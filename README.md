@@ -221,11 +221,17 @@ seconds of encoding.
 
 ## Resolution, limits and acceleration
 
-The interface offers 2048, 4096 and 8192 exports; 8192 is shown disabled because the world's fields
-exhaust a 10 GB heap during generation, before anything is drawn. The ceiling lives in
-`Platform.exportCeiling` (4096 on the desktop and in the browser, 2048 in a phone-sized browser
-window). The browser starts at a generation resolution of 512 and the desktop at 1024, because a
-browser tab has one thread and generation blocks the page while it runs.
+The interface offers generation resolutions of 512 to 4096 and exports of 2048, 4096 and 8192. The
+desktop goes to 4096; 8192 is shown disabled because the world's fields exhaust a 10 GB heap during
+generation, before anything is drawn. The browser goes to 2048, on a phone or a computer, for the
+world on screen and for exports: a 4096 generation killed a desktop browser's tab before anything
+was drawn, so the 4096 chips are shown disabled there, a stored 4096 preference is brought down to
+2048 with a line saying why, and a 4096 save from the desktop is refused from its header rather than
+opened into a tab that cannot hold its 2.45 GB of arrays. One ceiling covers both rows because an
+export makes the world again at its own size; it lives in `Platform.generationCeiling`, with the two
+values and their measurements in `WorldCeilings`. The browser starts at a generation resolution of
+512 and the desktop at 1024, because a browser tab has one thread and generation blocks the page
+while it runs.
 
 **Graphics acceleration** is an opt-in toggle in the header and in Settings (as *Graphics
 acceleration at launch*). It runs the erosion sweeps and the ocean-current solve on the graphics

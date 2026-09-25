@@ -696,10 +696,14 @@ class SiteAssemblyTest {
             Regex("""$property[^\n]*?(\d+)""").find(web)?.groupValues?.get(1)?.toInt()
                 ?: fail("WebPlatform.kt no longer states $property")
 
-        val ceiling = desktop.exportCeiling(compact = false)
-        val phoneCeiling = Regex("""exportCeiling\(compact: Boolean\): Int = if \(compact\) (\d+)""")
-            .find(web)?.groupValues?.get(1)?.toInt()
-            ?: fail("WebPlatform.kt no longer caps a phone's export")
+        val ceiling = desktop.generationCeiling
+        val browserCeiling = when (
+            Regex("""override val generationCeiling: Int = WorldCeilings\.(\w+)""").find(web)?.groupValues?.get(1)
+        ) {
+            "BROWSER_TAB" -> com.cartogenesis.ui.WorldCeilings.BROWSER_TAB
+            "DESKTOP" -> com.cartogenesis.ui.WorldCeilings.DESKTOP
+            else -> fail("WebPlatform.kt no longer states the browser's ceiling as one of WorldCeilings'")
+        }
 
         val exports = row("Export")
         assertTrue(
@@ -707,8 +711,8 @@ class SiteAssemblyTest {
             "the Export row does not quote the $ceiling × $ceiling this build can finish: \"$exports\""
         )
         assertTrue(
-            exports.contains("$phoneCeiling × $phoneCeiling"),
-            "the Export row does not quote the phone's cap of $phoneCeiling: \"$exports\""
+            Regex("""browser[^.]*$browserCeiling × $browserCeiling""").containsMatchIn(exports),
+            "the Export row does not quote the browser's ceiling of $browserCeiling: \"$exports\""
         )
         // And what a world at the ceiling comes out as for a picture: its true-shape sheet, which
         // is not the grid's own size.
@@ -731,7 +735,7 @@ class SiteAssemblyTest {
             "the Resolution row does not say what the desktop starts at: \"$resolutions\""
         )
         println(
-            "SITE the Features list quotes $ceiling as the ceiling, $phoneCeiling on a phone, " +
+            "SITE the Features list quotes $ceiling as the ceiling, $browserCeiling in the browser, " +
                 "and ${webNumber("override val defaultResolution")}/${desktop.defaultResolution} " +
                 "as the starting grids"
         )

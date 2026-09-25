@@ -126,24 +126,34 @@ fun CartogenesisRoot(platform: Platform) {
     /** What reading the settings found worth saying, for the status line once the window is up. */
     var launchNotice by remember { mutableStateOf("") }
 
-    // The library folder is applied here, before anything is drawn or listed, because it is where
-    // the library *is* rather than a default for next time: a window that opened on the default
-    // folder listed none of the reader's worlds, while Settings named the folder they were in.
-    LaunchedEffect(platform) {
-        val stored = SettingsCodec.decode(runCatching { platform.settingsStore.read() }.getOrNull())
-        val folder = stored.libraryFolder
-        if (folder.isNotBlank() && !runCatching { platform.useLibraryFolder(folder) }.getOrDefault(false)) {
-            launchNotice = "The library folder $folder is not available; the library is in " +
-                platform.libraryLocation
-        }
-        settings = stored
-    }
-
     // One writer, fed the newest preferences and nothing older. The river density slider changes
     // them on every mark it passes, and a write launched per change let an older write land last;
     // here the writes are made one after another, and a change that arrives while one is under way
     // replaces anything still waiting, so the last preferences set are the last ones written.
     val unwritten = remember { Channel<AppSettings>(Channel.CONFLATED) }
+
+    // The library folder is applied here, before anything is drawn or listed, because it is where
+    // the library *is* rather than a default for next time: a window that opened on the default
+    // folder listed none of the reader's worlds, while Settings named the folder they were in.
+    LaunchedEffect(platform) {
+        val read = SettingsCodec.decode(runCatching { platform.settingsStore.read() }.getOrNull())
+        // A size this host cannot make, from an older build or another session, is brought down to
+        // the ceiling and said once: the clamped document is written back, so the next launch has
+        // nothing to say.
+        val held = SettingsEffects.withinCeiling(read, platform.generationCeiling)
+        val stored = held.settings
+        if (stored != read) unwritten.trySend(stored)
+        val folder = stored.libraryFolder
+        val folderNotice =
+            if (folder.isNotBlank() && !runCatching { platform.useLibraryFolder(folder) }.getOrDefault(false)) {
+                "The library folder $folder is not available; the library is in ${platform.libraryLocation}"
+            } else {
+                null
+            }
+        launchNotice = listOfNotNull(held.notice, folderNotice).joinToString(" ")
+        settings = stored
+    }
+
     LaunchedEffect(platform) {
         for (updated in unwritten) {
             runCatching { platform.settingsStore.write(SettingsCodec.encode(updated)) }
@@ -219,8 +229,8 @@ private fun Application(
     latestSettings[0] = settings
     /** What this arrangement puts within reach. See [Arrangements]. */
     val reachable = remember(shape, platform) { Arrangements.of(shape, platform) }
-    /** 2048 in a phone browser, 4096 otherwise. See [Platform.exportCeiling]. */
-    val exportCeiling = platform.exportCeiling(compact)
+    /** The largest world this host makes, on screen or as an export. See [Platform.generationCeiling]. */
+    val generationCeiling = platform.generationCeiling
     var config by remember {
         mutableStateOf(
             SettingsEffects.startingConfig(settings, platform, freshSeed(), compact)
@@ -574,7 +584,7 @@ private fun Application(
 
             MenuCommand.SAVE_AS -> saveAs = true
 
-            MenuCommand.EXPORT -> startExport(SettingsEffects.exportSizeWithin(settings, exportCeiling))
+            MenuCommand.EXPORT -> startExport(SettingsEffects.exportSizeWithin(settings, generationCeiling))
 
             MenuCommand.SETTINGS -> showSettings = true
 
@@ -637,6 +647,13 @@ private fun Application(
     // has to run - and because after a Stop it is the only key that can move.
     LaunchedEffect(config, gate.requests) {
         if (!gate.hasGenerated) return@LaunchedEffect
+        // Every way to a size above the ceiling is already closed — the chips, the stored settings
+        // and the saves a browser refuses to open — so this is the guarantee rather than the rule:
+        // a world the host cannot finish is refused in a sentence rather than begun.
+        WorldCeilings.whyOutOfReach(config.width, generationCeiling)?.let { reason ->
+            status = "$reason."
+            return@LaunchedEffect
+        }
         // This effect's own coroutine is what Stop cancels: cancelling it unwinds the pipeline
         // wherever it has got to, and the engine notices between rounds rather than at the end.
         val thisRun = coroutineContext[Job]
@@ -1071,7 +1088,7 @@ private fun Application(
             hasWorld = world != null,
             worldSize = world?.width,
             exportChoice = exportChoice,
-            exportCeiling = exportCeiling,
+            generationCeiling = generationCeiling,
             exportSizes = reachable.exportSizes,
             pictureFormats = reachable.pictureFormats,
             dataLayers = reachable.dataLayers,
@@ -1095,7 +1112,7 @@ private fun Application(
             // is the guarantee, and it is what a size restored from an older build's
             // preference — which could still say 8192 — passes through. It applies to a data
             // layer exactly as it does to a picture: both re-run the pipeline at that size.
-            onExport = { startExport(Exports.clamp(it, exportCeiling)) },
+            onExport = { startExport(Exports.clamp(it, generationCeiling)) },
             onToggleAtlas = {
                 screen = if (screen == Screen.ATLAS) Screen.MAP else Screen.ATLAS
             },
@@ -1786,7 +1803,8 @@ private fun PanelHeader(
     /** Cells across the world on screen, or null before there is one. */
     worldSize: Int?,
     exportChoice: ExportChoice,
-    exportCeiling: Int,
+    /** The largest world this host makes; see [Platform.generationCeiling]. */
+    generationCeiling: Int,
     exportSizes: List<Int>,
     pictureFormats: List<ExportFormat>,
     dataLayers: List<DataLayer>,
@@ -1834,18 +1852,30 @@ private fun PanelHeader(
         ) { Text("Random world", maxLines = 1) }
     }
 
+    val resolutions = Knobs.resolutionChoices(generationCeiling)
     Labelled("Generation resolution", "${config.width} px") {
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            Knobs.RESOLUTIONS.forEach { size ->
+            resolutions.forEach { choice ->
                 FilterChip(
-                    selected = config.width == size,
-                    onClick = { onResolution(size) },
-                    label = { Text("$size", maxLines = 1) },
-                    enabled = !busy,
+                    selected = config.width == choice.size,
+                    onClick = { onResolution(choice.size) },
+                    label = { Text("${choice.size}", maxLines = 1) },
+                    enabled = !busy && choice.enabled,
                     modifier = Modifier.weight(1f)
                 )
             }
         }
+    }
+
+    // Why a chip above is greyed out, printed under the row rather than on hover: in a browser it
+    // is always true, and a phone has no pointer to hover with. Only where a chip is out of reach,
+    // so the desktop's header is as it was.
+    resolutions.mapNotNull { it.whyOutOfReach }.forEach { reason ->
+        Text(
+            reason,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 
     // What the two larger chips cost on the device this arrangement is drawn for, in seconds,
@@ -1875,7 +1905,7 @@ private fun PanelHeader(
 
     // Export, which would otherwise want a 200 dp column of its own on the far side of the map.
     OutputOptions(
-        worldSize, exportChoice, exportCeiling, exportSizes,
+        worldSize, exportChoice, generationCeiling, exportSizes,
         pictureFormats, dataLayers, onExportChoice, onExport
     )
 
@@ -2155,7 +2185,7 @@ private fun OutputOptions(
     /** Cells across the world on screen, or null before there is one to export. */
     worldSize: Int?,
     exportChoice: ExportChoice,
-    exportCeiling: Int,
+    generationCeiling: Int,
     sizes: List<Int>,
     pictureFormats: List<ExportFormat>,
     dataLayers: List<DataLayer>,
@@ -2188,19 +2218,21 @@ private fun OutputOptions(
     }
     // One line of small print, which the unreachable size borrows while the pointer is on it. In
     // the same slot rather than under the row, so nothing moves when it changes.
-    val unreachable = reachingFor
+    val choices = SizeChoice.row(sizes, generationCeiling)
+    val unreachable = choices.firstOrNull { it.size == reachingFor }?.whyOutOfReach
     Text(
-        if (unreachable != null) Exports.unreachableNote(unreachable) else exportChoice.detail,
+        unreachable ?: exportChoice.detail,
         style = MaterialTheme.typography.labelSmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        sizes.forEach { size ->
-            // A size this build cannot finish keeps its chip — the row would otherwise change
+        choices.forEach { choice ->
+            val size = choice.size
+            // A size this host cannot finish keeps its chip — the row would otherwise change
             // width when the ceiling moves, and a missing control says nothing about why it is
             // missing. It is drawn in the muted colour, it cannot be pressed, and hovering it
-            // says what is wrong.
-            val withinCeiling = Exports.reachable(size, exportCeiling)
+            // says what is wrong, in the small print above the row.
+            val withinCeiling = choice.enabled
             val hoverSource = remember { MutableInteractionSource() }
             val hovered by hoverSource.collectIsHoveredAsState()
             LaunchedEffect(hovered, withinCeiling) {
@@ -2211,7 +2243,7 @@ private fun OutputOptions(
             // generation under way does not touch until it is finished. A second press starts a
             // second export in the first one's place.
             Button(
-                onClick = { onExport(Exports.clamp(size, exportCeiling)) },
+                onClick = { onExport(Exports.clamp(size, generationCeiling)) },
                 enabled = withinCeiling && worldSize != null,
                 contentPadding = TIGHT,
                 modifier = Modifier.weight(1f).hoverable(hoverSource)

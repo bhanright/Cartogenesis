@@ -53,10 +53,11 @@ internal fun SettingsDialog(
      */
     libraryLocation: String = SettingsEffects.libraryLocation(settings, platform)
 ) {
-    // 2048 rather than 4096 in a phone browser, and the small print below says so. Read from the
-    // composition rather than passed in because this dialog is opened from a menu item that knows
-    // nothing about the window's shape.
-    val ceiling = platform.exportCeiling(LocalWindowShape.current == WindowShape.COMPACT)
+    // 2048 in a browser and 4096 on the desktop, for the working resolution and the exports alike;
+    // the chips above it stay in their rows, disabled, and each row's small print says why.
+    val ceiling = platform.generationCeiling
+    val resolutions = Knobs.resolutionChoices(ceiling)
+    val exportSizes = SizeChoice.row(Exports.SIZES, ceiling)
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Settings", style = MaterialTheme.typography.titleLarge) },
@@ -88,7 +89,8 @@ internal fun SettingsDialog(
 
                 SettingRow(
                     "Generation resolution",
-                    "The grid a new world starts at. The world on screen keeps its own."
+                    "The grid a new world starts at. The world on screen keeps its own." +
+                        reasonsBelow(resolutions)
                 ) {
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         FilterChip(
@@ -100,11 +102,12 @@ internal fun SettingsDialog(
                             },
                             label = { Text("This platform", maxLines = 1) }
                         )
-                        Knobs.RESOLUTIONS.forEach { size ->
+                        resolutions.forEach { choice ->
                             FilterChip(
-                                selected = settings.workingResolution == size,
-                                onClick = { onSettings(settings.copy(workingResolution = size)) },
-                                label = { Text("$size", maxLines = 1) }
+                                selected = settings.workingResolution == choice.size,
+                                enabled = choice.enabled,
+                                onClick = { onSettings(settings.copy(workingResolution = choice.size)) },
+                                label = { Text("${choice.size}", maxLines = 1) }
                             )
                         }
                     }
@@ -132,8 +135,7 @@ internal fun SettingsDialog(
 
                 SettingRow(
                     "Export",
-                    "What the export buttons start as. " +
-                        "Nothing above $ceiling can be finished by this build."
+                    "What the export buttons start as." + reasonsBelow(exportSizes)
                 ) {
                     ChoiceChips(
                         options = ExportFormat.entries,
@@ -145,13 +147,12 @@ internal fun SettingsDialog(
                         Modifier.padding(top = 4.dp),
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Exports.SIZES.forEach { size ->
-                            val reachable = Exports.reachable(size, ceiling)
+                        exportSizes.forEach { choice ->
                             FilterChip(
-                                selected = settings.exportSize == size,
-                                enabled = reachable,
-                                onClick = { onSettings(settings.copy(exportSize = size)) },
-                                label = { Text("$size", maxLines = 1) }
+                                selected = settings.exportSize == choice.size,
+                                enabled = choice.enabled,
+                                onClick = { onSettings(settings.copy(exportSize = choice.size)) },
+                                label = { Text("${choice.size}", maxLines = 1) }
                             )
                         }
                     }
@@ -244,6 +245,14 @@ internal fun SettingsDialog(
 }
 
 /** A heading, a line of why, and the control. The whole layout vocabulary of the dialog. */
+/**
+ * Why each disabled chip of [choices] is disabled, as sentences to follow a row's small print, or
+ * nothing when every chip can be pressed. A dialog has no hover to borrow, so the reasons are
+ * printed with the row rather than when the pointer finds the chip.
+ */
+private fun reasonsBelow(choices: List<SizeChoice>): String =
+    choices.mapNotNull { it.whyOutOfReach }.joinToString("") { " $it." }
+
 @Composable
 private fun SettingRow(title: String, note: String, content: @Composable () -> Unit) {
     Column(Modifier.fillMaxWidth().padding(top = 12.dp)) {

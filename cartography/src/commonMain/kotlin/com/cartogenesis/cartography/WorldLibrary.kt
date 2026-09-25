@@ -101,6 +101,13 @@ abstract class ByteWorldLibrary(
     protected abstract suspend fun names(): List<String>
 
     /**
+     * The widest save this library's host can hold, or null for any the format allows. A save wider
+     * than it is listed as refused and refused again if opened, from its header alone, so a host
+     * that could not hold it never allocates for it.
+     */
+    protected open val openingLimit: OpeningLimit? get() = null
+
+    /**
      * Runs [block] over the blob [name], a piece at a time, and returns what it returned; null if
      * there is no such blob. A failure of the storage itself throws [WorldFormatException] with
      * [SaveProblem.UNREADABLE].
@@ -203,7 +210,7 @@ abstract class ByteWorldLibrary(
     override suspend fun load(key: String): LoadOutcome {
         requireKey(key)
         return try {
-            reading(key) { source -> WorldCodec.open(source, compressor) }
+            reading(key) { source -> WorldCodec.open(source, compressor, openingLimit) }
                 ?: LoadOutcome.Refused(SaveRefusal(SaveProblem.UNREADABLE, "it is no longer in the library"))
         } catch (refused: WorldFormatException) {
             LoadOutcome.Refused(SaveRefusal(refused.problem, refused.detail))
@@ -234,7 +241,7 @@ abstract class ByteWorldLibrary(
         } else {
             readPrefix(name, needed.toInt()) ?: probe
         }
-        LibraryEntry(name, WorldCodec.decodeHeader(bytes).document)
+        LibraryEntry(name, WorldCodec.decodeHeader(bytes, openingLimit).document)
     } catch (refused: WorldFormatException) {
         LibraryEntry(name, null, SaveRefusal(refused.problem, refused.detail))
     }

@@ -239,6 +239,13 @@ internal object Knobs {
     /** Powers of two, because the terrain integrator is FFT-based. */
     val RESOLUTIONS: List<Int> = listOf(512, 1024, 2048, 4096)
 
+    /**
+     * The working-resolution chips under [ceiling], each with the reason it is out of reach or
+     * none: every one of [RESOLUTIONS], so a browser shows the 4096 it cannot make, disabled,
+     * rather than a row that silently stops at 2048. See [Platform.generationCeiling].
+     */
+    fun resolutionChoices(ceiling: Int): List<SizeChoice> = SizeChoice.row(RESOLUTIONS, ceiling)
+
     fun withSeed(config: WorldGenConfig, seed: Long): WorldGenConfig = config.copy(seed = seed)
 
     /**
@@ -568,9 +575,10 @@ internal object Knobs {
  *
  * Declared here for the same reason the knobs are: the ceiling is a *rule*, and a rule drawn only
  * inside a composable can only be checked by looking at it. The rule is that no export ever runs
- * above [Platform.exportCeiling] — 8192 exhausts a 10 GB heap inside the generator after about
- * nineteen minutes and never draws a pixel, so the chip for it is disabled and any request for it,
- * including one restored from a preference written by an older build, comes back as 4096.
+ * above [Platform.generationCeiling], because an export makes the world again at its size: 8192
+ * exhausts a 10 GB heap inside the generator and never draws a pixel, and 4096 does the same to a
+ * browser tab, so their chips are disabled where they cannot finish and any request for them,
+ * including one restored from a preference written by an older build, comes back as the ceiling.
  *
  * [clamp] is on the path every export takes rather than only on the button, because a disabled
  * control is a courtesy and not a guarantee: the size that reaches the platform is the one that
@@ -600,16 +608,26 @@ internal object Exports {
         reachable(size, ceiling) -> size
         else -> SIZES.filter { it <= ceiling }.maxOrNull() ?: SIZES.min()
     }
+}
 
-    /**
-     * Why a size is greyed out, in the small print, when someone reaches for it.
-     *
-     * A later release, not a refusal: the ceiling is this build's memory and not a decision about
-     * what a map should be, and the chip stays in the row so that the reader can see where it will
-     * be when it arrives.
-     */
-    fun unreachableNote(size: Int): String =
-        "$size needs more memory than this build can hold; it waits for a later release"
+/**
+ * One chip of a row of sizes: the size, and why it cannot be pressed here, or null when it can.
+ *
+ * Declared as data for the reason [Knobs] is: which chips are disabled, and what they say, is a
+ * rule a test has to be able to read without driving a composition, and the rows draw exactly this.
+ */
+internal data class SizeChoice(val size: Int, val whyOutOfReach: String?) {
+    val enabled: Boolean get() = whyOutOfReach == null
+
+    companion object {
+        /**
+         * Every one of [sizes] under [ceiling], each with its reason or none. A size out of reach
+         * keeps its chip, so the reader can see where it is and the row does not change width
+         * when the ceiling moves.
+         */
+        fun row(sizes: List<Int>, ceiling: Int): List<SizeChoice> =
+            sizes.map { SizeChoice(it, WorldCeilings.whyOutOfReach(it, ceiling)) }
+    }
 }
 
 /**

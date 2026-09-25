@@ -222,21 +222,18 @@ interface Platform {
     val coarsePointer: Boolean get() = false
 
     /**
-     * The largest export this build can actually finish.
+     * The largest world this host can make, in cells across: what the working resolution may be
+     * set to and what an export may be asked for. One number rather than two, because an export
+     * makes the world again at its own size, so the two could only disagree by offering a size
+     * that ends the same way from either row.
      *
-     * Not a taste: 8192 does not complete. It exhausts a 10 GB heap inside the generator after
-     * about nineteen minutes, before a single pixel of the map is drawn — so the chip for it is
-     * offered disabled rather than removed, and any size above this one falls back to it. See
-     * docs/DESIGN_LEDGER.md for the measurement. It is a value on the platform, and not a constant in the panel, so that the build
-     * which fixes the memory can raise the ceiling without the interface being touched: the export
-     * row draws whatever this says.
-     *
-     * [compact] is true in a phone-shaped window, and is a question rather than an assumption
-     * because the answer differs by host: a desktop window narrowed to 700 dp is still a desktop
-     * with every core and a 12 GB heap, while the same 700 dp in a browser is a phone with one
-     * thread. The web front end caps itself at 2048 there; the desktop ignores the argument.
+     * [WorldCeilings.DESKTOP] by default and on the desktop, [WorldCeilings.BROWSER_TAB] in every
+     * browser, phone or not; each says what was measured to put it there. A value on the platform
+     * rather than a constant in the panel, so that the build which makes a larger world fit raises
+     * this and every row that offers a size follows: a size above it stays in its row, disabled,
+     * with [WorldCeilings.whyOutOfReach] saying why.
      */
-    fun exportCeiling(compact: Boolean): Int = 4096
+    val generationCeiling: Int get() = WorldCeilings.DESKTOP
 
     /**
      * Draws [world] at [size] and puts the result wherever this platform puts finished files: a
@@ -433,3 +430,47 @@ expect fun randomId(): String
 
 /** A saved world's timestamp, in whatever form is natural for the host. */
 expect fun formatTimestamp(millis: Long): String
+
+/**
+ * The two ceilings a host can have on the size of world it makes, and the sentence for a size above
+ * one of them. See [Platform.generationCeiling].
+ *
+ * Public because the web front end, which is a module of its own, declares the browser's.
+ */
+object WorldCeilings {
+
+    /**
+     * The largest world any build finishes: 4096 cells across.
+     *
+     * Not a taste. 8192 exhausts a 10 GB heap inside the generator after about nineteen minutes,
+     * before a single pixel of the map is drawn, so its export chip is offered disabled rather than
+     * removed. See docs/DESIGN_LEDGER.md, G2, for the measurement.
+     */
+    const val DESKTOP: Int = 4096
+
+    /**
+     * The largest world a browser tab finishes: 2048 cells across.
+     *
+     * A 4096 generation in Edge on an RTX 3070 Ti held a 2.7 GB heap seven minutes in, still
+     * eroding, and the tab then died before anything was drawn; a 2048 world in the same tab
+     * finished in about four minutes with its heap near 2.3 GB. A saved 4096 world is 2.45 GB of
+     * arrays before anything is drawn from it (see `WorldCodec.FORMAT_VERSION`), more than the heap
+     * that tab died at, so a tab cannot open one either. See docs/TODO.md, "A 4096 world cannot be
+     * made in a browser tab", for the measurement and for what making it fit is still owed.
+     */
+    const val BROWSER_TAB: Int = 2048
+
+    /**
+     * Why a world [size] cells across cannot be made under [ceiling], or null when it can.
+     *
+     * A size the desktop reaches and this host does not can only be a browser's limit, because the
+     * browser's is the only ceiling below the desktop's; a size above the desktop's waits for a
+     * later release everywhere. Either way the sentence says where the size can be had, because a
+     * reader told only "no" has no idea whether to ask again.
+     */
+    fun whyOutOfReach(size: Int, ceiling: Int): String? = when {
+        size <= ceiling -> null
+        size <= DESKTOP -> "A $size world needs more memory than a browser tab is given; the desktop app makes it"
+        else -> "$size needs more memory than this build can hold; it waits for a later release"
+    }
+}

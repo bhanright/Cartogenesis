@@ -2,6 +2,7 @@ package com.cartogenesis.desktop
 
 import com.cartogenesis.cartography.MapStyle
 import com.cartogenesis.ui.ThemeChoice
+import com.cartogenesis.ui.WorldCeilings
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -68,6 +69,42 @@ class SiteSourcesTest {
                 "application offers ${MapStyle.entries.size} map styles"
         )
         println("SITE the Features list counts $counted map styles")
+    }
+
+    /**
+     * That no sentence of the page puts a world larger than the browser makes in the browser.
+     *
+     * The page used to say worlds go "up to 4096 × 4096 in the browser and on the desktop", and a
+     * 4096 world kills a browser tab before anything is drawn; the browser now stops at
+     * [WorldCeilings.BROWSER_TAB]. A sentence about the browser is any sentence of the page's text
+     * that says "browser" or "phone", and a world in one is a square grid, "N × N", or "an N
+     * world", so a 4096 × 2048 *picture* of a 2048 world is not a claim about a 4096 world.
+     */
+    @Test
+    fun `the page puts no world larger than the browser makes in the browser`() {
+        val text = page
+            .replace(Regex("""<style[\s\S]*?</style>|<script[\s\S]*?</script>|<!--[\s\S]*?-->"""), " ")
+            .replace(Regex("""<[^>]+>"""), " ")
+            .replace("&nbsp;", " ")
+            .replace(Regex("""\s+"""), " ")
+        val browserSentences = text.split(Regex("""(?<=[.;:])\s""")).filter {
+            Regex("""\b(browser|phone)""", RegexOption.IGNORE_CASE).containsMatchIn(it)
+        }
+        assertTrue(browserSentences.isNotEmpty(), "the page no longer says anything about the browser")
+        val world = Regex("""\b(\d{3,5}) × \1\b|\b(\d{3,5}) world\b""")
+        val claims = browserSentences.flatMap { sentence ->
+            world.findAll(sentence).map { match ->
+                val size = (match.groupValues[1].ifEmpty { match.groupValues[2] }).toInt()
+                size to sentence
+            }.toList()
+        }
+        val tooLarge = claims.filter { (size, _) -> size > WorldCeilings.BROWSER_TAB }
+        assertTrue(
+            tooLarge.isEmpty(),
+            "the page puts worlds larger than the browser's ${WorldCeilings.BROWSER_TAB} in the browser: " +
+                tooLarge.joinToString(" | ") { (size, sentence) -> "$size in \"${sentence.trim()}\"" }
+        )
+        println("SITE ${claims.size} world sizes in ${browserSentences.size} sentences about the browser, none above ${WorldCeilings.BROWSER_TAB}")
     }
 
     /**

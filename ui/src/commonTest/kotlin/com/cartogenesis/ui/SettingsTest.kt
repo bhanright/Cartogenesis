@@ -11,6 +11,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
+import kotlin.test.fail
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.test.runTest
 
@@ -232,6 +233,45 @@ class SettingsTest {
         assertEquals(4096, SettingsEffects.exportSizeWithin(big, ceiling = 4096))
         // A preference written by a build with a higher ceiling, opened by one without it.
         assertEquals(2048, SettingsEffects.exportSizeWithin(big, ceiling = 2048))
+    }
+
+    /**
+     * A stored 4096 is brought down to a browser's 2048 on the way in, and said, once.
+     *
+     * The document is what a settings file written before the browser had a ceiling of its own
+     * reads back as, through the same decoder the application uses. Under the browser's ceiling
+     * the working resolution and the export size both come back as 2048, the fresh world starts
+     * at 2048, and the notice names the size asked for and why; the held document, read again, has
+     * nothing left to say, which is what "once" amounts to, since the application stores it. Under
+     * the desktop's ceiling the same document is untouched and nothing is said.
+     */
+    @Test
+    fun `a stored 4096 loads as 2048 under a browser's ceiling, with the reason`() {
+        val stored = SettingsCodec.decode(
+            SettingsCodec.encode(AppSettings(workingResolution = 4096, exportSize = 4096))
+        )
+        assertEquals(4096, stored.workingResolution, "the decoder itself moved the size")
+
+        val browser = FakePlatform(ceiling = WorldCeilings.BROWSER_TAB)
+        val held = SettingsEffects.withinCeiling(stored, browser.generationCeiling)
+        assertEquals(2048, held.settings.workingResolution)
+        assertEquals(2048, held.settings.exportSize)
+        assertEquals(2048, SettingsEffects.startingConfig(held.settings, browser, seed = 1).width)
+        val notice = held.notice ?: fail("a 4096 preference was brought down to 2048 without a word")
+        assertTrue("4096" in notice && "2048" in notice, notice)
+        assertTrue("browser tab" in notice && "desktop app" in notice, notice)
+        assertEquals(null, SettingsEffects.withinCeiling(held.settings, browser.generationCeiling).notice)
+
+        // Even a caller that skipped the clamp gets no world above the ceiling.
+        assertEquals(2048, SettingsEffects.resolution(stored, browser))
+
+        val desktop = FakePlatform(ceiling = WorldCeilings.DESKTOP)
+        val untouched = SettingsEffects.withinCeiling(stored, desktop.generationCeiling)
+        assertEquals(stored, untouched.settings)
+        assertEquals(null, untouched.notice)
+        assertEquals(4096, SettingsEffects.resolution(stored, desktop))
+        // "This platform" is not a size, and is never moved.
+        assertEquals(null, SettingsEffects.withinCeiling(AppSettings(), browser.generationCeiling).notice)
     }
 
     @Test

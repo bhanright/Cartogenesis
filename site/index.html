@@ -587,8 +587,8 @@ if ('IntersectionObserver' in window &&
 
       <div class="notice" id="small-screen" hidden>
         <b>Works on phones.</b>
-        Worlds generate at 512 by default here, and 2048 works; exports are capped at 2048.
-        The desktop app goes further.
+        Worlds generate at 512 by default here, and 2048 works; worlds and exports stop at 2048
+        in any browser. The desktop app goes to 4096.
       </div>
     </div>
 
@@ -894,7 +894,7 @@ if ('IntersectionObserver' in window &&
       <div><dt>Themes</dt><dd>Seventeen interface themes, including light, dark, high contrast and colour-blind options.</dd></div>
       <div><dt>Editing</dt><dd>Edit generated names and borders. Your changes are saved with the world.</dd></div>
       <div><dt>Saves</dt><dd>Save a world and reopen the same file in the browser or the desktop app. In Chrome and Edge the browser's library can live in a folder on your computer, including one a sync service keeps in step.</dd></div>
-      <div><dt>Export</dt><dd>Export map images as PNG, WebP or JPEG, drawn at the world's true shape, or the data behind the map, one sample per cell: a 16-bit heightmap with its metre scale, and biome and realm index maps with their legends. Worlds up to 4096 × 4096 in the browser and on the desktop, whose map image is 8192 × 4096; phones are capped at 2048 × 2048.</dd></div>
+      <div><dt>Export</dt><dd>Export map images as PNG, WebP or JPEG, drawn at the world's true shape, or the data behind the map, one sample per cell: a 16-bit heightmap with its metre scale, and biome and realm index maps with their legends. The desktop app makes worlds up to 4096 × 4096, whose map image is 8192 × 4096. The browser, on a phone or a computer, stops at 2048 × 2048.</dd></div>
       <div><dt>Resolution</dt><dd>Choose the world's resolution. Higher settings add detail and need more memory; the browser starts at 512, the desktop app at 1024.</dd></div>
       <div><dt>Acceleration</dt><dd>Optional graphics acceleration speeds up erosion and export rendering: WebGPU in the browser, OpenGL on the desktop.</dd></div>
     </dl>
@@ -913,13 +913,13 @@ if ('IntersectionObserver' in window &&
              a visitor actually fetches to run the generator, measured off the assembled tree. The
              loading shell carries the same token and therefore the same figure. -->
         <p>Use a recent Chrome, Edge, Firefox or Safari. The first visit downloads the generator, about __BUNDLE_MB__&nbsp;MB, and caches it; nothing you make is uploaded anywhere.</p>
-        <p>Saved worlds stay in the browser's own storage, or, in Chrome and Edge, in a folder on your computer that you choose in the Library. The desktop app opens the same files.</p>
+        <p>Saved worlds stay in the browser's own storage, or, in Chrome and Edge, in a folder on your computer that you choose in the Library. The desktop app opens the same files; the browser opens the desktop's up to 2048.</p>
         <p>Optional graphics acceleration uses WebGPU where the browser offers it.</p>
       </div>
 
       <div class="panel">
         <h3>Sizes, formats and speed</h3>
-        <p>An export regenerates the world at the size you ask for, so the detail is real rather than enlarged. The map image is drawn at the world's true shape, twice as wide as it is tall: a 2048 world is a 4096 × 2048 picture. Larger worlds take longer and use more memory. On phones, browser exports are capped at a 2048 world, a 4096 × 2048 picture, to keep memory in bounds.</p>
+        <p>An export regenerates the world at the size you ask for, so the detail is real rather than enlarged. The map image is drawn at the world's true shape, twice as wide as it is tall: a 2048 world is a 4096 × 2048 picture. Larger worlds take longer and use more memory. The browser stops at a 2048 world, a 4096 × 2048 picture, for the world on screen and for exports. Larger worlds need the desktop app.</p>
         <p>PNG keeps every pixel. WebP is smaller and softens thin rivers and borders slightly.</p>
       </div>
 

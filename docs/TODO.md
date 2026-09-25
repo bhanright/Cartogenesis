@@ -139,6 +139,18 @@
   has not been seen, and no wasm test draws on a real canvas. The exports do not depend on it: they
   are encoded from the bitmap in memory. Before the next release, generate a 4096 world on screen in
   a browser and look; if it fails, cap the pane's picture or draw it in tiles. 2026-09-24, Fix A.
+- **Four grid-shaped marks on seed 718106 at 2048, seen while cutting the site's card pictures.**
+  Each breaks rule 13; whether the geometry guard's detectors see them has not been checked:
+  - the ice caps end in an edge straight down a column, with a fan of rays off it (the ice's work;
+    compare the known failure that the sheet's edge runs straight along a row);
+  - the dry belt crosses the northern lowlands as a band ruled along a row (the climate's);
+  - the estuary sea in the site's styles window has a straight west edge and a straight top (the
+    sea level's drowned basins), and shows on the site's Schoolroom card;
+  - a short straight double line at the top left of the site's data-view window, in all four cards.
+  The site's windows were kept (the three styles and four views must show the same ground), so the
+  last two are on the page until the generator is fixed; the site's pictures are all made again
+  once the audit's major fixes have merged, and the windows re-picked then if any mark remains.
+  2026-09-25, Site 4.
 - **Six operators still count a row as a column, each outside Fix 2's list.** Found by reading the
   code, not by a guard: the climate stage's rainfall blur (a square box of cells, sized by
   `RAIN_BLUR_REFERENCE_WIDTH`) and its two coastal-reach blurs, the water exposure and the offshore

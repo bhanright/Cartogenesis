@@ -66,12 +66,21 @@ import kotlin.test.assertTrue
  * field seeded in shoreline-relative units and updated in height units — was closed at E6 (see
  * `HydraulicErosion`'s `settled` and docs/DESIGN_LEDGER.md, E6); the table above predates it.
  *
- * **What the control rests on.** The world without the clamp has holes to find because the
- * incision's half-drop cap is worked out in shoreline-relative units and spent on the raw field,
- * where it lets a cell be cut by some 1.33 times its own drop to its receiver: Audit III's B-D1.
- * With a cap in consistent units a cell could never be cut past its receiver's old height, and the
- * clamp would have no incision holes left to close. So the day B-D1 is fixed this control fails,
- * saying so, and the clamp and this guard are that chunk's to re-examine rather than this one's.
+ * **What the control rests on, since the cap has had one unit.** The table above was taken while
+ * the incision's half-drop cap was worked out in shoreline-relative units and spent on the raw
+ * field, where it let a cell be cut by 1.33 times its own drop to its receiver (Audit III's B-D1),
+ * and that is where the holes the clamp closed came from. Spent in the field's own unit, the cap
+ * holds a cell above its receiver's old height and so above its new one, and the incision makes
+ * no hole with the clamp off either: none on any of the three seeds (docs/DESIGN_LEDGER.md, Fix 3).
+ * So the census is still asserted with the clamp on, and it no longer tells the two runs apart.
+ *
+ * What does is the other half of the clamp, which the cap does not reach: a cell already standing
+ * below its receiver, the floor of a basin the routing crosses on the fill, is not cut at all.
+ * The cap lets it lose half of the fill's drop, which is the drop of the water surface and not of
+ * the ground, so without the clamp the floors of basins are cut deeper round after round and more
+ * of the channels end under standing water. That is the control: pooled over the three seeds, the
+ * world without the clamp draws more channel cells under water than the world with it — 1,369
+ * against 1,237 when Fix 3 restated this, and more on every seed.
  */
 class ReceiverClampTest {
 
@@ -82,6 +91,8 @@ class ReceiverClampTest {
     fun `the incision leaves no channel cell below its receiver, and does without the clamp`() {
         val loose = ArrayList<String>()
         val tight = ArrayList<String>()
+        var pondedWith = 0
+        var pondedWithout = 0
         seeds.forEach { seed ->
             val config = WorldGenConfig(seed = seed, width = 512, height = 512)
             val plates = PlateStage.generate(config, TerrainStage.generate(config))
@@ -121,6 +132,7 @@ class ReceiverClampTest {
                         )
                 )
                 into.add("$seed $ponded ponded, ${totals[PitStage.INCISION]} cut into a hole")
+                if (clamp) pondedWith += ponded else pondedWithout += ponded
                 if (clamp) {
                     assertTrue(
                         totals[PitStage.INCISION] == 0,
@@ -133,12 +145,9 @@ class ReceiverClampTest {
         }
         println("CLAMP with the clamp off: $loose; with it on: $tight")
         assertTrue(
-            loose.any { it.contains(Regex("[1-9]\\d* cut into a hole")) },
-            "the world without the clamp was expected to cut channel cells below their receivers " +
-                "and cut none on any seed, so this guard proves nothing: $loose. The holes came " +
-                "from the incision's half-drop cap being spent in the wrong unit (Audit III's " +
-                "B-D1); if that has been fixed, the clamp has nothing left to close and this guard " +
-                "is the fixing chunk's to restate"
+            pondedWithout > pondedWith,
+            "without the clamp $pondedWithout channel cells were drawn under water against $pondedWith " +
+                "with it, pooled over the seeds, so the clamp was not seen doing anything: $loose against $tight"
         )
     }
 

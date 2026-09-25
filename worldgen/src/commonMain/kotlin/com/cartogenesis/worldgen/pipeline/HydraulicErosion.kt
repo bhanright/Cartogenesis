@@ -984,12 +984,12 @@ internal object HydraulicErosion {
                 val receiver = directions[cell]
                 if (receiver < 0) continue
                 val toSea = !isLand[receiver]
-                val drop = ground[cell] - if (toSea) relative[receiver] else ground[receiver]
+                val drop = fallToReceiver(ground, isLand, cell, receiver)
                 if (drop <= 0f) continue
                 var taken =
                     cut(
-                        rates, cell, receiver, cellsAcross, drop, area, landCells, relative,
-                        erodibility, incisionWatch, round
+                        rates, cell, receiver, cellsAcross, drop, area, landCells, landRange,
+                        surfaceOf[cell] - sea.shorelineHeight, erodibility, incisionWatch, round
                     )
                 if (receiverClamp && !toSea) {
                     // In the height field's own units, which is what the cut is spent in. A cell
@@ -1039,7 +1039,7 @@ internal object HydraulicErosion {
                 if (!carryingSediment) continue
 
                 val toSea = !isLand[receiver]
-                val drop = ground[cell] - if (toSea) relative[receiver] else ground[receiver]
+                val drop = fallToReceiver(ground, isLand, cell, receiver)
 
                 // Under standing water there is no channel to aggrade: the river here *is* the
                 // lake, its gradient is the epsilon the flood-fill left, and anything it was
@@ -1953,7 +1953,10 @@ internal object HydraulicErosion {
             // cells that length is cut into, and whichever way it runs.
             val gradient = rates.notchFallPerCell
             while (cell >= 0 && isLand[cell] && fromLipCellWidths < rates.outletReachCells) {
-                val cutLevel = newLevel - fromLipCellWidths * gradient
+                // Inside the rounds the sea is the base level below the lip too, and the falling
+                // surface stops at it rather than running a few centimetres a cell past it.
+                val falling = newLevel - fromLipCellWidths * gradient
+                val cutLevel = if (belowSea) falling else falling.coerceAtLeast(SHORELINE)
                 if (relative[cell] <= cutLevel) break
                 val take = (relative[cell] - cutLevel).toDouble() * landRange
                 val ponded = ground[cell] - relative[cell] > rates.pondDepth
@@ -2095,8 +2098,17 @@ internal object HydraulicErosion {
     }
 
     /**
+     * How far [cell] falls to the water level it drains to, in shoreline-relative units: to its
+     * receiver's filled surface on land, and to the shoreline, which is zero, where the receiver is
+     * sea. The sea's surface is the base level a river grades to, and a depth below it is on the
+     * sea's half of the ruler, not the land's; the two cannot be subtracted.
+     */
+    private fun fallToReceiver(ground: FloatArray, isLand: BooleanArray, cell: Int, receiver: Int): Float =
+        ground[cell] - if (isLand[receiver]) ground[receiver] else 0f
+
+    /**
      * Stream-power incision, held back by whatever is growing on the cell, and capped by the drop
-     * it sits on and by the sea it grades to.
+     * it sits on and by the sea it grades to, in the height field's own units.
      *
      * Two caps live here and a third lives at the call site. Half the drop, so a channel cannot cut
      * past the ground it is falling toward in a single round. And never below the sea, which is the
@@ -2105,6 +2117,13 @@ internal object HydraulicErosion {
      * they have the whole catchment behind them and open water in front — and the coastline shreds
      * into drowned valleys and islands. The third is the receiver clamp, which belongs to the
      * ordered pass rather than to this arithmetic because it needs the receiver's *new* height.
+     *
+     * [drop] is measured on the shoreline-relative field, whose unit is [landRange] of the height
+     * field, and the cut is spent on the height field, so the drop's cap is converted here, once.
+     * It was not, and half the drop was spent as 1.33 times it; see docs/DESIGN_LEDGER.md, Fix 3.
+     * The law's own term is not converted again: [Rates.incisionCoefficient] already carries the
+     * ratio of the two rulers. [heightAboveShoreline] is read off the height field itself, so a
+     * cut to it leaves the cell on the shoreline to the last bit and not a rounding below it.
      */
     private fun cut(
         rates: Rates,
@@ -2114,7 +2133,8 @@ internal object HydraulicErosion {
         drop: Float,
         area: FloatField,
         landCells: Float,
-        relative: FloatArray,
+        landRange: Float,
+        heightAboveShoreline: Float,
         /** The cover's factor on this cell, already relative to the land's mean. */
         erodibility: FloatArray,
         watch: IncisionWatch?,
@@ -2128,11 +2148,20 @@ internal object HydraulicErosion {
         val share = area.data[cell] / landCells
 
         val incision = rates.incisionCoefficient * sqrt(share) * slope * erodibility[cell]
-        val aboveSea = relative[cell].coerceAtLeast(0f)
-        val halfDrop = drop * 0.5f
+        val halfDrop = drop * HALF_THE_DROP * landRange
+        val aboveSea = heightAboveShoreline.coerceAtLeast(0f)
         watch?.asked(round, cell, receiver, incision, halfDrop, aboveSea)
         return minOf(incision, halfDrop, aboveSea)
     }
+
+    /**
+     * The most of the drop to its receiver a cell may lose in one round: half, so the explicit
+     * update cannot carry a cell past the ground it falls toward, whatever the law asks. Where the
+     * law asks for more — a channel whose one-round cut outruns its own step, the Courant number of
+     * this explicit scheme over one half — this cap and not the law sets the cut; see
+     * docs/DESIGN_LEDGER.md, Fix 3, for how much of the drawn network that is.
+     */
+    private const val HALF_THE_DROP = 0.5f
 
     /**
      * How far a cell may be raised before it stands as high as the ground that drains into it.
@@ -2289,6 +2318,9 @@ internal object HydraulicErosion {
         for (value in values) sum += value.toDouble()
         return sum
     }
+
+    /** The shoreline on the shoreline-relative field, which is where that field is zero. */
+    private const val SHORELINE = 0f
 
     /** Millimetres in a metre, for the uplift rates this stage is handed in millimetres a year. */
     private const val MILLIMETRES_PER_METRE = 1_000.0

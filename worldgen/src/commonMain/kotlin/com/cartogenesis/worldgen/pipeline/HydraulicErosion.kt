@@ -271,6 +271,19 @@ internal object HydraulicErosion {
         val courantCoefficient: Float =
             incisionCoefficient / scale.landHalfOfField * config.width
 
+        /**
+         * The diffusivity of a cell's unresolved channels and hillslopes on bare ground at mean
+         * rain, in square metres a year: `K dx dy`. See [ErosionConfig.subGridTransport] for its
+         * derivation; the cover's factor and the square root of the runoff weight multiply it per
+         * cell.
+         */
+        val subGridDiffusivity: Double =
+            erosion.bedrockErodibilityPerYear.toDouble() * config.cellWidthKm * 1000.0 * config.cellHeightKm * 1000.0
+
+        /** Metres on the ground across a cell and down a row. */
+        val cellWidthMetres: Double = config.cellWidthKm * 1000.0
+        val cellHeightMetres: Double = config.cellHeightKm * 1000.0
+
         /** [POND_DEPTH_METRES] as a share of the land's relief, which is what the routing works in. */
         val pondDepth: Float = scale.reliefShareOfMetres(POND_DEPTH_METRES)
 
@@ -1424,6 +1437,17 @@ internal object HydraulicErosion {
                 )
             }
 
+            // The unresolved channels' and hillslopes' own transport, an experiment behind its
+            // setting: see [ErosionConfig.subGridTransport] and [subGridCreep].
+            if (erosion.subGridTransport) {
+                val toSea = subGridCreep(
+                    rates, cellsAcross, cellsDown, isLand, sea.shorelineHeight, erodibility, runoff, working.data,
+                    scale.yearsPerHydraulicRound
+                )
+                incised += toSea
+                lost += toSea
+            }
+
             working = relax(working)
 
             if (onRound != null) {
@@ -2295,6 +2319,88 @@ internal object HydraulicErosion {
                 watch.cut(round, cell, receiver, courantNumber, height, baseBefore, baseAfter, after)
             }
         }
+    }
+
+    /**
+     * One round of the sub-grid transport [ErosionConfig.subGridTransport] describes: linear
+     * diffusion of [surface] over the land for [years], conservative between land cells, with the
+     * diffusivity [Rates.subGridDiffusivity] times each cell's [erodibility] and the square root
+     * of its [runoff] weight, a face taking the mean of its two cells'.
+     *
+     * Five-point, on the ground: a face across a row is a cell width long and one down a column a
+     * row's height, each difference over its own length squared. Explicit, in as many equal steps
+     * as keep the fastest cell's `dt D (2/dx^2 + 2/dy^2)` at or under a fifth: stable is under
+     * one, and a fifth keeps the steps' own damping within a hundredth of the law's on a ripple
+     * eight rows long (`SubGridTransportTest`). The sea is a
+     * boundary at [shorelineHeight]: land above it loses to it what the face carries, never more
+     * than its own height over the shoreline, and the sea gives nothing back. The poles are closed.
+     *
+     * @return what crept into the sea, summed in the height field's unit.
+     */
+    internal fun subGridCreep(
+        rates: Rates,
+        cellsAcross: Int,
+        cellsDown: Int,
+        isLand: BooleanArray,
+        shorelineHeight: Float,
+        erodibility: FloatArray,
+        runoff: FloatArray,
+        surface: FloatArray,
+        years: Double
+    ): Double {
+        val cellCount = cellsAcross * cellsDown
+        val diffusivity = DoubleArray(cellCount)
+        var fastest = 0.0
+        for (cell in 0 until cellCount) {
+            if (!isLand[cell]) continue
+            val d = rates.subGridDiffusivity * erodibility[cell] * sqrt(runoff[cell].coerceAtLeast(0f).toDouble())
+            diffusivity[cell] = d
+            if (d > fastest) fastest = d
+        }
+        if (fastest <= 0.0) return 0.0
+        val acrossRow = 1.0 / (rates.cellWidthMetres * rates.cellWidthMetres)
+        val downColumn = 1.0 / (rates.cellHeightMetres * rates.cellHeightMetres)
+        val steps = kotlin.math.ceil(years * fastest * (2 * acrossRow + 2 * downColumn) / 0.2).toInt().coerceAtLeast(1)
+        val dt = years / steps
+        val height = DoubleArray(cellCount) { surface[it].toDouble() }
+        val change = DoubleArray(cellCount)
+        val shore = shorelineHeight.toDouble()
+        var toSea = 0.0
+        repeat(steps) {
+            change.fill(0.0)
+            for (cell in 0 until cellCount) {
+                if (!isLand[cell]) continue
+                val row = cell / cellsAcross
+                val column = cell % cellsAcross
+                // East and south faces between land cells, each once.
+                val east = row * cellsAcross + (column + 1) % cellsAcross
+                val faces = if (row + 1 < cellsDown) 2 else 1
+                for (face in 0 until faces) {
+                    val other = if (face == 0) east else cell + cellsAcross
+                    val weight = if (face == 0) acrossRow else downColumn
+                    if (isLand[other]) {
+                        val flux = 0.5 * (diffusivity[cell] + diffusivity[other]) * weight * dt * (height[cell] - height[other])
+                        change[cell] -= flux
+                        change[other] += flux
+                    }
+                }
+                // Every face onto the sea, from this cell's side.
+                if (height[cell] > shore) {
+                    var out = 0.0
+                    val west = row * cellsAcross + (column - 1 + cellsAcross) % cellsAcross
+                    if (!isLand[east]) out += diffusivity[cell] * acrossRow * dt * (height[cell] - shore)
+                    if (!isLand[west]) out += diffusivity[cell] * acrossRow * dt * (height[cell] - shore)
+                    if (row > 0 && !isLand[cell - cellsAcross]) out += diffusivity[cell] * downColumn * dt * (height[cell] - shore)
+                    if (row + 1 < cellsDown && !isLand[cell + cellsAcross]) out += diffusivity[cell] * downColumn * dt * (height[cell] - shore)
+                    out = minOf(out, height[cell] - shore)
+                    change[cell] -= out
+                    toSea += out
+                }
+            }
+            for (cell in 0 until cellCount) if (isLand[cell]) height[cell] += change[cell]
+        }
+        for (cell in 0 until cellCount) if (isLand[cell]) surface[cell] = height[cell].toFloat()
+        return toSea
     }
 
     /**

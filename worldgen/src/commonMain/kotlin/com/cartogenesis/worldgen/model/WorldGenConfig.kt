@@ -2211,6 +2211,38 @@ data class ErosionConfig(
      */
     val outletIncision: Boolean = true,
     /**
+     * **An experiment, off by default (Fix 3b's comb round).** Whether the rounds carry the
+     * sediment a cell's *unresolved* channels and hillslopes move across its boundaries, as a
+     * conservative diffusion of the actual ground after each round's deposition walk.
+     *
+     * The form is the stream-power-plus-linear-diffusion model's (Perron, Dietrich and Kirchner,
+     * *Controls on the spacing of first-order valleys*, JGR Earth Surface 113, F04016, 2008;
+     * Theodoratos, Seybold and Kirchner, *Scaling and similarity of a stream-power incision and
+     * linear diffusion landscape evolution model*, Earth Surface Dynamics 6, 779-808, 2018):
+     * `dz/dt = U - K A^m S + D laplacian(z)`. Its two laws set a length,
+     * `lc = (D / K)^(1/(2m+1))`, the scale at which diffusion and incision are equally effective,
+     * and Perron and others find valley spacing proportional to it.
+     *
+     * **The scale, derived before it was measured.** Earth's soil creep has `D` of order 10^-3 to
+     * 10^-2 m² a year; with this model's `K` of 10^-6 a year ([bedrockErodibilityPerYear]) that
+     * puts `lc` at 30 to 100 m, and over the rounds' four million years creep moves material
+     * `sqrt(D t)`, about 0.1 km, against cells of 12 to 23 km at 512. Earth's creep at Earth's
+     * rate cannot act at this grid at all, so it is not what this is. What a coarse cell's resolved
+     * slope stands for is many unresolved channels and hillslopes, and the sediment *they* move
+     * across the cell's boundary follows the incision law itself on the cell's own ground: the
+     * flux per unit width out of a cell of side `delta` is its erosion `K a^m S` over the upslope
+     * length inside it, with sub-grid catchment `a ~ delta^2`, which is `K delta^(2m+1) S`:
+     * diffusive in form, with `D_sub = K delta^(2m+1)`, `K delta^2` at `m = 1/2`, taken here as
+     * `K e sqrt(w) dx dy` with the cell's cover factor `e` and runoff weight `w` as the incision
+     * reads them. That is `lc` set equal to the cell, from the law's own `K` and the cell's size,
+     * with no factor chosen: at 512, 274 m² a year on bare ground at mean rain. It is not chosen
+     * against the comb; it may count the cell's own-area cut the resolved incision already takes
+     * along its one receiver twice, which is what the experiment is for.
+     *
+     * Material crept into the sea leaves the model, booked as incised and lost to sea.
+     */
+    val subGridTransport: Boolean = false,
+    /**
      * How much harder the water cuts at a basin's outlet than it does in an ordinary channel, as a
      * multiple of the same stream-power coefficient.
      *

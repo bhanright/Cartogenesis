@@ -790,10 +790,9 @@ run and 33.6% on the finished map. A piece is now given only to a neighbour it l
 and the largest realm on seeds 7/42/1234/99 at 512 and 969495 at 2048 holds 21.4/26.6/19.9/24.8/21.0%
 (33.6/29.2/24.7/23.1/29.9% before). `RealmSpreadTest` asserts it. Where no neighbour can take a
 piece within the cap, the piece is not left behind as an exclave of a realm it no longer touches:
-a smaller one than the smallest realm goes to the neighbour holding most of its edge while that
-neighbour's whole excess over the cap stays under the smallest realm, and any other piece becomes a
-realm of its own with its capital on its best ground. No realm ends a smallest realm or more over
-the cap. A schism's breakaway also takes any run of the rest it
+it becomes a realm of its own with its capital on its best ground, whatever its size, so no realm
+ends over the cap; the price is a realm under the smallest size where a small piece has nowhere else
+to go. A schism's breakaway also takes any run of the rest it
 would cut off from the rest's main body. Counted over seeds 7/42/1234/99 at 512, no piece of any
 realm is stranded inside another's land (none on origin/main either), and one realm is landlocked
 inside a single neighbour against origin/main's three; realms on a coast with one land neighbour,
@@ -807,7 +806,9 @@ closed lake opened a unit per cell of its water; the size bound compared rain-we
 count of cells, so on the standard seeds the largest unit ran 3.0 to 4.2 times the configured share; and
 the merge of small units could take one across a strait and join two landmasses. Units are now
 labelled receivers first, down the drainage order reversed; each closed lake and each playa is one
-sink, whose water is never cut and whose land is cut at the bound like any other tributary's; the
+sink, and so is each overflowing lake, whose water is never cut and whose land is cut at the bound
+like any other tributary's, and a lake a trunk crosses goes whole to one bank when a unit is cut
+along its trunk; the
 bound is an area on the ground, cut at confluences, which no merge may pass; and a small
 unit merges only into a neighbour on its own landmass, the one it shares the longest border with. On
 seeds 7/42/1234 at 512 the largest realm unit went from 4.2/3.8/3.0 times the share to within it, and

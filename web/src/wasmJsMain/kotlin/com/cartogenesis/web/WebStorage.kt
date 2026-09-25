@@ -10,7 +10,10 @@ import com.cartogenesis.cartography.WorldFormatException
 import com.cartogenesis.ui.randomId
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
-import kotlin.coroutines.suspendCoroutine
+import kotlin.coroutines.cancellation.CancellationException
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 
 /**
  * Saved worlds in IndexedDB, and real gzip on this platform.
@@ -234,9 +237,14 @@ private external fun thenStoragePromise(
  * [awaitPromise] fits the GPU path, where a failure and "nothing to report" are the same answer.
  * A write that silently did not happen is a worse failure than one that throws, so IndexedDB's
  * calls use this instead and let the caller turn it into a message.
+ *
+ * Cancellable: a coroutine cancelled while the browser works stops waiting at once and throws, and
+ * whatever the promise settles to afterwards is dropped. The browser's own work is not stopped by
+ * that, so a caller with something to undo — a stream to abort, parts to clear — does it after the
+ * throw, and a call that must be seen to its end, a commit, is awaited under `NonCancellable`.
  */
 internal suspend fun awaitPromiseOrThrow(promise: JsHandle): JsHandle? =
-    suspendCoroutine { continuation ->
+    suspendCancellableCoroutine { continuation ->
         thenStoragePromise(
             promise,
             resolve = { continuation.resume(it) },
@@ -492,6 +500,9 @@ internal class IndexedDbLibrary(
     private suspend fun <T> withDb(block: suspend (IndexedDbConnection) -> T): T {
         val db = try {
             IndexedDbConnection.open()
+        } catch (cancelled: CancellationException) {
+            // A cancellation is an IllegalStateException too, and is not the storage refusing.
+            throw cancelled
         } catch (refused: IllegalStateException) {
             throw WorldFormatException(SaveProblem.UNREADABLE, refused.message.orEmpty())
         }
@@ -507,6 +518,9 @@ internal class IndexedDbLibrary(
     override suspend fun <T> reading(name: String, block: suspend (SaveSource) -> T): T? = withDb { db ->
         val payload = try {
             db.payload(name)
+        } catch (cancelled: CancellationException) {
+            // A cancellation is an IllegalStateException too, and is not the storage refusing.
+            throw cancelled
         } catch (refused: IllegalStateException) {
             throw WorldFormatException(SaveProblem.UNREADABLE, refused.message.orEmpty())
         } ?: return@withDb null
@@ -521,6 +535,9 @@ internal class IndexedDbLibrary(
     override suspend fun readPrefix(name: String, limitBytes: Int): ByteArray? =
         try {
             withDb { it.get(STORE_HEADERS, name) }
+        } catch (cancelled: CancellationException) {
+            // A cancellation is an IllegalStateException too, and is not the storage refusing.
+            throw cancelled
         } catch (refused: IllegalStateException) {
             throw WorldFormatException(SaveProblem.UNREADABLE, refused.message.orEmpty())
         }
@@ -532,19 +549,26 @@ internal class IndexedDbLibrary(
             val sink = StoredPartsSink(db, name, token, partObserver)
             contents(sink)
             sink.flush()
-            val replaced = db.commit(name, sink.header.bytes(), token, sink.count)
+            // The commit is seen to its end once begun: abandoned halfway through its wait, the
+            // transaction would still land, and the cleanup below would then clear the parts of
+            // the save it had just made the library's.
+            val replaced = withContext(NonCancellable) { db.commit(name, sink.header.bytes(), token, sink.count) }
             committed = true
-            if (replaced != null) db.deleteParts(name, replaced)
+            if (replaced != null) withContext(NonCancellable) { db.deleteParts(name, replaced) }
         } finally {
             // A write that did not finish leaves its parts behind unnamed; they are cleared here
-            // rather than left to fill the browser's quota.
-            if (!committed) runCatching { db.deleteParts(name, token) }
+            // rather than left to fill the browser's quota, cancelled or not.
+            if (!committed) withContext(NonCancellable) { runCatching { db.deleteParts(name, token) } }
         }
     }
 
-    override suspend fun remove(name: String) = withDb { db ->
-        val token = db.deleteSave(name)
-        if (token != null) db.deleteParts(name, token)
+    // Seen to its end once begun, as a commit is: a delete abandoned between its two steps would
+    // leave the parts of a save nobody names.
+    override suspend fun remove(name: String) = withContext(NonCancellable) {
+        withDb { db ->
+            val token = db.deleteSave(name)
+            if (token != null) db.deleteParts(name, token)
+        }
     }
 
     companion object {

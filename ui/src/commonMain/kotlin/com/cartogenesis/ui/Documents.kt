@@ -1,5 +1,8 @@
 package com.cartogenesis.ui
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import com.cartogenesis.cartography.WorldDocument
 import com.cartogenesis.cartography.WorldLibrary
 import com.cartogenesis.cartography.WorldOverrides
@@ -64,6 +67,55 @@ internal data class DocumentIdentity(
             else DocumentIdentity(freshId(), null, document.config.seed)
     }
 }
+
+/**
+ * The document on screen, and which opening of it this is.
+ *
+ * A save runs while the reader goes on working, and when it finishes it records where it wrote
+ * only if the document on screen is still the one it saved. The id cannot tell: a sync client's
+ * conflict copy carries the id of the file it was copied from, so opening that copy while a Save of
+ * the file was under way gave the copy the file's key when the Save finished, and the copy's next
+ * Save wrote over the file. So every opening — a new world, a file opened, Save as — is a session
+ * of its own, and a save belongs to the session it was asked in.
+ */
+internal class OpenDocument(initial: DocumentIdentity) {
+
+    var identity: DocumentIdentity by mutableStateOf(initial)
+        private set
+
+    private var session = 0L
+
+    /** Another document than the last: opened, made new, or saved as. */
+    fun becomes(next: DocumentIdentity) {
+        identity = next
+        session++
+    }
+
+    /** After a generation made [madeSeed]'s world: the same session while it is the same document. */
+    fun afterGenerating(madeSeed: Long, freshId: () -> String) {
+        val next = identity.afterGenerating(madeSeed, freshId)
+        if (next.id == identity.id) identity = next else becomes(next)
+    }
+
+    /** What a save asked for now carries with it to the end. */
+    fun saving(): SaveTicket = SaveTicket(session, identity)
+
+    /**
+     * Where a save of [ticket] writes in [destination], read when the write starts: the document's
+     * key there as it is now, while the document is the one the save was asked for — an earlier
+     * Save of it may have finished while this one waited — and the ticket's own otherwise.
+     */
+    fun keyFor(ticket: SaveTicket, destination: WorldLibrary): String? =
+        (if (ticket.session == session) identity else ticket.identity).keyIn(destination)
+
+    /** A save of [ticket] wrote [key] in [into]: recorded only if the document is still that one. */
+    fun saved(ticket: SaveTicket, key: String, into: WorldLibrary) {
+        if (ticket.session == session) identity = identity.at(key, into)
+    }
+}
+
+/** A save's claim on the document it was asked for: which opening, and its identity then. */
+internal class SaveTicket(val session: Long, val identity: DocumentIdentity)
 
 /**
  * The document Save, Save as and Download file [world] under.

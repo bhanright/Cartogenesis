@@ -102,6 +102,41 @@ internal suspend fun <T> withTestFolder(purpose: String, block: suspend (TestFol
 }
 
 /**
+ * Takes `move` off every file-system handle prototype that has one of its own, returning what was
+ * taken for [restoreMove] to put back: a browser without it, as older Chrome is for a folder on
+ * the disk, which the private file system cannot otherwise stand in for.
+ */
+@JsFun(
+    """() => {
+        const held = [];
+        for (const proto of [FileSystemHandle.prototype, FileSystemFileHandle.prototype]) {
+            const own = Object.getOwnPropertyDescriptor(proto, 'move');
+            if (own) { held.push([proto, own]); delete proto.move; }
+        }
+        return held;
+    }"""
+)
+private external fun hideMove(): JsHandle
+
+@JsFun("(held) => { for (const [proto, own] of held) Object.defineProperty(proto, 'move', own); }")
+private external fun restoreMove(held: JsHandle)
+
+@JsFun("() => typeof FileSystemFileHandle.prototype.move === 'function'")
+private external fun moveOffered(): Boolean
+
+/** Runs [block] as this browser is, or, when [canMove] is false, as one with no `move`. */
+internal suspend fun <T> withMoveIf(canMove: Boolean, block: suspend () -> T): T {
+    if (canMove) return block()
+    val held = hideMove()
+    try {
+        check(!moveOffered()) { "move was not taken away" }
+        return block()
+    } finally {
+        restoreMove(held)
+    }
+}
+
+/**
  * Fails unless [actual] is [expected], byte for byte, saying where they part. Not
  * `assertContentEquals`, whose message prints both arrays whole: a save's hundred and eighty
  * thousand numbers overran the test reporter between the browser and Gradle, which then lost the

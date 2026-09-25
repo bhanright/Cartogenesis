@@ -312,11 +312,17 @@ private fun Application(
     var pendingLabel by remember { mutableStateOf<Pair<Float, Float>?>(null) }
     var labelMode by remember { mutableStateOf(false) }
     /** Which document the world on screen is, and where Save writes it. See [DocumentIdentity]. */
-    var identity by remember { mutableStateOf(DocumentIdentity(randomId(), key = null, seed = null)) }
+    val document = remember { OpenDocument(DocumentIdentity(randomId(), key = null, seed = null)) }
     // The world's name: generated after each generation, editable in the header, and what the
     // save is filed under. See [WorldNaming] for the rule about which of those wins when.
     val naming = remember { WorldNaming() }
-    var saved by remember { mutableStateOf(listOf<LibraryEntry>()) }
+    /**
+     * The worlds the pane lists, with the library that listed them. A row's Open and Delete go to
+     * that library and no other, and the pane draws the rows only while it is still the library in
+     * use: between a move and the next listing there are no rows, rather than the last place's rows
+     * under the new place's name, where a Delete removed the new place's file of the same name.
+     */
+    var shelf by remember { mutableStateOf(LibraryShelf(library = null, entries = emptyList())) }
     /**
      * Which library is in use: the platform's own, or a folder the reader chose where the browser
      * allows one. Every list, open, save and delete asks it at the moment it starts, and keeps the
@@ -357,7 +363,7 @@ private fun Application(
     // back, or null for a file from outside the library.
     fun openSave(save: WorldSave, key: String?, from: WorldLibrary?) {
         val opened = save.document
-        identity = DocumentIdentity.opened(opened, key, from, ::randomId)
+        document.becomes(DocumentIdentity.opened(opened, key, from, ::randomId))
         naming.opened(opened.config.seed, opened.title)
         overrides = opened.overrides
         labels = opened.labels
@@ -373,7 +379,7 @@ private fun Application(
 
     /** The document [shown] is filed under, which is what Save and Download hand on. */
     fun documentOf(shown: WorldMap): WorldDocument =
-        documentFor(shown, identity, naming.title, overrides, labels, epochMillis())
+        documentFor(shown, document.identity, naming.title, overrides, labels, epochMillis())
 
     /**
      * A line saying [what] failed and why, and what became of the library if the failure was the
@@ -405,7 +411,7 @@ private fun Application(
                 emptyList()
             }
         }
-        if (places.library === listing) saved = listed
+        if (places.library === listing) shelf = LibraryShelf(listing, listed)
         hostWorldCount = places.hostWorldCount()
     }
 
@@ -432,31 +438,30 @@ private fun Application(
             status = "Reconnect to the library's folder, or choose this browser's storage, before saving."
             return
         }
-        val document = documentOf(current)
-        val writing = identity
+        val filed = documentOf(current)
+        val ticket = document.saving()
         scope.launch {
             status = try {
                 saving.withLock {
                     // Where the document was last written, read now rather than when Save was
                     // pressed: an earlier Save of it may have finished while this one waited.
-                    val owner = if (identity.id == writing.id) identity else writing
-                    val key = target.save(document, current, owner.keyIn(target))
-                    // Unless a world at another seed has taken this one's place while it was written.
-                    if (identity.id == writing.id) identity = identity.at(key, target)
+                    val key = target.save(filed, current, document.keyFor(ticket, target))
+                    // Unless another document has taken this one's place while it was written.
+                    document.saved(ticket, key, target)
                 }
                 refreshLibrary()
-                "Saved \"${document.title}\""
+                "Saved \"${filed.title}\""
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (failure: Throwable) {
-                failureLine("Could not save \"${document.title}\"", failure, target)
+                failureLine("Could not save \"${filed.title}\"", failure, target)
             }
         }
     }
 
-    /** Opens the library's [key]: the world, or a line saying why it will not open. */
-    fun openFromLibrary(key: String) {
-        val source = places.library ?: return
+    /** Opens [key] from [source], the library that listed it: the world, or why it will not open. */
+    fun openFromLibrary(key: String, source: WorldLibrary?) {
+        source ?: return
         scope.launch {
             status = try {
                 when (val outcome = source.load(key)) {
@@ -682,7 +687,7 @@ private fun Application(
             naming.generated(config.seed, Cartouches.suggest(generated))
             // And by the same rule a world at another seed is another document, so the next Save
             // writes a new file rather than over the last world's.
-            identity = identity.afterGenerating(generated.config.seed, ::randomId)
+            document.afterGenerating(generated.config.seed, ::randomId)
             // Any notice from an earlier export or save is about a world no longer on screen.
             status = ""
         } finally {
@@ -788,7 +793,7 @@ private fun Application(
             onConfirm = { title ->
                 // A new document rather than a new name on the old one, which is the difference
                 // between Save as and renaming: the world already in the library stays there.
-                identity = identity.savedAs(::randomId)
+                document.becomes(document.identity.savedAs(::randomId))
                 naming.rename(title)
                 saveAs = false
                 saveWorld()
@@ -863,7 +868,7 @@ private fun Application(
         if (screen == Screen.LIBRARY) {
             LibraryPane(
                 title = naming.name,
-                worlds = saved,
+                worlds = shelf.entries.takeIf { shelf.library === places.library }.orEmpty(),
                 location = places.location,
                 place = if (places.offersFolders) places.place else null,
                 libraryInUse = places.library != null,
@@ -878,15 +883,15 @@ private fun Application(
                     // Handing over the same bytes a save would have written - the format is
                     // shared, so this is the whole of moving a world to the other front end.
                     if (current != null) {
-                        val document = documentOf(current)
+                        val filed = documentOf(current)
                         scope.launch {
                             status = try {
-                                platform.downloadWorld(document, current)
-                                "Downloaded \"${document.title}\""
+                                platform.downloadWorld(filed, current)
+                                "Downloaded \"${filed.title}\""
                             } catch (cancelled: CancellationException) {
                                 throw cancelled
                             } catch (failure: Throwable) {
-                                "Could not download \"${document.title}\": ${failure.message ?: failure::class.simpleName}"
+                                "Could not download \"${filed.title}\": ${failure.message ?: failure::class.simpleName}"
                             }
                         }
                     }
@@ -912,9 +917,9 @@ private fun Application(
                 // Handing the saved world back as the world to reuse is the whole of opening it:
                 // the generation the settings change kicks off finds every stage already matching
                 // its config and computes none of them.
-                onOpen = { key -> openFromLibrary(key) },
+                onOpen = { key -> openFromLibrary(key, shelf.library) },
                 onDelete = { key ->
-                    val target = places.library
+                    val target = shelf.library
                     if (target != null) {
                         scope.launch {
                             status = try {
@@ -933,13 +938,13 @@ private fun Application(
                 // still handling the click, so both coroutines start undispatched: the call that
                 // opens either runs inside this handler, before anything else can suspend.
                 onChooseFolder = {
-                    scope.launch(start = CoroutineStart.UNDISPATCHED) { status = places.choose() }
+                    scope.launch(start = CoroutineStart.UNDISPATCHED) { places.choose()?.let { status = it } }
                 },
                 onReconnect = {
-                    scope.launch(start = CoroutineStart.UNDISPATCHED) { status = places.reconnect() }
+                    scope.launch(start = CoroutineStart.UNDISPATCHED) { places.reconnect()?.let { status = it } }
                 },
                 onUseHostStorage = {
-                    scope.launch { status = places.useHostStorage() }
+                    scope.launch { places.useHostStorage()?.let { status = it } }
                 },
                 onCopyIntoFolder = {
                     scope.launch {
@@ -2397,3 +2402,6 @@ private fun NameLabelDialog(onDismiss: () -> Unit, onConfirm: (String, LabelKind
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
 }
+
+/** A listing of the library, and the library it is a listing of: see `shelf` in [Application]. */
+internal class LibraryShelf(val library: WorldLibrary?, val entries: List<LibraryEntry>)

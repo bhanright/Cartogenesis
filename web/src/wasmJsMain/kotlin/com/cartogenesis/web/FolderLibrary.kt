@@ -13,7 +13,10 @@ import com.cartogenesis.ui.FolderPermission
 import com.cartogenesis.ui.LibraryFolder
 import com.cartogenesis.ui.RememberedPlace
 import com.cartogenesis.ui.randomId
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 
 /**
@@ -142,6 +145,9 @@ private fun readerWords(failure: Throwable): String {
 private suspend fun awaitFolder(promise: JsHandle): JsHandle? =
     try {
         awaitPromiseOrThrow(promise)
+    } catch (cancelled: CancellationException) {
+        // A cancellation is an IllegalStateException too, and is not the storage refusing.
+        throw cancelled
     } catch (refused: IllegalStateException) {
         throw FolderException(readerWords(refused), refused.message.orEmpty())
     }
@@ -184,6 +190,22 @@ internal class BufferGauge {
 }
 
 /**
+ * Points in a write at which the browser tests step in: to cancel while a part is with the
+ * browser, to put another writer's file in the way just before one is made, or to fail at a step
+ * no stand-in compressor reaches. The application never sets one, and each does nothing.
+ */
+internal open class WriteSteps {
+    /** A part has been handed to the stream and its promise not yet waited for. */
+    open suspend fun partHandedToStream(index: Int) {}
+
+    /** The fallback copy is about to make, or open, the file [name]. */
+    open suspend fun beforeTargetCreated(name: String) {}
+
+    /** A save is published and its temporary file [name] is about to be removed. */
+    open suspend fun beforeTemporaryRemoved(name: String) {}
+}
+
+/**
  * A save written into a writable stream a part at a time: [partBytes] are gathered, handed to the
  * browser, and waited for before the next part is gathered, so what the tab holds for the save is
  * one part and the copy of it the stream is taking — never the file.
@@ -191,10 +213,12 @@ internal class BufferGauge {
 private class FolderSink(
     private val writable: JsHandle,
     partBytes: Int,
-    private val gauge: BufferGauge
+    private val gauge: BufferGauge,
+    private val steps: WriteSteps
 ) : SaveSink {
     private val buffer = ByteArray(partBytes)
     private var filled = 0
+    private var handed = 0
 
     init {
         gauge.hold(buffer.size)
@@ -217,7 +241,9 @@ private class FolderSink(
         val part = filled
         gauge.hold(part)
         try {
-            awaitFolder(writePart(writable, buffer.toJs(0, part)))
+            val taking = writePart(writable, buffer.toJs(0, part))
+            steps.partHandedToStream(handed++)
+            awaitFolder(taking)
         } finally {
             gauge.release(part)
         }
@@ -258,6 +284,9 @@ private class FolderSource(
             } catch (refused: FolderException) {
                 gauge.release(2 * sliceBytes)
                 throw WorldFormatException(SaveProblem.UNREADABLE, refused.message.orEmpty())
+            } catch (cancelled: CancellationException) {
+                gauge.release(2 * sliceBytes)
+                throw cancelled
             }
             gauge.release(sliceBytes)
             if (slice == null) {
@@ -288,26 +317,36 @@ private class FolderSource(
  *
  * **Writing.** A save of a file that is there is written through the file's own writable stream,
  * which the browser keeps in a swap file beside it (`<name>.crswap`, which the listing ignores) and
- * moves over the file only when the stream is closed whole; a failure or a cancellation aborts the
- * stream and the file is as it was. A new file is written under a temporary name that does not end
- * in `.cgw` — `~<name>.<token>.tmp`, the shape the desktop's store uses and sync clients leave alone
- * — and moved to its name only once it is whole, so no reader, listing or sync client sees a half
- * of one, or the empty file a writable stream's target is from the moment it is created. A failure
- * removes the temporary file. Where the browser cannot move a file ([canMove] false, or `move`
- * answering `NotSupportedError`), the temporary file is copied into the new name instead and then
- * removed: the new name is then visible, empty, while the copy runs, and is removed again if the
- * copy fails.
+ * moves over the file only when the stream is closed whole; a failure or a cancellation before the
+ * close aborts the stream and the file is as it was. A new file is written under a temporary name
+ * that does not end in `.cgw` — `~<name>.<token>.tmp`, the shape the desktop's store uses and sync
+ * clients leave alone — and moved to its name only once it is whole, so no reader, listing or sync
+ * client sees a half of one, or the empty file a writable stream's target is from the moment it is
+ * created. A failure, or a cancellation before the move, removes the temporary file.
+ *
+ * **Where the browser cannot move a file** ([canMove] false, or `move` answering
+ * `NotSupportedError`), the temporary file is copied into the new name instead: see
+ * [copyIntoNewFile]. The new name is then visible, empty, while the copy runs.
+ *
+ * **Publishing is one step, letting go of the temporary file another.** Once the save is whole
+ * under its name nothing undoes it: a temporary file that will not be removed stays, under a name
+ * no listing reads.
+ *
+ * **Cancellation** is seen at every wait on the browser. The close and the move are the commits,
+ * and each is seen to its end once begun, so a cancelled save is either not made or made whole.
  *
  * **Reading.** A save is read a slice of [partBytes] at a time through `Blob.slice`, and a listing
  * reads only the front of each file, so no file is ever held whole in the tab.
  *
- * [gauge] counts what a save holds while it passes through, for the memory guard.
+ * [gauge] counts what a save holds while it passes through, for the memory guard; [steps] is where
+ * the browser tests step into a write.
  */
 internal class FolderWorldLibrary(
     private val directory: JsHandle,
     compressor: Compressor,
     writtenBy: String,
-    private val partBytes: Int = PART_BYTES
+    private val partBytes: Int = PART_BYTES,
+    private val steps: WriteSteps = WriteSteps()
 ) : ByteWorldLibrary(compressor, writtenBy) {
 
     val gauge = BufferGauge()
@@ -345,7 +384,7 @@ internal class FolderWorldLibrary(
     override suspend fun replacing(name: String, contents: suspend (SaveSink) -> Unit) {
         val existing = awaitFolder(existingFile(directory, name))
         if (existing == null || isNullish(existing)) {
-            publishNew(name, contents) { name }
+            publishNew(name, contents, replacesTakenName = true) { name }
         } else {
             writeThrough(existing, contents)
         }
@@ -353,7 +392,7 @@ internal class FolderWorldLibrary(
 
     /** A new file, named once it is whole: see the class comment. */
     override suspend fun creating(wanted: String, contents: suspend (SaveSink) -> Unit): String =
-        publishNew(wanted, contents) { freeName(wanted) }
+        publishNew(wanted, contents, replacesTakenName = false) { freeName(wanted) }
 
     override suspend fun remove(name: String) {
         awaitFolder(removeFile(directory, name))
@@ -368,14 +407,19 @@ internal class FolderWorldLibrary(
         return if (file == null || isNullish(file)) null else file
     }
 
-    /** Streams [contents] into [file] and commits it, or aborts the stream and rethrows. */
+    /**
+     * Streams [contents] into [file] and commits it, or aborts the stream and rethrows. A cancel
+     * that has arrived stops the write before the close; the close, once begun, is seen to its
+     * end, so the file is the old one or the new one and this call knows which.
+     */
     private suspend fun writeThrough(file: JsHandle, contents: suspend (SaveSink) -> Unit) {
         val writable = awaitFolder(writableOf(file)) ?: error("the browser gave no stream to write the file with")
-        val sink = FolderSink(writable, partBytes, gauge)
+        val sink = FolderSink(writable, partBytes, gauge, steps)
         try {
             contents(sink)
             sink.flush()
-            awaitFolder(closeWritable(writable))
+            currentCoroutineContext().ensureActive()
+            withContext(NonCancellable) { awaitFolder(closeWritable(writable)) }
         } catch (failure: Throwable) {
             withContext(NonCancellable) { awaitPromise(abortWritable(writable)) }
             throw failure
@@ -385,55 +429,107 @@ internal class FolderWorldLibrary(
     }
 
     /**
-     * Writes [contents] under a temporary name, then asks [finalName] what to call it — the last
-     * look at the folder before the move — and moves it there. Returns the name it took. Whatever
-     * fails, or is cancelled, leaves no file behind that this call created.
+     * Writes [contents] under a temporary name, then publishes it under the name [finalName] gives
+     * — asked only once the bytes are written, as the last look at the folder — and returns that
+     * name. [replacesTakenName] is true when the name is a key being written back, whose file is
+     * the one to replace; otherwise a name found taken is passed over. Until the save is published,
+     * whatever fails or is cancelled leaves no file this call made; after it, nothing undoes it.
      */
     private suspend fun publishNew(
         wanted: String,
         contents: suspend (SaveSink) -> Unit,
+        replacesTakenName: Boolean,
         finalName: suspend () -> String
     ): String {
         val temporaryName = "~$wanted.${randomId()}$TEMPORARY_SUFFIX"
         val temporary = awaitFolder(createdFile(directory, temporaryName))
             ?: error("the browser gave no file to write the save into")
-        var name: String? = null
-        var createdUnderName = false
-        try {
+        val name = try {
             writeThrough(temporary, contents)
-            name = finalName()
-            val moved = canMove(temporary) && isTrue(awaitFolder(moveFile(temporary, directory, name)))
-            if (!moved) {
-                createdUnderName = true
-                copyInto(name, temporary)
+            currentCoroutineContext().ensureActive()
+            publish(temporary, replacesTakenName, finalName)
+        } catch (failure: Throwable) {
+            withContext(NonCancellable) { runCatching { awaitFolder(removeFile(directory, temporaryName)) } }
+            throw failure
+        }
+        // Published. A move has taken the temporary name already, and after a copy the file is
+        // let go on its own: failing to, it stays under a name no listing reads.
+        withContext(NonCancellable) {
+            runCatching {
+                steps.beforeTemporaryRemoved(temporaryName)
                 awaitFolder(removeFile(directory, temporaryName))
             }
-            return name
-        } catch (failure: Throwable) {
-            withContext(NonCancellable) {
-                runCatching { awaitFolder(removeFile(directory, temporaryName)) }
-                if (createdUnderName && name != null) runCatching { awaitFolder(removeFile(directory, name)) }
+        }
+        return name
+    }
+
+    /** Makes the written [temporary] the save: by a rename where the browser can, by a copy where not. */
+    private suspend fun publish(temporary: JsHandle, replacesTakenName: Boolean, finalName: suspend () -> String): String {
+        if (canMove(temporary)) {
+            val name = finalName()
+            // The rename is the commit, seen to its end once begun.
+            val moved = withContext(NonCancellable) { isTrue(awaitFolder(moveFile(temporary, directory, name))) }
+            if (moved) return name
+        }
+        return copyIntoNewFile(temporary, replacesTakenName, finalName)
+    }
+
+    /**
+     * The fallback where a file cannot be moved: [temporary]'s bytes streamed into a file under the
+     * name [finalName] gives, looked up again immediately before the file is made, and the name
+     * returned.
+     *
+     * `getFileHandle(create)` opens a file that is there as readily as it makes one, and the page is
+     * given no way to make one only if it is not. So the file it hands back is looked at before a
+     * byte goes into it: one with anything in it is another writer's, arrived since the last look,
+     * and the save moves on to the next free name and leaves it be — unless [replacesTakenName], when
+     * that file is the one being written back. On a failure the file is removed only while it is
+     * still the empty file this call made; one another writer has filled meanwhile is theirs.
+     */
+    private suspend fun copyIntoNewFile(
+        temporary: JsHandle,
+        replacesTakenName: Boolean,
+        finalName: suspend () -> String
+    ): String {
+        val saved = awaitFolder(fileBehind(temporary)) ?: error("the browser could not read back the save it wrote")
+        repeat(MOST_NAMES_TRIED) {
+            val name = finalName()
+            steps.beforeTargetCreated(name)
+            val target = awaitFolder(createdFile(directory, name)) ?: error("the browser gave no file to copy the save into")
+            val found = awaitFolder(fileBehind(target)) ?: error("the browser could not read the file it made")
+            if (blobSize(found) > 0 && !replacesTakenName) return@repeat
+            try {
+                writeThrough(target) { sink -> copy(saved, sink) }
+                return name
+            } catch (failure: Throwable) {
+                withContext(NonCancellable) { removeIfStillEmpty(target, name) }
+                throw failure
             }
-            throw failure
+        }
+        error("every name this save tried was taken by another writer while it was being written")
+    }
+
+    /** [source] into [sink], a slice at a time, through a buffer of one part. */
+    private suspend fun copy(source: JsHandle, sink: SaveSink) {
+        val input = FolderSource(source, partBytes, gauge)
+        val buffer = ByteArray(partBytes)
+        gauge.hold(buffer.size)
+        try {
+            while (true) {
+                val count = input.read(buffer, 0, buffer.size)
+                if (count < 0) break
+                if (count > 0) sink.write(buffer, 0, count)
+            }
+        } finally {
+            input.close()
+            gauge.release(buffer.size)
         }
     }
 
-    /** The fallback where a file cannot be moved: [source]'s bytes streamed into a new file [name]. */
-    private suspend fun copyInto(name: String, source: JsHandle) {
-        val target = awaitFolder(createdFile(directory, name)) ?: error("the browser gave no file to copy the save into")
-        val file = awaitFolder(fileBehind(source)) ?: error("the browser could not read back the save it wrote")
-        writeThrough(target) { sink ->
-            val input = FolderSource(file, partBytes, gauge)
-            try {
-                val buffer = ByteArray(COPY_BUFFER_BYTES)
-                while (true) {
-                    val count = input.read(buffer, 0, buffer.size)
-                    if (count < 0) break
-                    if (count > 0) sink.write(buffer, 0, count)
-                }
-            } finally {
-                input.close()
-            }
+    private suspend fun removeIfStillEmpty(target: JsHandle, name: String) {
+        runCatching {
+            val now = awaitFolder(fileBehind(target))
+            if (now != null && !isNullish(now) && blobSize(now) == 0.0) awaitFolder(removeFile(directory, name))
         }
     }
 
@@ -445,17 +541,29 @@ internal class FolderWorldLibrary(
         const val PART_BYTES = 1 shl 20
 
         /**
-         * The most the library may hold for a save at once, in parts: the part being gathered and
-         * the copy of the last one the stream is still taking when writing, or a slice and the copy
-         * it arrived in when reading. Two, whatever the size of the file.
+         * The most the library may hold for a save at once, in parts, where the browser can move a
+         * file: the part being gathered and the copy of the last one the stream is still taking when
+         * writing, or a slice and the copy it arrived in when reading. Two, whatever the file's size.
          */
         const val BUFFER_BOUND_PARTS = 2
+
+        /**
+         * The same where the save is copied into its name instead: the part being gathered and the
+         * copy the stream is taking, as before, and beside them the slice being read back from the
+         * temporary file and the buffer it passes through — or, while a slice arrives, the slice
+         * twice over. Four, whatever the file's size.
+         */
+        const val FALLBACK_BOUND_PARTS = 4
 
         /** Ends a temporary file's name so no listing takes it for a save; the desktop's store uses the same. */
         private const val TEMPORARY_SUFFIX = ".tmp"
 
-        /** What the fallback copy holds between reading a slice and writing it on. */
-        private const val COPY_BUFFER_BYTES = 1 shl 16
+        /**
+         * How many names the fallback copy tries, each found taken by another writer in the moment
+         * since the last look, before it gives up: more than a handful in a row is something making
+         * files as fast as this looks, and a save that says so beats one that loops.
+         */
+        private const val MOST_NAMES_TRIED = 16
     }
 }
 

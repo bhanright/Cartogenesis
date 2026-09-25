@@ -155,12 +155,26 @@ class LibraryPlaces(private val platform: Platform) {
         }
 
     /**
+     * How many times the reader has asked for the library to move — started it, chosen a folder,
+     * reconnected, gone back to the host's storage. Each such request takes the next number, and
+     * every change of [place] that comes after a wait is made only if no request has been made
+     * since the one it belongs to: a slow answer about a folder left behind must never undo a
+     * choice the reader has made meanwhile.
+     */
+    private var requests = 0L
+
+    private fun newRequest(): Long = ++requests
+
+    private fun isCurrent(request: Long): Boolean = request == requests
+
+    /**
      * Reads the remembered choice and settles where the library is, asking the reader nothing.
      * Returns a line for the status bar when the reader's folder could not be used as it was left,
      * or null.
      */
     suspend fun start(): String? {
         val chooser = chooser ?: return null
+        val request = newRequest()
         val remembered = try {
             chooser.remembered()
         } catch (cancelled: CancellationException) {
@@ -169,11 +183,13 @@ class LibraryPlaces(private val platform: Platform) {
             RememberedPlace.NOTHING
         }
         val folder = remembered.folder
-        val notice = if (folder != null && remembered.inFolder) {
-            settle(folder)
-        } else {
-            place = LibraryPlace.HostStorage(folder)
-            null
+        val notice = when {
+            !isCurrent(request) -> null
+            folder != null && remembered.inFolder -> settle(folder, request)
+            else -> {
+                place = LibraryPlace.HostStorage(folder)
+                null
+            }
         }
         started = true
         return notice
@@ -181,12 +197,13 @@ class LibraryPlaces(private val platform: Platform) {
 
     /**
      * Opens the host's folder picker and, if the reader chose a folder, moves the library there
-     * and remembers it. Returns the line the status bar says.
+     * and remembers it. Returns the line the status bar says, or null when a later request has
+     * taken its place.
      *
      * The picker is the first thing asked for, before anything else that could suspend: a browser
      * opens it only while it is still handling the click that asked.
      */
-    suspend fun choose(): String {
+    suspend fun choose(): String? {
         val chooser = chooser ?: return "This browser cannot keep the library in a folder."
         val picked = try {
             chooser.pick()
@@ -195,19 +212,22 @@ class LibraryPlaces(private val platform: Platform) {
         } catch (failure: Throwable) {
             return "Could not open the folder picker: ${failure.message ?: failure::class.simpleName}"
         } ?: return "No folder chosen; the library is where it was."
+        val request = newRequest()
+        val notice = settle(picked, request)
+        if (!isCurrent(request)) return null
         rememberQuietly(RememberedPlace(picked, inFolder = true))
-        return settle(picked) ?: "The library is now the folder \"${picked.name}\"."
+        return notice ?: "The library is now the folder \"${picked.name}\"."
     }
 
     /**
      * Asks the reader again for leave to use the folder they chose, and uses it if they give it.
-     * Returns the line the status bar says.
+     * Returns the line the status bar says, or null when a later request has taken its place.
      *
      * The request is the first thing this does, for the same reason [choose] opens its picker
      * first. A reader who dismisses the question is left where they were; one who refuses gets the
      * browser's storage in its place, saying so, with the folder still their choice.
      */
-    suspend fun reconnect(): String {
+    suspend fun reconnect(): String? {
         val folder = folder ?: return "There is no folder to reconnect to."
         val answer = try {
             folder.requestPermission()
@@ -218,15 +238,18 @@ class LibraryPlaces(private val platform: Platform) {
             // is not the reader refusing, so nothing moves and they can click again.
             return "Could not ask for the folder \"${folder.name}\": ${failure.message ?: failure::class.simpleName}"
         }
+        val request = newRequest()
         return when (answer) {
             FolderPermission.GRANTED -> {
+                val notice = settle(folder, request)
+                if (!isCurrent(request)) return null
                 rememberQuietly(RememberedPlace(folder, inFolder = true))
-                settle(folder) ?: "The library is the folder \"${folder.name}\" again."
+                notice ?: "The library is the folder \"${folder.name}\" again."
             }
             FolderPermission.PROMPT -> "The folder \"${folder.name}\" is still waiting to be reconnected."
             FolderPermission.DENIED -> {
-                rememberQuietly(RememberedPlace(folder, inFolder = true))
                 place = LibraryPlace.FolderUnavailable(folder, REFUSED)
+                rememberQuietly(RememberedPlace(folder, inFolder = true))
                 unavailableNotice(folder, REFUSED)
             }
         }
@@ -236,7 +259,8 @@ class LibraryPlaces(private val platform: Platform) {
      * Moves the library back to the host's storage, and remembers that as the choice, keeping the
      * folder to offer again. The worlds in the folder stay in it. Returns the status line.
      */
-    suspend fun useHostStorage(): String {
+    suspend fun useHostStorage(): String? {
+        newRequest()
         val left = folder
         place = LibraryPlace.HostStorage(left)
         rememberQuietly(RememberedPlace(left, inFolder = false))
@@ -248,13 +272,15 @@ class LibraryPlaces(private val platform: Platform) {
      * After an operation on [failed] went wrong: asks again whether the folder can be used, and
      * moves the library out of it when it cannot — leave withdrawn since the visit began, or the
      * folder deleted under the page. Returns a status line when the place changed, or null.
+     *
+     * Not a request of the reader's, so it takes no number of its own: it acts for whichever request
+     * put the library where it is, and stands down if any other is made before its answer comes.
      */
     suspend fun afterFailure(failed: WorldLibrary): String? {
         val at = place as? LibraryPlace.InFolder ?: return null
         if (at.folder.library !== failed) return null
-        return settle(at.folder)
+        return settle(at.folder, requests)
     }
-
     /**
      * How many worlds in the host's storage the folder does not hold yet, for the offer to copy
      * them into it; zero when there is no folder in use or either cannot be listed.
@@ -312,9 +338,10 @@ class LibraryPlaces(private val platform: Platform) {
     /**
      * Where [folder] leaves the library, decided without asking the reader: in it, waiting to be
      * reconnected, or standing in for it with the host's storage. Returns a status line for the
-     * last two, and null when the folder is in use.
+     * last two, and null when the folder is in use — or when [request] is no longer the current
+     * one by the time the browser has answered, in which case nothing is changed at all.
      */
-    private suspend fun settle(folder: LibraryFolder): String? {
+    private suspend fun settle(folder: LibraryFolder, request: Long): String? {
         val permission = try {
             folder.permission()
         } catch (cancelled: CancellationException) {
@@ -322,6 +349,7 @@ class LibraryPlaces(private val platform: Platform) {
         } catch (failure: Throwable) {
             FolderPermission.DENIED
         }
+        if (!isCurrent(request)) return null
         when (permission) {
             FolderPermission.PROMPT -> {
                 place = LibraryPlace.ReconnectNeeded(folder)
@@ -339,6 +367,7 @@ class LibraryPlaces(private val platform: Platform) {
                 } catch (failure: Throwable) {
                     failure.message ?: failure::class.simpleName.orEmpty()
                 }
+                if (!isCurrent(request)) return null
                 if (unreachable != null) {
                     place = LibraryPlace.FolderUnavailable(folder, unreachable)
                     return unavailableNotice(folder, unreachable)

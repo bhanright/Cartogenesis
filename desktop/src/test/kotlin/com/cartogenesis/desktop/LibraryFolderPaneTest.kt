@@ -10,10 +10,12 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.runDesktopComposeUiTest
+import com.cartogenesis.cartography.LibraryEntry
 import com.cartogenesis.cartography.LoadOutcome
 import com.cartogenesis.cartography.WorldDocument
 import com.cartogenesis.cartography.WorldLibrary
@@ -36,6 +38,7 @@ import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.runBlocking
 
 /**
@@ -124,6 +127,46 @@ class LibraryFolderPaneTest {
         assertContentEquals(stranger, File(root, "browser/w1.cgw").readBytes(), "Save wrote the folder's world over a file in this browser's storage")
         val saved = assertIs<LoadOutcome.Loaded>(runBlocking { browserStorage.load("w1 (2).cgw") }).save
         assertEquals("Mine, in the folder", saved.document.title)
+    }
+
+    @OptIn(ExperimentalTestApi::class)
+    @Test
+    fun `rows listed from one place are gone the moment the library moves, and never act on another`() {
+        // The pane kept the last place's rows while the new place was being listed, and their
+        // Delete went to the new place: deleting this browser's w1.cgw from the row still on screen
+        // removed the folder's w1.cgw.
+        runBlocking {
+            browserStorage.save(document("Kept in the browser"), world)
+            folderStore.save(document("Kept in the folder"), world)
+        }
+        val listed = CompletableDeferred<Unit>()
+        val slowFolder = object : WorldLibrary by folderStore {
+            override suspend fun list(): List<LibraryEntry> {
+                listed.await()
+                return folderStore.list()
+            }
+        }
+        val folder = TestFolder("Maps", slowFolder, FolderPermission.GRANTED)
+        val platform = FolderHostPlatform(browserStorage, TestChooser(RememberedPlace(folder, inFolder = false)))
+        var rowOutlivedItsPlace = false
+        runDesktopComposeUiTest(width = 1440, height = 900) {
+            setContent { CartogenesisTheme(dark = false) { CartogenesisApp(platform) } }
+            onNodeWithText("Library").performClick()
+            waitUntil(timeoutMillis = WAIT_MS) { anyText { it == "Kept in the browser" } }
+
+            onNodeWithText("Use \"Maps\" again").performClick()
+            waitUntil(timeoutMillis = WAIT_MS) { anyText { it.startsWith("Worlds are kept in the folder") } }
+            waitForIdle()
+            rowOutlivedItsPlace = anyText { it == "Kept in the browser" }
+            if (rowOutlivedItsPlace) {
+                onAllNodesWithText("Delete").onFirst().performClick()
+                waitForIdle()
+            }
+            listed.complete(Unit)
+            waitUntil(timeoutMillis = WAIT_MS) { anyText { it == "Kept in the folder" } }
+        }
+        assertTrue(File(root, "Maps/w1.cgw").exists(), "a Delete on a row of this browser's storage removed the folder's file")
+        assertTrue(!rowOutlivedItsPlace, "this browser's rows stayed on screen under the folder's name")
     }
 
     @OptIn(ExperimentalTestApi::class)

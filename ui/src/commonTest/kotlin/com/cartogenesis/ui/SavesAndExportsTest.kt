@@ -76,6 +76,35 @@ class SavesAndExportsTest {
     }
 
     @Test
+    fun `a save that finishes after another file was opened leaves that file's key alone`() {
+        // Save x.cgw, and while it is written open "x (1).cgw", a sync client's conflict copy that
+        // carries the same id. Matched by id, the finished save gave the copy x.cgw's key, and the
+        // copy's next Save wrote over x.cgw.
+        val shelf = MemoryLibrary()
+        val next = { "fresh" }
+        val document = OpenDocument(DocumentIdentity("x", "x.cgw", 1L, shelf))
+        val ticket = document.saving()
+
+        val copy = WorldDocument(id = "x", title = "The conflict copy", config = WorldGenConfig(seed = 1L), savedAt = 2L)
+        document.becomes(DocumentIdentity.opened(copy, "x (1).cgw", shelf, next))
+        assertEquals("x (1).cgw", document.keyFor(document.saving(), shelf))
+
+        document.saved(ticket, "x.cgw", shelf)
+        assertEquals("x (1).cgw", document.identity.key, "the finished save gave the copy another file's key")
+        assertEquals("x", document.identity.id)
+
+        // And a save of the document that is still on screen records where it went.
+        val again = document.saving()
+        document.saved(again, "x (1).cgw", shelf)
+        assertEquals("x (1).cgw", document.identity.key)
+        // The same world made again at its own seed is the same document, and its saves still land.
+        val beforeGenerating = document.saving()
+        document.afterGenerating(1L, next)
+        document.saved(beforeGenerating, "x (1).cgw", shelf)
+        assertEquals("x (1).cgw", document.identity.key)
+    }
+
+    @Test
     fun `a key is written back only into the library it came from`() {
         // The library moved — to another folder, or between this browser's storage and a folder
         // on the disk — and Save wrote the world opened from one place over whatever file of the

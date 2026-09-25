@@ -15,6 +15,9 @@ import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 
 /**
@@ -139,6 +142,29 @@ class LibraryPlacesTest {
     }
 
     @Test
+    fun `a slow answer about a folder left behind never undoes a choice made since`() = runTest {
+        // A save to the old folder failed and the library asked the browser about it; the reader
+        // chose a new folder before the answer came, and the answer then moved the library back
+        // to the old folder's state.
+        val old = FakeFolder("Old", permission = FolderPermission.GRANTED)
+        val picked = FakeFolder("New", permission = FolderPermission.GRANTED)
+        val places = LibraryPlaces(FolderPlatform(FakeChooser(RememberedPlace(old, inFolder = true), picks = picked)))
+        places.start()
+        assertEquals(LibraryPlace.InFolder(old), places.place)
+
+        old.permission = FolderPermission.PROMPT
+        old.answerHeld = CompletableDeferred()
+        val asking = launch { places.afterFailure(old.library) }
+        runCurrent()
+        places.choose()
+        assertEquals(LibraryPlace.InFolder(picked), places.place)
+
+        old.answerHeld!!.complete(Unit)
+        asking.join()
+        assertEquals(LibraryPlace.InFolder(picked), places.place, "the answer about the old folder undid the new choice")
+    }
+
+    @Test
     fun `the offer to copy counts only the worlds the folder has no copy of`() = runTest {
         // Offered by count of everything in this browser's storage, it went on offering the same
         // world after it had been copied, and each click made another copy.
@@ -190,8 +216,12 @@ internal class FakeFolder(
     val calls = mutableListOf<String>()
     val requests: Int get() = calls.count { it == "requestPermission" }
 
+    /** When set, [permission] waits on it before answering: a browser slow to reply. */
+    var answerHeld: CompletableDeferred<Unit>? = null
+
     override suspend fun permission(): FolderPermission {
         calls += "permission"
+        answerHeld?.await()
         return permission
     }
 

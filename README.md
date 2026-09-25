@@ -410,7 +410,13 @@ temporary name and moved into place whole; a save over an existing file goes thr
 own swap file, committed only when complete. Writes from one tab are made in order; another tab,
 the desktop app or a sync client writing the same folder at the same moment is not ordered against
 it, but a save never leaves half a file, and a new save that finds its name taken takes the next
-free one. Nothing is uploaded anywhere: the page reads and writes that folder and nothing else.
+free one. Two gaps remain that the browser gives a page no way to close. The name is checked once
+more immediately before the save is put in place, and a file that another program creates under
+that name in the moment between the check and the move is replaced by the save, because a browser
+cannot create a file only if it does not already exist. And in a browser too old to rename files in
+a folder on the disk, the save is copied into its name instead, so an empty `.cgw` with that name
+shows in the folder, and to a sync client, while the copy runs. Nothing is uploaded anywhere: the
+page reads and writes that folder and nothing else.
 
 ## Menus, settings and themes
 

@@ -11,8 +11,8 @@ import kotlin.time.Duration.Companion.minutes
 import kotlinx.coroutines.test.runTest
 
 /**
- * What the folder library holds for a save while it passes through: never the file, only a part
- * or two of it, however long the file is.
+ * What the folder library holds for a save while it passes through: never the file, only a few
+ * parts of it, however long the file is.
  *
  * A 2048 save is some two hundred megabytes, and a library that gathered it before writing, or
  * handed the stream part after part without waiting for each to be taken, would hold all of it in
@@ -21,41 +21,53 @@ import kotlinx.coroutines.test.runTest
  * moves only when the library takes or lets go of a part. The parts are made small here so a small
  * world's save is many of them long: the property is the ratio, a bound in parts whatever the size.
  *
- * Shown failing on a sink that gathers the whole save and writes it once at the end: see the
- * ledger's row, docs/DESIGN_LEDGER.md, Fix 2c.
+ * Twice: where the browser can move a file, and where it cannot and the save is copied into its
+ * name, which holds more at once and has a bound of its own. Shown failing on a sink that gathers the
+ * whole save and writes it once at the end, and the copy on the move's bound: see the ledger's row,
+ * docs/DESIGN_LEDGER.md, Fix 2c.
  */
 class FolderMemoryTest {
 
     @Test
-    fun `a save many parts long is written and read back holding no more than two parts`() = runTest(timeout = 5.minutes) {
+    fun `a save many parts long is written and read back holding no more than two parts`() =
+        runTest(timeout = 5.minutes) { measure(canMove = true, boundParts = FolderWorldLibrary.BUFFER_BOUND_PARTS) }
+
+    @Test
+    fun `a save copied into its name, where the browser cannot move a file, holds no more than four parts`() =
+        runTest(timeout = 5.minutes) { measure(canMove = false, boundParts = FolderWorldLibrary.FALLBACK_BOUND_PARTS) }
+
+    private suspend fun measure(canMove: Boolean, boundParts: Int) {
         val world = TestWorlds.small()
         withTestFolder("memory") { folder ->
-            val library = FolderWorldLibrary(folder.handle, NoCompression, "a test", SMALL_PART_BYTES)
-            val bound = FolderWorldLibrary.BUFFER_BOUND_PARTS.toLong() * SMALL_PART_BYTES
-            val document = WorldDocument(id = "memory", title = "Memory", config = world.config, savedAt = 1L)
+            withMoveIf(canMove) {
+                val library = FolderWorldLibrary(folder.handle, NoCompression, "a test", SMALL_PART_BYTES)
+                val bound = boundParts.toLong() * SMALL_PART_BYTES
+                val document = WorldDocument(id = "memory", title = "Memory", config = world.config, savedAt = 1L)
 
-            val key = library.save(document, world)
-            val fileBytes = folder.readRaw(key).size
-            val writingPeak = library.gauge.peakBytes
-            assertTrue(
-                fileBytes > LEAST_PARTS * SMALL_PART_BYTES,
-                "the save is $fileBytes bytes, too short to show a bound in parts"
-            )
-            assertTrue(writingPeak <= bound, "writing a $fileBytes-byte save held $writingPeak bytes at once; the bound is $bound")
-            assertTrue(writingPeak >= SMALL_PART_BYTES, "the gauge saw $writingPeak bytes, less than the part it must hold")
-            assertEquals(0L, library.gauge.heldBytes, "the write kept hold of a part after it finished")
+                val key = library.save(document, world)
+                assertEquals(listOf(key), folder.entries(), "the save did not end as one file")
+                val fileBytes = folder.readRaw(key).size
+                val writingPeak = library.gauge.peakBytes
+                assertTrue(
+                    fileBytes > LEAST_PARTS * SMALL_PART_BYTES,
+                    "the save is $fileBytes bytes, too short to show a bound in parts"
+                )
+                assertTrue(writingPeak <= bound, "writing a $fileBytes-byte save held $writingPeak bytes at once; the bound is $bound")
+                assertTrue(writingPeak >= SMALL_PART_BYTES, "the gauge saw $writingPeak bytes, less than the part it must hold")
+                assertEquals(0L, library.gauge.heldBytes, "the write kept hold of a part after it finished")
 
-            library.gauge.resetPeak()
-            assertIs<LoadOutcome.Loaded>(library.load(key))
-            val readingPeak = library.gauge.peakBytes
-            assertTrue(readingPeak <= bound, "reading a $fileBytes-byte save held $readingPeak bytes at once; the bound is $bound")
-            assertTrue(readingPeak >= SMALL_PART_BYTES, "the gauge saw $readingPeak bytes, less than the slice it must hold")
-            assertEquals(0L, library.gauge.heldBytes, "the read kept hold of a slice after it finished")
+                library.gauge.resetPeak()
+                assertIs<LoadOutcome.Loaded>(library.load(key))
+                val readingPeak = library.gauge.peakBytes
+                assertTrue(readingPeak <= bound, "reading a $fileBytes-byte save held $readingPeak bytes at once; the bound is $bound")
+                assertTrue(readingPeak >= SMALL_PART_BYTES, "the gauge saw $readingPeak bytes, less than the slice it must hold")
+                assertEquals(0L, library.gauge.heldBytes, "the read kept hold of a slice after it finished")
 
-            println(
-                "FOLDER MEMORY save=${fileBytes}B parts=${(fileBytes + SMALL_PART_BYTES - 1) / SMALL_PART_BYTES} " +
-                    "part=${SMALL_PART_BYTES}B bound=${bound}B writingPeak=${writingPeak}B readingPeak=${readingPeak}B"
-            )
+                println(
+                    "FOLDER MEMORY move=$canMove save=${fileBytes}B parts=${(fileBytes + SMALL_PART_BYTES - 1) / SMALL_PART_BYTES} " +
+                        "part=${SMALL_PART_BYTES}B bound=${bound}B writingPeak=${writingPeak}B readingPeak=${readingPeak}B"
+                )
+            }
         }
     }
 
@@ -63,7 +75,7 @@ class FolderMemoryTest {
         /** Sixteen kibibytes: a 32 world's save, stored raw, is some ten of them. */
         const val SMALL_PART_BYTES = 1 shl 14
 
-        /** More parts than the bound allows, with room: a save this long cannot fit under it whole. */
-        const val LEAST_PARTS = 4
+        /** More parts than either bound allows, with room: a save this long cannot fit under one whole. */
+        const val LEAST_PARTS = 6
     }
 }

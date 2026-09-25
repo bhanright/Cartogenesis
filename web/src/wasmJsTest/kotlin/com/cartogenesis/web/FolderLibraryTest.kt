@@ -15,8 +15,11 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.minutes
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 
 /**
@@ -168,56 +171,188 @@ class FolderLibraryTest {
     }
 
     @Test
-    fun `a new save that fails partway leaves no file at all, under its name or any other`() = runTest(timeout = 5.minutes) {
-        // `getFileHandle(create)` makes an empty file before a byte is written, and aborting the
-        // stream leaves it there: a new save written straight to its name left an empty w1.cgw,
-        // listed as a world that will not open, for every save that failed.
+    fun `a new save that fails partway leaves no file at all, under its name or any other`() =
+        runTest(timeout = 5.minutes) { failedNewSaveLeavesNothing(canMove = true) }
+
+    @Test
+    fun `a new save that fails partway leaves no file at all, where the browser cannot move a file`() =
+        runTest(timeout = 5.minutes) { failedNewSaveLeavesNothing(canMove = false) }
+
+    // `getFileHandle(create)` makes an empty file before a byte is written, and aborting the stream
+    // leaves it there: a new save written straight to its name left an empty w1.cgw, listed as a
+    // world that will not open, for every save that failed.
+    private suspend fun failedNewSaveLeavesNothing(canMove: Boolean) {
         val world = TestWorlds.small()
         withTestFolder("fail-new") { folder ->
-            val failing = FolderWorldLibrary(folder.handle, FailsAtChunk(1), "a test", SMALL_PARTS)
-            assertFailsWith<IllegalStateException> { failing.save(document(world = world), world) }
-            assertEquals(emptyList(), folder.entries(), "a failed new save left a file behind")
-            // A key given whose file is not there is a new file too.
-            val failingAgain = FolderWorldLibrary(folder.handle, FailsAtChunk(1), "a test", SMALL_PARTS)
-            assertFailsWith<IllegalStateException> { failingAgain.save(document(world = world), world, "w1.cgw") }
-            assertEquals(emptyList(), folder.entries())
+            withMoveIf(canMove) {
+                val failing = FolderWorldLibrary(folder.handle, FailsAtChunk(1), "a test", SMALL_PARTS)
+                assertFailsWith<IllegalStateException> { failing.save(document(world = world), world) }
+                assertEquals(emptyList(), folder.entries(), "a failed new save left a file behind")
+                // A key given whose file is not there is a new file too.
+                val failingAgain = FolderWorldLibrary(folder.handle, FailsAtChunk(1), "a test", SMALL_PARTS)
+                assertFailsWith<IllegalStateException> { failingAgain.save(document(world = world), world, "w1.cgw") }
+                assertEquals(emptyList(), folder.entries())
+            }
         }
     }
 
     @Test
-    fun `a new save is never seen half made, and a cancelled one leaves nothing`() = runTest(timeout = 5.minutes) {
+    fun `a new save is never seen half made, and a cancelled one leaves nothing`() =
+        runTest(timeout = 5.minutes) { halfMadeNeverSeen(canMove = true) }
+
+    @Test
+    fun `a new save is never seen half made, where the browser cannot move a file`() =
+        runTest(timeout = 5.minutes) { halfMadeNeverSeen(canMove = false) }
+
+    private suspend fun TestScope.halfMadeNeverSeen(canMove: Boolean) {
         val world = TestWorlds.small()
         withTestFolder("half-made") { folder ->
-            val paused = PausesAtChunk(1)
-            val library = FolderWorldLibrary(folder.handle, paused, "a test", SMALL_PARTS)
-            val saving = launch { library.save(document(world = world), world) }
-            paused.reached.await()
-            // Partway through: whatever the folder holds, no listing takes any of it for a save.
-            assertTrue(folder.entries().isNotEmpty(), "nothing was being written")
-            assertEquals(emptyList(), library.list(), "a save still being written was listed")
-            assertTrue(folder.entries().none { it.endsWith(".cgw") }, "a .cgw appeared before it was whole: ${folder.entries()}")
+            withMoveIf(canMove) {
+                val paused = PausesAtChunk(1)
+                val library = FolderWorldLibrary(folder.handle, paused, "a test", SMALL_PARTS)
+                val saving = launch { library.save(document(world = world), world) }
+                paused.reached.await()
+                // Partway through: whatever the folder holds, no listing takes any of it for a save.
+                assertTrue(folder.entries().isNotEmpty(), "nothing was being written")
+                assertEquals(emptyList(), library.list(), "a save still being written was listed")
+                assertTrue(folder.entries().none { it.endsWith(".cgw") }, "a .cgw appeared before it was whole: ${folder.entries()}")
 
-            saving.cancel()
-            paused.release.complete(Unit)
-            saving.join()
-            assertEquals(emptyList(), folder.entries(), "a cancelled save left a file behind")
+                saving.cancel()
+                paused.release.complete(Unit)
+                saving.join()
+                assertEquals(emptyList(), folder.entries(), "a cancelled save left a file behind")
+            }
         }
     }
 
     @Test
-    fun `a name taken by another writer during a save is not written over`() = runTest(timeout = 5.minutes) {
-        // Another tab, the desktop application or a sync client puts w1.cgw in the folder while
-        // this tab is writing its own new w1.cgw. The name was free when the save began.
+    fun `a new save cancelled while a part is with the browser is not made`() =
+        runTest(timeout = 5.minutes) { cancelledWhileWriting(canMove = true, existing = false) }
+
+    @Test
+    fun `a new save cancelled while a part is with the browser is not made, where the browser cannot move a file`() =
+        runTest(timeout = 5.minutes) { cancelledWhileWriting(canMove = false, existing = false) }
+
+    @Test
+    fun `a save over a file cancelled while a part is with the browser leaves the file as it was`() =
+        runTest(timeout = 5.minutes) { cancelledWhileWriting(canMove = true, existing = true) }
+
+    // The cancel lands while the browser has a part of the save in hand and the library is waiting
+    // for it: not at a stand-in compressor, where any suspension would have seen it. A wait that
+    // could not be cancelled ran on through the close and the move and made the save whole.
+    private suspend fun TestScope.cancelledWhileWriting(canMove: Boolean, existing: Boolean) {
+        val world = TestWorlds.small()
+        withTestFolder("cancelled") { folder ->
+            withMoveIf(canMove) {
+                if (existing) FolderWorldLibrary(folder.handle, NoCompression, "a test").save(document(title = "Kept", world = world), world)
+                val before = folder.entries().associateWith { folder.readRaw(it) }
+                val cancelling = object : WriteSteps() {
+                    override suspend fun partHandedToStream(index: Int) {
+                        if (index == CANCELLED_AT_PART) currentCoroutineContext()[Job]!!.cancel()
+                    }
+                }
+                val library = FolderWorldLibrary(folder.handle, NoCompression, "a test", SMALL_PARTS, cancelling)
+                val saving = launch { library.save(document(title = "Cancelled", world = world), world, if (existing) "w1.cgw" else null) }
+                saving.join()
+                assertTrue(saving.isCancelled)
+                assertEquals(before.keys.toList(), folder.entries(), "a cancelled save left the folder changed")
+                before.forEach { (name, bytes) -> assertSameBytes(bytes, folder.readRaw(name), "$name was changed by a cancelled save") }
+            }
+        }
+    }
+
+    @Test
+    fun `a name taken by another writer during a save is not written over`() =
+        runTest(timeout = 5.minutes) { takenNameLeftAlone(canMove = true) }
+
+    @Test
+    fun `a name taken by another writer during a save is not written over, where the browser cannot move a file`() =
+        runTest(timeout = 5.minutes) { takenNameLeftAlone(canMove = false) }
+
+    // Another tab, the desktop application or a sync client puts w1.cgw in the folder while this
+    // tab is writing its own new w1.cgw. The name was free when the save began.
+    private suspend fun takenNameLeftAlone(canMove: Boolean) {
         val world = TestWorlds.small()
         withTestFolder("taken") { folder ->
-            val theirs = WorldCodec.encode(document(title = "Theirs", world = world), world, WebGzipCompressor)
-            val interloper = OnChunk(1) { folder.writeRaw("w1.cgw", theirs) }
-            val library = FolderWorldLibrary(folder.handle, interloper, "a test")
+            withMoveIf(canMove) {
+                val theirs = WorldCodec.encode(document(title = "Theirs", world = world), world, WebGzipCompressor)
+                val interloper = OnChunk(1) { folder.writeRaw("w1.cgw", theirs) }
+                val library = FolderWorldLibrary(folder.handle, interloper, "a test")
 
-            assertEquals("w1 (2).cgw", library.save(document(title = "Ours", world = world), world))
-            assertSameBytes(theirs, folder.readRaw("w1.cgw"), "the other writer's file was written over")
-            assertEquals("Ours", titleIn(library.load("w1 (2).cgw")))
-            assertEquals(listOf("w1 (2).cgw", "w1.cgw"), folder.entries())
+                assertEquals("w1 (2).cgw", library.save(document(title = "Ours", world = world), world))
+                assertSameBytes(theirs, folder.readRaw("w1.cgw"), "the other writer's file was written over")
+                assertEquals("Ours", titleIn(library.load("w1 (2).cgw")))
+                assertEquals(listOf("w1 (2).cgw", "w1.cgw"), folder.entries())
+            }
+        }
+    }
+
+    @Test
+    fun `a file another writer makes in the moment before the copy makes its own is left alone`() = runTest(timeout = 5.minutes) {
+        // Where the browser cannot move a file the save is copied into its name, and the file for
+        // it is made with `getFileHandle(create)`, which opens a file that is there as readily as
+        // it makes one. Another writer's w1.cgw, arriving after the last look at the folder, was
+        // opened and written over.
+        val world = TestWorlds.small()
+        withTestFolder("copy-taken") { folder ->
+            withMoveIf(false) {
+                val theirs = WorldCodec.encode(document(title = "Theirs", world = world), world, WebGzipCompressor)
+                var first = true
+                val interloper = object : WriteSteps() {
+                    override suspend fun beforeTargetCreated(name: String) {
+                        if (first) folder.writeRaw(name, theirs)
+                        first = false
+                    }
+                }
+                val library = FolderWorldLibrary(folder.handle, NoCompression, "a test", SMALL_PARTS, interloper)
+                assertEquals("w1 (2).cgw", library.save(document(title = "Ours", world = world), world))
+                assertSameBytes(theirs, folder.readRaw("w1.cgw"), "the other writer's file was written over")
+                assertEquals("Ours", titleIn(library.load("w1 (2).cgw")))
+                assertEquals(listOf("w1 (2).cgw", "w1.cgw"), folder.entries())
+            }
+        }
+    }
+
+    @Test
+    fun `a copy that fails partway leaves no file at all`() = runTest(timeout = 5.minutes) {
+        val world = TestWorlds.small()
+        withTestFolder("copy-fails") { folder ->
+            withMoveIf(false) {
+                var copying = false
+                val failsInTheCopy = object : WriteSteps() {
+                    override suspend fun beforeTargetCreated(name: String) {
+                        copying = true
+                    }
+                    override suspend fun partHandedToStream(index: Int) {
+                        if (copying && index == 1) error("the disk filled up")
+                    }
+                }
+                val library = FolderWorldLibrary(folder.handle, NoCompression, "a test", SMALL_PARTS, failsInTheCopy)
+                assertFailsWith<IllegalStateException> { library.save(document(world = world), world) }
+                assertTrue(copying, "the save never reached its copy")
+                assertEquals(emptyList(), folder.entries(), "a failed copy left a file behind")
+            }
+        }
+    }
+
+    @Test
+    fun `a temporary file that will not go away never takes the finished save with it`() = runTest(timeout = 5.minutes) {
+        // The copy was whole under its name; removing the temporary file then failed, and the
+        // failure was handled as the save's, which removed the finished save.
+        val world = TestWorlds.small()
+        withTestFolder("stuck-temporary") { folder ->
+            withMoveIf(false) {
+                val stuck = object : WriteSteps() {
+                    override suspend fun beforeTemporaryRemoved(name: String) {
+                        error("the file is held open")
+                    }
+                }
+                val library = FolderWorldLibrary(folder.handle, NoCompression, "a test", SMALL_PARTS, stuck)
+                assertEquals("w1.cgw", library.save(document(title = "Finished", world = world), world))
+                assertEquals("Finished", titleIn(library.load("w1.cgw")))
+                assertEquals(listOf("w1.cgw"), library.list().map { it.key })
+                assertTrue(folder.entries().any { it.endsWith(".tmp") }, "the temporary file was removed after all")
+            }
         }
     }
 
@@ -301,6 +436,9 @@ private class OnChunk(private val chunk: Int, private val action: suspend () -> 
  * the header ahead of it has already gone into the stream when they do.
  */
 private const val SMALL_PARTS = 1 shl 12
+
+/** Which part the cancel lands at: the third, well inside a 32 world's forty or so at [SMALL_PARTS]. */
+private const val CANCELLED_AT_PART = 2
 
 private fun ByteArray.indexOfSequence(sequence: ByteArray): Int =
     (0..size - sequence.size).first { start -> sequence.indices.all { this[start + it] == sequence[it] } }

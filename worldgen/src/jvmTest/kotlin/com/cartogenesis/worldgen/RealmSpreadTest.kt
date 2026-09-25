@@ -184,7 +184,7 @@ class RealmSpreadTest : BorrowsSharedWorlds() {
      * seeds at 512: origin/main had no stranded piece and three realms landlocked inside one
      * neighbour (one each on seeds 7, 42 and 99). Realms inside one neighbour with a coast are
      * printed and not asserted: a country on a stretch of shore with one land neighbour is
-     * Portugal, and on origin/main there were 18 of them over these four seeds.
+     * Portugal, and on origin/main there were 15 of them over these four seeds.
      */
     @Test
     fun `no piece is stranded and no more realms are landlocked inside one neighbour`() {

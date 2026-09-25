@@ -187,11 +187,13 @@ internal object HydraulicErosion {
          *
          * `E = K * A^m * S^n` with m = 0.5 and n = 1, over
          * [WorldScale.yearsPerHydraulicRound]. The stage holds the catchment as a share of all
-         * land and the slope as a rise per map width, so `sqrt(A)` is `sqrt(share * landArea)` and
-         * `S` is that rise times [WorldScale.reliefSpanMetres] over the map's width in metres; the
-         * cut is spent on the same field, whose whole 0..1 is that same span, so the two cancel
-         * and what is left is `K * years * sqrt(landArea) / worldWidth`. Everything but the share
-         * and the rise is constant over a generation, and this is it.
+         * land and the slope as a rise per map width, so `sqrt(A)` is `sqrt(share * landArea)`.
+         * The rise is read on the shoreline-relative field, whose unit is
+         * [WorldScale.highestLandMetres], so `S` is that rise times `highestLandMetres` over the
+         * map's width in metres; the cut is spent on the height field, whose unit is
+         * [WorldScale.reliefSpanMetres], so the metres are divided by that. What is left is
+         * `K * years * sqrt(landArea) / worldWidth * highestLandMetres / reliefSpanMetres`.
+         * Everything but the share and the rise is constant over a generation, and this is it.
          *
          * The land's area is the configured share of the world rather than the round's own count
          * of land cells. Sea level is a percentile, so that share *is* the land's area by
@@ -199,31 +201,23 @@ internal object HydraulicErosion {
          * round to round as the lowstand moved the shoreline, which is a property of the sea's
          * history and not of the rock.
          *
-         * The cancellation above is S2's second pass and it fixed a real error. S1 read the
-         * slope's rise as `highestLandMetres` per unit of the height field, which was the honest
-         * reading while the field was renormalised to its own extremes and its unit was whatever a
-         * given world made it; S2 gave the field an absolute scale whose unit *is*
-         * [WorldScale.reliefSpanMetres], and the two terms then cancel. Left in, the factor made
-         * the stage cut 2.67 times less per round than `K` and the time step together said.
-         *
-         * What moved is the time step and not the coefficient, and
-         * [WorldScale.yearsPerHydraulicRound] sets out why it was the better of the two: raising
-         * the cut instead was built and measured, and twelve rounds at 2.67 times the incision wear
-         * this landscape away rather than sharpening it. So the coefficient is the same float it
-         * has always been, every world is unmoved to the last bit, and what changed is the label
-         * on the clock.
+         * The ratio of the two rulers was taken to cancel from S2's second pass until Fix 3, and
+         * the round was labelled 2.67 times shorter to keep the cut; see
+         * [WorldScale.yearsPerHydraulicRound]. The label is back at the years the cut is worth and
+         * the ratio back in the coefficient, which is the same float it was.
          */
         val incisionCoefficient: Float = run {
             val landAreaKm2 = (1.0 - config.seaLevel.toDouble().coerceIn(0.0, 1.0)) * scale.worldAreaKm2
             val perYear = erosion.bedrockErodibilityPerYear.toDouble() * scale.yearsPerHydraulicRound
             val geometry = sqrt(landAreaKm2) / scale.worldWidthKm
-            (perYear * geometry).toFloat()
+            val landRulerOverFieldRuler = scale.highestLandMetres.toDouble() / scale.reliefSpanMetres.toDouble()
+            (perYear * geometry * landRulerOverFieldRuler).toFloat()
         }
 
         /**
          * The same rate in the shoreline-relative units the outlet notch is measured and spent in,
          * which is [incisionCoefficient] read off the land's half of the ruler instead of the
-         * whole field's.
+         * whole field's: `K * years * sqrt(landArea) / worldWidth`, which reads no vertical ruler.
          */
         val relativeIncisionCoefficient: Float =
             incisionCoefficient * scale.reliefSpanMetres / scale.highestLandMetres

@@ -442,21 +442,21 @@ class IsostasyTest : BorrowsSharedWorlds() {
      */
     @Test
     fun `steady-state relief goes as uplift over erodibility`() {
-        val upliftRates = listOf(0.05f, 0.1f, 0.2f, 0.4f)
+        val upliftRates = listOf(0.01875f, 0.0375f, 0.075f, 0.15f)
         val erodibilities = listOf(0.5e-6f, 1e-6f, 2e-6f, 4e-6f)
 
         val byUplift = upliftRates.map { rate -> syntheticBelt(rate, 1e-6f) }
-        val byErodibility = erodibilities.map { erodibility -> syntheticBelt(0.1f, erodibility) }
+        val byErodibility = erodibilities.map { erodibility -> syntheticBelt(0.0375f, erodibility) }
 
         upliftRates.zip(byUplift).forEach { (rate, belt) ->
             println(
-                "ISOSTASY steady state U=%.2f mm/yr K=1.0e-6: relief %.0f m of %.0f m uplifted (%.2f removed)"
+                "ISOSTASY steady state U=%.4f mm/yr K=1.0e-6: relief %.0f m of %.0f m uplifted (%.2f removed)"
                     .format(rate, belt.reliefMetres, belt.upliftedMetres, belt.removedShare)
             )
         }
         erodibilities.zip(byErodibility).forEach { (erodibility, belt) ->
             println(
-                "ISOSTASY steady state U=0.10 mm/yr K=%.1e: relief %.0f m of %.0f m uplifted (%.2f removed)"
+                "ISOSTASY steady state U=0.0375 mm/yr K=%.1e: relief %.0f m of %.0f m uplifted (%.2f removed)"
                     .format(erodibility, belt.reliefMetres, belt.upliftedMetres, belt.removedShare)
             )
         }
@@ -527,20 +527,22 @@ class IsostasyTest : BorrowsSharedWorlds() {
             // is 10^12 m² — so the relief a millimetre a year would hold up is a few centimetres,
             // and every round's cut runs into the half-the-drop cap long before the rock has any
             // say in it. Two hundred kilometres across puts the catchments where a real orogen's
-            // are and the relief in hundreds of metres; a twenty-thousand-year round keeps each
-            // round's bite well inside the cap, so what limits the cut is the stream power and
-            // not the arithmetic that guards it.
+            // are and the relief in hundreds of metres; a short round keeps each round's bite well
+            // inside the cap, so what limits the cut is the stream power and not the arithmetic
+            // that guards it.
             //
-            // Twenty thousand and six hundred rounds, where it was forty thousand and three hundred
-            // before the cut measured a step on the ground (docs/DESIGN_LEDGER.md, Fix 2), and the
-            // twelve million years between them unchanged. The belt's rivers
+            // 53,333 years and six hundred rounds, 32 million years. The round and the uplift rates
+            // are those of Fix 2 restated on the honest clock, the years times 336,476.4 over
+            // 126,178.65 and the rates times its inverse, so the belt is the belt it was
+            // (docs/DESIGN_LEDGER.md, Fix 3). The round was halved at Fix 2, from six hundred
+            // rounds of what are now 106,667 years to six hundred of this, and why: the belt's rivers
             // run down columns, and a step down a column is a row's height, half a cell width, now
             // that the incision measures it on the ground: the same slope falls half as far in a
             // step, and a round's bite, which is in proportion to the slope, is twice as large a
             // share of the drop the cap is read off. The forty-thousand-year round was sized on
             // the step the cut used to assume, and on the true one it reached the cap on the softest
             // rock: relief went as K^-0.74. Half the round is the same share of the cap it was.
-            scale = base.scale.copy(worldWidthKm = 200.0, yearsPerHydraulicRound = 20_000.0),
+            scale = base.scale.copy(worldWidthKm = 200.0, yearsPerHydraulicRound = BELT_ROUND_YEARS),
             isostasy = base.isostasy.copy(flexure = false),
             erosion = base.erosion.copy(
                 hydraulicRounds = rounds,
@@ -1069,6 +1071,12 @@ class IsostasyTest : BorrowsSharedWorlds() {
 
         /** Millimetres in a metre, for the denudation rate above. */
         const val METRES_TO_MILLIMETRES = 1_000.0
+
+        /**
+         * The synthetic belt's round, in years: twenty thousand on the clock before Fix 3, which
+         * cut 2.67 times what its label said, so the same cut is this long on the honest one.
+         */
+        const val BELT_ROUND_YEARS = 20_000.0 * 336_476.4 / 126_178.65
 
         /** How much relief the plain under a synthetic belt carries, peak to peak, in metres. */
         const val PLAIN_RELIEF_METRES = 100f

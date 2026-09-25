@@ -79,44 +79,28 @@ data class WorldScale(
      * [ErosionConfig.bedrockErodibilityPerYear], and the time step is whatever makes a round remove
      * what a round removes today: see [ErosionConfig.bedrockErodibilityPerYear] for the arithmetic.
      *
-     * Twelve rounds of it is 1.51 million years, which is the right order for the time a mountain
+     * Twelve rounds of it is 4.04 million years, which is the right order for the time a mountain
      * belt takes to reach a steady state between uplift and erosion — Whipple and Tucker put the
-     * response time of an orogen at 10^5 to 10^6 years for erodibilities in this band — and a
-     * reassuring answer to a question the generator could not previously be asked.
+     * response time of an orogen at 10^5 to 10^6 years for erodibilities in this band, and the
+     * belts here are cut at the bottom of it.
      *
-     * S1 reached 336,476.4 years by solving an expression with a term too many in it. The term was
-     * `highestLandMetres / reliefSpanMetres`, which S1 needed while the height field was
-     * renormalised to its own extremes and which cancels now that S2 has made the field an absolute
-     * altitude — see
-     * [com.cartogenesis.worldgen.pipeline.HydraulicErosion.Rates.incisionCoefficient] — and it was
-     * worth a factor of 2.67. So one of the two figures S1 fixed had to give: either this one comes
-     * down to 0.375 of what S1 wrote and every world stays exactly where it is, or the coefficient
-     * goes up by 2.67 and the rounds do 2.67 times the geomorphic work in the four million years
-     * S1 declared.
+     * The arithmetic keeps the ratio of the two rulers, `highestLandMetres / reliefSpanMetres`:
+     * the slope's rise is read on the shoreline-relative field, 6,000 m a unit, and the cut is
+     * spent on the height field, 16,000 m a unit, so it does not cancel. S2's second pass took it
+     * to cancel and re-labelled the round 126,178.65 years with the cut unchanged, which put every
+     * per-year figure the clock multiplies 2.67 times too high: the denudation compared with
+     * Earth's, and the uplift the belts are fed. Restored here with the factor put back in the
+     * coefficient, so it is the same float as before and a round removes what it removed; the
+     * rates the clock multiplies were restated with it (Audit III's B-F1; docs/DESIGN_LEDGER.md,
+     * Fix 3).
      *
-     * This one, and the other was built and measured before it was refused. Twelve rounds at 2.67
-     * times the cut do not dissect this landscape more; they wear it away. Measured on the four
-     * standard worlds, the valleys came out *shallower* against their own terrain — 0.019 against
-     * `ValleyIncisionTest`'s bar of 0.059, where holding the cut gives 0.047 — the coastline's
-     * box-counting dimension fell to 1.01-1.10 on every seed, under Mandelbrot's floor, because a
-     * coast worn for four million years is a smooth coast, and the largest lake and the count of
-     * undrained cells both went up rather than down. A cut spent faster than the uplift feeding it
-     * does not sharpen a landscape, and this one already removes 0.36 mm/yr, which is Earth's own
-     * order for an orogen.
-     *
-     * So the world is exactly the world it was and what changed is the label on the clock: a round
-     * is 126,179 years rather than 336,476. It re-dates every erosion figure the project has
-     * recorded, and the one that had to move with it is
-     * `TectonicsConfig.collisionUpliftMmPerYear` — a rate per year against a denudation per year,
-     * both of them now measured over a span two and two-thirds shorter.
-     *
-     * Written to a hundredth of a year, which is not precision anybody could defend about a
-     * landscape: it is the figure at which the coefficient the stage computes lands on the same
-     * float it has always held. A round of erosion is chaotic in its own last bit —
+     * Written to a tenth of a year, which is not precision anybody could defend about a landscape:
+     * it is the figure at which the coefficient the stage computes lands on the same float it has
+     * always held. A round of erosion is chaotic in its own last bit —
      * `ErosionConfig.outletIncisionRatio` records the largest lake on a seed jumping by a factor of
      * two between neighbouring rates — so a rate that is a millionth off is a different world.
      */
-    val yearsPerHydraulicRound: Double = 126_178.65
+    val yearsPerHydraulicRound: Double = 336_476.4
 ) {
 
     /**
@@ -989,49 +973,26 @@ data class TectonicsConfig(
      * The *scale* is this model's own, and the reason is a measurement rather than a preference.
      * England and Molnar's rock uplift is nearly all spent against exhumation — the Himalaya rise
      * at five millimetres a year and gain about half of one, because the rest comes off as
-     * sediment — so a rate is only meaningful beside the erosion it is racing. This generator's
-     * rivers and hillslopes take **0.275 mm/yr** off an active belt, measured over the belts of the
-     * present epoch on seeds 7, 42, 1234, 99 and 718106 at 512 with the uplift switched off
-     * (0.263, 0.337, 0.226, 0.275 and 0.272), which `IsostasyTest` re-measures and holds this
-     * constant against.
+     * sediment — so a rate is only meaningful beside the erosion it is racing. So the collision
+     * rate is the surface uplift Earth's own collisions manage — half a millimetre a year — plus
+     * what this model's rivers take off an active belt with the uplift switched off, measured over
+     * the belts of the present epoch on seeds 7, 42, 1234, 99 and 718106 at 512, which
+     * `IsostasyTest` re-measures and holds this constant against; the other three follow the
+     * ratios above. This is a derived constant and not a pin: a chunk that moves the denudation
+     * re-derives it, and the history of its figures is in docs/DESIGN_LEDGER.md (S2, S3, Fix 2 and
+     * Fix 3).
      *
-     * So the collision rate is the surface uplift Earth's own collisions manage — half a
-     * millimetre a year — plus what this model's rivers will take back off it, which is
-     * **0.775 mm/yr** of rock uplift, and the other three follow the ratios above. That is close to
-     * England and Molnar's own band for an active collision, 1 to 10 mm/yr, where S2's first pass
-     * reached 0.6, and the reason is worth saying. The first pass measured the denudation at 0.101
-     * mm/yr on a surface with a quarter of the mid-band relief for the water to cut into, and
-     * divided the metres a round removes by a round two and two-thirds longer than S1's own
-     * derivation gives (see [WorldScale.yearsPerHydraulicRound]). Both were corrected in the second
-     * pass, the erosion rate came out at Earth's own order for an orogen, and the uplift that has
-     * to race it came with it.
-     *
-     * **The denudation has been re-measured three times since, and the rate follows it each time
-     * rather than staying put.** S2's fourth pass gave the base relief a texture proportional to
-     * the ground's own relief, and a smoother plain is less for the water to take away: 0.36 to
-     * 0.27, which is where 0.77 came from. Then the hydraulic rounds started reading the climate.
-     * Two terms arrived together there and they pull the same way on a belt: the rainfall weight
-     * redistributes the world's water, and the plant cover's relative shielding takes erodibility
-     * off the wettest and best-wooded ground — which is what an active belt is — so a belt keeps a
-     * little more of itself. 0.27 to 0.218, and the rate with it. Then the erosion was put on the
-     * ground's ruler: a slope down a column had been read at half its gradient, since a step to the
-     * next row was taken for a cell width when it is half of one, and the thermal sweeps and the
-     * incision now take north- and south-facing ground at its true steepness. A belt loses more of
-     * itself, 0.218 to 0.275, and the rate follows, 0.718 to 0.775 (see
-     * docs/DESIGN_LEDGER.md, Fix 2). This is a derived constant and not a pin: what it is held to
-     * is Earth's surface uplift plus whatever this model's own rivers are measured to remove on the
-     * day, and a chunk that moves the second re-derives the first.
-     *
-     * Over the one and a half million years twelve rounds stand for that is 1.2 km of rock into a
-     * collision belt and 0.4 km out of it, against a dead belt of the same age that only loses.
-     * The difference between the two is what S2 exists to show.
+     * The four figures below are the rates of Fix 2 restated on the honest clock and nothing more:
+     * each is the old figure times 126,178.65 over 336,476.4, three eighths, so a round lifts a belt
+     * by the metres it did (docs/DESIGN_LEDGER.md, Fix 3). The derivation above is not yet re-run
+     * on that clock.
      *
      * Spent over [WorldScale.yearsPerHydraulicRound] per round. See `HydraulicErosion.apply`.
      */
-    val collisionUpliftMmPerYear: Float = 0.775f,
-    val andeanUpliftMmPerYear: Float = 0.310f,
-    val islandArcUpliftMmPerYear: Float = 0.109f,
-    val riftShoulderUpliftMmPerYear: Float = 0.047f,
+    val collisionUpliftMmPerYear: Float = 0.290625f,
+    val andeanUpliftMmPerYear: Float = 0.11625f,
+    val islandArcUpliftMmPerYear: Float = 0.040875f,
+    val riftShoulderUpliftMmPerYear: Float = 0.017625f,
     /**
      * The height, in metres, past which the crust's own strength starts to hold a range back.
      *

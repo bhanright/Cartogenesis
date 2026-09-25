@@ -108,12 +108,15 @@ the generator is written in those units and converted to whatever grid the world
 10. **Rivers and lakes.** Depressions are filled so no water dead-ends inland, flow is routed downhill
     and traced to the coast, and each basin's outlet incises its sill over time. A filled basin
     becomes a lake only as far as its water balance allows; where evaporation wins it sits below its
-    rim as an endorheic lake or dries to a playa. Rivers run from their farthest headwater, are drawn
-    at a width proportional to the square root of their discharge (Leopold and Maddock), and stop at
-    the shoreline.
+    rim as an endorheic lake or dries to a playa, and a basin that closes keeps its rain from the
+    basins below it. Discharge is the rain that falls, in millimetres, summed downstream. Rivers run
+    from their farthest headwater, are drawn at a width proportional to the square root of their
+    discharge (Leopold and Maddock), and stop at the shoreline.
 11. **Realms.** Borders are assigned by whole drainage catchment, so frontiers fall on watersheds.
-    Large catchments are split along their trunk river, enclaves dissolve into their surrounding
-    neighbour, and no realm holds more than 30% of the world. Each realm's population, exports and
+    Catchments are cut at their confluences to a bounded area of ground, a closed basin stays whole
+    with its lake, and a small one joins a neighbour on its own landmass. Large catchments are split
+    along their trunk river, enclaves dissolve into their surrounding neighbour, and no realm holds
+    more than 30% of the world's land. Each realm's population, exports and
     imports derive from the land it holds.
 12. **Peoples.** A second, independent layer: cultures spread from seeded hearths at a cost set by
     how unlike home the next land is, so a people's territory follows climate rather than politics.

@@ -385,8 +385,8 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
         val declaredGround = median(illuminationOverLand(world, ReliefShading.DAYLIGHT))
         println("RELIEF under the declared sky ordinary ground sits at %.4f".format(declaredGround))
         // Recorded: see [ORDINARY_GROUND_AWAITS_THE_DEVICE]. 0.9489 under the cap, 0.8756 on the
-        // implicit incision's terrain.
-        KnownFailures.expect(ORDINARY_GROUND_AWAITS_THE_DEVICE, "ordinary ground 0.8756") {
+        // implicit incision's terrain, 0.8750 once a lake falls with its outlet.
+        KnownFailures.expect(ORDINARY_GROUND_AWAITS_THE_DEVICE, "ordinary ground 0.8750") {
             if (kotlin.math.abs(declaredGround - ReliefShading.ordinaryGround) > MAX_GROUND_DRIFT) {
                 throw RecordedViolation(
                     "ordinary ground measures ${"%.4f".format(declaredGround)} under the declared sky, " +

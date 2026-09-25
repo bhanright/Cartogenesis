@@ -33,12 +33,13 @@ class RiverSelectionTest : BorrowsSharedWorlds() {
          * The known failure the budget floor's premise records since Fix 3b. On the implicit
          * incision's terrain seed 42's largest river's chain fits a quarter of Earth's ink even on
          * the postage-stamp sheet, so that sheet no longer exercises the floor on that seed; the
-         * clause's other seeds still do, and the largest river is still drawn on every sheet. A
+         * clause's other seeds still do, and the largest river is still drawn on every sheet. Once
+         * the implicit pass lets a lake fall with its outlet, seed 99's chain fits it too. A
          * smaller sheet or another seed would restore it, and is not chosen here
          * (docs/DESIGN_LEDGER.md, Fix 3b).
          */
-        const val FLOOR_IDLE_ON_ONE_SEED =
-            "the rivers: on the law's terrain one seed's largest chain fits the tiny sheet's quarter of Earth's ink"
+        const val FLOOR_IDLE_ON_SOME_SEEDS =
+            "the rivers: on the law's terrain some seeds' largest chains fit the tiny sheet's quarter of Earth's ink"
 
         /** The four standard seeds, at the grid every per-merge guard in this repository uses. */
         val SEEDS = listOf(7L, 42L, 1234L, 99L)
@@ -518,7 +519,7 @@ class RiverSelectionTest : BorrowsSharedWorlds() {
             if (quarterOfEarthKm >= tiny.budgetKilometres) idleFloor += "seed $seed"
             assertTrue(tiny.drawn[biggest], "seed $seed lost its largest river on a tiny sheet")
         }
-        KnownFailures.expect(FLOOR_IDLE_ON_ONE_SEED, "seed 42") {
+        KnownFailures.expect(FLOOR_IDLE_ON_SOME_SEEDS, "seed 42, seed 99") {
             if (idleFloor.isNotEmpty()) {
                 throw RecordedViolation(
                     "the largest river's chain fits a quarter of Earth's ink even on the tiny sheet, so it does not " +

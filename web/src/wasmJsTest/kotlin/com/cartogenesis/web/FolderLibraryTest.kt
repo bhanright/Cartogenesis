@@ -25,16 +25,15 @@ import kotlinx.coroutines.test.runTest
  * real `FileSystemDirectoryHandle`.
  *
  * The handle is one from the origin private file system, the only one a page can have without the
- * reader choosing it in a picker, which no test can drive. It shares with a folder the reader picks
- * everything this file exercises: the same handle type and calls, the same writable stream that
- * writes a swap file beside its target (`<name>.crswap`, measured here while a write is under way)
- * and replaces the target only on `close`, the same abort, the same empty file that
- * `getFileHandle(create)` makes before a byte is written, the same `move`, and slices read from a
- * `File` without reading the rest. It does not share: permission, which is always granted here and
- * which `LibraryPlacesTest` covers with a fake instead; the operating system's file system under a
- * picked folder, where Windows refuses to replace a file another program holds open and the browser
- * checks a file with Safe Browsing on `close`; and any sync client, which nothing here can stand in
- * for.
+ * reader choosing it in a picker, which no test can drive. Its handles are the same interface a
+ * picked folder's are, and in this file system the behaviours the library depends on were seen
+ * directly: a writable stream writes to a `<name>.crswap` beside its target and replaces the
+ * target only on `close`, `abort` leaves an existing file as it was, `getFileHandle(create)` makes
+ * an empty target before a byte is written and an aborted stream leaves it, and `move` renames.
+ * That a picked folder behaves the same is what Chrome documents, not something seen here. What
+ * this file system does not share: permission, always granted here, which `LibraryPlacesTest`
+ * covers with a fake instead; the operating system's file system under a picked folder, where
+ * Windows refuses to replace a file another program holds open; and any sync client.
  */
 class FolderLibraryTest {
 

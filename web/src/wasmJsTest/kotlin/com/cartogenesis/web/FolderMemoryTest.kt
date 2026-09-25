@@ -22,7 +22,7 @@ import kotlinx.coroutines.test.runTest
  * world's save is many of them long: the property is the ratio, a bound in parts whatever the size.
  *
  * Shown failing on a sink that gathers the whole save and writes it once at the end: see the
- * ledger's row for this chunk.
+ * ledger's row, docs/DESIGN_LEDGER.md, Fix 2c.
  */
 class FolderMemoryTest {
 

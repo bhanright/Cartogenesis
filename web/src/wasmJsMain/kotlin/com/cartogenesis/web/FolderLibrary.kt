@@ -1,6 +1,7 @@
 package com.cartogenesis.web
 
 import com.cartogenesis.cartography.ByteWorldLibrary
+import com.cartogenesis.cartography.OpeningLimit
 import com.cartogenesis.cartography.Compressor
 import com.cartogenesis.cartography.LibraryKeys
 import com.cartogenesis.cartography.SaveProblem
@@ -369,6 +370,8 @@ internal class FolderWorldLibrary(
     private val partBytes: Int = PART_BYTES,
     private val steps: WriteSteps = WriteSteps()
 ) : ByteWorldLibrary(compressor, writtenBy) {
+
+    override val openingLimit: OpeningLimit = BROWSER_OPENING_LIMIT
 
     val gauge = BufferGauge()
 

@@ -86,7 +86,9 @@ class LibraryFolderPaneTest {
             onNodeWithText("Reconnect to \"Maps\"").performClick()
             waitUntil(timeoutMillis = WAIT_MS) { anyText { it.contains("Kept in the folder") } }
             assertEquals(1, folder.requests)
-            onNodeWithText("Worlds are kept in the folder \"Maps\" on this computer.").assertExists()
+            onNodeWithText("Worlds are kept in the folder \"Maps\" on this device.").assertExists()
+            // A browser folder can be on a phone, where "this computer" is untrue.
+            assertTrue(!anyText { it.contains("computer") }, "the folder library still says it is on a computer")
             assertTrue(!anyText { it.contains("Kept in the browser") })
         }
     }

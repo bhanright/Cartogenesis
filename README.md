@@ -108,12 +108,15 @@ the generator is written in those units and converted to whatever grid the world
 10. **Rivers and lakes.** Depressions are filled so no water dead-ends inland, flow is routed downhill
     and traced to the coast, and each basin's outlet incises its sill over time. A filled basin
     becomes a lake only as far as its water balance allows; where evaporation wins it sits below its
-    rim as an endorheic lake or dries to a playa. Rivers run from their farthest headwater, are drawn
-    at a width proportional to the square root of their discharge (Leopold and Maddock), and stop at
-    the shoreline.
+    rim as an endorheic lake or dries to a playa, and a basin that closes keeps its rain from the
+    basins below it. Discharge is the rain that falls, in millimetres, summed downstream. Rivers run
+    from their farthest headwater, are drawn at a width proportional to the square root of their
+    discharge (Leopold and Maddock), and stop at the shoreline.
 11. **Realms.** Borders are assigned by whole drainage catchment, so frontiers fall on watersheds.
-    Large catchments are split along their trunk river, enclaves dissolve into their surrounding
-    neighbour, and no realm holds more than 30% of the world. Each realm's population, exports and
+    Catchments are cut at their confluences to a bounded area of ground, a closed basin stays whole
+    with its lake, and a small one joins a neighbour on its own landmass. Large catchments are split
+    along their trunk river, enclaves dissolve into their surrounding neighbour, and no realm holds
+    more than 30% of the world's land. Each realm's population, exports and
     imports derive from the land it holds.
 12. **Peoples.** A second, independent layer: cultures spread from seeded hearths at a cost set by
     how unlike home the next land is, so a people's territory follows climate rather than politics.
@@ -221,11 +224,17 @@ seconds of encoding.
 
 ## Resolution, limits and acceleration
 
-The interface offers 2048, 4096 and 8192 exports; 8192 is shown disabled because the world's fields
-exhaust a 10 GB heap during generation, before anything is drawn. The ceiling lives in
-`Platform.exportCeiling` (4096 on the desktop and in the browser, 2048 in a phone-sized browser
-window). The browser starts at a generation resolution of 512 and the desktop at 1024, because a
-browser tab has one thread and generation blocks the page while it runs.
+The interface offers generation resolutions of 512 to 4096 and exports of 2048, 4096 and 8192. The
+desktop goes to 4096; 8192 is shown disabled because the world's fields exhaust a 10 GB heap during
+generation, before anything is drawn. The browser goes to 2048, on a phone or a computer, for the
+world on screen and for exports: a 4096 generation killed a desktop browser's tab before anything
+was drawn, so the 4096 chips are shown disabled there, a stored 4096 preference is brought down to
+2048 with a line saying why, and a 4096 save from the desktop is refused from its header rather than
+opened into a tab that cannot hold its 2.45 GB of arrays. One ceiling covers both rows because an
+export makes the world again at its own size; it lives in `Platform.generationCeiling`, with the two
+values and their measurements in `WorldCeilings`. The browser starts at a generation resolution of
+512 and the desktop at 1024, because a browser tab has one thread and generation blocks the page
+while it runs.
 
 **Graphics acceleration** is an opt-in toggle in the header and in Settings (as *Graphics
 acceleration at launch*). It runs the erosion sweeps and the ocean-current solve on the graphics
@@ -399,7 +408,7 @@ own, each of which opens, and saves, without touching the other.
 
 In the browser the library starts in the browser's own storage, where clearing the site's data
 removes it. In Chrome and Edge, which offer web pages a folder picker, the Library pane's **Choose a
-folder…** moves it into a folder on your computer instead: the same `.cgw` files under the same
+folder…** moves it into a folder on your device instead: the same `.cgw` files under the same
 names as the desktop's, so one folder, synced or not, serves both. Firefox and Safari offer no such
 picker; there the library stays in the browser's storage and moves in and out by Download and
 Upload. The browser remembers the folder between visits but asks again before a page may use it,

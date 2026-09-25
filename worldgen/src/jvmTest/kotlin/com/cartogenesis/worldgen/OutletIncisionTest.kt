@@ -457,7 +457,10 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
                 "the last land cell against %.4f%% measured to the water — %s")
                 .format(SILL_SEEDS.size, pooledBefore * 100, pooledAfter * 100, perSeed)
         )
-        KnownFailures.expect(NOTCH_ON_THE_REDRAWN_CONTINENTS, "0.2609% against 0.2505%") {
+        // Re-recorded at chunk 6 from 0.2609% against 0.2505%: a closed basin's inflow is now the
+        // rain leaving it at every exit, less every closed basin above it, which moves which drowned
+        // basins hold water; the fall to the water still leaves the largest one smaller.
+        KnownFailures.expect(NOTCH_ON_THE_REDRAWN_CONTINENTS, "0.2591% against 0.2489%") {
             if (pooledAfter >= pooledBefore) {
                 throw RecordedViolation(
                     "counting the step into the water leaves ${"%.4f".format(pooledAfter * 100)}% of land " +

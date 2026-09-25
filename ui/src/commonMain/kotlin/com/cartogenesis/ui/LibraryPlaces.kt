@@ -140,7 +140,7 @@ class LibraryPlaces(private val platform: Platform) {
     /** Where the worlds are, as the end of a sentence: "Files live in …". */
     val location: String
         get() = when (val at = place) {
-            is LibraryPlace.InFolder -> "the folder \"${at.folder.name}\" on this computer."
+            is LibraryPlace.InFolder -> "the folder \"${at.folder.name}\" on this device."
             is LibraryPlace.ReconnectNeeded -> "the folder \"${at.folder.name}\", once it is reconnected."
             is LibraryPlace.HostStorage, is LibraryPlace.FolderUnavailable -> platform.libraryLocation
         }

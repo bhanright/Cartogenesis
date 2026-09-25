@@ -92,9 +92,10 @@ Rendering is not the constraint. The graphics device rasters 8192 in 1.4 seconds
 memory at all. Raising the ceiling therefore means generating in tiles or on disk, not building a
 bigger renderer.
 
-The limit lives in `Platform.exportCeiling` — 4096 on the desktop and in the browser, 2048 in a
-phone-sized browser window — so a build that fixes the memory can raise it without the interface
-changing. The same chips cap the data exports as cap the pictures: the ceiling is a question of how
+The limit lives in `Platform.generationCeiling` — 4096 on the desktop, 2048 in any browser, phone or
+not, for the working resolution and the exports alike — so a build that fixes the memory can raise
+it without the interface changing. The browser's figure is its own measurement, not the phone's
+borrowed: see `docs/TODO.md`, "A 4096 world cannot be made in a browser tab". The same chips cap the data exports as cap the pictures: the ceiling is a question of how
 big a world this build can finish, and knows nothing about what kind of file comes out of it.
 
 ## Drawing the map on the graphics device

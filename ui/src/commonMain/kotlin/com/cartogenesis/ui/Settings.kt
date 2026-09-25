@@ -58,7 +58,7 @@ data class AppSettings(
     @SerialName("exportFormat")
     val exportFormat: ExportFormat = ExportFormat.PNG,
 
-    /** Clamped against [Platform.exportCeiling] on the way out; see [exportSizeWithin]. */
+    /** Held to [Platform.generationCeiling] on the way in and on the way out; see [SettingsEffects]. */
     @SerialName("exportSize")
     val exportSize: Int = 2048,
 
@@ -151,6 +151,12 @@ object SettingsCodec {
 }
 
 /**
+ * Settings held to a host's ceiling, and the line saying what that moved; see
+ * [SettingsEffects.withinCeiling]. [notice] is null when nothing moved.
+ */
+internal data class HeldSettings(val settings: AppSettings, val notice: String?)
+
+/**
  * What each setting actually *does*, as a pure function.
  *
  * Every one of these exists so that the guard the spec asks for — "every setting has an effect a
@@ -199,7 +205,41 @@ internal object SettingsEffects {
         val preferred =
             if (settings.workingResolution == AppSettings.FOLLOW_PLATFORM) platform.defaultResolution
             else settings.workingResolution
-        return if (compact) minOf(preferred, Layouts.COMPACT_RESOLUTION) else preferred
+        // Held to the ceiling here as well as where the settings are read, so that no path to a
+        // fresh world reaches a size the host cannot finish; see [withinCeiling] for the notice.
+        val possible = minOf(preferred, platform.generationCeiling)
+        return if (compact) minOf(possible, Layouts.COMPACT_RESOLUTION) else possible
+    }
+
+    /**
+     * [settings] held to what a host whose [Platform.generationCeiling] is [ceiling] can make, with
+     * the one line that says what moved and why, or a null line when nothing had to.
+     *
+     * A settings document written before the browser stopped at 2048, or carried over from a
+     * session that asked for 4096, would otherwise start a world that ends in a dead tab. Clamped
+     * rather than refused, because the rest of the document is still the reader's; said rather than
+     * done quietly, because a reader who chose 4096 and gets 2048 is owed the reason, and said once,
+     * because the caller stores the clamped document so the next launch has nothing to say.
+     */
+    fun withinCeiling(settings: AppSettings, ceiling: Int): HeldSettings {
+        val resolution = settings.workingResolution
+        val resolutionMoves = resolution != AppSettings.FOLLOW_PLATFORM && resolution > ceiling
+        val exportMoves = settings.exportSize > ceiling
+        if (!resolutionMoves && !exportMoves) return HeldSettings(settings, notice = null)
+        val held = settings.copy(
+            workingResolution =
+                if (resolutionMoves) Knobs.RESOLUTIONS.filter { it <= ceiling }.max() else resolution,
+            exportSize = Exports.clamp(settings.exportSize, ceiling)
+        )
+        val asked = if (resolutionMoves) resolution else settings.exportSize
+        val what = when {
+            resolutionMoves && exportMoves -> "Worlds and exports start"
+            resolutionMoves -> "Worlds start"
+            else -> "Exports start"
+        }
+        val notice = "$what at $ceiling here rather than the $asked in your settings. " +
+            "${WorldCeilings.whyOutOfReach(asked, ceiling)}."
+        return HeldSettings(held, notice)
     }
 
     /**

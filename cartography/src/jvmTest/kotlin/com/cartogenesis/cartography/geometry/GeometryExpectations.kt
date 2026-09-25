@@ -116,7 +116,6 @@ internal object GeometryExpectations {
         insufficient("lakes' open water", Detector.RECTANGLE, 1234L)
         insufficient("lakes' open water", Detector.FACETS, 7L, 1234L)
         insufficient("lakes' open water", Detector.CREASES, 7L, 1234L)
-        insufficient("lakes' open water", Detector.ARCS, 1234L)
         insufficient("lakes' open water", Detector.COMBS, 1234L)
         insufficient("lakes' open water", Detector.ORIENTATION, 7L, 42L, 1234L, 99L)
         insufficient("river courses", Detector.ISOTROPY, 7L, 42L, 1234L, 99L)
@@ -184,6 +183,8 @@ internal object GeometryExpectations {
         insufficient("floodplain deposits", Detector.CREASES, 42L)
         insufficient("floodplain deposits", Detector.ORIENTATION, 7L, 42L, 1234L, 99L)
         insufficient("realm borders", Detector.ISOTROPY, 7L, 42L, 1234L, 99L)
+        // Since chunk 6's catchments no realm on these three is a ring small enough to measure.
+        insufficient("realm borders", Detector.RECTANGLE, 7L, 42L, 99L)
         insufficient("realm borders", Detector.ORIENTATION, 7L, 42L, 1234L, 99L)
         insufficient("biome edges", Detector.ISOTROPY, 7L, 1234L, 99L)
         insufficient("biome edges", Detector.ORIENTATION, 7L, 42L, 1234L, 99L)

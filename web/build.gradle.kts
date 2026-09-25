@@ -142,6 +142,22 @@ val siteFontFiles = listOf(
 /** Where `:desktop:renderSiteImagery` leaves the figures the page shows. */
 val siteImagery = rootProject.layout.projectDirectory.dir("web/build/site-imagery")
 
+/** The comment in `site/index.html` the pins of "Read the land" replace. */
+val pinsMarker = "<!-- pins -->"
+
+/**
+ * The pins of "Read the land", as `:desktop:renderSiteImagery` wrote them after finding each
+ * landmark in the world's own fields, each line given the marker's indentation.
+ *
+ * Written by the engine rather than into the page, so the pins move with the ground when the
+ * pictures are made again from a changed generator. See `SiteLandmarks.kt`.
+ */
+fun pinsMarkup(indent: String): String {
+    val pins = siteImagery.file("pins.html").asFile
+    check(pins.isFile) { "no ${pins.path}: :desktop:renderSiteImagery writes the pins beside the pictures" }
+    return pins.readLines(Charsets.UTF_8).filter { it.isNotBlank() }.joinToString("\n") { indent + it }
+}
+
 // ---------------------------------------------------------------------------------------------
 // The roadmap, drawn from the file rather than written on the page
 // ---------------------------------------------------------------------------------------------
@@ -241,6 +257,8 @@ tasks.register<Sync>("assembleSite") {
     // The roadmap the landing page draws: a change to it has to re-assemble the page, and Gradle
     // cannot see a file read inside a copy action.
     inputs.file(roadmapFile).withPropertyName("roadmapTheLandingPageDraws")
+    // And the pins the engine placed, which are read inside the same filter.
+    inputs.file(siteImagery.file("pins.html")).withPropertyName("pinsTheEnginePlaced")
 
     from(rootProject.layout.projectDirectory.dir("site")) {
         // Documentation for whoever maintains the site, not part of the site.
@@ -261,9 +279,14 @@ tasks.register<Sync>("assembleSite") {
 
         // The landing page's "What comes next" table, put in where the page keeps its marker.
         // A whole-line replacement, so the table takes the marker's own indentation with it.
+        // And the pins of "Read the land", put in where the page keeps theirs, the same way.
         filesMatching("index.html") {
             filter { line ->
-                if (line.trim() == roadmapMarker) roadmapTable(line.substringBefore("<")) else line
+                when (line.trim()) {
+                    roadmapMarker -> roadmapTable(line.substringBefore("<"))
+                    pinsMarker -> pinsMarkup(line.substringBefore("<"))
+                    else -> line
+                }
             }
         }
 
@@ -339,6 +362,10 @@ tasks.register<Sync>("assembleSite") {
         check(!assembledPage.contains(roadmapMarker)) {
             "index.html still carries $roadmapMarker, so the roadmap table was not substituted. " +
                 "The replacement matches the marker on a line of its own in site/index.html."
+        }
+        check(!assembledPage.contains(pinsMarker)) {
+            "index.html still carries $pinsMarker, so the map in Read the land has no pins. The " +
+                "replacement matches the marker on a line of its own in site/index.html."
         }
         val releases = roadmapRows()
         check(releases.all { assembledPage.contains(">${it.release}<") }) {

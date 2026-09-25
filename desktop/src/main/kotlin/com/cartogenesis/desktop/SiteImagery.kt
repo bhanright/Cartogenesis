@@ -9,6 +9,9 @@ import com.cartogenesis.worldgen.WorldGenerationEngine
 import com.cartogenesis.worldgen.generateBlocking
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
+import com.cartogenesis.cartography.WorldCodec
+import com.cartogenesis.cartography.WorldDocument
+import kotlinx.coroutines.runBlocking
 import org.jetbrains.skia.Bitmap
 import org.jetbrains.skia.Canvas
 import org.jetbrains.skia.ColorAlphaType
@@ -38,12 +41,14 @@ import java.io.File
  * mark the renderer makes is sized in *output pixels*, so a 1:1 window shows the pen the renderer
  * actually draws with, while a downscaled whole map shows a thinner one that exists nowhere.
  *
- * A figure is one window read one way, and each is one card's picture on the page; a pipeline step
- * that needs a wider stretch of ground is the one exception to 1:1 (see [Figure.reduction]). The
- * cards that compare readings — the three styles, the four data views — share one window per row,
- * which is what makes them the same ground: there is one window for the row's pictures to be cut
- * from. The page names each picture in its card's own heading rather than in lettering drawn into
- * the file, so nothing here sets type. See docs/DESIGN_LEDGER.md, Site 3 and Site 4, for what the
+ * A figure is one window read one way. Most are one card's picture on the page; the rest are the
+ * living figures' — the strip the hero drifts along, the "Read the land" map with the pins
+ * [SiteLandmarks] finds on it, and the nine styles the comparison slider fetches when picked.
+ * Wider ground is halved rather than cropped wider (see [Figure.reduction]). Pictures that are
+ * compared share one window — the six steps, the twelve styles, the four data views — which is
+ * what makes them the same ground: there is one window for the row's pictures to be cut from.
+ * The page names each picture in its own words rather than in lettering drawn into the file, so
+ * nothing here sets type. See docs/DESIGN_LEDGER.md, Site 3, Site 4 and Site 5a, for what the
  * page has asked for and when.
  *
  * It has to run on the deploy runner, which is Linux with no graphics card and no display. Nothing
@@ -119,17 +124,17 @@ object SiteImagery {
     val BAND = Window(1152, 320, 1600, 800)
 
     /**
-     * The window the three physical styles are compared in: square, 640 on a side.
+     * The window the map styles are compared in: 600 wide and 400 tall, at 1:1.
      *
-     * The northern continent's south-western lowlands, chosen so that the three styles are asked
-     * the questions they answer differently. It holds the dry tan belt that crosses them, the
-     * green country either side of it, the western flank of the range at its right-hand edge and
-     * the south coast below — which is where the styles part company, because Atlas and Natural
-     * tint the ground by its climate as well as its height and Schoolroom tints it by height
-     * alone. Three styles agreeing about a green coast would prove nothing. Which window each
-     * release has used, and why each moved, is in docs/DESIGN_LEDGER.md.
+     * The south-eastern lobe of the northern continent: brown hills over a green coastal plain,
+     * rivers reaching the south and east coasts, and the shelf and the deep sea round the corner.
+     * Height, climate, water and sea in one frame, which is what the twelve styles part company
+     * over. It moved here in Site 5a from the south-western lowlands, which carried two of the
+     * generator's grid-shaped marks listed in docs/TODO.md (a dry belt ruled along a row, and an
+     * estuary sea with a straight west edge and a straight top); this window holds neither, and
+     * starts east of the fan of rays at the range's southern ice cap.
      */
-    val STYLES_WINDOW = Window(1152, 512, 640, 640)
+    val STYLES_WINDOW = Window(2160, 580, 600, 400)
 
     /**
      * The window the four data layers are read in: 480 wide and 600 tall.
@@ -159,6 +164,9 @@ object SiteImagery {
      * only legible over a wider stretch of ground — plates a continent across, realms a coast long —
      * is cut from a window that many times wider and taller and averaged down to the card's size,
      * by halving, so a power of two.
+     *
+     * [showWater] off draws the map without its rivers and lakes, which is how the stage before the
+     * water is routed is shown: the same sheet, with only the step's own work taken off it.
      */
     data class Figure(
         val file: String,
@@ -166,7 +174,8 @@ object SiteImagery {
         val view: MapView,
         val style: MapStyle = MapStyle.ATLAS,
         val reduction: Int = 1,
-        val quality: Int = WEBP_QUALITY
+        val quality: Int = WEBP_QUALITY,
+        val showWater: Boolean = true
     ) {
         init {
             require(reduction >= 1 && reduction and (reduction - 1) == 0) {
@@ -177,7 +186,8 @@ object SiteImagery {
             }
         }
 
-        val options: RenderOptions get() = RenderOptions(view = view, style = style)
+        val options: RenderOptions
+            get() = RenderOptions(view = view, style = style, showRivers = showWater, showLakes = showWater)
 
         /** The picture's own width in pixels, which the page's `width` attribute states. */
         val width: Int get() = window.width / reduction
@@ -197,14 +207,21 @@ object SiteImagery {
     val HERO = Figure("natural.webp", BAND, MapView.FANTASY, MapStyle.NATURAL)
 
     /**
-     * The three physical styles, one card each, all cut from [STYLES_WINDOW].
+     * Every map style the application offers, each cut from [STYLES_WINDOW]: the comparison
+     * slider's twelve pictures, in the application's own order.
+     */
+    val STYLE_PICTURES: List<Figure> = MapStyle.entries
+        .map { style -> Figure("style-${style.name.lowercase()}.webp", STYLES_WINDOW, MapView.FANTASY, style) }
+
+    /**
+     * The three styles that have a card each, the same files the slider shows.
      *
      * Atlas, Schoolroom and Natural because they are the three that tint the ground differently for
      * a reason a reader can be told in one line: height and climate, height alone, and the colours
      * a satellite sees.
      */
     val STYLE_CARDS: List<Figure> = listOf(MapStyle.ATLAS, MapStyle.SCHOOLROOM, MapStyle.NATURAL)
-        .map { style -> Figure("style-${style.name.lowercase()}.webp", STYLES_WINDOW, MapView.FANTASY, style) }
+        .map { style -> STYLE_PICTURES.single { it.style == style } }
 
     /** The four data views, one card each, all cut from [LAYERS_WINDOW]. */
     val LAYER_CARDS: List<Figure> =
@@ -212,44 +229,94 @@ object SiteImagery {
             .map { view -> Figure("layer-${view.name.lowercase()}.webp", LAYERS_WINDOW, view) }
 
     /**
-     * The six steps of "How a world is made", each pictured by the view that shows what that step
-     * makes, in the page's order. Every picture is 480 by 320, the shape of a card in a row of
-     * three, and each window was chosen off the full sheets for what its step has to show and for
-     * what it must not: the ice caps on this world are drawn with a straight edge down a column and
-     * a fan of rays from one point, which rule 13 of docs/CONVENTIONS.md exists to keep off the map,
-     * so no window here holds one.
+     * The one window every step of "How a world is made" is pictured in: 1040 by 560 of the sheet,
+     * halved to 520 by 280.
      *
-     * - Plates and mountains: the tectonic plates over the continent's east coast and the island
-     *   arc beyond it, where continental and oceanic plates meet round the coast, at a quarter.
-     * - Erosion: the elevation view of the eastern lobe, where valleys are cut into the flanks and a
-     *   river builds a small delta at the coast, at 1:1.
-     * - Seas and ice: the eastern ridge in Natural, the shelf a pale band round every coast and a
-     *   lake in the ridge, at a half.
-     * - Climate: the same ground in the biomes view, snow on the ridge, forest, grassland and a
-     *   dry patch in the lee, at a half.
-     * - Rivers and lakes: the east coast of the southern continent in Natural, rivers gathering off
-     *   the hills to the sea past two lakes, at 1:1. Not the northern lowlands, which have more
-     *   river: the dry belt crosses them as a band ruled straight along a row, and at card size it
-     *   reads as a line drawn on the picture.
-     * - Realms and peoples: the political view of the west coast, where several realms meet along
-     *   its rivers and watersheds, at a half.
+     * One window and one scale, because the page plays the six pictures in turn in one frame and
+     * the land must not jump between them: what changes from frame to frame is the step's own
+     * work. The south-western peninsula of the northern continent, halved so that plates and
+     * realms have room to show: the continent's plate meeting two ocean plates round its coast,
+     * valleys cut into its hills, the shelf, a climate that runs from forest on the west coast to
+     * dry grassland inland, rivers reaching both coasts, and several realms. Its top edge stands
+     * below the dry belt the generator rules along a row, and its right-hand edge west of the
+     * estuary with a straight west edge (both in docs/TODO.md), so neither is in any frame.
+     */
+    val STAGE_WINDOW = Window(440, 740, 1040, 560)
+
+    /**
+     * The six steps, each pictured by the view that shows what that step makes, in the page's order:
+     * the tectonic plates; the elevation, for the land the erosion cut; Natural, for the coast and
+     * shelf the sea level drew; the biomes, for the climate; Natural again with its rivers and lakes,
+     * for the water; and the political view, for the realms. The first four are drawn without the
+     * rivers and lakes, which the fifth step makes, so the water arrives in the frame when its step
+     * does rather than being there from the start.
      */
     val STEP_CARDS: List<Figure> = listOf(
-        Figure("step-plates.webp", Window(2080, 0, 1920, 1280), MapView.PLATES, reduction = 4),
-        Figure("step-erosion.webp", Window(2200, 560, 480, 320), MapView.ELEVATION),
+        Figure("step-plates.webp", STAGE_WINDOW, MapView.PLATES, reduction = 2, showWater = false),
+        Figure("step-erosion.webp", STAGE_WINDOW, MapView.ELEVATION, reduction = 2, showWater = false),
         Figure(
-            "step-seas.webp", Window(2750, 300, 960, 640), MapView.FANTASY, MapStyle.NATURAL,
-            reduction = 2
+            "step-seas.webp", STAGE_WINDOW, MapView.FANTASY, MapStyle.NATURAL, reduction = 2,
+            showWater = false
         ),
-        Figure("step-climate.webp", Window(2750, 300, 960, 640), MapView.BIOMES, reduction = 2),
-        Figure(
-            "step-rivers.webp", Window(2990, 1720, 480, 320), MapView.FANTASY, MapStyle.NATURAL
-        ),
-        Figure("step-realms.webp", Window(400, 300, 960, 640), MapView.POLITICAL, reduction = 2)
+        Figure("step-climate.webp", STAGE_WINDOW, MapView.BIOMES, reduction = 2, showWater = false),
+        Figure("step-rivers.webp", STAGE_WINDOW, MapView.FANTASY, MapStyle.NATURAL, reduction = 2),
+        Figure("step-realms.webp", STAGE_WINDOW, MapView.POLITICAL, reduction = 2)
     )
 
+    /**
+     * The window "Read the land" is drawn and pinned in: 1120 by 560 at 1:1.
+     *
+     * The northern half of the eastern island and the coast across the strait from it: a coastal
+     * range raised over a subducting plate along its north shore, drier country in its lee, a
+     * narrow arm of the sea between the island and the far coast, river mouths on both, and a bay
+     * where the shelf runs wide. [SiteLandmarks] finds its pins in the world's fields inside this
+     * window rather than at places written here, so this paragraph describes what the window held
+     * when it was chosen, and the finder decides what it holds now. The
+     * bottom edge stands above the dry belt the generator rules along a row across the island
+     * (docs/TODO.md), which is why the window is not taller, and the right-hand edge west of the
+     * small ice cap with a straight edge on the far coast.
+     */
+    val LAND_WINDOW = Window(2760, 100, 1120, 560)
+
+    /** The "Read the land" map. */
+    val LAND = Figure("land.webp", LAND_WINDOW, MapView.FANTASY, MapStyle.NATURAL)
+
+    /**
+     * The sheet's width in pixels for the world [generate] makes, which is how wide a strip round
+     * the whole world is.
+     */
+    val SHEET_WIDTH_PIXELS: Int get() = SheetGeometry.of(config()).widthPixels
+
+    /**
+     * The hero's band all the way round the world, halved: the strip the hero drifts along.
+     *
+     * It starts where [BAND] starts, so its first 800 columns are the hero's picture at half
+     * scale and the strip can take over from the hero without a jump; it runs the whole
+     * circumference, so its last column is the sheet column west of its first and the strip joins
+     * itself end to end. Halved because the hero is read at half its pixels or less at every width
+     * the page is laid out at (a 2:1 frame at most about 510 pixels wide), and the whole strip at
+     * 1:1 would be four times the bytes for detail no reader is shown.
+     */
+    val HERO_STRIP: Figure by lazy {
+        Figure(
+            "hero-strip.webp", Window(BAND.x, BAND.y, SHEET_WIDTH_PIXELS, BAND.height),
+            MapView.FANTASY, MapStyle.NATURAL, reduction = 2
+        )
+    }
+
     /** Every picture the page shows, in the order it shows them. */
-    val FIGURES: List<Figure> = listOf(HERO) + STEP_CARDS + STYLE_CARDS + LAYER_CARDS
+    val FIGURES: List<Figure> by lazy {
+        listOf(HERO, HERO_STRIP) + STEP_CARDS + LAND + STYLE_PICTURES + LAYER_CARDS
+    }
+
+    /** Where [main] leaves the pins' markup for the page, beside the pictures. */
+    const val PINS_FILE = "pins.html"
+
+    /**
+     * Where [main] leaves the world the pictures were cut from, as a save, so that
+     * `SiteAssemblyTest` can read the fields under every pin rather than trust the finder.
+     */
+    const val WORLD_FILE = "world.cgw"
 
     @JvmStatic
     fun main(args: Array<String>) {
@@ -298,6 +365,25 @@ object SiteImagery {
             sheets.close()
         }
 
+        val landmarks = SiteLandmarks.find(world, LAND_WINDOW)
+        File(outputDir, PINS_FILE).writeText(pinsMarkup(landmarks, SheetGeometry.of(world)), Charsets.UTF_8)
+        landmarks.forEachIndexed { index, landmark ->
+            println(
+                "  pin ${index + 1} ${landmark.kind.id} on cell ${landmark.cell % world.width}," +
+                    "${landmark.cell / world.width} at sheet %.0f,%.0f".format(landmark.sheetX, landmark.sheetY)
+            )
+        }
+        val save = File(outputDir, WORLD_FILE)
+        save.writeBytes(
+            runBlocking {
+                WorldCodec.encode(
+                    WorldDocument("site", "The site's world", world.config, savedAt = 0L),
+                    world, GzipCompressor, "renderSiteImagery"
+                )
+            }
+        )
+        println("  $WORLD_FILE ${save.length()} bytes, for SiteAssemblyTest to read the pins against")
+
         val finished = System.currentTimeMillis()
         println(
             "SITE IMAGERY ${FIGURES.size} figures, $total bytes total, " +
@@ -305,14 +391,40 @@ object SiteImagery {
         )
     }
 
+    /**
+     * The pins of "Read the land" as the page writes them, one `button` a line, in [landmarks]'
+     * order, which is the order of the notes under the map.
+     *
+     * Each is placed by the centre of its cell as a share of the picture, to three places of a
+     * percent (a tenth of a pixel on the 1120-pixel picture), so it stays on its cell at every width
+     * the picture is drawn at. It carries the cell in `data-cell`, which is what the guard reads the
+     * world's fields at, and takes its accessible name from the note's own heading.
+     */
+    fun pinsMarkup(landmarks: List<SiteLandmarks.Landmark>, sheet: SheetGeometry): String =
+        landmarks.mapIndexed { index, landmark ->
+            val across = ((landmark.sheetX - LAND_WINDOW.x) % sheet.widthPixels + sheet.widthPixels) %
+                sheet.widthPixels
+            val down = landmark.sheetY - LAND_WINDOW.y
+            val left = String.format(java.util.Locale.ROOT, "%.3f", across * 100.0 / LAND_WINDOW.width)
+            val top = String.format(java.util.Locale.ROOT, "%.3f", down * 100.0 / LAND_WINDOW.height)
+            val cellX = landmark.cell % sheet.cellsAcross
+            val cellY = landmark.cell / sheet.cellsAcross
+            val id = landmark.kind.id
+            """<button type="button" class="pin" style="left:$left%;top:$top%" data-kind="$id" """ +
+                """data-cell="$cellX,$cellY" aria-labelledby="land-$id-name" aria-expanded="false" """ +
+                """aria-controls="land-note">${index + 1}</button>"""
+        }.joinToString("\n")
+
     /** [SEED] at [GRID_CELLS], with the settings the page names. */
-    fun generate(): WorldMap {
+    fun generate(): WorldMap = WorldGenerationEngine.generateBlocking(config())
+
+    /** The settings [generate] runs: [SEED] at [GRID_CELLS] with the page's sea, plates and realms. */
+    fun config(): WorldGenConfig {
         val base = WorldGenConfig(seed = SEED, width = 512, height = 512, seaLevel = SEA_LEVEL)
-        val config = base.copy(
+        return base.copy(
             tectonics = base.tectonics.copy(plateCount = PLATES),
             nations = base.nations.copy(nationCount = REALMS)
         ).atResolution(GRID_CELLS, GRID_CELLS)
-        return WorldGenerationEngine.generateBlocking(config)
     }
 
     /**

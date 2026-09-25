@@ -40,6 +40,9 @@ import kotlin.test.assertTrue
  * that the old lobe leaves no pocket (one seed of four gained one). Moving those to buy 1517 cells
  * of 4.19 million is what ground rule 5 exists to refuse.
  *
+ * Since Fix 3, which stopped the incision cutting river mouths below the sea, the census finds none
+ * at the waterline on these four seeds.
+ *
  * So what ships is the measurement. This reports the population any future transgression rule would
  * act on — and it is also the population S2's rift subsidence will move, which is the chunk that
  * can actually reach the scene E8 was aimed at. Nothing here is asserted except that the census
@@ -65,6 +68,7 @@ class WaterlineBasinTest : BorrowsSharedWorlds() {
     @Test
     fun `report the basins standing at the waterline`() {
         var found = 0
+        var classified = 0
         seeds.forEach { seed ->
             val config = WorldGenConfig(seed = seed, width = 512, height = 512)
             val world = SharedWorlds.world(config)
@@ -74,6 +78,7 @@ class WaterlineBasinTest : BorrowsSharedWorlds() {
             val stage = count(config, SeaLevelStage.apply(world.erosion.height, config))
             val finished = count(config, world.sea)
             found += stage.at
+            classified += stage.drowned
             println(
                 ("E8 seed %d at 512: %d basins below the cut over %d cells — %d standing at the " +
                     "waterline over %d cells (largest %d), %d behind a sill higher than a surge, " +
@@ -84,11 +89,14 @@ class WaterlineBasinTest : BorrowsSharedWorlds() {
                 )
             )
         }
+        // What the census must find is basins below the cut to sort, not basins at the waterline:
+        // since Fix 3 stopped the incision cutting river mouths below the sea, none of the four
+        // seeds holds one at the waterline (docs/DESIGN_LEDGER.md, Fix 3). It is printed above for
+        // as long as the census runs, so a world that grows them again shows them.
+        println("E8 over the four seeds: $found basins at the waterline among $classified below the cut")
         assertTrue(
-            found > 0,
-            "no basin stood at the waterline on any seed, so this census is counting nothing and " +
-                "the finding it records — that the rule which would take them cannot pay for " +
-                "itself — no longer has anything behind it"
+            classified > 0,
+            "no basin stood below the cut on any seed, so this census is sorting nothing"
         )
     }
 
@@ -141,10 +149,13 @@ class WaterlineBasinTest : BorrowsSharedWorlds() {
             if (notch.floor[b] >= 0f) continue
             drowned++
             drownedCells += notch.cells[b]
+            // The exit is the basin's entry, the first cell its deep water drains to, and not its
+            // lip: a basin inside converted ground below the waterline has a lip, if any, far off
+            // across that ground, and it is the exit this census is about.
             val crest =
-                if (notch.spill[b] >= 0) sea.relativeElevation.data[notch.spill[b]] else -1f
+                if (notch.entry[b] >= 0) sea.relativeElevation.data[notch.entry[b]] else -1f
             when {
-                notch.spill[b] < 0 || crest < 0f -> below++
+                notch.entry[b] < 0 || crest < 0f -> below++
                 crest <= surge -> {
                     at++
                     atCells += notch.cells[b]

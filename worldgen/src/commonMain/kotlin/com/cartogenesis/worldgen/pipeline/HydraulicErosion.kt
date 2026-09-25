@@ -48,6 +48,13 @@ internal data class RoundMass(
     /** The deepest fill anywhere on the map, over any basin's lowest ground. */
     val deepestBasin: Float = 0f,
     /**
+     * How deep the standing fill lies over the land as the round opens, in metres: the fill's
+     * depth over the ground summed over every cell raised by more than the pond depth, over the
+     * land's cell count. The volume of water the basins hold, spread over the land, so it answers
+     * how deep the fill is without depending on which basin happens to be the largest.
+     */
+    val fillDepthOverLandMetres: Double = 0.0,
+    /**
      * Channel cells standing lower than the cell they drain into, counted after each of the round's
      * mechanisms in turn: as the round opened, after the outlet notch, after the incision, after
      * the deposition, after the closing passes, and after the thermal relaxation.
@@ -916,6 +923,15 @@ internal object HydraulicErosion {
             } else {
                 null
             }
+            var openingFillDepthMetres = 0.0
+            if (onRound != null) {
+                var summed = 0.0
+                for (cell in ground.indices) {
+                    val standing = ground[cell] - relative[cell]
+                    if (isLand[cell] && standing > rates.pondDepth) summed += standing.toDouble()
+                }
+                openingFillDepthMetres = summed * config.scale.highestLandMetres / landCells
+            }
             var notched = 0.0
             var notchCells = 0
             if (notch != null && erosion.outletIncision) {
@@ -1449,6 +1465,7 @@ internal object HydraulicErosion {
                             if (it.largest >= 0) it.spill[it.largest] else -1
                         } ?: -1,
                         deepestBasin = notch?.deepest ?: 0f,
+                        fillDepthOverLandMetres = openingFillDepthMetres,
                         channelPits = pits.copyOf()
                     )
                 )
@@ -1840,6 +1857,15 @@ internal object HydraulicErosion {
      * fills, because the router needs an outlet for every cell in a single pass, and this is where
      * the other half is put back.
      *
+     * The breach begins at the lip, the basin's pour point, and not at the first cell outside its
+     * deep water: where the lake shelves those are different cells, and a breach begun on the
+     * margin stopped on it (see [FlowRouting.Spillways.entry]). The outflow's power is measured
+     * from the lip too, over the catchment gathered there and the channel below it, because that
+     * is the water crossing the sill and the slope it crosses at; measured from the margin, the
+     * level margin diluted the slope. And the surface is carried back from the lip across the
+     * margin as far as the margin stands above it, so a round whose drop is deeper than the margin
+     * lowers the whole sill rather than leaving the margin as a new one.
+     *
      * @param settled the surface deposition is judged against, lowered with the terrain, or null
      *   when nothing is being carried.
      * @param load where the spoil goes, or null when there is no walk left to carry it — in which
@@ -1977,6 +2003,52 @@ internal object HydraulicErosion {
                 cell = next
             }
 
+            // Back across the lake's shallow margin, from the lip to where the deep water begins:
+            // the same surface, rising by the same gradient per cell away from the lip, stopping at
+            // the first cell already below it. Nothing to do where the ground falls straight from
+            // the water to the lip, which is where the entry is the lip itself.
+            var backCellWidths = 0f
+            val entry = notch.entry[basin]
+            if (entry >= 0 && entry != spill) {
+                var marginCells = 0
+                var walker = entry
+                var marginWidths = 0f
+                while (walker >= 0 && walker != spill && isLand[walker] && marginWidths <= rates.outletReachCells) {
+                    val next = directions[walker]
+                    marginWidths += if (next >= 0) steps.between(walker, next, cellsAcross) else steps.eastWest
+                    marginCells++
+                    walker = next
+                }
+                if (walker == spill) {
+                    val margin = IntArray(marginCells)
+                    walker = entry
+                    for (index in 0 until marginCells) {
+                        margin[index] = walker
+                        walker = directions[walker]
+                    }
+                    var downstream = spill
+                    for (index in marginCells - 1 downTo 0) {
+                        val marginCell = margin[index]
+                        backCellWidths += steps.between(marginCell, downstream, cellsAcross)
+                        val cutLevel = newLevel + backCellWidths * gradient
+                        if (relative[marginCell] <= cutLevel) break
+                        val take = (relative[marginCell] - cutLevel).toDouble() * landRange
+                        val ponded = ground[marginCell] - relative[marginCell] > rates.pondDepth
+                        val removedHere = -raise(surfaceOf, marginCell, -take)
+                        if (removedHere > 0.0) {
+                            val asRelative = (removedHere / landRange).toFloat()
+                            relative[marginCell] -= asRelative
+                            if (!ponded) ground[marginCell] -= asRelative
+                            settled?.let { it[marginCell] -= asRelative }
+                            load?.let { it[marginCell] += removedHere }
+                            moved += removedHere
+                            cells++
+                        }
+                        downstream = marginCell
+                    }
+                }
+            }
+
             // And, on the far side of the cut only, the sill on the *basin's* own side.
             //
             // Inside the rounds the notch can never be cut below the lake's own surface, so there
@@ -2002,8 +2074,7 @@ internal object HydraulicErosion {
             // donors of equal catchment falls to the lower cell index, so the channel is one
             // specific channel on every machine.
             if (belowSea) {
-                var backCellWidths = 0f
-                var from = spill
+                var from = if (entry >= 0) entry else spill
                 while (backCellWidths <= rates.outletReachCells) {
                     var bestDonor = -1
                     var bestArea = -1f

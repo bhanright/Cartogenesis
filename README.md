@@ -415,7 +415,9 @@ more immediately before the save is put in place, and a file that another progra
 that name in the moment between the check and the move is replaced by the save, because a browser
 cannot create a file only if it does not already exist. And in a browser too old to rename files in
 a folder on the disk, the save is copied into its name instead, so an empty `.cgw` with that name
-shows in the folder, and to a sync client, while the copy runs. Nothing is uploaded anywhere: the
+shows in the folder, and to a sync client, while the copy runs; a file another program writes into
+that name after the copy has checked it is empty, and before the copy starts, is written over, for
+the same reason. Nothing is uploaded anywhere: the
 page reads and writes that folder and nothing else.
 
 ## Menus, settings and themes

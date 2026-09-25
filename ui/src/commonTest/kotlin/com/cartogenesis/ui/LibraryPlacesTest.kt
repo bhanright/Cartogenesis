@@ -165,6 +165,42 @@ class LibraryPlacesTest {
     }
 
     @Test
+    fun `a permission answer slow to come never outranks a choice made while it was given`() = runTest {
+        // Reconnect clicked, and while the browser's question was still open the reader chose this
+        // browser's storage instead. The reconnect was numbered when the answer came, later than
+        // that choice, and took the library back to the folder.
+        val folder = FakeFolder("Maps", permission = FolderPermission.PROMPT, answer = FolderPermission.GRANTED)
+        val places = LibraryPlaces(FolderPlatform(FakeChooser(RememberedPlace(folder, inFolder = true))))
+        places.start()
+        assertEquals(LibraryPlace.ReconnectNeeded(folder), places.place)
+
+        folder.requestHeld = CompletableDeferred()
+        val reconnecting = launch { places.reconnect() }
+        runCurrent()
+        places.useHostStorage()
+        folder.requestHeld!!.complete(Unit)
+        reconnecting.join()
+        assertEquals(LibraryPlace.HostStorage(folder), places.place, "the slow reconnect undid the choice of this browser's storage")
+    }
+
+    @Test
+    fun `a picker left open never outranks a choice made while it was open`() = runTest {
+        val folder = FakeFolder("Maps", permission = FolderPermission.GRANTED)
+        val picked = FakeFolder("Atlas", permission = FolderPermission.GRANTED)
+        val chooser = FakeChooser(RememberedPlace(folder, inFolder = true), picks = picked)
+        val places = LibraryPlaces(FolderPlatform(chooser))
+        places.start()
+
+        chooser.pickHeld = CompletableDeferred()
+        val choosing = launch { places.choose() }
+        runCurrent()
+        places.useHostStorage()
+        chooser.pickHeld!!.complete(Unit)
+        choosing.join()
+        assertEquals(LibraryPlace.HostStorage(folder), places.place, "the picker's late answer undid the choice of this browser's storage")
+    }
+
+    @Test
     fun `the offer to copy counts only the worlds the folder has no copy of`() = runTest {
         // Offered by count of everything in this browser's storage, it went on offering the same
         // world after it had been copied, and each click made another copy.
@@ -225,8 +261,12 @@ internal class FakeFolder(
         return permission
     }
 
+    /** When set, [requestPermission] waits on it before answering: a reader slow to click Allow. */
+    var requestHeld: CompletableDeferred<Unit>? = null
+
     override suspend fun requestPermission(): FolderPermission {
         calls += "requestPermission"
+        requestHeld?.await()
         permission = answer
         return answer
     }
@@ -244,8 +284,12 @@ internal class FakeChooser(
 ) : FolderChooser {
     val calls = mutableListOf<String>()
 
+    /** When set, [pick] waits on it before answering: a picker left open. */
+    var pickHeld: CompletableDeferred<Unit>? = null
+
     override suspend fun pick(): LibraryFolder? {
         calls += "pick"
+        pickHeld?.await()
         return picks
     }
 

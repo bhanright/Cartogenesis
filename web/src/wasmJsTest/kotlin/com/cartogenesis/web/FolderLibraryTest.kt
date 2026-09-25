@@ -267,6 +267,53 @@ class FolderLibraryTest {
     }
 
     @Test
+    fun `a copy cancelled as its file is made leaves no empty file behind`() = runTest(timeout = 5.minutes) {
+        // The browser was asked to make w1.cgw and the wait for it was abandoned: the file was
+        // made all the same, empty, and nothing cleared it, so the listing showed a world that
+        // will not open.
+        val world = TestWorlds.small()
+        withTestFolder("cancel-target") { folder ->
+            withMoveIf(false) {
+                val cancelling = object : WriteSteps() {
+                    override suspend fun beforeTargetCreated(name: String) {
+                        currentCoroutineContext()[Job]!!.cancel()
+                    }
+                }
+                val library = FolderWorldLibrary(folder.handle, NoCompression, "a test", SMALL_PARTS, cancelling)
+                val saving = launch { library.save(document(world = world), world) }
+                saving.join()
+                assertTrue(saving.isCancelled)
+                assertEquals(emptyList(), folder.entries(), "a copy cancelled as its file was made left a file behind")
+            }
+        }
+    }
+
+    @Test
+    fun `a save cancelled as its stream is opened leaves no stream or swap file behind`() = runTest(timeout = 5.minutes) {
+        // The stream was being opened when the wait for it was abandoned: the browser opened it
+        // all the same, with its swap file beside the save, and nothing ever aborted it.
+        val world = TestWorlds.small()
+        withTestFolder("cancel-stream") { folder ->
+            FolderWorldLibrary(folder.handle, NoCompression, "a test").save(document(title = "Kept", world = world), world)
+            val kept = folder.readRaw("w1.cgw")
+            val cancelling = object : WriteSteps() {
+                override suspend fun beforeStreamOpened() {
+                    currentCoroutineContext()[Job]!!.cancel()
+                }
+            }
+            val library = FolderWorldLibrary(folder.handle, NoCompression, "a test", SMALL_PARTS, cancelling)
+            val saving = launch { library.save(document(title = "Cancelled", world = world), world, "w1.cgw") }
+            saving.join()
+            assertTrue(saving.isCancelled)
+            assertEquals(listOf("w1.cgw"), folder.entries(), "a stream abandoned as it opened left its swap file")
+            assertSameBytes(kept, folder.readRaw("w1.cgw"), "the file was changed by a save cancelled before it began")
+            // Nothing holds the file: a save after it goes through.
+            FolderWorldLibrary(folder.handle, NoCompression, "a test").save(document(title = "After", world = world), world, "w1.cgw")
+            assertEquals("After", titleIn(library.load("w1.cgw")))
+        }
+    }
+
+    @Test
     fun `a name taken by another writer during a save is not written over`() =
         runTest(timeout = 5.minutes) { takenNameLeftAlone(canMove = true) }
 

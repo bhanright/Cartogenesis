@@ -205,6 +205,9 @@ class LibraryPlaces(private val platform: Platform) {
      */
     suspend fun choose(): String? {
         val chooser = chooser ?: return "This browser cannot keep the library in a folder."
+        // Numbered when the click asks, not when the picker answers: the reader may have asked for
+        // something else while the picker was open, and that later request is the one that stands.
+        val request = newRequest()
         val picked = try {
             chooser.pick()
         } catch (cancelled: CancellationException) {
@@ -212,7 +215,6 @@ class LibraryPlaces(private val platform: Platform) {
         } catch (failure: Throwable) {
             return "Could not open the folder picker: ${failure.message ?: failure::class.simpleName}"
         } ?: return "No folder chosen; the library is where it was."
-        val request = newRequest()
         val notice = settle(picked, request)
         if (!isCurrent(request)) return null
         rememberQuietly(RememberedPlace(picked, inFolder = true))
@@ -229,6 +231,9 @@ class LibraryPlaces(private val platform: Platform) {
      */
     suspend fun reconnect(): String? {
         val folder = folder ?: return "There is no folder to reconnect to."
+        // Numbered when the click asks, for the reason [choose] gives: a slow answer from the
+        // browser must not outrank a choice the reader made while it was being given.
+        val request = newRequest()
         val answer = try {
             folder.requestPermission()
         } catch (cancelled: CancellationException) {
@@ -238,7 +243,7 @@ class LibraryPlaces(private val platform: Platform) {
             // is not the reader refusing, so nothing moves and they can click again.
             return "Could not ask for the folder \"${folder.name}\": ${failure.message ?: failure::class.simpleName}"
         }
-        val request = newRequest()
+        if (!isCurrent(request)) return null
         return when (answer) {
             FolderPermission.GRANTED -> {
                 val notice = settle(folder, request)

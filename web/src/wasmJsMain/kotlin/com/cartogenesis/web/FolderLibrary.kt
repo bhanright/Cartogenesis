@@ -201,6 +201,9 @@ internal open class WriteSteps {
     /** The fallback copy is about to make, or open, the file [name]. */
     open suspend fun beforeTargetCreated(name: String) {}
 
+    /** A writable stream is about to be opened on a file. */
+    open suspend fun beforeStreamOpened() {}
+
     /** A save is published and its temporary file [name] is about to be removed. */
     open suspend fun beforeTemporaryRemoved(name: String) {}
 }
@@ -413,9 +416,15 @@ internal class FolderWorldLibrary(
      * end, so the file is the old one or the new one and this call knows which.
      */
     private suspend fun writeThrough(file: JsHandle, contents: suspend (SaveSink) -> Unit) {
-        val writable = awaitFolder(writableOf(file)) ?: error("the browser gave no stream to write the file with")
+        steps.beforeStreamOpened()
+        // Opening the stream is seen to its end: a wait abandoned partway would leave the browser
+        // holding an open stream, and its swap file beside the file, with nothing to abort it. A
+        // cancel that arrived meanwhile is met just below, where the stream is aborted.
+        val writable = withContext(NonCancellable) { awaitFolder(writableOf(file)) }
+            ?: error("the browser gave no stream to write the file with")
         val sink = FolderSink(writable, partBytes, gauge, steps)
         try {
+            currentCoroutineContext().ensureActive()
             contents(sink)
             sink.flush()
             currentCoroutineContext().ensureActive()
@@ -442,7 +451,9 @@ internal class FolderWorldLibrary(
         finalName: suspend () -> String
     ): String {
         val temporaryName = "~$wanted.${randomId()}$TEMPORARY_SUFFIX"
-        val temporary = awaitFolder(createdFile(directory, temporaryName))
+        // Made whole or not at all, as the copy's file is; a cancel meanwhile is met in the write,
+        // inside the `try` that removes it.
+        val temporary = withContext(NonCancellable) { awaitFolder(createdFile(directory, temporaryName)) }
             ?: error("the browser gave no file to write the save into")
         val name = try {
             writeThrough(temporary, contents)
@@ -495,10 +506,21 @@ internal class FolderWorldLibrary(
         repeat(MOST_NAMES_TRIED) {
             val name = finalName()
             steps.beforeTargetCreated(name)
-            val target = awaitFolder(createdFile(directory, name)) ?: error("the browser gave no file to copy the save into")
-            val found = awaitFolder(fileBehind(target)) ?: error("the browser could not read the file it made")
-            if (blobSize(found) > 0 && !replacesTakenName) return@repeat
+            // Making the file and looking at it are seen to their end: abandoned between the two,
+            // an empty .cgw would be left that no step below knew to clear. A cancel that arrived
+            // meanwhile is met inside the `try`, where the file is cleared.
+            val target = withContext(NonCancellable) { awaitFolder(createdFile(directory, name)) }
+                ?: error("the browser gave no file to copy the save into")
+            val bytesFound = try {
+                withContext(NonCancellable) { awaitFolder(fileBehind(target)) }?.let(::blobSize)
+                    ?: error("the browser could not read the file it made")
+            } catch (failure: Throwable) {
+                withContext(NonCancellable) { removeIfStillEmpty(target, name) }
+                throw failure
+            }
+            if (bytesFound > 0 && !replacesTakenName) return@repeat
             try {
+                currentCoroutineContext().ensureActive()
                 writeThrough(target) { sink -> copy(saved, sink) }
                 return name
             } catch (failure: Throwable) {

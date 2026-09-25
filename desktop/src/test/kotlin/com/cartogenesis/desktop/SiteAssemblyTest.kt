@@ -1,6 +1,5 @@
 package com.cartogenesis.desktop
 
-import com.cartogenesis.cartography.ColorVision
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -24,38 +23,11 @@ import kotlin.test.fail
 class SiteAssemblyTest {
 
     private companion object {
-
         /**
-         * WCAG 2.1 AA for body text (1.4.3), the bar `SitePaletteContrastTest` holds the rest of
-         * the page to. The naming bands are held to it rather than to the large-text bar, because
-         * the line under a band's name is small text by any measure.
-         */
-        const val AA = 4.5
-
-        /**
-         * How far a decoded pixel of a hairline may sit from the divider's brightness, in levels
-         * of Rec. 601 luma.
-         *
-         * Brightness and not colour, because the figures are lossy WebP, which keeps brightness at
-         * every pixel and colour at every second one: a two-pixel line of the divider's brass
-         * between two dark bands decodes as #7C7153, 45 levels bluer than it was drawn, with its
-         * brightness within one level. Measured on the assembled strips, both ways round: within 8
-         * levels every divider line keeps 0.92 of its length or more, and no other line more than
-         * 0.29. A calibration on the figures as built, not a figure of the codec's.
-         */
-        const val DIVIDER_LUMA_TOLERANCE = 8.0
-
-        /**
-         * The share of a line's pixels within [DIVIDER_LUMA_TOLERANCE] of the divider's brightness
-         * for the line to be part of a hairline: most of it, which sits between the 0.92 the
-         * dividers keep and the 0.29 no line of a map or a band reaches.
-         */
-        const val DIVIDER_SHARE = 0.5
-
-        /**
-         * The fewest colours, at five bits a channel, the map in a panel can hold: a panel of one
-         * flat colour decodes to one after lossy compression, and the strips' panels as built to
-         * between six hundred and three and a half thousand.
+         * The fewest colours, at five bits a channel, a map picture can hold: a picture of one flat
+         * colour decodes to one after lossy compression, and the pictures as built to between
+         * about three hundred (the currents view, whose land is one dark ground) and four and a half
+         * thousand.
          */
         const val LEAST_COLOURS_IN_A_MAP = 32
     }
@@ -79,49 +51,9 @@ class SiteAssemblyTest {
         }
     }
 
-    /** Rec. 601 luma, the brightness lossy WebP stores at every pixel. */
-    private fun luma(argb: Int): Double =
-        0.299 * ((argb shr 16) and 0xFF) + 0.587 * ((argb shr 8) and 0xFF) + 0.114 * (argb and 0xFF)
-
-    /**
-     * The hairlines across a strip: runs of whole lines — columns for panels laid across, rows for
-     * panels laid down — most of whose pixels are as bright as [SiteImagery.DIVIDER_COLOUR], each
-     * run one hairline.
-     */
-    private fun dividerRules(pixels: IntArray, width: Int, height: Int, layout: SiteImagery.Layout): List<IntRange> {
-        val across = layout == SiteImagery.Layout.ACROSS
-        val lines = if (across) width else height
-        val length = if (across) height else width
-        val dividerLuma = luma(SiteImagery.DIVIDER_COLOUR)
-        fun near(argb: Int): Boolean = kotlin.math.abs(luma(argb) - dividerLuma) <= DIVIDER_LUMA_TOLERANCE
-        val isRule = BooleanArray(lines) { line ->
-            val matching = (0 until length).count { along ->
-                near(if (across) pixels[along * width + line] else pixels[line * width + along])
-            }
-            matching >= DIVIDER_SHARE * length
-        }
-        val rules = ArrayList<IntRange>()
-        var start = -1
-        for (line in 0..lines) {
-            val rule = line < lines && isRule[line]
-            if (rule && start < 0) start = line
-            if (!rule && start >= 0) { rules.add(start until line); start = -1 }
-        }
-        return rules
-    }
-
-    /** How many colours, at five bits a channel, the map part of each panel holds. */
-    private fun mapColourCounts(pixels: IntArray, width: Int, figure: SiteImagery.Figure, layout: SiteImagery.Layout): List<Int> =
-        figure.panels.indices.map { index ->
-            val left = if (layout == SiteImagery.Layout.ACROSS) index * (figure.window.width + SiteImagery.DIVIDER) else 0
-            val top = if (layout == SiteImagery.Layout.ACROSS) 0 else index * (figure.panelHeight + SiteImagery.DIVIDER)
-            val colours = HashSet<Int>()
-            for (row in top until top + figure.window.height) for (column in left until left + figure.window.width) {
-                val argb = pixels[row * width + column]
-                colours.add((argb shr 3) and 0x1F1F1F)
-            }
-            colours.size
-        }
+    /** How many colours, at five bits a channel, a decoded picture holds. */
+    private fun colourCount(pixels: IntArray): Int =
+        pixels.mapTo(HashSet()) { argb -> (argb shr 3) and 0x1F1F1F }.size
 
     private val repoRoot: File
         get() {
@@ -217,204 +149,132 @@ class SiteAssemblyTest {
         )
     }
 
-    /**
-     * The tag a figure is published by, as the page writes it.
-     *
-     * Either the `<img>` a wide screen loads or the `<source>` a phone is handed instead: both
-     * carry the file's name and both state its shape, and which of the two a given figure appears
-     * in is the page's business rather than this guard's. Matching the whole tag rather than
-     * hunting for the file name is what lets the width, the height and the `alt` be read out of it.
-     */
-    private fun imageTag(page: String, file: String): String {
-        val quoted = Regex.escape(file)
-        return Regex("""<img\s+src="img/$quoted"[^>]*>""").find(page)?.value
-            ?: Regex("""<source[^>]*srcset="img/$quoted"[^>]*>""").find(page)?.value
-            ?: fail("the page has no <img> or <source> for img/$file")
-    }
+    /** The `<img>` a picture is published by, as the page writes it. */
+    private fun imageTag(page: String, file: String): String =
+        Regex("""<img\s+src="img/${Regex.escape(file)}"[^>]*>""").find(page)?.value
+            ?: fail("the page has no <img> for img/$file")
 
     private fun attribute(tag: String, name: String): String =
         Regex("""$name="([^"]*)"""").find(tag)?.groupValues?.get(1)
             ?: fail("""$tag has no $name attribute""")
 
-    /**
-     * The panel names a strip's `alt` text promises, in order.
-     *
-     * The text ends "Labelled A, B and C." — a shape rather than a word count, so that the list a
-     * reader who cannot see the figure is given and the list `SiteImagery` actually letters the
-     * bands with can be compared name for name. A panel dropped from either side moves one of the
-     * two lists and not the other.
-     *
-     * The capital is optional because the clause has been both: it was the tail of one sentence
-     * ("…drawn three times, labelled Atlas, Schoolroom and Natural.") until the alts were widened
-     * to say what each panel *shows*, which is the half of WCAG 1.1.1 a complex image needs and a
-     * list of names does not give. It is a sentence of its own now, and either spelling is the same
-     * promise.
-     */
-    private fun namesPromised(alt: String): List<String> {
-        val listed = Regex("""[Ll]abelled ([^.]*)""").find(alt)?.groupValues?.get(1).orEmpty()
-        assertTrue(
-            listed.isNotEmpty(),
-            "a comparison strip's alt text has to end \"Labelled A, B and C.\" so that what it " +
-                "promises can be compared with what is drawn; this one reads \"$alt\""
-        )
-        return listed.split(Regex(""",\s*|\s+and\s+""")).map { it.trim() }.filter { it.isNotEmpty() }
-    }
+    /** The `<li class="card">` a picture is the picture of, or a failure. */
+    private fun cardOf(page: String, file: String): String =
+        Regex("""<li class="card">.*?</li>""", RegexOption.DOT_MATCHES_ALL).findAll(page)
+            .map { it.value }.firstOrNull { it.contains("\"img/$file\"") }
+            ?: fail("img/$file is not the picture of any card on the page")
 
     @Test
-    fun `every figure the page shows was rendered, at the size the page reserves`() {
-        // These names are the contract between SiteImagery.FIGURES and the page's img tags.
-        // Renaming one side alone deploys a broken figure that nothing else would notice.
+    fun `every picture the page shows was rendered, at the size the page reserves`() {
+        // These names and sizes are the contract between SiteImagery.FIGURES and the page's img
+        // tags, written out rather than read from either side: renaming or reshaping one side
+        // alone deploys a broken picture or a card that jumps as it loads, and nothing else would
+        // notice.
         val expected = mapOf(
             "natural.webp" to (1600 to 800),
-            "styles.webp" to (1924 to 711),
-            "layers.webp" to (1926 to 667),
-            // The same panels stacked, which is what a phone is handed: one window wide, and as
-            // many finished panels tall as there are readings, with a hairline between each pair.
-            "styles-stacked.webp" to (640 to 2137),
-            "layers-stacked.webp" to (480 to 2674)
+            // How a world is made: one picture a step, the shape of a card in a row of three.
+            "step-plates.webp" to (480 to 320),
+            "step-erosion.webp" to (480 to 320),
+            "step-seas.webp" to (480 to 320),
+            "step-climate.webp" to (480 to 320),
+            "step-rivers.webp" to (480 to 320),
+            "step-realms.webp" to (480 to 320),
+            // The three styles, each the same 640 square window.
+            "style-atlas.webp" to (640 to 640),
+            "style-schoolroom.webp" to (640 to 640),
+            "style-natural.webp" to (640 to 640),
+            // The four data views, each the same 480 by 600 window.
+            "layer-temperature.webp" to (480 to 600),
+            "layer-currents.webp" to (480 to 600),
+            "layer-wind.webp" to (480 to 600),
+            "layer-rainfall.webp" to (480 to 600)
         )
+        assertEquals(
+            expected.mapValues { it.value }.toSortedMap(),
+            SiteImagery.FIGURES.associate { it.file to (it.width to it.height) }.toSortedMap(),
+            "SiteImagery renders a different set of pictures, or different sizes, from the ones " +
+                "this guard and the page were written for"
+        )
+
         val page = file("index.html").readText()
         expected.forEach { (name, size) ->
             assertEquals(size, webpDimensions(file("img/$name")), "img/$name is the wrong size")
             val tag = imageTag(page, name)
-            // Stated in the tag as well as rendered: the page reserves each figure's shape so the
-            // first screenful does not reflow as they load, and a reserved shape that is not the
-            // figure's shape reflows it twice over.
+            // Stated in the tag as well as rendered: the page reserves each picture's shape so the
+            // page does not reflow as they load, and a reserved shape that is not the picture's
+            // shape reflows it twice over.
             assertEquals(
                 size,
                 attribute(tag, "width").toInt() to attribute(tag, "height").toInt(),
-                "the page reserves a different shape for img/$name than the figure that was rendered"
+                "the page reserves a different shape for img/$name than the picture that was rendered"
             )
         }
 
         val published = File(site, "img").listFiles { f -> f.isFile }.orEmpty().map { it.name }
         assertEquals(
             expected.keys.sorted(), published.sorted(),
-            "img/ holds something other than the figures the page shows — a contact sheet left " +
-                "by -Pcontact, or a figure the page has stopped asking for"
+            "img/ holds something other than the pictures the page shows — a contact sheet left " +
+                "by -Pcontact, or a picture the page has stopped asking for"
+        )
+        println(
+            "SITE ${expected.size} pictures, ${published.sumOf { File(site, "img/$it").length() }} " +
+                "bytes: " + published.sorted().joinToString { "$it ${File(site, "img/$it").length()}" }
         )
     }
 
     /**
-     * That every variant of a comparison strip draws exactly the panels the page says it draws.
+     * That each row of comparison cards is the same ground read a different way in each card, and
+     * that each card is headed by the name of the reading its picture shows.
      *
-     * A strip is one image, so a panel that stopped being rendered would not 404 and would not
-     * break the layout: the figure would simply arrive one panel short, with the page's prose and
-     * its `alt` text still promising three. And now that a phone is handed a second file, a panel
-     * could go missing from one variant alone and be invisible to anyone reviewing on the other.
-     *
-     * So both files are counted, each along its own axis — the wide one is *n* windows plus the
-     * hairlines between them, the stacked one is *n* finished panels plus the same hairlines — and
-     * both are held to the one list of names in the `alt`, which the two variants share because
-     * they are the same figure turned a different way round.
+     * The pictures are separate files now, so nothing in a file says it is the same window as its
+     * neighbour's: that is held here, by the figure table sharing one window across the row. And
+     * the name a reader is given for a picture is the card's heading rather than lettering in the
+     * picture, so the heading is held to what the picture is — the style's or the view's own label,
+     * the word the application's toolbar uses for it.
      */
     @Test
-    fun `each comparison strip draws the panels the page's alt text lists`() {
+    fun `each row of comparison cards reads one window a different way in each card`() {
         val page = file("index.html").readText()
-        val strips = SiteImagery.FIGURES.filter { it.panels.size > 1 }
-        assertTrue(
-            strips.isNotEmpty(),
-            "SiteImagery has no comparison strip left; the page's style and layer sections are " +
-                "about figures that are no longer rendered"
-        )
-
-        strips.forEach { figure ->
-            val alt = attribute(imageTag(page, figure.file), "alt")
+        mapOf(
+            "the styles" to SiteImagery.STYLE_CARDS,
+            "the data views" to SiteImagery.LAYER_CARDS
+        ).forEach { (row, figures) ->
+            assertTrue(figures.size > 1, "$row have fewer than two cards, so compare nothing")
             assertEquals(
-                figure.panels.map { it.name }, namesPromised(alt),
-                "img/${figure.file} letters its bands ${figure.panels.joinToString { it.name }}, " +
-                    "and the page's alt text promises a reader ${namesPromised(alt)}"
+                1, figures.map { it.window }.distinct().size,
+                "$row are cut from different windows, so they are not the same ground: " +
+                    figures.joinToString { "${it.file} ${it.window}" }
             )
-
-            // The window belongs to the figure and not to the panel, so the panels of a strip
-            // cannot be showing different ground. What they must not share is the reading: two
-            // panels drawing the same view in the same style would be a comparison of nothing.
             assertEquals(
-                figure.panels.size,
-                figure.panels.map { it.view to it.style }.distinct().size,
-                "two panels of img/${figure.file} are the same reading of the same window"
+                figures.size, figures.map { it.view to it.style }.distinct().size,
+                "two of $row are the same reading of the same window"
             )
-
-            assertEquals(
-                listOf(SiteImagery.Layout.ACROSS, SiteImagery.Layout.DOWN), figure.layouts,
-                "a comparison strip is published both ways round, or a phone is left scrolling " +
-                    "${figure.file} sideways"
+            assertTrue(
+                figures.all { it.reduction == 1 },
+                "$row are cut at the sheet's own pixels, and one of them is reduced"
             )
-
-            figure.layouts.forEach { layout ->
-                val name = figure.fileFor(layout)
-                val drawn = webpDimensions(file("img/$name"))
+            figures.forEach { figure ->
+                val heading = Regex("""<h3>([^<]*)</h3>""").find(cardOf(page, figure.file))
+                    ?.groupValues?.get(1) ?: fail("the card for img/${figure.file} has no heading")
                 assertEquals(
-                    figure.width(layout) to figure.height(layout), drawn,
-                    "img/$name is not the size ${figure.panels.size} panels of " +
-                        "${figure.window.width}x${figure.window.height} come to laid " +
-                        layout.name.lowercase()
-                )
-                // How many panels are in the file, counted off the decoded picture rather than
-                // from its size, which the assertion above has already tied to the figure table:
-                // the hairlines between panels, found where a whole line of pixels is the
-                // divider's colour, and the map inside each panel, which must not be blank.
-                val picture = decodedPixels(file("img/$name"))
-                val rules = dividerRules(picture, drawn.first, drawn.second, layout)
-                assertEquals(
-                    figure.panels.size - 1, rules.size,
-                    "img/$name has ${rules.size} hairlines across it where ${figure.panels.size} " +
-                        "panels have ${figure.panels.size - 1}"
-                )
-                val blank = mapColourCounts(picture, drawn.first, figure, layout)
-                    .withIndex().filter { it.value < LEAST_COLOURS_IN_A_MAP }.map { it.index }
-                assertTrue(
-                    blank.isEmpty(),
-                    "img/$name has blank panels at ${blank.map { figure.panels[it].name }}: " +
-                        "fewer than $LEAST_COLOURS_IN_A_MAP colours in the map"
-                )
-                println(
-                    "SITE $name ${drawn.first}x${drawn.second}, ${figure.panels.size} panels of " +
-                        "${figure.window.width}x${figure.window.height} laid " +
-                        "${layout.name.lowercase()} at ${figure.window.x},${figure.window.y}: " +
-                        figure.panels.joinToString { it.name }
+                    figure.readingName, heading,
+                    "img/${figure.file} is the ${figure.readingName} reading, and its card is headed \"$heading\""
                 )
             }
+            println("SITE $row: " + figures.joinToString { it.readingName } + " at ${figures.first().window}")
         }
     }
 
-    /**
-     * That a naming band's lettering is legible on its own tint, and that the tint is the page's.
-     *
-     * The bands are drawn into the figure, so nothing on the page measures them: they are pixels by
-     * the time a browser sees them, and `SitePaletteContrastTest` only ever sees CSS. A band is
-     * text a reader is asked to read, though, and it is the only text on this site that the page's
-     * own guard cannot reach — so it is measured here, by the same arithmetic and against the same
-     * bar, and the tint is checked against the custom property it claims to be so that the strips
-     * cannot quietly stop matching the page around them.
-     */
     @Test
-    fun `every naming band is the page's own tint, and legible on it`() {
-        val page = file("index.html").readText()
-        val palette = Regex("""--([a-z-]+):\s*#([0-9a-fA-F]{6})\s*;""").findAll(page)
-            .associate { it.groupValues[1] to (0xFF000000.toInt() or it.groupValues[2].toInt(16)) }
-
-        SiteImagery.BandTint.entries.forEach { tint ->
-            fun fromPage(name: String) = palette[name]
-                ?: fail("a band is tinted --$name, and the page no longer defines that")
-            assertEquals(
-                fromPage(tint.groundName), tint.ground,
-                "${tint.name}'s ground is not the --${tint.groundName} the page sets"
-            )
-            assertEquals(
-                fromPage(tint.inkName), tint.ink,
-                "${tint.name}'s lettering is not the --${tint.inkName} the page sets"
-            )
-            val ratio = ColorVision.contrast(tint.ink, tint.ground)
+    fun `no picture on the page is blank`() {
+        SiteImagery.FIGURES.forEach { figure ->
+            val colours = colourCount(decodedPixels(file("img/${figure.file}")))
             assertTrue(
-                ratio >= AA,
-                "a band's --${tint.inkName} on --${tint.groundName} measures " +
-                    "${"%.2f".format(ratio)}:1, under the $AA:1 the rest of the page keeps"
+                colours >= LEAST_COLOURS_IN_A_MAP,
+                "img/${figure.file} holds $colours colours, fewer than $LEAST_COLOURS_IN_A_MAP: it " +
+                    "has come out blank, or as one flat tint with no map in it"
             )
-            println(
-                "SITE band ${tint.name}: --${tint.inkName} on --${tint.groundName} " +
-                    "${"%.2f".format(ratio)}:1"
-            )
+            println("SITE img/${figure.file} holds $colours colours at five bits a channel")
         }
     }
 

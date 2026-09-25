@@ -24,6 +24,17 @@
 <link rel="preload" as="font" type="font/ttf" href="fonts/spectral_regular.ttf" crossorigin>
 <link rel="preload" as="font" type="font/ttf" href="fonts/plex_sans_regular.ttf" crossorigin>
 
+<!-- Arms the cards' reveal before anything is painted, so a card that is going to rise into place
+     is never drawn once in place first and then snatched away. Only here, and only when the
+     browser can say when a card comes into view and the reader has not asked for less motion:
+     with scripts off, or motion reduced, the class is never set and every card is simply there. -->
+<script>
+if ('IntersectionObserver' in window &&
+    !(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches)) {
+  document.documentElement.className += ' reveal';
+}
+</script>
+
 <style>
   /* ==========================================================================
      The application's own identity, not a website's idea of one.
@@ -175,32 +186,107 @@
     display:block;font-family:var(--sans);font-size:14px;line-height:1.5;margin-bottom:3px;
   }
 
-  /* ---------- comparison strips --------------------------------------------- */
-  /* One image, not a row of images. What these figures claim is that the panels
-     are the same ground read different ways, and a row of separate pictures is
-     no evidence of that — a strip cut from one window is, which is why the
-     panels, the hairlines between them and the naming bands are all drawn into
-     the file by SiteImagery rather than assembled here.
-
-     Two files, then, and not two layouts: a phone gets the same panels composed
-     one above the other, chosen by the <picture> below at the same 900px the
-     headline's line break uses. So there is no CSS here at all — nothing on
-     this page arranges a panel, and the wide strip and the stacked one cannot
-     drift apart, because neither of them is assembled by the page. */
   .section-lede{margin:0 0 20px;color:var(--bone-dim);font-size:15px;max-width:64ch}
   /* The same sentence after a figure rather than before it, so it takes its air
      above instead of below. A rule on where it sits rather than a second class,
      because it is the same kind of line doing the same job. */
   figure+.section-lede{margin:20px 0 0}
 
-  /* ---------- how a world is made ------------------------------------------- */
-  /* The six cards from the earlier page, in this page's panel: the author kept the words and the
-     new dress (2026-09-12). The oxblood rule on the left is what tells a step of the pipeline
-     from a note further down, which shares the panel but not the rule. */
-  .steps{display:grid;gap:20px}
-  @media (min-width:600px){.steps{grid-template-columns:1fr 1fr}}
-  @media (min-width:900px){.steps{grid-template-columns:1fr 1fr 1fr;gap:24px}}
-  .steps .panel{border-left:2px solid var(--oxblood-lit)}
+  /* ---------- numbered cards ------------------------------------------------ */
+  /* A row of cards, each a picture, a numbered brass square on one hairline that
+     runs across the row, and a name with a line under it. Three rows on the page:
+     the six steps of the pipeline, the three styles and the four data views.
+
+     The line is drawn by the cards rather than by the row: each card carries the
+     stretch of it from its own left edge to the next card's, so a row that wraps
+     on to a second line starts a second line of its own and no rule has to know
+     where a row ends. The last card's stretch runs on into the gap past the row's
+     edge, which the list clips. On a phone the cards stack and each card's
+     stretch turns to run down the left, from its square to the next one. */
+  .cards{
+    --card-gap:24px;--row-gap:36px;--mark:28px;
+    list-style:none;margin:0;padding:0;
+    display:grid;grid-template-columns:minmax(0,1fr);gap:var(--row-gap) var(--card-gap);
+    overflow-x:clip;
+  }
+  .card{position:relative;min-width:0}
+  .card .plate{margin:0 0 16px}
+  .card-mark{position:relative;height:var(--mark);margin:0 0 14px}
+  .card-mark::before{
+    content:"";position:absolute;left:0;right:calc(-1 * var(--card-gap));
+    top:calc(50% - .5px);height:1px;background:var(--brass);transform-origin:left center;
+  }
+  .card-number{
+    position:relative;display:flex;align-items:center;justify-content:center;
+    width:var(--mark);height:var(--mark);background:var(--brass);color:var(--ink);
+    font-family:var(--mono);font-size:12px;line-height:1;letter-spacing:.04em;
+  }
+  .card h3{
+    font-family:var(--serif);font-size:17px;font-weight:600;line-height:1.3;
+    margin:0 0 6px;color:var(--parchment);
+  }
+  .card p{margin:0;color:var(--bone-dim);font-size:14.5px;line-height:1.6}
+  /* The seed and the scale under a row of comparison cards, as the figures had. */
+  .cards+figcaption{margin-top:22px}
+
+  /* Stacked: the square sits at the head of each card on the left, and each
+     card's stretch of line drops from its square to the next card's. The last
+     one's stops at its own square, so the line ends where the sequence does. */
+  @media (max-width:599px){
+    .card{padding-left:calc(var(--mark) + 16px)}
+    .card-mark{position:absolute;left:0;top:0;bottom:calc(-1 * var(--row-gap));height:auto;margin:0}
+    .card:last-child .card-mark{bottom:auto;height:var(--mark)}
+    .card-mark::before{
+      left:calc(var(--mark) / 2 - .5px);right:auto;top:0;bottom:0;width:1px;height:auto;
+      transform-origin:center top;
+    }
+  }
+  /* Across: three styles side by side from the phone breakpoint up; four views
+     and six steps two to a row until there is room for four and three, which is
+     the 900px the headline's line break already switches at. */
+  @media (min-width:600px){
+    .cards.styles{grid-template-columns:repeat(3,minmax(0,1fr))}
+    .cards.layers,.cards.steps{grid-template-columns:repeat(2,minmax(0,1fr))}
+  }
+  @media (min-width:900px){
+    .cards.layers{grid-template-columns:repeat(4,minmax(0,1fr))}
+    .cards.steps{grid-template-columns:repeat(3,minmax(0,1fr))}
+  }
+
+  /* The reveal. Everything below is scoped to the class the script in the head
+     sets, so a page without that script, or read with motion reduced, never
+     hides a card in the first place. Opacity and transform only: neither moves
+     anything else on the page, so every card has taken its space before it
+     shows. When a card comes into view its stretch of line draws across (or
+     down), its square appears where the stretch starts, and its picture and
+     words fade and rise; the cards that arrive together go in turn, --order
+     apart, which the script sets. */
+  .reveal .card{--step:180ms;--order:0}
+  .reveal .card-mark::before{
+    transform:scaleX(0);
+    transition:transform var(--step) linear calc(var(--order) * var(--step));
+  }
+  .reveal .card-number{
+    opacity:0;transform:scale(.6);
+    transition:opacity .25s ease-out calc(var(--order) * var(--step)),
+               transform .25s ease-out calc(var(--order) * var(--step));
+  }
+  .reveal .card > :not(.card-mark){
+    opacity:0;transform:translateY(14px);
+    transition:opacity .5s ease-out calc(var(--order) * var(--step) + 90ms),
+               transform .5s ease-out calc(var(--order) * var(--step) + 90ms);
+  }
+  @media (max-width:599px){ .reveal .card-mark::before{transform:scaleY(0)} }
+  .reveal .card.shown .card-mark::before,
+  .reveal .card.shown .card-number,
+  .reveal .card.shown > :not(.card-mark){opacity:1;transform:none}
+  /* A reader who asks for less motion after the page has loaded, and a printed
+     page, get every card at once, still. */
+  @media (prefers-reduced-motion: reduce), print{
+    .reveal .card-mark::before,
+    .reveal .card-number,
+    .reveal .card > :not(.card-mark){opacity:1;transform:none;transition:none}
+  }
 
   /* ---------- notices ------------------------------------------------------- */
   .notice{
@@ -372,32 +458,62 @@
       <span class="fill"></span>
     </div>
 
-    <div class="steps">
-      <div class="panel">
+    <ol class="cards steps">
+      <li class="card">
+        <div class="plate">
+          <img src="img/step-plates.webp" width="480" height="320" loading="lazy" decoding="async"
+               alt="The tectonic plates view of a continent's east coast and the island beyond it: each plate a flat tint over the shaded relief, rose, yellow, pink, green, violet and red, with a bright seam where two plates meet and ridges raised along the seams on land.">
+        </div>
+        <div class="card-mark"><span class="card-number">01</span></div>
         <h3>Plates and mountains</h3>
         <p>Moving tectonic plates form mountain ranges, volcanic arcs and broad plateaus. Where plates pull apart, rift valleys can fill with water.</p>
-      </div>
-      <div class="panel">
+      </li>
+      <li class="card">
+        <div class="plate">
+          <img src="img/step-erosion.webp" width="480" height="320" loading="lazy" decoding="async"
+               alt="The elevation view of a hilly coast: tan uplands cut by close-set valleys, rivers winding down between them to the sea on the right, and a small delta at one river's mouth.">
+        </div>
+        <div class="card-mark"><span class="card-number">02</span></div>
         <h3>Erosion</h3>
         <p>Erosion reshapes the terrain. Slopes collapse, rivers carve valleys, and sediment builds floodplains, fans and deltas.</p>
-      </div>
-      <div class="panel">
+      </li>
+      <li class="card">
+        <div class="plate">
+          <img src="img/step-seas.webp" width="480" height="320" loading="lazy" decoding="async"
+               alt="A long mountainous island in the Natural style: a ridge along its north coast with a lake in it, green lowlands to the south, and a pale band of shallow shelf water following every coast before the deep blue sea.">
+        </div>
+        <div class="card-mark"><span class="card-number">03</span></div>
         <h3>Seas and ice</h3>
         <p>Continental shelves lie along the coasts. Glaciers shape cold mountains, and ice sheets leave behind basins and lakes.</p>
-      </div>
-      <div class="panel">
+      </li>
+      <li class="card">
+        <div class="plate">
+          <img src="img/step-climate.webp" width="480" height="320" loading="lazy" decoding="async"
+               alt="The same island in the biomes view: grey rock and snow along the ridge, dark forest and pale green grassland below it, a strip of dry tan ground, and the sea in flat dark blue.">
+        </div>
+        <div class="card-mark"><span class="card-number">04</span></div>
         <h3>Climate</h3>
         <p>Seasons, ocean currents and terrain shape temperature and rainfall. Climate zones decide where forests, grasslands and deserts form.</p>
-      </div>
-      <div class="panel">
+      </li>
+      <li class="card">
+        <div class="plate">
+          <img src="img/step-rivers.webp" width="480" height="320" loading="lazy" decoding="async"
+               alt="A coast of green hills in the Natural style: rivers gathering off the hills and winding east to the sea, two lakes in the lowland to the west, and a volcanic peak at the top of the frame.">
+        </div>
+        <div class="card-mark"><span class="card-number">05</span></div>
         <h3>Rivers and lakes</h3>
         <p>Water flows downhill into rivers, lakes and seas. In dry inland basins, evaporation can shrink a lake and leave salt behind.</p>
-      </div>
-      <div class="panel">
+      </li>
+      <li class="card">
+        <div class="plate">
+          <img src="img/step-realms.webp" width="480" height="320" loading="lazy" decoding="async"
+               alt="The political view of a western coast: realms in flat tints of green, yellow, purple, lavender and bright green over the shaded relief, their borders following rivers and ridges, and the sea in muted blue.">
+        </div>
+        <div class="card-mark"><span class="card-number">06</span></div>
         <h3>Realms and peoples</h3>
         <p>Geography shapes borders and settlement. Realms follow rivers, coasts and watersheds, while peoples spread into familiar terrain and across political borders.</p>
-      </div>
-    </div>
+      </li>
+    </ol>
   </section>
 
   <section id="styles">
@@ -407,17 +523,39 @@
     </div>
 
     <p class="section-lede">
-      Compare the same landscape in Atlas, Schoolroom and Natural. Atlas combines elevation and climate colours, Schoolroom shows elevation, and Natural uses colours taken from satellite imagery.
+      Compare the same landscape in Atlas, Schoolroom and Natural.
     </p>
 
     <figure>
-      <div class="plate">
-        <picture>
-          <source media="(max-width: 899px)" srcset="img/styles-stacked.webp" width="640" height="2137">
-          <img src="img/styles.webp" width="1924" height="711" loading="lazy" decoding="async"
-               alt="The same square of a generated world drawn three times. Atlas colours the land by height and climate in muted greens and tans with a pale blue sea. Schoolroom colours it by height alone in bright greens and oranges. Natural uses satellite colours: dark green forest, ochre plains, rust ranges and a cobalt sea. Labelled Atlas, Schoolroom and Natural.">
-        </picture>
-      </div>
+      <ol class="cards styles">
+        <li class="card">
+          <div class="plate">
+            <img src="img/style-atlas.webp" width="640" height="640" loading="lazy" decoding="async"
+                 alt="A coast in the Atlas style, land tinted by height and climate: green lowlands, a tan dry belt, brown hills at the right, rivers joining a trunk that reaches the sea, two lakes, and a blue sea deepening offshore.">
+          </div>
+          <div class="card-mark"><span class="card-number">01</span></div>
+          <h3>Atlas</h3>
+          <p>Combines elevation and climate colours.</p>
+        </li>
+        <li class="card">
+          <div class="plate">
+            <img src="img/style-schoolroom.webp" width="640" height="640" loading="lazy" decoding="async"
+                 alt="The same coast in the Schoolroom style, land tinted by height alone: bright green lowlands, yellow and orange higher ground, blue rivers and lakes, and a pale blue sea with faint depth contours.">
+          </div>
+          <div class="card-mark"><span class="card-number">02</span></div>
+          <h3>Schoolroom</h3>
+          <p>Shows elevation alone.</p>
+        </li>
+        <li class="card">
+          <div class="plate">
+            <img src="img/style-natural.webp" width="640" height="640" loading="lazy" decoding="async"
+                 alt="The same coast in the Natural style, in satellite colours: dark green lowlands, an ochre dry belt and bare brown hills, rivers in pale blue, and a cobalt sea.">
+          </div>
+          <div class="card-mark"><span class="card-number">03</span></div>
+          <h3>Natural</h3>
+          <p>Uses colours taken from satellite imagery.</p>
+        </li>
+      </ol>
       <figcaption>
         <span class="say">The same region in Atlas, Schoolroom and Natural, at the same scale.</span>
         Seed 718106
@@ -436,13 +574,44 @@
     </p>
 
     <figure>
-      <div class="plate">
-        <picture>
-          <source media="(max-width: 899px)" srcset="img/layers-stacked.webp" width="480" height="2674">
-          <img src="img/layers.webp" width="1926" height="667" loading="lazy" decoding="async"
-               alt="The same stretch of coast drawn four times. Temperature shades the land from orange in the lowlands to white on the peaks. Ocean currents draws small arrows over the sea. Winds draws larger arrows, blue eastward in the north and orange westward in the south. Rainfall shades the land from yellow where it is dry to green where it is wet. Labelled Temperature, Ocean currents, Winds and Rainfall.">
-        </picture>
-      </div>
+      <ol class="cards layers">
+        <li class="card">
+          <div class="plate">
+            <img src="img/layer-temperature.webp" width="480" height="600" loading="lazy" decoding="async"
+                 alt="A stretch of coast in the temperature view: the land in pale blues and whites, coldest blue in the north-west, warming to orange along the shore, and the sea a flat warm orange.">
+          </div>
+          <div class="card-mark"><span class="card-number">01</span></div>
+          <h3>Temperature</h3>
+          <p>The mean annual temperature, in degrees Celsius.</p>
+        </li>
+        <li class="card">
+          <div class="plate">
+            <img src="img/layer-currents.webp" width="480" height="600" loading="lazy" decoding="async"
+                 alt="The same coast in the ocean currents view: the land a dark ground, and rows of small pale arrows over the sea running east along the coast.">
+          </div>
+          <div class="card-mark"><span class="card-number">02</span></div>
+          <h3>Ocean currents</h3>
+          <p>The surface flow, coloured warm or cold against its latitude.</p>
+        </li>
+        <li class="card">
+          <div class="plate">
+            <img src="img/layer-wind.webp" width="480" height="600" loading="lazy" decoding="async"
+                 alt="The same coast in the winds view: large arrows, blue ones blowing to the south-east over the north of the land and the open sea, and orange ones blowing to the south-west along the coast.">
+          </div>
+          <div class="card-mark"><span class="card-number">03</span></div>
+          <h3>Winds</h3>
+          <p>The prevailing wind through the year.</p>
+        </li>
+        <li class="card">
+          <div class="plate">
+            <img src="img/layer-rainfall.webp" width="480" height="600" loading="lazy" decoding="async"
+                 alt="The same coast in the rainfall view: the land shaded from pale yellow where it is dry in the north to green and deep blue where it is wettest along the shore, and the sea dark.">
+          </div>
+          <div class="card-mark"><span class="card-number">04</span></div>
+          <h3>Rainfall</h3>
+          <p>The annual rainfall, from dry to wet.</p>
+        </li>
+      </ol>
       <figcaption>
         <span class="say">Four views of the same coastline: its temperature, currents, winds and rainfall.</span>
         Seed 718106
@@ -605,6 +774,28 @@ sudo apt update &amp;&amp; sudo apt install cartogenesis</code></pre>
       window.matchMedia('(pointer: coarse)').matches) {
     var note = document.getElementById('small-screen');
     if (note) note.hidden = false;
+  }
+
+  /* The cards' reveal, armed by the head's script. Each card is watched on its
+     own and started once, the first time it comes into view; the cards that
+     come into view together — a row on a wide screen — are given their order in
+     the document, so they go in turn along the line. Nothing here follows the
+     scroll position: a card that has been shown stays shown. */
+  if (document.documentElement.className.indexOf('reveal') >= 0) {
+    var cards = Array.prototype.slice.call(document.querySelectorAll('.cards > .card'));
+    var watcher = new IntersectionObserver(function (entries) {
+      var arriving = [];
+      entries.forEach(function (entry) {
+        if (entry.isIntersecting) arriving.push(entry.target);
+      });
+      arriving.sort(function (a, b) { return cards.indexOf(a) - cards.indexOf(b); });
+      arriving.forEach(function (card, order) {
+        card.style.setProperty('--order', order);
+        card.classList.add('shown');
+        watcher.unobserve(card);
+      });
+    }, {threshold: 0.2});
+    cards.forEach(function (card) { watcher.observe(card); });
   }
 
   /* The latest release, read live so the page never carries a stale version number.

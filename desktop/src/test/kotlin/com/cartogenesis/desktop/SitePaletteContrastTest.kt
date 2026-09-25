@@ -84,8 +84,8 @@ class SitePaletteContrastTest {
         val TEXT_PAIRS: List<Triple<String, String, String>> = listOf(
             // On the page's ground.
             Triple("body text", "bone", "ink"),
-            Triple("lede, leads, captions, spec values, footer", "bone-dim", "ink"),
-            Triple("headline, wordmark, section headings", "parchment", "ink"),
+            Triple("lede, leads, captions, spec values, card text, footer", "bone-dim", "ink"),
+            Triple("headline, wordmark, section and card headings", "parchment", "ink"),
             Triple("eyebrow, spec terms, selected tab, note numbers", "brass", "ink"),
             Triple("annotation cartouche text", "bone", "ink"),
             Triple("unselected tab", "bone-dim", "ink"),
@@ -107,7 +107,10 @@ class SitePaletteContrastTest {
             Triple("primary button", "parchment", "oxblood"),
             Triple("primary button, hovered", "parchment", "oxblood-lit"),
             // The secondary button's own label sits on the page ground.
-            Triple("secondary button", "brass", "ink")
+            Triple("secondary button", "brass", "ink"),
+            // A card's number, set in the page's ink on the brass square that marks its place on
+            // the line: the one place the page sets type on brass rather than brass on the ground.
+            Triple("card number", "ink", "brass")
         )
     }
 
@@ -229,6 +232,9 @@ class SitePaletteContrastTest {
         check("focus ring", "brass", "ink", NON_TEXT)
         check("annotation cartouche border", "brass-dim", "ink", NON_TEXT)
         check("notice accent border", "brass-dim", "ink-raised", NON_TEXT)
+        // The line a row of cards sits on and the squares on it are what say the cards are a
+        // sequence, which is information, so they are held to the bar a meaningful graphic is.
+        check("card line and number square", "brass", "ink", NON_TEXT)
 
         // Measured and reported, but deliberately held to nothing. The hairline separates one
         // block of the page from the next and carries no information a reader would otherwise

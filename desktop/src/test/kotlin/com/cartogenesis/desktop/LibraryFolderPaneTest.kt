@@ -70,11 +70,13 @@ class LibraryFolderPaneTest {
         runDesktopComposeUiTest(width = 1440, height = 900) {
             setContent { CartogenesisTheme(dark = false) { CartogenesisApp(platform) } }
             onNodeWithText("Library").performClick()
-            waitUntil(timeoutMillis = WAIT_MS) { onAllNodesWithText("Reconnect to \"Maps\"").fetchSemanticsNodes().isNotEmpty() }
-
+            // Whatever the pane settles on, it names a place; then it is asked which.
+            waitUntil(timeoutMillis = WAIT_MS) { anyText { it.startsWith("Worlds are kept") || it.startsWith("The library is") } }
+            waitForIdle()
+            assertTrue(!anyText { it.contains("Kept in the browser") }, "this browser's storage stood in for the folder")
+            assertTrue(anyText { it == "Reconnect to \"Maps\"" }, "the folder waiting to be reconnected was not offered")
             onNodeWithText("The library is the folder \"Maps\".").assertExists()
             onNodeWithText("Reconnect to the folder to see its worlds").assertExists()
-            assertTrue(!anyText { it.contains("Kept in the browser") }, "this browser's storage stood in for the folder")
             onNode(hasText("Save") and SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button)).assertIsNotEnabled()
             assertEquals(0, folder.requests, "the reader was asked before they clicked")
 
@@ -113,7 +115,11 @@ class LibraryFolderPaneTest {
 
             // The pane's own Save, which is the call File ▸ Save makes.
             onNode(hasText("Save") and SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button)).performClick()
-            waitUntil(timeoutMillis = WAIT_MS) { (File(root, "browser").list()?.count { it.endsWith(".cgw") } ?: 0) == 2 }
+            // Written somewhere: beside the stranger's file, or over it.
+            waitUntil(timeoutMillis = WAIT_MS) {
+                (File(root, "browser").list()?.count { it.endsWith(".cgw") } ?: 0) == 2 ||
+                    !stranger.contentEquals(File(root, "browser/w1.cgw").readBytes())
+            }
         }
         assertContentEquals(stranger, File(root, "browser/w1.cgw").readBytes(), "Save wrote the folder's world over a file in this browser's storage")
         val saved = assertIs<LoadOutcome.Loaded>(runBlocking { browserStorage.load("w1 (2).cgw") }).save

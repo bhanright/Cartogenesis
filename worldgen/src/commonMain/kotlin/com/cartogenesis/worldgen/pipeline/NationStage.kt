@@ -358,8 +358,13 @@ object NationStage {
      * Only pieces you can *walk* out of are given away. A realm's overseas islands touch no other
      * realm by land, and they stay — that is the difference between an accident and a colony. Nor
      * is the piece holding a realm's capital ever given away, whatever its size.
+     *
+     * A piece goes to a neighbour only within `NationsConfig.maxRealmShare`; where none can take it,
+     * a piece the size of the smallest realm becomes a realm of its own, with its capital appended
+     * to [origins], so the pass never leaves a stranded piece behind. [nationId] is row-major, one
+     * realm id per cell, and is rewritten in place.
      */
-    private suspend fun dissolveEnclaves(
+    internal suspend fun dissolveEnclaves(
         config: WorldGenConfig,
         sea: SeaLevelResult,
         habitability: FloatField,
@@ -373,9 +378,13 @@ object NationStage {
         val capitalCells = HashSet<Int>()
         origins.forEach { capitalCells.add(it) }
         val capCells = config.nations.maxRealmShare * sea.landCellCount
-        val realmCells = IntArray(origins.size)
+        val smallestRealm = BasinRealms.smallestRealmCells(sea.landCellCount)
+        val realmCells = ArrayList<Int>()
+        repeat(origins.size) { realmCells.add(0) }
         for (cell in nationId.indices) {
-            if (sea.isLand[cell] && nationId[cell] != NationResult.UNCLAIMED) realmCells[nationId[cell]]++
+            if (sea.isLand[cell] && nationId[cell] != NationResult.UNCLAIMED) {
+                realmCells[nationId[cell]] = realmCells[nationId[cell]] + 1
+            }
         }
 
         // Repeated, because giving one pocket away can join two others into a piece worth keeping.
@@ -482,19 +491,34 @@ object NationStage {
                 // No land neighbours at all means an island, not an enclave. Leave it be.
                 // Ties go to the lower realm id: a HashMap's iteration order differs between the
                 // JVM and Wasm, and "whichever came first" is not a tie-break, it is a coin toss.
-                // A neighbour the piece would take past the realm cap is passed over for the next,
-                // and a piece no neighbour can take stays where it is: the cap is enforced on the
-                // catchments before this pass, and giving pieces away is the one step after it
-                // that can grow a realm (docs/DESIGN_LEDGER.md, chunk 6, E-T10).
+                if (edgeHeldBy.isEmpty()) return@forEachIndexed
+                // A neighbour the piece would take past the realm cap is passed over for the next:
+                // the cap is enforced on the catchments before this pass, and giving pieces away is
+                // the one step after it that can grow a realm (docs/DESIGN_LEDGER.md, chunk 6,
+                // E-T10). A piece no neighbour can take is not left where it is, an exclave of a
+                // realm it no longer touches: one the size of the smallest realm becomes a realm of
+                // its own with a capital on its best ground, and a smaller one goes to the
+                // neighbour holding most of its edge, which can put that neighbour over the cap by
+                // less than the smallest realm.
+                val byEdge = compareBy<Map.Entry<Int, Int>> { it.value }.thenByDescending { it.key }
                 val host = edgeHeldBy.entries
                     .filter { realmCells[it.key] + pieceCells.size <= capCells }
-                    .maxWithOrNull(
-                        compareBy<Map.Entry<Int, Int>> { it.value }.thenByDescending { it.key }
-                    )
-                    ?.key ?: return@forEachIndexed
+                    .maxWithOrNull(byEdge)?.key
+                    ?: if (pieceCells.size >= smallestRealm) {
+                        val newRealm = origins.size
+                        val capital = pieceCells.maxWith(
+                            compareBy<Int> { habitability.data[it] }.thenByDescending { it }
+                        )
+                        origins.add(capital)
+                        capitalCells.add(capital)
+                        realmCells.add(0)
+                        newRealm
+                    } else {
+                        edgeHeldBy.entries.maxWith(byEdge).key
+                    }
                 pieceCells.forEach { nationId[it] = host }
-                realmCells[host] += pieceCells.size
-                realmCells[realm] -= pieceCells.size
+                realmCells[host] = realmCells[host] + pieceCells.size
+                realmCells[realm] = realmCells[realm] - pieceCells.size
                 changed = true
             }
             if (!changed) return

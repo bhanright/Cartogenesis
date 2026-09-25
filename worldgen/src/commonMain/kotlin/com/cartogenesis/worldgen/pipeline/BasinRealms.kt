@@ -239,8 +239,7 @@ internal object BasinRealms {
         // A substantial one becomes a realm of its own; a rock in the ocean does not, because a
         // three-cell sovereign state is not a country, it is a rendering artefact. Those go to
         // whichever realm lies nearest across the water.
-        val smallestIslandRealm = (units.area.sum() * MIN_ISLAND_REALM_SHARE).toInt()
-            .coerceAtLeast(MIN_ISLAND_REALM_CELLS)
+        val smallestIslandRealm = smallestRealmCells(units.area.sum())
         var nextRealm = realmCount
         for (start in 0 until units.unitCount) {
             if (owner[start] != NationResult.UNCLAIMED || units.area[start] == 0) continue
@@ -297,6 +296,14 @@ internal object BasinRealms {
         }
         return nearest
     }
+
+    /**
+     * The least land, in cells, that is given a flag of its own when it has nowhere else to go:
+     * [MIN_ISLAND_REALM_SHARE] of [landCells], and never under [MIN_ISLAND_REALM_CELLS]. Shared with
+     * `NationStage.dissolveEnclaves`, which asks the same question of a stranded piece.
+     */
+    internal fun smallestRealmCells(landCells: Int): Int =
+        (landCells * MIN_ISLAND_REALM_SHARE).toInt().coerceAtLeast(MIN_ISLAND_REALM_CELLS)
 
     /** Rocks below this share of all land are not given a flag of their own. */
     private const val MIN_ISLAND_REALM_SHARE = 0.004f
@@ -434,6 +441,45 @@ internal object BasinRealms {
             }
         }
         if (taken.size < minTakenUnits || taken.size == mine.size) return null
+
+        // The fill keeps the breakaway in one piece and not what it leaves: a breakaway grown
+        // across the middle of a realm can cut part of the rest off from the rest's main body, and
+        // that part would be an exclave of a realm it no longer touches. So what the realm keeps
+        // is its largest run of land-joined catchments, and every other run the breakaway touches
+        // by land goes with the breakaway.
+        val left = mine.filter { it !in taken }.toHashSet()
+        val runOf = HashMap<Int, Int>()
+        val runArea = ArrayList<Int>()
+        for (start in mine) {
+            if (start !in left || start in runOf) continue
+            val run = runArea.size
+            var area = 0
+            val stack = ArrayDeque<Int>()
+            stack.addLast(start)
+            runOf[start] = run
+            while (stack.isNotEmpty()) {
+                val unit = stack.removeLast()
+                area += units.area[unit]
+                for (neighbour in units.landNeighbours[unit]) {
+                    if (neighbour in left && neighbour !in runOf) {
+                        runOf[neighbour] = run
+                        stack.addLast(neighbour)
+                    }
+                }
+            }
+            runArea.add(area)
+        }
+        if (runArea.size > 1) {
+            val kept = runArea.indices.maxWith(compareBy<Int> { runArea[it] }.thenByDescending { it })
+            val cutOff = mine.filter { unit ->
+                val run = runOf[unit] ?: return@filter false
+                run != kept && units.landNeighbours[unit].any { it in taken }
+            }
+            // A run touching the breakaway is joined to it whole: every unit of the run goes.
+            val runsJoining = cutOff.map { runOf.getValue(it) }.toHashSet()
+            for (unit in mine) if (runOf[unit]?.let { it in runsJoining } == true) taken.add(unit)
+            if (taken.size == mine.size) return null
+        }
         return taken
     }
 

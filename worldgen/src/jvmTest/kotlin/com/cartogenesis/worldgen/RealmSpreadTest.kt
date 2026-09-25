@@ -1,9 +1,13 @@
 package com.cartogenesis.worldgen
 
+import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.pipeline.NationResult
+import com.cartogenesis.worldgen.pipeline.NationStage
+import kotlinx.coroutines.runBlocking
 import java.util.Locale
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
@@ -130,6 +134,73 @@ class RealmSpreadTest : BorrowsSharedWorlds() {
         }
     }
 
+    /**
+     * The cap and the enclave rule together, on a hand-made map: realm H holds twenty columns of a
+     * forty-row strip less a six-by-six piece of realm R inside it, whose mainland lies further
+     * east. H taking the piece would pass the cap, and no other realm touches it.
+     *
+     * Before chunk 6 the enclave pass gave the piece to H regardless and H went over the cap; once
+     * the pass respected the cap it left the piece where it was, an exclave of a realm it no longer
+     * touches. The piece is now a realm of its own, with its capital on it, and no piece is
+     * stranded and no realm over the cap.
+     */
+    @Test
+    fun `a piece no neighbour can take within the cap becomes a realm of its own`() {
+        val config = HandMadeWorlds.config()
+        fun land(x: Int, y: Int) = y in 10..49
+        val sea = HandMadeWorlds.sea(config, ::land) { x, y -> if (land(x, y)) 0.1f else -0.1f }
+        fun inPiece(x: Int, y: Int) = x in 5..10 && y in 20..25
+        val realmColumns = listOf(0..19, 20..35, 36..49, 50..63)
+        val nationId = IntArray(config.width * config.height) { cell ->
+            val x = cell % config.width
+            val y = cell / config.width
+            when {
+                !land(x, y) -> NationResult.UNCLAIMED
+                inPiece(x, y) -> 1
+                else -> realmColumns.indexOfFirst { x in it }
+            }
+        }
+        val origins = realmColumns.map { HandMadeWorlds.cellAt(config, (it.first + it.last) / 2 + if (it.first == 0) 6 else 0, 40) }.toMutableList()
+        val habitability = FloatField(config.width, config.height)
+        for (cell in habitability.data.indices) if (sea.isLand[cell]) habitability.data[cell] = 0.5f
+        val capCells = config.nations.maxRealmShare * sea.landCellCount
+        assertTrue(20 * 40 > capCells && 20 * 40 - 36 <= capCells, "the fixture's realm H is not the case: the cap is $capCells cells")
+
+        runBlocking { NationStage.dissolveEnclaves(config, sea, habitability, nationId, origins) }
+
+        val pieces = RealmPieces(config.width, config.height, sea.isLand, nationId, NationResult.UNCLAIMED)
+        val held = nationId.filter { it != NationResult.UNCLAIMED }.groupingBy { it }.eachCount()
+        val pieceRealm = nationId[HandMadeWorlds.cellAt(config, 7, 22)]
+        println("PIECE WITHIN THE CAP realms hold $held; the piece is realm $pieceRealm; ${pieces.describe()}")
+        assertEquals(0, pieces.stranded.size, "a piece was left stranded")
+        assertTrue(held.values.all { it <= capCells }, "a realm went over the cap of $capCells cells: $held")
+        assertEquals(realmColumns.size, pieceRealm, "the piece did not become a realm of its own")
+        assertTrue(inPiece(origins[pieceRealm] % config.width, origins[pieceRealm] / config.width), "the new realm's capital is not on it")
+    }
+
+    /**
+     * No realm leaves a piece stranded in its neighbours, and no more realms sit landlocked inside
+     * a single neighbour than did before chunk 6's cap. Counted with [RealmPieces] on the standard
+     * seeds at 512: origin/main had no stranded piece and three realms landlocked inside one
+     * neighbour (one each on seeds 7, 42 and 99). Realms inside one neighbour with a coast are
+     * printed and not asserted: a country on a stretch of shore with one land neighbour is
+     * Portugal, and on origin/main there were 18 of them over these four seeds.
+     */
+    @Test
+    fun `no piece is stranded and no more realms are landlocked inside one neighbour`() {
+        var stranded = 0
+        var landlocked = 0
+        for (seed in listOf(7L, 42L, 1234L, 99L)) {
+            val world = SharedWorlds.world(WorldGenConfig(seed = seed, width = 512, height = 512))
+            val pieces = RealmPieces(world.width, world.height, world.sea.isLand, world.nations.nationId, NationResult.UNCLAIMED)
+            println("PIECES seed $seed: ${pieces.describe()}")
+            stranded += pieces.stranded.size
+            landlocked += pieces.enclosedRealms.count { !it.touchesTheSea }
+        }
+        assertEquals(0, stranded, "pieces stranded in other realms over the four standard seeds")
+        assertTrue(landlocked <= ORIGIN_LANDLOCKED_INSIDE_ONE, "$landlocked realms landlocked inside one neighbour, against origin/main's $ORIGIN_LANDLOCKED_INSIDE_ONE")
+    }
+
     @Test
     fun `realms differ in size`() {
         val world = SharedWorlds.world(
@@ -143,5 +214,10 @@ class RealmSpreadTest : BorrowsSharedWorlds() {
         val spread = sizes.first() / median.coerceAtLeast(1.0)
         println("SIZES $sizes (largest/median %.1f)".format(spread))
         assertTrue(spread >= 3.0, "realm sizes are too uniform: largest/median $spread")
+    }
+
+    private companion object {
+        /** origin/main's count over seeds 7, 42, 1234 and 99 at 512, taken at chunk 6. */
+        const val ORIGIN_LANDLOCKED_INSIDE_ONE = 3
     }
 }

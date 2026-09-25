@@ -1,6 +1,9 @@
 package com.cartogenesis.cartography
 
 import com.cartogenesis.worldgen.model.WorldMap
+import kotlin.coroutines.AbstractCoroutineContextElement
+import kotlin.coroutines.CoroutineContext
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -49,6 +52,32 @@ interface WorldLibrary {
  * listed with its reason rather than left out, so a reader can see it is there and delete it.
  */
 data class LibraryEntry(val key: String, val document: WorldDocument?, val refusal: SaveRefusal? = null)
+
+/**
+ * How far a save has got, for an interface that shows it moving: put in the coroutine context of a
+ * call to [WorldLibrary.save], and [onBytesWritten] is told the running total of the save's bytes
+ * each time the library's sink has taken a piece of them.
+ *
+ * A context element rather than a parameter because the count is the interface's concern and not
+ * the library's contract: every [ByteWorldLibrary] reports through it, and a library that does not
+ * simply never calls it, which an interface shows as a save under way with no count beside it.
+ * A total is not offered, because the file's size is not known until the compressor has finished.
+ */
+class SaveProgress(val onBytesWritten: (Long) -> Unit) : AbstractCoroutineContextElement(SaveProgress) {
+
+    /** [sink], counting what passes through it. */
+    internal fun counting(sink: SaveSink): SaveSink = object : SaveSink {
+        private var written = 0L
+
+        override suspend fun write(bytes: ByteArray, offset: Int, length: Int) {
+            sink.write(bytes, offset, length)
+            written += length
+            onBytesWritten(written)
+        }
+    }
+
+    companion object Key : CoroutineContext.Key<SaveProgress>
+}
 
 /** What a library key may be. */
 object LibraryKeys {
@@ -139,7 +168,10 @@ abstract class ByteWorldLibrary(
     override suspend fun save(document: WorldDocument, world: WorldMap, key: String?): String {
         key?.let(::requireKey)
         val newName = if (key == null) LibraryKeys.of(document) else null
-        val contents: suspend (SaveSink) -> Unit = { sink -> WorldCodec.write(document, world, sink, compressor, writtenBy) }
+        val progress = currentCoroutineContext()[SaveProgress]
+        val contents: suspend (SaveSink) -> Unit = { sink ->
+            WorldCodec.write(document, world, progress?.counting(sink) ?: sink, compressor, writtenBy)
+        }
         return writing.withLock {
             if (key != null) {
                 replacing(key, contents)

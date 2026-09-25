@@ -85,6 +85,7 @@ import com.cartogenesis.worldgen.model.LabelKind
 import com.cartogenesis.worldgen.model.MapLabel
 import com.cartogenesis.cartography.RenderOptions
 import com.cartogenesis.cartography.SaveProblem
+import com.cartogenesis.cartography.SaveProgress
 import com.cartogenesis.cartography.SheetGeometry
 import com.cartogenesis.cartography.WorldOverrides
 import com.cartogenesis.cartography.resolve
@@ -330,6 +331,8 @@ private fun Application(
      * it was asked of.
      */
     val places = remember(platform) { LibraryPlaces(platform) }
+    /** Every save, open, delete and copy, under way and ended, for the library pane. See [LibraryActivity]. */
+    val libraryActivity = remember { LibraryActivity() }
     /** How many worlds this browser's storage holds while a folder is in use, for the offer to copy them. */
     var hostWorldCount by remember { mutableStateOf(0) }
     // Nothing generates until this is armed - by Go, New world, or Generate. Opening a save from
@@ -431,30 +434,43 @@ private fun Application(
         val current = world
         if (current == null) {
             status = "Generate a world before saving it."
+            libraryActivity.say(status, failed = true)
             return
         }
         val target = places.library
         if (target == null) {
             status = "Reconnect to the library's folder, or choose this browser's storage, before saving."
+            libraryActivity.say(status, failed = true)
             return
         }
         val filed = documentOf(current)
         val ticket = document.saving()
+        // Shown before the coroutine is even started, so a save waiting its turn is visibly a save.
+        val work = libraryActivity.begin("Saving \"${filed.title}\"")
         scope.launch {
-            status = try {
-                saving.withLock {
-                    // Where the document was last written, read now rather than when Save was
-                    // pressed: an earlier Save of it may have finished while this one waited.
-                    val key = target.save(filed, current, document.keyFor(ticket, target))
-                    // Unless another document has taken this one's place while it was written.
-                    document.saved(ticket, key, target)
+            try {
+                status = try {
+                    saving.withLock {
+                        // Where the document was last written, read now rather than when Save was
+                        // pressed: an earlier Save of it may have finished while this one waited.
+                        val key = withContext(SaveProgress { work.bytesWritten = it }) {
+                            target.save(filed, current, document.keyFor(ticket, target))
+                        }
+                        // Unless another document has taken this one's place while it was written.
+                        document.saved(ticket, key, target)
+                    }
+                    val line = "Saved \"${filed.title}\""
+                    libraryActivity.end(work, line, failed = false)
+                    refreshLibrary()
+                    line
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (failure: Throwable) {
+                    failureLine("Could not save \"${filed.title}\"", failure, target)
+                        .also { libraryActivity.end(work, it, failed = true) }
                 }
-                refreshLibrary()
-                "Saved \"${filed.title}\""
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (failure: Throwable) {
-                failureLine("Could not save \"${filed.title}\"", failure, target)
+            } finally {
+                libraryActivity.drop(work)
             }
         }
     }
@@ -462,24 +478,32 @@ private fun Application(
     /** Opens [key] from [source], the library that listed it: the world, or why it will not open. */
     fun openFromLibrary(key: String, source: WorldLibrary?) {
         source ?: return
+        val work = libraryActivity.begin("Opening $key")
         scope.launch {
-            status = try {
-                when (val outcome = source.load(key)) {
-                    is LoadOutcome.Loaded -> {
-                        openSave(outcome.save, key, source)
-                        "Opened \"${outcome.save.document.title}\""
+            var failed = true
+            try {
+                status = try {
+                    when (val outcome = source.load(key)) {
+                        is LoadOutcome.Loaded -> {
+                            openSave(outcome.save, key, source)
+                            failed = false
+                            "Opened \"${outcome.save.document.title}\""
+                        }
+                        is LoadOutcome.Refused -> {
+                            val line = "Could not open $key: ${outcome.refusal.message}"
+                            // A file the storage would not read may be a folder the page has lost.
+                            val moved = if (outcome.refusal.problem == SaveProblem.UNREADABLE) places.afterFailure(source) else null
+                            if (moved == null) line else "$line. $moved"
+                        }
                     }
-                    is LoadOutcome.Refused -> {
-                        val line = "Could not open $key: ${outcome.refusal.message}"
-                        // A file the storage would not read may be a folder the page has lost.
-                        val moved = if (outcome.refusal.problem == SaveProblem.UNREADABLE) places.afterFailure(source) else null
-                        if (moved == null) line else "$line. $moved"
-                    }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (failure: Throwable) {
+                    failureLine("Could not open $key", failure, source)
                 }
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (failure: Throwable) {
-                failureLine("Could not open $key", failure, source)
+                libraryActivity.end(work, status, failed)
+            } finally {
+                libraryActivity.drop(work)
             }
         }
     }
@@ -921,16 +945,24 @@ private fun Application(
                 onDelete = { key ->
                     val target = shelf.library
                     if (target != null) {
+                        val work = libraryActivity.begin("Deleting $key")
                         scope.launch {
-                            status = try {
-                                target.delete(key)
-                                "Deleted $key"
-                            } catch (cancelled: CancellationException) {
-                                throw cancelled
-                            } catch (failure: Throwable) {
-                                failureLine("Could not delete $key", failure, target)
+                            try {
+                                var failed = true
+                                status = try {
+                                    target.delete(key)
+                                    failed = false
+                                    "Deleted $key"
+                                } catch (cancelled: CancellationException) {
+                                    throw cancelled
+                                } catch (failure: Throwable) {
+                                    failureLine("Could not delete $key", failure, target)
+                                }
+                                libraryActivity.end(work, status, failed)
+                                refreshLibrary()
+                            } finally {
+                                libraryActivity.drop(work)
                             }
-                            refreshLibrary()
                         }
                     }
                 },
@@ -947,11 +979,29 @@ private fun Application(
                     scope.launch { places.useHostStorage()?.let { status = it } }
                 },
                 onCopyIntoFolder = {
+                    val work = libraryActivity.begin("Copying this browser's worlds into the folder")
                     scope.launch {
-                        status = places.copyHostWorldsIntoFolder()
-                        refreshLibrary()
+                        try {
+                            val copied = try {
+                                places.copyHostWorldsIntoFolder()
+                            } catch (cancelled: CancellationException) {
+                                throw cancelled
+                            } catch (failure: Throwable) {
+                                // Listing either library can fail before a world is copied.
+                                LibraryPlaces.CopyOutcome(
+                                    "Could not copy the worlds: ${failure.message ?: failure::class.simpleName}",
+                                    failed = true
+                                )
+                            }
+                            status = copied.line
+                            libraryActivity.end(work, copied.line, copied.failed)
+                            refreshLibrary()
+                        } finally {
+                            libraryActivity.drop(work)
+                        }
                     }
-                }
+                },
+                activity = libraryActivity
             )
         } else if (screen == Screen.ATLAS && current != null) {
             AtlasPane(
@@ -1008,6 +1058,9 @@ private fun Application(
 
     /** What is under way, if anything: the generation's stage, or else the running export. */
     val underWay: String? = if (generating != null) stage ?: "Generating" else exports.running?.stage
+        // A save asked for from the menu over the map, where the library pane that would show it is
+        // not on screen. Over the library the pane says it itself.
+        ?: libraryActivity.underWay.firstOrNull()?.doing?.takeIf { screen != Screen.LIBRARY }
 
     /** The progress banner, between the toolbar and the map while a world or an export is being made. */
     val banner: @Composable () -> Unit = {

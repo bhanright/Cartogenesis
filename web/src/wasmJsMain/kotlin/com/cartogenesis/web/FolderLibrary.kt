@@ -41,6 +41,10 @@ import kotlinx.coroutines.withContext
  */
 
 // ---- The folder, through the handles the browser gives a page. ----
+//
+// Every call that answers with a promise is an `async` arrow, so a method this browser lacks, or
+// one that throws before it returns a promise, rejects like any other failure and reaches
+// `awaitFolder` with its own name, instead of being thrown through the call past it.
 
 /** Every entry's name in [directory], files and folders alike, as a JavaScript array of strings. */
 @JsFun(
@@ -50,20 +54,20 @@ import kotlinx.coroutines.withContext
         return names;
     })()"""
 )
-private external fun entryNames(directory: JsHandle): JsHandle
+internal external fun entryNames(directory: JsHandle): JsHandle
 
 @JsFun("(names) => names.length")
-private external fun namesLength(names: JsHandle): Int
+internal external fun namesLength(names: JsHandle): Int
 
 @JsFun("(names, index) => names[index]")
-private external fun nameAt(names: JsHandle, index: Int): String
+internal external fun nameAt(names: JsHandle, index: Int): String
 
 /**
  * The `File` named [name], or null when there is none; any other failure — a folder of that name,
  * leave withdrawn, the folder gone — rejects.
  */
 @JsFun(
-    """(directory, name) => directory.getFileHandle(name)
+    """async (directory, name) => directory.getFileHandle(name)
         .then((handle) => handle.getFile())
         .catch((e) => e && e.name === 'NotFoundError' ? null : Promise.reject(e))"""
 )
@@ -71,58 +75,61 @@ private external fun fileOrNull(directory: JsHandle, name: String): JsHandle
 
 /** The handle of the existing file [name], or null when there is none. */
 @JsFun(
-    """(directory, name) => directory.getFileHandle(name)
+    """async (directory, name) => directory.getFileHandle(name)
         .catch((e) => e && e.name === 'NotFoundError' ? null : Promise.reject(e))"""
 )
-private external fun existingFile(directory: JsHandle, name: String): JsHandle
+internal external fun existingFile(directory: JsHandle, name: String): JsHandle
 
 /** A new or existing file [name]'s handle, which creates it, empty, when it is not there. */
-@JsFun("(directory, name) => directory.getFileHandle(name, { create: true })")
-private external fun createdFile(directory: JsHandle, name: String): JsHandle
+@JsFun("async (directory, name) => directory.getFileHandle(name, { create: true })")
+internal external fun createdFile(directory: JsHandle, name: String): JsHandle
 
 /**
  * A writable stream over [file] that starts empty. The browser writes it to a swap file beside the
  * target and replaces the target with it only on `close`; `abort` throws the swap file away.
  */
-@JsFun("(file) => file.createWritable({ keepExistingData: false })")
-private external fun writableOf(file: JsHandle): JsHandle
+@JsFun("async (file) => file.createWritable({ keepExistingData: false })")
+internal external fun writableOf(file: JsHandle): JsHandle
 
 /** One part of a save, resolved once the stream has taken it: the stream's own backpressure. */
-@JsFun("(writable, bytes) => writable.write(bytes)")
-private external fun writePart(writable: JsHandle, bytes: JsHandle): JsHandle
+@JsFun("async (writable, bytes) => writable.write(bytes)")
+internal external fun writePart(writable: JsHandle, bytes: JsHandle): JsHandle
 
-@JsFun("(writable) => writable.close()")
-private external fun closeWritable(writable: JsHandle): JsHandle
+@JsFun("async (writable) => writable.close()")
+internal external fun closeWritable(writable: JsHandle): JsHandle
 
-@JsFun("(writable) => writable.abort().catch(() => null)")
-private external fun abortWritable(writable: JsHandle): JsHandle
+@JsFun("async (writable) => writable.abort().catch(() => null)")
+internal external fun abortWritable(writable: JsHandle): JsHandle
 
 /** Whether this browser can rename a file handle in place. */
 @JsFun("(file) => typeof file.move === 'function'")
-private external fun canMove(file: JsHandle): Boolean
+internal external fun canMove(file: JsHandle): Boolean
 
 /**
- * Renames [file] to [name] in [directory]. Resolves `true` once moved and `false` where this
- * browser has the method but not for this kind of folder, which an older Chrome answers with
- * `NotSupportedError` for a folder on the disk; any other failure rejects.
+ * Renames [file] to [name] in [directory]. Resolves null once moved, or with the browser's refusal
+ * as text — `NotSupportedError: …` from an older Chrome for a folder on the disk, and whatever
+ * Chrome on Android answers for a folder there, where a picked folder's files cannot be renamed —
+ * and never rejects: every refusal is a reason to copy instead, which [FolderWorldLibrary.publish]
+ * decides.
  */
 @JsFun(
-    """(file, directory, name) => file.move(directory, name)
-        .then(() => true)
-        .catch((e) => e && e.name === 'NotSupportedError' ? false : Promise.reject(e))"""
+    """async (file, directory, name) => {
+        try { await file.move(directory, name); return null; }
+        catch (e) { return String(e); }
+    }"""
 )
 private external fun moveFile(file: JsHandle, directory: JsHandle, name: String): JsHandle
 
 /** Removes the file [name], resolving `false` when there was none. */
 @JsFun(
-    """(directory, name) => directory.removeEntry(name)
+    """async (directory, name) => directory.removeEntry(name)
         .then(() => true)
         .catch((e) => e && e.name === 'NotFoundError' ? false : Promise.reject(e))"""
 )
-private external fun removeFile(directory: JsHandle, name: String): JsHandle
+internal external fun removeFile(directory: JsHandle, name: String): JsHandle
 
 @JsFun("(value) => value === true")
-private external fun isTrue(value: JsHandle?): Boolean
+internal external fun isTrue(value: JsHandle?): Boolean
 
 /**
  * What a failure in the folder means to a reader, from the `DOMException` name the promise was
@@ -153,10 +160,15 @@ private suspend fun awaitFolder(promise: JsHandle): JsHandle? =
     }
 
 /**
- * A folder operation that failed, in the reader's words, with the browser's own [detail] kept for
- * a bug report.
+ * A folder operation that failed, in the reader's words, followed by the browser's own [detail] —
+ * the exception's name and message, as `NotAllowedError: …` — in brackets.
+ *
+ * The detail is in the message, not only kept beside it, because the message is what the library
+ * pane shows, and the name is what tells one browser's refusal from another's: on a phone, where
+ * the folder is Android's rather than a directory's, the reader's words alone left nothing to go on.
  */
-internal class FolderException(readerMessage: String, val detail: String) : IllegalStateException(readerMessage)
+internal class FolderException(val readerMessage: String, val detail: String) :
+    IllegalStateException(if (detail.isEmpty() || detail == readerMessage) readerMessage else "$readerMessage ($detail)")
 
 // ---- How much a save holds while it passes through. ----
 
@@ -322,14 +334,20 @@ private class FolderSource(
  * which the browser keeps in a swap file beside it (`<name>.crswap`, which the listing ignores) and
  * moves over the file only when the stream is closed whole; a failure or a cancellation before the
  * close aborts the stream and the file is as it was. A new file is written under a temporary name
- * that does not end in `.cgw` — `~<name>.<token>.tmp`, the shape the desktop's store uses and sync
- * clients leave alone — and moved to its name only once it is whole, so no reader, listing or sync
- * client sees a half of one, or the empty file a writable stream's target is from the moment it is
- * created. A failure, or a cancellation before the move, removes the temporary file.
+ * that does not end in `.cgw` — `.<name>.<token>.tmp`, see [temporaryNameFor] — and moved to its
+ * name only once it is whole, so no reader, listing or sync client sees a half of one, or the empty
+ * file a writable stream's target is from the moment it is created. A failure, or a cancellation
+ * before the move, removes the temporary file.
  *
- * **Where the browser cannot move a file** ([canMove] false, or `move` answering
- * `NotSupportedError`), the temporary file is copied into the new name instead: see
- * [copyIntoNewFile]. The new name is then visible, empty, while the copy runs.
+ * **On Android** none of that is atomic, and nothing a page can do makes it so: Chrome keeps the
+ * swap file in its own cache rather than beside the file, and a close empties the file and copies
+ * the swap file into it, so a close that fails partway can leave a file short; and a file cannot be
+ * renamed there, so a new save is always copied into its name. See docs/DESIGN_LEDGER.md, Fix
+ * 2c-android, for the source lines.
+ *
+ * **Where the browser cannot move a file** ([canMove] false, or `move` refusing for any reason),
+ * the temporary file is copied into the new name instead: see [publish] and [copyIntoNewFile]. The
+ * new name is then visible, empty, while the copy runs.
  *
  * **Publishing is one step, letting go of the temporary file another.** Once the save is whole
  * under its name nothing undoes it: a temporary file that will not be removed stays, under a name
@@ -450,7 +468,7 @@ internal class FolderWorldLibrary(
         replacesTakenName: Boolean,
         finalName: suspend () -> String
     ): String {
-        val temporaryName = "~$wanted.${randomId()}$TEMPORARY_SUFFIX"
+        val temporaryName = temporaryNameFor(wanted, randomId())
         // Made whole or not at all, as the copy's file is; a cancel meanwhile is met in the write,
         // inside the `try` that removes it.
         val temporary = withContext(NonCancellable) { awaitFolder(createdFile(directory, temporaryName)) }
@@ -474,15 +492,40 @@ internal class FolderWorldLibrary(
         return name
     }
 
-    /** Makes the written [temporary] the save: by a rename where the browser can, by a copy where not. */
+    /**
+     * Makes the written [temporary] the save: by a rename where the browser can, by a copy where
+     * not.
+     *
+     * Any refusal of the rename sends the save to the copy, not only the `NotSupportedError` an
+     * older Chrome gives. Chrome on Android offers `move` on every file handle but cannot rename a
+     * file in a folder a phone picked, whose files are Android's documents rather than a
+     * directory's entries (`FileSystemURL::CreateSibling` returns nothing for them), and its answer
+     * there is not known to be `NotSupportedError`; read as a failure, it would end every new save.
+     * A move refused after the browser had already copied the file into the name is seen as a file
+     * under that name at the temporary's size, and taken as done.
+     */
     private suspend fun publish(temporary: JsHandle, replacesTakenName: Boolean, finalName: suspend () -> String): String {
         if (canMove(temporary)) {
             val name = finalName()
             // The rename is the commit, seen to its end once begun.
-            val moved = withContext(NonCancellable) { isTrue(awaitFolder(moveFile(temporary, directory, name))) }
-            if (moved) return name
+            val refusal = withContext(NonCancellable) { awaitFolder(moveFile(temporary, directory, name)) }
+            if (refusal == null || isNullish(refusal)) return name
+            if (withContext(NonCancellable) { holdsTheSave(name, temporary) }) return name
         }
         return copyIntoNewFile(temporary, replacesTakenName, finalName)
+    }
+
+    /**
+     * Whether [name] now holds a file the size of [temporary], which is the save moved there. No,
+     * when either cannot be read: the copy that follows then says why.
+     */
+    private suspend fun holdsTheSave(name: String, temporary: JsHandle): Boolean {
+        val sizes = runCatching {
+            val there = awaitFolder(fileOrNull(directory, name))?.takeUnless(::isNullish)
+            val written = awaitFolder(fileBehind(temporary))?.takeUnless(::isNullish)
+            if (there == null || written == null) null else blobSize(there) to blobSize(written)
+        }.getOrNull() ?: return false
+        return sizes.first == sizes.second
     }
 
     /**
@@ -581,6 +624,23 @@ internal class FolderWorldLibrary(
         private const val TEMPORARY_SUFFIX = ".tmp"
 
         /**
+         * The name a new save [wanted] is written under before it is published, [token] making it
+         * this save's own: `.<wanted>.<token>.tmp`.
+         *
+         * Chrome checks every name a page gives a folder on the disk (`IsSafePathComponent` in its
+         * File System Access manager, the same on Android as on a computer): with one leading dot
+         * set aside, a name may not begin or end with white space, a dot or a tilde, may hold none
+         * of `"` `*` `/` `:` `<` `>` `?` `\` `|` or a control character, may not be a Windows device name,
+         * and its extension may not be `lnk`, `scf`, `url`, a `{CLSID}` or one Safe Browsing counts
+         * dangerous. A name it refuses is a `TypeError`, "Name is not allowed.", before the folder is
+         * touched. The desktop store's `~<name>.<token>.tmp` begins with a tilde, so every new save
+         * into a folder a reader picked was refused; the origin private file system the browser
+         * tests use checks none of this, which is how it passed them. The leading dot is the one
+         * mark the rule allows that keeps the file out of a file manager's ordinary view.
+         */
+        internal fun temporaryNameFor(wanted: String, token: String): String = ".$wanted.$token$TEMPORARY_SUFFIX"
+
+        /**
          * How many names the fallback copy tries, each found taken by another writer in the moment
          * since the last look, before it gives up: more than a handful in a row is something making
          * files as fast as this looks, and a save that says so beats one that loops.
@@ -590,8 +650,8 @@ internal class FolderWorldLibrary(
 }
 
 /** The `File` a file handle holds now. */
-@JsFun("(file) => file.getFile()")
-private external fun fileBehind(file: JsHandle): JsHandle
+@JsFun("async (file) => file.getFile()")
+internal external fun fileBehind(file: JsHandle): JsHandle
 
 // ---- The folder as the interface asks about it, and the reader's choice kept between visits. ----
 
@@ -609,7 +669,7 @@ internal external fun directoryPickerAvailable(): Boolean
 private external fun pickDirectory(): JsHandle
 
 @JsFun("(directory) => directory.name")
-private external fun directoryName(directory: JsHandle): String
+internal external fun directoryName(directory: JsHandle): String
 
 /**
  * `queryPermission` or, when [ask] is true, `requestPermission` for reading and writing. A browser
@@ -623,10 +683,10 @@ private external fun directoryName(directory: JsHandle): String
         return method.call(directory, { mode: 'readwrite' });
     }"""
 )
-private external fun directoryPermission(directory: JsHandle, ask: Boolean): JsHandle
+internal external fun directoryPermission(directory: JsHandle, ask: Boolean): JsHandle
 
 @JsFun("(value) => String(value)")
-private external fun asText(value: JsHandle): String
+internal external fun asText(value: JsHandle): String
 
 /** Resolves null when [directory] can be listed, or with the name of the exception that stopped it. */
 @JsFun(

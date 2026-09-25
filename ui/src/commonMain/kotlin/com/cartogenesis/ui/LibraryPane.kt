@@ -12,6 +12,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -62,13 +65,21 @@ fun LibraryPane(
     onChooseFolder: () -> Unit = {},
     onReconnect: () -> Unit = {},
     onUseHostStorage: () -> Unit = {},
-    onCopyIntoFolder: () -> Unit = {}
+    onCopyIntoFolder: () -> Unit = {},
+    /** What the library is doing and last did, drawn first of all. See [LibraryActivity]. */
+    activity: LibraryActivity? = null
 ) {
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(24.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
+        // First, above the place and the buttons, so it is on screen however narrow the window
+        // and wherever the list was scrolled to when Save was pressed.
+        if (activity != null && (activity.underWay.isNotEmpty() || activity.last != null)) {
+            item(key = ACTIVITY_ITEM) { WhatTheLibraryIsDoing(activity) }
+        }
+
         if (place != null) {
             item {
                 WhereTheWorldsAre(place, hostWorldCount, onChooseFolder, onReconnect, onUseHostStorage, onCopyIntoFolder)
@@ -199,6 +210,33 @@ fun LibraryPane(
         }
     }
 }
+
+/**
+ * Every operation under way, each with a spinner and, for a save, the bytes written so far; then
+ * how the last one ended, in the scheme's error colour when it failed, with its reason whole.
+ */
+@Composable
+private fun WhatTheLibraryIsDoing(activity: LibraryActivity) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        for (work in activity.underWay) {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                val count = work.bytesWritten?.let { ", ${LibraryActivity.megabytes(it)} written" }.orEmpty()
+                Text("${work.doing}…$count", style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+        activity.last?.let { outcome ->
+            Text(
+                outcome.line,
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (outcome.failed) MaterialTheme.colorScheme.error else LocalContentColor.current
+            )
+        }
+    }
+}
+
+/** The list key of the activity lines, which no row can take: a row's key is a file name, and has no slash. */
+private const val ACTIVITY_ITEM = "/activity"
 
 /**
  * Which library is in use and how to change it: by the folder's name, or as this browser's storage.

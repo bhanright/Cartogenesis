@@ -137,6 +137,144 @@ internal suspend fun <T> withMoveIf(canMove: Boolean, block: suspend () -> T): T
 }
 
 /**
+ * Chrome's rule for a name a page gives a folder on the disk, transcribed from
+ * `FileSystemAccessManagerImpl::IsSafePathComponent` and the `base::i18n::IsFilenameLegal` and
+ * `base::IsReservedNameOnWindows` it calls; the origin private file system skips all of it, which
+ * is why the tests' folders need it put back. Everything but Safe Browsing's list of dangerous
+ * extensions, which is data Chrome updates on its own and no name here ends in.
+ *
+ * With one leading dot set aside: no white space, dot or tilde at either end; none of
+ * `"` `*` `/` `:` `<` `>` `?` `\` `|`, control or format characters; not ending in a dot; no `lnk`,
+ * `scf`, `url` or `{CLSID}` extension; not a Windows device name, by the part before the first dot,
+ * nor `desktop.ini`, `thumbs.db`, `conin$` or `conout$`.
+ */
+private const val CHROME_DISK_NAME_RULE = """((name) => {
+    if (typeof name !== 'string' || name === '' || name === '.' || name === '..' || /[\/\\]/.test(name)) return false;
+    const rest = name[0] === '.' ? name.slice(1) : name;
+    if (/["*\/:<>?\\|\u0000-\u001f\u007f-\u009f­؀-؅؜۝܏​-‏‪-‮⁠-⁤⁦-⁯﻿￹-￻]/.test(rest)) return false;
+    const atEnds = /[\s.~]/;
+    if (rest !== '' && (atEnds.test(rest[0]) || atEnds.test(rest[rest.length - 1]))) return false;
+    const dot = name.lastIndexOf('.');
+    const extension = dot >= 0 ? name.slice(dot + 1).toLowerCase() : '';
+    if (['lnk', 'scf', 'url'].includes(extension) || /^\{.*\}$/.test(extension)) return false;
+    if (name.endsWith('.')) return false;
+    const lower = name.toLowerCase().replace(/[ .]+$/, '');
+    const devices = ['con', 'prn', 'aux', 'nul', 'clock$'];
+    for (let n = 1; n <= 9; n++) devices.push('com' + n, 'lpt' + n);
+    if (devices.includes(lower.split('.')[0])) return false;
+    return !['desktop.ini', 'thumbs.db', 'conin$', 'conout$'].includes(lower);
+})"""
+
+/** Whether Chrome would let a page name a file [name] in a folder on the disk: see [CHROME_DISK_NAME_RULE]. */
+@JsFun("(name) => $CHROME_DISK_NAME_RULE(name)")
+internal external fun chromeAllowsOnTheDisk(name: String): Boolean
+
+/**
+ * Makes the private file system refuse, as a folder on the disk does, every name Chrome refuses
+ * there — in `getFileHandle`, `removeEntry` and a file's `move` — with the `TypeError` Chrome
+ * gives, "Name is not allowed."; returns what it replaced, for [restoreNames].
+ */
+@JsFun(
+    """() => {
+        const allowed = $CHROME_DISK_NAME_RULE;
+        const directory = FileSystemDirectoryHandle.prototype;
+        const file = FileSystemFileHandle.prototype;
+        const held = {
+            getFileHandle: directory.getFileHandle,
+            removeEntry: directory.removeEntry,
+            ownMove: Object.getOwnPropertyDescriptor(file, 'move'),
+            move: file.move
+        };
+        const refuse = () => Promise.reject(new TypeError('Name is not allowed.'));
+        directory.getFileHandle = function (name, options) {
+            return allowed(name) ? held.getFileHandle.call(this, name, options) : refuse();
+        };
+        directory.removeEntry = function (name, options) {
+            return allowed(name) ? held.removeEntry.call(this, name, options) : refuse();
+        };
+        if (typeof held.move === 'function') {
+            file.move = function (...args) {
+                const name = args[args.length - 1];
+                return typeof name === 'string' && !allowed(name) ? refuse() : held.move.apply(this, args);
+            };
+        }
+        return held;
+    }"""
+)
+private external fun applyDiskNameRule(): JsHandle
+
+@JsFun(
+    """(held) => {
+        const directory = FileSystemDirectoryHandle.prototype;
+        const file = FileSystemFileHandle.prototype;
+        directory.getFileHandle = held.getFileHandle;
+        directory.removeEntry = held.removeEntry;
+        if (held.ownMove) Object.defineProperty(file, 'move', held.ownMove); else delete file.move;
+    }"""
+)
+private external fun restoreNames(held: JsHandle)
+
+/** Runs [block] with the private file system refusing the names a folder on the disk refuses. */
+internal suspend fun <T> withDiskNameRule(block: suspend () -> T): T {
+    val held = applyDiskNameRule()
+    try {
+        return block()
+    } finally {
+        restoreNames(held)
+    }
+}
+
+/**
+ * Makes every file handle's `move` refuse, doing nothing, with a `DOMException` called [name], as
+ * Chrome on Android does in a folder a phone picked, where a file cannot be renamed; returns what it
+ * replaced, for [restoreRefusedMove].
+ */
+@JsFun(
+    """(name) => {
+        const file = FileSystemFileHandle.prototype;
+        const held = { ownMove: Object.getOwnPropertyDescriptor(file, 'move') };
+        file.move = function () { return Promise.reject(new DOMException('refused by the test', name)); };
+        return held;
+    }"""
+)
+private external fun refuseEveryMove(name: String): JsHandle
+
+@JsFun(
+    """(held) => {
+        const file = FileSystemFileHandle.prototype;
+        if (held.ownMove) Object.defineProperty(file, 'move', held.ownMove); else delete file.move;
+    }"""
+)
+private external fun restoreRefusedMove(held: JsHandle)
+
+/** Runs [block] with every `move` refused with a `DOMException` called [name]. */
+internal suspend fun <T> withEveryMoveRefused(name: String, block: suspend () -> T): T {
+    val held = refuseEveryMove(name)
+    try {
+        return block()
+    } finally {
+        restoreRefusedMove(held)
+    }
+}
+
+/**
+ * Takes `createWritable` off every file handle, returning it for [restoreCreateWritable]: a method
+ * the browser lacks, which a call throws on before any promise is made.
+ */
+@JsFun(
+    """() => {
+        const file = FileSystemFileHandle.prototype;
+        const held = Object.getOwnPropertyDescriptor(file, 'createWritable');
+        delete file.createWritable;
+        return held;
+    }"""
+)
+internal external fun hideCreateWritable(): JsHandle
+
+@JsFun("(held) => { Object.defineProperty(FileSystemFileHandle.prototype, 'createWritable', held); }")
+internal external fun restoreCreateWritable(held: JsHandle)
+
+/**
  * Fails unless [actual] is [expected], byte for byte, saying where they part. Not
  * `assertContentEquals`, whose message prints both arrays whole: a save's hundred and eighty
  * thousand numbers overran the test reporter between the browser and Gradle, which then lost the

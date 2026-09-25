@@ -406,7 +406,9 @@ Upload. The browser remembers the folder between visits but asks again before a 
 so a new visit shows **Reconnect to <folder>** until you click it, and saves nowhere until then.
 **Use this browser's storage** goes back, remembered as a choice of its own, and worlds already in
 the browser's storage can be copied into the folder with one click. A new save is written under a
-temporary name and moved into place whole; a save over an existing file goes through the browser's
+temporary name, `.<name>.<token>.tmp`, which most file managers hide, and moved into place whole
+(not the desktop's `~<name>.<token>.tmp`: Chrome refuses a name that begins with a tilde in a
+folder on the disk); a save over an existing file goes through the browser's
 own swap file, committed only when complete. Writes from one tab are made in order; another tab,
 the desktop app or a sync client writing the same folder at the same moment is not ordered against
 it, but a save never leaves half a file, and a new save that finds its name taken takes the next
@@ -419,6 +421,18 @@ shows in the folder, and to a sync client, while the copy runs; a file another p
 that name after the copy has checked it is empty, and before the copy starts, is written over, for
 the same reason. Nothing is uploaded anywhere: the
 page reads and writes that folder and nothing else.
+
+Chrome on Android offers the folder picker too, over Android's own storage rather than a directory,
+and two things are weaker there that a page cannot mend. A file cannot be renamed, so every new save
+is copied into its name, the empty `.cgw` showing while the copy runs. And the browser keeps its
+swap file in its own cache and, on close, empties the file and copies the new bytes into it, so a
+save over an existing world that fails partway can leave that file short. The Library pane shows
+each save, open, delete and copy while it runs, a save with the megabytes written so far, and then
+how it ended, with the browser's own name for any failure (`NotAllowedError` and the like), on a
+phone as on a computer. Opening the app with `?foldertest` in its address, as
+`cartogenesis.com/app/?foldertest`, gives a page instead that takes each of the library's steps in
+a folder you pick, on files of its own named `cartogenesis-folder-check-…` that it removes again,
+and reports what the browser answered to each, as text to copy into a bug report.
 
 ## Menus, settings and themes
 

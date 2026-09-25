@@ -316,13 +316,14 @@ class LibraryPlaces(private val platform: Platform) {
     /**
      * Copies each world in the host's storage that the folder has no copy of into it, each as a new
      * file beside whatever the folder holds and never over it, and leaves the originals where they
-     * were. Returns the status line.
+     * were. Returns the status line, and whether it is a failure.
      */
-    suspend fun copyHostWorldsIntoFolder(): String {
-        val at = place as? LibraryPlace.InFolder ?: return "Choose a folder to copy the worlds into first."
+    suspend fun copyHostWorldsIntoFolder(): CopyOutcome {
+        val at = place as? LibraryPlace.InFolder
+            ?: return CopyOutcome("Choose a folder to copy the worlds into first.", failed = true)
         val source = platform.library as? ByteWorldLibrary
         val target = at.folder.library as? ByteWorldLibrary
-        if (source == null || target == null) return "These worlds cannot be copied here."
+        if (source == null || target == null) return CopyOutcome("These worlds cannot be copied here.", failed = true)
         val keys = uncopied(at.folder)
         var copied = 0
         for (key in keys) {
@@ -333,12 +334,21 @@ class LibraryPlaces(private val platform: Platform) {
                 throw cancelled
             } catch (failure: Throwable) {
                 afterFailure(target)
-                return "Copied $copied of ${keys.size} worlds into \"${at.folder.name}\"; $key could not be " +
-                    "copied: ${failure.message ?: failure::class.simpleName}"
+                return CopyOutcome(
+                    "Copied $copied of ${keys.size} worlds into \"${at.folder.name}\"; $key could not be " +
+                        "copied: ${failure.message ?: failure::class.simpleName}",
+                    failed = true
+                )
             }
         }
-        return "Copied ${worlds(copied)} into \"${at.folder.name}\". They are still in this browser's storage too."
+        return CopyOutcome(
+            "Copied ${worlds(copied)} into \"${at.folder.name}\". They are still in this browser's storage too.",
+            failed = false
+        )
     }
+
+    /** What a copy into the folder said, and whether it stopped short. */
+    data class CopyOutcome(val line: String, val failed: Boolean)
 
     /**
      * Where [folder] leaves the library, decided without asking the reader: in it, waiting to be

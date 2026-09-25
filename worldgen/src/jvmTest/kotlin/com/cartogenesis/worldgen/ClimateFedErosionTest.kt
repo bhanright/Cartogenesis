@@ -304,6 +304,9 @@ class ClimateFedErosionTest {
         )
     }
 
+    /** One round's reading of every cell; see [Ground.observed]. */
+    private class Observed(val lawMetres: FloatArray, val courant: FloatArray, val shareOfDrop: FloatArray)
+
     /**
      * One belt's figures, kept so every seed is printed before any of them is judged.
      *

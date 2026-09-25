@@ -44,14 +44,24 @@ object ExportSubjects {
 
     /**
      * The export row's line about where its pictures come from, for a world [worldSize] cells
-     * across: which size, if any, is the world on screen, and what every other size is.
+     * across: which size, if any, is the world on screen, and what every other size is — and that
+     * a size is the world's grid, which a picture draws at its true shape, twice as wide as tall.
      */
     fun note(worldSize: Int, sizes: List<Int>): String =
         if (worldSize in sizes) {
             "At $worldSize, the world's own size, the export is the world on screen. At any other " +
-                "size it is made again from this world's settings and will differ in detail."
+                "size it is made again from this world's settings and will differ in detail. " +
+                PICTURE_SHAPE
         } else {
             "Each size is made again from this world's settings at that size, so it will differ in " +
-                "detail from the $worldSize world on screen."
+                "detail from the $worldSize world on screen. " + PICTURE_SHAPE
         }
+
+    /**
+     * What a size means for the picture: the grid's cells across, drawn at the world's true shape.
+     * A data export keeps one sample a cell, so it is the grid's own size either way.
+     */
+    private const val PICTURE_SHAPE =
+        "A picture of an N world is 2N by N, the world's true shape; a data export is N by N, " +
+            "one sample a cell."
 }

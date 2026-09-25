@@ -5,32 +5,53 @@ import kotlin.math.floor
 import kotlin.math.sqrt
 
 /**
- * The stroke geometry of an engraved map: how big each mark of the pen is, in pixels.
+ * The stroke geometry of an engraved map: how big each mark of the pen is, in pixels of the sheet.
  *
  * In pixels, and that is the whole of the idea. A pen does not grow with the sheet. An engraver
  * handed a plate twice the size does not draw the same picture twice as large; he draws the same
  * hachure with the same nib and fits four times as many strokes on it, so the larger plate carries
  * more of the country rather than a bigger version of less of it. Every figure here is therefore a
- * fixed count of output pixels at every resolution, and what grows with the grid is the *number* of
- * marks — as the square of the grid ratio, so a 2048 render lays sixteen strokes over the ground a
- * 512 render gives one.
+ * fixed count of the sheet's pixels at every resolution, and what grows with the grid is the
+ * *number* of marks — as the square of the grid ratio, so a 2048 render lays sixteen strokes over
+ * the ground a 512 render gives one.
  *
  * Sizing them as a share of the width instead was tried first and reviewed: at 2048 the hachures
  * came out as black dashes thirty pixels long and the ice stipple as polka dots, which is a woodcut
  * and not an engraving.
  *
- * Only two figures still depend on the map's width, and neither of them is a mark: how many lattice
- * columns fit across it, which is what lets the strokes meet at the date line, and what a central
- * difference has to be multiplied by to mean the same slope at any resolution.
+ * The pixels are the true-shape sheet's ([SheetGeometry]), where one covers the same ground both
+ * ways, so a stroke, a dot or a ruling is laid out there at its true direction and length. The
+ * raster still decides one colour a cell: each cell asks the pattern about the sheet pixel at its
+ * own top-left corner ([sheetX], [sheetY]) and every pixel of the cell takes the answer. On a cell
+ * two pixels wide a mark running north-south therefore comes out two pixels wide and one running
+ * east-west one pixel tall; that is the most a cell can say, and the placing and the bearing of
+ * every mark are still the sheet's.
+ *
+ * Only three figures depend on the grid, and none of them is a mark: how many lattice columns fit
+ * across the sheet, which is what lets the strokes meet at the date line; how many cells the
+ * central difference reaches, which is a lattice pitch of the sheet counted in each axis's cells;
+ * and what that difference has to be multiplied by to mean the same slope at any resolution.
  *
  * Built once per render and handed to both paths — the rasteriser reads it directly, the graphics
  * card gets the same numbers as uniforms (see [RasterRecipe.engraving]) — so neither can derive a
- * different pitch from the same width.
+ * different pitch from the same grid.
  */
-class EngravingPlan(width: Int) {
+class EngravingPlan(sheet: SheetGeometry) {
+
+    /** How many sheet pixels one cell spans east-west: where a column's pattern is asked. */
+    val pixelsPerCellAcross: Int = sheet.pixelsPerCellAcross
+
+    /** How many sheet pixels one cell spans north-south: where a row's pattern is asked. */
+    val pixelsPerCellDown: Int = sheet.pixelsPerCellDown
+
+    /** The sheet pixel a cell in [column] asks the pattern about: its left-hand pixel. */
+    fun sheetX(column: Int): Int = column * pixelsPerCellAcross
+
+    /** The sheet pixel a cell in [row] asks the pattern about: its top pixel. */
+    fun sheetY(row: Int): Int = row * pixelsPerCellDown
 
     /**
-     * Side of the lattice one stroke is drawn on, in pixels.
+     * Side of the lattice one stroke is drawn on, in sheet pixels.
      *
      * The strokes are placed rather than combed. Every lattice cell holds one stroke, nudged off
      * the cell's centre by a hash of the cell so the field does not read as a grid, and a pixel
@@ -43,19 +64,19 @@ class EngravingPlan(width: Int) {
      * bearing's 44.8. Anchoring each stroke to its own lattice cell bounds the arm at one cell, so a
      * turn in the aspect bends a stroke instead of shattering the field.
      */
-    val hachureLatticeCells: Int = HACHURE_LATTICE_PIXELS
+    val hachureLatticePixels: Int = HACHURE_LATTICE_PIXELS
 
     /**
-     * How many lattice cells fit across the map.
+     * How many lattice cells fit across the sheet.
      *
      * The east-west axis wraps, so the hash that places a stroke is taken on the column index
      * modulo this and the pattern meets itself at the date line instead of showing a seam. Exact
-     * whenever the width divides by the pitch, which every power of two does.
+     * whenever the sheet's width divides by the pitch, which every power of two does.
      */
-    val hachureLatticeColumns: Int = (width / hachureLatticeCells).coerceAtLeast(1)
+    val hachureLatticeColumns: Int = (sheet.widthPixels / hachureLatticePixels).coerceAtLeast(1)
 
     /** Half the length of one stroke, down the slope: three quarters of the lattice pitch. */
-    val strokeHalfLengthCells: Float = HACHURE_LATTICE_PIXELS * 0.75f
+    val strokeHalfLengthPixels: Float = HACHURE_LATTICE_PIXELS * STROKE_HALF_LENGTH_SHARE_OF_PITCH
 
     /**
      * Half the width of one stroke at full steepness, across the slope.
@@ -64,27 +85,36 @@ class EngravingPlan(width: Int) {
      * many of them there are, not by how fat each one is. The width is this times the steepness, so
      * flat ground draws nothing and a cliff draws a two-pixel line.
      */
-    val strokeHalfWidthCells: Float = 1f
+    val strokeHalfWidthPixels: Float = 1f
 
     /**
-     * How far the central difference that gives the slope and the aspect reaches, in pixels.
+     * How far the central difference that gives the slope and the aspect reaches, in columns and
+     * in rows.
      *
-     * One lattice pitch, which is the physically right figure: a drawing whose strokes are a pitch
-     * apart cannot express a change of direction finer than a pitch, and reading the aspect off a
-     * single pair of neighbouring cells on eroded ground gives a direction that changes every cell.
+     * One lattice pitch of the sheet, which is the physically right figure: a drawing whose strokes
+     * are a pitch apart cannot express a change of direction finer than a pitch, and reading the
+     * aspect off a single pair of neighbouring cells on eroded ground gives a direction that changes
+     * every cell. Counted in each axis's own cells, so the reach is the same ground both ways — on
+     * cells two pixels wide, four columns east and west and eight rows north and south.
      */
-    val gradientStencilCells: Int = HACHURE_LATTICE_PIXELS
+    val gradientStencilColumns: Int =
+        (HACHURE_LATTICE_PIXELS / sheet.pixelsPerCellAcross).coerceAtLeast(1)
+    val gradientStencilRows: Int =
+        (HACHURE_LATTICE_PIXELS / sheet.pixelsPerCellDown).coerceAtLeast(1)
 
     /**
-     * What the central difference is multiplied by to become a slope.
+     * What each axis's central difference is multiplied by to become a slope: per cell width along
+     * a row, and per row down a column (which `Engraving.hachure` then puts on the ground).
      *
-     * `ReliefShading.slopeScale` over the stencil's reach. This is the one figure that has to
-     * scale with the width, and for the opposite reason to everything else here: eight pixels of a
-     * 2048 grid cover a quarter of the ground eight pixels of a 512 grid cover, so without the scale
-     * the same hillside would read four times flatter on the larger plate and take four times less
-     * ink.
+     * `ReliefShading.slopeScale` over the stencil's reach in that axis. The scale is the one figure
+     * that has to grow with the grid, and for the opposite reason to everything else here: a cell
+     * of a 2048 grid covers a quarter of the ground a cell of a 512 grid covers, so without it the
+     * same hillside would read four times flatter on the larger plate and take four times less ink.
      */
-    val gradientScale: Float = ReliefShading.slopeScale(width) / gradientStencilCells
+    val gradientScaleAcross: Float =
+        ReliefShading.slopeScale(sheet.cellsAcross) / gradientStencilColumns
+    val gradientScaleDown: Float =
+        ReliefShading.slopeScale(sheet.cellsAcross) / gradientStencilRows
 
     /**
      * Where the first coastal line sits, in pixels from the shore.
@@ -93,16 +123,16 @@ class EngravingPlan(width: Int) {
      * and ten times this — four, twelve, twenty-four and forty pixels — and the gap between them
      * widens the way an engraver's does.
      */
-    val vignetteBaseCells: Float = 4f
+    val vignetteBasePixels: Float = 4f
 
     /** Half the thickness of a coastal line. */
-    val vignetteHalfWidthCells: Float = 0.6f
+    val vignetteHalfWidthPixels: Float = 0.6f
 
     /** How many lines follow the coast out to sea. Engravers drew three to five. */
     val vignetteLineCount: Int = 4
 
     /** How far the solid shore ink reaches out over the water from the coast. */
-    val shoreInkCells: Float = 1.5f
+    val shoreInkPixels: Float = 1.5f
 
     /**
      * How far the same firm ink reaches in from a lake's bank.
@@ -111,13 +141,13 @@ class EngravingPlan(width: Int) {
      * one would come out as a solid blot, which is one of the things this style was redrawn to stop
      * doing. Lakes narrower than twice this still fill, and at that size an engraver filled them too.
      */
-    val lakeRimCells: Float = 1.2f
+    val lakeRimPixels: Float = 1.2f
 
     /** Distance between the horizontal water lines inside a lake. */
-    val lakeLinePitchCells: Float = 6f
+    val lakeLinePitchPixels: Float = 6f
 
     /** Half the thickness of one water line. */
-    val lakeLineHalfWidthCells: Float = 0.45f
+    val lakeLineHalfWidthPixels: Float = 0.45f
 
     /**
      * How far from the bank a lake's water lines have faded to nothing.
@@ -125,26 +155,29 @@ class EngravingPlan(width: Int) {
      * Eight rulings' worth. A lake wider than twice this keeps a blank middle, which is what an
      * engraver left: the ruling says "water" at the bank rather than filling the basin.
      */
-    val lakeFadeCells: Float = 48f
+    val lakeFadePixels: Float = 48f
 
     /** Distance between stipple dots on the ice. */
-    val stipplePitchCells: Int = 6
+    val stipplePitchPixels: Int = 6
 
     /** Radius of one stipple dot. Small enough that a dot always sits clear of its cell's edges. */
-    val stippleRadiusCells: Float = 1f
+    val stippleRadiusPixels: Float = 1f
 
     /** Side of the block a dotted border is broken into. */
-    val borderDashCells: Int = 4
+    val borderDashPixels: Int = 4
 
     companion object {
 
         /**
-         * Side of the hachure lattice, in output pixels.
+         * Side of the hachure lattice, in sheet pixels.
          *
          * Eight, which is what the 512 plate was drawn at and reviewed at. Every other mark here is
          * this or a fraction of it, and none of them changes with the size of the sheet.
          */
         const val HACHURE_LATTICE_PIXELS: Int = 8
+
+        /** A stroke's half length against the lattice pitch: three quarters, so neighbours meet. */
+        private const val STROKE_HALF_LENGTH_SHARE_OF_PITCH = 0.75f
 
         /**
          * How wide the soft edge of a drawn line is, in pixels.
@@ -154,11 +187,11 @@ class EngravingPlan(width: Int) {
          * on a square root flips whole pixels where the two hardwares round differently, and a ramp
          * moves them by one step instead.
          */
-        const val ANTIALIAS_CELLS: Float = 0.6f
+        const val ANTIALIAS_PIXELS: Float = 0.6f
 
         /**
          * The slope below which the ground is left blank, in the same units
-         * [EngravingPlan.gradientScale] produces.
+         * [EngravingPlan.gradientScaleAcross] produces, on the ground.
          *
          * Lehmann's rule is that a hachure map leaves the flat blank and darkens with the slope, so
          * there has to be a figure for flat. Set from the ground rather than by eye: it is the tenth
@@ -192,18 +225,21 @@ class EngravingPlan(width: Int) {
  * (`GpuRaster.SOURCE`), written line for line against this file; the two are one drawing in two
  * languages and have to be changed together, exactly as the hillshade is.
  *
+ * Every position here is a pixel of the true-shape sheet, and every length is in those pixels; see
+ * [EngravingPlan] for how a cell of the raster is placed on it.
+ *
  * Three properties are load-bearing and worth stating, because they are what lets the same picture
  * come off a graphics card whose square root and divide round differently from the JVM's:
  *
  *  - **Nothing is a hard threshold on a rounded quantity.** Every edge is a [smoothstep] across
- *    [EngravingPlan.ANTIALIAS_CELLS], so a last-bit difference in a phase moves a channel by one
+ *    [EngravingPlan.ANTIALIAS_PIXELS], so a last-bit difference in a phase moves a channel by one
  *    step rather than flipping a pixel from paper to ink.
  *  - **Nothing quantised can change the answer.** Where an index has to be worked out — which
  *    lattice cell a pixel is in, which stipple cell — the mark it selects sits far enough inside
  *    that cell that a pixel on the boundary is covered identically whichever side it is counted on,
  *    so the two paths may disagree about the index and still draw the same pixel.
  *  - **What can be integer is integer.** The stipple's dot centres and the border's dashes are
- *    whole cells, hashed with 32-bit wrapping arithmetic that Kotlin and GLSL agree on to the bit.
+ *    whole pixels, hashed with 32-bit wrapping arithmetic that Kotlin and GLSL agree on to the bit.
  */
 internal object Engraving {
 
@@ -216,8 +252,11 @@ internal object Engraving {
      * than scribbled at one bearing. Steepness sets the stroke's width and how black it runs; flat
      * ground draws nothing.
      *
+     * [gradientX] is the difference along a row, per cell width of ground, and [gradientY] the one
+     * down a column, per row; a row is [cellHeightInCellWidths] of a cell width on the ground.
+     *
      * The nine cells around the pixel are enough, and that is a property worth keeping: a stroke
-     * reaches at most [EngravingPlan.strokeHalfLengthCells] plus its half width from its own seed,
+     * reaches at most [EngravingPlan.strokeHalfLengthPixels] plus its half width from its own seed,
      * which is under one and a quarter lattice cells, and a seed two cells away is at least that
      * far. It is also what makes the two paths agree — the cell index is the only quantised thing
      * here, and a pixel on a cell boundary gets the same answer from either side of it, because the
@@ -226,37 +265,36 @@ internal object Engraving {
      * @return 0 for blank paper, 1 for solid ink.
      */
     fun hachure(
-        pixelX: Int,
-        pixelY: Int,
+        sheetX: Int,
+        sheetY: Int,
         gradientX: Float,
         gradientY: Float,
         cellHeightInCellWidths: Float,
         plan: EngravingPlan,
         inkGain: Float
     ): Float {
-        // The ground's slope, which is what the stroke's weight says: down a column a pixel is a
-        // row, a share of a cell width, so the fall per pixel there is less than the fall per cell
-        // width of ground by that share.
+        // The ground's slope, which is what the stroke's weight says: down a column a step is a
+        // row, a share of a cell width, so the fall per cell width of ground there is the fall per
+        // row divided by that share.
         val southwardOnTheGround = gradientY / cellHeightInCellWidths
         val slope = sqrt(gradientX * gradientX + southwardOnTheGround * southwardOnTheGround)
         val steepness =
             ((slope - EngravingPlan.SLOPE_FLOOR) * inkGain).coerceIn(0f, 1f)
         if (steepness <= 0f) return 0f
 
-        // And the ground's fall line as the sheet draws it, which is the stroke's direction: a cell
-        // width of ground southward is 1 / [cellHeightInCellWidths] rows of the sheet.
-        val sheetSouthward = southwardOnTheGround / cellHeightInCellWidths
-        val perSheetSlope = 1f / sqrt(gradientX * gradientX + sheetSouthward * sheetSouthward)
-        val downhillX = gradientX * perSheetSlope
-        val downhillY = sheetSouthward * perSheetSlope
+        // And the ground's fall line, which is the stroke's direction: the sheet draws the ground
+        // at its true shape, so the bearing on the ground is the bearing on the sheet.
+        val perSlope = 1f / slope
+        val downhillX = gradientX * perSlope
+        val downhillY = southwardOnTheGround * perSlope
 
-        val pitch = plan.hachureLatticeCells
+        val pitch = plan.hachureLatticePixels
         val latticeColumns = plan.hachureLatticeColumns
-        val halfLength = plan.strokeHalfLengthCells
-        val halfWidth = plan.strokeHalfWidthCells * steepness
-        val softEdge = EngravingPlan.ANTIALIAS_CELLS
-        val hereColumn = pixelX / pitch
-        val hereRow = pixelY / pitch
+        val halfLength = plan.strokeHalfLengthPixels
+        val halfWidth = plan.strokeHalfWidthPixels * steepness
+        val softEdge = EngravingPlan.ANTIALIAS_PIXELS
+        val hereColumn = sheetX / pitch
+        val hereRow = sheetY / pitch
 
         var strongest = 0f
         for (offsetRow in -1..1) {
@@ -268,8 +306,8 @@ internal object Engraving {
                     pitch * (NUDGE_FROM + NUDGE_SPAN * unitFrom(bits, HASH_SHIFT_X))
                 val seedY = row * pitch +
                     pitch * (NUDGE_FROM + NUDGE_SPAN * unitFrom(bits, HASH_SHIFT_Y))
-                val fromSeedX = pixelX - seedX
-                val fromSeedY = pixelY - seedY
+                val fromSeedX = sheetX - seedX
+                val fromSeedY = sheetY - seedY
                 val alongStroke = abs(fromSeedX * downhillX + fromSeedY * downhillY)
                 val acrossStroke = abs(fromSeedX * -downhillY + fromSeedY * downhillX)
                 val coverage =
@@ -290,25 +328,26 @@ internal object Engraving {
      * The coastal vignette: lines following the shore out to sea at widening spacing, fading.
      *
      * The convention of every engraved chart, and the reason an old map's ocean reads as water
-     * rather than as the paper it is printed on. [shoreCells] is the distance from the nearest dry
-     * land; inside [EngravingPlan.shoreInkCells] the water is the shore's own solid ink.
+     * rather than as the paper it is printed on. [shorePixels] is the distance from the nearest dry
+     * land, in sheet pixels; inside [EngravingPlan.shoreInkPixels] the water is the shore's own
+     * solid ink.
      */
-    fun coastalWater(shoreCells: Float, plan: EngravingPlan): Float {
-        if (shoreCells < plan.shoreInkCells) return 1f
+    fun coastalWater(shorePixels: Float, plan: EngravingPlan): Float {
+        if (shorePixels < plan.shoreInkPixels) return 1f
 
         // The nth line sits at base * (n+1)(n+2)/2; this inverts that triangular series, so the
         // whole number part of `line` names the nearest line and the fraction says how far past
         // it this pixel is. The quarter under the root completes the square of the inversion.
         val line = floor(
-            sqrt(2f * shoreCells / plan.vignetteBaseCells + 0.25f) - 1f
+            sqrt(2f * shorePixels / plan.vignetteBasePixels + 0.25f) - 1f
         )
         if (line < 0f || line >= plan.vignetteLineCount) return 0f
 
-        val centre = plan.vignetteBaseCells * (line + 1f) * (line + 2f) * 0.5f
+        val centre = plan.vignetteBasePixels * (line + 1f) * (line + 2f) * 0.5f
         val coverage = 1f - smoothstep(
-            plan.vignetteHalfWidthCells - EngravingPlan.ANTIALIAS_CELLS,
-            plan.vignetteHalfWidthCells + EngravingPlan.ANTIALIAS_CELLS,
-            abs(shoreCells - centre)
+            plan.vignetteHalfWidthPixels - EngravingPlan.ANTIALIAS_PIXELS,
+            plan.vignetteHalfWidthPixels + EngravingPlan.ANTIALIAS_PIXELS,
+            abs(shorePixels - centre)
         )
         // Each line further out is drawn fainter, so the vignette dies away into open paper
         // rather than stopping at a fourth line as firm as the first.
@@ -320,21 +359,22 @@ internal object Engraving {
      *
      * The lake itself is left as paper — a grey blot is a colour decision and this style has no
      * colour to spend — so the water is described the way an engraver describes it, by ruling it.
+     * [sheetY] is the sheet pixel row and [shorePixels] the distance to the bank in sheet pixels.
      */
-    fun lakeWater(pixelY: Int, shoreCells: Float, plan: EngravingPlan): Float {
-        if (shoreCells < plan.lakeRimCells) return 1f
+    fun lakeWater(sheetY: Int, shorePixels: Float, plan: EngravingPlan): Float {
+        if (shorePixels < plan.lakeRimPixels) return 1f
 
-        val pitch = plan.lakeLinePitchCells
-        val linesDown = pixelY / pitch
+        val pitch = plan.lakeLinePitchPixels
+        val linesDown = sheetY / pitch
         // The rulings are centred half a pitch into each period, so the distance to the nearest
         // one is how far this row's fraction of a period sits from the middle of it.
         val fromLine = abs(linesDown - floor(linesDown) - 0.5f) * pitch
         val coverage = 1f - smoothstep(
-            plan.lakeLineHalfWidthCells - EngravingPlan.ANTIALIAS_CELLS,
-            plan.lakeLineHalfWidthCells + EngravingPlan.ANTIALIAS_CELLS,
+            plan.lakeLineHalfWidthPixels - EngravingPlan.ANTIALIAS_PIXELS,
+            plan.lakeLineHalfWidthPixels + EngravingPlan.ANTIALIAS_PIXELS,
             fromLine
         )
-        val fade = (1f - shoreCells / plan.lakeFadeCells).coerceIn(0f, 1f)
+        val fade = (1f - shorePixels / plan.lakeFadePixels).coerceIn(0f, 1f)
         return coverage * fade * EngravingPlan.LAKE_LINE_STRENGTH
     }
 
@@ -347,21 +387,21 @@ internal object Engraving {
      * different dot even where they disagree about the cell. The offset is an exact fraction of a
      * power of two, so both place the centre on the same spot to the bit.
      */
-    fun stipple(pixelX: Int, pixelY: Int, plan: EngravingPlan): Float {
-        val pitch = plan.stipplePitchCells
-        val column = pixelX / pitch
-        val row = pixelY / pitch
+    fun stipple(sheetX: Int, sheetY: Int, plan: EngravingPlan): Float {
+        val pitch = plan.stipplePitchPixels
+        val column = sheetX / pitch
+        val row = sheetY / pitch
         val bits = hashBits(column, row)
         val centreX = column * pitch +
             pitch * (DOT_NUDGE_FROM + DOT_NUDGE_SPAN * unitFrom(bits, HASH_SHIFT_X))
         val centreY = row * pitch +
             pitch * (DOT_NUDGE_FROM + DOT_NUDGE_SPAN * unitFrom(bits, HASH_SHIFT_Y))
-        val fromCentreX = pixelX - centreX
-        val fromCentreY = pixelY - centreY
+        val fromCentreX = sheetX - centreX
+        val fromCentreY = sheetY - centreY
         val distance = sqrt(fromCentreX * fromCentreX + fromCentreY * fromCentreY)
         return 1f - smoothstep(
-            plan.stippleRadiusCells - EngravingPlan.ANTIALIAS_CELLS,
-            plan.stippleRadiusCells + EngravingPlan.ANTIALIAS_CELLS,
+            plan.stippleRadiusPixels - EngravingPlan.ANTIALIAS_PIXELS,
+            plan.stippleRadiusPixels + EngravingPlan.ANTIALIAS_PIXELS,
             distance
         )
     }
@@ -369,13 +409,13 @@ internal object Engraving {
     /**
      * Whether a border cell takes ink, so the boundary reads as a dotted line rather than a solid.
      *
-     * The map is cut into blocks and a hashed majority of them take ink, so a border running in any
-     * direction is broken at irregular intervals — which is what a boundary drawn by hand looks
+     * The sheet is cut into blocks and a hashed majority of them take ink, so a border running in
+     * any direction is broken at irregular intervals — which is what a boundary drawn by hand looks
      * like, and what a regular dash pattern cannot manage for a line that turns.
      */
-    fun borderDot(pixelX: Int, pixelY: Int, plan: EngravingPlan): Boolean {
-        val block = plan.borderDashCells
-        val bits = hashBits(pixelX / block, pixelY / block)
+    fun borderDot(sheetX: Int, sheetY: Int, plan: EngravingPlan): Boolean {
+        val block = plan.borderDashPixels
+        val bits = hashBits(sheetX / block, sheetY / block)
         return (bits ushr HASH_SHIFT_X) % A_HUNDRED < EngravingPlan.BORDER_DUTY_PERCENT
     }
 
@@ -457,12 +497,19 @@ internal object Engraving {
 }
 
 /**
- * Euclidean distance from every cell to the nearest cell of a mask, in cells.
+ * Euclidean distance from every cell to the nearest cell of a mask, in pixels of the true-shape
+ * sheet.
  *
  * The engraving reads it twice: out at sea it is the distance to the coast, which is what the
  * vignette's lines follow, and inside a lake it is the distance to that lake's shore, which is
  * what the water lines fade with. Both come from one field seeded on dry land, because a lake is
  * surrounded by dry land and the sea is bounded by it.
+ *
+ * Measured on the sheet rather than in cells, because a cell is not the same size both ways: a
+ * column is [SheetGeometry.pixelsPerCellAcross] pixels wide and a row
+ * [SheetGeometry.pixelsPerCellDown] tall, and a vignette whose lines stood so many *cells* out
+ * would stand twice as far off an east coast as off a north one. From cell centre to cell centre,
+ * which is where the raster asks.
  *
  * Exact rather than approximate, and that is the whole reason this is here rather than a chamfer
  * transform: a chamfer can only step along the eight directions a square grid offers, so its
@@ -470,7 +517,8 @@ internal object Engraving {
  * open sea where the coast has none. The algorithm is Felzenszwalb and Huttenlocher's separable
  * transform — a scan down each column for the vertical distance, then a lower envelope of
  * parabolas along each row — which is linear in the number of cells and gives the true Euclidean
- * distance, not a metric that resembles it.
+ * distance, not a metric that resembles it; the two axes' spacings enter it as the parabolas'
+ * roots and positions, which the transform allows as it stands.
  *
  * The east-west axis wraps as the map does. The row pass runs over three copies of the row and
  * keeps the middle one, which is the cheapest exact way to let a cell near one edge find a source
@@ -484,21 +532,28 @@ internal object ShoreDistance {
     /** Reported where the mask is empty, so a world with no land at all still draws. */
     const val UNREACHED: Float = 1e18f
 
-    /** @param source 1 where a cell is a source, 0 elsewhere. */
-    fun of(cellsAcross: Int, cellsDown: Int, source: ByteArray): FloatArray {
+    /**
+     * @param source 1 where a cell is a source, 0 elsewhere, one entry per cell of [sheet]'s grid.
+     */
+    fun of(sheet: SheetGeometry, source: ByteArray): FloatArray {
+        val cellsAcross = sheet.cellsAcross
+        val cellsDown = sheet.cellsDown
+        val columnPixels = sheet.pixelsPerCellAcross.toDouble()
+        val rowPixels = sheet.pixelsPerCellDown.toDouble()
         val cellCount = cellsAcross * cellsDown
         val distance = FloatArray(cellCount)
         if (cellCount == 0) return distance
 
-        // Larger than any squared distance a grid this size can hold, and finite, so the envelope
+        // Larger than any squared distance a sheet this size can hold, and finite, so the envelope
         // below can do arithmetic on it without meeting an infinity.
-        val unreachableSquared =
-            4.0 * (cellsAcross.toDouble() * cellsAcross + cellsDown.toDouble() * cellsDown)
+        val widthPixels = cellsAcross * columnPixels
+        val heightPixels = cellsDown * rowPixels
+        val unreachableSquared = 4.0 * (widthPixels * widthPixels + heightPixels * heightPixels)
         // Small enough that adding one all the way down a column cannot overflow.
         val noSourceInColumn = Int.MAX_VALUE / 4
 
-        // First pass: how far each cell is from the nearest source in its own column, by one scan
-        // down and one back up.
+        // First pass: how many rows each cell is from the nearest source in its own column, by one
+        // scan down and one back up.
         val downColumn = IntArray(cellCount)
         for (column in 0 until cellsAcross) {
             var nearestRows = noSourceInColumn
@@ -526,8 +581,9 @@ internal object ShoreDistance {
         }
 
         // Second pass, along each row: the lower envelope of one parabola per column, rooted at
-        // that column's vertical distance. Three copies of the row wide, so a cell near one edge
-        // can find a source near the other and the middle copy is the answer.
+        // that column's vertical distance in pixels and standing at its position in pixels. Three
+        // copies of the row wide, so a cell near one edge can find a source near the other and the
+        // middle copy is the answer.
         val scanWidth = cellsAcross * COPIES_OF_EACH_ROW
         val rootedAt = DoubleArray(scanWidth)
         val parabola = IntArray(scanWidth)
@@ -536,9 +592,10 @@ internal object ShoreDistance {
             val rowStart = row * cellsAcross
             for (sample in 0 until scanWidth) {
                 val rows = downColumn[rowStart + sample % cellsAcross]
+                val downPixels = rows * rowPixels
                 rootedAt[sample] =
                     if (rows >= noSourceInColumn) unreachableSquared
-                    else rows.toDouble() * rows
+                    else downPixels * downPixels
             }
 
             var top = 0
@@ -546,10 +603,10 @@ internal object ShoreDistance {
             envelopeEdge[0] = -BEYOND_THE_SCAN
             envelopeEdge[1] = BEYOND_THE_SCAN
             for (sample in 1 until scanWidth) {
-                var meeting = intersection(rootedAt, parabola[top], sample)
+                var meeting = intersection(rootedAt, parabola[top], sample, columnPixels)
                 while (meeting <= envelopeEdge[top]) {
                     top--
-                    meeting = intersection(rootedAt, parabola[top], sample)
+                    meeting = intersection(rootedAt, parabola[top], sample, columnPixels)
                 }
                 top++
                 parabola[top] = sample
@@ -560,9 +617,10 @@ internal object ShoreDistance {
             top = 0
             for (column in 0 until cellsAcross) {
                 val sample = cellsAcross + column
-                while (envelopeEdge[top + 1] < sample) top++
-                val acrossCells = (sample - parabola[top]).toDouble()
-                val squared = acrossCells * acrossCells + rootedAt[parabola[top]]
+                val atPixels = sample * columnPixels
+                while (envelopeEdge[top + 1] < atPixels) top++
+                val acrossPixels = (sample - parabola[top]) * columnPixels
+                val squared = acrossPixels * acrossPixels + rootedAt[parabola[top]]
                 distance[rowStart + column] =
                     if (squared >= unreachableSquared) UNREACHED else sqrt(squared).toFloat()
             }
@@ -570,13 +628,20 @@ internal object ShoreDistance {
         return distance
     }
 
-    /** Where the parabolas rooted at columns [left] and [right] cross. */
-    private fun intersection(rootedAt: DoubleArray, left: Int, right: Int): Double {
-        val leftColumn = left.toDouble()
-        val rightColumn = right.toDouble()
-        return ((rootedAt[right] + rightColumn * rightColumn) -
-            (rootedAt[left] + leftColumn * leftColumn)) /
-            (2.0 * rightColumn - 2.0 * leftColumn)
+    /**
+     * Where the parabolas rooted at samples [left] and [right] cross, in pixels along the row,
+     * the samples standing [columnPixels] apart.
+     */
+    private fun intersection(
+        rootedAt: DoubleArray,
+        left: Int,
+        right: Int,
+        columnPixels: Double
+    ): Double {
+        val leftAt = left * columnPixels
+        val rightAt = right * columnPixels
+        return ((rootedAt[right] + rightAt * rightAt) - (rootedAt[left] + leftAt * leftAt)) /
+            (2.0 * rightAt - 2.0 * leftAt)
     }
 
     /**

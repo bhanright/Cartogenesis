@@ -82,11 +82,15 @@ sealed interface ExportedWorld {
     /** The world on screen, drawn as it is. */
     data object OnScreen : ExportedWorld
 
-    /** Made again at the export's size from the settings of a [fromWidth] by [fromHeight] world. */
+    /**
+     * Made again at the export's size from the settings of a world whose grid is [fromWidth] by
+     * [fromHeight] cells.
+     */
     data class MadeAgain(val fromWidth: Int, val fromHeight: Int) : ExportedWorld {
+        /** For a world made again on a grid [width] by [height] cells. */
         fun note(width: Int, height: Int): String =
-            "made again at $width x $height from the settings of the $fromWidth x $fromHeight world " +
-                "on screen: the same settings, but not the same world cell for cell"
+            "made again on a $width x $height grid from the settings of the $fromWidth x " +
+                "$fromHeight world on screen: the same settings, but not the same world cell for cell"
     }
 
     companion object {
@@ -405,6 +409,18 @@ object DataExports {
         return json.finish()
     }
 
+    /**
+     * The sidecar's one sentence on what a sample stands for, beside the figures that say it.
+     *
+     * A data export keeps the native grid rather than the picture's true-shape sheet: duplicating
+     * samples would add bytes and no information, and a program that reads a heightmap wants the
+     * spacing, which `cellWidthKm` and `cellHeightKm` give it.
+     */
+    private const val SAMPLE_SPACING_NOTE =
+        "one sample per grid cell: cellWidthKm apart east-west and cellHeightKm apart north-south, " +
+            "so drawn a pixel to a sample the image is narrower than the world; stretch it " +
+            "cellWidthKm / cellHeightKm times across to see the world's true shape"
+
     /** How many bits a sample of each of the two exports takes. See [PngWriter]. */
     private const val GREYSCALE_BITS_PER_SAMPLE = 16
     private const val INDEXED_BITS_PER_SAMPLE = 8
@@ -435,6 +451,13 @@ object DataExports {
         json.number("seed", config.seed)
         json.number("widthPixels", world.width)
         json.number("heightPixels", world.height)
+        // The image is the grid, one sample a cell, and its cells are not square on the ground.
+        // Said plainly, because every other picture this program writes is the true-shape sheet
+        // and a reader holding both should not take the one for the other.
+        json.number("gridCellsAcross", world.width)
+        json.number("gridCellsDown", world.height)
+        json.number("samplesPerCell", 1)
+        json.text("sampleSpacing", SAMPLE_SPACING_NOTE)
         json.number("worldWidthKm", scale.worldWidthKm)
         json.number("cellWidthKm", scale.cellWidthKm(world.width))
         json.number("cellHeightKm", scale.cellHeightKm(world.height))

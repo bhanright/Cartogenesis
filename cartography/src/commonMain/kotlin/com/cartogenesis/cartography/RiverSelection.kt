@@ -27,7 +27,7 @@ import kotlin.math.sqrt
  *    kind: no course below the peak discharge of the [MapSheet.featuresKept]'th largest is drawn.
  *    That is Töpfer's law read the way F14 read it, on the traced count, and it makes the top
  *    exactly the drawing F14 made. It is not applied below the top, because in a pane smaller
- *    than a cell to the pixel it would refuse the short courses the second pass fills the last of
+ *    than the whole sheet it would refuse the short courses the second pass fills the last of
  *    Earth's budget with, and Earth's mark would no longer be the selection its guards measure.
  * 3. Courses ranked by discharge, largest first, on the peak width ratio.
  * 4. A first pass taking at most one *candidate* per square of the [crowdingPitchKilometres]
@@ -77,8 +77,10 @@ object RiverSelection {
      * 0.004025. `Lake Centerline` is excluded because this map draws a lake as a lake.
      *
      * Carried here by [INK_EXPONENT], the 1:10M tier gives 0.001800, **five and a half per cent
-     * above this**; the two bracket 0.001754, and the 1:50M tier is taken outright because this
-     * map's own two scales are 1:22M and 1:50M and it is the nearer of the two. It is a *chosen
+     * above this**; the two bracket 0.001754, and the 1:50M tier is taken outright because it is
+     * the scale a 2048 world is seen at fitted into its pane, and the export of that world, at
+     * about 1:11M on its true-shape sheet, sits beside the 1:10M tier that agrees with it to that
+     * five and a half per cent. It is a *chosen
      * benchmark and not a physical constant*: Natural Earth's linework is hand-smoothed and
      * hand-ranked, its own documentation recommends the 1:10M tier around 1:30M and supplements
      * elsewhere, and a different atlas would give a different figure. Earth's land area is quoted
@@ -112,8 +114,8 @@ object RiverSelection {
      * needs a correction of its own. Here the assumption is checked rather than assumed: Natural
      * Earth's two tiers measure **0.533** over a fivefold change of scale, a thirtieth from the
      * law, and 0.5 is taken as the simpler of the two. Between 1:10M and 1:50M that is
-     * interpolation; outside them it is extrapolation, and this map's export at 512 cells across is
-     * already at 1:88M.
+     * interpolation; outside them it is extrapolation, and this map's export of a world 512 cells
+     * across, a sheet of 1024 pixels, is already at 1:44M.
      */
     private const val INK_EXPONENT: Double = 0.5
 
@@ -150,7 +152,7 @@ object RiverSelection {
     /**
      * The mark at the top: no ink budget at all, and the radical law's cut in its place.
      *
-     * Which is to say F14's drawing, to the course: on a sheet at a cell to a pixel
+     * Which is to say F14's drawing, to the course: on the whole sheet
      * [MapSheet.featuresKept] keeps everything, so every traced course is drawn, and on a smaller
      * sheet it keeps Töpfer's share of the traced count. [drawnByTheRadicalLaw] is that rule
      * written out on its own, and is what the guards measure this mark against.
@@ -197,7 +199,8 @@ object RiverSelection {
      * The mean spacing of the reference's own courses at this scale: one course to every
      * `1 / density` square kilometres is one course to every `√(1 / density)` kilometres of
      * spacing, which is the pitch of a square lattice holding one apiece. 645 km at 1:50 000 000
-     * and 475 km at 1:22 000 000 — about eighty cells across a 2048 grid. The lattice is laid out
+     * and 366 km at the 1:11 000 000 of a 2048 world's export — about sixty-two cell widths of
+     * that grid. The lattice is laid out
      * in ground kilometres rather than cells, because a cell of this world is twice as wide as it
      * is tall; it does not wrap the east-west seam, so two mouths either side of it are never
      * crowded against each other.
@@ -213,7 +216,7 @@ object RiverSelection {
         val courseKilometres: DoubleArray,
         /** Each course's trunk, or [NO_TRUNK] where it reaches water or the edge of the world. */
         val trunkOf: IntArray,
-        /** The sheet's representative fraction: the `22 000 000` of `1:22 000 000`. */
+        /** The sheet's representative fraction: the `11 000 000` of `1:11 000 000`. */
         val denominator: Double,
         /** This world's land, in square kilometres, which the budget is per. */
         val landAreaSquareKm: Double,
@@ -256,7 +259,7 @@ object RiverSelection {
      *
      * [sheet] carries the scale and is the whole of the generalisation; [world] gives the network,
      * the land area the density is per, and the water a course ends in. The same call serves the
-     * pane and the export, which differ only in their [MapSheet.pixelsPerCell].
+     * pane and the export, which differ only in their [MapSheet.pixelsPerSheetPixel].
      */
     fun drawnOn(world: WorldMap, sheet: MapSheet, inkStep: Int): List<River> {
         val rivers = world.rivers.rivers
@@ -269,7 +272,8 @@ object RiverSelection {
      * [drawnOn]'s working, kept whole so a guard can read the budget it was spent against.
      *
      * [world] gives the network, the land the density is per and the water a course ends in;
-     * [sheet] gives the scale, through [MapSheet.pixelsPerCell] and nothing else; [inkStep] is the
+     * [sheet] gives the scale, through [MapSheet.kilometresPerPixel] on the world's own
+     * [SheetGeometry] and nothing else; [inkStep] is the
      * mark of the density scale, [EARTH_DENSITY_STEP] being Earth's own figure. Every length in
      * the result is in kilometres on the ground and every area in square kilometres. The invariant
      * is that the drawn kilometres never exceed [Selection.budgetKilometres] and that every drawn
@@ -288,7 +292,7 @@ object RiverSelection {
         val rivers = world.rivers.rivers
         val config = world.config
         val denominator = MapScale.representativeFractionDenominator(
-            config.scale, world.width, sheet.pixelsPerCell
+            SheetGeometry.of(world), sheet.pixelsPerSheetPixel
         )
         val landAreaSquareKm = world.sea.landCellCount * config.squareKilometresPerCell
         val pitchKm = crowdingPitchKilometres(denominator)

@@ -20,7 +20,9 @@ import kotlin.math.sqrt
  *  - **A line is a fixed width in pixels**, not a fixed depth band. The distance to the nearest
  *    contour is measured in metres of depth and then divided by how fast the depth changes here, so
  *    a line across a flat basin is the same weight as one down a slope, rather than a broad smear on
- *    the one and nothing at all on the other.
+ *    the one and nothing at all on the other. The pixels are the true-shape sheet's
+ *    ([SheetGeometry]), one of which is the same ground both ways, so a contour running north-south
+ *    is held to the same width as one running east-west; the raster still decides it once a cell.
  *  - **Lines that crowd are dropped.** Where the floor falls away steeply the contours pack closer
  *    than the eye can separate; below [CROWDED_PIXELS] apart they fade out, so the continental slope
  *    reads as a slope rather than as a moiré.
@@ -66,7 +68,7 @@ object Isobaths {
      * one-bit edge reads as a dither rather than as a line, and a hard threshold on a divide flips
      * whole pixels where two hardwares round differently, where a ramp moves them by one step.
      */
-    private const val ANTIALIAS_PIXELS = EngravingPlan.ANTIALIAS_CELLS
+    private const val ANTIALIAS_PIXELS = EngravingPlan.ANTIALIAS_PIXELS
 
     /**
      * How close two contours may run before they stop reading as two, in output pixels.
@@ -150,8 +152,8 @@ object Isobaths {
      * line.
      *
      * [depth] is 0 at the shoreline and 1 at the deepest floor the field can hold; [slopePerPixel]
-     * is how much of that depth a step of one pixel covers here, which is what holds a line to its
-     * width on the sheet; [slopePerCellWidth] is how much of it a cell width of ground covers,
+     * is how much of that depth a step of one pixel of the true-shape sheet covers here, which is
+     * what holds a line to its width on the sheet; [slopePerCellWidth] is how much of it a cell width of ground covers,
      * which is what says whether the floor is a plain; [interval] comes from [interval] and
      * [flattestSlope] from [flattestSlope], or 0 to draw on the plains as well, which is the
      * control `IsobathTest` measures against.

@@ -893,31 +893,35 @@ enum class MapStyle(
     }
 
     /**
-     * Whether this cell of realm [id] takes the hatch.
+     * Whether the sheet pixel at [sheetX], [sheetY] of realm [id] takes the hatch.
      *
      * The nine colours run out at nine realms and the tenth begins the set again, so each further
      * turn of the cycle is given a texture instead of a hue: diagonal strokes for the second nine,
      * the other diagonal for the third. The comb is the one [inked] draws for line art, at a
-     * coarser pitch — two cells of ink in six — so that it reads as a hatch at map scale rather
+     * coarser pitch — two pixels of ink in six — so that it reads as a hatch at map scale rather
      * than as a dither.
+     *
+     * Ruled on the true-shape sheet ([SheetGeometry]) and asked once a cell, at the cell's top-left
+     * pixel, so the diagonals run at forty-five degrees on the drawn map; ruled in cells they would
+     * lean to the shape of a cell.
      */
-    internal fun hatched(id: Int, column: Int, row: Int): Boolean {
+    internal fun hatched(id: Int, sheetX: Int, sheetY: Int): Boolean {
         val ramp = realmRamp ?: return false
         return when ((id / ramp.size) % HATCHES_BEFORE_REPEATING) {
-            1 -> (column + row) % COMB_PITCH_CELLS < COMB_INK_CELLS
-            // Written with no negative operand anywhere, rather than as (column - row) mod 6:
-            // GLSL leaves % undefined when either side is negative, and the shader has to agree
-            // with this to the bit. (column + (6 - row mod 6)) mod 6 is the same anti-diagonal.
-            2 -> (column + (COMB_PITCH_CELLS - row % COMB_PITCH_CELLS)) % COMB_PITCH_CELLS <
-                COMB_INK_CELLS
+            1 -> (sheetX + sheetY) % COMB_PITCH_PIXELS < COMB_INK_PIXELS
+            // Written with no negative operand anywhere, rather than as (x - y) mod 6: GLSL leaves
+            // % undefined when either side is negative, and the shader has to agree with this to
+            // the bit. (x + (6 - y mod 6)) mod 6 is the same anti-diagonal.
+            2 -> (sheetX + (COMB_PITCH_PIXELS - sheetY % COMB_PITCH_PIXELS)) % COMB_PITCH_PIXELS <
+                COMB_INK_PIXELS
             else -> false
         }
     }
 
-    /** A realm fill with its hatch applied, where the cell takes one. */
-    internal fun realmFill(id: Int, column: Int, row: Int): Int {
+    /** A realm fill with its hatch applied, where the sheet pixel takes one. */
+    internal fun realmFill(id: Int, sheetX: Int, sheetY: Int): Int {
         val fill = realm(id)
-        return if (hatched(id, column, row)) {
+        return if (hatched(id, sheetX, sheetY)) {
             MapPalette.blend(fill, coastline, HATCH_STRENGTH)
         } else {
             fill
@@ -925,9 +929,9 @@ enum class MapStyle(
     }
 
     /** The same for a people. */
-    internal fun peopleFill(id: Int, column: Int, row: Int): Int {
+    internal fun peopleFill(id: Int, sheetX: Int, sheetY: Int): Int {
         val fill = people(id)
-        return if (hatched(id, column, row)) {
+        return if (hatched(id, sheetX, sheetY)) {
             MapPalette.blend(fill, coastline, HATCH_STRENGTH)
         } else {
             fill
@@ -956,13 +960,14 @@ enum class MapStyle(
         private const val HATCHES_BEFORE_REPEATING = 3
 
         /**
-         * The comb the hatch is ruled at: two cells of ink in every six.
+         * The comb the hatch is ruled at: two sheet pixels of ink in every six.
          *
          * Coarser than the comb [MapStyle.PEN_AND_INK] draws with, deliberately, so that at map
-         * scale it reads as a hatch rather than as a dither of the fill it crosses.
+         * scale it reads as a hatch rather than as a dither of the fill it crosses. On cells two
+         * pixels wide, asked at every other pixel, it still comes to one cell in three along a row.
          */
-        private const val COMB_PITCH_CELLS = 6
-        private const val COMB_INK_CELLS = 2
+        private const val COMB_PITCH_PIXELS = 6
+        private const val COMB_INK_PIXELS = 2
 
         /**
          * How far along the realm set the peoples' colours start.

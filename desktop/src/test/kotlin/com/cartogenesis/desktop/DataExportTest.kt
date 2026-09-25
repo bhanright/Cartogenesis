@@ -240,6 +240,12 @@ class DataExportTest {
         assertEquals(config.seed, json.int("seed").toLong())
         assertEquals(world.width, json.int("widthPixels"))
         assertEquals(world.height, json.int("heightPixels"))
+        // The data keeps the native grid, one sample a cell, and says so: the picture exports are
+        // the true-shape sheet and this is not.
+        assertEquals(world.width, json.int("gridCellsAcross"))
+        assertEquals(world.height, json.int("gridCellsDown"))
+        assertEquals(1, json.int("samplesPerCell"))
+        assertTrue("one sample per grid cell" in json.text("sampleSpacing"))
         assertEquals(16, json.int("bitsPerSample"))
         assertEquals(DataExports.SEA_LEVEL_GREY_LEVEL, json.int("seaLevelGreyLevel"))
 
@@ -534,8 +540,9 @@ class DataExportTest {
         // `ImageIO` is asked here; the fidelity below goes through Skia for all of them, so that no
         // part of the comparison is a difference between two decoders.
         val opened = decode(shipped)
-        assertEquals(world.width, opened.width, "the JPEG did not decode at the export size")
-        assertEquals(world.height, opened.height)
+        val sheet = com.cartogenesis.cartography.SheetGeometry.of(world)
+        assertEquals(sheet.widthPixels, opened.width, "the JPEG did not decode at the sheet's size")
+        assertEquals(sheet.heightPixels, opened.height)
 
         val truth = decodeThroughSkia(reference)
         val decoded = decodeThroughSkia(shipped)

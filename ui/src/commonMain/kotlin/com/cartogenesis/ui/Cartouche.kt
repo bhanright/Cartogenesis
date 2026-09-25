@@ -4,6 +4,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.cartogenesis.cartography.MapScale
+import com.cartogenesis.cartography.SheetGeometry
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.Culture
 
@@ -38,17 +39,17 @@ internal data class Cartouche(
     val worldName: String,
     val facts: String,
     /**
-     * `5.9 km per pixel east-west, 2.9 north-south · about 1:22 000 000 at the equator, east-west`,
-     * for the size [facts] quotes.
+     * `2.9 km per pixel · about 1:11 000 000 at the equator`, for the true-shape sheet of the size
+     * [facts] quotes.
      */
     val scale: String,
     /**
-     * How wide one cell of this world is on the ground.
+     * How much ground one pixel of this world's true-shape sheet covers, either way.
      *
      * The legend's scale bar is the same arithmetic as [scale] taken at the zoom the reader is at
      * rather than at the sheet's own size, and this is what it needs to do it with.
      */
-    val kilometresPerCellWidth: Double,
+    val kilometresPerSheetPixel: Double,
     /** Empty until a world has actually been generated in this session (an opened save has not). */
     val footnote: String
 )
@@ -112,8 +113,8 @@ internal object Cartouches {
     fun of(world: WorldMap, name: String, millis: Long): Cartouche = Cartouche(
         worldName = name,
         facts = facts(world.config.seed, world.config.width, world.config.height),
-        scale = MapScale.cartoucheLine(world.config.scale, world.width, world.height),
-        kilometresPerCellWidth = world.config.scale.cellWidthKm(world.width),
+        scale = MapScale.cartoucheLine(SheetGeometry.of(world)),
+        kilometresPerSheetPixel = SheetGeometry.of(world).kilometresPerPixel,
         footnote = footnote(millis)
     )
 }

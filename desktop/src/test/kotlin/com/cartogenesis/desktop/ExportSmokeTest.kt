@@ -93,9 +93,13 @@ class ExportSmokeTest {
             "JPEG (${jpeg.bytes}) was not smaller than WebP (${webp.bytes}), which the UI claims"
         )
         // And a JPEG that decodes at the size that was asked for, which is the whole of what the
-        // format has to do here.
+        // format has to do here: the 1024 world's true-shape sheet.
+        val sheet = com.cartogenesis.cartography.SheetGeometry.of(world)
         val decodedJpeg = decode(jpeg.file)
-        assertEquals(1024 * 1024, decodedJpeg.size, "the JPEG did not decode at 1024x1024")
+        assertEquals(
+            sheet.pixelCount, decodedJpeg.size,
+            "the JPEG did not decode at ${sheet.widthPixels}x${sheet.heightPixels}"
+        )
 
         // Decode both through Skia and compare every pixel. ImageIO has no WebP reader, and
         // "it is smaller" is not evidence of anything on its own — the encoder could be discarding

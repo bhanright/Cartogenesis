@@ -119,15 +119,19 @@
   512, 1024 and 2048 where it read 1.93, 1.99 and 2.06, and the 2,000 m contour 1.46, 1.47 and 1.48
   where it read 1.99, 2.00 and 2.04. The coast's figure still rises with the grid; why is not
   measured.
-- **The map draws a world twice as wide as it is tall on a square sheet, so land that is round on
-  the ground reads twice as tall as it is wide.** Since the operators measure the ground (Fix 2), a
-  continent, a lake or a range is as wide on the ground whichever way it runs, and the default grid
-  is as many cells down as across over 12,000 by 6,000 km. The raster draws one pixel a cell, the
-  map view fits it with one scale for both axes (`App.kt`, its fit scale), and the site's imagery is
-  cut from the same square sheet, so what a reader sees is the ground stretched twofold north-south.
-  The fix is the drawing's: draw the sheet at the world's own aspect, or make grids twice as many
-  cells across as down. The cartouche already states the two scales the sheet has; the exports'
-  aspect was not checked. 2026-09-24, Fix 2.
+- ~~**The map draws a world twice as wide as it is tall on a square sheet, so land that is round
+  on the ground reads twice as tall as it is wide.**~~ Answered by Fix A, 2026-09-24: every picture,
+  on screen and exported, is drawn on the true-shape sheet (`SheetGeometry`), a cell two pixels
+  wide and one tall with its colour copied exactly and the ink laid over it at its own width; the
+  cartouche quotes the sheet's one scale. The other half of the answer, grids twice as many cells
+  across as down so a cell is square on the ground, is still open and reuses the same geometry.
+- **On the true-shape sheet a cell is two pixels wide, so what the raster decides a cell at a time
+  is two pixels wide where it runs north-south and one tall where it runs east-west.** The raster's
+  own ink — its coast and border cells, a hachure, an isobath, the stipple — keeps its bearing and
+  pitch on the sheet, because every pattern is asked at the cell's own pixel of it, but a mark along
+  a column cannot be narrower than a cell. The vector ink laid over it (the traced coast, rivers,
+  graticule, glyphs, lettering) is not affected. What removes it is a grid whose cells are square on
+  the ground; per-pixel kernels were declined for it. 2026-09-24, Fix A.
 - **Six operators still count a row as a column, each outside Fix 2's list.** Found by reading the
   code, not by a guard: the climate stage's rainfall blur (a square box of cells, sized by
   `RAIN_BLUR_REFERENCE_WIDTH`) and its two coastal-reach blurs, the water exposure and the offshore

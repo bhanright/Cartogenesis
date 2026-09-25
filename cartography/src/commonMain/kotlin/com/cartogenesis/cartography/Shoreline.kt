@@ -64,8 +64,9 @@ object Shoreline {
     }
 
     /**
-     * [line] with every vertex whose removal moves the line less than [toleranceCells] taken out,
-     * by Douglas-Peucker.
+     * [line] with every vertex whose removal moves the line less than [tolerance] taken out, by
+     * Douglas-Peucker. [tolerance] is in whatever units [line]'s coordinates are, which for the
+     * drawn coast is the whole sheet's pixels; see [of].
      *
      * The recursion is an explicit stack rather than a call stack: a coastline at 4096 can run to
      * tens of thousands of vertices in one ring, and the worst case for this algorithm is a
@@ -74,9 +75,9 @@ object Shoreline {
      * The two ends are always kept, so a ring stays closed and an open chain still reaches the edge
      * of the sheet.
      */
-    fun simplified(line: FloatArray, toleranceCells: Float): FloatArray {
+    fun simplified(line: FloatArray, tolerance: Float): FloatArray {
         val vertices = line.size / 2
-        if (vertices < 3 || toleranceCells <= 0f) return line
+        if (vertices < 3 || tolerance <= 0f) return line
 
         val keep = BooleanArray(vertices)
         keep[0] = true
@@ -91,7 +92,7 @@ object Shoreline {
             if (last <= first + 1) continue
 
             var farthest = -1
-            var farthestDistance = toleranceCells
+            var farthestDistance = tolerance
             for (vertex in first + 1 until last) {
                 val distance = distanceToSegment(
                     line[vertex * 2], line[vertex * 2 + 1],
@@ -125,23 +126,51 @@ object Shoreline {
     }
 
     /**
-     * The whole coast of [isLand], traced and generalised for [sheet].
+     * The whole coast of [isLand], a grid of [geometry]'s cells, traced and generalised for
+     * [sheet], as polylines in cell coordinates.
+     *
+     * Generalised on the sheet rather than on the grid: each line is carried onto the true-shape
+     * sheet, simplified there to [MapSheet.simplifyTolerancePixels], and carried back. A cell is not
+     * the same size both ways on the ground, and a tolerance of so many cells would give away twice
+     * as much of a coast running north-south as of one running east-west; a pixel of the sheet is
+     * the same ground both ways. The carrying is a multiply and a divide by whole pixel counts, so a
+     * kept vertex comes back to the half-cell lattice it was traced on exactly.
      *
      * Islands smaller than the tolerance in both directions are dropped rather than simplified: at
      * that scale their outline is a dot, and a dot drawn in the coastline's ink reads as a mark on
      * the paper. The raster still fills them, so the land is not lost — only its outline is, which
      * is what generalising a coast means.
      */
-    fun of(isLand: BooleanArray, cellsAcross: Int, cellsDown: Int, sheet: MapSheet): List<FloatArray> {
-        val tolerance = sheet.simplifyToleranceCells
+    fun of(isLand: BooleanArray, geometry: SheetGeometry, sheet: MapSheet): List<FloatArray> {
+        val tolerancePixels = sheet.simplifyTolerancePixels
         val coast = ArrayList<FloatArray>()
-        trace(isLand, cellsAcross, cellsDown).forEach { line ->
-            if (spans(line) >= tolerance) coast.add(simplified(line, tolerance))
+        trace(isLand, geometry.cellsAcross, geometry.cellsDown).forEach { line ->
+            val onTheSheet = scaled(line, geometry.pixelsPerCellAcross, geometry.pixelsPerCellDown)
+            if (spans(onTheSheet) >= tolerancePixels) {
+                val kept = simplified(onTheSheet, tolerancePixels)
+                coast.add(unscaled(kept, geometry.pixelsPerCellAcross, geometry.pixelsPerCellDown))
+            }
         }
         return coast
     }
 
-    /** The longer side of a polyline's bounding box, in cells. */
+    /** [line] with every x multiplied by [acrossFactor] and every y by [downFactor]. */
+    private fun scaled(line: FloatArray, acrossFactor: Int, downFactor: Int): FloatArray {
+        if (acrossFactor == 1 && downFactor == 1) return line
+        return FloatArray(line.size) { at ->
+            if (at % 2 == 0) line[at] * acrossFactor else line[at] * downFactor
+        }
+    }
+
+    /** [scaled] undone. */
+    private fun unscaled(line: FloatArray, acrossFactor: Int, downFactor: Int): FloatArray {
+        if (acrossFactor == 1 && downFactor == 1) return line
+        return FloatArray(line.size) { at ->
+            if (at % 2 == 0) line[at] / acrossFactor else line[at] / downFactor
+        }
+    }
+
+    /** The longer side of a polyline's bounding box, in its own units. */
     private fun spans(line: FloatArray): Float {
         var minX = Float.MAX_VALUE
         var maxX = -Float.MAX_VALUE
@@ -161,8 +190,8 @@ object Shoreline {
     }
 
     /**
-     * Distance from a point to a segment, in cells — to the segment itself, not to the infinite
-     * line through it.
+     * Distance from a point to a segment, in the units of their coordinates — to the segment
+     * itself, not to the infinite line through it.
      *
      * The difference matters for the guarantee this algorithm is worth having for. Douglas-Peucker
      * is often written with the perpendicular distance to the line, and then a vertex sitting off
@@ -189,11 +218,12 @@ object Shoreline {
     }
 
     /**
-     * Below this squared length a segment is treated as a point, in cells squared.
+     * Below this squared length a segment is treated as a point, in the coordinates' units squared.
      *
      * A millionth of a millionth: every real vertex here sits on a half-cell lattice, so the
-     * shortest segment the trace can produce is half a cell and nothing legitimate comes near
-     * this. It exists only so the projection below cannot divide by zero.
+     * shortest segment the trace can produce is half a cell — half a pixel or more on the sheet —
+     * and nothing legitimate comes near this. It exists only so the projection below cannot divide
+     * by zero.
      */
     private const val SHORTEST_REAL_SEGMENT_SQUARED = 1e-12f
 

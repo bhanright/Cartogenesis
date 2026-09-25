@@ -102,7 +102,9 @@ data class RenderOptions(
 }
 
 /**
- * One straight run of a river: its two ends in cell coordinates, and how heavily it is stroked.
+ * One straight run of a river: its two ends in cell coordinates, and how heavily it is stroked on
+ * the sheet. The front end carries the ends onto the sheet through [MapOverlay.sheet] and strokes
+ * the run there at [widthPixels], so the pen is the same width whichever way the river runs.
  *
  * A run is one cell long, so the stroke changes by a hair from run to run and the taper down a
  * river is drawn by the sequence rather than by any single segment. It is also why a confluence
@@ -114,17 +116,21 @@ class RiverSegment(
     val fromY: Float,
     val toX: Float,
     val toY: Float,
-    /** In output pixels, from [RiverPen]. */
+    /** In the sheet's pixels, from [RiverPen]. */
     val widthPixels: Float
 )
 
 enum class GlyphShape { TRIANGLE, DIAMOND, SQUARE, CIRCLE }
 
-/** A direction arrow for a flow field, in cell coordinates. */
+/** A direction arrow for a flow field, standing at a point in cell coordinates. */
 class FlowArrow(
     val x: Float,
     val y: Float,
-    /** Where the arrow points, as a unit vector: x eastward, y southward. */
+    /**
+     * Where the arrow points on the sheet, as a unit vector in sheet pixels: x eastward, y
+     * southward. On the sheet rather than in cells, so an arrow drawn along it points where the
+     * water or the air goes on the drawn map.
+     */
     val directionX: Float,
     val directionY: Float,
     /** 0..1, so a platform can fade weak flow rather than drawing a forest of stubs. */
@@ -133,7 +139,10 @@ class FlowArrow(
     val color: Int
 )
 
-/** A landmark marker: where, what shape, what colour. Drawing it is the platform's job. */
+/**
+ * A landmark marker: where, in cell coordinates, what shape, what colour, and how big in sheet
+ * pixels. Drawing it is the platform's job.
+ */
 class LandmarkGlyph(
     val x: Float,
     val y: Float,
@@ -150,8 +159,17 @@ class LandmarkGlyph(
  * drawing API executes it. It is also where generalisation happens: what is in here is what
  * survives at the scale the map is being seen at, so the front end draws all of it and decides none
  * of it. See [MapSheet].
+ *
+ * Two frames, and each thing says which it is in. What stands on the ground — the rivers, the
+ * coast, the flow arrows' feet, the landmarks — is in cell coordinates, the frame the world was
+ * traced in, and a front end carries each point onto the sheet through [sheet]. What belongs to the
+ * paper — every pen width and glyph size, the graticule, the scale bar, an arrow's length — is in
+ * the true-shape sheet's own pixels already, so ink is placed through the transform and never
+ * stretched by it.
  */
 class MapOverlay(
+    /** Where a cell lands on the sheet this overlay is drawn over. */
+    val sheet: SheetGeometry,
     val rivers: List<RiverSegment>,
     /** How many separate rivers those segments belong to, after [RiverSelection.drawnOn]. */
     val riversDrawn: Int,
@@ -164,21 +182,26 @@ class MapOverlay(
     /** Ocean or wind arrows, on the views that show them. */
     val flow: List<FlowArrow>,
     /**
-     * How far a flow arrow may reach from its own point, in cells.
+     * How far a flow arrow may reach from its own point, in sheet pixels.
      *
      * Half the lattice pitch, so two neighbours drawn at full length meet nose to tail and no
      * further. A platform scales its whole arrow — shaft, head and barbs — off this one figure.
      */
-    val flowArrowReachCells: Float,
-    /** The graticule, when the reader asked for one. */
+    val flowArrowReachPixels: Float,
+    /** The graticule, when the reader asked for one, in sheet pixels. */
     val graticule: Graticule?,
-    /** The scale bar, on a sheet that carries its own. See [MapSheet.carriesScaleBar]. */
+    /**
+     * The scale bar, on a sheet that carries its own, in sheet pixels. See
+     * [MapSheet.carriesScaleBar].
+     */
     val scaleBar: PlacedScaleBar?,
     val riverColor: Int,
     /** The coast's ink, its alpha already carrying [MapStyle.coastlineStrength]. */
     val coastColor: Int,
+    /** The coast's pen, in sheet pixels. */
     val coastWidth: Float,
     val graticuleColor: Int,
+    /** The graticule's pen, in sheet pixels. */
     val graticuleWidth: Float,
     /** The style's own ink and paper, for the marks that are writing rather than geography. */
     val marginInk: Int,
@@ -234,12 +257,21 @@ object MapRasterizer {
         return rasterize(world, options)
     }
 
-    /** ARGB pixels, row-major, `world.width * world.height` long. */
+    /**
+     * ARGB, one colour per cell, row-major, `world.width * world.height` long.
+     *
+     * One colour a cell and not a pixel of the sheet: [SheetGeometry.expand] copies each into the
+     * pixels its cell covers on the true-shape sheet. The patterns the raster draws — hachures,
+     * stipple, rulings, the hatch, dotted borders — are laid out on that sheet and asked at each
+     * cell's own pixel of it ([EngravingPlan.sheetX]), so they keep their bearing and their pitch
+     * once the cell is copied out; a mark running along a column is as wide as a cell.
+     */
     fun rasterize(world: WorldMap, options: RenderOptions = RenderOptions()): IntArray {
         val cellsAcross = world.width
         val cellsDown = world.height
         val cellCount = cellsAcross * cellsDown
         val pixels = IntArray(cellCount)
+        val sheet = SheetGeometry.of(world)
 
         val style = options.style
         val reliefDrawn = options.showHillshade && options.view != MapView.NORMALS
@@ -260,10 +292,10 @@ object MapRasterizer {
         // business. The water and the ice are only drawn where the style chooses the colours: a
         // diagnostic view's sea carries a temperature or an anomaly, and ruling it would bury the
         // thing it is there to show.
-        val plan = if (style.lineArt) EngravingPlan(cellsAcross) else null
+        val plan = if (style.lineArt) EngravingPlan(sheet) else null
         val engraveWater = style.lineArt && options.view.styled
         val shore = if (plan != null) {
-            ShoreDistance.of(cellsAcross, cellsDown, dryLandMask(world, showLakes))
+            ShoreDistance.of(sheet, dryLandMask(world, showLakes))
         } else null
         val elevation = world.sea.relativeElevation
 
@@ -282,6 +314,8 @@ object MapRasterizer {
         for (cell in 0 until cellCount) {
             val column = cell % cellsAcross
             val row = cell / cellsAcross
+            val sheetX = column * sheet.pixelsPerCellAcross
+            val sheetY = row * sheet.pixelsPerCellDown
             if (showLakes && lakes.isLake(cell)) {
                 // Depth from how far the water surface sits above the ground beneath it, so a
                 // deep basin reads darker than a shallow flood. The surface is the lake's own,
@@ -296,7 +330,7 @@ object MapRasterizer {
                 )
                 if (plan != null && engraveWater) {
                     water = MapPalette.blend(
-                        water, style.coastline, Engraving.lakeWater(row, shore!![cell], plan)
+                        water, style.coastline, Engraving.lakeWater(sheetY, shore!![cell], plan)
                     )
                 }
                 pixels[cell] = water
@@ -304,7 +338,8 @@ object MapRasterizer {
             }
 
             var color = baseColor(
-                world, options.view, style, cell, isobathInterval, flattestSlope, isobathStencil
+                world, sheet, options.view, style, cell, isobathInterval, flattestSlope,
+                isobathStencil
             )
             val isLand = world.sea.isLand[cell]
             if (plan != null && engraveWater && !isLand) {
@@ -317,19 +352,20 @@ object MapRasterizer {
                     // Ink rather than shading: the paper is left alone and strokes are laid down
                     // the slope, heavier where the ground is steeper, which is how a pen draws a
                     // mountain when it has no colour to draw it with.
-                    val reach = plan.gradientStencilCells
+                    val reachColumns = plan.gradientStencilColumns
+                    val reachRows = plan.gradientStencilRows
                     val gradientX =
-                        (elevation.sample(column + reach, row) -
-                            elevation.sample(column - reach, row)) * plan.gradientScale
+                        (elevation.sample(column + reachColumns, row) -
+                            elevation.sample(column - reachColumns, row)) * plan.gradientScaleAcross
                     val gradientY =
-                        (elevation.sample(column, row + reach) -
-                            elevation.sample(column, row - reach)) * plan.gradientScale
+                        (elevation.sample(column, row + reachRows) -
+                            elevation.sample(column, row - reachRows)) * plan.gradientScaleDown
                     color = MapPalette.blend(
                         color,
                         style.coastline,
                         Engraving.hachure(
-                            column, row, gradientX, gradientY, world.config.cellHeightInCellWidths.toFloat(),
-                            plan, style.inkGain
+                            sheetX, sheetY, gradientX, gradientY,
+                            world.config.cellHeightInCellWidths.toFloat(), plan, style.inkGain
                         )
                     )
                 } else {
@@ -340,7 +376,7 @@ object MapRasterizer {
                 world.climate.biome[cell] == Biome.ICE_SHEET
             ) {
                 color = MapPalette.blend(
-                    color, style.coastline, Engraving.stipple(column, row, plan)
+                    color, style.coastline, Engraving.stipple(sheetX, sheetY, plan)
                 )
             }
             pixels[cell] = color
@@ -370,10 +406,14 @@ object MapRasterizer {
     /**
      * The coast, the rivers, the graticule and the landmarks to lay over the raster, as geometry.
      *
-     * [sheet] is what the drawing is for, and is the whole of the generalisation: at one pixel to
-     * the cell — an export, or any offline render — every river is drawn and the coast keeps every
-     * bend it has; shown smaller than that, the smallest rivers go and the coast is simplified to
-     * the tolerance the sheet can actually show. See [MapSheet].
+     * [sheet] is what the drawing is for, and is the whole of the generalisation: on the whole
+     * sheet — an export, or any offline render — every river the scale allows is drawn and the
+     * coast keeps every bend it has; shown smaller than that, the smallest rivers go and the coast
+     * is simplified to the tolerance the sheet can actually show. See [MapSheet].
+     *
+     * Every pen is sized against the width of the true-shape sheet, [SheetGeometry.widthPixels],
+     * which is what the reader sees; sized against the grid's width, every pen would come out half
+     * the share of the picture it was chosen to be.
      */
     fun overlay(
         world: WorldMap,
@@ -381,6 +421,8 @@ object MapRasterizer {
         sheet: MapSheet = MapSheet.UNGENERALISED
     ): MapOverlay {
         val cellsAcross = world.width
+        val geometry = SheetGeometry.of(world)
+        val sheetWidthPixels = geometry.widthPixels
         val rivers = ArrayList<RiverSegment>()
         val skipInLakes = options.showLakes && options.view.showsTerrain
         val water = world.rivers.lakes
@@ -393,7 +435,7 @@ object MapRasterizer {
             }
 
         drawnRivers.forEach { river ->
-            val course = trimmedAtTheShore(world, river, cellsAcross)
+            val course = trimmedAtTheShore(world, river, geometry)
             for (vertex in 0 until course.vertexCount - 1) {
                 val fromCell = river.cells[vertex]
                 val toCell = river.cells[vertex + 1]
@@ -402,7 +444,7 @@ object MapRasterizer {
                 val fromY = (fromCell / cellsAcross) + HALF_A_CELL
                 val toY = (toCell / cellsAcross) + HALF_A_CELL
                 val widthPixels =
-                    RiverPen.widthPixels(river.widthRatio[vertex], cellsAcross)
+                    RiverPen.widthPixels(river.widthRatio[vertex], sheetWidthPixels)
                 // The last drawn segment stops short of the water, so the round cap's outer
                 // edge lands on the shoreline; [trimmedAtTheShore] says why.
                 val reach =
@@ -454,19 +496,22 @@ object MapRasterizer {
             }
         }
 
-        // Flow arrows on a coarse lattice: one every `latticePitchCells`, so the density stays
-        // legible whatever the map resolution.
+        // Flow arrows on a coarse lattice, so the density stays legible whatever the map
+        // resolution. Square on the sheet rather than in cells: a lattice as many rows apart as
+        // columns would stand twice as close north-south as east-west on the drawn map.
         val flow = ArrayList<FlowArrow>()
-        var flowArrowReachCells = 1f
+        var flowArrowReachPixels = 1f
         if (options.view.showsFlow) {
             val cellsDown = world.height
             val arrowsAcross =
                 if (options.view == MapView.WIND) WIND_ARROWS_ACROSS else CURRENT_ARROWS_ACROSS
-            val latticePitchCells = (cellsAcross / arrowsAcross).coerceAtLeast(CLOSEST_ARROWS_CELLS)
-            flowArrowReachCells = latticePitchCells * HALF_A_CELL
-            var row = latticePitchCells / 2
+            val pitchColumns = (cellsAcross / arrowsAcross).coerceAtLeast(CLOSEST_ARROWS_CELLS)
+            val pitchPixels = pitchColumns * geometry.pixelsPerCellAcross
+            val pitchRows = (pitchPixels / geometry.pixelsPerCellDown).coerceAtLeast(1)
+            flowArrowReachPixels = pitchPixels * HALF_A_CELL
+            var row = pitchRows / 2
             while (row < cellsDown) {
-                var column = latticePitchCells / 2
+                var column = pitchColumns / 2
                 while (column < cellsAcross) {
                     val cell = row * cellsAcross + column
                     if (options.view == MapView.CURRENTS) {
@@ -477,9 +522,8 @@ object MapRasterizer {
                                 kotlin.math.sqrt(eastward * eastward + southward * southward)
                             if (speed > STILLEST_DRAWN_CURRENT) {
                                 flow.add(
-                                    FlowArrow(
-                                        column + HALF_A_CELL, row + HALF_A_CELL,
-                                        eastward / speed, southward / speed,
+                                    arrowOnTheSheet(
+                                        column, row, eastward, southward, geometry,
                                         (speed / world.config.ocean.speedCellsPerPass)
                                             .coerceIn(0f, 1f),
                                         CURRENT_ARROW_INK
@@ -494,27 +538,25 @@ object MapRasterizer {
                         // carrying poleward — rather than as three stripes of east and west.
                         val eastward = world.climate.windDirection[cell].toFloat()
                         val southward = world.climate.windMeridional.data[cell]
-                        val length =
-                            kotlin.math.sqrt(eastward * eastward + southward * southward)
                         val ink = if (eastward > 0) WESTERLY_ARROW_INK else EASTERLY_ARROW_INK
                         flow.add(
-                            FlowArrow(
-                                column + HALF_A_CELL, row + HALF_A_CELL,
-                                eastward / length, southward / length, WIND_ARROW_STRENGTH, ink
+                            arrowOnTheSheet(
+                                column, row, eastward, southward, geometry, WIND_ARROW_STRENGTH,
+                                ink
                             )
                         )
                     }
-                    column += latticePitchCells
+                    column += pitchColumns
                 }
-                row += latticePitchCells
+                row += pitchRows
             }
         }
 
         val glyphs = ArrayList<LandmarkGlyph>()
-        // Purely a fraction of the map, so a glyph covers the same share of the picture at every
+        // Purely a fraction of the sheet, so a glyph covers the same share of the picture at every
         // size — unlike the river pen beside it, which is a share of the sheet with a floor.
         val glyphRadiusPixels =
-            (cellsAcross / GLYPH_RADII_ACROSS_MAP).coerceAtLeast(SMALLEST_GLYPH_PIXELS)
+            (sheetWidthPixels / GLYPH_RADII_ACROSS_MAP).coerceAtLeast(SMALLEST_GLYPH_PIXELS)
         if (options.showLandmarks && !options.view.showsFlow) {
             world.landmarks.landmarks.forEach { landmark ->
                 glyphs.add(
@@ -531,24 +573,27 @@ object MapRasterizer {
 
         val coast =
             if (options.showCoastline) {
-                Shoreline.of(world.sea.isLand, cellsAcross, world.height, sheet)
+                Shoreline.of(world.sea.isLand, geometry, sheet)
             } else {
                 emptyList()
             }
 
         return MapOverlay(
+            sheet = geometry,
             rivers = rivers,
             riversDrawn = drawnRivers.size,
             coastline = coast,
             landmarks = glyphs,
             flow = flow,
-            flowArrowReachCells = flowArrowReachCells,
+            flowArrowReachPixels = flowArrowReachPixels,
             graticule =
-                if (options.showGraticule) Graticule.of(cellsAcross, world.height) else null,
-            scaleBar = if (sheet.carriesScaleBar) placedScaleBar(world) else null,
+                if (options.showGraticule) {
+                    Graticule.of(geometry.widthPixels, geometry.heightPixels)
+                } else null,
+            scaleBar = if (sheet.carriesScaleBar) placedScaleBar(geometry) else null,
             riverColor = options.style.river,
             coastColor = withAlpha(options.style.coastline, options.style.coastlineStrength),
-            coastWidth = coastPenPixels(cellsAcross),
+            coastWidth = coastPenPixels(sheetWidthPixels),
             graticuleColor = withAlpha(options.style.coastline, GRATICULE_INK_STRENGTH),
             graticuleWidth = RiverPen.HAIRLINE_PIXELS,
             marginInk = options.style.coastline,
@@ -562,38 +607,67 @@ object MapRasterizer {
     }
 
     /**
-     * The scale bar, tucked into the sheet's bottom-left corner clear of the margin figures.
+     * A flow arrow at the centre of the cell at [column], [row], pointing where a flow of
+     * [eastward] columns and [southward] rows goes on the sheet.
+     *
+     * Both flows are carried in the grid's own units — the currents in cells per pass, the wind's
+     * slant in rows per column — so a step of the flow is that many columns and rows, and on the
+     * sheet it is that many of each axis's pixels.
+     */
+    private fun arrowOnTheSheet(
+        column: Int,
+        row: Int,
+        eastward: Float,
+        southward: Float,
+        geometry: SheetGeometry,
+        strength: Float,
+        ink: Int
+    ): FlowArrow {
+        val acrossPixels = eastward * geometry.pixelsPerCellAcross
+        val downPixels = southward * geometry.pixelsPerCellDown
+        val length = sqrt(acrossPixels * acrossPixels + downPixels * downPixels)
+        return FlowArrow(
+            column + HALF_A_CELL, row + HALF_A_CELL,
+            acrossPixels / length, downPixels / length, strength, ink
+        )
+    }
+
+    /**
+     * The scale bar, tucked into the sheet's bottom-left corner clear of the margin figures, in
+     * the sheet's own pixels.
      *
      * Above the row a graticule puts its longitude figures on and to the right of the column it
      * puts its latitudes in, so a sheet drawn with the graticule on and one drawn with it off put
-     * the bar in the same place and neither writes anything over anything else.
+     * the bar in the same place and neither writes anything over anything else. The bar is the
+     * longest round distance that fits a quarter of the sheet's width at the sheet's one scale.
      */
-    private fun placedScaleBar(world: WorldMap): PlacedScaleBar {
+    internal fun placedScaleBar(geometry: SheetGeometry): PlacedScaleBar {
         val figure = Graticule.labelHeightPixels(
-            world.width.toFloat() * Graticule.DEGREES / DEGREES_OF_LONGITUDE
+            geometry.widthPixels.toFloat() * Graticule.DEGREES / DEGREES_OF_LONGITUDE
         )
         return PlacedScaleBar(
             bar = MapScale.longestBarThatFits(
-                MapScale.kilometresPerPixel(world.config.scale, world.width, 1f),
-                world.width.toFloat()
+                MapScale.kilometresPerPixel(geometry, 1f),
+                geometry.widthPixels.toFloat()
             ),
             x = figure * MARGIN_FIGURES_CLEARED,
-            y = world.height - figure * MARGIN_FIGURES_CLEARED,
+            y = geometry.heightPixels - figure * MARGIN_FIGURES_CLEARED,
             figureHeightPixels = figure
         )
     }
 
     /**
-     * How heavily the traced coast is stroked, in output pixels, on a sheet [cellsAcross] wide.
+     * How heavily the traced coast is stroked, in sheet pixels, on a sheet [sheetWidthPixels]
+     * wide.
      *
-     * The raster inks one cell of coast, which on the sheet is one pixel, and the stroke matches
-     * that at 2048 so that turning it on sharpens the coast rather than doubling it. Held as a
-     * share of the sheet from there — the reasoning [RiverPen] gives for the river pen — so a plate
-     * twice as large carries a coast twice as heavy, with a floor of one whole pixel because below
-     * that a line is a grey suggestion rather than a coast.
+     * Two pixels on a 2048 world's 4096-pixel sheet, which is the raster's one inked cell where
+     * the coast runs north-south, so that turning the stroke on sharpens the coast rather than
+     * doubling it. Held as a share of the sheet from there — the reasoning [RiverPen] gives for the
+     * river pen — so a plate twice as large carries a coast twice as heavy, with a floor of one
+     * whole pixel because below that a line is a grey suggestion rather than a coast.
      */
-    internal fun coastPenPixels(cellsAcross: Int): Float =
-        (cellsAcross * COAST_SHARE_OF_MAP_WIDTH).coerceAtLeast(1f)
+    internal fun coastPenPixels(sheetWidthPixels: Int): Float =
+        (sheetWidthPixels * COAST_SHARE_OF_MAP_WIDTH).coerceAtLeast(1f)
 
     private const val COAST_SHARE_OF_MAP_WIDTH = 0.0005f
 
@@ -751,8 +825,13 @@ object MapRasterizer {
      * vertex within half a stroke of the shore would cross it just as the end cap did.
      *
      * A course that ends on land is a tributary stopping on the trunk it joins, and is left whole.
+     *
+     * Walked in sheet pixels, which is what the pen is measured in: a step east is
+     * [SheetGeometry.pixelsPerCellAcross] pixels of the sheet and a step south
+     * [SheetGeometry.pixelsPerCellDown], so half a stroke is given up along the ground the river
+     * actually crosses on the drawn map.
      */
-    private fun trimmedAtTheShore(world: WorldMap, river: River, cellsAcross: Int): DrawnCourse {
+    private fun trimmedAtTheShore(world: WorldMap, river: River, sheet: SheetGeometry): DrawnCourse {
         val cells = river.cells
         val whole = DrawnCourse(cells.size, 1f)
         if (cells.size < 3) return whole
@@ -762,23 +841,23 @@ object MapRasterizer {
         if (!intoWater) return whole
 
         val halfStrokePixels =
-            RiverPen.widthPixels(river.widthRatio[lastOnLand], cellsAcross) / 2f
-        val toTheShoreCells = stepLength(cells[lastOnLand], mouth, cellsAcross) / 2f
-        if (toTheShoreCells >= halfStrokePixels) {
+            RiverPen.widthPixels(river.widthRatio[lastOnLand], sheet.widthPixels) / 2f
+        val toTheShorePixels = stepPixels(cells[lastOnLand], mouth, sheet) / 2f
+        if (toTheShorePixels >= halfStrokePixels) {
             // The stroke ends on the last step, between that cell's centre and the shoreline.
             return DrawnCourse(
-                cells.size, (toTheShoreCells - halfStrokePixels) / (2f * toTheShoreCells)
+                cells.size, (toTheShorePixels - halfStrokePixels) / (2f * toTheShorePixels)
             )
         }
 
-        var owedCells = halfStrokePixels - toTheShoreCells
+        var owedPixels = halfStrokePixels - toTheShorePixels
         var vertex = lastOnLand
         while (vertex > 0) {
-            val stepCells = stepLength(cells[vertex - 1], cells[vertex], cellsAcross)
-            if (owedCells <= stepCells) {
-                return DrawnCourse(vertex + 1, (stepCells - owedCells) / stepCells)
+            val stepPixels = stepPixels(cells[vertex - 1], cells[vertex], sheet)
+            if (owedPixels <= stepPixels) {
+                return DrawnCourse(vertex + 1, (stepPixels - owedPixels) / stepPixels)
             }
-            owedCells -= stepCells
+            owedPixels -= stepPixels
             vertex--
         }
         // A course shorter than its own pen: leave it whole rather than draw a dot. It takes a
@@ -786,13 +865,19 @@ object MapRasterizer {
         return whole
     }
 
-    /** Distance between two cells' centres, in cells, across the east-west seam if need be. */
-    private fun stepLength(from: Int, to: Int, cellsAcross: Int): Float {
+    /**
+     * Distance between two cells' centres on the true-shape sheet, in its pixels, across the
+     * east-west seam if need be.
+     */
+    private fun stepPixels(from: Int, to: Int, sheet: SheetGeometry): Float {
+        val cellsAcross = sheet.cellsAcross
         var columns = to % cellsAcross - from % cellsAcross
         if (columns > cellsAcross / 2) columns -= cellsAcross
         if (columns < -cellsAcross / 2) columns += cellsAcross
         val rows = to / cellsAcross - from / cellsAcross
-        return sqrt((columns * columns + rows * rows).toFloat())
+        val acrossPixels = (columns * sheet.pixelsPerCellAcross).toFloat()
+        val downPixels = (rows * sheet.pixelsPerCellDown).toFloat()
+        return sqrt(acrossPixels * acrossPixels + downPixels * downPixels)
     }
 
     /** Shape carries the kind, so the map stays readable in greyscale and without a legend. */
@@ -837,6 +922,7 @@ object MapRasterizer {
      */
     private fun baseColor(
         world: WorldMap,
+        sheet: SheetGeometry,
         view: MapView,
         style: MapStyle,
         cell: Int,
@@ -846,6 +932,8 @@ object MapRasterizer {
     ): Int {
         val isLand = world.sea.isLand[cell]
         val relative = world.sea.relativeElevation.data[cell]
+        val sheetX = (cell % world.width) * sheet.pixelsPerCellAcross
+        val sheetY = (cell / world.width) * sheet.pixelsPerCellDown
 
         return when (view) {
             MapView.FANTASY ->
@@ -855,7 +943,8 @@ object MapRasterizer {
                         water
                     } else {
                         val contour = seaContour(
-                            world, cell, -relative, isobathInterval, flattestSlope, isobathStencil
+                            world, sheet, cell, -relative, isobathInterval, flattestSlope,
+                            isobathStencil
                         )
                         MapPalette.blend(water, style.coastline, style.isobathInk * contour)
                     }
@@ -884,7 +973,7 @@ object MapRasterizer {
                     !isLand -> politicalSea(style, relative)
                     owner == NationResult.UNCLAIMED -> style.wilderness
                     else -> MapPalette.blend(
-                        style.realmFill(owner, cell % world.width, cell / world.width),
+                        style.realmFill(owner, sheetX, sheetY),
                         politicalLand(style, relative),
                         REALM_RELIEF_BLEED
                     )
@@ -899,7 +988,7 @@ object MapRasterizer {
                     // The same bleed as the political map, so the two read as the same world seen
                     // two ways rather than as two unrelated charts.
                     else -> MapPalette.blend(
-                        style.peopleFill(people, cell % world.width, cell / world.width),
+                        style.peopleFill(people, sheetX, sheetY),
                         politicalLand(style, relative),
                         REALM_RELIEF_BLEED
                     )
@@ -978,33 +1067,37 @@ object MapRasterizer {
     /**
      * How strongly this sea pixel takes the contour ink.
      *
-     * The line's width is held in pixels rather than in metres of depth, so the arithmetic needs to
-     * know how fast the floor falls here — a central difference over [stencil] cells each way,
-     * divided by the distance it spans, which is the depth a single pixel of travel covers. Over a
-     * stencil rather than between neighbours, for the reason [Isobaths.slopeStencil] gives.
+     * The line's width is held in pixels of the sheet rather than in metres of depth, so the
+     * arithmetic needs to know how fast the floor falls here — a central difference over [stencil]
+     * cells each way, divided by the distance it spans, then put on the ground and carried to the
+     * depth one pixel of the sheet covers. Over a stencil rather than between neighbours, for the
+     * reason [Isobaths.slopeStencil] gives.
      *
      * Internal rather than private so that `IsobathTest` holds its own measurement to this one on a
      * generated world instead of trusting a copy of it.
      */
     internal fun seaContour(
         world: WorldMap,
+        sheet: SheetGeometry,
         cell: Int,
         depth: Float,
         interval: Float,
         flattestSlope: Float,
         stencil: Int
     ): Float = seaContour(
-        world.sea.relativeElevation, world.config.cellHeightInCellWidths, cell, depth, interval,
-        flattestSlope, stencil
+        world.sea.relativeElevation, world.config.cellHeightInCellWidths,
+        sheet.pixelsPerCellAcross, cell, depth, interval, flattestSlope, stencil
     )
 
     /**
      * [seaContour] on a bare [elevation] field whose rows are [cellHeightInCellWidths] as tall as
-     * its columns are wide: what the raster draws, on a sea floor `IsobathTest` can make.
+     * its columns are wide, and whose columns are [pixelsPerCellAcross] pixels of the sheet wide:
+     * what the raster draws, on a sea floor `IsobathTest` can make.
      */
     internal fun seaContour(
         elevation: FloatField,
         cellHeightInCellWidths: Double,
+        pixelsPerCellAcross: Int,
         cell: Int,
         depth: Float,
         interval: Float,
@@ -1021,11 +1114,12 @@ object MapRasterizer {
         val southward =
             (elevation.sample(column, row + stencil) -
                 elevation.sample(column, row - stencil)) * perCell
-        // Per pixel for the line's width on the sheet, and per cell width of ground for whether
-        // the floor is a plain: down a column a pixel is a row, a share of a cell width.
-        val slopePerPixel = sqrt(eastward * eastward + southward * southward)
+        // Per cell width of ground, both for whether the floor is a plain and, over the pixels a
+        // cell width spans on the true-shape sheet, for the line's width there: a pixel of the
+        // sheet is the same ground either way, so one slope on the ground serves both.
         val southwardOnTheGround = southward / cellHeightInCellWidths.toFloat()
         val slopeOnTheGround = sqrt(eastward * eastward + southwardOnTheGround * southwardOnTheGround)
+        val slopePerPixel = slopeOnTheGround / pixelsPerCellAcross
         return Isobaths.ink(depth, slopePerPixel, slopeOnTheGround, interval, flattestSlope)
     }
 
@@ -1084,7 +1178,7 @@ object MapRasterizer {
                 if (plan == null) {
                     pixels[cell] =
                         MapPalette.blend(pixels[cell], style.border, BORDER_INK_STRENGTH)
-                } else if (Engraving.borderDot(column, row, plan)) {
+                } else if (Engraving.borderDot(plan.sheetX(column), plan.sheetY(row), plan)) {
                     pixels[cell] = MapPalette.blend(pixels[cell], style.border, 1f)
                 }
             }

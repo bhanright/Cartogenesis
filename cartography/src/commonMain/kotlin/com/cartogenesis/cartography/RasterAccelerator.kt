@@ -104,8 +104,18 @@ object RasterView {
  * memory, say — and not because anything else should be assembling one by hand.
  */
 class RasterRecipe(
+    /** Columns of the grid, which is also the width of the raster in colours: one a cell. */
     val width: Int,
+    /** Rows of the grid. */
     val height: Int,
+    /**
+     * How many pixels of the true-shape sheet a cell covers east-west and north-south
+     * ([SheetGeometry]). The raster is still one colour a cell; these say where on the sheet a
+     * cell asks its patterns — the hatch, the hachures, the stipple, the rulings, the dotted
+     * border — and how wide a sheet pixel is when an isobath is held to its width.
+     */
+    val pixelsPerCellAcross: Int,
+    val pixelsPerCellDown: Int,
     val view: Int,
 
     // ---- per-cell fields ----
@@ -194,13 +204,13 @@ class RasterRecipe(
     val lineArt: Boolean,
     val inkGain: Float,
     /**
-     * How big each mark of the engraving is, in pixels, or null where the style does not engrave.
-     * Built once here so neither path can derive a different pitch from the same width.
+     * How big each mark of the engraving is, in sheet pixels, or null where the style does not
+     * engrave. Built once here so neither path can derive a different pitch from the same grid.
      */
     val engraving: EngravingPlan? = null,
     /**
-     * Euclidean distance in cells from every cell to the nearest dry land, or null where nothing
-     * reads it.
+     * Euclidean distance in sheet pixels from every cell to the nearest dry land, or null where
+     * nothing reads it.
      *
      * The engraving's coastal vignette and its ruled lake water are both drawn from it. Computed on
      * the processor and uploaded rather than recomputed on the device, for the same reason the
@@ -279,6 +289,13 @@ class RasterRecipe(
         require(vegetation == null || shoreDistance == null) {
             "vegetation and shoreDistance share one device binding and cannot both be uploaded"
         }
+        require(pixelsPerCellAcross >= 1 && pixelsPerCellDown >= 1) {
+            "a cell of $pixelsPerCellAcross x $pixelsPerCellDown sheet pixels"
+        }
+        require(
+            engraving == null || (engraving.pixelsPerCellAcross == pixelsPerCellAcross &&
+                engraving.pixelsPerCellDown == pixelsPerCellDown)
+        ) { "the engraving was planned for another sheet than the one this recipe draws on" }
     }
 
 
@@ -312,6 +329,7 @@ class RasterRecipe(
             val cellsAcross = world.width
             val cellsDown = world.height
             val cellCount = cellsAcross * cellsDown
+            val sheet = SheetGeometry.of(world)
             val style = options.style
             val view = options.view
 
@@ -439,6 +457,8 @@ class RasterRecipe(
             return RasterRecipe(
                 width = cellsAcross,
                 height = cellsDown,
+                pixelsPerCellAcross = sheet.pixelsPerCellAcross,
+                pixelsPerCellDown = sheet.pixelsPerCellDown,
                 view = viewId,
                 elevation = world.sea.relativeElevation.data,
                 land = land,
@@ -484,11 +504,9 @@ class RasterRecipe(
                 reliefStrength = style.reliefStrength,
                 lineArt = style.lineArt,
                 inkGain = style.inkGain,
-                engraving = if (style.lineArt) EngravingPlan(cellsAcross) else null,
+                engraving = if (style.lineArt) EngravingPlan(sheet) else null,
                 shoreDistance = if (style.lineArt) {
-                    ShoreDistance.of(
-                        cellsAcross, cellsDown, MapRasterizer.dryLandMask(world, showLakes)
-                    )
+                    ShoreDistance.of(sheet, MapRasterizer.dryLandMask(world, showLakes))
                 } else null,
                 iceBiome = if (biomes != null) Biome.ICE_SHEET.ordinal else -1,
                 engraveWater = engraveWater,

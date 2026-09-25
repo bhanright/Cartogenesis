@@ -3,6 +3,7 @@ package com.cartogenesis.desktop
 import com.cartogenesis.cartography.MapStyle
 import com.cartogenesis.cartography.MapView
 import com.cartogenesis.cartography.RenderOptions
+import com.cartogenesis.cartography.SheetGeometry
 import com.cartogenesis.ui.MapImage
 import com.cartogenesis.worldgen.WorldGenerationEngine
 import com.cartogenesis.worldgen.generateBlocking
@@ -35,9 +36,9 @@ import kotlin.math.roundToInt
  * page out of it, and the release that changes what a coastline looks like changes the coastline
  * the page shows.
  *
- * Generating [SEED] at [RENDER_PIXELS] is a minute of arithmetic and a figure is a window onto that
- * map, cropped at the render's own pixels. Cropping rather than scaling is the point: every mark
- * the renderer makes is sized in *output pixels*, so a 1:1 window shows the pen the renderer
+ * Generating [SEED] at [GRID_CELLS] is a minute of arithmetic and a figure is a window onto that
+ * map's sheet, cropped at the sheet's own pixels. Cropping rather than scaling is the point: every
+ * mark the renderer makes is sized in *output pixels*, so a 1:1 window shows the pen the renderer
  * actually draws with, while a downscaled whole map shows a thinner one that exists nowhere.
  *
  * A figure is one window and one or more [Panel]s — the same window read a different way in each,
@@ -66,12 +67,14 @@ object SiteImagery {
     const val REALMS = 12
 
     /**
-     * The world is generated at 2048 pixels square and the figures are cut out of it at 1:1.
+     * The world is generated on a grid 2048 cells square, drawn on its true-shape sheet — 4096
+     * pixels by 2048 ([com.cartogenesis.cartography.SheetGeometry]) — and the figures are cut out
+     * of that sheet at 1:1.
      *
      * 2048 is the size the desktop build exports at by default and the resolution the page's claims
      * are about. It is also what makes a 1600-wide crop possible without inventing pixels.
      */
-    const val RENDER_PIXELS = 2048
+    const val GRID_CELLS = 2048
 
     /**
      * How hard the WebP encoder is asked to work, where nothing says otherwise.
@@ -85,53 +88,52 @@ object SiteImagery {
     const val WEBP_QUALITY = 72
 
     /**
-     * A window onto the map, in the 2048 render's own pixels.
+     * A window onto the map, in the pixels of the 2048 world's 4096 by 2048 sheet.
      *
      * The windows are written down rather than searched for. A "find the most interesting band"
      * heuristic would move the picture every time the generator changed, which is the one property
      * a fixed identity must not have: the page should show the same country next release, drawn
      * better. These were chosen by rendering the whole map and looking at it (`-Pcontact`).
      *
-     * [x] may run past the right-hand edge. The map is a cylinder — column 2047 and column 0 are
-     * neighbours — so a window that crosses the seam is an ordinary window. (The widest river on
-     * this world lives on the seam, at a mouth near cell (104, 1094), and was a figure for a day.)
+     * [x] may run past the right-hand edge. The map is a cylinder — the sheet's last pixel column
+     * and its first are neighbours — so a window that crosses the seam is an ordinary window. (The
+     * widest river on this world lives on the seam, and was a figure for a day.)
      *
      * What a window *holds* is the generator's to decide, and the paragraphs below describe what
      * each held when it was chosen. A pipeline change moves the coastline under a fixed window —
      * which is the whole point of rendering the page from the engine — so every window is looked at
      * again before a release ships, and moved if it no longer shows what it was picked for. The
-     * coordinates here were chosen against the 2.0 generator.
+     * coordinates here were re-picked when the sheet took the world's true shape, from the contact
+     * sheet of that sheet.
      */
     data class Window(val x: Int, val y: Int, val width: Int, val height: Int)
 
     /**
      * The band across the top of the page: the hero.
      *
-     * A 2:1 window on the northern continent, which carries in one frame everything the page
-     * claims — a cordillera along its spine, a river system that gathers the whole northern half,
-     * lakes, a coast broken into peninsulas and a long spit, islands offshore, and the west coast
-     * of the next continent with its own lake and snowfield at the right-hand edge.
+     * A 2:1 window on the southern half of the northern continent, which carries in one frame
+     * everything the page claims — the snow-capped range down its middle, rivers draining both
+     * flanks to a south coast of bays and an estuary, lakes in the lowlands either side, and the
+     * continent's east coast turning north at the right-hand edge.
      *
      * Drawn in `MapStyle.NATURAL`, for the colour. The window did not have to move with the style:
-     * what it holds is what that style has most to say about — forest against dry interior, a
-     * rust-coloured range between them, and a cobalt sea around it.
+     * what it holds is what that style has most to say about — forest against a dry belt, a range
+     * between them, and a cobalt sea around it.
      */
-    val BAND = Window(448, 64, 1600, 800)
+    val BAND = Window(1152, 320, 1600, 800)
 
     /**
      * The window the three physical styles are compared in: square, 640 on a side.
      *
-     * The central continent of the 3.0 world, chosen so that the three styles are asked the
-     * questions they answer differently. It holds the north coast and the strait to its south,
-     * the grey range that crosses it, the rivers draining both flanks, and the dry tan interior
-     * on its eastern half — which is where the styles part company, because Atlas and Natural
+     * The northern continent's south-western lowlands, chosen so that the three styles are asked
+     * the questions they answer differently. It holds the dry tan belt that crosses them, the
+     * green country either side of it, the western flank of the range at its right-hand edge and
+     * the south coast below — which is where the styles part company, because Atlas and Natural
      * tint the ground by its climate as well as its height and Schoolroom tints it by height
-     * alone. Three styles agreeing about a green coast would prove nothing. The 2.0 line's window
-     * at (704, 64) sat over the same seed's old northern continent; the 3.0 pipeline redraws the
-     * seed, and that square is now mostly open sea, so the window was re-picked from the contact
-     * sheet before 3.0.0 shipped.
+     * alone. Three styles agreeing about a green coast would prove nothing. Which window each
+     * release has used, and why each moved, is in docs/DESIGN_LEDGER.md.
      */
-    val STYLES_WINDOW = Window(660, 460, 640, 640)
+    val STYLES_WINDOW = Window(1152, 512, 640, 640)
 
     /**
      * The window the four data layers are read in: 480 wide and 600 tall.
@@ -144,11 +146,12 @@ object SiteImagery {
      *
      * 600 rows of 2048 is a little over fifty degrees of latitude, and these are the fifty that
      * carry the most: the belt where the westerlies give way to the trades runs through the upper
-     * third of the frame, so the Winds panel shows the two blowing opposite ways rather than one of
-     * them filling the panel. Half land and half water, because two of the four layers draw nothing
-     * on land and the other two draw nothing at sea.
+     * half of the frame, so the Winds panel shows the two blowing opposite ways rather than one of
+     * them filling the panel. Land above and water below, the south coast of the northern
+     * continent across the middle, because two of the four layers draw nothing on land and the
+     * other two draw nothing at sea.
      */
-    val LAYERS_WINDOW = Window(200, 500, 480, 600)
+    val LAYERS_WINDOW = Window(2048, 512, 480, 600)
 
     /**
      * The gap between two panels of a strip, in the strip's own pixels.
@@ -416,13 +419,13 @@ object SiteImagery {
         )
     }
 
-    /** [SEED] at [RENDER_PIXELS], with the settings the page names. */
+    /** [SEED] at [GRID_CELLS], with the settings the page names. */
     fun generate(): WorldMap {
         val base = WorldGenConfig(seed = SEED, width = 512, height = 512, seaLevel = SEA_LEVEL)
         val config = base.copy(
             tectonics = base.tectonics.copy(plateCount = PLATES),
             nations = base.nations.copy(nationCount = REALMS)
-        ).atResolution(RENDER_PIXELS, RENDER_PIXELS)
+        ).atResolution(GRID_CELLS, GRID_CELLS)
         return WorldGenerationEngine.generateBlocking(config)
     }
 
@@ -443,7 +446,11 @@ object SiteImagery {
             Image.makeFromBitmap(bitmap)
         }
 
-        val mapWidth: Int get() = world.width
+        /** The sheet's width in pixels: where a window wraps round the seam. */
+        val mapWidth: Int get() = SheetGeometry.of(world).widthPixels
+
+        /** The sheet's height in pixels. */
+        val mapHeight: Int get() = SheetGeometry.of(world).heightPixels
 
         override fun close() {
             images.values.forEach { it.close() }
@@ -820,7 +827,7 @@ object SiteImagery {
     /**
      * The whole map at half size with a grid, one sheet per reading the page uses.
      *
-     * The grid is in the *render's* coordinates rather than the sheet's: a light line every
+     * The grid is in the map sheet's own pixels rather than the contact sheet's: a light line every
      * [GRID_MINOR_PIXELS] map pixels and a heavier one every [GRID_MAJOR_PIXELS], so a window can be
      * read off the picture and typed straight into a [Window] without arithmetic. The windows the
      * page uses are outlined in brass on every sheet, so a proposed change can be judged against the
@@ -830,26 +837,33 @@ object SiteImagery {
         val readings = FIGURES.flatMap { it.panels }
             .map { Triple(it.view, it.style, it.options) }
             .distinctBy { it.first to it.second }
-        val sheetPixels = RENDER_PIXELS / 2
+        val mapWidth = sheets.mapWidth
+        val mapHeight = sheets.mapHeight
+        val contactWidth = mapWidth / 2
+        val contactHeight = mapHeight / 2
         for ((view, style, options) in readings) {
             val name = "contact-${view.name.lowercase()}-${style.name.lowercase()}"
             val sheet = Bitmap().apply {
-                allocPixels(ImageInfo.makeS32(sheetPixels, sheetPixels, ColorAlphaType.PREMUL))
+                allocPixels(ImageInfo.makeS32(contactWidth, contactHeight, ColorAlphaType.PREMUL))
             }
             val canvas = Canvas(sheet)
             canvas.drawImageRect(
                 sheets.of(options),
-                Rect.makeWH(RENDER_PIXELS.toFloat(), RENDER_PIXELS.toFloat()),
-                Rect.makeWH(sheetPixels.toFloat(), sheetPixels.toFloat())
+                Rect.makeWH(mapWidth.toFloat(), mapHeight.toFloat()),
+                Rect.makeWH(contactWidth.toFloat(), contactHeight.toFloat())
             )
             val minorLine = Paint().apply { color = GRID_MINOR_INK; strokeWidth = 1f }
             val majorLine = Paint().apply { color = GRID_MAJOR_INK; strokeWidth = 1.5f }
             var mapPixel = 0
-            while (mapPixel <= RENDER_PIXELS) {
+            while (mapPixel <= maxOf(mapWidth, mapHeight)) {
                 val onSheet = mapPixel / 2f
                 val paint = if (mapPixel % GRID_MAJOR_PIXELS == 0) majorLine else minorLine
-                canvas.drawLine(onSheet, 0f, onSheet, sheetPixels.toFloat(), paint)
-                canvas.drawLine(0f, onSheet, sheetPixels.toFloat(), onSheet, paint)
+                if (mapPixel <= mapWidth) {
+                    canvas.drawLine(onSheet, 0f, onSheet, contactHeight.toFloat(), paint)
+                }
+                if (mapPixel <= mapHeight) {
+                    canvas.drawLine(0f, onSheet, contactWidth.toFloat(), onSheet, paint)
+                }
                 mapPixel += GRID_MINOR_PIXELS
             }
             val outline = Paint().apply {

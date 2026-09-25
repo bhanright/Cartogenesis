@@ -667,19 +667,13 @@ class IsostasyTest : BorrowsSharedWorlds() {
                 tectonics.collisionUpliftMmPerYear
             )
         )
-        // Recorded rather than asserted since Fix 3: see [RATE_WAITS_FOR_THE_LAW].
-        KnownFailures.expect(
-            RATE_WAITS_FOR_THE_LAW,
-            String.format(java.util.Locale.ROOT, "%.2f implied against %.2f", implied, tectonics.collisionUpliftMmPerYear)
-        ) {
-            if (abs(implied - tectonics.collisionUpliftMmPerYear) > UPLIFT_RATE_TOLERANCE_MM_PER_YEAR) {
-                throw RecordedViolation(
-                    "the collision uplift rate is not Earth's surface uplift plus what this model's own rivers take " +
-                        "off a belt: %.3f implied against the %.3f the setting carries".format(implied, tectonics.collisionUpliftMmPerYear),
-                    String.format(java.util.Locale.ROOT, "%.2f implied against %.2f", implied, tectonics.collisionUpliftMmPerYear)
-                )
-            }
-        }
+        // Armed again at Fix 3b, whose implicit incision lets the law and not the cap set the
+        // denudation this is derived from (docs/DESIGN_LEDGER.md, Fix 3 and Fix 3b).
+        assertTrue(
+            "the collision uplift rate is not Earth's surface uplift plus what this model's own rivers take off a " +
+                "belt: %.3f implied against the %.3f the setting carries".format(implied, tectonics.collisionUpliftMmPerYear),
+            abs(implied - tectonics.collisionUpliftMmPerYear) <= UPLIFT_RATE_TOLERANCE_MM_PER_YEAR
+        )
         // And the ratios between the four are England & Molnar's, unchanged by the scale above.
         assertEquals(
             "the Andean rate is not England & Molnar's 2-in-5 of the collision rate",
@@ -794,7 +788,7 @@ class IsostasyTest : BorrowsSharedWorlds() {
         // out; the plates' shape, queued as its own chunk, is where the collision's ground is decided.
         KnownFailures.expect(
             FORELAND_AT_THE_EDGE_OF_THE_COLLISION,
-            "moat at 48-56 cell widths, 242 m under the belt, rising 0 m beyond it"
+            "moat at 48-56 cell widths, 502 m under the belt, rising 0 m beyond it"
         ) {
             if (beyondTheMoat - inTheForeland < MIN_FOREBULGE_METRES) {
                 throw RecordedViolation(
@@ -923,9 +917,9 @@ class IsostasyTest : BorrowsSharedWorlds() {
                 " rather than the clause dropped",
             interiorCells > 0 && thicknessThere > 0f
         )
-        // Over Airy's own share by a thousandth from Fix 2 to Fix 3, when seed 7's cap stood
-        // broad enough for its interior to sink at nearly the whole of it; inside it again on the
-        // ground Fix 3 leaves, and armed (docs/DESIGN_LEDGER.md, Fix 3).
+        // Over Airy's own share from Fix 2 to Fix 3 (0.279 against 0.278), inside it at Fix 3, over
+        // it on the implicit update before the uplift was re-derived (0.284), and inside it again
+        // with the uplift re-derived (docs/DESIGN_LEDGER.md, Fix 2 and Fix 3b).
         assertTrue(
             "the bed under the cap sank ${"%.0f".format(deepestUnderIce)} m under" +
                 " ${"%.0f".format(thicknessThere)} m of ice, a ratio of ${"%.3f".format(realised)}," +
@@ -1045,28 +1039,14 @@ class IsostasyTest : BorrowsSharedWorlds() {
          * How far the collision rate may sit from Earth's surface uplift plus the measured
          * denudation, in millimetres a year.
          *
-         * Sixteen thousandths. The denudation is a mean over five worlds whose own figures the case
-         * prints, and on the honest clock they spread over about three hundredths of a millimetre
-         * (0.059 to 0.091 when Fix 3 measured them); half that is tight enough that the
-         * constant cannot drift away from its derivation unnoticed and loose enough that a seed's
-         * chaos cannot fail it. It was a twentieth on the clock before Fix 3, whose years were 2.67
-         * times too few.
+         * Two hundredths: half the spread of the five worlds' own figures, which the case prints.
+         * On the implicit incision they run 0.220 to 0.261 mm a year, four hundredths apart; half
+         * that is tight enough that the constant cannot drift away from its derivation unnoticed
+         * and loose enough that a seed's chaos cannot fail it. By the same rule it was sixteen
+         * thousandths under the cap (0.059 to 0.091) and a twentieth on the clock before Fix 3.
          */
-        const val UPLIFT_RATE_TOLERANCE_MM_PER_YEAR = 0.016
+        const val UPLIFT_RATE_TOLERANCE_MM_PER_YEAR = 0.02
 
-        /**
-         * The known failure the collision rate's derivation records since Fix 3.
-         *
-         * The clock was put back at the years a round's cut is worth and the rate restated on it,
-         * three eighths of Fix 2's figure, so a round lifts a belt by the metres it did; but the
-         * derivation was not re-run. With the incision's caps spent in the field's own unit, the
-         * cap at half the drop sets every cut on the drawn network, so the denudation this case
-         * measures is the limiter's and not the stream-power law's, and a rate derived from it
-         * would have to be derived again once the law governs. That is the implicit solver's
-         * chunk to do. See docs/DESIGN_LEDGER.md, Fix 3, for the figures it would give now.
-         */
-        const val RATE_WAITS_FOR_THE_LAW =
-            "Audit III B-F1: the collision rate waits for a denudation the stream-power law sets, and the cap sets it today"
 
         /** The known failure the forebulge clause records. See docs/DESIGN_LEDGER.md, Fix 2. */
         const val FORELAND_AT_THE_EDGE_OF_THE_COLLISION =

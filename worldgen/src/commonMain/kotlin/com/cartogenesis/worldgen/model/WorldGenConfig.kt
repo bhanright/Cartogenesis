@@ -971,31 +971,35 @@ data class TectonicsConfig(
      * and it is the part of their measurement this model can take unchanged.
      *
      * The *scale* is this model's own, and the reason is a measurement rather than a preference.
-     * England and Molnar's rock uplift is nearly all spent against exhumation — the Himalaya rise
-     * at five millimetres a year and gain about half of one, because the rest comes off as
-     * sediment — so a rate is only meaningful beside the erosion it is racing. So the collision
-     * rate is the surface uplift Earth's own collisions manage — half a millimetre a year — plus
-     * what this model's rivers take off an active belt with the uplift switched off, measured over
-     * the belts of the present epoch on seeds 7, 42, 1234, 99 and 718106 at 512, which
-     * `IsostasyTest` re-measures and holds this constant against; the other three follow the
-     * ratios above. This is a derived constant and not a pin: a chunk that moves the denudation
-     * re-derives it, and the history of its figures is in docs/DESIGN_LEDGER.md (S2, S3, Fix 2 and
-     * Fix 3).
+     * England and Molnar keep three quantities apart, and so does this: **rock uplift**, which is
+     * what these settings are and what the rounds add to the rock; **net denudation**, what the
+     * rivers and hillslopes take off; and **surface uplift**, the difference, which is what a
+     * range gains in height. Rock uplift is surface uplift plus denudation. The Himalaya's rock
+     * rises at five millimetres a year and its surface gains about half of one, because the rest
+     * comes off as sediment, so a rate is only meaningful beside the erosion it is racing. The
+     * collision rate is therefore Earth's surface uplift for a collision, half a millimetre a year,
+     * plus the denudation this model's own erosion takes off the present epoch's collisional and
+     * Andean belts with every uplift rate and the flexure off: 0.238 mm a year pooled over seeds 7,
+     * 42, 1234, 99 and 718106 at 512 (0.224, 0.261, 0.220, 0.231 and 0.257), the mean lowering of
+     * those belts' land over the twelve rounds' years. The flexure is off in that measurement
+     * because the plate's rebound under the unloading is the third quantity, the **flexural
+     * response**, and would hide part of the denudation behind it; the rounds apply it to what
+     * these rates stack on as they always did. `IsostasyTest` re-measures the denudation and
+     * holds this constant against it. The other three follow England and Molnar's ratios above:
+     * two fifths, 0.1406 and 0.0606 of the collision rate.
      *
-     * The four figures below are Fix 2's restated on the honest clock and nothing more: each is the
-     * old figure times 126,178.65 over 336,476.4, three eighths, so a round lifts a belt by the
-     * metres it did. The derivation is deliberately not re-run on that clock. The denudation it
-     * would read is the half-the-drop cap's and not the stream-power law's, since the cap sets
-     * every cut on the drawn network once it is spent in the field's own unit, and a rate derived
-     * from a limiter's denudation would have to be derived again once the law governs; the
-     * figures it would give, and why they wait, are in docs/DESIGN_LEDGER.md, Fix 3.
+     * Derived since Fix 3b on the implicit incision, where the stream-power law and not a
+     * numerical cap sets every cut; the denudation under the cap was 0.074 mm a year and was the
+     * cap's, which is why the derivation waited for this. A chunk that moves the denudation
+     * re-derives it; the history of its figures is in docs/DESIGN_LEDGER.md (S2, S3, Fix 2, Fix 3
+     * and Fix 3b).
      *
      * Spent over [WorldScale.yearsPerHydraulicRound] per round. See `HydraulicErosion.apply`.
      */
-    val collisionUpliftMmPerYear: Float = 0.290625f,
-    val andeanUpliftMmPerYear: Float = 0.11625f,
-    val islandArcUpliftMmPerYear: Float = 0.040875f,
-    val riftShoulderUpliftMmPerYear: Float = 0.017625f,
+    val collisionUpliftMmPerYear: Float = 0.738f,
+    val andeanUpliftMmPerYear: Float = 0.2952f,
+    val islandArcUpliftMmPerYear: Float = 0.1038f,
+    val riftShoulderUpliftMmPerYear: Float = 0.04476f,
     /**
      * The height, in metres, past which the crust's own strength starts to hold a range back.
      *
@@ -2090,6 +2094,12 @@ data class ErosionConfig(
      * the yield of a large basin. Measured across 4, 20 and 60 the valley-incision figure moved by
      * less than the sea-level histogram's own quantisation, so this is a middle value rather than a
      * fitted one.
+     *
+     * Re-examined when the implicit incision replaced the capped explicit one (docs/DESIGN_LEDGER.md,
+     * Fix 3b). Its derivation is a ratio to the incision's own coefficient and a measurement that
+     * it barely matters, neither of which read the cap, so it stands; but it is not an Earth
+     * figure, and the load it is compared against is the law's now. What a transport capacity
+     * should be in these units is recorded as open in `TODO.md`.
      */
     val transportCapacity: Float = 20f,
     /**
@@ -2119,6 +2129,13 @@ data class ErosionConfig(
      * a delta lifts above the line pushes a cell somewhere else below it — and the cells nearest the
      * line are the low coastal ground people live on, which is why `CultureRealmTest` is the guard
      * that feels this setting first. See [deltaFreeboardMetres] for the measurements.
+     *
+     * Said plainly, since the implicit incision (docs/DESIGN_LEDGER.md, Fix 3b): the figure was
+     * chosen, beside [deltaFreeboardMetres] and [deltaMinCatchment], by what it did to the culture
+     * guard's figures on the capped explicit update's worlds, which is setting a value to make a
+     * world pass and not a derivation. It is not re-tuned here. An Earth figure for the share of a
+     * river's load its delta keeps is what would derive it, and that is recorded as open in
+     * `TODO.md`.
      */
     val deltaShare: Float = 0.15f,
     /** The same, for a river reaching a lake: how much of its load the basin traps at the inflow. */
@@ -2224,6 +2241,16 @@ data class ErosionConfig(
      * cutting about 1.1 times as hard as an ordinary reach and not three times — and against the
      * height field, where the ordinary cut is actually spent, about nine tenths as hard. The
      * physical claim the number is supposed to make is not the claim it was making.
+     *
+     * Re-examined when the implicit incision replaced the capped explicit one (docs/DESIGN_LEDGER.md,
+     * Fix 3b). The notch is still an explicit cut, 1.125 times the law's rate at the lip bounded by
+     * the basin's depth and the sea, while the ordinary reach below it now loses `F / (1 + F)` of its
+     * drop, the law's steady state and not a limiter's. The ratio was chosen on a measurement of the
+     * largest lake at three grids, which is setting a value to make worlds pass and not an Earth
+     * figure, and nothing here derives it. On the law's terrain the notch leaves seed 99 a lake
+     * twice the Caspian's share and the fill 82% as deep as without it (`OutletIncisionTest`).
+     * Whether a knickpoint should cut harder than an ordinary reach at all, and by how much, is
+     * recorded as open in `TODO.md`.
      */
     val outletIncisionRatio: Float = 1.125f,
     /**

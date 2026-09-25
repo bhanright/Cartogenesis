@@ -132,6 +132,13 @@
   a column cannot be narrower than a cell. The vector ink laid over it (the traced coast, rivers,
   graticule, glyphs, lettering) is not affected. What removes it is a grid whose cells are square on
   the ground; per-pixel kernels were declined for it. 2026-09-24, Fix A.
+- **Nobody has drawn a 4096 world's sheet in a real browser.** Fix A made it 8192 by 4096 pixels,
+  twice the width it was, and the pane hands it to Skia on a WebGL canvas, whose largest texture is
+  the device's `MAX_TEXTURE_SIZE`: 16,384 on most desktop graphics cards, as little as 4,096 on some
+  phones and older integrated ones. Whether Skia tiles an image over that limit or draws nothing
+  has not been seen, and no wasm test draws on a real canvas. The exports do not depend on it: they
+  are encoded from the bitmap in memory. Before the next release, generate a 4096 world on screen in
+  a browser and look; if it fails, cap the pane's picture or draw it in tiles. 2026-09-24, Fix A.
 - **Six operators still count a row as a column, each outside Fix 2's list.** Found by reading the
   code, not by a guard: the climate stage's rainfall blur (a square box of cells, sized by
   `RAIN_BLUR_REFERENCE_WIDTH`) and its two coastal-reach blurs, the water exposure and the offshore

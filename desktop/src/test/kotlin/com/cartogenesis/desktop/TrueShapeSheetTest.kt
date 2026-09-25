@@ -70,6 +70,12 @@ class TrueShapeSheetTest {
                         if (y > bottom) bottom = y
                     }
                 }
+                // With no pixel changed the bounds never move, and their difference overflows to
+                // the same small number both ways: a sheet that drew nothing would read as round.
+                assertTrue(
+                    right >= left && bottom >= top,
+                    "a disc $DISC_RADIUS_KM km in radius changed no pixel at $size in ${style.label}"
+                )
                 val across = right - left + 1
                 val down = bottom - top + 1
                 // A cell's quantisation either way, and a pixel of antialiasing each side.
@@ -77,9 +83,19 @@ class TrueShapeSheetTest {
                     ROUNDNESS_SLACK_PIXELS,
                     (maxOf(across, down) * ROUNDNESS_SHARE).toInt()
                 )
+                // The disc's own width on the sheet, either way: a pixel covers the same ground
+                // both ways on the true-shape sheet. Only a floor, since a style may carry ink past
+                // the shore (Pen and ink's sea lines), but a squeezed or empty sheet falls short.
+                val diameterPixels =
+                    (2 * DISC_RADIUS_KM / (base.config.scale.worldWidthKm / sheetWidth)).toInt()
                 println(
                     "TRUESHAPE disc at $size, ${style.label}: $across x $down pixels on a " +
-                        "${sheetWidth}x$sheetHeight sheet"
+                        "${sheetWidth}x$sheetHeight sheet, the disc $diameterPixels across"
+                )
+                assertTrue(
+                    across >= diameterPixels - tolerance && down >= diameterPixels - tolerance,
+                    "a disc $DISC_RADIUS_KM km in radius is drawn $across by $down pixels at $size " +
+                        "in ${style.label}, under its own $diameterPixels pixels across"
                 )
                 assertTrue(
                     abs(across - down) <= tolerance,

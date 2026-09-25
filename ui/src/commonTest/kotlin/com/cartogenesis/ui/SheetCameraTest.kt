@@ -7,6 +7,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /**
  * The map pane's arithmetic from a click to the cell under it, on the true-shape sheet.
@@ -49,20 +50,36 @@ class SheetCameraTest {
             // Either side of the east-west seam, on one row.
             last to CELLS / 3, 0 to CELLS / 3
         )
-        listOf(MapCamera(), MapCamera().apply { about(Offset(310f, 170f), 3.5f, Offset(-40f, 25f)) })
-            .forEach { camera ->
-                places.forEach { (column, row) ->
-                    val click = clickOn(camera, column, row)
-                    val cell = cellUnder(camera, click)
-                    // Off the pane is not a click on the map; everything else must come back.
-                    if (click.x in 0f..PANE_WIDTH && click.y in 0f..PANE_HEIGHT) {
-                        assertEquals(
-                            row * CELLS + column, cell,
-                            "a click at $click on cell ($column, $row) came back as $cell, zoom ${camera.zoom}"
-                        )
-                    }
+        // Zoomed in, the named places are all off the pane, so the zoomed camera is also asked at
+        // a lattice of cells across the whole grid, of which only those it shows are clicked.
+        val lattice = (0 until CELLS step LATTICE_STEP).flatMap { column ->
+            (0 until CELLS step LATTICE_STEP).map { row -> column to row }
+        }
+        val fitted = MapCamera()
+        val zoomed = MapCamera().apply { about(Offset(310f, 170f), 3.5f, Offset(-40f, 25f)) }
+        listOf(fitted, zoomed).forEach { camera ->
+            var clicked = 0
+            (places + lattice).forEach { (column, row) ->
+                val click = clickOn(camera, column, row)
+                val cell = cellUnder(camera, click)
+                // Off the pane is not a click on the map; everything else must come back.
+                if (click.x in 0f..PANE_WIDTH && click.y in 0f..PANE_HEIGHT) {
+                    clicked++
+                    assertEquals(
+                        row * CELLS + column, cell,
+                        "a click at $click on cell ($column, $row) came back as $cell, zoom ${camera.zoom}"
+                    )
                 }
             }
+            // The fitted camera shows the whole sheet, so every place is a click; the zoomed one
+            // shows about a sixth of the columns and two fifths of the rows.
+            val fewest = if (camera === fitted) places.size + lattice.size else FEWEST_ZOOMED_CLICKS
+            assertTrue(
+                clicked >= fewest,
+                "only $clicked of the cells asked were on the pane at zoom ${camera.zoom}, " +
+                    "against at least $fewest"
+            )
+        }
     }
 
     @Test
@@ -107,5 +124,15 @@ class SheetCameraTest {
 
         /** From a cell's index to its centre. */
         const val HALF = 0.5f
+
+        /** Every sixteenth column and row: 1,024 cells over a 512 grid. */
+        const val LATTICE_STEP = 16
+
+        /**
+         * The zoomed camera shows columns 133 to 278 and rows 0 to 214 of the 512 grid, which holds
+         * 9 by 14 of the lattice's cells: 126. Well under that, so a pane or zoom rounding a little
+         * differently still passes, and far over the none that were clicked before.
+         */
+        const val FEWEST_ZOOMED_CLICKS = 60
     }
 }

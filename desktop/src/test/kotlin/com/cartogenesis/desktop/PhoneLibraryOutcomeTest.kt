@@ -139,11 +139,8 @@ class PhoneLibraryOutcomeTest {
         toTheLibrary()
         waitUntil(timeoutMillis = WAIT_MS) { onAllNodesWithText("Kept").fetchSemanticsNodes().isNotEmpty() }
         onNodeWithText("Kept").performClick()
-        // Opened, and nothing generating: the cartouche over the map names the world's seed.
-        waitUntil(timeoutMillis = WAIT_MS) {
-            onAllNodesWithText("seed 4243 ·", substring = true).fetchSemanticsNodes().isNotEmpty() &&
-                onAllNodesWithText("Stop").fetchSemanticsNodes().isEmpty()
-        }
+        // Opened: the cartouche over the map names the world's seed.
+        waitUntil(timeoutMillis = WAIT_MS) { onAllNodesWithText("seed 4243 ·", substring = true).fetchSemanticsNodes().isNotEmpty() }
         waitForIdle()
         toTheLibrary()
         waitUntil(timeoutMillis = WAIT_MS) {
@@ -154,9 +151,20 @@ class PhoneLibraryOutcomeTest {
     /** The sheet pulled up, and the header's Library button in it: not the bar over the library, which has the same word. */
     @OptIn(ExperimentalTestApi::class)
     private fun DesktopComposeUiTest.toTheLibrary() {
-        onNodeWithText("Settings").performClick()
-        waitForIdle()
+        // The sheet is pulled up only if it is down: a press on its handle when it is already up
+        // puts it away, with the Library button in it.
+        if (onAllNodes(button("Library")).fetchSemanticsNodes().isEmpty() || !onNode(button("Library")).isDisplayed()) {
+            onNodeWithText("Settings").performClick()
+            waitForIdle()
+        }
+        // The button is held while a world is being made, and an opened world is handed to the
+        // generator to reuse, which on a cold start takes long enough for a press to land on it
+        // disabled and do nothing.
+        waitUntil(timeoutMillis = WAIT_MS) {
+            onAllNodes(button("Library")).fetchSemanticsNodes().any { SemanticsProperties.Disabled !in it.config }
+        }
         onNode(button("Library")).performScrollTo().performClick()
+        waitUntil(timeoutMillis = WAIT_MS) { onAllNodesWithText("This world").fetchSemanticsNodes().isNotEmpty() }
         waitForIdle()
     }
 
@@ -173,7 +181,6 @@ class PhoneLibraryOutcomeTest {
 
         /** A 32 world opens and saves in moments; this is room for a loaded machine. */
         const val WAIT_MS = 120_000L
-
         /** What Chrome says when a page's leave to write a folder is not there, as `String(error)` gives it. */
         const val REFUSAL = "NotAllowedError: The request is not allowed by the user agent or the platform in the current context."
     }

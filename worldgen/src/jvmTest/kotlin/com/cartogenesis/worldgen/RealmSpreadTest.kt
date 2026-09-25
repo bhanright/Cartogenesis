@@ -180,16 +180,15 @@ class RealmSpreadTest : BorrowsSharedWorlds() {
 
     /**
      * Two pieces of realm R, twenty cells each, inside realm H, which holds 760 cells against a cap
-     * of 768 and is the only realm either piece touches. Twenty is under the smallest realm, so a
-     * piece may take H past the cap by less than that; but only in total. The first piece takes H
-     * to 780, twelve over; the second would take it to 800, 32 over, which is past the allowance,
-     * so it becomes a realm of its own.
+     * of 768 and is the only realm either piece touches. Neither piece fits within the cap, so
+     * each becomes a realm of its own, however small; no piece is left stranded and H stays at 760.
      *
-     * The allowance was checked piece by piece against nothing, so H took both and ended 32 cells
-     * over a cap whose stated bound was under the smallest realm, 24 cells here.
+     * After the review round a piece under the smallest realm went to H regardless and H ended 32
+     * cells over the cap; an allowance of less than the smallest realm, counted over H's whole
+     * excess, left H 12 over, and on seed 7 took the largest realm to 30.1% against the cap of 30%.
      */
     @Test
-    fun `small pieces cannot add up past the cap's allowance`() {
+    fun `small pieces never take a realm past the cap`() {
         val config = HandMadeWorlds.config()
         fun land(x: Int, y: Int) = y in 10..49
         val sea = HandMadeWorlds.sea(config, ::land) { x, y -> if (land(x, y)) 0.1f else -0.1f }
@@ -208,7 +207,6 @@ class RealmSpreadTest : BorrowsSharedWorlds() {
         val habitability = FloatField(config.width, config.height)
         for (cell in habitability.data.indices) if (sea.isLand[cell]) habitability.data[cell] = 0.5f
         val capCells = config.nations.maxRealmShare * sea.landCellCount
-        val smallestRealm = 24
         assertEquals(768f, capCells, "the fixture's cap")
 
         runBlocking { NationStage.dissolveEnclaves(config, sea, habitability, nationId, origins) }
@@ -218,7 +216,7 @@ class RealmSpreadTest : BorrowsSharedWorlds() {
         println("SMALL PIECES realms hold $held against a cap of $capCells; ${pieces.describe()}")
         assertEquals(0, pieces.stranded.size, "a piece was left stranded")
         val worstOver = held.values.maxOf { it - capCells }
-        assertTrue(worstOver < smallestRealm, "a realm stands %.0f cells over the cap, against an allowance of under %d".format(worstOver, smallestRealm))
+        assertTrue(worstOver <= 0f, "a realm stands %.0f cells over the cap".format(worstOver))
     }
 
     /**

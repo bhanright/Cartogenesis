@@ -299,10 +299,9 @@ internal object BasinRealms {
 
     /**
      * The least land, in cells, that is given a flag of its own when it has nowhere else to go:
-     * [MIN_ISLAND_REALM_SHARE] of [landCells], and never under [MIN_ISLAND_REALM_CELLS]. Shared with
-     * `NationStage.dissolveEnclaves`, which asks the same question of a stranded piece.
+     * [MIN_ISLAND_REALM_SHARE] of [landCells], and never under [MIN_ISLAND_REALM_CELLS].
      */
-    internal fun smallestRealmCells(landCells: Int): Int =
+    private fun smallestRealmCells(landCells: Int): Int =
         (landCells * MIN_ISLAND_REALM_SHARE).toInt().coerceAtLeast(MIN_ISLAND_REALM_CELLS)
 
     /** Rocks below this share of all land are not given a flag of their own. */

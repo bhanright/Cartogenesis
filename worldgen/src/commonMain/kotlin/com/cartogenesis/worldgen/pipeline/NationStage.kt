@@ -359,11 +359,9 @@ object NationStage {
      * realm by land, and they stay — that is the difference between an accident and a colony. Nor
      * is the piece holding a realm's capital ever given away, whatever its size.
      *
-     * A piece goes to a neighbour only within `NationsConfig.maxRealmShare`, or, when it is smaller
-     * than the smallest realm, within the cap plus less than the smallest realm counted over all
-     * the pieces that neighbour takes; any other piece becomes a realm of its own, with its capital
-     * appended to [origins]. So the pass never leaves a stranded piece behind and never takes a
-     * realm a smallest realm or more past the cap. [nationId] is row-major, one
+     * A piece goes to a neighbour only within `NationsConfig.maxRealmShare`; any other piece
+     * becomes a realm of its own, with its capital appended to [origins]. So the pass never leaves
+     * a stranded piece behind and never takes a realm past the cap. [nationId] is row-major, one
      * realm id per cell, and is rewritten in place.
      */
     internal suspend fun dissolveEnclaves(
@@ -380,7 +378,6 @@ object NationStage {
         val capitalCells = HashSet<Int>()
         origins.forEach { capitalCells.add(it) }
         val capCells = config.nations.maxRealmShare * sea.landCellCount
-        val smallestRealm = BasinRealms.smallestRealmCells(sea.landCellCount)
         val realmCells = ArrayList<Int>()
         repeat(origins.size) { realmCells.add(0) }
         for (cell in nationId.indices) {
@@ -497,25 +494,17 @@ object NationStage {
                 // A neighbour the piece would take past the realm cap is passed over for the next:
                 // the cap is enforced on the catchments before this pass, and giving pieces away is
                 // the one step after it that can grow a realm (docs/DESIGN_LEDGER.md, chunk 6,
-                // E-T10). A piece no neighbour can take is not left where it is, an exclave of a
-                // realm it no longer touches. One smaller than the smallest realm may still go to
-                // the neighbour holding most of its edge, so long as that neighbour's whole excess
-                // over the cap stays under the smallest realm: counted in total, so that two small
-                // pieces cannot add up past it. Any other piece — the size of the smallest realm,
-                // or one no neighbour can take within that allowance — becomes a realm of its own
-                // with a capital on its best ground. So after this pass no piece is stranded and no
-                // realm stands a smallest realm or more over the cap; a realm under the smallest
-                // size is made only where a small piece has nowhere else to go.
+                // E-T10). A piece no neighbour can take within the cap is not left where it is,
+                // an exclave of a realm it no longer touches, and it is not handed over past the
+                // cap either: it becomes a realm of its own, with a capital on its best ground. So
+                // after this pass no piece is stranded and no realm is over the cap; the price is
+                // a realm smaller than the smallest one wherever a small piece has nowhere else to
+                // go. An allowance over the cap for small pieces was tried first and took a realm
+                // past it (docs/DESIGN_LEDGER.md, chunk 6 third round).
                 val byEdge = compareBy<Map.Entry<Int, Int>> { it.value }.thenByDescending { it.key }
                 val host = edgeHeldBy.entries
                     .filter { realmCells[it.key] + pieceCells.size <= capCells }
                     .maxWithOrNull(byEdge)?.key
-                    ?: edgeHeldBy.entries
-                        .filter {
-                            pieceCells.size < smallestRealm &&
-                                realmCells[it.key] + pieceCells.size < capCells + smallestRealm
-                        }
-                        .maxWithOrNull(byEdge)?.key
                     ?: run {
                         val newRealm = origins.size
                         val capital = pieceCells.maxWith(

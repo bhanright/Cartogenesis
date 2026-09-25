@@ -116,6 +116,23 @@
   deep: on the synthetic ridges the steepest third of the ground is valley walls, and it drains
   across the fall line (62 to 68% along a row on the east-west ridge).
 
+  **The cause is the routing's, deepened by erosion (Fix 3b's review round, reported).** The steepest
+  third of the land at 1024, on seeds 7 and 42, counted on three surfaces routed by the production
+  routing over the same land: an isotropic synthetic surface built on the ground (sixty-four waves
+  of random bearing, 4 to 40 cell widths long), the world's terrain before erosion, and the finished
+  world. Down a column: 51.4 and 47.4% on the isotropic surface, 41.8 and 44.5% before erosion, 60.5
+  and 59.1% finished; along a row 17.0 and 18.2%, 17.7 and 17.6%, 13.6 and 14.2%; on a diagonal 31.6
+  and 34.4%, 40.6 and 37.9%, 25.9 and 26.7%. On these cells, half as tall as wide, the eight
+  neighbours' bearings split a circle so that steepest descent on isotropic ground goes down a
+  column about 35% of the time, along a row about 15% and on a diagonal about 50%. So the routing
+  already sends 12 to 16 points more of isotropic ground down the columns than the bearings give,
+  taken from the diagonals; the terrain before erosion is near that baseline; and the rounds of
+  erosion deepen it to about 60%, on main's tree, the cap's and the implicit update's alike. The fix
+  this points at is in the routing's choice between a column and a diagonal on a cell of this shape,
+  not in the incision. The share with both neighbours alike across the fall line falls through the
+  erosion (48 and 47% before, 23 and 24% finished), so the channels organise; what the eye reads as
+  a comb is the bearing, not a lattice of one-cell gullies.
+
 - **The sea-level percentile hands the sea's highest cell to the land where the sea fills its rank
   exactly.** `SeaLevelStage.thresholdAtRank` finds the bin where the cells counted so far reach the
   target rank, `>=`, and when the target is the bin's last cell the index is clamped to it and the

@@ -2,10 +2,12 @@
 
 ## Where the work is
 
-- **Branch:** `chunk/6-water-realms`, created from origin/main at `fb22d30` and pushed after every
-  commit. It is not merged and no pull request is open.
-- **Head:** `acb9df9`.
-- **Review branch:** `review/6-water-realms` is this head plus `review/` (this report and the renders).
+- **Branch:** `chunk/6-water-realms`, created from origin/main at `fb22d30`. It is not merged and no
+  pull request is open.
+- **Head:** `66d745d`, after the review round (see "Review round" at the end). The first build,
+  which the sections below describe, was `acb9df9`.
+- **Review branch:** `review/6-water-realms` is the head with `review/` on top: this report and the
+  renders.
 
 ## Baseline: origin/main as it stood
 
@@ -282,7 +284,9 @@ The audit's figures for this world, 13 runs up to about 217 km, were taken on an
 ## The renders
 
 Files in `review/renders/`: seeds 42 and 718106 at 1024, in the Political and Fantasy views,
-`-before` from `fb22d30` and `-after` from the head.
+`-before` from `fb22d30` and `-after` from the head. The descriptions below are of the first build.
+The Political `-after` files have since been re-taken on `66d745d`, and "Review round" says what
+moved. The Fantasy `-after` files are unchanged to the pixel.
 
 **Seed 718106, Political.** Before:
 
@@ -310,7 +314,7 @@ against 29% before.
 **Fantasy, both seeds.** They look the same to the eye at this size. 0.92% (seed 42) and 1.08%
 (seed 718106) of pixels differ: river ink and lake edges, which is where findings 1 and 2 act.
 
-## Test counts on the final head
+## Test counts on the first build (`acb9df9`)
 
 The counts come from the JUnit XML under each module's `build/test-results`. The head's four suites
 were run in one build, `--no-daemon --console=plain -PtestWorkers=2 --continue`.
@@ -344,3 +348,141 @@ Against the baseline's 254, the nine extra tests are the new guards: `WaterRecei
   consumers. It is recorded in `docs/TODO.md`, because that file was not to be edited.
 - The ice sheet's ruled edge that the remaining straight realm run follows belongs to the ice's
   chunk.
+
+## Review round
+
+A second reading of the branch at `acb9df9` raised four points. Each was checked against the code
+before anything changed, then fixed and guarded by a test shown failing with the fix switched off.
+
+Commits:
+
+- `44925cf`: point 1 and point 4
+- `f244bbc`: point 2
+- `6d18d53`: point 3
+- `66d745d`: docs, and a count corrected in a test comment
+
+**Head:** `66d745d`.
+
+### 1. Basins with several exits were not solved upstream first
+
+**Verified.** The basins were ordered by the drainage rank of their last exit. That is not a
+topological order once a basin has two exits: the early one can feed a lower basin that the late
+one comes after. The subtraction also walked a routing that a closed basin below might already have
+re-pointed.
+
+**Change.** `RiverStage.basinsUpstreamFirst` builds a graph: an edge from each basin to the basin
+that each of its exits' water reaches next, on the routing the fill left. It then walks the graph in
+Kahn's order. The subtraction walks that same routing, kept as it was before any basin closed.
+
+**Guard.** `WaterReceivedTest`, "a basin with two exits is solved before the basin one of them
+feeds". Basin A has an early exit into B and a late exit at the end of a 47-cell chain, with the
+ranks asserted as the precondition.
+
+- **Fix off** (the exit-rank ordering and the live routing restored): B is given **700 mm-cells
+  against 450 reaching it**.
+- **Now:** 450 against 450, and A is solved before B.
+
+### 2. The km² limit failed where a closed lake's catchment was larger than it
+
+**Verified.** Each water cell kept its own slopes up to the limit, and the sink then kept every
+water cell together with those slopes.
+
+**Change.** A closed lake or playa is one node at its sink. Its water is never cut. Land draining to
+any cell of the water is a tributary of the sink and is cut at the limit like any other. Only a body
+of water larger than the limit on its own can exceed it.
+
+**Guard.** `CatchmentUnitsTest`, "a closed lake's unit is cut at the limit like any other": a
+two-cell lake with nine land cells draining to its second cell, under a ten-cell limit.
+
+- **Fix off** (`BasinPartition` as of `acb9df9`): **one unit of 11 cells**.
+- **Now:** units of 2 and 9 cells, with the lake whole.
+
+### 3. The cap left stranded pieces
+
+**Verified in the code:** `dissolveEnclaves` left a piece that no neighbour could take under the cap
+where it was.
+
+**The reviewer's example has a different cause.** On 718106 at 1024 I counted pieces with
+`RealmPieces`: a *stranded* piece is a piece of a realm, other than its largest, that borders
+another realm by land. `acb9df9` had none, there or on seeds 7/42/1234/99 at 512. The four small
+realms inside the purple realm on the eastern island are whole realms, seeded on that island and
+grown round by their neighbour. They are still there after this round.
+
+**Change.**
+
+- A piece that no neighbour can take within the cap becomes a realm of its own, with its capital on
+  its best ground, if it is at least the smallest realm (0.4% of the land, and never under 24
+  cells). A smaller piece goes to the neighbour holding most of its edge; that can put the
+  neighbour over the cap by less than the smallest realm, and the code says so.
+- A schism's breakaway takes any run of the rest that it would cut off from the rest's main body.
+- A cap-split realm that cannot be split is set aside, as before this round.
+
+**Guards**, in `RealmSpreadTest`:
+
+- **"a piece no neighbour can take within the cap becomes a realm of its own".** A 36-cell piece
+  lies inside a realm holding 764 cells against a cap of 768.
+  - **Fix off** (the piece left where it is, as at `acb9df9`): **1 stranded piece**.
+  - **Now:** the piece is realm 4, with its capital on it. No piece is stranded and no realm is over
+    the cap.
+  - On origin/main the piece would have gone to the large realm, taking it to 800 cells against the
+    cap of 768. I established that by reading origin/main's code, not by running it.
+- **"no piece is stranded and no more realms are landlocked inside one neighbour"**, over seeds
+  7/42/1234/99 at 512, against origin/main's figures. It passes on origin/main and on `acb9df9`
+  too, so it guards against regression and does not demonstrate the defect.
+
+**Counts** (seeds 7/42/1234/99 at 512, then 718106 at 1024):
+
+| | origin/main | `acb9df9` | Now |
+|---|---|---|---|
+| Stranded pieces | 0/0/0/0/1 | 0/0/0/0/0 | 0/0/0/0/0 |
+| Realms whose largest piece meets exactly one other realm by land | 5/4/5/4/5 | 4/4/5/5/8 | 2/5/5/6/7 |
+| … of those, landlocked | 4 | 2 | 2 |
+
+**Largest realm** (seeds 7/42/1234/99 at 512 and 969495 at 2048): 21.4/26.6/19.9/24.8/21.0% of
+the land. Seeds 42 and 99 rose from 23.8% and 20.6%, because the breakaway rule re-lays their realms.
+
+### 4. The water guards now assert what they name
+
+- **The hand-drawn case** asserts:
+  - A's exits are exactly its two exit cells;
+  - a path leaving A and coming back is counted once: A is given 2,650 against 2,650 entering it;
+  - A's water reaches B on the routing before any basin closed.
+- **The terrain case** asserts that the upper basin's water reaches the lower one on that routing,
+  and that every basin has an exit. It prints the exit counts, which turn out to be three for each
+  of its basins.
+
+### What moved in this round
+
+- **Rivers and lakes:** did not move on the five worlds measured.
+- **Coastal capitals** (seeds 7/42/1234/99 at 512 and 969495 at 2048): 14/18, 8/14, 8/16, 6/14 and
+  3/14, 39 of 76. origin/main had 36 of 77.
+- **Realm borders on 718106 at 2048** (straight runs along a row or column):
+
+  | | origin/main | First build | Now |
+  |---|---|---|---|
+  | 50 km or longer | 10 | 8 | **12** |
+  | 100 km or longer | 1 | 0 | 0 |
+  | Longest | 123 km | 67 km | 76 km |
+
+  The longest now is north–south at cell (459,224). No guard detector failed on either layer. The
+  peoples' borders did not move.
+- **Renders.** The `-after` renders in `review/renders/` are re-taken on this head.
+  - **Seed 42:** one large realm, 26.6% of the land, now runs across the middle of the western
+    continent, and a small realm holds the isthmus.
+  - **Seed 718106:** the south coast east of the ice is split between two realms where there was
+    one. The four small realms inside the eastern island's large realm remain.
+  - **Fantasy views:** did not move, since rivers and lakes did not.
+
+### Test counts after this round
+
+| Task | Tests | Failures | Errors | Skipped | Run on |
+|---|---|---|---|---|---|
+| `:worldgen:jvmTest` | 267 | 0 | 0 | 0 | `66d745d`, alone, 51 min 55 s |
+| `:cartography:jvmTest` | 117 | 0 | 0 | 0 | `6d18d53`, with ui and desktop |
+| `:ui:jvmTest` | 129 | 0 | 0 | 0 | `6d18d53`, with cartography and desktop |
+| `:desktop:test` | 104 | 0 | 0 | 19 | `6d18d53`, with cartography and ui |
+
+`66d745d` differs from `6d18d53` only in docs and a comment in `RealmSpreadTest`. The four new tests
+account for 267 against the first build's 263.
+
+**The 2048 audit tier** (`:cartography:audit`) is being run on `66d745d`; its result is added here when it finishes.

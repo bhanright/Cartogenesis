@@ -106,3 +106,21 @@ internal fun erodeBlockingObservingCover(
         weightSums = weightSums, shieldCut = shieldCut
     )
 }
+
+/**
+ * The whole stage, handing every cell's cut before the receiver clamp and every round's result to
+ * [watch] — what the guards on the incision's units observe production through, since the clamp and
+ * the finished heights both hide what the cut asked for.
+ */
+internal fun erodeBlockingWatchingIncision(
+    config: WorldGenConfig,
+    height: FloatField,
+    upliftRateMmPerYear: FloatField?,
+    watch: IncisionWatch,
+    receiverClamp: Boolean = true
+): ErosionResult = runBlocking {
+    ErosionStage.apply(
+        config, height, upliftRateMmPerYear, null, null, null, receiverClamp = receiverClamp,
+        incisionWatch = watch
+    )
+}

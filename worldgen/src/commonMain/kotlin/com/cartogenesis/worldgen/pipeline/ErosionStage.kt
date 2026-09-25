@@ -120,7 +120,9 @@ object ErosionStage {
          * shielding is not a taste, and a world generated with the rain but without the cover is
          * not a world anybody wants, only a control.
          */
-        shieldCut: Boolean = true
+        shieldCut: Boolean = true,
+        /** See `HydraulicErosion.apply`: every cell's cut before the clamp, for the unit guards. */
+        incisionWatch: IncisionWatch? = null
     ): ErosionResult {
         if (!config.erosion.enabled) return ErosionResult(height)
 
@@ -140,7 +142,7 @@ object ErosionStage {
         return ErosionResult(
             HydraulicErosion.apply(
                 config, weathered.height, config.seaLevel, upliftRateMmPerYear, onRound, log,
-                receiverClamp, weightSums, shieldCut
+                receiverClamp, weightSums, shieldCut, incisionWatch
             ) { field ->
                 thermalErosion(config, field, accelerator, sweepsPerRound).height
             },

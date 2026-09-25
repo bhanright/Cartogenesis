@@ -1,6 +1,7 @@
 package com.cartogenesis.worldgen.pipeline
 
 import com.cartogenesis.worldgen.model.FloatField
+import kotlin.concurrent.Volatile
 import kotlin.math.sqrt
 
 /**
@@ -41,6 +42,17 @@ internal object FlatRouting {
      * [Surface.flatsKept] counts how many did.
      */
     class Surface(val heights: DoubleArray, val flats: Int, val flatsKept: Int, val raisedCells: Int)
+
+    /**
+     * Handed every [Surface] [surfaceOf] lays, while a guard is listening.
+     *
+     * Every routing pass in the pipeline lays one and throws it away, so without this a flat that
+     * fell back to the staircase inside a hydraulic round or the river stage is invisible to
+     * everything but the routing itself. Diagnostics only: set by a test around a generation and
+     * cleared after it, and it changes nothing about the surface.
+     */
+    @Volatile
+    internal var surfaceWatch: ((Surface) -> Unit)? = null
 
     fun surfaceOf(
         width: Int,
@@ -114,7 +126,9 @@ internal object FlatRouting {
                 localIndex[members[member]] = LAID
             }
         }
-        return Surface(surface, flats, flatsKept, raisedCells)
+        val laid = Surface(surface, flats, flatsKept, raisedCells)
+        surfaceWatch?.invoke(laid)
+        return laid
     }
 
     /** Marks a raised cell whose flat has been handled, so the component walk does not revisit it. */

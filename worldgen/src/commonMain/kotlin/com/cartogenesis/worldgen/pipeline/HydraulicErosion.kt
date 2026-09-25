@@ -72,6 +72,41 @@ internal data class RoundMass(
     val channelPits: IntArray = IntArray(0)
 )
 
+/**
+ * What the ordered incision pass asked of each cell and what it left, for the guards that have to
+ * see a cut the receiver clamp and the finished heights hide. Diagnostics only: nothing reads an
+ * answer back, and a pass with no watcher computes nothing for one.
+ */
+internal interface IncisionWatch {
+
+    /**
+     * One cell's cut before the receiver clamp, as its three terms, each in the height field's own
+     * units: the stream-power incision, the cap at half the drop to [receiver], and the cap at the
+     * shoreline. What the pass asks for is the least of the three.
+     */
+    fun asked(round: Int, cell: Int, receiver: Int, streamPower: Float, halfDropCap: Float, shorelineCap: Float)
+
+    /**
+     * The ordered pass has cut every cell of [round]. [surface] is the height field as it left it;
+     * [ground] (the depression-filled surface the drops were read off) and [relative] are the
+     * round's shoreline-relative fields as the cut read them, whose land half is [landRange] of the
+     * height field; [shorelineHeight] is the round's shoreline in the height field. Every array is
+     * the pass's own and must not be written.
+     */
+    fun incised(
+        round: Int,
+        isLand: BooleanArray,
+        directions: IntArray,
+        ground: FloatArray,
+        relative: FloatArray,
+        discharge: FloatArray,
+        landCells: Float,
+        landRange: Float,
+        shorelineHeight: Float,
+        surface: FloatArray
+    )
+}
+
 /** The points in a round the pit census above is taken at. */
 internal object PitStage {
     const val OPENING = 0
@@ -528,6 +563,8 @@ internal object HydraulicErosion {
         weightSums: ((String, Double, Int) -> Unit)? = null,
         /** Whether [cut] takes the cover's factor. Only ever false in the cover's own guard. */
         shieldCut: Boolean = true,
+        /** Handed every cell's cut and every round's result; see [IncisionWatch]. */
+        incisionWatch: IncisionWatch? = null,
         relax: suspend (FloatField) -> FloatField
     ): FloatField {
         val erosion = config.erosion
@@ -958,7 +995,7 @@ internal object HydraulicErosion {
                 var taken =
                     cut(
                         rates, cell, receiver, cellsAcross, drop, area, landCells, relative,
-                        erodibility
+                        erodibility, incisionWatch, round
                     )
                 if (receiverClamp && !toSea) {
                     // In the height field's own units, which is what the cut is spent in. A cell
@@ -975,6 +1012,10 @@ internal object HydraulicErosion {
                     incisedAt[cell] = -raise(surfaceOf, cell, -taken.toDouble())
                 }
             }
+            incisionWatch?.incised(
+                round, isLand, directions, ground, relative, area.data, landCells, landRange,
+                sea.shorelineHeight, surfaceOf
+            )
 
             if (onRound != null) {
                 census(
@@ -2081,7 +2122,9 @@ internal object HydraulicErosion {
         landCells: Float,
         relative: FloatArray,
         /** The cover's factor on this cell, already relative to the land's mean. */
-        erodibility: FloatArray
+        erodibility: FloatArray,
+        watch: IncisionWatch?,
+        round: Int
     ): Float {
         val distance = rates.groundSteps.between(cell, receiver, cellsAcross)
         val slope = drop / distance * cellsAcross
@@ -2092,7 +2135,9 @@ internal object HydraulicErosion {
 
         val incision = rates.incisionCoefficient * sqrt(share) * slope * erodibility[cell]
         val aboveSea = relative[cell].coerceAtLeast(0f)
-        return minOf(incision, drop * 0.5f, aboveSea)
+        val halfDrop = drop * 0.5f
+        watch?.asked(round, cell, receiver, incision, halfDrop, aboveSea)
+        return minOf(incision, halfDrop, aboveSea)
     }
 
     /**

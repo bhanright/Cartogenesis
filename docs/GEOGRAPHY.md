@@ -725,7 +725,10 @@ pointing at the basin its exits' water reaches next on the routing the fill left
 the balance closes one its whole catchment is taken out of every cell below its old spill, along
 that same routing, before anything further down is solved. Ordering by where a basin's last exit
 falls in the drainage is not enough once a basin has two exits, which is common: its early exit can
-feed a lower basin that its late one comes after. A basin's inflow is also the rain leaving it at *every* cell where
+feed a lower basin that its late one comes after. Two basins can even feed each other, each by a
+different exit; such a group has no upstream member, and is solved together to a fixed point, each
+basin on the rain that reaches it once the others have closed. None of the standard worlds has one,
+though most of their basins have more than one exit. A basin's inflow is also the rain leaving it at *every* cell where
 its water leaves, not the largest of them: a rim level for several cells lets a filled flat drain
 across more than one, and the largest alone under-fed it. `WaterReceivedTest` builds two chained
 basins with a desert playa above a steppe basin and holds the lower one's inflow to the rain that
@@ -787,9 +790,10 @@ run and 33.6% on the finished map. A piece is now given only to a neighbour it l
 and the largest realm on seeds 7/42/1234/99 at 512 and 969495 at 2048 holds 21.4/26.6/19.9/24.8/21.0%
 (33.6/29.2/24.7/23.1/29.9% before). `RealmSpreadTest` asserts it. Where no neighbour can take a
 piece within the cap, the piece is not left behind as an exclave of a realm it no longer touches:
-one the size of the smallest realm becomes a realm of its own with its capital on its best ground,
-and a smaller one goes to the neighbour holding most of its edge, which can put that neighbour over
-the cap by less than the smallest realm. A schism's breakaway also takes any run of the rest it
+a smaller one than the smallest realm goes to the neighbour holding most of its edge while that
+neighbour's whole excess over the cap stays under the smallest realm, and any other piece becomes a
+realm of its own with its capital on its best ground. No realm ends a smallest realm or more over
+the cap. A schism's breakaway also takes any run of the rest it
 would cut off from the rest's main body. Counted over seeds 7/42/1234/99 at 512, no piece of any
 realm is stranded inside another's land (none on origin/main either), and one realm is landlocked
 inside a single neighbour against origin/main's three; realms on a coast with one land neighbour,

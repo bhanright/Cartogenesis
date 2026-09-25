@@ -221,11 +221,11 @@ private fun WhereTheWorldsAre(
     val (sentence, detail) = when (place) {
         is LibraryPlace.HostStorage ->
             "Worlds are kept in this browser's storage." to
-                "In Chrome and Edge the library can live in a folder on this computer instead, " +
+                "In Chrome and Edge the library can live in a folder on this device instead, " +
                 "including one OneDrive, Dropbox or Google Drive keeps in step, and the desktop " +
                 "application opens the same files. Nothing is uploaded anywhere."
         is LibraryPlace.InFolder ->
-            "Worlds are kept in the folder \"${place.folder.name}\" on this computer." to
+            "Worlds are kept in the folder \"${place.folder.name}\" on this device." to
                 "Each world is a .cgw file named for it, the same files the desktop application " +
                 "keeps, so a folder a sync client keeps in step serves both."
         is LibraryPlace.ReconnectNeeded ->

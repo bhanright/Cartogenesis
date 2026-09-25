@@ -1,6 +1,7 @@
 package com.cartogenesis.web
 
 import com.cartogenesis.cartography.ByteWorldLibrary
+import com.cartogenesis.cartography.OpeningLimit
 import com.cartogenesis.cartography.Compressor
 import com.cartogenesis.cartography.SaveProblem
 import com.cartogenesis.cartography.SaveSink
@@ -493,6 +494,8 @@ internal class IndexedDbLibrary(
     compressor: Compressor,
     writtenBy: String
 ) : ByteWorldLibrary(compressor, writtenBy) {
+
+    override val openingLimit: OpeningLimit = BROWSER_OPENING_LIMIT
 
     /** Told of every part as it goes in or comes out; the self-test measures the tab with it. */
     var partObserver: PartObserver? = null

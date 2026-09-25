@@ -415,7 +415,7 @@ class PanelKnobsTest {
      * button, which is disabled, and not from a preference written by an older build, which is why
      * [Exports.clamp] and not the button is what this test asks.
      *
-     * The ceiling is [Platform.exportCeiling] rather than a constant here, so the build that fixes
+     * The ceiling is [Platform.generationCeiling] rather than a constant here, so the build that fixes
      * the memory raises one number on the platform and this test starts letting 8192 through.
      */
     @Test
@@ -447,7 +447,7 @@ class PanelKnobsTest {
         // build's memory, and a reader who is told only "no" has no idea whether to ask again.
         assertEquals(
             "8192 needs more memory than this build can hold; it waits for a later release",
-            Exports.unreachableNote(8192)
+            WorldCeilings.whyOutOfReach(8192, 4096)
         )
     }
 
@@ -631,7 +631,7 @@ class PanelKnobsTest {
     @Test
     fun `the phone's export ceiling applies to the data layers too`() {
         val phone = FakePlatform(ceiling = 2048, coarsePointer = true)
-        val ceiling = phone.exportCeiling(compact = true)
+        val ceiling = phone.generationCeiling
         assertEquals(2048, ceiling)
         assertEquals(2048, Exports.clamp(4096, ceiling))
         assertEquals(2048, Exports.clamp(8192, ceiling))
@@ -700,25 +700,44 @@ class PanelKnobsTest {
     }
 
     /**
-     * A phone exports at 2048, and the cap is the platform's rather than the panel's.
+     * A browser stops at 2048, and says so on the chips rather than leaving them out.
      *
-     * Same mechanism as the 8192 ceiling above, asked with the window's shape: an export re-runs
-     * the whole pipeline at the target size on the page's only thread, and 4096 of that on a phone
-     * is a tab the browser kills. The desktop ignores the argument, so narrowing a desktop window
-     * does not narrow what it can export.
+     * A 4096 generation killed a desktop browser's tab before anything was drawn, so under a
+     * browser's ceiling both 4096 chips — the working resolution's and the export's — are disabled,
+     * each with the sentence that says where 4096 can be had; 8192 keeps its own sentence, since
+     * no build makes it. Everything at or below the ceiling is pressable, and under the desktop's
+     * ceiling nothing but 8192 is disabled, which is the row as it was before the browser had a
+     * ceiling of its own.
      */
     @Test
-    fun `a phone browser's export ceiling caps the size at 2048`() {
-        val phone = object : FakePlatform(coarsePointer = true) {
-            override fun exportCeiling(compact: Boolean): Int = if (compact) 2048 else 4096
-        }
-        assertEquals(2048, phone.exportCeiling(compact = true))
-        assertEquals(4096, phone.exportCeiling(compact = false))
-        assertEquals(2048, Exports.clamp(4096, phone.exportCeiling(compact = true)))
-        assertEquals(2048, Exports.clamp(8192, phone.exportCeiling(compact = true)))
-        assertFalse(Exports.reachable(4096, phone.exportCeiling(compact = true)))
-        // A platform that does not care answers the same either way.
-        assertEquals(4096, FakePlatform().exportCeiling(compact = true))
+    fun `under a browser's ceiling the 4096 chips are disabled and say why`() {
+        val browser = FakePlatform(ceiling = WorldCeilings.BROWSER_TAB)
+        val tabReason = "A 4096 world needs more memory than a browser tab is given; the desktop app makes it"
+
+        val resolutions = Knobs.resolutionChoices(browser.generationCeiling)
+        assertEquals(Knobs.RESOLUTIONS, resolutions.map { it.size }, "a resolution chip left the row")
+        assertEquals(listOf(512, 1024, 2048), resolutions.filter { it.enabled }.map { it.size })
+        assertEquals(tabReason, resolutions.single { it.size == 4096 }.whyOutOfReach)
+
+        val exports = SizeChoice.row(Exports.SIZES, browser.generationCeiling)
+        assertEquals(Exports.SIZES, exports.map { it.size }, "an export chip left the row")
+        assertEquals(listOf(2048), exports.filter { it.enabled }.map { it.size })
+        assertEquals(tabReason, exports.single { it.size == 4096 }.whyOutOfReach)
+        assertEquals(
+            "8192 needs more memory than this build can hold; it waits for a later release",
+            exports.single { it.size == 8192 }.whyOutOfReach
+        )
+        // And the size an export is actually asked at, whatever the button or a preference said.
+        assertEquals(2048, Exports.clamp(4096, browser.generationCeiling))
+        assertEquals(2048, Exports.clamp(8192, browser.generationCeiling))
+
+        val desktop = FakePlatform(ceiling = WorldCeilings.DESKTOP)
+        assertTrue(Knobs.resolutionChoices(desktop.generationCeiling).all { it.enabled })
+        assertEquals(
+            listOf(2048, 4096),
+            SizeChoice.row(Exports.SIZES, desktop.generationCeiling).filter { it.enabled }.map { it.size }
+        )
+        assertEquals(WorldCeilings.DESKTOP, FakePlatform().generationCeiling)
     }
 
     /** A phone starts at 512 whatever a settings file carried over from a desktop says. */

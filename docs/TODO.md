@@ -140,10 +140,15 @@
   near 2.3 GB) and drew its 4096 by 2048 sheet correctly, at 2.9 km a pixel. So the question Fix A
   left, whether Skia draws an image wider than a device's texture limit (as little as 4,096 on some
   phones and older integrated graphics), is untested only for the 4096 world, and that world does
-  not get as far as drawing. The browser still offers 4096 on screen and as an export (which
-  regenerates at 4096), and both can be expected to end the same way. Not known whether this is new
-  since the ground's ruler or as old as the 4096 chip. Either cap the browser at 2048 until a
-  4096 generation fits a tab's memory, or make it fit. 2026-09-25, after Fix A.
+  not get as far as drawing. Not known whether this is new since the ground's ruler or as old as
+  the 4096 chip. 2026-09-25, after Fix A.
+  **The cap is in** (2026-09-25): the browser stops at 2048 for the world on screen and for exports,
+  its 4096 chips shown disabled with the reason, a stored 4096 preference brought down to 2048 with a
+  line saying so, and a 4096 save refused from its header, since its 2.45 GB of arrays is more than
+  the heap the tab died at (`Platform.generationCeiling`, `WorldCeilings.BROWSER_TAB`,
+  `OpeningLimit`). **Still open:** making a 4096 world fit a tab, and then drawing its sheet there,
+  which is the Skia texture-limit question above. When it fits, `WorldCeilings.BROWSER_TAB` is the
+  one number to raise; the browser's opening limit and every size row follow it.
 - **Four grid-shaped marks on seed 718106 at 2048, seen while cutting the site's card pictures.**
   Each breaks rule 13; whether the geometry guard's detectors see them has not been checked:
   - the ice caps end in an edge straight down a column, with a fan of rays off it (the ice's work;

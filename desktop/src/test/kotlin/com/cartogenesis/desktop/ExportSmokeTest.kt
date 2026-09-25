@@ -53,7 +53,7 @@ class ExportSmokeTest {
      */
     @Test
     fun `the desktop build's export ceiling is 4096`() {
-        assertEquals(4096, DesktopPlatform().exportCeiling(compact = false))
+        assertEquals(4096, DesktopPlatform().generationCeiling)
     }
 
     @Test

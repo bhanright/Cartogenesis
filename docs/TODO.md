@@ -71,6 +71,21 @@
   along grid-bearing valleys, is not diagnosed; a guard on the drainage without the ice is owed.
   2026-09-25, Fix 3b.
 
+- **Steep flanks are combed by single-cell gullies down the columns, and the implicit incision makes
+  it show (rule 13).** On the renders of seeds 7 and 42 at 1024 the flanks of east-west ranges carry
+  straight north-south gullies about a cell apart. Measured on steep land (a fall over 20 m/km to the
+  receiver) at 1024: 59 to 64% of cells drain straight down a column on all three trees measured
+  (main, the capped update and the implicit one), where a ground with no preferred bearing on these
+  cells, half as tall as wide, would send about 35% down a column; and 21 to 29% of those have both
+  row neighbours draining the same way on all three. So the routing's bearing is not new. What is
+  new is that the law now cuts those channels to grade, twice as much ground is steep (155,444 cells
+  against main's 71,442 on seed 7), and the comb that the cap kept shallow is plain to the eye. The
+  geometry guard does not see it. Earth's first-order valleys are spaced by the ratio of hillslope
+  transport to incision (Perron, Kirchner and Dietrich 2009), and this model's hillslopes have no
+  length of their own (the X1d entry above); a transport length in kilometres, and a guard on the
+  share of steep ground draining down a column against what the cell's shape predicts, are what
+  would answer it. 2026-09-25, Fix 3b.
+
 - **The sea-level percentile hands the sea's highest cell to the land where the sea fills its rank
   exactly.** `SeaLevelStage.thresholdAtRank` finds the bin where the cells counted so far reach the
   target rank, `>=`, and when the target is the bin's last cell the index is clamped to it and the

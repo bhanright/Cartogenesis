@@ -988,6 +988,13 @@ data class TectonicsConfig(
      * holds this constant against it. The other three follow England and Molnar's ratios above:
      * two fifths, 0.1406 and 0.0606 of the collision rate.
      *
+     * What the derivation does not establish: that production, which runs with the flexure on,
+     * gains half a millimetre a year of surface on its collisional belts. The sum is exact only for
+     * the flexure-off measurement it was taken from. With the flexure on, the same belts lose
+     * 0.134 mm a year where the flexure-off run lost 0.238, the flexural response entering the
+     * same budget, and nothing here measures the surface uplift production's belts actually make. The rate is the
+     * flexure-off balance, stated as such, and not a calibration of production's ranges.
+     *
      * Derived since Fix 3b on the implicit incision, where the stream-power law and not a
      * numerical cap sets every cut; the denudation under the cap was 0.074 mm a year and was the
      * cap's, which is why the derivation waited for this. A chunk that moves the denudation

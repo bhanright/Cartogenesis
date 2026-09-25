@@ -2193,12 +2193,20 @@ internal object HydraulicErosion {
      *   and the cap the explicit update needed at the shoreline is this boundary condition; and
      *   the water's surface where the receiver stands under a filled basin's water by more than
      *   [Rates.pondDepth], because a river entering a lake grades to the lake as one entering the
-     *   sea grades to the sea. That last is the one place the pass reads the filled surface
-     *   [ground]: everywhere else it works on the actual ground [surfaceOf] as the notch left it.
-     * - *No cell ends below its base level.* The update is a weighted mean of the cell's own
-     *   height and `z_r'`, with weights `1 / (1 + F)` and `F / (1 + F)`, both positive for any
-     *   `F`, so it lies between them; carried out as `z_r' + (z - z_r') / (1 + F)` in double, it
-     *   rounds to a float between the two.
+     *   sea grades to the sea.
+     * - *A lake falls with its outlet.* Its surface for the pass is the lower of its filled level
+     *   and the level its outlet drains to once the outlet is cut, carried upstream through the
+     *   lake's cells (receivers first, so the outlet is final before the lake behind it). A cell
+     *   under that surface is neither cut nor raised; a cell the falling water uncovers is graded
+     *   like any other; and an inflow grades to the surface as it now stands. The filled surface
+     *   [ground] is read only to find the water and its level before the pass: everywhere else the
+     *   pass works on the actual ground [surfaceOf] as the notch left it.
+     * - *No cell the pass moves ends below its base level.* The update is a weighted mean of the
+     *   cell's own height and `z_r'`, with weights `1 / (1 + F)` and `F / (1 + F)`, both positive
+     *   for any `F`, so it lies between them; carried out as `z_r' + (z - z_r') / (1 + F)` in
+     *   double, it rounds to a float between the two. Cells the pass leaves alone keep their
+     *   height, below their base or not: a basin's floor under water, and a cell already at or
+     *   below the level it grades to.
      * - *No cell is raised.* A cell standing at or below its base level is neither cut nor
      *   raised: the floor of a basin, where the routing runs over the fill and the ground does not
      *   slope, has no channel to deepen, and the weighted mean would lift it toward its receiver,
@@ -2242,25 +2250,48 @@ internal object HydraulicErosion {
         round: Int = 0
     ) {
         val asFound = if (watch != null) surfaceOf.copyOf() else null
+        // The water's surface over each cell of a filled basin for this pass, NaN elsewhere: set
+        // receivers first, so the outlet's new height is known before the lake behind it.
+        val waterSurface = FloatArray(surfaceOf.size) { Float.NaN }
         for (rank in order.indices.reversed()) {
             val cell = order[rank]
             val receiver = directions[cell]
-            if (receiver < 0) continue
-            val baseAfter = baseLevel(receiver, surfaceOf, isLand, ground, relative, rates.pondDepth, landRange, shorelineHeight)
+            val underStandingWater = ground[cell] - relative[cell] > rates.pondDepth
+            if (receiver < 0) {
+                if (underStandingWater) waterSurface[cell] = shorelineHeight + ground[cell] * landRange
+                continue
+            }
+            val baseAfter = baseLevel(receiver, surfaceOf, isLand, waterSurface, shorelineHeight)
+            if (underStandingWater) {
+                // The lake falls with its outlet: its surface is its filled level or the level its
+                // outlet now drains to, whichever is lower, and a cell behind another lake cell
+                // shares that cell's surface.
+                val filledLevel = shorelineHeight + ground[cell] * landRange
+                val downstream = if (isLand[receiver] && !waterSurface[receiver].isNaN()) waterSurface[receiver] else baseAfter
+                waterSurface[cell] = minOf(filledLevel, downstream)
+            }
             val height = surfaceOf[cell]
             val stepCellWidths = rates.groundSteps.between(cell, receiver, cellsAcross)
             val courantNumber =
                 rates.courantCoefficient * sqrt(discharge[cell] / landCells) * erodibility[cell] / stepCellWidths
+            // Under the water as it now stands there is no channel to cut and nothing to raise; a
+            // cell the falling water has uncovered is graded like any other.
+            val submerged = underStandingWater && height <= waterSurface[cell]
             val after =
-                if (height <= baseAfter && onlyAboveBase) height
+                if (submerged || (height <= baseAfter && onlyAboveBase)) height
                 else (baseAfter + (height - baseAfter).toDouble() / (1.0 + courantNumber)).toFloat()
             if (after != height) {
                 surfaceOf[cell] = after
                 if (incisedAt != null && after < height) incisedAt[cell] = height.toDouble() - after.toDouble()
             }
             if (watch != null && asFound != null) {
-                val baseBefore =
-                    baseLevel(receiver, asFound, isLand, ground, relative, rates.pondDepth, landRange, shorelineHeight)
+                // Before the pass the lake stood at its filled level.
+                val baseBefore = when {
+                    !isLand[receiver] -> shorelineHeight
+                    ground[receiver] - relative[receiver] > rates.pondDepth ->
+                        maxOf(asFound[receiver], shorelineHeight + ground[receiver] * landRange)
+                    else -> asFound[receiver]
+                }
                 watch.cut(round, cell, receiver, courantNumber, height, baseBefore, baseAfter, after)
             }
         }
@@ -2268,23 +2299,20 @@ internal object HydraulicErosion {
 
     /**
      * The level a cell draining into [receiver] grades to, in the height field's unit: the round's
-     * shoreline where the receiver is sea; the water's surface, the filled level [ground] converted
-     * off its relative unit, where the receiver stands under more than [pondDepth] of a filled
-     * basin's water; and otherwise the receiver's own ground in [surface]. See [incise].
+     * shoreline where the receiver is sea; where the receiver stands under a filled basin's water,
+     * that water's surface as this pass leaves it ([waterSurface], already set, receivers being
+     * first), or the receiver's ground if the falling water has uncovered it; and otherwise the
+     * receiver's own ground in [surface]. See [incise].
      */
     private fun baseLevel(
         receiver: Int,
         surface: FloatArray,
         isLand: BooleanArray,
-        ground: FloatArray,
-        relative: FloatArray,
-        pondDepth: Float,
-        landRange: Float,
+        waterSurface: FloatArray,
         shorelineHeight: Float
     ): Float = when {
         !isLand[receiver] -> shorelineHeight
-        ground[receiver] - relative[receiver] > pondDepth ->
-            maxOf(surface[receiver], shorelineHeight + ground[receiver] * landRange)
+        !waterSurface[receiver].isNaN() -> maxOf(surface[receiver], waterSurface[receiver])
         else -> surface[receiver]
     }
 

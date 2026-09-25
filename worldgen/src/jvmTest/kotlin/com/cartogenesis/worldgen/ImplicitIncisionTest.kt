@@ -161,7 +161,7 @@ class ImplicitIncisionTest {
      * Everything the pass reported of one round, held until the round's end so each cell can be
      * judged against the round's sea and the pass's finished heights.
      */
-    private class Bounds(cellCount: Int, private val spanMetres: Float) : IncisionWatch {
+    private class Bounds(cellCount: Int, private val spanMetres: Float, private val pondDepth: Float) : IncisionWatch {
         private val reached = BooleanArray(cellCount)
         private val receiverOf = IntArray(cellCount)
         private val courantAt = FloatArray(cellCount)
@@ -176,6 +176,7 @@ class ImplicitIncisionTest {
         var leftAlone = 0
         var receiversLowered = 0
         var madeEligible = 0
+        var tooCloseToJudge = 0
         val violations = ArrayList<String>()
 
         override fun cut(
@@ -201,7 +202,7 @@ class ImplicitIncisionTest {
                 val receiver = receiverOf[cell]
                 val before = beforeAt[cell]
                 val after = afterAt[cell]
-                val base = baseAfterAt[cell]
+                val base = baseAt(receiver, isLand, directions, ground, relative, landRange, shorelineHeight, surface)
                 fun wrong(what: String) {
                     if (violations.size < 20) {
                         violations.add(
@@ -213,8 +214,7 @@ class ImplicitIncisionTest {
                 }
                 // The watch is read against the field itself, so a report cannot hide the pass.
                 if (surface[cell] != after) wrong("reported ${after * spanMetres} m where the field holds ${surface[cell] * spanMetres}")
-                if (isLand[receiver] && base < surface[receiver]) wrong("graded below its receiver's new ground")
-                if (!isLand[receiver] && base != shorelineHeight) wrong("a mouth graded to somewhere other than the shoreline")
+                if (baseAfterAt[cell] != base) wrong("graded to ${baseAfterAt[cell] * spanMetres} m where its base is")
                 if (before <= base) {
                     leftAlone++
                     if (after != before) wrong("moved though it stood at or below its base")
@@ -228,11 +228,16 @@ class ImplicitIncisionTest {
                     if (after < shorelineHeight) wrong("cut below the shoreline")
                 }
                 // More than half the drop wherever `F` is over one, `F / (1 + F)` being over a
-                // half there; two float steps of the height allowed for the rounding of the cut.
+                // half there, held strictly. Where the law's cut clears the half by less than two
+                // float steps of the height, the rounding of one cell's result can land either
+                // side of it, so those cells are counted and not judged.
                 if (courantAt[cell] > 1f) {
                     largeCourant++
-                    val slack = 2f * Math.ulp(before)
-                    if (before - after <= 0.5f * (before - base) - slack) wrong("cut no more than half its drop at F over one")
+                    val courant = courantAt[cell].toDouble()
+                    val drop = before.toDouble() - base.toDouble()
+                    val margin = (courant / (1.0 + courant) - 0.5) * drop
+                    if (margin < 2.0 * Math.ulp(before)) tooCloseToJudge++
+                    else if (before.toDouble() - after.toDouble() <= 0.5 * drop) wrong("cut no more than half its drop at F over one")
                 }
                 if (base < baseBeforeAt[cell]) {
                     receiversLowered++
@@ -242,6 +247,34 @@ class ImplicitIncisionTest {
                     }
                 }
             }
+        }
+
+        /**
+         * The level a cell draining into [receiver] grades to, found here from the pass's result
+         * and not taken from its report: the shoreline for the sea; for a receiver under a filled
+         * basin's water, the lake as it now stands, the lowest of the filled levels on the way down
+         * through the lake and of what the lake finally spills onto (the sea's surface, or the new
+         * ground of the first dry cell), or the receiver's new ground if that is higher; and
+         * otherwise the receiver's new ground.
+         */
+        private fun baseAt(
+            receiver: Int, isLand: BooleanArray, directions: IntArray, ground: FloatArray, relative: FloatArray,
+            landRange: Float, shorelineHeight: Float, surface: FloatArray
+        ): Float {
+            if (!isLand[receiver]) return shorelineHeight
+            fun ponded(cell: Int) = ground[cell] - relative[cell] > pondDepth
+            if (!ponded(receiver)) return surface[receiver]
+            var water = Float.POSITIVE_INFINITY
+            var cell = receiver
+            while (true) {
+                water = minOf(water, shorelineHeight + ground[cell] * landRange)
+                val next = directions[cell]
+                if (next < 0) break
+                if (!isLand[next]) { water = minOf(water, shorelineHeight); break }
+                if (!ponded(next)) { water = minOf(water, surface[next]); break }
+                cell = next
+            }
+            return maxOf(surface[receiver], water)
         }
     }
 
@@ -261,13 +294,14 @@ class ImplicitIncisionTest {
     fun `the pass keeps its bounds and cuts past half the drop where F is over one`() {
         val config = WorldGenConfig(seed = 42L, width = 512, height = 512)
         val plates = PlateStage.generate(config, TerrainStage.generate(config))
-        val bounds = Bounds(config.width * config.height, config.scale.reliefSpanMetres)
+        val bounds = Bounds(config.width * config.height, config.scale.reliefSpanMetres, HydraulicErosion.Rates(config).pondDepth)
         erodeBlockingWatchingIncision(config, plates.height, plates.upliftRateMmPerYear, bounds)
         println(
             "IMPLICIT bounds seed 42@512 over the rounds: ${bounds.cuts} cuts, ${bounds.largeCourant} at F over one, " +
                 "${bounds.mouths} mouths, ${bounds.leftAlone} left alone at or below their base, " +
                 "${bounds.receiversLowered} whose receiver the pass lowered and ${bounds.madeEligible} of them cut " +
-                "only because it was; ${bounds.violations.size} violations"
+                "only because it was; ${bounds.tooCloseToJudge} at F over one too close to half their drop to judge; " +
+                "${bounds.violations.size} violations"
         )
         assertTrue(bounds.cuts > 0, "the pass cut nothing, so this case saw nothing to test")
         assertTrue(bounds.largeCourant > 0, "no cell had F over one, so the law's own clause saw nothing")
@@ -349,6 +383,83 @@ class ImplicitIncisionTest {
             "the middle cell ended at %.3f m where its receiver's new height of %.3f m and F %.3f put it at %.3f m"
                 .format(belowAfter, mouthAfter, courant, expected)
         )
+    }
+
+    /** Where the draining-lake fixture's three cells ended, in metres. */
+    private class Drained(val outlet: Double, val bed: Double, val inflow: Double)
+
+    /**
+     * Three cells in a row running into the sea: an outlet at 100 m, a lake's bed at [bedMetres]
+     * whose water stands at the outlet's 100 m, and an inflow at 120 m draining into the lake. The
+     * outlet is cut at [outletCourant]; the bed and the inflow at `F` nine.
+     */
+    private fun drainLake(outletCourant: Double, bedMetres: Float): Drained {
+        val config = WorldGenConfig(seed = 1L, width = 16, height = 16)
+        val scale = config.scale
+        val rates = HydraulicErosion.Rates(config)
+        val cellCount = config.width * config.height
+        val shoreline = scale.fieldAtAltitude(0f)
+        val landRange = scale.landHalfOfField
+        val row = 8 * config.width
+        val sea = row + 2
+        val outlet = row + 3
+        val bed = row + 4
+        val inflow = row + 5
+        val isLand = BooleanArray(cellCount)
+        val directions = IntArray(cellCount) { -1 }
+        val surface = FloatArray(cellCount) { scale.fieldAtAltitude(-SEA_SURFACE_DEPTH_METRES) }
+        for ((cell, metres, receiver) in listOf(Triple(outlet, 100f, sea), Triple(bed, bedMetres, outlet), Triple(inflow, 120f, bed))) {
+            isLand[cell] = true
+            directions[cell] = receiver
+            surface[cell] = scale.fieldAtAltitude(metres)
+        }
+        val relative = FloatArray(cellCount) { (surface[it] - shoreline) / landRange }
+        // The filled surface: the bed's water stands at the outlet's height.
+        val filled = relative.copyOf()
+        filled[bed] = relative[outlet]
+        assertTrue(filled[bed] - relative[bed] > rates.pondDepth, "the fixture's lake is too shallow to stand as water")
+        val wanted = mapOf(outlet to outletCourant, bed to 9.0, inflow to 9.0)
+        val discharge = FloatArray(cellCount)
+        for ((cell, courant) in wanted) discharge[cell] = (courant / rates.courantCoefficient).let { (it * it).toFloat() }
+        HydraulicErosion.incise(
+            rates, config.width, intArrayOf(inflow, bed, outlet), directions, isLand, filled, relative, discharge,
+            landCells = 1f, landRange = landRange, shorelineHeight = shoreline,
+            erodibility = FloatArray(cellCount) { 1f }, surfaceOf = surface, incisedAt = null
+        )
+        fun metres(cell: Int) = scale.altitudeAtField(surface[cell]).toDouble()
+        return Drained(metres(outlet), metres(bed), metres(inflow))
+    }
+
+    /**
+     * A lake falls with its outlet: its surface for the pass is the lower of its filled level and
+     * its outlet's new height. A bed still under that surface is neither cut nor raised, a bed the
+     * falling water uncovers is graded like any other cell, and an inflow grades to the surface as
+     * it now stands, not as it stood when the round opened.
+     *
+     * Two cases. The outlet cut from 100 m to 10 m at `F` nine drains the lake past its 70 m bed:
+     * the bed is cut to 16 m and the inflow to 26.4 m. The outlet cut to 80 m at `F` a quarter
+     * leaves the lake standing over its 50 m bed at 80 m: the bed stays, and the inflow grades to
+     * 80 m, to 84 m. A pass that holds the lake at its filled level for the whole pass grades the
+     * inflow to 100 m in both, to 102 m, and fails here.
+     */
+    @Test
+    fun `a lake falls with its outlet and its inflow grades to the lowered water`() {
+        val drained = drainLake(outletCourant = 9.0, bedMetres = 70f)
+        val standing = drainLake(outletCourant = 0.25, bedMetres = 50f)
+        println(
+            "IMPLICIT draining lake: drained, the outlet to %.2f m, the bed to %.2f m, the inflow to %.2f m; standing, the outlet to %.2f m, the bed %.2f m, the inflow to %.2f m"
+                .format(drained.outlet, drained.bed, drained.inflow, standing.outlet, standing.bed, standing.inflow)
+        )
+        for ((what, got, want) in listOf(
+            Triple("the drained lake's outlet", drained.outlet, 10.0),
+            Triple("the drained lake's uncovered bed", drained.bed, 16.0),
+            Triple("the drained lake's inflow", drained.inflow, 26.4),
+            Triple("the standing lake's outlet", standing.outlet, 80.0),
+            Triple("the standing lake's submerged bed", standing.bed, 50.0),
+            Triple("the standing lake's inflow", standing.inflow, 84.0)
+        )) {
+            assertTrue(abs(got - want) <= HEIGHT_TOLERANCE_METRES, "$what ended at %.3f m where the law puts it at %.3f m".format(got, want))
+        }
     }
 
     // ================================================================== the law

@@ -788,7 +788,7 @@ class IsostasyTest : BorrowsSharedWorlds() {
         // out; the plates' shape, queued as its own chunk, is where the collision's ground is decided.
         KnownFailures.expect(
             FORELAND_AT_THE_EDGE_OF_THE_COLLISION,
-            "moat at 48-56 cell widths, 502 m under the belt, rising 0 m beyond it"
+            "moat at 48-56 cell widths, 586 m under the belt, rising 0 m beyond it"
         ) {
             if (beyondTheMoat - inTheForeland < MIN_FOREBULGE_METRES) {
                 throw RecordedViolation(

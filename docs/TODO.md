@@ -46,19 +46,22 @@
     by what they did to the culture guard's figures on the capped worlds: set to make worlds pass.
     An Earth figure for the share of a river's load its delta keeps would derive the first.
   - `ErosionConfig.outletIncisionRatio` (1.125) was chosen on the largest lake at three grids,
-    also to make worlds pass. On the law's terrain the notch leaves seed 99 a lake 2.1 times the
-    Caspian's share and the fill 82% as deep as the control's (`OutletIncisionTest` records both).
+    also to make worlds pass. On the law's terrain the notch left seed 99 a lake 2.1 times the
+    Caspian's share and the fill 82% as deep as the control's; once a lake falls with its outlet
+    seed 99's lake is under the Caspian's share, seeds 718106 and 7 keep more than half their
+    water, and the fill stands 82.5% as deep (`OutletIncisionTest` records both).
     Whether a knickpoint should cut harder than an ordinary reach at all is the question.
   2026-09-25, Fix 3b.
 
-- **The implicit incision is first order, and the channel network it leaves grows denser on a finer
-  grid.** `ScaleFreeTest`'s channel-head clause reads 1.38 to 1.48 from 512 to 1024 on the four
-  standard seeds, over its 1.35, where the capped update read 1.15 to 1.23. One reading, not
-  measured: at a fixed catchment on the ground `F` doubles when the cell halves, so a finer grid's
-  channels come nearer their round's grade. What would settle it: the same comparison with rounds of
-  half and a quarter the years (and twice and four times as many), to see whether the two grids
-  converge as the round shortens; if they do, the round's length is a resolution parameter and
-  wants choosing for it. 2026-09-25, Fix 3b.
+- **The channel network the implicit incision leaves grows denser on a finer grid, and the round's
+  length is not why.** `ScaleFreeTest`'s channel-head clause reads 1.38 to 1.48 from 512 to 1024 on
+  the four standard seeds (1.42 to 1.54 once a lake falls with its outlet), over its 1.35, where the
+  capped update read 1.15 to 1.23. Measured at Fix 3b's review round: at 1024 with twenty-four rounds
+  of half the years, the density is 1.004, 1.019, 1.000 and 0.999 times the stock 1024's on seeds 7,
+  42, 1234 and 99. The time step has converged; the growth is the grid's, and the round's length is
+  not a resolution parameter for it. Not isolated: whether it is the criterion reading a slope over
+  a shorter step, `F` doubling at a fixed catchment when the cell halves, or the routing. A 2048
+  comparison would say whether it settles. 2026-09-25, Fix 3b and its review round.
 
 - **About a tenth of the standing water without the ice lies in thin parallel grid-bearing bars
   (rule 13).** `GlaciationTest`'s comb clause measures the ice's own addition, which passes; but
@@ -70,6 +73,17 @@
   718106 and 7). What makes the bars, and whether they are drainage lines the fill leaves standing
   along grid-bearing valleys, is not diagnosed; a guard on the drainage without the ice is owed.
   2026-09-25, Fix 3b.
+
+  **And a sixth once a lake falls with its outlet.** Fix 3b's review round made a lake's surface
+  in the implicit pass fall with its outlet's cut, instead of standing at its filled level for the
+  whole pass, so an inflow grades to the lowered water. With the ice off the bars' share rose to
+  0.167, 0.168 and 0.153 (561, 1,214 and 642 cells of 3,363, 7,224 and 4,198), and with the ice on
+  to 0.159, 0.163 and 0.137. The ice's own share is still no higher than the bare world's, but on
+  seed 42 the glaciated world holds 1,554 more lake cells, and the comb clause, which counts cells,
+  is over its fiftieth at 2.48%. `StraightRunTest`'s census finds its first ruled bar since the facet
+  rule: 27 cells on seed 42 at 512. Both are recorded under the one finding. The likeliest reading,
+  not tested: inflows now cut to a lower base, so more grid-bearing channels are deep enough for
+  the next round's fill to stand in. 2026-09-25, Fix 3b review round.
 
 - **Steep flanks are combed by single-cell gullies down the columns, and the implicit incision makes
   it show (rule 13).** On the renders of seeds 7 and 42 at 1024 the flanks of east-west ranges carry
@@ -85,6 +99,39 @@
   length of their own (the X1d entry above); a transport length in kilometres, and a guard on the
   share of steep ground draining down a column against what the cell's shape predicts, are what
   would answer it. 2026-09-25, Fix 3b.
+
+  **The update does not make the comb (Fix 3b's review round, reported).** On synthetic ridges on a
+  256 grid (cells 46.9 km by 23.4 km), a 4,000 m crest falling linearly over 50 cell widths either
+  side with 2 m of roughness, twelve rounds at 0.29 and 0.738 mm a year, the channels (eight cells
+  upstream or more) follow the fall line on both bearings under both updates: 94 to 99% down a
+  column on the east-west ridge and 89 to 92% along a row on the north-south one. The share of
+  channel cells with a parallel channel draining the same way within two cell widths of ground
+  across the fall line is 97 to 99% under the capped update on both bearings and 56 to 59%
+  (east-west) and 69 to 71% (north-south) under the implicit one. The cap combs more, and more
+  evenly; the implicit update combs less, and no more on east-west ridges than north-south, and
+  cuts what comb there is to grade. With 20 m of roughness on a 1,500 m crest, where the roughness
+  outweighs the ridge's fall, the order is the same (61 and 80% capped, 19 and 51% implicit). The
+  columns the generated worlds' steep ground prefers are therefore not the update's; what they are
+  is not isolated. The steep-cell count used above is no instrument for it once the valleys are cut
+  deep: on the synthetic ridges the steepest third of the ground is valley walls, and it drains
+  across the fall line (62 to 68% along a row on the east-west ridge).
+
+  **The cause is the routing's, deepened by erosion (Fix 3b's review round, reported).** The steepest
+  third of the land at 1024, on seeds 7 and 42, counted on three surfaces routed by the production
+  routing over the same land: an isotropic synthetic surface built on the ground (sixty-four waves
+  of random bearing, 4 to 40 cell widths long), the world's terrain before erosion, and the finished
+  world. Down a column: 51.4 and 47.4% on the isotropic surface, 41.8 and 44.5% before erosion, 60.5
+  and 59.1% finished; along a row 17.0 and 18.2%, 17.7 and 17.6%, 13.6 and 14.2%; on a diagonal 31.6
+  and 34.4%, 40.6 and 37.9%, 25.9 and 26.7%. On these cells, half as tall as wide, the eight
+  neighbours' bearings split a circle so that steepest descent on isotropic ground goes down a
+  column about 35% of the time, along a row about 15% and on a diagonal about 50%. So the routing
+  already sends 12 to 16 points more of isotropic ground down the columns than the bearings give,
+  taken from the diagonals; the terrain before erosion is near that baseline; and the rounds of
+  erosion deepen it to about 60%, on main's tree, the cap's and the implicit update's alike. The fix
+  this points at is in the routing's choice between a column and a diagonal on a cell of this shape,
+  not in the incision. The share with both neighbours alike across the fall line falls through the
+  erosion (48 and 47% before, 23 and 24% finished), so the channels organise; what the eye reads as
+  a comb is the bearing, not a lattice of one-cell gullies.
 
 - **The sea-level percentile hands the sea's highest cell to the land where the sea fills its rank
   exactly.** `SeaLevelStage.thresholdAtRank` finds the bin where the cells counted so far reach the

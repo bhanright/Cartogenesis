@@ -59,7 +59,8 @@ class MoistureBudgetTest : BorrowsSharedWorlds() {
          * The known failure both recycling clauses record. The ratio pooled over the four seeds
          * stood at 0.331, read 0.292 on the continents the ground's ruler drew (Fix 2) and 0.279
          * under the capped incision's terrain (Fix 3); it came inside the band on the implicit
-         * update and reads 0.295 with the uplift re-derived on it, a few thousandths under. No
+         * update and reads 0.295 with the uplift re-derived on it, a few thousandths under, and 0.296
+         * once a lake falls with its outlet. No
          * operator of the moisture march changed; the terrain it marches over did (docs/DESIGN_LEDGER.md,
          * Fix 2, Fix 3 and Fix 3b).
          */
@@ -210,7 +211,7 @@ class MoistureBudgetTest : BorrowsSharedWorlds() {
         // Under the band since the continents were redrawn on the ground's ruler, inside it on the
         // implicit update before the uplift was re-derived, and under it again after: see
         // [RECYCLING_UNDER_THE_BAND].
-        KnownFailures.expect(RECYCLING_UNDER_THE_BAND, "0.295") {
+        KnownFailures.expect(RECYCLING_UNDER_THE_BAND, "0.296") {
             if (!(ratio > EARTH_RECYCLING_LOW && ratio < EARTH_RECYCLING_HIGH)) {
                 throw RecordedViolation(
                     ("the continental recycling ratio is %.3f, outside Earth's %.2f to %.2f")
@@ -269,7 +270,7 @@ class MoistureBudgetTest : BorrowsSharedWorlds() {
                 )
         )
         // Recorded as the clause above.
-        KnownFailures.expect(RECYCLING_UNDER_THE_BAND, "0.295") {
+        KnownFailures.expect(RECYCLING_UNDER_THE_BAND, "0.296") {
             if (!(proxyRatio > EARTH_RECYCLING_LOW && proxyRatio < EARTH_RECYCLING_HIGH)) {
                 throw RecordedViolation(
                     ("the shipped ground return puts the recycling ratio at %.3f, outside Earth's " +

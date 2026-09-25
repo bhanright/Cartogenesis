@@ -787,7 +787,7 @@ schism. (Recorded here by C2, which found both figures in a code comment and now
 Held since chunk 6. The cap was enforced on the catchments and the enclave pass then gave a realm the
 stranded pieces of its neighbours: seed 7's largest realm held 24.2% of the land when the cap had
 run and 33.6% on the finished map. A piece is now given only to a neighbour it leaves within the cap,
-and the largest realm on seeds 7/42/1234/99 at 512 and 969495 at 2048 holds 21.4/26.6/19.9/24.8/21.0%
+and the largest realm on seeds 7/42/1234/99 at 512 and 969495 at 2048 holds 29.9/27.9/22.6/17.8/23.2%
 (33.6/29.2/24.7/23.1/29.9% before). `RealmSpreadTest` asserts it. Where no neighbour can take a
 piece within the cap, the piece is not left behind as an exclave of a realm it no longer touches:
 it becomes a realm of its own with its capital on its best ground, whatever its size, so no realm
@@ -796,7 +796,7 @@ to go. A schism's breakaway also takes any run of the rest it
 would cut off from the rest's main body. Counted over seeds 7/42/1234/99 at 512, no piece of any
 realm is stranded inside another's land (none on origin/main either), and one realm is landlocked
 inside a single neighbour against origin/main's three; realms on a coast with one land neighbour,
-Portugal's case, are 17 against origin/main's 15.
+Portugal's case, are 19 against origin/main's 15.
 
 **The pieces are catchments, and each is one piece of ground.** A realm's borders are only as good
 as the units it is built from, and chunk 6 found four faults in them. They were labelled in order of
@@ -814,10 +814,12 @@ unit merges only into a neighbour on its own landmass, the one it shares the lon
 seeds 7/42/1234 at 512 the largest realm unit went from 4.2/3.8/3.0 times the share to within it, and
 on seed 7 the merge had left 14 units spanning two landmasses and now leaves none. `CatchmentUnitsTest`
 guards each rule on a hand-made world. On 718106 at 2048 the realm borders' straight runs along a
-row or column of 50 km or more went from 10 to 12 and the longest from 123 km to 76, and the one of
-100 km or more went: the realms are laid differently, so the borders fall on different ground, and
-none of the runs reaches the guard's bar. The peoples' borders, whose longest runs lie at the same
-cells before and after, follow the ice and biome edges the partition does not draw.
+row or column of 50 km or more went from 10 to 17 and of 100 km or more from 1 to 2, the longest
+still 123 km: that one and the second, 108 km, lie on the ice sheet's own ruled edge at cells
+(980,462) and (981,347), where the realms on either side now differ, and none of the runs reaches the
+guard's bar. The ice's edge is the ice's finding and not the partition's; the peoples' borders,
+whose longest runs lie at the same cells before and after, follow the ice and biome edges the same
+way.
 
 ## The units these rules are stated in
 
@@ -1197,7 +1199,7 @@ seeds 7/42/1234/99 at 512 and 969495 at 2048, on the realms chunk 6 first laid, 
 capitals were 15/18, 7/14, 8/16, 7/15 and 3/14 with the term as it is and the same with the land-only
 mean except 969495, which went to 4/14. The pull is real in the arithmetic and does not decide where
 capitals go, so the term was left. On the realms as chunk 6 finally lays them the coastal capitals
-are 14/18, 8/14, 8/16, 6/14 and 3/14, 39 of 76, against 36 of 77 on origin/main.
+are 13/20, 2/13, 8/15, 8/16 and 3/14, 34 of 78, against 36 of 77 on origin/main.
 
 ## Where the deserts are
 

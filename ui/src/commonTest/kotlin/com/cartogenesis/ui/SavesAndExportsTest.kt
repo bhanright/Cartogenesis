@@ -51,8 +51,9 @@ class SavesAndExportsTest {
         // the pane says saving under the same name updates it in place.
         var fresh = 0
         val next = { "doc-${++fresh}" }
-        val first = DocumentIdentity("doc-0", key = null, seed = null).afterGenerating(1L, next).at("doc-0.cgw")
-        assertEquals(DocumentIdentity("doc-0", "doc-0.cgw", 1L), first)
+        val shelf = MemoryLibrary()
+        val first = DocumentIdentity("doc-0", key = null, seed = null).afterGenerating(1L, next).at("doc-0.cgw", shelf)
+        assertEquals(DocumentIdentity("doc-0", "doc-0.cgw", 1L, shelf), first)
 
         val random = first.afterGenerating(2L, next)
         assertNotEquals(first.id, random.id)
@@ -63,15 +64,28 @@ class SavesAndExportsTest {
         // A file from outside the library is a new document too, whatever id it carries: that id
         // may be a library save's, and a first Save filed under it wrote over that save.
         val world = WorldDocument(id = "doc-0", title = "Brought in", config = WorldGenConfig(seed = 1L), savedAt = 1L)
-        val imported = DocumentIdentity.opened(world, key = null, freshId = next)
+        val imported = DocumentIdentity.opened(world, key = null, from = null, freshId = next)
         assertNotEquals("doc-0", imported.id)
         assertNull(imported.key)
-        assertEquals(DocumentIdentity("doc-0", "doc-0.cgw", 1L), DocumentIdentity.opened(world, "doc-0.cgw", next))
+        assertEquals(DocumentIdentity("doc-0", "doc-0.cgw", 1L, shelf), DocumentIdentity.opened(world, "doc-0.cgw", shelf, next))
         // Save as is a new document for the same world.
         val copy = first.savedAs(next)
         assertNotEquals(first.id, copy.id)
         assertNull(copy.key)
         assertEquals(first.seed, copy.seed)
+    }
+
+    @Test
+    fun `a key is written back only into the library it came from`() {
+        // The library moved — to another folder, or between this browser's storage and a folder
+        // on the disk — and Save wrote the world opened from one place over whatever file of the
+        // same name the other place held.
+        val browserStorage = MemoryLibrary()
+        val folder = MemoryLibrary()
+        val opened = DocumentIdentity("doc-0", key = null, seed = 1L).at("doc-0.cgw", browserStorage)
+        assertEquals("doc-0.cgw", opened.keyIn(browserStorage))
+        assertNull(opened.keyIn(folder), "a key from this browser's storage was written into the folder")
+        assertNull(DocumentIdentity("doc-0", "doc-0.cgw", 1L).keyIn(folder), "a key with no library was trusted")
     }
 
     @Test

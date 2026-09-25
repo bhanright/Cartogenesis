@@ -1,21 +1,34 @@
 package com.cartogenesis.ui
 
 import com.cartogenesis.cartography.WorldDocument
+import com.cartogenesis.cartography.WorldLibrary
 import com.cartogenesis.cartography.WorldOverrides
 import com.cartogenesis.worldgen.model.MapLabel
 import com.cartogenesis.worldgen.model.WorldMap
 
 /**
  * Which document the world on screen belongs to: its [id], the library [key] it was last opened
- * from or saved to (null until it has been either), and the [seed] of the world it holds.
+ * from or saved to (null until it has been either), the [library] that key names a file in, and
+ * the [seed] of the world it holds.
  *
  * The rule is the one the library pane states — "saving under the same name updates it in place" —
  * and the one the cartouche already follows for the name: a settings edit at the same seed is the
  * same document, and a world at another seed is a new one. So Save after Random world writes a new
  * file beside the last, rather than over it, and Save after opening a file writes back to that
  * file, whatever it is called.
+ *
+ * A key names a file in one library and nothing in any other. The library can move — the desktop's
+ * to another folder, the browser's between its own storage and a folder on the disk — and a key
+ * carried across would be written over whatever file of that name the other place holds, which is
+ * as likely as not somebody else's world. So the key is kept with the library it came from, and a
+ * Save into any other library files the world as new: see [keyIn].
  */
-internal data class DocumentIdentity(val id: String, val key: String?, val seed: Long?) {
+internal data class DocumentIdentity(
+    val id: String,
+    val key: String?,
+    val seed: Long?,
+    val library: WorldLibrary? = null
+) {
 
     /**
      * After a generation made [madeSeed]'s world: this document if the seed is its own or it had
@@ -27,22 +40,27 @@ internal data class DocumentIdentity(val id: String, val key: String?, val seed:
     /** Save as: the same world under a new document, so the one already in the library stays. */
     fun savedAs(freshId: () -> String): DocumentIdentity = DocumentIdentity(freshId(), null, seed)
 
-    /** Saved to, or opened from, [writtenKey]: the next Save goes there too. */
-    fun at(writtenKey: String): DocumentIdentity = copy(key = writtenKey)
+    /** Saved to, or opened from, [writtenKey] in [into]: the next Save there goes there too. */
+    fun at(writtenKey: String, into: WorldLibrary): DocumentIdentity = copy(key = writtenKey, library = into)
+
+    /**
+     * Where a Save into [destination] writes this document: its key when the key names a file in
+     * [destination], and otherwise null, which is a new file and never replaces another.
+     */
+    fun keyIn(destination: WorldLibrary): String? = key?.takeIf { library === destination }
 
     companion object {
         /**
-         * A save opened from the library's [key], which Save writes back to; or, when [key] is
-         * null, a file from outside the library, which is a new document with [freshId] and
-         * nowhere saved.
+         * A save opened from [from]'s [key], which Save writes back to; or, when either is null, a
+         * file from outside the library, which is a new document with [freshId] and nowhere saved.
          *
          * An imported file keeps no id of its own because the id it carries may be the id of a save
          * already in the library — a copy downloaded and brought back, or a copy from another
          * machine — and its first Save must never write over that save. The library files a new
          * document under a name no other file has.
          */
-        fun opened(document: WorldDocument, key: String?, freshId: () -> String): DocumentIdentity =
-            if (key != null) DocumentIdentity(document.id, key, document.config.seed)
+        fun opened(document: WorldDocument, key: String?, from: WorldLibrary?, freshId: () -> String): DocumentIdentity =
+            if (key != null && from != null) DocumentIdentity(document.id, key, document.config.seed, from)
             else DocumentIdentity(freshId(), null, document.config.seed)
     }
 }

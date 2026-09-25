@@ -14,6 +14,7 @@ import com.cartogenesis.ui.BuildInfo
 import com.cartogenesis.ui.ExportFormat
 import com.cartogenesis.ui.ExportOutcome
 import com.cartogenesis.ui.ExportSubjects
+import com.cartogenesis.ui.FolderChooser
 import com.cartogenesis.ui.MapImage
 import com.cartogenesis.ui.Platform
 import com.cartogenesis.ui.SettingsStore
@@ -27,9 +28,10 @@ import org.jetbrains.skia.Image
 /**
  * What a browser tab can offer.
  *
- * The three answers differ from the desktop's, and nothing else does: worlds live in IndexedDB
- * rather than on disk, exporting means handing the browser a file to download rather than writing
- * a path, and the graphics device is reached through WebGPU rather than OpenGL.
+ * The three answers differ from the desktop's, and nothing else does: worlds live in IndexedDB, or
+ * in a folder on the disk the reader chose where the browser allows a page one, rather than in a
+ * folder named by its path; exporting means handing the browser a file to download rather than
+ * writing a path; and the graphics device is reached through WebGPU rather than OpenGL.
  */
 class WebPlatform(
     override val accelerator: ErosionAccelerator?,
@@ -91,6 +93,15 @@ class WebPlatform(
     override val libraryLocation: String =
         "This browser's IndexedDB storage. Clearing site data will remove them, so download " +
             "anything worth keeping."
+
+    /**
+     * A folder on the disk, where the browser offers `showDirectoryPicker`: Chrome and Edge. Asked
+     * of the feature rather than of the browser's name, so a browser that adds the API gets the
+     * choice and one that removes it loses it; without it this is null and nothing else about the
+     * library changes. See [BrowserFolderChooser].
+     */
+    override val folderChooser: FolderChooser? =
+        if (directoryPickerAvailable()) BrowserFolderChooser(compressor) else null
 
     override val supportsFileTransfer: Boolean = true
 

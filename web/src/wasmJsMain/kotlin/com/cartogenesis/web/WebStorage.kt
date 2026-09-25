@@ -201,18 +201,18 @@ internal external fun newParts(): JsHandle
 private external fun appendPart(parts: JsHandle, part: JsHandle)
 
 @JsFun("(blob) => blob.size")
-private external fun blobSize(blob: JsHandle): Double
+internal external fun blobSize(blob: JsHandle): Double
 
 @JsFun("(blob, start, end) => blob.slice(start, end).arrayBuffer().then((buffer) => new Uint8Array(buffer))")
-private external fun blobSlice(blob: JsHandle, start: Double, end: Double): JsHandle
+internal external fun blobSlice(blob: JsHandle, start: Double, end: Double): JsHandle
 
-private fun ByteArray.toJs(offset: Int = 0, length: Int = size): JsHandle {
+internal fun ByteArray.toJs(offset: Int = 0, length: Int = size): JsHandle {
     val buffer = newByteArray(length)
     for (index in 0 until length) setByteAt(buffer, index, this[offset + index].toInt() and 0xFF)
     return buffer
 }
 
-private fun JsHandle.toKotlinBytes(): ByteArray {
+internal fun JsHandle.toKotlinBytes(): ByteArray {
     val length = byteArrayLength(this)
     return ByteArray(length) { byteAt(this, it).toByte() }
 }
@@ -235,7 +235,7 @@ private external fun thenStoragePromise(
  * A write that silently did not happen is a worse failure than one that throws, so IndexedDB's
  * calls use this instead and let the caller turn it into a message.
  */
-private suspend fun awaitPromiseOrThrow(promise: JsHandle): JsHandle? =
+internal suspend fun awaitPromiseOrThrow(promise: JsHandle): JsHandle? =
     suspendCoroutine { continuation ->
         thenStoragePromise(
             promise,

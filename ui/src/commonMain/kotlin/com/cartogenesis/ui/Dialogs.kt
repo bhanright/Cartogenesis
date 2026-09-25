@@ -46,7 +46,12 @@ internal fun SettingsDialog(
     settings: AppSettings,
     platform: Platform,
     onSettings: (AppSettings) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    /**
+     * Where the library is now, in the reader's terms. The desktop's is its folder setting; a
+     * browser's is its own storage or the folder the reader chose in the Library pane.
+     */
+    libraryLocation: String = SettingsEffects.libraryLocation(settings, platform)
 ) {
     // 2048 rather than 4096 in a phone browser, and the small print below says so. Read from the
     // composition rather than passed in because this dialog is opened from a menu item that knows
@@ -154,7 +159,7 @@ internal fun SettingsDialog(
 
                 SettingRow(
                     "Library folder",
-                    SettingsEffects.libraryLocation(settings, platform)
+                    libraryLocation
                 ) {
                     if (platform.canRevealFolder) {
                         var typed by remember(settings.libraryFolder) {
@@ -185,6 +190,16 @@ internal fun SettingsDialog(
                                 contentPadding = TIGHT
                             ) { Text("Open folder", maxLines = 1) }
                         }
+                    } else if (platform.folderChooser != null) {
+                        // A browser folder is chosen by the browser's own picker and remembered
+                        // with its handle, not typed as a path, so it is chosen where the worlds
+                        // are rather than here.
+                        Text(
+                            "In this browser the library can live in a folder on this computer, " +
+                                "including one a sync client keeps in step. Choose it in the Library.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     } else {
                         Text(
                             "This platform keeps its library where it keeps it; there is no " +

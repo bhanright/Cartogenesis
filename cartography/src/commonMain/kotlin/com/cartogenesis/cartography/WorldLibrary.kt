@@ -7,7 +7,8 @@ import kotlinx.coroutines.sync.withLock
 /**
  * Where saved worlds live.
  *
- * Only the bytes are platform-specific — the desktop has a folder, the browser has IndexedDB.
+ * Only the bytes are platform-specific — the desktop has a folder, the browser has IndexedDB or,
+ * where it offers the File System Access API, a folder the reader chose.
  * Everything about the *format* is shared, which is what stops the two builds drifting into
  * incompatible save files.
  *
@@ -18,8 +19,8 @@ import kotlinx.coroutines.sync.withLock
  * itself, and two files carrying the same world never write over each other.
  *
  * Every method suspends. The desktop never actually suspends on one — plain blocking file I/O —
- * but the browser's library lives in IndexedDB, which is asynchronous throughout, so the interface
- * has to be.
+ * but both of the browser's libraries, IndexedDB and a chosen folder, are asynchronous throughout,
+ * so the interface has to be.
  */
 interface WorldLibrary {
     /** Headers only. A listing must never expand a payload — a 1024 save is tens of megabytes. */
@@ -138,10 +139,52 @@ abstract class ByteWorldLibrary(
     override suspend fun save(document: WorldDocument, world: WorldMap, key: String?): String {
         key?.let(::requireKey)
         val newName = if (key == null) LibraryKeys.of(document) else null
+        val contents: suspend (SaveSink) -> Unit = { sink -> WorldCodec.write(document, world, sink, compressor, writtenBy) }
         return writing.withLock {
-            val name = key ?: freeName(newName!!)
-            replacing(name) { sink -> WorldCodec.write(document, world, sink, compressor, writtenBy) }
-            name
+            if (key != null) {
+                replacing(key, contents)
+                key
+            } else {
+                creating(newName!!, contents)
+            }
+        }
+    }
+
+    /**
+     * Writes a new blob under [wanted], or under the next free name after it, and returns the name
+     * it took: a new file is never written over an old one.
+     *
+     * The name is chosen before the write here, which is all a library whose only writer is this
+     * instance needs. A library that shares its folder with other writers — another tab, the
+     * desktop application, a sync client — overrides this to choose again once the bytes are
+     * written, immediately before they are put in place, so the window in which another writer can
+     * take the name is the one call that moves the file rather than the whole of the write.
+     */
+    protected open suspend fun creating(wanted: String, contents: suspend (SaveSink) -> Unit): String {
+        val name = freeName(wanted)
+        replacing(name, contents)
+        return name
+    }
+
+    /**
+     * Copies [key] from [source] into this library as a new file, under the same name or the next
+     * free one after it, and returns the name it took. The bytes are passed on a piece at a time as
+     * they are read, neither decoded nor held whole, so a copy costs what a save costs and a file
+     * that would not open is copied as it is, to be refused here as it was there.
+     */
+    suspend fun copyFrom(source: ByteWorldLibrary, key: String): String {
+        requireKey(key)
+        return writing.withLock {
+            source.reading(key) { input ->
+                creating(key) { sink ->
+                    val buffer = ByteArray(COPY_BUFFER_BYTES)
+                    while (true) {
+                        val count = input.read(buffer, 0, buffer.size)
+                        if (count < 0) break
+                        if (count > 0) sink.write(buffer, 0, count)
+                    }
+                }
+            } ?: throw WorldFormatException(SaveProblem.UNREADABLE, "it is no longer in the library it was copied from")
         }
     }
 
@@ -150,7 +193,7 @@ abstract class ByteWorldLibrary(
      * `<id> (3).cgw` and so on that it does not: a new file is never written over an old one,
      * whatever the ids inside them say.
      */
-    private suspend fun freeName(wanted: String): String {
+    protected suspend fun freeName(wanted: String): String {
         val taken = names().toSet()
         if (wanted !in taken) return wanted
         val stem = wanted.removeSuffix(LibraryKeys.EXTENSION)
@@ -203,5 +246,8 @@ abstract class ByteWorldLibrary(
          * nothing.
          */
         const val HEADER_PROBE_BYTES = 1 shl 20
+
+        /** What a copy between two libraries holds between reading and writing: the desktop's own buffer. */
+        private const val COPY_BUFFER_BYTES = 1 shl 16
     }
 }

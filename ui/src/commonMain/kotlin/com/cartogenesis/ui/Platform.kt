@@ -109,6 +109,18 @@ interface Platform {
     val libraryLocation: String
 
     /**
+     * How the reader may move [library] into a folder on the disk they choose, or null where this
+     * host offers no such thing.
+     *
+     * A browser question. Chrome and Edge let a page ask for a folder and keep it across visits
+     * (the File System Access API); Firefox and Safari do not, and there the library stays in the
+     * browser's own storage with nothing offered in its place. The desktop's library is a folder
+     * already, chosen in Settings by its path, so it answers null too. See [LibraryPlaces], which
+     * is what the interface asks rather than asking this directly.
+     */
+    val folderChooser: FolderChooser? get() = null
+
+    /**
      * Whether the library pane's download/upload buttons appear.
      *
      * The desktop's library already lives on disk as ordinary `.cgw` files a user can move by

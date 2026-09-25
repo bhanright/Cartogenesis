@@ -351,4 +351,10 @@ tasks.withType<Test>().configureEach {
         rootProject.files("docs/INSTALL.md", "docs/RELEASE_NOTES_TEMPLATE.md")
     ).withPropertyName("documentsReadByTheSiteSourcesTest")
         .withPathSensitivity(PathSensitivity.RELATIVE)
+
+    // `FolderInteropTest` reads the desktop's save that the browser's tests open, from `:web`'s
+    // test sources: the same trap, the same declaration.
+    inputs.files(rootProject.fileTree("web/src/wasmJsTest/kotlin"))
+        .withPropertyName("browserTestSourcesReadByTheFolderInteropTest")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
 }

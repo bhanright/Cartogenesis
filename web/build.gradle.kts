@@ -19,6 +19,9 @@ plugins {
  * whether there is a GPU.
  */
 kotlin {
+    // The browser tests run through Karma in a headless Chrome, as `:ui`'s do, because what they
+    // test — a folder handle's streams and the private file system behind it — exists only in a
+    // browser. Karma reads its settings from `karma.config.d/` beside this file; see the files there.
     @OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)
     wasmJs {
         browser {
@@ -35,6 +38,10 @@ kotlin {
             implementation(compose.runtime)
             implementation(compose.material3)
             implementation(compose.ui)
+        }
+        wasmJsTest.dependencies {
+            implementation(kotlin("test"))
+            implementation(libs.kotlinx.coroutines.test)
         }
     }
 }

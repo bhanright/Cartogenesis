@@ -79,10 +79,12 @@ import com.cartogenesis.cartography.MapRasterizer
 import com.cartogenesis.cartography.MapSheet
 import com.cartogenesis.cartography.NationOverride
 import com.cartogenesis.cartography.WorldDocument
+import com.cartogenesis.cartography.WorldLibrary
 import com.cartogenesis.cartography.WorldSave
 import com.cartogenesis.worldgen.model.LabelKind
 import com.cartogenesis.worldgen.model.MapLabel
 import com.cartogenesis.cartography.RenderOptions
+import com.cartogenesis.cartography.SaveProblem
 import com.cartogenesis.cartography.SheetGeometry
 import com.cartogenesis.cartography.WorldOverrides
 import com.cartogenesis.cartography.resolve
@@ -92,6 +94,7 @@ import com.cartogenesis.worldgen.model.WorldMap
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.math.roundToInt
 import kotlin.random.Random
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
@@ -314,7 +317,15 @@ private fun Application(
     // save is filed under. See [WorldNaming] for the rule about which of those wins when.
     val naming = remember { WorldNaming() }
     var saved by remember { mutableStateOf(listOf<LibraryEntry>()) }
-    val store = platform.library
+    /**
+     * Which library is in use: the platform's own, or a folder the reader chose where the browser
+     * allows one. Every list, open, save and delete asks it at the moment it starts, and keeps the
+     * answer to the end, so an operation under way when the reader switches finishes in the place
+     * it was asked of.
+     */
+    val places = remember(platform) { LibraryPlaces(platform) }
+    /** How many worlds this browser's storage holds while a folder is in use, for the offer to copy them. */
+    var hostWorldCount by remember { mutableStateOf(0) }
     // Nothing generates until this is armed - by Go, New world, or Generate. Opening a save from
     // the library arms it too, since a world is then on screen and later edits should live-update
     // it exactly as if it had been generated here.
@@ -342,11 +353,11 @@ private fun Application(
     // What opening a save amounts to, whether it came from the library or from an uploaded file:
     // hand the world back to the engine as the world to reuse, which recomputes nothing.
     //
-    // [key] is where it was opened from in the library, which is where Save will write it back,
-    // or null for a file from outside the library.
-    fun openSave(save: WorldSave, key: String?) {
+    // [key] is where it was opened from in the library [from], which is where Save will write it
+    // back, or null for a file from outside the library.
+    fun openSave(save: WorldSave, key: String?, from: WorldLibrary?) {
         val opened = save.document
-        identity = DocumentIdentity.opened(opened, key, ::randomId)
+        identity = DocumentIdentity.opened(opened, key, from, ::randomId)
         naming.opened(opened.config.seed, opened.title)
         overrides = opened.overrides
         labels = opened.labels
@@ -364,16 +375,38 @@ private fun Application(
     fun documentOf(shown: WorldMap): WorldDocument =
         documentFor(shown, identity, naming.title, overrides, labels, epochMillis())
 
-    /** The library listed again, or a line saying why it could not be. */
+    /**
+     * A line saying [what] failed and why, and what became of the library if the failure was the
+     * folder's: leave to use it withdrawn, or the folder gone from under the page.
+     */
+    suspend fun failureLine(what: String, failure: Throwable, library: WorldLibrary): String {
+        val line = "$what: ${failure.message ?: failure::class.simpleName}"
+        val moved = places.afterFailure(library) ?: return line
+        return "$line. $moved"
+    }
+
+    /**
+     * The library listed again, or a line saying why it could not be.
+     *
+     * A listing that finishes after the reader has moved the library is of the place they left,
+     * and is dropped rather than shown as the place they are in.
+     */
     suspend fun refreshLibrary() {
-        saved = try {
-            store.list()
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (failure: Throwable) {
-            status = "Could not list the library: ${failure.message ?: failure::class.simpleName}"
+        val listing = places.library
+        val listed = if (listing == null) {
             emptyList()
+        } else {
+            try {
+                listing.list()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Throwable) {
+                status = failureLine("Could not list the library", failure, listing)
+                emptyList()
+            }
         }
+        if (places.library === listing) saved = listed
+        hostWorldCount = places.hostWorldCount()
     }
 
     /**
@@ -383,11 +416,20 @@ private fun Application(
      * quota, a full disk. That is a message, not a crash. The world goes in the file, not the
      * recipe for it: nothing here depends on this machine reproducing the same world from the same
      * seed, which is what the whole format was changed for.
+     *
+     * The library is the one in use when Save is pressed, and the key is written back only if it
+     * is that library's: a world opened from one place and saved into another is filed there as
+     * new, never over a file that happens to share its name. See [DocumentIdentity.keyIn].
      */
     fun saveWorld() {
         val current = world
         if (current == null) {
             status = "Generate a world before saving it."
+            return
+        }
+        val target = places.library
+        if (target == null) {
+            status = "Reconnect to the library's folder, or choose this browser's storage, before saving."
             return
         }
         val document = documentOf(current)
@@ -397,36 +439,42 @@ private fun Application(
                 saving.withLock {
                     // Where the document was last written, read now rather than when Save was
                     // pressed: an earlier Save of it may have finished while this one waited.
-                    val destination = if (identity.id == writing.id) identity.key else writing.key
-                    val key = store.save(document, current, destination)
+                    val owner = if (identity.id == writing.id) identity else writing
+                    val key = target.save(document, current, owner.keyIn(target))
                     // Unless a world at another seed has taken this one's place while it was written.
-                    if (identity.id == writing.id) identity = identity.at(key)
+                    if (identity.id == writing.id) identity = identity.at(key, target)
                 }
                 refreshLibrary()
                 "Saved \"${document.title}\""
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (failure: Throwable) {
-                "Could not save \"${document.title}\": ${failure.message ?: failure::class.simpleName}"
+                failureLine("Could not save \"${document.title}\"", failure, target)
             }
         }
     }
 
     /** Opens the library's [key]: the world, or a line saying why it will not open. */
     fun openFromLibrary(key: String) {
+        val source = places.library ?: return
         scope.launch {
             status = try {
-                when (val outcome = store.load(key)) {
+                when (val outcome = source.load(key)) {
                     is LoadOutcome.Loaded -> {
-                        openSave(outcome.save, key)
+                        openSave(outcome.save, key, source)
                         "Opened \"${outcome.save.document.title}\""
                     }
-                    is LoadOutcome.Refused -> "Could not open $key: ${outcome.refusal.message}"
+                    is LoadOutcome.Refused -> {
+                        val line = "Could not open $key: ${outcome.refusal.message}"
+                        // A file the storage would not read may be a folder the page has lost.
+                        val moved = if (outcome.refusal.problem == SaveProblem.UNREADABLE) places.afterFailure(source) else null
+                        if (moved == null) line else "$line. $moved"
+                    }
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (failure: Throwable) {
-                "Could not open $key: ${failure.message ?: failure::class.simpleName}"
+                failureLine("Could not open $key", failure, source)
             }
         }
     }
@@ -472,7 +520,13 @@ private fun Application(
         )
     }
 
-    LaunchedEffect(Unit) { refreshLibrary() }
+    // Where the library is, settled before anything is listed: a folder remembered from the last
+    // visit is read back and asked about, and the first listing is of wherever that leaves it.
+    LaunchedEffect(places) { places.start()?.let { status = it } }
+
+    // Listed again whenever the library moves, so the pane never shows one place's worlds under
+    // another place's name.
+    LaunchedEffect(places.place, places.started) { refreshLibrary() }
 
     // The library and the atlas are whole screens of their own, and a settings sheet pulled up over
     // the top third of one is a sheet in the way. Choosing either puts it down; nothing puts it
@@ -713,7 +767,9 @@ private fun Application(
                     }
                 }
             },
-            onDismiss = { showSettings = false }
+            onDismiss = { showSettings = false },
+            libraryLocation =
+                if (places.offersFolders) places.location else SettingsEffects.libraryLocation(settings, platform)
         )
     }
 
@@ -808,7 +864,10 @@ private fun Application(
             LibraryPane(
                 title = naming.name,
                 worlds = saved,
-                location = platform.libraryLocation,
+                location = places.location,
+                place = if (places.offersFolders) places.place else null,
+                libraryInUse = places.library != null,
+                hostWorldCount = hostWorldCount,
                 supportsFileTransfer = platform.supportsFileTransfer,
                 hasWorld = current != null,
                 onTitleChange = naming::rename,
@@ -838,7 +897,7 @@ private fun Application(
                             when (val outcome = platform.uploadWorld()) {
                                 null -> "No file opened"
                                 is LoadOutcome.Loaded -> {
-                                    openSave(outcome.save, key = null)
+                                    openSave(outcome.save, key = null, from = null)
                                     "Opened \"${outcome.save.document.title}\" from file"
                                 }
                                 is LoadOutcome.Refused -> "Could not open the file: ${outcome.refusal.message}"
@@ -855,15 +914,36 @@ private fun Application(
                 // its config and computes none of them.
                 onOpen = { key -> openFromLibrary(key) },
                 onDelete = { key ->
-                    scope.launch {
-                        status = try {
-                            store.delete(key)
-                            "Deleted $key"
-                        } catch (cancelled: CancellationException) {
-                            throw cancelled
-                        } catch (failure: Throwable) {
-                            "Could not delete $key: ${failure.message ?: failure::class.simpleName}"
+                    val target = places.library
+                    if (target != null) {
+                        scope.launch {
+                            status = try {
+                                target.delete(key)
+                                "Deleted $key"
+                            } catch (cancelled: CancellationException) {
+                                throw cancelled
+                            } catch (failure: Throwable) {
+                                failureLine("Could not delete $key", failure, target)
+                            }
+                            refreshLibrary()
                         }
+                    }
+                },
+                // The picker and the permission prompt are allowed only while the browser is
+                // still handling the click, so both coroutines start undispatched: the call that
+                // opens either runs inside this handler, before anything else can suspend.
+                onChooseFolder = {
+                    scope.launch(start = CoroutineStart.UNDISPATCHED) { status = places.choose() }
+                },
+                onReconnect = {
+                    scope.launch(start = CoroutineStart.UNDISPATCHED) { status = places.reconnect() }
+                },
+                onUseHostStorage = {
+                    scope.launch { status = places.useHostStorage() }
+                },
+                onCopyIntoFolder = {
+                    scope.launch {
+                        status = places.copyHostWorldsIntoFolder()
                         refreshLibrary()
                     }
                 }

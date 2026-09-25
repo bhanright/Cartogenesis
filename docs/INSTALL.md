@@ -6,6 +6,12 @@ each is what does not fit on a card.
 
 The download bundles its own Java runtime. Nothing needs to be installed first on any platform.
 
+The desktop program keeps its settings in one file, `settings.json`, in the system's own folder for
+a person's configuration: `%APPDATA%\Cartogenesis` on Windows,
+`~/Library/Application Support/Cartogenesis` on macOS, and `$XDG_CONFIG_HOME/cartogenesis`
+(`~/.config/cartogenesis` where that is not set) on Linux. Saved worlds are kept apart from it, in `.cartogenesis/worlds` in your
+home folder unless you choose another library folder.
+
 The file names below write `<version>` where a release's own number goes — `3.0.2`, say. The
 complete list is `site/downloads.txt`, which `SiteAssemblyTest` holds this file, the page and the
 release-notes template to, so all three name the same files.
@@ -28,7 +34,9 @@ if you trust the download: what SmartScreen is telling you is true, which is tha
 for a certificate vouching for this file. The portable zip avoids the panel because it is not an
 installer.
 
-Saved worlds live in `%USERPROFILE%\.cartogenesis\worlds`.
+Saved worlds live in `%USERPROFILE%\.cartogenesis\worlds`. Settings are one file,
+`%APPDATA%\Cartogenesis\settings.json`, or `%USERPROFILE%\AppData\Roaming\Cartogenesis\settings.json`
+where `%APPDATA%` is not set.
 
 ## Linux
 
@@ -106,13 +114,15 @@ and it exits cleanly either way. From the tarball the command is
 - Saved worlds: `~/.cartogenesis/worlds`, or the folder chosen under Settings ▸ Library folder.
   Back that folder up and nothing else; choosing a folder a sync client keeps in step, as the
   README's "The library, and keeping it in the cloud" describes, backs it up as you go.
-- Settings: alongside them, under `~/.cartogenesis`.
+- Settings: one file, `$XDG_CONFIG_HOME/cartogenesis/settings.json`, or
+  `~/.config/cartogenesis/settings.json` where `XDG_CONFIG_HOME` is not set. Not beside the worlds:
+  a preference belongs to you rather than to a library, so it stays put when the library moves.
 - From the package, the launcher is `/opt/cartogenesis/bin/Cartogenesis`, reached from the
   desktop environment's own menu. The package adds no symlink to `/usr/bin`, so the full path is
   what a terminal wants.
 
-Removing the package leaves `~/.cartogenesis` where it is, on purpose: your worlds are not the
-program's to delete.
+Removing the package leaves `~/.cartogenesis` and the settings file where they are, on purpose:
+your worlds are not the program's to delete.
 
 ## Browser
 

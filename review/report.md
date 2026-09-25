@@ -611,7 +611,7 @@ The census's records were updated for this chunk:
 - **One new violation, recorded under its existing finding:** a drawn river's square corner on
   59758 at (1985,1521). The discharge change re-ranked which rivers are drawn.
 
-The other audit-tier classes, the render dumps, ran on `7fe2cf5`: three passed and one skipped
+The other audit-tier classes, the render dumps, ran on `7fe2cf5`: four passed and one skipped
 itself.
 
 ### Where it all ends

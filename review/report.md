@@ -4,8 +4,8 @@
 
 - **Branch:** `chunk/6-water-realms`, created from origin/main at `fb22d30`. It is not merged and no
   pull request is open.
-- **Head:** `66d745d`, after the review round (see "Review round" at the end). The first build,
-  which the sections below describe, was `acb9df9`.
+- **Head:** `7fe2cf5`, after the review round and the third round (both at the end). The first
+  build, which the sections below describe, was `acb9df9`.
 - **Review branch:** `review/6-water-realms` is the head with `review/` on top: this report and the
   renders.
 
@@ -485,4 +485,93 @@ the land. Seeds 42 and 99 rose from 23.8% and 20.6%, because the breakaway rule 
 `66d745d` differs from `6d18d53` only in docs and a comment in `RealmSpreadTest`. The four new tests
 account for 267 against the first build's 263.
 
-**The 2048 audit tier** (`:cartography:audit`) is being run on `66d745d`; its result is added here when it finishes.
+**The 2048 audit tier** was started on `66d745d` and stopped after about ten minutes, to make way
+for the third round's builds. It was run on the third round's head instead; see there.
+
+## Third round
+
+A reading of `66d745d` confirmed points 2 and 4 of the review round fixed and the stranded-piece
+fallback working, and found two gaps. Each was verified on the code, then fixed and guarded by a
+test shown failing with the fix switched off.
+
+Commits:
+
+- `194c4f9`: point 1
+- `4fa940e`: point 2
+- `7fe2cf5`: ledger and `GEOGRAPHY.md`
+
+**Head:** `7fe2cf5`.
+
+### 1. Small pieces added up past the cap
+
+**Verified.** A piece under the smallest realm went to the neighbour holding most of its edge
+whatever that neighbour already held over the cap, so the stated bound held piece by piece and not
+in total.
+
+**Change.** A small piece goes to that neighbour only while the neighbour's *whole* excess over the
+cap stays under the smallest realm. A piece no neighbour can take within that allowance becomes a
+realm of its own, with its capital on its best ground. The bound the code now keeps:
+
+- no stranded piece is left;
+- no realm ends the pass a smallest realm or more over the cap;
+- a realm under the smallest size is made only where a small piece has nowhere else to go.
+
+**Guard.** `RealmSpreadTest`, "small pieces cannot add up past the cap's allowance": two 20-cell
+pieces inside a realm of 760 cells, against a cap of 768 and a smallest realm of 24.
+
+- **Fix off** (`NationStage` as of `66d745d`): the host took both pieces and ended **32 over**.
+- **Now:** the host takes one and ends 12 over; the other piece is a realm of its own, and no piece
+  is stranded.
+
+### 2. The basin graph could hold a cycle
+
+**Verified.** The graph's leftovers were appended in index order, so of two basins feeding each
+other, the first was solved on rain the other keeps.
+
+**Change.** `RiverStage.basinGroupsUpstreamFirst` finds strongly connected groups of basins (Tarjan,
+with an explicit stack) and walks them upstream first. A single basin is solved as before. A group
+of more than one is iterated to a fixed point:
+
+1. Measure each member's inflow on the routing the fill left, with every closed basin keeping its
+   water: those above the group, and the members closed so far other than itself.
+2. The members the balance closes become the next closed set.
+3. Repeat until the closed set stops changing.
+
+**Why it converges.** A closure only takes water away, so every member's inflow can only fall as
+the closed set grows. The balance closes a basin at any inflow below the one at which it closes it,
+so the closed set only grows, and it settles within as many passes as the group has members. After
+a group, the rain field is re-accumulated with every closed basin as a sink: that is the field the
+single closures' subtractions reach one at a time.
+
+**Guard.** `WaterReceivedTest`, "two basins that feed each other are solved together". This is the
+four-exit case: A feeds B by its west exit, B feeds A by its east exit, and each has a second exit
+off the world.
+
+- **Fix off** (each group split into single basins in index order, which is what the old walk
+  did): A was given **550 mm-cells against 450 reaching it**.
+- **Now:** 450 against 450 for each, and one group solved together.
+
+**How many such groups the standard worlds contain: none.** On seeds 7/42/1234/99 at 512 and on
+718106 and 969495 at 2048:
+
+| | Seed 7 | 42 | 1234 | 99 | 718106 | 969495 |
+|---|---|---|---|---|---|---|
+| Closed basins | 21 | 27 | 6 | 19 | 30 | 41 |
+| … with more than one exit | 15 | 13 | 6 | 14 | 27 | 35 |
+| Groups feeding each other | 0 | 0 | 0 | 0 | 0 | 0 |
+
+No world moved on this account, and the case is still handled.
+
+### Test counts on `7fe2cf5`
+
+| Task | Tests | Failures | Errors | Skipped | Run |
+|---|---|---|---|---|---|
+| `:worldgen:jvmTest` | 269 | 0 | 0 | 0 | alone, 50 min 55 s |
+| `:cartography:jvmTest` | 117 | 0 | 0 | 0 | with ui and desktop, 23 min 17 s |
+| `:ui:jvmTest` | 129 | 0 | 0 | 0 | with cartography and desktop |
+| `:desktop:test` | 104 | 0 | 0 | 19 | with cartography and ui |
+
+All four ran on `7fe2cf5`. The two new tests account for 269 against the review round's 267.
+
+**The 2048 audit tier** (`:cartography:audit`) is running on `7fe2cf5`. Its result is added here
+when it finishes.

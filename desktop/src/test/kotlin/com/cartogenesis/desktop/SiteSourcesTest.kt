@@ -316,6 +316,33 @@ class SiteSourcesTest {
     }
 
     /**
+     * That what only a script can work stays out of sight without one.
+     *
+     * The frame that plays the steps, the style slider and the pins' note carry `hidden` in the
+     * markup, and a script takes it off. But a style sheet's own `display` beats the attribute, so
+     * a rule giving one of them a display outside the script's classes would show a reader
+     * without scripts a frame with nothing in it and controls that do nothing. Checked on every
+     * element the markup hides, by each of its classes.
+     */
+    @Test
+    fun `what needs a script stays hidden without one`() {
+        val hiddenClasses = Regex("""<[a-z]+\s[^>]*\shidden(?=[\s>])[^>]*>""").findAll(page.substringAfter("<body"))
+            .mapNotNull { Regex("""class="([^"]+)"""").find(it.value)?.groupValues?.get(1) }
+            .flatMap { it.split(' ') }.toSet()
+        assertTrue(hiddenClasses.size >= 3, "the markup hides ${hiddenClasses.size} classes of thing; the frame, the slider and the note are three")
+        val shown = rules(styleSheet).filter { (_, body) ->
+            Regex("""display\s*:\s*(?!none)""").containsMatchIn(body)
+        }.flatMap { it.first }.filter { selector ->
+            // The element the rule styles is its selector's last compound, not an ancestor.
+            val subject = selector.split(Regex("""[\s>+~]+""")).last()
+            !selector.startsWith(".live ") && !selector.startsWith(".reveal ") &&
+                hiddenClasses.any { Regex("""\.${Regex.escape(it)}(?![\w-])""").containsMatchIn(subject) }
+        }
+        assertTrue(shown.isEmpty(), "these give a display to something the markup hides until a script runs: $shown")
+        println("SITE ${hiddenClasses.size} classes hidden until a script runs, none shown without one")
+    }
+
+    /**
      * That a reader who asks for less motion sees every card at once, still.
      *
      * Twice over: the head does not arm the reveal when the preference is set as the page loads,

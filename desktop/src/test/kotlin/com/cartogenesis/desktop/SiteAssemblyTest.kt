@@ -44,17 +44,20 @@ class SiteAssemblyTest {
          * The bytes the page fetched as it loaded before Site 5a: the page as assembled (46,168),
          * the two preloaded faces (261,088 and 200,500) and the hero (178,484, the same file
          * then and now). The page's figure is main's page at d7c7e31 with the roadmap drawn in as
-         * the assembly draws it today.
+         * the assembly draws it today. That page's step pictures were lazy cards lower down,
+         * which a headless Chrome saw arrive after the load event, so they are not in it.
          */
         const val LOAD_BYTES_BEFORE_SITE_5A = 686_240L
 
         /**
-         * What Site 5a allows the load to grow by: 24 KiB, for the markup, style and script of its
-         * five figures and the five pins the assembly writes in, which measured 23,945 bytes. No
-         * picture: every picture it adds is lazy, is fetched after the load, or is fetched when
-         * the reader picks it.
+         * What Site 5a allows the load to grow by: 128 KiB, where it measured 112,483 bytes. The
+         * markup, style and script of its five figures and the five pins the assembly writes in
+         * are 23,945 of those, and the six steps' pictures, which the frame brings into the load,
+         * the other 88,538. The headroom is for the step pictures, whose size moves whenever the
+         * site's pictures are made again. Every other picture Site 5a adds is lazy, is fetched
+         * after the load, or is fetched when the reader picks it.
          */
-        const val LOAD_BYTES_GROWTH_SITE_5A = 24_576L
+        const val LOAD_BYTES_GROWTH_SITE_5A = 131_072L
 
         /**
          * The most the hero's strip may weigh: 112 KiB, where it measured 106,218 bytes, 2048 by
@@ -620,9 +623,12 @@ class SiteAssemblyTest {
 
     /**
      * What the page fetches as it loads, and a ceiling on it: the page itself, the two faces it
-     * preloads, and every picture it asks for without `loading="lazy"`. The hero's strip is fetched
-     * after the page has loaded and is weighed apart, and every lazy picture comes when the reader
-     * reaches it.
+     * preloads, every picture it asks for without `loading="lazy"`, and the six steps' pictures.
+     * The steps are lazy, but the frame that plays them stands in the second screenful at every
+     * width, inside the distance a browser fetches lazy pictures ahead of the reader, so a headless
+     * Chrome measured all six arriving before the load event at 375, 768, 1280 and 1920 wide. The
+     * hero's strip is fetched after the page has loaded and is weighed apart, and every other lazy
+     * picture comes as the reader nears it.
      *
      * The ceiling is the weight before Site 5a and the growth Site 5a states for it (see
      * [LOAD_BYTES_BEFORE_SITE_5A] and [LOAD_BYTES_GROWTH_SITE_5A]), so a later change that makes
@@ -636,10 +642,11 @@ class SiteAssemblyTest {
         val eager = Regex("""<img\s[^>]*>""").findAll(text).map { it.value }
             .filterNot { it.contains("""loading="lazy"""") }
             .map { attribute(it, "src") }.toList()
-        val atLoad = page.length() + (preloaded + eager).sumOf { file(it).length() }
+        val steps = SiteImagery.STEP_CARDS.map { "img/${it.file}" }
+        val atLoad = page.length() + (preloaded + eager + steps).distinct().sumOf { file(it).length() }
         val strip = file("img/${SiteImagery.HERO_STRIP.file}").length()
         println(
-            "SITE at load: $atLoad bytes (page ${page.length()}, preloaded ${preloaded.joinToString()}, eager ${eager.joinToString()}); " +
+            "SITE at load: $atLoad bytes (page ${page.length()}, preloaded ${preloaded.joinToString()}, eager ${eager.joinToString()}, the frame's ${steps.joinToString()}); " +
                 "the hero's strip after load, $strip bytes"
         )
         assertTrue(

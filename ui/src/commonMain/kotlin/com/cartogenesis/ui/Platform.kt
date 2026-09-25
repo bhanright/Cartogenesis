@@ -321,6 +321,26 @@ interface Platform {
     fun copyToClipboard(text: String) {}
 
     /**
+     * The whole address this application was opened at, query and fragment included, or null where
+     * it was not opened at an address at all.
+     *
+     * A browser answers with the page's own address, read once when the page loads, and that is
+     * where a link to a world arrives: see [WorldLinks.read]. The desktop is started from a
+     * program, not an address, and answers null, so it opens as it always has.
+     */
+    val openedAt: String? get() = null
+
+    /**
+     * The page address a copied link to a world begins with, with no query or fragment of its own.
+     *
+     * The browser answers with its own page, so a link copied from a test deployment or a local
+     * build opens in that build. The desktop is no page, and its link has to open for somebody who
+     * has never installed anything, so it takes the published application's address, which is the
+     * default: [WorldLinks.PUBLIC_APP_ADDRESS].
+     */
+    val worldLinkBase: String get() = WorldLinks.PUBLIC_APP_ADDRESS
+
+    /**
      * Which front end this is, in the word a bug report's form offers: "Desktop" or "Browser".
      *
      * A report of a browser's behaviour and a report of the desktop's are different reports — the

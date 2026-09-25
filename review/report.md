@@ -666,3 +666,255 @@ the measurements; the full suites and the renders to run once, after the comb fi
 `ErosionUnitsTest` and `ReceiverClampTest` were not changed this round; they ran green inside the
 whole-worldgen run above. The probes (`SeedProbeGrid`, `SeedProbeRidge`, `SeedProbeCombCause`,
 `SeedProbeRender`) are ignored files and are not committed.
+
+## Comb experiments
+
+**Branch:** `chunk/3b-implicit-erosion` at `1e8b3ac`. Not merged, `origin/main` not merged in, no pull
+request, no full suites, no final renders. Every figure below is at 512 on seeds 7 and 42 unless it
+says otherwise.
+
+| Commit | What it does |
+|---|---|
+| `93169ca` | A guard on the router's step shares on planes; the comb's cause restated; `subGridDraw`'s KDoc fixed. |
+| `16a92c8` | The comb guard (`CombGuardTest`, `CombCensus`), recorded as failing on this head. |
+| `9a3fc39` | Candidate B behind `ErosionConfig.subGridTransport`, off by default, with `SubGridTransportTest`. |
+| `1e8b3ac` | Candidate A behind `ErosionConfig.incisionNeedsChannelHead`, off by default, with its bounds case in `ImplicitIncisionTest`. |
+
+Either candidate can be kept by turning its setting on and dropped by reverting its commit. They
+touch separate code, apart from one shared settings block in `WorldGenConfig`.
+
+### 1. What the router does, corrected
+
+The review round read the steep ground's column share against 35%, which is what the nearest of the
+eight bearings would give on cells half as tall as wide. The router is not that rule: it is
+Tarboton's facet direction with the Rho8 draw.
+
+- **Its own expectation** over isotropic bearings, integrated from the facet geometry, is 44.868%
+  down a column, 15.311% along a row and 39.821% on a diagonal. This agrees with the review's
+  figures.
+- **Production's router on planes** at 360 bearings on three seeds takes 45.04%, 15.38% and 39.58%,
+  each within 1.5 standard errors. The mean step's bearing holds on every plane; the worst is 3.5
+  standard errors on the worst of 1,080 planes.
+- **The new guard** (`RoutingGroundTest`) fails the plain steepest-of-eight rule at 35.6%, 14.4% and
+  50.0%.
+- **The standard error is counted over cells, not cells times bearings.** A cell's draw is the same
+  hash at every bearing of one seed, and counting it once per bearing had first put the router 14
+  errors off.
+
+So the router has no residual on planes, and nothing to correct cheaply there. Against its own
+44.9%:
+- the isotropic synthetic surfaces read 47.4% and 51.4%, 2.5 to 6.5 points over it: rough, filled,
+  steep-selected ground, not a plane;
+- the terrain before erosion reads 42.0% and 45.9%, at the rule;
+- the finished world reads 57 to 58%.
+
+The earlier "the fix is the routing's" was wrong.
+
+### 2. The feedback, tested on the same cells
+
+The cells followed are the steepest third of the terrain before erosion, routed there by production's
+router, and read again on the finished world's drainage. The same cells in every run (31,400 to
+32,100 a seed).
+
+| Run | Column share, before → after | Diagonal → column | Row → column | Column → column |
+|---|---|---|---|---|
+| Stock, seed 7 | 42.0 → 57.0% | 38.7% | 48.0% | 78.1% |
+| Stock, seed 42 | 45.9 → 57.9% | 37.9% | 47.4% | 77.8% |
+| A, seed 7 | 42.0 → 57.2% | 40.9% | 50.2% | 75.6% |
+| A, seed 42 | 45.9 → 58.4% | 40.4% | 49.8% | 76.0% |
+| B, seed 7 | 41.9 → 39.8% | 20.3% | 25.1% | 64.5% |
+| B, seed 42 | 45.8 → 43.8% | 23.0% | 29.7% | 65.7% |
+
+The rounds turn two in five diagonal steps and half of all row steps into columns. Under B the
+column share stays at the rule's, and those conversions halve. This is consistent with a feedback
+in which a channel cut down a column pulls its neighbours down the column, and the lateral transport
+breaks it. It does not isolate that mechanism: B changes everything the rounds see, not only the
+columns.
+
+### 3. The comb guard
+
+`CombGuardTest` counts channel cells, by the model's own channel-head criterion (the network the map
+draws and every other drainage clause measures), that run:
+- in a straight reach along one grid axis at least **60 km** long;
+- with a second such reach running the same way **20 to 50 km** across;
+- with a ridge of **100 m** or more between the two.
+
+Both axes are counted at the same kilometres on the ground.
+
+The bar has two parts:
+- **The comb.** The columns may carry 3.5 times the rows' comb. That is the rule's own column-to-row
+  ratio of parallel reaches on the isotropic surfaces (3.1 and 2.0), rounded up. Those surfaces'
+  parallel reaches never have a 50 m ridge (0.00 to 0.01 km per 1,000 km²).
+- **The network.** It may not thin by more than `ScaleFreeTest`'s 1.35, so the comb cannot be
+  removed by removing channels.
+
+The row control is matched by distance, not by count. Straight reaches are longer on the ground down
+a column than along a row under this rule: for the same angular deviation about 23.4 / tan φ km
+against 11.7 / tan φ. The 3.5 allows for that.
+
+| Seed | Run | Channel, km per 1,000 km² | Sustained, column / row | Comb, column / row | Guard |
+|---|---|---|---|---|---|
+| 7 | stock (bb7b606's erosion) | 31.64 | 2.72 / 0.95 | 0.408 / 0.061 | fails: comb |
+| 42 | stock | 36.61 | 3.27 / 1.05 | 0.519 / 0.079 | fails: comb |
+| 7 | A | 36.53 | 2.86 / 0.96 | 0.429 / 0.068 | fails: comb |
+| 42 | A | 40.81 | 3.27 / 1.07 | 0.533 / 0.083 | fails: comb |
+| 7 | B | 20.77 | 3.04 / 1.75 | 0.077 / 0.000 | fails: network, and comb against a row of nought |
+| 42 | B | 25.34 | 3.68 / 1.89 | 0.110 / 0.002 | fails: network |
+
+At 1024 on stock the columns carry 0.44 and 0.48 and the rows 0.01 and 0.00, so the measure holds
+across the grids.
+
+It is recorded as a known failure on this head. **It has a weakness:** the ratio has no floor, so a
+world with almost no row comb fails however little column comb it has. That is B's case on seed 7.
+The maintainer may want an absolute floor added. I did not add one, because the only value I had to
+set it from was this head's own row figure.
+
+### 4. Candidate A: the incision cutoff
+
+**As built** (`ErosionConfig.incisionNeedsChannelHead`):
+- **The mask** is taken each round, after that round's routing and before the notch, by
+  `ChannelInitiation`'s criterion:
+  - the runoff-weighted area in km² over the round's own drainage, each cell's rain as a share of
+    Earth's 715 mm land mean, from the rounds' provisional rainfall (or that mean where the climate
+    feed is off);
+  - the true ground's gradient to the round's receiver;
+  - the rounds' provisional cover, against `RiverConfig`'s threshold and cover gain.
+- **Carried downstream** through lakes, so a flatter reach below a head still incises.
+- **Never reused:** each round's routing invalidates the mask.
+- **Not applied:** the frozen-ground rule, because the rounds carry no summer temperature.
+- **Cells left out** are not cut. They still pass their base upward, hold standing water, and take
+  and carry spoil.
+- **The watch.** The incision reports each left-out cell as excluded. The bounds guard holds it
+  unmoved and holds the law's clauses on the rest: on seed 42, 428,881 cell-rounds were left out and
+  792,822 cut, with no violation.
+- **The notch** cuts only a basin's spill path, which carries the basin's whole discharge and is a
+  channel by the same criterion, so it needs no change.
+
+**What it did:**
+- **Nothing to the comb:** 0.43 and 0.53 against 0.41 and 0.52.
+- **The network grew** a little (36.5 and 40.8).
+- **The ground stepped more:** the mean step across a row was 253 and 293 m, against 223 and 263.
+- **Lake bars:** on seed 42 in production settings, 311 bar cells against 116. With the notch and
+  ice off, 168 and 197 against 138 and 219.
+- **The sea lobes** laid 9 to 12% less.
+
+Why it misses: at these grids a cell's own area already passes a humid channel head (about 275 km²
+against 0.01 to 0.1). What the criterion leaves out is gentle, forested or dry ground, and the comb
+is on steep ground the criterion calls channel anyway. The crops show smooth uncut patches beside
+the same comb.
+
+**Recommendation: drop A.**
+
+### 5. Candidate B: sub-grid transport
+
+**The form** is the stream-power-plus-linear-diffusion model, `dz/dt = U - K A^m S + D ∇²z`:
+- Perron, Dietrich and Kirchner, *Controls on the spacing of first-order valleys*, JGR Earth Surface
+  113, F04016, 2008, and *Formation of evenly spaced ridges and valleys*, Nature 460, 502-505, 2009;
+- Theodoratos, Seybold and Kirchner, *Scaling and similarity of a stream-power incision and linear
+  diffusion landscape evolution model*, Earth Surface Dynamics 6, 779-808, 2018.
+
+Its two laws set a length, `lc = (D/K)^(1/(2m+1))`, at which diffusion and incision are equally
+effective, and Perron and others find valley spacing proportional to it. A caveat on the sources:
+this environment's network proxy blocks the journals' pages, so these citations and the form rest
+on search-engine records of the papers, not on reading them. The Earth range for `D` below is the
+commonly quoted one, and I did not check it against a paper this round.
+
+**The scale, derived before it was measured:**
+- **Earth's soil creep** has `D` of 10⁻³ to 10⁻² m² a year. With this model's `K` of 10⁻⁶ a year,
+  `lc` is 30 to 100 m.
+- Over the rounds' four million years creep moves material `√(Dt)`, about 0.1 km, against cells of
+  12 to 23 km. Earth's creep cannot act at this grid.
+- **What a coarse cell's slope stands for** is many unresolved channels and hillslopes. The flux
+  *they* carry across the cell's boundary, by the incision law on the cell's own ground (sub-grid
+  catchment `a ~ Δ²`, upslope length `Δ`), is `K Δ^(2m+1) S`. That is diffusive, with
+  `D_sub = K Δ²` at `m = ½`.
+- **As built** it is `K e √w dx dy`, with the cell's cover factor `e` and runoff weight `w`: 274 m²
+  a year at 512 on bare ground at mean rain. This is `lc` set equal to the cell, with no factor
+  chosen.
+
+**It may double-count.** The resolved incision already carries each cell's own-area cut along its
+one receiver.
+
+**As built** (`ErosionConfig.subGridTransport`):
+- five-point diffusion of the actual ground after each round's deposition walk, over the land;
+- conservative between land cells;
+- into the sea at the shoreline, booked as incised and lost;
+- explicit steps at a fifth of the stability limit.
+
+`SubGridTransportTest`:
+- an island's material is conserved to what crosses the shore (land lost 4.720452, sea took
+  4.720451);
+- an eight-row ripple keeps 0.668 of its amplitude, against diffusion's 0.674.
+
+**What it did:**
+- **The comb:** down about 80% (0.077 and 0.110 against 0.408 and 0.519). The row comb is almost
+  nil.
+- **The feedback:** gone (section 2).
+- **Lake bars:** nearly gone.
+  - Production: 20 and 6 bar cells (0.033 and 0.005 of 610 and 1,288 lake cells), against 127 and
+    116.
+  - Notch and ice off: 0 and 11, against 138 and 219.
+  - Fewer lake cells too: 610 against 904 on seed 7.
+- **Deltas:** unchanged (sea lobes 23.3 and 32.9 against 23.0 and 30.8).
+- **Grid dependence:** better. The channel network grows 1.36, 1.33, 1.31 and 1.37 times from 512 to
+  1024 on seeds 7, 42, 1234 and 99, against 1.42 to 1.54 stock, so two seeds come inside
+  `ScaleFreeTest`'s 1.35.
+- **The dissection clauses the branch armed**, run with B on in a scratch build (never committed):
+  - the belt's flank: passes;
+  - the wet flank: passes;
+  - **the valley notch fails:** a finished channel stands 0.0108 of the field below its banks, more
+    than a tenth shallower than the 0.0148 the clause asks;
+  - the plains' texture, a recorded failure on this head, **now passes** (the harness says arm it);
+  - the rain-dissection contrast fails as it does on stock, with new figures (seed 7 0.016 against
+    0.035).
+- **The network:** thins 34% and 31% (20.8 and 25.3 against 31.6 and 36.6), past the comb guard's
+  1.35.
+- **The ground:** the mean step across a row halves (120 and 148 m against 223 and 263). The land's
+  mean height barely moves (1,564 and 1,802 m against 1,537 and 1,776).
+
+In the crops, seed 7's range keeps its shape with most of the stripes gone and some left on its
+south flank, but the lowland round it has lost most of its fine dissection. 969495's eastern flank
+keeps parallel valleys running to the coast: fewer, broader and smoother, not gone.
+
+### 6. The crops
+
+In `review/renders/`: `comb-<seed>-<size>-<atlas|elevation>-<stock|A|B>.png`.
+- **Seed 7 at 1024:** the upper-right range, sheet pixels 1040-1360 by 440-660.
+- **969495 at 2048:** the eastern flank, sheet pixels 2096-2356 by 820-1080.
+
+Each crop is a fresh generation with the setting on, at the same sheet window.
+
+### 7. Recommendation
+
+- **Drop A.** It does not touch the comb and adds lake bars on seed 42.
+- **Keep B's direction, not B's scale as built.** B is the only candidate that removes the mechanism.
+  It stops the rounds turning the flanks down the columns, cuts the comb by four fifths, removes
+  most lake bars, brings the network's grid dependence toward `ScaleFreeTest`'s bar and fixes the
+  plains' texture, and it leaves the deltas alone.
+- **But at `K dx dy` it takes a quarter of the valleys' depth, a third of the network and half the
+  ground's cell-to-cell relief.** It fails the valley-notch clause and the comb guard's network
+  hold. The guard's comb clause, as written, also fails B on seed 7 only because the rows are
+  nearly nought.
+- **The next step is a derivation, not a tuning.** `D_sub` counts the cell's own-area transport the
+  resolved incision already makes along its receiver. A sub-grid term net of that is the principled
+  correction:
+  - diffuse only the part of each cell's fall not carried by its receiver's cut;
+  - or scale `D_sub` by the share of the cell's sub-grid catchment the resolved channel does not
+    drain.
+- **I did not try a smaller factor on `D_sub`.** Choosing one to bring the valley notch back inside
+  its bar would be setting a value to make a world pass.
+
+### 8. Tests this round
+
+Only the tests the round touches were run, one Gradle build at a time:
+
+| Test | Result |
+|---|---|
+| `RoutingGroundTest`, whole | pass; the new case fails on the steepest-of-eight rule |
+| `CombGuardTest` | known failure recorded on this head |
+| `SubGridTransportTest` | pass |
+| `ImplicitIncisionTest`: the bounds, the lake and the new head-criterion cases | pass |
+| With B's default on in a scratch build: `ValleyIncisionTest`, `GroundTextureTest`, `ClimateFedErosionTest`'s wet flank and dissection clauses, `CombGuardTest`, `ScaleFreeTest`'s channel-head clause | as in section 5 |
+
+No full suite ran. The probes (`SeedProbeCandidates`, `SeedProbeCombGuard`, `SeedProbeCombCrops`) are
+ignored files, not committed.

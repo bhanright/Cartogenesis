@@ -209,4 +209,138 @@ class SiteSourcesTest {
         )
         println("SITE the apt source line is \"$onPage\"")
     }
+
+    /** Every `<li class="card">` on the page, as written. */
+    private val cards: List<String> by lazy {
+        Regex("""<li class="card">.*?</li>""", RegexOption.DOT_MATCHES_ALL).findAll(page)
+            .map { it.value }.toList()
+    }
+
+    /**
+     * That every card's picture states its shape and says what it shows.
+     *
+     * The width and height are what let the browser reserve a card's space before its picture
+     * arrives, so the page does not jump as a lazy picture loads under a reader's eye. The `alt` is
+     * the picture for a reader who cannot see it, and each card's is its own: a row of cards that
+     * all said the same thing would be telling that reader the pictures are the same.
+     */
+    @Test
+    fun `every card picture states its size and has its own description`() {
+        assertEquals(
+            13, cards.size,
+            "the page has ${cards.size} cards where it has six steps, three styles and four views"
+        )
+        val descriptions = cards.map { card ->
+            val images = Regex("""<img\s[^>]*>""").findAll(card).map { it.value }.toList()
+            assertEquals(1, images.size, "a card carries ${images.size} pictures: $card")
+            val image = images.single()
+            fun attribute(name: String): String? =
+                Regex("""\s$name="([^"]*)"""").find(image)?.groupValues?.get(1)
+            listOf("width", "height").forEach { side ->
+                val value = attribute(side)?.toIntOrNull()
+                assertTrue(
+                    value != null && value > 0,
+                    "$image does not state its $side, so its card has no space until it loads"
+                )
+            }
+            val alt = attribute("alt")
+            assertTrue(!alt.isNullOrBlank(), "$image says nothing to a reader who cannot see it")
+            alt
+        }
+        val repeated = descriptions.groupingBy { it }.eachCount().filterValues { it > 1 }.keys
+        assertTrue(repeated.isEmpty(), "two cards describe their pictures in the same words: $repeated")
+        println("SITE ${cards.size} cards, every picture sized and described in its own words")
+    }
+
+    /** The page's own style sheet, comments taken out. */
+    private val styleSheet: String by lazy {
+        val css = Regex("""<style>(.*?)</style>""", RegexOption.DOT_MATCHES_ALL).find(page)
+            ?.groupValues?.get(1) ?: fail("the page has no style sheet")
+        css.replace(Regex("""/\*.*?\*/""", RegexOption.DOT_MATCHES_ALL), "")
+    }
+
+    /** Every innermost rule in [css]: its selectors, each trimmed, and its declarations. */
+    private fun rules(css: String): List<Pair<List<String>, String>> =
+        Regex("""([^{}]+)\{([^{}]*)\}""").findAll(css).map { rule ->
+            rule.groupValues[1].split(',').map { it.trim().replace(Regex("""\s+"""), " ") } to
+                rule.groupValues[2]
+        }.toList()
+
+    /** A declaration that keeps a card or a stretch of its line out of sight. */
+    private val hides = Regex("""opacity\s*:\s*0(?![.\d])|scale[XY]?\(\s*0\s*\)""")
+
+    /** Every selector that hides something, anywhere in the style sheet. */
+    private val hidingSelectors: List<String> by lazy {
+        rules(styleSheet).filter { (_, body) -> hides.containsMatchIn(body) }.flatMap { it.first }
+    }
+
+    /**
+     * That with scripts off every card is visible.
+     *
+     * The reveal hides a card until it comes into view, and only a script can bring it back. So
+     * everything that hides is scoped to the `reveal` class, which only the script in the head
+     * sets and which the page's own markup never carries: a reader without scripts gets the cards
+     * as they are written, with nothing waiting on an observer that will never run.
+     */
+    @Test
+    fun `with scripts off every card is visible`() {
+        assertTrue(hidingSelectors.isNotEmpty(), "nothing on the page hides; this checked nothing")
+        val unscoped = hidingSelectors.filterNot { it.startsWith(".reveal ") }
+        assertTrue(
+            unscoped.isEmpty(),
+            "these rules hide something whether or not a script ever runs to show it again: $unscoped"
+        )
+        val htmlTag = Regex("""<html[^>]*>""").find(page)?.value ?: fail("the page has no <html>")
+        assertTrue(!htmlTag.contains("reveal"), "the markup arms the reveal itself: $htmlTag")
+        val head = page.substringBefore("<body")
+        val armed = Regex("""<script>(.*?)</script>""", RegexOption.DOT_MATCHES_ALL).findAll(head)
+            .map { it.groupValues[1] }.filter { it.contains("reveal") }.toList()
+        assertEquals(
+            1, armed.size,
+            "the reveal is armed by ${armed.size} scripts in the head, where one has to set it " +
+                "before the cards are painted"
+        )
+        assertTrue(
+            armed.single().contains("IntersectionObserver"),
+            "the head arms the reveal without asking whether the browser can say when a card is " +
+                "in view, so a browser that cannot never shows the cards"
+        )
+        // And the motion is started by the cards coming into view, never driven by where the page
+        // has been scrolled to.
+        listOf("addEventListener('scroll'", "addEventListener(\"scroll\"", "onscroll").forEach {
+            assertTrue(!page.contains(it), "the page listens to scrolling ($it)")
+        }
+        println("SITE ${hidingSelectors.distinct().size} hiding rules, all behind the script's class")
+    }
+
+    /**
+     * That a reader who asks for less motion sees every card at once, still.
+     *
+     * Twice over: the head does not arm the reveal when the preference is set as the page loads,
+     * and the style sheet undoes every hiding rule, with its transition, for a reader whose
+     * preference is set after it has — so the block has to name every selector that hides.
+     */
+    @Test
+    fun `a reader who asks for less motion sees every card at once`() {
+        val head = page.substringBefore("<body")
+        assertTrue(
+            Regex("""<script>[^<]*prefers-reduced-motion: reduce[^<]*reveal""").containsMatchIn(head),
+            "the head arms the reveal without asking whether the reader wants less motion"
+        )
+        val block = Regex(
+            """@media[^{]*prefers-reduced-motion:\s*reduce[^{]*\{((?:[^{}]*\{[^{}]*\})*)\s*\}"""
+        ).find(styleSheet)?.groupValues?.get(1)
+            ?: fail("the style sheet has no rule for a reader who prefers reduced motion")
+        val stilled = rules(block).filter { (_, body) ->
+            body.contains(Regex("""opacity\s*:\s*1""")) &&
+                body.contains(Regex("""transform\s*:\s*none""")) &&
+                body.contains(Regex("""transition\s*:\s*none"""))
+        }.flatMap { it.first }.toSet()
+        val stillMoving = hidingSelectors.toSet() - stilled
+        assertTrue(
+            stillMoving.isEmpty(),
+            "with motion reduced these still hide and then move: $stillMoving"
+        )
+        println("SITE reduced motion stills ${stilled.size} selectors: $stilled")
+    }
 }

@@ -408,7 +408,7 @@ internal object BasinPartition {
      * A cell is put on the left or right bank by walking downstream until it meets the trunk, then
      * taking the sign of the cross product between the trunk's own direction and the direction the
      * water came in from. Cells on the trunk itself go with the left bank, so the channel stays
-     * whole and the seam runs along its far edge.
+     * whole and the seam runs along its far edge; a lake the trunk crosses goes whole to one bank.
      */
     fun splitAlongTrunks(
         config: WorldGenConfig,
@@ -519,6 +519,27 @@ internal object BasinPartition {
         }
 
         if (!splitAny) return units
+
+        // A lake goes whole to one bank: the one most of its cells in the unit are on, the left
+        // where they tie. A trunk crossing a lake runs over the flat the fill made of it, where the
+        // routing is the flat's potential and not the ground's, and a seam along it draws a border
+        // down the middle of the water, ruler-straight wherever the potential happens to lie
+        // along a bearing (docs/DESIGN_LEDGER.md, chunk 6 third round). With the lake whole, the
+        // border keeps to its shore.
+        val lakeId = rivers.lakes.lakeId
+        val banksOfLake = HashMap<Long, IntArray>()
+        for (cell in units.unitOf.indices) {
+            val lake = lakeId[cell]
+            if (lake == LakeResult.NO_LAKE || bankOf[cell] == NO_BANK) continue
+            val key = units.unitOf[cell].toLong() shl 32 or lake.toLong()
+            banksOfLake.getOrPut(key) { IntArray(2) }[bankOf[cell]]++
+        }
+        for (cell in units.unitOf.indices) {
+            val lake = lakeId[cell]
+            if (lake == LakeResult.NO_LAKE || bankOf[cell] == NO_BANK) continue
+            val counts = banksOfLake.getValue(units.unitOf[cell].toLong() shl 32 or lake.toLong())
+            bankOf[cell] = if (counts[RIGHT_BANK] > counts[LEFT_BANK]) RIGHT_BANK else LEFT_BANK
+        }
 
         // Renumber: each unit becomes at most two.
         val unitOf = IntArray(units.unitOf.size) { BasinUnits.NONE }

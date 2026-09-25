@@ -160,6 +160,44 @@ class CatchmentUnitsTest : BorrowsSharedWorlds() {
     }
 
     /**
+     * One catchment whose trunk runs due south down its middle column and crosses a lake eleven
+     * cells wide on the way, every other cell draining sideways to the trunk. Cut along its trunk,
+     * the catchment's two banks meet on the trunk's far edge, and the lake, being water, goes whole
+     * to one of them: the border keeps to the shore rather than running down the middle of the lake.
+     *
+     * The seam followed the trunk across the lake, and a trunk across a lake runs over the flat the
+     * fill made of it, straight wherever the flat's potential lies along a bearing: on seed 42 at
+     * 2048 a realm border ran due south for 65 steps across one.
+     */
+    @Test
+    fun `a lake a trunk crosses stays whole on one bank`() {
+        val config = HandMadeWorlds.config()
+        fun land(x: Int, y: Int) = x in 20..40 && y in 10..40
+        fun inLake(x: Int, y: Int) = x in 25..35 && y in 20..28
+        val sea = HandMadeWorlds.sea(config, ::land) { x, y -> if (land(x, y)) 0.1f else -0.1f }
+        val cellCount = config.width * config.height
+        val lakeId = IntArray(cellCount) { if (inLake(it % config.width, it / config.width)) 0 else LakeResult.NO_LAKE }
+        val lakeCells = (0 until cellCount).filter { lakeId[it] == 0 }
+        val lakes = LakeResult(
+            lakeId, listOf(Lake(0, lakeCells.size, 0.1f, HandMadeWorlds.cellAt(config, 30, 28), endorheic = false, spillElevation = 0.1f)),
+            BooleanArray(cellCount), config.width
+        )
+        val rivers = HandMadeWorlds.rivers(config, sea, { x, y ->
+            when {
+                x < 30 -> HandMadeWorlds.cellAt(config, x + 1, y)
+                x > 30 -> HandMadeWorlds.cellAt(config, x - 1, y)
+                else -> HandMadeWorlds.cellAt(config, x, y + 1)
+            }
+        }, lakes)
+        val units = BasinPartition.compute(config, sea, rivers, Double.MAX_VALUE)
+        val banked = BasinPartition.splitAlongTrunks(config, sea, rivers, units, 10f)
+        val holding = unitsHolding(banked, lakeCells)
+        println("LAKE ON A TRUNK %d units after the split; the lake's %d cells in %d".format(banked.unitCount, lakeCells.size, holding.size))
+        assertEquals(2, banked.unitCount, "the catchment was not cut along its trunk, so the case asks nothing")
+        assertEquals(1, holding.size, "the lake was cut in two along the trunk")
+    }
+
+    /**
      * An arid comb: four rows running east into a trunk down one column, the trunk into the sea,
      * three times `NationsConfig.maxBasinShare` of the land in all, on a hundred millimetres of
      * rain; every other row is its own small catchment. Cut by the realm stage's own partition,

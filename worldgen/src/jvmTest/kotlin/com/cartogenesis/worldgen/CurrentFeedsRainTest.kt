@@ -185,7 +185,7 @@ class CurrentFeedsRainTest : BorrowsSharedWorlds() {
         // cold-current coast's rain by, so the sign is the sample's. Recorded rather than
         // re-picked to a seed that dries: the claim is the coupling's, and at this size it is not
         // one the march makes (docs/DESIGN_LEDGER.md, Fix 2).
-        KnownFailures.expect(COLD_COAST_BARELY_MOVES, "off 1793 mm, on 1805 mm") {
+        KnownFailures.expect(COLD_COAST_BARELY_MOVES, "off 1908 mm, on 1918 mm") {
             if (coldOn >= coldOff) {
                 throw RecordedViolation(
                     "cold-current coast should get drier with the coupling on: off=$coldOff, on=$coldOn",

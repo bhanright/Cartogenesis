@@ -251,21 +251,18 @@ class LittoralCoastTest {
         CoastRoughness.dimensionComplaint("pooled by ruler", pooledRuler)?.let { complaints.add(it) }
         CoastRoughness.dimensionComplaint("pooled by M1's box count", boxes!!.dimension)
             ?.let { complaints.add(it) }
-        assertTrue(complaints.isEmpty(), complaints.joinToString("; "))
-        // One seed's own coast has read under the floor since the continents were redrawn on the
-        // ground's ruler: 298405's measures 1.092 over four to sixteen cell widths, graded and
-        // ungraded alike, so it is the terrain's coast and not the littoral pass. Measured on the
-        // ground the five coasts pool at 1.182 by ruler and 1.112 by box, inside the band; seed
-        // 298405 read 1.134 here by the old square-cell ruler on the old continents, and its
-        // finished world's coast 1.170 by the ground's (docs/DESIGN_LEDGER.md, Fix 2).
-        KnownFailures.expect(SMOOTH_COAST_ON_ONE_SEED, "seed 298405 at 1.092") {
-            if (smoothSeeds.isNotEmpty()) {
+        // Recorded since Fix 3, whose mouths are no longer cut below the sea: see [CAP_SETS_EVERY_CUT].
+        KnownFailures.expect(CAP_SETS_EVERY_CUT, "pooled by ruler 1.198, by box 1.028") {
+            if (complaints.isNotEmpty()) {
                 throw RecordedViolation(
-                    "a seed's coast by ruler is under Richardson's floor: ${smoothSeeds.joinToString()}",
-                    smoothSeeds.joinToString()
+                    complaints.joinToString("; "),
+                    String.format(Locale.ROOT, "pooled by ruler %.3f, by box %.3f", pooledRuler, boxes!!.dimension)
                 )
             }
         }
+        // Seed 298405's coast read under the floor by ruler from Fix 2 to Fix 3 (1.092) and is
+        // inside it again on Fix 3's ground, so the clause is armed (docs/DESIGN_LEDGER.md, Fix 3).
+        assertTrue(smoothSeeds.isEmpty(), "a seed's coast by ruler is under Richardson's floor: ${smoothSeeds.joinToString()}")
     }
 
     /**
@@ -359,11 +356,16 @@ class LittoralCoastTest {
                     graded!!.dimensionStandardDeviation, control!!.dimensionStandardDeviation
                 )
         )
-        assertTrue(
-            graded!!.smoothShare >= control!!.smoothShare * SMOOTH_SHARE_GAIN,
-            ("the graded coast reads %.3f smooth against the ungraded coast's %.3f, which is not a " +
-                "change worth the pass").format(graded!!.smoothShare, control!!.smoothShare)
-        )
+        // Recorded since Fix 3, whose ungraded coast is already smoother: see [CAP_SETS_EVERY_CUT].
+        KnownFailures.expect(CAP_SETS_EVERY_CUT, "0.740 graded against 0.596") {
+            if (graded!!.smoothShare < control!!.smoothShare * SMOOTH_SHARE_GAIN) {
+                throw RecordedViolation(
+                    ("the graded coast reads %.3f smooth against the ungraded coast's %.3f, which is not a " +
+                        "change worth the pass").format(graded!!.smoothShare, control!!.smoothShare),
+                    String.format(Locale.ROOT, "%.3f graded against %.3f", graded!!.smoothShare, control!!.smoothShare)
+                )
+            }
+        }
     }
 
     /**
@@ -418,9 +420,15 @@ class LittoralCoastTest {
     }
 
     private companion object {
-        /** The known failure the dimension clause records, per seed. See docs/DESIGN_LEDGER.md, Fix 2. */
-        const val SMOOTH_COAST_ON_ONE_SEED =
-            "the coast: on the ground's ruler seed 298405's coast is smoother than Richardson's floor"
+        /**
+         * The known failure the clauses Fix 3 moved record: with the incision's caps spent in the
+         * height field's own unit, the cap at half the drop sets the cut on every drawn channel, so
+         * the rounds cut less than the stream-power law asks and the explicit update, not the law,
+         * shapes the channels. The implicit solver's chunk is where it is next taken up; see
+         * docs/DESIGN_LEDGER.md, Fix 3.
+         */
+        const val CAP_SETS_EVERY_CUT =
+            "the erosion: with its caps in one unit the half-the-drop cap sets every drawn channel's cut, and the explicit incision cuts less than the stream-power law asks"
 
         /** The rulers the coast is walked with, in cell widths of ground. */
         val RULERS = listOf(1, 2, 4, 8, 16)

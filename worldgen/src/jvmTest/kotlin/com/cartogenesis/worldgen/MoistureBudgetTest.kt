@@ -210,7 +210,7 @@ class MoistureBudgetTest : BorrowsSharedWorlds() {
         )
         // Under the band since the continents were redrawn on the ground's ruler, and kept
         // running as a known failure: see [RECYCLING_UNDER_THE_BAND].
-        KnownFailures.expect(RECYCLING_UNDER_THE_BAND, "0.292") {
+        KnownFailures.expect(RECYCLING_UNDER_THE_BAND, "0.279") {
             if (!(ratio > EARTH_RECYCLING_LOW && ratio < EARTH_RECYCLING_HIGH)) {
                 throw RecordedViolation(
                     ("the continental recycling ratio is %.3f, outside Earth's %.2f to %.2f")
@@ -268,7 +268,7 @@ class MoistureBudgetTest : BorrowsSharedWorlds() {
                     EARTH_RECYCLING_LOW * 100, EARTH_RECYCLING_HIGH * 100
                 )
         )
-        KnownFailures.expect(RECYCLING_UNDER_THE_BAND, "0.292") {
+        KnownFailures.expect(RECYCLING_UNDER_THE_BAND, "0.279") {
             if (!(proxyRatio > EARTH_RECYCLING_LOW && proxyRatio < EARTH_RECYCLING_HIGH)) {
                 throw RecordedViolation(
                     ("the shipped ground return puts the recycling ratio at %.3f, outside Earth's " +

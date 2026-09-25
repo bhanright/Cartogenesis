@@ -444,7 +444,7 @@ internal class DesertBands {
         val complaints = report(seeds, "AUDIT BAND", everyBand = false)
         // The pooled tropical clause runs as a known failure; every other clause is asserted.
         val tropical = complaints.filter { it.contains("pooled ${names[0]} ") }
-        KnownFailures.expect(TROPICAL_DESERT_POOLED, "pooled 0-15 deg at x0.69") {
+        KnownFailures.expect(TROPICAL_DESERT_POOLED, "pooled 0-15 deg at x1.09") {
             if (tropical.isNotEmpty()) {
                 throw RecordedViolation(
                     "the tropics hold too much of the four worlds' desert: $tropical",

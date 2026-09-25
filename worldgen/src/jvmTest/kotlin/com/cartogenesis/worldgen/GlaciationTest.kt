@@ -166,7 +166,7 @@ class GlaciationTest : BorrowsSharedWorlds() {
         // a change upstream of it brings them back, and says to arm them.
         KnownFailures.expect(
             "C I4: glaciated country holds no more lakes than the ice's absence leaves",
-            "cold-country lakes 0.33 to 0.50 per 10k cells, iced zone ratio 1.08"
+            "cold-country lakes 0.15 to 0.34 per 10k cells, iced zone ratio 1.03"
         ) {
             val tripled = with.coldLakes.toLong() * without.coldLand >= 3L * without.coldLakes * with.coldLand
             val contrasted = with.ratio >= COLD_LAKE_RATIO

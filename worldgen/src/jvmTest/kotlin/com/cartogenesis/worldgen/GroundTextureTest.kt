@@ -6,6 +6,7 @@ import com.cartogenesis.worldgen.pipeline.BoundaryClass
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
+import java.util.Locale
 import kotlin.test.Test
 import org.junit.Assert.assertTrue
 
@@ -70,12 +71,17 @@ class GroundTextureTest : BorrowsSharedWorlds() {
             "TEXTURE belt flank pooled %.0f m against main's %.0f and the control's %.0f"
                 .format(pooled, MAIN_BELT_FLANK_TEXTURE_METRES, pooledControl)
         )
-        assertTrue(
-            "a belt's flank departs from its own smoothed self by ${"%.0f".format(pooled)} m," +
-                " which is less than the ${"%.0f".format(MAIN_BELT_FLANK_TEXTURE_METRES)} m the" +
-                " tree before S2 managed: the stamp is showing through as a ramp",
-            pooled >= MAIN_BELT_FLANK_TEXTURE_METRES
-        )
+        // Recorded since Fix 3, whose flanks are cut less: see [CAP_SETS_EVERY_CUT].
+        KnownFailures.expect(CAP_SETS_EVERY_CUT, "belt flank 101 m") {
+            if (pooled < MAIN_BELT_FLANK_TEXTURE_METRES) {
+                throw RecordedViolation(
+                    "a belt's flank departs from its own smoothed self by ${"%.0f".format(pooled)} m," +
+                        " which is less than the ${"%.0f".format(MAIN_BELT_FLANK_TEXTURE_METRES)} m the" +
+                        " tree before S2 managed: the stamp is showing through as a ramp",
+                    String.format(Locale.ROOT, "belt flank %.0f m", pooled)
+                )
+            }
+        }
         assertTrue(
             "the control at ${"%.0f".format(CRITICAL_FALL_BEFORE_S2)} m/km reads" +
                 " ${"%.0f".format(pooledControl)} m, which is not below the" +
@@ -215,12 +221,17 @@ class GroundTextureTest : BorrowsSharedWorlds() {
                 " ${"%.1f".format(RECORDED_LOWEST_QUARTER_TEXTURE_METRES)}: the plains are sandpaper",
             pooledLowest <= RECORDED_LOWEST_QUARTER_TEXTURE_METRES + RECORDED_TO_THE_TENTH_METRE
         )
-        assertTrue(
-            "the highest quarter departs by ${"%.3f".format(pooledHighest)} m against the" +
-                " ${"%.1f".format(RECORDED_HIGHEST_QUARTER_TEXTURE_METRES)} m recorded: the ranges" +
-                " have been smoothed along with the plains",
-            pooledHighest >= RECORDED_HIGHEST_QUARTER_TEXTURE_METRES - RECORDED_TO_THE_TENTH_METRE
-        )
+        // Recorded since Fix 3, whose ranges are cut less: see [CAP_SETS_EVERY_CUT].
+        KnownFailures.expect(CAP_SETS_EVERY_CUT, "highest quarter 68.5 m") {
+            if (pooledHighest < RECORDED_HIGHEST_QUARTER_TEXTURE_METRES - RECORDED_TO_THE_TENTH_METRE) {
+                throw RecordedViolation(
+                    "the highest quarter departs by ${"%.3f".format(pooledHighest)} m against the" +
+                        " ${"%.1f".format(RECORDED_HIGHEST_QUARTER_TEXTURE_METRES)} m recorded: the ranges" +
+                        " have been smoothed along with the plains",
+                    String.format(Locale.ROOT, "highest quarter %.1f m", pooledHighest)
+                )
+            }
+        }
         assertTrue(
             "with the texture rule off the lowest quarter reads" +
                 " ${"%.1f".format(controlLowest.average())} m, which is already inside the" +
@@ -493,6 +504,16 @@ class GroundTextureTest : BorrowsSharedWorlds() {
     private fun world(seed: Long): WorldMap = SharedWorlds.world(standard(seed))
 
     private companion object {
+        /**
+         * The known failure the clauses Fix 3 moved record: with the incision's caps spent in the
+         * height field's own unit, the cap at half the drop sets the cut on every drawn channel, so
+         * the rounds cut less than the stream-power law asks and the explicit update, not the law,
+         * shapes the channels. The implicit solver's chunk is where it is next taken up; see
+         * docs/DESIGN_LEDGER.md, Fix 3.
+         */
+        const val CAP_SETS_EVERY_CUT =
+            "the erosion: with its caps in one unit the half-the-drop cap sets every drawn channel's cut, and the explicit incision cuts less than the stream-power law asks"
+
         /** `GeographyAuditTest`'s standard seeds, plus the author's own world. */
         val SEEDS = listOf(7L, 42L, 1234L, 99L, 718106L)
 

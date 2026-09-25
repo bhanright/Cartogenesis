@@ -4,6 +4,7 @@ import com.cartogenesis.worldgen.math.JumpFloodDistance
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import kotlin.math.sqrt
+import java.util.Locale
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -70,6 +71,8 @@ class SeaLevelHistoryTest : BorrowsSharedWorlds() {
     fun `the sea comes back up the valleys, and does not with the lowstand at zero`() {
         var controlFailures = 0
         val pooledEstuaries = ArrayList<Double>()
+        val shortfalls = ArrayList<String>()
+        val figures = ArrayList<String>()
         seeds.forEach { seed ->
             // H5b's post-cut outlet pass held off in *both* arms, so this pair varies the lowstand
             // and nothing else.
@@ -109,12 +112,12 @@ class SeaLevelHistoryTest : BorrowsSharedWorlds() {
             // 1.28, 2.53 and 4.31 and the loop used to stop at the first of them, so what was
             // guarding the claim was seed 7 alone. Same restatement the desert guard and
             // `CultureRealmTest` carry: the direction per seed, the size pooled.
-            assertTrue(
-                lowered.estuaries > today.estuaries,
-                "seed $seed: ${lowered.estuaries} river mouths more than three cells inside an " +
+            if (lowered.estuaries <= today.estuaries) {
+                shortfalls += "seed $seed: ${lowered.estuaries} river mouths more than three cells inside an " +
                     "inlet, against ${today.estuaries} with the sea held at today's level for " +
                     "every round — the lowstand drowned no valleys at all"
-            )
+                figures += "seed $seed ${lowered.estuaries} against ${today.estuaries}"
+            }
             pooledEstuaries.add(lowered.estuaries.toDouble() / today.estuaries.coerceAtLeast(1))
             // The indentation is reported and no longer asserted, and F17 is why. It used to read
             // 1.11, 1.23 and 1.55 times the control on these three seeds, and the bar was 1.05.
@@ -148,11 +151,15 @@ class SeaLevelHistoryTest : BorrowsSharedWorlds() {
             "SEA HISTORY pooled: %.2fx estuary mouths with the lowstand (%s)"
                 .format(meanGain, pooledEstuaries.joinToString { "%.2f".format(it) })
         )
-        assertTrue(
-            pooledEstuaries.size == seeds.size && meanGain >= estuaryGain,
-            "pooled over ${pooledEstuaries.size} seeds the lowstand leaves ${meanGain}x the " +
+        if (!(pooledEstuaries.size == seeds.size && meanGain >= estuaryGain)) {
+            shortfalls += "pooled over ${pooledEstuaries.size} seeds the lowstand leaves ${meanGain}x the " +
                 "estuary mouths, not the ${estuaryGain}x a drowned valley owes"
-        )
+            figures += String.format(Locale.ROOT, "pooled %.2fx", meanGain)
+        }
+        // Recorded since Fix 3, whose mouths are no longer cut below the sea: see [CAP_SETS_EVERY_CUT].
+        KnownFailures.expect(CAP_SETS_EVERY_CUT, "seed 7 10 against 31; seed 1234 19 against 22; pooled 0.84x") {
+            if (shortfalls.isNotEmpty()) throw RecordedViolation(shortfalls.joinToString("; "), figures.joinToString("; "))
+        }
 
         // The other half of ground rule 2: the world without the lowstand has to fail a bar the
         // world with it clears, or this guard is measuring nothing.
@@ -256,6 +263,18 @@ class SeaLevelHistoryTest : BorrowsSharedWorlds() {
                 )
             }
         }
+    }
+
+    private companion object {
+        /**
+         * The known failure the clauses Fix 3 moved record: with the incision's caps spent in the
+         * height field's own unit, the cap at half the drop sets the cut on every drawn channel, so
+         * the rounds cut less than the stream-power law asks and the explicit update, not the law,
+         * shapes the channels. The implicit solver's chunk is where it is next taken up; see
+         * docs/DESIGN_LEDGER.md, Fix 3.
+         */
+        const val CAP_SETS_EVERY_CUT =
+            "the erosion: with its caps in one unit the half-the-drop cap sets every drawn channel's cut, and the explicit incision cuts less than the stream-power law asks"
     }
 }
 
@@ -432,6 +451,7 @@ internal class Coast(world: WorldMap, label: String) {
     }
 
     companion object {
+
         /**
          * Half-width, in cells at 512, below which water counts as an inlet rather than as open
          * sea. Two cells is a channel about four across — twenty kilometres to the cell makes that

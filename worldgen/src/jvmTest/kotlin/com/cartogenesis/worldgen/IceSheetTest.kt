@@ -73,7 +73,7 @@ class IceSheetTest : BorrowsSharedWorlds() {
         // ground it covers. See docs/DESIGN_LEDGER.md, Fix 2.
         KnownFailures.expect(
             THIN_SHEETS_ON_HIGH_GROUND,
-            "seed 718106 at 1876 m over 497 km, seed 7 at 1405 m over 483 km"
+            "seed 718106 at 1849 m over 503 km, seed 59758 at 1969 m over 478 km, seed 7 at 1413 m over 497 km"
         ) {
             if (thin.isNotEmpty()) {
                 throw RecordedViolation(
@@ -392,7 +392,7 @@ class IceSheetTest : BorrowsSharedWorlds() {
         // operators and not the relief window this clause was written for.
         KnownFailures.expect(
             ICE_EDGE_ALONG_A_ROW,
-            "seed 59758: the sheet's edge runs 70 cells straight along bearing 0, against 35.8 allowed"
+            "seed 59758: the sheet's edge runs 69 cells straight along bearing 0, against 36.4 allowed"
         ) {
             if (failures.isNotEmpty()) {
                 throw RecordedViolation(

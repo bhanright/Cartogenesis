@@ -982,10 +982,13 @@ data class TectonicsConfig(
      * re-derives it, and the history of its figures is in docs/DESIGN_LEDGER.md (S2, S3, Fix 2 and
      * Fix 3).
      *
-     * The four figures below are the rates of Fix 2 restated on the honest clock and nothing more:
-     * each is the old figure times 126,178.65 over 336,476.4, three eighths, so a round lifts a belt
-     * by the metres it did (docs/DESIGN_LEDGER.md, Fix 3). The derivation above is not yet re-run
-     * on that clock.
+     * The four figures below are Fix 2's restated on the honest clock and nothing more: each is the
+     * old figure times 126,178.65 over 336,476.4, three eighths, so a round lifts a belt by the
+     * metres it did. The derivation is deliberately not re-run on that clock. The denudation it
+     * would read is the half-the-drop cap's and not the stream-power law's, since the cap sets
+     * every cut on the drawn network once it is spent in the field's own unit, and a rate derived
+     * from a limiter's denudation would have to be derived again once the law governs; the
+     * figures it would give, and why they wait, are in docs/DESIGN_LEDGER.md, Fix 3.
      *
      * Spent over [WorldScale.yearsPerHydraulicRound] per round. See `HydraulicErosion.apply`.
      */

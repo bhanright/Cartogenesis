@@ -435,7 +435,7 @@ class JumpFloodDistanceTest : BorrowsSharedWorlds() {
         // nearest. Recorded under that finding rather than excused.
         KnownFailures.expect(
             "A-I11: the plain jump flood is not exact on land-mask sources, and seed 42's shelf is drawn off it",
-            "9 cells, the worst 0.0016 cell widths at (457,31)"
+            "2 cells, the worst 0.0016 cell widths at (35,6)"
         ) {
             if (offCells > 0) {
                 val found = String.format(

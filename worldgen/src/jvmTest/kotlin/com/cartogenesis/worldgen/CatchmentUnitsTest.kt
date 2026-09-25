@@ -160,6 +160,43 @@ class CatchmentUnitsTest : BorrowsSharedWorlds() {
     }
 
     /**
+     * An overflowing lake of 99 cells, routed across in straight rows to its east shore and down
+     * that shore to its outlet, under a limit of 40 cells. The lake is water and is never cut, so
+     * it is one unit on its own, the one unit allowed past the limit, and the land around it is cut
+     * at the limit as usual.
+     *
+     * Its cells were cut like land, so units ran across the water along the rows the routing
+     * drew: on seed 42 at 2048 two realms met down the middle of a lake for 65 steps.
+     */
+    @Test
+    fun `an overflowing lake is one unit and is not cut along its routing`() {
+        val config = HandMadeWorlds.config()
+        fun land(x: Int, y: Int) = x in 20..40 && y in 10..40
+        fun inLake(x: Int, y: Int) = x in 25..35 && y in 20..28
+        val sea = HandMadeWorlds.sea(config, ::land) { x, y -> if (land(x, y)) 0.1f else -0.1f }
+        val cellCount = config.width * config.height
+        val lakeId = IntArray(cellCount) { if (inLake(it % config.width, it / config.width)) 0 else LakeResult.NO_LAKE }
+        val lakeCells = (0 until cellCount).filter { lakeId[it] == 0 }
+        val lakes = LakeResult(
+            lakeId, listOf(Lake(0, lakeCells.size, 0.1f, HandMadeWorlds.cellAt(config, 35, 28), endorheic = false, spillElevation = 0.1f)),
+            BooleanArray(cellCount), config.width
+        )
+        val rivers = HandMadeWorlds.rivers(config, sea, { x, y ->
+            when {
+                inLake(x, y) && x < 35 -> HandMadeWorlds.cellAt(config, x + 1, y)
+                else -> HandMadeWorlds.cellAt(config, x, y + 1)
+            }
+        }, lakes)
+        val cellKm2 = config.squareKilometresPerCell
+        val units = BasinPartition.compute(config, sea, rivers, 40.0 * cellKm2)
+        val holding = unitsHolding(units, lakeCells)
+        println("OVERFLOWING LAKE its %d cells in %d units; unit sizes %s".format(lakeCells.size, holding.size, units.area.sorted()))
+        assertEquals(1, holding.size, "the lake was cut along its routing")
+        assertEquals(lakeCells.size, units.area[holding.single()], "the lake's unit took land past the limit")
+        assertTrue((0 until units.unitCount).filter { it != holding.single() }.all { units.area[it] <= 40 }, "a unit of land over the limit")
+    }
+
+    /**
      * One catchment whose trunk runs due south down its middle column and crosses a lake eleven
      * cells wide on the way, every other cell draining sideways to the trunk. Cut along its trunk,
      * the catchment's two banks meet on the trunk's far edge, and the lake, being water, goes whole

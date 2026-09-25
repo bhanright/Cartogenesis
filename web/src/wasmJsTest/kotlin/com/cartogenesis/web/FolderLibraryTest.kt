@@ -305,11 +305,15 @@ class FolderLibraryTest {
             val saving = launch { library.save(document(title = "Cancelled", world = world), world, "w1.cgw") }
             saving.join()
             assertTrue(saving.isCancelled)
-            assertEquals(listOf("w1.cgw"), folder.entries(), "a stream abandoned as it opened left its swap file")
             assertSameBytes(kept, folder.readRaw("w1.cgw"), "the file was changed by a save cancelled before it began")
-            // Nothing holds the file: a save after it goes through.
+            // A save after it goes through, which also gives a stranded stream time to have opened.
             FolderWorldLibrary(folder.handle, NoCompression, "a test").save(document(title = "After", world = world), world, "w1.cgw")
             assertEquals("After", titleIn(library.load("w1.cgw")))
+            assertEquals(listOf("w1.cgw"), folder.entries(), "a stream abandoned as it opened left its swap file")
+            // And nothing holds the file open: the browser refuses to delete one a stream is open on
+            // (`NoModificationAllowedError`, seen in this file system), as it refuses to move one.
+            library.delete("w1.cgw")
+            assertEquals(emptyList(), folder.entries())
         }
     }
 

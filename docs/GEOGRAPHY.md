@@ -49,15 +49,32 @@ a river rising in a warmer catchment still runs across it.
 
 The runoff itself is one figure for the whole pipeline, `Runoff.annualWeightMm`: a cell's rainfall
 in millimetres a year, held at or above a floor of **60 mm** so that an arid upland still feeds the
-channel leaving it. The floor is the river stage's own, 0.05 of the 1,200 mm scale
-`ClimateResult.precipitation` is normalised against, and the channel criterion had it wrong at 150
-mm until 2026-09-22 — read off a 3,000 mm scale that nothing in the climate uses, and added to the
-rainfall rather than taken as a floor under it, which gave every desert cell a fifth of Earth's
-land mean in water it does not have. Correcting it thins the network where it should be thinnest:
-pooled over the four standard seeds at 512, drainage density in hyper-arid country falls from
-0.0527 to 0.0362 km/km² against humid country's 0.0309 to 0.0280, so the dryland peak is narrower
-and the humid-over-semi-arid ratio rises from 0.71 to 0.83 — still under one, which is the side of
-Moglen, Eltahir and Bras's curve the guard asserts, but with less room than before.
+channel leaving it. Sixty millimetres is where UNEP's hyper-arid class ends — an aridity index,
+rainfall over potential evaporation, of 0.05 — under a potential evaporation of 1,200 mm, the scale
+`ClimateResult.precipitation` is normalised against; it is also the figure the river stage's own
+floor stood for, 0.05 of that scale, so nothing that already read it moved when it was restated. The
+channel criterion had it wrong at 150 mm until 2026-09-22 — read off a 3,000 mm scale that nothing in
+the climate uses, and added to the rainfall rather than taken as a floor under it, which gave every
+desert cell a fifth of Earth's land mean in water it does not have. Correcting it thins the network
+where it should be thinnest: pooled over the four standard seeds at 512, drainage density in
+hyper-arid country falls from 0.0527 to 0.0362 km/km² against humid country's 0.0309 to 0.0280, so
+the dryland peak is narrower and the humid-over-semi-arid ratio rises from 0.71 to 0.83 — still
+under one, which is the side of Moglen, Eltahir and Bras's curve the guard asserts, but with less
+room than before.
+
+**The drawn network carries the rain that falls, however much it is.** Until chunk 6 the discharge
+the rivers are drawn, ranked and split by was weighted by the 0..1 rainfall, clamped at 1,200 mm and
+with the floor added on top: a trunk draining 3,000 mm of rainforest carried what a trunk draining
+1,200 mm did, and a 100 mm desert cell counted as 160. It is `Runoff.annualWeightMm` now, and so is
+the threshold the realm stage reads a river off, so the two are in one unit. Measured over the export
+selection at Earth's density on seeds 7/42/1234/99 at 512 and 969495 at 2048, the share of drawn
+kilometres in catchments averaging over 1,200 mm rose from 0.0/1.5/0.8/4.6/2.6% to
+0.6/2.5/1.1/6.7/3.4%, and in catchments under 400 mm fell from 69.6/57.8/75.4/62.9/65.8% to
+68.4/56.7/75.0/59.0/64.2%; the courses drawn went from 58/71/56/67/201 to 58/74/55/67/209. The
+median drawn mouth's width ratio moved from 0.432/0.348/0.340/0.398/0.319 to
+0.460/0.362/0.321/0.436/0.312: widths are a share of the widest trunk, and which trunk is widest now
+depends on how wet its country is. `WaterReceivedTest` holds two identical islands at 1,500 and
+3,000 mm to a discharge ratio of two; the clamped weight gave one.
 
 What each stage divides that weight by differs, and the difference is the point. The channel
 criterion divides by **Earth's** land mean, because its threshold is an area of real ground: against
@@ -700,6 +717,20 @@ spill-level area holds water at balance, against 100% with the balance switched 
 author's world at 1024 the lake count falls 82 to 67 and the lake share of land 1.15% to 0.91%,
 with ten endorheic basins and 132 playa cells.
 
+**A closed basin keeps its rain.** The catchment rainfall the balance reads is accumulated once, over
+the routing as the fill left it, when every basin still spills into the next; so a lake below a
+closed basin was fed the rain its neighbour upstream had already evaporated. Since chunk 6 the
+basins are solved upstream first, in the order their exits take in the drainage, and the moment the
+balance closes one its whole catchment is taken out of every cell below its old spill before
+anything further down is solved. A basin's inflow is also the rain leaving it at *every* cell where
+its water leaves, not the largest of them: a rim level for several cells lets a filled flat drain
+across more than one, and the largest alone under-fed it. `WaterReceivedTest` builds two chained
+basins with a desert playa above a steppe basin and holds the lower one's inflow to the rain that
+reaches it; without the subtraction it is over by exactly the playa's rain. Over seeds 7/42/1234/99
+at 512 and 969495 at 2048 the lakes went from 19/24/4/16/32 to 19/24/4/17/32, the closed ones from
+6/2/1/4/5 to 5/1/0/5/2, the playa cells from 8/34/10/23/902 to 11/34/15/7/1,133 and the share of land
+under lakes from 1.028/1.887/0.129/1.966/2.681% to 1.010/1.893/0.148/1.994/2.727%.
+
 **The ground carries a cover, and it is a field rather than a name.** Koppen's classifier gives a
 cell one of sixteen names, and a name is a step: two cells either side of the 500 mm steppe line
 are painted as different countries although their vegetation differs by a few per cent. Beside it
@@ -743,6 +774,30 @@ sprawl is cut where it happens instead — a realm over `NationsConfig.maxRealmS
 along one of its own internal watersheds, largest first, until none is over. That split costs
 nothing to place, because the divide is already there, and it is the same mechanism as a voluntary
 schism. (Recorded here by C2, which found both figures in a code comment and nowhere else.)
+
+Held since chunk 6. The cap was enforced on the catchments and the enclave pass then gave a realm the
+stranded pieces of its neighbours: seed 7's largest realm held 24.2% of the land when the cap had
+run and 33.6% on the finished map. A piece is now given only to a neighbour it leaves within the cap,
+and the largest realm on seeds 7/42/1234/99 at 512 and 969495 at 2048 holds 21.4/23.8/19.9/20.6/21.0%
+(33.6/29.2/24.7/23.1/29.9% before). `RealmSpreadTest` asserts it.
+
+**The pieces are catchments, and each is one piece of ground.** A realm's borders are only as good
+as the units it is built from, and chunk 6 found four faults in them. They were labelled in order of
+the filled surface, which since the flats and closed basins are routed along the true ground is not
+the order the water takes, so a cell whose receiver was not yet labelled opened a unit of its own; a
+closed lake opened a unit per cell of its water; the size bound compared rain-weighted flow with a
+count of cells, so on the standard seeds the largest unit ran 3.0 to 4.2 times the configured share; and
+the merge of small units could take one across a strait and join two landmasses. Units are now
+labelled receivers first, down the drainage order reversed; each closed lake and each playa is one
+sink; the bound is an area on the ground, cut at confluences, which no merge may pass; and a small
+unit merges only into a neighbour on its own landmass, the one it shares the longest border with. On
+seeds 7/42/1234 at 512 the largest realm unit went from 4.2/3.8/3.0 times the share to within it, and
+on seed 7 the merge had left 14 units spanning two landmasses and now leaves none. `CatchmentUnitsTest`
+guards each rule on a hand-made world. On 718106 at 2048 the realm borders' straight runs along a
+row or column of 50 km or more went from 10 to 8 and the longest from 123 km to 67, and the one of
+100 km or more went. The run at cell (981,505) is the realm border following the ice sheet's own
+ruled edge, which is the ice's finding and not the partition's; the peoples' borders, whose longest
+runs lie at the same cells before and after, follow the ice and biome edges the same way.
 
 ## The units these rules are stated in
 
@@ -1095,7 +1150,7 @@ of whatever rim survived.
 
 ## Fixed by this audit
 
-**Rainfall no longer normalizes per world.** Every world used to rescale so its 88th land percentile sat at 1.0, which meant an arid world and a lush one classified identically and every world got roughly the same desert share regardless of its actual moisture. Fixed by [A4 Absolute rainfall](DESIGN_LEDGER.md): `classify` now reads `precipitationMm`, millimetres calibrated from the march's own physics (seed 42's windward coast lands at 3000mm, its desert core at 142mm) rather than rescaled per world, so a genuinely arider seed produces genuinely more desert — measured, desert share now ranges 0.99-6.14% across seeds 7/42/1234/99, a 6.2x driest-to-wettest spread where the old normalization produced near-identical shares by construction. The 0..1 field every earlier consumer expects (`CultureStage`'s climate distance, `RiverStage`/`NationStage` runoff weighting, the rainfall map view) is kept as `precipitationMm` divided by a fixed reference and clamped, so nothing downstream needed to change, only what it is calibrated against.
+**Rainfall no longer normalizes per world.** Every world used to rescale so its 88th land percentile sat at 1.0, which meant an arid world and a lush one classified identically and every world got roughly the same desert share regardless of its actual moisture. Fixed by [A4 Absolute rainfall](DESIGN_LEDGER.md): `classify` now reads `precipitationMm`, millimetres calibrated from the march's own physics (seed 42's windward coast lands at 3000mm, its desert core at 142mm) rather than rescaled per world, so a genuinely arider seed produces genuinely more desert — measured, desert share now ranges 0.99-6.14% across seeds 7/42/1234/99, a 6.2x driest-to-wettest spread where the old normalization produced near-identical shares by construction. The 0..1 field the earlier consumers expected (`CultureStage`'s climate distance, the rainfall map view, and until chunk 6 `RiverStage`'s and `NationStage`'s runoff weighting, which read `precipitationMm` now) is kept as `precipitationMm` divided by a fixed reference and clamped, so nothing downstream needed to change, only what it is calibrated against.
 
 **Lakes.** A basin the priority-flood had to raise is now recognised as standing water: 25–47 lakes
 per world, the largest a few hundred cells. The lake surface sits at the basin's spill level, rivers
@@ -1114,6 +1169,15 @@ over the river mouth — inland enough to be defensible and out of the floodplai
 water, which is why London, Paris and Rome are where they are.
 
 After: 6–8 of 12 coastal, 6–9 of 12 on a river. A mix rather than a rule.
+
+Chunk 6 asked whether the defensibility term still pulls capitals to the coast: it compares a
+cell's height with a mean over land and sea together, so near a coast the sea floor pulls the mean
+down and a low coastal cell reads as standing high. Measured against a mean over the land alone on
+seeds 7/42/1234/99 at 512 and 969495 at 2048, the coastal capitals were 15/18, 7/14, 8/16, 7/15 and
+3/14 with the term as it is and the same with the land-only mean except 969495, which went to 4/14.
+The pull is real in the arithmetic and does not decide where capitals go, so the term was left. With
+the realms re-laid by chunk 6 the coastal share is 40 of 77 capitals over those five worlds, against
+36 of 77 before.
 
 ## Where the deserts are
 

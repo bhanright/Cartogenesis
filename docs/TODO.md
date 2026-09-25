@@ -1362,7 +1362,14 @@
   a settlement wants from water (discharge it can drink and float a boat on) rather than about the
   drawing, and answering it moves every realm on every map, so it wants its own measurement and its
   own guard. The older half of this entry stands too: the figure is a constant and not the setting,
-  so it was already not what a moved slider drew. 2026-09-12, restated 2026-09-21 at R1.
+  so it was already not what a moved slider drew. Since chunk 6 the runoff it sums and the discharge
+  it compares with are both `Runoff.annualWeightMm`, in millimetres, so the two are at least in one
+  unit. 2026-09-12, restated 2026-09-21 at R1 and 2026-09-25 at chunk 6.
+- **`ClimateStage` still says the river and realm stages read its 0..1 rainfall.** The comment above
+  the normalised copy in `ClimateStage.generate` lists `RiverStage`'s and `NationStage`'s runoff
+  weighting among the copy's consumers; since chunk 6 both read `precipitationMm` through
+  `Runoff.annualWeightMm`. Left for the chunk that corrects that stage's divisor KDoc, since chunk 6
+  was not to edit the climate stage. 2026-09-25.
 - **Realm governments are decided by cell counts, not areas.** `Atlas.government`'s empire and
   free-city bars count cells, so the same world exported at a finer grid promotes every realm: the
   `minCells` class of defect again. Express them as shares of the land and pin with the resolution

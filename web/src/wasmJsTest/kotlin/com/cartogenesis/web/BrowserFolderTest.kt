@@ -76,7 +76,9 @@ class BrowserFolderTest {
         assertEquals("it is no longer where it was", chosen.unreachableBecause())
         val failure = runCatching { chosen.library.list() }.exceptionOrNull()
         assertIs<FolderException>(failure)
-        assertEquals("the folder, or the file in it, is no longer there", failure.message)
+        assertEquals("the folder, or the file in it, is no longer there", failure.readerMessage)
+        // And the browser's own name for it, which is what the library pane shows beside the words.
+        assertTrue(failure.message.orEmpty().contains("(NotFoundError"), "the browser's name was left out: ${failure.message}")
     }
 
     @Test

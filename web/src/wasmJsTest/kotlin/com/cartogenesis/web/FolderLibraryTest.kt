@@ -446,6 +446,75 @@ class FolderLibraryTest {
             }
         }
     }
+
+    @Test
+    fun `every name a save writes is one Chrome allows in a folder on the disk`() = runTest(timeout = 5.minutes) {
+        // The temporary name was ~<name>.<token>.tmp, which Chrome refuses in any folder a reader
+        // picks, a leading tilde being one of its rules; the private file system checks no names,
+        // so every new save passed here and failed there, on a phone as on a computer.
+        val temporary = FolderWorldLibrary.temporaryNameFor("w1 (2).cgw", "0f8fad5b-d9cb-469f-a165-70867728950e")
+        assertTrue(chromeAllowsOnTheDisk(temporary), "Chrome refuses $temporary in a folder on the disk")
+        assertTrue(!chromeAllowsOnTheDisk("~w1.cgw.0f8fad5b-d9cb-469f-a165-70867728950e.tmp"), "the transcribed rule lets the tilde through")
+
+        val world = TestWorlds.small()
+        withTestFolder("disk-names") { folder ->
+            val browserStorage = IndexedDbLibrary(WebGzipCompressor, "a test")
+            val stored = browserStorage.save(document(id = "disknames", title = "From the browser", world = world), world)
+            try {
+                withDiskNameRule {
+                    val library = FolderWorldLibrary(folder.handle, WebGzipCompressor, "a test")
+                    assertEquals("w1.cgw", library.save(document(world = world), world))
+                    assertEquals("w1 (2).cgw", library.save(document(title = "Beside it", world = world), world))
+                    library.save(document(title = "Over it", world = world), world, "w1.cgw")
+                    assertEquals("disknames.cgw", library.copyFrom(browserStorage, stored))
+                    assertEquals("Over it", titleIn(library.load("w1.cgw")))
+                    library.delete("w1 (2).cgw")
+                }
+                assertEquals(listOf("disknames.cgw", "w1.cgw"), folder.entries())
+            } finally {
+                browserStorage.delete(stored)
+            }
+        }
+    }
+
+    @Test
+    fun `where the browser refuses to move a file, as Chrome on Android does, a new save is copied into its name`() =
+        runTest(timeout = 5.minutes) {
+            // Chrome on Android has move on every file handle and cannot rename a file in a folder a
+            // phone picked; its refusal is not NotSupportedError, and was taken for the save failing.
+            val world = TestWorlds.small()
+            for (refusal in listOf("InvalidStateError", "InvalidModificationError", "NotSupportedError")) {
+                withTestFolder("move-refused") { folder ->
+                    withDiskNameRule {
+                        withEveryMoveRefused(refusal) {
+                            val library = FolderWorldLibrary(folder.handle, WebGzipCompressor, "a test")
+                            assertEquals("w1.cgw", library.save(document(world = world), world), "with move refused as $refusal")
+                            assertEquals("w1 (2).cgw", library.save(document(title = "Beside it", world = world), world))
+                            assertEquals("One", titleIn(library.load("w1.cgw")))
+                        }
+                    }
+                    assertEquals(listOf("w1 (2).cgw", "w1.cgw"), folder.entries(), "with move refused as $refusal")
+                }
+            }
+        }
+
+    @Test
+    fun `a method the browser lacks is a failure with the browser's own name, not an exception past the library`() =
+        runTest(timeout = 5.minutes) {
+            val world = TestWorlds.small()
+            withTestFolder("no-writable") { folder ->
+                val library = FolderWorldLibrary(folder.handle, WebGzipCompressor, "a test")
+                val held = hideCreateWritable()
+                val failure = try {
+                    runCatching { library.save(document(world = world), world) }.exceptionOrNull()
+                } finally {
+                    restoreCreateWritable(held)
+                }
+                assertIs<FolderException>(failure, "the failure was not the folder's: $failure")
+                assertTrue("TypeError" in failure.message.orEmpty(), "the browser's name for it was lost: ${failure.message}")
+                assertEquals(emptyList(), folder.entries(), "the failed save left a file")
+            }
+        }
 }
 
 /** Stores every chunk raw and throws on chunk [failingChunk], as a disk that fills up partway would. */

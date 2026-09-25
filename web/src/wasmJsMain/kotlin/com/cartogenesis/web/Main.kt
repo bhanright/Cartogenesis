@@ -30,6 +30,13 @@ private const val VIEWPORT_ID = "composeTarget"
 
 @OptIn(ExperimentalComposeUiApi::class)
 fun main() {
+    if (folderCheckRequested()) {
+        // ?foldertest is a page of its own rather than a report after start-up, as ?selftest is:
+        // the folder picker opens only from a click, and the report is text for the reader to copy.
+        hideLoadingMessage()
+        showFolderCheckPage()
+        return
+    }
     ComposeViewport(VIEWPORT_ID) {
         var platform by remember { mutableStateOf<Platform?>(null) }
 

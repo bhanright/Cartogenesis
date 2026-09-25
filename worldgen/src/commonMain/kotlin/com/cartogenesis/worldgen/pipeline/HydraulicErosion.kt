@@ -111,6 +111,14 @@ internal interface IncisionWatch {
     )
 
     /**
+     * [cell] was left out of the incision because it carries no channel
+     * ([ErosionConfig.incisionNeedsChannelHead]): the pass did not cut it, and [before] and
+     * [after] must agree. Reported instead of [cut], so the guards judge the law only where the
+     * law was asked. Nothing to do by default.
+     */
+    fun excluded(round: Int, cell: Int, before: Float, after: Float) = Unit
+
+    /**
      * The implicit pass has cut every cell of [round]. [surface] is the height field as it left it;
      * [ground] (the depression-filled surface the routing ran on) and [relative] are the round's
      * shoreline-relative fields after the outlet notch, whose land half is [landRange] of the
@@ -1021,7 +1029,13 @@ internal object HydraulicErosion {
                 incisedAt = if (carryingSediment) incisedAt else null,
                 onlyAboveBase = receiverClamp,
                 watch = incisionWatch,
-                round = round
+                round = round,
+                channel = if (erosion.incisionNeedsChannelHead) {
+                    channelHeads(
+                        config, isLand, sea.landCellCount, sea.relativeElevation, filled, directions, order,
+                        if (erosion.climateFeed) rainfallMm else null, vegetationDensity
+                    )
+                } else null
             )
             incisionWatch?.incised(
                 round, isLand, directions, ground, relative, area.data, landCells, landRange,
@@ -2271,7 +2285,8 @@ internal object HydraulicErosion {
         incisedAt: DoubleArray?,
         onlyAboveBase: Boolean = true,
         watch: IncisionWatch? = null,
-        round: Int = 0
+        round: Int = 0,
+        channel: BooleanArray? = null
     ) {
         val asFound = if (watch != null) surfaceOf.copyOf() else null
         // The water's surface over each cell of a filled basin for this pass, NaN elsewhere: set
@@ -2295,6 +2310,12 @@ internal object HydraulicErosion {
                 waterSurface[cell] = minOf(filledLevel, downstream)
             }
             val height = surfaceOf[cell]
+            // Not a channel by the head criterion, where that experiment is on: not cut, and its
+            // base still handed to the cells above it.
+            if (channel != null && !channel[cell]) {
+                watch?.excluded(round, cell, height, surfaceOf[cell])
+                continue
+            }
             val stepCellWidths = rates.groundSteps.between(cell, receiver, cellsAcross)
             val courantNumber =
                 rates.courantCoefficient * sqrt(discharge[cell] / landCells) * erodibility[cell] / stepCellWidths
@@ -2319,6 +2340,43 @@ internal object HydraulicErosion {
                 watch.cut(round, cell, receiver, courantNumber, height, baseBefore, baseAfter, after)
             }
         }
+    }
+
+    /**
+     * The cells [ErosionConfig.incisionNeedsChannelHead] lets the incision cut: every head
+     * `ChannelInitiation`'s criterion finds on this round's drainage, and everything downstream of
+     * one, through lakes. See the setting for what each input is and when it is taken.
+     *
+     * @param rainfallMm the rounds' provisional rainfall, or null where the climate feed is off,
+     *   which weights every cell at Earth's land mean.
+     */
+    internal fun channelHeads(
+        config: WorldGenConfig,
+        isLand: BooleanArray,
+        landCellCount: Int,
+        ground: FloatField,
+        filled: FloatField,
+        directions: IntArray,
+        order: IntArray,
+        rainfallMm: FloatArray?,
+        vegetationDensity: FloatArray
+    ): BooleanArray {
+        val cellKm2 = config.squareKilometresPerCell.toFloat()
+        val area = FlowRouting.accumulate(config.width, config.height, isLand, filled, directions, landCellCount) { cell ->
+            (if (rainfallMm == null) 1f else ChannelInitiation.runoffShareOfEarthMean(rainfallMm[cell])) * cellKm2
+        }.data
+        val gradient = ChannelInitiation.gradientToReceiver(config, isLand, ground, directions)
+        val channel = BooleanArray(isLand.size)
+        for (cell in channel.indices) {
+            if (!isLand[cell]) continue
+            channel[cell] = ChannelInitiation.isChannelHead(area[cell], gradient[cell], vegetationDensity[cell], config.rivers)
+        }
+        for (cell in order) {
+            if (!channel[cell]) continue
+            val receiver = directions[cell]
+            if (receiver >= 0 && isLand[receiver]) channel[receiver] = true
+        }
+        return channel
     }
 
     /**

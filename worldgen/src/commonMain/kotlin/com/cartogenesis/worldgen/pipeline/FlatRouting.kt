@@ -48,7 +48,8 @@ internal object FlatRouting {
         isLand: BooleanArray,
         elevation: FloatField,
         filled: FloatField,
-        seed: Long
+        seed: Long,
+        cellHeightInCellWidths: Double
     ): Surface {
         val cellCount = width * height
         val ground = elevation.data
@@ -97,7 +98,9 @@ internal object FlatRouting {
             // because the lowest cell of a flat was raised from something lower that was not raised
             // itself — had it been, it would be in this flat and lower still.
             val entryLevel = lowestLevel.toDouble()
-            val potential = solvePotential(width, height, members, memberCount, localIndex, surface, entryLevel, seed)
+            val potential = solvePotential(
+                width, height, members, memberCount, localIndex, surface, entryLevel, seed, cellHeightInCellWidths
+            )
 
             if (potential != null && layInBand(width, height, members, memberCount, localIndex, surface, potential, entryLevel)) {
                 // laid
@@ -118,9 +121,72 @@ internal object FlatRouting {
     private const val LAID = Int.MAX_VALUE
 
     /**
+     * The weight on a neighbour along the cell's longer side: the unit the other two are set
+     * against. East-west on cells no taller than they are wide, north-south on taller ones.
+     */
+    private const val LONG_SIDE_WEIGHT = 1.0
+
+    /** The Laplacian's three weights: a neighbour east or west, north or south, and diagonal. */
+    internal class Stencil(val eastWest: Double, val northSouth: Double, val diagonal: Double)
+
+    /**
+     * The weights of [solvePotential]'s Laplacian on cells [cellHeightInCellWidths] as tall as they
+     * are wide: isotropic on the ground, and every one of them positive whatever shape the cells are.
+     *
+     * The derivation. Measure the ground in cell widths, so a neighbour east or west is one away,
+     * one north or south `r` away and a diagonal one `(±1, ±r)`. The second-order Taylor expansion
+     * of `sum w (u_neighbour - u)` over the eight is `(e + 2d) u_xx + r^2 (n + 2d) u_yy`, the cross
+     * terms cancelling between the diagonals, for weights `e` east-west, `n` north-south and `d`
+     * on each diagonal. The operator is isotropic on the ground when the two coefficients agree,
+     * `e + 2d = r^2 (n + 2d)`, which leaves one weight free once the scale is fixed.
+     *
+     * On cells no taller than they are wide (`r <= 1`, this map's) the east-west weight is the unit
+     * and the diagonal `2 / (1 + r^2)`, one on square cells and less as the cells flatten, in step
+     * with the diagonal's length on the ground; the north-south weight follows, `(1 + 2d) / r^2 - 2d`,
+     * which is positive because `1 + 2d > 2d >= 2d r^2`. On taller cells the same rule is read with
+     * the axes exchanged, the grid seen on its side: the north-south weight is the unit, the
+     * diagonal `2 / (1 + 1/r^2)`, and the east-west weight `r^2 (1 + 2d) - 2d`, positive because
+     * `r^2 > 1`. The two agree on square cells, where all three weights are one, the unit stencil
+     * this replaced. The overall scale does not matter to the answer: the potential is laid into
+     * its band by its own highest value.
+     *
+     * Read with the axes as they are for every shape, the north-south weight goes negative once a
+     * cell is more than `sqrt(5/3)` as tall as it is wide: -0.35 on the cells of a grid 512 by 128.
+     * A negative weight voids the discrete maximum principle the solve's guarantee rests on.
+     */
+    internal fun stencil(cellHeightInCellWidths: Double): Stencil {
+        val r = cellHeightInCellWidths
+        return if (r <= 1.0) {
+            val diagonal = 2.0 / (1.0 + r * r)
+            Stencil(LONG_SIDE_WEIGHT, (1.0 + 2.0 * diagonal) / (r * r) - 2.0 * diagonal, diagonal)
+        } else {
+            val diagonal = 2.0 / (1.0 + 1.0 / (r * r))
+            Stencil(r * r * (1.0 + 2.0 * diagonal) - 2.0 * diagonal, LONG_SIDE_WEIGHT, diagonal)
+        }
+    }
+
+    /**
      * Poisson's equation over one flat: every member gathers a unit of rain, the entry holds it
      * at nothing, the rim lets nothing through. Conjugate gradients on the eight-neighbour
      * Laplacian, which is symmetric and positive definite as soon as one entry cell exists.
+     *
+     * The Laplacian is the ground's. On cells [cellHeightInCellWidths] as tall as they are wide, an
+     * eight-neighbour stencil with every weight one is the operator `3 (w^2 d2/dx2 + h^2 d2/dy2)`
+     * on the ground, four times as conductive east-west as north-south on this map's cells, and the
+     * level lines it draws round an outlet are ellipses twice as long east-west. The weights of
+     * [stencil] make it isotropic and keep every weight positive, which keeps the discrete maximum
+     * principle the guarantee below rests on.
+     *
+     * The price of an isotropic ground is an anisotropic matrix: on this map's cells a member is
+     * held to the members above and below it 13.6 times as hard as to the ones beside it, and plain
+     * conjugate gradients pay for that in steps: seed 7's largest flat at 512, 1,283 cells, took
+     * 350 of them against the square stencil's 270. So the steps are preconditioned by solving each
+     * column's run of members exactly, its own tridiagonal share of the matrix, which takes the
+     * stiff direction out whole and leaves the solve converging at the pace of the soft one: the
+     * same flat takes 148. The block is symmetric and positive definite, being a principal part of
+     * a matrix that is, so the steps are still conjugate gradients and the answer is the same one
+     * to the tolerance; see [ColumnRuns]. On cells taller than they are wide the stiff direction is
+     * along the row instead, and the column runs precondition less; the answer is the same.
      *
      * Returns null where the solve produced a non-positive value, which a converged solve cannot
      * (the discrete maximum principle puts every member strictly above the average of its
@@ -134,28 +200,53 @@ internal object FlatRouting {
         localIndex: IntArray,
         surface: DoubleArray,
         entryLevel: Double,
-        seed: Long
+        seed: Long,
+        cellHeightInCellWidths: Double
     ): DoubleArray? {
-        // The stencil per member: its degree over members and entries, and its member neighbours.
+        val stencil = stencil(cellHeightInCellWidths)
+        val diagonal = stencil.diagonal
+        val northSouth = stencil.northSouth
+        val eastWest = stencil.eastWest
+
+        // The stencil per member: its weighted degree over members and entries, and its member
+        // neighbours with their weights.
         val degree = DoubleArray(memberCount)
         val neighbourStart = IntArray(memberCount + 1)
         val neighbours = IntArray(memberCount * 8)
+        val weights = DoubleArray(memberCount * 8)
         var written = 0
         for (member in 0 until memberCount) {
             val cell = members[member]
+            val column = cell % width
+            val row = cell / width
             neighbourStart[member] = written
-            var count = 0
-            FlowRouting.forEachNeighbour(width, height, cell % width, cell / width) { neighbour ->
-                val local = localIndex[neighbour]
-                if (local in 0 until memberCount && local != LAID) {
-                    neighbours[written++] = local
-                    count++
-                } else if (local < 0 && surface[neighbour] < entryLevel) {
-                    // An entry: it takes water and holds the potential at nothing.
-                    count++
+            var total = 0.0
+            for (rowStep in -1..1) {
+                val neighbourRow = row + rowStep
+                if (neighbourRow < 0 || neighbourRow >= height) continue
+                for (columnStep in -1..1) {
+                    if (columnStep == 0 && rowStep == 0) continue
+                    var neighbourColumn = (column + columnStep) % width
+                    if (neighbourColumn < 0) neighbourColumn += width
+                    val neighbour = neighbourRow * width + neighbourColumn
+                    val weight = when {
+                        columnStep != 0 && rowStep != 0 -> diagonal
+                        rowStep != 0 -> northSouth
+                        else -> eastWest
+                    }
+                    val local = localIndex[neighbour]
+                    if (local in 0 until memberCount && local != LAID) {
+                        neighbours[written] = local
+                        weights[written] = weight
+                        written++
+                        total += weight
+                    } else if (local < 0 && surface[neighbour] < entryLevel) {
+                        // An entry: it takes water and holds the potential at nothing.
+                        total += weight
+                    }
                 }
             }
-            degree[member] = count.toDouble()
+            degree[member] = total
         }
         neighbourStart[memberCount] = written
 
@@ -163,7 +254,7 @@ internal object FlatRouting {
             for (member in 0 until memberCount) {
                 var sum = degree[member] * x[member]
                 for (slot in neighbourStart[member] until neighbourStart[member + 1]) {
-                    sum -= x[neighbours[slot]]
+                    sum -= weights[slot] * x[neighbours[slot]]
                 }
                 into[member] = sum
             }
@@ -179,10 +270,17 @@ internal object FlatRouting {
             val cell = members[it]
             1.0 + RAIN_RELIEF * FlowRouting.smoothSeededField(width, cell % width, cell / width, seed xor RAIN_RELIEF_SALT)
         }
-        val direction = residual.copyOf()
+        val runs = ColumnRuns(width, members, memberCount, localIndex, degree, northSouth)
+        val preconditioned = DoubleArray(memberCount)
+        runs.solve(residual, preconditioned)
+        val direction = preconditioned.copyOf()
         val product = DoubleArray(memberCount)
         var residualNorm = 0.0
-        for (member in 0 until memberCount) residualNorm += residual[member] * residual[member]
+        var residualAgainstPreconditioned = 0.0
+        for (member in 0 until memberCount) {
+            residualNorm += residual[member] * residual[member]
+            residualAgainstPreconditioned += residual[member] * preconditioned[member]
+        }
         val stopAt = residualNorm * RESIDUAL_TOLERANCE * RESIDUAL_TOLERANCE
         val mostIterations = MOST_ITERATIONS_FLOOR + (MOST_ITERATIONS_PER_ROOT_CELL * sqrt(memberCount.toDouble())).toInt()
 
@@ -191,24 +289,105 @@ internal object FlatRouting {
             applyLaplacian(direction, product)
             var directionEnergy = 0.0
             for (member in 0 until memberCount) directionEnergy += direction[member] * product[member]
-            if (directionEnergy <= 0.0) break
-            val stepLength = residualNorm / directionEnergy
+            if (directionEnergy <= 0.0 || residualAgainstPreconditioned <= 0.0) break
+            val stepLength = residualAgainstPreconditioned / directionEnergy
             var nextNorm = 0.0
             for (member in 0 until memberCount) {
                 x[member] += stepLength * direction[member]
                 residual[member] -= stepLength * product[member]
                 nextNorm += residual[member] * residual[member]
             }
-            val improvement = nextNorm / residualNorm
+            runs.solve(residual, preconditioned)
+            var nextAgainstPreconditioned = 0.0
+            for (member in 0 until memberCount) nextAgainstPreconditioned += residual[member] * preconditioned[member]
+            val improvement = nextAgainstPreconditioned / residualAgainstPreconditioned
             for (member in 0 until memberCount) {
-                direction[member] = residual[member] + improvement * direction[member]
+                direction[member] = preconditioned[member] + improvement * direction[member]
             }
             residualNorm = nextNorm
+            residualAgainstPreconditioned = nextAgainstPreconditioned
             iteration++
         }
 
         for (member in 0 until memberCount) if (!(x[member] > 0.0)) return null
         return x
+    }
+
+    /**
+     * The preconditioner of [solvePotential]: the flat's matrix with only the north-south couplings
+     * inside each column kept, solved exactly.
+     *
+     * A run is a column's members one under the next, unbroken; each is a tridiagonal system whose
+     * diagonal is the members' own weighted degrees and whose off-diagonal is the north-south
+     * weight, factorised once here by Thomas's elimination and solved once a step. The pivots are
+     * positive because the block is a principal part of a positive definite matrix, and the
+     * elimination is stable on it because every row of it is diagonally dominant: a member's degree
+     * is the sum of all its weights, of which the block holds at most two.
+     */
+    private class ColumnRuns(
+        width: Int,
+        members: IntArray,
+        memberCount: Int,
+        localIndex: IntArray,
+        degree: DoubleArray,
+        private val northSouth: Double
+    ) {
+        /** The members in run order, each run from its northernmost member down. */
+        private val order = IntArray(memberCount)
+
+        /** Where each run starts in [order], and one past the last. */
+        private val runStart: IntArray
+
+        /** Thomas's modified diagonal, per position in [order]. */
+        private val pivot = DoubleArray(memberCount)
+
+        init {
+            fun memberAt(cell: Int): Int {
+                if (cell < 0 || cell >= localIndex.size) return -1
+                val local = localIndex[cell]
+                return if (local in 0 until memberCount) local else -1
+            }
+            val starts = ArrayList<Int>()
+            var placed = 0
+            for (member in 0 until memberCount) {
+                // A run starts at a member with no member directly north of it; a column does not
+                // wrap north-south, so a member in the top row always starts one.
+                if (memberAt(members[member] - width) >= 0) continue
+                starts.add(placed)
+                var here = member
+                while (here >= 0) {
+                    order[placed++] = here
+                    here = memberAt(members[here] + width)
+                }
+            }
+            starts.add(placed)
+            runStart = starts.toIntArray()
+            for (run in 0 until runStart.size - 1) {
+                for (position in runStart[run] until runStart[run + 1]) {
+                    val diagonal = degree[order[position]]
+                    pivot[position] =
+                        if (position == runStart[run]) diagonal
+                        else diagonal - northSouth * northSouth / pivot[position - 1]
+                }
+            }
+        }
+
+        /** Writes the block's answer to [right] into [into]. */
+        fun solve(right: DoubleArray, into: DoubleArray) {
+            for (run in 0 until runStart.size - 1) {
+                val first = runStart[run]
+                val last = runStart[run + 1] - 1
+                // Down the column: each member's equation with the one above it eliminated.
+                for (position in first..last) {
+                    val carried = if (position == first) 0.0 else northSouth * into[order[position - 1]]
+                    into[order[position]] = (right[order[position]] + carried) / pivot[position]
+                }
+                // Back up it: each member's answer with the one below it put back.
+                for (position in last - 1 downTo first) {
+                    into[order[position]] += northSouth / pivot[position] * into[order[position + 1]]
+                }
+            }
+        }
     }
 
     /**

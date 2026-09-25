@@ -235,6 +235,13 @@ class PenAndInkTest : BorrowsSharedWorlds() {
          * land on this tree and still finds the recorded figure, because a gentler uplift and a
          * different set of drawn rivers move the belts and the valleys rather than the roughness
          * of ordinary country. Re-taken last, after the two module suites had settled.
+         *
+         * Fix 2 moved all twelve twice. First the ground: every operator that shaped it was put on
+         * the ground's ruler, so every continent is new, and the relief was drawn for the ground.
+         * Then the light: the sky's horizon had read the ground half as steep as the lamps did, and
+         * reads the one exaggeration now, so ordinary country sees less of the sky and
+         * `ReliefShading.ORDINARY_GROUND` is re-derived with it, 0.9526 to 0.9362 to 0.9225
+         * (docs/DESIGN_LEDGER.md, Fix 2). Re-taken last each time.
          */
         /** The twelve records live in [RecordedRenders], with the one script that re-takes them. */
         val RECORDED_STYLES: Map<MapStyle, Int> get() = RecordedRenders.STYLES_AT_512
@@ -262,9 +269,7 @@ class PenAndInkTest : BorrowsSharedWorlds() {
         /** Only ground with real ink on it is asked about: below this the paper is meant to be blank. */
         const val MEASURED_SLOPE_FLOOR = 0.14f
 
-        /** The known failures the two derivation guards record, by the audit finding. */
-        const val SLOPE_FLOOR_STALE =
-            "Audit III F-I9: the engraving's slope floor is not the tenth percentile it was read as"
+        /** The known failure the ink gain's derivation guard records, by the audit finding. */
         const val INK_GAIN_STALE =
             "Audit III F-I9: Pen and ink's widest stroke is not at the seventy-fifth percentile it was set at"
 
@@ -453,18 +458,17 @@ class PenAndInkTest : BorrowsSharedWorlds() {
                 val gradientY =
                     (elevation.sample(column, row + reach) -
                         elevation.sample(column, row - reach)) * plan.gradientScale
-                val slope = sqrt(gradientX * gradientX + gradientY * gradientY)
+                val slope = groundSlope(gradientX, gradientY, world)
                 if (slope >= MEASURED_SLOPE_FLOOR &&
                     allLand(land, width, column, row, window)
                 ) {
                     val tensor = structureTensor(pixels, width, column, row, window)
                     if (tensor != null) {
                         // The picture's steepest change runs across the strokes; the strokes run a
-                        // quarter turn from it, and the aspect is what they should be along.
+                        // quarter turn from it, and the ground's fall line as the sheet draws it is
+                        // what they should be along.
                         val inkDirection = tensor + QUARTER_TURN
-                        total += foldedDifference(
-                            inkDirection, atan2(gradientY.toDouble(), gradientX.toDouble())
-                        )
+                        total += foldedDifference(inkDirection, sheetFallLine(gradientX, gradientY, world))
                         windows++
                     }
                 }
@@ -577,10 +581,10 @@ class PenAndInkTest : BorrowsSharedWorlds() {
             for (column in 1 until width - 1) {
                 val cell = row * width + column
                 if (!world.sea.isLand[cell]) continue
-                val here = aspectOrNull(elevation, column, row, reach, plan) ?: continue
+                val here = aspectOrNull(world, elevation, column, row, reach, plan) ?: continue
                 measured++
-                val east = aspectOrNull(elevation, column + 1, row, reach, plan)
-                val south = aspectOrNull(elevation, column, row + 1, reach, plan)
+                val east = aspectOrNull(world, elevation, column + 1, row, reach, plan)
+                val south = aspectOrNull(world, elevation, column, row + 1, reach, plan)
                 val turned = (east != null && foldedDifference(here, east) > SEAM_RADIANS) ||
                     (south != null && foldedDifference(here, south) > SEAM_RADIANS)
                 if (turned) seams++
@@ -595,6 +599,7 @@ class PenAndInkTest : BorrowsSharedWorlds() {
     }
 
     private fun aspectOrNull(
+        world: WorldMap,
         elevation: com.cartogenesis.worldgen.model.FloatField,
         x: Int,
         y: Int,
@@ -605,17 +610,34 @@ class PenAndInkTest : BorrowsSharedWorlds() {
             (elevation.sample(x + reach, y) - elevation.sample(x - reach, y)) * plan.gradientScale
         val gradientY =
             (elevation.sample(x, y + reach) - elevation.sample(x, y - reach)) * plan.gradientScale
-        val slope = sqrt(gradientX * gradientX + gradientY * gradientY)
+        val slope = groundSlope(gradientX, gradientY, world)
         if (slope < MEASURED_SLOPE_FLOOR) return null
-        return atan2(gradientY.toDouble(), gradientX.toDouble())
+        return sheetFallLine(gradientX, gradientY, world)
+    }
+
+    /**
+     * The ground's steepness from a hachure's two differences, as `Engraving.hachure` reads it: the
+     * difference down a column is over rows, a share of a cell width each.
+     */
+    private fun groundSlope(gradientX: Float, gradientY: Float, world: WorldMap): Float {
+        val southward = gradientY / world.config.cellHeightInCellWidths.toFloat()
+        return sqrt(gradientX * gradientX + southward * southward)
+    }
+
+    /** The ground's fall line as the sheet draws it, the bearing a hachure runs along, in radians. */
+    private fun sheetFallLine(gradientX: Float, gradientY: Float, world: WorldMap): Double {
+        val rowScale = world.config.cellHeightInCellWidths
+        return atan2(gradientY / (rowScale * rowScale), gradientX.toDouble())
     }
 
     /**
      * The floor below which the ground is left blank is "the tenth percentile of the land slope of
      * seed 234475 measured at this stencil" ([EngravingPlan.SLOPE_FLOOR]). Held to it at the digit
      * it is stated to: the percentile of the gallery world, which is that seed, rounds to the
-     * floor's hundredth. The world has moved since the floor was read (Audit III, F-I9), so the
-     * clause runs as a known failure recorded by where the percentile now rounds.
+     * floor's hundredth. It ran as a known failure while the world stood moved from the floor
+     * (Audit III, F-I9), the percentile at 0.05, and is asserted again since the slope is read on
+     * the ground, where a hachure now reads it: the tenth percentile is 0.065 there
+     * (docs/DESIGN_LEDGER.md, Fix 2).
      */
     @Test
     fun `the slope floor is the tenth percentile of the land it was read off`() {
@@ -623,21 +645,18 @@ class PenAndInkTest : BorrowsSharedWorlds() {
         val tenth = hundredths(percentile(slopes, 0.10))
         val floor = hundredths(EngravingPlan.SLOPE_FLOOR)
         println("PENINK the tenth percentile of the land slope rounds to $tenth; the floor is $floor")
-        KnownFailures.expect(SLOPE_FLOOR_STALE, "the tenth percentile rounds to 0.05, the floor is 0.07") {
-            if (tenth != floor) {
-                throw RecordedViolation(
-                    "the tenth percentile of seed 234475's land slope is ${percentile(slopes, 0.10)}; the floor is ${EngravingPlan.SLOPE_FLOOR}",
-                    "the tenth percentile rounds to $tenth, the floor is $floor"
-                )
-            }
-        }
+        assertEquals(
+            floor, tenth,
+            "the tenth percentile of seed 234475's land slope is ${percentile(slopes, 0.10)}; the floor is ${EngravingPlan.SLOPE_FLOOR}"
+        )
     }
 
     /**
      * Pen and ink's gain puts a stroke at its widest at "a slope of 0.40, which is the
      * seventy-fifth percentile of this world's land" (the style's own comment): the floor plus one
      * over the gain. Held to it at the hundredth the 0.40 is stated to. Stale on the moved world
-     * as the floor is (Audit III, F-I9), and recorded the same way.
+     * (Audit III, F-I9), and recorded by where the percentile rounds: read on the ground, as a
+     * hachure now reads a slope, it stands past the widest stroke rather than short of it.
      */
     @Test
     fun `the ink gain puts the widest stroke at the seventy-fifth percentile of the land`() {
@@ -645,7 +664,7 @@ class PenAndInkTest : BorrowsSharedWorlds() {
         val seventyFifth = hundredths(percentile(slopes, 0.75))
         val widest = hundredths(EngravingPlan.SLOPE_FLOOR + 1f / MapStyle.PEN_AND_INK.inkGain)
         println("PENINK the seventy-fifth percentile of the land slope rounds to $seventyFifth; the widest stroke is at $widest")
-        KnownFailures.expect(INK_GAIN_STALE, "the seventy-fifth percentile rounds to 0.33, the widest stroke is at 0.40") {
+        KnownFailures.expect(INK_GAIN_STALE, "the seventy-fifth percentile rounds to 0.43, the widest stroke is at 0.40") {
             if (seventyFifth != widest) {
                 throw RecordedViolation(
                     "the seventy-fifth percentile of seed 234475's land slope is ${percentile(slopes, 0.75)}; " +
@@ -659,7 +678,7 @@ class PenAndInkTest : BorrowsSharedWorlds() {
     /** [value] rounded to the hundredth and written out, for comparing figures at that digit. */
     private fun hundredths(value: Float): String = String.format(Locale.ROOT, "%.2f", value)
 
-    /** The land slopes in ascending order, read the way the raster reads them for a hachure. */
+    /** The land slopes in ascending order, read the way the raster reads them for a hachure: on the ground. */
     private fun landSlopes(world: WorldMap, plan: EngravingPlan): List<Float> {
         val width = world.width
         val elevation = world.sea.relativeElevation
@@ -675,7 +694,7 @@ class PenAndInkTest : BorrowsSharedWorlds() {
             val gradientY =
                 (elevation.sample(column, row + reach) -
                     elevation.sample(column, row - reach)) * plan.gradientScale
-            slopes.add(sqrt(gradientX * gradientX + gradientY * gradientY))
+            slopes.add(groundSlope(gradientX, gradientY, world))
         }
         slopes.sort()
         return slopes
@@ -737,9 +756,11 @@ class PenAndInkTest : BorrowsSharedWorlds() {
                     // coordinates, so the whole picture arrives magnified by the grid ratio.
                     val readX = if (enlarged) column * REFERENCE_SIDE / width else column
                     val readY = if (enlarged) row * REFERENCE_SIDE / width else row
+                    // Square pixels of ground: the strokes' own geometry on the sheet is what this
+                    // measures, and a row counts as a column.
                     val ink = Engraving.hachure(
                         readX, readY,
-                        fromCentreX / radius * slope, fromCentreY / radius * slope, plan, gain
+                        fromCentreX / radius * slope, fromCentreY / radius * slope, 1f, plan, gain
                     ) > INKED
                     scanned++
                     if (ink && !wasInk) runs++

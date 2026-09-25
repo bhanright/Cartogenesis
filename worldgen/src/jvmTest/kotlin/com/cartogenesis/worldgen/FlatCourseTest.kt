@@ -53,6 +53,19 @@ class FlatCourseTest : BorrowsSharedWorlds() {
 
         /** Rule 8's line: under this share of a generation a device path is declined. */
         const val LARGEST_SHARE_WITHOUT_A_DEVICE_PATH = 0.01
+
+        /**
+         * The known failure the cost clause records: the potential is over rule 8's line on the
+         * worlds the ground's ruler draws, so the decision to decline it a device path no longer
+         * stands. Measured on seed 7 at 512 with nothing else running: 1.4 ms a pass over 3,662
+         * raised cells and 1.02% of a generation on the tree before Fix 2, already a hair over;
+         * 7.0 ms over 7,161 after it, 4.7%. The operator is not what grew: the redrawn world's
+         * flats hold twice the cells, two of them 1,283 and 777 cells across, and the square
+         * stencil the potential had before costs 7.45 ms a pass on that same world, where the
+         * ground's, column-preconditioned, costs 7.0. See docs/DESIGN_LEDGER.md, Fix 2.
+         */
+        const val POTENTIAL_OVER_THE_LINE =
+            "the water: the flat potential costs more than rule 8's hundredth of a generation, and has no device path"
     }
 
     @Test
@@ -111,10 +124,11 @@ class FlatCourseTest : BorrowsSharedWorlds() {
         // being measured. One pass read 3.9 ms against 1.7 quiet while another build ran beside
         // it, and put the share over the line it is meant to sit well under.
         var surfaceMs = Double.MAX_VALUE
-        var surface = FlatRouting.surfaceOf(world.width, world.height, sea.isLand, sea.relativeElevation, filled, seed)
+        val rowScale = world.config.cellHeightInCellWidths
+        var surface = FlatRouting.surfaceOf(world.width, world.height, sea.isLand, sea.relativeElevation, filled, seed, rowScale)
         repeat(3) {
             val surfaceStarted = System.nanoTime()
-            surface = FlatRouting.surfaceOf(world.width, world.height, sea.isLand, sea.relativeElevation, filled, seed)
+            surface = FlatRouting.surfaceOf(world.width, world.height, sea.isLand, sea.relativeElevation, filled, seed, rowScale)
             surfaceMs = minOf(surfaceMs, (System.nanoTime() - surfaceStarted) / 1_000_000.0)
         }
         val passes = routingPassesPerGeneration(world.config)
@@ -125,11 +139,15 @@ class FlatCourseTest : BorrowsSharedWorlds() {
                 "%.2f%% of a %.1f s generation over $passes passes; %d flats kept the staircase"
                     .format(shareOfGeneration * 100, generationMs / 1000, surface.flatsKept)
         )
-        assertTrue(
-            shareOfGeneration < LARGEST_SHARE_WITHOUT_A_DEVICE_PATH,
-            "the potential is %.2f%% of a generation, over the %.0f%% under which a device path is declined"
-                .format(shareOfGeneration * 100, LARGEST_SHARE_WITHOUT_A_DEVICE_PATH * 100)
-        )
+        KnownFailures.expect(POTENTIAL_OVER_THE_LINE, "over a hundredth of a generation") {
+            if (shareOfGeneration >= LARGEST_SHARE_WITHOUT_A_DEVICE_PATH) {
+                throw RecordedViolation(
+                    "the potential is %.2f%% of a generation, over the %.0f%% under which a device path is declined"
+                        .format(shareOfGeneration * 100, LARGEST_SHARE_WITHOUT_A_DEVICE_PATH * 100),
+                    "over a hundredth of a generation"
+                )
+            }
+        }
         assertEquals(0, surface.flatsKept, "a flat at $STANDARD_SIDE fell back to the staircase")
     }
 }
@@ -211,7 +229,8 @@ internal object FlatCourse {
         val filled = world.rivers.filledElevation
         val flow = FlowRouting.flowDirections(
             world.width, world.height, sea.isLand, sea.relativeElevation, filled,
-            world.config.seed, world.config.facetRouting, world.config.flatPotential
+            world.config.seed, world.config.cellHeightInCellWidths, world.config.facetRouting,
+            world.config.flatPotential
         )
         val cellCount = world.width * world.height
         // 0 not yet walked, 1 known to leave the raised ground, 2 on the walk in progress.

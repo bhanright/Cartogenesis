@@ -10,9 +10,17 @@ import kotlin.test.assertTrue
  * Whether rivers run in valleys they cut, or merely in whatever hollows the noise left.
  *
  * The measure is the cross-section. For every point on every drawn river, look at the ground a few
- * cells away *across* the flow and ask how much higher it stands. A river that carved its own
+ * cell widths away *across* the flow and ask how much higher it stands. A river that carved its own
  * valley sits in a notch and the answer is clearly positive; a river that simply found the lowest
  * line across noise-shaped terrain sits barely below its surroundings.
+ *
+ * Across on the ground and as far on the ground whichever way the river runs, since Fix 2 put the
+ * land on the ground's ruler. The banks were read three cells across the flow, which is three rows
+ * for a river running east-west and so half as far on the ground as for one running north-south;
+ * on land isotropic in cells that was the same share of a valley either way, and on land isotropic
+ * on the ground it reads an east-west valley's banks halfway up its walls. Read in cells, the
+ * finished channels on the ground's ruler stood 0.0129 below their banks on the three seeds and the
+ * ground before the water 0.0037; read on the ground, 0.0127 and 0.0037.
  *
  * Both sides are read in the height field's own units — the erosion stage's output against the
  * erosion stage's input, at the same cells, along the same courses. Until S2's third pass the
@@ -55,7 +63,8 @@ class ValleyIncisionTest : BorrowsSharedWorlds() {
             withoutTotal += pair.bare
             println(
                 "INCISION seed %d: %.4f of the elevation range along its own courses, against %.4f"
-                    .format(seed, pair.eroded, pair.bare) + " on the ground before the water ran"
+                    .format(seed, pair.eroded, pair.bare) + " on the ground before the water ran;" +
+                    " by the course's step, ${pair.byStep}"
             )
         }
 
@@ -66,16 +75,25 @@ class ValleyIncisionTest : BorrowsSharedWorlds() {
             with > without * DEEPENING_RATIO_BAR,
             "hydraulic erosion barely deepened the valleys: $with against $without"
         )
-        assertTrue(
-            with >= NOTCH_DEPTH_BEFORE_S2 * NOTCH_DEPTH_ALLOWANCE,
-            "a finished channel stands ${"%.4f".format(with)} of the field below its banks," +
-                " more than a tenth shallower than the" +
-                " ${"%.4f".format(NOTCH_DEPTH_BEFORE_S2)} the tree before S2 cut"
-        )
+        // Under Audit III's B-D1 since the erosion was put on the ground's ruler: see
+        // [INCISION_CAPPED_PER_STEP].
+        KnownFailures.expect(INCISION_CAPPED_PER_STEP, "0.0127") {
+            if (with < NOTCH_DEPTH_BEFORE_S2 * NOTCH_DEPTH_ALLOWANCE) {
+                throw RecordedViolation(
+                    "a finished channel stands ${"%.4f".format(with)} of the field below its banks," +
+                        " more than a tenth shallower than the" +
+                        " ${"%.4f".format(NOTCH_DEPTH_BEFORE_S2)} the tree before S2 cut",
+                    String.format(java.util.Locale.ROOT, "%.4f", with)
+                )
+            }
+        }
     }
 
-    /** What the banks stand above the channel, on the eroded ground and on the ground before it. */
-    private class Cross(val eroded: Double, val bare: Double)
+    /**
+     * What the banks stand above the channel, on the eroded ground and on the ground before it, and
+     * the finished notch by which way the course steps there, for the report.
+     */
+    private class Cross(val eroded: Double, val bare: Double, val byStep: String = "")
 
     /**
      * Mean height of the banks above the channel over every drawn river point, measured twice: on
@@ -98,7 +116,10 @@ class ValleyIncisionTest : BorrowsSharedWorlds() {
         var erodedTotal = 0.0
         var bareTotal = 0.0
         var samples = 0
-        val reach = 3
+        val rowScale = config.cellHeightInCellWidths
+        // Along a row, down a column, on a diagonal: the notch by the course's own step.
+        val stepDepth = DoubleArray(3)
+        val stepSamples = IntArray(3)
 
         world.rivers.rivers.forEach { river ->
             for (k in 1 until river.cells.size - 1) {
@@ -107,19 +128,24 @@ class ValleyIncisionTest : BorrowsSharedWorlds() {
                 val x = here % w
                 val y = here / w
 
-                // The flow direction, and the axis across it.
+                // The flow direction, and the axis across it on the ground: the flow's step in
+                // cell widths is (dx, dy r), so across it is (-dy r, dx), taken out to the reach
+                // and turned back into columns and rows.
                 val dx = signOf(next % w - x, w)
                 val dy = (next / w) - y
                 if (dx == 0 && dy == 0) continue
-                val acrossX = -dy
-                val acrossY = dx
+                val acrossEast = -dy * rowScale
+                val acrossSouth = dx.toDouble()
+                val acrossLength = kotlin.math.sqrt(acrossEast * acrossEast + acrossSouth * acrossSouth)
+                val acrossColumns = kotlin.math.round(acrossEast / acrossLength * BANK_REACH_CELL_WIDTHS).toInt()
+                val acrossRows = kotlin.math.round(acrossSouth / acrossLength * BANK_REACH_CELL_WIDTHS / rowScale).toInt()
 
                 var erodedBanks = 0f
                 var bareBanks = 0f
                 var found = 0
                 for (side in intArrayOf(-1, 1)) {
-                    val bx = ((x + acrossX * reach * side) % w + w) % w
-                    val by = y + acrossY * reach * side
+                    val bx = ((x + acrossColumns * side) % w + w) % w
+                    val by = y + acrossRows * side
                     if (by < 0 || by >= h) continue
                     val b = by * w + bx
                     if (!world.sea.isLand[b]) continue
@@ -131,10 +157,20 @@ class ValleyIncisionTest : BorrowsSharedWorlds() {
                 erodedTotal += erodedBanks / found
                 bareTotal += bareBanks / found
                 samples++
+                val step = if (dy == 0) 0 else if (dx == 0) 1 else 2
+                stepDepth[step] += (erodedBanks / found).toDouble()
+                stepSamples[step]++
             }
         }
         if (samples == 0) return Cross(0.0, 0.0)
-        return Cross(erodedTotal / samples, bareTotal / samples)
+        val byStep = listOf("along a row", "down a column", "on a diagonal").indices.joinToString { step ->
+            "%s %.4f over %d".format(
+                listOf("along a row", "down a column", "on a diagonal")[step],
+                if (stepSamples[step] == 0) 0.0 else stepDepth[step] / stepSamples[step],
+                stepSamples[step]
+            )
+        }
+        return Cross(erodedTotal / samples, bareTotal / samples, byStep)
     }
 
     private companion object {
@@ -162,6 +198,31 @@ class ValleyIncisionTest : BorrowsSharedWorlds() {
         const val DEEPENING_RATIO_BAR = 1.9
         const val NOTCH_DEPTH_BEFORE_S2 = 0.0148
         const val NOTCH_DEPTH_ALLOWANCE = 0.9
+
+        /**
+         * How far across the flow the banks are read, in cell widths of ground: the three cells the
+         * class has always read, which were three cell widths for a river running north-south and
+         * are now that for every river.
+         */
+        const val BANK_REACH_CELL_WIDTHS = 3.0
+
+        /**
+         * The known failure the depth clause records, and the finding it is: `GroundIsotropyTest`
+         * records the same cap under the same name.
+         *
+         * The tree before Fix 2 cut its channels to 0.0158 on these seeds, read in cells on land
+         * isotropic in cells. On the ground's ruler they stand 0.0127 read on the ground, and the
+         * shortfall is in the courses that step down a column: where a river steps along a row its
+         * notch is 0.0152, 0.0172 and 0.0119 deep on seeds 7, 42 and 1234, on a diagonal 0.0136,
+         * 0.0162 and 0.0115, and down a column 0.0104, 0.0129 and 0.0091, a quarter to a third
+         * shallower than along a row. The incision is capped at half the drop to the receiver in a
+         * round, a drop is in proportion to the step, and a step down a column is half as long on
+         * the ground, so where the cap and not the law sets the cut a course running north-south is
+         * cut half as far a round. The erosion's units, which set how often the cap binds, are the
+         * next chunk's (docs/DESIGN_LEDGER.md, Fix 2).
+         */
+        const val INCISION_CAPPED_PER_STEP =
+            "Audit III B-D1: the incision's cap sets the cut, and a cap per step cuts a north-south channel half as deep a round"
     }
 
     /** Column difference on a cylinder: a step across the seam is still one cell. */

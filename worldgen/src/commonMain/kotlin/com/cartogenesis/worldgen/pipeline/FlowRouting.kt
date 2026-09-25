@@ -1,7 +1,8 @@
 package com.cartogenesis.worldgen.pipeline
 
-import com.cartogenesis.worldgen.model.FloatField
+import com.cartogenesis.worldgen.math.GroundSteps
 import com.cartogenesis.worldgen.math.LongMinHeap
+import com.cartogenesis.worldgen.model.FloatField
 import kotlin.math.sqrt
 
 /**
@@ -127,6 +128,13 @@ internal object FlowRouting {
      * takes. That direction points somewhere between the facet's two neighbours, at some share of
      * the way from the cardinal to the diagonal.
      *
+     * The facets are the ground's, not a square's. This map's cells are [cellHeightInCellWidths] as
+     * tall as they are wide, so a facet's leg out to a cardinal neighbour and its leg on to the
+     * diagonal are a cell width and a row's height, one way round or the other, and each slope is
+     * taken over its own leg; the facet's far edge then subtends its own angle, and the share is
+     * where along that edge the descent crosses it. Taken over a square's legs, a plane falling at
+     * 45 degrees on the ground routed at 14 (docs/DESIGN_LEDGER.md, Fix 2).
+     *
      * The whole flow then goes to *one* of the two, drawn at that share — Fairfield and Leymarie's
      * Rho8 (1991, *Water Resources Research* 27(5), 709-717), which was written for this defect.
      * Every stage below this one needs a single receiver: the drainage is a forest, a river cannot
@@ -170,6 +178,7 @@ internal object FlowRouting {
         elevation: FloatField,
         filled: FloatField,
         seed: Long,
+        cellHeightInCellWidths: Double,
         byFacet: Boolean = true,
         overPotential: Boolean = true
     ): IntArray {
@@ -177,9 +186,10 @@ internal object FlowRouting {
         // The filled field, except across the flats the fill raised, where it is the potential
         // [FlatRouting] lays: see there for why a staircase cannot be routed across without a ruler.
         val routingSurface =
-            if (overPotential) FlatRouting.surfaceOf(width, height, isLand, elevation, filled, seed).heights
+            if (overPotential) FlatRouting.surfaceOf(width, height, isLand, elevation, filled, seed, cellHeightInCellWidths).heights
             else DoubleArray(width * height) { (if (isLand[it]) filled.data[it] else elevation.data[it]).toDouble() }
         val trueGround = elevation.data
+        val steps = GroundSteps(cellHeightInCellWidths)
         for (row in 0 until height) {
             for (column in 0 until width) {
                 val cell = row * width + column
@@ -187,7 +197,7 @@ internal object FlowRouting {
                 val here = routingSurface[cell]
                 if (!byFacet) {
                     receiver[cell] = steepestNeighbourOf(
-                        width, height, isLand, trueGround, routingSurface, column, row
+                        width, height, isLand, trueGround, routingSurface, column, row, steps
                     )
                     continue
                 }
@@ -204,6 +214,11 @@ internal object FlowRouting {
                         neighbourAt(width, height, column + cardinalColumnStep, row + cardinalRowStep)
                     if (cardinal < 0) continue
                     val cardinalDrop = here - routingSurface[cardinal]
+                    // The facet's two legs on the ground: out to the cardinal, and on from it to
+                    // the diagonal, square to the first.
+                    val toTheCardinal = steps.of(cardinalColumnStep, cardinalRowStep).toDouble()
+                    val onToTheDiagonal =
+                        (if (cardinalColumnStep == 0) steps.eastWest else steps.northSouth).toDouble()
 
                     for (turn in -1..1 step 2) {
                         val diagonalColumnStep =
@@ -214,28 +229,39 @@ internal object FlowRouting {
                         )
                         if (diagonal < 0) continue
                         val diagonalFall = here - routingSurface[diagonal]
-                        val diagonalSlope = diagonalFall / DIAGONAL_STEP_CELLS
-                        // Tarboton's two components: the fall to the cardinal, and the further fall
-                        // from the cardinal on to the diagonal. Both over one cell, since the
-                        // diagonal is one cell from the cardinal as well as from here.
+                        val diagonalSlope = diagonalFall / steps.diagonal
+                        // Tarboton's two components: the fall to the cardinal over the first leg,
+                        // and the further fall from the cardinal on to the diagonal over the second.
                         val outwardFall = diagonalFall - cardinalDrop
+                        val cardinalSlope = cardinalDrop / toTheCardinal
+                        val outwardSlope = outwardFall / onToTheDiagonal
+
+                        // Where along the far edge, from the cardinal to the diagonal, the descent
+                        // crosses it: the tangent of its angle off the first leg, over the tangent
+                        // of the angle the far edge subtends. On a square's legs this is the ratio
+                        // of the two falls.
+                        val shareAlongTheEdge = if (cardinalDrop > 0.0) {
+                            outwardFall * toTheCardinal * toTheCardinal /
+                                (cardinalDrop * onToTheDiagonal * onToTheDiagonal)
+                        } else {
+                            1.0
+                        }
 
                         // Where the descent points out of the facet it is clamped to the edge it
                         // left by: to the cardinal when the diagonal is no lower than the cardinal,
                         // and to the diagonal when the cardinal is not downhill at all or the
-                        // further fall on to the diagonal is the larger of the two.
+                        // descent crosses the far edge past the diagonal.
                         val clampedToTheCardinal = cardinalDrop > 0.0 && outwardFall <= 0.0
-                        val facetSlope = if (clampedToTheCardinal) {
-                            cardinalDrop
-                        } else if (cardinalDrop <= 0.0 || outwardFall >= cardinalDrop) {
-                            diagonalSlope
-                        } else {
-                            sqrt(cardinalDrop * cardinalDrop + outwardFall * outwardFall)
+                        val clampedToTheDiagonal = !clampedToTheCardinal && shareAlongTheEdge >= 1.0
+                        val facetSlope = when {
+                            clampedToTheCardinal -> cardinalSlope
+                            clampedToTheDiagonal -> diagonalSlope
+                            else -> sqrt(cardinalSlope * cardinalSlope + outwardSlope * outwardSlope)
                         }
                         val shareTowardTheDiagonal = when {
                             clampedToTheCardinal -> 0.0
-                            cardinalDrop <= 0.0 || outwardFall >= cardinalDrop -> 1.0
-                            else -> outwardFall / cardinalDrop
+                            clampedToTheDiagonal -> 1.0
+                            else -> shareAlongTheEdge
                         }
                         if (facetSlope > steepestFacetSlope) {
                             steepestFacetSlope = facetSlope
@@ -273,12 +299,13 @@ internal object FlowRouting {
         trueGround: FloatArray,
         routingSurface: DoubleArray,
         column: Int,
-        row: Int
+        row: Int,
+        steps: GroundSteps
     ): Int {
         var steepest = -1
         var steepestDrop = 0.0
         val here = routingSurface[row * width + column]
-        forEachNeighbourWithDistance(width, height, column, row) { neighbour, distance ->
+        forEachNeighbourWithDistance(width, height, column, row, steps) { neighbour, distance ->
             // Ocean cells carry their true elevation on the surface, so coastal cells drain to sea.
             val there = routingSurface[neighbour]
             val drop = (here - there) / distance
@@ -648,13 +675,6 @@ internal object FlowRouting {
      */
     private const val ELEVATION_BIAS = 4f
 
-    /**
-     * Length of a diagonal step, in cells, for the drop-per-distance comparison in
-     * [flowDirections]. Written out rather than taken from `sqrt`, because every world ever
-     * generated took the steepest neighbour by this exact float.
-     */
-    const val DIAGONAL_STEP_CELLS = 1.41421356f
-
     inline fun forEachNeighbour(
         width: Int,
         height: Int,
@@ -674,11 +694,16 @@ internal object FlowRouting {
         }
     }
 
+    /**
+     * [forEachNeighbour], handing each neighbour's distance on the ground in cell widths with it:
+     * [steps]' length for a step along a row, down a column or on a diagonal.
+     */
     inline fun forEachNeighbourWithDistance(
         width: Int,
         height: Int,
         column: Int,
         row: Int,
+        steps: GroundSteps,
         action: (index: Int, distance: Float) -> Unit
     ) {
         for (rowStep in -1..1) {
@@ -688,9 +713,7 @@ internal object FlowRouting {
                 if (columnStep == 0 && rowStep == 0) continue
                 var neighbourColumn = (column + columnStep) % width
                 if (neighbourColumn < 0) neighbourColumn += width
-                val distance =
-                    if (columnStep != 0 && rowStep != 0) DIAGONAL_STEP_CELLS else 1f
-                action(neighbourRow * width + neighbourColumn, distance)
+                action(neighbourRow * width + neighbourColumn, steps.of(columnStep, rowStep))
             }
         }
     }

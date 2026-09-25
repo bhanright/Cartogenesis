@@ -717,27 +717,24 @@ class CoastalSpacingAuditTest {
     /**
      * The routing's ruler measured, and the incision's printed beside it as arithmetic.
      *
-     * `FlowRouting.flowDirections` compares the falls to its neighbours over one cell for a cardinal
-     * step and `DIAGONAL_STEP_CELLS` for a diagonal one, whichever way the step runs, where
-     * `RiverStage.stepKilometres` measures a step in true kilometres. On a grid whose cells are
-     * twice as wide as they are tall those two rulers disagree, and this case measures what the
-     * routing does about it: a plane falling equally fast, per kilometre, eastward and southward —
-     * steepest descent at 45 degrees on the ground — routed by the production function, and the
-     * mean bearing of the steps it chooses read in kilometres. A router isotropic on the ground
-     * returns 45 degrees; one reading every step in cell widths takes the east-to-south-east facet
-     * with half its weight on the diagonal, whose mean step is one cell width east and half a cell
-     * height south, 14.0 degrees.
+     * `FlowRouting.flowDirections` builds its facets on the ground: a leg out to a cardinal
+     * neighbour and a leg on to the diagonal, a cell width and a row's height one way round or the
+     * other, where X1d found it comparing falls over one cell or the square root of two whichever
+     * way the step ran. This case measures what the routing does on a plane falling equally fast,
+     * per kilometre, eastward and southward — steepest descent at 45 degrees on the ground — routed
+     * by the production function, with the mean bearing of the steps it chooses read in kilometres.
+     * A router isotropic on the ground returns 45 degrees; one reading every step in cell widths
+     * took the east-to-south-east facet with half its weight on the diagonal, 14.0 degrees, which is
+     * what X1d measured and what this case asserted until the facets were mended
+     * (docs/DESIGN_LEDGER.md, Fix 2).
      *
-     * Asserted: that the routing's mean bearing lies more than fifteen degrees from the plane's,
-     * which is the fact the ledger row states. Fifteen is half the thirty-one degrees the square
-     * ruler predicts, and far outside what a draw over a quarter of a million cells scatters by.
-     * The case fails once the routing measures in kilometres, and the row goes stale with it.
+     * Asserted: that the routing's mean bearing lies within two degrees of the plane's, the bar
+     * `RoutingGroundTest` holds a dozen planes to per merge; the square ruler's error was fifteen
+     * times it.
      *
-     * `HydraulicErosion.cut` is private and charges the same square ruler — a drop over 1 or the
-     * square root of 2 cells, times the column count — so the incision reads a north-south slope at
-     * half the ground's and a diagonal one at `sqrt(1.25) / sqrt(2)`, 0.79; that is printed as the
-     * source's arithmetic, not measured. The share of one world's land steps in each direction is
-     * printed beside it.
+     * `HydraulicErosion.cut` is private and divides its drop by the same step's length on the
+     * ground, a row's height down a column, which is printed beside the routing as arithmetic
+     * rather than measured; so is the share of one world's land steps in each direction.
      */
     @Test
     fun `the routing's ruler measured, and the incision's beside it`() {
@@ -752,7 +749,7 @@ class CoastalSpacingAuditTest {
         })
         val receiver = FlowRouting.flowDirections(
             cellsAcross, cellsDown, BooleanArray(cellsAcross * cellsDown) { true }, plane, plane,
-            AUTHORS_SEED, byFacet = true, overPotential = false
+            AUTHORS_SEED, probe.cellHeightInCellWidths, byFacet = true, overPotential = false
         )
         // Away from the seam, where the plane is not periodic and the wrap would drain west.
         val margin = 16
@@ -800,14 +797,14 @@ class CoastalSpacingAuditTest {
             ("X1d METRIC incision, from the source's arithmetic: a slope down a column read at %.2f " +
                 "of the ground's and a diagonal one at %.2f; of %d land steps on seed %d at %d, %.1f%% " +
                 "run along a row, %.1f%% down a column and %.1f%% diagonally").format(
-                cellHeightKm / cellWidthKm, hypot(cellWidthKm, cellHeightKm) / cellWidthKm / sqrt(2.0),
+                1.0, 1.0,
                 allSteps, AUTHORS_SEED, CONTROL_SIDE,
                 100.0 * alongRow / allSteps, 100.0 * downColumn / allSteps, 100.0 * diagonal / allSteps
             )
         )
         assertTrue(
-            abs(routedDegrees - 45.0) > 15.0,
-            "the routing's mean bearing on the plane, $routedDegrees degrees, is far from the ground's 45"
+            abs(routedDegrees - 45.0) <= 2.0,
+            "the routing's mean bearing on the plane, $routedDegrees degrees, is off the ground's 45"
         )
     }
 

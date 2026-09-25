@@ -126,15 +126,22 @@ internal object CoastRoughness {
      * shoreline crosses is a box with something on both sides of it, at every size, which is the
      * divider method on a grid. Boxes tile from the left edge; the grid wraps in x and its width is
      * a power of two, so every box size here divides it and no box straddles the seam.
+     *
+     * Square on the ground since M1's own count was, for the reason given there: a box is [boxSizes]
+     * cell widths across and as many rows down as make the same length (see
+     * `EarthLikeness.coastlineBoxCount`).
      */
     fun coastlineBoxCount(
         isLand: BooleanArray,
         cellsAcross: Int,
         cellsDown: Int,
+        /** `cellHeightKm / cellWidthKm`, so a box can be as tall on the ground as it is wide. */
+        cellHeightInCellWidths: Double,
         boxSizes: IntArray = POOLED_BOX_SIZES
     ): BoxCount {
         val boxes = LongArray(boxSizes.size)
         boxSizes.forEachIndexed { sizeIndex, size ->
+            val rowsDown = kotlin.math.round(size / cellHeightInCellWidths).toInt().coerceAtLeast(1)
             var crossed = 0L
             var boxTop = 0
             while (boxTop < cellsDown) {
@@ -143,7 +150,7 @@ internal object CoastRoughness {
                     var sawLand = false
                     var sawWater = false
                     var row = boxTop
-                    while (row < min(boxTop + size, cellsDown) && !(sawLand && sawWater)) {
+                    while (row < min(boxTop + rowsDown, cellsDown) && !(sawLand && sawWater)) {
                         var column = boxLeft
                         while (column < min(boxLeft + size, cellsAcross)) {
                             if (isLand[row * cellsAcross + column]) sawLand = true else sawWater = true
@@ -155,7 +162,7 @@ internal object CoastRoughness {
                     if (sawLand && sawWater) crossed++
                     boxLeft += size
                 }
-                boxTop += size
+                boxTop += rowsDown
             }
             boxes[sizeIndex] = crossed
         }
@@ -244,7 +251,8 @@ internal object CoastRoughness {
     }
 
     /**
-     * The coastline's length measured with a ruler of [rulerCells] cells, in cells.
+     * The coastline's length measured with a ruler of [rulerCells] cell widths, in cell widths of
+     * ground.
      *
      * Richardson's own method rather than a box count, and the reason is that a box count saturates
      * where this question is asked. [boundaryBoxCount] at one cell can return at most one box per
@@ -259,26 +267,35 @@ internal object CoastRoughness {
      * multiplied back up. That is a divider walked at that step, and Richardson's law says the
      * length grows as `r^(1-D)` as the ruler shortens, so a straight coast measures the same at
      * every ruler and a crinkled one measures longer at the short ones.
+     *
+     * On the ground: a block is [rulerCells] cell widths across and as many rows down as make the
+     * same length, and at the finest ruler, the cell itself, an edge between two cells of one row
+     * is a row's height long and one between two cells of one column a cell's width. Counted in
+     * cells, in blocks twice as wide as they are tall on the ground, the four standard worlds'
+     * coasts read 0.02 to 0.05 smoother over four to sixteen (docs/DESIGN_LEDGER.md, Fix 2).
      */
     fun richardsonLength(
         isLand: BooleanArray,
         cellsAcross: Int,
         cellsDown: Int,
-        rulerCells: Int
+        rulerCells: Int,
+        /** `cellHeightKm / cellWidthKm`, so a ruler is as long on the ground each way. */
+        cellHeightInCellWidths: Double
     ): Double {
         if (rulerCells <= 1) {
-            return shorelineEdges(isLand, cellsAcross, cellsDown).toDouble()
+            return shorelineLengthCellWidths(isLand, cellsAcross, cellsDown, cellHeightInCellWidths)
         }
+        val rowsDown = kotlin.math.round(rulerCells / cellHeightInCellWidths).toInt().coerceAtLeast(1)
         val coarseAcross = cellsAcross / rulerCells
-        val coarseDown = cellsDown / rulerCells
+        val coarseDown = cellsDown / rowsDown
         if (coarseAcross < 2 || coarseDown < 2) return 0.0
         val coarse = BooleanArray(coarseAcross * coarseDown)
-        val half = rulerCells * rulerCells / 2
+        val half = rulerCells * rowsDown / 2
         for (blockRow in 0 until coarseDown) {
             for (blockColumn in 0 until coarseAcross) {
                 var land = 0
-                for (row in 0 until rulerCells) {
-                    val sourceRow = blockRow * rulerCells + row
+                for (row in 0 until rowsDown) {
+                    val sourceRow = blockRow * rowsDown + row
                     for (column in 0 until rulerCells) {
                         val sourceColumn = blockColumn * rulerCells + column
                         if (isLand[sourceRow * cellsAcross + sourceColumn]) land++
@@ -288,6 +305,28 @@ internal object CoastRoughness {
             }
         }
         return shorelineEdges(coarse, coarseAcross, coarseDown).toDouble() * rulerCells
+    }
+
+    /**
+     * The shoreline's length on the ground, in cell widths: [shorelineEdges] with each edge weighed
+     * by the side of the cell it is, a row's height between two cells of one row and a cell's
+     * width between two cells of one column.
+     */
+    fun shorelineLengthCellWidths(
+        isLand: BooleanArray,
+        cellsAcross: Int,
+        cellsDown: Int,
+        cellHeightInCellWidths: Double
+    ): Double {
+        var length = 0.0
+        for (row in 0 until cellsDown) {
+            for (column in 0 until cellsAcross) {
+                val here = isLand[row * cellsAcross + column]
+                if (here != isLand[row * cellsAcross + (column + 1) % cellsAcross]) length += cellHeightInCellWidths
+                if (row + 1 < cellsDown && here != isLand[(row + 1) * cellsAcross + column]) length += 1.0
+            }
+        }
+        return length
     }
 
     /**

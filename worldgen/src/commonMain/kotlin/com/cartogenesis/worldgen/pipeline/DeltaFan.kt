@@ -1,5 +1,6 @@
 package com.cartogenesis.worldgen.pipeline
 
+import com.cartogenesis.worldgen.math.GroundSteps
 import kotlin.math.sqrt
 
 /**
@@ -171,9 +172,6 @@ internal object DeltaFan {
         return (mixed ushr 17).toInt()
     }
 
-    /** Length of a diagonal step, in cells, for the walk in [growFan]. */
-    const val DIAGONAL_STEP_CELLS = 1.41421356f
-
     /**
      * The narrowest a distributary groove may be, in cells.
      *
@@ -207,12 +205,20 @@ internal object DeltaFan {
      *
      * @param outX horizontal component of the step the river took as it arrived. Need not be a unit
      *   vector; a zero vector gives a fan that reaches equally in every direction.
-     * @param reachCells the lobe's full reach straight ahead, in cells. Converted from
-     *   `ErosionConfig.deltaReachKm` and the grid by the caller, so it is a length on the ground.
+     * @param reachCells the lobe's full reach straight ahead, in cell widths. Converted from
+     *   `ErosionConfig.deltaReachKm` and the grid by the caller, so it is a length on the ground,
+     *   and read against offsets on the ground, so it is that length whichever way the lobe points.
      */
     class Rim(
         val apex: Int,
         private val width: Int,
+        /**
+         * How tall a row is as a fraction of how wide a column is, `cellHeightKm / cellWidthKm`, so
+         * the rim is a length on the ground whichever way it points: every offset from the apex is
+         * measured in cell widths, a row counting this much of one. Measured in cells, a lobe
+         * reached half as far north and south as `ErosionConfig.deltaReachKm` asked.
+         */
+        private val cellHeightInCellWidths: Double,
         val reachCells: Float,
         outX: Float,
         outY: Float,
@@ -250,14 +256,21 @@ internal object DeltaFan {
                 MIN_GROOVE_HALF_WIDTH_CELLS
             }
 
+        /** The length of a step to each neighbour on the ground, for the walk in [growFan]. */
+        val groundSteps: GroundSteps = GroundSteps(cellHeightInCellWidths)
+
+        private val rowScale = cellHeightInCellWidths.toFloat()
+
         init {
-            val outLength = sqrt(outX * outX + outY * outY)
+            // The river's arrival, a step of columns and rows, turned into a direction on the ground.
+            val outDown = outY * rowScale
+            val outLength = sqrt(outX * outX + outDown * outDown)
             if (outLength <= 0f) {
                 aheadX = 0f
                 aheadY = 0f
             } else {
                 aheadX = outX / outLength
-                aheadY = outY / outLength
+                aheadY = outDown / outLength
             }
             val phase2 = phase(hash, 1)
             val phase3 = phase(hash, 2)
@@ -380,14 +393,17 @@ internal object DeltaFan {
                 val rayY = grooveY[groove]
                 val rayReachCells = radius(rayX, rayY, 1f)
                 var blocked = false
-                var step = 1
-                while (step <= rayReachCells.toInt()) {
-                    val row = apexRow + (rayY * step).toInt()
+                // Walked in steps no longer than a row is tall, so no row the ray crosses is
+                // stepped over.
+                val stride = minOf(1f, rowScale)
+                var along = stride
+                while (along <= rayReachCells.toInt()) {
+                    val row = apexRow + (rayY * along / rowScale).toInt()
                     if (row < 0 || row >= height) { blocked = true; break }
-                    var column = (apexColumn + (rayX * step).toInt()) % width
+                    var column = (apexColumn + (rayX * along).toInt()) % width
                     if (column < 0) column += width
                     if (!open(row * width + column)) { blocked = true; break }
-                    step++
+                    along += stride
                 }
                 if (blocked) continue
                 if (kept != groove) {
@@ -402,8 +418,8 @@ internal object DeltaFan {
         /** Column difference from the apex, the short way round a map that wraps in x. */
         fun columnOffset(cell: Int): Float = wrapDx(cell % width - apexColumn, width).toFloat()
 
-        /** Row difference from the apex. The y axis does not wrap. */
-        fun rowOffset(cell: Int): Float = (cell / width - apexRow).toFloat()
+        /** Row difference from the apex, as a length on the ground in cell widths. The y axis does not wrap. */
+        fun rowOffset(cell: Int): Float = (cell / width - apexRow) * rowScale
 
         private fun phase(hash: Int, slot: Int): Pair<Float, Float> {
             val hashedX = draw(hash, slot * 2) * 2f - 1f
@@ -420,9 +436,12 @@ internal object DeltaFan {
      * heap is bounded by the cells inside a disc of radius `reach`, which is why it can be sized
      * from the reach rather than from the grid.
      */
-    class Scratch(cells: Int, reachCells: Int) {
+    class Scratch(cells: Int, reachCells: Int, cellHeightInCellWidths: Double) {
         val stamp = IntArray(cells)
-        private val capacity = ((2 * reachCells + 1) * (2 * reachCells + 1)).coerceAtLeast(9)
+        // A lobe reaching [reachCells] cell widths spans that many columns either way and as many
+        // rows as cover the same ground.
+        private val reachRows = kotlin.math.ceil(reachCells / cellHeightInCellWidths).toInt()
+        private val capacity = ((2 * reachCells + 1) * (2 * reachRows + 1)).coerceAtLeast(9)
         private val cells = IntArray(capacity)
         private val keys = FloatArray(capacity)
         private val penalties = FloatArray(capacity)
@@ -591,8 +610,7 @@ internal inline fun growFan(
                     neighbourColumnOffset * neighbourColumnOffset +
                         neighbourRowOffset * neighbourRowOffset
                 )
-                val stepCells =
-                    if (stepX != 0 && stepY != 0) DeltaFan.DIAGONAL_STEP_CELLS else 1f
+                val stepCells = rim.groundSteps.of(stepX, stepY)
                 // Only the extra cost of the depth accumulates; the distance term is measured
                 // afresh from the apex, so the walk cannot inherit an octagonal path length.
                 val neighbourPenalty = penalty + stepCells * (advance(neighbour) - 1f)

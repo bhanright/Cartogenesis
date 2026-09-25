@@ -282,8 +282,9 @@ object SeaLevelStage {
         val cellCount = cellsAcross * cellsDown
         val isLand = beforeShelf.isLand
 
-        // Euclidean distance to the nearest land cell, by jump flooding: the three bands below are
-        // read straight off it, so the shelf break is one of this field's iso-contours.
+        // Euclidean distance on the ground to the nearest land cell, in cell widths, by jump
+        // flooding: the three bands below are read straight off it, so the shelf break is one of
+        // this field's iso-contours and stands as far off a northern coast as off a western one.
         val distanceToLand = FloatArray(cellCount) { JumpFloodDistance.INFINITE }
         val nearestLandCell = IntArray(cellCount) { -1 }
         for (cell in 0 until cellCount) {
@@ -293,11 +294,14 @@ object SeaLevelStage {
             }
         }
         if (beforeShelf.landCellCount > 0) {
-            JumpFloodDistance.run(cellsAcross, cellsDown, distanceToLand, nearestLandCell)
+            JumpFloodDistance.run(
+                cellsAcross, cellsDown, distanceToLand, nearestLandCell, config.cellHeightInCellWidths
+            )
         }
 
-        // The three bands, converted from the world's own scale once: the shelf's width in cells
-        // of this grid, and its two depths as shares of the sea's own range below the shoreline.
+        // The three bands, converted from the world's own scale once: the shelf's width in cell
+        // widths of this grid, and its two depths as shares of the sea's own range below the
+        // shoreline.
         val shelfBreakCells = config.cellsFor(seaConfig.shelfWidthKm)
         val slopeFootCells = 2f * shelfBreakCells
         val shelfBreakDepth = -config.scale.depthShareOfMetres(seaConfig.shelfDepthMetres)
@@ -502,6 +506,7 @@ object SeaLevelStage {
                 relativeElevation,
                 filled,
                 config.seed,
+                config.cellHeightInCellWidths,
                 config.facetRouting,
                 config.flatPotential
             )

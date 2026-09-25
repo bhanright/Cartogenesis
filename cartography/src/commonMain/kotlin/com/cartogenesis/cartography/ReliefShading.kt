@@ -1,6 +1,8 @@
 package com.cartogenesis.cartography
 
 import com.cartogenesis.worldgen.model.FloatField
+import kotlin.math.abs
+import kotlin.math.sign
 import kotlin.math.sqrt
 
 /**
@@ -30,7 +32,19 @@ import kotlin.math.sqrt
  * lamp had left it. The dome above is what fixed it. See docs/DESIGN_LEDGER.md, F13, for the figures.
  *
  * The single lamp is kept, exactly as it was, because a reader may prefer it — see
- * [RenderOptions.singleLamp]. Under it this file reproduces the older shading bit for bit.
+ * [RenderOptions.singleLamp].
+ *
+ * **Drawn for the ground, not for the sheet.** A cell of this map is twice as wide as it is tall,
+ * and the sheet draws it as a square pixel, so a slope can be read per pixel (the sheet's) or per
+ * kilometre (the ground's), and the two disagree by a factor of two north-south. This reads the
+ * ground: the difference down a column is divided by the row's height and the one along a row by
+ * the column's width, and the horizon is sampled along the eight compass bearings of the ground at
+ * three distances of ground. So a range lights the same whichever way it runs, and a slope facing
+ * north is shaded as steep as it stands. Read on the sheet, a north-facing slope was lit as half as
+ * steep as the same slope facing east, and the sky's stencil reached twice as far east as north
+ * (Audit III's F-R5; docs/DESIGN_LEDGER.md, Fix 2). On square cells the two readings of a slope
+ * are one; the horizon's diagonal samples still differ from the older stencil's, which went a whole
+ * diagonal cell out per step of reach and so reached the diagonals root two further than the axes.
  *
  * The reference implementation, as [Engraving] is: every line here has a copy in the compute
  * shader (`GpuRaster.SOURCE`) written against it, and the two are one model in two languages.
@@ -38,13 +52,20 @@ import kotlin.math.sqrt
 internal object ReliefShading {
 
     /**
-     * How far the central differences are exaggerated, at a map [width].
-     *
-     * Gentle relief still has to read at map scale, and these are differences between adjacent
-     * cells: at four times the grid a step covers a quarter of the ground, and the relief would
-     * otherwise render four times flatter.
+     * What a central difference is multiplied by to become the exaggerated gradient, at a map
+     * [width]: [verticalExaggeration] over the two cell widths the difference spans.
      */
-    fun slopeScale(width: Int): Float = SLOPE_SCALE_AT_512 * (width / 512f)
+    fun slopeScale(width: Int): Float = verticalExaggeration(width) / CENTRAL_DIFFERENCE_SPAN_CELL_WIDTHS
+
+    /**
+     * How many times steeper than the ground the relief is drawn, at a map [width]: the one
+     * exaggeration the lamps, the sky's horizon and the engraving's gradient all read.
+     *
+     * Gentle relief still has to read at map scale, and the gradient here is a rise over a cell
+     * width in the height field's own units: at four times the grid a cell covers a quarter of the
+     * ground, and the relief would otherwise render four times flatter.
+     */
+    fun verticalExaggeration(width: Int): Float = VERTICAL_EXAGGERATION_AT_512 * (width / 512f)
 
     /**
      * How far the openness stencil reaches on its shortest step, in cells, at a map [width].
@@ -65,18 +86,24 @@ internal object ReliefShading {
      * The sea keeps a factor of 1: relief is only ever raked across the land, and shading the sea
      * floor as well would be most of the work for none of the picture.
      */
-    fun of(elevation: FloatField, isLand: BooleanArray, singleLamp: Boolean): FloatArray {
+    fun of(
+        elevation: FloatField,
+        isLand: BooleanArray,
+        singleLamp: Boolean,
+        cellHeightInCellWidths: Double
+    ): FloatArray {
         val cellsAcross = elevation.width
         val cellsDown = elevation.height
         val shade = FloatArray(cellsAcross * cellsDown) { 1f }
         val scale = slopeScale(cellsAcross)
-        val step = opennessStep(cellsAcross)
+        val horizon = ReliefHorizon.of(opennessStep(cellsAcross), cellHeightInCellWidths)
+        val rowScale = cellHeightInCellWidths.toFloat()
         for (row in 0 until cellsDown) {
             val rowStart = row * cellsAcross
             for (column in 0 until cellsAcross) {
                 if (!isLand[rowStart + column]) continue
                 shade[rowStart + column] =
-                    at(column, row, elevation, scale, step, singleLamp)
+                    at(column, row, elevation, scale, rowScale, horizon, singleLamp, DAYLIGHT)
             }
         }
         return shade
@@ -105,7 +132,8 @@ internal object ReliefShading {
      * The lighting factor at one cell.
      *
      * [scale] comes from [slopeScale] and [step] from [opennessStep]; both are properties of the
-     * grid rather than of the cell, so they are worked out once and handed in.
+     * grid rather than of the cell, so they are worked out once and handed in, with how tall a row
+     * is against a column's width.
      */
     fun at(
         x: Int,
@@ -114,17 +142,32 @@ internal object ReliefShading {
         scale: Float,
         step: Int,
         singleLamp: Boolean,
+        cellHeightInCellWidths: Double,
         sky: Sky = DAYLIGHT
+    ): Float = at(
+        x, y, elevation, scale, cellHeightInCellWidths.toFloat(), ReliefHorizon.of(step, cellHeightInCellWidths),
+        singleLamp, sky
+    )
+
+    private fun at(
+        x: Int,
+        y: Int,
+        elevation: FloatField,
+        scale: Float,
+        rowScale: Float,
+        horizon: ReliefHorizon,
+        singleLamp: Boolean,
+        sky: Sky
     ): Float {
         if (singleLamp) {
             val eastward = (elevation.sample(x + 1, y) - elevation.sample(x - 1, y)) * scale
-            val southward = (elevation.sample(x, y + 1) - elevation.sample(x, y - 1)) * scale
+            val southward = (elevation.sample(x, y + 1) - elevation.sample(x, y - 1)) * scale / rowScale
             val normalLength = sqrt(eastward * eastward + southward * southward + 1f)
             val lambert =
                 (-eastward * LAMP_EAST - southward * LAMP_SOUTH + LAMP_HEIGHT) / normalLength
             return (LAMP_AMBIENT + LAMP_SWING * lambert).coerceIn(DARKEST, BRIGHTEST)
         }
-        return (illumination(x, y, elevation, scale, step, sky) / ORDINARY_GROUND)
+        return (illumination(x, y, elevation, scale, rowScale, horizon, sky) / ORDINARY_GROUND)
             .coerceIn(DARKEST, BRIGHTEST)
     }
 
@@ -141,13 +184,31 @@ internal object ReliefShading {
         elevation: FloatField,
         scale: Float,
         step: Int,
+        cellHeightInCellWidths: Double,
         sky: Sky = DAYLIGHT
+    ): Float = illumination(
+        x, y, elevation, scale, cellHeightInCellWidths.toFloat(), ReliefHorizon.of(step, cellHeightInCellWidths), sky
+    )
+
+    private fun illumination(
+        x: Int,
+        y: Int,
+        elevation: FloatField,
+        scale: Float,
+        rowScale: Float,
+        horizon: ReliefHorizon,
+        sky: Sky
     ): Float {
+        // Rises per cell width of ground: the difference down a column is over two rows, which
+        // are [rowScale] of a cell width each.
         val eastward = (elevation.sample(x + 1, y) - elevation.sample(x - 1, y)) * scale
-        val southward = (elevation.sample(x, y + 1) - elevation.sample(x, y - 1)) * scale
+        val southward = (elevation.sample(x, y + 1) - elevation.sample(x, y - 1)) * scale / rowScale
         val normalLength = sqrt(eastward * eastward + southward * southward + 1f)
         val direct = directLight(eastward, southward, normalLength, sky)
-        val open = openness(x, y, elevation, scale, step, sky)
+        // The horizon reads the rise over its run, a gradient once, so it takes the whole
+        // exaggeration where the central differences above take half of it for each of the two
+        // cell widths they span: one surface, lit and shaded at one steepness.
+        val open = openness(x, y, elevation, scale * CENTRAL_DIFFERENCE_SPAN_CELL_WIDTHS, horizon, sky)
         val share = sky.diffuseShare
         return share * open + (1f - share) * (direct / LAMP_HEIGHT)
     }
@@ -189,11 +250,12 @@ internal object ReliefShading {
     /**
      * How much of the sky the ground at a cell can see: 1 on an open plain, toward 0 in a slot.
      *
-     * The cheap horizon estimate the sky term needs. Along each of the eight grid bearings the
-     * stencil looks out three distances and keeps the steepest rise it finds; the sine of that
-     * angle is the share of that bearing's sky the ground has lost, and the mean over the eight,
-     * weighted by how bright each bearing's sky is, is the share lost altogether. Ground that is
-     * lower than its surroundings loses nothing, since a horizon below the eye blocks nothing.
+     * The cheap horizon estimate the sky term needs. Along each of the eight compass bearings of
+     * the ground the stencil looks out three distances and keeps the steepest rise it finds; the
+     * sine of that angle is the share of that bearing's sky the ground has lost, and the mean over
+     * the eight, weighted by how bright each bearing's sky is, is the share lost altogether. Ground
+     * that is lower than its surroundings loses nothing, since a horizon below the eye blocks
+     * nothing. Where the samples fall is [ReliefHorizon]'s business.
      *
      * This is a horizon over a few cells rather than the full sky-view factor, which would integrate
      * to the true horizon in every direction: at map scale the difference is invisible and the cost
@@ -203,26 +265,21 @@ internal object ReliefShading {
         x: Int,
         y: Int,
         elevation: FloatField,
-        scale: Float,
-        step: Int,
+        exaggeration: Float,
+        horizon: ReliefHorizon,
         sky: Sky = DAYLIGHT
     ): Float {
         val here = elevation.sample(x, y)
         val brightness = sky.brightness
         var blocked = 0f
         for (bearing in 0 until HORIZON_BEARINGS) {
-            val eastward = BEARING_EAST[bearing]
-            val southward = BEARING_SOUTH[bearing]
             var steepest = 0f
-            var reach = step
-            var stride = BEARING_LENGTH[bearing] * step
             for (further in 0 until HORIZON_STEPS) {
-                val rise = (elevation.sample(x + eastward * reach, y + southward * reach) - here) *
-                    scale
-                val tangent = rise / stride
+                val sample = bearing * HORIZON_STEPS + further
+                val rise = (elevation.sample(x + horizon.columns[sample], y + horizon.rows[sample]) - here) *
+                    exaggeration
+                val tangent = rise / horizon.strides[sample]
                 if (tangent > steepest) steepest = tangent
-                reach += reach
-                stride += stride
             }
             // Weighted by how bright that quarter of the sky is, so a ridge standing between the
             // ground and the sun costs it more light than the same ridge behind it.
@@ -232,35 +289,38 @@ internal object ReliefShading {
     }
 
     /**
-     * The single lamp's exaggeration at a 512 grid.
+     * The relief's vertical exaggeration at a 512 grid: the rise over a cell width of ground, in
+     * the height field's units, is drawn twenty-four times steeper.
      *
-     * Twelve, which is what every render before the sky model was drawn at and what the
-     * engraving's own gradient is still scaled by.
+     * Deliberate, and the one the maps have always been drawn at. The single lamp, which every
+     * render before the sky model used and which [RenderOptions.singleLamp] keeps exactly, read a
+     * central difference over two cell widths, un-halved, times twelve: the gradient twice over,
+     * times twelve. The sky model's eight lamps took that difference as it stood, the engraving's
+     * gradient is the same difference over its reach times the same twelve, and [HAZE] and
+     * [ORDINARY_GROUND] are measured against that picture. The sky's horizon alone read the rise
+     * over its run once, times twelve, so the lamps lit ground twice as steep as the horizon that
+     * shaded it; it reads the same twenty-four now, and the surface the direct light and the sky
+     * see is one surface (docs/DESIGN_LEDGER.md, Fix 2).
      */
-    private const val SLOPE_SCALE_AT_512 = 12f
+    private const val VERTICAL_EXAGGERATION_AT_512 = 24f
+
+    /** How many cell widths a central difference spans: one either side of the cell. */
+    private const val CENTRAL_DIFFERENCE_SPAN_CELL_WIDTHS = 2f
 
     /** Shortest reach of the openness stencil at a 512 grid; the other two are twice and four times it. */
     private const val OPENNESS_STEP_AT_512 = 2
 
     /** How many distances out each bearing looks. Three, at r, 2r and 4r. */
-    private const val HORIZON_STEPS = 3
+    const val HORIZON_STEPS = 3
 
-    /** The eight grid bearings the horizon is measured along. */
-    private const val HORIZON_BEARINGS = 8
+    /** The eight compass bearings of the ground the horizon is measured along. */
+    const val HORIZON_BEARINGS = 8
 
-    private val BEARING_EAST = intArrayOf(1, 1, 0, -1, -1, -1, 0, 1)
-    private val BEARING_SOUTH = intArrayOf(0, 1, 1, 1, 0, -1, -1, -1)
-
-    /** Cells travelled per cell of reach: a diagonal step covers root two. */
-    private val BEARING_LENGTH = floatArrayOf(
-        1f, ROOT_TWO, 1f, ROOT_TWO, 1f, ROOT_TWO, 1f, ROOT_TWO
-    )
-
-    /** The same eight bearings as unit vectors, which is what a lamp's direction wants. */
-    private val BEARING_UNIT_EAST = floatArrayOf(
+    /** The eight bearings as unit vectors on the ground, for the lamps and the horizon alike. */
+    internal val BEARING_UNIT_EAST = floatArrayOf(
         1f, ROOT_HALF, 0f, -ROOT_HALF, -1f, -ROOT_HALF, 0f, ROOT_HALF
     )
-    private val BEARING_UNIT_SOUTH = floatArrayOf(
+    internal val BEARING_UNIT_SOUTH = floatArrayOf(
         0f, ROOT_HALF, 1f, ROOT_HALF, 0f, -ROOT_HALF, -1f, -ROOT_HALF
     )
 
@@ -356,9 +416,15 @@ internal object ReliefShading {
      * Re-derived rather than argued with, because the figure is defined as that
      * median and for no other reason — and re-derived rather than absorbed into the drift bar,
      * because leaving it stale would draw every map one and a half percent off the tone the lamp
-     * set, which is the one thing this constant exists to hold still.
+     * set, which is the one thing this constant exists to hold still. It moved to 0.9362 with both
+     * the ground and the reading of it: the world is shaped on the ground's ruler, and a
+     * slope facing north or south is lit as steep as it stands rather than as half that, so
+     * ordinary country catches less light. And to 0.9225 when the sky's horizon was put on the
+     * lamps' exaggeration, [VERTICAL_EXAGGERATION_AT_512], where it had read the ground half as
+     * steep: ground walled in by country twice as steep sees less of the sky (docs/DESIGN_LEDGER.md,
+     * Fix 2).
      */
-    private const val ORDINARY_GROUND = 0.9526f
+    private const val ORDINARY_GROUND = 0.9225f
 
     /** Read by `ReliefShadingTest`, which is where the figure above comes from. */
     val ordinaryGround: Float get() = ORDINARY_GROUND
@@ -373,6 +439,63 @@ internal object ReliefShading {
     private const val BRIGHTEST = 1.35f
 }
 
-/** Root two and its reciprocal, written once: the diagonals of the stencil and of the lamps. */
-private const val ROOT_TWO = 1.4142135f
+/**
+ * Where the sky's horizon is sampled round a cell: along each of the eight compass bearings of
+ * the ground, at [ReliefShading.HORIZON_STEPS] distances doubling from the stencil's shortest step, the whole
+ * cell nearest that point on the ground and the ground's distance to it.
+ *
+ * The bearings are the ground's, so on cells twice as wide as they are tall the step north is
+ * twice as many rows as the step east is columns, and a diagonal lands where the ground's
+ * diagonal does rather than on the grid's; the offset is rounded to a whole cell, never the cell
+ * itself, and the stride is that cell's own distance on the ground, so every tangent read is the true rise
+ * over the true run to the sample it was read at. Worked out once for a grid and handed to
+ * every cell; the compute shader is handed the same arrays, so the two sample the same cells.
+ */
+class ReliefHorizon(
+    /** Column offset of each sample, bearing by bearing, nearest first. */
+    val columns: IntArray,
+    /** Row offset of each sample, in the same order. */
+    val rows: IntArray,
+    /** The distance on the ground to each sample, in cell widths. */
+    val strides: FloatArray
+) {
+    companion object {
+        /**
+         * The samples for a stencil whose shortest step is [step] cell widths, on cells
+         * [cellHeightInCellWidths] as tall as they are wide.
+         */
+        fun of(step: Int, cellHeightInCellWidths: Double): ReliefHorizon {
+            val samples = ReliefShading.HORIZON_BEARINGS * ReliefShading.HORIZON_STEPS
+            val columns = IntArray(samples)
+            val rows = IntArray(samples)
+            val strides = FloatArray(samples)
+            for (bearing in 0 until ReliefShading.HORIZON_BEARINGS) {
+                var reach = step.toDouble()
+                for (further in 0 until ReliefShading.HORIZON_STEPS) {
+                    val sample = bearing * ReliefShading.HORIZON_STEPS + further
+                    val acrossInCells = ReliefShading.BEARING_UNIT_EAST[bearing] * reach
+                    val downInCells = ReliefShading.BEARING_UNIT_SOUTH[bearing] * reach / cellHeightInCellWidths
+                    var column = kotlin.math.round(acrossInCells).toInt()
+                    var row = kotlin.math.round(downInCells).toInt()
+                    if (column == 0 && row == 0) {
+                        // The point rounds onto the cell itself, which has no distance to read a
+                        // tangent over: on cells twice as tall as they are wide the stencil's
+                        // shortest step north is half a row. One cell out along whichever axis the
+                        // bearing leans on in cells, which is never nought on both.
+                        if (abs(acrossInCells) >= abs(downInCells)) column = sign(acrossInCells).toInt()
+                        else row = sign(downInCells).toInt()
+                    }
+                    val down = row * cellHeightInCellWidths
+                    columns[sample] = column
+                    rows[sample] = row
+                    strides[sample] = sqrt(column.toDouble() * column + down * down).toFloat()
+                    reach += reach
+                }
+            }
+            return ReliefHorizon(columns, rows, strides)
+        }
+    }
+}
+
+/** The reciprocal of root two, written once: the diagonal bearings' components on the ground. */
 private const val ROOT_HALF = 0.70710678f

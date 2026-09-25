@@ -121,8 +121,11 @@ class ClimateReliefGalleryTest {
                 val southward =
                     (elevation.sample(x, y + reach) - elevation.sample(x, y - reach)) * span
                 val slope = kotlin.math.sqrt(eastward * eastward + southward * southward)
+                val southwardOnTheGround = southward / world.config.cellHeightInCellWidths.toFloat()
+                val slopeOnTheGround =
+                    kotlin.math.sqrt(eastward * eastward + southwardOnTheGround * southwardOnTheGround)
                 inked[cell] =
-                    Isobaths.ink(-elevation.data[cell], slope, interval, flattestSlope) >= 0.5f
+                    Isobaths.ink(-elevation.data[cell], slope, slopeOnTheGround, interval, flattestSlope) >= 0.5f
             }
         }
 

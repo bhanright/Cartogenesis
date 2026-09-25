@@ -91,7 +91,9 @@ class DeltaOutlineTest {
      * axis-aligned run longer than the lobe's own reach must be under the bar. The reach is half a
      * lobe's width, so the bar asks that no delta have a straight coast longer than a quarter of
      * its own span, which is already generous: Earth's deltas have none at all outside the
-     * artificial ones.
+     * artificial ones. Lengths are the ground's, in cell widths: an edge along a row is a cell
+     * width long and an edge down a column a row's height, so a lobe round on the ground, which is
+     * twice as many rows tall as it is columns wide, is not read as straight down its flanks.
      */
     @Test
     fun `which mechanism makes which shape`() {
@@ -106,11 +108,11 @@ class DeltaOutlineTest {
                 val fan = straightness(run, run.mask(DepositionLog.LAKE_FAN))
                 val plain = run.log.mechanism.count { it == DepositionLog.FLOODPLAIN }
                 println(
-                    ("E5 %s seed %d %s: sea lobe %d cells, perimeter %d, %.1f%% in runs > %d " +
-                        "(longest %d); lake fan %d cells, perimeter %d, %.1f%% in runs (longest " +
-                        "%d); floodplain %d cells").format(
+                    ("E5 %s seed %d %s: sea lobe %d cells, perimeter %.0f cell widths, %.1f%% in runs past " +
+                        "a reach of %d (longest %.1f); lake fan %d cells, perimeter %.0f, %.1f%% in runs " +
+                        "(longest %.1f); floodplain %d cells").format(
                         name, seed, "${run.w}", lobe.cells, lobe.perimeter, lobe.share * 100,
-                        runLimit(run.reach), lobe.longest, fan.cells, fan.perimeter, fan.share * 100,
+                        run.reach, lobe.longest, fan.cells, fan.perimeter, fan.share * 100,
                         fan.longest, plain
                     )
                 )
@@ -147,17 +149,20 @@ class DeltaOutlineTest {
      * A perimeter is counted in unit edges rather than in cells, because a cell on a diagonal
      * staircase has two boundary edges and a cell on a straight coast has one, and it is the edges
      * that are straight or not. Horizontal edges run in x and vertical edges in y; a run is a
-     * maximal set of collinear consecutive edges on the same side of the mask.
+     * maximal set of collinear consecutive edges on the same side of the mask. Each edge is
+     * weighed by its length on the ground: a cell width along a row, a row's height down a column.
      */
     private fun straightness(run: Run, mask: BooleanArray): Straight {
         val w = run.w
         val h = run.h
         val cells = mask.count { it }
-        if (cells == 0) return Straight(0, 0, 0.0, 0)
-        var perimeter = 0
-        var inRuns = 0
-        var longest = 0
-        val limit = runLimit(run.reach)
+        if (cells == 0) return Straight(0, 0.0, 0.0, 0.0)
+        val rowHeight = run.config.cellHeightInCellWidths
+        var perimeter = 0.0
+        var inRuns = 0.0
+        var longest = 0.0
+        val alongARow = runLimitCells(run.reach, stepAcrossCellWidths = rowHeight, stepAlongCellWidths = 1.0)
+        val downAColumn = runLimitCells(run.reach, stepAcrossCellWidths = 1.0, stepAlongCellWidths = rowHeight)
 
         // Horizontal edges: for each row boundary and each side, walk the columns.
         for (y in 0 until h) {
@@ -173,10 +178,10 @@ class DeltaOutlineTest {
                         (ny < 0 || ny >= h || !mask[ny * w + x])
                     if (open && step < w) {
                         length++
-                        perimeter++
+                        perimeter += 1.0
                     } else {
-                        if (length > limit) inRuns += length
-                        if (length > longest) longest = length
+                        if (length > alongARow) inRuns += length.toDouble()
+                        if (length > longest) longest = length.toDouble()
                         length = 0
                     }
                 }
@@ -197,10 +202,10 @@ class DeltaOutlineTest {
                     }
                     if (open) {
                         length++
-                        perimeter++
+                        perimeter += rowHeight
                     } else {
-                        if (length > limit) inRuns += length
-                        if (length > longest) longest = length
+                        if (length > downAColumn) inRuns += length * rowHeight
+                        if (length * rowHeight > longest) longest = length * rowHeight
                         length = 0
                     }
                 }
@@ -208,31 +213,37 @@ class DeltaOutlineTest {
         }
         return Straight(
             cells, perimeter,
-            if (perimeter == 0) 0.0 else inRuns.toDouble() / perimeter, longest
+            if (perimeter == 0.0) 0.0 else inRuns / perimeter, longest
         )
     }
 
     /**
-     * The longest straight grid-axis run a fan is allowed before it counts against it.
+     * The longest straight grid-axis run a fan is allowed before it counts against it, in the
+     * run's own steps: columns for a run along a row, rows for a run down a column.
      *
-     * One lobe reach — half a lobe's width — except that a *smooth* curve rasterised onto a square
-     * grid has straight runs of its own: a circle of radius R runs flat across its top for about
-     * `2·sqrt(2R)` cells, which is where its curve deviates by less than half a cell. At the 2048
-     * the artefact was found at, where the reach is twenty-four, that is fourteen cells and the
-     * reach is the binding limit; at the 512 this test can afford it is seven against a reach of
-     * six, and measuring a rasterised circle as a square would be measuring the grid rather than
-     * the fan. So the limit is the larger of the two.
+     * One lobe reach — half a lobe's width — except that a *smooth* curve rasterised onto a grid
+     * has straight runs of its own: a circle of radius R runs straight along one axis for as long
+     * as it strays less than one step across it, a chord of `2·sqrt(2·R·s)` for a step `s` deep
+     * across the run, all in cell widths of ground. At the 2048 the artefact was found at, where
+     * the reach is twenty-four, a run down a column may go fourteen and the reach is the binding
+     * limit; at the 512 this test can afford it is seven against a reach of six, and measuring a
+     * rasterised circle as a square would be measuring the grid rather than the fan. So the limit
+     * is the larger of the two. A row is half as tall as a column is wide, so a run along a row
+     * strays by half a cell width a step and a run down a column by a whole one: the two axes
+     * allow different lengths, and a run down a column is counted in rows of half the length.
      */
-    private fun runLimit(reach: Int): Int {
-        val raster = kotlin.math.ceil(2.0 * sqrt(2.0 * reach)).toInt()
-        return maxOf(reach, raster)
+    private fun runLimitCells(reach: Int, stepAcrossCellWidths: Double, stepAlongCellWidths: Double): Int {
+        val rasterCellWidths = 2.0 * sqrt(2.0 * reach * stepAcrossCellWidths)
+        return kotlin.math.ceil(maxOf(reach.toDouble(), rasterCellWidths) / stepAlongCellWidths).toInt()
     }
 
     private class Straight(
         val cells: Int,
-        val perimeter: Int,
+        /** In cell widths of ground. */
+        val perimeter: Double,
         val share: Double,
-        val longest: Int
+        /** In cell widths of ground. */
+        val longest: Double
     )
 
     // ------------------------------------------------------------------------- discs and harmonics
@@ -288,9 +299,10 @@ class DeltaOutlineTest {
             shapes.forEach { (name, form) ->
                 val (outX, outY, wobble) = form
                 val sediment = FloatArray(w * h)
-                val scratch = DeltaFan.Scratch(w * h, reach.toInt())
+                val scratch = DeltaFan.Scratch(w * h, reach.toInt(), SQUARE_CELLS)
                 val rim = DeltaFan.Rim(
-                    apex = apex, width = w, reachCells = reach, outX = outX, outY = outY,
+                    apex = apex, width = w, cellHeightInCellWidths = SQUARE_CELLS,
+                    reachCells = reach, outX = outX, outY = outY,
                     hash = hash, grooved = false, wobble = wobble
                 )
                 growFan(
@@ -522,6 +534,58 @@ class DeltaOutlineTest {
      * own; the control is the same twenty-four walks with the depth term switched off, which is
      * what the breadth-first walk did — it never looked at the water at all.
      */
+    /**
+     * A lobe with no direction to build in reaches as far north and south as east and west, on
+     * this project's own cells.
+     *
+     * `ErosionConfig.deltaReachKm` is a length on the ground, converted to cells with the cell's
+     * width; a rim that measured its distances in cells would therefore reach half as far north and
+     * south as the kilometres it was given (Audit III's B-D2). Grown on open flat water with no
+     * wobble, a fan's extent along each axis is read back in cell widths.
+     */
+    @Test
+    fun `a lobe reaches as far north as east on the ground`() {
+        val config = WorldGenConfig(seed = 42L, width = 512, height = 512)
+        val rowScale = config.cellHeightInCellWidths
+        val w = 256
+        val h = 256
+        val apexColumn = w / 2
+        val apexRow = h / 2
+        // Far wider than a delta on the default grid, so the extent is read to a few percent.
+        val reach = WIDE_LOBE_CELL_WIDTHS
+        val sediment = FloatArray(w * h)
+        val scratch = DeltaFan.Scratch(w * h, reach.toInt(), rowScale)
+        val rim = DeltaFan.Rim(
+            apex = apexRow * w + apexColumn, width = w, cellHeightInCellWidths = rowScale,
+            reachCells = reach, outX = 0f, outY = 0f, hash = DeltaFan.hash(42L, 1), grooved = false,
+            wobble = 0f
+        )
+        growFan(
+            w, h, budget = 1e9, rim = rim, scratch = scratch, id = 1,
+            surfaceOf = FloatArray(w * h) { -1f }, sediment = sediment,
+            settled = FloatArray(w * h), toRelative = 1f, wholeCells = false, log = null,
+            mark = DepositionLog.SEA_LOBE, accepts = { true }, advance = { 1f }, levelOf = { _, _ -> 0f }
+        )
+        var eastWest = 0.0
+        var northSouth = 0.0
+        for (cell in 0 until w * h) {
+            if (sediment[cell] <= 0f) continue
+            val across = abs(cell % w - apexColumn).toDouble()
+            val down = abs(cell / w - apexRow) * rowScale
+            if (cell / w == apexRow) eastWest = maxOf(eastWest, across)
+            if (cell % w == apexColumn) northSouth = maxOf(northSouth, down)
+        }
+        println(
+            "DELTA a directionless lobe of %.1f cell widths reaches %.1f east-west and %.1f north-south on the ground"
+                .format(reach, eastWest, northSouth)
+        )
+        assertTrue(
+            abs(eastWest - northSouth) <= 1.0,
+            "a lobe of ${"%.1f".format(reach)} cell widths reaches ${"%.1f".format(eastWest)} east-west and " +
+                "${"%.1f".format(northSouth)} north-south on the ground"
+        )
+    }
+
     @Test
     fun `a fan reaches further over a shelf than into deep water`() {
         val w = 96
@@ -546,9 +610,10 @@ class DeltaOutlineTest {
                 }
                 val sediment = FloatArray(w * h)
                 val settled = FloatArray(w * h)
-                val scratch = DeltaFan.Scratch(w * h, reach.toInt())
+                val scratch = DeltaFan.Scratch(w * h, reach.toInt(), SQUARE_CELLS)
                 val rim = DeltaFan.Rim(
-                    apex = apexY * w + apexX, width = w, reachCells = reach,
+                    apex = apexY * w + apexX, width = w, cellHeightInCellWidths = SQUARE_CELLS,
+                    reachCells = reach,
                     outX = 1f, outY = 0f, hash = hash, grooved = false
                 )
                 growFan(
@@ -652,7 +717,10 @@ class DeltaOutlineTest {
         val sea = SeaLevelStage.percentileCut(run.height, 0.62f, run.config.scale)
         val filled = FlowRouting.fillDepressions(w, h, sea.isLand, sea.relativeElevation)
         val flow =
-            FlowRouting.flowDirections(w, h, sea.isLand, sea.relativeElevation, filled, run.seed)
+            FlowRouting.flowDirections(
+                w, h, sea.isLand, sea.relativeElevation, filled, run.seed,
+                run.config.cellHeightInCellWidths
+            )
         val area = FlowRouting.accumulate(w, h, sea.isLand, filled, flow, sea.landCellCount) { 1f }
         val land = sea.landCellCount.toFloat()
 
@@ -776,5 +844,19 @@ class DeltaOutlineTest {
 
         /** Mouths measured in the synthetic depth test. */
         const val TRIALS = 24
+
+        /**
+         * The row scale of the synthetic grids the outline's shape and its depth bending are read
+         * on: square cells, so a harmonic of the outline in cells is the same harmonic on the
+         * ground. What the rim does on this project's own cells is `a lobe reaches as far north
+         * as east on the ground`.
+         */
+        const val SQUARE_CELLS = 1.0
+
+        /**
+         * The directionless lobe's reach in the ground-reach case: forty cell widths, so the lobe's
+         * `DeltaFan.SIDE_REACH_SHARE` of it is fifteen, and a cell of rasterisation is a fifteenth.
+         */
+        const val WIDE_LOBE_CELL_WIDTHS = 40f
     }
 }

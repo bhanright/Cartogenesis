@@ -94,8 +94,7 @@ class ErosionConvergenceTest {
     private fun disequilibrium(config: WorldGenConfig, data: FloatArray): Pair<Double, Double> {
         val w = config.width
         val h = config.height
-        val limit = ErosionStage.maxOrthogonalDrop(config)
-        val diagonal = limit * sqrt(2f)
+        val limits = ErosionStage.thermalLimits(config)
         var over = 0
         var worst = 0f
         for (y in 0 until h) {
@@ -106,7 +105,11 @@ class ErosionConvergenceTest {
                     if (ny < 0 || ny >= h) continue
                     val nx = (x + intArrayOf(1, -1, 0, 0, 1, 1, -1, -1)[n] + w) % w
                     val drop = here - data[ny * w + nx]
-                    val cap = if (n < 4) limit else diagonal
+                    val cap = when {
+                        n >= 4 -> limits.diagonal
+                        n >= 2 -> limits.northSouth
+                        else -> limits.eastWest
+                    }
                     if (drop > cap) {
                         over++
                         if (drop / cap > worst) worst = drop / cap

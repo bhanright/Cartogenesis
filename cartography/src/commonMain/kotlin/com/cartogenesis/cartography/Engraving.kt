@@ -230,17 +230,25 @@ internal object Engraving {
         pixelY: Int,
         gradientX: Float,
         gradientY: Float,
+        cellHeightInCellWidths: Float,
         plan: EngravingPlan,
         inkGain: Float
     ): Float {
-        val slope = sqrt(gradientX * gradientX + gradientY * gradientY)
+        // The ground's slope, which is what the stroke's weight says: down a column a pixel is a
+        // row, a share of a cell width, so the fall per pixel there is less than the fall per cell
+        // width of ground by that share.
+        val southwardOnTheGround = gradientY / cellHeightInCellWidths
+        val slope = sqrt(gradientX * gradientX + southwardOnTheGround * southwardOnTheGround)
         val steepness =
             ((slope - EngravingPlan.SLOPE_FLOOR) * inkGain).coerceIn(0f, 1f)
         if (steepness <= 0f) return 0f
 
-        val perSlope = 1f / slope
-        val downhillX = gradientX * perSlope
-        val downhillY = gradientY * perSlope
+        // And the ground's fall line as the sheet draws it, which is the stroke's direction: a cell
+        // width of ground southward is 1 / [cellHeightInCellWidths] rows of the sheet.
+        val sheetSouthward = southwardOnTheGround / cellHeightInCellWidths
+        val perSheetSlope = 1f / sqrt(gradientX * gradientX + sheetSouthward * sheetSouthward)
+        val downhillX = gradientX * perSheetSlope
+        val downhillY = sheetSouthward * perSheetSlope
 
         val pitch = plan.hachureLatticeCells
         val latticeColumns = plan.hachureLatticeColumns

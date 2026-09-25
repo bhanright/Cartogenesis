@@ -148,7 +148,10 @@ internal object DrownedValleys {
         if (drowned.isEmpty()) return cut
 
         val arriving =
-            catchmentArrivingByCell(cut, cellCount, config.seed, config.facetRouting, config.flatPotential)
+            catchmentArrivingByCell(
+                cut, cellCount, config.seed, config.cellHeightInCellWidths, config.facetRouting,
+                config.flatPotential
+            )
         carryCatchmentDownTheValleys(drowned, arriving, cut.isLand, height)
 
         val cellWidthKilometres = scale.cellWidthKm(cellsAcross).toFloat()
@@ -397,6 +400,7 @@ internal object DrownedValleys {
         cut: SeaLevelResult,
         cellCount: Int,
         seed: Long,
+        cellHeightInCellWidths: Double,
         byFacet: Boolean,
         overPotential: Boolean
     ): FloatArray {
@@ -406,7 +410,8 @@ internal object DrownedValleys {
             cellsAcross, cellsDown, cut.isLand, cut.relativeElevation
         )
         val directions = FlowRouting.flowDirections(
-            cellsAcross, cellsDown, cut.isLand, cut.relativeElevation, filled, seed, byFacet, overPotential
+            cellsAcross, cellsDown, cut.isLand, cut.relativeElevation, filled, seed, cellHeightInCellWidths,
+            byFacet, overPotential
         )
         val catchment = FlowRouting.accumulate(
             cellsAcross, cellsDown, cut.isLand, filled, directions, cut.landCellCount

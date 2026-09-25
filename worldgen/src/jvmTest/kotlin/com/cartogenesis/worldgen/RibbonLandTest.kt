@@ -1,5 +1,6 @@
 package com.cartogenesis.worldgen
 
+import com.cartogenesis.worldgen.math.JumpFloodDistance
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import kotlin.test.Test
 import kotlin.test.assertTrue
@@ -12,7 +13,8 @@ import kotlin.test.assertTrue
  * look like that, but real ones are segmented, curved and volcanic, not continuous ruler-edged
  * walls of uniform width.
  *
- * Measured as the share of land sitting within two cells of water, which is what "thin" means
+ * Measured as the share of land in bodies no cell of which stands further from water than a
+ * hundred and seventieth of the map's width, in cell widths of ground, which is what "thin" means
  * here, alongside the longest single strip so a few big continents cannot hide a bad one.
  */
 class RibbonLandTest : BorrowsSharedWorlds() {
@@ -44,7 +46,13 @@ class RibbonLandTest : BorrowsSharedWorlds() {
      */
     @Test
     fun `erosion widens the strips a belt leaves in shallow sea`() {
-        val base = WorldGenConfig(seed = 234475L, width = 512, height = 512)
+        // Seed 7 and not 234475 since the ground was put on its ruler (docs/DESIGN_LEDGER.md, Fix
+        // 2): a belt is as wide north-south as east-west now, and 234475's un-eroded world at 1024
+        // has no strip left for erosion to widen, measured either way. Of seeds 1 to 22 scanned
+        // with the same measure, ten leave strips before erosion and seed 7 the most of them, four
+        // holding 0.324% of its land; 5, 8, 11, 13, 14, 17, 18, 20 and 21 leave one each, seed
+        // 20's the largest at 0.487%.
+        val base = WorldGenConfig(seed = 7L, width = 512, height = 512)
             .atResolution(1024, 1024)
             .let { it.copy(tectonics = it.tectonics.copy(historyEpochs = 1)) }
         listOf(
@@ -62,51 +70,27 @@ class RibbonLandTest : BorrowsSharedWorlds() {
             val h = world.height
             val land = world.sea.isLand
 
-            // Chebyshev distance from each land cell to the nearest water, by BFS from the coast.
-            val depth = IntArray(w * h) { -1 }
-            val queue = ArrayDeque<Int>()
-            for (i in 0 until w * h) {
-                if (!land[i]) continue
-                var coastal = false
-                val x = i % w
-                val y = i / w
-                for (dy in -1..1) {
-                    val ny = y + dy
-                    if (ny !in 0 until h) continue
-                    for (dx in -1..1) {
-                        if (!land[ny * w + ((x + dx + w) % w)]) coastal = true
-                    }
-                }
-                if (coastal) { depth[i] = 1; queue.add(i) }
-            }
-            while (queue.isNotEmpty()) {
-                val i = queue.removeFirst()
-                val x = i % w
-                val y = i / w
-                for (dy in -1..1) {
-                    val ny = y + dy
-                    if (ny !in 0 until h) continue
-                    for (dx in -1..1) {
-                        val n = ny * w + ((x + dx + w) % w)
-                        if (land[n] && depth[n] == -1) {
-                            depth[n] = depth[i] + 1
-                            queue.add(n)
-                        }
-                    }
-                }
-            }
+            // How far each land cell stands from the nearest water on the ground, in cell widths: a
+            // row is half as tall as a column is wide, so a strip running east-west is as many
+            // cell widths across as it is rows across times the row's height. Counted in cells,
+            // as this case first was, a strip running east-west could be twice as wide on the
+            // ground as one running north-south and still count.
+            val depth = FloatArray(w * h) { if (land[it]) JumpFloodDistance.INFINITE else 0f }
+            JumpFloodDistance.run(
+                w, h, depth, IntArray(w * h) { if (land[it]) -1 else it }, world.config.cellHeightInCellWidths
+            )
 
             // Group the land into bodies, and judge each by its own half-width. A strip stays
             // shallow however long it runs; a continent does not.
             val component = IntArray(w * h) { -1 }
             var components = 0
             val area = ArrayList<Int>()
-            val halfWidth = ArrayList<Int>()
+            val halfWidth = ArrayList<Float>()
             for (start in 0 until w * h) {
                 if (!land[start] || component[start] != -1) continue
                 val id = components++
                 var cells = 0
-                var deepest = 0
+                var deepest = 0f
                 val stack = ArrayDeque<Int>()
                 stack.add(start)
                 component[start] = id

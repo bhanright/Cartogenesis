@@ -101,6 +101,14 @@ class IsobathTest : BorrowsSharedWorlds() {
          */
         const val VISIBLE_INK = 0.1f
 
+        /**
+         * The two made planes of the bearing clause, as shares of the plain's gradient: under the
+         * fade's lower end, where the rule takes the line whole, and a tenth over its upper end,
+         * where it leaves the line alone.
+         */
+        const val UNDER_THE_PLAIN = 0.45
+        const val OVER_THE_PLAIN = 1.1
+
         /** The known failure the shoreline clause records. */
         const val SHORELINE_CONTOURED =
             "Audit III F-C4: the level-0 contour inks the sea beside the coast, doubling the coastline"
@@ -157,6 +165,7 @@ class IsobathTest : BorrowsSharedWorlds() {
         val flattest = if (flatnessRule) Isobaths.flattestSlope(CONFIG, SIDE, SIDE) else 0f
         val reach = Isobaths.slopeStencil(SIDE)
         val span = 1f / (2f * reach)
+        val rowScale = CONFIG.cellHeightInCellWidths.toFloat()
         val ink = FloatArray(depth.size)
         for (row in 0 until SIDE) {
             for (column in 0 until SIDE) {
@@ -168,7 +177,9 @@ class IsobathTest : BorrowsSharedWorlds() {
                     (sample(depth, column, row + reach) -
                         sample(depth, column, row - reach)) * span
                 val slope = sqrt(eastward * eastward + southward * southward)
-                ink[cell] = Isobaths.ink(depth[cell], slope, interval, flattest)
+                val southwardOnTheGround = southward / rowScale
+                val slopeOnTheGround = sqrt(eastward * eastward + southwardOnTheGround * southwardOnTheGround)
+                ink[cell] = Isobaths.ink(depth[cell], slope, slopeOnTheGround, interval, flattest)
             }
         }
         return ink
@@ -263,6 +274,63 @@ class IsobathTest : BorrowsSharedWorlds() {
             "only ${"%.2f".format(slope.inkedShare * 100)}% of the slope kept its contours, short " +
                 "of ${MIN_SLOPE_INKED * 100}% — the rule has taken the drawing with it"
         )
+    }
+
+    /**
+     * An abyssal plain is a gradient on the ground, whichever way the floor falls.
+     *
+     * `Isobaths.ABYSSAL_PLAIN_GRADIENT` is a metre of fall a kilometre, and a floor falling that
+     * gently is a plain whether it falls north or east. A raster that measured the fall per pixel
+     * and converted the rule with one cell side for both axes read a floor falling north at 0.71 of
+     * its gradient and one falling east at 1.41 on this map's cells (Audit III's F-R5), so the same
+     * ground was a plain one way and a slope the other.
+     *
+     * Planes at four bearings on the ground, each through a contour at its middle: at under half
+     * the plain's gradient the rule leaves no ink at all, and at a tenth over it the rule leaves the
+     * line exactly as the drawing without the rule draws it.
+     */
+    @Test
+    fun `the plain is a gradient on the ground whichever way the floor falls`() {
+        val rowScale = CONFIG.cellHeightInCellWidths
+        val interval = Isobaths.interval(CONFIG.scale)
+        val flattest = Isobaths.flattestSlope(CONFIG, SIDE, SIDE)
+        val stencil = Isobaths.slopeStencil(SIDE)
+        val plainPerCellWidth = CONFIG.scale.depthShareOfMetres(
+            (Isobaths.ABYSSAL_PLAIN_GRADIENT * CONFIG.cellWidthKm * 1000.0).toFloat()
+        )
+        val failures = ArrayList<String>()
+        for (degrees in listOf(0.0, 90.0, 45.0, 135.0)) {
+            val falls = degrees * kotlin.math.PI / 180.0
+            for (share in listOf(UNDER_THE_PLAIN, OVER_THE_PLAIN)) {
+                val depth = FloatArray(SIDE * SIDE) { cell ->
+                    val column = cell % SIDE - SIDE / 2
+                    val row = cell / SIDE - SIDE / 2
+                    (PLAIN_DEPTH + share * plainPerCellWidth *
+                        (column * kotlin.math.cos(falls) + row * rowScale * kotlin.math.sin(falls))).toFloat()
+                }
+                val floor = com.cartogenesis.worldgen.model.FloatField(SIDE, SIDE, FloatArray(depth.size) { -depth[it] })
+                var inkedWithRule = 0
+                var differing = 0
+                for (row in SIDE / 4 until SIDE * 3 / 4) {
+                    for (column in SIDE / 4 until SIDE * 3 / 4) {
+                        val cell = row * SIDE + column
+                        val withRule = MapRasterizer.seaContour(floor, rowScale, cell, depth[cell], interval, flattest, stencil)
+                        val without = MapRasterizer.seaContour(floor, rowScale, cell, depth[cell], interval, 0f, stencil)
+                        if (withRule >= VISIBLE_INK) inkedWithRule++
+                        if (withRule != without) differing++
+                    }
+                }
+                val verdict = if (share == UNDER_THE_PLAIN) inkedWithRule == 0 else differing == 0
+                println(
+                    "ISOBATH a floor falling at %5.1f degrees on the ground at %.2f of the plain's gradient: %d cells inked, %d drawn otherwise than without the rule"
+                        .format(degrees, share, inkedWithRule, differing)
+                )
+                if (!verdict) {
+                    failures += "falling at $degrees degrees, ${share}x the plain's gradient: $inkedWithRule inked, $differing changed by the rule"
+                }
+            }
+        }
+        assertTrue(failures.isEmpty(), "the plain rule reads the same ground differently by bearing: $failures")
     }
 
     /**

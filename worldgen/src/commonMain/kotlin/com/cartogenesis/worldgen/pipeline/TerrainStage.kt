@@ -49,22 +49,18 @@ data class TerrainResult(
 object TerrainStage {
 
     /**
-     * Radius of the box blur [smooth] blends the integrated surface toward, in cells.
+     * Radius of the box blur [smooth] blends the integrated surface toward, in cell widths.
      *
      * One, because the integration output is already smooth and this pass exists only to take the
      * last of the per-cell noise off it; a wider window would cost the terrain its fine relief for
-     * nothing.
+     * nothing. The same cell width of ground down the map is two rows on this map's cells.
      */
-    private const val SMOOTHING_RADIUS_CELLS = 1
-
-    /** Cells in the [SMOOTHING_RADIUS_CELLS] window, which is what the running sum divides by. */
-    private const val SMOOTHING_WINDOW_CELLS =
-        (2 * SMOOTHING_RADIUS_CELLS + 1) * (2 * SMOOTHING_RADIUS_CELLS + 1)
+    private const val SMOOTHING_RADIUS_CELL_WIDTHS = 1
 
     fun generate(config: WorldGenConfig): TerrainResult {
         val normals = buildNormalField(config)
-        val height = integrate(normals, ReliefBand.of(config))
-        smooth(height, config.terrain.smoothing)
+        val height = integrate(normals, config.cellHeightInCellWidths, ReliefBand.of(config))
+        smooth(height, config.terrain.smoothing, config.cellHeightInCellWidths)
         return TerrainResult(normals, height.normalize())
     }
 
@@ -143,12 +139,29 @@ object TerrainStage {
         val eastwardNoise = PerlinNoise(config.seed)
         val southwardNoise = PerlinNoise(southwardNoiseSeed(config.seed))
 
-        // The noise lattice tiles this many times across the map, in both axes, which is what
-        // makes the world wrap east to west; dividing by the grid turns a cell index into a
-        // position on that lattice.
+        // The noise lattice tiles this many times round the map east to west, which is what makes
+        // the world wrap, and is square on the ground, so down a world half as tall as it is wide
+        // it covers half as many cycles. A lattice with as many cycles down the map as across it
+        // is square in cells, and on this map's cells that drew every landform twice as long
+        // east-west as north-south: the land's own outlines projected twice as far east-west on
+        // the ground (docs/GEOGRAPHY.md, and docs/DESIGN_LEDGER.md, Fix 2).
         val latticeCyclesAcrossMap = terrain.baseFrequency
+        val rowScale = config.cellHeightInCellWidths
         val latticeStepX = latticeCyclesAcrossMap.toFloat() / cellsAcross
-        val latticeStepY = latticeCyclesAcrossMap.toFloat() / cellsDown
+        val latticeStepY = (latticeCyclesAcrossMap * rowScale / cellsAcross).toFloat()
+        // Down the map the field is transformed as a periodic one like any other, so the lattice's
+        // period north-south is the cycles it covers when that is whole, and the pole-to-pole
+        // stretch joins up at the poles as it did before; at an odd count it is the period across,
+        // which the lattice never reaches, and the poles meet the transform's seam unjoined.
+        val cyclesDownMap = latticeCyclesAcrossMap * rowScale * cellsDown / cellsAcross
+        val wholeCyclesDown = kotlin.math.round(cyclesDownMap).toInt()
+        val latticePeriodY =
+            if (wholeCyclesDown >= 1 && kotlin.math.abs(cyclesDownMap - wholeCyclesDown) < 1e-9) wholeCyclesDown
+            else latticeCyclesAcrossMap
+        // A slope along a row is a rise per cell width and one down a column a rise per row, and a
+        // row is [rowScale] of a cell width on the ground, so the same slope on the ground is that
+        // share of the rise per row.
+        val southwardStrength = (terrain.gradientStrength * rowScale).toFloat()
 
         // Filled row-band per core. fbm() keeps no state between calls, and each cell writes only
         // its own index, so this produces exactly the same field as a sequential fill.
@@ -163,16 +176,16 @@ object TerrainStage {
                         row * latticeStepY,
                         terrain.octaves,
                         latticeCyclesAcrossMap,
-                        latticeCyclesAcrossMap,
+                        latticePeriodY,
                         terrain.lacunarity,
                         terrain.gain
                     )
-                    southwardGradient.data[cell] = terrain.gradientStrength * southwardNoise.fbm(
+                    southwardGradient.data[cell] = southwardStrength * southwardNoise.fbm(
                         column * latticeStepX,
                         row * latticeStepY,
                         terrain.octaves,
                         latticeCyclesAcrossMap,
-                        latticeCyclesAcrossMap,
+                        latticePeriodY,
                         terrain.lacunarity,
                         terrain.gain
                     )
@@ -193,6 +206,13 @@ object TerrainStage {
      *
      * where P and Q are the two gradient components' spectra and wx, wy are angular frequencies in
      * radians per cell. Z is accumulated in place over P rather than into a third pair of buffers.
+     *
+     * The least squares is taken on the ground. A cell is [cellHeightInCellWidths] as tall as it is
+     * wide, so a slope per row is that share of the slope per cell width, and matching the two
+     * components per cell would weigh the field's north-south part by the square of that share
+     * against the ground's; in the formula that is `wy Q / r^2` over `wx^2 + wy^2 / r^2` for a row
+     * scale `r`. A field that is a gradient comes back exactly either way, so this changes only
+     * which surface stands nearest to a field that is not one, which the terrain's noise is not.
      * At export resolutions these arrays dominate the app's memory: six of them at 4096x4096 is
      * over 800MB, which no device will grant.
      *
@@ -201,7 +221,12 @@ object TerrainStage {
      * already running. Null recovers the surface exactly, which is what `HeightIntegrationTest`
      * reads back.
      */
-    fun integrate(normals: NormalField, band: ReliefBand? = null): FloatField {
+    fun integrate(
+        normals: NormalField,
+        cellHeightInCellWidths: Double,
+        band: ReliefBand? = null
+    ): FloatField {
+        val rowScaleSquared = cellHeightInCellWidths * cellHeightInCellWidths
         val cellsAcross = normals.width
         val cellsDown = normals.height
         val cellCount = cellsAcross * cellsDown
@@ -226,7 +251,7 @@ object TerrainStage {
                 val radiansPerCellAcross = 2.0 * PI * cyclesAcross / cellsAcross
                 val angularMagnitudeSquared =
                     radiansPerCellAcross * radiansPerCellAcross +
-                        radiansPerCellDown * radiansPerCellDown
+                        radiansPerCellDown * radiansPerCellDown / rowScaleSquared
                 val cell = row * cellsAcross + column
                 if (angularMagnitudeSquared == 0.0) {
                     // DC term: the arbitrary constant of integration.
@@ -237,10 +262,10 @@ object TerrainStage {
 
                 val projectedSlopeReal =
                     radiansPerCellAcross * eastwardSpectrumReal[cell] +
-                        radiansPerCellDown * southwardSpectrumReal[cell]
+                        radiansPerCellDown * southwardSpectrumReal[cell] / rowScaleSquared
                 val projectedSlopeImaginary =
                     radiansPerCellAcross * eastwardSpectrumImaginary[cell] +
-                        radiansPerCellDown * southwardSpectrumImaginary[cell]
+                        radiansPerCellDown * southwardSpectrumImaginary[cell] / rowScaleSquared
                 // Z, written back over P: multiplying by -i swaps the parts and negates the new
                 // imaginary one. From here the eastward pair holds the surface, not the slope.
                 val response =
@@ -265,20 +290,26 @@ object TerrainStage {
      * Blends [field] toward a box-blurred copy of itself, in place.
      *
      * [amount] is the share of the blurred copy in the result, clamped to 0..1: 0 leaves the field
-     * untouched, 1 replaces it outright. Cheap, and the integration output is already smooth.
+     * untouched, 1 replaces it outright. Cheap, and the integration output is already smooth. The
+     * window is [SMOOTHING_RADIUS_CELL_WIDTHS] of ground either way, which is that many columns and
+     * as many rows as cover the same ground on cells [cellHeightInCellWidths] as tall as they are
+     * wide.
      */
-    private fun smooth(field: FloatField, amount: Float) {
+    private fun smooth(field: FloatField, amount: Float, cellHeightInCellWidths: Double) {
         if (amount <= 0f) return
+        val radiusRows = kotlin.math.round(SMOOTHING_RADIUS_CELL_WIDTHS / cellHeightInCellWidths).toInt()
+            .coerceAtLeast(1)
+        val windowCells = ((2 * SMOOTHING_RADIUS_CELL_WIDTHS + 1) * (2 * radiusRows + 1)).toFloat()
         val blurred = FloatField(field.width, field.height)
         for (row in 0 until field.height) {
             for (column in 0 until field.width) {
                 var sum = 0f
-                for (offsetY in -SMOOTHING_RADIUS_CELLS..SMOOTHING_RADIUS_CELLS) {
-                    for (offsetX in -SMOOTHING_RADIUS_CELLS..SMOOTHING_RADIUS_CELLS) {
+                for (offsetY in -radiusRows..radiusRows) {
+                    for (offsetX in -SMOOTHING_RADIUS_CELL_WIDTHS..SMOOTHING_RADIUS_CELL_WIDTHS) {
                         sum += field.sample(column + offsetX, row + offsetY)
                     }
                 }
-                blurred[column, row] = sum / SMOOTHING_WINDOW_CELLS.toFloat()
+                blurred[column, row] = sum / windowCells
             }
         }
         val blurredShare = amount.coerceIn(0f, 1f)

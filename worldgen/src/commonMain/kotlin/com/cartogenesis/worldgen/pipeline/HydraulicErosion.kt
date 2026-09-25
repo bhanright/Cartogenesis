@@ -1,6 +1,7 @@
 package com.cartogenesis.worldgen.pipeline
 
 import com.cartogenesis.worldgen.concurrent.standAside
+import com.cartogenesis.worldgen.math.GroundSteps
 import com.cartogenesis.worldgen.model.ErosionConfig
 import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.WorldGenConfig
@@ -195,7 +196,7 @@ internal object HydraulicErosion {
         /** [POND_DEPTH_METRES] as a share of the land's relief, which is what the routing works in. */
         val pondDepth: Float = scale.reliefShareOfMetres(POND_DEPTH_METRES)
 
-        /** [NOTCH_FALL_METRES_PER_KM] as the fall of one cell, in those same units. */
+        /** [NOTCH_FALL_METRES_PER_KM] as the fall over one cell width, in those same units. */
         val notchFallPerCell: Float =
             scale.reliefShareOfMetres(NOTCH_FALL_METRES_PER_KM * config.cellWidthKm.toFloat())
 
@@ -219,6 +220,14 @@ internal object HydraulicErosion {
 
         /** [ErosionConfig.outletReachKm] as a whole number of cells of this grid. */
         val outletReachCells: Int = config.wholeCellsFor(erosion.outletReachKm)
+
+        /**
+         * How long a step to each neighbour is on the ground, in cell widths: every slope this
+         * stage takes to a neighbour divides by one of these, and every channel length it adds up
+         * is a sum of them. The unit stays the cell width, so a slope along a row is what the
+         * coefficients above were calibrated on; a step down a column is a row's height of it.
+         */
+        val groundSteps: GroundSteps = config.groundSteps
     }
 
     /**
@@ -651,7 +660,7 @@ internal object HydraulicErosion {
         val fanDistance = IntArray(if (squareFans) fanCapacity else 0)
         val scratch =
             if (carryingSediment && erosion.deltaOutline) {
-                DeltaFan.Scratch(cellsAcross * cellsDown, reachCells)
+                DeltaFan.Scratch(cellsAcross * cellsDown, reachCells, config.cellHeightInCellWidths)
             } else {
                 null
             }
@@ -787,7 +796,7 @@ internal object HydraulicErosion {
             )
             val directions = FlowRouting.flowDirections(
                 cellsAcross, cellsDown, sea.isLand, sea.relativeElevation, filled,
-                config.seed, config.facetRouting, config.flatPotential
+                config.seed, config.cellHeightInCellWidths, config.facetRouting, config.flatPotential
             )
             // Discharge and not catchment: each cell hands on what falls on it, so what arrives
             // at a channel is `Q = P * A` and the accumulation is a rainfall-weighted cell count
@@ -1009,7 +1018,7 @@ internal object HydraulicErosion {
                 // `GpuErosionTest` found it, at five cells in a million.
                 val ponded = ground[cell] - relative[cell] > rates.pondDepth
                 run {
-                    val distance = if (isDiagonal(cell, receiver, cellsAcross)) DIAGONAL_STEP_CELLS else 1f
+                    val distance = rates.groundSteps.between(cell, receiver, cellsAcross)
                     val slope = if (drop > 0f) drop / distance * cellsAcross else 0f
                     val capacity =
                         (erosion.transportCapacity * sqrt(area.data[cell] / landCells) * slope).toDouble()
@@ -1070,7 +1079,7 @@ internal object HydraulicErosion {
                         // `room` comes back in the relative units [settled] is kept in; the load
                         // and the field are heights, so it is converted here and nowhere else.
                         val room =
-                            headroom(cellsAcross, cellsDown, cell, drop, directions, settled, grade) *
+                            headroom(cellsAcross, cellsDown, cell, drop, directions, settled, grade, rates.groundSteps) *
                                 landRange
                         val give = minOf(carried - capacity, room.toDouble()) * erosion.depositionRate
                         if (give > 0.0) {
@@ -1108,6 +1117,7 @@ internal object HydraulicErosion {
                             val rim = DeltaFan.Rim(
                                 apex = receiver,
                                 width = cellsAcross,
+                                cellHeightInCellWidths = config.cellHeightInCellWidths,
                                 reachCells = reachCells.toFloat(),
                                 outX = outX,
                                 outY = outY,
@@ -1194,6 +1204,7 @@ internal object HydraulicErosion {
                             val rim = DeltaFan.Rim(
                                 apex = receiver,
                                 width = cellsAcross,
+                                cellHeightInCellWidths = config.cellHeightInCellWidths,
                                 reachCells = reachCells.toFloat(),
                                 outX = inX,
                                 outY = inY,
@@ -1319,7 +1330,8 @@ internal object HydraulicErosion {
                     val spoilFlow =
                         FlowRouting.flowDirections(
                             cellsAcross, cellsDown, after.isLand, spoilGround, spoilFilled,
-                            config.seed, config.facetRouting, config.flatPotential
+                            config.seed, config.cellHeightInCellWidths, config.facetRouting,
+                            config.flatPotential
                         )
                     // The closing breach cuts the sill a fresh delta laid across a drainage, and
                     // what it has to cut with is the discharge behind that sill. Weighted as the
@@ -1358,7 +1370,8 @@ internal object HydraulicErosion {
             if (closing && erosion.deltaLobe && spoil != null) {
                 val opened = openMouths(
                     cellsAcross, cellsDown, working, provisionalSeaLevel, config.scale, spoil,
-                    rates.pondDepth, config.seed, config.facetRouting, config.flatPotential,
+                    rates.pondDepth, config.seed, config.cellHeightInCellWidths, config.facetRouting,
+                    config.flatPotential,
                     rainfallMm, weightSums
                 )
                 incised += opened.removed
@@ -1583,8 +1596,8 @@ internal object HydraulicErosion {
      * term carries is the contrast between bare ground and closed canopy, with the blanket
      * attenuation taken out. It does not conserve the erosion: a mean of one over cells is not a
      * mean of one over cuts, because the cover sits where the cutting is (wet ground is both best
-     * wooded and hardest cut), and the measured denudation off an active belt is 0.218 mm/yr
-     * against 0.271 without the term, not 0.271 again. The relative form is the least the
+     * wooded and hardest cut), and the denudation off an active belt measured 0.218 mm/yr
+     * against 0.271 without the term when S3 built it, not 0.271 again. The relative form is the least the
      * calibration can lose, not its preservation. `ErosionConfig.bedrockErodibilityPerYear` carries Stock and
      * Montgomery's and Lague's figures for real bedrock rivers, and those rivers ran through
      * forests: the cover is already in the number. Multiplying it by `1 - 0.5 * density` again
@@ -1699,6 +1712,7 @@ internal object HydraulicErosion {
         spoil: FloatArray,
         pondDepth: Float,
         seed: Long,
+        cellHeightInCellWidths: Double,
         byFacet: Boolean,
         overPotential: Boolean,
         /** The march's rainfall in millimetres, floored; this pass normalises it for itself. */
@@ -1724,7 +1738,8 @@ internal object HydraulicErosion {
         val filled =
             FlowRouting.fillDepressions(cellsAcross, cellsDown, isLand, sea.relativeElevation)
         val flow = FlowRouting.flowDirections(
-            cellsAcross, cellsDown, isLand, sea.relativeElevation, filled, seed, byFacet, overPotential
+            cellsAcross, cellsDown, isLand, sea.relativeElevation, filled, seed, cellHeightInCellWidths,
+            byFacet, overPotential
         )
         // Weighted as the rounds weighted it, so a groove is cut where a river's water is and not
         // merely where a lot of ground drains — and normalised over this pass's own land, which is
@@ -1835,14 +1850,24 @@ internal object HydraulicErosion {
             // a saddle's, and a saddle is by construction the flattest way out of a basin: a rate
             // taken from it drains nothing in the twelve rounds a world gets, which is the
             // measurement that decided this shape.
+            // The channel's length on the ground, in cell widths: each cell on it counts the step it
+            // drains through, so a notch running down a column is as long as the ground it crosses
+            // and not twice that. How many cells it is, apart, is what the fill's staircase is
+            // counted in.
+            val steps = rates.groundSteps
             var fall = 0f
-            var length = 0
+            var lengthCellWidths = 0f
+            var cellsWalked = 0
+            var lastStep = steps.eastWest
             var cell = spill
-            while (cell >= 0 && isLand[cell] && length < rates.outletReachCells) {
+            while (cell >= 0 && isLand[cell] && lengthCellWidths < rates.outletReachCells) {
                 fall = level - relative[cell]
                 if (fall > level - floor) break
-                length++
-                cell = directions[cell]
+                val next = directions[cell]
+                lastStep = if (next >= 0) steps.between(cell, next, cellsAcross) else steps.eastWest
+                lengthCellWidths += lastStep
+                cellsWalked++
+                cell = next
             }
             // The walk above stops on the last cell of *land*, one step short of the water the
             // outflow empties into, and where the sill runs level all the way to that water the
@@ -1861,14 +1886,14 @@ internal object HydraulicErosion {
             // answer it had: re-rating those as well hands every coastal sill the whole fall to sea
             // level at once, which empties basins that ought to hold their water.
             if (erosion.outletFallToTheWater &&
-                fall <= FlowRouting.FLAT_GRADIENT_STEP * length &&
+                fall <= FlowRouting.FLAT_GRADIENT_STEP * cellsWalked &&
                 cell >= 0 && !isLand[cell]
             ) {
                 fall = level - relative[cell]
-                length++
+                lengthCellWidths += lastStep
             }
-            if (length == 0) continue
-            val slope = (fall / length * cellsAcross).coerceAtLeast(0f)
+            if (cellsWalked == 0) continue
+            val slope = (fall / lengthCellWidths * cellsAcross).coerceAtLeast(0f)
             val power = rates.relativeIncisionCoefficient * erosion.outletIncisionRatio *
                 sqrt(area[spill] / landCells) * slope
 
@@ -1887,13 +1912,13 @@ internal object HydraulicErosion {
             if (dropRelative <= 0f) continue
             val newLevel = level - dropRelative
             cell = spill
-            var stepsFromLip = 0
-            // The breach's own fall, per cell, from a gradient in metres per kilometre: a channel
-            // of a given length on the ground descends by the same amount however many cells that
-            // length is cut into.
+            var fromLipCellWidths = 0f
+            // The breach's own fall, per cell width, from a gradient in metres per kilometre: a
+            // channel of a given length on the ground descends by the same amount however many
+            // cells that length is cut into, and whichever way it runs.
             val gradient = rates.notchFallPerCell
-            while (cell >= 0 && isLand[cell] && stepsFromLip < rates.outletReachCells) {
-                val cutLevel = newLevel - stepsFromLip * gradient
+            while (cell >= 0 && isLand[cell] && fromLipCellWidths < rates.outletReachCells) {
+                val cutLevel = newLevel - fromLipCellWidths * gradient
                 if (relative[cell] <= cutLevel) break
                 val take = (relative[cell] - cutLevel).toDouble() * landRange
                 val ponded = ground[cell] - relative[cell] > rates.pondDepth
@@ -1909,8 +1934,9 @@ internal object HydraulicErosion {
                     moved += removedHere
                     cells++
                 }
-                stepsFromLip++
-                cell = directions[cell]
+                val next = directions[cell]
+                fromLipCellWidths += if (next >= 0) steps.between(cell, next, cellsAcross) else steps.eastWest
+                cell = next
             }
 
             // And, on the far side of the cut only, the sill on the *basin's* own side.
@@ -1938,9 +1964,9 @@ internal object HydraulicErosion {
             // donors of equal catchment falls to the lower cell index, so the channel is one
             // specific channel on every machine.
             if (belowSea) {
-                var back = 1
+                var backCellWidths = 0f
                 var from = spill
-                while (back <= rates.outletReachCells) {
+                while (backCellWidths <= rates.outletReachCells) {
                     var bestDonor = -1
                     var bestArea = -1f
                     FlowRouting.forEachNeighbour(
@@ -1962,7 +1988,9 @@ internal object HydraulicErosion {
                         }
                     }
                     if (bestDonor < 0) break
-                    val cutLevel = newLevel + back * gradient
+                    backCellWidths += steps.between(bestDonor, from, cellsAcross)
+                    if (backCellWidths > rates.outletReachCells) break
+                    val cutLevel = newLevel + backCellWidths * gradient
                     if (relative[bestDonor] <= cutLevel) break
                     val take = (relative[bestDonor] - cutLevel).toDouble() * landRange
                     val taken = -raise(surfaceOf, bestDonor, -take)
@@ -1975,7 +2003,6 @@ internal object HydraulicErosion {
                         cells++
                     }
                     from = bestDonor
-                    back++
                 }
             }
         }
@@ -2056,7 +2083,7 @@ internal object HydraulicErosion {
         /** The cover's factor on this cell, already relative to the land's mean. */
         erodibility: FloatArray
     ): Float {
-        val distance = if (isDiagonal(cell, receiver, cellsAcross)) DIAGONAL_STEP_CELLS else 1f
+        val distance = rates.groundSteps.between(cell, receiver, cellsAcross)
         val slope = drop / distance * cellsAcross
         // The land's water and not its area: [normaliseOverLand] carries a mean of one over the
         // land, so dividing the weighted accumulation by the land's cell count still gives this
@@ -2083,7 +2110,8 @@ internal object HydraulicErosion {
         drop: Float,
         directions: IntArray,
         settled: FloatArray,
-        grade: Float
+        grade: Float,
+        steps: GroundSteps
     ): Float {
         var room = Float.MAX_VALUE
         var fed = false
@@ -2098,7 +2126,7 @@ internal object HydraulicErosion {
                 // The margin up to the feeder, less the fall the channel needs to keep over that
                 // step. At grade this is nought and the cell stops rising; on a reach steeper than
                 // the river needs it is positive and the floor creeps up toward grade.
-                val step = if (isDiagonal(neighbour, cell, cellsAcross)) DIAGONAL_STEP_CELLS else 1f
+                val step = steps.between(neighbour, cell, cellsAcross)
                 val margin = settled[neighbour] - settled[cell] - grade * step
                 if (margin < room) room = margin
             }
@@ -2226,10 +2254,4 @@ internal object HydraulicErosion {
     /** Millimetres in a metre, for the uplift rates this stage is handed in millimetres a year. */
     private const val MILLIMETRES_PER_METRE = 1_000.0
 
-    /** Length of a diagonal step, in cells, for every slope this file measures. */
-    private const val DIAGONAL_STEP_CELLS = 1.41421356f
-
-    /** Neighbours differ by one row *and* one column only when the step was diagonal. */
-    private fun isDiagonal(from: Int, to: Int, width: Int): Boolean =
-        (from / width != to / width) && (from % width != to % width)
 }

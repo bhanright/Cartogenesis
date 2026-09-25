@@ -223,7 +223,12 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
         GL43C.glUniform1i(uniform("uShowBorders"), recipe.showBorders.toGl())
 
         GL43C.glUniform1f(uniform("uSlopeScale"), recipe.slopeScale)
-        GL43C.glUniform1i(uniform("uOpennessStep"), recipe.opennessStep)
+        GL43C.glUniform1f(uniform("uRowScale"), recipe.cellHeightInCellWidths)
+        val horizon = recipe.reliefHorizon
+        for (sample in horizon.strides.indices) {
+            GL43C.glUniform2i(uniform("uHorizonOffset[$sample]"), horizon.columns[sample], horizon.rows[sample])
+            GL43C.glUniform1f(uniform("uHorizonStride[$sample]"), horizon.strides[sample])
+        }
         GL43C.glUniform1f(uniform("uOrdinaryGround"), recipe.ordinaryGround)
         GL43C.glUniform1f(uniform("uBiomeWash"), recipe.biomeWash)
         GL43C.glUniform1f(uniform("uBiomeMuting"), recipe.biomeMuting)
@@ -412,7 +417,14 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
             uniform int uShowBorders;
 
             uniform float uSlopeScale;
-            uniform int uOpennessStep;
+            // How tall a row is against a column's width: the relief, the hachures and the plain
+            // under the isobaths are all read on the ground. See ReliefShading, drawn for the ground.
+            uniform float uRowScale;
+            // ReliefHorizon: where the sky's horizon is sampled, bearing by bearing, nearest first,
+            // and the ground's distance to each sample. Handed in rather than worked out here, so
+            // the two paths sample the same cells.
+            uniform ivec2 uHorizonOffset[24];
+            uniform float uHorizonStride[24];
             uniform float uBiomeWash;
             uniform float uBiomeMuting;
             uniform float uClimateTint;
@@ -517,7 +529,6 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
             const float LAMP_SWING = 0.55;
             const float LAMP_REACH = 0.848;
             const float ROOT_HALF = 0.70710678;
-            const float ROOT_TWO = 1.4142135;
             // The sky at ReliefShading.HAZE, which is 0.10: a diffuse share of
             // 0.15 + 0.85 * haze, and a brightness per bearing of
             // evenness + (1 - evenness) * toward, with evenness 0.1 + 0.9 * haze. Copied out of
@@ -532,14 +543,14 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
             const float BRIGHTEST = 1.35;
             const int HORIZON_BEARINGS = 8;
             const int HORIZON_STEPS = 3;
+            // ReliefShading's central difference spans two cell widths, so the horizon, which
+            // reads a rise over its run, takes twice the scale the differences are read at: the
+            // one vertical exaggeration, ReliefShading.verticalExaggeration.
+            const float CENTRAL_DIFFERENCE_SPAN_CELL_WIDTHS = 2.0;
 
-            // The eight compass bearings, as whole steps for the horizon stencil and as unit
-            // vectors for the lamps, with the brightness of the sky along each: east, south-east,
-            // south, south-west, west, north-west, north, north-east.
-            const int BEARING_EAST[8] = int[8](1, 1, 0, -1, -1, -1, 0, 1);
-            const int BEARING_SOUTH[8] = int[8](0, 1, 1, 1, 0, -1, -1, -1);
-            const float BEARING_LENGTH[8] =
-                float[8](1.0, ROOT_TWO, 1.0, ROOT_TWO, 1.0, ROOT_TWO, 1.0, ROOT_TWO);
+            // The eight compass bearings of the ground, as unit vectors for the lamps, with the
+            // brightness of the sky along each: east, south-east, south, south-west, west,
+            // north-west, north, north-east.
             const float BEARING_UNIT_EAST[8] =
                 float[8](1.0, ROOT_HALF, 0.0, -ROOT_HALF, -1.0, -ROOT_HALF, 0.0, ROOT_HALF);
             const float BEARING_UNIT_SOUTH[8] =
@@ -617,25 +628,22 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
 
             /*
              * ReliefShading.openness: how much of the sky the ground here can see. The horizon
-             * angle along each of the eight grid bearings over three doubling steps, and the mean
-             * of their sines is the share of the sky the surrounding ground has taken away.
+             * angle along each of the eight compass bearings of the ground over three doubling
+             * steps, and the mean of their sines is the share of the sky the surrounding ground has
+             * taken away.
              */
             float openness(int x, int y) {
                 float here = elevationAt(x, y);
                 precise float blocked = 0.0;
                 for (int bearing = 0; bearing < HORIZON_BEARINGS; bearing++) {
-                    int east = BEARING_EAST[bearing];
-                    int south = BEARING_SOUTH[bearing];
                     float steepest = 0.0;
-                    int reach = uOpennessStep;
-                    precise float stride = BEARING_LENGTH[bearing] * float(uOpennessStep);
                     for (int further = 0; further < HORIZON_STEPS; further++) {
-                        precise float rise =
-                            (elevationAt(x + east * reach, y + south * reach) - here) * uSlopeScale;
-                        precise float tangent = rise / stride;
+                        int reading = bearing * HORIZON_STEPS + further;
+                        ivec2 offset = uHorizonOffset[reading];
+                        precise float rise = (elevationAt(x + offset.x, y + offset.y) - here) *
+                            (uSlopeScale * CENTRAL_DIFFERENCE_SPAN_CELL_WIDTHS);
+                        precise float tangent = rise / uHorizonStride[reading];
                         if (tangent > steepest) steepest = tangent;
-                        reach += reach;
-                        stride += stride;
                     }
                     // Weighted by how bright that quarter of the sky is, so a ridge standing
                     // between the ground and the sun costs it more light than one behind it.
@@ -650,7 +658,7 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
                 precise float eastward =
                     (elevationAt(x + 1, y) - elevationAt(x - 1, y)) * uSlopeScale;
                 precise float southward =
-                    (elevationAt(x, y + 1) - elevationAt(x, y - 1)) * uSlopeScale;
+                    (elevationAt(x, y + 1) - elevationAt(x, y - 1)) * uSlopeScale / uRowScale;
                 precise float normalLength =
                     sqrt(eastward * eastward + southward * southward + 1.0);
 
@@ -714,13 +722,18 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
                     (elevationAt(x + reach, y) - elevationAt(x - reach, y)) * uGradientScale;
                 precise float gradY =
                     (elevationAt(x, y + reach) - elevationAt(x, y - reach)) * uGradientScale;
-                precise float slope = sqrt(gradX * gradX + gradY * gradY);
+                // The ground's slope for the stroke's weight, and the ground's fall line as the
+                // sheet draws it for its direction: Engraving.hachure.
+                precise float southwardOnTheGround = gradY / uRowScale;
+                precise float slope =
+                    sqrt(gradX * gradX + southwardOnTheGround * southwardOnTheGround);
                 float steepness = clamp((slope - uSlopeFloor) * uInkGain, 0.0, 1.0);
                 if (steepness <= 0.0) return 0.0;
 
-                precise float inverse = 1.0 / slope;
+                precise float sheetSouthward = southwardOnTheGround / uRowScale;
+                precise float inverse = 1.0 / sqrt(gradX * gradX + sheetSouthward * sheetSouthward);
                 precise float downX = gradX * inverse;
-                precise float downY = gradY * inverse;
+                precise float downY = sheetSouthward * inverse;
 
                 int pitch = uHachureLattice;
                 float halfLength = uStrokeHalfLength;
@@ -846,8 +859,12 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
                 precise float slope = sqrt(eastward * eastward + southward * southward);
                 // A contour is a line only where the floor slopes; on a plain the level set is a
                 // region, and the drawing stains a basin instead of tracing a line through it.
+                // Whether it slopes is a question about the ground, so it is asked per cell width.
+                precise float southwardOnTheGround = southward / uRowScale;
+                precise float slopeOnTheGround =
+                    sqrt(eastward * eastward + southwardOnTheGround * southwardOnTheGround);
                 float onASlope = uIsobathFlattest <= 0.0 ? 1.0 : smoothstep(
-                    uIsobathFlattest * ISOBATH_PLAIN_FADE, uIsobathFlattest, slope);
+                    uIsobathFlattest * ISOBATH_PLAIN_FADE, uIsobathFlattest, slopeOnTheGround);
                 if (onASlope <= 0.0) return 0.0;
                 precise float run = slope < FLATTEST_SLOPE ? FLATTEST_SLOPE : slope;
 

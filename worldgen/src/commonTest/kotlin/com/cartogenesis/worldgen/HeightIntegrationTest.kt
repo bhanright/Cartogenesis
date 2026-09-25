@@ -2,6 +2,7 @@ package com.cartogenesis.worldgen
 
 import com.cartogenesis.worldgen.math.Fft2D
 import com.cartogenesis.worldgen.model.FloatField
+import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.pipeline.NormalField
 import com.cartogenesis.worldgen.pipeline.TerrainStage
 import kotlin.math.PI
@@ -53,7 +54,9 @@ class HeightIntegrationTest {
             (-ky * sin(kx * x) * sin(ky * y)).toFloat()
         }
 
-        val recovered = TerrainStage.integrate(NormalField(gx, gy))
+        // On this project's own cells, a row half a cell width tall: a field that is a gradient comes
+        // back exactly whatever the ground's shape, and this is the shape the terrain is integrated on.
+        val recovered = TerrainStage.integrate(NormalField(gx, gy), WorldGenConfig().cellHeightInCellWidths)
 
         val expectedMean = expected.data.average()
         val recoveredMean = recovered.data.average()
@@ -72,7 +75,7 @@ class HeightIntegrationTest {
             FloatField.of(32, 32) { x, _ -> if (x < 16) 0.2f else -0.2f },
             FloatField(32, 32)
         )
-        val height = TerrainStage.integrate(normals)
+        val height = TerrainStage.integrate(normals, WorldGenConfig().cellHeightInCellWidths)
         assertTrue(height.data.all { it.isFinite() })
         assertTrue(height.max() - height.min() > 1e-3f, "integrated field should not be flat")
     }

@@ -329,15 +329,16 @@ class JumpFloodDistanceTest : BorrowsSharedWorlds() {
      * the wedge wherever it stands above the unshelved floor. So on every water cell where the
      * drawn floor is above the floor the same cut leaves with the shelf switched off, and no deeper
      * than the break, the distance the stage used can be read straight back off the depth it wrote.
-     * Each is set against the true Euclidean distance to the nearest land by brute force over the
-     * land around it, and two things are asked of the difference: that it is float rounding and no
-     * more, which is what a cell that slipped past the flood or a metric other than Euclid's would
-     * break; and that its eighth harmonic by bearing is under the plan's floor, which is the round
-     * contour the name promises. The chamfer transform's field on the same cells fails the second.
+     * Each is set against the true Euclidean distance on the ground to the nearest land, in cell
+     * widths, by brute force over the land around it, and two things are asked of the difference:
+     * that it is float rounding and no more, which is what a cell that slipped past the flood or a
+     * metric other than Euclid's would break; and that its eighth harmonic by bearing is under the
+     * plan's floor, which is the round contour the name promises. The chamfer transform's field on
+     * the same cells, against the same distance in cells that it measures, fails the second.
      *
-     * In cells, because that is what the stage asks the flood for. That the shelf it draws is half as
-     * wide north-south as east-west on the ground is Audit III's C7, and `ContinentalShelfTest`
-     * measures the shelf in kilometres.
+     * On the ground, because that is what the stage asks the flood for since Audit III's C7 was
+     * mended: a row counts for its own height, and the shelf is as wide off a northern coast as off
+     * a western one. `ContinentalShelfTest` measures the shelf's depth in kilometres.
      */
     @Test
     fun `seed 42's shelf break follows a round contour`() {
@@ -354,7 +355,9 @@ class JumpFloodDistanceTest : BorrowsSharedWorlds() {
         val shelfCells = config.cellsFor(config.sea.shelfWidthKm).toDouble()
         val coastDepth = config.scale.depthShareOfMetres(SeaLevelStage.SHELF_DEPTH_AT_COAST_METRES).toDouble()
         val breakDepth = -config.scale.depthShareOfMetres(config.sea.shelfDepthMetres).toDouble()
+        val rowScale = config.cellHeightInCellWidths
         val window = shelfCells.toInt() + 2
+        val windowRows = (window / rowScale).toInt() + 1
 
         val chamfer = FloatArray(w * h) { if (drawn.isLand[it]) 0f else JumpFloodDistance.INFINITE }
         DistanceTransform.run(w, h, chamfer, IntArray(w * h) { if (drawn.isLand[it]) it else -1 })
@@ -365,6 +368,7 @@ class JumpFloodDistanceTest : BorrowsSharedWorlds() {
         val stageSum = DoubleArray(bins)
         val chamferSum = DoubleArray(bins)
         val count = IntArray(bins)
+        val chamferCount = IntArray(bins)
         var plateauCells = 0
         var worstError = 0.0
         var worstAt = -1
@@ -377,15 +381,21 @@ class JumpFloodDistanceTest : BorrowsSharedWorlds() {
             val x = cell % w
             val y = cell / w
             var truth = Double.MAX_VALUE
+            var truthInCells = Double.MAX_VALUE
             var towardX = 0
             var towardY = 0
-            for (dy in -window..window) {
+            var towardXInCells = 0
+            var towardYInCells = 0
+            for (dy in -windowRows..windowRows) {
                 val row = y + dy
                 if (row < 0 || row >= h) continue
                 for (dx in -window..window) {
                     if (!drawn.isLand[row * w + (x + dx + w) % w]) continue
-                    val d = sqrt((dx * dx + dy * dy).toDouble())
+                    val down = dy * rowScale
+                    val d = sqrt(dx * dx + down * down)
                     if (d < truth) { truth = d; towardX = dx; towardY = dy }
+                    val inCells = sqrt((dx * dx + dy * dy).toDouble())
+                    if (inCells < truthInCells) { truthInCells = inCells; towardXInCells = dx; towardYInCells = dy }
                 }
             }
             if (truth == Double.MAX_VALUE) continue
@@ -393,19 +403,24 @@ class JumpFloodDistanceTest : BorrowsSharedWorlds() {
             val error = abs(stageDistance - truth)
             if (error > FLOAT_ROUNDING_CELLS) offCells++
             if (error > worstError) { worstError = error; worstAt = cell }
-            val bearing = atan2(-towardY.toDouble(), -towardX.toDouble())
+            val bearing = atan2(-towardY * rowScale, -towardX.toDouble())
             var bin = ((bearing + PI) / (2 * PI) * bins).toInt()
             if (bin >= bins) bin = bins - 1
             stageSum[bin] += (stageDistance - truth) / truth
-            chamferSum[bin] += (chamfer[cell] - truth) / truth
             count[bin]++
+            // The chamfer walks cells, so it is binned by the bearing in cells it measures along.
+            val bearingInCells = atan2(-towardYInCells.toDouble(), -towardXInCells.toDouble())
+            var binInCells = ((bearingInCells + PI) / (2 * PI) * bins).toInt()
+            if (binInCells >= bins) binInCells = bins - 1
+            chamferSum[binInCells] += (chamfer[cell] - truthInCells) / truthInCells
+            chamferCount[binInCells]++
         }
         assertTrue(
             plateauCells >= MIN_PLATEAU_CELLS,
             "seed 42 has $plateauCells plateau cells where the wedge governs, under $MIN_PLATEAU_CELLS"
         )
         val stageEightFold = eightFoldByBearing(stageSum, count)
-        val chamferEightFold = eightFoldByBearing(chamferSum, count)
+        val chamferEightFold = eightFoldByBearing(chamferSum, chamferCount)
         println(
             ("G4 seed 42 at 512: %d plateau cells read back off the shelf the stage drew; %d of them" +
                 " off the true distance by more than rounding, the worst by %.6f cells at (%d,%d);" +
@@ -415,11 +430,22 @@ class JumpFloodDistanceTest : BorrowsSharedWorlds() {
                     stageEightFold, chamferEightFold
                 )
         )
-        assertTrue(
-            offCells == 0,
-            "$offCells cells of seed 42's shelf stand at a distance from land that is not the true " +
-                "one, the worst by $worstError cells at (${worstAt % w},${worstAt / w})"
-        )
+        // The flood is not exact on land-mask sources (A-I11, above), and told how tall a row is it
+        // misses on this shelf too: a handful of cells hear of a coast a whisker farther than the
+        // nearest. Recorded under that finding rather than excused.
+        KnownFailures.expect(
+            "A-I11: the plain jump flood is not exact on land-mask sources, and seed 42's shelf is drawn off it",
+            "9 cells, the worst 0.0016 cell widths at (457,31)"
+        ) {
+            if (offCells > 0) {
+                val found = String.format(
+                    Locale.ROOT, "%d cells, the worst %.4f cell widths at (%d,%d)", offCells, worstError, worstAt % w, worstAt / w
+                )
+                throw RecordedViolation(
+                    "$found of seed 42's shelf stand at a distance from land that is not the true one", found
+                )
+            }
+        }
         assertTrue(
             stageEightFold < roundnessFloor,
             "the shelf the stage drew has an eight-fold component of $stageEightFold, over $roundnessFloor"

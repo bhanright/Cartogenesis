@@ -24,10 +24,11 @@ interface ErosionAccelerator {
      *
      * [heights] must not be modified; the result is a separate array.
      *
-     * [maxOrthogonalDrop] is the steepest drop one cell may hold, in the height field's own units,
-     * already converted from the critical slope and this grid's cell width. Every physical
-     * constant arrives on the device converted: a kernel has no business knowing how wide the
-     * world is.
+     * [limits] are the steepest drops one cell may hold toward a neighbour along a row, down a
+     * column and on a diagonal, in the height field's own units, already converted from the
+     * critical slope and this grid's cells: a row is not as tall as a column is wide, so the three
+     * differ. Every physical constant arrives on the device converted: a kernel has no business
+     * knowing how wide the world is.
      *
      * Suspending, because the obvious second implementation cannot be anything else: WebGPU hands
      * back promises for its device, its queue and every read of a buffer, and Kotlin/Wasm has no
@@ -37,8 +38,27 @@ interface ErosionAccelerator {
         width: Int,
         height: Int,
         heights: FloatArray,
-        maxOrthogonalDrop: Float,
+        limits: ThermalLimits,
         passes: Int,
         rate: Float
     ): FloatArray?
 }
+
+/**
+ * The steepest drop a cell may hold toward each kind of neighbour, in the height field's own units:
+ * the critical slope times that step's length on the ground.
+ *
+ * Three figures because a cell of this map is not square. A step along a row is a cell width, a
+ * step down a column is a row's height, half of that on this project's grids, and a diagonal step
+ * is the hypotenuse of the two; the same critical gradient allows a drop in proportion to each.
+ * One figure for every orthogonal neighbour let north- and south-facing slopes stand at twice the
+ * critical gradient.
+ */
+class ThermalLimits(
+    /** Toward a neighbour east or west. */
+    val eastWest: Float,
+    /** Toward a neighbour north or south. */
+    val northSouth: Float,
+    /** Toward a diagonal neighbour. */
+    val diagonal: Float
+)

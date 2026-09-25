@@ -107,27 +107,76 @@
   300 km band (`TectonicsConfig.crustMarginKm`), the erosion's own lengths (`debrisTravelKm`,
   `deltaReachKm`, `outletReachKm`), and the instrument's reference grid and shortest front, which
   were not varied. 2026-09-22, X1d.
-- **The land's outlines are consistent with cell-space anisotropy in the kilometre metric.** Over
-  seven worlds the coastline projects 1.93, 1.99 and 2.06 times as far east-west as north-south at
-  512, 1024 and 2048 (1.82 to 2.14 by world), the 2,000 m contour 1.99, 2.00 and 2.04 (1.83 to
-  2.24), where land isotropic on the ground gives 1; `CoastalSpacingAuditTest` prints both for every
-  world. Two known inputs could draw it so: the terrain noise's lattice has as many cycles down the
-  map as across it (`TerrainStage.buildNormalField`), and `PlateStage`'s boundary distance counts
-  cells with no row scale (the `JumpFloodDistance` entry below); which carries it is not measured.
-  A kilometre-isotropic noise would take half the cycles down the map that it takes across it, and
-  would move every world; the two projections per seed are the guard. Found by X1d, whose
-  straight-front finder saw one to three north-south coasts against 86 to 121 east-west ones at
-  each grid. 2026-09-22, X1d.
-- **The incision and the routing measure a step in cell widths whichever way it runs.**
-  `FlowRouting.flowDirections` compares its facets over one cell or `DIAGONAL_STEP_CELLS`, and on a
-  plane falling equally per kilometre east and south, 45 degrees on the ground, it routes 14.1
-  degrees south of east — the 14.0 a square ruler predicts (measured by `CoastalSpacingAuditTest`,
-  which asserts the disagreement and so fails once it is fixed). `HydraulicErosion.cut` divides a
-  drop by 1 or the square root of 2 cells and multiplies by the column count, so by the source's
-  arithmetic it reads a north-south slope at 0.50 of the ground's and a diagonal one at 0.79, where
-  `RiverStage.stepKilometres` measures true kilometres. On 969495 at 512, 29.4% of land steps run
-  down a column and 37.7% diagonally. X1d recorded it and did not find it setting a spacing; a fix
-  moves every world and wants `GpuErosionTest` in step. 2026-09-22, X1d.
+- ~~**The land's outlines are consistent with cell-space anisotropy in the kilometre metric.**~~
+  Answered by Fix 2, 2026-09-24. The terrain noise's lattice and `PlateStage`'s boundary distance
+  were put on the ground with every other operator Audit III found counting a row as a column, so
+  which of them carried the twofold figure was not separated. On the four standard worlds at 512 the
+  coastline now projects 1.32, 1.41, 1.41 and 1.41 times as far east-west as north-south, 1.39
+  pooled, where the same measure read 1.88 to 2.00 before (`GroundIsotropyTest`). What is left is
+  the incision's cap per step, Audit III's B-D1, which cuts a channel running north-south half as
+  far a round; the test records it as a known failure and the erosion's units are the next chunk's.
+  Over the seven worlds `CoastalSpacingAuditTest` prints, the coastline reads 1.41, 1.48 and 1.53 at
+  512, 1024 and 2048 where it read 1.93, 1.99 and 2.06, and the 2,000 m contour 1.46, 1.47 and 1.48
+  where it read 1.99, 2.00 and 2.04. The coast's figure still rises with the grid; why is not
+  measured.
+- **The map draws a world twice as wide as it is tall on a square sheet, so land that is round on
+  the ground reads twice as tall as it is wide.** Since the operators measure the ground (Fix 2), a
+  continent, a lake or a range is as wide on the ground whichever way it runs, and the default grid
+  is as many cells down as across over 12,000 by 6,000 km. The raster draws one pixel a cell, the
+  map view fits it with one scale for both axes (`App.kt`, its fit scale), and the site's imagery is
+  cut from the same square sheet, so what a reader sees is the ground stretched twofold north-south.
+  The fix is the drawing's: draw the sheet at the world's own aspect, or make grids twice as many
+  cells across as down. The cartouche already states the two scales the sheet has; the exports'
+  aspect was not checked. 2026-09-24, Fix 2.
+- **Six operators still count a row as a column, each outside Fix 2's list.** Found by reading the
+  code, not by a guard: the climate stage's rainfall blur (a square box of cells, sized by
+  `RAIN_BLUR_REFERENCE_WIDTH`) and its two coastal-reach blurs, the water exposure and the offshore
+  anomaly's spread, whose radius is `OceanConfig.coastalReachCells` (the ocean's chunk); the realms'
+  two blurs (`NationStage`); the seeded field that jitters flat routing and the lake balance, a
+  lattice of eight cells each way (`FlowRouting.smoothSeededField`); the thermal sweeps' count,
+  which spends `debrisTravelKm` as sweeps of one cell, a row down a column
+  (`ErosionStage.sweepsFor`); and the glaciation's two distance fields (the `JumpFloodDistance`
+  entry below). 2026-09-24, Fix 2.
+- **Fix 2 redrew every continent, and twenty clauses its new worlds tipped run as known failures,
+  each named for where it is next taken up.** The plate partition moved from a chamfer on square
+  cells to Euclid on the ground, so every seed's continents are new, and a clause that reads one
+  sample of them moved with them. Each runs under `KnownFailures` with the figure that tipped it:
+  - *the plates*: seed 42's old belts stand within 52 cell widths of a present boundary
+    (`TectonicHistoryTest`); seed 42's foreland falls to the edge of the collision's own
+    ground with no rise beyond (`IsostasyTest`); and the author's world at 2048 holds 2 rift lakes,
+    the deepest 454 m, under Malawi's 706, where it held 4 and the deepest 1,025 m
+    (`RiftDepthAuditTest`, the audit tier);
+  - *the ice* (chunk 5): the bed under seed 7's cap sinks a metre past Airy's share of its column
+    (`IsostasyTest`); sheets as wide as Greenland's grow on high plateaus and stand under its 2,000 m
+    (`IceSheetTest`, seeds 718106 and 7); seed 59758's sheet edge runs 70 cells along a row, the
+    census's ice-edge finding (`IceSheetTest`);
+  - *the erosion* (chunk 3): the coast's projection ratio and the valley notch, a quarter to a third
+    shallower where a course steps down a column, both under B-D1 (`GroundIsotropyTest`,
+    `ValleyIncisionTest`); seed 1234's windward flank cut 1.26 times as hard for 3.5 times the rain,
+    under the law's 1.49 (`ClimateFedErosionTest`);
+  - *the water*: the notch's three largest-basin clauses (`OutletIncisionTest`); the flat potential
+    at 4.7% of a generation on seed 7, past rule 8's hundredth, because the redrawn world's flats
+    hold twice the cells (`FlatCourseTest`) — a device path, or a cheaper solve, is owed;
+  - *the climate*: the pooled recycling ratio, 0.292 against Earth's 0.30 (`MoistureBudgetTest`,
+    both clauses); seed 1's cold-current coast, 0.66% wetter with the coupling on
+    (`CurrentFeedsRainTest`); the tropics' pooled desert share, x0.69 against a bar of x0.54
+    (`GeographyAuditTest`); the warm-current west coasts at 50-60 degrees forested on one seed of
+    three, 64.0%, 12.7% and 34.3% where they were 56.9%, 41.1% and 62.1% (`ColdCapReportTest`, the
+    audit tier);
+  - *the coast*: seed 298405's coast, 1.092 by ruler on the ground (`LittoralCoastTest`);
+  - *the distance*: seed 42's shelf, drawn off the plain jump flood, off Euclid by 0.0016 of a cell
+    width on nine cells, under A-I11 (`JumpFloodDistanceTest`).
+  Measured, and not tuned: no bar moved to take any of them in. 2026-09-24, Fix 2.
+- ~~**The incision and the routing measure a step in cell widths whichever way it runs.**~~ Done by
+  Fix 2, 2026-09-24. The routing's facets are built on the ground, a leg of a cell width and a leg of
+  a row's height, so a plane falls where it faces: `RoutingGroundTest` routes a dozen planes, the
+  ground's diagonal and the grid's among them, each within a quarter of a degree of its bearing, and
+  `CoastalSpacingAuditTest` now asserts the 45 degrees it used to assert the 14 against. The
+  incision, the transport walk, the notch and the headroom divide a drop by the step's length on
+  the ground in cell widths, and the thermal sweeps hold a drop per kind of step on both devices.
+  What the ruler does not reach is recorded under `GroundIsotropyTest`'s known failure: the cut is
+  capped at half the drop to a cell's receiver in a round, a drop is in proportion to the step, and
+  where the cap sets the cut (Audit III's B-D1) a north-south channel is cut half as deep a round.
 - **The moisture march does not conserve its water, in two places.** In `ClimateStage.marchLandStep` the parcel's stock is capped to the cold cap *after* its rain for the cell has been taken, so the water the cap removes over cold ground is neither rained nor carried: it leaves the budget silently. In `marchSeaStep` the rain over open water is reported (`moisture * seaRainPerCell`) but never subtracted from the stock handed to the next cell, so the ocean reservoir approaches saturation whatever the sea rain rate is set to. Both were found by reading the code against the ledger's recycling figure, which therefore does not by itself show the budget is right. The fix is an instrumented budget first (every source, every sink, the storage change and the boundary flux summing to zero per lap), then the two corrections, then re-measuring recycling and the interior mean; it belongs to the chunk on wetter interiors, because closing the sea leak alone will move every coast. Beside it: the 1,000 km depletion length cites van der Ent and Savenije (2011) for a figure that paper gives as 500-2,000 km for tropical and mountain recycling, with 3,000-5,000 km in temperate climates and over 7,000 in deserts, so the constant's justification is misread and the transport time and the rain lifetime want testing separately. 2026-09-21.
 - **A lake fan outlives its lake, and what it leaves is a sill.** On 718106 at 2048 the deposited world holds 23,362 cells of standing water (graded) and 24,421 (ungraded) against 20,998 with no deposition at all, and the window where deposition ponds the most - `[48,400,203,650]`, found by `BayHeadDeltaAuditTest` - holds one lake of 1,038 cells the no-deposition world does not have. `DepositionLog` says its shore is ringed with lake-fan spoil, and a render of the log's mechanism over the window (looked at during T4, not kept) shows that spoil lying in a ring well outside the present shore. The reading of that picture, which is an inference and not a measurement: the rounds ponded a far larger basin there, fans were built into it, the basin's rim was cut and it drained, and the spoil laid across its floor was left standing across the hollow in the middle. A fan is stopped two pond depths short of the surface it is built toward (`HydraulicErosion`, the lake inflow branch) so that every cell it touches is still water afterwards, and that is true of the surface it was built toward and not of the one the basin drains to later; sediment sits in its own array until `settle` adds it to the terrain at the end, so the per-round breaches lower the rock under it and not it. Nothing forbids cutting it afterwards: the closing breach is blind to mechanism and `openMouths` cuts any spoil under a drawn course, so what preserved these lakes is one of their limits - the closing breach's stream power, floor and reach, or `openMouths`' discharge threshold, which a small basin's outflow does not meet - and which one is not yet measured. The graded rule has no say in any of it, which is why the two settings hold nearly the same water in that window (3,699 and 3,687); over the whole world they make fourteen and thirteen lakes the no-deposition world lacks, 5,600 and 6,100 cells, and the audit case prints, for each, the gross deposition on its shore by mechanism. The audit's water clause is therefore printed as a census and not asserted. What would answer it: find which limit preserved the lakes (a round-by-round trace of one basin's spill and floor), then either stop a fan short of the floor of the basin's outlet rather than of its surface or give the closing breach a drained basin's former discharge, and measure whole-world standing water against the no-deposition world on both authored seeds at 1024 and 2048. With it, a discriminating guard for the graded rule itself, which no per-merge test has: a controlled channel whose upstream margin leaves the ungraded rule headroom to deposit and the graded rule none, shown failing by forcing the graded branch to a zero grade. Whole-world standing water on deposited worlds has stood at or above the no-deposition figure since E6 (1.04x and 1.16x at 1024 then; 1.26x and 0.99x at 1024 and 1.11x and 1.16x at 2048 on the 3.2 tree), so this is not new, only named. 2026-09-22.
 - **The audit tier cannot be finished on the machine T3 ran it on, and the fault is the machine.**
@@ -588,18 +637,13 @@
   land in lakes against a bar of 2.22% — it passes by a factor of two and a half. The clause it
   stood in no longer claims to justify the sixth, so this entry is the only thing holding the
   question.*
-- **Four `JumpFloodDistance` callers still measure north-south distance with the cell's width.**
+- **Two `JumpFloodDistance` callers still measure north-south distance with the cell's width.**
   S2b gave the flood a row scale and passed it from `PlateStage`'s craton reach and sea-floor age,
-  which are S2's own. The rest still count cells and convert with `cellWidthKm`, so on a 2:1 grid
-  each of them reaches half as far north-south as the kilometres it is given: `ClimateStage`'s
-  `waterDistance`, which sets how maritime a coast is; `SeaLevelStage`'s distance to land, off which
-  the shelf, the slope and the rise are read, so a shelf is half as wide off a northern coast as off
-  a western one; `PlateStage`'s two boundary-distance fields, which every belt profile, plateau rim
-  and trench wall is a function of; and `GlaciationStage`'s distance to the ice edge and distance to
-  ice. Each is a one-line change — pass `config.cellHeightInCellWidths` and convert the answer with
-  `cellWidthKm` — and each moves every world it touches, so each wants its own before-and-after
-  renders and its own re-pinning. The belt profiles are the largest of them and probably want a
-  chunk rather than a line. 2026-09-14, S2b.
+  and Fix 2 from `ClimateStage.waterDistance`, `SeaLevelStage`'s distance to land and
+  `PlateStage.boundaryDistance`, with a guard apiece. What still counts cells and converts with
+  `cellWidthKm`, so reaching half as far north-south as the kilometres it is given, is
+  `GlaciationStage`'s distance to the ice edge and distance to ice, which belong with the ice's own
+  redesign. 2026-09-14, S2b; 2026-09-24, Fix 2.
 - **A below-sea-level basin can come out four rows deep and twenty-five columns long, and nobody
   has looked at one.** S2b's repair to `fillDepressions` reaches, for the first time, land that the
   enclosed-water rule left standing below the water beside it, so those hollows now hold standing
@@ -748,7 +792,10 @@
   ruler coarsened by majority, which cannot see under its own step, the same coast reads 1.255
   pooled after against 1.260 before, and seed 7 reads 1.228 against 1.230. The repair belongs to the instrument — `CoastRoughness`'s
   `richardsonLength` is the one F17 uses and M1 could take it, or its box sizes could start above
-  the scale it means to measure. 2026-09-13.
+  the scale it means to measure. 2026-09-13. Since Fix 2 its boxes are square on the ground, four,
+  eight and sixteen cell widths across and twice as many rows down, and `CoastRoughness`'s with
+  them: on the redrawn worlds the pooled figure reads 1.128 with them and 1.063 with boxes square in
+  cells. The saturation this entry names is unchanged. 2026-09-24, Fix 2.
 - **A graded coast has no barrier islands.** F17's littoral pass fills the re-entrants of Earth's
   third of the shoreline but does not throw a barrier across the mouth of one and leave a lagoon
   behind it, which is what Earth's depositional coasts are — Padre Island and the Laguna Madre, the

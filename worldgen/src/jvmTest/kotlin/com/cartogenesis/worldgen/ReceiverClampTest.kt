@@ -161,7 +161,9 @@ class ReceiverClampTest {
         if (sea.landCellCount == 0) return 0
         val filled = FlowRouting.fillDepressions(w, h, sea.isLand, sea.relativeElevation)
         val flow =
-            FlowRouting.flowDirections(w, h, sea.isLand, sea.relativeElevation, filled, config.seed)
+            FlowRouting.flowDirections(
+                w, h, sea.isLand, sea.relativeElevation, filled, config.seed, config.cellHeightInCellWidths
+            )
         val area = FlowRouting.accumulate(w, h, sea.isLand, filled, flow, sea.landCellCount) { 1f }
         val land = sea.landCellCount.toFloat()
         // The share of the world's runoff the in-round census counts as a channel, which is what

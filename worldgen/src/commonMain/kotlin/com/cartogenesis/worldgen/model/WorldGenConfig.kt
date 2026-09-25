@@ -1,5 +1,6 @@
 package com.cartogenesis.worldgen.model
 
+import com.cartogenesis.worldgen.math.GroundSteps
 import kotlinx.serialization.Serializable
 
 /**
@@ -418,11 +419,22 @@ data class TectonicsConfig(
     val mountainHeight: Float = 0.55f,
     /** Depth of oceanic trenches at subduction boundaries, on the same scale. */
     val trenchDepth: Float = 0.3f,
-    /** How far, in cells, boundary effects reach inland. */
+    /**
+     * How far boundary effects reach inland, in cell widths of ground: the same kilometres from a
+     * boundary running north-south as from one running east-west. Every belt half-width and offset
+     * below is a count of cell widths on the same terms.
+     */
     val boundaryFalloffCells: Float = 26f,
     /**
      * How wide the band is over which one crust becomes the other, in kilometres — a continental
      * margin, measured from where the crust starts to thin to where it is ocean floor.
+     *
+     * Read as the width over which the crust's share falls from nine tenths to a tenth, since the
+     * blur that makes the band is a Gaussian and has no end of its own; the ramp is then steepest in
+     * its middle at `1.02 / width` of the step a kilometre, which is the gradient the paragraph below
+     * works out, and the same width on the ground whichever way the margin runs. See
+     * `PlateStage.blurAcrossTheMargin`, and docs/DESIGN_LEDGER.md, Fix 2: the box blur this replaced
+     * made the band 389 km wide east-west and 195 km north-south.
      *
      * Implicit before it was a setting: the plate base was blurred by a third of
      * [boundaryFalloffCells], which comes to about 200 km on the default grid and was never a
@@ -704,7 +716,7 @@ data class TectonicsConfig(
      */
     val crustPairProfiles: Boolean = true,
     /**
-     * Half-width, in cells, of the coastal range on the continental side of an oceanic–continental
+     * Half-width, in cell widths, of the coastal range on the continental side of an oceanic–continental
      * margin. Deliberately far narrower than [collisionWidthCells]: the Andes are a few hundred
      * kilometres across where Tibet is well over a thousand, and that contrast is the whole point
      * of distinguishing the pairs. [WorldGenConfig.atResolution] rescales it with the grid.
@@ -713,19 +725,19 @@ data class TectonicsConfig(
     /** Crest height of that coastal range, in normalized elevation units. Narrow but tall. */
     val andeanHeight: Float = 0.52f,
     /**
-     * How far inland of the suture the volcanic arc stands, in cells.
+     * How far inland of the suture the volcanic arc stands, in cell widths.
      *
      * A subducting slab does not melt at the trench; it melts once it is deep enough, which puts
      * the volcanoes a fixed distance behind the margin rather than on it. That offset is what
      * makes the margin asymmetric in a way a symmetric falloff cannot express.
      */
     val arcOffsetCells: Float = 13f,
-    /** Half-width of the volcanic arc ridge about its own axis, in cells. */
+    /** Half-width of the volcanic arc ridge about its own axis, in cell widths. */
     val arcWidthCells: Float = 5f,
     /** Height of the volcanic arc above the range it rides on, in normalized elevation units. */
     val arcHeight: Float = 0.20f,
     /**
-     * Half-width, in cells, of a continental collision plateau. Broad — see [andeanWidthCells].
+     * Half-width, in cell widths, of a continental collision plateau. Broad — see [andeanWidthCells].
      * [WorldGenConfig.atResolution] rescales it with the grid.
      */
     val collisionWidthCells: Float = 26f,
@@ -774,11 +786,11 @@ data class TectonicsConfig(
      */
     val plateauAlongVariation: Float = 0.50f,
     /**
-     * How far from the suture the island arc stands, on the overriding plate, in cells.
+     * How far from the suture the island arc stands, on the overriding plate, in cell widths.
      * [WorldGenConfig.atResolution] rescales it with the grid.
      */
     val islandArcOffsetCells: Float = 8f,
-    /** Half-width of the island-arc ridge about its own axis, in cells. */
+    /** Half-width of the island-arc ridge about its own axis, in cell widths. */
     val islandArcWidthCells: Float = 7f,
     /**
      * Crest height of an island arc, in normalized elevation units.
@@ -809,7 +821,7 @@ data class TectonicsConfig(
      * docs/DESIGN_LEDGER.md, E7, for the figures.
      */
     val riftDepth: Float = 0.25f,
-    /** Half-width of the rift trough, in cells. */
+    /** Half-width of the rift trough, in cell widths. */
     val riftWidthCells: Float = 7f,
     /**
      * Share of the trough's half-width that is flat floor before the ground starts climbing.
@@ -820,9 +832,9 @@ data class TectonicsConfig(
      * `ValleyIncisionTest` reads as incision. Dimensionless, so it needs no rescaling.
      */
     val riftFloorShare: Float = 0.55f,
-    /** How far from the rift axis its raised shoulders crest, in cells. */
+    /** How far from the rift axis its raised shoulders crest, in cell widths. */
     val riftShoulderOffsetCells: Float = 11f,
-    /** Half-width of each shoulder about its own crest, in cells. */
+    /** Half-width of each shoulder about its own crest, in cell widths. */
     val riftShoulderWidthCells: Float = 7f,
     /**
      * Height of the rift shoulders, in normalized elevation units.
@@ -912,7 +924,8 @@ data class TectonicsConfig(
      */
     val historyEpochs: Int = 3,
     /**
-     * How far a plate travels between one epoch and the next, in cells.
+     * How far a plate travels between one epoch and the next, in cell widths of ground, whichever
+     * way it drifts.
      *
      * A plate boundary only moves if the plates either side of it move relative to one another, so
      * this is what decides how far an old belt ends up from a present one. At the default a
@@ -977,14 +990,14 @@ data class TectonicsConfig(
      * England and Molnar's rock uplift is nearly all spent against exhumation — the Himalaya rise
      * at five millimetres a year and gain about half of one, because the rest comes off as
      * sediment — so a rate is only meaningful beside the erosion it is racing. This generator's
-     * rivers and hillslopes take **0.218 mm/yr** off an active belt, measured over the belts of the
+     * rivers and hillslopes take **0.275 mm/yr** off an active belt, measured over the belts of the
      * present epoch on seeds 7, 42, 1234, 99 and 718106 at 512 with the uplift switched off
-     * (0.192, 0.275, 0.191, 0.201 and 0.229), which `IsostasyTest` re-measures and holds this
+     * (0.263, 0.337, 0.226, 0.275 and 0.272), which `IsostasyTest` re-measures and holds this
      * constant against.
      *
      * So the collision rate is the surface uplift Earth's own collisions manage — half a
      * millimetre a year — plus what this model's rivers will take back off it, which is
-     * **0.718 mm/yr** of rock uplift, and the other three follow the ratios above. That is close to
+     * **0.775 mm/yr** of rock uplift, and the other three follow the ratios above. That is close to
      * England and Molnar's own band for an active collision, 1 to 10 mm/yr, where S2's first pass
      * reached 0.6, and the reason is worth saying. The first pass measured the denudation at 0.101
      * mm/yr on a surface with a quarter of the mid-band relief for the water to cut into, and
@@ -993,28 +1006,32 @@ data class TectonicsConfig(
      * pass, the erosion rate came out at Earth's own order for an orogen, and the uplift that has
      * to race it came with it.
      *
-     * **The denudation has been re-measured twice since, and the rate follows it each time rather
-     * than staying put.** S2's fourth pass gave the base relief a texture proportional to the
-     * ground's own relief, and a smoother plain is less for the water to take away: 0.36 to 0.27,
-     * which is where 0.77 came from. Then the hydraulic rounds started reading the climate. Two
-     * terms arrived together there and they pull the same way on a belt: the rainfall weight
+     * **The denudation has been re-measured three times since, and the rate follows it each time
+     * rather than staying put.** S2's fourth pass gave the base relief a texture proportional to
+     * the ground's own relief, and a smoother plain is less for the water to take away: 0.36 to
+     * 0.27, which is where 0.77 came from. Then the hydraulic rounds started reading the climate.
+     * Two terms arrived together there and they pull the same way on a belt: the rainfall weight
      * redistributes the world's water, and the plant cover's relative shielding takes erodibility
      * off the wettest and best-wooded ground — which is what an active belt is — so a belt keeps a
-     * little more of itself. 0.27 to 0.218, and the rate with it. This is a derived constant and
-     * not a pin: what it is held to is Earth's surface uplift plus whatever this model's own
-     * rivers are measured to remove on the day, and a chunk that moves the second re-derives the
-     * first.
+     * little more of itself. 0.27 to 0.218, and the rate with it. Then the erosion was put on the
+     * ground's ruler: a slope down a column had been read at half its gradient, since a step to the
+     * next row was taken for a cell width when it is half of one, and the thermal sweeps and the
+     * incision now take north- and south-facing ground at its true steepness. A belt loses more of
+     * itself, 0.218 to 0.275, and the rate follows, 0.718 to 0.775 (see
+     * docs/DESIGN_LEDGER.md, Fix 2). This is a derived constant and not a pin: what it is held to
+     * is Earth's surface uplift plus whatever this model's own rivers are measured to remove on the
+     * day, and a chunk that moves the second re-derives the first.
      *
-     * Over the one and a half million years twelve rounds stand for that is 1.1 km of rock into a
-     * collision belt and 0.3 km out of it, against a dead belt of the same age that only loses.
+     * Over the one and a half million years twelve rounds stand for that is 1.2 km of rock into a
+     * collision belt and 0.4 km out of it, against a dead belt of the same age that only loses.
      * The difference between the two is what S2 exists to show.
      *
      * Spent over [WorldScale.yearsPerHydraulicRound] per round. See `HydraulicErosion.apply`.
      */
-    val collisionUpliftMmPerYear: Float = 0.718f,
-    val andeanUpliftMmPerYear: Float = 0.287f,
-    val islandArcUpliftMmPerYear: Float = 0.101f,
-    val riftShoulderUpliftMmPerYear: Float = 0.043f,
+    val collisionUpliftMmPerYear: Float = 0.775f,
+    val andeanUpliftMmPerYear: Float = 0.310f,
+    val islandArcUpliftMmPerYear: Float = 0.109f,
+    val riftShoulderUpliftMmPerYear: Float = 0.047f,
     /**
      * The height, in metres, past which the crust's own strength starts to hold a range back.
      *
@@ -1047,9 +1064,11 @@ data class TectonicsConfig(
      */
     val beltAgeWidening: Float = 1.45f,
     /**
-     * Radius, in cells, of the rounding blur applied per epoch of age.
+     * Radius, in cell widths, of the rounding blur applied per epoch of age.
      *
-     * Two box passes rather than three: an old belt should read as rounded, not as a stain. The
+     * Applied as a Gaussian round on the ground with the spread two box passes of this radius have
+     * east-west, `sqrt(2 r (r + 1) / 3)`; it was those two box passes, square in cells. Two rather
+     * than three because an old belt should read as rounded, not as a stain. The
      * blur is what turns a stamped profile with a crest and a toe into the smooth swell of a worn
      * range, and it is applied to the epoch's own uplift field alone, so it never touches the
      * present epoch's edges. [WorldGenConfig.atResolution] rescales it with the grid.
@@ -1096,11 +1115,11 @@ data class TectonicsConfig(
      * rather than volcanic fields inland.
      */
     val hotspotPlateFraction: Float = 0.35f,
-    /** How long a hotspot trail runs before it has subsided to nothing, in cells. */
+    /** How long a hotspot trail runs before it has subsided to nothing, in cell widths of ground. */
     val hotspotChainLengthCells: Float = 110f,
-    /** Distance between successive seamounts along a trail, in cells. */
+    /** Distance between successive seamounts along a trail, in cell widths of ground. */
     val hotspotSpacingCells: Float = 15f,
-    /** Radius of a single seamount, in cells. */
+    /** Radius of a single seamount, in cell widths: round on the ground, so twice as many rows. */
     val hotspotRadiusCells: Float = 5f,
     /** Height of the youngest seamount in a chain, in normalized elevation units. */
     val hotspotHeight: Float = 0.17f,
@@ -3065,6 +3084,16 @@ data class WorldGenConfig(
     /** [kilometres] on the ground as a whole number of cells, never fewer than [atLeast]. */
     fun wholeCellsFor(kilometres: Double, atLeast: Int = 1): Int =
         kotlin.math.round(cellsFor(kilometres)).toInt().coerceAtLeast(atLeast)
+
+    /**
+     * [kilometres] on the ground as a count of *rows* of this grid, which are not as tall as a cell
+     * is wide: the north-south twin of [cellsFor].
+     */
+    fun rowsFor(kilometres: Double): Double = kilometres / cellHeightKm
+
+    /** How long a step to each of a cell's neighbours is on this grid, in cell widths. */
+    val groundSteps: GroundSteps
+        get() = GroundSteps(cellHeightInCellWidths)
 
     /**
      * Re-targets the same world at a different grid size — used by HD export.

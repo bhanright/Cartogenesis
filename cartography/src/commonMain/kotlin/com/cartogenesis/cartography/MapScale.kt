@@ -19,7 +19,10 @@ class ScaleBar(
     val label: String
 )
 
-/** A scale bar placed on the sheet, at the left end of the bar in cell coordinates. */
+/**
+ * A scale bar placed on the sheet, at the left end of the bar in cell coordinates. It is drawn
+ * east-west, along a row, which is the axis its length holds on.
+ */
 class PlacedScaleBar(
     val bar: ScaleBar,
     val x: Float,
@@ -31,13 +34,18 @@ class PlacedScaleBar(
  * How far a distance on the map is on the ground, and how to say so.
  *
  * Everything here comes off one number the world already carries — [WorldScale.worldWidthKm],
- * twelve thousand kilometres east to west, which is what turns a count of cells into a length and
- * is where the realm areas and the heightmap sidecar's cell size come from too. Nothing is measured
- * twice: [WorldScale.cellWidthKm] is the arithmetic, and this puts it on the paper.
+ * twelve thousand kilometres east to west and half that from pole to pole, which is what turns a
+ * count of cells into a length and is where the realm areas and the heightmap sidecar's cell size
+ * come from too. Nothing is measured twice: [WorldScale.cellWidthKm] and [WorldScale.cellHeightKm]
+ * are the arithmetic, and this puts them on the paper.
  *
- * The projection is equirectangular, so a kilometre is only a kilometre along the equator and along
- * every meridian; east-west distances shrink by the cosine of the latitude as they go poleward.
- * That is the projection's own distortion and not something a scale bar can fix, which is why the
+ * The sheet draws a cell as a square pixel, and a cell is not square: on a grid as many cells tall
+ * as wide over a world twice as wide as it is tall, a pixel covers a cell's width of ground
+ * east-west and half of that north-south. So the sheet has two scales, and a bar laid along a
+ * meridian would overstate a distance twice over. The bar is drawn east-west and holds there; the
+ * cartouche gives both figures, east-west and north-south. On top of that the projection is
+ * equirectangular, so east-west distances shrink by the cosine of the latitude as they go poleward;
+ * that is the projection's own distortion and not something a scale bar can fix, which is why the
  * bar and the cartouche both say *at the equator* and neither pretends otherwise. A projection that
  * could say more is a later chunk's work; see REALISM_AUDIT.md, P1.
  */
@@ -67,12 +75,25 @@ object MapScale {
 
     private const val MILLIMETRES_PER_KILOMETRE: Double = 1_000_000.0
 
-    /** Ground kilometres one drawn pixel covers, at [pixelsPerCell] pixels to the cell. */
+    /**
+     * Ground kilometres one drawn pixel covers east-west, at [pixelsPerCell] pixels to the cell:
+     * the scale along a row, which is the one the bar is drawn on.
+     */
     fun kilometresPerPixel(
         scale: WorldScale,
         cellsAcross: Int,
         pixelsPerCell: Float
     ): Double = scale.cellWidthKm(cellsAcross) / pixelsPerCell
+
+    /**
+     * Ground kilometres one drawn pixel covers north-south, at [pixelsPerCell] pixels to the cell:
+     * a row's height, which on this project's grids is half what a pixel covers east-west.
+     */
+    fun kilometresPerPixelNorthSouth(
+        scale: WorldScale,
+        cellsDown: Int,
+        pixelsPerCell: Float
+    ): Double = scale.cellHeightKm(cellsDown) / pixelsPerCell
 
     /**
      * The longest round distance that fits [SHARE_OF_FRAME] of a frame [frameWidthPixels] wide.
@@ -129,18 +150,23 @@ object MapScale {
             MILLIMETRES_PER_KILOMETRE / MILLIMETRES_PER_PIXEL
 
     /**
-     * The line the cartouche carries: how far a pixel of this sheet reaches, and the fraction.
+     * The line the cartouche carries: how far a pixel of this sheet reaches each way, and the
+     * fraction.
      *
-     * `5.9 km per pixel · about 1:22 000 000 at the equator`. The fraction is quoted to two
-     * significant figures and no more, because it rests on [MILLIMETRES_PER_PIXEL] — an assumption
-     * about the reader's screen — and a fraction written to seven digits would claim a precision
-     * that assumption does not have. "About" is there for the same reason.
+     * `5.9 km per pixel east-west, 2.9 north-south · about 1:22 000 000 at the equator, east-west`.
+     * Both figures, because a pixel covers twice as much ground east-west as north-south and one
+     * figure for both would be wrong along every meridian (Audit III's F-C1). The fraction is the
+     * east-west one, the axis the bar is drawn on. It is quoted to two significant figures and no
+     * more, because it rests on [MILLIMETRES_PER_PIXEL] — an assumption about the reader's screen —
+     * and a fraction written to seven digits would claim a precision that assumption does not have.
+     * "About" is there for the same reason.
      */
-    fun cartoucheLine(scale: WorldScale, cellsAcross: Int): String {
+    fun cartoucheLine(scale: WorldScale, cellsAcross: Int, cellsDown: Int): String {
         val perPixel = kilometresPerPixel(scale, cellsAcross, 1f)
+        val perPixelNorthSouth = kilometresPerPixelNorthSouth(scale, cellsDown, 1f)
         val denominator = representativeFractionDenominator(scale, cellsAcross, 1f)
-        return "${oneDecimal(perPixel)} km per pixel · about 1:${grouped(twoFigures(denominator))} " +
-            "at the equator"
+        return "${oneDecimal(perPixel)} km per pixel east-west, ${oneDecimal(perPixelNorthSouth)} " +
+            "north-south · about 1:${grouped(twoFigures(denominator))} at the equator, east-west"
     }
 
     /** `5.9`. Kotlin's common runtime has no format string, and this is the only place one is due. */

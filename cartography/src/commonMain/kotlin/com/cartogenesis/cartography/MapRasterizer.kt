@@ -1,5 +1,6 @@
 package com.cartogenesis.cartography
 
+import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.Biome
 import com.cartogenesis.worldgen.pipeline.LandmarkKind
@@ -245,7 +246,10 @@ object MapRasterizer {
         // A line-art style never asks for the shaded relief, so it never pays for the pass: the
         // hachures read the same central differences a cell at a time.
         val relief = if (reliefDrawn && !style.lineArt) {
-            ReliefShading.of(world.sea.relativeElevation, world.sea.isLand, options.singleLamp)
+            ReliefShading.of(
+                world.sea.relativeElevation, world.sea.isLand, options.singleLamp,
+                world.config.cellHeightInCellWidths
+            )
         } else null
 
         val lakes = world.rivers.lakes
@@ -324,7 +328,8 @@ object MapRasterizer {
                         color,
                         style.coastline,
                         Engraving.hachure(
-                            column, row, gradientX, gradientY, plan, style.inkGain
+                            column, row, gradientX, gradientY, world.config.cellHeightInCellWidths.toFloat(),
+                            plan, style.inkGain
                         )
                     )
                 } else {
@@ -988,11 +993,27 @@ object MapRasterizer {
         interval: Float,
         flattestSlope: Float,
         stencil: Int
+    ): Float = seaContour(
+        world.sea.relativeElevation, world.config.cellHeightInCellWidths, cell, depth, interval,
+        flattestSlope, stencil
+    )
+
+    /**
+     * [seaContour] on a bare [elevation] field whose rows are [cellHeightInCellWidths] as tall as
+     * its columns are wide: what the raster draws, on a sea floor `IsobathTest` can make.
+     */
+    internal fun seaContour(
+        elevation: FloatField,
+        cellHeightInCellWidths: Double,
+        cell: Int,
+        depth: Float,
+        interval: Float,
+        flattestSlope: Float,
+        stencil: Int
     ): Float {
-        val cellsAcross = world.width
+        val cellsAcross = elevation.width
         val column = cell % cellsAcross
         val row = cell / cellsAcross
-        val elevation = world.sea.relativeElevation
         val perCell = 1f / (2f * stencil)
         val eastward =
             (elevation.sample(column + stencil, row) -
@@ -1000,8 +1021,12 @@ object MapRasterizer {
         val southward =
             (elevation.sample(column, row + stencil) -
                 elevation.sample(column, row - stencil)) * perCell
-        val slope = sqrt(eastward * eastward + southward * southward)
-        return Isobaths.ink(depth, slope, interval, flattestSlope)
+        // Per pixel for the line's width on the sheet, and per cell width of ground for whether
+        // the floor is a plain: down a column a pixel is a row, a share of a cell width.
+        val slopePerPixel = sqrt(eastward * eastward + southward * southward)
+        val southwardOnTheGround = southward / cellHeightInCellWidths.toFloat()
+        val slopeOnTheGround = sqrt(eastward * eastward + southwardOnTheGround * southwardOnTheGround)
+        return Isobaths.ink(depth, slopePerPixel, slopeOnTheGround, interval, flattestSlope)
     }
 
     private fun drawCoastline(world: WorldMap, style: MapStyle, pixels: IntArray) {

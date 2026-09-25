@@ -44,8 +44,20 @@ class BoundaryPairTest {
      * the comparison is only honest if both belts come out of the same world, since two worlds
      * could differ in belt shape for any number of reasons that have nothing to do with crust
      * pairs. All six are used together — see the pooling note in the guard.
+     *
+     * And each has a collision the per-seed clause can measure: its mean profile stands above half
+     * its own highest at the suture, so it has a width at half height (`PLATEAU-MEASURABLE` in the
+     * scan). A collision whose pair closes too slowly to raise more than the terrain's scatter has
+     * no plateau, and the clause has nothing to judge on it.
+     *
+     * When the plates were partitioned on the ground's ruler, which plates meet moved with the
+     * partition, and four of the six stopped qualifying: seed 3 carries no collision and no island
+     * arc now, and seeds 1, 11 and 17 carry collisions that stand -0.019, -0.052 and +0.014 of the
+     * height field over the plate interiors at the suture, where seed 1's stood +0.163 before.
+     * Each was replaced by the lowest seed that qualifies and was not already here, 4, 5, 6 and 7
+     * (docs/DESIGN_LEDGER.md, Fix 2).
      */
-    private val pairSeeds = listOf(1L, 3L, 11L, 17L, 22L, 23L)
+    private val pairSeeds = listOf(4L, 5L, 6L, 7L, 22L, 23L)
 
     /** A seed carrying island arcs and continental rifts, for the reported profiles. */
     // Re-picked at S2: the crusts are now chosen by area rather than by count, so which plates are
@@ -53,6 +65,12 @@ class BoundaryPairTest {
     // reads seed 17 with 31,175 arc cells and 98,394 rift cells, the largest pairing of the two in
     // seeds 1..24.
     private val arcSeed = 17L
+
+    /**
+     * The most a hotspot cone's radius may vary as an ellipse on the ground, as a share of its mean:
+     * see `hotspot cones are round at the resolution they surface on`.
+     */
+    private val ROUND_ON_THE_GROUND = 0.10
 
     /**
      * The world with the plate-base step flattened, which is what makes the belts measurable.
@@ -235,7 +253,17 @@ class BoundaryPairTest {
             val allThree = BoundaryClass.entries
                 .take(3)
                 .all { counts[it.ordinal] > 0 }
-            println("PAIRS scan seed $seed${if (allThree) " ALL-THREE-CONVERGENT" else ""} $present")
+            // A collision is measurable when its mean profile holds above half its own highest
+            // at the suture, so it has a width at half height; one whose pair closes too slowly to
+            // raise more than the terrain's own scatter does not, and the per-seed clause has
+            // nothing to judge on it.
+            val measurable = allThree &&
+                profileOf(listOf(platesOf(seed)), BoundaryClass.COLLISION_PLATEAU, Crust.CONTINENTAL)
+                    .halfHeightWidth > 0f
+            println(
+                "PAIRS scan seed $seed${if (allThree) " ALL-THREE-CONVERGENT" else ""}" +
+                    "${if (measurable) " PLATEAU-MEASURABLE" else ""} $present"
+            )
         }
     }
 
@@ -515,53 +543,75 @@ class BoundaryPairTest {
     @Test
     fun `hotspot cones are round at the resolution they surface on`() {
         fun measure(width: Int, detail: Boolean): Triple<Double, Double, Double> {
-            val base = WorldGenConfig(seed = 718106L, width = 512, height = 512)
-            val config = (if (width == 512) base else base.atResolution(width, width)).let {
-                it.copy(tectonics = it.tectonics.copy(hotspotConeDetail = detail))
-            }
-            val withChains = PlateStage.generate(config, TerrainStage.generate(config))
-            val without = config.copy(tectonics = config.tectonics.copy(hotspotPlateFraction = 0f))
-            val flat = PlateStage.generate(without, TerrainStage.generate(without))
-
-            val delta = FloatArray(width * width)
-            var peakI = -1
-            var peakV = 0f
-            for (i in delta.indices) {
-                val d = withChains.height.data[i] - flat.height.data[i]
-                delta[i] = d
-                if (d > peakV) { peakV = d; peakI = i }
-            }
-            val cx = (peakI % width).toFloat()
-            val cy = (peakI / width).toFloat()
-            val half = peakV / 2f
-
-            fun nearest(x: Float, y: Float): Float {
-                val xi = x.toInt().coerceIn(0, width - 1)
-                val yi = y.toInt().coerceIn(0, width - 1)
-                return delta[yi * width + xi]
-            }
-
-            val radii = DoubleArray(16)
-            for (k in 0 until 16) {
-                val theta = 2.0 * PI * k / 16.0
-                val dx = cos(theta).toFloat()
-                val dy = sin(theta).toFloat()
-                var r = 0f
-                while (r < width / 4f) {
-                    if (nearest(cx + dx * r, cy + dy * r) < half) break
-                    r += 0.1f
-                }
-                radii[k] = r.toDouble()
-            }
-            val relAmp8 = eightFoldRelativeAmplitude(radii)
-            return Triple(radii.average(), relAmp8, peakV.toDouble())
+            val (mean, eightFold, _) = shape(width, detail)
+            return Triple(mean, eightFold, 0.0)
         }
-
         val (mean512Before, amp512Before, _) = measure(512, detail = false)
         val (mean512After, amp512After, _) = measure(512, detail = true)
-        val (mean2048Before, amp2048Before, _) = measure(2048, detail = false)
-        val (mean2048After, amp2048After, _) = measure(2048, detail = true)
+        val (mean2048Before, amp2048Before, twoFold2048Before) = shape(2048, detail = false)
+        val (mean2048After, amp2048After, twoFold2048After) = shape(2048, detail = true)
+        reportAndAssert(
+            mean512Before, amp512Before, mean512After, amp512After,
+            mean2048Before, amp2048Before, mean2048After, amp2048After, twoFold2048Before, twoFold2048After
+        )
+    }
 
+    /**
+     * A seed 718106 hotspot cone's half-height radius read at sixteen bearings *on the ground*, in
+     * cell widths: its mean, the relative amplitude of its eighth harmonic (the faceting the E3 guard
+     * is about) and of its second (an ellipse, which is what a cone round in cells is on cells half
+     * as tall as they are wide).
+     */
+    private fun shape(width: Int, detail: Boolean): Triple<Double, Double, Double> {
+        val base = WorldGenConfig(seed = 718106L, width = 512, height = 512)
+        val config = (if (width == 512) base else base.atResolution(width, width)).let {
+            it.copy(tectonics = it.tectonics.copy(hotspotConeDetail = detail))
+        }
+        val withChains = PlateStage.generate(config, TerrainStage.generate(config))
+        val without = config.copy(tectonics = config.tectonics.copy(hotspotPlateFraction = 0f))
+        val flat = PlateStage.generate(without, TerrainStage.generate(without))
+
+        val delta = FloatArray(width * width)
+        var peakI = -1
+        var peakV = 0f
+        for (i in delta.indices) {
+            val d = withChains.height.data[i] - flat.height.data[i]
+            delta[i] = d
+            if (d > peakV) { peakV = d; peakI = i }
+        }
+        val cx = (peakI % width).toFloat()
+        val cy = (peakI / width).toFloat()
+        val half = peakV / 2f
+
+        fun nearest(x: Float, y: Float): Float {
+            val xi = x.toInt().coerceIn(0, width - 1)
+            val yi = y.toInt().coerceIn(0, width - 1)
+            return delta[yi * width + xi]
+        }
+
+        // A step of one cell width on the ground is a whole column east-west and two rows
+        // north-south, so the bearings are the ground's and the radius is a length on it.
+        val rowScale = config.cellHeightInCellWidths.toFloat()
+        val radii = DoubleArray(16)
+        for (k in 0 until 16) {
+            val theta = 2.0 * PI * k / 16.0
+            val dx = cos(theta).toFloat()
+            val dy = sin(theta).toFloat() / rowScale
+            var r = 0f
+            while (r < width / 4f) {
+                if (nearest(cx + dx * r, cy + dy * r) < half) break
+                r += 0.1f
+            }
+            radii[k] = r.toDouble()
+        }
+        return Triple(radii.average(), harmonicRelativeAmplitude(radii, 8), harmonicRelativeAmplitude(radii, 2))
+    }
+
+    private fun reportAndAssert(
+        mean512Before: Double, amp512Before: Double, mean512After: Double, amp512After: Double,
+        mean2048Before: Double, amp2048Before: Double, mean2048After: Double, amp2048After: Double,
+        twoFold2048Before: Double, twoFold2048After: Double
+    ) {
         println(
             "E3 seed 718106 @512  before: mean radius %.2f cells, relative 8-fold amplitude %.4f"
                 .format(mean512Before, amp512Before)
@@ -588,6 +638,22 @@ class BoundaryPairTest {
             amp2048After < 0.05,
             "seed 718106's hotspot cone at 2048 has a relative eight-fold amplitude of " +
                 "$amp2048After, wanted under 0.05"
+        )
+
+        // Round on the ground and not only in cells: the second harmonic of the radius by bearing
+        // on the ground is what a cone stamped round in cells shows, a third of its mean on cells
+        // half as tall as they are wide. The seeded rim puts at most
+        // `RIM_HARMONIC_MIN + RIM_HARMONIC_SPAN`, 0.045, into that harmonic on purpose, so the bar
+        // is a tenth: above the rim's own wobble and the grid's reading of it, and a third of the
+        // ellipse.
+        println(
+            "E3 seed 718106 @2048 second harmonic on the ground: before %.4f, after %.4f"
+                .format(twoFold2048Before, twoFold2048After)
+        )
+        assertTrue(
+            twoFold2048Before < ROUND_ON_THE_GROUND && twoFold2048After < ROUND_ON_THE_GROUND,
+            "seed 718106's hotspot cone at 2048 is an ellipse on the ground: second harmonic " +
+                "$twoFold2048Before without the rim detail and $twoFold2048After with it, wanted under $ROUND_ON_THE_GROUND"
         )
 
         // 512 is reported, not asserted: a single grid cell there is thirty-to-forty percent of
@@ -653,13 +719,16 @@ class BoundaryPairTest {
     }
 
     /** DFT magnitude at the eighth harmonic of a 16-sample series, relative to its mean. */
-    private fun eightFoldRelativeAmplitude(radii: DoubleArray): Double {
+    private fun eightFoldRelativeAmplitude(radii: DoubleArray): Double = harmonicRelativeAmplitude(radii, 8)
+
+    /** DFT magnitude at the [harmonic]th harmonic of a series round a circle, relative to its mean. */
+    private fun harmonicRelativeAmplitude(radii: DoubleArray, harmonic: Int): Double {
         val n = radii.size
         val mean = radii.average()
         var re = 0.0
         var im = 0.0
         for (k in 0 until n) {
-            val theta = 2.0 * PI * 8 * k / n
+            val theta = 2.0 * PI * harmonic * k / n
             re += radii[k] * cos(theta)
             im += radii[k] * sin(theta)
         }

@@ -67,6 +67,9 @@ class GpuRasterTest {
         /** Seed 42 at 1024, the world the export guards already use. Generated once for them all. */
         val CONFIG = WorldGenConfig(seed = 42L, width = 1024, height = 1024)
 
+        /** The made-up world's row scale: a square grid of this 2:1 world's own cells. */
+        val ROW_SCALE = CONFIG.cellHeightInCellWidths
+
         /** Any ramp will do for a recipe made up by hand; only its length reaches the arithmetic. */
         val RAMP = intArrayOf(
             0xFF0B2239.toInt(), 0xFF2B7398.toInt(), 0xFF9DBE7A.toInt(),
@@ -296,7 +299,8 @@ class GpuRasterTest {
         hillshade = true,
         singleLamp = false,
         slopeScale = 12f * (side / 512f),
-        opennessStep = 2 * side / 512,
+        reliefHorizon = RasterRecipe.reliefHorizon(side, ROW_SCALE),
+        cellHeightInCellWidths = ROW_SCALE.toFloat(),
         ordinaryGround = RasterRecipe.ORDINARY_GROUND,
         showLakes = false,
         showCoastline = true,

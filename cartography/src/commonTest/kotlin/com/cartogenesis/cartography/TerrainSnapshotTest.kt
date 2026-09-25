@@ -3,6 +3,7 @@ package com.cartogenesis.cartography
 import com.cartogenesis.worldgen.WorldGenerationEngine
 import com.cartogenesis.worldgen.model.Acceleration
 import com.cartogenesis.worldgen.model.WorldGenConfig
+import com.cartogenesis.worldgen.pipeline.ThermalLimits
 import kotlin.time.Duration.Companion.minutes
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
@@ -83,8 +84,9 @@ class TerrainSnapshotTest {
         val snapshot = TerrainSnapshot.of(4, 4, FloatArray(16))
         val stored = StoredTerrain(snapshot)
 
-        assertNotNull(stored.erode(4, 4, FloatArray(16), 9f, 1, 0.25f))
-        assertNull(stored.erode(8, 8, FloatArray(64), 9f, 1, 0.25f))
+        val limits = ThermalLimits(eastWest = 9f, northSouth = 4.5f, diagonal = 10f)
+        assertNotNull(stored.erode(4, 4, FloatArray(16), limits, 1, 0.25f))
+        assertNull(stored.erode(8, 8, FloatArray(64), limits, 1, 0.25f))
     }
 
     @OptIn(ExperimentalEncodingApi::class)

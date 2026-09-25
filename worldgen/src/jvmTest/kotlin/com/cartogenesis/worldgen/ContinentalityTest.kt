@@ -3,8 +3,10 @@ package com.cartogenesis.worldgen
 import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.pipeline.ClimateStage
+import com.cartogenesis.worldgen.pipeline.SeaLevelResult
 import com.cartogenesis.worldgen.pipeline.Season
 import kotlin.math.abs
+import kotlin.math.exp
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -47,6 +49,18 @@ class ContinentalityTest : BorrowsSharedWorlds() {
          * three reaches rather than at Moscow.
          */
         const val TARGET_GAP = 6.0
+
+        /** The marine air's e-folding length, `ClimateStage.MARINE_REACH_KM`, which is private. */
+        const val MARINE_REACH_KM = 350.0
+
+        /** How far inland the straight coasts are read, in e-folding lengths. */
+        const val MARINE_REACH_E_FOLDINGS = 4.0
+
+        /**
+         * How far a cell's marine fraction may stand from the curve: a float's rounding of a
+         * fraction and of the distance it is read off, and no more.
+         */
+        const val MARINE_ROUNDING = 1e-4
     }
 
     @Test
@@ -92,6 +106,54 @@ class ContinentalityTest : BorrowsSharedWorlds() {
             ("interior swings %.1f C more than the coast even with the blend off — the guard " +
                 "cannot discriminate the feature from its absence")
                 .format(measured.interiorWithoutBlend - measured.coastWithoutBlend)
+        )
+    }
+
+    /**
+     * Sea air reaches as far inland from a coast facing north as from one facing east, on the
+     * ground: the marine fraction of every land cell is `exp(-d / 350 km)` with `d` its true
+     * distance from the shoreline, whichever way the shoreline faces.
+     *
+     * Two synthetic worlds, sea north of a straight coast along a row and sea west of one along a
+     * column, and every land cell out to four e-folding lengths inland of each held to that curve.
+     * The shoreline is the edge between the last water cell and the first land one, half a row or
+     * half a column from the first land cell's centre, so the distance is measured from there.
+     */
+    @Test
+    fun `sea air reaches as far inland from a coast facing north as from one facing east`() {
+        val config = WorldGenConfig(seed = 42L, width = 512, height = 512)
+        val cellsAcross = config.width
+        val cellsDown = config.height
+        val edge = cellsDown / 4
+        fun sea(isLand: (Int, Int) -> Boolean): SeaLevelResult {
+            val land = BooleanArray(cellsAcross * cellsDown) { isLand(it % cellsAcross, it / cellsAcross) }
+            return SeaLevelResult(0f, land, FloatField(cellsAcross, cellsDown), land.count { it })
+        }
+        val northFacing = ClimateStage.marineAirFraction(config, sea { _, row -> row >= edge })
+        val westFacing = ClimateStage.marineAirFraction(config, sea { column, _ -> column >= edge && column < cellsAcross - edge })
+        var worst = 0.0
+        var worstAt = ""
+        var measured = 0
+        for (inland in 0 until cellsDown) {
+            val kmNorthFacing = (inland + 0.5) * config.cellHeightKm
+            if (kmNorthFacing <= MARINE_REACH_E_FOLDINGS * MARINE_REACH_KM) {
+                val read = northFacing.data[(edge + inland) * cellsAcross + cellsAcross / 2].toDouble()
+                val error = abs(read - exp(-kmNorthFacing / MARINE_REACH_KM))
+                measured++
+                if (error > worst) { worst = error; worstAt = "${"%.0f".format(kmNorthFacing)} km south of a coast facing north" }
+            }
+            val kmWestFacing = (inland + 0.5) * config.cellWidthKm
+            if (kmWestFacing <= MARINE_REACH_E_FOLDINGS * MARINE_REACH_KM) {
+                val read = westFacing.data[cellsDown / 2 * cellsAcross + edge + inland].toDouble()
+                val error = abs(read - exp(-kmWestFacing / MARINE_REACH_KM))
+                measured++
+                if (error > worst) { worst = error; worstAt = "${"%.0f".format(kmWestFacing)} km east of a coast facing west" }
+            }
+        }
+        println("CONTINENTALITY marine air on two straight coasts: $measured cells, the worst off exp(-d / 350 km) by %.4f, $worstAt".format(worst))
+        assertTrue(
+            worst <= MARINE_ROUNDING,
+            "the marine fraction stands ${"%.3f".format(worst)} off exp(-d / 350 km) at $worstAt"
         )
     }
 

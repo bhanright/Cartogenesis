@@ -542,9 +542,19 @@ class GroundTextureTest : BorrowsSharedWorlds() {
          * Neither figure is anywhere near the claim's own scale: the plains would have to reach
          * the texture-off control's 104 m to be sandpaper, and the ranges are still 1.7 times the
          * plains.
+         *
+         * **Re-taken twice**, when every operator was put on the ground's ruler and every
+         * continent was redrawn with it (docs/DESIGN_LEDGER.md, Fix 2): 68.6 and 103.8, the lowest
+         * quarter reading 64, 97, 58, 76 and 47 m on the five seeds and the highest 102, 125, 94,
+         * 94 and 104. The plains are a hair rougher and the ranges smoother. No one cause was
+         * isolated, since every world moved at once; one that is certain to be in it is that the
+         * four-cell box this reads is twice as wide as it is tall on the ground, and the relief it
+         * smooths is round on the ground now rather than in cells. The claim's scale has narrowed
+         * and still holds: the texture-off control reads 88.6 and 145.2, so the plains stand 20 m
+         * short of sandpaper and the ranges are 1.5 times the plains.
          */
-        const val RECORDED_LOWEST_QUARTER_TEXTURE_METRES = 65.7
-        const val RECORDED_HIGHEST_QUARTER_TEXTURE_METRES = 110.4
+        const val RECORDED_LOWEST_QUARTER_TEXTURE_METRES = 68.6
+        const val RECORDED_HIGHEST_QUARTER_TEXTURE_METRES = 103.8
 
         /**
          * How far from the crust's own edge a drowned continental cell may lie and still count as

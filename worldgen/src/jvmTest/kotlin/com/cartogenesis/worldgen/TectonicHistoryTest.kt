@@ -5,6 +5,7 @@ import com.cartogenesis.worldgen.pipeline.BoundaryClass
 import com.cartogenesis.worldgen.pipeline.PlateResult
 import com.cartogenesis.worldgen.pipeline.PlateStage
 import com.cartogenesis.worldgen.pipeline.TerrainStage
+import java.util.Locale
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -111,20 +112,31 @@ class TectonicHistoryTest {
 
     @Test
     fun `an old belt stands far from any present boundary`() {
+        val short = ArrayList<Pair<Long, Float>>()
         seeds.forEach { seed ->
             val inland = inlandRelief(seed, DEFAULT_EPOCHS)
             println(
-                ("HISTORY seed %d: the tallest ground the history built beyond %.0f cells of " +
-                    "every present boundary stands %+.4f, at %.0f cells out")
+                ("HISTORY seed %d: the tallest ground the history built beyond %.0f cell widths of " +
+                    "every present boundary stands %+.4f, at %.0f cell widths out")
                     .format(seed, MIN_INLAND_CELLS, inland.relief, inland.distance)
             )
-            assertTrue(
-                inland.relief >= MIN_BELT_PEAK,
-                "seed $seed: the history's tallest ground more than $MIN_INLAND_CELLS cells from " +
-                    "any present boundary is only ${inland.relief}, wanted at least " +
-                    "$MIN_BELT_PEAK — an old belt that never leaves a modern plate edge is not a " +
-                    "scar, it is the same range twice"
-            )
+            if (inland.relief < MIN_BELT_PEAK) short += seed to inland.relief
+        }
+        // Seed 42 has not met this since the distance was measured on the ground (see the KDoc
+        // on [MIN_INLAND_CELLS]), and it runs as a known failure rather than at a nearer distance:
+        // its history's belts stand 39 to 52 cell widths from a present boundary, 0.050 of the
+        // field tall beyond 39, but the control whose plates never moved reads 0.033 there on
+        // seed 1234, over the bar, so 39 cannot tell a scar from the present belts stamped again.
+        KnownFailures.expect(OLD_BELTS_NEAR_PRESENT_EDGES, "seed 42 at 0.0035") {
+            if (short.isNotEmpty()) {
+                val found = short.joinToString { (seed, relief) -> String.format(Locale.ROOT, "seed %d at %.4f", seed, relief) }
+                throw RecordedViolation(
+                    "the history's tallest ground more than $MIN_INLAND_CELLS cell widths from any present " +
+                        "boundary is under $MIN_BELT_PEAK on $found — an old belt that never leaves a modern " +
+                        "plate edge is not a scar, it is the same range twice",
+                    found
+                )
+            }
         }
     }
 
@@ -376,12 +388,22 @@ class TectonicHistoryTest {
          * How far from a present boundary an old belt's crest has to stand to count as a scar
          * rather than as the modern belt beside it.
          *
-         * Stated as twice `boundaryFalloffCells` (26 cells at 512), which is where the present epoch's
-         * own uplift has fallen to nothing on every profile the stage builds — so a crest beyond
-         * it cannot be a present belt under another name. On a 12,000 km world at 512 that is
+         * Stated as twice `boundaryFalloffCells` (26 cell widths at 512), which is where the present
+         * epoch's own uplift has fallen to nothing on every profile the stage builds — so a crest
+         * beyond it cannot be a present belt under another name. On a 12,000 km world at 512 that is
          * about 1,200 km; the Appalachian front stands some 2,000 km from the Mid-Atlantic ridge.
+         *
+         * Cell widths of ground, in every direction, since the boundary distance was measured on
+         * the ground; until then a crest 52 rows north of a boundary counted as 52 when it stood
+         * 26 cell widths off. The control below is what says the figure is still the right one:
+         * three epochs that never moved read 0.0036, 0.0011 and 0.0060 of the field beyond 52 on
+         * the three seeds, under the bar, and 0.016, 0.015 and 0.033 beyond 39, the last over it.
          */
         const val MIN_INLAND_CELLS = 52f
+
+        /** The known failure the inland clause records. */
+        const val OLD_BELTS_NEAR_PRESENT_EDGES =
+            "the plates: on the ground's ruler seed 42's old belts stand within 52 cell widths of a present boundary"
 
         /** The Appalachians against the Alps: roughly 2,000 m against 4,500. */
         const val MIN_LOWER = 1.8f

@@ -11,6 +11,7 @@ import com.cartogenesis.cartography.WorldDocument
 import com.cartogenesis.cartography.WorldLibrary
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.ErosionAccelerator
+import com.cartogenesis.worldgen.pipeline.ThermalLimits
 
 /**
  * A host that does nothing, so a test can ask what the shared code does with it.
@@ -123,7 +124,7 @@ internal object FakeAccelerator : ErosionAccelerator {
         width: Int,
         height: Int,
         heights: FloatArray,
-        maxOrthogonalDrop: Float,
+        limits: ThermalLimits,
         passes: Int,
         rate: Float
     ): FloatArray? = null

@@ -2,11 +2,13 @@ package com.cartogenesis.worldgen.pipeline
 
 import com.cartogenesis.worldgen.concurrent.parallelChunks
 import com.cartogenesis.worldgen.math.BoxBlur
-import com.cartogenesis.worldgen.math.DistanceTransform
+import com.cartogenesis.worldgen.math.GaussianBlur
 import com.cartogenesis.worldgen.math.JumpFloodDistance
+import com.cartogenesis.worldgen.math.LongMinHeap
 import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.TectonicsConfig
 import com.cartogenesis.worldgen.model.WorldGenConfig
+import com.cartogenesis.worldgen.noise.GroundLattice
 import com.cartogenesis.worldgen.noise.PerlinNoise
 import kotlin.math.PI
 import kotlin.math.abs
@@ -73,7 +75,7 @@ data class PlateResult(
     val plates: List<Plate>,
     /** Plate id per cell. */
     val plateId: IntArray,
-    /** Distance in cells to the nearest plate boundary. */
+    /** Distance on the ground to the nearest plate boundary, in cell widths. */
     val boundaryDistance: FloatField,
     /** [BoundaryType] ordinal of the nearest boundary, per cell. */
     val nearestBoundaryType: IntArray,
@@ -270,38 +272,19 @@ object PlateStage {
                 if (present) {
                     plates
                 } else {
-                    displacedPlates(
-                        plates,
-                        tectonics.epochDriftCells * epochsAgo,
-                        cellsAcross,
-                        cellsDown
-                    )
+                    displacedPlates(config, plates, tectonics.epochDriftCells * epochsAgo)
                 }
             val epochPlateId = if (present) drawn.plateId else assignPlates(config, epochPlates)
-            val boundaries = classifyBoundaries(cellsAcross, cellsDown, epochPlateId, epochPlates)
+            val boundaries = classifyBoundaries(config, epochPlateId, epochPlates)
             // Segmentation is a live rift's structure. A failed one is a filled sag (see the
             // CONTINENTAL_RIFT arm of [stampEpoch]), so only the present epoch is walked — which
             // also keeps the present segments, and their guard's figures, exactly as they were.
             if (present) segmentRifts(config, boundaries)
 
-            // Euclidean, by jump flooding: every belt profile below is a function of this distance,
-            // so a metric whose contours are octagons hands its facets to the plateau rims and the
-            // trench walls. See [JumpFloodDistance].
-            val epochDistanceCells = FloatArray(cellsAcross * cellsDown) { JumpFloodDistance.INFINITE }
-            val nearestBoundaryCell = IntArray(cellsAcross * cellsDown) { -1 }
-            boundaries.keys.forEach { cell ->
-                epochDistanceCells[cell] = 0f
-                nearestBoundaryCell[cell] = cell
-            }
+            val epochDistance = boundaryDistance(config, boundaries.keys)
+            val epochDistanceCells = epochDistance.distanceCellWidths
+            val nearestBoundaryCell = epochDistance.nearestBoundaryCell
             val hasBoundaries = boundaries.isNotEmpty()
-            if (hasBoundaries) {
-                JumpFloodDistance.run(
-                    cellsAcross,
-                    cellsDown,
-                    epochDistanceCells,
-                    nearestBoundaryCell
-                )
-            }
 
             if (present) {
                 plateId = epochPlateId
@@ -349,14 +332,7 @@ object PlateStage {
             )
 
             if (!present) {
-                // The profile rounds with age: what was stamped with a crest and a toe comes out
-                // as a swell. Two passes rather than the usual three, because an old range should
-                // read as rounded and not as a stain.
-                BoxBlur.apply(
-                    epochUplift,
-                    radius = (tectonics.beltAgeBlurCells * epochsAgo).roundToInt(),
-                    passes = 2
-                )
+                roundWithAge(config, epochUplift, epochsAgo)
                 for (cell in uplift.data.indices) uplift.data[cell] += epochUplift.data[cell]
             }
         }
@@ -369,11 +345,7 @@ object PlateStage {
             continentalShare.data[cell] =
                 if (plates[plateId[cell]].type == PlateType.CONTINENTAL) 1f else 0f
         }
-        // Half the margin's width, because a box blur of radius r spreads a step over 2r.
-        BoxBlur.apply(
-            continentalShare,
-            radius = config.wholeCellsFor(tectonics.crustMarginKm / 2.0)
-        )
+        blurAcrossTheMargin(config, continentalShare)
         roughenMargins(config, continentalShare)
 
         stampHotspotChains(config, plates, plateId, uplift)
@@ -408,7 +380,7 @@ object PlateStage {
         // come out as straight parallel lines that never join. This gives the water something to
         // converge on.
         val detailNoise = PerlinNoise(config.seed * 7919 + 13)
-        val detailCyclesAcrossMap = tectonics.detailFrequency.toFloat()
+        val detailLattice = GroundLattice(config, tectonics.detailFrequency.toFloat())
 
         // How far in from the edge of its own crust each cell sits, 0 at the edge and 1 in the
         // craton. Both the crust's thickness and the relief it carries are read off it. With
@@ -486,11 +458,11 @@ object PlateStage {
                             crustReliefMetres + orogenShare * orogenReliefMetres
                         }
                     val detail = tectonics.detailAmplitude * detailNoise.fbm(
-                        column * detailCyclesAcrossMap / cellsAcross,
-                        row * detailCyclesAcrossMap / cellsDown,
+                        detailLattice.x(column),
+                        detailLattice.y(row),
                         4,
-                        tectonics.detailFrequency,
-                        tectonics.detailFrequency
+                        detailLattice.period,
+                        detailLattice.period
                     )
                     // The base noise is a standard score, so multiplying by a deviation in metres
                     // is all there is to it, and its mean of zero is what keeps it from moving the
@@ -862,7 +834,8 @@ object PlateStage {
      * interior at exactly the level its column floats at and lets the margin wander.
      *
      * The cycles are counted across the map rather than in cells, as every other noise in this file
-     * is, so a margin has the same shape at 512 and at 2048 with more of its octaves resolved.
+     * is, so a margin has the same shape at 512 and at 2048 with more of its octaves resolved, and
+     * on a lattice square on the ground, so it wanders as far north-south as east-west.
      */
     private fun roughenMargins(config: WorldGenConfig, continentalShare: FloatField) {
         val roughness = config.tectonics.marginRoughness
@@ -870,6 +843,7 @@ object PlateStage {
         val cellsAcross = config.width
         val cellsDown = config.height
         val noise = PerlinNoise(config.seed * 104729 + 6199)
+        val lattice = GroundLattice(config, MARGIN_CYCLES)
         parallelChunks(0, cellsDown) { startRow, endRow ->
             for (row in startRow until endRow) {
                 for (column in 0 until cellsAcross) {
@@ -878,11 +852,11 @@ object PlateStage {
                     val inTheBand = 4f * share * (1f - share)
                     if (inTheBand <= 0f) continue
                     val wander = noise.fbm(
-                        column * MARGIN_CYCLES / cellsAcross,
-                        row * MARGIN_CYCLES / cellsDown,
+                        lattice.x(column),
+                        lattice.y(row),
                         MARGIN_OCTAVES,
-                        MARGIN_CYCLES.toInt(),
-                        MARGIN_CYCLES.toInt()
+                        lattice.period,
+                        lattice.period
                     )
                     continentalShare.data[cell] =
                         (share + roughness * inTheBand * wander).coerceIn(0f, 1f)
@@ -952,7 +926,7 @@ object PlateStage {
      * nothing in the pipeline would ever read.
      */
     internal class EpochBoundaries(
-        /** Cells to the nearest boundary of that epoch. */
+        /** Cell widths on the ground to the nearest boundary of that epoch. */
         val distanceCells: FloatArray,
         /** [BoundaryClass] ordinal of that nearest boundary, or -1 where there was none. */
         val nearestBoundaryClass: IntArray
@@ -965,19 +939,13 @@ object PlateStage {
         val drawn = drawPlates(config)
         val epochPlates =
             if (epochsAgo == 0) drawn.plates
-            else displacedPlates(drawn.plates, tectonics.epochDriftCells * epochsAgo, cellsAcross, cellsDown)
+            else displacedPlates(config, drawn.plates, tectonics.epochDriftCells * epochsAgo)
         val plateId = if (epochsAgo == 0) drawn.plateId else assignPlates(config, epochPlates)
-        val boundaries = classifyBoundaries(cellsAcross, cellsDown, plateId, epochPlates)
+        val boundaries = classifyBoundaries(config, plateId, epochPlates)
 
-        val distanceCells = FloatArray(cellsAcross * cellsDown) { JumpFloodDistance.INFINITE }
-        val nearestBoundaryCell = IntArray(cellsAcross * cellsDown) { -1 }
-        boundaries.keys.forEach { cell ->
-            distanceCells[cell] = 0f
-            nearestBoundaryCell[cell] = cell
-        }
-        if (boundaries.isNotEmpty()) {
-            JumpFloodDistance.run(cellsAcross, cellsDown, distanceCells, nearestBoundaryCell)
-        }
+        val distance = boundaryDistance(config, boundaries.keys)
+        val distanceCells = distance.distanceCellWidths
+        val nearestBoundaryCell = distance.nearestBoundaryCell
 
         val nearestBoundaryClass = IntArray(cellsAcross * cellsDown) { -1 }
         for (cell in nearestBoundaryClass.indices) {
@@ -987,8 +955,78 @@ object PlateStage {
         return EpochBoundaries(distanceCells, nearestBoundaryClass)
     }
 
+    /** How far every cell stands from the nearest of a set of boundary cells, and which one that is. */
+    internal class BoundaryDistance(
+        /** The distance, in cell widths; [JumpFloodDistance.INFINITE] where there is no boundary. */
+        val distanceCellWidths: FloatArray,
+        /** The index of the nearest boundary cell, or -1 where there is none. */
+        val nearestBoundaryCell: IntArray
+    )
+
     /**
-     * Every plate seed carried back along minus its own drift, by [distanceCells].
+     * The distance every belt profile is a function of: from each cell to the nearest of
+     * [boundaryCells], Euclidean by jump flooding, so a metric whose contours are octagons does not
+     * hand its facets to the plateau rims and the trench walls. See [JumpFloodDistance].
+     *
+     * On the ground and in cell widths, told how tall a row is: every belt's half-width and offset
+     * in `TectonicsConfig` is a count of cell widths, so a belt reaches the same kilometres from a
+     * boundary running east-west as from one running north-south. Counted in plain cells it
+     * reached half as far north and south, and every range was twice as broad east-west as the
+     * same range turned through a right angle.
+     *
+     * Internal so `TectonicGroundTest` can measure it on a boundary it lays where it likes.
+     */
+    internal fun boundaryDistance(config: WorldGenConfig, boundaryCells: Collection<Int>): BoundaryDistance {
+        val cellCount = config.width * config.height
+        val distanceCellWidths = FloatArray(cellCount) { JumpFloodDistance.INFINITE }
+        val nearestBoundaryCell = IntArray(cellCount) { -1 }
+        boundaryCells.forEach { cell ->
+            distanceCellWidths[cell] = 0f
+            nearestBoundaryCell[cell] = cell
+        }
+        if (boundaryCells.isNotEmpty()) {
+            JumpFloodDistance.run(
+                config.width, config.height, distanceCellWidths, nearestBoundaryCell,
+                config.cellHeightInCellWidths
+            )
+        }
+        return BoundaryDistance(distanceCellWidths, nearestBoundaryCell)
+    }
+
+    /**
+     * Blurs a map of which crust each cell is made of across the boundary between the two, in
+     * place: the band this makes is the continental margin [Isostasy.Columns] turns into a shelf,
+     * a slope and a rise.
+     *
+     * A Gaussian round on the ground, so a straight crust edge becomes the same ramp whichever way
+     * it runs, and its spread is the one that makes the ramp's 10-90% width
+     * `TectonicsConfig.crustMarginKm`: a step convolved with a Gaussian is an error function, which
+     * climbs from a tenth to nine tenths over [TEN_TO_NINETY_IN_STANDARD_DEVIATIONS] standard
+     * deviations. The box blur this replaced took one radius in cells for both axes, so its ramp was
+     * 389 km wide east-west and 195 km north-south against the 300 declared, square in support
+     * and faintly diagonal in shape. See docs/DESIGN_LEDGER.md, Fix 2.
+     *
+     * Internal so `TectonicGroundTest` can measure the margin's width on edges it lays where it
+     * likes.
+     */
+    internal fun blurAcrossTheMargin(config: WorldGenConfig, crust: FloatField) {
+        val spreadKm = config.tectonics.crustMarginKm / TEN_TO_NINETY_IN_STANDARD_DEVIATIONS
+        GaussianBlur.apply(crust, spreadKm / config.cellWidthKm, spreadKm / config.cellHeightKm)
+    }
+
+    /**
+     * How many standard deviations of a Gaussian an error-function ramp takes to climb from a tenth
+     * to nine tenths: twice the normal quantile at 0.9, `2 * 1.2815515655446004`.
+     */
+    private const val TEN_TO_NINETY_IN_STANDARD_DEVIATIONS = 2.5631031310892008
+
+    /**
+     * Every plate seed carried back along minus its own drift, by [distanceCellWidths] of ground.
+     *
+     * A drift is a direction on the ground, drawn at a uniform angle, so the same distance is a
+     * whole column per cell width east-west and two rows per cell width north-south on this map's
+     * cells; carried back in cells both ways, a plate drifting north travelled half as far as one
+     * drifting east.
      *
      * X wraps, because the world is a cylinder. Y clamps, because it is not: a plate whose drift
      * points at a pole was, far enough back, at the pole and no further, and a seed off the edge
@@ -996,16 +1034,34 @@ object PlateStage {
      * the later id simply takes the cell and the earlier plate has no region in that epoch, which
      * is a plate that had not yet rifted away from its neighbour.
      */
-    private fun displacedPlates(
+    internal fun displacedPlates(
+        config: WorldGenConfig,
         plates: List<Plate>,
-        distanceCells: Float,
-        width: Int,
-        height: Int
+        distanceCellWidths: Float
     ): List<Plate> = plates.map { plate ->
-        var wrappedSeedX = (plate.seedX - plate.driftX * distanceCells).roundToInt() % width
+        val width = config.width
+        val height = config.height
+        val distanceRows = distanceCellWidths / config.cellHeightInCellWidths.toFloat()
+        var wrappedSeedX = (plate.seedX - plate.driftX * distanceCellWidths).roundToInt() % width
         if (wrappedSeedX < 0) wrappedSeedX += width
-        val clampedSeedY = (plate.seedY - plate.driftY * distanceCells).roundToInt().coerceIn(0, height - 1)
+        val clampedSeedY = (plate.seedY - plate.driftY * distanceRows).roundToInt().coerceIn(0, height - 1)
         plate.copy(seedX = wrappedSeedX, seedY = clampedSeedY)
+    }
+
+    /**
+     * Rounds one past epoch's uplift, in place: what was stamped with a crest and a toe comes out as
+     * a swell, the more so the older it is.
+     *
+     * Internal so `TectonicGroundTest` can measure the kernel's spread on the ground.
+     */
+    internal fun roundWithAge(config: WorldGenConfig, uplift: FloatField, epochsAgo: Int) {
+        // A Gaussian round on the ground with the spread two box passes of the setting's radius
+        // have east-west, `sqrt(2 r (r + 1) / 3)` cell widths: the same rounding the belts were
+        // measured with along a row, and now as far down a column, where the square window in cells
+        // rounded half as far on the ground and cut its support off in a rectangle.
+        val radiusCellWidths = config.tectonics.beltAgeBlurCells.toDouble() * epochsAgo
+        val spreadCellWidths = sqrt(2.0 * radiusCellWidths * (radiusCellWidths + 1.0) / 3.0)
+        GaussianBlur.apply(uplift, spreadCellWidths, spreadCellWidths / config.cellHeightInCellWidths)
     }
 
     /**
@@ -1074,6 +1130,13 @@ object PlateStage {
         val past = epochsAgo > 0
         val ageBandBase = epochsAgo.toFloat() / epochs
         val ageBandSpan = 1f / epochs
+        // Every belt noise on a lattice square on the ground, so a belt swells, pinches and breaks
+        // into massifs at the same spacing whichever way it runs.
+        val widthSwellLattice = GroundLattice(config, WIDTH_SWELL_CYCLES)
+        val roughnessLattice = GroundLattice(config, ROUGHNESS_CYCLES)
+        val rangeLattice = GroundLattice(config, tectonics.rangeVariationCycles)
+        val edgeJitterLattice = GroundLattice(config, EDGE_JITTER_CYCLES)
+        val arcChainLattice = GroundLattice(config, ARC_CHAIN_CYCLES)
 
         run {
             val beltReachCells = tectonics.boundaryFalloffCells
@@ -1109,11 +1172,11 @@ object PlateStage {
                         // stays continuous rather than dissolving into blotches.
                         val widthScale = WIDTH_SWELL_MIN + WIDTH_SWELL_SPAN * (0.5f + 0.5f *
                             widthNoise.fbm(
-                                column * WIDTH_SWELL_CYCLES / cellsAcross,
-                                row * WIDTH_SWELL_CYCLES / cellsDown,
+                                widthSwellLattice.x(column),
+                                widthSwellLattice.y(row),
                                 3,
-                                WIDTH_SWELL_CYCLES.toInt(),
-                                WIDTH_SWELL_CYCLES.toInt()
+                                widthSwellLattice.period,
+                                widthSwellLattice.period
                             ))
                         val narrow = sharpFalloff(
                             distanceFromBoundary,
@@ -1122,11 +1185,11 @@ object PlateStage {
 
                         // Breaks up the otherwise uniform ridge profile into distinct peaks.
                         val roughness = ROUGHNESS_MIN + ROUGHNESS_SPAN * ridgeNoise.fbm(
-                            column * ROUGHNESS_CYCLES / cellsAcross,
-                            row * ROUGHNESS_CYCLES / cellsDown,
+                            roughnessLattice.x(column),
+                            roughnessLattice.y(row),
                             4,
-                            ROUGHNESS_CYCLES.toInt(),
-                            ROUGHNESS_CYCLES.toInt()
+                            roughnessLattice.period,
+                            roughnessLattice.period
                         )
 
                         // Slow variation along the length of a belt. Without it, every convergent
@@ -1134,10 +1197,10 @@ object PlateStage {
                         // thing that makes plate edges read as drawn on rather than grown. Real
                         // ranges swell, sag, and break into separate massifs.
                         val alongStrikeAmount = tectonics.rangeVariation.coerceIn(0f, 1f)
-                        val swellCycles = tectonics.rangeVariationCycles.toInt().coerceAtLeast(1)
+                        val swellCycles = rangeLattice.period.coerceAtLeast(1)
                         val swell = rangeNoise.fbm(
-                            column * tectonics.rangeVariationCycles / cellsAcross,
-                            row * tectonics.rangeVariationCycles / cellsDown,
+                            rangeLattice.x(column),
+                            rangeLattice.y(row),
                             3,
                             swellCycles,
                             swellCycles
@@ -1207,11 +1270,11 @@ object PlateStage {
                         // docs/DESIGN_LEDGER.md, G4.
                         val edgeJitter = EDGE_JITTER_MIN + EDGE_JITTER_SPAN *
                             (0.5f + 0.5f * widthNoise.fbm(
-                                column * EDGE_JITTER_CYCLES / cellsAcross,
-                                row * EDGE_JITTER_CYCLES / cellsDown,
+                                edgeJitterLattice.x(column),
+                                edgeJitterLattice.y(row),
                                 3,
-                                EDGE_JITTER_CYCLES.toInt(),
-                                EDGE_JITTER_CYCLES.toInt()
+                                edgeJitterLattice.period,
+                                edgeJitterLattice.period
                             )).coerceIn(0f, 1f)
 
                         upliftHere = when (interaction.pairClass) {
@@ -1234,9 +1297,8 @@ object PlateStage {
                                             tectonics.arcOffsetCells,
                                             tectonics.arcWidthCells
                                         ) *
-                                        volcanicChain(
-                                            arcNoise, column, row, cellsAcross, cellsDown
-                                        ) * alongRange
+                                        volcanicChain(arcNoise, arcChainLattice, column, row) *
+                                        alongRange
                                 }
 
                             // Continental against continental. Neither side will go under, so the
@@ -1532,10 +1594,12 @@ object PlateStage {
         if (tectonics.hotspotPlateFraction <= 0f || tectonics.hotspotHeight == 0f) return
         if (tectonics.hotspotRadiusCells <= 0f || tectonics.hotspotSpacingCells <= 0f) return
 
-        val cellsAcross = uplift.width
-        val cellsDown = uplift.height
         val random = Random(config.seed * 31337 + 7)
         val sizeNoise = PerlinNoise(config.seed * 104729 + 4441)
+        val sizeLattice = GroundLattice(config, SEAMOUNT_SIZE_CYCLES)
+        // A chain's lengths are in cell widths of ground, so a step north or south of one is this
+        // many rows.
+        val rowsPerCellWidth = (1.0 / config.cellHeightInCellWidths).toFloat()
         var ventIndex = 0
 
         plates.forEach { plate ->
@@ -1544,9 +1608,9 @@ object PlateStage {
             // placed anywhere at all lands on some other plate nineteen times in twenty, and the
             // clip to the carrying plate in [stampSeamount] then erases the whole chain — which is
             // exactly what the first version of this did, on every seed tried.
-            val spreadCells = tectonics.hotspotChainLengthCells * 0.3f
-            val originX = plate.seedX + (random.nextFloat() - 0.5f) * spreadCells
-            val originY = plate.seedY + (random.nextFloat() - 0.5f) * spreadCells
+            val spreadCellWidths = tectonics.hotspotChainLengthCells * 0.3f
+            val originX = plate.seedX + (random.nextFloat() - 0.5f) * spreadCellWidths
+            val originY = plate.seedY + (random.nextFloat() - 0.5f) * spreadCellWidths * rowsPerCellWidth
             if (plate.type != PlateType.OCEANIC) return@forEach
             if (roll >= tectonics.hotspotPlateFraction) return@forEach
 
@@ -1556,13 +1620,14 @@ object PlateStage {
                 // while ago has since been carried a while along the drift vector. Older means
                 // further along, and lower: the crust cools and the seamount subsides with it.
                 val ventX = originX + plate.driftX * travelledCells
-                val ventY = originY + plate.driftY * travelledCells
+                val ventY = originY + plate.driftY * travelledCells * rowsPerCellWidth
                 val ageAlongChain = travelledCells / tectonics.hotspotChainLengthCells
-                val sizeJitter = 0.6f + 0.8f *
-                    (0.5f + 0.5f * sizeNoise.fbm(ventX * 9f / cellsAcross, ventY * 9f / cellsDown, 2, 9, 9))
-                        .coerceIn(0f, 1f)
+                val sizeJitter = 0.6f + 0.8f * (0.5f + 0.5f * sizeNoise.fbm(
+                    sizeLattice.x(ventX), sizeLattice.y(ventY), 2, sizeLattice.period, sizeLattice.period
+                )).coerceIn(0f, 1f)
                 stampSeamount(
                     uplift = uplift,
+                    cellHeightInCellWidths = config.cellHeightInCellWidths.toFloat(),
                     plateId = plateId,
                     plate = plate.id,
                     ventX = ventX,
@@ -1582,14 +1647,16 @@ object PlateStage {
     }
 
     /**
-     * One seamount: a smooth cone of [radius] cells, wrapping in x and clipped in y.
+     * One seamount: a smooth cone of [radius] cell widths on the ground, wrapping in x and clipped
+     * in y.
      *
-     * The falloff is true Euclidean distance and always was, never the chamfer approximation
-     * [DistanceTransform] still uses in this file for plate assignment, so the eight-sided look a
+     * Round on the ground, so [radius] columns across and twice as many rows down on this map's
+     * cells; stamped round in cells, every cone was an ellipse twice as long east-west as
+     * north-south. The falloff is true Euclidean distance on the ground, so the eight-sided look a
      * cone can have is not the metric's doing. It is rasterization: a stamp four or five cells
-     * across has too little grid to draw a circle, and the four compass and four diagonal
-     * bearings — the only ones a square grid hits exactly — come out measurably longer than the
-     * bearings between them however continuous the formula behind them is.
+     * across has too little grid to draw a circle, and the bearings a grid hits exactly come out
+     * measurably longer than the bearings between them however continuous the formula behind them
+     * is.
      *
      * [detail] answers that by supersampling each cell, which is cheap when the whole stamp is a
      * few cells wide, and while there breaks the remaining perfect symmetry with a few
@@ -1600,6 +1667,7 @@ object PlateStage {
      */
     private fun stampSeamount(
         uplift: FloatField,
+        cellHeightInCellWidths: Float,
         plateId: IntArray,
         plate: Int,
         ventX: Float,
@@ -1613,7 +1681,11 @@ object PlateStage {
         if (amplitude <= 0f) return
         val cellsAcross = uplift.width
         val cellsDown = uplift.height
-        val boundingRadiusCells = radius.toInt() + 1
+        // Out to the furthest the rim's harmonics can push it, so no cone is cut off along a row or
+        // a column by its own box.
+        val widestRimCellWidths = radius * (1f + RIM_HARMONICS * (RIM_HARMONIC_MIN + RIM_HARMONIC_SPAN))
+        val boundingColumns = widestRimCellWidths.toInt() + 1
+        val boundingRows = (widestRimCellWidths / cellHeightInCellWidths).toInt() + 1
 
         val harmonics = if (detail) rimHarmonics(seedHash(seed, ventIndex.toLong())) else null
         // Sub-cell samples per axis, so a stamp only a few cells across is area-averaged rather
@@ -1624,9 +1696,9 @@ object PlateStage {
         val subOffset = (subStep - 1f) / 2f
         val subSampleCount = (subSamplesPerAxis * subSamplesPerAxis).toFloat()
 
-        for (row in (ventY.toInt() - boundingRadiusCells)..(ventY.toInt() + boundingRadiusCells)) {
+        for (row in (ventY.toInt() - boundingRows)..(ventY.toInt() + boundingRows)) {
             if (row < 0 || row >= cellsDown) continue
-            for (column in (ventX.toInt() - boundingRadiusCells)..(ventX.toInt() + boundingRadiusCells)) {
+            for (column in (ventX.toInt() - boundingColumns)..(ventX.toInt() + boundingColumns)) {
                 var wrappedColumn = column % cellsAcross
                 if (wrappedColumn < 0) wrappedColumn += cellsAcross
                 val cell = row * cellsAcross + wrappedColumn
@@ -1640,7 +1712,7 @@ object PlateStage {
                         var offsetX = sampleX - ventX
                         if (offsetX > cellsAcross / 2f) offsetX -= cellsAcross
                         if (offsetX < -cellsAcross / 2f) offsetX += cellsAcross
-                        val offsetY = sampleY - ventY
+                        val offsetY = (sampleY - ventY) * cellHeightInCellWidths
                         val distance = sqrt(offsetX * offsetX + offsetY * offsetY)
                         val rim = if (harmonics == null) {
                             radius
@@ -1897,55 +1969,40 @@ object PlateStage {
     }
 
     /**
-     * Chamfer-Voronoi assignment, then a noise domain-warp so boundaries meander instead of
-     * looking like straight Voronoi edges.
+     * The nearest seed's plate at every cell, on the ground, then a noise domain-warp so boundaries
+     * meander instead of looking like straight Voronoi edges.
      *
-     * Deliberately still the chamfer transform, where every consumer that reads a *distance* has
-     * moved to [JumpFloodDistance]. Nothing here reads the distance: only the label survives, and
-     * what the label decides is a partition of the map into plates — which cell belongs to which
-     * seed.
-     * There is no contour to facet, so the octagonal metric costs nothing visible; and since a
-     * Euclidean Voronoi would draw its cell walls in slightly different places, switching it would
-     * redraw every plate of every world ever generated for no gain anybody could see. Left alone
-     * on purpose.
+     * Still a warped partition, and rule 13 names a nearest-seed partition among the shapes it
+     * rejects; what is measured of the boundaries it draws is in docs/DESIGN_LEDGER.md, Fix 2, and
+     * reshaping them is its own item on the roadmap. What changed is the ruler: the partition's
+     * metric is Euclid's on the ground, and the warp moves a boundary as far north-south as
+     * east-west in kilometres, on a noise lattice square on the ground. Both were square in cells,
+     * which on this map's cells drew every plate twice as wide as it is tall on the ground and
+     * warped its boundaries twice as far and twice as tightly east-west.
      */
     private fun assignPlates(config: WorldGenConfig, plates: List<Plate>): IntArray {
         val cellsAcross = config.width
         val cellsDown = config.height
-
-        val distanceToSeed = FloatArray(cellsAcross * cellsDown) { DistanceTransform.INFINITE }
-        val nearestSeedPlate = IntArray(cellsAcross * cellsDown) { -1 }
-        plates.forEach { plate ->
-            val cell = plate.seedY * cellsAcross + plate.seedX
-            distanceToSeed[cell] = 0f
-            nearestSeedPlate[cell] = plate.id
-        }
-        DistanceTransform.run(cellsAcross, cellsDown, distanceToSeed, nearestSeedPlate)
+        val nearestSeedPlate = nearestSeedPartition(config, plates)
 
         val warpX = PerlinNoise(config.seed * 6151 + 3)
         val warpY = PerlinNoise(config.seed * 6151 + 9)
-        val warpAmplitudeCells =
+        val lattice = GroundLattice(config, WARP_CYCLES)
+        val warpAmplitudeCellWidths =
             config.tectonics.boundaryFalloffCells * WARP_AMPLITUDE_IN_BELT_WIDTHS
+        val warpAmplitudeRows = (warpAmplitudeCellWidths / config.cellHeightInCellWidths).toFloat()
 
         val warped = IntArray(cellsAcross * cellsDown)
         // Reads `raw`, writes its own cell of `warped` — no overlap between rows.
         parallelChunks(0, cellsDown) { startRow, endRow ->
             for (row in startRow until endRow) {
                 for (column in 0 until cellsAcross) {
-                    val warpAcross = warpAmplitudeCells * warpX.fbm(
-                        column * WARP_CYCLES / cellsAcross,
-                        row * WARP_CYCLES / cellsDown,
-                        4,
-                        WARP_CYCLES.toInt(),
-                        WARP_CYCLES.toInt()
-                    )
-                    val warpDown = warpAmplitudeCells * warpY.fbm(
-                        column * WARP_CYCLES / cellsAcross,
-                        row * WARP_CYCLES / cellsDown,
-                        4,
-                        WARP_CYCLES.toInt(),
-                        WARP_CYCLES.toInt()
-                    )
+                    val latticeX = lattice.x(column)
+                    val latticeY = lattice.y(row)
+                    val warpAcross = warpAmplitudeCellWidths *
+                        warpX.fbm(latticeX, latticeY, 4, lattice.period, lattice.period)
+                    val warpDown = warpAmplitudeRows *
+                        warpY.fbm(latticeX, latticeY, 4, lattice.period, lattice.period)
                     var sourceColumn = (column + warpAcross).roundToInt() % cellsAcross
                     if (sourceColumn < 0) sourceColumn += cellsAcross
                     val sourceRow = (row + warpDown).roundToInt().coerceIn(0, cellsDown - 1)
@@ -1957,12 +2014,37 @@ object PlateStage {
         return warped
     }
 
+    /**
+     * Which plate's seed each cell is nearest on the ground, before the warp: Euclidean by jump
+     * flooding and told how tall a row is. A chamfer walk over square cells did this before, which
+     * is an octagonal metric in cells and, on this map's cells, one that measured north-south at
+     * twice the ground.
+     *
+     * Internal so `TectonicGroundTest` can ask it about seeds it places where it likes.
+     */
+    internal fun nearestSeedPartition(config: WorldGenConfig, plates: List<Plate>): IntArray {
+        val cellsAcross = config.width
+        val cellsDown = config.height
+        val distanceToSeed = FloatArray(cellsAcross * cellsDown) { JumpFloodDistance.INFINITE }
+        val nearestSeedPlate = IntArray(cellsAcross * cellsDown) { -1 }
+        plates.forEach { plate ->
+            val cell = plate.seedY * cellsAcross + plate.seedX
+            distanceToSeed[cell] = 0f
+            nearestSeedPlate[cell] = plate.id
+        }
+        JumpFloodDistance.run(
+            cellsAcross, cellsDown, distanceToSeed, nearestSeedPlate, config.cellHeightInCellWidths
+        )
+        return nearestSeedPlate
+    }
+
     private fun classifyBoundaries(
-        width: Int,
-        height: Int,
+        config: WorldGenConfig,
         plateId: IntArray,
         plates: List<Plate>
     ): Map<Int, Boundary> {
+        val width = config.width
+        val height = config.height
         val boundaries = HashMap<Int, Boundary>()
         val interactions = HashMap<Int, PairInteraction>()
         val neighbours = arrayOf(
@@ -1995,7 +2077,10 @@ object PlateStage {
                     if (plate.id < neighbourPlate.id) plate.id * plates.size + neighbourPlate.id
                     else neighbourPlate.id * plates.size + plate.id
                 val interaction = interactions.getOrPut(key) {
-                    interactionOf(plates[key / plates.size], plates[key % plates.size], width)
+                    interactionOf(
+                        plates[key / plates.size], plates[key % plates.size], width,
+                        config.cellHeightInCellWidths
+                    )
                 }
                 boundaries[cell] = Boundary(
                     interaction,
@@ -2020,16 +2105,16 @@ object PlateStage {
      *
      * The along-strike coordinate is a walk, not a projection: a rift meanders, so distance along
      * any straight axis is not distance along the rift. Each connected run of a pair's boundary
-     * cells is traversed breadth-first from one of its ends — found by the usual double sweep,
-     * farthest cell from an arbitrary start, then farthest from that — and the resulting geodesic
-     * distance in cells is the arc length every cell of the run is cut by.
+     * cells is measured along its own centreline on the ground from one of its ends, and that arc
+     * length, in cell widths, is what every cell of the run is cut by; see [arcAlongRun].
      *
      * Determinism, in the terms rule 4 of the plan asks for: the cells are taken in ascending
      * index order (never in the hash order of the boundary map), each connected run is keyed by
      * its own lowest cell index, every tie in the double sweep is broken by the lower index, and
      * the per-segment draws come from a splitmix-seeded linear congruential stream rather than
      * from a shared [Random]. Segment lengths are fractions of the map's width, so the same rift
-     * breaks into the same segments at 512 and at 2048.
+     * breaks into the same segments at 512 and at 2048, and the same lengths on the ground at every
+     * bearing.
      */
     private fun segmentRifts(config: WorldGenConfig, boundaries: Map<Int, Boundary>) {
         val tectonics = config.tectonics
@@ -2060,43 +2145,9 @@ object PlateStage {
             pairAt[cell] = index
         }
 
-        val arc = IntArray(cellsAcross * cellsDown) { -1 }
-        val runCells = ArrayList<Int>()
+        // Which cells have already been gathered into a run, so each is visited once.
+        val collected = BooleanArray(cellsAcross * cellsDown)
         val queue = ArrayList<Int>()
-
-        // Breadth-first over one run's cells, from [source]; leaves the hop count in `arc` and
-        // returns the farthest cell, ties broken by the lower index.
-        fun sweep(source: Int, pair: Int): Int {
-            runCells.forEach { arc[it] = -1 }
-            queue.clear()
-            arc[source] = 0
-            queue.add(source)
-            var head = 0
-            var farthest = source
-            while (head < queue.size) {
-                val cell = queue[head++]
-                val hops = arc[cell]
-                if (hops > arc[farthest] || (hops == arc[farthest] && cell < farthest)) {
-                    farthest = cell
-                }
-                val column = cell % cellsAcross
-                val row = cell / cellsAcross
-                for (rowStep in -1..1) {
-                    val neighbourRow = row + rowStep
-                    if (neighbourRow < 0 || neighbourRow >= cellsDown) continue
-                    for (columnStep in -1..1) {
-                        if (columnStep == 0 && rowStep == 0) continue
-                        var neighbourColumn = (column + columnStep) % cellsAcross
-                        if (neighbourColumn < 0) neighbourColumn += cellsAcross
-                        val neighbour = neighbourRow * cellsAcross + neighbourColumn
-                        if (pairAt[neighbour] != pair || arc[neighbour] >= 0) continue
-                        arc[neighbour] = hops + 1
-                        queue.add(neighbour)
-                    }
-                }
-            }
-            return farthest
-        }
 
         val minSegmentCells = (tectonics.riftSegmentMin * cellsAcross).coerceAtLeast(2f)
         val maxSegmentCells = (tectonics.riftSegmentMax * cellsAcross).coerceAtLeast(minSegmentCells)
@@ -2106,16 +2157,14 @@ object PlateStage {
             val pair = pairAt[start]
             if (pair < 0) return@forEach
 
-            // Collect this connected run, then take its two passes. `start` is the run's lowest
-            // index, since the cells are walked in ascending order and a run is claimed whole.
-            runCells.clear()
+            // Collect this connected run. `start` is the run's lowest index, since the cells are
+            // walked in ascending order and a run is claimed whole.
             queue.clear()
             queue.add(start)
-            arc[start] = 0
+            collected[start] = true
             var head = 0
             while (head < queue.size) {
                 val cell = queue[head++]
-                runCells.add(cell)
                 val column = cell % cellsAcross
                 val row = cell / cellsAcross
                 for (rowStep in -1..1) {
@@ -2126,16 +2175,15 @@ object PlateStage {
                         var neighbourColumn = (column + columnStep) % cellsAcross
                         if (neighbourColumn < 0) neighbourColumn += cellsAcross
                         val neighbour = neighbourRow * cellsAcross + neighbourColumn
-                        if (pairAt[neighbour] != pair || arc[neighbour] >= 0) continue
-                        arc[neighbour] = 0
+                        if (pairAt[neighbour] != pair || collected[neighbour]) continue
+                        collected[neighbour] = true
                         queue.add(neighbour)
                     }
                 }
             }
-
-            val end = sweep(sweep(start, pair), pair)
-            // `arc` now holds arc length from the far end of the run; `end` is its other end.
-            val length = arc[end].toFloat()
+            val runCells = queue.toIntArray()
+            val along = arcAlongRun(config, runCells)
+            val length = along.lengthCellWidths
 
             // Where the joins fall, and what each segment between them looks like.
             var bits = seedHash(config.seed, start.toLong() * 131L + pair.toLong())
@@ -2184,8 +2232,8 @@ object PlateStage {
             // Which flank the first segment hangs from; the rest alternate off it.
             val parity = ((bits ushr 17) and 1L) == 0L
 
-            runCells.forEach { cell ->
-                val arcLengthCells = arc[cell].toFloat()
+            runCells.forEachIndexed { runIndex, cell ->
+                val arcLengthCells = along.arcLengthCellWidths[runIndex]
                 var segmentIndex = 0
                 while (segmentIndex < joins.size - 2 &&
                     arcLengthCells >= joins[segmentIndex + 1]
@@ -2206,10 +2254,7 @@ object PlateStage {
                 )
             }
 
-            runCells.forEach {
-                arc[it] = -1
-                pairAt[it] = CLAIMED
-            }
+            runCells.forEach { pairAt[it] = CLAIMED }
         }
     }
 
@@ -2219,21 +2264,199 @@ object PlateStage {
     /** [segmentRifts]: a rift cell whose run has already been walked. */
     private const val CLAIMED = -2
 
+    /** How far along one run of boundary cells each of its cells lies, from one end of it. */
+    internal class RunArc(
+        /** One entry per cell of the run, in the order the run was handed in. */
+        val arcLengthCellWidths: FloatArray,
+        /** From the end the arc is measured from to the far end. */
+        val lengthCellWidths: Float
+    )
+
+    /**
+     * The arc length along a connected run of boundary cells, on the ground and in cell widths,
+     * from one of its ends.
+     *
+     * The ends are found by the usual double sweep — the farthest cell from the run's first, then
+     * the farthest from that, ties broken by the lower cell index — over a walk from cell to cell
+     * whose steps are their length on the ground: a whole cell width along a row, half of one down
+     * a column on this map's cells, the hypotenuse on a diagonal. That walk orders the run but does
+     * not measure it, because a staircase of axis and diagonal steps overstates the line it
+     * approximates, by up to eighteen percent on cells half as tall as they are wide. So the length
+     * is the length of the run's centreline: the cells are gathered into stretches
+     * [CENTRELINE_STEP_CELL_WIDTHS] long by their walked distance, each stretch stands at the mean
+     * of its cells on the ground, and the arc is measured along the line from one end through those
+     * means to the other, each cell taking its place on it by its walked distance. A straight run
+     * measures its own length to the width of its cells; a meander is followed at the scale of a
+     * stretch. Counted in hops, as before, a north-south rift was twice its length on the ground and
+     * a diagonal one 1.4 times.
+     *
+     * Internal so `TectonicGroundTest` can walk a straight run it lays at any bearing.
+     */
+    internal fun arcAlongRun(config: WorldGenConfig, runCells: IntArray): RunArc {
+        val cellsAcross = config.width
+        val cellsDown = config.height
+        val steps = config.groundSteps
+        val rowScale = config.cellHeightInCellWidths
+        val count = runCells.size
+        val localIndex = HashMap<Int, Int>(count * 2)
+        runCells.forEachIndexed { index, cell -> localIndex[cell] = index }
+        val walked = FloatArray(count)
+        val heap = LongMinHeap(count)
+
+        // A shortest walk over the run from [source], a local index, with each step its length on
+        // the ground; leaves the distances in `walked` and returns the farthest cell's local index.
+        fun sweep(source: Int): Int {
+            walked.fill(Float.MAX_VALUE)
+            walked[source] = 0f
+            heap.push(walkKey(0f, source))
+            while (!heap.isEmpty()) {
+                val key = heap.pop()
+                val local = (key and 0xFFFFFFFFL).toInt()
+                val here = Float.fromBits((key ushr 32).toInt())
+                if (here > walked[local]) continue
+                val cell = runCells[local]
+                val column = cell % cellsAcross
+                val row = cell / cellsAcross
+                for (rowStep in -1..1) {
+                    val neighbourRow = row + rowStep
+                    if (neighbourRow < 0 || neighbourRow >= cellsDown) continue
+                    for (columnStep in -1..1) {
+                        if (columnStep == 0 && rowStep == 0) continue
+                        var neighbourColumn = (column + columnStep) % cellsAcross
+                        if (neighbourColumn < 0) neighbourColumn += cellsAcross
+                        val neighbourLocal =
+                            localIndex[neighbourRow * cellsAcross + neighbourColumn] ?: continue
+                        val there = here + steps.of(columnStep, rowStep)
+                        if (there < walked[neighbourLocal]) {
+                            walked[neighbourLocal] = there
+                            heap.push(walkKey(there, neighbourLocal))
+                        }
+                    }
+                }
+            }
+            var farthest = source
+            for (local in 0 until count) {
+                val distance = walked[local]
+                if (distance > walked[farthest] ||
+                    (distance == walked[farthest] && runCells[local] < runCells[farthest])
+                ) {
+                    farthest = local
+                }
+            }
+            return farthest
+        }
+
+        val first = sweep(0)
+        val last = sweep(first)
+        val originColumn = runCells[first] % cellsAcross
+        val originRow = runCells[first] / cellsAcross
+
+        // Where each cell stands on the ground from the end the arc starts at, in cell widths.
+        fun eastOf(local: Int): Double {
+            var columns = runCells[local] % cellsAcross - originColumn
+            if (columns > cellsAcross / 2) columns -= cellsAcross
+            if (columns < -cellsAcross / 2) columns += cellsAcross
+            return columns.toDouble()
+        }
+        fun southOf(local: Int): Double = (runCells[local] / cellsAcross - originRow) * rowScale
+
+        // The stretches, by walked distance, and the mean of each on the ground.
+        val lastWalked = walked[last].toDouble()
+        val stretches = (lastWalked / CENTRELINE_STEP_CELL_WIDTHS).toInt() + 1
+        val sumEast = DoubleArray(stretches)
+        val sumSouth = DoubleArray(stretches)
+        val sumWalked = DoubleArray(stretches)
+        val members = IntArray(stretches)
+        for (local in 0 until count) {
+            val stretch = (walked[local] / CENTRELINE_STEP_CELL_WIDTHS).toInt().coerceIn(0, stretches - 1)
+            sumEast[stretch] += eastOf(local)
+            sumSouth[stretch] += southOf(local)
+            sumWalked[stretch] += walked[local].toDouble()
+            members[stretch]++
+        }
+
+        // The centreline: from the first end, through each stretch's mean, to the last end. Each
+        // point carries the walked distance it stands for and the arc length along the line to it.
+        val pointWalked = ArrayList<Double>()
+        val pointArc = ArrayList<Double>()
+        var previousEast = 0.0
+        var previousSouth = 0.0
+        var arc = 0.0
+        fun addPoint(east: Double, south: Double, walkedHere: Double) {
+            if (pointWalked.isNotEmpty() && walkedHere <= pointWalked.last()) return
+            val stepEast = east - previousEast
+            val stepSouth = south - previousSouth
+            arc += sqrt(stepEast * stepEast + stepSouth * stepSouth)
+            pointWalked.add(walkedHere)
+            pointArc.add(arc)
+            previousEast = east
+            previousSouth = south
+        }
+        pointWalked.add(0.0)
+        pointArc.add(0.0)
+        for (stretch in 0 until stretches) {
+            if (members[stretch] == 0) continue
+            addPoint(
+                sumEast[stretch] / members[stretch],
+                sumSouth[stretch] / members[stretch],
+                sumWalked[stretch] / members[stretch]
+            )
+        }
+        addPoint(eastOf(last), southOf(last), lastWalked)
+
+        // Each cell's place on the centreline, interpolated by its walked distance.
+        val arcLengths = FloatArray(count) { local ->
+            val distance = walked[local].toDouble()
+            var point = 1
+            while (point < pointWalked.size - 1 && pointWalked[point] < distance) point++
+            if (point >= pointWalked.size) {
+                pointArc.last().toFloat()
+            } else {
+                val from = pointWalked[point - 1]
+                val to = pointWalked[point]
+                val along = if (to > from) ((distance - from) / (to - from)).coerceIn(0.0, 1.0) else 1.0
+                (pointArc[point - 1] + along * (pointArc[point] - pointArc[point - 1])).toFloat()
+            }
+        }
+        return RunArc(arcLengths, pointArc.last().toFloat())
+    }
+
+    /** A walked distance and a local index packed so a heap of them pops the nearest first. */
+    private fun walkKey(distanceCellWidths: Float, local: Int): Long =
+        (distanceCellWidths.toRawBits().toLong() shl 32) or local.toLong()
+
+    /**
+     * How long a stretch of a run [arcAlongRun] draws its centreline through, in cell widths: four,
+     * several cells long so that its mean lies on the run's axis whatever staircase the cells make,
+     * and short against the segments whose ends it places, which are `TectonicsConfig.riftSegmentMin`
+     * to `riftSegmentMax` of the map's width, twenty to fifty cell widths at any grid.
+     */
+    private const val CENTRELINE_STEP_CELL_WIDTHS = 4.0
+
     /**
      * Projects the plates' relative motion onto the axis between their centres — the closest thing
      * to a boundary normal that holds for the whole shared edge.
+     *
+     * The axis is taken on the ground, a row counting [cellHeightInCellWidths] of a column, because
+     * the drifts it is projected against are directions on the ground; taken in cells, a pair lying
+     * north-south of each other was read at the wrong angle to every drift not along an axis.
      */
-    private fun interactionOf(first: Plate, second: Plate, width: Int): PairInteraction {
+    private fun interactionOf(
+        first: Plate,
+        second: Plate,
+        width: Int,
+        cellHeightInCellWidths: Double
+    ): PairInteraction {
         var acrossCells = (second.seedX - first.seedX).toFloat()
         // Shortest way round the cylinder, so plates either side of the seam behave sanely.
         if (acrossCells > width / 2f) acrossCells -= width
         if (acrossCells < -width / 2f) acrossCells += width
-        val downCells = (second.seedY - first.seedY).toFloat()
+        val downCellWidths = (second.seedY - first.seedY) * cellHeightInCellWidths.toFloat()
 
-        val separationCells = sqrt(acrossCells * acrossCells + downCells * downCells)
+        val separationCellWidths = sqrt(acrossCells * acrossCells + downCellWidths * downCellWidths)
             .coerceAtLeast(MIN_SEED_SEPARATION_CELLS)
-        val axisAcross = acrossCells / separationCells
-        val axisDown = downCells / separationCells
+        val axisAcross = acrossCells / separationCellWidths
+        val axisDown = downCellWidths / separationCellWidths
 
         // Positive when the pair is closing.
         val convergence = (
@@ -2345,17 +2568,16 @@ object PlateStage {
      */
     private fun volcanicChain(
         noise: PerlinNoise,
+        lattice: GroundLattice,
         column: Int,
-        row: Int,
-        cellsAcross: Int,
-        cellsDown: Int
+        row: Int
     ): Float {
         val alongStrike = 0.5f + 0.5f * noise.fbm(
-            column * ARC_CHAIN_CYCLES / cellsAcross,
-            row * ARC_CHAIN_CYCLES / cellsDown,
+            lattice.x(column),
+            lattice.y(row),
             2,
-            ARC_CHAIN_CYCLES.toInt(),
-            ARC_CHAIN_CYCLES.toInt()
+            lattice.period,
+            lattice.period
         )
         return alongStrike.coerceIn(0f, 1f).pow(ARC_CHAIN_EXPONENT) * ARC_CHAIN_PEAK
     }
@@ -2415,6 +2637,15 @@ object PlateStage {
     /** Amplitude of one seeded rim harmonic, as a fraction of a seamount's radius. */
     private const val RIM_HARMONIC_MIN = 0.015f
     private const val RIM_HARMONIC_SPAN = 0.03f
+
+    /** How many harmonics a rim carries: the second, third and fifth. See [rimHarmonics]. */
+    private const val RIM_HARMONICS = 3
+
+    /**
+     * How many times the seamounts' size noise repeats round the map: nine, so neighbouring vents
+     * in a chain, fifteen cell widths apart, are sized alike and chains a plate apart are not.
+     */
+    private const val SEAMOUNT_SIZE_CYCLES = 9f
 
     /**
      * How far a plate seed is kept from each pole, as a share of the grid's height, and the band

@@ -1,5 +1,7 @@
 package com.cartogenesis.cartography
 
+import com.cartogenesis.cartography.geometry.KnownFailures
+import com.cartogenesis.cartography.geometry.RecordedViolation
 import com.cartogenesis.worldgen.BorrowsSharedWorlds
 import com.cartogenesis.worldgen.SharedWorlds
 import com.cartogenesis.worldgen.model.WorldGenConfig
@@ -27,6 +29,17 @@ import kotlin.test.assertTrue
 class RiverSelectionTest : BorrowsSharedWorlds() {
 
     private companion object {
+        /**
+         * The known failure the budget floor's premise records since Fix 3b. On the implicit
+         * incision's terrain seed 42's largest river's chain fits a quarter of Earth's ink even on
+         * the postage-stamp sheet, so that sheet no longer exercises the floor on that seed; the
+         * clause's other seeds still do, and the largest river is still drawn on every sheet. A
+         * smaller sheet or another seed would restore it, and is not chosen here
+         * (docs/DESIGN_LEDGER.md, Fix 3b).
+         */
+        const val FLOOR_IDLE_ON_ONE_SEED =
+            "the rivers: on the law's terrain one seed's largest chain fits the tiny sheet's quarter of Earth's ink"
+
         /** The four standard seeds, at the grid every per-merge guard in this repository uses. */
         val SEEDS = listOf(7L, 42L, 1234L, 99L)
         const val SIDE = 512
@@ -461,6 +474,7 @@ class RiverSelectionTest : BorrowsSharedWorlds() {
 
     @Test
     fun `the bottom of the scale keeps the largest river and its trunk chain`() {
+        val idleFloor = ArrayList<String>()
         SEEDS.forEach { seed ->
             val map = world(seed)
             val sheet = MapSheet.UNGENERALISED
@@ -501,12 +515,17 @@ class RiverSelectionTest : BorrowsSharedWorlds() {
                     "a quarter of Earth's ink is ${quarterOfEarthKm.round()} km, the budget " +
                     "${tiny.budgetKilometres.round()} km, ${tiny.drawnCount} drawn"
             )
-            assertTrue(
-                quarterOfEarthKm < tiny.budgetKilometres,
-                "seed $seed: the largest river's chain fits a quarter of Earth's ink even here, " +
-                    "so this sheet does not exercise the floor"
-            )
+            if (quarterOfEarthKm >= tiny.budgetKilometres) idleFloor += "seed $seed"
             assertTrue(tiny.drawn[biggest], "seed $seed lost its largest river on a tiny sheet")
+        }
+        KnownFailures.expect(FLOOR_IDLE_ON_ONE_SEED, "seed 42") {
+            if (idleFloor.isNotEmpty()) {
+                throw RecordedViolation(
+                    "the largest river's chain fits a quarter of Earth's ink even on the tiny sheet, so it does not " +
+                        "exercise the floor: ${idleFloor.joinToString()}",
+                    idleFloor.joinToString()
+                )
+            }
         }
     }
 

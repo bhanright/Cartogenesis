@@ -35,13 +35,30 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
     private companion object {
 
         /**
-         * The known failure the haze clause records since Fix 3: with the incision's caps spent in
-         * one unit, the cap at half the drop sets every drawn channel's cut, the rounds cut less
-         * than the stream-power law asks and the relief is smoother. The implicit solver's chunk is
-         * where it is next taken up; see docs/DESIGN_LEDGER.md, Fix 3.
+         * The known failure the haze clause records. It matched at 0.12 against the declared 0.10
+         * from Fix 3, and still does on the implicit incision's terrain (Fix 3b), which moved
+         * ordinary ground and not the match. It is recorded and not re-derived there because the
+         * declared haze is copied, as the sky's share and brightness, into the graphics card's
+         * shader (`GpuRaster`), and the parity guard that would check a new pair against the
+         * processor cannot run without a display; see docs/DESIGN_LEDGER.md, Fix 3 and Fix 3b.
          */
-        const val CAP_SETS_EVERY_CUT =
-            "the erosion: with its caps in one unit the half-the-drop cap sets every drawn channel's cut, and the explicit incision cuts less than the stream-power law asks"
+        const val HAZE_A_STEP_OFF =
+            "the relief: the lamp's contrast is matched a step off the declared haze"
+
+        /**
+         * The known failure the ordinary-ground clause records. The median light over the
+         * gallery world's land under the declared sky is 0.8756 on the implicit incision's
+         * terrain, rougher on the plains and the ranges alike, against the declared 0.9225 (0.9489
+         * under the capped update, recorded then because the implicit update was to move the
+         * relief again). Re-derived to 0.8756 it holds its own clause, but a synthetic plane
+         * falling at 315 degrees on cells twice as tall as wide is then drawn 1.01 of its bar off
+         * the shading of its ground, because the constant scales the factor the plane is clipped
+         * by; and it travels to the graphics card with the haze, whose parity guard cannot run here.
+         * Recorded, for the chunk that re-derives the haze and the ground together with the device
+         * guard running (docs/DESIGN_LEDGER.md, Fix 3b).
+         */
+        const val ORDINARY_GROUND_AWAITS_THE_DEVICE =
+            "the relief: ordinary ground's median light has moved off the declared figure with the terrain"
 
         /** The gallery's world, at the size these guards measure on. See [TestWorlds]. */
         val WORLD: WorldMap get() = TestWorlds.gallery
@@ -353,9 +370,9 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
         // is back on the declared 0.10 (docs/DESIGN_LEDGER.md, Fix 2).
         val matched = String.format(java.util.Locale.ROOT, "%.2f", bestHaze)
         val declared = String.format(java.util.Locale.ROOT, "%.2f", ReliefShading.HAZE)
-        // A step off again since Fix 3, whose relief is cut less and so is smoother: recorded and
-        // not re-derived, because the implicit update that follows moves the relief again.
-        KnownFailures.expect(CAP_SETS_EVERY_CUT, "matched at haze 0.12") {
+        // A step off since Fix 3, and still at 0.12 on the implicit incision's terrain: see
+        // [HAZE_A_STEP_OFF].
+        KnownFailures.expect(HAZE_A_STEP_OFF, "matched at haze 0.12") {
             if (kotlin.math.abs(bestHaze - ReliefShading.HAZE) > HAZE_SWEEP_STEP / 2) {
                 throw RecordedViolation(
                     "the lamp's contrast is matched at haze $matched, a step or more from the declared $declared",
@@ -367,8 +384,9 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
         // one — and not under whichever haze the sweep matched.
         val declaredGround = median(illuminationOverLand(world, ReliefShading.DAYLIGHT))
         println("RELIEF under the declared sky ordinary ground sits at %.4f".format(declaredGround))
-        // Recorded since Fix 3 for the haze's reason above, and not re-derived for the same one.
-        KnownFailures.expect(CAP_SETS_EVERY_CUT, "ordinary ground 0.9489") {
+        // Recorded: see [ORDINARY_GROUND_AWAITS_THE_DEVICE]. 0.9489 under the cap, 0.8756 on the
+        // implicit incision's terrain.
+        KnownFailures.expect(ORDINARY_GROUND_AWAITS_THE_DEVICE, "ordinary ground 0.8756") {
             if (kotlin.math.abs(declaredGround - ReliefShading.ordinaryGround) > MAX_GROUND_DRIFT) {
                 throw RecordedViolation(
                     "ordinary ground measures ${"%.4f".format(declaredGround)} under the declared sky, " +

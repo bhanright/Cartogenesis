@@ -19,6 +19,9 @@ plugins {
  * whether there is a GPU.
  */
 kotlin {
+    // The browser tests run through Karma in a headless Chrome, as `:ui`'s do, because what they
+    // test — a folder handle's streams and the private file system behind it — exists only in a
+    // browser. Karma reads its settings from `karma.config.d/` beside this file; see the files there.
     @OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)
     wasmJs {
         browser {
@@ -36,6 +39,19 @@ kotlin {
             implementation(compose.material3)
             implementation(compose.ui)
         }
+        wasmJsTest.dependencies {
+            implementation(kotlin("test"))
+            implementation(libs.kotlinx.coroutines.test)
+        }
+    }
+}
+
+// Karma is started with an environment of the plugin's making rather than the build's, so the one
+// variable the browser tests read is handed on by name. See `RegenerateInteropFixtures` in
+// `:desktop`'s tests for what it does.
+tasks.withType<org.jetbrains.kotlin.gradle.targets.js.testing.KotlinJsTest>().configureEach {
+    providers.environmentVariable("REGENERATE_INTEROP_FIXTURES").orNull?.let {
+        environment("REGENERATE_INTEROP_FIXTURES", it)
     }
 }
 

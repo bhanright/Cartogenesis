@@ -109,13 +109,27 @@ interface Platform {
     val libraryLocation: String
 
     /**
+     * How the reader may move [library] into a folder on the disk they choose, or null where this
+     * host offers no such thing.
+     *
+     * A browser question. Chrome and Edge let a page ask for a folder and keep it across visits
+     * (the File System Access API); Firefox and Safari do not, and there the library stays in the
+     * browser's own storage with nothing offered in its place. The desktop's library is a folder
+     * already, chosen in Settings by its path, so it answers null too. See [LibraryPlaces], which
+     * is what the interface asks rather than asking this directly.
+     */
+    val folderChooser: FolderChooser? get() = null
+
+    /**
      * Whether the library pane's download/upload buttons appear.
      *
      * The desktop's library already lives on disk as ordinary `.cgw` files a user can move by
      * hand, so it declines this rather than duplicating a file dialog the OS already gives them.
      * The browser's library lives in IndexedDB, invisible to anything outside the page, so a
-     * download and a file picker are the only way a save moves in or out of it — which is also
-     * the only way a world crosses between the two front ends, since the format is shared.
+     * download and a file picker are the only way a save moves in or out of it — and, in a browser
+     * with no [folderChooser], the only way a world crosses between the two front ends, since the
+     * format is shared. Where the reader has put the library in a folder, the buttons stay: a
+     * download is still the way to hand one world to somebody else.
      *
      * A runtime flag rather than an `expect`/`actual` split: the pane is shared code, and what it
      * draws should depend on what this platform can do, not on which target compiled it.

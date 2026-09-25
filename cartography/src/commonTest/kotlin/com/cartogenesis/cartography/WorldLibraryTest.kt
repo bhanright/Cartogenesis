@@ -197,6 +197,24 @@ class WorldLibraryTest {
     }
 
     @Test
+    fun `a copy from another library is a new file beside what is there, byte for byte`() = runTest {
+        // What the browser offers when the reader moves the library into a folder: the worlds in
+        // the browser's storage copied in, and none of the folder's own written over.
+        val from = FakeByteWorldLibrary()
+        val into = FakeByteWorldLibrary()
+        from.save(document(title = "In the browser"), world)
+        into.save(document(title = "Already in the folder"), world)
+        val folderOwn = into.blobs.getValue("a.cgw").copyOf()
+
+        assertEquals("a (2).cgw", into.copyFrom(from, "a.cgw"))
+        assertContentEquals(folderOwn, into.blobs.getValue("a.cgw"), "the copy wrote over the folder's own file")
+        assertContentEquals(from.blobs.getValue("a.cgw"), into.blobs.getValue("a (2).cgw"))
+        assertEquals(setOf("a.cgw"), from.blobs.keys, "the copy took the original away")
+        assertEquals("In the browser", assertIs<LoadOutcome.Loaded>(into.load("a (2).cgw")).save.document.title)
+        assertFailsWith<WorldFormatException> { into.copyFrom(from, "missing.cgw") }
+    }
+
+    @Test
     fun `overlapping saves of one file land in the order they were asked for`() = runTest {
         // The first save is slow and the second fast. Unordered, the second finished first and
         // the first then renamed itself over it, so the older world was the one left on disk.

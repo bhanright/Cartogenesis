@@ -435,7 +435,10 @@ Chrome on Android offers the folder picker too, over Android's own storage rathe
 and two things are weaker there that a page cannot mend. A file cannot be renamed, so every new save
 is copied into its name, the empty `.cgw` showing while the copy runs. And the browser keeps its
 swap file in its own cache and, on close, empties the file and copies the new bytes into it, so a
-save over an existing world that fails partway can leave that file short. The Library pane shows
+save over an existing world that fails partway can leave that file short. A new save is whole
+under its temporary name before it is copied, so when the copy fails that file is kept rather than
+removed, and the failure names it: renamed without its leading dot and ending in `.cgw`, it
+opens. The Library pane shows
 each save, open, delete and copy while it runs, a save with the megabytes written so far, and then
 how it ended, with the browser's own name for any failure (`NotAllowedError` and the like), on a
 phone as on a computer. Opening the app with `?foldertest` in its address, as

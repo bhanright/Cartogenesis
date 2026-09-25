@@ -247,6 +247,38 @@ private external fun refuseEveryMove(name: String): JsHandle
 )
 private external fun restoreRefusedMove(held: JsHandle)
 
+/**
+ * Makes every file handle's `move(directory, name)` refuse as `InvalidStateError` after another
+ * writer has put a file of its own under `name`, exactly as long as the one being moved and full of
+ * sevens: the case a check of the length alone takes for the move having happened.
+ */
+@JsFun(
+    """() => {
+        const file = FileSystemFileHandle.prototype;
+        const held = { ownMove: Object.getOwnPropertyDescriptor(file, 'move') };
+        file.move = async function (directory, name) {
+            const size = (await this.getFile()).size;
+            const theirs = await directory.getFileHandle(name, { create: true });
+            const writable = await theirs.createWritable();
+            await writable.write(new Uint8Array(size).fill(7));
+            await writable.close();
+            throw new DOMException('refused by the test', 'InvalidStateError');
+        };
+        return held;
+    }"""
+)
+private external fun refuseEveryMoveAfterAnotherWriter(): JsHandle
+
+/** Runs [block] with every `move` refused once another writer's file of the same length is in the way. */
+internal suspend fun <T> withAnotherWritersFileWhereMoveRefuses(block: suspend () -> T): T {
+    val held = refuseEveryMoveAfterAnotherWriter()
+    try {
+        return block()
+    } finally {
+        restoreRefusedMove(held)
+    }
+}
+
 /** Runs [block] with every `move` refused with a `DOMException` called [name]. */
 internal suspend fun <T> withEveryMoveRefused(name: String, block: suspend () -> T): T {
     val held = refuseEveryMove(name)

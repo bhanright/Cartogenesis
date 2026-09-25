@@ -24,11 +24,33 @@ class FolderCheckTest {
             println("FOLDER CHECK\n" + folderCheckReport(folder.name, steps, running = null))
 
             assertEquals(emptyList(), steps.filter { it.outcome != FolderCheckStep.Outcome.DONE }, "a step did not answer")
-            for (asked in listOf("(getFileHandle, create)", "(createWritable)", "(write)", "(close)", "(move)", "(keys)", "(removeEntry)", "through the library")) {
+            for (asked in listOf("(getFileHandle, create)", "(createWritable)", "(write)", "(close)", "(move)", "(keys)", "(isSameEntry, removeEntry)", "through the library")) {
                 assertTrue(steps.any { asked in it.what }, "no step asked $asked")
             }
             assertEquals(listOf(STRANGER), folder.entries(), "the check left something behind, or took what was not its own")
             assertSameBytes(stranger, folder.readRaw(STRANGER), "the check changed a file it did not make")
+        }
+    }
+
+    @Test
+    fun `a file carrying the check's token that the check did not make is named and left alone`() = runTest(timeout = 5.minutes) {
+        // The clean-up removed every name holding the run's token, which takes a sync client's
+        // copy of the check's file, or anything else that happens to carry it, with its own.
+        withTestFolder("check-token-stranger") { folder ->
+            val token = "0f8fad5b-d9cb-469f-a165-70867728950e"
+            val stranger = "${FolderCheck.NAME_PREFIX}$token (conflicted copy).cgw"
+            val bytes = FolderCheck.pattern(STRANGER_BYTES, offset = 3)
+            folder.writeRaw(stranger, bytes)
+
+            val steps = FolderCheck(folder.handle, WebGzipCompressor, partBytes = PART_BYTES, token = token).run()
+            println("FOLDER CHECK WITH A STRANGER CARRYING THE TOKEN\n" + folderCheckReport(folder.name, steps, running = null))
+
+            assertEquals(listOf(stranger), folder.entries(), "the check removed a file it did not make, or left one of its own")
+            assertSameBytes(bytes, folder.readRaw(stranger), "the check changed a file it did not make")
+            val last = steps.last()
+            assertEquals(FolderCheckStep.Outcome.FAILED, last.outcome, "the file left under the token was not reported")
+            assertTrue(stranger in last.answer, "the report did not name what was left: ${last.answer}")
+            assertEquals(emptyList(), steps.dropLast(1).filter { it.outcome != FolderCheckStep.Outcome.DONE })
         }
     }
 

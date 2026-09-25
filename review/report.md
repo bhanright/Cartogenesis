@@ -1,7 +1,8 @@
 # Chunk 3b, stage 1: the implicit incision on the processor
 
 **Branch:** `chunk/3b-implicit-erosion` at `5bb85b3`, from `origin/chunk/3-erosion-units` at 89f062f.
-Not merged, and no pull request.
+Not merged, and no pull request. **A review round since** takes the branch to `bb7b606`; see
+[the last section](#review-round).
 
 **Chunk 6.** Its six files (RiverStage, LakeWaterBalance, BasinPartition, BasinRealms, NationStage,
 CultureStage) were not edited, and the solver did not need them. Three test files that chunk 6 also
@@ -425,3 +426,243 @@ loaded machine, was measured alone before it was recorded (2.02%).
   refused.
 - The graphics-card tests: they skip without a display, and are counted as skips above.
 - This is also why the relief's haze and ordinary ground were recorded rather than re-derived.
+
+## Review round
+
+**Branch:** `chunk/3b-implicit-erosion` at `bb7b606`. Not merged, `origin/main` not merged in, and no
+pull request.
+
+| Commit | What it does |
+|---|---|
+| `991148e` | A lake falls with its outlet in the implicit pass; the draining-lake guard; the bounds guard made strict and given its own base. |
+| `baa9a82` | The collision uplift's KDoc says what its derivation does not establish. |
+| `549f657` | The generator's clauses the lake change moved: fourteen re-recorded, three armed, two recorded under a new finding. |
+| `0f11942` | TODO and the ledger: the grid measurement, the ridge measurement, the lake semantics; the grid finding renamed. |
+| `528f024` | The map's clauses the lake change moved (`:cartography`). |
+| `bb7b606` | TODO and the ledger carry the comb's cause. |
+
+### 1. The lake's surface during the pass
+
+**The defect.** The pass held a lake at its filled level for the whole pass. A lake cell's receivers
+are processed first, so by the time an inflow was graded, the outlet below the lake had often been
+cut far below the lake's filled level. The inflow still graded to the old water, which no longer
+stood there.
+
+**The semantics chosen**, the candidate the review proposed:
+- A lake's surface for the pass is the lower of its filled level and the level its outlet drains to
+  once the outlet is cut. It is carried upstream through the lake's cells, receivers first, so the
+  outlet is final before the lake behind it.
+- A cell under that surface is neither cut nor raised.
+- A cell the falling water uncovers is graded like any other.
+- An inflow grades to the surface as it now stands.
+
+**The guard,** `a lake falls with its outlet and its inflow grades to the lowered water`: a sea, an
+outlet at 100 m, a lake bed filled to 100 m, and an inflow at 120 m, with the bed and inflow at `F` 9.
+
+| Case | Outlet | Bed | Inflow | Inflow on 5bb85b3 |
+|---|---|---|---|---|
+| Outlet at `F` 9: the lake drains past its 70 m bed | 10.00 m | 16.00 m (uncovered, graded) | 26.40 m | 102.00 m |
+| Outlet at `F` 0.25: the lake stands over its 50 m bed | 80.00 m | 50.00 m (kept) | 84.00 m | 102.00 m |
+
+It fails on 5bb85b3's code and passes on this head.
+
+### 2. The bounds guard
+
+- **Strict.** The more-than-half-the-drop clause has no slack in the failing direction. Where the
+  law's cut clears half the drop by less than two float steps of the height, the rounding of one
+  cell can land either side of it, so those cells are counted and printed, not judged: 28 of the
+  190,908 cells at `F` over one on seed 42 at 512. None of the others fail.
+- **Its own base.** The watcher now finds each cell's base itself from the pass's result, not from
+  the pass's report:
+  - the shoreline for the sea;
+  - the receiver's new ground on dry land;
+  - for a receiver under a lake: walking down through the lake to what it spills onto, the lowest of
+    the filled levels on the way and of that last level, or the receiver's new ground if that is
+    higher.
+
+  It requires the reported base to equal that exactly. On 5bb85b3's frozen lake it fails in round 0
+  (20 violations, the most the watcher keeps, the first at cell 638); on this head there are none.
+- **The KDoc** says the bound is on the cells the pass moves: a basin's floor under water, and a
+  cell already at or below its base, keep their height below it.
+
+### 3. What the lake change moved
+
+The full `:worldgen:jvmTest` ran twice on this round's code: 20 red of 266 before the re-records, 0
+of 266 after. Two ignored probe files were compiled into the second run and reported 268; they are
+left out of these counts.
+
+- **Re-recorded, figures only** (14): the rainfall calibration, the dissection contrast, the
+  Earth-likeness suite, the coast's projection ratio (1.13), the plains' texture, the glacial lakes,
+  the ice's flow and thickness, the foreland moat, the shelf's jump flood, the coast's dimension, the
+  recycling ratio (0.296), and the notch's two clauses. In the Earth-likeness suite, seed 99's
+  drylands now pass and the box dimension reads 1.093.
+- **Armed** (3):
+  - the ice sheet's edge: 31 against 36.1 allowed, where it was 46 against 36.6;
+  - the graded coast's gain: 0.553 against 0.412, a gain of 1.34 over a bar of 1.3, **narrowly**;
+  - the largest realm: 29%. It is in `RealmSpreadTest`, a file chunk 6 also changes.
+- **The notch.** Seed 99's largest lake is now under the Caspian's share (0.113% of its land against
+  0.249%). What fails instead is seeds 718106 and 7 keeping more than half their water after the
+  notch.
+- **Two new failures, under one finding: the cost of these semantics.** With the notch off at 1024,
+  the thin parallel grid-bearing bars' share of the standing water:
+
+  | Seed | Ice off, before | Ice off, now | Ice on, before | Ice on, now |
+  |---|---|---|---|---|
+  | 42 | 0.078 | 0.168 | 0.085 | 0.163 |
+  | 7 | 0.120 | 0.153 | 0.108 | 0.137 |
+  | 718106 | 0.108 | 0.167 | 0.098 | 0.159 |
+
+  - The ice's comb clause counts cells. It is over its fiftieth on seed 42 (2.48%) because the
+    glaciated world holds 1,554 more lake cells, not because the ice's own bar share rose.
+  - The ruled-bar census finds its first bar since the facet routing: 27 cells on seed 42 at 512.
+  - The likeliest reading, not tested: inflows now cut to a lower base, so more grid-bearing channels
+    are deep enough for the next round's fill to stand in. **It wants weighing before the merge: it
+    is a rule 13 regression the semantics bring.**
+- **The map** (`:cartography:jvmTest`): 4 red of 117.
+  - Handled: the 512 census re-taken (the anomaly's corner rate on seed 7 joins its banding finding),
+    the recorded renders regenerated, ordinary ground 0.8750, and seed 99 joining seed 42 on the river
+    floor.
+  - The four were re-run alone and pass. The whole task was not re-run.
+
+### 4. The network's growth with the grid (reported, nothing changed)
+
+Channel-head density in km of channel per km² of land, by `ScaleFreeTest`'s arithmetic:
+
+| Seed | 512 | 1024 | 1024, 24 rounds of half the years | 1024 / 512 | Half the step / 1024 |
+|---|---|---|---|---|---|
+| 7 | 0.0324 | 0.0499 | 0.0501 | 1.54 | 1.004 |
+| 42 | 0.0379 | 0.0571 | 0.0582 | 1.51 | 1.019 |
+| 1234 | 0.0296 | 0.0422 | 0.0422 | 1.42 | 1.000 |
+| 99 | 0.0284 | 0.0412 | 0.0412 | 1.45 | 0.999 |
+
+**It does not converge toward 512 as the round shortens.** The time step has already converged: half
+the step moves the network by 0 to 2%. The growth is the grid's, not the round's.
+
+The earlier report's reading, that the implicit scheme being first order was the cause, is not
+supported. The finding is renamed to say so. Which part of the grid is responsible has not been
+isolated:
+- the criterion reading a slope over a shorter step;
+- `F` doubling at a fixed catchment when the cell halves;
+- or the routing.
+
+### 5. The comb (reported, nothing changed)
+
+**Synthetic ridges.** Running east-west and north-south on a 256 grid (cells 46.9 km by 23.4 km):
+- a 4,000 m crest falling linearly over 50 cell widths either side, with 2 m of roughness;
+- twelve rounds of uniform uplift;
+- the production implicit update against a capped explicit one written in the probe.
+
+Channels are cells with eight or more cells upstream. "Parallel" means a channel draining the same
+way within two cell widths of ground across the fall line.
+
+| Ridge | Update | Uplift | Channels down a column | along a row | diagonal | with a parallel channel |
+|---|---|---|---|---|---|---|
+| east-west | implicit | 0.29 | 94.8% | 0.5% | 4.7% | 58.8% |
+| east-west | implicit | 0.738 | 94.5% | 0.6% | 4.9% | 56.3% |
+| east-west | capped | 0.29 | 98.6% | 0.4% | 1.0% | 98.6% |
+| east-west | capped | 0.738 | 98.4% | 0.4% | 1.2% | 98.5% |
+| north-south | implicit | 0.29 | 3.0% | 89.4% | 7.6% | 71.2% |
+| north-south | implicit | 0.738 | 3.7% | 88.6% | 7.7% | 69.4% |
+| north-south | capped | 0.29 | 5.5% | 91.5% | 3.0% | 96.7% |
+| north-south | capped | 0.738 | 6.3% | 90.6% | 3.0% | 96.7% |
+
+- On both bearings and under both updates the channels follow the fall line.
+- The cap combs more, and evenly on both bearings.
+- The implicit update combs less, and no more on east-west ridges than on north-south ones.
+
+**The update does not make the comb.**
+
+Two caveats:
+- With 20 m of roughness on a 1,500 m crest the roughness outweighs the ridge's fall. The order is the
+  same (capped 61 and 80% parallel, implicit 19 and 51%), but channels there take diagonals 23 to 43%
+  of the time.
+- The share of *steep* cells draining along a grid line, which the request named, is no instrument
+  once the valleys are cut deep. On the implicit ridges the steepest third of the ground is valley
+  walls, and it drains across the fall line: 62 to 68% along a row on the east-west ridge. The
+  channel reading above is the one that answers the question.
+
+**The comb's cause, which decides the fix.** The steepest third of the land at 1024 on seeds 7 and 42,
+counted on three surfaces routed by the production routing over the same land:
+- an isotropic synthetic surface built on the ground (sixty-four waves of random bearing, 4 to 40 cell
+  widths long);
+- the world's terrain before erosion (`PlateStage`'s height);
+- the finished world.
+
+| Surface | Down a column | Along a row | Diagonal |
+|---|---|---|---|
+| Bearing geometry alone on these cells | about 35% | about 15% | about 50% |
+| Isotropic surface, seeds 7 and 42 | 51.4, 47.4% | 17.0, 18.2% | 31.6, 34.4% |
+| Terrain before erosion | 41.8, 44.5% | 17.7, 17.6% | 40.6, 37.9% |
+| Finished world | 60.5, 59.1% | 13.6, 14.2% | 25.9, 26.7% |
+
+The geometry row: on a cell half as tall as wide, a diagonal neighbour stands 63.4° off north. So on
+locally planar ground, steepest descent to the nearest bearing goes:
+- down a column for a fall line within 31.7° of north or south;
+- along a row within 13.3° of east or west;
+- on a diagonal otherwise.
+
+So:
+- On isotropic ground the routing already sends 12 to 16 points more down the columns than the
+  bearings give, taken from the diagonals.
+- The terrain before erosion sits near that baseline.
+- The rounds of erosion deepen the preference to about 60%. The earlier count found 59 to 64% on
+  main's tree and chunk 3's too, so any incision does this, not the implicit one in particular.
+
+**The fix this points at is in the routing's choice between a column and a diagonal on a cell of this
+shape, not in the incision.** Across the fall line, the share of steep cells whose two neighbours
+drain the same way falls through the erosion (48 and 47% before, 23 and 24% finished), so the
+channels organise. What the eye reads as a comb is the bearing, not a lattice of one-cell gullies.
+Not tested: whether the routing's surplus comes from the facet rule, the flat potential, or the depression fill.
+
+### 6. The uplift's note
+
+`WorldGenConfig`'s KDoc for the collision rate, the ledger, and this report now say it:
+- The 0.738 mm a year is exact only for the flexure-off measurement it was taken from: 0.5 mm of
+  surface uplift plus 0.238 of denudation.
+- With the flexure on, the same belts lose 0.134 mm a year, the flexural response entering the same
+  budget.
+- Nothing measures the surface uplift production's belts actually make. The rate is the flexure-off
+  balance, not a calibration of production's ranges.
+
+### 7. The renders
+
+**The maps moved visibly, so this head's renders were re-taken.** Main's and chunk 3's are unchanged
+and were not. They are under `review/renders/` with the suffix `-review`, in the same windows as
+before.
+
+Against the previous head (`-implicit`), the share of pixels off by more than 32 levels:
+
+| World | Whole | Coast | Range |
+|---|---|---|---|
+| 7 at 1024 | 2.2% | 7.2% | 6.6% |
+| 42 at 1024 | 2.8% | 9.7% | 8.9% |
+| 969495 at 2048 | 1.5% | 5.8% | 5.1% |
+
+What the eye sees:
+- **Lakes are smaller.** The lake south of seed 42's long lake is nearly drained, seed 7's long lake is
+  narrower, and 969495's lake in the south-east is gone.
+- **Rivers re-route** in places.
+- **The relief and its dissection read the same.**
+- **The flanks' comb is unchanged.** The easiest place to see it is 969495's eastern flank in
+  `969495-2048-atlas-coast-review.png`.
+
+### 8. Tests this round
+
+The review narrowed this round's testing partway through: only the guards the round touches and
+the measurements; the full suites and the renders to run once, after the comb fix and a merge of
+`origin/main`. What ran:
+
+| Run | On | Result |
+|---|---|---|
+| `ImplicitIncisionTest`: the new lake fixture, and the bounds guard | this head's code, and 5bb85b3's pass | pass, and fail on 5bb85b3 |
+| `:worldgen:jvmTest`, whole | after the lake change, before the re-records | 20 of 266 red, handled above |
+| `:worldgen:jvmTest`, whole | after the re-records (`549f657`) | 266 of 266 pass, 22 known failures |
+| `ScaleFreeTest`'s channel-head clause | after the renamed finding (`0f11942`) | pass, recorded |
+| `:cartography:jvmTest`, whole | after the lake change | 4 of 117 red, handled above |
+| `GeometryGuardTest`, `PenAndInkTest`, `ReliefShadingTest`, `RiverSelectionTest` | after the re-records | pass (22 tests) |
+| `:ui:jvmTest`, whole | this head's code | 129 of 129 pass |
+| `:desktop:test` | not run | stopped on the review's instruction |
+
+`ErosionUnitsTest` and `ReceiverClampTest` were not changed this round; they ran green inside the
+whole-worldgen run above. The probes (`SeedProbeGrid`, `SeedProbeRidge`, `SeedProbeCombCause`,
+`SeedProbeRender`) are ignored files and are not committed.

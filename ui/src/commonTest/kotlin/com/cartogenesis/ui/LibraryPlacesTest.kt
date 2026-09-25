@@ -6,6 +6,7 @@ import com.cartogenesis.cartography.SaveProblem
 import com.cartogenesis.cartography.SaveRefusal
 import com.cartogenesis.cartography.WorldDocument
 import com.cartogenesis.cartography.WorldLibrary
+import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -135,6 +136,27 @@ class LibraryPlacesTest {
         val notice = places.afterFailure(folder.library)
         assertEquals(LibraryPlace.ReconnectNeeded(folder), places.place)
         assertTrue(notice.orEmpty().contains("Reconnect"), notice)
+    }
+
+    @Test
+    fun `the offer to copy counts only the worlds the folder has no copy of`() = runTest {
+        // Offered by count of everything in this browser's storage, it went on offering the same
+        // world after it had been copied, and each click made another copy.
+        val folder = FakeFolder("Maps", permission = FolderPermission.GRANTED)
+        val platform = FolderPlatform(FakeChooser(RememberedPlace(folder, inFolder = true)))
+        val places = LibraryPlaces(platform)
+        places.start()
+        val config = WorldGenConfig(seed = 1L)
+        val shared = WorldDocument(id = "shared", title = "Copied already", config = config, savedAt = 5L)
+        (platform.library as MemoryLibrary).documents["shared.cgw"] = shared
+        (platform.library as MemoryLibrary).documents["only-here.cgw"] = WorldDocument(id = "only-here", title = "Not yet", config = config, savedAt = 6L)
+        (folder.library as MemoryLibrary).documents["shared (2).cgw"] = shared
+        // Another world under a name the browser's storage also uses is not a copy of it.
+        (folder.library as MemoryLibrary).documents["only-here.cgw"] = WorldDocument(id = "only-here", title = "Another", config = config, savedAt = 99L)
+        assertEquals(1, places.hostWorldCount())
+
+        places.useHostStorage()
+        assertEquals(0, places.hostWorldCount(), "a copy was offered with no folder in use")
     }
 
     @Test

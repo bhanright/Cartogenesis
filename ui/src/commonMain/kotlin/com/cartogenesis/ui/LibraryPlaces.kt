@@ -256,13 +256,13 @@ class LibraryPlaces(private val platform: Platform) {
     }
 
     /**
-     * How many worlds are in the host's storage, for the offer to copy them into the folder; zero
-     * when there is no folder in use or they cannot be listed.
+     * How many worlds in the host's storage the folder does not hold yet, for the offer to copy
+     * them into it; zero when there is no folder in use or either cannot be listed.
      */
     suspend fun hostWorldCount(): Int {
-        if (place !is LibraryPlace.InFolder) return 0
+        val at = place as? LibraryPlace.InFolder ?: return 0
         return try {
-            platform.library.list().size
+            uncopied(at.folder).size
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (failure: Throwable) {
@@ -271,16 +271,28 @@ class LibraryPlaces(private val platform: Platform) {
     }
 
     /**
-     * Copies every world in the host's storage into the folder, each as a new file beside whatever
-     * the folder holds and never over it, and leaves the originals where they were. Returns the
-     * status line.
+     * The keys of the host's worlds that [folder] holds no copy of: none of its files has the same
+     * document saved at the same moment. Matched by what is in the file rather than by its name,
+     * because a folder another machine writes may hold a different world under the same name.
+     */
+    private suspend fun uncopied(folder: LibraryFolder): List<String> {
+        val held = folder.library.list().mapNotNull { entry -> entry.document?.let { it.id to it.savedAt } }.toSet()
+        return platform.library.list()
+            .filter { entry -> entry.document?.let { (it.id to it.savedAt) !in held } ?: true }
+            .map { it.key }
+    }
+
+    /**
+     * Copies each world in the host's storage that the folder has no copy of into it, each as a new
+     * file beside whatever the folder holds and never over it, and leaves the originals where they
+     * were. Returns the status line.
      */
     suspend fun copyHostWorldsIntoFolder(): String {
         val at = place as? LibraryPlace.InFolder ?: return "Choose a folder to copy the worlds into first."
         val source = platform.library as? ByteWorldLibrary
         val target = at.folder.library as? ByteWorldLibrary
         if (source == null || target == null) return "These worlds cannot be copied here."
-        val keys = source.list().map { it.key }
+        val keys = uncopied(at.folder)
         var copied = 0
         for (key in keys) {
             try {

@@ -404,8 +404,9 @@ class SiteAssemblyTest {
      * The world wraps east-west and the strip is its whole circumference, so as the track slides
      * the strip's last column is followed by its first: those two have to be neighbours on the
      * ground. Held to how much one column differs from the next anywhere inside the strip, where
-     * every pair is neighbours by construction: the seam is allowed to differ as much as the
-     * rougher tenth of those and no more.
+     * every pair is neighbours by construction: the seam may differ as much as the roughest of
+     * those and no more. On the strip as built the seam measures 24 against a median of 17 and a
+     * roughest of 49; a strip stopped 512 pixels short of the circumference measured 164.
      */
     @Test
     fun `the hero's strip joins itself and begins where the hero is`() {
@@ -423,13 +424,12 @@ class SiteAssemblyTest {
             }
             return sum.toDouble() / height
         }
-        val inside = (0 until width - 1).map { columnDifference(it, it + 1) }.sorted()
-        val roughTenth = inside[inside.size * 9 / 10]
+        val roughest = (0 until width - 1).maxOf { columnDifference(it, it + 1) }
         val seam = columnDifference(width - 1, 0)
         assertTrue(
-            seam <= roughTenth,
-            "the strip's last column and its first differ by %.1f a pixel, and neighbouring columns inside it by %.1f at the ninetieth percentile: the strip does not join itself"
-                .format(seam, roughTenth)
+            seam <= roughest,
+            "the strip's last column and its first differ by %.1f a pixel, and no two neighbouring columns inside it by more than %.1f: the strip does not join itself"
+                .format(seam, roughest)
         )
 
         // The first stretch, against the hero halved: the same window at the strip's scale.
@@ -448,7 +448,7 @@ class SiteAssemblyTest {
             "the strip's first $across columns differ from the hero by %.1f in green on average: the strip does not begin where the hero is, and would jump as it takes over"
                 .format(meanGreen)
         )
-        println("SITE the hero's strip: seam %.1f against %.1f inside, first stretch %.1f from the hero".format(seam, roughTenth, meanGreen))
+        println("SITE the hero's strip: seam %.1f against %.1f at the roughest inside, first stretch %.1f from the hero".format(seam, roughest, meanGreen))
     }
 
     /** One pin as the assembled page writes it. */

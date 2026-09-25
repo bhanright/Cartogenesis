@@ -72,7 +72,7 @@ import kotlin.test.assertTrue
  * height and that one, never below it. The other half is a rule: a cell standing at or below the
  * level it grades to, the floor of a basin the routing crosses on the fill, is left alone, where the
  * weighted mean would move it toward its receiver. The switch takes that rule out, and without it
- * the incision's slot of the census is no longer empty: 530, 1,157 and 1,015 channel cells on
+ * the incision's slot of the census is no longer empty: 588, 1,286 and 1,036 channel cells on
  * 718106, 42 and 7 at 512 over the rounds, against none with it (docs/DESIGN_LEDGER.md, Fix 3b).
  * The channel cells drawn under water, which the control rested on under the explicit update, are
  * printed and no longer asserted: raising basin floors makes fewer of them, not more.

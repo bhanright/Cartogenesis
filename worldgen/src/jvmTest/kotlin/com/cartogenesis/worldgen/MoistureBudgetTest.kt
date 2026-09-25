@@ -53,19 +53,18 @@ class MoistureBudgetTest : BorrowsSharedWorlds() {
          */
         const val EARTH_RECYCLING_LOW = 0.30
 
+        const val EARTH_RECYCLING_HIGH = 0.45
+
         /**
-         * The known failure both recycling clauses record.
-         *
-         * The ratio pooled over the four seeds stood at 0.331 and reads 0.292 on the continents
-         * the ground's ruler draws, the seeds themselves at 0.32, 0.31, 0.34 and 0.22 where they
-         * were 0.24, 0.41, 0.32 and 0.31: a spread across seeds of a tenth either way, which moves
-         * a pooled figure over four worlds by more than its three hundredths of room. No operator
-         * of the moisture march changed with the ruler; the continents are new, and the pool is one
-         * sample of them (docs/DESIGN_LEDGER.md, Fix 2).
+         * The known failure both recycling clauses record. The ratio pooled over the four seeds
+         * stood at 0.331, read 0.292 on the continents the ground's ruler drew (Fix 2) and 0.279
+         * under the capped incision's terrain (Fix 3); it came inside the band on the implicit
+         * update and reads 0.295 with the uplift re-derived on it, a few thousandths under. No
+         * operator of the moisture march changed; the terrain it marches over did (docs/DESIGN_LEDGER.md,
+         * Fix 2, Fix 3 and Fix 3b).
          */
         const val RECYCLING_UNDER_THE_BAND =
             "the climate: on the continents the ground's ruler draws, four worlds recycle under Earth's continental band"
-        const val EARTH_RECYCLING_HIGH = 0.45
 
         /** How far inland "the interior" starts, in kilometres: `PressureWindTest`'s own figure. */
         const val INTERIOR_REACH_KM = 500.0
@@ -208,9 +207,10 @@ class MoistureBudgetTest : BorrowsSharedWorlds() {
                     seeds.size, ratio * 100, EARTH_RECYCLING_LOW * 100, EARTH_RECYCLING_HIGH * 100
                 )
         )
-        // Under the band since the continents were redrawn on the ground's ruler, and kept
-        // running as a known failure: see [RECYCLING_UNDER_THE_BAND].
-        KnownFailures.expect(RECYCLING_UNDER_THE_BAND, "0.279") {
+        // Under the band since the continents were redrawn on the ground's ruler, inside it on the
+        // implicit update before the uplift was re-derived, and under it again after: see
+        // [RECYCLING_UNDER_THE_BAND].
+        KnownFailures.expect(RECYCLING_UNDER_THE_BAND, "0.295") {
             if (!(ratio > EARTH_RECYCLING_LOW && ratio < EARTH_RECYCLING_HIGH)) {
                 throw RecordedViolation(
                     ("the continental recycling ratio is %.3f, outside Earth's %.2f to %.2f")
@@ -268,7 +268,8 @@ class MoistureBudgetTest : BorrowsSharedWorlds() {
                     EARTH_RECYCLING_LOW * 100, EARTH_RECYCLING_HIGH * 100
                 )
         )
-        KnownFailures.expect(RECYCLING_UNDER_THE_BAND, "0.279") {
+        // Recorded as the clause above.
+        KnownFailures.expect(RECYCLING_UNDER_THE_BAND, "0.295") {
             if (!(proxyRatio > EARTH_RECYCLING_LOW && proxyRatio < EARTH_RECYCLING_HIGH)) {
                 throw RecordedViolation(
                     ("the shipped ground return puts the recycling ratio at %.3f, outside Earth's " +

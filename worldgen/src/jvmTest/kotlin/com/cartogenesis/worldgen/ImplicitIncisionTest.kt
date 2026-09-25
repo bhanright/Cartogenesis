@@ -791,8 +791,8 @@ class ImplicitIncisionTest {
     }
 
     /**
-     * A knickpoint retreats as far on the ground running north-south as running east-west, and a
-     * round retreats it as far as two rounds of half the time.
+     * A knickpoint retreats at the law's celerity, as far on the ground running north-south as
+     * running east-west, and a round retreats it as far as two rounds of half the time.
      *
      * The capped explicit update is the case this was written against (Audit III's B-D1): it cuts
      * half the drop on a large-`F` channel, and a drop is in proportion to the step, so a channel
@@ -816,8 +816,15 @@ class ImplicitIncisionTest {
         println("IMPLICIT knickpoint " + line("north-south, one round", northSouth, northSouthStart))
         println("IMPLICIT knickpoint " + line("east-west, two half rounds", eastWestHalves, start))
         println("IMPLICIT knickpoint " + line("north-south, two half rounds", northSouthHalves, northSouthStart))
+        // The law's celerity `K sqrt(A)` is `F` cell widths a round along a row: first that the
+        // knickpoint moved at all, then that it moved at the law's speed, which a pass that cut
+        // nothing, the sea alone moving, reads as the sea's fall over the break's change of slope.
         val retreat = eastWest.sharp - start.sharp
-        assertTrue(retreat > 0.5 * EAST_WEST_COURANT, "the knickpoint barely moved, %.3f cell widths, so this saw nothing".format(retreat))
+        assertTrue(retreat > 0.0, "the knickpoint did not move, so this saw nothing")
+        assertTrue(
+            abs(retreat - EAST_WEST_COURANT) <= RETREAT_TOLERANCE_CELL_WIDTHS,
+            "the knickpoint retreated %.4f cell widths east-west in one round, where the law's celerity is %.1f".format(retreat, EAST_WEST_COURANT)
+        )
         val sharpRetreats = listOf(
             "north-south" to northSouth.sharp - northSouthStart.sharp,
             "east-west in two halves" to eastWestHalves.sharp - start.sharp,

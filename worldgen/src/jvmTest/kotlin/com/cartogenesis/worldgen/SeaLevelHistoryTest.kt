@@ -156,19 +156,23 @@ class SeaLevelHistoryTest : BorrowsSharedWorlds() {
                 "estuary mouths, not the ${estuaryGain}x a drowned valley owes"
             figures += String.format(Locale.ROOT, "pooled %.2fx", meanGain)
         }
-        // Recorded since Fix 3, whose mouths are no longer cut below the sea: see [CAP_SETS_EVERY_CUT].
-        KnownFailures.expect(CAP_SETS_EVERY_CUT, "seed 7 10 against 31; seed 1234 19 against 22; pooled 0.84x") {
-            if (shortfalls.isNotEmpty()) throw RecordedViolation(shortfalls.joinToString("; "), figures.joinToString("; "))
-        }
+        // Armed again at Fix 3b: under the capped explicit update seeds 7 and 1234 fell short
+        // (docs/DESIGN_LEDGER.md, Fix 3 and Fix 3b).
+        assertTrue(shortfalls.isEmpty(), shortfalls.joinToString("; ") + "; " + figures.joinToString("; "))
 
         // The other half of ground rule 2: the world without the lowstand has to fail a bar the
         // world with it clears, or this guard is measuring nothing.
-        assertTrue(
-            controlFailures == seeds.size,
-            "the world with the sea held at today's level was expected to fall short of " +
-                "$controlEstuaryCeiling estuary mouths on all ${seeds.size} seeds and did so on " +
-                "$controlFailures"
-        )
+        // Recorded since Fix 3b: see [CONTROL_REACHES_THE_CEILING].
+        KnownFailures.expect(CONTROL_REACHES_THE_CEILING, "short on 2 of 3") {
+            if (controlFailures != seeds.size) {
+                throw RecordedViolation(
+                    "the world with the sea held at today's level was expected to fall short of " +
+                        "$controlEstuaryCeiling estuary mouths on all ${seeds.size} seeds and did so on " +
+                        "$controlFailures",
+                    "short on $controlFailures of ${seeds.size}"
+                )
+            }
+        }
     }
 
     @Test
@@ -267,14 +271,17 @@ class SeaLevelHistoryTest : BorrowsSharedWorlds() {
 
     private companion object {
         /**
-         * The known failure the clauses Fix 3 moved record: with the incision's caps spent in the
-         * height field's own unit, the cap at half the drop sets the cut on every drawn channel, so
-         * the rounds cut less than the stream-power law asks and the explicit update, not the law,
-         * shapes the channels. The implicit solver's chunk is where it is next taken up; see
-         * docs/DESIGN_LEDGER.md, Fix 3.
+         * The known failure the control's clause records since Fix 3b. The claim holds: with the
+         * lowstand the three worlds carry 1.70 times the estuary mouths pooled (2.15, 1.50 and
+         * 1.43), and the lowstand clause is armed again. But the control, the sea held at today's
+         * level, has to fall short of the ceiling of 40 mouths on every seed for the bar to mean
+         * anything, and on the law's terrain seed 1234 reaches 44 without the lowstand: the law
+         * cuts the lower valleys deep enough that the rising sea finds some without the lowstand's
+         * help. The ceiling was set on the capped terrain and is not re-set here
+         * (docs/DESIGN_LEDGER.md, Fix 3b).
          */
-        const val CAP_SETS_EVERY_CUT =
-            "the erosion: with its caps in one unit the half-the-drop cap sets every drawn channel's cut, and the explicit incision cuts less than the stream-power law asks"
+        const val CONTROL_REACHES_THE_CEILING =
+            "the erosion: on the law's terrain the sea held at today's level already drowns enough valleys to reach the estuary ceiling on one seed"
     }
 }
 

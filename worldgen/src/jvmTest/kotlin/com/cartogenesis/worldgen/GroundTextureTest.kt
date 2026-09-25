@@ -71,17 +71,13 @@ class GroundTextureTest : BorrowsSharedWorlds() {
             "TEXTURE belt flank pooled %.0f m against main's %.0f and the control's %.0f"
                 .format(pooled, MAIN_BELT_FLANK_TEXTURE_METRES, pooledControl)
         )
-        // Recorded since Fix 3, whose flanks are cut less: see [CAP_SETS_EVERY_CUT].
-        KnownFailures.expect(CAP_SETS_EVERY_CUT, "belt flank 101 m") {
-            if (pooled < MAIN_BELT_FLANK_TEXTURE_METRES) {
-                throw RecordedViolation(
-                    "a belt's flank departs from its own smoothed self by ${"%.0f".format(pooled)} m," +
-                        " which is less than the ${"%.0f".format(MAIN_BELT_FLANK_TEXTURE_METRES)} m the" +
-                        " tree before S2 managed: the stamp is showing through as a ramp",
-                    String.format(Locale.ROOT, "belt flank %.0f m", pooled)
-                )
-            }
-        }
+        // Armed again at Fix 3b; under the capped explicit update the flank read 101 m.
+        assertTrue(
+            "a belt's flank departs from its own smoothed self by ${"%.0f".format(pooled)} m," +
+                " which is less than the ${"%.0f".format(MAIN_BELT_FLANK_TEXTURE_METRES)} m the" +
+                " tree before S2 managed: the stamp is showing through as a ramp",
+            pooled >= MAIN_BELT_FLANK_TEXTURE_METRES
+        )
         assertTrue(
             "the control at ${"%.0f".format(CRITICAL_FALL_BEFORE_S2)} m/km reads" +
                 " ${"%.0f".format(pooledControl)} m, which is not below the" +
@@ -215,23 +211,25 @@ class GroundTextureTest : BorrowsSharedWorlds() {
                     controlLowest.average(), controlHighest.average()
                 )
         )
-        assertTrue(
-            "the lowest quarter of the land departs from its own smoothed self by" +
-                " ${"%.3f".format(pooledLowest)} m, where the record reads" +
-                " ${"%.1f".format(RECORDED_LOWEST_QUARTER_TEXTURE_METRES)}: the plains are sandpaper",
-            pooledLowest <= RECORDED_LOWEST_QUARTER_TEXTURE_METRES + RECORDED_TO_THE_TENTH_METRE
-        )
-        // Recorded since Fix 3, whose ranges are cut less: see [CAP_SETS_EVERY_CUT].
-        KnownFailures.expect(CAP_SETS_EVERY_CUT, "highest quarter 68.5 m") {
-            if (pooledHighest < RECORDED_HIGHEST_QUARTER_TEXTURE_METRES - RECORDED_TO_THE_TENTH_METRE) {
+        // Recorded since Fix 3b, whose law cuts the plains as well as the ranges: see
+        // [LAW_SETS_EVERY_CUT]. The record is not re-taken on the world it would have to pass.
+        KnownFailures.expect(LAW_SETS_EVERY_CUT, "lowest quarter 98.1 m") {
+            if (pooledLowest > RECORDED_LOWEST_QUARTER_TEXTURE_METRES + RECORDED_TO_THE_TENTH_METRE) {
                 throw RecordedViolation(
-                    "the highest quarter departs by ${"%.3f".format(pooledHighest)} m against the" +
-                        " ${"%.1f".format(RECORDED_HIGHEST_QUARTER_TEXTURE_METRES)} m recorded: the ranges" +
-                        " have been smoothed along with the plains",
-                    String.format(Locale.ROOT, "highest quarter %.1f m", pooledHighest)
+                    "the lowest quarter of the land departs from its own smoothed self by" +
+                        " ${"%.3f".format(pooledLowest)} m, where the record reads" +
+                        " ${"%.1f".format(RECORDED_LOWEST_QUARTER_TEXTURE_METRES)}: the plains are sandpaper",
+                    String.format(Locale.ROOT, "lowest quarter %.1f m", pooledLowest)
                 )
             }
         }
+        // Armed again at Fix 3b; under the capped explicit update the ranges read 68.5 m.
+        assertTrue(
+            "the highest quarter departs by ${"%.3f".format(pooledHighest)} m against the" +
+                " ${"%.1f".format(RECORDED_HIGHEST_QUARTER_TEXTURE_METRES)} m recorded: the ranges" +
+                " have been smoothed along with the plains",
+            pooledHighest >= RECORDED_HIGHEST_QUARTER_TEXTURE_METRES - RECORDED_TO_THE_TENTH_METRE
+        )
         assertTrue(
             "with the texture rule off the lowest quarter reads" +
                 " ${"%.1f".format(controlLowest.average())} m, which is already inside the" +
@@ -505,14 +503,15 @@ class GroundTextureTest : BorrowsSharedWorlds() {
 
     private companion object {
         /**
-         * The known failure the clauses Fix 3 moved record: with the incision's caps spent in the
-         * height field's own unit, the cap at half the drop sets the cut on every drawn channel, so
-         * the rounds cut less than the stream-power law asks and the explicit update, not the law,
-         * shapes the channels. The implicit solver's chunk is where it is next taken up; see
-         * docs/DESIGN_LEDGER.md, Fix 3.
+         * The known failure the clauses Fix 3b moved record. The implicit update lets the
+         * stream-power law set every cut, where the explicit update's cap at half the drop set the
+         * drawn network's, so the land is cut as the law asks; this clause's figure was recorded on
+         * the capped terrain, and a record re-taken on the world it has to pass would pass it by
+         * construction. Whether the record or the terrain is the one to move is the maintainer's;
+         * see docs/DESIGN_LEDGER.md, Fix 3b, for the figures.
          */
-        const val CAP_SETS_EVERY_CUT =
-            "the erosion: with its caps in one unit the half-the-drop cap sets every drawn channel's cut, and the explicit incision cuts less than the stream-power law asks"
+        const val LAW_SETS_EVERY_CUT =
+            "the erosion: since the implicit update the stream-power law sets every cut, and this clause's figure was recorded on the capped terrain"
 
         /** `GeographyAuditTest`'s standard seeds, plus the author's own world. */
         val SEEDS = listOf(7L, 42L, 1234L, 99L, 718106L)

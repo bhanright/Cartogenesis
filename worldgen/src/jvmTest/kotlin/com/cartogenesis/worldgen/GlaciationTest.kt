@@ -166,7 +166,7 @@ class GlaciationTest : BorrowsSharedWorlds() {
         // a change upstream of it brings them back, and says to arm them.
         KnownFailures.expect(
             "C I4: glaciated country holds no more lakes than the ice's absence leaves",
-            "cold-country lakes 0.15 to 0.34 per 10k cells, iced zone ratio 1.03"
+            "cold-country lakes 0.23 to 0.36 per 10k cells, iced zone ratio 0.79"
         ) {
             val tripled = with.coldLakes.toLong() * without.coldLand >= 3L * without.coldLakes * with.coldLand
             val contrasted = with.ratio >= COLD_LAKE_RATIO
@@ -587,7 +587,9 @@ class GlaciationTest : BorrowsSharedWorlds() {
             }
         }
         // Collected and asserted once, rather than seed by seed, so a run reports all three figures
-        // instead of stopping at the first that is over.
+        // instead of stopping at the first that is over. On the implicit update before the uplift
+        // was re-derived on it the ice added 5.00% and 3.18% on seeds 718106 and 7, a comb; with the
+        // re-derived uplift it is inside the bar again (docs/DESIGN_LEDGER.md, Fix 3b).
         assertTrue(
             "the ice puts ${ICE_COMB_BAR * 100}% or more of these worlds' standing water into thin" +
                 " grid-bearing bars that run parallel to another such bar within ten cells — a" +

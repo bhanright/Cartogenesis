@@ -69,10 +69,12 @@ class EarthLikenessTest : BorrowsSharedWorlds() {
         val complaints = ArrayList<String>()
         suite.perSeed.forEach { complaints += EarthLikeness.complaints(it, oneWorld = true) }
         complaints += EarthLikeness.complaints(suite.pooled, oneWorld = false)
-        // The drylands' drainage density since Fix 3: see [CAP_SETS_EVERY_CUT].
-        KnownFailures.expect(CAP_SETS_EVERY_CUT, "99: humid country carries 1.02 times the channel per unit of land that semi-arid country does, " +
+        // Recorded since Fix 3, and re-recorded at Fix 3b: see [LAW_SETS_EVERY_CUT]. Under the cap
+        // seed 99's humid country carried 1.02 times the semi-arid's channel and the pooled coast's
+        // box count read 1.036; on the law's terrain they read 1.00 and 1.092, Earth's figures kept.
+        KnownFailures.expect(LAW_SETS_EVERY_CUT, "99: humid country carries 1.00 times the channel per unit of land that semi-arid country does, " +
                 "where Moglen, Eltahir & Bras (1998) have the density falling away on the wet side and so below one; " +
-                "pooled: the coastline's box-counting dimension is 1.036, outside 1.25 +/- 0.15 " +
+                "pooled: the coastline's box-counting dimension is 1.092, outside 1.25 +/- 0.15 " +
                 "(Mandelbrot 1967: Britain 1.25, Richardson's smoothest coast 1.02)") {
             if (complaints.isNotEmpty()) {
                 throw RecordedViolation(
@@ -131,14 +133,14 @@ class EarthLikenessTest : BorrowsSharedWorlds() {
 
     private companion object {
         /**
-         * The known failure the clauses Fix 3 moved record: with the incision's caps spent in the
-         * height field's own unit, the cap at half the drop sets the cut on every drawn channel, so
-         * the rounds cut less than the stream-power law asks and the explicit update, not the law,
-         * shapes the channels. The implicit solver's chunk is where it is next taken up; see
-         * docs/DESIGN_LEDGER.md, Fix 3.
+         * The known failure the clauses Fix 3b moved record. The implicit update lets the
+         * stream-power law set every cut, where the explicit update's cap at half the drop set the
+         * drawn network's, so the land is cut as the law asks; this clause's figure was recorded on
+         * the capped terrain, or its bar is Earth's and the law's terrain, with the uplift
+         * re-derived on it, does not reach it. See docs/DESIGN_LEDGER.md, Fix 3b, for the figures.
          */
-        const val CAP_SETS_EVERY_CUT =
-            "the erosion: with its caps in one unit the half-the-drop cap sets every drawn channel's cut, and the explicit incision cuts less than the stream-power law asks"
+        const val LAW_SETS_EVERY_CUT =
+            "the erosion: since the implicit update the stream-power law sets every cut, and this clause's figure was recorded on the capped terrain"
 
         /** The standard seeds, which are `GeographyAuditTest`'s. */
         val seeds = listOf(7L, 42L, 1234L, 99L)

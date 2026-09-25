@@ -251,8 +251,10 @@ class LittoralCoastTest {
         CoastRoughness.dimensionComplaint("pooled by ruler", pooledRuler)?.let { complaints.add(it) }
         CoastRoughness.dimensionComplaint("pooled by M1's box count", boxes!!.dimension)
             ?.let { complaints.add(it) }
-        // Recorded since Fix 3, whose mouths are no longer cut below the sea: see [CAP_SETS_EVERY_CUT].
-        KnownFailures.expect(CAP_SETS_EVERY_CUT, "pooled by ruler 1.198, by box 1.028") {
+        // Recorded since Fix 3 (by box 1.028 under the cap), and re-recorded at Fix 3b: the law's
+        // terrain takes the box count to 1.082, still under Mandelbrot's band, with the ruler's
+        // 1.187 inside it. See [LAW_SETS_EVERY_CUT].
+        KnownFailures.expect(LAW_SETS_EVERY_CUT, "pooled by ruler 1.187, by box 1.082") {
             if (complaints.isNotEmpty()) {
                 throw RecordedViolation(
                     complaints.joinToString("; "),
@@ -356,8 +358,10 @@ class LittoralCoastTest {
                     graded!!.dimensionStandardDeviation, control!!.dimensionStandardDeviation
                 )
         )
-        // Recorded since Fix 3, whose ungraded coast is already smoother: see [CAP_SETS_EVERY_CUT].
-        KnownFailures.expect(CAP_SETS_EVERY_CUT, "0.740 graded against 0.596") {
+        // Recorded since Fix 3 (0.740 graded against 0.596 under the cap), and re-recorded at Fix 3b:
+        // both coasts are rougher on the law's terrain and the gain is short still. See
+        // [LAW_SETS_EVERY_CUT].
+        KnownFailures.expect(LAW_SETS_EVERY_CUT, "0.548 graded against 0.436") {
             if (graded!!.smoothShare < control!!.smoothShare * SMOOTH_SHARE_GAIN) {
                 throw RecordedViolation(
                     ("the graded coast reads %.3f smooth against the ungraded coast's %.3f, which is not a " +
@@ -421,14 +425,13 @@ class LittoralCoastTest {
 
     private companion object {
         /**
-         * The known failure the clauses Fix 3 moved record: with the incision's caps spent in the
-         * height field's own unit, the cap at half the drop sets the cut on every drawn channel, so
-         * the rounds cut less than the stream-power law asks and the explicit update, not the law,
-         * shapes the channels. The implicit solver's chunk is where it is next taken up; see
-         * docs/DESIGN_LEDGER.md, Fix 3.
+         * The known failure the clauses Fix 3b moved record. The implicit update lets the
+         * stream-power law set every cut, where the explicit update's cap at half the drop set the
+         * drawn network's, so the land is cut as the law asks; this clause's figure was recorded on
+         * the capped terrain. See docs/DESIGN_LEDGER.md, Fix 3b, for the figures.
          */
-        const val CAP_SETS_EVERY_CUT =
-            "the erosion: with its caps in one unit the half-the-drop cap sets every drawn channel's cut, and the explicit incision cuts less than the stream-power law asks"
+        const val LAW_SETS_EVERY_CUT =
+            "the erosion: since the implicit update the stream-power law sets every cut, and this clause's figure was recorded on the capped terrain"
 
         /** The rulers the coast is walked with, in cell widths of ground. */
         val RULERS = listOf(1, 2, 4, 8, 16)

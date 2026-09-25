@@ -3,7 +3,6 @@ package com.cartogenesis.worldgen
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.pipeline.PlateStage
 import com.cartogenesis.worldgen.pipeline.TerrainStage
-import java.util.Locale
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -72,27 +71,19 @@ class ValleyIncisionTest : BorrowsSharedWorlds() {
         val with = withTotal / seeds.size
         val without = withoutTotal / seeds.size
         println("INCISION mean %.4f against %.4f, %.2fx".format(with, without, with / without))
-        // Recorded since Fix 3: see [CAP_SETS_EVERY_CUT].
-        KnownFailures.expect(CAP_SETS_EVERY_CUT, "1.68x") {
-            if (with <= without * DEEPENING_RATIO_BAR) {
-                throw RecordedViolation(
-                    "hydraulic erosion barely deepened the valleys: $with against $without",
-                    String.format(Locale.ROOT, "%.2fx", with / without)
-                )
-            }
-        }
-        // Under Audit III's B-D1 since the erosion was put on the ground's ruler: see
-        // [INCISION_CAPPED_PER_STEP].
-        KnownFailures.expect(INCISION_CAPPED_PER_STEP, "0.0077") {
-            if (with < NOTCH_DEPTH_BEFORE_S2 * NOTCH_DEPTH_ALLOWANCE) {
-                throw RecordedViolation(
-                    "a finished channel stands ${"%.4f".format(with)} of the field below its banks," +
-                        " more than a tenth shallower than the" +
-                        " ${"%.4f".format(NOTCH_DEPTH_BEFORE_S2)} the tree before S2 cut",
-                    String.format(java.util.Locale.ROOT, "%.4f", with)
-                )
-            }
-        }
+        // Both armed again at Fix 3b. Under the capped explicit update the valleys read 1.68 times
+        // the bare ground and 0.0077 deep, a quarter to a third shallower where a course stepped
+        // down a column (Audit III's B-D1); with the law setting the cut they read 4.64 times and
+        // 0.0229, and the same by every step (docs/DESIGN_LEDGER.md, Fix 3b).
+        assertTrue(
+            with > without * DEEPENING_RATIO_BAR,
+            "hydraulic erosion barely deepened the valleys: $with against $without"
+        )
+        assertTrue(
+            with >= NOTCH_DEPTH_BEFORE_S2 * NOTCH_DEPTH_ALLOWANCE,
+            "a finished channel stands ${"%.4f".format(with)} of the field below its banks, more than a tenth shallower " +
+                "than the ${"%.4f".format(NOTCH_DEPTH_BEFORE_S2)} the tree before S2 cut"
+        )
     }
 
     /**
@@ -181,16 +172,6 @@ class ValleyIncisionTest : BorrowsSharedWorlds() {
 
     private companion object {
         /**
-         * The known failure the clauses Fix 3 moved record: with the incision's caps spent in the
-         * height field's own unit, the cap at half the drop sets the cut on every drawn channel, so
-         * the rounds cut less than the stream-power law asks and the explicit update, not the law,
-         * shapes the channels. The implicit solver's chunk is where it is next taken up; see
-         * docs/DESIGN_LEDGER.md, Fix 3.
-         */
-        const val CAP_SETS_EVERY_CUT =
-            "the erosion: with its caps in one unit the half-the-drop cap sets every drawn channel's cut, and the explicit incision cuts less than the stream-power law asks"
-
-        /**
          * How much deeper the water must leave a channel than it found it, and how deep the
          * channel must end up, in units of the height field.
          *
@@ -221,24 +202,6 @@ class ValleyIncisionTest : BorrowsSharedWorlds() {
          * are now that for every river.
          */
         const val BANK_REACH_CELL_WIDTHS = 3.0
-
-        /**
-         * The known failure the depth clause records, and the finding it is: `GroundIsotropyTest`
-         * records the same cap under the same name.
-         *
-         * The tree before Fix 2 cut its channels to 0.0158 on these seeds, read in cells on land
-         * isotropic in cells. On the ground's ruler they stand 0.0127 read on the ground, and the
-         * shortfall is in the courses that step down a column: where a river steps along a row its
-         * notch is 0.0152, 0.0172 and 0.0119 deep on seeds 7, 42 and 1234, on a diagonal 0.0136,
-         * 0.0162 and 0.0115, and down a column 0.0104, 0.0129 and 0.0091, a quarter to a third
-         * shallower than along a row. The incision is capped at half the drop to the receiver in a
-         * round, a drop is in proportion to the step, and a step down a column is half as long on
-         * the ground, so where the cap and not the law sets the cut a course running north-south is
-         * cut half as far a round. The erosion's units, which set how often the cap binds, are the
-         * next chunk's (docs/DESIGN_LEDGER.md, Fix 2).
-         */
-        const val INCISION_CAPPED_PER_STEP =
-            "Audit III B-D1: the incision's cap sets the cut, and a cap per step cuts a north-south channel half as deep a round"
     }
 
     /** Column difference on a cylinder: a step across the seam is still one cell. */

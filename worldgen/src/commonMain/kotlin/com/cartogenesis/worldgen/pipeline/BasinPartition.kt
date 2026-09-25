@@ -79,8 +79,8 @@ internal object BasinPartition {
      * mouths, where each becomes a unit of its own. So a unit is cut at a confluence, as before, and
      * no unit holds more ground than the limit (a lake's own water is never cut, so a lake larger
      * than the limit is the one exception). What it replaced compared the rain-weighted flow with a
-     * count of cells, so a dry catchment, whose cells weigh a fraction of a wet one's, ran seven to
-     * twenty times the configured share before anything cut it.
+     * count of cells, so a dry catchment, whose cells weigh a fraction of a wet one's, ran several
+     * times the configured share before anything cut it (docs/DESIGN_LEDGER.md, chunk 6).
      *
      * [rivers] supplies the routing and the lakes; [sea] the land. Every land cell ends in exactly
      * one unit and every unit lies on one landmass, since each cell drains to a neighbour.

@@ -485,8 +485,7 @@ object NationStage {
                 // A neighbour the piece would take past the realm cap is passed over for the next,
                 // and a piece no neighbour can take stays where it is: the cap is enforced on the
                 // catchments before this pass, and giving pieces away is the one step after it
-                // that can grow a realm. Unchecked, seed 7's largest realm went from 24% of the
-                // land to 34% here (docs/DESIGN_LEDGER.md, chunk 6).
+                // that can grow a realm (docs/DESIGN_LEDGER.md, chunk 6, E-T10).
                 val host = edgeHeldBy.entries
                     .filter { realmCells[it.key] + pieceCells.size <= capCells }
                     .maxWithOrNull(
@@ -728,10 +727,9 @@ object NationStage {
             passes = BLUR_PASSES
         )
         // Over land and sea together, so near a coast the sea floor pulls the mean down and a low
-        // coastal cell reads as standing higher than it does. Measured at chunk 6 against a mean
-        // over the land alone, and left: the land-only mean left the share of coastal capitals
-        // unchanged on the four standard seeds and put one more on the coast on 969495 at 2048
-        // (docs/DESIGN_LEDGER.md, chunk 6).
+        // coastal cell reads as standing higher than it does. Measured against a mean over the
+        // land alone and left, because that mean did not take capitals off the coast
+        // (docs/DESIGN_LEDGER.md, chunk 6, finding 9).
         val smoothedElevation = sea.relativeElevation.copy()
         BoxBlur.apply(
             smoothedElevation,

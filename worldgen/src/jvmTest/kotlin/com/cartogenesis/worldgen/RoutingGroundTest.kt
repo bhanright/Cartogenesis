@@ -69,6 +69,140 @@ class RoutingGroundTest {
     }
 
     /**
+     * On planes at every bearing the facet rule takes a column, a row or a diagonal as often as its
+     * own geometry says, and the mean of what it takes points down the plane.
+     *
+     * The rule's expectation, worked here from the facet's geometry and not from the router: a plane
+     * descending at bearing `theta` lies in the facet between the cardinal and the diagonal that
+     * flank `theta`, and the descent crosses that facet's far edge, which runs square to the leg out
+     * to the cardinal, a share `tan(alpha) * leg / edge` of the way from the cardinal to the
+     * diagonal, `alpha` being its angle off the leg. The draw takes the diagonal with that share.
+     * Averaged over [SHARE_BEARINGS] bearings on this map's cells, half as tall as wide, that is
+     * 44.87% down a column, 15.31% along a row and 39.82% on a diagonal. The nearest of the eight
+     * bearings would give 35.2, 14.8 and 50.0: the rule is not that, and the column's share over
+     * it is the rule's, not a defect.
+     *
+     * Read on production's [FlowRouting.flowDirections] over [SHARE_SEEDS], interior cells only.
+     * Each share is held to four of its standard errors, from the draws, which are the only thing
+     * random here. A cell's draw is the same at every bearing of one seed, so the independent
+     * samples are the cells and not the cells times the bearings: the error is taken from the
+     * spread, across cells, of the share of the bearings each cell took each way. The mean step's
+     * bearing is held on each plane to [WORST_PLANE_SIGMAS] of its own standard errors, the
+     * bound for the worst of the 1,080 planes.
+     */
+    @Test
+    fun `the facet rule takes each bearing as often as its geometry says`() {
+        var cellsRead = 0L
+        val taken = DoubleArray(3)
+        val expected = DoubleArray(3)
+        // Per seed and cell, how many of the bearings went each way, and what the geometry expected.
+        val perCell = Array(SHARE_SEEDS.size) { Array(3) { DoubleArray(SHARE_SIDE * SHARE_SIDE) } }
+        var worstBearingSigmas = 0.0
+        var worstBearingDegrees = 0.0
+        var worstAt = 0.0
+        for ((seedIndex, seed) in SHARE_SEEDS.withIndex()) {
+            for (index in 0 until SHARE_BEARINGS) {
+                val degrees = (index + 0.5) * 360.0 / SHARE_BEARINGS
+                val fall = degrees * PI / 180.0
+                val plane = FloatField.of(SHARE_SIDE, SHARE_SIDE) { column, row ->
+                    (0.5 - PLANE_FALL_PER_CELL_WIDTH * (column * cos(fall) + row * rowScale * sin(fall))).toFloat()
+                }
+                val receiver = FlowRouting.flowDirections(
+                    SHARE_SIDE, SHARE_SIDE, BooleanArray(SHARE_SIDE * SHARE_SIDE) { true }, plane, plane, seed, rowScale
+                )
+                val (share, diagonalIsColumnwise) = facetShare(fall)
+                var east = 0.0
+                var south = 0.0
+                var eastSquares = 0.0
+                var southSquares = 0.0
+                var crossSquares = 0.0
+                var n = 0
+                for (row in MARGIN until SHARE_SIDE - MARGIN) {
+                    for (column in MARGIN until SHARE_SIDE - MARGIN) {
+                        val target = receiver[row * SHARE_SIDE + column]
+                        if (target < 0) continue
+                        val dc = (target % SHARE_SIDE) - column
+                        val dr = (target / SHARE_SIDE) - row
+                        val way = if (dc == 0) 0 else if (dr == 0) 1 else 2
+                        taken[way] += 1.0
+                        val cell = row * SHARE_SIDE + column
+                        perCell[seedIndex][way][cell] += 1.0
+                        perCell[seedIndex][2][cell] -= share
+                        perCell[seedIndex][if (diagonalIsColumnwise) 0 else 1][cell] -= 1 - share
+                        val x = dc.toDouble()
+                        val y = dr * rowScale
+                        east += x; south += y
+                        eastSquares += x * x; southSquares += y * y; crossSquares += x * y
+                        n++
+                    }
+                }
+                cellsRead += n
+                // Each cell takes the diagonal with probability `share`, else the cardinal.
+                expected[2] += n * share
+                if (diagonalIsColumnwise) expected[0] += n * (1 - share) else expected[1] += n * (1 - share)
+                // The mean step's bearing, and its standard error across the plane's draws.
+                val meanX = east / n
+                val meanY = south / n
+                var error = atan2(meanY, meanX) * 180.0 / PI - degrees
+                while (error > 180.0) error -= 360.0
+                while (error < -180.0) error += 360.0
+                val across = -sin(fall) to cos(fall)
+                val acrossVariance = (across.first * across.first * (eastSquares / n - meanX * meanX) +
+                    across.second * across.second * (southSquares / n - meanY * meanY) +
+                    2 * across.first * across.second * (crossSquares / n - meanX * meanY))
+                val sigmaDegrees = sqrt(acrossVariance.coerceAtLeast(0.0) / n) / sqrt(meanX * meanX + meanY * meanY) * 180.0 / PI
+                val sigmas = if (sigmaDegrees > 0.0) abs(error) / sigmaDegrees else if (abs(error) < 1e-9) 0.0 else Double.POSITIVE_INFINITY
+                if (sigmas > worstBearingSigmas) { worstBearingSigmas = sigmas; worstBearingDegrees = error; worstAt = degrees }
+            }
+        }
+        val names = listOf("down a column", "along a row", "on a diagonal")
+        val complaints = ArrayList<String>()
+        for (k in 0 until 3) {
+            // The per-cell departures from the geometry, summed over bearings: their spread across
+            // the cells is the error of the total.
+            var sumSquares = 0.0
+            for (seedCells in perCell) for (row in MARGIN until SHARE_SIDE - MARGIN) for (column in MARGIN until SHARE_SIDE - MARGIN) {
+                val departure = seedCells[k][row * SHARE_SIDE + column]
+                sumSquares += departure * departure
+            }
+            val sigma = sqrt(sumSquares)
+            println(
+                "ROUTING shares %s: %.3f%% taken, %.3f%% the rule's geometry, %.2f standard errors apart"
+                    .format(names[k], 100.0 * taken[k] / cellsRead, 100.0 * expected[k] / cellsRead, abs(taken[k] - expected[k]) / sigma)
+            )
+            if (abs(taken[k] - expected[k]) > SHARE_SIGMAS * sigma) {
+                complaints += "%s %.3f%% against %.3f%%".format(names[k], 100.0 * taken[k] / cellsRead, 100.0 * expected[k] / cellsRead)
+            }
+        }
+        println("ROUTING the worst plane's mean step: %.3f degrees off at %.1f, %.2f standard errors".format(worstBearingDegrees, worstAt, worstBearingSigmas))
+        assertTrue(complaints.isEmpty(), "the router's step shares are not its geometry's: $complaints")
+        assertTrue(
+            worstBearingSigmas <= WORST_PLANE_SIGMAS,
+            "the mean step on the plane at $worstAt degrees points $worstBearingDegrees degrees off it, $worstBearingSigmas standard errors"
+        )
+    }
+
+    /**
+     * The share of a plane's steps the facet rule sends to the diagonal, for a plane descending at
+     * [fall] (from east toward south, on the ground), and whether that facet's cardinal is a column
+     * step. The facet is the one the descent lies in; see the case above.
+     */
+    private fun facetShare(fall: Double): Pair<Double, Boolean> {
+        val x = cos(fall)
+        val y = sin(fall)
+        // The bearing of the diagonal's step on the ground, off the east-west axis.
+        val diagonalOffRow = atan2(rowScale, 1.0)
+        val offRow = atan2(abs(y), abs(x))
+        return if (offRow <= diagonalOffRow) {
+            // Between the row step (a cell width) and the diagonal: the far edge is a row's height.
+            (1.0 * kotlin.math.tan(offRow) / rowScale) to false
+        } else {
+            // Between the column step (a row's height) and the diagonal: the far edge a cell width.
+            (rowScale * kotlin.math.tan(PI / 2 - offRow) / 1.0) to true
+        }
+    }
+
+    /**
      * Across a raised flat, the potential the water follows rises as fast north-south as east-west
      * from the flat's one outlet: its level lines are round on the ground, on cells of every shape.
      *
@@ -187,11 +321,26 @@ class RoutingGroundTest {
         /** Cells left out at every edge, so the seam's wrap and the poles' clamp decide nothing. */
         const val MARGIN = 16
 
+        /** The share case's planes: bearings evenly spaced round the circle, seeds, and side. */
+        const val SHARE_BEARINGS = 360
+        val SHARE_SEEDS = listOf(7L, 42L, 1234L)
+        const val SHARE_SIDE = 128
+
+        /** Standard errors a share may stand from its expectation. */
+        const val SHARE_SIGMAS = 4.0
+
+        /**
+         * And the worst of the 1,080 planes' mean bearings: the largest of that many independent
+         * normal errors passes 4.5 standard errors one time in about a hundred and thirty.
+         */
+        const val WORST_PLANE_SIGMAS = 4.5
+
         /**
          * How far the mean routed bearing may stand from the plane's: two degrees. The draw that
-         * decides each step is a smooth field eight cells to a period, so over the sixty thousand
-         * cells read the mean of its choices sits within a fraction of a degree of the share it
-         * draws at; the square ruler's 31-degree error on the ground's diagonal is fifteen times it.
+         * decides each step is a hash of the cell, independent from one cell to the next, so over
+         * the fifty thousand cells read the mean of its choices sits within a fraction of a degree
+         * of the share it draws at; the square ruler's 31-degree error on the ground's diagonal is
+         * fifteen times it.
          */
         const val BEARING_TOLERANCE_DEGREES = 2.0
 

@@ -262,6 +262,8 @@ class WorldLinksTest {
         assertEquals(0.62f.toRawBits(), WorldLinks.readFloat("0.62")?.toRawBits())
         assertEquals(2.0e-7f.toRawBits(), WorldLinks.readFloat("2.0E-7")?.toRawBits())
         assertEquals(1.337e-6f.toRawBits(), WorldLinks.readFloat("1.337E-6")?.toRawBits())
+        // And the browser's: Kotlin/Wasm writes the same value without an exponent.
+        assertEquals(1.337e-6f.toRawBits(), WorldLinks.readFloat("0.000001337")?.toRawBits())
         assertEquals(137f.toRawBits(), WorldLinks.readFloat("137")?.toRawBits())
         assertEquals(0x3f1eb852, WorldLinks.readFloat("x3f1eb852")?.toRawBits())
         listOf("", "0x1p3", "1.0f", "NaN", "Infinity", "1e", ".5", "x3f1e").forEach {

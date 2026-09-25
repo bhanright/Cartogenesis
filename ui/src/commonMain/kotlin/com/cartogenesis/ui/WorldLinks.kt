@@ -5,8 +5,6 @@ import com.cartogenesis.cartography.MapView
 import com.cartogenesis.cartography.RenderOptions
 import com.cartogenesis.worldgen.model.Acceleration
 import com.cartogenesis.worldgen.model.WorldGenConfig
-import kotlin.math.nextDown
-import kotlin.math.nextUp
 
 /**
  * What the application found in the address it was opened at, and what it starts with because of
@@ -423,7 +421,18 @@ object WorldLinks {
         val nearest = wide.toFloat()
         val nearestWide = nearest.toDouble()
         if (nearestWide == wide || !nearest.isFinite()) return false
-        val beyond = if (wide > nearestWide) nearest.nextUp() else nearest.nextDown()
+        val beyond = adjacentFloat(nearest, upward = wide > nearestWide)
         return wide - nearestWide == beyond.toDouble() - wide
+    }
+
+    /**
+     * The float next to [value] above it or below it. By its bits, because `nextUp` and `nextDown`
+     * exist for a float on the JVM only: adjacent floats of one sign have adjacent bit patterns,
+     * counting away from zero.
+     */
+    private fun adjacentFloat(value: Float, upward: Boolean): Float {
+        if (value == 0f) return if (upward) Float.MIN_VALUE else -Float.MIN_VALUE
+        val awayFromZero = upward == (value > 0f)
+        return Float.fromBits(value.toRawBits() + if (awayFromZero) 1 else -1)
     }
 }

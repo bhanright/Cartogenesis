@@ -42,13 +42,14 @@ class WorldLinkWorldTest {
         // What a browser window at another seed and size makes of the link.
         val elsewhere = WorldGenConfig(seed = 1L, width = 1024, height = 1024).atResolution(1024, 1024)
         val opened = WorldLinks.read(link, elsewhere, RenderOptions(), WorldCeilings.BROWSER_TAB).config
-        assertEquals(original, opened, "the link opens other settings")
 
+        // The worlds first, so a failure names the fields of the world that moved.
         val made = digests(original)
         val remade = digests(opened)
         assertTrue(made.size > 20, "the walk found only ${made.size} branches, so it compared almost nothing")
         val differing = made.keys.filter { made[it] != remade[it] }
         assertTrue(differing.isEmpty(), "the linked world differs from the one it was copied from in ${differing.joinToString()}")
+        assertEquals(original, opened, "the link opens other settings")
 
         // The control: the same walk tells the world from its neighbour one plate away, so an
         // empty list above is two identical worlds rather than a comparison that sees nothing.

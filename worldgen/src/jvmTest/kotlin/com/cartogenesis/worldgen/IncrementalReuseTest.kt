@@ -72,9 +72,6 @@ class IncrementalReuseTest {
             "tectonics" to base.copy(
                 tectonics = base.tectonics.copy(plateCount = base.tectonics.plateCount + 3)
             ),
-            // H1's knobs live on the same section, so the tectonics guard already covers them —
-            // but only if a case actually moves one, and the history is the largest change that
-            // section can make: it rewrites the height field every later stage is built on.
             // The crust's own settings, which the plate stage reads to turn a crust into an
             // altitude and the erosion stage reads to bend the plate under what it moves.
             "isostasy" to base.copy(
@@ -84,6 +81,9 @@ class IncrementalReuseTest {
             "uplift" to base.copy(
                 tectonics = base.tectonics.copy(collisionUpliftMmPerYear = 0f)
             ),
+            // H1's knobs live on the same section, so the tectonics guard already covers them —
+            // but only if a case actually moves one, and the history is the largest change that
+            // section can make: it rewrites the height field every later stage is built on.
             "tectonicHistory" to base.copy(
                 tectonics = base.tectonics.copy(historyEpochs = 1)
             ),
@@ -136,8 +136,6 @@ class IncrementalReuseTest {
                 )
             ),
             "seasons" to base.copy(climate = base.climate.copy(seasons = false)),
-            // The slant of the wind belts is the same section again, and the same cross-stage
-            // question: it changes the wind, and the ocean stage is driven by the wind.
             // W4: the cover on the ground and the frozen ground under it are the climate stage's
             // own fields, so its section is not the only one that stage reads.
             "vegetation" to base.copy(
@@ -151,6 +149,9 @@ class IncrementalReuseTest {
             "vegetationRecycling" to base.copy(
                 climate = base.climate.copy(vegetationRecycling = !base.climate.vegetationRecycling)
             ),
+            // The slant of the wind belts is the same section again. It turns the wind the
+            // moisture march follows, though not the ocean's: the currents are forced by the belt
+            // profile and the pressure wind, and neither reads it.
             "meridionalWind" to base.copy(
                 climate = base.climate.copy(meridionalWind = 0f)
             ),
@@ -209,9 +210,9 @@ class IncrementalReuseTest {
 
     @Test
     fun `a world rebuilt from its parts reuses every stage and generates nothing`() {
-        // What opening a save is: the world arrives as freshly built objects holding freshly
-        // allocated arrays — nothing in it came from this engine — and is handed back as the world
-        // to reuse. Every stage should match its config and none should run. Identity rather than
+        // What an opened save meets when a setting is next edited: the world arrives as freshly
+        // built objects holding freshly allocated arrays — nothing in it came from this engine —
+        // and is handed back as the world to reuse. Every stage should match its config and none should run. Identity rather than
         // equality, because a stage that recomputed the same answer would pass an equality check
         // while costing exactly what reuse exists to avoid.
         //
@@ -237,12 +238,11 @@ class IncrementalReuseTest {
 
     @Test
     fun `a partial world reuses what it has and regenerates climate downstream`() {
-        // The engine half of D4's contract: a save missing a stage - here, climate, the one A1
-        // actually broke - is not a world the engine refuses. It is a `PartialWorld` with that
-        // stage `null`, and the same guard chain that already forces a recompute of a changed
-        // stage forces a recompute of a missing one, cascading to everything the pipeline runs
-        // after it. `WorldCodecTest` in `:cartography` pins the loader half - this pins the half
-        // that can break here.
+        // A `PartialWorld` with a stage `null` - here, climate - is not a world the engine
+        // refuses: the same guard chain that forces a recompute of a changed stage forces a
+        // recompute of a missing one, cascading to every stage built from it. No save hands the
+        // engine one any more - `WorldCodecTest` in `:cartography` pins that a save missing a
+        // section is refused - so this pins the engine's side on its own.
         val generated = WorldGenerationEngine.generateBlocking(base)
         val loaded = rebuiltAsIfLoaded(generated)
         val partial = LoadedWorld(
@@ -267,9 +267,8 @@ class IncrementalReuseTest {
         assertSame(partial.erosion, opened.erosion, "erosion was regenerated")
         assertSame(partial.sea, opened.sea, "sea level was regenerated")
         assertSame(partial.ocean, opened.ocean, "ocean was regenerated")
-        // Rivers, nations, cultures and landmarks all had real (if stale) data in `partial` - their
-        // own sections would have survived a save missing only climate - so a bug that reused them
-        // anyway would still pass a null check. Only identity catches it.
+        // Rivers, nations, cultures and landmarks all had real (if stale) data in `partial`, so a
+        // bug that reused them anyway would still pass a null check. Only identity catches it.
         assertNotSame(partial.rivers, opened.rivers, "rivers should regenerate along with climate")
         assertNotSame(partial.nations, opened.nations, "realms should regenerate along with climate")
         assertNotSame(partial.cultures, opened.cultures, "peoples should regenerate along with climate")
@@ -279,9 +278,8 @@ class IncrementalReuseTest {
 
     @Test
     fun `an entirely absent previous still generates every stage`() {
-        // The degenerate case of a partial world: nothing at all survived (a version-2 save, or the
-        // very first generation). Every guard's `reusable?.takeIf { ... }` has to fail cleanly
-        // rather than throw when `previous` itself is null.
+        // The degenerate case of a partial world: no stage at all. Every stage has to fall through
+        // to generating afresh cleanly rather than throw when each of `previous`'s stages is null.
         val empty = LoadedWorld(config = base)
         assertNull(empty.terrain)
         val fresh = fingerprint(WorldGenerationEngine.generateBlocking(base))

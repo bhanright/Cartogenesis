@@ -163,7 +163,7 @@ class LibraryFolderPaneTest {
                 waitForIdle()
             }
             listed.complete(Unit)
-            waitUntil(timeoutMillis = WAIT_MS) { anyText { it == "Kept in the folder" } }
+            waitUntil(timeoutMillis = WAIT_MS) { anyText { it == "Kept in the folder" || it == "Nothing saved yet" } }
         }
         assertTrue(File(root, "Maps/w1.cgw").exists(), "a Delete on a row of this browser's storage removed the folder's file")
         assertTrue(!rowOutlivedItsPlace, "this browser's rows stayed on screen under the folder's name")

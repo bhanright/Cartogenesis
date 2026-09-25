@@ -246,8 +246,10 @@ class FolderLibraryTest {
             withMoveIf(canMove) {
                 if (existing) FolderWorldLibrary(folder.handle, NoCompression, "a test").save(document(title = "Kept", world = world), world)
                 val before = folder.entries().associateWith { folder.readRaw(it) }
+                var lastHanded = -1
                 val cancelling = object : WriteSteps() {
                     override suspend fun partHandedToStream(index: Int) {
+                        lastHanded = index
                         if (index == CANCELLED_AT_PART) currentCoroutineContext()[Job]!!.cancel()
                     }
                 }
@@ -257,6 +259,9 @@ class FolderLibraryTest {
                 assertTrue(saving.isCancelled)
                 assertEquals(before.keys.toList(), folder.entries(), "a cancelled save left the folder changed")
                 before.forEach { (name, bytes) -> assertSameBytes(bytes, folder.readRaw(name), "$name was changed by a cancelled save") }
+                // The wait on the part in the browser's hands is where the cancel is seen: a wait
+                // that could not be cancelled handed the browser every part left before it stopped.
+                assertEquals(CANCELLED_AT_PART, lastHanded, "the save went on writing after it was cancelled")
             }
         }
     }

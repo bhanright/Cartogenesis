@@ -24,6 +24,11 @@ here, because keeping a second copy of any of them is how a copy goes stale:
   with the author's settings, cut to fixed windows — so a release that changes what a coastline looks
   like changes the coastline the page shows. See `SiteImagery.kt` for the seed, the windows and
   how to pick a new one.
+- **The pins of "Read the land"**, which `SiteLandmarks.kt` finds in the same world's fields inside
+  that map's window and `:desktop:renderSiteImagery` writes beside the pictures as `pins.html`;
+  the assembly puts them in place of the `<!-- pins -->` marker, as it puts the roadmap in place
+  of its own. The notes they open are written in the page. The same task saves the world itself
+  there as `world.cgw`, about 260 MB, which is never published: the guard below reads it.
 
 ## Assembling it
 
@@ -67,7 +72,11 @@ Assembles the site and then runs `SiteAssemblyTest` over the tree that would be 
 bundles and the five the page sets its type in, no source map, a loader stamp that is a commit
 rather than the placeholder, `_headers` and `_redirects` present, every figure the page shows
 rendered at the size the page reserves for it, no request to a font host, and no link to any site
-but this project's (ground rule 10). It lives in `:desktop` because the web module compiles
+but this project's (ground rule 10). For the living figures it holds the six steps to one window
+and one scale, the slider's twelve styles to one window with only two asked for as the page loads,
+the hero's strip to joining itself end to end and beginning where the hero is, every pin to the
+cell it names and that cell, read back out of the saved world, to the kind of place its note says
+it is, and the bytes the page fetches as it loads to a stated ceiling. It lives in `:desktop` because the web module compiles
 to wasm and cannot read files. It is deliberately excluded from `:desktop:test`, which has no reason
 to build 12 MB of WebAssembly and would otherwise be judging whatever an earlier run left behind.
 

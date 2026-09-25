@@ -33,38 +33,36 @@ class SiteAssemblyTest {
         const val LEAST_COLOURS_IN_A_MAP = 32
 
         /**
-         * How far, on average in the green channel out of 255, the strip's first stretch may be
-         * from the hero halved before the strip taking over would read as a jump. The two are the
-         * same window encoded at two scales, so what is left is the encoder's loss at each; a
-         * strip cut one stretch along the world measures many times this.
+         * How far, on average in the green channel out of 255, the band's first stretch may be
+         * from the link preview at the band's scale before the settled plate would show a
+         * different window from the author's. The two are the same window encoded apart, so what
+         * is left is the encoder's loss at each; a band cut one stretch along the world measures
+         * many times this.
          */
-        const val HERO_TAKEOVER_MOST_MEAN_DIFFERENCE = 12.0
+        const val PREVIEW_TAKEOVER_MOST_MEAN_DIFFERENCE = 12.0
 
         /**
-         * The bytes the page fetched as it loaded before Site 5a: the page as assembled (46,168),
-         * the two preloaded faces (261,088 and 200,500) and the hero (178,484, the same file
-         * then and now). The page's figure is main's page at d7c7e31 with the roadmap drawn in as
-         * the assembly draws it today. That page's step pictures were lazy cards lower down,
-         * which a headless Chrome saw arrive after the load event, so they are not in it.
+         * The most the full band may weigh: 320 KiB, where it measured 288,294 bytes, 4096 by 800 at
+         * [SiteImagery.WORLD_BAND_QUALITY]. It is the page's largest request and every wide or
+         * dense screen fetches it as the page opens.
          */
-        const val LOAD_BYTES_BEFORE_SITE_5A = 686_240L
+        const val WORLD_BAND_MOST_BYTES = 327_680L
+
+        /** The most the half band may weigh: 100 KiB, where it measured 90,848 bytes, 2048 by 400. */
+        const val WORLD_BAND_HALF_MOST_BYTES = 102_400L
 
         /**
-         * What Site 5a allows the load to grow by: 128 KiB, where it measured 112,205 bytes. The
-         * markup, style and script of its five figures and the five pins the assembly writes in
-         * are 24,801 of those, and the six steps' pictures, which the frame brings into the load,
-         * the other 87,404. The headroom is for the step pictures, whose size moves whenever the
-         * site's pictures are made again. Every other picture Site 5a adds is lazy, is fetched
-         * after the load, or is fetched when the reader picks it.
+         * The ceiling on what the page fetches as it loads, by the kind of screen (see
+         * [fetchedAtLoad]): the 1,373,328 and 1,570,774 bytes the list summed to when it was
+         * written, each plus 64 KiB for the pictures and the page moving when they are made again.
+         * By the same count Site 5a's page fetched 1,432,079 (its guard said 798,445, having left out
+         * three faces), so the opening costs a wide or dense screen 138,695 bytes more, the full band
+         * against the hero it replaced, and a narrow one at one device pixel 58,751 less.
          */
-        const val LOAD_BYTES_GROWTH_SITE_5A = 131_072L
-
-        /**
-         * The most the hero's strip may weigh: 112 KiB, where it measured 106,218 bytes, 2048 by
-         * 400 at [SiteImagery.WEBP_QUALITY]. Fetched once the page has loaded and never by a reader
-         * who asked for less motion.
-         */
-        const val HERO_STRIP_MOST_BYTES = 114_688L
+        val LOAD_BYTES_SITE_6: Map<String, Long> = mapOf(
+            "narrow at one device pixel" to 1_373_328L + 65_536L,
+            "wide or dense" to 1_570_774L + 65_536L
+        )
     }
 
     /** A WebP decoded through Skia as ARGB, row after row. */
@@ -156,7 +154,7 @@ class SiteAssemblyTest {
     }
 
     @Test
-    fun `the description page and its hero are published`() {
+    fun `the description page and its link preview are published`() {
         val index = file("index.html")
         assertTrue(index.length() > 4_000, "index.html is ${index.length()} bytes — that is not the page")
         assertTrue(
@@ -164,9 +162,8 @@ class SiteAssemblyTest {
             "the description page no longer points at /app/, so its launch button goes nowhere"
         )
 
-        // The hero is also the link preview image, so a scraper reads this exact file — and reads
-        // it at the address the og:image names, which is why that is checked and not only the tag
-        // the page draws with.
+        // The link preview image: a scraper reads this exact file at the address the og:image
+        // names. The page no longer draws it; its opening's band begins with the same window.
         val hero = file("img/natural.webp")
         val header = hero.asLatin1()
         assertTrue(
@@ -179,8 +176,7 @@ class SiteAssemblyTest {
         )
         assertEquals(
             1600 to 800, webpDimensions(hero),
-            "the hero is no longer 1600x800. The page reserves that shape in the img tag, so a " +
-                "different one reflows the whole first screenful as it loads."
+            "the link preview is no longer 1600x800, the 2:1 a link's preview is drawn at"
         )
     }
 
@@ -206,9 +202,11 @@ class SiteAssemblyTest {
         // alone deploys a broken picture or a card that jumps as it loads, and nothing else would
         // notice.
         val expected = mapOf(
+            // The link preview, which the page's og:image names.
             "natural.webp" to (1600 to 800),
-            // The strip the hero drifts along: the band round the whole world, halved.
-            "hero-strip.webp" to (2048 to 400),
+            // The band the opening drifts, round the whole world, full size and halved.
+            "world-band.webp" to (4096 to 800),
+            "world-band-half.webp" to (2048 to 400),
             // How a world is made: one picture a step, one window halved, played in one frame.
             "step-plates.webp" to (520 to 280),
             "step-erosion.webp" to (520 to 280),
@@ -216,8 +214,6 @@ class SiteAssemblyTest {
             "step-climate.webp" to (520 to 280),
             "step-rivers.webp" to (520 to 280),
             "step-realms.webp" to (520 to 280),
-            // Read the land: the map the pins stand on.
-            "land.webp" to (1120 to 560),
             // The twelve styles, each the same 600 by 400 window: three are cards, all twelve are
             // the comparison slider's.
             "style-atlas.webp" to (600 to 400),
@@ -246,15 +242,29 @@ class SiteAssemblyTest {
         )
 
         val page = file("index.html").readText()
-        // Two ways a picture is asked for without an img of its own: the hero's strip, fetched by
-        // the script once the page has loaded, and a style the slider fetches when it is picked.
-        val strip = attribute(Regex("""<div[^>]*id="hero-plate"[^>]*>""").find(page)?.value
-            ?: fail("the hero has no plate to drift in"), "data-strip")
-        assertEquals("img/hero-strip.webp", strip, "the hero drifts along a strip that was not rendered")
+        // Three ways a picture is asked for without an img of its own shape: the link preview,
+        // named by the og:image; the full band, a <picture>'s source over the half band's img; and
+        // a style the slider fetches when it is picked.
         val offered = pickerValues(page).map { "style-$it.webp" }.toSet()
+        val bandSources = Regex("""<source[^>]*srcset="img/${Regex.escape(SiteImagery.WORLD_BAND.file)}"""").findAll(page).count()
+        assertTrue(bandSources >= 1, "the opening never asks for the full band")
         expected.forEach { (name, size) ->
             assertEquals(size, webpDimensions(file("img/$name")), "img/$name is the wrong size")
-            if (name == "hero-strip.webp") return@forEach
+            if (name == SiteImagery.HERO.file || name == SiteImagery.WORLD_BAND.file) return@forEach
+            if (name == SiteImagery.WORLD_BAND_HALF.file) {
+                // Laid at the band's shape, the full band's, which the half band shares.
+                val tag = imageTag(page, name)
+                assertEquals(
+                    SiteImagery.WORLD_BAND.width * size.second, SiteImagery.WORLD_BAND.height * size.first,
+                    "the two bands are not the same shape"
+                )
+                assertEquals(
+                    SiteImagery.WORLD_BAND.width to SiteImagery.WORLD_BAND.height,
+                    attribute(tag, "width").toInt() to attribute(tag, "height").toInt(),
+                    "the page lays the band out at a shape that is not the band's"
+                )
+                return@forEach
+            }
             if (!Regex("""<img\s+src="img/${Regex.escape(name)}"""").containsMatchIn(page)) {
                 assertTrue(name in offered, "img/$name is rendered and nothing on the page asks for it")
                 return@forEach
@@ -401,263 +411,125 @@ class SiteAssemblyTest {
     }
 
     /**
-     * That the strip the hero drifts along joins itself end to end, and that its first stretch is
-     * the hero's own picture, so the strip can take over from it without the land moving.
+     * That the band the opening drifts joins itself end to end at both its sizes, that its first
+     * stretch is the link preview's window, and that neither size has grown past its stated weight.
      *
-     * The world wraps east-west and the strip is its whole circumference, so as the track slides
-     * the strip's last column is followed by its first: those two have to be neighbours on the
-     * ground. Held to how much one column differs from the next anywhere inside the strip, where
-     * every pair is neighbours by construction: the seam may differ as much as the roughest of
-     * those and no more. On the strip as built the seam measures 24 against a median of 17 and a
-     * roughest of 49; a strip stopped 512 pixels short of the circumference measured 164.
+     * The world wraps east-west and the band is its whole circumference, laid twice on one track,
+     * so as the track slides the band's last column is followed by its first: those two have to be
+     * neighbours on the ground. Held to how much one column differs from the next anywhere inside
+     * the band, where every pair is neighbours by construction: the seam may differ as much as the
+     * roughest of those and no more. The half band's seam measured 24 against a roughest of 49 as
+     * the strip of Site 5a; a strip stopped 512 pixels short of the circumference measured 164.
      */
     @Test
-    fun `the hero's strip joins itself and begins where the hero is`() {
-        val figure = SiteImagery.HERO_STRIP
-        val pixels = decodedPixels(file("img/${figure.file}"))
-        val width = figure.width
-        val height = figure.height
-        fun columnDifference(left: Int, right: Int): Double {
-            var sum = 0L
-            for (row in 0 until height) {
-                val a = pixels[row * width + left]
-                val b = pixels[row * width + right]
-                sum += abs((a shr 16 and 0xFF) - (b shr 16 and 0xFF)) +
-                    abs((a shr 8 and 0xFF) - (b shr 8 and 0xFF)) + abs((a and 0xFF) - (b and 0xFF))
-            }
-            return sum.toDouble() / height
-        }
-        val roughest = (0 until width - 1).maxOf { columnDifference(it, it + 1) }
-        val seam = columnDifference(width - 1, 0)
-        assertTrue(
-            seam <= roughest,
-            "the strip's last column and its first differ by %.1f a pixel, and no two neighbouring columns inside it by more than %.1f: the strip does not join itself"
-                .format(seam, roughest)
-        )
-
-        // The first stretch, against the hero halved: the same window at the strip's scale.
+    fun `the band joins itself at both sizes and begins where the preview is`() {
         val hero = decodedPixels(file("img/${SiteImagery.HERO.file}"))
         val heroWidth = SiteImagery.HERO.width
-        val across = heroWidth / figure.reduction
-        var difference = 0L
-        for (row in 0 until height) for (column in 0 until across) {
-            val a = pixels[row * width + column]
-            val b = hero[(row * figure.reduction) * heroWidth + column * figure.reduction]
-            difference += abs((a shr 8 and 0xFF) - (b shr 8 and 0xFF))
+        listOf(
+            SiteImagery.WORLD_BAND to WORLD_BAND_MOST_BYTES,
+            SiteImagery.WORLD_BAND_HALF to WORLD_BAND_HALF_MOST_BYTES
+        ).forEach { (figure, mostBytes) ->
+            val published = file("img/${figure.file}")
+            val pixels = decodedPixels(published)
+            val width = figure.width
+            val height = figure.height
+            fun columnDifference(left: Int, right: Int): Double {
+                var sum = 0L
+                for (row in 0 until height) {
+                    val a = pixels[row * width + left]
+                    val b = pixels[row * width + right]
+                    sum += abs((a shr 16 and 0xFF) - (b shr 16 and 0xFF)) +
+                        abs((a shr 8 and 0xFF) - (b shr 8 and 0xFF)) + abs((a and 0xFF) - (b and 0xFF))
+                }
+                return sum.toDouble() / height
+            }
+            val roughest = (0 until width - 1).maxOf { columnDifference(it, it + 1) }
+            val seam = columnDifference(width - 1, 0)
+            assertTrue(
+                seam <= roughest,
+                "${figure.file}'s last column and its first differ by %.1f a pixel, and no two neighbouring columns inside it by more than %.1f: the band does not join itself"
+                    .format(seam, roughest)
+            )
+
+            // The first stretch, against the link preview at the band's scale.
+            val across = heroWidth / figure.reduction
+            var difference = 0L
+            for (row in 0 until height) for (column in 0 until across) {
+                val a = pixels[row * width + column]
+                val b = hero[(row * figure.reduction) * heroWidth + column * figure.reduction]
+                difference += abs((a shr 8 and 0xFF) - (b shr 8 and 0xFF))
+            }
+            val meanGreen = difference.toDouble() / (height * across)
+            assertTrue(
+                meanGreen < PREVIEW_TAKEOVER_MOST_MEAN_DIFFERENCE,
+                "${figure.file}'s first $across columns differ from the link preview by %.1f in green on average: the band does not begin at the author's window"
+                    .format(meanGreen)
+            )
+            assertTrue(
+                published.length() <= mostBytes,
+                "${figure.file} is ${published.length()} bytes, more than the $mostBytes stated for it"
+            )
+            // The brightest pixel, for the title card's scrim: the contrast guard measures the card's
+            // words over pure white, which is the brightest a pixel can be and, here, is.
+            val brightest = pixels.maxOf { (it shr 16 and 0xFF) + (it shr 8 and 0xFF) + (it and 0xFF) }
+            println(
+                "SITE ${figure.file}: seam %.1f against %.1f at the roughest inside, first stretch %.1f from the preview, %d bytes, brightest pixel %d of 765"
+                    .format(seam, roughest, meanGreen, published.length(), brightest)
+            )
         }
-        val meanGreen = difference.toDouble() / (height * across)
-        assertTrue(
-            meanGreen < HERO_TAKEOVER_MOST_MEAN_DIFFERENCE,
-            "the strip's first $across columns differ from the hero by %.1f in green on average: the strip does not begin where the hero is, and would jump as it takes over"
-                .format(meanGreen)
+    }
+
+    /**
+     * What a headless Chrome fetched as the page loaded, by name, for a screen 375 pixels wide at
+     * one device pixel to the CSS pixel and for every other screen it was measured on (375 at two,
+     * 1280 at one and at two), on a first visit with the title card and on a returning one alike
+     * (see docs/DESIGN_LEDGER.md, Site 6). Every face the style sheet names is fetched, not only
+     * the two the head preloads, because the whole page is laid out at once and every face is set
+     * somewhere in it; one of the two bands; and the six steps' pictures, which are lazy but stand
+     * inside the distance a browser fetches lazy pictures ahead of the reader.
+     */
+    private val fetchedAtLoad: Map<String, List<String>> by lazy {
+        val always = listOf(
+            "fonts/spectral_regular.ttf", "fonts/spectral_semibold.ttf", "fonts/plex_sans_regular.ttf",
+            "fonts/plex_sans_medium.ttf", "fonts/plex_mono_regular.ttf"
+        ) + SiteImagery.STEP_CARDS.map { "img/${it.file}" }
+        mapOf(
+            "narrow at one device pixel" to always + "img/${SiteImagery.WORLD_BAND_HALF.file}",
+            "wide or dense" to always + "img/${SiteImagery.WORLD_BAND.file}"
         )
-        println("SITE the hero's strip: seam %.1f against %.1f at the roughest inside, first stretch %.1f from the hero".format(seam, roughest, meanGreen))
-    }
-
-    /** One pin as the assembled page writes it. */
-    private class Pin(val kind: String, val left: Double, val top: Double, val cellX: Int, val cellY: Int, val labelledBy: String)
-
-    /** Every pin on the "Read the land" map, in the page's order. */
-    private fun pins(page: String): List<Pin> =
-        Regex("""<button[^>]*class="pin"[^>]*>""").findAll(page).map { match ->
-            val tag = match.value
-            val style = attribute(tag, "style")
-            val left = Regex("""left:([\d.]+)%""").find(style)?.groupValues?.get(1)?.toDouble() ?: fail("$tag has no left")
-            val top = Regex("""top:([\d.]+)%""").find(style)?.groupValues?.get(1)?.toDouble() ?: fail("$tag has no top")
-            val (cellX, cellY) = attribute(tag, "data-cell").split(",").map { it.toInt() }
-            Pin(attribute(tag, "data-kind"), left, top, cellX, cellY, attribute(tag, "aria-labelledby"))
-        }.toList()
-
-    /** The world the site's pictures were cut from, as `SiteImagery` saved it beside them. */
-    private val siteWorld: com.cartogenesis.worldgen.model.WorldMap by lazy {
-        val save = File(repoRoot, "web/build/site-imagery/${SiteImagery.WORLD_FILE}")
-        assertTrue(save.isFile, "no saved world at ${save.path}: :desktop:renderSiteImagery writes it")
-        save.inputStream().buffered(1 shl 16).use { input ->
-            val source = object : com.cartogenesis.cartography.SaveSource {
-                override suspend fun read(into: ByteArray, offset: Int, length: Int): Int = input.read(into, offset, length)
-            }
-            kotlinx.coroutines.runBlocking { com.cartogenesis.cartography.WorldCodec.read(source, GzipCompressor).world }
-        }
     }
 
     /**
-     * That every pin on "Read the land" stands inside the map, on the cell it names, and that the
-     * cell is the kind of place its note says it is.
+     * What the page fetches as it loads, and a ceiling on it, restated for Site 6.
      *
-     * The pins are placed by `SiteLandmarks` from the world's fields, and this reads the same
-     * world back from the save written beside the pictures and asks each pin's question again, in
-     * code of its own: a delta pin on the mouth of a river large enough to build one, a coastal
-     * range on high ground over an ocean plate's margin, and so on. A finder that drifted onto the
-     * wrong cell, or a page whose pins were typed by hand, fails here rather than being trusted.
-     */
-    @Test
-    fun `every pin stands on the kind of place its note names`() {
-        val page = file("index.html").readText()
-        val pins = pins(page)
-        val notes = Regex("""<li id="land-([a-z-]+)">""").findAll(page).map { it.groupValues[1] }.toList()
-        assertTrue(pins.size in 5..6, "the map has ${pins.size} pins, where it has five or six")
-        assertEquals(notes, pins.map { it.kind }, "the pins are not the notes under the map, in their order")
-        pins.forEachIndexed { index, pin ->
-            assertTrue(page.contains("""id="${pin.labelledBy}""""), "pin ${index + 1} is named by ${pin.labelledBy}, which is not on the page")
-            val number = Regex("""data-kind="${pin.kind}"[^>]*>(\d+)</button>""").find(page)?.groupValues?.get(1)
-            assertEquals("${index + 1}", number, "the ${pin.kind} pin is numbered $number and is note ${index + 1}")
-        }
-
-        val world = siteWorld
-        val window = SiteImagery.LAND_WINDOW
-        val sheet = com.cartogenesis.cartography.SheetGeometry.of(world)
-        pins.forEach { pin ->
-            // Inside the picture, with the whole of its square on it.
-            assertTrue(pin.left in 2.0..98.0 && pin.top in 4.0..96.0, "the ${pin.kind} pin stands at ${pin.left}%, ${pin.top}%, at the picture's edge or off it")
-            // On the cell it names: the cell's centre, as a share of the picture.
-            val centreX = ((pin.cellX + 0.5) * sheet.pixelsPerCellAcross - window.x).mod(sheet.widthPixels.toDouble())
-            val centreY = (pin.cellY + 0.5) * sheet.pixelsPerCellDown - window.y
-            assertEquals(centreX * 100 / window.width, pin.left, 0.001, "the ${pin.kind} pin is not on its cell across")
-            assertEquals(centreY * 100 / window.height, pin.top, 0.001, "the ${pin.kind} pin is not on its cell down")
-            val cell = pin.cellY * world.width + pin.cellX
-            val failure = kindFailure(world, pin.kind, cell)
-            assertTrue(failure == null, "the ${pin.kind} pin stands on cell ${pin.cellX},${pin.cellY}, which $failure")
-            println("SITE pin ${pin.kind} on cell ${pin.cellX},${pin.cellY} at ${pin.left}%, ${pin.top}%")
-        }
-    }
-
-    /** Height above the shoreline in metres, or depth below it as a negative number, for any cell. */
-    private fun metres(world: com.cartogenesis.worldgen.model.WorldMap, cell: Int): Float {
-        val relative = world.sea.relativeElevation.data[cell]
-        return if (world.sea.isLand[cell]) world.config.scale.metresAboveShoreline(relative)
-        else world.config.scale.metresBelowShoreline(relative)
-    }
-
-    /**
-     * Why [cell] is not a place of [kind], or null when it is. Each clause is the kind's definition
-     * in the world's own terms, written here rather than taken from the finder.
-     */
-    private fun kindFailure(world: com.cartogenesis.worldgen.model.WorldMap, kind: String, cell: Int): String? {
-        val land = world.sea.isLand
-        val width = world.width
-        val scale = world.config.scale
-        val cellWidthKm = scale.cellWidthKm(width)
-        val cellHeightKm = scale.cellHeightKm(world.height)
-        return when (kind) {
-            "coastal-range" -> {
-                val tectonics = world.config.tectonics
-                val reach = tectonics.andeanWidthCells + tectonics.arcOffsetCells + tectonics.arcWidthCells
-                when {
-                    !land[cell] -> "is sea"
-                    world.plates.nearestBoundaryClass[cell] != com.cartogenesis.worldgen.pipeline.BoundaryClass.ANDEAN_MARGIN.ordinal ->
-                        "lies nearest a ${com.cartogenesis.worldgen.pipeline.BoundaryClass.entries.getOrNull(world.plates.nearestBoundaryClass[cell])} boundary, not an ocean plate under a continent"
-                    world.plates.boundaryDistance.data[cell] > reach -> "stands ${world.plates.boundaryDistance.data[cell]} cells from the margin, beyond its range and arc"
-                    metres(world, cell) < 1_500f -> "stands ${metres(world, cell).toInt()} m high, not a range"
-                    else -> null
-                }
-            }
-            "rain-shadow" -> {
-                if (!land[cell] || world.rivers.lakes.isLake(cell)) return "is water"
-                if (metres(world, cell) > 1_000f) return "stands ${metres(world, cell).toInt()} m high, inside the range rather than behind it"
-                // Upwind, a kilometre at a time for 250 km: a crest a kilometre above the cell, and
-                // land beyond the crest with three times the cell's rain.
-                val eastKm = world.climate.windDirection[cell] * cellWidthKm
-                val southKm = world.climate.windMeridional.data[cell] * cellHeightKm
-                val speed = kotlin.math.hypot(eastKm, southKm)
-                if (speed == 0.0) return "has no wind"
-                var crest = metres(world, cell)
-                var wettestBeyond = 0f
-                for (km in 1..250) {
-                    val row = cell / width - Math.round(southKm / speed * km / cellHeightKm).toInt()
-                    if (row !in 0 until world.height) break
-                    val column = Math.floorMod(cell % width - Math.round(eastKm / speed * km / cellWidthKm).toInt(), width)
-                    val upwind = row * width + column
-                    if (metres(world, upwind) > crest) { crest = metres(world, upwind); wettestBeyond = 0f }
-                    else if (land[upwind]) wettestBeyond = maxOf(wettestBeyond, world.climate.precipitationMm.data[upwind])
-                }
-                val rain = world.climate.precipitationMm.data[cell]
-                when {
-                    crest < metres(world, cell) + 1_000f -> "has no crest a kilometre above it within 250 km upwind"
-                    wettestBeyond < 3 * rain -> "gets ${rain.toInt()} mm, and the land upwind of the crest at most ${wettestBeyond.toInt()}: no rain shadow"
-                    else -> null
-                }
-            }
-            "drowned-valley" -> {
-                if (land[cell]) return "is land"
-                val across = (60.0 / cellWidthKm).toInt()
-                val down = (60.0 / cellHeightKm).toInt()
-                var sea = 0
-                var all = 0
-                for (dy in -down..down) for (dx in -across..across) {
-                    if ((dx * cellWidthKm) * (dx * cellWidthKm) + (dy * cellHeightKm) * (dy * cellHeightKm) > 3_600.0) continue
-                    val row = cell / width + dy
-                    if (row !in 0 until world.height) continue
-                    all++
-                    if (!land[row * width + Math.floorMod(cell % width + dx, width)]) sea++
-                }
-                if (sea * 3 >= all) "has $sea of the $all cells within 60 km under the sea, an open coast rather than a narrow arm" else null
-            }
-            "delta" -> {
-                if (!land[cell]) return "is sea"
-                val next = world.rivers.flowTarget[cell]
-                if (next < 0 || land[next]) return "is not where a river meets the sea"
-                // How much land drains through it: walk down the routing from every land cell and
-                // count the walks that pass here. Cheap enough over one world, and it needs no
-                // order over the cells to be right.
-                val drains = IntArray(world.width * world.height)
-                for (source in 0 until world.width * world.height) {
-                    if (!land[source]) continue
-                    var at = source
-                    var steps = 0
-                    while (at >= 0 && land[at] && steps++ < world.width * 4) {
-                        if (at == cell) { drains[cell]++; break }
-                        at = world.rivers.flowTarget[at]
-                    }
-                }
-                val least = world.config.erosion.deltaMinCatchment * world.sea.landCellCount
-                if (drains[cell] < least) "drains ${drains[cell]} cells, under the $least a river must before it builds a delta" else null
-            }
-            "shelf" -> when {
-                land[cell] -> "is land"
-                metres(world, cell) < -world.config.sea.shelfDepthMetres -> "lies ${-metres(world, cell).toInt()} m deep, off the shelf"
-                else -> null
-            }
-            else -> "is of a kind this guard does not know"
-        }
-    }
-
-    /**
-     * What the page fetches as it loads, and a ceiling on it: the page itself, the two faces it
-     * preloads, every picture it asks for without `loading="lazy"`, and the six steps' pictures.
-     * The steps are lazy, but the frame that plays them stands in the second screenful at every
-     * width, inside the distance a browser fetches lazy pictures ahead of the reader, so a headless
-     * Chrome measured all six arriving before the load event at 375, 768, 1280 and 1920 wide. The
-     * hero's strip is fetched after the page has loaded and is weighed apart, and every other lazy
-     * picture comes as the reader nears it.
-     *
-     * The ceiling is the weight before Site 5a and the growth Site 5a states for it (see
-     * [LOAD_BYTES_BEFORE_SITE_5A] and [LOAD_BYTES_GROWTH_SITE_5A]), so a later change that makes
-     * the first load heavier has to come here and say by how much.
+     * Site 5a's guard counted the page, the two preloaded faces, the eager pictures and the six
+     * steps, and so missed the three faces the style sheet asks for, which a headless Chrome
+     * fetched at load every time, and anything a style sheet or a `<picture>`'s source asks for. So
+     * the list here is what was measured, by name ([fetchedAtLoad]), and this checks it both ways:
+     * everything the page asks for without waiting (a preload, a face, an eager picture or a
+     * `<picture>`'s source) is on the list, and the list, summed off the published files, stays
+     * under a stated ceiling for each kind of screen.
      */
     @Test
     fun `the page's load stays within its stated weight`() {
         val page = file("index.html")
         val text = page.readText()
-        val preloaded = Regex("""<link rel="preload"[^>]*href="([^"]+)"""").findAll(text).map { it.groupValues[1] }.toList()
-        val eager = Regex("""<img\s[^>]*>""").findAll(text).map { it.value }
-            .filterNot { it.contains("""loading="lazy"""") }
-            .map { attribute(it, "src") }.toList()
-        val steps = SiteImagery.STEP_CARDS.map { "img/${it.file}" }
-        val atLoad = page.length() + (preloaded + eager + steps).distinct().sumOf { file(it).length() }
-        val strip = file("img/${SiteImagery.HERO_STRIP.file}").length()
-        println(
-            "SITE at load: $atLoad bytes (page ${page.length()}, preloaded ${preloaded.joinToString()}, eager ${eager.joinToString()}, the frame's ${steps.joinToString()}); " +
-                "the hero's strip after load, $strip bytes"
-        )
-        assertTrue(
-            atLoad <= LOAD_BYTES_BEFORE_SITE_5A + LOAD_BYTES_GROWTH_SITE_5A,
-            "the page fetches $atLoad bytes as it loads, more than the $LOAD_BYTES_BEFORE_SITE_5A it " +
-                "fetched before Site 5a and the $LOAD_BYTES_GROWTH_SITE_5A Site 5a allowed it"
-        )
-        assertTrue(
-            strip <= HERO_STRIP_MOST_BYTES,
-            "the hero's strip is $strip bytes, more than the $HERO_STRIP_MOST_BYTES stated for it"
-        )
+        val asked = (Regex("""<link rel="preload"[^>]*href="([^"]+)"""").findAll(text).map { it.groupValues[1] } +
+            Regex("""url\("(fonts/[^"]+)"\)""").findAll(text).map { it.groupValues[1] } +
+            Regex("""<img\s[^>]*>""").findAll(text).map { it.value }.filterNot { it.contains("""loading="lazy"""") }
+                .map { attribute(it, "src") } +
+            Regex("""<source[^>]*srcset="([^"]+)"""").findAll(text).map { it.groupValues[1] }).toSet()
+        val listed = fetchedAtLoad.values.flatten().toSet()
+        assertTrue((asked - listed).isEmpty(), "the page asks for ${asked - listed} as it loads, which the stated load does not count")
+        fetchedAtLoad.forEach { (screen, files) ->
+            val atLoad = page.length() + files.sumOf { file(it).length() }
+            val ceiling = LOAD_BYTES_SITE_6.getValue(screen)
+            println("SITE at load, $screen: $atLoad bytes (page ${page.length()}, " + files.joinToString { "$it ${file(it).length()}" } + ")")
+            assertTrue(
+                atLoad <= ceiling,
+                "the page fetches $atLoad bytes as it loads on a $screen screen, more than the $ceiling stated for it"
+            )
+        }
     }
 
     @Test
@@ -1072,21 +944,21 @@ class SiteAssemblyTest {
     }
 
     /**
-     * That the download button names the platforms there are downloads for.
+     * That the opening's download button names the platforms there are downloads for.
      *
      * It read "Download for Windows (recommended)" for as long as Windows was the only one, and a
      * label like that survives a new platform perfectly happily: the button still works, and it
      * still tells a Linux reader the program is not for them.
      */
     @Test
-    fun `the hero's download button names both desktop platforms`() {
+    fun `the opening's download button names both desktop platforms`() {
         val page = file("index.html").readText()
         val label = Regex("""id="launch-desktop"[^>]*>([^<]*)<""").find(page)?.groupValues?.get(1)
-            ?: fail("the hero no longer has a download button")
+            ?: fail("the opening no longer has a download button")
         listOf("Windows", "Linux").forEach {
             assertTrue(
                 label.contains(it),
-                "the hero's download button reads \"$label\" and there is a $it download"
+                "the opening's download button reads \"$label\" and there is a $it download"
             )
         }
 
@@ -1103,7 +975,7 @@ class SiteAssemblyTest {
             at < page.indexOf("""<section id="next">"""),
             "the Download and Installation section has moved below the roadmap"
         )
-        println("SITE the hero's download button reads \"$label\"")
+        println("SITE the opening's download button reads \"$label\"")
     }
 
     @Test
@@ -1129,4 +1001,117 @@ class SiteAssemblyTest {
                 maps.joinToString { it.name }
         )
     }
+
+    /**
+     * The files a release carries, from `site/downloads.txt`, with `<version>` where its number goes.
+     */
+    private val releaseFileNames: List<String> by lazy {
+        File(repoRoot, "site/downloads.txt").readLines().map { it.substringBefore('#').trim() }.filter { it.isNotEmpty() }
+    }
+
+    /**
+     * Runs the page's own release lookup, as published, in Node against a release made of every
+     * file `site/downloads.txt` lists, and against the ways that release can fail to arrive.
+     *
+     * The lookup is the part of the page's script between its two markers. It takes what it
+     * depends on — the network, the visit's storage, the clock and its time limit — as arguments,
+     * so here it is handed stand-ins for each and asked: does every file a release carries match
+     * its own pill, and only its own; does a release that lacks a file leave only that pill as it
+     * was; do a malformed answer, a refusal (the API's rate limit is a 403), a failed request and a
+     * request that never answers all come back as no release, so every pill stays a link to the
+     * release page with no size; is a refusal kept for the visit rather than asked again on every
+     * page; and is a download that is not on this project's own release page ignored. Node is
+     * already on the deploy runner, which is Linux with the Actions image's tools, and on the
+     * machines this is built on.
+     */
+    @Test
+    fun `the release lookup finds every file the release carries and falls back on every failure`() {
+        val page = file("index.html").readText()
+        val lookup = Regex("""/\* release lookup begins \*/(.*?)/\* release lookup ends \*/""", RegexOption.DOT_MATCHES_ALL)
+            .find(page)?.groupValues?.get(1) ?: fail("the page's release lookup is no longer marked")
+        val work = kotlin.io.path.createTempDirectory("release-lookup").toFile()
+        try {
+            File(work, "lookup.js").writeText(lookup)
+            File(work, "names.json").writeText(releaseFileNames.joinToString(",", "[", "]") { "\"$it\"" })
+            File(work, "run.js").writeText(RELEASE_LOOKUP_HARNESS)
+            val process = ProcessBuilder("node", "run.js").directory(work).redirectErrorStream(true).start()
+            val output = process.inputStream.bufferedReader().readText()
+            assertTrue(process.waitFor(60, java.util.concurrent.TimeUnit.SECONDS), "Node did not finish the release lookup's cases")
+            assertEquals(0, process.exitValue(), "Node could not run the release lookup: $output")
+            val results = output.lines().filter { it.startsWith("CASE ") }
+            println(results.joinToString("\n") { "SITE release lookup $it" })
+            val failed = results.filter { it.endsWith(" FAIL") || it.contains(" FAIL ") }
+            assertTrue(results.size >= 9, "the release lookup's harness reported ${results.size} cases: $output")
+            assertTrue(failed.isEmpty(), "the release lookup got these wrong:\n" + failed.joinToString("\n"))
+        } finally {
+            work.deleteRecursively()
+        }
+    }
+
+    /**
+     * The cases, in Node. Each prints `CASE <name> PASS` or `CASE <name> FAIL <why>`. The release
+     * is made from `names.json`, the list the page's pills are held to, so a file added to a
+     * release is a file this asks the lookup to find.
+     */
+    private val RELEASE_LOOKUP_HARNESS = """
+const fs = require('fs');
+const block = fs.readFileSync('lookup.js', 'utf8');
+const names = JSON.parse(fs.readFileSync('names.json', 'utf8'));
+const api = new Function(block + '; return {releaseFromAnswer, releaseFileFor, lookUpLatestRelease, sizeInWords};')();
+const version = '3.2.0';
+const home = 'https://github.com/bhanright/Cartogenesis/releases/download/v' + version + '/';
+const asset = (pattern, at) => ({name: pattern.replace('<version>', version), size: 1048576 * (10 + at), browser_download_url: home + pattern.replace('<version>', version)});
+const whole = {tag_name: 'v' + version, assets: names.map(asset)};
+function keeping() { const kept = new Map(); return {getItem: (k) => kept.has(k) ? kept.get(k) : null, setItem: (k, v) => kept.set(k, String(v))}; }
+function answering(status, body, counter) {
+  return () => { counter.calls++; return Promise.resolve({ok: status >= 200 && status < 300, status,
+    json: () => typeof body === 'string' ? Promise.reject(new SyntaxError('not JSON')) : Promise.resolve(JSON.parse(JSON.stringify(body)))}); };
+}
+let clock = 0; const now = () => clock;
+const say = (name, ok, why) => console.log('CASE ' + name + (ok ? ' PASS' : ' FAIL ' + (why || '')));
+(async () => {
+  let counter = {calls: 0};
+  let release = await api.lookUpLatestRelease(answering(200, whole, counter), keeping(), now, 1000);
+  const found = names.map((n) => release && api.releaseFileFor(release, n));
+  say('every-file-matches-its-own-pill', found.every((f, at) => f && f.name === names[at].replace('<version>', version) && f.size === whole.assets[at].size),
+    JSON.stringify(found));
+  say('no-two-pills-share-a-file', new Set(found.map((f) => f && f.name)).size === names.length);
+  say('size-in-words', api.sizeInWords(107692851) === '102.7 MB', api.sizeInWords(107692851));
+
+  const lacking = {tag_name: 'v' + version, assets: whole.assets.slice(1)};
+  release = await api.lookUpLatestRelease(answering(200, lacking, {calls: 0}), keeping(), now, 1000);
+  const partly = names.map((n) => api.releaseFileFor(release, n));
+  say('a-missing-file-leaves-only-its-pill', partly[0] === null && partly.slice(1).every(Boolean), JSON.stringify(partly.map(Boolean)));
+
+  release = await api.lookUpLatestRelease(answering(200, 'not json', {calls: 0}), keeping(), now, 1000);
+  say('malformed-answer-is-no-release', release === null, JSON.stringify(release));
+  release = await api.lookUpLatestRelease(answering(200, {message: 'Not Found'}, {calls: 0}), keeping(), now, 1000);
+  say('answer-of-the-wrong-shape-is-no-release', release === null, JSON.stringify(release));
+
+  counter = {calls: 0};
+  const store = keeping();
+  release = await api.lookUpLatestRelease(answering(403, {message: 'API rate limit exceeded'}, counter), store, now, 1000);
+  const again = await api.lookUpLatestRelease(answering(200, whole, counter), store, now, 1000);
+  say('a-refusal-is-no-release-and-is-kept-for-the-visit', release === null && again === null && counter.calls === 1, 'calls ' + counter.calls);
+
+  release = await api.lookUpLatestRelease(() => Promise.reject(new TypeError('offline')), keeping(), now, 1000);
+  say('a-failed-request-is-no-release', release === null);
+
+  const started = Date.now();
+  release = await api.lookUpLatestRelease(() => new Promise(() => {}), keeping(), now, 50);
+  say('a-request-that-never-answers-is-given-up', release === null && Date.now() - started < 1000, (Date.now() - started) + ' ms');
+
+  counter = {calls: 0};
+  const kept = keeping();
+  await api.lookUpLatestRelease(answering(200, whole, counter), kept, now, 1000);
+  const second = await api.lookUpLatestRelease(answering(200, whole, counter), kept, now, 1000);
+  clock += 16 * 60 * 1000;
+  await api.lookUpLatestRelease(answering(200, whole, counter), kept, now, 1000);
+  say('an-answer-is-kept-for-a-quarter-hour-and-no-longer', second && counter.calls === 2, 'calls ' + counter.calls);
+
+  const foreign = {tag_name: 'v' + version, assets: [Object.assign(asset(names[0], 0), {browser_download_url: 'https://mirror.invalid/' + names[0]})]};
+  release = await api.lookUpLatestRelease(answering(200, foreign, {calls: 0}), keeping(), now, 1000);
+  say('a-download-off-this-project-is-ignored', release && api.releaseFileFor(release, names[0]) === null);
+})().catch((e) => { console.log('CASE harness FAIL ' + e); });
+""".trimIndent()
 }

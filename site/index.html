@@ -1400,7 +1400,9 @@ sudo apt update &amp;&amp; sudo apt install cartogenesis</code><button type="but
     if (layout) { cue.hidden = false; watchScroll(openingInView); }
     askForFrame();
   });
-  lessMotion.addEventListener('change', function () { if (lessMotion.matches) settleInFlow(); });
+  if (lessMotion.addEventListener) {
+    lessMotion.addEventListener('change', function () { if (lessMotion.matches) settleInFlow(); });
+  }
   if (document.fonts && document.fonts.ready) {
     document.fonts.ready.then(function () { measure(); askForFrame(); });
   }

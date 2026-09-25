@@ -80,48 +80,69 @@ class SitePaletteContrastTest {
             "oxblood-lit" to { s -> s.error.toArgb() }
         )
 
+        /**
+         * The page's colours of its own, which the window has no use for, each with the one place it
+         * is used. Named here so a colour cannot be added to the page without being listed, and each
+         * measured below on what it is read against.
+         */
+        val PAGE_ONLY: Map<String, String> = mapOf(
+            "letter-unlit" to "the title card's name, before its letters are struck",
+            "letter-struck" to "each letter's flash as it is struck, on its way to brass"
+        )
+
         /** Every text pair on the page: where it is, the ink, and the ground it is read on. */
         val TEXT_PAIRS: List<Triple<String, String, String>> = listOf(
-            // On the page's ground.
-            Triple("body text", "bone", "ink"),
-            Triple("lede, leads, captions, spec values, card text, footer", "bone-dim", "ink"),
+            // On the page's ground, the opening's panel and the tray included (the tray's ground is
+            // the ink at 92%, over a page whose every ground is darker than the words set on it).
+            Triple("body text, the opening's lede", "bone", "ink"),
+            Triple("section leads, captions, spec values, card text, footer", "bone-dim", "ink"),
             Triple("headline, wordmark, section and card headings", "parchment", "ink"),
-            Triple("eyebrow, spec terms, selected tab, note numbers", "brass", "ink"),
-            Triple("annotation cartouche text", "bone", "ink"),
-            Triple("unselected tab", "bone-dim", "ink"),
-            // On a raised panel: the notices, the practical panels, the hero plate.
-            Triple("notice and panel text", "bone-dim", "ink-raised"),
-            Triple("notice lead-in", "bone", "ink-raised"),
+            Triple("eyebrow, spec terms, note numbers, the link under the downloads", "brass", "ink"),
+            // On a raised panel: the practical panels.
+            Triple("panel text", "bone-dim", "ink-raised"),
             Triple("panel heading", "parchment", "ink-raised"),
             Triple("panel call to action", "brass", "ink-raised"),
             Triple("platform tag", "bone-dim", "ink-raised"),
-            // A file name inside a sentence takes the mono face and the panel's own ground.
-            Triple("file name in a note", "bone", "ink-raised"),
-            // On a sunk panel: the three apt commands a Linux reader copies, and what a hovered or
-            // focused secondary button and download card become.
-            Triple("command block", "bone", "ink-sunk"),
-            Triple("secondary button, hovered", "brass", "ink-sunk"),
-            Triple("download card heading, hovered", "parchment", "ink-sunk"),
-            Triple("download card text, hovered", "bone-dim", "ink-sunk"),
-            // On the primary button, at rest and lit.
-            Triple("primary button", "parchment", "oxblood"),
-            Triple("primary button, hovered", "parchment", "oxblood-lit"),
-            // The secondary button's own label sits on the page ground.
-            Triple("secondary button", "brass", "ink"),
+            // On a sunk panel: what a hovered or focused download panel in the Notes becomes.
+            Triple("download panel heading, hovered", "parchment", "ink-sunk"),
+            Triple("download panel text, hovered", "bone-dim", "ink-sunk"),
+            // On the primary button, at rest and lit: the page's ink on brass, and on parchment.
+            Triple("primary button", "ink", "brass"),
+            Triple("primary button, hovered", "ink", "parchment"),
+            // The secondary button's label and the scroll cue's arrow sit on the page's ground.
+            Triple("secondary button, the cue and the pause control", "parchment", "ink"),
             // A card's number, set in the page's ink on the brass square that marks its place on
             // the line: the one place the page sets type on brass rather than brass on the ground.
             Triple("card number", "ink", "brass"),
-            // The living figures. A pin on the map and the numbered square of each note under it
-            // are the card number's pair; an open pin and its note's square turn parchment.
-            Triple("pin and note number", "ink", "brass"),
-            Triple("pin and note number, open", "ink", "parchment"),
-            Triple("a pin's note on the map", "bone-dim", "ink-raised"),
-            Triple("a pin's note, its heading", "parchment", "ink-raised"),
+            // The living figures.
             Triple("the slider's style pickers", "bone", "ink-raised"),
             Triple("step and picker labels", "bone-dim", "ink"),
-            Triple("play button, and the suggested download's tag", "brass", "ink"),
+            Triple("play button", "brass", "ink"),
             Triple("play button, hovered", "brass", "ink-sunk")
         )
+
+        /**
+         * How a download card's pairs are read: which of the card's own colours is the ink and
+         * which the ground. Each card names its ground and ink, and mixes its dim ink, its chip and
+         * its command well from them, so every pair is measured on that card's own ground.
+         */
+        val CARD_PAIRS: List<Triple<String, String, String>> = listOf(
+            Triple("name, the + control, other pills, links", "card-ink", "card-ground"),
+            Triple("summary line, instructions and notes", "card-ink-dim", "card-ground"),
+            Triple("the For your system tag, the Copy button", "card-ink", "card-chip"),
+            Triple("the apt commands", "card-ink", "card-well"),
+            Triple("the first pill, filled", "card-ground", "card-ink")
+        )
+
+        /**
+         * WCAG 2.1's large text: the title card's name is at least 22 pixels in the semibold, which
+         * is past the 18.66 pixels of bold that counts as large. The line under it is regular type
+         * from 17 pixels, which does not, and is held to [AA].
+         */
+        const val TITLE_NAME_BAR = AA_LARGE
+
+        /** The brightest a pixel of the band can be, and the band holds it: the ice is pure white. */
+        val BRIGHTEST_BAND_PIXEL = 0xFFFFFFFF.toInt()
     }
 
     private fun readFromRoot(path: String): String {
@@ -138,7 +159,10 @@ class SitePaletteContrastTest {
     /** The loading shell the web app's bundle is fetched behind, which sets its colours literally. */
     private val shell: String by lazy { readFromRoot("site/app/index.html") }
 
-    /** Every `--name:#rrggbb` the page declares, as opaque ARGB. */
+    /**
+     * Every `--name:#rrggbb` the page declares, as opaque ARGB: the palette in `:root` and the
+     * page's own colours beside it.
+     */
     private val namedColours: Map<String, Int> by lazy {
         Regex("""--([a-z-]+):\s*(#[0-9a-fA-F]{6})\s*;""").findAll(page)
             .associate { it.groupValues[1] to (0xFF000000.toInt() or
@@ -181,7 +205,7 @@ class SitePaletteContrastTest {
     @Test
     fun `the page defines exactly the palette this test measures, and it is the window's`() {
         assertEquals(
-            PALETTE.keys.sorted(), namedColours.keys.sorted(),
+            (PALETTE.keys + PAGE_ONLY.keys).sorted(), namedColours.keys.sorted(),
             "the page's palette and this test have drifted apart. Every colour the page defines " +
                 "has to have a measured pair here, or it is a colour nobody has checked."
         )
@@ -200,8 +224,9 @@ class SitePaletteContrastTest {
 
     /**
      * What a parse of the page's rules can say about the pairs written out above: every colour a
-     * rule sets text in is one of the palette's names — a literal hex would never be measured —
-     * and every such name is the ink of at least one measured pair.
+     * rule sets text in is one of the page's names — a literal hex would never be measured — and
+     * every such name is the ink of at least one measured pair: a palette colour in [TEXT_PAIRS], a
+     * download card's own colour in [CARD_PAIRS], or a title-card letter.
      */
     @Test
     fun `every colour the page sets text in is a palette colour that is measured`() {
@@ -210,7 +235,7 @@ class SitePaletteContrastTest {
         assertTrue(textColours.isNotEmpty(), "the page sets no text colour at all, so this read nothing")
         val literal = textColours.filterNot { it.startsWith("var(--") || it == "inherit" || it == "transparent" }
         assertTrue(literal.isEmpty(), "rules on the page set text in colours no pair measures: $literal")
-        val measuredInks = TEXT_PAIRS.map { it.second }.toSet()
+        val measuredInks = TEXT_PAIRS.map { it.second }.toSet() + CARD_PAIRS.map { it.second } + PAGE_ONLY.keys
         val unmeasured = textColours.filter { it.startsWith("var(--") }
             .map { it.removePrefix("var(--").substringBefore(")") }
             .filter { it !in measuredInks && it != "brass-dim" }.distinct()
@@ -237,19 +262,16 @@ class SitePaletteContrastTest {
 
     @Test
     fun `the boundaries a reader has to see meet the non-text bar`() {
-        check("secondary button border", "brass", "ink", NON_TEXT)
-        check("selected tab underline", "brass", "ink", NON_TEXT)
+        // A secondary button's resting border is a hairline, which says nothing its own label does
+        // not; hovered or focused it turns brass, and that is the edge a reader looks for.
+        check("secondary button border, hovered or focused", "brass", "ink", NON_TEXT)
         check("focus ring", "brass", "ink", NON_TEXT)
-        check("annotation cartouche border", "brass-dim", "ink", NON_TEXT)
-        check("notice accent border", "brass-dim", "ink-raised", NON_TEXT)
         // The line a row of cards sits on and the squares on it are what say the cards are a
         // sequence, which is information, so they are held to the bar a meaningful graphic is.
         check("card line and number square", "brass", "ink", NON_TEXT)
         // The step on show is marked by a ring round its square, which is the only thing saying
         // which card the frame is showing; the suggested download by a rule beside its row.
         check("lit step ring", "parchment", "ink", NON_TEXT)
-        check("suggested download rule", "brass", "ink", NON_TEXT)
-        check("a pin's note, its border", "brass-dim", "ink-raised", NON_TEXT)
 
         // Measured and reported, but deliberately held to nothing. The hairline separates one
         // block of the page from the next and carries no information a reader would otherwise
@@ -285,5 +307,98 @@ class SitePaletteContrastTest {
                     ColorVision.contrast(colour("brass-dim"), colour("ink-raised"))
                 )}:1 on a panel. Use --brass for small type; --brass-dim is for rules."
         )
+    }
+
+    /** The page's style sheet, comments taken out. */
+    private val styleSheet: String by lazy {
+        (Regex("""<style>(.*?)</style>""", RegexOption.DOT_MATCHES_ALL).find(page)?.groupValues?.get(1)
+            ?: fail("the page has no style sheet")).replace(Regex("""/\*.*?\*/""", RegexOption.DOT_MATCHES_ALL), "")
+    }
+
+    /** The declarations of the rule whose whole selector is [selector], or a failure. */
+    private fun declarationsOf(selector: String): Map<String, String> {
+        val body = Regex("""(?:^|[}\s])${Regex.escape(selector)}\s*\{([^}]*)\}""").find(styleSheet)?.groupValues?.get(1)
+            ?: fail("the style sheet has no rule for $selector")
+        return body.split(';').map { it.trim() }.filter { it.contains(':') }
+            .associate { it.substringBefore(':').trim() to it.substringAfter(':').trim() }
+    }
+
+    /**
+     * A colour as the style sheet writes it, resolved: a palette name, one of [custom]'s own
+     * properties, or `color-mix(in srgb, A N%, B)` of two of those, which a browser mixes channel by
+     * channel in sRGB, N parts of A to the rest of B.
+     */
+    private fun resolve(value: String, custom: Map<String, String>): Int {
+        val mix = Regex("""color-mix\(\s*in srgb\s*,\s*(var\(--[\w-]+\))\s+(\d+(?:\.\d+)?)%\s*,\s*(var\(--[\w-]+\))\s*\)""")
+            .matchEntire(value.trim())
+        if (mix != null) {
+            val share = mix.groupValues[2].toDouble() / 100
+            val first = resolve(mix.groupValues[1], custom)
+            val second = resolve(mix.groupValues[3], custom)
+            fun channel(shift: Int) = Math.round(
+                ((first shr shift) and 0xFF) * share + ((second shr shift) and 0xFF) * (1 - share)
+            ).toInt()
+            return (0xFF shl 24) or (channel(16) shl 16) or (channel(8) shl 8) or channel(0)
+        }
+        val name = Regex("""var\(--([\w-]+)\)""").matchEntire(value.trim())?.groupValues?.get(1)
+            ?: fail("$value is not a colour this test can resolve")
+        return custom[name]?.let { resolve(it, custom) } ?: colour(name)
+    }
+
+    /**
+     * That every download card's words meet AA on that card's own ground.
+     *
+     * The cards are the one place the page sets type on grounds other than its own: Windows on
+     * brass, Linux on the lit oxblood, the browser on the sunk ink. Each card's ground and inks are
+     * read out of the card's own rule, over the defaults every card starts from, and each of
+     * [CARD_PAIRS] measured with them, so a card whose ground or dim ink moves is measured as it
+     * now is rather than as it was written here.
+     */
+    @Test
+    fun `every download card's words meet AA on its own ground`() {
+        val defaults = declarationsOf(".dl-card").filterKeys { it.startsWith("--card-") }.mapKeys { it.key.removePrefix("--") }
+        assertTrue(defaults.keys.containsAll(listOf("card-ground", "card-ink", "card-ink-dim", "card-chip", "card-well")),
+            "the cards no longer name their ground, inks, chip and well: ${defaults.keys}")
+        val cards = listOf("windows", "linux", "browser")
+        cards.forEach { card ->
+            val own = declarationsOf(".dl-card.$card").filterKeys { it.startsWith("--card-") }.mapKeys { it.key.removePrefix("--") }
+            val custom = defaults + own
+            CARD_PAIRS.forEach { (where, ink, ground) ->
+                val inkValue = resolve("var(--$ink)", custom)
+                val groundValue = resolve("var(--$ground)", custom)
+                checkValues("$card card, $where", "--$ink", inkValue, "--$ground", groundValue, AA)
+            }
+            // The focus ring is drawn in the card's ink.
+            checkValues("$card card, focus ring", "--card-ink", resolve("var(--card-ink)", custom),
+                "--card-ground", resolve("var(--card-ground)", custom), NON_TEXT)
+        }
+    }
+
+    /**
+     * That the title card's name, in each of its three colours, and the line under it read over
+     * the brightest ground the band can put behind them.
+     *
+     * The card stands over the moving map, so what is behind a letter could be anything the band
+     * holds, and it holds pure white ice. The words sit on a scrim of their own, flat across the
+     * middle of an ellipse that holds every letter (a headless Chrome measured each letter's
+     * corners inside it at 375, 768, 1280 and 1920 wide; see docs/DESIGN_LEDGER.md, Site 6), so the
+     * worst any letter is read against is the scrim's ink at its flat strength over white. The name
+     * is measured unlit, at its flash and lit, and the line in its bone.
+     */
+    @Test
+    fun `the title card's words read over the brightest ice the band holds`() {
+        val scrim = declarationsOf(".title-words::before")["background"] ?: fail("the title card's words have no scrim")
+        val flat = Regex("""radial-gradient\(\s*closest-side\s*,\s*color-mix\(\s*in srgb\s*,\s*var\(--ink\)\s+(\d+)%\s*,\s*transparent\s*\)\s+(\d+)%""")
+            .find(scrim) ?: fail("the scrim is no longer the ink, flat to a stop and then feathered: $scrim")
+        val strength = flat.groupValues[1].toDouble() / 100
+        val ink = colour("ink")
+        fun over(shift: Int) = Math.round(
+            ((ink shr shift) and 0xFF) * strength + ((BRIGHTEST_BAND_PIXEL shr shift) and 0xFF) * (1 - strength)
+        ).toInt()
+        val ground = (0xFF shl 24) or (over(16) shl 16) or (over(8) shl 8) or over(0)
+        val groundName = "ink ${flat.groupValues[1]}% over white"
+        listOf("letter-unlit" to "the name, unlit", "letter-struck" to "the name, struck", "brass" to "the name, lit")
+            .forEach { (name, where) -> checkValues("title card, $where", "--$name", colour(name), groundName, ground, TITLE_NAME_BAR) }
+        checkValues("title card, the line under the name", "--bone", colour("bone"), groundName, ground, AA)
     }
 }

@@ -1,8 +1,8 @@
 # Installing Cartogenesis
 
-Every way there is to run it, one section per platform. The short summaries here are the same
-sentences cartogenesis.com's Download and Installation section shows and the release notes repeat;
-the detail under each is what does not fit on a card.
+Every way there is to run it, one section per platform. The short summaries here are what
+cartogenesis.com's download cards say, in the sentences the release notes repeat; the detail under
+each is what does not fit on a card.
 
 The download bundles its own Java runtime. Nothing needs to be installed first on any platform.
 

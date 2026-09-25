@@ -68,10 +68,11 @@ internal object BasinPartition {
      * time, drew realm borders ruler-straight along the grid. Not [FlowRouting.heightOrder], for the
      * same reason: it is the filled surface's order and not the network's.
      *
-     * **Closed basins whole.** Every cell of an endorheic lake or a playa is a sink, and a sink opens
-     * a unit; so each of them opened its own, and a closed basin came apart into as many units as
-     * it had cells of water. The water of one lake, or one connected playa, is taken as one sink
-     * instead, and the land draining to it joins it up to the size rule below.
+     * **Water whole.** Every cell of an endorheic lake or a playa is a sink, and a sink opens a unit;
+     * so each of them opened its own, and a closed basin came apart into as many units as it had
+     * cells of water. The water of one lake, closed or overflowing, or of one connected playa, is
+     * taken as one node instead (see [waterSinks]), and the land draining to it joins it up to the
+     * size rule below.
      *
      * **The size rule is an area on the ground.** Each cell's open area is its own ground plus
      * whatever of its tributaries' it keeps; walking sources first, a cell keeps its tributaries
@@ -96,7 +97,7 @@ internal object BasinPartition {
         val cellsDown = config.height
         val cellCount = cellsAcross * cellsDown
         val cellAreaKm2 = config.squareKilometresPerCell
-        val sinkOf = closedWaterSinks(cellsAcross, cellsDown, sea, rivers)
+        val sinkOf = waterSinks(cellsAcross, cellsDown, sea, rivers)
         val receiver = IntArray(cellCount) { cell ->
             val downstream = rivers.flowTarget[cell]
             when {
@@ -110,9 +111,9 @@ internal object BasinPartition {
             cellsAcross, cellsDown, sea.isLand, receiver, sea.landCellCount
         )
 
-        // Whose area each cell's is counted into. A body of closed water is one node: its own
-        // cells are counted at its sink and never cut, and the land draining to any cell of it is
-        // a tributary of the sink, kept or cut at the limit like any other. Counted cell by cell
+        // Whose area each cell's is counted into. A body of water is one node: its own cells are
+        // counted at its sink and never cut, and the land draining to any cell of it is a
+        // tributary of the sink, kept or cut at the limit like any other. Counted cell by cell
         // instead, each water cell kept its own slopes up to the limit and the sink then kept them
         // all, so a lake's unit could be many times the limit.
         val mustKeep = BooleanArray(cellCount)
@@ -120,7 +121,7 @@ internal object BasinPartition {
             val downstream = receiver[cell]
             when {
                 downstream < 0 -> -1
-                sinkOf[cell] >= 0 -> { mustKeep[cell] = true; downstream }
+                sinkOf[cell] >= 0 && sinkOf[cell] != cell -> { mustKeep[cell] = true; downstream }
                 sinkOf[downstream] >= 0 -> sinkOf[downstream]
                 else -> downstream
             }
@@ -187,12 +188,18 @@ internal object BasinPartition {
     }
 
     /**
-     * Each closed basin's water as one sink: for every cell of one endorheic lake, or of one
-     * connected stretch of playa, the lowest-indexed cell of it; -1 everywhere else. Water cells
-     * are sinks in the routing itself (see [LakeWaterBalance.routeIntoWater]), so pointing each at
-     * its sink adds edges only between cells that had none, and the routing stays a forest.
+     * Each body of water as one sink: for every cell of one lake, or of one connected stretch of
+     * playa, the cell standing for it; -1 everywhere else. A closed lake's or a playa's sink is its
+     * lowest-indexed cell, since its water drains nowhere (see [LakeWaterBalance.routeIntoWater]);
+     * an overflowing lake's is the cell its water leaves by, the one carrying most, whose way on
+     * never comes back into the lake. Pointing every other cell of the water at the sink keeps the
+     * routing a forest, and an overflowing lake with no such exit is left cell by cell.
+     *
+     * An overflowing lake is routed across the flat the fill made of it, straight wherever the
+     * flat's potential lies along a bearing, so a unit cut across it cut the water along a ruled
+     * line (docs/DESIGN_LEDGER.md, chunk 6 third round).
      */
-    private fun closedWaterSinks(
+    private fun waterSinks(
         cellsAcross: Int,
         cellsDown: Int,
         sea: SeaLevelResult,
@@ -200,8 +207,9 @@ internal object BasinPartition {
     ): IntArray {
         val cellCount = cellsAcross * cellsDown
         val lakes = rivers.lakes
+        val flowTarget = rivers.flowTarget
         fun drainsNowhere(cell: Int): Boolean {
-            val downstream = rivers.flowTarget[cell]
+            val downstream = flowTarget[cell]
             return sea.isLand[cell] && (downstream < 0 || !sea.isLand[downstream])
         }
         val sinkOf = IntArray(cellCount) { -1 }
@@ -226,6 +234,34 @@ internal object BasinPartition {
                     }
                 }
             }
+        }
+
+        // Overflowing lakes: the exit carrying most, which must leave for good.
+        val cellsOfLake = Array(lakes.lakes.size) { ArrayList<Int>() }
+        for (cell in 0 until cellCount) {
+            val lake = lakes.lakeId[cell]
+            if (lake != LakeResult.NO_LAKE && sea.isLand[cell] && !lakes.lakes[lake].endorheic) cellsOfLake[lake].add(cell)
+        }
+        val accumulation = rivers.flowAccumulation.data
+        for (lake in cellsOfLake.indices) {
+            val cells = cellsOfLake[lake]
+            if (cells.isEmpty()) continue
+            var sink = -1
+            for (cell in cells) {
+                val downstream = flowTarget[cell]
+                if (downstream >= 0 && lakes.lakeId[downstream] == lake) continue
+                var below = downstream
+                var steps = 0
+                var comesBack = false
+                while (below >= 0 && sea.isLand[below] && steps++ < cellCount) {
+                    if (lakes.lakeId[below] == lake) { comesBack = true; break }
+                    below = flowTarget[below]
+                }
+                if (comesBack) continue
+                if (sink < 0 || accumulation[cell] > accumulation[sink]) sink = cell
+            }
+            if (sink < 0) continue
+            for (cell in cells) sinkOf[cell] = sink
         }
         return sinkOf
     }
@@ -408,7 +444,7 @@ internal object BasinPartition {
      * A cell is put on the left or right bank by walking downstream until it meets the trunk, then
      * taking the sign of the cross product between the trunk's own direction and the direction the
      * water came in from. Cells on the trunk itself go with the left bank, so the channel stays
-     * whole and the seam runs along its far edge.
+     * whole and the seam runs along its far edge; a lake the trunk crosses goes whole to one bank.
      */
     fun splitAlongTrunks(
         config: WorldGenConfig,
@@ -519,6 +555,27 @@ internal object BasinPartition {
         }
 
         if (!splitAny) return units
+
+        // A lake goes whole to one bank: the one most of its cells in the unit are on, the left
+        // where they tie. A trunk crossing a lake runs over the flat the fill made of it, where the
+        // routing is the flat's potential and not the ground's, and a seam along it draws a border
+        // down the middle of the water, ruler-straight wherever the potential happens to lie
+        // along a bearing (docs/DESIGN_LEDGER.md, chunk 6 third round). With the lake whole, the
+        // border keeps to its shore.
+        val lakeId = rivers.lakes.lakeId
+        val banksOfLake = HashMap<Long, IntArray>()
+        for (cell in units.unitOf.indices) {
+            val lake = lakeId[cell]
+            if (lake == LakeResult.NO_LAKE || bankOf[cell] == NO_BANK) continue
+            val key = units.unitOf[cell].toLong() shl 32 or lake.toLong()
+            banksOfLake.getOrPut(key) { IntArray(2) }[bankOf[cell]]++
+        }
+        for (cell in units.unitOf.indices) {
+            val lake = lakeId[cell]
+            if (lake == LakeResult.NO_LAKE || bankOf[cell] == NO_BANK) continue
+            val counts = banksOfLake.getValue(units.unitOf[cell].toLong() shl 32 or lake.toLong())
+            bankOf[cell] = if (counts[RIGHT_BANK] > counts[LEFT_BANK]) RIGHT_BANK else LEFT_BANK
+        }
 
         // Renumber: each unit becomes at most two.
         val unitOf = IntArray(units.unitOf.size) { BasinUnits.NONE }

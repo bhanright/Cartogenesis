@@ -104,8 +104,8 @@ object NationStage {
     private const val HIGH_GROUND_ELEVATION = 0.4f
 
     /**
-     * Floors on the catchment sizes, in cells, for the two shares in `NationsConfig` that are
-     * expressed against the whole world's land.
+     * Floors on the catchment sizes, in cells of the grid, for the two shares in `NationsConfig`
+     * that are expressed against the whole world's land.
      *
      * A share of a very small map rounds to nothing, and a partition into one-cell units is not a
      * partition. Both are a resolution guard rather than a modelling choice.
@@ -166,11 +166,19 @@ object NationStage {
 
     /**
      * Share of the world's runoff a cell must carry for habitability to treat it as being on a
-     * river, and the floor under it so a world with almost no rain still has a few riverine cells
-     * rather than all of them. See [drawableRiverFlow].
+     * river. See [drawableRiverFlow].
      */
     private const val RIVERINE_FLOW_SHARE = 0.0006f
-    private const val MIN_RIVERINE_FLOW = 1e-4f
+
+    /**
+     * The floor under that threshold, in cells of [Runoff.FLOOR_MM]: a world with almost no rain
+     * still has a few riverine cells rather than all of them.
+     *
+     * Every cell carries at least its own floor's water, so a threshold at one cell's floor would
+     * make every cell riverine; two is the least that asks for water from above. The floor was
+     * 1e-4 of the old 0..1 weight, a fiftieth of one cell's own, and so never did what it said.
+     */
+    private const val MIN_RIVERINE_FLOOR_CELLS = 2
 
     /**
      * Radii for the two blurred copies [describe] judges a capital site on, as a divisor of the
@@ -256,20 +264,7 @@ object NationStage {
             return NationResult(nationId, emptyList(), habitability)
         }
 
-        val landCells = sea.landCellCount
-        val catchments = BasinPartition.compute(
-            config, sea, rivers,
-            (landCells * nationsConfig.maxBasinShare).toInt().coerceAtLeast(SMALLEST_LARGE_BASIN)
-        )
-        // Cut the big ones along their trunk, so some frontiers are rivers and not only divides.
-        val banked = BasinPartition.splitAlongTrunks(
-            config, sea, rivers, catchments,
-            rivers.flowAccumulation.data.max() * nationsConfig.riverBorderShare
-        )
-        val units = BasinPartition.mergeSmall(
-            config, sea, banked,
-            (landCells * nationsConfig.minBasinShare).toInt().coerceAtLeast(SMALLEST_KEPT_BASIN)
-        )
+        val units = realmUnits(config, sea, rivers)
         stopIfAsked()
         val assignment = BasinRealms.assign(
             config, sea, units, habitability,
@@ -295,6 +290,31 @@ object NationStage {
             describe(config, sea, climate, rivers, habitability, nationId, capitals),
             habitability
         )
+    }
+
+    /**
+     * The catchments realms are handed out in: the land cut into units of at most
+     * `NationsConfig.maxBasinShare` of its area, the large ones cut again along their trunk rivers
+     * so some frontiers are rivers and not only divides, and the slivers under
+     * `NationsConfig.minBasinShare` merged into a neighbour on their own landmass. Both shares are
+     * of the land's area on the ground, and every unit that results is within the larger of them.
+     */
+    internal fun realmUnits(config: WorldGenConfig, sea: SeaLevelResult, rivers: RiverResult): BasinUnits {
+        val nationsConfig = config.nations
+        val landCells = sea.landCellCount
+        val cellAreaKm2 = config.squareKilometresPerCell
+        val largestKm2 =
+            maxOf(landCells * nationsConfig.maxBasinShare.toDouble(), SMALLEST_LARGE_BASIN.toDouble()) *
+                cellAreaKm2
+        val smallestKm2 =
+            maxOf(landCells * nationsConfig.minBasinShare.toDouble(), SMALLEST_KEPT_BASIN.toDouble()) *
+                cellAreaKm2
+        val catchments = BasinPartition.compute(config, sea, rivers, largestKm2)
+        val banked = BasinPartition.splitAlongTrunks(
+            config, sea, rivers, catchments,
+            rivers.flowAccumulation.data.max() * nationsConfig.riverBorderShare
+        )
+        return BasinPartition.mergeSmall(config, sea, banked, smallestKm2, largestKm2)
     }
 
     /**
@@ -630,7 +650,8 @@ object NationStage {
 
     /**
      * The accumulated flow above which habitability counts a cell as being on a river — computed
-     * from the rainfall rather than by re-tracing anything.
+     * from the rainfall rather than by re-tracing anything, and in the unit
+     * [RiverResult.flowAccumulation] is in: [Runoff.annualWeightMm], summed.
      *
      * A share of the world's own runoff, which is the rule `RiverStage` drew a channel by until R1
      * gave the channels a physical threshold. It is left here as habitability's own figure, under
@@ -642,13 +663,16 @@ object NationStage {
      * `TODO.md` as a difference to measure rather than made here as a rename.
      */
     private fun drawableRiverFlow(sea: SeaLevelResult, climate: ClimateResult): Float {
-        var totalRunoff = 0f
+        // Summed in double: a 2048 world's land holds billions of millimetre-cells, past where a
+        // float still counts a single cell's rain.
+        var totalRunoffMm = 0.0
         for (cell in sea.isLand.indices) {
             if (sea.isLand[cell]) {
-                totalRunoff += RiverStage.runoffWeight(climate.precipitation.data[cell])
+                totalRunoffMm += Runoff.annualWeightMm(climate.precipitationMm.data[cell])
             }
         }
-        return (totalRunoff * RIVERINE_FLOW_SHARE).coerceAtLeast(MIN_RIVERINE_FLOW)
+        return (totalRunoffMm * RIVERINE_FLOW_SHARE).toFloat()
+            .coerceAtLeast(MIN_RIVERINE_FLOOR_CELLS * Runoff.FLOOR_MM)
     }
 
     /**
@@ -766,10 +790,22 @@ object NationStage {
 
             val name = NameForge.name(cultureSeed, NameKind.REALM, 0L)
             val capitalName = NameForge.name(cultureSeed, NameKind.SETTLEMENT, 1L)
-            val shares = biomes[id].entries.sortedByDescending { it.value }
+            // Every tie among biomes goes to the lower ordinal. The tallies are hash maps keyed by
+            // an enum, whose hash is the object's identity on the JVM and changes between program
+            // starts, so a sort that left ties in iteration order listed tied biomes in a
+            // different order on every run, and flipped the dominant biome where the top two tied.
+            val shares = biomes[id].entries
+                .sortedWith(
+                    compareByDescending<Map.Entry<Biome, Int>> { it.value }
+                        .thenBy { it.key.ordinal }
+                )
                 .map { it.key to it.value / realmCells }
-            val heartland = heartlandBiome[id].entries.maxByOrNull { it.value }?.key
-                ?: shares.firstOrNull()?.first ?: Biome.GRASSLAND
+            val heartland = heartlandBiome[id].entries
+                .maxWithOrNull(
+                    compareBy<Map.Entry<Biome, Float>> { it.value }
+                        .thenByDescending { it.key.ordinal }
+                )
+                ?.key ?: shares.firstOrNull()?.first ?: Biome.GRASSLAND
 
             val population = (capacity[id] * squareKmPerCell *
                 config.nations.peoplePerArableKm2).roundToLong()
@@ -782,7 +818,10 @@ object NationStage {
             // Production follows people, not acreage — a realm whose bulk is polar waste still
             // makes its living off the temperate ground its farmers actually work.
             val settledShares = heartlandBiome[id].entries
-                .sortedByDescending { it.value }
+                .sortedWith(
+                    compareByDescending<Map.Entry<Biome, Float>> { it.value }
+                        .thenBy { it.key.ordinal }
+                )
                 .let { entries ->
                     val weight = entries.sumOf { it.value.toDouble() }.toFloat()
                         .coerceAtLeast(MIN_SETTLED_WEIGHT)

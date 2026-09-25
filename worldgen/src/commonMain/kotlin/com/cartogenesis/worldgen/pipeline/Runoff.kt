@@ -1,20 +1,16 @@
 package com.cartogenesis.worldgen.pipeline
 
 /**
- * How much water a land cell sheds in a year, in millimetres: the one weight the erosion rounds
- * and the channel-initiation criterion route with.
+ * How much water a land cell sheds in a year, in millimetres: the one weight every stage that
+ * routes water routes with — the erosion rounds, the channel-initiation criterion, the drawn
+ * network's discharge in `RiverStage`, and the riverine threshold `NationStage` reads off it.
  *
- * Not yet the whole pipeline: `RiverStage.runoffWeight`, which weights the drawn network's own
- * accumulation, still adds its floor to a rainfall on the 0..1 scale, the older form, and is left
- * as it is because moving it re-draws every river for the sake of consistency alone; it is the
- * third consumer to bring here, with the drawn network re-measured when it comes.
- *
- * Three stages ask the same question of a cell and used to answer it three ways. `RiverStage` adds
- * a floor to a rainfall already normalised to 0..1, `ChannelInitiation` added a hundred and fifty
- * millimetres to a rainfall in millimetres, and `HydraulicErosion` took the larger of the rainfall
- * and a floor; all three meant "an arid upland still feeds the channel that leaves it", and two of
- * them named a different floor for it. There is one figure here now and the stages differ only in
- * what they divide it by, which is the part that genuinely differs.
+ * Four stages ask the same question of a cell and used to answer it three ways. `RiverStage` added
+ * a floor to a rainfall normalised to 0..1 and clamped at 1,200 mm, `ChannelInitiation` added a
+ * hundred and fifty millimetres to a rainfall in millimetres, and `HydraulicErosion` took the larger
+ * of the rainfall and a floor; all three meant "an arid upland still feeds the channel that leaves
+ * it", and two of them named a different floor for it. There is one figure here now and the stages
+ * differ only in what they divide it by, which is the part that genuinely differs.
  *
  * **Rainfall standing in for runoff, and the shortfall is the same in every consumer.** What
  * actually reaches a channel is rainfall less what the plants breathe out and the ground takes in,
@@ -22,8 +18,11 @@ package com.cartogenesis.worldgen.pipeline
  * downstream of here, so every figure below is an upper bound on the water and a smooth one on a
  * quantity that is not smooth. Stated once, in the place the substitution is made.
  *
- * **The two normalisations, and why each is right for its consumer.** Neither stage routes
- * [annualWeightMm] raw; each divides it by a mean, and they divide by different ones on purpose.
+ * **The two normalisations, and why each is right for its consumer.** The two stages that compare
+ * the weight against a fitted or measured figure do not route [annualWeightMm] raw; each divides it
+ * by a mean, and they divide by different ones on purpose. The drawn network and the realm stage
+ * route it raw, because everything they do with it is a ratio within the one world — a channel's
+ * width against the widest, a threshold as a share of all the land's water.
  *
  * `ChannelInitiation` divides by **Earth's own mean over land**, [EARTH_MEAN_LAND_RAINFALL_MM] —
  * an absolute reference. Its threshold is an area in square kilometres read off Montgomery and
@@ -46,7 +45,7 @@ package com.cartogenesis.worldgen.pipeline
  * criterion has no such blind spot, and that difference between the two stages is real rather than
  * an inconsistency to be tidied away.
  *
- * See docs/DESIGN_LEDGER.md, R1 and S3.
+ * See docs/DESIGN_LEDGER.md, R1, S3 and chunk 6.
  */
 object Runoff {
 
@@ -58,12 +57,22 @@ object Runoff {
      * to be initiated by — but a dry upland does gather a trickle from snowmelt and the odd storm,
      * and its channels are cut by the rare storm rather than by the annual mean.
      *
-     * Derived once, here, from the river stage's own floor so that every stage means the same
-     * thing by it: `RiverStage.RUNOFF_FLOOR` is 0.05 of `ClimateResult.precipitation`, and that
-     * field is `precipitationMm` divided by [ClimateStage.REFERENCE_MM], so the same share read in
-     * millimetres is that floor times the reference — sixty millimetres a year.
+     * Sixty millimetres is where the hyper-arid class ends: UNEP's aridity index, rainfall over
+     * potential evaporation, puts the line at [HYPER_ARID_ARIDITY_INDEX], and under a potential
+     * evaporation of [ClimateStage.REFERENCE_MM] — the scale the climate normalises its rainfall
+     * against, and within the spread of the estimates of Earth's mean over land — that is sixty.
+     * So a cell drier than the driest class keeps that class's edge, and nothing wetter is
+     * touched. It is also the figure the river stage's own floor stood for since E1, 0.05 of the
+     * 1,200 mm scale, so the erosion and the channel criterion, which read it already, do not move.
      */
-    const val FLOOR_MM = RiverStage.RUNOFF_FLOOR * ClimateStage.REFERENCE_MM
+    const val FLOOR_MM = HYPER_ARID_ARIDITY_INDEX * ClimateStage.REFERENCE_MM
+
+    /**
+     * Rainfall over potential evaporation below which country is hyper-arid, in UNEP's World
+     * Atlas of Desertification (Middleton and Thomas 1992, 1997): the Atacama, the Namib and the
+     * core of the Sahara.
+     */
+    const val HYPER_ARID_ARIDITY_INDEX = 0.05f
 
     /**
      * The rainfall the absolute form is measured against, in millimetres a year: Earth's mean over

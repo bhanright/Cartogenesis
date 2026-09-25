@@ -145,7 +145,10 @@ private fun openWaterMask(lakeId: IntArray, cellsAcross: Int): BooleanArray {
 data class RiverResult(
     /** Depression-filled elevation — every land cell has a downhill path to the sea. */
     val filledElevation: FloatField,
-    /** Upstream drainage area, weighted by rainfall. */
+    /**
+     * The discharge each cell carries, in millimetre-cells: every upstream cell's rainfall in
+     * millimetres a year, held at [Runoff.FLOOR_MM] where drier, summed down the routing.
+     */
     val flowAccumulation: FloatField,
     /**
      * Index of the cell each land cell drains into. -1 means the water leaves the world, which
@@ -166,57 +169,88 @@ data class RiverResult(
 object RiverStage {
 
     /**
-     * Runoff a cell contributes over and above its own rainfall.
-     *
-     * A floor rather than a physical term: an arid upland still gathers a trickle from snowmelt
-     * and the odd storm, and without it a desert range contributes exactly nothing and the river
-     * that leaves it disappears at its head.
-     */
-    internal const val RUNOFF_FLOOR = 0.05f
-
-    /**
      * Every land cell's water and the channels it makes: the depression-filled surface, the D8
      * target of each cell, the flow accumulated down that tree, the lakes the fill implies, and
      * the rivers traced over the result.
      *
-     * [sea] gives the land mask and the ground the water runs over; [climate] gives the rainfall,
-     * both as the 0..1 field the runoff weight is taken from and as the millimetres the lake water
-     * balance needs. Every per-cell array is row-major at `config.width` by `config.height`.
+     * [sea] gives the land mask and the ground the water runs over; [climate] gives the rainfall in
+     * millimetres a year, which both the discharge and the lake water balance are weighted by.
+     * Every per-cell array is row-major at `config.width` by `config.height`, and
+     * [RiverResult.flowAccumulation] is in millimetre-cells: [Runoff.annualWeightMm] summed over
+     * every cell upstream.
      */
     fun generate(
         config: WorldGenConfig,
         sea: SeaLevelResult,
         climate: ClimateResult
     ): RiverResult {
+        val routed = routeAndSizeLakes(config, sea, climate, solved = null)
+        val flow = accumulateFlow(
+            config.width, config.height, sea, climate, routed.filled, routed.flowTarget
+        )
+        val isChannel = ChannelInitiation.channelMask(
+            config, sea.isLand, sea.landCellCount, sea.relativeElevation, routed.filled,
+            routed.flowTarget, climate
+        ) { routed.lakes.isOpenWater(it) }
+        val rivers = traceRivers(config, sea, flow, routed.flowTarget, routed.lakes, isChannel)
+
+        return RiverResult(routed.filled, flow, routed.flowTarget, rivers, routed.lakes)
+    }
+
+    private class Routed(val filled: FloatField, val flowTarget: IntArray, val lakes: LakeResult)
+
+    /**
+     * The filled surface, the routing over it, and the lakes it implies, with the routing inside
+     * every closed basin re-pointed at the water the balance leaves in it.
+     *
+     * Lakes are sized before the water is accumulated, because an endorheic basin changes the
+     * answer: nothing leaves it, so every cell downstream of its rim loses that whole catchment
+     * and the river that used to be drawn below a desert basin stops being drawn. The balance
+     * itself needs a catchment total of its own, in millimetres of rain, which is the same
+     * accumulation run over the rainfall rather than over the runoff weight.
+     */
+    private fun routeAndSizeLakes(
+        config: WorldGenConfig,
+        sea: SeaLevelResult,
+        climate: ClimateResult,
+        solved: MutableList<SolvedBasin>?
+    ): Routed {
         val cellsAcross = config.width
         val cellsDown = config.height
-
         val filled = fillDepressions(cellsAcross, cellsDown, sea)
         val flowTarget = computeFlowDirections(
             cellsAcross, cellsDown, sea, filled, config.seed, config.cellHeightInCellWidths,
             config.facetRouting, config.flatPotential
         )
-
-        // Lakes are sized before the water is accumulated, because an endorheic basin changes the
-        // answer: nothing leaves it, so every cell downstream of its rim loses that whole catchment
-        // and the river that used to be drawn below a desert basin stops being drawn. The balance
-        // itself needs a catchment total of its own, in millimetres, which is the same accumulation
-        // run over the rainfall rather than over the runoff weight.
         val catchmentRainMm = if (config.lakes.enabled && config.lakes.waterBalance) {
             FlowRouting.accumulate(
                 cellsAcross, cellsDown, sea.isLand, filled, flowTarget, sea.landCellCount
             ) { cell -> climate.precipitationMm.data[cell] }
         } else null
+        val lakes = findLakes(config, sea, climate, filled, flowTarget, catchmentRainMm, solved)
+        return Routed(filled, flowTarget, lakes)
+    }
 
-        val lakes = findLakes(config, sea, climate, filled, flowTarget, catchmentRainMm)
-        val flow = accumulateFlow(cellsAcross, cellsDown, sea, climate, filled, flowTarget)
-        val isChannel = ChannelInitiation.channelMask(
-            config, sea.isLand, sea.landCellCount, sea.relativeElevation, filled, flowTarget,
-            climate
-        ) { lakes.isOpenWater(it) }
-        val rivers = traceRivers(config, sea, flow, flowTarget, lakes, isChannel)
+    /**
+     * One closed basin as the water balance was handed it: its cells at spill level, the catchment
+     * rainfall in millimetre-cells that fed it, and whether the balance closed it.
+     */
+    internal class SolvedBasin(val cells: IntArray, val catchmentRainMm: Float, val endorheic: Boolean)
 
-        return RiverResult(filled, flow, flowTarget, rivers, lakes)
+    /**
+     * Every closed basin of the world [sea] and [climate] describe, in the order the balance solved
+     * them, with the inflow each was given — the one figure the water balance takes from outside
+     * the basin, and the one a basin upstream can wrongly add to. For the guard that reads it;
+     * the stage itself never needs the list.
+     */
+    internal fun solvedBasins(
+        config: WorldGenConfig,
+        sea: SeaLevelResult,
+        climate: ClimateResult
+    ): List<SolvedBasin> {
+        val solved = ArrayList<SolvedBasin>()
+        routeAndSizeLakes(config, sea, climate, solved)
+        return solved
     }
 
     /**
@@ -233,6 +267,19 @@ object RiverStage {
      * evaporation (or disappears entirely, leaving a playa), the basin's flow targets are re-pointed
      * at the water rather than at the rim, and the water that runs in stops running out — which is
      * why [flowTarget] is taken by this function and modified, rather than being read.
+     *
+     * **Upstream basins first, and a closed one takes its rain with it.** [catchmentRainMm] is
+     * accumulated once, over the routing as the fill left it, when every basin still spills; so at
+     * a lower basin's pour point it counts the rain of every basin above it. A basin the balance
+     * closes never sends that rain on, so the moment one is closed its catchment is taken out of
+     * every cell below its old spill, before any basin further down is solved. That needs the
+     * basins in drainage order, sources first, which is the order of their pour points in
+     * [FlowRouting.drainageOrder]: a basin that spills into another passes its water through that
+     * one's pour point, so its own comes earlier. Solved in cell-index order with the field left
+     * as it was, a playa upstream of a lake fed the lake rain it had already evaporated. The lakes
+     * are still numbered in cell-index order, as they always were.
+     *
+     * [solved], where given, receives each basin as the balance was handed it; see [solvedBasins].
      */
     private fun findLakes(
         config: WorldGenConfig,
@@ -240,7 +287,8 @@ object RiverStage {
         climate: ClimateResult,
         filled: FloatField,
         flowTarget: IntArray,
-        catchmentRainMm: FloatField?
+        catchmentRainMm: FloatField?,
+        solved: MutableList<SolvedBasin>?
     ): LakeResult {
         val cellsAcross = config.width
         val cellsDown = config.height
@@ -262,35 +310,15 @@ object RiverStage {
                 (filled.data[cell] - ground.data[cell]) >= minDepth
         }
 
-        // Potential evaporation is a per-cell property of the climate, not of any basin, so it is
-        // worth computing once rather than once per candidate level.
-        val evaporationMm = if (catchmentRainMm == null) null else FloatArray(cellCount) { cell ->
-            if (!sea.isLand[cell]) 0f else LakeWaterBalance.potentialEvaporationMm(
-                climate.summerTemperature.data[cell],
-                climate.winterTemperature.data[cell],
-                lakesConfig.evaporationScale
-            )
-        }
-
-        val lakes = ArrayList<Lake>()
+        // Every basin big enough to read as water, in cell-index order. A basin can end up with no
+        // lake on it — too dry — so membership is tracked apart from the lake ids, which are only
+        // for cells that finish under water.
+        val basins = ArrayList<IntArray>()
         val toVisit = ArrayDeque<Int>()
         val basinCells = ArrayList<Int>()
-        // A basin can end up with no lake on it — too small, or too dry — so membership is tracked
-        // apart from the lake ids, which are only for cells that finish under water.
         val visited = BooleanArray(cellCount)
-        // Reused across basins. [LakeWaterBalance.routeIntoWater] empties it as it goes, so it is
-        // all-false again by the time the next basin fills it.
-        val pending = BooleanArray(cellCount)
-        // The other two scratch arrays the re-routing needs. `settled` is stamped with the basin's
-        // own number rather than a boolean, so it never has to be cleared; `pathKey` is only ever
-        // read for cells the current basin has just written.
-        val settled = IntArray(cellCount) { -1 }
-        val pathKey = FloatArray(cellCount)
-        var basinMark = 0
-
         for (start in 0 until cellCount) {
             if (!submerged[start] || visited[start]) continue
-
             basinCells.clear()
             toVisit.addLast(start)
             visited[start] = true
@@ -306,37 +334,87 @@ object RiverStage {
                     }
                 }
             }
-
             // Too small to read as water; hand it back to the land.
             if (basinCells.size < minLakeCells) continue
+            basins.add(basinCells.toIntArray())
+        }
 
-            // The brim, and the cell the water leaves through — wherever the basin drains to dry
-            // ground.
-            val spillElevation = basinCells.maxOf { filled.data[it] }
-            var outletCell = basinCells[0]
-            for (cell in basinCells) {
+        // The brim, and the cell the water leaves through — wherever the basin drains to dry
+        // ground. Read before any basin is re-pointed; a basin's own routing is the only routing
+        // its solution changes, so the answer for the others stands.
+        val spillElevation = FloatArray(basins.size) { basin -> basins[basin].maxOf { filled.data[it] } }
+        val outletCell = IntArray(basins.size) { basin ->
+            val cells = basins[basin]
+            cells.firstOrNull { cell ->
                 val target = flowTarget[cell]
-                if (target >= 0 && !submerged[target]) {
-                    outletCell = cell
-                    break
-                }
-            }
+                target >= 0 && !submerged[target]
+            } ?: cells[0]
+        }
 
-            if (catchmentRainMm == null || evaporationMm == null) {
-                fillToBrim(lakeId, lakes, basinCells, spillElevation, outletCell)
-                continue
+        if (catchmentRainMm == null) {
+            val lakes = ArrayList<Lake>()
+            for (basin in basins.indices) {
+                fillToBrim(lakeId, lakes, basins[basin], spillElevation[basin], outletCell[basin])
             }
+            return LakeResult(lakeId, lakes, playa, cellsAcross)
+        }
 
+        // Potential evaporation is a per-cell property of the climate, not of any basin, so it is
+        // worth computing once rather than once per candidate level.
+        val evaporationMm = FloatArray(cellCount) { cell ->
+            if (!sea.isLand[cell]) 0f else LakeWaterBalance.potentialEvaporationMm(
+                climate.summerTemperature.data[cell],
+                climate.winterTemperature.data[cell],
+                lakesConfig.evaporationScale
+            )
+        }
+
+        // Each basin's pour point is the cell its whole catchment passes through, which is the one
+        // carrying the most rain; ties to the lower cell index.
+        val pourPoint = IntArray(basins.size) { basin ->
+            var best = basins[basin][0]
+            for (cell in basins[basin]) {
+                val here = catchmentRainMm.data[cell]
+                val bestSoFar = catchmentRainMm.data[best]
+                if (here > bestSoFar || (here == bestSoFar && cell < best)) best = cell
+            }
+            best
+        }
+        val drainageRank = IntArray(cellCount)
+        FlowRouting.drainageOrder(cellsAcross, cellsDown, sea.isLand, flowTarget, sea.landCellCount)
+            .forEachIndexed { rank, cell -> drainageRank[cell] = rank }
+        val upstreamFirst = basins.indices.sortedWith(
+            compareBy<Int> { drainageRank[pourPoint[it]] }.thenBy { it }
+        )
+
+        // What the balance made of each basin: its water cells, or null where it overflows, and
+        // whether that water is a lake or a playa.
+        val waterOf = arrayOfNulls<IntArray>(basins.size)
+        val waterIsPlaya = BooleanArray(basins.size)
+        val surfaceOf = FloatArray(basins.size)
+
+        // Reused across basins. [LakeWaterBalance.routeIntoWater] empties it as it goes, so it is
+        // all-false again by the time the next basin fills it.
+        val pending = BooleanArray(cellCount)
+        // The other two scratch arrays the re-routing needs. `settled` is stamped with the basin's
+        // own number rather than a boolean, so it never has to be cleared; `pathKey` is only ever
+        // read for cells the current basin has just written.
+        val settled = IntArray(cellCount) { -1 }
+        val pathKey = FloatArray(cellCount)
+        var basinMark = 0
+
+        for (basin in upstreamFirst) {
+            val cells = basins[basin]
             // The basin's own cells, lowest ground first: its hypsometry, and the order the water
             // covers them in. Sorted through the elevation-keyed packing every other ordering in
             // this pipeline uses, so equal heights fall to the lower cell index on every platform.
-            val byGround = LongArray(basinCells.size)
-            for (rank in basinCells.indices) {
-                byGround[rank] = FlowRouting.encode(ground.data[basinCells[rank]], basinCells[rank])
+            val byGround = LongArray(cells.size)
+            for (rank in cells.indices) {
+                byGround[rank] = FlowRouting.encode(ground.data[cells[rank]], cells[rank])
             }
             byGround.sort()
 
-            val basinCellCount = basinCells.size
+            val basinCellCount = cells.size
             val sortedGround = FloatArray(basinCellCount)
             val rainPrefixMm = FloatArray(basinCellCount + 1)
             val evaporationPrefixMm = FloatArray(basinCellCount + 1)
@@ -350,41 +428,23 @@ object RiverStage {
             }
 
             // Every cell of the basin drains out through its pour point, so the accumulation there
-            // is the whole catchment — the basin plus every slope that feeds it.
-            var catchmentMm = 0f
-            for (cell in basinCells) {
-                val here = catchmentRainMm.data[cell]
-                if (here > catchmentMm) catchmentMm = here
-            }
-
+            // is the whole catchment — the basin plus every slope that feeds it, less every closed
+            // basin above it.
+            val catchmentMm = catchmentRainMm.data[pourPoint[basin]]
             val balance = LakeWaterBalance.solve(
                 sortedGround, rainPrefixMm, evaporationPrefixMm,
-                catchmentMm, spillElevation, minDepth, lakesConfig.runoffFraction
+                catchmentMm, spillElevation[basin], minDepth, lakesConfig.runoffFraction
             )
-
-            if (balance.atSpill) {
-                fillToBrim(lakeId, lakes, basinCells, spillElevation, outletCell)
-                continue
-            }
+            solved?.add(SolvedBasin(cells.copyOf(), catchmentMm, endorheic = !balance.atSpill))
+            if (balance.atSpill) continue
 
             // Endorheic. Take the water back to the balance level, hand the rest of the basin
             // floor back to the land, and make the basin a sink: no outlet river, and the rivers
             // that used to run below it were carrying water that never leaves.
-            val id = lakes.size
-            val balancedCells = IntArray(balance.submergedCells) {
-                FlowRouting.decodeIndex(byGround[it])
-            }
-
             val waterCells: IntArray
             if (balance.submergedCells >= minLakeCells) {
-                for (cell in balancedCells) lakeId[cell] = id
-                lakes.add(
-                    Lake(
-                        id, balancedCells.size, balance.surface, outletCell,
-                        endorheic = true, spillElevation = spillElevation
-                    )
-                )
-                waterCells = balancedCells
+                waterCells = IntArray(balance.submergedCells) { FlowRouting.decodeIndex(byGround[it]) }
+                surfaceOf[basin] = balance.surface
             } else {
                 // Not enough water to read as a lake. What is left is a playa: the flat floor of
                 // the basin, dry most of the year and briefly a sheet of water after rain. At
@@ -400,16 +460,46 @@ object RiverStage {
                 waterCells = IntArray(flatCells.coerceAtLeast(1)) {
                     FlowRouting.decodeIndex(byGround[it])
                 }
-                for (cell in waterCells) playa[cell] = true
+                waterIsPlaya[basin] = true
+            }
+            waterOf[basin] = waterCells
+
+            // The catchment stops at this basin, so nothing below its old spill receives it —
+            // taken out along the path the water used to leave by, before that path is re-pointed.
+            var below = flowTarget[pourPoint[basin]]
+            var steps = 0
+            while (below >= 0 && sea.isLand[below] && steps++ < cellCount) {
+                catchmentRainMm.data[below] =
+                    (catchmentRainMm.data[below] - catchmentMm).coerceAtLeast(0f)
+                below = flowTarget[below]
             }
 
-            for (cell in basinCells) pending[cell] = true
+            for (cell in cells) pending[cell] = true
             LakeWaterBalance.routeIntoWater(
-                cellsAcross, cellsDown, ground, pending, waterCells, basinCells.size, flowTarget,
+                cellsAcross, cellsDown, ground, pending, waterCells, cells.size, flowTarget,
                 settled, basinMark++, pathKey, config.seed, config.cellHeightInCellWidths
             )
         }
 
+        val lakes = ArrayList<Lake>()
+        for (basin in basins.indices) {
+            val water = waterOf[basin]
+            when {
+                water == null ->
+                    fillToBrim(lakeId, lakes, basins[basin], spillElevation[basin], outletCell[basin])
+                waterIsPlaya[basin] -> for (cell in water) playa[cell] = true
+                else -> {
+                    val id = lakes.size
+                    for (cell in water) lakeId[cell] = id
+                    lakes.add(
+                        Lake(
+                            id, water.size, surfaceOf[basin], outletCell[basin],
+                            endorheic = true, spillElevation = spillElevation[basin]
+                        )
+                    )
+                }
+            }
+        }
         return LakeResult(lakeId, lakes, playa, cellsAcross)
     }
 
@@ -417,7 +507,7 @@ object RiverStage {
     private fun fillToBrim(
         lakeId: IntArray,
         lakes: MutableList<Lake>,
-        basinCells: List<Int>,
+        basinCells: IntArray,
         spillElevation: Float,
         outletCell: Int
     ) {
@@ -453,14 +543,16 @@ object RiverStage {
     )
 
     /**
-     * Runoff a single cell contributes, from its rainfall on the 0..1 scale. See [RUNOFF_FLOOR]
-     * for why an arid cell still contributes something.
+     * The discharge every cell carries, in millimetre-cells: [Runoff.annualWeightMm] summed over
+     * the cell and everything upstream of it.
      *
-     * Internal rather than private because `NationStage` has to reach the same figure to decide
-     * which cells are on a river, and the two must not drift apart.
+     * The absolute rainfall and not `ClimateResult.precipitation`, the 0..1 copy clamped at
+     * `ClimateStage.REFERENCE_MM`, because a trunk draining rainforest at three thousand millimetres
+     * carries two and a half times what one at twelve hundred does, and the clamped copy drew,
+     * ranked and split the two as the same river. `NationStage` reads its riverine threshold off
+     * the same helper, so the threshold and the discharge are in one unit. See
+     * docs/DESIGN_LEDGER.md, chunk 6.
      */
-    internal fun runoffWeight(precipitation: Float): Float = RUNOFF_FLOOR + precipitation
-
     private fun accumulateFlow(
         cellsAcross: Int,
         cellsDown: Int,
@@ -470,7 +562,7 @@ object RiverStage {
         flowTarget: IntArray
     ): FloatField = FlowRouting.accumulate(
         cellsAcross, cellsDown, sea.isLand, filled, flowTarget, sea.landCellCount
-    ) { cell -> runoffWeight(climate.precipitation.data[cell]) }
+    ) { cell -> Runoff.annualWeightMm(climate.precipitationMm.data[cell]) }
 
     /**
      * Whether a headwater is a lake's outflow rather than a scratch on a hillside: some neighbour

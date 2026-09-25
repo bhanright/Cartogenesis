@@ -2888,8 +2888,9 @@ data class NationsConfig(
      */
     val upwellingFisheryBonus: Float = 0.16f,
     /**
-     * Largest catchment left whole, as a share of all land. Anything draining more than this is
-     * cut at its confluences, so the pieces are its tributaries.
+     * Largest catchment left whole, as a share of the land's area on the ground. Anything draining
+     * more ground than this is cut at its confluences, so the pieces are its tributaries and the
+     * reaches of its trunk between them, and no piece is larger.
      *
      * A single river basin can be a fifth of a continent. Left whole, every realm would be
      * enormous and shaped alike; cut too fine and realms become mosaics of scraps with no
@@ -2984,7 +2985,10 @@ data class CulturesConfig(
      * it, which on one seed meant a third of the world's land.
      */
     val hostileCrossingCost: Float = 6.0f,
-    /** Largest catchment left whole when dividing land into cultural regions, as a share of land. */
+    /**
+     * Largest catchment left whole when dividing land into cultural regions, as a share of the
+     * land's area on the ground; no region piece is larger.
+     */
     val maxRegionShare: Float = 0.030f,
     /** Smallest cultural region, as a share of land; anything under is merged into a neighbour. */
     val minRegionShare: Float = 0.006f

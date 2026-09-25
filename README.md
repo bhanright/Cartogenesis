@@ -80,9 +80,9 @@ the generator is written in those units and converted to whatever grid the world
    floor sits at the depth its age gives it (Parsons and Sclater).
 3. **Erosion.** Thermal erosion moves material off slopes steeper than a critical gradient, and
    stream-power incision (`E = K A^0.5 S`) cuts channels in proportion to the water draining through
-   them, round by round, never below the sea and never by more than half the drop to the next cell
-   in a round. On every river the map draws that half-the-drop limit, not the law, sets the cut
-   today, which the next erosion chunk is to replace with an implicit solve (`docs/TODO.md`). Uplift continues under active belts during the same rounds, and the plate
+   them, round by round, solved implicitly (Braun and Willett 2013) from the outlets upstream, so the
+   law and not a numerical limit sets every cut and no cell is cut below the sea or below the cell
+   it drains into. Uplift continues under active belts during the same rounds, and the plate
    flexes under what the water moves: stripped ranges rebound, forelands sink under sediment, and an
    ice sheet holds its bed down.
 4. **Deposition.** Sediment settles where a cell's load exceeds what its slope can carry: graded

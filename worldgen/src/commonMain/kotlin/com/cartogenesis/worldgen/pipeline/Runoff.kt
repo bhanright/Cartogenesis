@@ -50,6 +50,13 @@ package com.cartogenesis.worldgen.pipeline
 object Runoff {
 
     /**
+     * Rainfall over potential evaporation below which country is hyper-arid, in UNEP's World
+     * Atlas of Desertification (Middleton and Thomas 1992, 1997): the Atacama, the Namib and the
+     * core of the Sahara.
+     */
+    const val HYPER_ARID_ARIDITY_INDEX = 0.05f
+
+    /**
      * The least water a cell is counted as shedding, in millimetres a year.
      *
      * A floor and not a physical term. Below it a desert range would contribute nothing at all to
@@ -66,13 +73,6 @@ object Runoff {
      * 1,200 mm scale, so the erosion and the channel criterion, which read it already, do not move.
      */
     const val FLOOR_MM = HYPER_ARID_ARIDITY_INDEX * ClimateStage.REFERENCE_MM
-
-    /**
-     * Rainfall over potential evaporation below which country is hyper-arid, in UNEP's World
-     * Atlas of Desertification (Middleton and Thomas 1992, 1997): the Atacama, the Namib and the
-     * core of the Sahara.
-     */
-    const val HYPER_ARID_ARIDITY_INDEX = 0.05f
 
     /**
      * The rainfall the absolute form is measured against, in millimetres a year: Earth's mean over

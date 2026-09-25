@@ -17,25 +17,52 @@
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%23121417'/><path d='M4 22c4-6 8 2 12-4s8 2 12-4' fill='none' stroke='%23c9a227' stroke-width='2.2' stroke-linecap='round'/><path d='M4 27c4-6 8 2 12-4s8 2 12-4' fill='none' stroke='%235d0000' stroke-width='2.2' stroke-linecap='round'/></svg>">
 
-<!-- The two faces the first screenful is set in. The other three are asked for by @font-face
-     below and fetched when the reader gets to them. Fonts are fetched in CORS mode even from the
-     same origin, so `crossorigin` is not optional here: without it the preload is discarded and
-     the file is downloaded a second time. -->
-<link rel="preload" as="font" type="font/ttf" href="fonts/spectral_regular.ttf" crossorigin>
+<!-- The two faces the first screenful is set in: the heading's and the title card's semibold, and
+     the sans the lede is read in. The other three are asked for by @font-face below and fetched
+     when the page first sets type in them. Fonts are fetched in CORS mode even from the same
+     origin, so `crossorigin` is not optional here: without it the preload is discarded and the file
+     is downloaded a second time. -->
+<link rel="preload" as="font" type="font/ttf" href="fonts/spectral_semibold.ttf" crossorigin>
 <link rel="preload" as="font" type="font/ttf" href="fonts/plex_sans_regular.ttf" crossorigin>
 
-<!-- Two classes, set before anything is painted. `live` says scripts run, so the figures that need
-     one (the frame that plays the steps, the style slider, the pins' notes) take their space from
-     the first paint rather than arriving under the reader. `reveal` arms the cards' reveal, so a
-     card that is going to rise into place is never drawn once in place first and then snatched
-     away: only when the browser can say when a card comes into view and the reader has not asked
-     for less motion. With scripts off neither is set and every card and picture is simply there. -->
+<!-- Classes set before anything is painted, so that nothing a reader sees is drawn one way and then
+     swapped for another. `live` says scripts run, so the figures that need one take their space
+     from the first paint. `reveal` arms the cards' reveal: only when the browser can say when a
+     card comes into view and the reader has not asked for less motion. `unfold` pins the opening
+     while the page scrolls, so its panel can rise over the map: the reveal's two conditions, and a
+     screen at least 500 pixels tall, below which no width sets the opening's panel with a quarter
+     of the screen left for the map (the panel is never under about 380 pixels tall). `splash` puts
+     the title card up first: once a visit, which the browser has to be able to remember, and never
+     for a reader who arrived at a place further down the page. With scripts off none is set and
+     the opening is simply there, settled. If the page's own script does not finish, all four come
+     off again once the document has been read, and the page is the one a reader without scripts
+     gets. -->
 <script>
-document.documentElement.className += ' live';
-if ('IntersectionObserver' in window &&
-    !(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches)) {
-  document.documentElement.className += ' reveal';
-}
+(function () {
+  var html = document.documentElement;
+  html.className += ' live';
+  if ('IntersectionObserver' in window &&
+      !(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches)) {
+    html.className += ' reveal';
+    if (window.matchMedia('(min-height: 500px)').matches) {
+      html.className += ' unfold';
+      var firstThisVisit = false;
+      try {
+        firstThisVisit = !location.hash &&
+          sessionStorage.getItem('cartogenesis-opening-seen') !== 'yes';
+        if (firstThisVisit) sessionStorage.setItem('cartogenesis-opening-seen', 'yes');
+      } catch (unavailable) {
+        firstThisVisit = false;
+      }
+      if (firstThisVisit) html.className += ' splash';
+    }
+  }
+  document.addEventListener('DOMContentLoaded', function () {
+    if (html.getAttribute('data-scripted') !== 'yes') {
+      html.className = html.className.replace(/\s*\b(live|reveal|unfold|splash)\b/g, '');
+    }
+  });
+})();
 </script>
 
 <style>
@@ -97,8 +124,17 @@ if ('IntersectionObserver' in window &&
     --mono:"IBM Plex Mono","Cascadia Mono",Consolas,"Liberation Mono",monospace;
 
     --measure:1120px;
+    --gutter:24px;
+  }
+  /* The page's two colours of its own, which the application has no use for: the
+     title card's name is set in white over the map before it lights, and each
+     letter flashes pale gold on its way to the brass it stays. Nowhere else. */
+  .title-card{
+    --letter-unlit:#ffffff;
+    --letter-struck:#ffe7a1;
   }
   *{box-sizing:border-box}
+  html{background:var(--ink)}
   body{
     margin:0;background:var(--ink);color:var(--bone);
     font-family:var(--sans);font-size:16px;line-height:1.65;
@@ -106,75 +142,182 @@ if ('IntersectionObserver' in window &&
   }
   a{color:inherit}
   :focus-visible{outline:2px solid var(--brass);outline-offset:3px}
-  .wrap{max-width:var(--measure);margin:0 auto;padding:0 24px}
+  .wrap{max-width:var(--measure);margin:0 auto;padding:0 var(--gutter)}
 
-  /* ---------- topbar: the wordmark, and nothing that belongs to anyone else -- */
-  .topbar{border-bottom:1px solid var(--hairline)}
-  .topbar .wrap{display:flex;align-items:baseline;gap:22px;padding-top:16px;padding-bottom:14px}
   /* The wordmark the author chose (2026-09-12): the name in spaced capitals with its second half in
-     brass, and the one-line description beside it — the treatment the earlier page had, set in
-     the page's own Spectral rather than that page's Cinzel. */
+     brass, set in the page's own Spectral. It rides in the tray now that the page has no top bar. */
   .wordmark{
     font-family:var(--serif);font-weight:600;font-size:18px;line-height:1;
     letter-spacing:.2em;text-transform:uppercase;color:var(--parchment);margin:0;
   }
   .wordmark span{color:var(--brass)}
-  .topline{font-family:var(--sans);font-size:14px;color:var(--bone-dim);white-space:nowrap}
-  @media (max-width:520px){.topline{display:none}}
 
-  /* ---------- hero ---------------------------------------------------------- */
-  .hero{
-    display:grid;gap:36px 48px;align-items:center;
-    grid-template-columns:minmax(0,1fr);
-    padding:56px 0 16px;
+  .btn{
+    display:inline-flex;align-items:center;justify-content:center;min-height:46px;padding:0 20px;
+    font-family:var(--sans);font-weight:500;font-size:15px;line-height:1.2;text-decoration:none;
+    border:1px solid var(--brass);border-radius:2px;
+    transition:background-color .15s,border-color .15s;
   }
-  @media (min-width:900px){
-    /* The text column is the wider of the two because the headline sets on two lines and the
-       break is chosen, not left to the browser: at this width line one is "Build a world".
-       The crop is 2:1, so half the row is already more height than it needs. */
-    .hero{grid-template-columns:minmax(0,1fr) minmax(0,.9fr);padding:88px 0 40px}
+  .btn.primary{background:var(--brass);color:var(--ink)}
+  .btn.primary:hover,.btn.primary:focus-visible{background:var(--parchment);border-color:var(--parchment)}
+  .btn.secondary{background:transparent;color:var(--parchment);border-color:var(--hairline)}
+  .btn.secondary:hover,.btn.secondary:focus-visible{border-color:var(--brass)}
+
+  /* ---------- the opening --------------------------------------------------- */
+  /* The drifting world across the top of the screen and an ink panel under it
+     with the heading and the two ways in; as the page scrolls the panel rises
+     over the map like a curtain and the map pulls in to sit beneath the heading
+     as a framed plate.
+
+     Written three ways. As it stands here, with no class, it is the opening
+     settled: the panel, then the plate in the page's flow, which is what a
+     reader without scripts, a reader who asked for less motion and a screen too
+     short for the rest all get. Under `unfold` the stage is pinned over a runway
+     of one more screen and laid out as the opening at rest, the map filling what
+     the panel leaves; the script then moves the map, the band inside it and the
+     panel by transforms alone, as far as the scroll has gone. Under `splash` the
+     map is laid over the whole stage for the title card. Every size the script
+     reads is the stage's own, whose height is the small viewport's (`svh`), so a
+     phone's toolbar showing and hiding changes nothing the opening is measured
+     by. */
+  .opening{position:relative;z-index:0;background:var(--ink)}
+  .opening-stage{padding:clamp(8px,6vh,48px) 0 40px}
+  .opening-panel{
+    display:flex;flex-direction:column;align-items:center;text-align:center;
+    padding:clamp(22px,4vh,40px) var(--gutter) clamp(18px,3vh,32px);background:var(--ink);
   }
   .eyebrow{
-    font-family:var(--mono);font-size:13px;letter-spacing:.14em;text-transform:uppercase;
-    color:var(--brass);margin:0 0 22px;
+    font-family:var(--mono);font-size:12px;line-height:1;letter-spacing:.2em;text-transform:uppercase;
+    color:var(--brass);margin:0 0 14px;
   }
-  /* The hero is the page's one large statement, so it is set a size class above everything
-     below it: the headline at up to 54px against the 24px section heads, the lede at 20px
-     against 16px body. 54px is the largest size at which "from the ground up." still fits the
-     text column at 900px wide, which is where the two-column hero switches on. */
   h1{
-    font-family:var(--serif);font-weight:400;
-    font-size:clamp(34px,4.2vw,54px);line-height:1.1;letter-spacing:-.01em;
-    margin:0;color:var(--parchment);
+    font-family:var(--serif);font-weight:600;color:var(--parchment);
+    font-size:clamp(34px,5.6vw,72px);line-height:1.02;letter-spacing:-.01em;margin:0 0 14px;
+    text-wrap:balance;max-width:14em;
   }
-  /* Inline by default, so a narrow column wraps the sentence wherever it likes rather than
-     stranding "up." alone on a line of its own. The chosen break is switched on with the
-     two-column hero below, where there is room for it. */
-  h1 .line{display:inline}
-  @media (min-width:900px){ h1 .line{display:block} }
-  .lede{
-    margin:24px 0 0;color:var(--bone-dim);font-size:clamp(17px,1.6vw,20px);line-height:1.5;
-    max-width:40ch;
+  .lede{margin:0 0 20px;color:var(--bone);max-width:36em}
+  .actions{display:flex;flex-wrap:wrap;justify-content:center;gap:12px}
+  .opening-cue{
+    margin-top:18px;width:36px;height:36px;padding:0;border-radius:50%;border:1px solid var(--hairline);
+    background:transparent;color:var(--parchment);cursor:pointer;transition:border-color .15s;
   }
+  .unfold .opening-cue{display:grid;place-items:center}
+  .opening-cue:hover{border-color:var(--brass)}
+  .opening-cue svg{width:14px;height:14px}
 
-  .actions{display:flex;flex-wrap:wrap;gap:14px;margin:34px 0 0}
-  .btn{
-    display:inline-block;text-decoration:none;font-family:var(--sans);font-weight:500;
-    font-size:15.5px;line-height:1.2;padding:14px 24px;border-radius:2px;
-    border:1px solid transparent;transition:background-color .15s,border-color .15s,color .15s;
+  /* The plate: 2:1, as wide as the column allows up to 960, and the band inside
+     it as tall as the plate, so what shows is the band's first stretch, which is
+     the author's window. */
+  .opening-plate{
+    position:relative;width:min(960px,calc(100% - 2 * var(--gutter)));aspect-ratio:2/1;margin:0 auto;
+    border:1px solid var(--hairline);background:var(--ink-raised);overflow:hidden;
   }
-  .btn.primary{background:var(--oxblood);color:var(--parchment);border-color:var(--oxblood)}
-  .btn.primary:hover,.btn.primary:focus-visible{
-    background:var(--oxblood-lit);border-color:var(--oxblood-lit);
+  .opening-map{position:absolute;inset:0;overflow:hidden;background:var(--ink-raised)}
+  .opening-band{position:absolute;left:0;top:0;height:100%;transform-origin:0 0}
+  /* The band laid twice end to end and slid by half the pair: once round the
+     world every four minutes, and the second copy is the same file, so it costs
+     no second request. */
+  .band-track{display:flex;height:100%;width:max-content}
+  .band-track picture,.band-track img{display:block;height:100%;width:auto}
+  .live .band-track{animation:band-drift 240s linear infinite}
+  .opening-map.paused .band-track{animation-play-state:paused}
+  @keyframes band-drift{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+  .opening-frame{display:none}
+  .band-pause{
+    width:30px;height:30px;padding:0;border-radius:50%;cursor:pointer;
+    border:1px solid var(--hairline);background:var(--ink);color:var(--parchment);
+    transition:border-color .15s;
   }
-  .btn.secondary{background:transparent;color:var(--brass);border-color:var(--brass)}
-  .btn.secondary:hover,.btn.secondary:focus-visible{background:var(--ink-sunk)}
-  .trust{
-    font-family:var(--mono);font-size:13px;color:var(--bone-dim);
-    margin:18px 0 0;letter-spacing:.02em;
+  .band-pause:hover{border-color:var(--brass)}
+  .band-pause svg{display:block;width:12px;height:12px;margin:auto}
+  .band-pause .play{display:none}
+  .band-pause[aria-pressed="true"] .play{display:block}
+  .band-pause[aria-pressed="true"] .pause{display:none}
+  .live .band-pause{position:absolute;right:12px;top:12px;z-index:2}
+
+  .unfold .opening{height:200vh;height:200svh;margin-bottom:calc(-1 * var(--overlap, 0px))}
+  .unfold .opening-stage{
+    position:sticky;top:0;height:100vh;height:100svh;overflow:hidden;padding:0;
+    display:flex;flex-direction:column;
+  }
+  .unfold .opening-panel{position:relative;z-index:2;flex:none}
+  .unfold .opening-plate{display:contents}
+  .unfold .opening-map{
+    position:relative;inset:auto;order:-1;flex:1 1 auto;min-height:0;z-index:1;transform-origin:0 0;
+  }
+  .unfold .opening-frame{
+    display:block;position:absolute;z-index:1;border:1px solid var(--hairline);pointer-events:none;
+    opacity:0;
+  }
+  .unfold .band-pause{left:0;top:0;right:auto;z-index:1}
+
+  /* The title card: the name over the whole map, and the line under it. The
+     name's letters light one by one, left to right, like keys struck along a
+     keyboard: white, a bright flash, then the page's brass, and they stay lit.
+     The words sit on a scrim of their own, an ellipse flat across the middle
+     55 hundredths of its radius, which holds every letter, and feathered out
+     over the map beyond; flat, it is dark enough that the lit brass reads over
+     the brightest ice the band holds. */
+  .title-card{display:none}
+  .splash .title-card{
+    display:grid;place-items:center;position:absolute;inset:0;z-index:3;text-align:center;
+    padding:0 var(--gutter);pointer-events:none;
+  }
+  .title-words{position:relative;isolation:isolate;padding:clamp(16px,3vw,36px) clamp(12px,3vw,40px)}
+  .title-words::before{
+    content:"";position:absolute;z-index:-1;inset:-130% -50%;
+    background:radial-gradient(closest-side,color-mix(in srgb,var(--ink) 74%,transparent) 55%,transparent 100%);
+  }
+  .title-name{
+    margin:0;font-family:var(--serif);font-weight:600;text-transform:uppercase;white-space:nowrap;
+    color:var(--letter-unlit);font-size:clamp(22px,7.2vw,92px);line-height:1;letter-spacing:.24em;
+    padding-left:.24em;text-shadow:0 2px 24px rgba(0,0,0,.45);
+  }
+  .title-name span{display:inline-block}
+  .splash .title-name.struck span{animation:key-struck .72s cubic-bezier(.3,.7,.3,1) calc(var(--i) * 115ms) both}
+  @keyframes key-struck{
+    0%{color:var(--letter-unlit);text-shadow:0 2px 24px rgba(0,0,0,.45)}
+    38%{color:var(--letter-struck);text-shadow:0 0 22px rgba(255,214,110,.85),0 0 4px rgba(255,236,170,.9)}
+    100%{color:var(--brass);text-shadow:0 0 16px rgba(201,162,39,.45),0 2px 24px rgba(0,0,0,.45)}
+  }
+  .title-line{
+    margin:18px 0 0;font-family:var(--serif);font-weight:400;font-style:italic;color:var(--bone);
+    font-size:clamp(17px,2.2vw,26px);line-height:1.3;text-shadow:0 1px 14px rgba(0,0,0,.5);
+  }
+  .splash .opening-map{position:absolute;inset:0;opacity:0;transition:opacity .7s ease-out}
+  .splash .opening-map.shown{opacity:1}
+  .splash .opening-panel{transform:translateY(100vh);transform:translateY(100svh)}
+
+  /* ---------- the tray ------------------------------------------------------ */
+  /* The wordmark and the two ways in, once the opening's own buttons have gone
+     by: along the top on a computer, along the foot on a phone, where it drops
+     the wordmark to give the two buttons the width. It steps aside while the
+     download section is on screen, and wherever it would cover a control or the
+     page's last words (the script says where). Hidden, it is out of reach of
+     the keyboard as well as out of sight. */
+  .tray{
+    position:fixed;left:0;right:0;top:0;z-index:30;padding-top:env(safe-area-inset-top,0px);
+    background:var(--ink);background:color-mix(in srgb,var(--ink) 92%,transparent);
+    -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);border-bottom:1px solid var(--hairline);
+  }
+  .live .tray{visibility:hidden;transform:translateY(-100%);transition:transform .28s ease,visibility 0s linear .28s}
+  .live .tray.on{visibility:visible;transform:none;transition:transform .28s ease}
+  .tray-row{display:flex;align-items:center;gap:12px;min-height:60px}
+  .tray .wordmark{margin:0 auto 0 0}
+  .tray .btn{min-height:38px;padding:0 14px;font-size:14px}
+  @media (max-width:699px){
+    .tray{
+      top:auto;bottom:0;padding-top:0;padding-bottom:env(safe-area-inset-bottom,0px);
+      border-bottom:0;border-top:1px solid var(--hairline);
+    }
+    .live .tray{transform:translateY(100%)}
+    .live .tray.on{transform:none}
+    .tray .wordmark{display:none}
+    .tray .btn{flex:1;padding:0 10px;white-space:nowrap}
   }
 
   /* ---------- figures ------------------------------------------------------- */
+  main{position:relative;z-index:1;background:var(--ink)}
   figure{margin:0}
   .plate{border:1px solid var(--hairline);background:var(--ink-raised);line-height:0}
   .plate img{display:block;width:100%;height:auto}
@@ -245,8 +388,8 @@ if ('IntersectionObserver' in window &&
     }
   }
   /* Across: three styles side by side from the phone breakpoint up; four views
-     and six steps two to a row until there is room for four and three, which is
-     the 900px the headline's line break already switches at. */
+     and six steps two to a row until there is room for four and three, at the
+     900px where the page's wider rows begin. */
   @media (min-width:600px){
     .cards.styles{grid-template-columns:repeat(3,minmax(0,1fr))}
     .cards.layers,.cards.steps{grid-template-columns:repeat(2,minmax(0,1fr))}
@@ -295,11 +438,10 @@ if ('IntersectionObserver' in window &&
   /* Figures that move or answer the reader. Each is our own few lines here and in
      the script at the foot, and each keeps to the reveal's rules: opacity and
      transform only, so nothing moves the layout; started and stopped by what is
-     in view, never by the scroll position; stilled for a reader who asks for
-     less motion; and every rule that keeps something out of sight is scoped to
-     `live` or `reveal`, the classes only the head's script sets. The parts that
-     need a script at all carry `hidden` in the markup, so a reader without
-     scripts never meets a control that does nothing. */
+     in view; stilled for a reader who asks for less motion; and every rule that
+     keeps something out of sight is scoped to a class only the head's script
+     sets. The parts that need a script at all carry `hidden` in the markup, so a
+     reader without scripts never meets a control that does nothing. */
   .control{
     font-family:var(--mono);font-size:12.5px;line-height:1.2;letter-spacing:.04em;
     color:var(--brass);background:transparent;border:1px solid var(--brass);border-radius:2px;
@@ -313,34 +455,19 @@ if ('IntersectionObserver' in window &&
   }
   .control-label{font-family:var(--mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--bone-dim)}
 
-  /* The hero drifts: a strip of the band all the way round the world, laid
-     twice end to end on one track and moved half its length, so the world turns
-     without a seam. The strip's first stretch is the hero's own picture, so the
-     strip fades in over it where it stands and nothing jumps. */
-  .hero-plate{position:relative;overflow:hidden}
-  .drift{position:absolute;inset:0;overflow:hidden}
-  .drift-track{
-    position:absolute;top:0;left:0;height:100%;aspect-ratio:4096/400;
-    background-repeat:repeat-x;background-size:50% 100%;
-  }
-  .live .drift{opacity:0;transition:opacity .6s ease-out}
-  .live .drift.ready{opacity:1}
-  .drift.ready .drift-track{animation:drift 240s linear infinite}
-  .hero-plate:hover .drift-track,.drift.paused .drift-track{animation-play-state:paused}
-  @keyframes drift{from{transform:translateX(0)}to{transform:translateX(-50%)}}
-
   /* How a world is made, played: the six steps' own pictures stacked in one
-     frame, one window of one world at one scale, crossfading in turn. */
+     frame, one window of one world at one scale, crossfading in turn, under the
+     cards it plays, with only the step's name beside it. */
   /* No display of its own outside `live`: an author's display beats the
      `hidden` attribute, and without a script the frame has to stay hidden. */
-  .forming{gap:18px 36px;align-items:center;margin:0 0 40px}
+  .forming{gap:18px 36px;align-items:center;margin:40px 0 0}
   .live .forming,.live .forming[hidden]{display:grid}
   @media (min-width:900px){.forming{grid-template-columns:minmax(0,520px) minmax(0,1fr)}}
   .forming-frame{position:relative;aspect-ratio:520/280}
   .forming-frame img{position:absolute;inset:0;width:100%;height:100%}
   .live .forming-frame img{opacity:0;transition:opacity .7s ease-in-out}
   .live .forming-frame img.current{opacity:1}
-  .forming-stage{display:flex;align-items:center;gap:14px;margin:0 0 8px}
+  .forming-stage{display:flex;align-items:center;gap:14px;margin:0 0 18px}
   /* The step on show, numbered as its card is, in a square of its own: the
      cards' squares are the reveal's to hide until their row comes into view. */
   .forming-number{
@@ -349,7 +476,6 @@ if ('IntersectionObserver' in window &&
     letter-spacing:.04em;
   }
   .forming-name{font-family:var(--serif);font-size:19px;font-weight:600;line-height:1.3;color:var(--parchment)}
-  .forming-line{margin:0 0 18px;color:var(--bone-dim);font-size:14.5px;line-height:1.6;min-height:4.8em}
   .forming-controls{display:flex;flex-wrap:wrap;align-items:center;gap:12px 16px}
   .forming-controls input{flex:1;min-width:160px}
   /* The step on show, lit on the cards' line while the frame is in view: a
@@ -359,41 +485,6 @@ if ('IntersectionObserver' in window &&
     opacity:0;transition:opacity .3s ease-out;
   }
   .live .card.lit .card-number::after{opacity:1}
-
-  /* Read the land: pins the engine placed, each a button over the map, and the
-     same notes as a list under it for a reader without scripts or sight. */
-  .landmap,.landmap-plate{position:relative}
-  .pin{
-    position:absolute;width:28px;height:28px;margin:-14px 0 0 -14px;padding:0;
-    display:flex;align-items:center;justify-content:center;
-    font-family:var(--mono);font-size:12px;line-height:1;color:var(--ink);
-    background:var(--brass);border:1px solid var(--ink);border-radius:0;cursor:pointer;
-  }
-  .pin[aria-expanded="true"]{background:var(--parchment)}
-  @media (max-width:599px){.pin{width:24px;height:24px;margin:-12px 0 0 -12px;font-size:11px}}
-  .pin-note{
-    position:absolute;z-index:1;width:min(320px,calc(100% - 16px));
-    background:var(--ink-raised);border:1px solid var(--brass-dim);padding:12px 14px;
-    font-family:var(--sans);font-size:14px;line-height:1.55;color:var(--bone-dim);
-  }
-  .pin-note b{display:block;color:var(--parchment);font-family:var(--serif);font-weight:600;font-size:16px}
-  /* On a phone the map is too small to hold a note without covering the other
-     pins, so the note opens under the map instead, where a finger can reach
-     every pin past it. */
-  @media (max-width:599px){.pin-note{position:static;width:auto;margin:10px 0 0}}
-  .land-notes{list-style:none;margin:22px 0 0;padding:0;display:grid;gap:14px 32px;counter-reset:land}
-  @media (min-width:820px){.land-notes{grid-template-columns:1fr 1fr}}
-  .land-notes li{
-    counter-increment:land;position:relative;padding:0 0 0 42px;
-    color:var(--bone-dim);font-size:14.5px;line-height:1.6;
-  }
-  .land-notes li::before{
-    content:counter(land);position:absolute;left:0;top:1px;width:28px;height:28px;
-    display:flex;align-items:center;justify-content:center;
-    background:var(--brass);color:var(--ink);font-family:var(--mono);font-size:12px;line-height:1;
-  }
-  .land-notes b{display:block;color:var(--parchment);font-family:var(--serif);font-weight:600;font-size:16px}
-  .land-notes li.active::before{background:var(--parchment)}
 
   /* Any two styles over one ground, split by a handle the reader drags. The
      wipe is two transforms: the top picture's box slides left by what is cut
@@ -422,33 +513,6 @@ if ('IntersectionObserver' in window &&
   .compare-range:focus-visible ~ .compare-handle::before{outline:2px solid var(--brass);outline-offset:3px}
   .compare-pickers{display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px 20px;margin:14px 0 0}
   .compare-pickers label{display:flex;align-items:center;gap:10px}
-
-  /* The download that fits the reader's system, marked where it stands: a
-     brass rule in the gutter beside its row and a tag in its heading. */
-  .ledger .row.suggested{position:relative}
-  .ledger .row.suggested::before{
-    content:"";position:absolute;left:-14px;top:20px;bottom:20px;width:2px;background:var(--brass);
-  }
-  .tag.suggest{color:var(--brass);border-color:var(--brass-dim)}
-
-  /* A reader who asks for less motion, after the page has loaded, gets every
-     living figure still: no drift, no crossfade, no fade on the lit ring. */
-  @media (prefers-reduced-motion: reduce){
-    .drift.ready .drift-track{animation:none}
-    .live .drift,
-    .live .forming-frame img,
-    .live .card-number::after{transition:none}
-  }
-
-  /* ---------- notices ------------------------------------------------------- */
-  .notice{
-    margin:22px 0 0;padding:14px 16px;
-    border:1px solid var(--hairline);border-left:2px solid var(--brass-dim);
-    background:var(--ink-raised);font-size:14px;line-height:1.6;color:var(--bone-dim);
-  }
-  .notice b{color:var(--bone);font-weight:500}
-  .notice[hidden]{display:none}
-  .notice a{color:var(--brass)}
 
   /* ---------- sections ------------------------------------------------------ */
   section{padding:56px 0 0}
@@ -493,50 +557,104 @@ if ('IntersectionObserver' in window &&
   }
 
   /* ---------- download and installation ----------------------------------- */
-  /* A ledger rather than a grid of cards. Four panels in two columns left the Windows and
-     browser boxes mostly empty beside the Linux one, because the row takes the tallest panel's
-     height and Linux carries three lines of command that the others do not. Rows on the page's
-     own ground take each platform's own height and no more: the name in the left column, what
-     to do in the right, a hairline between one platform and the next.
+  /* A card per platform, in the page's palette: Windows in brass, Linux in the
+     oxblood the page lights its buttons with, the browser on the sunk ink with
+     a hairline. Each shows what it is in a line; chosen, it opens across the row
+     with its files and what to know, and the other two move beneath it. With
+     scripts off every card is open and spans the row, so every file and every
+     instruction is there to read.
 
-     A file name inside a sentence is set in the mono face and nothing else — no ground, no
-     border. It is there to mark where the prose stops and a literal string starts, and a tinted
-     box around three words in a paragraph is a bigger interruption than the thing it marks. */
+     Each card names its own ground and inks, and everything in it is drawn from
+     those, so the contrast guard measures each card's text on that card's own
+     ground rather than on the page's. The dim line is the card's ink mixed with
+     its ground rather than made translucent, so the colour it is read in is one
+     a guard can compute. */
   code{font-family:var(--mono);font-size:.92em;color:var(--bone)}
-  .ledger{border-top:1px solid var(--hairline);margin:0 0 28px}
-  .ledger .row{
-    display:grid;grid-template-columns:minmax(0,1fr);gap:6px 32px;
-    padding:20px 0;border-bottom:1px solid var(--hairline);min-width:0;
+  .dl{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+  .dl-card{
+    --card-ground:var(--ink-sunk);--card-ink:var(--parchment);
+    --card-ink-dim:color-mix(in srgb,var(--card-ink) 78%,var(--card-ground));
+    --card-chip:color-mix(in srgb,var(--card-ink) 14%,var(--card-ground));
+    --card-well:color-mix(in srgb,var(--ink) 34%,var(--card-ground));
+    position:relative;grid-column:1 / -1;min-width:0;border-radius:18px;overflow:hidden;
+    background:var(--card-ground);color:var(--card-ink);
   }
-  @media (min-width:700px){.ledger .row{grid-template-columns:160px minmax(0,1fr)}}
-  .ledger h3{
-    font-family:var(--serif);font-size:17px;font-weight:600;line-height:1.3;
-    margin:0;color:var(--parchment);
+  .dl-card.windows{--card-ground:var(--brass);--card-ink:var(--ink)}
+  .dl-card.linux{--card-ground:var(--oxblood-lit);--card-ink:var(--parchment)}
+  .dl-card.browser{--card-ground:var(--ink-sunk);--card-ink:var(--parchment);box-shadow:inset 0 0 0 1px var(--hairline)}
+  .live .dl-card:not(.open){grid-column:auto}
+  .dl-inner{transform-origin:0 0}
+  .dl-head{
+    display:flex;flex-direction:column;justify-content:space-between;gap:22px;width:100%;margin:0;
+    padding:18px 18px 6px;border:0;border-radius:18px;background:none;font:inherit;color:inherit;
+    text-align:left;
   }
-  .ledger h3 .tag{display:inline-block;margin:6px 0 0 10px;vertical-align:0}
-  @media (min-width:700px){.ledger h3 .tag{display:block;margin:8px 0 0;width:max-content}}
-  .ledger .what{min-width:0}
-  .ledger .what p{margin:0 0 10px;color:var(--bone-dim);font-size:14.5px;line-height:1.6}
-  .ledger .what p:last-child{margin-bottom:0}
-  /* The files themselves, on one line under the instruction, in the mono face and dimmer than
-     the prose: a reader looking for the name finds it in the same place on every row. */
-  .ledger .files{font-family:var(--mono);font-size:12.5px;color:var(--bone-dim);line-height:1.7}
-  .ledger .files code{color:var(--bone);font-size:inherit}
-  /* A block a reader copies: on the sunk ground rather than the page's own, so the three lines
-     read as something handed over rather than as more of the paragraph above them. It scrolls
-     sideways instead of wrapping — a source line broken across two lines pastes as two commands,
-     and the second one is not a command. min-width:0 on the row is what lets it scroll rather
-     than push the column wide. */
-  .cmd{
-    font-family:var(--mono);font-size:12.5px;line-height:1.8;color:var(--bone);
-    background:var(--ink-sunk);border:1px solid var(--hairline);
-    margin:10px 0 12px;padding:12px 14px;overflow-x:auto;white-space:pre;
+  .live .dl-head{cursor:pointer}
+  .live .dl-card:not(.open) .dl-head{min-height:172px;padding-bottom:16px}
+  .dl-head:focus-visible{outline:2px solid var(--card-ink);outline-offset:-4px}
+  .dl-top{display:flex;justify-content:space-between;align-items:flex-start}
+  .dl-icon{width:30px;height:30px}
+  .dl-more{display:none;width:30px;height:30px;border-radius:50%;background:var(--card-chip);transition:transform .3s}
+  .live .dl-more{display:grid;place-items:center}
+  .dl-more svg{width:14px;height:14px}
+  .dl-card.open .dl-more{transform:rotate(45deg)}
+  .dl-name{display:block;font-family:var(--sans);font-weight:500;font-size:19px;line-height:1.2}
+  .dl-sum{display:block;font-family:var(--sans);font-weight:500;font-size:14px;line-height:1.35;color:var(--card-ink-dim);margin-top:4px}
+  .dl-tag{
+    margin-left:8px;font-family:var(--mono);font-size:12px;line-height:1;letter-spacing:.06em;padding:4px 7px;
+    border-radius:999px;background:var(--card-chip);color:var(--card-ink);vertical-align:2px;white-space:nowrap;
   }
-  .cmd code{font-size:inherit}
-  /* The release page, once, as the button the hero's download button leads to rather than as a
-     fifth fact in the list. */
-  .ledger-actions{display:flex;flex-wrap:wrap;gap:14px;align-items:center}
-  .ledger-actions .note{font-size:14px;color:var(--bone-dim);margin:0}
+  .dl-body{padding:0 18px 20px;display:grid;grid-template-columns:minmax(0,1fr);gap:14px}
+  .live .dl-card:not(.open) .dl-body{display:none}
+  .dl-body p{margin:0;color:var(--card-ink-dim);font-size:15px;line-height:1.6;max-width:62ch}
+  .dl-card code{color:inherit}
+  .dl-files{display:flex;flex-wrap:wrap;gap:10px}
+  .dl-file{
+    display:inline-flex;align-items:baseline;gap:8px;text-decoration:none;color:var(--card-ink);
+    border:1px solid currentColor;border-radius:999px;padding:10px 16px;
+    font-family:var(--sans);font-weight:500;font-size:14px;line-height:1;
+  }
+  .dl-file small{font-family:var(--mono);font-size:12px;line-height:1}
+  .dl-file.first{background:var(--card-ink);border-color:var(--card-ink);color:var(--card-ground)}
+  .dl-card.browser .dl-file.first{background:var(--brass);border-color:var(--brass);color:var(--ink)}
+  .dl-file:focus-visible{outline:2px solid var(--card-ink);outline-offset:3px}
+  /* The three apt commands, in a well of the card's own ground, scrolling
+     sideways rather than wrapping: a source line broken across two lines pastes
+     as two commands, and the second is not a command. */
+  .dl-cmd{
+    position:relative;margin:0;background:var(--card-well);border-radius:12px;padding:12px 14px;
+    font-family:var(--mono);font-size:13px;line-height:1.55;color:var(--card-ink);
+    overflow-x:auto;white-space:pre;
+  }
+  .dl-cmd-box{position:relative;min-width:0}
+  .live .dl-cmd{padding-top:40px}
+  .dl-copy{
+    position:absolute;right:8px;top:8px;font-family:var(--mono);font-size:12px;line-height:1;
+    color:var(--card-ink);background:var(--card-chip);border:0;border-radius:999px;padding:6px 10px;cursor:pointer;
+  }
+  .dl-notes{margin:0;padding-left:18px;color:var(--card-ink-dim);font-size:14px;line-height:1.55;display:grid;gap:4px}
+  .dl-all{display:inline-block;margin:22px 0 0;color:var(--brass);font-size:15px}
+  @media (max-width:699px){
+    .dl{grid-template-columns:repeat(2,minmax(0,1fr))}
+    .live .dl-card.browser:not(.open){grid-column:1 / -1}
+    .live .dl-card:not(.open) .dl-head{min-height:140px}
+  }
+
+  /* A reader who asks for less motion, after the page has loaded, gets every
+     living figure still: no drift, no letters struck, no tray sliding, no
+     crossfade, no fade on the lit ring. (The opening and the title card are
+     never armed for that reader in the first place; these catch a preference
+     set after the page has loaded.) */
+  @media (prefers-reduced-motion: reduce){
+    .live .band-track,
+    .splash .title-name.struck span{animation:none}
+    .live .tray,
+    .live .tray.on,
+    .splash .opening-map,
+    .dl-more,
+    .live .forming-frame img,
+    .live .card-number::after{transition:none}
+  }
 
   /* ---------- the ask, at the foot --------------------------------------- */
   /* Two lines of the same weight, side by side where there is room and stacked
@@ -558,72 +676,74 @@ if ('IntersectionObserver' in window &&
 </style>
 </head>
 <body>
-
-<header class="topbar">
-  <div class="wrap">
+<!-- The tray, which only a script can bring in: it follows the reader once the opening's own
+     buttons have gone by. -->
+<header class="tray" id="tray" hidden>
+  <div class="wrap tray-row">
     <p class="wordmark">Carto<span>genesis</span></p>
-    <span class="topline">Procedural world-map generator</span>
+    <a class="btn primary" href="/app/">Open in the browser</a>
+    <a class="btn secondary" href="#install">Download the app</a>
   </div>
 </header>
 
-<main class="wrap">
-
-  <div class="hero">
-    <div>
-      <p class="eyebrow">Open source, free to use</p>
-      <h1>
-        <span class="line">Build a world</span>
-        <span class="line">from the ground up.</span>
-      </h1>
-      <p class="lede">
-        Generate a world map from a seed. Shape its terrain, rivers, climate and borders, then choose a map style and export the result.
-      </p>
-
-      <div class="actions">
+<!-- The opening: an ink panel with the heading and the two ways in, and the world drifting across
+     the top of the screen above it, which settles into a plate beneath the heading as the page
+     scrolls. The band is one picture of the world all the way round, laid twice end to end so it
+     can turn without a seam; narrow screens at about one device pixel to the CSS pixel get it at
+     half size (see SiteImagery.WORLD_BAND_HALF for the arithmetic), everything else full size. -->
+<div class="opening" id="opening">
+  <div class="opening-stage" id="opening-stage">
+    <div class="opening-panel" id="opening-panel">
+      <p class="eyebrow">Open source · Free to use</p>
+      <h1>Build a world from the ground up.</h1>
+      <p class="lede">Generate a world map from a seed. Shape its terrain, rivers, climate and borders, then choose a map style and export the result.</p>
+      <div class="actions" id="opening-actions">
         <a class="btn primary" href="/app/" id="launch">Open in the browser</a>
         <a class="btn secondary" href="#install" id="launch-desktop">Download the Desktop App (Windows/Linux)</a>
       </div>
-      <p class="trust">Free and open source · Your maps stay on your device</p>
-
-      <div class="notice" id="small-screen" hidden>
-        <b>Works on phones.</b>
-        Worlds generate at 512 by default here, and 2048 works; worlds and exports stop at 2048
-        in any browser. The desktop app goes to 4096.
+      <button type="button" class="opening-cue" id="opening-cue" aria-label="Scroll down to the page" hidden>
+        <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M7 1v11M2 7l5 5 5-5"/></svg>
+      </button>
+    </div>
+    <div class="opening-plate">
+      <div class="opening-map" id="opening-map">
+        <div class="opening-band" id="opening-band">
+          <div class="band-track">
+            <picture>
+              <source media="(min-width: 700px), (min-resolution: 1.2dppx), (-webkit-min-device-pixel-ratio: 1.2)" srcset="img/world-band.webp">
+              <img src="img/world-band-half.webp" width="4096" height="800" fetchpriority="high"
+                   alt="A band of a generated world in the Natural style, all the way round it: a continent with a snow-capped range down its middle and rivers running to a southern coast of bays and lakes, a second land across a strait to the east, a wide ocean, and the forested coast of a third land beyond it.">
+            </picture>
+            <picture aria-hidden="true">
+              <source media="(min-width: 700px), (min-resolution: 1.2dppx), (-webkit-min-device-pixel-ratio: 1.2)" srcset="img/world-band.webp">
+              <img src="img/world-band-half.webp" width="4096" height="800" alt="">
+            </picture>
+          </div>
+        </div>
+      </div>
+      <span class="opening-frame" id="opening-frame"></span>
+      <button type="button" class="band-pause" id="band-pause" aria-pressed="false" aria-label="Pause the turning world" hidden>
+        <svg class="pause" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true"><path d="M2.5 1.5h2.4v9H2.5zM7.1 1.5h2.4v9H7.1z"/></svg>
+        <svg class="play" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true"><path d="M3 1.3l7.2 4.7L3 10.7z"/></svg>
+      </button>
+    </div>
+    <!-- The title card the first visit opens on. Decorative: the heading is the h1 above. -->
+    <div class="title-card" id="title-card" aria-hidden="true">
+      <div class="title-words">
+        <p class="title-name" id="title-name"><span style="--i:0">C</span><span style="--i:1">a</span><span style="--i:2">r</span><span style="--i:3">t</span><span style="--i:4">o</span><span style="--i:5">g</span><span style="--i:6">e</span><span style="--i:7">n</span><span style="--i:8">e</span><span style="--i:9">s</span><span style="--i:10">i</span><span style="--i:11">s</span></p>
+        <p class="title-line">Build a world from the ground up</p>
       </div>
     </div>
-
-    <figure>
-      <!-- The strip the hero drifts along once the page has loaded: see the script at the foot. -->
-      <div class="plate hero-plate" id="hero-plate" data-strip="img/hero-strip.webp">
-        <img src="img/natural.webp" width="1600" height="800" fetchpriority="high"
-             alt="A generated world map in the Natural style: a northern continent with a mountain range along its spine, a river system draining to a ragged southern coast, lakes, offshore islands, and the coast of a second continent at the right.">
-      </div>
-      <figcaption>
-        <span class="say">A generated world in the Natural style, with mountain ranges, river systems, lakes and islands.</span>
-        Seed 718106 · 62% ocean · 14 tectonic plates
-      </figcaption>
-    </figure>
   </div>
+</div>
+
+<main>
+<div class="wrap">
 
   <section id="how">
     <div class="section-head">
       <h2>How a world is made</h2>
       <span class="fill"></span>
-    </div>
-
-    <!-- The six steps played in one frame: the cards' own pictures, which share one window and
-         one scale, so the land stays put and only each step's work changes. -->
-    <div class="forming" id="forming" hidden>
-      <div class="plate forming-frame" aria-hidden="true"></div>
-      <div class="forming-side">
-        <p class="forming-stage"><span class="forming-number" id="forming-number">01</span><span class="forming-name" id="forming-name">Plates and mountains</span></p>
-        <p class="forming-line" id="forming-line"></p>
-        <div class="forming-controls">
-          <button type="button" class="control" id="forming-play" aria-pressed="false">Play</button>
-          <label class="control-label" for="forming-stage">Step</label>
-          <input type="range" id="forming-stage" min="1" max="6" step="1" value="1">
-        </div>
-      </div>
     </div>
 
     <ol class="cards steps">
@@ -682,42 +802,21 @@ if ('IntersectionObserver' in window &&
         <p>Geography shapes borders and settlement. Realms follow rivers, coasts and watersheds, while peoples spread into familiar terrain and across political borders.</p>
       </li>
     </ol>
-  </section>
 
-  <!-- Read the land: one map with the engine's pins on it. The pins are not written here: the
-       assembly puts them in place of the marker below, from where SiteLandmarks found each place in
-       the world's own fields, so they stay on their ground when the pictures are made again. The
-       notes are written here, one per kind in the finder's order, and are the list under the map;
-       a pin opens its own as a note on the map. -->
-  <section id="land">
-    <div class="section-head">
-      <h2>Read the land</h2>
-      <span class="fill"></span>
-    </div>
-
-    <p class="section-lede">
-      Five things the generator made on one stretch of coast. Each pin was placed by the generator itself, which found the place in the world's own data: where the plates meet, where the rain falls and where the rivers run.
-    </p>
-
-    <figure class="landmap">
-      <div class="plate landmap-plate">
-        <img src="img/land.webp" width="1120" height="560" loading="lazy" decoding="async"
-             alt="The north coast of an island in the Natural style: a range of bare brown mountains along the shore with a lake among its peaks, green and olive country behind it with a wide river running north to a narrow arm of the sea, the coast of another land across that arm at the top right, and deep sea across the top.">
-        <!-- pins -->
+    <!-- The six steps played in one frame, under the cards they play: the cards' own pictures,
+         which share one window and one scale, so the land stays put and only each step's work
+         changes. Beside it, only the step's name: its card above says the rest. -->
+    <div class="forming" id="forming" hidden>
+      <div class="plate forming-frame" aria-hidden="true"></div>
+      <div class="forming-side">
+        <p class="forming-stage"><span class="forming-number" id="forming-number">01</span><span class="forming-name" id="forming-name">Plates and mountains</span></p>
+        <div class="forming-controls">
+          <button type="button" class="control" id="forming-play" aria-pressed="false">Play</button>
+          <label class="control-label" for="forming-stage">Step</label>
+          <input type="range" id="forming-stage" min="1" max="6" step="1" value="1">
+        </div>
       </div>
-      <div class="pin-note" id="land-note" hidden></div>
-      <ol class="land-notes">
-        <li id="land-coastal-range"><b id="land-coastal-range-name">A coastal range</b> An ocean plate sinks beneath the continent along this coast. Compression thickens and lifts the crust above it into a mountain range. On Earth: the Andes, above the Nazca plate.</li>
-        <li id="land-rain-shadow"><b id="land-rain-shadow-name">A rain shadow</b> Moist sea air cools and drops its rain as it climbs the range. Beyond the crest, far less rain falls. On Earth: Patagonia, east of the Andes.</li>
-        <li id="land-drowned-valley"><b id="land-drowned-valley-name">A drowned valley</b> A river cut this valley when the sea stood lower. The rising sea flooded it, leaving a long, narrow inlet. On Earth: Chesapeake Bay.</li>
-        <li id="land-delta"><b id="land-delta-name">A delta</b> The river drops the sediment it carries as it enters the sea. Over time this builds low new land out from the coast. On Earth: the Mississippi delta.</li>
-        <li id="land-shelf"><b id="land-shelf-name">The continental shelf</b> The continent continues beneath shallow water. At the shelf edge, usually 100 to 200 metres down, the sea floor steepens towards the deep ocean. On Earth: the North Sea.</li>
-      </ol>
-      <figcaption>
-        <span class="say">One stretch of coast in the Natural style, with the five places the generator found on it.</span>
-        Seed 718106
-      </figcaption>
-    </figure>
+    </div>
   </section>
 
   <section id="styles">
@@ -938,14 +1037,15 @@ if ('IntersectionObserver' in window &&
 
   <!-- Installing, after the Notes and before the roadmap: a reader who has read what the program
        is and what it will and will not do is the reader ready to be told how to get it, and the
-       roadmap is the answer to a different question. One card per platform, Linux the fullest
-       because it is the one with variables in it — which package manager, which driver, where the
-       launcher lives.
+       roadmap is the answer to a different question. One card per platform.
 
-       Every file name here is checked against site/downloads.txt by SiteAssemblyTest, and the
-       source line below is checked word for word against the one in docs/INSTALL.md: a page that
-       names a file the release does not carry, or a source line that differs by a character from
-       the documented one, is a page that sends a reader somewhere that does not work. -->
+       Every file a release carries has a pill here, and each pill names its file in `data-asset`,
+       with <version> where the release's own number goes. Checked against site/downloads.txt by
+       SiteSourcesTest, both ways. The pill links to /releases/latest, which works whatever the
+       release is called; the script at the foot asks GitHub for the latest release once, and turns
+       each pill whose file the release carries into a link to that file with its size. So no
+       version and no size is ever written here, and none goes stale. The apt source line is
+       checked word for word against the one in docs/INSTALL.md. -->
   <section id="install">
     <div class="section-head">
       <h2>Download and Installation</h2>
@@ -953,42 +1053,96 @@ if ('IntersectionObserver' in window &&
     </div>
 
     <p class="section-lede">
-      Choose a download for Windows or Linux, or run Cartogenesis in the browser.
+      Choose your system for its files and how to install them. The browser version runs anywhere; the desktop app makes larger worlds.
     </p>
 
-    <div class="ledger">
-      <div class="row" data-system="windows">
-        <h3>Windows</h3>
-        <div class="what">
-          <p>Unzip the portable zip and run <code>Cartogenesis.exe</code>. Nothing is installed. Or choose the MSI installer. It is unsigned, so Windows shows a SmartScreen warning. If you trust the download, choose “More info”, then “Run anyway”.</p>
-          <p class="files"><code>Cartogenesis-&lt;version&gt;-windows-portable.zip</code> · <code>Cartogenesis-&lt;version&gt;.msi</code></p>
+    <div class="dl" id="dl">
+      <div class="dl-card windows" data-system="windows">
+        <div class="dl-inner">
+          <button type="button" class="dl-head" aria-expanded="true" aria-controls="dl-windows">
+            <span class="dl-top">
+              <svg class="dl-icon" viewBox="0 0 30 30" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4.5 6.5q0-1.5 1.5-1.5h18q1.5 0 1.5 1.5v13q0 1.5-1.5 1.5H6q-1.5 0-1.5-1.5z"/><path d="M11 26h8M15 21v5"/></svg>
+              <span class="dl-more" aria-hidden="true"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 2v10M2 7h10"/></svg></span>
+            </span>
+            <span>
+              <span class="dl-name">Windows<span class="dl-tag" hidden>For your system</span></span>
+              <span class="dl-sum">MSI installer or portable zip · 64-bit</span>
+            </span>
+          </button>
+          <div class="dl-body" id="dl-windows">
+            <div class="dl-files">
+              <a class="dl-file first" href="/releases/latest" data-asset="Cartogenesis-&lt;version&gt;.msi">MSI installer</a>
+              <a class="dl-file" href="/releases/latest" data-asset="Cartogenesis-&lt;version&gt;-windows-portable.zip">Portable zip</a>
+            </div>
+            <p>The portable zip installs nothing: unzip it and run <code>Cartogenesis.exe</code>. The MSI installer adds a Start menu entry. It is unsigned, so Windows shows a SmartScreen warning. If you trust the download, choose “More info”, then “Run anyway”.</p>
+            <ul class="dl-notes">
+              <li>Java is bundled, with nothing else to install.</li>
+              <li>Draws exported pictures on the graphics card where there is one, and runs erosion, ocean currents and the ice sheet on it when you switch graphics acceleration on.</li>
+            </ul>
+          </div>
         </div>
       </div>
 
-      <div class="row" data-system="linux">
-        <h3>Linux<span class="tag">Debian · Ubuntu</span></h3>
-        <div class="what">
-          <p>The apt repository is recommended. The three commands below fetch the signing key, add the source line and run apt install. Alternatively, install the <code>.deb</code> with apt, or unpack and run the portable tarball. Java is bundled, with nothing else to install. The open-source graphics stack (Mesa) was tested. The proprietary NVIDIA driver was not. Saved worlds live in <code>~/.cartogenesis/worlds</code>.</p>
-          <pre class="cmd"><code>sudo curl -fsSL https://cartogenesis.com/apt/key.asc -o /etc/apt/keyrings/cartogenesis.asc
+      <div class="dl-card linux" data-system="linux">
+        <div class="dl-inner">
+          <button type="button" class="dl-head" aria-expanded="true" aria-controls="dl-linux">
+            <span class="dl-top">
+              <svg class="dl-icon" viewBox="0 0 30 30" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4.5 6.5q0-1.5 1.5-1.5h18q1.5 0 1.5 1.5v17q0 1.5-1.5 1.5H6q-1.5 0-1.5-1.5z"/><path d="M8.5 11.5l4 3-4 3M14.5 18.5h7"/></svg>
+              <span class="dl-more" aria-hidden="true"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 2v10M2 7h10"/></svg></span>
+            </span>
+            <span>
+              <span class="dl-name">Linux<span class="dl-tag" hidden>For your system</span></span>
+              <span class="dl-sum">apt repository, .deb or tarball · Debian, Ubuntu</span>
+            </span>
+          </button>
+          <div class="dl-body" id="dl-linux">
+            <p>The apt repository is recommended, so later releases arrive with <code>apt upgrade</code>. These three commands fetch the signing key, add the source line and install:</p>
+            <div class="dl-cmd-box"><pre class="dl-cmd"><code id="dl-apt">sudo curl -fsSL https://cartogenesis.com/apt/key.asc -o /etc/apt/keyrings/cartogenesis.asc
 echo "deb [signed-by=/etc/apt/keyrings/cartogenesis.asc] https://cartogenesis.com/apt stable main" | sudo tee /etc/apt/sources.list.d/cartogenesis.list
-sudo apt update &amp;&amp; sudo apt install cartogenesis</code></pre>
-          <p class="files"><code>Cartogenesis-&lt;version&gt;-linux-amd64.deb</code> · <code>Cartogenesis-&lt;version&gt;-linux-portable.tar.gz</code></p>
+sudo apt update &amp;&amp; sudo apt install cartogenesis</code></pre><button type="button" class="dl-copy" data-copy="dl-apt" hidden>Copy</button></div>
+            <div class="dl-files">
+              <a class="dl-file first" href="/releases/latest" data-asset="Cartogenesis-&lt;version&gt;-linux-amd64.deb">.deb package</a>
+              <a class="dl-file" href="/releases/latest" data-asset="Cartogenesis-&lt;version&gt;-linux-portable.tar.gz">Portable tarball</a>
+            </div>
+            <p>Or install the <code>.deb</code> with apt, or unpack the portable tarball and run it.</p>
+            <ul class="dl-notes">
+              <li>Java is bundled, with nothing else to install.</li>
+              <li>The open-source graphics stack (Mesa) was tested. The proprietary NVIDIA driver was not.</li>
+              <li>Saved worlds live in <code>~/.cartogenesis/worlds</code>.</li>
+            </ul>
+          </div>
         </div>
       </div>
 
-      <div class="row" data-system="browser">
-        <h3>Browser</h3>
-        <div class="what">
-          <p>Run Cartogenesis at cartogenesis.com. Nothing is installed and nothing is uploaded. You can also host the web zip yourself over HTTPS.</p>
-          <p class="files"><code>Cartogenesis-&lt;version&gt;-web.zip</code></p>
+      <div class="dl-card browser" data-system="browser">
+        <div class="dl-inner">
+          <button type="button" class="dl-head" aria-expanded="true" aria-controls="dl-browser">
+            <span class="dl-top">
+              <svg class="dl-icon" viewBox="0 0 30 30" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="15" cy="15" r="11"/><path d="M4 15h22M15 4c3.5 3.2 5 7 5 11s-1.5 7.8-5 11c-3.5-3.2-5-7-5-11s1.5-7.8 5-11z"/></svg>
+              <span class="dl-more" aria-hidden="true"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 2v10M2 7h10"/></svg></span>
+            </span>
+            <span>
+              <span class="dl-name">Browser<span class="dl-tag" hidden>For your system</span></span>
+              <span class="dl-sum">Nothing to install · worlds up to 2048</span>
+            </span>
+          </button>
+          <div class="dl-body" id="dl-browser">
+            <div class="dl-files">
+              <a class="dl-file first" href="/app/">Open in the browser</a>
+              <a class="dl-file" href="/releases/latest" data-asset="Cartogenesis-&lt;version&gt;-web.zip">Web zip, to host yourself</a>
+            </div>
+            <p>Runs in a recent Chrome, Edge, Firefox or Safari. Nothing is installed and nothing you make is uploaded: worlds are kept in the browser's own storage or, in Chrome and Edge, in a folder you choose, the same files the desktop app keeps.</p>
+            <ul class="dl-notes">
+              <li>Makes worlds up to 2048 in the browser; the desktop app goes to 4096.</li>
+              <li>On a phone, worlds generate at 512 by default, and 2048 works.</li>
+              <li>To host it yourself, serve the web zip's contents over HTTPS.</li>
+            </ul>
+          </div>
         </div>
       </div>
     </div>
 
-    <div class="ledger-actions">
-      <a class="btn secondary" href="/releases/latest" id="install-releases" target="_blank" rel="noopener">Get the latest release ↗</a>
-      <p class="note">Every file above, for the current release, with the notes saying what changed in it.</p>
-    </div>
+    <a class="dl-all" href="/releases/latest" id="install-releases" target="_blank" rel="noopener">Every file, with the release notes ↗</a>
   </section>
 
   <section id="next">
@@ -1017,6 +1171,7 @@ sudo apt update &amp;&amp; sudo apt install cartogenesis</code></pre>
     <p>Have a feature in mind? Say so. <a href="https://github.com/bhanright/Cartogenesis/issues/new?template=feature.yml">Suggest a feature</a>, or write to <a href="mailto:dev@cartogenesis.com">dev@cartogenesis.com</a>.</p>
   </section>
 
+</div>
 </main>
 
 <footer>
@@ -1027,20 +1182,17 @@ sudo apt update &amp;&amp; sudo apt install cartogenesis</code></pre>
 
 <script>
 (function () {
-  /* The phone note is about what a phone can do, so it is shown to phones: a narrow
-     viewport *and* a coarse pointer, which a small desktop window is not. */
-  if (window.matchMedia('(max-width: 820px)').matches &&
-      window.matchMedia('(pointer: coarse)').matches) {
-    var note = document.getElementById('small-screen');
-    if (note) note.hidden = false;
-  }
+  var html = document.documentElement;
+  function armed(name) { return (' ' + html.className + ' ').indexOf(' ' + name + ' ') >= 0; }
+  var lessMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+  var mayMove = armed('reveal');
 
   /* The cards' reveal, armed by the head's script. Each card is watched on its
      own and started once, the first time it comes into view; the cards that
      come into view together — a row on a wide screen — are given their order in
      the document, so they go in turn along the line. Nothing here follows the
      scroll position: a card that has been shown stays shown. */
-  if (document.documentElement.className.indexOf('reveal') >= 0) {
+  if (mayMove) {
     var cards = Array.prototype.slice.call(document.querySelectorAll('.cards > .card'));
     var watcher = new IntersectionObserver(function (entries) {
       var arriving = [];
@@ -1057,79 +1209,371 @@ sudo apt update &amp;&amp; sudo apt install cartogenesis</code></pre>
     cards.forEach(function (card) { watcher.observe(card); });
   }
 
-  var html = document.documentElement;
-  var mayMove = html.className.indexOf('reveal') >= 0;
-
   /* Calls back with true and false as an element comes into view and leaves it,
      or once with true where the browser cannot say. */
-  function whileInView(element, callback) {
+  function whileInView(element, callback, threshold) {
     if (!('IntersectionObserver' in window)) { callback(true); return; }
     new IntersectionObserver(function (entries) {
       callback(entries[entries.length - 1].isIntersecting);
-    }, {threshold: 0.25}).observe(element);
+    }, {threshold: threshold === undefined ? 0.25 : threshold}).observe(element);
   }
 
-  /* The hero drifts. The strip is asked for once the page has loaded, so the
-     first paint is the hero picture alone, and it takes over only once it has
-     arrived and decoded. Never for a reader who asked for less motion. */
-  var heroPlate = document.getElementById('hero-plate');
-  if (heroPlate && mayMove) {
-    window.addEventListener('load', function () {
-      var source = heroPlate.getAttribute('data-strip');
-      var strip = new Image();
-      strip.src = source;
-      (strip.decode ? strip.decode() : Promise.resolve()).then(function () {
-        var drift = document.createElement('div');
-        drift.className = 'drift';
-        drift.setAttribute('aria-hidden', 'true');
-        var track = document.createElement('div');
-        track.className = 'drift-track';
-        track.style.backgroundImage = 'url("' + source + '")';
-        drift.appendChild(track);
-        heroPlate.appendChild(drift);
-        whileInView(heroPlate, function (inView) { drift.classList.toggle('paused', !inView); });
-        requestAnimationFrame(function () {
-          requestAnimationFrame(function () { drift.classList.add('ready'); });
-        });
-      }).catch(function () {});
+  function clamp(value, least, most) { return Math.min(most, Math.max(least, value)); }
+  function lerp(from, to, share) { return from + (to - from) * share; }
+  /* Smooth at both ends: the curtain lifts gently, moves, and settles. */
+  function easeInOut(share) {
+    return share < 0.5 ? 4 * share * share * share : 1 - Math.pow(-2 * share + 2, 3) / 2;
+  }
+
+  /* ---------- the opening ---------------------------------------------------
+     Everything below that runs per frame runs only while the opening is on
+     screen: the scroll is listened to only then, and each scroll asks for one
+     frame at most. The drift is the style sheet's own animation, which the
+     browser runs off the page's thread; it is paused whenever the opening is
+     off screen. The scroll is read and never steered: nothing here prevents,
+     delays or snaps it. */
+  var opening = document.getElementById('opening');
+  var stage = document.getElementById('opening-stage');
+  var panel = document.getElementById('opening-panel');
+  var map = document.getElementById('opening-map');
+  var band = document.getElementById('opening-band');
+  var frame = document.getElementById('opening-frame');
+  var cue = document.getElementById('opening-cue');
+  var pause = document.getElementById('band-pause');
+  var titleCard = document.getElementById('title-card');
+  var titleName = document.getElementById('title-name');
+
+  /* The band's width over its height, as the page lays it (4096 by 800). */
+  var BAND_ASPECT = 4096 / 800;
+  /* The page's side margin, as the style sheet's --gutter. */
+  var GUTTER_PX = 24;
+  /* The settled plate: 2:1, at most as wide as the page's column less its
+     gutters, and never so narrow that the band is a strip of detail nobody can
+     read; below that the opening is shown settled in the page's flow instead. */
+  var PLATE_MOST_WIDTH_PX = 960;
+  var PLATE_LEAST_WIDTH_PX = 240;
+  /* At rest the map has at least a quarter of the screen above the panel, or
+     the opening is shown settled instead: less is a sliver, not a world. */
+  var OPEN_MAP_LEAST_SHARE = 0.25;
+  /* Where the panel settles: six hundredths of the screen from the top, between
+     8 and 48 pixels, as the study had it. */
+  var SETTLED_PANEL_TOP_SHARE = 0.06, SETTLED_PANEL_TOP_LEAST_PX = 8, SETTLED_PANEL_TOP_MOST_PX = 48;
+  /* The least ground left under the settled plate before the next section. */
+  var PLATE_FOOT_SHARE = 0.04, PLATE_FOOT_LEAST_PX = 20;
+  /* The gap the next section rises to under the plate. */
+  var NEXT_SECTION_GAP_SHARE = 0.06, NEXT_SECTION_GAP_LEAST_PX = 40;
+  /* The plate's hairline fades in over the last two fifths of the settling. */
+  var FRAME_FADES_IN_FROM = 0.6;
+  /* The pause control's size and its inset from the map's corner, as styled. */
+  var PAUSE_SIZE_PX = 30, PAUSE_INSET_PX = 12;
+  /* How far below the screen the panel waits while the title card is up. */
+  var PANEL_BELOW_SCREEN_PX = 8;
+
+  var layout = null;
+  var splash = armed('splash') ? 1 : 0;
+  var frameAsked = false;
+  var pausedByReader = false;
+  var openingInView = true;
+
+  /* Takes the page back to the settled opening in its flow, for good or until a
+     resize finds room again: the reader asked for less motion, or the screen is
+     too short to pin the opening. */
+  function settleInFlow() {
+    if (armed('splash')) endSplash();
+    html.classList.remove('unfold');
+    layout = null;
+    watchScroll(false);
+    [map, band, panel, frame, cue, pause].forEach(function (element) {
+      element.style.transform = '';
+      element.style.opacity = '';
+    });
+    opening.style.removeProperty('--overlap');
+    cue.hidden = true;
+  }
+
+  /* The opening's geometry, measured off the stage, whose height is the small
+     viewport's: the one measure of the screen every size below is taken from. */
+  function measure() {
+    if (!armed('unfold')) return;
+    var stageHeight = stage.getBoundingClientRect().height;
+    var width = stage.clientWidth;
+    var panelHeight = panel.offsetHeight;
+    var openHeight = stageHeight - panelHeight;
+    var settledPanelTop = clamp(stageHeight * SETTLED_PANEL_TOP_SHARE, SETTLED_PANEL_TOP_LEAST_PX, SETTLED_PANEL_TOP_MOST_PX);
+    var plateTop = settledPanelTop + panelHeight;
+    var room = stageHeight - plateTop - Math.max(PLATE_FOOT_LEAST_PX, stageHeight * PLATE_FOOT_SHARE);
+    /* Space short, the plate keeps its 2:1 and narrows. */
+    var plateWidth = Math.min(PLATE_MOST_WIDTH_PX, width - 2 * GUTTER_PX, 2 * room);
+    var fits = openHeight >= stageHeight * OPEN_MAP_LEAST_SHARE &&
+      plateWidth >= PLATE_LEAST_WIDTH_PX &&
+      /* The band laid twice must cover the open map however far it has drifted. */
+      width <= BAND_ASPECT * openHeight;
+    if (!fits) { settleInFlow(); return; }
+    var plateHeight = plateWidth / 2;
+    var overlap = Math.max(0, stageHeight - (plateTop + plateHeight) -
+      Math.max(NEXT_SECTION_GAP_LEAST_PX, stageHeight * NEXT_SECTION_GAP_SHARE));
+    opening.style.setProperty('--overlap', overlap + 'px');
+    var plateLeft = (width - plateWidth) / 2;
+    frame.style.left = plateLeft + 'px';
+    frame.style.top = plateTop + 'px';
+    frame.style.width = plateWidth + 'px';
+    frame.style.height = plateHeight + 'px';
+    layout = {
+      stageHeight: stageHeight, width: width, openHeight: openHeight, settledPanelTop: settledPanelTop,
+      plate: {left: plateLeft, top: plateTop, width: plateWidth, height: plateHeight},
+      overlap: overlap
+    };
+  }
+
+  /* How far the reader has scrolled through the runway, 0 at rest and 1 settled. */
+  function runLength() { return opening.offsetHeight - layout.stageHeight - layout.overlap; }
+  function scrolled() {
+    var run = runLength();
+    return run <= 0 ? 1 : clamp(-opening.getBoundingClientRect().top / run, 0, 1);
+  }
+
+  /* Puts the map, the band in it, the panel, the frame, the cue and the pause
+     control where the scroll (and the title card, while it is up) says, by
+     transforms and opacity alone, relative to where the style sheet lays each
+     out: under `splash` the map over the whole stage and the panel at its top,
+     under `unfold` the map over what the panel leaves and the panel under it. */
+  function paint() {
+    frameAsked = false;
+    if (!layout) return;
+    var raw = scrolled();
+    var settled = easeInOut(raw);
+    var carded = easeInOut(splash);
+    var inSplash = armed('splash');
+    var restHeight = lerp(layout.openHeight, layout.stageHeight, carded);
+    var x = lerp(0, layout.plate.left, settled);
+    var y = lerp(0, layout.plate.top, settled);
+    var width = lerp(layout.width, layout.plate.width, settled);
+    var height = lerp(restHeight, layout.plate.height, settled);
+    var panelTop = lerp(lerp(layout.openHeight, layout.stageHeight + PANEL_BELOW_SCREEN_PX, carded),
+      layout.settledPanelTop, settled);
+    var laidHeight = inSplash ? layout.stageHeight : layout.openHeight;
+    var laidPanelTop = inSplash ? 0 : layout.openHeight;
+    var scaleAcross = width / layout.width, scaleDown = height / laidHeight;
+    map.style.transform = 'translate(' + x + 'px,' + y + 'px) scale(' + scaleAcross + ',' + scaleDown + ')';
+    /* The band keeps its own shape whatever the map's: it is as tall as the
+       map, and the map's box clips what is wider. */
+    band.style.transform = 'scaleX(' + (scaleDown / scaleAcross) + ')';
+    panel.style.transform = 'translateY(' + (panelTop - laidPanelTop) + 'px)';
+    frame.style.opacity = String(clamp((settled - FRAME_FADES_IN_FROM) / (1 - FRAME_FADES_IN_FROM), 0, 1));
+    cue.style.opacity = String(1 - Math.min(1, raw * 3));
+    pause.style.transform = 'translate(' + (x + width - PAUSE_SIZE_PX - PAUSE_INSET_PX) + 'px,' +
+      (y + PAUSE_INSET_PX) + 'px)';
+    if (inSplash) {
+      titleCard.style.opacity = String(Math.max(0, (splash - 0.4) / 0.6));
+      titleCard.style.transform = 'scale(' + lerp(0.97, 1, carded) + ')';
+    }
+  }
+  function askForFrame() {
+    if (frameAsked) return;
+    frameAsked = true;
+    requestAnimationFrame(paint);
+  }
+  function onScroll() {
+    if (armed('splash')) skipSplash();
+    askForFrame();
+  }
+  var scrollWatched = false;
+  function watchScroll(on) {
+    if (on && !scrollWatched) addEventListener('scroll', onScroll, {passive: true});
+    if (!on && scrollWatched) removeEventListener('scroll', onScroll);
+    scrollWatched = on;
+  }
+  function showDriftState() {
+    map.classList.toggle('paused', pausedByReader || !openingInView);
+    pause.setAttribute('aria-pressed', pausedByReader ? 'true' : 'false');
+  }
+
+  new IntersectionObserver(function (entries) {
+    openingInView = entries[entries.length - 1].isIntersecting;
+    watchScroll(openingInView && !!layout);
+    showDriftState();
+    if (openingInView) askForFrame();
+  }).observe(opening);
+
+  addEventListener('resize', function () {
+    if (!armed('unfold') && mayMove && !lessMotion.matches) html.classList.add('unfold');
+    measure();
+    if (layout) { cue.hidden = false; watchScroll(openingInView); }
+    askForFrame();
+  });
+  if (lessMotion.addEventListener) {
+    lessMotion.addEventListener('change', function () { if (lessMotion.matches) settleInFlow(); });
+  }
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(function () { measure(); askForFrame(); });
+  }
+
+  cue.addEventListener('click', function () {
+    if (!layout) return;
+    var settledAt = opening.getBoundingClientRect().top + window.scrollY + runLength();
+    window.scrollTo({top: settledAt, behavior: lessMotion.matches ? 'auto' : 'smooth'});
+  });
+  pause.addEventListener('click', function () {
+    pausedByReader = !pausedByReader;
+    showDriftState();
+  });
+
+  /* The title card. It stands for HOLD_MS from when the map shows, which is when
+     the band has arrived and decoded or WAIT_FOR_MAP_MS has passed, whichever is
+     first; then over SETTLE_MS the map comes down into the opening, the card
+     fades and the panel rises. A scroll, a tap or a key while it is up sends it
+     at once, over SKIP_MS. The letters light in the style sheet, 115 ms apart
+     and 720 ms each: the twelfth is lit 1985 ms after the first, and the card
+     rests lit for the half second after that. */
+  var HOLD_MS = 2500;
+  var SETTLE_MS = 1300;
+  var WAIT_FOR_MAP_MS = 1500;
+  var SKIP_MS = 280;
+  var splashRunning = null;
+  var holdTimer = null;
+  var SKIPPING_EVENTS = ['wheel', 'touchstart', 'keydown', 'pointerdown'];
+
+  function runSplash(to, milliseconds, then) {
+    var from = splash;
+    var started = performance.now();
+    function step(now) {
+      if (splashRunning !== step) return;
+      var share = Math.min(1, (now - started) / milliseconds);
+      splash = lerp(from, to, share);
+      paint();
+      if (share < 1) requestAnimationFrame(step); else then();
+    }
+    splashRunning = step;
+    requestAnimationFrame(step);
+  }
+  function showMap() { map.classList.add('shown'); }
+  function endSplash() {
+    splashRunning = null;
+    clearTimeout(holdTimer);
+    SKIPPING_EVENTS.forEach(function (type) { removeEventListener(type, skipSplash); });
+    splash = 0;
+    html.classList.remove('splash');
+    titleCard.style.opacity = '';
+    titleCard.style.transform = '';
+    if (mayMove) pause.hidden = false;
+    paint();
+  }
+  var skipping = false;
+  function skipSplash() {
+    if (!armed('splash') || skipping) return;
+    skipping = true;
+    showMap();
+    clearTimeout(holdTimer);
+    runSplash(0, SKIP_MS, endSplash);
+  }
+  function playSplash() {
+    SKIPPING_EVENTS.forEach(function (type) { addEventListener(type, skipSplash, {passive: true}); });
+    var picture = map.querySelector('img');
+    var decoded = picture.decode ? picture.decode().catch(function () {}) : Promise.resolve();
+    var waited = new Promise(function (resolve) { setTimeout(resolve, WAIT_FOR_MAP_MS); });
+    Promise.race([decoded, waited]).then(function () {
+      if (!armed('splash') || skipping) return;
+      showMap();
+      titleName.classList.add('struck');
+      holdTimer = setTimeout(function () {
+        if (armed('splash')) runSplash(0, SETTLE_MS, endSplash);
+      }, HOLD_MS);
     });
   }
 
+  measure();
+  if (layout) {
+    cue.hidden = false;
+    if (armed('splash')) playSplash();
+  }
+  if (mayMove && !armed('splash')) pause.hidden = false;
+  paint();
+
+  /* ---------- the tray ------------------------------------------------------
+     In once the opening's own buttons have gone off the top of the screen; out
+     while the download section is on screen, and while anything that must not
+     be covered is under it: the step slider, the style slider, the roadmap, the
+     report links and the footer. Each of those is watched where the tray lies,
+     a band of the tray's own height along the top of the screen or along its
+     foot, so nothing here reads the scroll. Hidden, it is inert as well, so the
+     keyboard cannot reach what the eye cannot see. */
+  var tray = document.getElementById('tray');
+  var openingActions = document.getElementById('opening-actions');
+  var install = document.getElementById('install');
+  var keepClear = ['forming', 'compare', 'next', 'report'].map(function (id) { return document.getElementById(id); })
+    .concat([document.querySelector('footer')]).filter(Boolean);
+  var buttonsGone = false, installOnScreen = false, covering = new Set();
+  function showTray() {
+    var on = buttonsGone && !installOnScreen && covering.size === 0;
+    tray.classList.toggle('on', on);
+    if (on) tray.removeAttribute('inert'); else tray.setAttribute('inert', '');
+  }
+  if (tray && 'IntersectionObserver' in window) {
+    tray.setAttribute('inert', '');
+    tray.hidden = false;
+    new IntersectionObserver(function (entries) {
+      var entry = entries[entries.length - 1];
+      buttonsGone = !entry.isIntersecting && entry.boundingClientRect.bottom <= 0;
+      showTray();
+    }).observe(openingActions);
+    new IntersectionObserver(function (entries) {
+      installOnScreen = entries[entries.length - 1].isIntersecting;
+      showTray();
+    }, {rootMargin: '0px 0px -20% 0px'}).observe(install);
+    var clearanceWatcher = null;
+    var watchClearance = function () {
+      if (clearanceWatcher) clearanceWatcher.disconnect();
+      covering.clear();
+      var along = Math.ceil(tray.offsetHeight);
+      var beyond = Math.max(0, window.innerHeight - along);
+      var atFoot = window.matchMedia('(max-width: 699px)').matches;
+      clearanceWatcher = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          if (entry.isIntersecting) covering.add(entry.target); else covering.delete(entry.target);
+        });
+        showTray();
+      }, {rootMargin: atFoot ? '-' + beyond + 'px 0px 0px 0px' : '0px 0px -' + beyond + 'px 0px'});
+      keepClear.forEach(function (element) { clearanceWatcher.observe(element); });
+    };
+    watchClearance();
+    addEventListener('resize', watchClearance);
+  }
+
   /* How a world is made, played. The frame holds the six cards' own pictures,
-     one of them on show at a time; it plays while in view, and a reader who
-     asked for less motion gets the step control and no play button. */
+     one of them on show at a time with its step's name; it plays while in view,
+     and a reader who asked for less motion gets the step control and no play
+     button. */
   var forming = document.getElementById('forming');
   if (forming) {
     var stepCards = Array.prototype.slice.call(document.querySelectorAll('.cards.steps > .card'));
-    var frame = forming.querySelector('.forming-frame');
+    var formingFrame = forming.querySelector('.forming-frame');
     var stepControl = document.getElementById('forming-stage');
     var playButton = document.getElementById('forming-play');
     var frames = stepCards.map(function (card) {
       var picture = card.querySelector('img').cloneNode();
       picture.alt = '';
-      frame.appendChild(picture);
+      formingFrame.appendChild(picture);
       return picture;
     });
-    var shown = 0, playing = mayMove, inView = false, timer = null;
+    var shown = 0, playing = mayMove, formingInView = false, timer = null;
     var STEP_MILLISECONDS = 2600;
-    function show(step) {
+    var show = function (step) {
       shown = step;
       frames.forEach(function (picture, at) { picture.classList.toggle('current', at === step); });
-      stepCards.forEach(function (card, at) { card.classList.toggle('lit', inView && at === step); });
+      stepCards.forEach(function (card, at) { card.classList.toggle('lit', formingInView && at === step); });
       var name = stepCards[step].querySelector('h3').textContent;
       document.getElementById('forming-number').textContent = '0' + (step + 1);
       document.getElementById('forming-name').textContent = name;
-      document.getElementById('forming-line').textContent = stepCards[step].querySelector('p').textContent;
       stepControl.value = step + 1;
       stepControl.setAttribute('aria-valuetext', 'Step ' + (step + 1) + ' of ' + frames.length + ': ' + name);
-    }
-    function run() {
-      var go = playing && inView;
+    };
+    var run = function () {
+      var go = playing && formingInView;
       if (go && !timer) timer = setInterval(function () { show((shown + 1) % frames.length); }, STEP_MILLISECONDS);
       if (!go && timer) { clearInterval(timer); timer = null; }
       playButton.textContent = playing ? 'Pause' : 'Play';
       playButton.setAttribute('aria-pressed', playing ? 'true' : 'false');
-    }
+    };
     if (!mayMove) playButton.hidden = true;
     playButton.addEventListener('click', function () { playing = !playing; run(); });
     stepControl.addEventListener('input', function () {
@@ -1137,54 +1581,10 @@ sudo apt update &amp;&amp; sudo apt install cartogenesis</code></pre>
       show(Number(stepControl.value) - 1);
       run();
     });
-    whileInView(forming, function (visible) { inView = visible; show(shown); run(); });
+    whileInView(forming, function (visible) { formingInView = visible; show(shown); run(); });
     forming.hidden = false;
     show(0);
     run();
-  }
-
-  /* Read the land. Each pin opens its own note on the map, taken from the list
-     under it; a second press, Escape or a press elsewhere closes it. */
-  var note = document.getElementById('land-note');
-  if (note) {
-    var pins = Array.prototype.slice.call(document.querySelectorAll('.landmap-plate .pin'));
-    var openPin = null;
-    function closeNote() {
-      if (!openPin) return;
-      openPin.setAttribute('aria-expanded', 'false');
-      document.getElementById('land-' + openPin.getAttribute('data-kind')).classList.remove('active');
-      openPin = null;
-      note.hidden = true;
-    }
-    function openNote(pin) {
-      closeNote();
-      var item = document.getElementById('land-' + pin.getAttribute('data-kind'));
-      note.innerHTML = item.innerHTML;
-      Array.prototype.forEach.call(note.querySelectorAll('[id]'), function (e) { e.removeAttribute('id'); });
-      note.hidden = false;
-      if (getComputedStyle(note).position === 'absolute') {
-        var plate = pin.parentNode;
-        var x = pin.offsetLeft + pin.offsetWidth / 2, y = pin.offsetTop + pin.offsetHeight / 2;
-        var left = Math.max(8, Math.min(x - note.offsetWidth / 2, plate.clientWidth - note.offsetWidth - 8));
-        var top = y < plate.clientHeight / 2 ? y + 22 : y - 22 - note.offsetHeight;
-        note.style.left = left + 'px';
-        note.style.top = Math.max(4, top) + 'px';
-      }
-      pin.setAttribute('aria-expanded', 'true');
-      item.classList.add('active');
-      openPin = pin;
-    }
-    pins.forEach(function (pin) {
-      pin.addEventListener('click', function (event) {
-        event.stopPropagation();
-        if (openPin === pin) closeNote(); else openNote(pin);
-      });
-    });
-    note.addEventListener('click', function (event) { event.stopPropagation(); });
-    document.addEventListener('click', closeNote);
-    document.addEventListener('keydown', function (event) {
-      if (event.key === 'Escape' && openPin) { var pin = openPin; closeNote(); pin.focus(); }
-    });
   }
 
   /* Any two styles, compared. Only the two on show are fetched: a picked style
@@ -1193,7 +1593,7 @@ sudo apt update &amp;&amp; sudo apt install cartogenesis</code></pre>
   if (compare) {
     var compareFrame = compare.querySelector('.compare-frame');
     var divider = document.getElementById('compare-range');
-    function place() { compareFrame.style.setProperty('--split', divider.value + '%'); }
+    var place = function () { compareFrame.style.setProperty('--split', divider.value + '%'); };
     divider.addEventListener('input', place);
     [['compare-left-style', '.compare-left'], ['compare-right-style', '.compare-right']].forEach(function (pair) {
       var picker = document.getElementById(pair[0]);
@@ -1208,8 +1608,97 @@ sudo apt update &amp;&amp; sudo apt install cartogenesis</code></pre>
     place();
   }
 
-  /* The download that suits this reader's system, marked in its place. Read
-     from what the browser reports; nothing is said when it is not recognised. */
+  /* ---------- the download cards --------------------------------------------
+     The one chosen opens across the row and the others move beneath it. The
+     move measures where every card was, lets the grid lay them out anew, and
+     slides each from its old place and size to its new one (first, last,
+     invert, play); each card's contents are scaled the other way at every step,
+     so the words keep their shape while the card around them changes its. */
+  var downloads = document.getElementById('dl');
+  var platformCards = Array.prototype.slice.call(downloads.querySelectorAll('.dl-card'));
+  var ownOrder = platformCards.slice();
+  var CARD_MOVE_MS = 420;
+  var CARD_MOVE_STEPS = 12;
+  function easeOut(share) { return 1 - Math.pow(1 - share, 3); }
+  function headOf(card) { return card.querySelector('.dl-head'); }
+  function rearrange(change) {
+    var before = new Map(platformCards.map(function (card) { return [card, card.getBoundingClientRect()]; }));
+    change();
+    if (lessMotion.matches || !Element.prototype.animate) return;
+    platformCards.forEach(function (card) {
+      var was = before.get(card), now = card.getBoundingClientRect();
+      if (!now.width || !now.height) return;
+      var dx = was.left - now.left, dy = was.top - now.top;
+      var across = was.width / now.width, down = was.height / now.height;
+      if (Math.abs(dx) < 1 && Math.abs(dy) < 1 && Math.abs(across - 1) < 0.01 && Math.abs(down - 1) < 0.01) return;
+      var outer = [], inner = [];
+      for (var step = 0; step <= CARD_MOVE_STEPS; step++) {
+        var share = easeOut(step / CARD_MOVE_STEPS);
+        var scaleAcross = lerp(across, 1, share), scaleDown = lerp(down, 1, share);
+        outer.push({offset: step / CARD_MOVE_STEPS, transformOrigin: '0 0',
+          transform: 'translate(' + lerp(dx, 0, share) + 'px,' + lerp(dy, 0, share) + 'px) scale(' + scaleAcross + ',' + scaleDown + ')'});
+        inner.push({offset: step / CARD_MOVE_STEPS, transform: 'scale(' + (1 / scaleAcross) + ',' + (1 / scaleDown) + ')'});
+      }
+      card.animate(outer, {duration: CARD_MOVE_MS, easing: 'linear'});
+      card.querySelector('.dl-inner').animate(inner, {duration: CARD_MOVE_MS, easing: 'linear'});
+      if (card.classList.contains('open')) {
+        card.querySelector('.dl-body').animate([{opacity: 0}, {opacity: 0, offset: 0.45}, {opacity: 1}], {duration: CARD_MOVE_MS + 60});
+      }
+    });
+  }
+  function choose(chosen) {
+    var opens = chosen && !chosen.classList.contains('open');
+    rearrange(function () {
+      platformCards.forEach(function (card) {
+        var on = opens && card === chosen;
+        card.classList.toggle('open', on);
+        headOf(card).setAttribute('aria-expanded', on ? 'true' : 'false');
+      });
+      /* The open card goes first, so it spans the row above the other two;
+         closed, they go back to their own order. */
+      if (opens) downloads.insertBefore(chosen, downloads.firstChild);
+      else ownOrder.forEach(function (card) { downloads.appendChild(card); });
+    });
+  }
+  platformCards.forEach(function (card) {
+    headOf(card).setAttribute('aria-expanded', 'false');
+    headOf(card).addEventListener('click', function () { choose(card); });
+  });
+  document.addEventListener('keydown', function (event) {
+    if (event.key !== 'Escape') return;
+    var open = downloads.querySelector('.dl-card.open');
+    if (!open) return;
+    var focusWasInside = open.contains(document.activeElement);
+    choose(null);
+    if (focusWasInside) headOf(open).focus();
+  });
+  Array.prototype.forEach.call(downloads.querySelectorAll('.dl-copy'), function (button) {
+    button.hidden = false;
+    button.addEventListener('click', function () {
+      var source = document.getElementById(button.getAttribute('data-copy'));
+      function said(words) {
+        button.textContent = words;
+        setTimeout(function () { button.textContent = 'Copy'; }, 1600);
+      }
+      function selectInstead() {
+        var range = document.createRange();
+        range.selectNodeContents(source);
+        var selection = getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+        said('Selected');
+      }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(source.textContent).then(function () { said('Copied'); }, selectInstead);
+      } else {
+        selectInstead();
+      }
+    });
+  });
+
+  /* The card that suits this reader's system, marked where it stands and not
+     opened. Read from what the browser reports; nothing is said when it is not
+     recognised. */
   function systemOfThisDevice() {
     var agent = navigator.userAgent || '';
     var platform = (navigator.userAgentData && navigator.userAgentData.platform) || '';
@@ -1221,27 +1710,109 @@ sudo apt update &amp;&amp; sudo apt install cartogenesis</code></pre>
     return null;
   }
   var system = systemOfThisDevice();
-  var suggested = system && document.querySelector('.ledger .row[data-system="' + system + '"]');
-  if (suggested) {
-    suggested.classList.add('suggested');
-    var tag = document.createElement('span');
-    tag.className = 'tag suggest';
-    tag.textContent = 'For your system';
-    suggested.querySelector('h3').appendChild(tag);
+  var suggested = system && downloads.querySelector('.dl-card[data-system="' + system + '"] .dl-tag');
+  if (suggested) suggested.hidden = false;
+
+  /* ---------- the latest release, read live ---------------------------------
+     So the page never carries a version number or a size that has gone stale.
+     One request for the whole page, made once it has loaded; given up after
+     RELEASE_LOOKUP_TIMEOUT_MS; its answer, or its failure, kept for the visit
+     for RELEASE_KEPT_MS, so a reader moving about the site does not spend the
+     sixty requests an hour GitHub allows an address. Each file is matched on
+     its own, by its exact name with the release's version put in, so a release
+     that lacks one file leaves that one link as it was written: to the release
+     page, with no size. Everything between the two markers below is run by
+     SiteAssemblyTest against the list of files a release carries, with a
+     malformed answer, a missing file, a refusal and a failure. */
+  /* release lookup begins */
+  var RELEASE_API = 'https://api.github.com/repos/bhanright/Cartogenesis/releases/latest';
+  var RELEASE_FILES = 'https://github.com/bhanright/Cartogenesis/releases/download/';
+  var RELEASE_KEPT_KEY = 'cartogenesis-latest-release';
+  /* A release document is a few kilobytes and the API answers in well under a
+     second; a lookup still going after five has lost its reader. */
+  var RELEASE_LOOKUP_TIMEOUT_MS = 5000;
+  /* Releases are cut days apart; a quarter of an hour of one visit is safe. */
+  var RELEASE_KEPT_MS = 15 * 60 * 1000;
+
+  /* The parts of GitHub's answer the page uses, or null for anything else. */
+  function releaseFromAnswer(answer) {
+    if (!answer || typeof answer.tag_name !== 'string' || !/^v?\d[\w.-]*$/.test(answer.tag_name) ||
+        !Array.isArray(answer.assets)) return null;
+    return {
+      tag: answer.tag_name,
+      files: answer.assets.filter(function (asset) {
+        return asset && typeof asset.name === 'string' && typeof asset.size === 'number' &&
+          typeof asset.browser_download_url === 'string' &&
+          asset.browser_download_url.indexOf(RELEASE_FILES) === 0;
+      }).map(function (asset) {
+        return {name: asset.name, size: asset.size, url: asset.browser_download_url};
+      })
+    };
   }
 
-  /* The latest release, read live so the page never carries a stale version number.
-     Silent on failure: the link works either way. */
-  var line = document.getElementById('release-line');
-  if (line && window.fetch) {
-    fetch('https://api.github.com/repos/bhanright/Cartogenesis/releases/latest',
-          {headers: {'Accept': 'application/vnd.github+json'}})
-      .then(function (r) { return r.ok ? r.json() : null; })
-      .then(function (j) {
-        if (j && j.tag_name) line.textContent = 'Get the latest release (' + j.tag_name + ') ↗';
-      })
-      .catch(function () {});
+  /* The release's own file for a name written with <version>, or null. */
+  function releaseFileFor(release, pattern) {
+    var name = pattern.replace('<version>', release.tag.replace(/^v/, ''));
+    for (var at = 0; at < release.files.length; at++) {
+      if (release.files[at].name === name) return release.files[at];
+    }
+    return null;
   }
+
+  /* A size as the page writes it: megabytes to one place. */
+  function sizeInWords(bytes) { return (bytes / 1048576).toFixed(1) + ' MB'; }
+
+  /* The latest release, from the visit's keeping or from GitHub; null when
+     there is none to be had. */
+  function lookUpLatestRelease(fetchRelease, keeping, now, timeoutMs) {
+    try {
+      var kept = JSON.parse(keeping.getItem(RELEASE_KEPT_KEY) || 'null');
+      if (kept && now() - kept.at < RELEASE_KEPT_MS) return Promise.resolve(kept.release);
+    } catch (unreadable) {}
+    function keep(release) {
+      try { keeping.setItem(RELEASE_KEPT_KEY, JSON.stringify({at: now(), release: release})); } catch (full) {}
+      return release;
+    }
+    var controller = typeof AbortController === 'function' ? new AbortController() : null;
+    var gaveUp = new Promise(function (resolve) {
+      setTimeout(function () { if (controller) controller.abort(); resolve('timed out'); }, timeoutMs);
+    });
+    var asked = fetchRelease(RELEASE_API, {
+      headers: {'Accept': 'application/vnd.github+json'},
+      signal: controller ? controller.signal : undefined
+    }).then(function (response) {
+      return response.ok ? response.json().then(releaseFromAnswer) : null;
+    });
+    return Promise.race([asked, gaveUp]).then(function (answer) {
+      return answer === 'timed out' ? null : keep(answer);
+    }, function () { return keep(null); });
+  }
+  /* release lookup ends */
+
+  function offerRelease(release) {
+    if (!release) return;
+    var line = document.getElementById('release-line');
+    if (line) line.textContent = 'Get the latest release (' + release.tag + ') ↗';
+    Array.prototype.forEach.call(downloads.querySelectorAll('.dl-file[data-asset]'), function (pill) {
+      var file = releaseFileFor(release, pill.getAttribute('data-asset'));
+      if (!file) return;
+      pill.href = file.url;
+      var size = document.createElement('small');
+      size.textContent = sizeInWords(file.size);
+      pill.appendChild(size);
+    });
+  }
+  if (window.fetch && window.Promise) {
+    var keeping = {getItem: function () { return null; }, setItem: function () {}};
+    try { if (window.sessionStorage) keeping = window.sessionStorage; } catch (blocked) {}
+    var askOnce = function () {
+      lookUpLatestRelease(window.fetch.bind(window), keeping, Date.now, RELEASE_LOOKUP_TIMEOUT_MS)
+        .then(offerRelease, function () {});
+    };
+    if (document.readyState === 'complete') askOnce(); else addEventListener('load', askOnce);
+  }
+
+  html.setAttribute('data-scripted', 'yes');
 })();
 </script>
 

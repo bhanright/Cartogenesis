@@ -78,7 +78,10 @@ class SiteSourcesTest {
      * 4096 world kills a browser tab before anything is drawn; the browser now stops at
      * [WorldCeilings.BROWSER_TAB]. A sentence about the browser is any sentence of the page's text
      * that says "browser" or "phone", and a world in one is a square grid, "N × N", or "an N
-     * world", so a 4096 × 2048 *picture* of a 2048 world is not a claim about a 4096 world.
+     * world", so a 4096 × 2048 *picture* of a 2048 world is not a claim about a 4096 world, and
+     * "worlds up to N" is one. The Browser download card is about the browser from end to end
+     * without saying so in every clause ("Nothing to install · worlds up to 2048"), so every number
+     * in it is held to the ceiling too, except in a clause that names the desktop app.
      */
     @Test
     fun `the page puts no world larger than the browser makes in the browser`() {
@@ -91,12 +94,14 @@ class SiteSourcesTest {
             Regex("""\b(browser|phone)""", RegexOption.IGNORE_CASE).containsMatchIn(it)
         }
         assertTrue(browserSentences.isNotEmpty(), "the page no longer says anything about the browser")
-        val world = Regex("""\b(\d{3,5}) × \1\b|\b(\d{3,5}) world\b""")
+        val world = Regex("""\b(\d{3,5}) × \1\b|\b(\d{3,5}) world\b|\bworlds? (?:\w+ ){0,2}?up to (\d{3,5})\b""")
         val claims = browserSentences.flatMap { sentence ->
             world.findAll(sentence).map { match ->
-                val size = (match.groupValues[1].ifEmpty { match.groupValues[2] }).toInt()
+                val size = match.groupValues.drop(1).first { it.isNotEmpty() }.toInt()
                 size to sentence
             }.toList()
+        } + browserCardClauses().flatMap { clause ->
+            Regex("""\b\d{3,5}\b""").findAll(clause).map { it.value.toInt() to clause }.toList()
         }
         val tooLarge = claims.filter { (size, _) -> size > WorldCeilings.BROWSER_TAB }
         assertTrue(
@@ -105,6 +110,20 @@ class SiteSourcesTest {
                 tooLarge.joinToString(" | ") { (size, sentence) -> "$size in \"${sentence.trim()}\"" }
         )
         println("SITE ${claims.size} world sizes in ${browserSentences.size} sentences about the browser, none above ${WorldCeilings.BROWSER_TAB}")
+    }
+
+    /**
+     * The Browser download card's words as a reader reads them, split into clauses at full stops,
+     * semicolons and the middle dots its summary line uses, less every clause that names the
+     * desktop app, whose numbers are the desktop's.
+     */
+    private fun browserCardClauses(): List<String> {
+        val card = Regex("""<div class="dl-card browser"[\s\S]*?<a class="dl-all"""").find(page)?.value
+            ?: fail("the page has no Browser download card")
+        val text = card.replace(Regex("""<[^>]+>"""), " ").replace(Regex("""\s+"""), " ")
+        val clauses = text.split(Regex("""[.;·]""")).map { it.trim() }.filter { it.isNotEmpty() }
+        assertTrue(clauses.any { it.contains("2048") }, "the Browser card no longer says how large a world it makes")
+        return clauses.filterNot { it.contains("desktop", ignoreCase = true) }
     }
 
     /**
@@ -312,25 +331,35 @@ class SiteSourcesTest {
     }
 
     /**
+     * The classes only the head's script sets: `live` (scripts run), `reveal` (the cards may rise),
+     * `unfold` (the opening is pinned and moves with the scroll) and `splash` (the title card is up).
+     * A rule scoped to one of them does nothing for a reader without scripts.
+     */
+    private val scriptClasses = listOf("live", "reveal", "unfold", "splash")
+
+    private fun scopedToTheScript(selector: String): Boolean =
+        scriptClasses.any { selector.startsWith(".$it ") }
+
+    /**
      * That with scripts off every card is visible.
      *
      * The reveal hides a card until it comes into view, and only a script can bring it back; the
-     * living figures hide the frames and the ring that are not on show, which only a script can
-     * change. So everything that hides is scoped to the `reveal` or the `live` class, which only
-     * the script in the head sets and which the page's own markup never carries: a reader without
-     * scripts gets the cards and pictures as they are written, with nothing waiting on a script that
-     * will never run.
+     * living figures hide the frames and the ring that are not on show, and the title card hides
+     * the map until it has arrived, which only a script can change. So everything that hides is
+     * scoped to one of [scriptClasses], which only the script in the head sets and which the page's
+     * own markup never carries: a reader without scripts gets the cards and pictures as they are
+     * written, with nothing waiting on a script that will never run.
      */
     @Test
     fun `with scripts off every card is visible`() {
         assertTrue(hidingSelectors.isNotEmpty(), "nothing on the page hides; this checked nothing")
-        val unscoped = hidingSelectors.filterNot { it.startsWith(".reveal ") || it.startsWith(".live ") }
+        val unscoped = hidingSelectors.filterNot { scopedToTheScript(it) }
         assertTrue(
             unscoped.isEmpty(),
             "these rules hide something whether or not a script ever runs to show it again: $unscoped"
         )
         val htmlTag = Regex("""<html[^>]*>""").find(page)?.value ?: fail("the page has no <html>")
-        assertTrue(!htmlTag.contains("reveal") && !htmlTag.contains("live"), "the markup arms the reveal itself: $htmlTag")
+        assertTrue(scriptClasses.none { htmlTag.contains(it) }, "the markup arms the script's classes itself: $htmlTag")
         val head = page.substringBefore("<body")
         val armed = Regex("""<script>(.*?)</script>""", RegexOption.DOT_MATCHES_ALL).findAll(head)
             .map { it.groupValues[1] }.filter { it.contains("reveal") }.toList()
@@ -344,11 +373,6 @@ class SiteSourcesTest {
             "the head arms the reveal without asking whether the browser can say when a card is " +
                 "in view, so a browser that cannot never shows the cards"
         )
-        // And the motion is started by the cards coming into view, never driven by where the page
-        // has been scrolled to.
-        listOf("addEventListener('scroll'", "addEventListener(\"scroll\"", "onscroll").forEach {
-            assertTrue(!page.contains(it), "the page listens to scrolling ($it)")
-        }
         println("SITE ${hidingSelectors.distinct().size} hiding rules, all behind the script's class")
     }
 
@@ -372,7 +396,7 @@ class SiteSourcesTest {
         }.flatMap { it.first }.filter { selector ->
             // The element the rule styles is its selector's last compound, not an ancestor.
             val subject = selector.split(Regex("""[\s>+~]+""")).last()
-            !selector.startsWith(".live ") && !selector.startsWith(".reveal ") &&
+            !scopedToTheScript(selector) &&
                 hiddenClasses.any { Regex("""\.${Regex.escape(it)}(?![\w-])""").containsMatchIn(subject) }
         }
         assertTrue(shown.isEmpty(), "these give a display to something the markup hides until a script runs: $shown")
@@ -416,8 +440,19 @@ class SiteSourcesTest {
         blocks.joinToString("\n")
     }
 
-    /** The properties a transition may name: the two that move nothing, and colour. */
-    private val stillProperties = setOf("color", "background-color", "border-color")
+    /**
+     * The properties a transition may name besides opacity and transform: colour, which moves
+     * nothing, and visibility, which the tray changes at the end of its slide so that, hidden, it is
+     * out of the keyboard's reach too.
+     */
+    private val stillProperties = setOf("color", "background-color", "border-color", "visibility")
+
+    /**
+     * The one animation allowed more than opacity and transform: the title card's letters, struck
+     * one by one, change their colour and their glow and nothing else. Neither moves anything.
+     */
+    private val struckLetters = "key-struck"
+    private val struckLetterProperties = setOf("color", "text-shadow")
 
     /**
      * That everything on the page that moves moves by opacity and transform alone, and that a
@@ -448,8 +483,10 @@ class SiteSourcesTest {
         keyframes.forEach { frames ->
             rules(frames.groupValues[2]).forEach { (_, body) ->
                 val properties = body.split(';').map { it.substringBefore(':').trim() }.filter { it.isNotEmpty() }
+                val allowed = if (frames.groupValues[1] == struckLetters) struckLetterProperties
+                else setOf("opacity", "transform")
                 assertTrue(
-                    properties.all { it == "opacity" || it == "transform" },
+                    properties.all { it in allowed },
                     "@keyframes ${frames.groupValues[1]} animates $properties"
                 )
             }
@@ -493,5 +530,197 @@ class SiteSourcesTest {
             assertTrue(named, "this control has no name a screen reader can say: $tag")
         }
         println("SITE ${controls.size} controls, every one named")
+    }
+
+    /** The page's own script at its foot, the last `<script>` in the page. */
+    private val pageScript: String by lazy {
+        Regex("""<script>(.*?)</script>""", RegexOption.DOT_MATCHES_ALL).findAll(page).last().groupValues[1]
+    }
+
+    /** The part of [pageScript] that works the opening, between its heading and the tray's. */
+    private val openingScript: String by lazy {
+        val from = pageScript.indexOf("---------- the opening")
+        val to = pageScript.indexOf("---------- the tray")
+        assertTrue(from in 0 until to, "the page's script has no opening block before its tray block")
+        pageScript.substring(from, to)
+    }
+
+    /**
+     * That the page reads the scroll and never steers it.
+     *
+     * The opening is linked to the scroll, so the page has to listen to it; what the reader must
+     * never meet is a page that takes the scroll over. So: nothing on the page prevents a default
+     * (a wheel, a touch or a key held back is a scroll taken over), no listener is registered as
+     * able to, the style sheet snaps nothing, and the one place the page scrolls for the reader is
+     * the opening's cue, when it is pressed. The scroll is listened to in one place, passively, and
+     * that listener is taken off again (by the opening's watcher, when the opening leaves the
+     * screen), so no scroll anywhere else on the page does any work; and every frame the page asks
+     * for is asked for by the opening, whose frames run only while it is on screen.
+     */
+    @Test
+    fun `the page reads the scroll and never steers it`() {
+        assertTrue(!page.contains("preventDefault"), "the page prevents a default, which is how a scroll is taken over")
+        assertTrue(!Regex("""passive\s*:\s*false""").containsMatchIn(page), "the page registers a listener that may hold the scroll back")
+        assertTrue(!Regex("""scroll-snap""").containsMatchIn(styleSheet), "the style sheet snaps the scroll")
+        assertTrue(!Regex("""(^|[\s,}])(html|body)\s*\{[^}]*overflow\s*:\s*hidden""").containsMatchIn(styleSheet), "the style sheet locks the page's scroll")
+
+        val listened = Regex("""addEventListener\(\s*['"]scroll['"]\s*,\s*(\w+)\s*,\s*\{\s*passive\s*:\s*true\s*\}\s*\)""")
+            .findAll(page).map { it.groupValues[1] }.toList()
+        val everyScrollListener = Regex("""addEventListener\(\s*['"]scroll['"]""").findAll(page).count() +
+            Regex("""onscroll""").findAll(page).count()
+        assertEquals(1, everyScrollListener, "the page listens to the scroll in $everyScrollListener places, where the opening is the one")
+        assertEquals(1, listened.size, "the page's scroll listener is not passive")
+        assertTrue(openingScript.contains("addEventListener('scroll', ${listened.single()}"), "the scroll is listened to outside the opening")
+        assertTrue(
+            Regex("""removeEventListener\(\s*['"]scroll['"]\s*,\s*${listened.single()}\s*\)""").containsMatchIn(openingScript),
+            "the opening's scroll listener is never taken off, so it works on the scroll the whole page down"
+        )
+
+        val scrolledFor = Regex("""\.(scrollTo|scrollBy|scrollIntoView)\(""").findAll(pageScript).count()
+        assertEquals(1, scrolledFor, "the page scrolls for the reader in $scrolledFor places, where the opening's cue is the one")
+        val cueHandler = Regex("""cue\.addEventListener\('click', function \(\) \{(.*?)\n  \}\);""", RegexOption.DOT_MATCHES_ALL)
+            .find(openingScript)?.groupValues?.get(1) ?: fail("the opening's cue has no click handler")
+        assertTrue(Regex("""\.scrollTo\(""").containsMatchIn(cueHandler), "the page scrolls for the reader somewhere other than when the cue is pressed")
+
+        val frames = Regex("""requestAnimationFrame\(""").findAll(pageScript).count()
+        val openingFrames = Regex("""requestAnimationFrame\(""").findAll(openingScript).count()
+        assertTrue(frames > 0, "the opening asks for no frames; this checked nothing")
+        assertEquals(frames, openingFrames, "something other than the opening asks for frames, so per-frame work runs off the opening")
+        println("SITE the scroll is read in one passive listener that comes off, scrolled for only by the cue, and $frames frame requests, all the opening's")
+    }
+
+    /**
+     * That the title card is only ever up behind its class, once a visit, and never for a reader
+     * who asked for less motion.
+     *
+     * The head decides before anything is painted: the card is armed only inside the branch that
+     * has already asked for motion, only when the visit has not seen it (read and written in the
+     * browser's session storage, inside a `try`, because a browser that refuses storage must not
+     * replay it on every page) and not when the reader arrived at a place on the page. Everything
+     * the style sheet does to show the card, hide the map behind it or strike its letters is
+     * scoped to `splash`, and it is hidden without the class.
+     */
+    @Test
+    fun `the title card plays once a visit, never for less motion, and only behind its class`() {
+        val head = page.substringBefore("<body")
+        val decides = Regex("""<script>(.*?)</script>""", RegexOption.DOT_MATCHES_ALL).findAll(head)
+            .map { it.groupValues[1] }.singleOrNull { it.contains("splash") }
+            ?: fail("no script in the head arms the title card")
+        val motion = decides.indexOf("prefers-reduced-motion: reduce")
+        val armed = decides.indexOf("' splash'")
+        assertTrue(motion in 0 until armed, "the head arms the title card without first asking whether the reader wants less motion")
+        val tried = Regex("""try\s*\{(.*?)\}\s*catch""", RegexOption.DOT_MATCHES_ALL).find(decides)?.groupValues?.get(1)
+            ?: fail("the head reads the visit's memory outside a try")
+        listOf("sessionStorage.getItem", "sessionStorage.setItem", "location.hash").forEach {
+            assertTrue(tried.contains(it), "the head's once-a-visit test has no $it")
+        }
+
+        val showing = rules(styleSheet).filter { (_, body) -> Regex("""display\s*:\s*(?!none)""").containsMatchIn(body) }
+            .flatMap { (selectors, _) -> selectors }
+            .filter { Regex("""\.title-card$""").containsMatchIn(it.split(Regex("""[\s>+~]+""")).last()) }
+        val striking = rules(styleSheet).filter { (_, body) -> body.contains("key-struck") }.flatMap { (selectors, _) -> selectors }
+        val hidingTheMap = rules(styleSheet).filter { (_, body) -> Regex("""opacity\s*:\s*0(?![.\d])""").containsMatchIn(body) }
+            .flatMap { (selectors, _) -> selectors }.filter { it.contains(".opening-map") }
+        val cardSelectors = showing + striking + hidingTheMap
+        assertTrue(showing.isNotEmpty() && striking.isNotEmpty() && hidingTheMap.isNotEmpty(),
+            "the style sheet no longer shows the card, strikes its letters or hides the map behind it; this checked nothing")
+        val unscoped = cardSelectors.filterNot { it.startsWith(".splash ") }
+        assertTrue(unscoped.isEmpty(), "these show the title card, strike its letters or hide the map outside the card's class: $unscoped")
+        assertTrue(Regex("""(^|})\s*\.title-card\s*\{\s*display\s*:\s*none""").containsMatchIn(styleSheet), "the title card is not hidden without its class")
+
+        val card = Regex("""<div class="title-card"[^>]*>""").find(page)?.value ?: fail("the page has no title card")
+        assertTrue(card.contains("""aria-hidden="true""""), "the title card is read aloud as well as the heading")
+        assertEquals(1, Regex("""<h1[\s>]""").findAll(page).count(), "the page has more or fewer than one h1")
+        println("SITE the title card is armed after the motion test, once a visit, and ${cardSelectors.size} rules show it only behind its class")
+    }
+
+    /**
+     * That with no script the opening is settled and every download card is open, and says so.
+     *
+     * Settled means in the page's flow: nothing that pins the stage, sizes it to the screen or
+     * moves the panel or the map applies without the classes the head's script sets. Open means
+     * every card's body is shown, which only a rule scoped to `live` may undo, and every card's
+     * head says `aria-expanded="true"` in the markup, naming a body that is on the page.
+     */
+    @Test
+    fun `with no script the opening is settled and every card is open`() {
+        val pinning = rules(styleSheet).filter { (selectors, body) ->
+            selectors.any { it.contains(".opening") } &&
+                Regex("""position\s*:\s*sticky|(?<![-\w])height\s*:[^;}]*vh|transform\s*:|display\s*:\s*contents""").containsMatchIn(body)
+        }.flatMap { (selectors, _) -> selectors }.filter { it.contains(".opening") }
+        assertTrue(pinning.isNotEmpty(), "nothing pins the opening; this checked nothing")
+        val unscoped = pinning.filterNot { scopedToTheScript(it) }
+        assertTrue(unscoped.isEmpty(), "these pin or move the opening whether or not a script runs: $unscoped")
+
+        val closing = rules(styleSheet).filter { (_, body) -> Regex("""display\s*:\s*none""").containsMatchIn(body) }
+            .flatMap { (selectors, _) -> selectors }.filter { it.contains(".dl-body") }
+        assertTrue(closing.isNotEmpty(), "nothing closes a card; this checked nothing")
+        assertTrue(closing.all { it.startsWith(".live ") }, "a card is closed whether or not a script runs: $closing")
+
+        val heads = Regex("""<button[^>]*class="dl-head"[^>]*>""").findAll(page).map { it.value }.toList()
+        assertEquals(3, heads.size, "the page has ${heads.size} download cards, where it has Windows, Linux and the browser")
+        heads.forEach { head ->
+            assertTrue(head.contains("""aria-expanded="true""""), "a card's head says it is closed, and without a script it is open: $head")
+            val body = Regex("""aria-controls="([^"]+)"""").find(head)?.groupValues?.get(1) ?: fail("$head names no body")
+            val bodyTag = Regex("""<div class="dl-body" id="${Regex.escape(body)}"[^>]*>""").find(page)?.value
+                ?: fail("$head names $body, which is not a card's body on the page")
+            assertTrue(!bodyTag.contains("hidden"), "$bodyTag is hidden in the markup")
+        }
+        println("SITE with no script: ${pinning.size} opening rules all behind the script's classes, ${heads.size} cards open")
+    }
+
+    /**
+     * That every download pill works without the release lookup, and that the lookup can upgrade
+     * every file a release carries.
+     *
+     * Each pill names its file in `data-asset`, as `site/downloads.txt` writes it, and links to
+     * `/releases/latest`, which the host forwards to the release page, so a pill whose file the
+     * lookup cannot find, or a page whose lookup fails, still takes the reader to the file. The
+     * pills are the list, both ways: every file a release carries has one, and none names a file it
+     * does not. And nothing in the section says a version or a size: those come from the release.
+     */
+    @Test
+    fun `every download pill falls back to the release page and names a file the release carries`() {
+        val section = installSection(page)
+        val pills = Regex("""<a class="dl-file[^"]*"[^>]*>""").findAll(section).map { it.value }.toList()
+        val named = pills.mapNotNull { pill ->
+            Regex("""data-asset="([^"]+)"""").find(pill)?.groupValues?.get(1)?.let { unescaped(it) to pill }
+        }
+        assertTrue(named.isNotEmpty(), "no pill names a release file")
+        named.forEach { (_, pill) ->
+            assertEquals("/releases/latest", Regex("""href="([^"]+)"""").find(pill)?.groupValues?.get(1),
+                "a pill links somewhere other than the release page before the lookup has run: $pill")
+        }
+        assertEquals(releaseFileNames.sorted(), named.map { it.first }.sorted(),
+            "the pills and site/downloads.txt name different files")
+        val stated = Regex("""\b\d+(\.\d+)?\s?MB\b|\bv?\d+\.\d+\.\d+\b""").findAll(
+            section.replace(Regex("""<!--[\s\S]*?-->"""), "").replace(Regex("""<[^>]+>"""), " ")
+        ).map { it.value }.toList()
+        assertTrue(stated.isEmpty(), "the section states a version or a size by hand: $stated")
+        assertTrue(pageScript.contains("getAttribute('data-asset')"), "the release lookup no longer reads the pills' file names")
+        assertEquals(1, Regex("""api\.github\.com""").findAll(page).count(), "the page asks GitHub's API for the release in more than one place")
+        println("SITE ${named.size} pills fall back to /releases/latest: " + named.joinToString { it.first })
+    }
+
+    /**
+     * That what the keyboard can reach is what the eye can see, and that the drift can be stopped.
+     *
+     * The tray slides out of sight when it is not wanted; translated away, its links would still
+     * take the keyboard's focus somewhere nobody can see, so while it is hidden it is invisible to
+     * the keyboard (`visibility`) and inert. The drift is continuous motion, so the opening has a
+     * control that pauses it, a real button that says whether it is pressed.
+     */
+    @Test
+    fun `the hidden tray is out of the keyboard's reach and the drift can be paused`() {
+        val hidden = rules(styleSheet).filter { (selectors, _) -> ".live .tray" in selectors }
+        assertTrue(hidden.any { (_, body) -> Regex("""visibility\s*:\s*hidden""").containsMatchIn(body) },
+            "the tray, hidden, is only moved away, so the keyboard can still reach it")
+        assertTrue(rules(styleSheet).any { (selectors, body) -> ".live .tray.on" in selectors && body.contains("visibility:visible") },
+            "the tray is never made visible again")
+        assertTrue(pageScript.contains("setAttribute('inert'") && pageScript.contains("removeAttribute('inert')"),
+            "the tray is not made inert while it is hidden")
+        val pause = Regex("""<button[^>]*id="band-pause"[^>]*>""").find(page)?.value ?: fail("the opening has no control to pause the drift")
+        assertTrue(pause.contains("aria-pressed"), "the pause control does not say whether it is pressed")
+        println("SITE the hidden tray is invisible to the keyboard and inert; the drift has a pause control")
     }
 }

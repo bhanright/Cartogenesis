@@ -161,13 +161,13 @@
   last two are on the page until the generator is fixed; the site's pictures are all made again
   once the audit's major fixes have merged, and the windows re-picked then if any mark remains.
   2026-09-25, Site 4. Site 5a moved the styles window, and with it the Schoolroom card, off the
-  estuary, and put the six steps, the twelve styles and the "Read the land" map in windows that
-  hold none of the four; the dry belt also crosses the eastern island along the same rows
-  (about 675 to 700 of the 2048 sheet), which is why the "Read the land" window stops above it.
-  Two remain on the page where the figure cannot move: the hero's window holds the range's ice cap
-  and the dry belt, as it did, and the strip the hero drifts along is that band all the way round
-  the world, so it carries the belt and the ice cap's straight edge the whole way; the data-view
-  window's double line is unchanged.
+  estuary, and put the six steps and the twelve styles in windows that hold none of the four; the
+  dry belt also crosses the eastern island along the same rows (about 675 to 700 of the 2048
+  sheet). Two remain on the page where the figure cannot move: the band the opening drifts (Site 6,
+  now at the sheet's full 4096 by 800 and the page's largest picture) is the author's window all
+  the way round the world, so it carries the range's ice cap with its straight edge and the dry
+  belt the whole way, and its settled plate shows both; the data-view window's double line is
+  unchanged.
 - **Six operators still count a row as a column, each outside Fix 2's list.** Found by reading the
   code, not by a guard: the climate stage's rainfall blur (a square box of cells, sized by
   `RAIN_BLUR_REFERENCE_WIDTH`) and its two coastal-reach blurs, the water exposure and the offshore

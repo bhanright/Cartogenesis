@@ -675,6 +675,32 @@ object NationStage {
             .coerceAtLeast(MIN_RIVERINE_FLOOR_CELLS * Runoff.FLOOR_MM)
     }
 
+    private const val LAND_ONLY_RELIEF = false
+
+    /**
+     * The mean ground over the land around each cell, sea left out: the same blur, taken of the
+     * land's elevation and of the land itself and divided, so a coastal cell is judged against the
+     * land beside it and not against the sea floor beyond it.
+     */
+    private fun landMeanElevation(config: WorldGenConfig, sea: SeaLevelResult): FloatField {
+        val radius = (config.width / RELIEF_RADIUS_DIVISOR).coerceAtLeast(MIN_BLUR_RADIUS)
+        val landElevation = FloatField(config.width, config.height)
+        val landShare = FloatField(config.width, config.height)
+        for (cell in sea.isLand.indices) {
+            if (!sea.isLand[cell]) continue
+            landElevation.data[cell] = sea.relativeElevation.data[cell]
+            landShare.data[cell] = 1f
+        }
+        BoxBlur.apply(landElevation, radius = radius, passes = BLUR_PASSES)
+        BoxBlur.apply(landShare, radius = radius, passes = BLUR_PASSES)
+        for (cell in sea.isLand.indices) {
+            val share = landShare.data[cell]
+            landElevation.data[cell] =
+                if (share > 0f) landElevation.data[cell] / share else sea.relativeElevation.data[cell]
+        }
+        return landElevation
+    }
+
     /**
      * Everything the atlas says about each realm, from the map it was given: area, coast, rivers,
      * neighbours, biome shares, a capital, a population and the prose.
@@ -714,12 +740,13 @@ object NationStage {
             radius = (config.width / HINTERLAND_RADIUS_DIVISOR).coerceAtLeast(MIN_BLUR_RADIUS),
             passes = BLUR_PASSES
         )
-        val smoothedElevation = sea.relativeElevation.copy()
-        BoxBlur.apply(
-            smoothedElevation,
-            radius = (config.width / RELIEF_RADIUS_DIVISOR).coerceAtLeast(MIN_BLUR_RADIUS),
-            passes = BLUR_PASSES
-        )
+        val smoothedElevation = if (LAND_ONLY_RELIEF) landMeanElevation(config, sea) else sea.relativeElevation.copy().also {
+            BoxBlur.apply(
+                it,
+                radius = (config.width / RELIEF_RADIUS_DIVISOR).coerceAtLeast(MIN_BLUR_RADIUS),
+                passes = BLUR_PASSES
+            )
+        }
 
         val bestCapital = FloatArray(origins.size) { -1f }
         val capitalCell = IntArray(origins.size) { -1 }

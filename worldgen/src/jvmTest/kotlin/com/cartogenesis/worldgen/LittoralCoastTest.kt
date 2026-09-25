@@ -253,8 +253,9 @@ class LittoralCoastTest {
             ?.let { complaints.add(it) }
         // Recorded since Fix 3 (by box 1.028 under the cap), and re-recorded at Fix 3b: the law's
         // terrain takes the box count to 1.082, still under Mandelbrot's band, with the ruler's
-        // 1.187 inside it. See [LAW_SETS_EVERY_CUT].
-        KnownFailures.expect(LAW_SETS_EVERY_CUT, "pooled by ruler 1.187, by box 1.082") {
+        // 1.187 inside it, and 1.084 and 1.182 once a lake falls with its outlet. See
+        // [LAW_SETS_EVERY_CUT].
+        KnownFailures.expect(LAW_SETS_EVERY_CUT, "pooled by ruler 1.182, by box 1.084") {
             if (complaints.isNotEmpty()) {
                 throw RecordedViolation(
                     complaints.joinToString("; "),
@@ -358,18 +359,14 @@ class LittoralCoastTest {
                     graded!!.dimensionStandardDeviation, control!!.dimensionStandardDeviation
                 )
         )
-        // Recorded since Fix 3 (0.740 graded against 0.596 under the cap), and re-recorded at Fix 3b:
-        // both coasts are rougher on the law's terrain and the gain is short still. See
-        // [LAW_SETS_EVERY_CUT].
-        KnownFailures.expect(LAW_SETS_EVERY_CUT, "0.548 graded against 0.436") {
-            if (graded!!.smoothShare < control!!.smoothShare * SMOOTH_SHARE_GAIN) {
-                throw RecordedViolation(
-                    ("the graded coast reads %.3f smooth against the ungraded coast's %.3f, which is not a " +
-                        "change worth the pass").format(graded!!.smoothShare, control!!.smoothShare),
-                    String.format(Locale.ROOT, "%.3f graded against %.3f", graded!!.smoothShare, control!!.smoothShare)
-                )
-            }
-        }
+        // Recorded from Fix 3 (0.740 graded against 0.596 under the cap, 0.548 against 0.436 on the
+        // law's terrain), and armed at Fix 3b's review round: once a lake falls with its outlet it
+        // reads 0.553 against 0.412, a gain of 1.34 (docs/DESIGN_LEDGER.md, Fix 3b).
+        assertTrue(
+            graded!!.smoothShare >= control!!.smoothShare * SMOOTH_SHARE_GAIN,
+            ("the graded coast reads %.3f smooth against the ungraded coast's %.3f, which is not a " +
+                "change worth the pass").format(graded!!.smoothShare, control!!.smoothShare)
+        )
     }
 
     /**

@@ -52,17 +52,12 @@ class RealmSpreadTest : BorrowsSharedWorlds() {
             largestShares += seed to largest.toDouble() / land
         }
         val cap = WorldGenConfig().nations.maxRealmShare.toDouble()
-        KnownFailures.expect(
-            "E-T10: the largest realm stands over the stage's own cap, the cause not yet diagnosed",
-            "seed 1234 38.2%"
-        ) {
-            val over = largestShares.filter { it.second > cap }
-            if (over.isNotEmpty()) {
-                val found = over.joinToString { (seed, share) -> String.format(Locale.ROOT, "seed %d %.1f%%", seed, share * 100) }
-                val capPercent = String.format(Locale.ROOT, "%.0f%%", cap * 100)
-                throw RecordedViolation("one realm holds more of the land than the stage's own cap of $capPercent: $found", found)
-            }
-        }
+        // Recorded as E-T10 while seed 1234's largest realm held 38.2%, and armed at Fix 3b's review
+        // round, where it holds 29% (docs/DESIGN_LEDGER.md, Fix 3b).
+        val over = largestShares.filter { it.second > cap }
+        val found = over.joinToString { (seed, share) -> String.format(Locale.ROOT, "seed %d %.1f%%", seed, share * 100) }
+        val capPercent = String.format(Locale.ROOT, "%.0f%%", cap * 100)
+        assertTrue(over.isEmpty(), "one realm holds more of the land than the stage's own cap of $capPercent: $found")
     }
 
     @Test

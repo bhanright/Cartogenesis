@@ -71,6 +71,17 @@
   along grid-bearing valleys, is not diagnosed; a guard on the drainage without the ice is owed.
   2026-09-25, Fix 3b.
 
+  **And a sixth once a lake falls with its outlet.** Fix 3b's review round made a lake's surface
+  in the implicit pass fall with its outlet's cut, instead of standing at its filled level for the
+  whole pass, so an inflow grades to the lowered water. With the ice off the bars' share rose to
+  0.167, 0.168 and 0.153 (561, 1,214 and 642 cells of 3,363, 7,224 and 4,198), and with the ice on
+  to 0.159, 0.163 and 0.137. The ice's own share is still no higher than the bare world's, but on
+  seed 42 the glaciated world holds 1,554 more lake cells, and the comb clause, which counts cells,
+  is over its fiftieth at 2.48%. `StraightRunTest`'s census finds its first ruled bar since the facet
+  rule: 27 cells on seed 42 at 512. Both are recorded under the one finding. The likeliest reading,
+  not tested: inflows now cut to a lower base, so more grid-bearing channels are deep enough for
+  the next round's fill to stand in. 2026-09-25, Fix 3b review round.
+
 - **Steep flanks are combed by single-cell gullies down the columns, and the implicit incision makes
   it show (rule 13).** On the renders of seeds 7 and 42 at 1024 the flanks of east-west ranges carry
   straight north-south gullies about a cell apart. Measured on steep land (a fall over 20 m/km to the

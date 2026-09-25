@@ -71,10 +71,9 @@ class EarthLikenessTest : BorrowsSharedWorlds() {
         complaints += EarthLikeness.complaints(suite.pooled, oneWorld = false)
         // Recorded since Fix 3, and re-recorded at Fix 3b: see [LAW_SETS_EVERY_CUT]. Under the cap
         // seed 99's humid country carried 1.02 times the semi-arid's channel and the pooled coast's
-        // box count read 1.036; on the law's terrain they read 1.00 and 1.092, Earth's figures kept.
-        KnownFailures.expect(LAW_SETS_EVERY_CUT, "99: humid country carries 1.00 times the channel per unit of land that semi-arid country does, " +
-                "where Moglen, Eltahir & Bras (1998) have the density falling away on the wet side and so below one; " +
-                "pooled: the coastline's box-counting dimension is 1.092, outside 1.25 +/- 0.15 " +
+        // box count read 1.036; on the law's terrain they read 1.00 and 1.092, and once a lake falls
+        // with its outlet seed 99's drylands pass and the box count reads 1.093.
+        KnownFailures.expect(LAW_SETS_EVERY_CUT, "pooled: the coastline's box-counting dimension is 1.093, outside 1.25 +/- 0.15 " +
                 "(Mandelbrot 1967: Britain 1.25, Richardson's smoothest coast 1.02)") {
             if (complaints.isNotEmpty()) {
                 throw RecordedViolation(

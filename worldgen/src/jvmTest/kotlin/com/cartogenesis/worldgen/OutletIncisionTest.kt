@@ -257,7 +257,7 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
         )
         val pooledDepth = depthShares.average()
         // Recorded since Fix 3b: see [NOTCH_SHORT_ON_THE_LAWS_TERRAIN].
-        KnownFailures.expect(NOTCH_SHORT_ON_THE_LAWS_TERRAIN, "81.8% as deep as the control's") {
+        KnownFailures.expect(NOTCH_SHORT_ON_THE_LAWS_TERRAIN, "82.5% as deep as the control's") {
             if (pooledDepth >= 0.5) {
                 throw RecordedViolation(
                     "the fill still stands ${"%.1f".format(pooledDepth * 100)}% as deep over the land as the " +
@@ -466,10 +466,12 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
         }
         // Recorded since Fix 3b: see [NOTCH_SHORT_ON_THE_LAWS_TERRAIN]. Seed 99's lake was over
         // the Caspian's share from Fix 2 to Fix 3, and the notch begun at the lip took it down at
-        // Fix 3; on the law's terrain with the uplift re-derived it stands over it again.
+        // Fix 3; on the law's terrain with the uplift re-derived it stood over it again, and once
+        // a lake falls with its outlet it is under it (0.113% of the land) and what fails is two
+        // worlds keeping more than half their water.
         KnownFailures.expect(
             NOTCH_SHORT_ON_THE_LAWS_TERRAIN,
-            "seed 99's largest lake 2.11x the Caspian; seed 42's water 1.6056% to 0.8251%"
+            "seed 718106's water 0.7704% to 0.5995%; seed 7's water 1.1530% to 0.8764%"
         ) {
             if (overCaspian.isNotEmpty() || notHalved.isNotEmpty()) {
                 val found = (overCaspian + notHalved).joinToString("; ")
@@ -659,7 +661,10 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
          * with), and seed 42's world keeps 0.83% of its land under the basins the notch can reach
          * against the control's 1.61%, just over half; and the notch leaves the fill 81.8% as deep over the land as the control
          * pooled over six seeds (seeds 7 and 1234 deeper with the notch than without), where the
-         * clause asks under half. The notch is still an explicit cut at 1.125 times the law's rate,
+         * clause asks under half. Once the implicit pass lets a lake fall with its outlet (Fix 3b's
+         * review round), seed 99's largest lake is 0.113% of its land, under the Caspian's 0.249%,
+         * and seed 42's water falls from 2.62% to 1.15%; seeds 718106 and 7 keep 0.60% of 0.77% and
+         * 0.88% of 1.15%, more than half, and the fill stands 82.5% as deep as the control's. The notch is still an explicit cut at 1.125 times the law's rate,
          * a ratio chosen on the capped update's lakes; the ordinary reach below it is the law's
          * implicit cut now, and the uplift that lifts the belts is two and a half times what it
          * was. Which of these leaves seed 99's basin standing is not isolated, and the notch's

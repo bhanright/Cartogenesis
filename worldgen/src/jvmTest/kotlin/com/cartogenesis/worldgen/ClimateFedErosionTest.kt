@@ -436,7 +436,7 @@ class ClimateFedErosionTest {
         // Fix 2). Taking the erosion itself, the uplift added back, is the re-derivation B-I2 asks.
         KnownFailures.expect(
             "B-I2: the rain-dissection pin was set on rounds without the uplift",
-            "seed 7 at 0.027, seed 42 at 0.176, seed 1234 at 0.178, seed 99 at 0.144; seed 7's flat-rain control at -0.123, seed 99's flat-rain control at -0.069"
+            "seed 7 at 0.035, seed 42 at 0.176, seed 1234 at 0.181, seed 99 at 0.148; seed 7's flat-rain control at -0.119, seed 99's flat-rain control at -0.078"
         ) {
             if (underThePin.isNotEmpty() || uncontrolled.isNotEmpty()) {
                 val found = underThePin.joinToString { (seed, fed) -> String.format(Locale.ROOT, "seed %d at %.3f", seed, fed) } +

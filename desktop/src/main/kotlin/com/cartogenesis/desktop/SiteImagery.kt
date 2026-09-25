@@ -9,9 +9,6 @@ import com.cartogenesis.worldgen.WorldGenerationEngine
 import com.cartogenesis.worldgen.generateBlocking
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
-import com.cartogenesis.cartography.WorldCodec
-import com.cartogenesis.cartography.WorldDocument
-import kotlinx.coroutines.runBlocking
 import org.jetbrains.skia.Bitmap
 import org.jetbrains.skia.Canvas
 import org.jetbrains.skia.ColorAlphaType
@@ -42,14 +39,14 @@ import java.io.File
  * actually draws with, while a downscaled whole map shows a thinner one that exists nowhere.
  *
  * A figure is one window read one way. Most are one card's picture on the page; the rest are the
- * living figures' — the strip the hero drifts along, the "Read the land" map with the pins
- * [SiteLandmarks] finds on it, and the nine styles the comparison slider fetches when picked.
+ * band round the world the page opens on, at two sizes, the nine styles the comparison slider
+ * fetches when picked, and the picture a link to the page previews.
  * Wider ground is halved rather than cropped wider (see [Figure.reduction]). Pictures that are
  * compared share one window — the six steps, the twelve styles, the four data views — which is
  * what makes them the same ground: there is one window for the row's pictures to be cut from.
  * The page names each picture in its own words rather than in lettering drawn into the file, so
- * nothing here sets type. See docs/DESIGN_LEDGER.md, Site 3, Site 4 and Site 5a, for what the
- * page has asked for and when.
+ * nothing here sets type. See docs/DESIGN_LEDGER.md, Site 3, Site 4, Site 5a and Site 6, for
+ * what the page has asked for and when.
  *
  * It has to run on the deploy runner, which is Linux with no graphics card and no display. Nothing
  * here asks for either: the rasteriser is called on its processor path, and Skia only ever writes
@@ -110,7 +107,7 @@ object SiteImagery {
     data class Window(val x: Int, val y: Int, val width: Int, val height: Int)
 
     /**
-     * The band across the top of the page: the hero.
+     * The window the page's opening starts from, and the picture a link to the page previews.
      *
      * A 2:1 window on the southern half of the northern continent, which carries in one frame
      * everything the page claims — the snow-capped range down its middle, rivers draining both
@@ -203,7 +200,11 @@ object SiteImagery {
         val readingName: String get() = if (view == MapView.FANTASY) style.label else view.label
     }
 
-    /** The hero: the band across the top of the page, and the picture a link to the page previews. */
+    /**
+     * The picture a link to the page previews: [BAND] in the Natural style, named by the page's
+     * `og:image`. The page itself does not draw it; its opening is [WORLD_BAND], whose first
+     * stretch is this window.
+     */
     val HERO = Figure("natural.webp", BAND, MapView.FANTASY, MapStyle.NATURAL)
 
     /**
@@ -264,59 +265,59 @@ object SiteImagery {
     )
 
     /**
-     * The window "Read the land" is drawn and pinned in: 1120 by 560 at 1:1.
-     *
-     * The northern half of the eastern island and the coast across the strait from it: a coastal
-     * range raised over a subducting plate along its north shore, drier country in its lee, a
-     * narrow arm of the sea between the island and the far coast, river mouths on both, and a bay
-     * where the shelf runs wide. [SiteLandmarks] finds its pins in the world's fields inside this
-     * window rather than at places written here, so this paragraph describes what the window held
-     * when it was chosen, and the finder decides what it holds now. The
-     * bottom edge stands above the dry belt the generator rules along a row across the island
-     * (docs/TODO.md), which is why the window is not taller, and the right-hand edge west of the
-     * small ice cap with a straight edge on the far coast.
-     */
-    val LAND_WINDOW = Window(2760, 100, 1120, 560)
-
-    /** The "Read the land" map. */
-    val LAND = Figure("land.webp", LAND_WINDOW, MapView.FANTASY, MapStyle.NATURAL)
-
-    /**
      * The sheet's width in pixels for the world [generate] makes, which is how wide a strip round
      * the whole world is.
      */
     val SHEET_WIDTH_PIXELS: Int get() = SheetGeometry.of(config()).widthPixels
 
     /**
-     * The hero's band all the way round the world, halved: the strip the hero drifts along.
+     * How hard the encoder works on the two bands, the one picture every reader fetches as the
+     * page opens.
      *
-     * It starts where [BAND] starts, so its first 800 columns are the hero's picture at half
-     * scale and the strip can take over from the hero without a jump; it runs the whole
-     * circumference, so its last column is the sheet column west of its first and the strip joins
-     * itself end to end. Halved because the hero is read at half its pixels or less at every width
-     * the page is laid out at (a 2:1 frame at most about 510 pixels wide), and the whole strip at
-     * 1:1 would be four times the bytes for detail no reader is shown.
+     * Lower than [WEBP_QUALITY] because the band is never read still at its own pixels: it is
+     * drawn at most the height of the screen and it drifts, so the encoder's softening of a coast's
+     * last pixel is not something a reader is shown, while the full band is the page's largest
+     * request. See docs/DESIGN_LEDGER.md, Site 6, for the bytes measured at each quality.
      */
-    val HERO_STRIP: Figure by lazy {
+    const val WORLD_BAND_QUALITY = 60
+
+    /**
+     * The band the page opens on: [BAND]'s rows all the way round the world at the sheet's own
+     * pixels, 4096 by 800.
+     *
+     * It starts where [BAND] starts, so its first 1600 columns are the link preview's picture, and
+     * the settled opening, a 2:1 plate showing the band's first stretch, is the author's window. It
+     * runs the whole circumference, so its last column is the sheet column west of its first and
+     * the band joins itself end to end as it drifts. Full size because the page draws it up to the
+     * height of the screen, where half its rows would be enlarged on any wide or dense one.
+     */
+    val WORLD_BAND: Figure by lazy {
         Figure(
-            "hero-strip.webp", Window(BAND.x, BAND.y, SHEET_WIDTH_PIXELS, BAND.height),
-            MapView.FANTASY, MapStyle.NATURAL, reduction = 2
+            "world-band.webp", Window(BAND.x, BAND.y, SHEET_WIDTH_PIXELS, BAND.height),
+            MapView.FANTASY, MapStyle.NATURAL, quality = WORLD_BAND_QUALITY
+        )
+    }
+
+    /**
+     * [WORLD_BAND] halved, 2048 by 400, for a narrow screen at about one device pixel to the CSS
+     * pixel.
+     *
+     * The settled plate on a screen narrower than the page's 700-pixel breakpoint is at most 326
+     * CSS pixels tall (the 700 less two 24-pixel gutters, halved), which these 400 rows cover up to
+     * 1.2 device pixels to the CSS pixel; the page's `<picture>` sends every wider or denser screen
+     * the full band.
+     */
+    val WORLD_BAND_HALF: Figure by lazy {
+        Figure(
+            "world-band-half.webp", WORLD_BAND.window, MapView.FANTASY, MapStyle.NATURAL,
+            reduction = 2, quality = WORLD_BAND_QUALITY
         )
     }
 
     /** Every picture the page shows, in the order it shows them. */
     val FIGURES: List<Figure> by lazy {
-        listOf(HERO, HERO_STRIP) + STEP_CARDS + LAND + STYLE_PICTURES + LAYER_CARDS
+        listOf(HERO, WORLD_BAND, WORLD_BAND_HALF) + STEP_CARDS + STYLE_PICTURES + LAYER_CARDS
     }
-
-    /** Where [main] leaves the pins' markup for the page, beside the pictures. */
-    const val PINS_FILE = "pins.html"
-
-    /**
-     * Where [main] leaves the world the pictures were cut from, as a save, so that
-     * `SiteAssemblyTest` can read the fields under every pin rather than trust the finder.
-     */
-    const val WORLD_FILE = "world.cgw"
 
     @JvmStatic
     fun main(args: Array<String>) {
@@ -343,9 +344,9 @@ object SiteImagery {
                 "realms=${world.nations.nations.size})"
         )
 
-        // One rasterisation per distinct reading rather than one per figure: the hero and the
-        // Natural style card are the same reading of the same world, and a 2048 sheet is 32 MB and
-        // most of a second.
+        // One rasterisation per distinct reading rather than one per figure: the link preview, the
+        // band and the Natural style card are the same reading of the same world, and a 2048 sheet
+        // is 32 MB and most of a second.
         val sheets = Sheets(world)
         var total = 0L
         try {
@@ -365,55 +366,12 @@ object SiteImagery {
             sheets.close()
         }
 
-        val landmarks = SiteLandmarks.find(world, LAND_WINDOW)
-        File(outputDir, PINS_FILE).writeText(pinsMarkup(landmarks, SheetGeometry.of(world)), Charsets.UTF_8)
-        landmarks.forEachIndexed { index, landmark ->
-            println(
-                "  pin ${index + 1} ${landmark.kind.id} on cell ${landmark.cell % world.width}," +
-                    "${landmark.cell / world.width} at sheet %.0f,%.0f".format(landmark.sheetX, landmark.sheetY)
-            )
-        }
-        val save = File(outputDir, WORLD_FILE)
-        save.writeBytes(
-            runBlocking {
-                WorldCodec.encode(
-                    WorldDocument("site", "The site's world", world.config, savedAt = 0L),
-                    world, GzipCompressor, "renderSiteImagery"
-                )
-            }
-        )
-        println("  $WORLD_FILE ${save.length()} bytes, for SiteAssemblyTest to read the pins against")
-
         val finished = System.currentTimeMillis()
         println(
             "SITE IMAGERY ${FIGURES.size} figures, $total bytes total, " +
                 "${(finished - started) / 1000}s including generation"
         )
     }
-
-    /**
-     * The pins of "Read the land" as the page writes them, one `button` a line, in [landmarks]'
-     * order, which is the order of the notes under the map.
-     *
-     * Each is placed by the centre of its cell as a share of the picture, to three places of a
-     * percent (a tenth of a pixel on the 1120-pixel picture), so it stays on its cell at every width
-     * the picture is drawn at. It carries the cell in `data-cell`, which is what the guard reads the
-     * world's fields at, and takes its accessible name from the note's own heading.
-     */
-    fun pinsMarkup(landmarks: List<SiteLandmarks.Landmark>, sheet: SheetGeometry): String =
-        landmarks.mapIndexed { index, landmark ->
-            val across = ((landmark.sheetX - LAND_WINDOW.x) % sheet.widthPixels + sheet.widthPixels) %
-                sheet.widthPixels
-            val down = landmark.sheetY - LAND_WINDOW.y
-            val left = String.format(java.util.Locale.ROOT, "%.3f", across * 100.0 / LAND_WINDOW.width)
-            val top = String.format(java.util.Locale.ROOT, "%.3f", down * 100.0 / LAND_WINDOW.height)
-            val cellX = landmark.cell % sheet.cellsAcross
-            val cellY = landmark.cell / sheet.cellsAcross
-            val id = landmark.kind.id
-            """<button type="button" class="pin" style="left:$left%;top:$top%" data-kind="$id" """ +
-                """data-cell="$cellX,$cellY" aria-labelledby="land-$id-name" aria-expanded="false" """ +
-                """aria-controls="land-note">${index + 1}</button>"""
-        }.joinToString("\n")
 
     /** [SEED] at [GRID_CELLS], with the settings the page names. */
     fun generate(): WorldMap = WorldGenerationEngine.generateBlocking(config())

@@ -50,10 +50,10 @@ class SiteAssemblyTest {
         const val LOAD_BYTES_BEFORE_SITE_5A = 686_240L
 
         /**
-         * What Site 5a allows the load to grow by: 128 KiB, where it measured 112,483 bytes. The
+         * What Site 5a allows the load to grow by: 128 KiB, where it measured 112,205 bytes. The
          * markup, style and script of its five figures and the five pins the assembly writes in
-         * are 23,945 of those, and the six steps' pictures, which the frame brings into the load,
-         * the other 88,538. The headroom is for the step pictures, whose size moves whenever the
+         * are 24,801 of those, and the six steps' pictures, which the frame brings into the load,
+         * the other 87,404. The headroom is for the step pictures, whose size moves whenever the
          * site's pictures are made again. Every other picture Site 5a adds is lazy, is fetched
          * after the load, or is fetched when the reader picks it.
          */

@@ -15,7 +15,9 @@
     (`GroundIsotropyTest`);
   - the valley notch, the coast's dimension, the lowstand's estuaries, the ground's texture, the rain's
     dissection contrast and the drylands' drainage density, which run as known failures under
-    `CAP_SETS_EVERY_CUT` with their figures (docs/DESIGN_LEDGER.md, Fix 3);
+    `CAP_SETS_EVERY_CUT` with their figures (docs/DESIGN_LEDGER.md, Fix 3), and in `:cartography`
+    the relief shading's haze and ordinary ground, which are calibrated on the relief and wait
+    for the relief the law cuts;
   - `ClimateFedErosionTest`'s cover and flank clauses, which measure a proportional law and want
     restating on the law's rate through `IncisionWatch` once the cut saturates as `F / (1 + F)`.
   2026-09-25, Fix 3.

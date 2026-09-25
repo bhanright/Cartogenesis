@@ -4,7 +4,7 @@
 
 - **Branch:** `chunk/6-water-realms`, created from origin/main at `fb22d30`. It is not merged and no
   pull request is open.
-- **Head:** `7fe2cf5`, after the review round and the third round (both at the end). The first
+- **Head:** `7513ad0`, after the review round and the third round (both at the end). The first
   build, which the sections below describe, was `acb9df9`.
 - **Review branch:** `review/6-water-realms` is the head with `review/` on top: this report and the
   renders.
@@ -491,87 +491,182 @@ for the third round's builds. It was run on the third round's head instead; see 
 ## Third round
 
 A reading of `66d745d` confirmed points 2 and 4 of the review round fixed and the stranded-piece
-fallback working, and found two gaps. Each was verified on the code, then fixed and guarded by a
-test shown failing with the fix switched off.
+fallback working, and found two gaps. The 2048 audit then turned up a third problem, which this
+round also fixed. Each was verified on the code, then fixed and guarded by a test shown failing
+with the fix switched off.
 
-Commits:
+**Head:** `7513ad0`. The code as tested is `9e434bf`; the two commits after it change only docs.
 
-- `194c4f9`: point 1
-- `4fa940e`: point 2
-- `7fe2cf5`: ledger and `GEOGRAPHY.md`
-
-**Head:** `7fe2cf5`.
-
-### 1. Small pieces added up past the cap
+### 1. Small pieces past the cap
 
 **Verified.** A piece under the smallest realm went to the neighbour holding most of its edge
-whatever that neighbour already held over the cap, so the stated bound held piece by piece and not
-in total.
+whatever that neighbour already held over the cap.
 
-**Change.** A small piece goes to that neighbour only while the neighbour's *whole* excess over the
-cap stays under the smallest realm. A piece no neighbour can take within that allowance becomes a
-realm of its own, with its capital on its best ground. The bound the code now keeps:
+**Change, in two steps.**
 
-- no stranded piece is left;
-- no realm ends the pass a smallest realm or more over the cap;
-- a realm under the smallest size is made only where a small piece has nowhere else to go.
+1. **An allowance, as suggested (`194c4f9`).** A small piece could take its neighbour past the cap
+   by less than one smallest realm, counted over that neighbour's whole excess.
+   - The two-piece case then ended 12 cells over.
+   - On the standard worlds, once the lake change below had re-laid the realms, it took seed 7's
+     largest realm to **30.1%**, past the 30% cap. The armed E-T10 clause asserts that cap and
+     the README states it. I did not loosen the clause to the allowance.
+2. **A strict cap (`04cbee7`).** A piece that no neighbour can take within the cap becomes a realm
+   of its own, whatever its size.
 
-**Guard.** `RealmSpreadTest`, "small pieces cannot add up past the cap's allowance": two 20-cell
-pieces inside a realm of 760 cells, against a cap of 768 and a smallest realm of 24.
+**The bound the code now keeps:**
 
-- **Fix off** (`NationStage` as of `66d745d`): the host took both pieces and ended **32 over**.
-- **Now:** the host takes one and ends 12 over; the other piece is a realm of its own, and no piece
-  is stranded.
+- no piece is stranded;
+- no realm is over the cap;
+- a realm under the smallest size exists only where a small piece has nowhere else to go. On seed
+  7 that is realm 19, at 293 cells, the piece that had tipped the cap.
+
+**Guard.** `RealmSpreadTest`, "small pieces never take a realm past the cap": two 20-cell pieces
+inside a realm of 760 cells against a cap of 768.
+
+| Version | Host ends at |
+|---|---|
+| `66d745d` | 800 cells, 32 over |
+| The allowance | 780 cells, 12 over |
+| Now | 760 cells; both pieces are realms of their own, and none is stranded |
 
 ### 2. The basin graph could hold a cycle
 
 **Verified.** The graph's leftovers were appended in index order, so of two basins feeding each
 other, the first was solved on rain the other keeps.
 
-**Change.** `RiverStage.basinGroupsUpstreamFirst` finds strongly connected groups of basins (Tarjan,
-with an explicit stack) and walks them upstream first. A single basin is solved as before. A group
-of more than one is iterated to a fixed point:
+**Change (`4fa940e`).** `RiverStage.basinGroupsUpstreamFirst` finds strongly connected groups
+(Tarjan, with an explicit stack) and walks them upstream first. A group of more than one basin is
+iterated to a fixed point:
 
 1. Measure each member's inflow on the routing the fill left, with every closed basin keeping its
-   water: those above the group, and the members closed so far other than itself.
+   water.
 2. The members the balance closes become the next closed set.
 3. Repeat until the closed set stops changing.
 
-**Why it converges.** A closure only takes water away, so every member's inflow can only fall as
-the closed set grows. The balance closes a basin at any inflow below the one at which it closes it,
-so the closed set only grows, and it settles within as many passes as the group has members. After
-a group, the rain field is re-accumulated with every closed basin as a sink: that is the field the
-single closures' subtractions reach one at a time.
+**Why it converges.** A closure only takes water away, so each inflow can only fall as the closed
+set grows, and the balance closes a basin at any lower inflow. So the closed set only grows, and it
+settles within as many passes as the group has members. After a group the rain field is
+re-accumulated with every closed basin as a sink.
 
-**Guard.** `WaterReceivedTest`, "two basins that feed each other are solved together". This is the
-four-exit case: A feeds B by its west exit, B feeds A by its east exit, and each has a second exit
-off the world.
+**Guard.** `WaterReceivedTest`, "two basins that feed each other are solved together", the
+four-exit case.
 
-- **Fix off** (each group split into single basins in index order, which is what the old walk
-  did): A was given **550 mm-cells against 450 reaching it**.
-- **Now:** 450 against 450 for each, and one group solved together.
+- **Fix off** (groups split into single basins in index order): A was given **550 mm-cells
+  against 450 reaching it**.
+- **Now:** 450 against 450 for each.
 
-**How many such groups the standard worlds contain: none.** On seeds 7/42/1234/99 at 512 and on
-718106 and 969495 at 2048:
+**How many such groups the standard worlds contain: none.**
 
-| | Seed 7 | 42 | 1234 | 99 | 718106 | 969495 |
+| | Seed 7 | 42 | 1234 | 99 | 718106 at 2048 | 969495 at 2048 |
 |---|---|---|---|---|---|---|
 | Closed basins | 21 | 27 | 6 | 19 | 30 | 41 |
 | … with more than one exit | 15 | 13 | 6 | 14 | 27 | 35 |
 | Groups feeding each other | 0 | 0 | 0 | 0 | 0 | 0 |
 
-No world moved on this account, and the case is still handled.
+### 3. A realm border across a lake, found by the audit
 
-### Test counts on `7fe2cf5`
+On seed 42 at 2048 a realm border ran due south for **65 steps** at cell (290,656), over the
+guard's bar of 63.9. Every cell on both sides was lake. The partition had cut an overflowing lake
+like land, along the rows that the flat's routing draws across it.
+
+**Changes.**
+
+- **`e296eab`:** when a catchment is cut along its trunk, a lake the trunk crosses goes whole to
+  one bank. This alone did not remove the border.
+- **`f86f848`:** an overflowing lake is one node of the partition, as closed lakes already were.
+  - Its sink is the exit that carries the most water and never comes back into the lake.
+  - Its water is never cut, and land draining into it is cut at the limit.
+  - A lake with no such exit is left cell by cell, so the routing cannot gain a cycle.
+
+**Guards**, in `CatchmentUnitsTest`:
+
+- **A lake on a trunk stays on one bank.** Fix off (`BasinPartition` as of `7fe2cf5`): the lake is
+  cut in two. Now: one bank.
+- **An overflowing lake of 99 cells under a 40-cell limit.** Fix off (`BasinPartition` as of
+  `e296eab`): the lake is cut into **7 units**. Now: one unit, and every unit of land is within
+  the limit.
+- **The audit then lists 42's straight realm borders as fixed.**
+
+### The 2048 audit tier
+
+I ran `:cartography:audit`'s geometry census on origin/main and on this branch.
+
+- **origin/main fails** on four drawn-coast clauses of its own: 7's and 718106's arcs, 59758's
+  isotropy, and 969495's square corner.
+- **This branch fails on those four and nothing else**, on `9e434bf`. The four are the base's and
+  are left as they were.
+
+The census's records were updated for this chunk:
+
+- **Armed** (clauses this chunk fixed):
+  - 42: straight realm borders on three detectors, and its peoples' facet;
+  - 1234: realm square corner;
+  - 99: realm arc;
+  - 59758: straight realm borders on two detectors;
+  - 969495: drawn-river arc and peoples' crease.
+- **Listed as unmeasurable:** realm-border rectangles on 7/1234/718106/59758/969495 at 2048 and on
+  1234 at 512, where no realm is now a ring small enough to measure. Also 59758's peoples'-border
+  isotropy.
+- **Re-recorded:** 59758's peoples' facet, 92.31 where it was 96.21.
+- **One new violation, recorded under its existing finding:** a drawn river's square corner on
+  59758 at (1985,1521). The discharge change re-ranked which rivers are drawn.
+
+The other audit-tier classes, the render dumps, ran on `7fe2cf5`: three passed and one skipped
+itself.
+
+### Where it all ends
+
+**Realms** (seeds 7/42/1234/99 at 512 and 969495 at 2048):
+
+| | Seed 7 | 42 | 1234 | 99 | 969495 |
+|---|---|---|---|---|---|
+| Largest realm (% of land) | 29.9 | 27.9 | 22.6 | 17.8 | 23.2 |
+| Realms | 20 | 13 | 15 | 16 | 14 |
+| Coastal capitals | 13/20 | 2/13 | 8/15 | 8/16 | 3/14 |
+
+Coastal capitals total 34 of 78, against 36 of 77 on origin/main.
+
+**Pieces**, on the four seeds at 512:
+
+- No stranded piece.
+- Realms held inside one land neighbour: 5/2/6/7, of which one is landlocked. origin/main had
+  three landlocked.
+
+**Realm borders on 718106 at 2048** (straight runs along a row or column):
+
+| | origin/main | First build | Review round | Now |
+|---|---|---|---|---|
+| 50 km or longer | 10 | 8 | 12 | **17** |
+| 100 km or longer | 1 | 0 | 0 | **2** |
+| Longest | 123 km | 67 km | 76 km | **123 km** |
+
+The two longest runs, 123 km and 108 km at cells (980,462) and (981,347), lie on the ice sheet's
+own ruled edge. The realms on either side of the ice now differ, where at the first build they did
+not. None of these runs reaches the guard's bar. The ice's edge is a later chunk's; this chunk
+does not make the count better than origin/main's, and I am stating that plainly. The peoples'
+borders did not move.
+
+**Renders.** The `-after` Political files in `review/renders/` are re-taken on `9e434bf`.
+
+- **718106:**
+  - The four small realms inside the eastern island's large realm are gone; one realm holds most
+    of that island.
+  - The ice sheet belongs to the realm west of it, and the green realm's border runs down the ice's
+    straight east edge.
+- **42:**
+  - The middle of the western continent is shared by more, smaller realms.
+  - Two of them meet along a **straight north–south border**, close to where origin/main had one.
+    The 2048 census does not flag it; to the eye it is straight.
+- **Fantasy views:** unchanged to the pixel. Rivers and lakes did not move in this round.
+
+### Test counts on `9e434bf`
 
 | Task | Tests | Failures | Errors | Skipped | Run |
 |---|---|---|---|---|---|
-| `:worldgen:jvmTest` | 269 | 0 | 0 | 0 | alone, 50 min 55 s |
-| `:cartography:jvmTest` | 117 | 0 | 0 | 0 | with ui and desktop, 23 min 17 s |
+| `:worldgen:jvmTest` | 271 | 0 | 0 | 0 | alone |
+| `:cartography:jvmTest` | 117 | 0 | 0 | 0 | with ui and desktop |
 | `:ui:jvmTest` | 129 | 0 | 0 | 0 | with cartography and desktop |
 | `:desktop:test` | 104 | 0 | 0 | 19 | with cartography and ui |
+| `:cartography:audit` (geometry census) | 1 | 1 | 0 | 0 | alone; fails only on origin/main's four coast clauses |
 
-All four ran on `7fe2cf5`. The two new tests account for 269 against the review round's 267.
-
-**The 2048 audit tier** (`:cartography:audit`) is running on `7fe2cf5`. Its result is added here
-when it finishes.
+The four new tests account for 271 against the review round's 267.

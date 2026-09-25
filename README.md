@@ -448,11 +448,24 @@ and reports what the browser answered to each, as text to copy into a bug report
 
 ## Menus, settings and themes
 
-A strip along the top carries **File** (random world, open library, save, save as, export, settings,
-quit on the desktop), **View** (theme, panel sections, the map toolbar) and **Help** (check for
+A strip along the top carries **File** (random world, open library, save, save as, export, copy
+link to this world, settings, quit on the desktop), **View** (theme, panel sections, the map toolbar) and **Help** (check for
 updates, report a bug, about). It is drawn in `:ui` so the browser build has it too; the desktop
-binds the usual keystrokes (Ctrl+N, Ctrl+O, Ctrl+S, Ctrl+Shift+S, Ctrl+E, Ctrl+comma, Ctrl+Q) and
-the browser binds none, so it never steals Ctrl+S from the tab.
+binds the usual keystrokes (Ctrl+N, Ctrl+O, Ctrl+S, Ctrl+Shift+S, Ctrl+E, Ctrl+L, Ctrl+comma,
+Ctrl+Q) and the browser binds none, so it never steals Ctrl+S from the tab.
+
+**Copy link to this world** puts on the clipboard an address that makes the world on screen again
+in the browser: `https://cartogenesis.com/app/?seed=718106#v=1&size=1024&plates=18&style=vellum`.
+The seed is in the query, so `/app/?seed=718106` typed by hand opens that seed at the size and
+settings a fresh window starts with; the rest follows `#`, which a browser never sends to the
+server: the link format's version, the size, and every setting of the world and of the drawing that
+differs from its default. The desktop copies the published address, the browser its own page's. A
+link carries no saved world, no name, no labels and no edits, and neither where the work runs nor
+the river density, which belong to the machine and the reader. Opened, a part the application
+cannot use (a seed that is not a number, a setting it does not know, a value outside its control's
+range) is set aside with one line of status and the rest applies; a size above the browser's
+ceiling is brought down to it with the reason; and a link in a format this build does not write is
+refused whole rather than misread.
 
 Settings persist through the `Platform` seam as one JSON document
 (`%APPDATA%\Cartogenesis\settings.json` on Windows, local storage in the browser); a document from a

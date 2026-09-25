@@ -138,6 +138,18 @@ class WebPlatform(
     }
 
     /**
+     * The address the page was loaded at, read when the platform is made, which is before the
+     * first composition and so before the window decides which world it starts on.
+     */
+    override val openedAt: String = pageAddress()
+
+    /**
+     * This page, so a link copied here opens in the build it was copied from: the published one,
+     * a preview deployment or a local server alike.
+     */
+    override val worldLinkBase: String = pageAddressAlone()
+
+    /**
      * One `fetch`, made only when a reader asks for it.
      *
      * GitHub's releases API sends `Access-Control-Allow-Origin: *`, so this is an ordinary

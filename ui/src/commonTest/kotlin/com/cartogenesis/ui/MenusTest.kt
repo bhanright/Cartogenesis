@@ -17,7 +17,7 @@ import kotlin.test.assertTrue
 class MenusTest {
 
     @Test
-    fun `File offers the six document actions, and Quit only where there is something to quit`() {
+    fun `File offers the seven document actions, and Quit only where there is something to quit`() {
         val browser = FakePlatform(canQuit = false)
         val desktop = FakePlatform(canQuit = true)
 
@@ -28,6 +28,7 @@ class MenusTest {
                 MenuCommand.SAVE,
                 MenuCommand.SAVE_AS,
                 MenuCommand.EXPORT,
+                MenuCommand.COPY_LINK,
                 MenuCommand.SETTINGS
             ),
             Menus.file(browser)
@@ -108,6 +109,7 @@ class MenusTest {
         assertTrue(MenuCommand.SAVE.needsWorld)
         assertTrue(MenuCommand.SAVE_AS.needsWorld)
         assertTrue(MenuCommand.EXPORT.needsWorld)
+        assertTrue(MenuCommand.COPY_LINK.needsWorld)
         assertFalse(MenuCommand.NEW_WORLD.needsWorld)
         assertFalse(MenuCommand.SETTINGS.needsWorld)
         assertFalse(MenuCommand.ABOUT.needsWorld)

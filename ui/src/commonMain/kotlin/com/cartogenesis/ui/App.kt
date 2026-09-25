@@ -232,12 +232,21 @@ private fun Application(
     val reachable = remember(shape, platform) { Arrangements.of(shape, platform) }
     /** The largest world this host makes, on screen or as an export. See [Platform.generationCeiling]. */
     val generationCeiling = platform.generationCeiling
-    var config by remember {
-        mutableStateOf(
-            SettingsEffects.startingConfig(settings, platform, freshSeed(), compact)
+    /**
+     * The world the address names, if it names one: a browser opened at a link starts on that
+     * world rather than on a fresh seed. Read once, when the window first composes, and applied
+     * over what the window would have started with, so a link says only what differs from it.
+     */
+    val opening = remember {
+        WorldLinks.read(
+            address = platform.openedAt,
+            starting = SettingsEffects.startingConfig(settings, platform, freshSeed(), compact),
+            startingOptions = SettingsEffects.startingRenderOptions(settings),
+            ceiling = generationCeiling
         )
     }
-    var options by remember { mutableStateOf(SettingsEffects.startingRenderOptions(settings)) }
+    var config by remember { mutableStateOf(opening.config) }
+    var options by remember { mutableStateOf(opening.options) }
 
     // The river density is stored with the preferences as soon as it moves, so the next window -
     // and every world opened in it - is drawn at the reader's own mark. See
@@ -280,7 +289,17 @@ private fun Application(
     // Notices only, now: what an export or a save did. What used to be the status line — the seed,
     // the size, the realm count and the time — is the cartouche in the map's legend, and is read
     // off the world itself rather than accumulated into a sentence here.
-    var status by remember { mutableStateOf(launchNotice) }
+    var status by remember {
+        mutableStateOf(listOfNotNull(launchNotice.ifBlank { null }, opening.notice).joinToString(" "))
+    }
+    /**
+     * What the link said about the world it named, held until that world is on screen: a finished
+     * generation clears the status line, and this line is about the world it has just made. Dropped
+     * by any other ending, so it never reappears under a later world.
+     */
+    var linkNoticeAfterGenerating by remember {
+        mutableStateOf(opening.notice.takeIf { opening.generates })
+    }
     /** How long the last generation took, for the cartouche's footnote. Zero for an opened save. */
     var generationMillis by remember { mutableStateOf(0L) }
     // The preference is the *starting* format, not a live binding: changing the default in the
@@ -348,7 +367,8 @@ private fun Application(
     // Nothing generates until this is armed - by Go, New world, or Generate. Opening a save from
     // the library arms it too, since a world is then on screen and later edits should live-update
     // it exactly as if it had been generated here.
-    val gate = remember { GenerationGate() }
+    // A link is the reader asking for a world by name, so a window opened at one is armed already.
+    val gate = remember { GenerationGate().also { if (opening.generates) it.request() } }
     // Which of the panel's sections are unrolled. Remembered here rather than inside the panel so
     // that a trip to the atlas or the library and back does not roll them all up again.
     val sections = remember { SectionState() }
@@ -610,6 +630,19 @@ private fun Application(
 
             MenuCommand.EXPORT -> startExport(SettingsEffects.exportSizeWithin(settings, generationCeiling))
 
+            // The world on screen and the drawing on screen, not the panel's settings: the panel
+            // may already be on the next world while this one is still the one being looked at.
+            // Called inside the click, as the bug report's copy is, because a browser lets a page
+            // write the clipboard only while it is handling the reader's gesture.
+            MenuCommand.COPY_LINK -> world?.let { shown ->
+                status = WorldLinks.copy(
+                    platform,
+                    shown.config,
+                    options,
+                    hasEdits = labels.isNotEmpty() || overrides != WorldOverrides()
+                )
+            }
+
             MenuCommand.SETTINGS -> showSettings = true
 
             MenuCommand.QUIT -> platform.quit()
@@ -729,9 +762,11 @@ private fun Application(
             // And by the same rule a world at another seed is another document, so the next Save
             // writes a new file rather than over the last world's.
             document.afterGenerating(generated.config.seed, ::randomId)
-            // Any notice from an earlier export or save is about a world no longer on screen.
-            status = ""
+            // Any notice from an earlier export or save is about a world no longer on screen. What
+            // a link said about the world it named is about this one, and stays.
+            status = linkNoticeAfterGenerating.orEmpty()
         } finally {
+            linkNoticeAfterGenerating = null
             // In a `finally` because the settings have to come back whichever way this ended, and
             // the way that matters is the throw a cancelled coroutine unwinds with. Writing a
             // snapshot value is not a suspending call, so it still works after the cancellation.

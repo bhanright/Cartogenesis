@@ -273,9 +273,9 @@ object RiverStage {
      * a lower basin's pour point it counts the rain of every basin above it. A basin the balance
      * closes never sends that rain on, so the moment one is closed its catchment is taken out of
      * every cell below its old spill, before any basin further down is solved. That needs the
-     * basins in drainage order, sources first, which is the order of their pour points in
+     * basins in drainage order, sources first, which is the order of their last exits in
      * [FlowRouting.drainageOrder]: a basin that spills into another passes its water through that
-     * one's pour point, so its own comes earlier. Solved in cell-index order with the field left
+     * one's exits, so its own come earlier. Solved in cell-index order with the field left
      * as it was, a playa upstream of a lake fed the lake rain it had already evaporated. The lakes
      * are still numbered in cell-index order, as they always were.
      *
@@ -369,22 +369,35 @@ object RiverStage {
             )
         }
 
-        // Each basin's pour point is the cell its whole catchment passes through, which is the one
-        // carrying the most rain; ties to the lower cell index.
-        val pourPoint = IntArray(basins.size) { basin ->
-            var best = basins[basin][0]
-            for (cell in basins[basin]) {
-                val here = catchmentRainMm.data[cell]
-                val bestSoFar = catchmentRainMm.data[best]
-                if (here > bestSoFar || (here == bestSoFar && cell < best)) best = cell
+        // Where each basin's water leaves it: every cell of the basin whose receiver lies outside
+        // it. Usually one, the pour point on the rim; where a rim is level for several cells the
+        // flat can drain across more than one, and the catchment is then the sum over all of them.
+        val inBasin = IntArray(cellCount) { -1 }
+        for (basin in basins.indices) for (cell in basins[basin]) inBasin[cell] = basin
+        // An exit whose water comes back into the basin further down is not where it leaves, and
+        // counting it would count its water twice.
+        fun leavesForGood(exit: Int, basin: Int): Boolean {
+            var cell = flowTarget[exit]
+            var steps = 0
+            while (cell >= 0 && sea.isLand[cell] && steps++ < cellCount) {
+                if (inBasin[cell] == basin) return false
+                cell = flowTarget[cell]
             }
-            best
+            return true
+        }
+        val exitsOf = Array(basins.size) { basin ->
+            basins[basin].filter { cell ->
+                val target = flowTarget[cell]
+                (target < 0 || inBasin[target] != basin) && leavesForGood(cell, basin)
+            }.toIntArray()
         }
         val drainageRank = IntArray(cellCount)
         FlowRouting.drainageOrder(cellsAcross, cellsDown, sea.isLand, flowTarget, sea.landCellCount)
             .forEachIndexed { rank, cell -> drainageRank[cell] = rank }
+        // A basin spilling into another passes its water through that one's exits, so its own
+        // last exit comes earlier in the drainage order.
         val upstreamFirst = basins.indices.sortedWith(
-            compareBy<Int> { drainageRank[pourPoint[it]] }.thenBy { it }
+            compareBy<Int> { basin -> exitsOf[basin].maxOfOrNull { drainageRank[it] } ?: 0 }.thenBy { it }
         )
 
         // What the balance made of each basin: its water cells, or null where it overflows, and
@@ -427,10 +440,11 @@ object RiverStage {
                     evaporationPrefixMm[rank] + evaporationMm[cell]
             }
 
-            // Every cell of the basin drains out through its pour point, so the accumulation there
-            // is the whole catchment — the basin plus every slope that feeds it, less every closed
+            // Every cell of the basin drains out through its exits, so the accumulation there is
+            // the whole catchment — the basin plus every slope that feeds it, less every closed
             // basin above it.
-            val catchmentMm = catchmentRainMm.data[pourPoint[basin]]
+            var catchmentMm = 0f
+            for (exit in exitsOf[basin]) catchmentMm += catchmentRainMm.data[exit]
             val balance = LakeWaterBalance.solve(
                 sortedGround, rainPrefixMm, evaporationPrefixMm,
                 catchmentMm, spillElevation[basin], minDepth, lakesConfig.runoffFraction
@@ -466,12 +480,15 @@ object RiverStage {
 
             // The catchment stops at this basin, so nothing below its old spill receives it —
             // taken out along the path the water used to leave by, before that path is re-pointed.
-            var below = flowTarget[pourPoint[basin]]
-            var steps = 0
-            while (below >= 0 && sea.isLand[below] && steps++ < cellCount) {
-                catchmentRainMm.data[below] =
-                    (catchmentRainMm.data[below] - catchmentMm).coerceAtLeast(0f)
-                below = flowTarget[below]
+            for (exit in exitsOf[basin]) {
+                val leaving = catchmentRainMm.data[exit]
+                var below = flowTarget[exit]
+                var steps = 0
+                while (below >= 0 && sea.isLand[below] && steps++ < cellCount) {
+                    catchmentRainMm.data[below] =
+                        (catchmentRainMm.data[below] - leaving).coerceAtLeast(0f)
+                    below = flowTarget[below]
+                }
             }
 
             for (cell in cells) pending[cell] = true

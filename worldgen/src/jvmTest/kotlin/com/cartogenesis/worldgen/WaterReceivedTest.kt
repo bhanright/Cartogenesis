@@ -44,7 +44,11 @@ class WaterReceivedTest {
             val (x0, h0) = profile.last { it.first <= x }
             val (x1, h1) = profile.firstOrNull { it.first > x } ?: (x0 to h0)
             val along = if (x1 == x0) 0f else (x - x0).toFloat() / (x1 - x0)
-            return h0 + (h1 - h0) * along + rim
+            // A slight fall toward the middle row, so each rim has one lowest notch and each basin
+            // spills through one cell, as a basin the fill raised does; a rim dead level along
+            // its whole length would spill through all of it at once.
+            val towardTheNotch = abs(y - 32) * 0.0005f
+            return h0 + (h1 - h0) * along + rim + towardTheNotch
         }
         val desert = { x: Int, _: Int -> x < 22 }
         val sea = HandMadeWorlds.sea(config, ::land, ::ground)
@@ -65,6 +69,8 @@ class WaterReceivedTest {
         // enters it, and the rain on each.
         val world = RiverStage.generate(config, sea, climate)
         val lowerCells = lower.cells.toHashSet()
+        val exits = lower.cells.count { val target = world.flowTarget[it]; target >= 0 && target !in lowerCells }
+        println("CLOSED BASIN the lower basin's water leaves it at $exits cells once routed")
         var reachingMm = 0.0
         for (start in sea.isLand.indices) {
             if (!sea.isLand[start]) continue

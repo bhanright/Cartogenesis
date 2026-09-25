@@ -46,6 +46,15 @@ kotlin {
     }
 }
 
+// Karma is started with an environment of the plugin's making rather than the build's, so the one
+// variable the browser tests read is handed on by name. See `RegenerateInteropFixtures` in
+// `:desktop`'s tests for what it does.
+tasks.withType<org.jetbrains.kotlin.gradle.targets.js.testing.KotlinJsTest>().configureEach {
+    providers.environmentVariable("REGENERATE_INTEROP_FIXTURES").orNull?.let {
+        environment("REGENERATE_INTEROP_FIXTURES", it)
+    }
+}
+
 // ---------------------------------------------------------------------------------------------
 // cartogenesis.com
 // ---------------------------------------------------------------------------------------------

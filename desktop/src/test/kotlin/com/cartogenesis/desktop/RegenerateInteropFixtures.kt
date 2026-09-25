@@ -21,9 +21,9 @@ import kotlinx.coroutines.runBlocking
  *
  * 1. `REGENERATE_INTEROP_FIXTURES=1 ./gradlew :desktop:test --tests '*RegenerateInteropFixtures*'`
  *    writes the desktop's save into `:web`'s test sources, as base64 in [DESKTOP_SAVE_SOURCE].
- * 2. `REGENERATE_INTEROP_FIXTURES=1 ./gradlew :web:wasmJsTest --tests '*FolderInteropTest*'` makes
- *    the browser's test print the save its folder library wrote, on a line of its own beginning
- *    [BROWSER_SAVE_MARKER], into the test results.
+ * 2. `REGENERATE_INTEROP_FIXTURES=1 ./gradlew :web:wasmJsBrowserTest --tests '*FolderInteropTest*'` makes
+ *    the browser's test print the save its folder library wrote into the test results, as base64
+ *    in numbered lines beginning [BROWSER_SAVE_MARKER].
  * 3. Step 1 again, which finds that line in `:web`'s results and writes the save it carries to
  *    [BROWSER_SAVE_RESOURCE].
  */
@@ -51,11 +51,11 @@ class RegenerateInteropFixtures {
                 """package com.cartogenesis.web
 
 /**
- * `$key`, a 32 world saved by the desktop's own store, `DesktopWorldStore`, into a folder, and
- * checked in as base64 for `FolderInteropTest` to put in a browser folder and open with the folder
- * library. Written by the desktop's `RegenerateInteropFixtures`; it goes stale with the save format,
- * as the gzip fixture does, and is regenerated the same way. Chunked because one string this long
- * is more than a class file's constant holds.
+ * `$key`, a 32 world saved into a folder by the desktop's own store, `DesktopWorldStore`, and
+ * checked in as base64 for `FolderInteropTest` to put in a browser folder and open with the
+ * folder library. Written by the desktop's `RegenerateInteropFixtures`; it goes stale with the
+ * save format, as the gzip fixture does, and is regenerated the same way. Chunked because one
+ * string this long is more than a class file's constant holds.
  */
 internal val DESKTOP_WRITTEN_SAVE_BASE64: String =
 $lines
@@ -66,14 +66,21 @@ $lines
             folder.deleteRecursively()
         }
 
+        // Numbered pieces, `<marker><index> <base64>`, joined in their order. Found by pattern and
+        // by length rather than by line, because the test reporter runs the printed lines together
+        // with nothing between them, and the next marker begins with letters base64 also uses.
         val results = File(BROWSER_RESULTS).walkTopDown().filter { it.isFile && it.extension == "xml" }
-        val line = results.flatMap { it.readLines().asSequence() }.map { it.trim() }
-            .firstOrNull { it.startsWith(BROWSER_SAVE_MARKER) }
-        if (line == null) {
+        val piece = Regex("${BROWSER_SAVE_MARKER}(\\d{4}) ([A-Za-z0-9+/=]{1,$BROWSER_SAVE_PIECE})")
+        val pieces = results.flatMap { piece.findAll(it.readText()) }
+            .map { it.groupValues[1].toInt() to it.groupValues[2] }
+            .sortedBy { it.first }
+            .toList()
+        if (pieces.isEmpty()) {
             println("INTEROP no browser save in $BROWSER_RESULTS; run step 2 of this class's procedure, then this again")
             return@runBlocking
         }
-        val browserBytes = Base64.decode(line.removePrefix(BROWSER_SAVE_MARKER).trim())
+        check(pieces.map { it.first } == pieces.indices.toList()) { "the browser's save is missing pieces" }
+        val browserBytes = Base64.decode(pieces.joinToString("") { it.second })
         File(BROWSER_SAVE_RESOURCE).apply { parentFile.mkdirs() }.writeBytes(browserBytes)
         println("INTEROP browser save rewritten: ${browserBytes.size} bytes")
     }
@@ -87,6 +94,9 @@ $lines
 
         /** The line the browser's test prints its save on, and the base64 after it. */
         const val BROWSER_SAVE_MARKER = "FOLDER-WRITTEN-SAVE "
+
+        /** How many base64 characters the browser's test prints a piece: its `PRINTED_LINE`. */
+        const val BROWSER_SAVE_PIECE = 1_000
 
         const val BROWSER_RESULTS = "../web/build/test-results"
         const val BROWSER_SAVE_RESOURCE = "src/test/resources/interop/folder-written.cgw"

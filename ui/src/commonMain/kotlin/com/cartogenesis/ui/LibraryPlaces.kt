@@ -214,7 +214,9 @@ class LibraryPlaces(private val platform: Platform) {
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (failure: Throwable) {
-            FolderPermission.DENIED
+            // The browser would not ask — most often because the click's moment had passed — which
+            // is not the reader refusing, so nothing moves and they can click again.
+            return "Could not ask for the folder \"${folder.name}\": ${failure.message ?: failure::class.simpleName}"
         }
         return when (answer) {
             FolderPermission.GRANTED -> {

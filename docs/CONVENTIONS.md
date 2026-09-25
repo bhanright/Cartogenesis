@@ -136,7 +136,9 @@ Nothing is distributed and there are no saves anyone needs to keep, so these nam
 any others rather than frozen behind `@SerialName`. The price is paid once, in the open: **when a
 serialised name moves, `WorldCodec.FORMAT_VERSION` is bumped in the same commit**, and the codec
 refuses every older file by name instead of misreading it. The checked-in gzip fixture is a whole
-save, so it goes stale with the format and is regenerated in the same commit too.
+save, so it goes stale with the format and is regenerated in the same commit too, and so are the two
+saves the folder interoperability tests read, one written by the desktop's store and one by the
+browser's folder library (`RegenerateInteropFixtures` in `:desktop`'s tests says how).
 
 Enforced by `WorldCodecTest`, whose cases *a save from an older format is refused rather than
 misread* and *every per-cell array and every list comes back identical* both bind here, and by

@@ -162,7 +162,7 @@ class FolderLibraryTest {
             FolderWorldLibrary(folder.handle, NoCompression, "a test").save(document(title = "Kept", world = world), world)
             val kept = folder.readRaw("w1.cgw")
 
-            val failing = FolderWorldLibrary(folder.handle, FailsAfterChunks(2), "a test")
+            val failing = FolderWorldLibrary(folder.handle, FailsAtChunk(1), "a test", SMALL_PARTS)
             assertFailsWith<IllegalStateException> { failing.save(document(title = "Lost", world = world), world, "w1.cgw") }
             assertContentEquals(kept, folder.readRaw("w1.cgw"))
             assertEquals(listOf("w1.cgw"), folder.entries(), "the failed save left its swap file behind")
@@ -176,11 +176,11 @@ class FolderLibraryTest {
         // listed as a world that will not open, for every save that failed.
         val world = TestWorlds.small()
         withTestFolder("fail-new") { folder ->
-            val failing = FolderWorldLibrary(folder.handle, FailsAfterChunks(2), "a test")
+            val failing = FolderWorldLibrary(folder.handle, FailsAtChunk(1), "a test", SMALL_PARTS)
             assertFailsWith<IllegalStateException> { failing.save(document(world = world), world) }
             assertEquals(emptyList(), folder.entries(), "a failed new save left a file behind")
             // A key given whose file is not there is a new file too.
-            val failingAgain = FolderWorldLibrary(folder.handle, FailsAfterChunks(2), "a test")
+            val failingAgain = FolderWorldLibrary(folder.handle, FailsAtChunk(1), "a test", SMALL_PARTS)
             assertFailsWith<IllegalStateException> { failingAgain.save(document(world = world), world, "w1.cgw") }
             assertEquals(emptyList(), folder.entries())
         }
@@ -190,8 +190,8 @@ class FolderLibraryTest {
     fun `a new save is never seen half made, and a cancelled one leaves nothing`() = runTest(timeout = 5.minutes) {
         val world = TestWorlds.small()
         withTestFolder("half-made") { folder ->
-            val paused = PausesAtChunk(3)
-            val library = FolderWorldLibrary(folder.handle, paused, "a test")
+            val paused = PausesAtChunk(1)
+            val library = FolderWorldLibrary(folder.handle, paused, "a test", SMALL_PARTS)
             val saving = launch { library.save(document(world = world), world) }
             paused.reached.await()
             // Partway through: whatever the folder holds, no listing takes any of it for a save.
@@ -213,7 +213,7 @@ class FolderLibraryTest {
         val world = TestWorlds.small()
         withTestFolder("taken") { folder ->
             val theirs = WorldCodec.encode(document(title = "Theirs", world = world), world, WebGzipCompressor)
-            val interloper = OnChunk(2) { folder.writeRaw("w1.cgw", theirs) }
+            val interloper = OnChunk(1) { folder.writeRaw("w1.cgw", theirs) }
             val library = FolderWorldLibrary(folder.handle, interloper, "a test")
 
             assertEquals("w1 (2).cgw", library.save(document(title = "Ours", world = world), world))
@@ -228,7 +228,7 @@ class FolderLibraryTest {
         val world = TestWorlds.small()
         withTestFolder("order") { folder ->
             val paused = PausesAtChunk(1)
-            val library = FolderWorldLibrary(folder.handle, paused, "a test")
+            val library = FolderWorldLibrary(folder.handle, paused, "a test", SMALL_PARTS)
             val older = launch { library.save(document(title = "Older", world = world), world, "w1.cgw") }
             paused.reached.await()
             val newer = launch { library.save(document(title = "Newer", world = world), world, "w1.cgw") }
@@ -260,7 +260,7 @@ class FolderLibraryTest {
 }
 
 /** Stores every chunk raw and throws on chunk [failingChunk], as a disk that fills up partway would. */
-private class FailsAfterChunks(private val failingChunk: Int) : Compressor {
+private class FailsAtChunk(private val failingChunk: Int) : Compressor {
     private var chunks = 0
     override val name: String get() = "none"
     override suspend fun compress(data: ByteArray): ByteArray? {
@@ -296,6 +296,13 @@ private class OnChunk(private val chunk: Int, private val action: suspend () -> 
     }
     override suspend fun decompress(data: ByteArray, limitBytes: Int): ByteArray? = null
 }
+
+/**
+ * Four kibibytes a part for the tests that stop a save partway: a 32 world's payload is a single
+ * codec chunk, so the stand-in compressors above act on the first one, and parts this small mean
+ * the header ahead of it has already gone into the stream when they do.
+ */
+private const val SMALL_PARTS = 1 shl 12
 
 private fun ByteArray.indexOfSequence(sequence: ByteArray): Int =
     (0..size - sequence.size).first { start -> sequence.indices.all { this[start + it] == sequence[it] } }

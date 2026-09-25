@@ -62,15 +62,30 @@ class FolderInteropTest {
             assertEquals(LibraryKeys.of(document), key, "not the name the desktop's store gives a new save")
             val written = folder.readRaw(key)
             assertContentEquals(WorldCodec.encode(document, world, WebGzipCompressor, "web"), written)
-            if (regeneratingInteropFixtures()) println("FOLDER-WRITTEN-SAVE " + Base64.encode(written))
+            // In numbered pieces of [PRINTED_LINE] characters, which `RegenerateInteropFixtures`
+            // reads back by number and length: the test reporter runs printed lines together.
+            if (regeneratingInteropFixtures()) {
+                Base64.encode(written).chunked(PRINTED_LINE).forEachIndexed { index, line ->
+                    println("FOLDER-WRITTEN-SAVE ${index.toString().padStart(4, '0')} $line")
+                }
+            }
         }
     }
 }
 
+/** Base64 characters a printed piece holds: `RegenerateInteropFixtures.BROWSER_SAVE_PIECE`. */
+private const val PRINTED_LINE = 1_000
+
+/**
+ * Whether Karma was started with `REGENERATE_INTEROP_FIXTURES` set; see `karma.config.d/`. Kotlin's
+ * test runner moves the client arguments from `args` to `originalArgs` before a test runs, so both
+ * are read.
+ */
 @JsFun(
     """() => {
         const karma = typeof window !== 'undefined' ? window.__karma__ : undefined;
-        const args = karma && karma.config && karma.config.args ? karma.config.args : [];
+        const config = karma && karma.config ? karma.config : {};
+        const args = (config.args || []).concat(config.originalArgs || []);
         return args.indexOf('regenerate-interop-fixtures') >= 0;
     }"""
 )

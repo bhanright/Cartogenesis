@@ -365,7 +365,8 @@ and checksummed on its own, so a save is written and read a chunk at a time: a 4
 of arrays, saves and opens without any array its size existing in between. The header is
 checksummed too, and each chunk's checksum is bound to the header and to the chunk's place, so an
 edited header, or a header put in front of another save's chunks, is found. The browser keeps its
-library in IndexedDB the same way, a mebibyte to a record. `WorldCodec` in
+library in IndexedDB the same way, a mebibyte to a record, or in a folder the reader chose, a
+mebibyte to a write. `WorldCodec` in
 `:cartography` is the whole format, shared by both front ends, with serializers generated from the
 config classes so a new setting cannot go missing from a save.
 
@@ -395,6 +396,21 @@ finished bringing down, or an online-only placeholder it cannot fetch, is refuse
 rather than opened as something else. And the copies a client makes when two machines edit one
 world (`world (1).cgw`, `world (conflicted copy).cgw` and the like) are listed as worlds of their
 own, each of which opens, and saves, without touching the other.
+
+In the browser the library starts in the browser's own storage, where clearing the site's data
+removes it. In Chrome and Edge, which offer web pages a folder picker, the Library pane's **Choose a
+folder…** moves it into a folder on your computer instead: the same `.cgw` files under the same
+names as the desktop's, so one folder, synced or not, serves both. Firefox and Safari offer no such
+picker; there the library stays in the browser's storage and moves in and out by Download and
+Upload. The browser remembers the folder between visits but asks again before a page may use it,
+so a new visit shows **Reconnect to <folder>** until you click it, and saves nowhere until then.
+**Use this browser's storage** goes back, remembered as a choice of its own, and worlds already in
+the browser's storage can be copied into the folder with one click. A new save is written under a
+temporary name and moved into place whole; a save over an existing file goes through the browser's
+own swap file, committed only when complete. Writes from one tab are made in order; another tab,
+the desktop app or a sync client writing the same folder at the same moment is not ordered against
+it, but a save never leaves half a file, and a new save that finds its name taken takes the next
+free one. Nothing is uploaded anywhere: the page reads and writes that folder and nothing else.
 
 ## Menus, settings and themes
 

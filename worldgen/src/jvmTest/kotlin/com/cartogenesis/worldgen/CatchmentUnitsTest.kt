@@ -125,6 +125,41 @@ class CatchmentUnitsTest : BorrowsSharedWorlds() {
     }
 
     /**
+     * A closed lake of two cells with nine cells of land draining into the one that is not its
+     * sink, under a limit of ten cells. The lake's water is never cut, and the land is cut at the
+     * limit like any other tributary, so no unit holds more than ten cells.
+     *
+     * Each water cell kept its own slopes up to the limit and the sink then kept every water cell
+     * with whatever it had kept, so the lake's unit came to eleven cells under a limit of ten.
+     * With [Double.MAX_VALUE] as the limit, as in the closed-basin case above, that could not show.
+     */
+    @Test
+    fun `a closed lake's unit is cut at the limit like any other`() {
+        val config = HandMadeWorlds.config()
+        fun land(x: Int, y: Int) = y == 20 && x in 20..30
+        val sea = HandMadeWorlds.sea(config, ::land) { x, y -> if (land(x, y)) 0.1f else -0.1f }
+        val cellCount = config.width * config.height
+        val sink = HandMadeWorlds.cellAt(config, 20, 20)
+        val other = HandMadeWorlds.cellAt(config, 21, 20)
+        val lakeId = IntArray(cellCount) { LakeResult.NO_LAKE }
+        lakeId[sink] = 0
+        lakeId[other] = 0
+        val lakes = LakeResult(
+            lakeId, listOf(Lake(0, 2, 0.1f, sink, endorheic = true, spillElevation = 0.12f)),
+            BooleanArray(cellCount), config.width
+        )
+        val rivers = HandMadeWorlds.rivers(config, sea, { x, y ->
+            if (x <= 21) -1 else HandMadeWorlds.cellAt(config, x - 1, y)
+        }, lakes)
+        val cellKm2 = config.squareKilometresPerCell
+        val limitKm2 = 10.0 * cellKm2
+        val units = BasinPartition.compute(config, sea, rivers, limitKm2)
+        println("CLOSED LAKE LIMIT units ${units.area.sorted()} under a limit of 10 cells")
+        assertEquals(units.unitOf[sink], units.unitOf[other], "the lake's water was cut in two")
+        assertTrue(units.area.all { it <= 10 }, "a unit of ${units.area.max()} cells under a limit of 10")
+    }
+
+    /**
      * An arid comb: four rows running east into a trunk down one column, the trunk into the sea,
      * three times `NationsConfig.maxBasinShare` of the land in all, on a hundred millimetres of
      * rain; every other row is its own small catchment. Cut by the realm stage's own partition,

@@ -251,6 +251,8 @@ object RiverStage {
      */
     internal class SolvedBasins {
         val basins = ArrayList<SolvedBasin>()
+        /** How many groups of basins feeding each other were solved together. */
+        var groupsSolvedTogether = 0
         var routingBeforeClosing = IntArray(0)
         var routingAfterClosing = IntArray(0)
     }
@@ -309,8 +311,9 @@ object RiverStage {
      * closes never sends that rain on, so the moment one is closed its catchment is taken out of
      * every cell below its old spill, before any basin further down is solved. That needs the
      * basins upstream first, which is a topological order of the graph whose edges run from each
-     * basin to the basin its exits' water reaches next on the routing the fill left; see
-     * [basinsUpstreamFirst]. Solved in cell-index order with the field left
+     * basin to the basin its exits' water reaches next on the routing the fill left; a group of
+     * basins that feed each other is solved together, to a fixed point. See
+     * [basinGroupsUpstreamFirst]. Solved in cell-index order with the field left
      * as it was, a playa upstream of a lake fed the lake rain it had already evaporated. The lakes
      * are still numbered in cell-index order, as they always were.
      *
@@ -431,8 +434,10 @@ object RiverStage {
         // topological order. Ordering by where a basin's exits fall in the drainage order is not
         // enough once a basin has two: its exit into a lower basin can come early and its other
         // exit late, and the lower basin would then be solved first on rain that is still stale.
+        // Two basins can also feed each other, each by a different exit, and such a group has no
+        // upstream member to solve first; it is solved together, below.
         val routingBeforeClosing = flowTarget.copyOf()
-        val upstreamFirst = basinsUpstreamFirst(
+        val groupsUpstreamFirst = basinGroupsUpstreamFirst(
             basins.size, exitsOf, inBasin, routingBeforeClosing, sea.isLand
         )
         solved?.routingBeforeClosing = routingBeforeClosing
@@ -453,90 +458,150 @@ object RiverStage {
         val pathKey = FloatArray(cellCount)
         var basinMark = 0
 
-        for (basin in upstreamFirst) {
+        // A basin's hypsometry: its cells sorted by the ground beneath them, lowest first, which is
+        // the order the water covers them in, with running sums of rain and evaporation over them.
+        // Sorted through the elevation-keyed packing every other ordering in this pipeline uses, so
+        // equal heights fall to the lower cell index on every platform.
+        class Hypsometry(val byGround: LongArray, val sortedGround: FloatArray, val rainPrefixMm: FloatArray, val evaporationPrefixMm: FloatArray)
+        fun hypsometryOf(basin: Int): Hypsometry {
             val cells = basins[basin]
-            // The basin's own cells, lowest ground first: its hypsometry, and the order the water
-            // covers them in. Sorted through the elevation-keyed packing every other ordering in
-            // this pipeline uses, so equal heights fall to the lower cell index on every platform.
-            val byGround = LongArray(cells.size)
-            for (rank in cells.indices) {
-                byGround[rank] = FlowRouting.encode(ground.data[cells[rank]], cells[rank])
-            }
+            val byGround = LongArray(cells.size) { FlowRouting.encode(ground.data[cells[it]], cells[it]) }
             byGround.sort()
-
-            val basinCellCount = cells.size
-            val sortedGround = FloatArray(basinCellCount)
-            val rainPrefixMm = FloatArray(basinCellCount + 1)
-            val evaporationPrefixMm = FloatArray(basinCellCount + 1)
-            for (rank in 0 until basinCellCount) {
+            val sortedGround = FloatArray(cells.size)
+            val rainPrefixMm = FloatArray(cells.size + 1)
+            val evaporationPrefixMm = FloatArray(cells.size + 1)
+            for (rank in cells.indices) {
                 val cell = FlowRouting.decodeIndex(byGround[rank])
                 sortedGround[rank] = ground.data[cell]
-                rainPrefixMm[rank + 1] =
-                    rainPrefixMm[rank] + climate.precipitationMm.data[cell]
-                evaporationPrefixMm[rank + 1] =
-                    evaporationPrefixMm[rank] + evaporationMm[cell]
+                rainPrefixMm[rank + 1] = rainPrefixMm[rank] + climate.precipitationMm.data[cell]
+                evaporationPrefixMm[rank + 1] = evaporationPrefixMm[rank] + evaporationMm[cell]
             }
-
-            // Every cell of the basin drains out through its exits, so the accumulation there is
-            // the whole catchment — the basin plus every slope that feeds it, less every closed
-            // basin above it.
+            return Hypsometry(byGround, sortedGround, rainPrefixMm, evaporationPrefixMm)
+        }
+        fun balanceOf(basin: Int, shape: Hypsometry, catchmentMm: Float) = LakeWaterBalance.solve(
+            shape.sortedGround, shape.rainPrefixMm, shape.evaporationPrefixMm,
+            catchmentMm, spillElevation[basin], minDepth, lakesConfig.runoffFraction
+        )
+        fun inflowOf(basin: Int, field: FloatArray): Float {
             var catchmentMm = 0f
-            for (exit in exitsOf[basin]) catchmentMm += catchmentRainMm.data[exit]
-            val balance = LakeWaterBalance.solve(
-                sortedGround, rainPrefixMm, evaporationPrefixMm,
-                catchmentMm, spillElevation[basin], minDepth, lakesConfig.runoffFraction
-            )
-            solved?.basins?.add(
-                SolvedBasin(cells.copyOf(), exitsOf[basin].copyOf(), catchmentMm, endorheic = !balance.atSpill)
-            )
-            if (balance.atSpill) continue
+            for (exit in exitsOf[basin]) catchmentMm += field[exit]
+            return catchmentMm
+        }
 
-            // Endorheic. Take the water back to the balance level, hand the rest of the basin
-            // floor back to the land, and make the basin a sink: no outlet river, and the rivers
-            // that used to run below it were carrying water that never leaves.
+        // Endorheic. Take the water back to the balance level, hand the rest of the basin floor back
+        // to the land, and make the basin a sink: no outlet river, and the rivers that used to run
+        // below it were carrying water that never leaves.
+        val closed = BooleanArray(basins.size)
+        fun close(basin: Int, shape: Hypsometry, balance: LakeWaterBalance.Balance) {
+            val cells = basins[basin]
             val waterCells: IntArray
             if (balance.submergedCells >= minLakeCells) {
-                waterCells = IntArray(balance.submergedCells) { FlowRouting.decodeIndex(byGround[it]) }
+                waterCells = IntArray(balance.submergedCells) { FlowRouting.decodeIndex(shape.byGround[it]) }
                 surfaceOf[basin] = balance.surface
             } else {
                 // Not enough water to read as a lake. What is left is a playa: the flat floor of
                 // the basin, dry most of the year and briefly a sheet of water after rain. At
                 // least the ground within one minimum depth of the lowest cell, so a basin whose
                 // balance is zero still gets the flat it plainly has.
-                val floor = sortedGround[0]
+                val floor = shape.sortedGround[0]
                 var flatCells = balance.submergedCells
-                while (flatCells < basinCellCount &&
-                    sortedGround[flatCells] <= floor + minDepth
-                ) {
+                while (flatCells < cells.size && shape.sortedGround[flatCells] <= floor + minDepth) {
                     flatCells++
                 }
                 waterCells = IntArray(flatCells.coerceAtLeast(1)) {
-                    FlowRouting.decodeIndex(byGround[it])
+                    FlowRouting.decodeIndex(shape.byGround[it])
                 }
                 waterIsPlaya[basin] = true
             }
             waterOf[basin] = waterCells
-
-            // The catchment stops at this basin, so nothing below its old spill receives it —
-            // taken out along the path the water used to leave by, which is the routing before any
-            // basin was closed: a closed basin below has re-pointed its own cells at its water, and
-            // the rain being taken out was counted along the way the fill sent it.
-            for (exit in exitsOf[basin]) {
-                val leaving = catchmentRainMm.data[exit]
-                var below = routingBeforeClosing[exit]
-                var steps = 0
-                while (below >= 0 && sea.isLand[below] && steps++ < cellCount) {
-                    catchmentRainMm.data[below] =
-                        (catchmentRainMm.data[below] - leaving).coerceAtLeast(0f)
-                    below = routingBeforeClosing[below]
-                }
-            }
-
+            closed[basin] = true
             for (cell in cells) pending[cell] = true
             LakeWaterBalance.routeIntoWater(
                 cellsAcross, cellsDown, ground, pending, waterCells, cells.size, flowTarget,
                 settled, basinMark++, pathKey, config.seed, config.cellHeightInCellWidths
             )
+        }
+
+        // The rain reaching every cell on the routing the fill left, with every basin in
+        // [absorbing] keeping what reaches it: the exact field a sequence of single closures
+        // arrives at, and what a group of basins feeding each other is measured with.
+        fun rainWithSinks(absorbing: (Int) -> Boolean): FloatArray {
+            val routing = routingBeforeClosing.copyOf()
+            for (cell in 0 until cellCount) {
+                val basin = inBasin[cell]
+                if (basin >= 0 && absorbing(basin)) routing[cell] = -1
+            }
+            return FlowRouting.accumulate(
+                cellsAcross, cellsDown, sea.isLand, filled, routing, sea.landCellCount
+            ) { cell -> climate.precipitationMm.data[cell] }.data
+        }
+
+        for (group in groupsUpstreamFirst) {
+            if (group.size == 1) {
+                val basin = group[0]
+                val shape = hypsometryOf(basin)
+                // Every cell of the basin drains out through its exits, so the accumulation there
+                // is the whole catchment — the basin plus every slope that feeds it, less every
+                // closed basin above it.
+                val catchmentMm = inflowOf(basin, catchmentRainMm.data)
+                val balance = balanceOf(basin, shape, catchmentMm)
+                solved?.basins?.add(
+                    SolvedBasin(basins[basin].copyOf(), exitsOf[basin].copyOf(), catchmentMm, endorheic = !balance.atSpill)
+                )
+                if (balance.atSpill) continue
+                // The catchment stops at this basin, so nothing below its old spill receives it —
+                // taken out along the path the water used to leave by, which is the routing before
+                // any basin was closed: a closed basin below has re-pointed its own cells at its
+                // water, and the rain being taken out was counted along the way the fill sent it.
+                for (exit in exitsOf[basin]) {
+                    val leaving = catchmentRainMm.data[exit]
+                    var below = routingBeforeClosing[exit]
+                    var steps = 0
+                    while (below >= 0 && sea.isLand[below] && steps++ < cellCount) {
+                        catchmentRainMm.data[below] =
+                            (catchmentRainMm.data[below] - leaving).coerceAtLeast(0f)
+                        below = routingBeforeClosing[below]
+                    }
+                }
+                close(basin, shape, balance)
+                continue
+            }
+
+            // Basins feeding each other, each by its own exit: none is upstream of the rest, and
+            // whichever were solved first would be given the others' rain whether or not they keep
+            // it. So the group is iterated to a fixed point. Each member's inflow is measured with
+            // every closed basin keeping its water — those above the group, and the members closed
+            // so far other than itself — and the members the balance then closes are the next
+            // closed set. A closure only takes water away, so every inflow falls as the closed set
+            // grows, and a basin the balance closes at one inflow it closes at any smaller one; so
+            // the closed set only grows, and settles within as many passes as the group has
+            // members. Each member is then solved on its inflow at the settled set.
+            solved?.let { it.groupsSolvedTogether++ }
+            val shapes = group.map { hypsometryOf(it) }
+            var closedInGroup = BooleanArray(group.size)
+            var inflows = FloatArray(group.size)
+            for (pass in 0..group.size) {
+                inflows = FloatArray(group.size) { member ->
+                    val field = rainWithSinks { basin ->
+                        closed[basin] || (basin != group[member] && group.indexOf(basin).let { it >= 0 && closedInGroup[it] })
+                    }
+                    inflowOf(group[member], field)
+                }
+                val next = BooleanArray(group.size) { !balanceOf(group[it], shapes[it], inflows[it]).atSpill }
+                if (next.contentEquals(closedInGroup)) break
+                closedInGroup = next
+            }
+            for (member in group.indices) {
+                val basin = group[member]
+                val balance = balanceOf(basin, shapes[member], inflows[member])
+                solved?.basins?.add(
+                    SolvedBasin(basins[basin].copyOf(), exitsOf[basin].copyOf(), inflows[member], endorheic = !balance.atSpill)
+                )
+                if (!balance.atSpill) close(basin, shapes[member], balance)
+            }
+            // Everything below the group sees its closures: the field re-taken whole, which the
+            // single closures' subtractions would have arrived at one by one.
+            rainWithSinks { closed[it] }.copyInto(catchmentRainMm.data)
         }
 
         val lakes = ArrayList<Lake>()
@@ -562,21 +627,22 @@ object RiverStage {
     }
 
     /**
-     * The basins in an order where every basin comes before any basin its water reaches: each
-     * exit's path is followed down [routing] to the first cell of another basin, which is an edge
-     * of the graph, or to the sea, which is none; the graph is then walked by Kahn's algorithm,
-     * basins with nothing above them first and in index order. [routing] is a forest, so the graph
-     * has no cycle; anything a cycle left over would still be solved, last.
+     * The basins in groups, each group before any group its water reaches: each exit's path is
+     * followed down [routing] to the first cell of another basin, which is an edge of the graph, or
+     * to the sea, which is none. A group is a strongly connected set — basins whose water reaches
+     * each other, which a forest of cells allows when each feeds the other by a different exit — and
+     * is almost always one basin. Found by Tarjan's algorithm, which hands the groups out downstream
+     * first, so the list is reversed; basins are taken in index order and edges in exit order, and
+     * each group is sorted, so the answer is one specific order on every platform.
      */
-    private fun basinsUpstreamFirst(
+    private fun basinGroupsUpstreamFirst(
         basinCount: Int,
         exitsOf: Array<IntArray>,
         inBasin: IntArray,
         routing: IntArray,
         isLand: BooleanArray
-    ): IntArray {
+    ): List<IntArray> {
         val below = Array(basinCount) { ArrayList<Int>() }
-        val feeding = IntArray(basinCount)
         for (basin in 0 until basinCount) {
             for (exit in exitsOf[basin]) {
                 var cell = routing[exit]
@@ -584,27 +650,64 @@ object RiverStage {
                 while (cell >= 0 && isLand[cell] && steps++ < routing.size) {
                     val reached = inBasin[cell]
                     if (reached >= 0 && reached != basin) {
-                        if (reached !in below[basin]) {
-                            below[basin].add(reached)
-                            feeding[reached]++
-                        }
+                        if (reached !in below[basin]) below[basin].add(reached)
                         break
                     }
                     cell = routing[cell]
                 }
             }
         }
-        val order = IntArray(basinCount)
-        var tail = 0
-        for (basin in 0 until basinCount) if (feeding[basin] == 0) order[tail++] = basin
-        var head = 0
-        while (head < tail) {
-            for (next in below[order[head++]]) if (--feeding[next] == 0) order[tail++] = next
+
+        // Tarjan, with an explicit stack of (basin, next edge) so a long chain of basins cannot
+        // overflow the call stack.
+        val index = IntArray(basinCount) { -1 }
+        val lowLink = IntArray(basinCount)
+        val onStack = BooleanArray(basinCount)
+        val stack = ArrayList<Int>()
+        val groups = ArrayList<IntArray>()
+        var nextIndex = 0
+        val walkBasin = IntArray(basinCount)
+        val walkEdge = IntArray(basinCount)
+        for (root in 0 until basinCount) {
+            if (index[root] >= 0) continue
+            var depth = 0
+            walkBasin[0] = root
+            walkEdge[0] = 0
+            index[root] = nextIndex; lowLink[root] = nextIndex; nextIndex++
+            stack.add(root); onStack[root] = true
+            while (depth >= 0) {
+                val basin = walkBasin[depth]
+                if (walkEdge[depth] < below[basin].size) {
+                    val next = below[basin][walkEdge[depth]++]
+                    if (index[next] < 0) {
+                        index[next] = nextIndex; lowLink[next] = nextIndex; nextIndex++
+                        stack.add(next); onStack[next] = true
+                        depth++
+                        walkBasin[depth] = next
+                        walkEdge[depth] = 0
+                    } else if (onStack[next] && index[next] < lowLink[basin]) {
+                        lowLink[basin] = index[next]
+                    }
+                    continue
+                }
+                if (lowLink[basin] == index[basin]) {
+                    val group = ArrayList<Int>()
+                    do {
+                        val member = stack.removeAt(stack.size - 1)
+                        onStack[member] = false
+                        group.add(member)
+                    } while (member != basin)
+                    groups.add(group.sorted().toIntArray())
+                }
+                depth--
+                if (depth >= 0) {
+                    val parent = walkBasin[depth]
+                    if (lowLink[basin] < lowLink[parent]) lowLink[parent] = lowLink[basin]
+                }
+            }
         }
-        if (tail < basinCount) {
-            for (basin in 0 until basinCount) if (feeding[basin] > 0) order[tail++] = basin
-        }
-        return order
+        groups.reverse()
+        return groups
     }
 
     /** The right answer wherever the basin overflows: water to the brim over every basin cell. */

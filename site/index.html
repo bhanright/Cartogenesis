@@ -24,11 +24,14 @@
 <link rel="preload" as="font" type="font/ttf" href="fonts/spectral_regular.ttf" crossorigin>
 <link rel="preload" as="font" type="font/ttf" href="fonts/plex_sans_regular.ttf" crossorigin>
 
-<!-- Arms the cards' reveal before anything is painted, so a card that is going to rise into place
-     is never drawn once in place first and then snatched away. Only here, and only when the
-     browser can say when a card comes into view and the reader has not asked for less motion:
-     with scripts off, or motion reduced, the class is never set and every card is simply there. -->
+<!-- Two classes, set before anything is painted. `live` says scripts run, so the figures that need
+     one (the frame that plays the steps, the style slider, the pins' notes) take their space from
+     the first paint rather than arriving under the reader. `reveal` arms the cards' reveal, so a
+     card that is going to rise into place is never drawn once in place first and then snatched
+     away: only when the browser can say when a card comes into view and the reader has not asked
+     for less motion. With scripts off neither is set and every card and picture is simply there. -->
 <script>
+document.documentElement.className += ' live';
 if ('IntersectionObserver' in window &&
     !(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches)) {
   document.documentElement.className += ' reveal';
@@ -288,6 +291,155 @@ if ('IntersectionObserver' in window &&
     .reveal .card > :not(.card-mark){opacity:1;transform:none;transition:none}
   }
 
+  /* ---------- living figures ---------------------------------------------- */
+  /* Figures that move or answer the reader. Each is our own few lines here and in
+     the script at the foot, and each keeps to the reveal's rules: opacity and
+     transform only, so nothing moves the layout; started and stopped by what is
+     in view, never by the scroll position; stilled for a reader who asks for
+     less motion; and every rule that keeps something out of sight is scoped to
+     `live` or `reveal`, the classes only the head's script sets. The parts that
+     need a script at all carry `hidden` in the markup, so a reader without
+     scripts never meets a control that does nothing. */
+  .control{
+    font-family:var(--mono);font-size:12.5px;line-height:1.2;letter-spacing:.04em;
+    color:var(--brass);background:transparent;border:1px solid var(--brass);border-radius:2px;
+    padding:9px 14px;min-height:36px;cursor:pointer;
+  }
+  .control:hover,.control:focus-visible{background:var(--ink-sunk)}
+  input[type=range]{accent-color:var(--brass)}
+  select{
+    font-family:var(--mono);font-size:13px;color:var(--bone);background:var(--ink-raised);
+    border:1px solid var(--hairline);border-radius:2px;padding:7px 8px;min-height:36px;
+  }
+  .control-label{font-family:var(--mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--bone-dim)}
+
+  /* The hero drifts: a strip of the band all the way round the world, laid
+     twice end to end on one track and moved half its length, so the world turns
+     without a seam. The strip's first stretch is the hero's own picture, so the
+     strip fades in over it where it stands and nothing jumps. */
+  .hero-plate{position:relative;overflow:hidden}
+  .drift{position:absolute;inset:0;overflow:hidden}
+  .drift-track{
+    position:absolute;top:0;left:0;height:100%;aspect-ratio:4096/400;
+    background-repeat:repeat-x;background-size:50% 100%;
+  }
+  .live .drift{opacity:0;transition:opacity .6s ease-out}
+  .live .drift.ready{opacity:1}
+  .drift.ready .drift-track{animation:drift 240s linear infinite}
+  .hero-plate:hover .drift-track,.drift.paused .drift-track{animation-play-state:paused}
+  @keyframes drift{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+
+  /* How a world is made, played: the six steps' own pictures stacked in one
+     frame, one window of one world at one scale, crossfading in turn. */
+  /* No display of its own outside `live`: an author's display beats the
+     `hidden` attribute, and without a script the frame has to stay hidden. */
+  .forming{gap:18px 36px;align-items:center;margin:0 0 40px}
+  .live .forming,.live .forming[hidden]{display:grid}
+  @media (min-width:900px){.forming{grid-template-columns:minmax(0,520px) minmax(0,1fr)}}
+  .forming-frame{position:relative;aspect-ratio:520/280}
+  .forming-frame img{position:absolute;inset:0;width:100%;height:100%}
+  .live .forming-frame img{opacity:0;transition:opacity .7s ease-in-out}
+  .live .forming-frame img.current{opacity:1}
+  .forming-stage{display:flex;align-items:center;gap:14px;margin:0 0 8px}
+  /* The step on show, numbered as its card is, in a square of its own: the
+     cards' squares are the reveal's to hide until their row comes into view. */
+  .forming-number{
+    flex:none;display:flex;align-items:center;justify-content:center;width:28px;height:28px;
+    background:var(--brass);color:var(--ink);font-family:var(--mono);font-size:12px;line-height:1;
+    letter-spacing:.04em;
+  }
+  .forming-name{font-family:var(--serif);font-size:19px;font-weight:600;line-height:1.3;color:var(--parchment)}
+  .forming-line{margin:0 0 18px;color:var(--bone-dim);font-size:14.5px;line-height:1.6;min-height:4.8em}
+  .forming-controls{display:flex;flex-wrap:wrap;align-items:center;gap:12px 16px}
+  .forming-controls input{flex:1;min-width:160px}
+  /* The step on show, lit on the cards' line while the frame is in view: a
+     ring round its square in parchment. */
+  .live .card-number::after{
+    content:"";position:absolute;inset:-5px;border:2px solid var(--parchment);
+    opacity:0;transition:opacity .3s ease-out;
+  }
+  .live .card.lit .card-number::after{opacity:1}
+
+  /* Read the land: pins the engine placed, each a button over the map, and the
+     same notes as a list under it for a reader without scripts or sight. */
+  .landmap,.landmap-plate{position:relative}
+  .pin{
+    position:absolute;width:28px;height:28px;margin:-14px 0 0 -14px;padding:0;
+    display:flex;align-items:center;justify-content:center;
+    font-family:var(--mono);font-size:12px;line-height:1;color:var(--ink);
+    background:var(--brass);border:1px solid var(--ink);border-radius:0;cursor:pointer;
+  }
+  .pin[aria-expanded="true"]{background:var(--parchment)}
+  @media (max-width:599px){.pin{width:24px;height:24px;margin:-12px 0 0 -12px;font-size:11px}}
+  .pin-note{
+    position:absolute;z-index:1;width:min(320px,calc(100% - 16px));
+    background:var(--ink-raised);border:1px solid var(--brass-dim);padding:12px 14px;
+    font-family:var(--sans);font-size:14px;line-height:1.55;color:var(--bone-dim);
+  }
+  .pin-note b{display:block;color:var(--parchment);font-family:var(--serif);font-weight:600;font-size:16px}
+  /* On a phone the map is too small to hold a note without covering the other
+     pins, so the note opens under the map instead, where a finger can reach
+     every pin past it. */
+  @media (max-width:599px){.pin-note{position:static;width:auto;margin:10px 0 0}}
+  .land-notes{list-style:none;margin:22px 0 0;padding:0;display:grid;gap:14px 32px;counter-reset:land}
+  @media (min-width:820px){.land-notes{grid-template-columns:1fr 1fr}}
+  .land-notes li{
+    counter-increment:land;position:relative;padding:0 0 0 42px;
+    color:var(--bone-dim);font-size:14.5px;line-height:1.6;
+  }
+  .land-notes li::before{
+    content:counter(land);position:absolute;left:0;top:1px;width:28px;height:28px;
+    display:flex;align-items:center;justify-content:center;
+    background:var(--brass);color:var(--ink);font-family:var(--mono);font-size:12px;line-height:1;
+  }
+  .land-notes b{display:block;color:var(--parchment);font-family:var(--serif);font-weight:600;font-size:16px}
+  .land-notes li.active::before{background:var(--parchment)}
+
+  /* Any two styles over one ground, split by a handle the reader drags. The
+     wipe is two transforms: the top picture's box slides left by what is cut
+     and the picture inside it slides right by the same, so it stays put while
+     its edge moves. The range input over the whole frame is the handle itself,
+     so a pointer, a finger and the arrow keys all move it. */
+  .compare{margin:36px 0 0;max-width:600px}
+  .live .compare[hidden]{display:block}
+  .compare-frame{position:relative;aspect-ratio:600/400;overflow:hidden;--split:50%}
+  .compare-frame img{position:absolute;inset:0;width:100%;height:100%}
+  .compare-over{position:absolute;inset:0;overflow:hidden;transform:translateX(calc(var(--split) - 100%))}
+  .compare-over img{transform:translateX(calc(100% - var(--split)))}
+  .compare-range{position:absolute;inset:0;width:100%;height:100%;margin:0;cursor:ew-resize;touch-action:pan-y}
+  .live .compare-range{opacity:0}
+  .compare-handle{
+    position:absolute;inset:0;pointer-events:none;
+    transform:translateX(calc(var(--split) - 100%));
+  }
+  .compare-handle::after{
+    content:"";position:absolute;top:0;bottom:0;right:-1px;width:2px;background:var(--brass);
+  }
+  .compare-handle::before{
+    content:"";position:absolute;top:50%;right:-10px;width:20px;height:20px;margin-top:-10px;
+    background:var(--brass);border:1px solid var(--ink);
+  }
+  .compare-range:focus-visible ~ .compare-handle::before{outline:2px solid var(--brass);outline-offset:3px}
+  .compare-pickers{display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px 20px;margin:14px 0 0}
+  .compare-pickers label{display:flex;align-items:center;gap:10px}
+
+  /* The download that fits the reader's system, marked where it stands: a
+     brass rule in the gutter beside its row and a tag in its heading. */
+  .ledger .row.suggested{position:relative}
+  .ledger .row.suggested::before{
+    content:"";position:absolute;left:-14px;top:20px;bottom:20px;width:2px;background:var(--brass);
+  }
+  .tag.suggest{color:var(--brass);border-color:var(--brass-dim)}
+
+  /* A reader who asks for less motion, after the page has loaded, gets every
+     living figure still: no drift, no crossfade, no fade on the lit ring. */
+  @media (prefers-reduced-motion: reduce){
+    .drift.ready .drift-track{animation:none}
+    .live .drift,
+    .live .forming-frame img,
+    .live .card-number::after{transition:none}
+  }
+
   /* ---------- notices ------------------------------------------------------- */
   .notice{
     margin:22px 0 0;padding:14px 16px;
@@ -441,7 +593,8 @@ if ('IntersectionObserver' in window &&
     </div>
 
     <figure>
-      <div class="plate">
+      <!-- The strip the hero drifts along once the page has loaded: see the script at the foot. -->
+      <div class="plate hero-plate" id="hero-plate" data-strip="img/hero-strip.webp">
         <img src="img/natural.webp" width="1600" height="800" fetchpriority="high"
              alt="A generated world map in the Natural style: a northern continent with a mountain range along its spine, a river system draining to a ragged southern coast, lakes, offshore islands, and the coast of a second continent at the right.">
       </div>
@@ -458,11 +611,26 @@ if ('IntersectionObserver' in window &&
       <span class="fill"></span>
     </div>
 
+    <!-- The six steps played in one frame: the cards' own pictures, which share one window and
+         one scale, so the land stays put and only each step's work changes. -->
+    <div class="forming" id="forming" hidden>
+      <div class="plate forming-frame" aria-hidden="true"></div>
+      <div class="forming-side">
+        <p class="forming-stage"><span class="forming-number" id="forming-number">01</span><span class="forming-name" id="forming-name">Plates and mountains</span></p>
+        <p class="forming-line" id="forming-line"></p>
+        <div class="forming-controls">
+          <button type="button" class="control" id="forming-play" aria-pressed="false">Play</button>
+          <label class="control-label" for="forming-stage">Step</label>
+          <input type="range" id="forming-stage" min="1" max="6" step="1" value="1">
+        </div>
+      </div>
+    </div>
+
     <ol class="cards steps">
       <li class="card">
         <div class="plate">
-          <img src="img/step-plates.webp" width="480" height="320" loading="lazy" decoding="async"
-               alt="The tectonic plates view of a continent's east coast and the island beyond it: each plate a flat tint over the shaded relief, rose, yellow, pink, green, violet and red, with a bright seam where two plates meet and ridges raised along the seams on land.">
+          <img src="img/step-plates.webp" width="520" height="280" loading="lazy" decoding="async"
+               alt="The tectonic plates view of a peninsula: the continent's plate in pale blue over the shaded relief, an ocean plate in pink to the west and another in yellow to the south-east, with a glowing seam where each meets the continent.">
         </div>
         <div class="card-mark"><span class="card-number">01</span></div>
         <h3>Plates and mountains</h3>
@@ -470,8 +638,8 @@ if ('IntersectionObserver' in window &&
       </li>
       <li class="card">
         <div class="plate">
-          <img src="img/step-erosion.webp" width="480" height="320" loading="lazy" decoding="async"
-               alt="The elevation view of a hilly coast: tan uplands cut by close-set valleys, rivers winding down between them to the sea on the right, and a small delta at one river's mouth.">
+          <img src="img/step-erosion.webp" width="520" height="280" loading="lazy" decoding="async"
+               alt="The same peninsula in the elevation view: green lowlands and hills cut by valleys, darker ground along its steep south-east coast, and the sea floor in blues.">
         </div>
         <div class="card-mark"><span class="card-number">02</span></div>
         <h3>Erosion</h3>
@@ -479,8 +647,8 @@ if ('IntersectionObserver' in window &&
       </li>
       <li class="card">
         <div class="plate">
-          <img src="img/step-seas.webp" width="480" height="320" loading="lazy" decoding="async"
-               alt="A long mountainous island in the Natural style: a ridge along its north coast with a lake in it, green lowlands to the south, and a pale band of shallow shelf water following every coast before the deep blue sea.">
+          <img src="img/step-seas.webp" width="520" height="280" loading="lazy" decoding="async"
+               alt="The same peninsula in the Natural style before its rivers: a pale band of shallow shelf water along every coast, and the deep blue sea beyond it.">
         </div>
         <div class="card-mark"><span class="card-number">03</span></div>
         <h3>Seas and ice</h3>
@@ -488,8 +656,8 @@ if ('IntersectionObserver' in window &&
       </li>
       <li class="card">
         <div class="plate">
-          <img src="img/step-climate.webp" width="480" height="320" loading="lazy" decoding="async"
-               alt="The same island in the biomes view: grey rock and snow along the ridge, dark forest and pale green grassland below it, a strip of dry tan ground, and the sea in flat dark blue.">
+          <img src="img/step-climate.webp" width="520" height="280" loading="lazy" decoding="async"
+               alt="The same peninsula in the biomes view: green forest along the coasts, yellow grassland across its dry middle, and paler country to the north.">
         </div>
         <div class="card-mark"><span class="card-number">04</span></div>
         <h3>Climate</h3>
@@ -497,8 +665,8 @@ if ('IntersectionObserver' in window &&
       </li>
       <li class="card">
         <div class="plate">
-          <img src="img/step-rivers.webp" width="480" height="320" loading="lazy" decoding="async"
-               alt="A coast of green hills in the Natural style: rivers gathering off the hills and winding east to the sea, two lakes in the lowland to the west, and a volcanic peak at the top of the frame.">
+          <img src="img/step-rivers.webp" width="520" height="280" loading="lazy" decoding="async"
+               alt="The same peninsula in the Natural style with its water: rivers running from the hills to both coasts, and a lake at the head of an inlet in the east.">
         </div>
         <div class="card-mark"><span class="card-number">05</span></div>
         <h3>Rivers and lakes</h3>
@@ -506,14 +674,50 @@ if ('IntersectionObserver' in window &&
       </li>
       <li class="card">
         <div class="plate">
-          <img src="img/step-realms.webp" width="480" height="320" loading="lazy" decoding="async"
-               alt="The political view of a western coast: realms in flat tints of green, yellow, purple, lavender and bright green over the shaded relief, their borders following rivers and ridges, and the sea in muted blue.">
+          <img src="img/step-realms.webp" width="520" height="280" loading="lazy" decoding="async"
+               alt="The same peninsula in the political view: realms in flat tints of yellow, violet, blue and green over the relief, their borders following rivers and ridges.">
         </div>
         <div class="card-mark"><span class="card-number">06</span></div>
         <h3>Realms and peoples</h3>
         <p>Geography shapes borders and settlement. Realms follow rivers, coasts and watersheds, while peoples spread into familiar terrain and across political borders.</p>
       </li>
     </ol>
+  </section>
+
+  <!-- Read the land: one map with the engine's pins on it. The pins are not written here: the
+       assembly puts them in place of the marker below, from where SiteLandmarks found each place in
+       the world's own fields, so they stay on their ground when the pictures are made again. The
+       notes are written here, one per kind in the finder's order, and are the list under the map;
+       a pin opens its own as a note on the map. -->
+  <section id="land">
+    <div class="section-head">
+      <h2>Read the land</h2>
+      <span class="fill"></span>
+    </div>
+
+    <p class="section-lede">
+      Five things the generator made on one stretch of coast. Each pin was placed by the generator itself, which found the place in the world's own data: where the plates meet, where the rain falls and where the rivers run.
+    </p>
+
+    <figure class="landmap">
+      <div class="plate landmap-plate">
+        <img src="img/land.webp" width="1120" height="560" loading="lazy" decoding="async"
+             alt="The north coast of an island in the Natural style: a range of bare brown mountains along the shore with a lake among its peaks, green and olive country behind it with a wide river running north to a narrow arm of the sea, the coast of another land across that arm at the top right, and deep sea across the top.">
+        <!-- pins -->
+      </div>
+      <div class="pin-note" id="land-note" hidden></div>
+      <ol class="land-notes">
+        <li id="land-coastal-range"><b id="land-coastal-range-name">A coastal range</b> An ocean plate sinks beneath the continent along this coast. Compression thickens and lifts the crust above it into a mountain range. On Earth: the Andes, above the Nazca plate.</li>
+        <li id="land-rain-shadow"><b id="land-rain-shadow-name">A rain shadow</b> Moist sea air cools and drops its rain as it climbs the range. Beyond the crest, far less rain falls. On Earth: Patagonia, east of the Andes.</li>
+        <li id="land-drowned-valley"><b id="land-drowned-valley-name">A drowned valley</b> A river cut this valley when the sea stood lower. The rising sea flooded it, leaving a long, narrow inlet. On Earth: Chesapeake Bay.</li>
+        <li id="land-delta"><b id="land-delta-name">A delta</b> The river drops the sediment it carries as it enters the sea. Over time this builds low new land out from the coast. On Earth: the Mississippi delta.</li>
+        <li id="land-shelf"><b id="land-shelf-name">The continental shelf</b> The continent continues beneath shallow water. At the shelf edge, usually 100 to 200 metres down, the sea floor steepens towards the deep ocean. On Earth: the North Sea.</li>
+      </ol>
+      <figcaption>
+        <span class="say">One stretch of coast in the Natural style, with the five places the generator found on it.</span>
+        Seed 718106
+      </figcaption>
+    </figure>
   </section>
 
   <section id="styles">
@@ -530,8 +734,8 @@ if ('IntersectionObserver' in window &&
       <ol class="cards styles">
         <li class="card">
           <div class="plate">
-            <img src="img/style-atlas.webp" width="640" height="640" loading="lazy" decoding="async"
-                 alt="A coast in the Atlas style, land tinted by height and climate: green lowlands, a tan dry belt, brown hills at the right, rivers joining a trunk that reaches the sea, two lakes, and a blue sea deepening offshore.">
+            <img src="img/style-atlas.webp" width="600" height="400" loading="lazy" decoding="async"
+                 alt="A corner of coast in the Atlas style, land tinted by height and climate: brown hills over a green coastal plain, rivers winding to the south and east coasts, and a blue sea deepening offshore.">
           </div>
           <div class="card-mark"><span class="card-number">01</span></div>
           <h3>Atlas</h3>
@@ -539,8 +743,8 @@ if ('IntersectionObserver' in window &&
         </li>
         <li class="card">
           <div class="plate">
-            <img src="img/style-schoolroom.webp" width="640" height="640" loading="lazy" decoding="async"
-                 alt="The same coast in the Schoolroom style, land tinted by height alone: bright green lowlands, yellow and orange higher ground, blue rivers and lakes, and a pale blue sea with faint depth contours.">
+            <img src="img/style-schoolroom.webp" width="600" height="400" loading="lazy" decoding="async"
+                 alt="The same coast in the Schoolroom style, land tinted by height alone: green lowlands rising to yellow and orange hills, blue rivers, and a pale blue sea with faint depth contours.">
           </div>
           <div class="card-mark"><span class="card-number">02</span></div>
           <h3>Schoolroom</h3>
@@ -548,8 +752,8 @@ if ('IntersectionObserver' in window &&
         </li>
         <li class="card">
           <div class="plate">
-            <img src="img/style-natural.webp" width="640" height="640" loading="lazy" decoding="async"
-                 alt="The same coast in the Natural style, in satellite colours: dark green lowlands, an ochre dry belt and bare brown hills, rivers in pale blue, and a cobalt sea.">
+            <img src="img/style-natural.webp" width="600" height="400" loading="lazy" decoding="async"
+                 alt="The same coast in the Natural style, in satellite colours: olive and green lowlands under bare brown hills, rivers in pale blue, and a cobalt sea.">
           </div>
           <div class="card-mark"><span class="card-number">03</span></div>
           <h3>Natural</h3>
@@ -558,6 +762,61 @@ if ('IntersectionObserver' in window &&
       </ol>
       <figcaption>
         <span class="say">The same region in Atlas, Schoolroom and Natural, at the same scale.</span>
+        Seed 718106
+      </figcaption>
+    </figure>
+
+    <!-- Any two of the twelve styles over the same ground. Only the two on show are asked for; a
+         style is fetched when it is picked. The pictures are the cards' own window, so the default
+         pair are the Atlas and Natural cards' files and cost nothing more. -->
+    <figure class="compare" id="compare" hidden>
+      <div class="plate compare-frame">
+        <img class="compare-right" src="img/style-natural.webp" width="600" height="400" loading="lazy" decoding="async"
+             alt="The coast in the Natural style.">
+        <div class="compare-over">
+          <img class="compare-left" src="img/style-atlas.webp" width="600" height="400" loading="lazy" decoding="async"
+               alt="The coast in the Atlas style.">
+        </div>
+        <input type="range" class="compare-range" id="compare-range" min="0" max="100" step="1" value="50"
+               aria-label="Where the picture divides between the two styles">
+        <div class="compare-handle" aria-hidden="true"></div>
+      </div>
+      <div class="compare-pickers">
+        <label><span class="control-label">Left</span>
+          <select id="compare-left-style">
+              <option value="atlas" selected>Atlas</option>
+              <option value="vellum">Vellum</option>
+              <option value="ink_wash">Ink wash</option>
+              <option value="nautical">Nautical</option>
+              <option value="midnight">Midnight</option>
+              <option value="schoolroom">Schoolroom</option>
+              <option value="verdant">Verdant</option>
+              <option value="scroll">Scroll</option>
+              <option value="pen_and_ink">Pen and ink</option>
+              <option value="mars">Mars</option>
+              <option value="natural">Natural</option>
+              <option value="clear">Colour-blind</option>
+          </select>
+        </label>
+        <label><span class="control-label">Right</span>
+          <select id="compare-right-style">
+              <option value="atlas">Atlas</option>
+              <option value="vellum">Vellum</option>
+              <option value="ink_wash">Ink wash</option>
+              <option value="nautical">Nautical</option>
+              <option value="midnight">Midnight</option>
+              <option value="schoolroom">Schoolroom</option>
+              <option value="verdant">Verdant</option>
+              <option value="scroll">Scroll</option>
+              <option value="pen_and_ink">Pen and ink</option>
+              <option value="mars">Mars</option>
+              <option value="natural" selected>Natural</option>
+              <option value="clear">Colour-blind</option>
+          </select>
+        </label>
+      </div>
+      <figcaption>
+        <span class="say">Any two of the twelve styles over the same ground. Drag the divider, or move it with the arrow keys.</span>
         Seed 718106
       </figcaption>
     </figure>
@@ -698,7 +957,7 @@ if ('IntersectionObserver' in window &&
     </p>
 
     <div class="ledger">
-      <div class="row">
+      <div class="row" data-system="windows">
         <h3>Windows</h3>
         <div class="what">
           <p>Unzip the portable zip and run <code>Cartogenesis.exe</code>. Nothing is installed. Or choose the MSI installer. It is unsigned, so Windows shows a SmartScreen warning. If you trust the download, choose “More info”, then “Run anyway”.</p>
@@ -706,7 +965,7 @@ if ('IntersectionObserver' in window &&
         </div>
       </div>
 
-      <div class="row">
+      <div class="row" data-system="linux">
         <h3>Linux<span class="tag">Debian · Ubuntu</span></h3>
         <div class="what">
           <p>The apt repository is recommended. The three commands below fetch the signing key, add the source line and run apt install. Alternatively, install the <code>.deb</code> with apt, or unpack and run the portable tarball. Java is bundled, with nothing else to install. The open-source graphics stack (Mesa) was tested. The proprietary NVIDIA driver was not. Saved worlds live in <code>~/.cartogenesis/worlds</code>.</p>
@@ -717,7 +976,7 @@ sudo apt update &amp;&amp; sudo apt install cartogenesis</code></pre>
         </div>
       </div>
 
-      <div class="row">
+      <div class="row" data-system="browser">
         <h3>Browser</h3>
         <div class="what">
           <p>Run Cartogenesis at cartogenesis.com. Nothing is installed and nothing is uploaded. You can also host the web zip yourself over HTTPS.</p>
@@ -796,6 +1055,179 @@ sudo apt update &amp;&amp; sudo apt install cartogenesis</code></pre>
       });
     }, {threshold: 0.2});
     cards.forEach(function (card) { watcher.observe(card); });
+  }
+
+  var html = document.documentElement;
+  var mayMove = html.className.indexOf('reveal') >= 0;
+
+  /* Calls back with true and false as an element comes into view and leaves it,
+     or once with true where the browser cannot say. */
+  function whileInView(element, callback) {
+    if (!('IntersectionObserver' in window)) { callback(true); return; }
+    new IntersectionObserver(function (entries) {
+      callback(entries[entries.length - 1].isIntersecting);
+    }, {threshold: 0.25}).observe(element);
+  }
+
+  /* The hero drifts. The strip is asked for once the page has loaded, so the
+     first paint is the hero picture alone, and it takes over only once it has
+     arrived and decoded. Never for a reader who asked for less motion. */
+  var heroPlate = document.getElementById('hero-plate');
+  if (heroPlate && mayMove) {
+    window.addEventListener('load', function () {
+      var source = heroPlate.getAttribute('data-strip');
+      var strip = new Image();
+      strip.src = source;
+      (strip.decode ? strip.decode() : Promise.resolve()).then(function () {
+        var drift = document.createElement('div');
+        drift.className = 'drift';
+        drift.setAttribute('aria-hidden', 'true');
+        var track = document.createElement('div');
+        track.className = 'drift-track';
+        track.style.backgroundImage = 'url("' + source + '")';
+        drift.appendChild(track);
+        heroPlate.appendChild(drift);
+        whileInView(heroPlate, function (inView) { drift.classList.toggle('paused', !inView); });
+        requestAnimationFrame(function () {
+          requestAnimationFrame(function () { drift.classList.add('ready'); });
+        });
+      }).catch(function () {});
+    });
+  }
+
+  /* How a world is made, played. The frame holds the six cards' own pictures,
+     one of them on show at a time; it plays while in view, and a reader who
+     asked for less motion gets the step control and no play button. */
+  var forming = document.getElementById('forming');
+  if (forming) {
+    var stepCards = Array.prototype.slice.call(document.querySelectorAll('.cards.steps > .card'));
+    var frame = forming.querySelector('.forming-frame');
+    var stepControl = document.getElementById('forming-stage');
+    var playButton = document.getElementById('forming-play');
+    var frames = stepCards.map(function (card) {
+      var picture = card.querySelector('img').cloneNode();
+      picture.alt = '';
+      frame.appendChild(picture);
+      return picture;
+    });
+    var shown = 0, playing = mayMove, inView = false, timer = null;
+    var STEP_MILLISECONDS = 2600;
+    function show(step) {
+      shown = step;
+      frames.forEach(function (picture, at) { picture.classList.toggle('current', at === step); });
+      stepCards.forEach(function (card, at) { card.classList.toggle('lit', inView && at === step); });
+      var name = stepCards[step].querySelector('h3').textContent;
+      document.getElementById('forming-number').textContent = '0' + (step + 1);
+      document.getElementById('forming-name').textContent = name;
+      document.getElementById('forming-line').textContent = stepCards[step].querySelector('p').textContent;
+      stepControl.value = step + 1;
+      stepControl.setAttribute('aria-valuetext', 'Step ' + (step + 1) + ' of ' + frames.length + ': ' + name);
+    }
+    function run() {
+      var go = playing && inView;
+      if (go && !timer) timer = setInterval(function () { show((shown + 1) % frames.length); }, STEP_MILLISECONDS);
+      if (!go && timer) { clearInterval(timer); timer = null; }
+      playButton.textContent = playing ? 'Pause' : 'Play';
+      playButton.setAttribute('aria-pressed', playing ? 'true' : 'false');
+    }
+    if (!mayMove) playButton.hidden = true;
+    playButton.addEventListener('click', function () { playing = !playing; run(); });
+    stepControl.addEventListener('input', function () {
+      playing = false;
+      show(Number(stepControl.value) - 1);
+      run();
+    });
+    whileInView(forming, function (visible) { inView = visible; show(shown); run(); });
+    forming.hidden = false;
+    show(0);
+    run();
+  }
+
+  /* Read the land. Each pin opens its own note on the map, taken from the list
+     under it; a second press, Escape or a press elsewhere closes it. */
+  var note = document.getElementById('land-note');
+  if (note) {
+    var pins = Array.prototype.slice.call(document.querySelectorAll('.landmap-plate .pin'));
+    var openPin = null;
+    function closeNote() {
+      if (!openPin) return;
+      openPin.setAttribute('aria-expanded', 'false');
+      document.getElementById('land-' + openPin.getAttribute('data-kind')).classList.remove('active');
+      openPin = null;
+      note.hidden = true;
+    }
+    function openNote(pin) {
+      closeNote();
+      var item = document.getElementById('land-' + pin.getAttribute('data-kind'));
+      note.innerHTML = item.innerHTML;
+      Array.prototype.forEach.call(note.querySelectorAll('[id]'), function (e) { e.removeAttribute('id'); });
+      note.hidden = false;
+      if (getComputedStyle(note).position === 'absolute') {
+        var plate = pin.parentNode;
+        var x = pin.offsetLeft + pin.offsetWidth / 2, y = pin.offsetTop + pin.offsetHeight / 2;
+        var left = Math.max(8, Math.min(x - note.offsetWidth / 2, plate.clientWidth - note.offsetWidth - 8));
+        var top = y < plate.clientHeight / 2 ? y + 22 : y - 22 - note.offsetHeight;
+        note.style.left = left + 'px';
+        note.style.top = Math.max(4, top) + 'px';
+      }
+      pin.setAttribute('aria-expanded', 'true');
+      item.classList.add('active');
+      openPin = pin;
+    }
+    pins.forEach(function (pin) {
+      pin.addEventListener('click', function (event) {
+        event.stopPropagation();
+        if (openPin === pin) closeNote(); else openNote(pin);
+      });
+    });
+    note.addEventListener('click', function (event) { event.stopPropagation(); });
+    document.addEventListener('click', closeNote);
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape' && openPin) { var pin = openPin; closeNote(); pin.focus(); }
+    });
+  }
+
+  /* Any two styles, compared. Only the two on show are fetched: a picked style
+     is asked for when it is picked. */
+  var compare = document.getElementById('compare');
+  if (compare) {
+    var compareFrame = compare.querySelector('.compare-frame');
+    var divider = document.getElementById('compare-range');
+    function place() { compareFrame.style.setProperty('--split', divider.value + '%'); }
+    divider.addEventListener('input', place);
+    [['compare-left-style', '.compare-left'], ['compare-right-style', '.compare-right']].forEach(function (pair) {
+      var picker = document.getElementById(pair[0]);
+      var picture = compare.querySelector(pair[1]);
+      picker.addEventListener('change', function () {
+        var label = picker.options[picker.selectedIndex].text;
+        picture.src = 'img/style-' + picker.value + '.webp';
+        picture.alt = 'The coast in the ' + label + ' style.';
+      });
+    });
+    compare.hidden = false;
+    place();
+  }
+
+  /* The download that suits this reader's system, marked in its place. Read
+     from what the browser reports; nothing is said when it is not recognised. */
+  function systemOfThisDevice() {
+    var agent = navigator.userAgent || '';
+    var platform = (navigator.userAgentData && navigator.userAgentData.platform) || '';
+    var both = platform + ' ' + agent;
+    if (/Android|iPhone|iPad|iPod|CrOS|Chrome OS|ChromeOS/i.test(both)) return 'browser';
+    if (/^Windows$/i.test(platform) || (!platform && /Windows NT/.test(agent))) return 'windows';
+    if (/^macOS$/i.test(platform) || (!platform && /Macintosh|Mac OS X/.test(agent))) return 'browser';
+    if (/^Linux$/i.test(platform) || (!platform && /Linux|X11/.test(agent))) return 'linux';
+    return null;
+  }
+  var system = systemOfThisDevice();
+  var suggested = system && document.querySelector('.ledger .row[data-system="' + system + '"]');
+  if (suggested) {
+    suggested.classList.add('suggested');
+    var tag = document.createElement('span');
+    tag.className = 'tag suggest';
+    tag.textContent = 'For your system';
+    suggested.querySelector('h3').appendChild(tag);
   }
 
   /* The latest release, read live so the page never carries a stale version number.

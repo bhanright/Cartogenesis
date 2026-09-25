@@ -277,21 +277,23 @@ class SiteSourcesTest {
     /**
      * That with scripts off every card is visible.
      *
-     * The reveal hides a card until it comes into view, and only a script can bring it back. So
-     * everything that hides is scoped to the `reveal` class, which only the script in the head
-     * sets and which the page's own markup never carries: a reader without scripts gets the cards
-     * as they are written, with nothing waiting on an observer that will never run.
+     * The reveal hides a card until it comes into view, and only a script can bring it back; the
+     * living figures hide the frames and the ring that are not on show, which only a script can
+     * change. So everything that hides is scoped to the `reveal` or the `live` class, which only
+     * the script in the head sets and which the page's own markup never carries: a reader without
+     * scripts gets the cards and pictures as they are written, with nothing waiting on a script that
+     * will never run.
      */
     @Test
     fun `with scripts off every card is visible`() {
         assertTrue(hidingSelectors.isNotEmpty(), "nothing on the page hides; this checked nothing")
-        val unscoped = hidingSelectors.filterNot { it.startsWith(".reveal ") }
+        val unscoped = hidingSelectors.filterNot { it.startsWith(".reveal ") || it.startsWith(".live ") }
         assertTrue(
             unscoped.isEmpty(),
             "these rules hide something whether or not a script ever runs to show it again: $unscoped"
         )
         val htmlTag = Regex("""<html[^>]*>""").find(page)?.value ?: fail("the page has no <html>")
-        assertTrue(!htmlTag.contains("reveal"), "the markup arms the reveal itself: $htmlTag")
+        assertTrue(!htmlTag.contains("reveal") && !htmlTag.contains("live"), "the markup arms the reveal itself: $htmlTag")
         val head = page.substringBefore("<body")
         val armed = Regex("""<script>(.*?)</script>""", RegexOption.DOT_MATCHES_ALL).findAll(head)
             .map { it.groupValues[1] }.filter { it.contains("reveal") }.toList()
@@ -314,6 +316,33 @@ class SiteSourcesTest {
     }
 
     /**
+     * That what only a script can work stays out of sight without one.
+     *
+     * The frame that plays the steps, the style slider and the pins' note carry `hidden` in the
+     * markup, and a script takes it off. But a style sheet's own `display` beats the attribute, so
+     * a rule giving one of them a display outside the script's classes would show a reader
+     * without scripts a frame with nothing in it and controls that do nothing. Checked on every
+     * element the markup hides, by each of its classes.
+     */
+    @Test
+    fun `what needs a script stays hidden without one`() {
+        val hiddenClasses = Regex("""<[a-z]+\s[^>]*\shidden(?=[\s>])[^>]*>""").findAll(page.substringAfter("<body"))
+            .mapNotNull { Regex("""class="([^"]+)"""").find(it.value)?.groupValues?.get(1) }
+            .flatMap { it.split(' ') }.toSet()
+        assertTrue(hiddenClasses.size >= 3, "the markup hides ${hiddenClasses.size} classes of thing; the frame, the slider and the note are three")
+        val shown = rules(styleSheet).filter { (_, body) ->
+            Regex("""display\s*:\s*(?!none)""").containsMatchIn(body)
+        }.flatMap { it.first }.filter { selector ->
+            // The element the rule styles is its selector's last compound, not an ancestor.
+            val subject = selector.split(Regex("""[\s>+~]+""")).last()
+            !selector.startsWith(".live ") && !selector.startsWith(".reveal ") &&
+                hiddenClasses.any { Regex("""\.${Regex.escape(it)}(?![\w-])""").containsMatchIn(subject) }
+        }
+        assertTrue(shown.isEmpty(), "these give a display to something the markup hides until a script runs: $shown")
+        println("SITE ${hiddenClasses.size} classes hidden until a script runs, none shown without one")
+    }
+
+    /**
      * That a reader who asks for less motion sees every card at once, still.
      *
      * Twice over: the head does not arm the reveal when the preference is set as the page loads,
@@ -327,20 +356,105 @@ class SiteSourcesTest {
             Regex("""<script>[^<]*prefers-reduced-motion: reduce[^<]*reveal""").containsMatchIn(head),
             "the head arms the reveal without asking whether the reader wants less motion"
         )
-        val block = Regex(
-            """@media[^{]*prefers-reduced-motion:\s*reduce[^{]*\{((?:[^{}]*\{[^{}]*\})*)\s*\}"""
-        ).find(styleSheet)?.groupValues?.get(1)
-            ?: fail("the style sheet has no rule for a reader who prefers reduced motion")
+        val block = reducedMotionRules
         val stilled = rules(block).filter { (_, body) ->
             body.contains(Regex("""opacity\s*:\s*1""")) &&
                 body.contains(Regex("""transform\s*:\s*none""")) &&
                 body.contains(Regex("""transition\s*:\s*none"""))
         }.flatMap { it.first }.toSet()
-        val stillMoving = hidingSelectors.toSet() - stilled
+        val stillMoving = hidingSelectors.filter { it.startsWith(".reveal ") }.toSet() - stilled
         assertTrue(
             stillMoving.isEmpty(),
             "with motion reduced these still hide and then move: $stillMoving"
         )
         println("SITE reduced motion stills ${stilled.size} selectors: $stilled")
+    }
+
+    /** Every rule inside the style sheet's `prefers-reduced-motion: reduce` blocks, all of them. */
+    private val reducedMotionRules: String by lazy {
+        val blocks = Regex(
+            """@media[^{]*prefers-reduced-motion:\s*reduce[^{]*\{((?:[^{}]*\{[^{}]*\})*)\s*\}"""
+        ).findAll(styleSheet).map { it.groupValues[1] }.toList()
+        assertTrue(blocks.isNotEmpty(), "the style sheet has no rule for a reader who prefers reduced motion")
+        blocks.joinToString("\n")
+    }
+
+    /** The properties a transition may name: the two that move nothing, and colour. */
+    private val stillProperties = setOf("color", "background-color", "border-color")
+
+    /**
+     * That everything on the page that moves moves by opacity and transform alone, and that a
+     * reader who asks for less motion is spared all of it.
+     *
+     * Opacity and transform are the two properties a browser can change without laying the page
+     * out again, so nothing that animates can push anything else about. Colour may fade on a
+     * hovered button, which moves nothing. Every rule that moves something, by a transition of
+     * either property or by an animation, has its selector stilled in a reduced-motion block:
+     * `transition:none` or `animation:none`.
+     */
+    @Test
+    fun `everything that moves moves by opacity and transform, and is stilled for less motion`() {
+        val moving = HashMap<String, String>()
+        rules(styleSheet.replace(Regex("""@keyframes[^{]*\{(?:[^{}]*\{[^{}]*\})*\s*\}"""), "")).forEach { (selectors, body) ->
+            Regex("""transition\s*:\s*([^;}]+)""").find(body)?.groupValues?.get(1)?.let { value ->
+                if (value.trim() == "none") return@let
+                val properties = value.split(',').map { it.trim().substringBefore(' ') }
+                val strangers = properties - stillProperties - setOf("opacity", "transform")
+                assertTrue(strangers.isEmpty(), "$selectors transition $strangers, which moves the layout or is not ours to move")
+                if (properties.any { it == "opacity" || it == "transform" }) selectors.forEach { moving[it] = "transition" }
+            }
+            if (Regex("""(^|[;\s])animation\s*:""").containsMatchIn(body) && !body.contains(Regex("""animation\s*:\s*none"""))) {
+                selectors.forEach { moving[it] = "animation" }
+            }
+        }
+        val keyframes = Regex("""@keyframes\s+([\w-]+)\s*\{((?:[^{}]*\{[^{}]*\})*)\s*\}""").findAll(styleSheet).toList()
+        keyframes.forEach { frames ->
+            rules(frames.groupValues[2]).forEach { (_, body) ->
+                val properties = body.split(';').map { it.substringBefore(':').trim() }.filter { it.isNotEmpty() }
+                assertTrue(
+                    properties.all { it == "opacity" || it == "transform" },
+                    "@keyframes ${frames.groupValues[1]} animates $properties"
+                )
+            }
+        }
+        assertTrue(moving.isNotEmpty(), "nothing on the page moves; this checked nothing")
+        val stilled = rules(reducedMotionRules).flatMap { (selectors, body) ->
+            selectors.map { it to body }
+        }
+        val unstilled = moving.filter { (selector, how) ->
+            stilled.none { (still, body) -> still == selector && body.contains(Regex("""$how\s*:\s*none""")) }
+        }
+        assertTrue(unstilled.isEmpty(), "with motion reduced these still move: $unstilled")
+        println("SITE ${moving.size} rules move, all by opacity and transform, all stilled for less motion")
+    }
+
+    /**
+     * That every control on the page says what it is to a reader who cannot see it: a button by its
+     * own words or an `aria-label`, an input or a picker by a `label` or an `aria-label`, and
+     * anything named by `aria-labelledby` by an element that is on the page.
+     *
+     * The pins of "Read the land" are put into the page at assembly, so `SiteAssemblyTest` checks
+     * those the same way; this reads the page as it is written.
+     */
+    @Test
+    fun `every control has an accessible name`() {
+        val labelledFor = Regex("""<label[^>]*for="([^"]+)"""").findAll(page).map { it.groupValues[1] }.toSet()
+        val wrapped = Regex("""<label[^>]*>(.*?)</label>""", RegexOption.DOT_MATCHES_ALL).findAll(page)
+            .flatMap { label -> Regex("""<(?:input|select)\s[^>]*>""").findAll(label.groupValues[1]).map { it.value } }
+            .toSet()
+        val controls = Regex("""<(button|input|select)\s[^>]*>(?:(.*?)</\1>)?""", RegexOption.DOT_MATCHES_ALL)
+            .findAll(page).toList()
+        assertTrue(controls.size >= 5, "the page has ${controls.size} controls; its living figures have more")
+        controls.forEach { control ->
+            val tag = Regex("""<(button|input|select)\s[^>]*>""").find(control.value)!!.value
+            val id = Regex("""\sid="([^"]+)"""").find(tag)?.groupValues?.get(1)
+            val labelledBy = Regex("""aria-labelledby="([^"]+)"""").find(tag)?.groupValues?.get(1)
+            val named = Regex("""aria-label="[^"]+"""").containsMatchIn(tag) ||
+                (labelledBy != null && page.contains("""id="$labelledBy"""")) ||
+                (id != null && id in labelledFor) || tag in wrapped ||
+                (control.groupValues[1] == "button" && control.groupValues[2].replace(Regex("<[^>]*>"), "").isNotBlank())
+            assertTrue(named, "this control has no name a screen reader can say: $tag")
+        }
+        println("SITE ${controls.size} controls, every one named")
     }
 }

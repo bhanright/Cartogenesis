@@ -198,6 +198,10 @@ val siteImageryDir = rootProject.layout.projectDirectory.dir("web/build/site-ima
  * generating the world once; the handful of rasterisations and their WebP encodes are a few
  * seconds between them. Measured 2026-09-12, when the page showed seven figures.
  *
+ * Beside the pictures it writes the pins of "Read the land", which `:web:assembleSite` puts into
+ * the page, and the world itself as a save (about 260 MB, and 13 s to write), which the
+ * assembly never publishes and `SiteAssemblyTest` reads to check each pin against the ground.
+ *
  * `-Pcontact` additionally writes the whole map at half size with a coordinate grid over it and
  * the page's windows outlined, which is how a window is chosen. Not wanted by a deploy.
  */
@@ -225,7 +229,10 @@ tasks.register<JavaExec>("renderSiteImagery") {
     inputs.files(
         rootProject.fileTree("worldgen/src"),
         rootProject.fileTree("cartography/src"),
-        rootProject.files("desktop/src/main/kotlin/com/cartogenesis/desktop/SiteImagery.kt")
+        rootProject.files(
+            "desktop/src/main/kotlin/com/cartogenesis/desktop/SiteImagery.kt",
+            "desktop/src/main/kotlin/com/cartogenesis/desktop/SiteLandmarks.kt"
+        )
     ).withPropertyName("generatorSourcesThatDecideWhatTheFiguresShow")
         .withPathSensitivity(PathSensitivity.RELATIVE)
 }
@@ -241,9 +248,10 @@ tasks.register<Test>("siteTest") {
         includeTestsMatching(siteAssemblyClass)
         isFailOnNoMatchingTests = true
     }
-    // It reads a tree of files and generates nothing, and it runs beside the other modules' suites,
-    // so it takes the smallest heap of the root build script's budget rather than the exports'.
-    maxHeapSize = "512m"
+    // It reads a tree of files and generates nothing, but one of the files is the world the pictures
+    // were cut from, which the pins of "Read the land" are checked against: a 2048 world is about
+    // 45 per-cell arrays of 4 million entries, some 750 MB, and the decode holds a chunk beside it.
+    maxHeapSize = "3g"
     // What this test reads is another project's build output. Declaring it as an input here is
     // what Gradle would want, but it also makes Gradle refuse the build for using an output
     // without a producing dependency it can see. Never being up to date costs a few seconds and

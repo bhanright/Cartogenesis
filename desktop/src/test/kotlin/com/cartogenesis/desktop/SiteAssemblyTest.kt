@@ -6,6 +6,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.test.fail
+import kotlin.math.abs
 
 /**
  * Checks the tree `:web:assembleSite` builds for cartogenesis.com, before it is uploaded.
@@ -30,6 +31,40 @@ class SiteAssemblyTest {
          * thousand.
          */
         const val LEAST_COLOURS_IN_A_MAP = 32
+
+        /**
+         * How far, on average in the green channel out of 255, the strip's first stretch may be
+         * from the hero halved before the strip taking over would read as a jump. The two are the
+         * same window encoded at two scales, so what is left is the encoder's loss at each; a
+         * strip cut one stretch along the world measures many times this.
+         */
+        const val HERO_TAKEOVER_MOST_MEAN_DIFFERENCE = 12.0
+
+        /**
+         * The bytes the page fetched as it loaded before Site 5a: the page as assembled (46,168),
+         * the two preloaded faces (261,088 and 200,500) and the hero (178,484, the same file
+         * then and now). The page's figure is main's page at d7c7e31 with the roadmap drawn in as
+         * the assembly draws it today. That page's step pictures were lazy cards lower down,
+         * which a headless Chrome saw arrive after the load event, so they are not in it.
+         */
+        const val LOAD_BYTES_BEFORE_SITE_5A = 686_240L
+
+        /**
+         * What Site 5a allows the load to grow by: 128 KiB, where it measured 112,205 bytes. The
+         * markup, style and script of its five figures and the five pins the assembly writes in
+         * are 24,801 of those, and the six steps' pictures, which the frame brings into the load,
+         * the other 87,404. The headroom is for the step pictures, whose size moves whenever the
+         * site's pictures are made again. Every other picture Site 5a adds is lazy, is fetched
+         * after the load, or is fetched when the reader picks it.
+         */
+        const val LOAD_BYTES_GROWTH_SITE_5A = 131_072L
+
+        /**
+         * The most the hero's strip may weigh: 112 KiB, where it measured 106,218 bytes, 2048 by
+         * 400 at [SiteImagery.WEBP_QUALITY]. Fetched once the page has loaded and never by a reader
+         * who asked for less motion.
+         */
+        const val HERO_STRIP_MOST_BYTES = 114_688L
     }
 
     /** A WebP decoded through Skia as ARGB, row after row. */
@@ -172,17 +207,31 @@ class SiteAssemblyTest {
         // notice.
         val expected = mapOf(
             "natural.webp" to (1600 to 800),
-            // How a world is made: one picture a step, the shape of a card in a row of three.
-            "step-plates.webp" to (480 to 320),
-            "step-erosion.webp" to (480 to 320),
-            "step-seas.webp" to (480 to 320),
-            "step-climate.webp" to (480 to 320),
-            "step-rivers.webp" to (480 to 320),
-            "step-realms.webp" to (480 to 320),
-            // The three styles, each the same 640 square window.
-            "style-atlas.webp" to (640 to 640),
-            "style-schoolroom.webp" to (640 to 640),
-            "style-natural.webp" to (640 to 640),
+            // The strip the hero drifts along: the band round the whole world, halved.
+            "hero-strip.webp" to (2048 to 400),
+            // How a world is made: one picture a step, one window halved, played in one frame.
+            "step-plates.webp" to (520 to 280),
+            "step-erosion.webp" to (520 to 280),
+            "step-seas.webp" to (520 to 280),
+            "step-climate.webp" to (520 to 280),
+            "step-rivers.webp" to (520 to 280),
+            "step-realms.webp" to (520 to 280),
+            // Read the land: the map the pins stand on.
+            "land.webp" to (1120 to 560),
+            // The twelve styles, each the same 600 by 400 window: three are cards, all twelve are
+            // the comparison slider's.
+            "style-atlas.webp" to (600 to 400),
+            "style-vellum.webp" to (600 to 400),
+            "style-ink_wash.webp" to (600 to 400),
+            "style-nautical.webp" to (600 to 400),
+            "style-midnight.webp" to (600 to 400),
+            "style-schoolroom.webp" to (600 to 400),
+            "style-verdant.webp" to (600 to 400),
+            "style-scroll.webp" to (600 to 400),
+            "style-pen_and_ink.webp" to (600 to 400),
+            "style-mars.webp" to (600 to 400),
+            "style-natural.webp" to (600 to 400),
+            "style-clear.webp" to (600 to 400),
             // The four data views, each the same 480 by 600 window.
             "layer-temperature.webp" to (480 to 600),
             "layer-currents.webp" to (480 to 600),
@@ -197,8 +246,19 @@ class SiteAssemblyTest {
         )
 
         val page = file("index.html").readText()
+        // Two ways a picture is asked for without an img of its own: the hero's strip, fetched by
+        // the script once the page has loaded, and a style the slider fetches when it is picked.
+        val strip = attribute(Regex("""<div[^>]*id="hero-plate"[^>]*>""").find(page)?.value
+            ?: fail("the hero has no plate to drift in"), "data-strip")
+        assertEquals("img/hero-strip.webp", strip, "the hero drifts along a strip that was not rendered")
+        val offered = pickerValues(page).map { "style-$it.webp" }.toSet()
         expected.forEach { (name, size) ->
             assertEquals(size, webpDimensions(file("img/$name")), "img/$name is the wrong size")
+            if (name == "hero-strip.webp") return@forEach
+            if (!Regex("""<img\s+src="img/${Regex.escape(name)}"""").containsMatchIn(page)) {
+                assertTrue(name in offered, "img/$name is rendered and nothing on the page asks for it")
+                return@forEach
+            }
             val tag = imageTag(page, name)
             // Stated in the tag as well as rendered: the page reserves each picture's shape so the
             // page does not reflow as they load, and a reserved shape that is not the picture's
@@ -236,7 +296,7 @@ class SiteAssemblyTest {
     fun `each row of comparison cards reads one window a different way in each card`() {
         val page = file("index.html").readText()
         mapOf(
-            "the styles" to SiteImagery.STYLE_CARDS,
+            "the style cards" to SiteImagery.STYLE_CARDS,
             "the data views" to SiteImagery.LAYER_CARDS
         ).forEach { (row, figures) ->
             assertTrue(figures.size > 1, "$row have fewer than two cards, so compare nothing")
@@ -263,6 +323,341 @@ class SiteAssemblyTest {
             }
             println("SITE $row: " + figures.joinToString { it.readingName } + " at ${figures.first().window}")
         }
+    }
+
+    /** The `value` of every option the slider's two pickers offer, left picker first. */
+    private fun pickerValues(page: String): List<String> {
+        val figure = compareFigure(page)
+        return Regex("""<option value="([^"]*)"""").findAll(figure).map { it.groupValues[1] }.toList()
+    }
+
+    /** The slider's `<figure>`, as the page writes it. */
+    private fun compareFigure(page: String): String =
+        Regex("""<figure class="compare"[^>]*>.*?</figure>""", RegexOption.DOT_MATCHES_ALL).find(page)?.value
+            ?: fail("the page has no comparison slider")
+
+    /**
+     * That the frame which plays "How a world is made" shows one ground at one scale: the six
+     * steps' pictures, which are the frame's, cut from one window with one reduction, and in the
+     * cards' order.
+     *
+     * The frame crossfades from each picture to the next, so a picture from another window, or the
+     * same window at another scale, is the land jumping under the reader between two steps.
+     */
+    @Test
+    fun `the six steps are one window at one scale`() {
+        val steps = SiteImagery.STEP_CARDS
+        assertEquals(6, steps.size, "How a world is made has ${steps.size} steps to play, not six")
+        assertEquals(1, steps.map { it.window }.distinct().size, "the steps are cut from different windows: " +
+            steps.joinToString { "${it.file} ${it.window}" })
+        assertEquals(1, steps.map { it.reduction }.distinct().size, "the steps are drawn at different scales: " +
+            steps.joinToString { "${it.file} 1:${it.reduction}" })
+        assertEquals(1, steps.map { it.width to it.height }.distinct().size, "the steps are different sizes")
+        val page = file("index.html").readText()
+        val order = Regex("""<ol class="cards steps">.*?</ol>""", RegexOption.DOT_MATCHES_ALL).find(page)?.value
+            ?.let { cards -> Regex("""src="img/([^"]+)"""").findAll(cards).map { it.groupValues[1] }.toList() }
+            ?: fail("the page has no row of step cards")
+        assertEquals(steps.map { it.file }, order, "the step cards are not the steps, in order")
+        println("SITE the six steps: one window ${steps.first().window} at 1:${steps.first().reduction}")
+    }
+
+    /**
+     * That the slider compares every style the application offers over one ground, and asks for
+     * only the two it shows.
+     *
+     * The page's weight at load may grow by two pictures at most for the slider, and grows by none:
+     * its default pair are the Atlas and Natural cards' own files. The other ten are named only as
+     * a picker's option and fetched when picked.
+     */
+    @Test
+    fun `the slider offers all twelve styles on one ground and loads two`() {
+        val styles = SiteImagery.STYLE_PICTURES
+        assertEquals(
+            com.cartogenesis.cartography.MapStyle.entries.toList(), styles.map { it.style },
+            "the slider's pictures are not every style the application offers, in its order"
+        )
+        assertEquals(1, styles.map { it.window }.distinct().size, "the twelve styles are cut from different windows")
+        assertTrue(styles.all { it.reduction == 1 }, "a style picture is reduced, so the pens are not the renderer's")
+        assertTrue(SiteImagery.STYLE_CARDS.all { it in styles }, "a style card is not one of the slider's pictures")
+
+        val page = file("index.html").readText()
+        val figure = compareFigure(page)
+        val pickers = Regex("""<select[^>]*>(.*?)</select>""", RegexOption.DOT_MATCHES_ALL).findAll(figure)
+            .map { select ->
+                Regex("""<option value="([^"]*)"[^>]*>([^<]*)</option>""").findAll(select.groupValues[1])
+                    .map { it.groupValues[1] to it.groupValues[2] }.toList()
+            }.toList()
+        assertEquals(2, pickers.size, "the slider has ${pickers.size} pickers, where it has a left and a right")
+        val offered = styles.map { it.file.removePrefix("style-").removeSuffix(".webp") to it.style.label }
+        pickers.forEach { assertEquals(offered, it, "a picker does not offer the twelve styles by their own names") }
+
+        val loaded = Regex("""<img\s[^>]*src="([^"]+)"""").findAll(figure).map { it.groupValues[1] }.toList()
+        assertEquals(2, loaded.size, "the slider asks for ${loaded.size} pictures as the page loads, not two: $loaded")
+        val cards = SiteImagery.STYLE_CARDS.map { "img/${it.file}" }
+        println(
+            "SITE the slider offers ${styles.size} styles and loads ${loaded.size}: $loaded" +
+                ", of which ${loaded.count { it in cards }} are card pictures already on the page"
+        )
+    }
+
+    /**
+     * That the strip the hero drifts along joins itself end to end, and that its first stretch is
+     * the hero's own picture, so the strip can take over from it without the land moving.
+     *
+     * The world wraps east-west and the strip is its whole circumference, so as the track slides
+     * the strip's last column is followed by its first: those two have to be neighbours on the
+     * ground. Held to how much one column differs from the next anywhere inside the strip, where
+     * every pair is neighbours by construction: the seam may differ as much as the roughest of
+     * those and no more. On the strip as built the seam measures 24 against a median of 17 and a
+     * roughest of 49; a strip stopped 512 pixels short of the circumference measured 164.
+     */
+    @Test
+    fun `the hero's strip joins itself and begins where the hero is`() {
+        val figure = SiteImagery.HERO_STRIP
+        val pixels = decodedPixels(file("img/${figure.file}"))
+        val width = figure.width
+        val height = figure.height
+        fun columnDifference(left: Int, right: Int): Double {
+            var sum = 0L
+            for (row in 0 until height) {
+                val a = pixels[row * width + left]
+                val b = pixels[row * width + right]
+                sum += abs((a shr 16 and 0xFF) - (b shr 16 and 0xFF)) +
+                    abs((a shr 8 and 0xFF) - (b shr 8 and 0xFF)) + abs((a and 0xFF) - (b and 0xFF))
+            }
+            return sum.toDouble() / height
+        }
+        val roughest = (0 until width - 1).maxOf { columnDifference(it, it + 1) }
+        val seam = columnDifference(width - 1, 0)
+        assertTrue(
+            seam <= roughest,
+            "the strip's last column and its first differ by %.1f a pixel, and no two neighbouring columns inside it by more than %.1f: the strip does not join itself"
+                .format(seam, roughest)
+        )
+
+        // The first stretch, against the hero halved: the same window at the strip's scale.
+        val hero = decodedPixels(file("img/${SiteImagery.HERO.file}"))
+        val heroWidth = SiteImagery.HERO.width
+        val across = heroWidth / figure.reduction
+        var difference = 0L
+        for (row in 0 until height) for (column in 0 until across) {
+            val a = pixels[row * width + column]
+            val b = hero[(row * figure.reduction) * heroWidth + column * figure.reduction]
+            difference += abs((a shr 8 and 0xFF) - (b shr 8 and 0xFF))
+        }
+        val meanGreen = difference.toDouble() / (height * across)
+        assertTrue(
+            meanGreen < HERO_TAKEOVER_MOST_MEAN_DIFFERENCE,
+            "the strip's first $across columns differ from the hero by %.1f in green on average: the strip does not begin where the hero is, and would jump as it takes over"
+                .format(meanGreen)
+        )
+        println("SITE the hero's strip: seam %.1f against %.1f at the roughest inside, first stretch %.1f from the hero".format(seam, roughest, meanGreen))
+    }
+
+    /** One pin as the assembled page writes it. */
+    private class Pin(val kind: String, val left: Double, val top: Double, val cellX: Int, val cellY: Int, val labelledBy: String)
+
+    /** Every pin on the "Read the land" map, in the page's order. */
+    private fun pins(page: String): List<Pin> =
+        Regex("""<button[^>]*class="pin"[^>]*>""").findAll(page).map { match ->
+            val tag = match.value
+            val style = attribute(tag, "style")
+            val left = Regex("""left:([\d.]+)%""").find(style)?.groupValues?.get(1)?.toDouble() ?: fail("$tag has no left")
+            val top = Regex("""top:([\d.]+)%""").find(style)?.groupValues?.get(1)?.toDouble() ?: fail("$tag has no top")
+            val (cellX, cellY) = attribute(tag, "data-cell").split(",").map { it.toInt() }
+            Pin(attribute(tag, "data-kind"), left, top, cellX, cellY, attribute(tag, "aria-labelledby"))
+        }.toList()
+
+    /** The world the site's pictures were cut from, as `SiteImagery` saved it beside them. */
+    private val siteWorld: com.cartogenesis.worldgen.model.WorldMap by lazy {
+        val save = File(repoRoot, "web/build/site-imagery/${SiteImagery.WORLD_FILE}")
+        assertTrue(save.isFile, "no saved world at ${save.path}: :desktop:renderSiteImagery writes it")
+        save.inputStream().buffered(1 shl 16).use { input ->
+            val source = object : com.cartogenesis.cartography.SaveSource {
+                override suspend fun read(into: ByteArray, offset: Int, length: Int): Int = input.read(into, offset, length)
+            }
+            kotlinx.coroutines.runBlocking { com.cartogenesis.cartography.WorldCodec.read(source, GzipCompressor).world }
+        }
+    }
+
+    /**
+     * That every pin on "Read the land" stands inside the map, on the cell it names, and that the
+     * cell is the kind of place its note says it is.
+     *
+     * The pins are placed by `SiteLandmarks` from the world's fields, and this reads the same
+     * world back from the save written beside the pictures and asks each pin's question again, in
+     * code of its own: a delta pin on the mouth of a river large enough to build one, a coastal
+     * range on high ground over an ocean plate's margin, and so on. A finder that drifted onto the
+     * wrong cell, or a page whose pins were typed by hand, fails here rather than being trusted.
+     */
+    @Test
+    fun `every pin stands on the kind of place its note names`() {
+        val page = file("index.html").readText()
+        val pins = pins(page)
+        val notes = Regex("""<li id="land-([a-z-]+)">""").findAll(page).map { it.groupValues[1] }.toList()
+        assertTrue(pins.size in 5..6, "the map has ${pins.size} pins, where it has five or six")
+        assertEquals(notes, pins.map { it.kind }, "the pins are not the notes under the map, in their order")
+        pins.forEachIndexed { index, pin ->
+            assertTrue(page.contains("""id="${pin.labelledBy}""""), "pin ${index + 1} is named by ${pin.labelledBy}, which is not on the page")
+            val number = Regex("""data-kind="${pin.kind}"[^>]*>(\d+)</button>""").find(page)?.groupValues?.get(1)
+            assertEquals("${index + 1}", number, "the ${pin.kind} pin is numbered $number and is note ${index + 1}")
+        }
+
+        val world = siteWorld
+        val window = SiteImagery.LAND_WINDOW
+        val sheet = com.cartogenesis.cartography.SheetGeometry.of(world)
+        pins.forEach { pin ->
+            // Inside the picture, with the whole of its square on it.
+            assertTrue(pin.left in 2.0..98.0 && pin.top in 4.0..96.0, "the ${pin.kind} pin stands at ${pin.left}%, ${pin.top}%, at the picture's edge or off it")
+            // On the cell it names: the cell's centre, as a share of the picture.
+            val centreX = ((pin.cellX + 0.5) * sheet.pixelsPerCellAcross - window.x).mod(sheet.widthPixels.toDouble())
+            val centreY = (pin.cellY + 0.5) * sheet.pixelsPerCellDown - window.y
+            assertEquals(centreX * 100 / window.width, pin.left, 0.001, "the ${pin.kind} pin is not on its cell across")
+            assertEquals(centreY * 100 / window.height, pin.top, 0.001, "the ${pin.kind} pin is not on its cell down")
+            val cell = pin.cellY * world.width + pin.cellX
+            val failure = kindFailure(world, pin.kind, cell)
+            assertTrue(failure == null, "the ${pin.kind} pin stands on cell ${pin.cellX},${pin.cellY}, which $failure")
+            println("SITE pin ${pin.kind} on cell ${pin.cellX},${pin.cellY} at ${pin.left}%, ${pin.top}%")
+        }
+    }
+
+    /** Height above the shoreline in metres, or depth below it as a negative number, for any cell. */
+    private fun metres(world: com.cartogenesis.worldgen.model.WorldMap, cell: Int): Float {
+        val relative = world.sea.relativeElevation.data[cell]
+        return if (world.sea.isLand[cell]) world.config.scale.metresAboveShoreline(relative)
+        else world.config.scale.metresBelowShoreline(relative)
+    }
+
+    /**
+     * Why [cell] is not a place of [kind], or null when it is. Each clause is the kind's definition
+     * in the world's own terms, written here rather than taken from the finder.
+     */
+    private fun kindFailure(world: com.cartogenesis.worldgen.model.WorldMap, kind: String, cell: Int): String? {
+        val land = world.sea.isLand
+        val width = world.width
+        val scale = world.config.scale
+        val cellWidthKm = scale.cellWidthKm(width)
+        val cellHeightKm = scale.cellHeightKm(world.height)
+        return when (kind) {
+            "coastal-range" -> {
+                val tectonics = world.config.tectonics
+                val reach = tectonics.andeanWidthCells + tectonics.arcOffsetCells + tectonics.arcWidthCells
+                when {
+                    !land[cell] -> "is sea"
+                    world.plates.nearestBoundaryClass[cell] != com.cartogenesis.worldgen.pipeline.BoundaryClass.ANDEAN_MARGIN.ordinal ->
+                        "lies nearest a ${com.cartogenesis.worldgen.pipeline.BoundaryClass.entries.getOrNull(world.plates.nearestBoundaryClass[cell])} boundary, not an ocean plate under a continent"
+                    world.plates.boundaryDistance.data[cell] > reach -> "stands ${world.plates.boundaryDistance.data[cell]} cells from the margin, beyond its range and arc"
+                    metres(world, cell) < 1_500f -> "stands ${metres(world, cell).toInt()} m high, not a range"
+                    else -> null
+                }
+            }
+            "rain-shadow" -> {
+                if (!land[cell] || world.rivers.lakes.isLake(cell)) return "is water"
+                if (metres(world, cell) > 1_000f) return "stands ${metres(world, cell).toInt()} m high, inside the range rather than behind it"
+                // Upwind, a kilometre at a time for 250 km: a crest a kilometre above the cell, and
+                // land beyond the crest with three times the cell's rain.
+                val eastKm = world.climate.windDirection[cell] * cellWidthKm
+                val southKm = world.climate.windMeridional.data[cell] * cellHeightKm
+                val speed = kotlin.math.hypot(eastKm, southKm)
+                if (speed == 0.0) return "has no wind"
+                var crest = metres(world, cell)
+                var wettestBeyond = 0f
+                for (km in 1..250) {
+                    val row = cell / width - Math.round(southKm / speed * km / cellHeightKm).toInt()
+                    if (row !in 0 until world.height) break
+                    val column = Math.floorMod(cell % width - Math.round(eastKm / speed * km / cellWidthKm).toInt(), width)
+                    val upwind = row * width + column
+                    if (metres(world, upwind) > crest) { crest = metres(world, upwind); wettestBeyond = 0f }
+                    else if (land[upwind]) wettestBeyond = maxOf(wettestBeyond, world.climate.precipitationMm.data[upwind])
+                }
+                val rain = world.climate.precipitationMm.data[cell]
+                when {
+                    crest < metres(world, cell) + 1_000f -> "has no crest a kilometre above it within 250 km upwind"
+                    wettestBeyond < 3 * rain -> "gets ${rain.toInt()} mm, and the land upwind of the crest at most ${wettestBeyond.toInt()}: no rain shadow"
+                    else -> null
+                }
+            }
+            "drowned-valley" -> {
+                if (land[cell]) return "is land"
+                val across = (60.0 / cellWidthKm).toInt()
+                val down = (60.0 / cellHeightKm).toInt()
+                var sea = 0
+                var all = 0
+                for (dy in -down..down) for (dx in -across..across) {
+                    if ((dx * cellWidthKm) * (dx * cellWidthKm) + (dy * cellHeightKm) * (dy * cellHeightKm) > 3_600.0) continue
+                    val row = cell / width + dy
+                    if (row !in 0 until world.height) continue
+                    all++
+                    if (!land[row * width + Math.floorMod(cell % width + dx, width)]) sea++
+                }
+                if (sea * 3 >= all) "has $sea of the $all cells within 60 km under the sea, an open coast rather than a narrow arm" else null
+            }
+            "delta" -> {
+                if (!land[cell]) return "is sea"
+                val next = world.rivers.flowTarget[cell]
+                if (next < 0 || land[next]) return "is not where a river meets the sea"
+                // How much land drains through it: walk down the routing from every land cell and
+                // count the walks that pass here. Cheap enough over one world, and it needs no
+                // order over the cells to be right.
+                val drains = IntArray(world.width * world.height)
+                for (source in 0 until world.width * world.height) {
+                    if (!land[source]) continue
+                    var at = source
+                    var steps = 0
+                    while (at >= 0 && land[at] && steps++ < world.width * 4) {
+                        if (at == cell) { drains[cell]++; break }
+                        at = world.rivers.flowTarget[at]
+                    }
+                }
+                val least = world.config.erosion.deltaMinCatchment * world.sea.landCellCount
+                if (drains[cell] < least) "drains ${drains[cell]} cells, under the $least a river must before it builds a delta" else null
+            }
+            "shelf" -> when {
+                land[cell] -> "is land"
+                metres(world, cell) < -world.config.sea.shelfDepthMetres -> "lies ${-metres(world, cell).toInt()} m deep, off the shelf"
+                else -> null
+            }
+            else -> "is of a kind this guard does not know"
+        }
+    }
+
+    /**
+     * What the page fetches as it loads, and a ceiling on it: the page itself, the two faces it
+     * preloads, every picture it asks for without `loading="lazy"`, and the six steps' pictures.
+     * The steps are lazy, but the frame that plays them stands in the second screenful at every
+     * width, inside the distance a browser fetches lazy pictures ahead of the reader, so a headless
+     * Chrome measured all six arriving before the load event at 375, 768, 1280 and 1920 wide. The
+     * hero's strip is fetched after the page has loaded and is weighed apart, and every other lazy
+     * picture comes as the reader nears it.
+     *
+     * The ceiling is the weight before Site 5a and the growth Site 5a states for it (see
+     * [LOAD_BYTES_BEFORE_SITE_5A] and [LOAD_BYTES_GROWTH_SITE_5A]), so a later change that makes
+     * the first load heavier has to come here and say by how much.
+     */
+    @Test
+    fun `the page's load stays within its stated weight`() {
+        val page = file("index.html")
+        val text = page.readText()
+        val preloaded = Regex("""<link rel="preload"[^>]*href="([^"]+)"""").findAll(text).map { it.groupValues[1] }.toList()
+        val eager = Regex("""<img\s[^>]*>""").findAll(text).map { it.value }
+            .filterNot { it.contains("""loading="lazy"""") }
+            .map { attribute(it, "src") }.toList()
+        val steps = SiteImagery.STEP_CARDS.map { "img/${it.file}" }
+        val atLoad = page.length() + (preloaded + eager + steps).distinct().sumOf { file(it).length() }
+        val strip = file("img/${SiteImagery.HERO_STRIP.file}").length()
+        println(
+            "SITE at load: $atLoad bytes (page ${page.length()}, preloaded ${preloaded.joinToString()}, eager ${eager.joinToString()}, the frame's ${steps.joinToString()}); " +
+                "the hero's strip after load, $strip bytes"
+        )
+        assertTrue(
+            atLoad <= LOAD_BYTES_BEFORE_SITE_5A + LOAD_BYTES_GROWTH_SITE_5A,
+            "the page fetches $atLoad bytes as it loads, more than the $LOAD_BYTES_BEFORE_SITE_5A it " +
+                "fetched before Site 5a and the $LOAD_BYTES_GROWTH_SITE_5A Site 5a allowed it"
+        )
+        assertTrue(
+            strip <= HERO_STRIP_MOST_BYTES,
+            "the hero's strip is $strip bytes, more than the $HERO_STRIP_MOST_BYTES stated for it"
+        )
     }
 
     @Test

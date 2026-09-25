@@ -1,12 +1,13 @@
 package com.cartogenesis.desktop
 
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.DesktopComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsNotEnabled
-import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
@@ -74,7 +75,7 @@ class LibraryFolderPaneTest {
             onNodeWithText("The library is the folder \"Maps\".").assertExists()
             onNodeWithText("Reconnect to the folder to see its worlds").assertExists()
             assertTrue(!anyText { it.contains("Kept in the browser") }, "this browser's storage stood in for the folder")
-            onNode(hasText("Save") and hasClickAction()).assertIsNotEnabled()
+            onNode(hasText("Save") and SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button)).assertIsNotEnabled()
             assertEquals(0, folder.requests, "the reader was asked before they clicked")
 
             onNodeWithText("Reconnect to \"Maps\"").performClick()
@@ -110,9 +111,8 @@ class LibraryFolderPaneTest {
             onNodeWithText("Use this browser's storage").performClick()
             waitUntil(timeoutMillis = WAIT_MS) { anyText { it.contains("A stranger's world") } }
 
-            onNodeWithText("File").performClick()
-            waitForIdle()
-            onNodeWithText("Save").performClick()
+            // The pane's own Save, which is the call File ▸ Save makes.
+            onNode(hasText("Save") and SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button)).performClick()
             waitUntil(timeoutMillis = WAIT_MS) { (File(root, "browser").list()?.count { it.endsWith(".cgw") } ?: 0) == 2 }
         }
         assertContentEquals(stranger, File(root, "browser/w1.cgw").readBytes(), "Save wrote the folder's world over a file in this browser's storage")

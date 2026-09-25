@@ -235,7 +235,7 @@ object SiteImagery {
      *   its rivers and watersheds, at a half.
      */
     val STEP_CARDS: List<Figure> = listOf(
-        Figure("step-plates.webp", Window(2000, 0, 1920, 1280), MapView.PLATES, reduction = 4),
+        Figure("step-plates.webp", Window(2080, 0, 1920, 1280), MapView.PLATES, reduction = 4),
         Figure("step-erosion.webp", Window(2200, 560, 480, 320), MapView.ELEVATION),
         Figure(
             "step-seas.webp", Window(2750, 300, 960, 640), MapView.FANTASY, MapStyle.NATURAL,

@@ -110,7 +110,17 @@ class SitePaletteContrastTest {
             Triple("secondary button", "brass", "ink"),
             // A card's number, set in the page's ink on the brass square that marks its place on
             // the line: the one place the page sets type on brass rather than brass on the ground.
-            Triple("card number", "ink", "brass")
+            Triple("card number", "ink", "brass"),
+            // The living figures. A pin on the map and the numbered square of each note under it
+            // are the card number's pair; an open pin and its note's square turn parchment.
+            Triple("pin and note number", "ink", "brass"),
+            Triple("pin and note number, open", "ink", "parchment"),
+            Triple("a pin's note on the map", "bone-dim", "ink-raised"),
+            Triple("a pin's note, its heading", "parchment", "ink-raised"),
+            Triple("the slider's style pickers", "bone", "ink-raised"),
+            Triple("step and picker labels", "bone-dim", "ink"),
+            Triple("play button, and the suggested download's tag", "brass", "ink"),
+            Triple("play button, hovered", "brass", "ink-sunk")
         )
     }
 
@@ -235,6 +245,11 @@ class SitePaletteContrastTest {
         // The line a row of cards sits on and the squares on it are what say the cards are a
         // sequence, which is information, so they are held to the bar a meaningful graphic is.
         check("card line and number square", "brass", "ink", NON_TEXT)
+        // The step on show is marked by a ring round its square, which is the only thing saying
+        // which card the frame is showing; the suggested download by a rule beside its row.
+        check("lit step ring", "parchment", "ink", NON_TEXT)
+        check("suggested download rule", "brass", "ink", NON_TEXT)
+        check("a pin's note, its border", "brass-dim", "ink-raised", NON_TEXT)
 
         // Measured and reported, but deliberately held to nothing. The hairline separates one
         // block of the page from the next and carries no information a reader would otherwise

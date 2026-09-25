@@ -168,8 +168,8 @@ private suspend fun awaitFolder(promise: JsHandle): JsHandle? =
  * pane shows, and the name is what tells one browser's refusal from another's: on a phone, where
  * the folder is Android's rather than a directory's, the reader's words alone left nothing to go on.
  */
-internal class FolderException(val readerMessage: String, val detail: String) :
-    IllegalStateException(if (detail.isEmpty() || detail == readerMessage) readerMessage else "$readerMessage ($detail)")
+internal class FolderException(val readerMessage: String, val detail: String, cause: Throwable? = null) :
+    IllegalStateException(if (detail.isEmpty() || detail == readerMessage) readerMessage else "$readerMessage ($detail)", cause)
 
 // ---- How much a save holds while it passes through. ----
 
@@ -337,8 +337,9 @@ private class FolderSource(
  * close aborts the stream and the file is as it was. A new file is written under a temporary name
  * that does not end in `.cgw` — `.<name>.<token>.tmp`, see [temporaryNameFor] — and moved to its
  * name only once it is whole, so no reader, listing or sync client sees a half of one, or the empty
- * file a writable stream's target is from the moment it is created. A failure, or a cancellation
- * before the move, removes the temporary file.
+ * file a writable stream's target is from the moment it is created. A failure while it is written,
+ * or a cancellation before it is published, removes the temporary file; a failure to publish it
+ * once it is whole keeps it, and says where it is (see [publishNew]).
  *
  * **On Android** none of that is atomic, and nothing a page can do makes it so: Chrome keeps the
  * swap file in its own cache rather than beside the file, and a close empties the file and copies
@@ -462,8 +463,14 @@ internal class FolderWorldLibrary(
      * Writes [contents] under a temporary name, then publishes it under the name [finalName] gives
      * — asked only once the bytes are written, as the last look at the folder — and returns that
      * name. [replacesTakenName] is true when the name is a key being written back, whose file is
-     * the one to replace; otherwise a name found taken is passed over. Until the save is published,
-     * whatever fails or is cancelled leaves no file this call made; after it, nothing undoes it.
+     * the one to replace; otherwise a name found taken is passed over.
+     *
+     * Until the temporary file is whole, whatever fails or is cancelled removes it. Once it is
+     * whole it is the only complete copy of the save, so a failure to publish it keeps it, under
+     * its temporary name, and the failure says where it is: a copy into the name that fails partway
+     * can leave the name short — on Android, where a write empties the file first, it does — and
+     * removing the temporary file then would lose the save. A cancellation still removes it, as a
+     * cancelled save is not made. After publishing, nothing undoes the save.
      */
     private suspend fun publishNew(
         wanted: String,
@@ -476,13 +483,23 @@ internal class FolderWorldLibrary(
         // inside the `try` that removes it.
         val temporary = withContext(NonCancellable) { awaitFolder(createdFile(directory, temporaryName)) }
             ?: error("the browser gave no file to write the save into")
-        val name = try {
+        val removeTemporary: suspend () -> Unit = {
+            withContext(NonCancellable) { runCatching { awaitFolder(removeFile(directory, temporaryName)) } }
+        }
+        try {
             writeThrough(temporary, contents)
             currentCoroutineContext().ensureActive()
-            publish(temporary, replacesTakenName, finalName)
         } catch (failure: Throwable) {
-            withContext(NonCancellable) { runCatching { awaitFolder(removeFile(directory, temporaryName)) } }
+            removeTemporary()
             throw failure
+        }
+        val name = try {
+            publish(temporary, replacesTakenName, finalName)
+        } catch (cancelled: CancellationException) {
+            removeTemporary()
+            throw cancelled
+        } catch (failure: Throwable) {
+            throw keptAside(failure, temporaryName)
         }
         // Published. A move has taken the temporary name already, and after a copy the file is
         // let go on its own: failing to, it stays under a name no listing reads.
@@ -504,8 +521,11 @@ internal class FolderWorldLibrary(
      * file in a folder a phone picked, whose files are Android's documents rather than a
      * directory's entries (`FileSystemURL::CreateSibling` returns nothing for them), and its answer
      * there is not known to be `NotSupportedError`; read as a failure, it would end every new save.
-     * A move refused after the browser had already copied the file into the name is seen as a file
-     * under that name at the temporary's size, and taken as done.
+     *
+     * A refused move is never taken as a move that happened. Whatever the name holds afterwards may
+     * be another writer's, and a file of the same length is not the same file. Were the browser to
+     * move the save and then refuse, the save would be under the name already, and the copy would
+     * file it a second time beside it or fail: a duplicate or a false failure, never a lost save.
      */
     private suspend fun publish(temporary: JsHandle, replacesTakenName: Boolean, finalName: suspend () -> String): String {
         if (canMove(temporary)) {
@@ -513,22 +533,23 @@ internal class FolderWorldLibrary(
             // The rename is the commit, seen to its end once begun.
             val refusal = withContext(NonCancellable) { awaitFolder(moveFile(temporary, directory, name)) }
             if (refusal == null || isNullish(refusal)) return name
-            if (withContext(NonCancellable) { holdsTheSave(name, temporary) }) return name
         }
         return copyIntoNewFile(temporary, replacesTakenName, finalName)
     }
 
     /**
-     * Whether [name] now holds a file the size of [temporary], which is the save moved there. No,
-     * when either cannot be read: the copy that follows then says why.
+     * [failure] to publish a save that is whole under [temporaryName], said with where it is, so
+     * the reader can recover it: the library lists only `.cgw` names that do not begin with a dot.
      */
-    private suspend fun holdsTheSave(name: String, temporary: JsHandle): Boolean {
-        val sizes = runCatching {
-            val there = awaitFolder(fileOrNull(directory, name))?.takeUnless(::isNullish)
-            val written = awaitFolder(fileBehind(temporary))?.takeUnless(::isNullish)
-            if (there == null || written == null) null else blobSize(there) to blobSize(written)
-        }.getOrNull() ?: return false
-        return sizes.first == sizes.second
+    private fun keptAside(failure: Throwable, temporaryName: String): FolderException {
+        val words = (failure as? FolderException)?.readerMessage ?: failure.message ?: failure::class.simpleName.orEmpty()
+        val detail = (failure as? FolderException)?.detail.orEmpty()
+        return FolderException(
+            "$words. The whole save is kept in the folder as \"$temporaryName\"; renamed without its " +
+                "leading dot and ending in .cgw, it opens",
+            detail,
+            failure
+        )
     }
 
     /**

@@ -26,9 +26,13 @@ import kotlinx.coroutines.launch
  * lists, opens and deletes a small world through the library itself. Each step is reported with
  * what the browser said — its exception's name and message where it refused — and how long it took.
  *
- * It touches no file it did not make: every name it makes carries a token drawn for this run, it
- * checks each name is free before making it, and the last step removes only names carrying that
- * token. The listing steps name only those files, and count the rest.
+ * It changes no file it did not make. Every name it makes carries a token drawn for this run and is
+ * checked free first; each file it makes is remembered with its handle, and is removed only while
+ * the entry under that name is still that file (`isSameEntry`), so a file another writer has put
+ * under the name meanwhile is left alone and reported. The library's own round trip deletes only the
+ * key its save returned. It reads more than it makes: the listing steps read every name in the
+ * folder, naming only those carrying the token and counting the rest, and the library's listing
+ * reads the header at the front of every save in the folder, as the Library pane does.
  */
 internal class FolderCheck(
     private val directory: JsHandle,
@@ -51,6 +55,9 @@ internal class FolderCheck(
 
     private val steps = mutableListOf<FolderCheckStep>()
 
+    /** Every file this run made, by the name it made it under and the handle it was given, in order. */
+    private val made = mutableListOf<Pair<String, JsHandle>>()
+
     /** Runs every step, in order, and returns them all. A step that cannot run without an earlier one is reported skipped. */
     suspend fun run(): List<FolderCheckStep> {
         step("ask whether this page may read and write the folder (queryPermission)") {
@@ -65,12 +72,12 @@ internal class FolderCheck(
             val earlier = runCatching { awaitPromiseOrThrow(existingFile(directory, earlierTemporaryName)) }.getOrNull()
             check(earlier == null || isNullish(earlier)) { "$earlierTemporaryName is already in the folder; nothing was made" }
             "none is there"
-        } ?: return finish(cleanUp = false)
+        } ?: return finish()
 
         // Not a step the library takes any longer: whether this folder refuses the name it used to
         // take, which is what stopped every new save in a folder a reader picked.
         probe("make a file under the earlier temporary name $earlierTemporaryName (getFileHandle, create)") {
-            awaitPromiseOrThrow(createdFile(directory, earlierTemporaryName))
+            made += earlierTemporaryName to awaitPromiseOrThrow(createdFile(directory, earlierTemporaryName))!!
             "made; removed at the end"
         }
         // Whether a refused name left a file anyway: a save that failed before making anything and
@@ -79,7 +86,7 @@ internal class FolderCheck(
 
         val bytes = pattern(PARTS * partBytes)
         val temporary = step("make the temporary file $temporaryName (getFileHandle, create)") {
-            awaitPromiseOrThrow(createdFile(directory, temporaryName))!!
+            awaitPromiseOrThrow(createdFile(directory, temporaryName))!!.also { made += temporaryName to it }
         }
         if (temporary != null) {
             step("find it listed under that name (keys)") { listing() }
@@ -100,10 +107,11 @@ internal class FolderCheck(
         } else {
             skip("everything that writes the temporary file", "the file could not be made")
         }
-        step("remove $savedName (removeEntry)") { removed(savedName) }
-        step("remove $temporaryName if still there (removeEntry)") { removed(temporaryName) }
+        for ((name, file) in made.filter { (name, _) -> name == savedName || name == temporaryName }) {
+            step("remove $name if it is still the file this check made (isSameEntry, removeEntry)") { removeIfOurs(name, file) }
+        }
         libraryRoundTrip()
-        return finish(cleanUp = true)
+        return finish()
     }
 
     /** A stream opened on [file], [bytes] written in parts, and closed: true when all of it answered. */
@@ -145,6 +153,8 @@ internal class FolderCheck(
                 "moved"
             }
             if (moved != null) {
+                // The handle moved with the file, so it is this run's file under its new name.
+                made += savedName to temporary
                 return step("look $savedName up by name (getFileHandle)") {
                     awaitPromiseOrThrow(existingFile(directory, savedName))?.takeUnless(::isNullish)
                         ?: error("nothing is there under that name")
@@ -154,7 +164,7 @@ internal class FolderCheck(
             skip("move it to $savedName (move)", "this browser has no move here")
         }
         val target = step("make $savedName to copy into, as the library does without move (getFileHandle, create)") {
-            awaitPromiseOrThrow(createdFile(directory, savedName))!!
+            awaitPromiseOrThrow(createdFile(directory, savedName))!!.also { made += savedName to it }
         } ?: return null
         return if (writeThrough("$savedName, the copy", target, bytes)) target else null
     }
@@ -167,7 +177,7 @@ internal class FolderCheck(
         } ?: return
         val document = WorldDocument(id = stem, title = "Folder check", config = world.config, savedAt = epochMillisNow())
         val key = step("save it through the library") { library.save(document, world) } ?: return
-        step("find it in the library's listing") {
+        step("find it in the library's listing (reads the header of every save in the folder, and changes none)") {
             check(library.list().any { it.key == key }) { "$key was not listed" }
             key
         }
@@ -185,30 +195,41 @@ internal class FolderCheck(
     }
 
     /**
-     * Removes whatever this run left under its own token, when it made anything, and says what the
-     * folder holds of it. Not when its names were found taken: then the files are not its own.
+     * Removes whatever this run made that is still there and still its own, then reads which names
+     * carrying the token are left, and fails the step if any is: a file the check could not remove,
+     * or one it did not make — a swap file the browser left, a copy a storage provider renamed —
+     * which it names and leaves alone.
      */
-    private suspend fun finish(cleanUp: Boolean): List<FolderCheckStep> {
-        if (cleanUp) {
-            step("remove anything else this check made, and list what is left of it") {
-                val left = ownNames()
-                for (name in left) awaitPromiseOrThrow(removeFile(directory, name))
-                val after = ownNames()
-                check(after.isEmpty()) { "still there: ${after.joinToString()}" }
-                if (left.isEmpty()) "nothing was left" else "removed ${left.joinToString()}"
+    private suspend fun finish(): List<FolderCheckStep> {
+        if (made.isNotEmpty()) {
+            step("remove what else this check made, if still its own, and list what is left under its token") {
+                val removed = made.mapNotNull { (name, file) -> name.takeIf { removeIfOurs(name, file) == REMOVED } }
+                val left = allNames().filter { token in it }
+                check(left.isEmpty()) {
+                    "left in the folder, not removed: ${left.joinToString()}" +
+                        (if (removed.isEmpty()) "" else "; removed ${removed.joinToString()}")
+                }
+                if (removed.isEmpty()) "nothing was left" else "removed ${removed.joinToString()}"
             }
         }
         onProgress(steps.toList(), null)
         return steps.toList()
     }
 
+    /**
+     * Removes [name] only while the entry under it is [file], the one this run made: [REMOVED]; or
+     * says it was not there, or that another file now has the name and was left alone.
+     */
+    private suspend fun removeIfOurs(name: String, file: JsHandle): String {
+        val there = awaitPromiseOrThrow(existingFile(directory, name))?.takeUnless(::isNullish) ?: return "was not there"
+        if (!isTrue(awaitPromiseOrThrow(sameEntry(there, file)))) return "left alone: another file has that name now"
+        return if (isTrue(awaitPromiseOrThrow(removeFile(directory, name)))) REMOVED else "was not there"
+    }
+
     private suspend fun allNames(): List<String> {
         val names = awaitPromiseOrThrow(entryNames(directory))!!
         return List(namesLength(names)) { nameAt(names, it) }
     }
-
-    /** The names in the folder carrying this run's token: only files this check made. */
-    private suspend fun ownNames(): List<String> = allNames().filter { token in it }
 
     /** This run's names in the folder, and how many others there are, unnamed. */
     private suspend fun listing(): String {
@@ -230,9 +251,6 @@ internal class FolderCheck(
         check(read.contentEquals(expected)) { "${read.size} bytes read, not the ${expected.size} written, or not the same bytes" }
         return "${read.size} bytes, as written"
     }
-
-    private suspend fun removed(name: String): String =
-        if (isTrue(awaitPromiseOrThrow(removeFile(directory, name)))) "removed" else "was not there"
 
     /**
      * Runs [action] as the step [what] and records how it went: its answer, or the browser's
@@ -280,6 +298,9 @@ internal class FolderCheck(
     private fun answerOf(value: Any): String = value as? String ?: "done"
 
     companion object {
+        /** What [removeIfOurs] answers when it removed the file. */
+        private const val REMOVED = "removed"
+
         /** Every name this check makes starts so, which says in a file manager whose it is. */
         const val NAME_PREFIX = "cartogenesis-folder-check-"
 
@@ -340,6 +361,10 @@ private external fun userAgent(): String
  */
 @JsFun("async (file, directory, name) => file.move(directory, name)")
 private external fun moveExactly(file: JsHandle, directory: JsHandle, name: String): JsHandle
+
+/** Whether two handles are the same entry in the folder, resolving `true` or `false`. */
+@JsFun("async (one, other) => one.isSameEntry(other)")
+private external fun sameEntry(one: JsHandle, other: JsHandle): JsHandle
 
 // ---- The page `?foldertest` shows in place of the application. ----
 
@@ -435,5 +460,6 @@ private const val FOLDER_CHECK_INTRODUCTION =
     "This takes, one at a time, each step the library takes to save a world into a folder, and " +
         "says what this browser answered to each. Choose the folder the library uses. The check " +
         "makes its own files there, named cartogenesis-folder-check-…, and removes them again; it " +
-        "does not open, change or remove anything else in the folder. When it has finished, copy " +
+        "changes and removes nothing else in the folder, and reads only the names in it and, as the " +
+        "Library pane does, the header at the front of each save. When it has finished, copy " +
         "the report and send it back."

@@ -370,7 +370,10 @@ class FolderLibraryTest {
     }
 
     @Test
-    fun `a copy that fails partway leaves no file at all`() = runTest(timeout = 5.minutes) {
+    fun `a copy that fails partway keeps the whole save under its temporary name, and says so`() = runTest(timeout = 5.minutes) {
+        // The copy is the second write; the temporary file is already the whole save. On Android a
+        // write empties its file first, so a copy that fails can leave the name short, and removing
+        // the temporary file as well lost the save outright.
         val world = TestWorlds.small()
         withTestFolder("copy-fails") { folder ->
             withMoveIf(false) {
@@ -384,12 +387,39 @@ class FolderLibraryTest {
                     }
                 }
                 val library = FolderWorldLibrary(folder.handle, NoCompression, "a test", SMALL_PARTS, failsInTheCopy)
-                assertFailsWith<IllegalStateException> { library.save(document(world = world), world) }
+                val failure = assertFailsWith<IllegalStateException> { library.save(document(world = world), world) }
                 assertTrue(copying, "the save never reached its copy")
-                assertEquals(emptyList(), folder.entries(), "a failed copy left a file behind")
+
+                val kept = folder.entries().singleOrNull()
+                assertNotNull(kept, "the whole save was removed with the failed copy: ${folder.entries()}")
+                assertTrue(kept.startsWith(".w1.cgw.") && kept.endsWith(".tmp"), "not the temporary file: $kept")
+                assertTrue(kept in failure.message.orEmpty(), "the failure did not say where the save is: ${failure.message}")
+                assertTrue("the disk filled up" in failure.message.orEmpty(), "the failure lost its reason: ${failure.message}")
+                assertEquals(emptyList(), library.list(), "the listing took the temporary file for a save")
+                // And it is the save, whole: under a name the library reads, it opens.
+                folder.writeRaw("recovered.cgw", folder.readRaw(kept))
+                assertEquals("One", titleIn(library.load("recovered.cgw")))
             }
         }
     }
+
+    @Test
+    fun `a refused move is not taken as done because another writer's file of the same length is in the way`() =
+        runTest(timeout = 5.minutes) {
+            // Checked by length alone, the other writer's file passed for the save, and the
+            // temporary file, the only copy of the save, was removed.
+            val world = TestWorlds.small()
+            withTestFolder("move-same-length") { folder ->
+                val key = withAnotherWritersFileWhereMoveRefuses {
+                    FolderWorldLibrary(folder.handle, WebGzipCompressor, "a test").save(document(world = world), world)
+                }
+                val library = FolderWorldLibrary(folder.handle, WebGzipCompressor, "a test")
+                assertEquals("w1 (2).cgw", key, "the save took the other writer's name")
+                assertEquals("One", titleIn(library.load(key)))
+                assertTrue(folder.readRaw("w1.cgw").all { it == 7.toByte() }, "the other writer's file was changed")
+                assertEquals(listOf("w1 (2).cgw", "w1.cgw"), folder.entries())
+            }
+        }
 
     @Test
     fun `a temporary file that will not go away never takes the finished save with it`() = runTest(timeout = 5.minutes) {

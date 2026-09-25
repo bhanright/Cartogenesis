@@ -283,9 +283,12 @@ spread faster, and what a map can be held to is not the rate but Earth's mean oc
 3,682 m, which is what the rate is solved from.
 
 **A range that is being pushed up holds its height, and one that has stopped does not.** An uplift
-rate in millimetres a year runs under the belts of the present epoch — 0.92 in a continental
-collision, 0.37 on an Andean margin, less on an island arc and a rift's shoulders, nothing at all
-on a craton — and is spent every hydraulic round over the years a round stands for. So the rivers
+rate in millimetres a year runs under the belts of the present epoch — 0.29 in a continental
+collision, 0.12 on an Andean margin, less on an island arc and a rift's shoulders, nothing at all
+on a craton — and is spent every hydraulic round over the years a round stands for. (Those are the
+rates of [Fix 2](DESIGN_LEDGER.md) restated on the honest clock by [Fix 3](DESIGN_LEDGER.md), so a
+round lifts a belt by the metres it did; they are not yet re-derived against a denudation the
+stream-power law sets, for the reason given under the deviation below on the incision's cap.) So the rivers
 are cutting a belt that is still rising, and the height it settles at is the balance between the
 two, which is Whipple and Tucker's steady state rather than a stamped profile. An old belt is low
 because its uplift stopped and erosion went on, and the epochs say when: the ageing is
@@ -756,13 +759,14 @@ how deep an ocean is.
 
 The world is **12,000 km wide** and half that tall, being an equirectangular projection of a whole
 planet. Its highest land stands **6,000 m** above the waterline and its deepest floor **10,000 m**
-below it. One hydraulic round stands for about **126,000 years**, so the twelve of them are one and
-a half million — the right order for a mountain belt to reach a steady state between uplift and
-erosion. (S1 said 340,000 and four million: it solved the round's length from an expression carrying
-a `highestLandMetres / reliefSpanMetres` that was the honest reading while the height field was a
-normalisation and cancels now that it is an altitude. Solving the corrected expression is the same
-derivation with the same `K` and the same cut per round, and gives exactly 0.375 of S1's figure, so
-no world moved — only the label on the clock.)
+below it. One hydraulic round stands for about **336,000 years**, so the twelve of them are four
+million — the right order for a mountain belt to reach a steady state between uplift and erosion.
+The slope a river cuts with is read on the shoreline-relative field, 6,000 m a unit, and the cut is
+spent on the height field, 16,000 m a unit, so `highestLandMetres / reliefSpanMetres` belongs in the
+stream-power coefficient. From S2's second pass until [Fix 3](DESIGN_LEDGER.md) it was taken to
+cancel, and the round was labelled 126,000 years with the cut unchanged, which put every figure per
+year on the clock, the denudation compared with Earth's and the uplift the belts are fed, 2.67 times
+too high.
 
 Both ends of the vertical range are **cell means, not points**, and that is the thing to hold on to
 when a figure below looks too large. A cell of the default 512 grid is 23 km by 12 km. No cell that
@@ -838,6 +842,24 @@ margin on a deep sea rather than a step on a shallow one. Bringing the break its
 figure is a separate question and is in `TODO.md`.
 
 ## Known deviations
+
+**On every drawn river the cut is the explicit update's cap, not the stream-power law's.** The
+incision is `E = K A^0.5 S` over a round, spent explicitly, and it is capped at half the drop to a
+cell's receiver so it cannot carry a cell past the ground below it. That cap binds wherever the
+law's cut in a round is more than half the drop, a catchment of about four cells at every grid, and
+the rivers the map draws start at about sixty cells at 512. Since [Fix 3](DESIGN_LEDGER.md) spent
+the cap in the height field's own unit, it sets 100% of the drawn network's cuts on every world
+measured (it was 95 to 99.5% while it was spent as 1.33 times the drop). So what the law says about
+catchment, rain and cover reaches the channels only through a limiter: a round cuts half the drop,
+a north-south channel half as far as an east-west one on the same slope, and the lowering is
+shallower than the law and the four-million-year clock say. The valleys stand 1.68 times deeper
+than the ground before the water ran, against the 1.9 the tree before S2 managed. The coast's
+box-counting dimension is 1.03 pooled, under Mandelbrot's 1.25 +/- 0.15; it fell when the mouths
+stopped being cut below the sea and the cap began to bind everywhere, which of the two was not
+isolated. The ranges' texture is two thirds of what was recorded. The
+belts' denudation, 0.074 mm a year with the uplift off, is the cap's, so the collision uplift rate is
+not re-derived from it. The fix is an implicit update (Braun and Willett 2013), which the next
+erosion chunk takes up; `TODO.md` lists what it re-derives.
 
 **Half the land is tundra.** Over seeds 7/42/1234/99 at 512, tundra takes 40–58% of the ice-free
 land, pooled 47%, against Earth's 6% (Olson et al. 2001). The boreal forest beside it is 6.7%
@@ -1091,7 +1113,7 @@ of whatever rim survived.
 
 **What spaces a coast's valleys is not established, and the comb the author saw is resolution-dependent.** Measured by X1d over seven worlds (969495 and the six audited seeds) at 512, 1024 and 2048, on every straight coast at least 300 km long, with a finder that reads the routing and never the traced rivers (`RangeFront`, driven by `CoastalSpacingAuditTest`). Under that instrument the valleys that reach the divide are about 70 km apart at every grid — 70.3, 70.2 and 66.2 km, 3, 6 and 12 cells — and matched coast by coast the fine grid's figure is 0.92 to 1.02 of the coarse grid's in kilometres. That steadiness is not evidence that the ground sets the figure: halving the instrument's catchment floor takes the spacing to 47 to 52 km and doubling it to 76 to 101, at every grid, so the value is the instrument's reading and a floor fixed in square kilometres would hold it steady across grids by itself. The floor is a choice (1,440 km2, where Hack's empirical length-area relation puts a typical basin's main stream at the 100 km shortest drawn course), not a law. The combs between the valleys are resolution-dependent. Catchments of at least that floor reach the coasts 70.0, 58.2 and 47.7 km apart, and the traced courses — every one of which an export drew before X1c's selection — 75.8, 53.3 and 45.7 km; matched coast by coast from 512 to 2048 they keep 0.83 and 0.80 of their spacing, and at half and double the floor the catchment comb keeps 0.63 and 0.81. A spacing fixed in cells would keep 0.25, one fixed on the ground 1.00: these contract, but far more slowly than the grid refines. The traced comb at 2048 is 45.7 km, 8.4 cells, which is the "ten cells" the author read. His own coast, on the eastern peninsula of 969495 — a smooth slope falling from a plateau at 1,100 to 1,900 m to the sea over 100 to 150 km, beside a transform boundary and on no mountain front — contracts faster. Measured on one line fixed in kilometres, its catchments are 62.3 km apart at 512 and at 1024 and 24.2 km apart at 2048, 0.39 of the 1024 figure, and its traced courses 124.5, 62.3 and 19.4 km, 0.31: below the 0.50 a spacing fixed in cells would keep between those grids, on samples of 5 and 11 gaps. Halving and doubling the relief wavelength and the belt width, and changing the octave count by one (which doubles and halves the finest wavelength the noise carries), on two seeds at 2048, leaves the coasts' valley spacing at 0.82 to 1.18 of the stock world's and the catchment comb at 0.83 to 1.14: no consistent proportional response, which does not show that none of these contributes. Nor does the spacing follow the depth of the ground behind the coast the way Earth's does: Hovius (1996) found the half-width of a linear mountain belt 2.1 times its outlet spacing, and on this instrument's divide proxy the ratio reads 0.86 to 1.09 on coasts and 0.61 to 0.95 on mountain fronts, with the log of spacing rising 0.21 to 0.32 per unit log of half-width where Hovius's belts give 1 — figures of the proxy, which lets a basin alone in its strip set its own divide. A hypothesis for the author's coast, not established: the hillslope process here is a slope threshold with no length of its own, and the spacing of first-order valleys on Earth is set by the ratio of hillslope transport to river incision (Perron, Kirchner and Dietrich 2009), so where the ground is smooth enough that nothing else intervenes the cell may be the only length left. It is recorded in `TODO.md` with the fix it would imply and this measurement as its guard.
 
-**The land's outlines run about two fifths further east-west than north-south on the ground, and the rest of the twofold anisotropy they had is gone.** A square grid over a world twice as wide as it is tall has cells twice as wide as they are tall, and a landscape isotropic on the ground puts as much of its coastline's length into east-west travel as into north-south. Before Fix 2 the coastline projected 1.93, 1.99 and 2.06 times as far east-west as north-south at 512, 1024 and 2048 over seven worlds, which is what land isotropic in *cells* gives: every operator that shapes the ground counted a row as a column, the terrain noise's lattice and the plate stage's boundary distance among them. With each on the ground's ruler ([Fix 2](DESIGN_LEDGER.md)) the four standard worlds at 512 read 1.32, 1.41, 1.41 and 1.41, 1.39 pooled (`GroundIsotropyTest`), where the same measure read 1.88, 2.00, 1.97 and 1.89 before, and over the seven worlds `CoastalSpacingAuditTest` prints, 1.41, 1.48 and 1.53 at 512, 1024 and 2048, the 2,000 m contour 1.46, 1.47 and 1.48; Natural Earth's coastline reads 0.98 at 1:50,000,000 and 1.00 at 1:10,000,000, measured on the sphere. What is left is the hydraulic rounds'. The plate stage's own coast reads 1.09 and 0.91 on seeds 42 and 7, and the thermal sweeps leave it there; the twelve rounds take the erosion stage's land to 1.56 and 1.48, because the incision is capped at half the drop to a cell's receiver in a round, a drop is in proportion to the step's length, and a step down a column is half as long as one along a row, so wherever the cap and not the stream-power law sets the cut a channel running north-south is cut half as deep a round as one running east-west (Audit III's B-D1, the erosion's units). The notches say the same: where a river's course steps along a row it is cut about as deep as the tree before Fix 2 cut it, and where it steps down a column a quarter to a third shallower (`ValleyIncisionTest`). Weakening the law tenfold, so the cap binds less, takes the ratio to 1.14 and 1.04 on seeds 42 and 7, and thirtyfold to 1.05 and 0.91. The routing falls where the ground falls: a plane falling at 45 degrees on the ground routes at 45.0, where it routed at 14.1 (`RoutingGroundTest`).
+**The land's outlines run about two fifths further east-west than north-south on the ground, and the rest of the twofold anisotropy they had is gone.** A square grid over a world twice as wide as it is tall has cells twice as wide as they are tall, and a landscape isotropic on the ground puts as much of its coastline's length into east-west travel as into north-south. Before Fix 2 the coastline projected 1.93, 1.99 and 2.06 times as far east-west as north-south at 512, 1024 and 2048 over seven worlds, which is what land isotropic in *cells* gives: every operator that shapes the ground counted a row as a column, the terrain noise's lattice and the plate stage's boundary distance among them. With each on the ground's ruler ([Fix 2](DESIGN_LEDGER.md)) the four standard worlds at 512 read 1.32, 1.41, 1.41 and 1.41, 1.39 pooled (`GroundIsotropyTest`), where the same measure read 1.88, 2.00, 1.97 and 1.89 before, and over the seven worlds `CoastalSpacingAuditTest` prints, 1.41, 1.48 and 1.53 at 512, 1024 and 2048, the 2,000 m contour 1.46, 1.47 and 1.48; Natural Earth's coastline reads 0.98 at 1:50,000,000 and 1.00 at 1:10,000,000, measured on the sphere. What is left is the hydraulic rounds'. The plate stage's own coast reads 1.09 and 0.91 on seeds 42 and 7, and the thermal sweeps leave it there; the twelve rounds take the erosion stage's land to 1.56 and 1.48, because the incision is capped at half the drop to a cell's receiver in a round, a drop is in proportion to the step's length, and a step down a column is half as long as one along a row, so wherever the cap and not the stream-power law sets the cut a channel running north-south is cut half as deep a round as one running east-west (Audit III's B-D1, the erosion's units). The notches say the same: where a river's course steps along a row it is cut about as deep as the tree before Fix 2 cut it, and where it steps down a column a quarter to a third shallower (`ValleyIncisionTest`). Weakening the law tenfold, so the cap binds less, takes the ratio to 1.14 and 1.04 on seeds 42 and 7, and thirtyfold to 1.05 and 0.91. The routing falls where the ground falls: a plane falling at 45 degrees on the ground routes at 45.0, where it routed at 14.1 (`RoutingGroundTest`). Since [Fix 3](DESIGN_LEDGER.md) put the incision's caps in one unit, the four worlds read 1.02, 1.15, 1.19 and 1.11 on seeds 7, 42, 1234 and 99, 1.12 pooled, where they read 1.32 to 1.41, and seed 1234 is still past what its length allows. The cap now sets every drawn channel's cut, so the per-step asymmetry is still there. Which of Fix 3's changes moved the ratio (the mouths no longer cut below the sea, or the cap binding on more cells) was not isolated.
 
 ## Fixed by this audit
 
@@ -1530,12 +1552,20 @@ read at that width: the Andes' western flank climbs 6,000 m in 100 km, the Himal
 honest conversion of a unitless figure nobody had ever chosen as a slope, and a twentieth of the
 gentlest front on Earth. A stamped plateau's rim ramp falls at about 12 m/km over its 200 km, so the
 sweeps found it exactly at the threshold and planed it to a dead plane: every collision belt on the
-map wore a smooth cream annulus with no channel crossing it. And nothing cuts below sea level, because that is the base level every river grades to; without
-that limit the cells nearest the shore incise hardest, having a whole catchment behind them and open
-water in front, and the coastline shreds into drowned valleys.
+map wore a smooth cream annulus with no channel crossing it. And the incision never cuts below sea
+level, because that is the base level every river grades to; without that limit the cells nearest
+the shore incise hardest, having a whole catchment behind them and open water in front, and the
+coastline shreds into drowned valleys. Until [Fix 3](DESIGN_LEDGER.md) it did: the limit was a
+height above the sea in the land's unit spent on the height field, so a cell could lose 2.67 times
+its height above the water, and every round cut 42 to 67% of the cells draining into the sea (55
+to 58% over the twelve rounds, on seeds 7, 42 and 1234 at 512, 42 at 1024 and 969495 at 2048), and
+every drawn river's mouth, below that round's shoreline, a median 10 to 28 m and up to 980 m. The
+ice carving a trough and the pass that opens a drowned basin after the sea-level cut still cut below
+it, deliberately.
 
-Verified by `ValleyIncisionTest`, which measures how far the banks stand above the channel across
-every drawn river: twice as high as without water.
+Measured by `ValleyIncisionTest`, which reads how far the banks stand above the channel across
+every drawn river: twice as high as without water until [Fix 3](DESIGN_LEDGER.md), 1.68 times since,
+under the deviation below on the incision's cap.
 
 ## Three kinds of collision
 

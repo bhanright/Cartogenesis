@@ -60,9 +60,9 @@ generated worlds are discarded.
 
 Each stage feeds the next, and every stage is deterministic for a given seed. The world has a
 declared physical size (`WorldScale`): 12,000 km across, land up to 6,000 m above the waterline, sea
-floor down to 10,000 m below it, and one hydraulic round standing for about 126,000 years
-(`WorldScale.yearsPerHydraulicRound`, 126,178.65, derived from the stream-power constants rather
-than chosen). Both ends of the vertical range are cell means rather than points — a cell of the
+floor down to 10,000 m below it, and one hydraulic round standing for about 336,000 years
+(`WorldScale.yearsPerHydraulicRound`, 336,476.4, derived from the stream-power constants rather
+than chosen), so twelve rounds are about four million years. Both ends of the vertical range are cell means rather than points — a cell of the
 default grid is 23 km across, and no cell that size holds a summit. Every reach, depth and rate in
 the generator is written in those units and converted to whatever grid the world is generated at.
 
@@ -80,7 +80,9 @@ the generator is written in those units and converted to whatever grid the world
    floor sits at the depth its age gives it (Parsons and Sclater).
 3. **Erosion.** Thermal erosion moves material off slopes steeper than a critical gradient, and
    stream-power incision (`E = K A^0.5 S`) cuts channels in proportion to the water draining through
-   them, round by round. Uplift continues under active belts during the same rounds, and the plate
+   them, round by round, never below the sea and never by more than half the drop to the next cell
+   in a round. On every river the map draws that half-the-drop limit, not the law, sets the cut
+   today, which the next erosion chunk is to replace with an implicit solve (`docs/TODO.md`). Uplift continues under active belts during the same rounds, and the plate
    flexes under what the water moves: stripped ranges rebound, forelands sink under sediment, and an
    ice sheet holds its bed down.
 4. **Deposition.** Sediment settles where a cell's load exceeds what its slope can carry: graded

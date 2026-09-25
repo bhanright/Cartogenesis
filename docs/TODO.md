@@ -1,5 +1,43 @@
 # To do
 
+- **The explicit incision is set by its own cap on every drawn channel, not by the stream-power
+  law.** Once Fix 3 spent the incision's caps in one unit, the cap at half the drop to a cell's
+  receiver sets 100.0% of the drawn network's cuts on seeds 7, 42 and 1234 at 512, 42 at 1024 and
+  969495 at 2048. The explicit update cuts `F` times the drop, where `F = K T sqrt(A) / L` is about
+  `0.24 sqrt(A in cells)` at every grid, and the drawn network starts where `F` is 1.9. So the law,
+  the cover's factor and the rain's weighting reach the channels only through a limiter. The
+  maintainer has chosen Braun and Willett's implicit update for the next erosion chunk. Fix 3's
+  report on its review branch sets out what it changes in the ordered pass, what becomes of each cap,
+  the clamp, deposition and the notch, its cost and a graphics-card path. That chunk re-derives:
+  - the collision uplift rate, from a denudation the law sets (`IsostasyTest`'s known failure;
+    today's cap-set figure, 0.074 mm a year, would make it 0.574);
+  - the two per-step known failures, the coast's projection ratio and the steep ground's facing
+    (`GroundIsotropyTest`);
+  - the valley notch, the coast's dimension, the lowstand's estuaries, the ground's texture, the rain's
+    dissection contrast and the drylands' drainage density, which run as known failures under
+    `CAP_SETS_EVERY_CUT` with their figures (docs/DESIGN_LEDGER.md, Fix 3);
+  - `ClimateFedErosionTest`'s cover and flank clauses, which measure a proportional law and want
+    restating on the law's rate through `IncisionWatch` once the cut saturates as `F / (1 + F)`.
+  2026-09-25, Fix 3.
+
+- **The sea-level percentile hands the sea's highest cell to the land where the sea fills its rank
+  exactly.** `SeaLevelStage.thresholdAtRank` finds the bin where the cells counted so far reach the
+  target rank, `>=`, and when the target is the bin's last cell the index is clamped to it and the
+  returned threshold is the highest *sea* value, so every cell at that value counts as land: cut at
+  half sea, four cells at 0.1, 0.1, 0.9 and 0.9 come out all land, and four at 0.1, 0.2, 0.8 and
+  0.9 three land of four. On a real world the error is a cell or a few; on a synthetic one whose
+  sea shares a depth it is the whole sea (Fix 3's clock
+  guard gives its sea distinct depths and reads the catchment as the stage defines it). The smallest
+  fix is `>` in the bracket search, which finds the bin holding the target rank's own cell and
+  returns its value. Every world moves by the cells at the boundary, so it wants a fingerprint check
+  of its own. 2026-09-25, Fix 3.
+
+- **The flat potential's cost sits on rule 8's line.** After Fix 3 seed 7's flats at 512 hold 2,696
+  raised cells in 478 flats and a pass costs 3.4 ms, 1.00% of a generation over 33 passes; it read
+  under the line on two runs and `FlatCourseTest`'s clause is armed again, but a loaded machine can
+  put it over. A device path, or a figure that does not ride on the machine's load, is still owed.
+  2026-09-25, Fix 3.
+
 - **The Earth reference behind the river density is one dataset.** The Cartography panel's River
   density slider scales the ink from a quarter of Earth's figure to every course the sheet's scale
   allows, with Earth's figure as the default mark, so the reader can now have the old drawing back
@@ -114,7 +152,9 @@
   coastline now projects 1.32, 1.41, 1.41 and 1.41 times as far east-west as north-south, 1.39
   pooled, where the same measure read 1.88 to 2.00 before (`GroundIsotropyTest`). What is left is
   the incision's cap per step, Audit III's B-D1, which cuts a channel running north-south half as
-  far a round; the test records it as a known failure and the erosion's units are the next chunk's.
+  far a round; the test records it as a known failure. Fix 3 put the erosion in one unit and the
+  ratio came to 1.12 pooled, still over on seed 1234 at 1.19; the cap now sets every drawn cut, and
+  the implicit update is where it is next taken up (the first entry above).
   Over the seven worlds `CoastalSpacingAuditTest` prints, the coastline reads 1.41, 1.48 and 1.53 at
   512, 1024 and 2048 where it read 1.93, 1.99 and 2.06, and the 2,000 m contour 1.46, 1.47 and 1.48
   where it read 1.99, 2.00 and 2.04. The coast's figure still rises with the grid; why is not
@@ -161,11 +201,13 @@
     (`IsostasyTest`); sheets as wide as Greenland's grow on high plateaus and stand under its 2,000 m
     (`IceSheetTest`, seeds 718106 and 7); seed 59758's sheet edge runs 70 cells along a row, the
     census's ice-edge finding (`IceSheetTest`);
-  - *the erosion* (chunk 3): the coast's projection ratio and the valley notch, a quarter to a third
-    shallower where a course steps down a column, both under B-D1 (`GroundIsotropyTest`,
-    `ValleyIncisionTest`); seed 1234's windward flank cut 1.26 times as hard for 3.5 times the rain,
-    under the law's 1.49 (`ClimateFedErosionTest`);
-  - *the water*: the notch's three largest-basin clauses (`OutletIncisionTest`); the flat potential
+  - *the erosion* (chunk 3, done as Fix 3, and still open under the implicit update, the first entry
+    above): the coast's projection ratio and the valley notch, a quarter to a third shallower where a
+    course steps down a column, both under B-D1 (`GroundIsotropyTest`, `ValleyIncisionTest`); seed
+    1234's windward flank cut 1.26 times as hard for 3.5 times the rain, under the law's 1.49, 1.12
+    since Fix 3 (`ClimateFedErosionTest`);
+  - *the water*: the notch's three largest-basin clauses (`OutletIncisionTest`), armed again at Fix 3
+    once the notch began at the basin's lip; the flat potential
     at 4.7% of a generation on seed 7, past rule 8's hundredth, because the redrawn world's flats
     hold twice the cells (`FlatCourseTest`) — a device path, or a cheaper solve, is owed;
   - *the climate*: the pooled recycling ratio, 0.292 against Earth's 0.30 (`MoistureBudgetTest`,
@@ -188,6 +230,7 @@
   What the ruler does not reach is recorded under `GroundIsotropyTest`'s known failure: the cut is
   capped at half the drop to a cell's receiver in a round, a drop is in proportion to the step, and
   where the cap sets the cut (Audit III's B-D1) a north-south channel is cut half as deep a round.
+  Since Fix 3 that is every drawn channel; see the first entry above.
 - **The moisture march does not conserve its water, in two places.** In `ClimateStage.marchLandStep` the parcel's stock is capped to the cold cap *after* its rain for the cell has been taken, so the water the cap removes over cold ground is neither rained nor carried: it leaves the budget silently. In `marchSeaStep` the rain over open water is reported (`moisture * seaRainPerCell`) but never subtracted from the stock handed to the next cell, so the ocean reservoir approaches saturation whatever the sea rain rate is set to. Both were found by reading the code against the ledger's recycling figure, which therefore does not by itself show the budget is right. The fix is an instrumented budget first (every source, every sink, the storage change and the boundary flux summing to zero per lap), then the two corrections, then re-measuring recycling and the interior mean; it belongs to the chunk on wetter interiors, because closing the sea leak alone will move every coast. Beside it: the 1,000 km depletion length cites van der Ent and Savenije (2011) for a figure that paper gives as 500-2,000 km for tropical and mountain recycling, with 3,000-5,000 km in temperate climates and over 7,000 in deserts, so the constant's justification is misread and the transport time and the rain lifetime want testing separately. 2026-09-21.
 - **A lake fan outlives its lake, and what it leaves is a sill.** On 718106 at 2048 the deposited world holds 23,362 cells of standing water (graded) and 24,421 (ungraded) against 20,998 with no deposition at all, and the window where deposition ponds the most - `[48,400,203,650]`, found by `BayHeadDeltaAuditTest` - holds one lake of 1,038 cells the no-deposition world does not have. `DepositionLog` says its shore is ringed with lake-fan spoil, and a render of the log's mechanism over the window (looked at during T4, not kept) shows that spoil lying in a ring well outside the present shore. The reading of that picture, which is an inference and not a measurement: the rounds ponded a far larger basin there, fans were built into it, the basin's rim was cut and it drained, and the spoil laid across its floor was left standing across the hollow in the middle. A fan is stopped two pond depths short of the surface it is built toward (`HydraulicErosion`, the lake inflow branch) so that every cell it touches is still water afterwards, and that is true of the surface it was built toward and not of the one the basin drains to later; sediment sits in its own array until `settle` adds it to the terrain at the end, so the per-round breaches lower the rock under it and not it. Nothing forbids cutting it afterwards: the closing breach is blind to mechanism and `openMouths` cuts any spoil under a drawn course, so what preserved these lakes is one of their limits - the closing breach's stream power, floor and reach, or `openMouths`' discharge threshold, which a small basin's outflow does not meet - and which one is not yet measured. The graded rule has no say in any of it, which is why the two settings hold nearly the same water in that window (3,699 and 3,687); over the whole world they make fourteen and thirteen lakes the no-deposition world lacks, 5,600 and 6,100 cells, and the audit case prints, for each, the gross deposition on its shore by mechanism. The audit's water clause is therefore printed as a census and not asserted. What would answer it: find which limit preserved the lakes (a round-by-round trace of one basin's spill and floor), then either stop a fan short of the floor of the basin's outlet rather than of its surface or give the closing breach a drained basin's former discharge, and measure whole-world standing water against the no-deposition world on both authored seeds at 1024 and 2048. With it, a discriminating guard for the graded rule itself, which no per-merge test has: a controlled channel whose upstream margin leaves the ungraded rule headroom to deposit and the graded rule none, shown failing by forcing the graded branch to a zero grade. Whole-world standing water on deposited worlds has stood at or above the no-deposition figure since E6 (1.04x and 1.16x at 1024 then; 1.26x and 0.99x at 1024 and 1.11x and 1.16x at 2048 on the 3.2 tree), so this is not new, only named. 2026-09-22.
 - **The audit tier cannot be finished on the machine T3 ran it on, and the fault is the machine.**

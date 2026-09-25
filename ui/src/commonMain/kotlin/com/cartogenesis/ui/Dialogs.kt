@@ -196,7 +196,7 @@ internal fun SettingsDialog(
                         // with its handle, not typed as a path, so it is chosen where the worlds
                         // are rather than here.
                         Text(
-                            "In this browser the library can live in a folder on this computer, " +
+                            "In this browser the library can live in a folder on this device, " +
                                 "including one a sync client keeps in step. Choose it in the Library.",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant

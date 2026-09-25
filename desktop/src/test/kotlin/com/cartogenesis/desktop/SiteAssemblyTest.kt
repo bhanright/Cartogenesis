@@ -711,7 +711,7 @@ class SiteAssemblyTest {
             "the Export row does not quote the $ceiling × $ceiling this build can finish: \"$exports\""
         )
         assertTrue(
-            Regex("""browser[^.]*$browserCeiling × $browserCeiling""").containsMatchIn(exports),
+            Regex("""browser[^.]*\b$browserCeiling × $browserCeiling\b""").containsMatchIn(exports),
             "the Export row does not quote the browser's ceiling of $browserCeiling: \"$exports\""
         )
         // And what a world at the ceiling comes out as for a picture: its true-shape sheet, which

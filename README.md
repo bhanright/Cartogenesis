@@ -405,7 +405,7 @@ own, each of which opens, and saves, without touching the other.
 
 In the browser the library starts in the browser's own storage, where clearing the site's data
 removes it. In Chrome and Edge, which offer web pages a folder picker, the Library pane's **Choose a
-folder…** moves it into a folder on your computer instead: the same `.cgw` files under the same
+folder…** moves it into a folder on your device instead: the same `.cgw` files under the same
 names as the desktop's, so one folder, synced or not, serves both. Firefox and Safari offer no such
 picker; there the library stays in the browser's storage and moves in and out by Download and
 Upload. The browser remembers the folder between visits but asks again before a page may use it,

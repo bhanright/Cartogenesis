@@ -48,21 +48,20 @@ class RealmSpreadTest : BorrowsSharedWorlds() {
             // And no realm should be a world empire. The runaway version of this hit 60%; the bar
             // is the stage's own cap, `NationsConfig.maxRealmShare`, since a realm over it is split
             // until it is not. It was 40% until Audit III (its E-T10), which could not see the cap
-            // failing anywhere between the two.
+            // failing anywhere between the two: seed 7's largest realm stood at 33.6%, because the
+            // cap was enforced on the catchments and the enclave pass then gave the realm pieces
+            // of its neighbours. Armed at chunk 6, which made that pass respect the cap.
             largestShares += seed to largest.toDouble() / land
         }
         val cap = WorldGenConfig().nations.maxRealmShare.toDouble()
-        KnownFailures.expect(
-            "E-T10: the largest realm stands over the stage's own cap, the cause not yet diagnosed",
-            "seed 7 33.6%"
-        ) {
-            val over = largestShares.filter { it.second > cap }
-            if (over.isNotEmpty()) {
-                val found = over.joinToString { (seed, share) -> String.format(Locale.ROOT, "seed %d %.1f%%", seed, share * 100) }
-                val capPercent = String.format(Locale.ROOT, "%.0f%%", cap * 100)
-                throw RecordedViolation("one realm holds more of the land than the stage's own cap of $capPercent: $found", found)
-            }
-        }
+        val over = largestShares.filter { it.second > cap }
+        assertTrue(
+            over.isEmpty(),
+            "one realm holds more of the land than the stage's own cap of %.0f%%: %s".format(
+                Locale.ROOT, cap * 100,
+                over.joinToString { (seed, share) -> String.format(Locale.ROOT, "seed %d %.1f%%", seed, share * 100) }
+            )
+        )
     }
 
     @Test

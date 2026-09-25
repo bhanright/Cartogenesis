@@ -372,6 +372,11 @@ object NationStage {
         val cellCount = cellsAcross * cellsDown
         val capitalCells = HashSet<Int>()
         origins.forEach { capitalCells.add(it) }
+        val capCells = config.nations.maxRealmShare * sea.landCellCount
+        val realmCells = IntArray(origins.size)
+        for (cell in nationId.indices) {
+            if (sea.isLand[cell] && nationId[cell] != NationResult.UNCLAIMED) realmCells[nationId[cell]]++
+        }
 
         // Repeated, because giving one pocket away can join two others into a piece worth keeping.
         repeat(ENCLAVE_PASSES) {
@@ -477,12 +482,20 @@ object NationStage {
                 // No land neighbours at all means an island, not an enclave. Leave it be.
                 // Ties go to the lower realm id: a HashMap's iteration order differs between the
                 // JVM and Wasm, and "whichever came first" is not a tie-break, it is a coin toss.
+                // A neighbour the piece would take past the realm cap is passed over for the next,
+                // and a piece no neighbour can take stays where it is: the cap is enforced on the
+                // catchments before this pass, and giving pieces away is the one step after it
+                // that can grow a realm. Unchecked, seed 7's largest realm went from 24% of the
+                // land to 34% here (docs/DESIGN_LEDGER.md, chunk 6).
                 val host = edgeHeldBy.entries
+                    .filter { realmCells[it.key] + pieceCells.size <= capCells }
                     .maxWithOrNull(
                         compareBy<Map.Entry<Int, Int>> { it.value }.thenByDescending { it.key }
                     )
                     ?.key ?: return@forEachIndexed
                 pieceCells.forEach { nationId[it] = host }
+                realmCells[host] += pieceCells.size
+                realmCells[realm] -= pieceCells.size
                 changed = true
             }
             if (!changed) return

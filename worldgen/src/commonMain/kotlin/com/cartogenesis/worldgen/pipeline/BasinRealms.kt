@@ -358,6 +358,9 @@ internal object BasinRealms {
         // See GEOGRAPHY.md, "Realms of uneven size".
         val capCells = config.nations.maxRealmShare * units.area.sum().toFloat()
         var attempts = 0
+        // A realm that cannot be split is set aside rather than ending the pass, so one realm
+        // over the cap in a single catchment does not leave every other realm over it too.
+        val unsplittable = HashSet<Int>()
         while (attempts++ < MAX_CAP_SPLITS) {
             val held = IntArray(count)
             for (unit in 0 until units.unitCount) {
@@ -365,7 +368,7 @@ internal object BasinRealms {
             }
             var largestOverCap = -1
             for (realm in 0 until count) {
-                if (held[realm] > capCells &&
+                if (held[realm] > capCells && realm !in unsplittable &&
                     (largestOverCap < 0 || held[realm] > held[largestOverCap])
                 ) {
                     largestOverCap = realm
@@ -373,10 +376,13 @@ internal object BasinRealms {
             }
             if (largestOverCap < 0) break
             val mine = (0 until units.unitCount).filter { owner[it] == largestOverCap }
-            if (mine.size < MIN_CAP_SPLIT_UNITS) break
-            val breakawayUnits = growBreakaway(
+            val breakawayUnits = if (mine.size < MIN_CAP_SPLIT_UNITS) null else growBreakaway(
                 units, owner, quality, largestOverCap, mine, minTakenUnits = 1
-            ) ?: break
+            )
+            if (breakawayUnits == null) {
+                unsplittable.add(largestOverCap)
+                continue
+            }
             val breakaway = count++
             breakawayUnits.forEach { owner[it] = breakaway }
         }

@@ -225,6 +225,21 @@ object OceanStage {
         val solution = OceanCirculation.solve(levels, relax)
         val stream = solution.stream
         report.append("${grid.first}x${grid.second} levels ${levels.size} cycles ${solution.cycles} residual ${solution.relativeResidual} solve ${solveStarted.elapsedNow().inWholeMilliseconds} ms")
+        run {
+            // Diagnostic, temporary: the float floor of the residual and where the worst cell is.
+            val res = OceanCirculation.residual(solvedStencil, stream)
+            val largestF = OceanCirculation.largest(OceanCirculation.balanceOf(solvedStencil))
+            var worstCell = 0; var worst = 0.0; var floor = 0.0; var psiMax = 0.0
+            for (cell in res.indices) {
+                if (!solvedStencil.isWater[cell]) continue
+                val a = kotlin.math.abs(res[cell]); if (a > worst) { worst = a; worstCell = cell }
+                val f = 2.0 * 1.1920929e-7 * kotlin.math.abs(stream[cell]) * solvedStencil.centreWeight[cell / grid.first]
+                if (f > floor) floor = f
+                psiMax = maxOf(psiMax, kotlin.math.abs(stream[cell].toDouble()))
+            }
+            report.append(" history " + solution.history.filterIndexed { i, _ -> i < 12 || i % 20 == 0 }.joinToString(",") { it.toString().take(7) })
+            report.append(" [psi max $psiMax m2/s, float floor ${floor / largestF}, worst at row ${worstCell / grid.first} col ${worstCell % grid.first} psi ${stream[worstCell]}]")
+        }
         val (across, down) = grid
         val gridWidthMetres = config.scale.worldWidthKm * METRES_PER_KM / across
         val gridHeightMetres = worldHeightMetres(config) / down
@@ -282,10 +297,10 @@ object OceanStage {
         val heightShare = WorldScale.WORLD_HEIGHT_AS_SHARE_OF_WIDTH
         return when (config.ocean.heatGrid) {
             OceanHeatGrid.FINE -> cellsAcross to cellsDown
-            OceanHeatGrid.PHYSICS -> {
+            OceanHeatGrid.PHYSICS, OceanHeatGrid.PHYSICS_ALWAYS -> {
                 val spacingMetres = narrowestStommelLayerMetres(config.scale) / CELLS_ACROSS_STOMMEL_LAYER
                 val fineWidthMetres = config.scale.cellWidthKm(cellsAcross) * METRES_PER_KM
-                if (spacingMetres < fineWidthMetres) {
+                if (spacingMetres < fineWidthMetres && config.ocean.heatGrid == OceanHeatGrid.PHYSICS) {
                     cellsAcross to cellsDown
                 } else {
                     val down = rowsForCycle((worldHeightMetres(config) / spacingMetres).roundToInt())

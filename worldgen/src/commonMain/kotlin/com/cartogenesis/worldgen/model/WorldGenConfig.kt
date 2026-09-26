@@ -1945,7 +1945,9 @@ enum class OceanHeatGrid {
     /** Square cells two to the narrowest Stommel layer, or the map's grid where that is finer. */
     PHYSICS,
     /** Square cells, a fixed number of rows per row of the map. */
-    MAP_SHARE
+    MAP_SHARE,
+    /** The physics-sized grid at every size, finer than the map's where the map's is coarser. */
+    PHYSICS_ALWAYS
 }
 
 /** Where the erosion sweeps run. */

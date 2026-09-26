@@ -116,7 +116,7 @@ object OceanCirculation {
     private const val SQUARE_ENOUGH = 1.25
 
     /** What a solve returned: ψ on the finest grid, the V-cycles it took and the residual it reached. */
-    class Solution(val stream: FloatArray, val cycles: Int, val relativeResidual: Double)
+    class Solution(val stream: FloatArray, val cycles: Int, val relativeResidual: Double, val history: List<Double> = emptyList())
 
     /**
      * Builds the problem for one grid.
@@ -162,11 +162,19 @@ object OceanCirculation {
                 eastAlongX = scale * (2.0 + cothLessOne)
                 westAlongX = scale * cothLessOne
             }
-            val centreWeight = eastAlongX + westAlongX + 2.0 * alongY
+            // The poles are walls at the map's top and bottom edges, which are cell faces: the
+            // value beyond the first and last rows is minus the row's own, so ψ is zero on the
+            // face. Folded into the weights here, the north or south weight of an edge row is
+            // zero and its centre carries the wall, and every grid of a cycle puts the wall in
+            // the same place.
+            val northAlongY = if (row == 0) 0.0 else alongY
+            val southAlongY = if (row == cellsDown - 1) 0.0 else alongY
+            val centreWeight = eastAlongX + westAlongX + 2.0 * alongY +
+                (alongY - northAlongY) + (alongY - southAlongY)
             east[row] = (eastAlongX / centreWeight).toFloat()
             west[row] = (westAlongX / centreWeight).toFloat()
-            north[row] = (alongY / centreWeight).toFloat()
-            south[row] = (alongY / centreWeight).toFloat()
+            north[row] = (northAlongY / centreWeight).toFloat()
+            south[row] = (southAlongY / centreWeight).toFloat()
             centre[row] = centreWeight
         }
         val stencil = OceanStencil(
@@ -194,8 +202,9 @@ object OceanCirculation {
     /**
      * [passes] red-black Gauss-Seidel passes over [stencil], in place in [stream].
      *
-     * The reference every accelerator is held to. Land is pinned at zero; columns wrap; beyond
-     * either pole ψ is zero, which is a wall: no water crosses a pole. Colouring by
+     * The reference every accelerator is held to. Land is pinned at zero; columns wrap; an edge
+     * row's weight toward its pole is zero, since the stencil carries the pole's wall in its centre
+     * weight, so what lies beyond is never read: no water crosses a pole. Colouring by
      * `(column + row)` parity on an even-width cylinder means no two cells of one colour are
      * neighbours, so a colour updates in parallel and in place.
      */
@@ -288,7 +297,7 @@ object OceanCirculation {
     /**
      * Adds [coarse], a correction on the grid [coarseAcross] by [coarseDown], to [fine]'s water
      * cells, read bilinearly between coarse cell centres: columns wrap, and beyond either pole the
-     * correction is the wall's zero.
+     * correction is minus the edge row's, so it is zero on the pole's face as ψ is.
      */
     fun prolongAdd(
         coarse: FloatArray,
@@ -314,9 +323,12 @@ object OceanCirculation {
                     val acrossBlend = coarseColumn - left
                     val westColumn = (left + coarseAcross) % coarseAcross
                     val eastColumn = (left + 1) % coarseAcross
-                    fun at(coarseRowIndex: Int, coarseColumnIndex: Int): Float =
-                        if (coarseRowIndex < 0 || coarseRowIndex >= coarseDown) 0f
-                        else coarse[coarseRowIndex * coarseAcross + coarseColumnIndex]
+                    // Beyond a pole the correction is minus the edge row's, as the stencil has it.
+                    fun at(coarseRowIndex: Int, coarseColumnIndex: Int): Float = when {
+                        coarseRowIndex < 0 -> -coarse[coarseColumnIndex]
+                        coarseRowIndex >= coarseDown -> -coarse[(coarseDown - 1) * coarseAcross + coarseColumnIndex]
+                        else -> coarse[coarseRowIndex * coarseAcross + coarseColumnIndex]
+                    }
                     val top = at(above, westColumn) * (1f - acrossBlend) + at(above, eastColumn) * acrossBlend
                     val bottom = at(above + 1, westColumn) * (1f - acrossBlend) + at(above + 1, eastColumn) * acrossBlend
                     fine[cell] += top * (1f - downBlend) + bottom * downBlend
@@ -403,12 +415,14 @@ object OceanCirculation {
         val largestBalance = largest(balanceOf(finest))
         var cycles = 0
         var residual = if (largestBalance > 0.0) Double.MAX_VALUE else 0.0
+        val history = ArrayList<Double>()
         while (residual >= RESIDUAL_TOLERANCE && cycles < MOST_CYCLES) {
             stream = vCycle(levels, stream, relax)
             cycles++
             residual = largest(residual(finest, stream)) / largestBalance
+            history.add(residual)
         }
-        return Solution(stream, cycles, residual)
+        return Solution(stream, cycles, residual, history)
     }
 
     /**
@@ -469,7 +483,8 @@ object OceanCirculation {
 
     /**
      * The layer's velocity from ψ by central differences, in metres a second, zero on land: an
-     * eastward `-∂ψ/∂y` and a northward `∂ψ/∂x`. Beyond a pole ψ is the wall's zero, as in [relax].
+     * eastward `-∂ψ/∂y` and a northward `∂ψ/∂x`. Beyond a pole ψ is minus the edge row's, the wall
+     * on the pole's face that the stencil holds.
      */
     fun velocities(
         stencil: OceanStencil,
@@ -491,8 +506,8 @@ object OceanCirculation {
                 }
                 val columnEast = if (column + 1 == across) 0 else column + 1
                 val columnWest = if (column == 0) across - 1 else column - 1
-                val streamNorth = if (row > 0) stream[(row - 1) * across + column] else 0f
-                val streamSouth = if (row + 1 < down) stream[(row + 1) * across + column] else 0f
+                val streamNorth = if (row > 0) stream[(row - 1) * across + column] else -stream[cell]
+                val streamSouth = if (row + 1 < down) stream[(row + 1) * across + column] else -stream[cell]
                 eastwardMps[cell] = (-(streamNorth - streamSouth) / (2.0 * cellHeightMetres)).toFloat()
                 northwardMps[cell] = ((stream[row * across + columnEast] -
                     stream[row * across + columnWest]) / (2.0 * cellWidthMetres)).toFloat()

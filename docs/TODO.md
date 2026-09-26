@@ -351,8 +351,9 @@
 - **Six operators still count a row as a column, each outside Fix 2's list.** Found by reading the
   code, not by a guard: the climate stage's rainfall blur (a square box of cells, sized by
   `RAIN_BLUR_REFERENCE_WIDTH`) and its two coastal-reach blurs, the water exposure and the offshore
-  anomaly's spread, whose radius is `OceanConfig.coastalReachCells` (the ocean's chunk); the realms'
-  two blurs (`NationStage`); the seeded field that jitters flat routing and the lake balance, a
+  anomaly's spread, whose radius is `OceanConfig.coastalReachCells` (chunk 4b, the coastal
+  climate); the realms' two blurs (`NationStage`); the seeded field that jitters flat routing and
+  the lake balance, a
   lattice of eight cells each way (`FlowRouting.smoothSeededField`); the thermal sweeps' count,
   which spends `debrisTravelKm` as sweeps of one cell, a row down a column
   (`ErosionStage.sweepsFor`); and the glaciation's two distance fields (the `JumpFloodDistance`

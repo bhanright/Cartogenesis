@@ -102,8 +102,9 @@ Chrome, which the guard starts itself, finds where Chrome is installed (or where
 width from a 360 phone to a 3440 monitor and holds nothing on it to running past the screen or out
 of its box, at rest, with each download card open and with scripts off; and, under touch at 360,
 390 and 768, holds a lens pressed at the map's centre, corners and edges to standing whole on the
-screen and clear of the finger. A machine without Chrome fails those two by name; the deploy
-runner's image has it. It lives in `:desktop` because the web module compiles
+screen and clear of the finger, and a swipe over it to scrolling the page while a held finger does
+not. A machine without Chrome fails those three by name rather than passing them unmeasured;
+GitHub's hosted Ubuntu image, which the deploy runs on, carries Chrome. It lives in `:desktop` because the web module compiles
 to wasm and cannot read files. It is deliberately excluded from `:desktop:test`, which has no reason
 to build 12 MB of WebAssembly and would otherwise be judging whatever an earlier run left behind.
 

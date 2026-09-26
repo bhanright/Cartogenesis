@@ -1893,7 +1893,7 @@ sudo apt update &amp;&amp; sudo apt install cartogenesis</code></pre><button typ
     glassPicture.style.height = glassPicture.getAttribute('height') + 'px';
     /* How long a finger must rest before the lens comes up, and how far it may
        wander meanwhile: a tap or the start of a scroll is not a request. */
-    var HOLD_MS = 280, HOLD_WANDER_PX = 10;
+    var LENS_HOLD_MS = 280, HOLD_WANDER_PX = 10;
     /* On a touch screen the lens stands this far above the finger's centre, so
        the finger does not cover what it shows. */
     var ABOVE_FINGER_SHARE = 0.75;
@@ -1955,7 +1955,7 @@ sudo apt update &amp;&amp; sudo apt install cartogenesis</code></pre><button typ
         held = true;
         showLens(true);
         placeLens(point.x, point.y, glass.offsetWidth * ABOVE_FINGER_SHARE);
-      }, HOLD_MS)};
+      }, LENS_HOLD_MS)};
     });
     var letGo = function () {
       if (holding) clearTimeout(holding.timer);

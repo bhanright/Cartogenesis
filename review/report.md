@@ -918,3 +918,218 @@ Only the tests the round touches were run, one Gradle build at a time:
 
 No full suite ran. The probes (`SeedProbeCandidates`, `SeedProbeCombGuard`, `SeedProbeCombCrops`) are
 ignored files, not committed.
+
+## Comb experiments, second round
+
+**Branch:** `chunk/3b-implicit-erosion` at `071b0bb`. Not merged, `origin/main` not merged in, no pull
+request, no full suites and no full render set. Every figure is at 512 on seeds 7 and 42 unless it
+says otherwise.
+
+| Commit | What it does |
+|---|---|
+| `43ab85f` | Reverts candidate A (`1e8b3ac`). |
+| `c250862` | The two net forms, each behind a setting and off by default; the router can report the facet share; `SubGridTransportTest` holds both. |
+| `79ea118` | `CombGuardTest`'s ratio gets an absolute floor from its control. |
+| `071b0bb` | The ledger records the round. |
+
+**The answer, plainly: no.** Neither form removes the comb while keeping the valleys and the
+network.
+- **Across the fall** removes about three quarters of the comb and stops the feedback, as B does. It
+  keeps the network inside the guard's hold and passes every dissection clause the branch armed.
+  But the valleys are a third shallower than stock's, and what is left of the comb is still ten
+  times the control's floor.
+- **The undrained share** keeps the valleys, the network and the texture almost as stock has them,
+  and leaves the comb almost as stock has it.
+
+### 1. The forms as built, and their derivations
+
+Both start from B's flux, `-D_sub grad z` with `D_sub = K e sqrt(w) dx dy`. Both apply it as B
+does: after each round's deposition walk, conservatively between land cells, into the sea at the
+shore. At most one of the three sub-grid settings may be on. The derivations are in `ErosionConfig`'s
+KDoc for each setting.
+
+**Form 1, `ErosionConfig.subGridTransportAcrossTheFall`: diffuse only the part of the fall the
+receiver's cut does not carry.**
+- **Why along the receiver is counted twice.**
+  - Take a cell with nothing upstream. The law's area is the cell's own, `a = dx dy` weighted by
+    `w`, so the pass hands on `K e sqrt(w) (dx dy)^(3/2) S` of material a year across the face
+    toward the receiver.
+  - B's flux across that same face, of length `L`, is `K e sqrt(w) dx dy S L`.
+  - These are the same flux. They are equal on a square cell. On this map's cells, half as tall as
+    wide, they differ by `sqrt(2)` one way along a row and the other way down a column, so their
+    geometric mean is equal.
+  - Downstream the resolved cut carries that share and more.
+  - So B's term along the receiver is a second copy of a flux the pass already makes. Across the
+    fall it is a flux nothing else makes: hillslopes shedding sideways into the next channel.
+- **The form.** Net of the receiver's component, the flux is `-D_sub (I - u u^T) grad z`, where `u`
+  is the unit bearing to the receiver on the ground. The five-point scheme carries the tensor's
+  diagonal:
+  - a face across a row takes `D_sub (1 - u_x^2)`, and a face down a column takes
+    `D_sub (1 - u_y^2)`;
+  - a cell draining down a column diffuses fully across the row and not at all down the column;
+  - a diagonal receiver, 63.4° off north on these cells, keeps a fifth across the row and four fifths
+    down the column;
+  - a cell with no receiver keeps the whole `D_sub`.
+- **What is left out.** The tensor's cross term. It is nought for a cardinal receiver, and a
+  five-point stencil cannot carry it monotonically.
+
+**Form 2, `ErosionConfig.subGridTransportUndrainedShare`: scale `D_sub` by the share of the cell's
+own catchment the resolved channel does not drain.**
+- The router's Tarboton facet divides a cell's own water between two neighbours, `p` to the one the
+  Rho8 draw picks and `1 - p` to the other. The resolved channel drains `p`, and its cut carries
+  that share's transport, as form 1 derives. Nothing carries the `1 - p`.
+- So `D_net = D_sub (1 - p)`, applied isotropically:
+  - nought where the descent is clamped to one neighbour, which is every incised channel's cell;
+  - the whole `D_sub` on a cell with no receiver.
+- `FlowRouting.flowDirections` reports `1 - p` when it is asked for it. It routes exactly as before,
+  and `WorldFingerprintTest` is unchanged.
+
+**Literature.**
+- I found no published form of either correction.
+- Litwin, Malatesta and Sklar, *Hillslope diffusion and channel steepness in landscape evolution
+  models* (Earth Surface Dynamics 13, 277-293, 2025), study the coupling this addresses: the
+  stream-power-plus-diffusion model applying both laws in every cell, and the channel steepening it
+  causes. The KDoc cites them for the problem only. As last round, the journal's pages are blocked
+  here, so this rests on search records, not on reading the paper.
+
+**`SubGridTransportTest`** holds each form to its law.
+
+| Case | Figure |
+|---|---|
+| Island, B | land lost 4.720452, sea took 4.720451 |
+| Island, across the fall (receivers on all eight bearings and none) | lost 3.015282, sea took 3.015282 |
+| Island, undrained share 0 to 1 | lost 2.423606, sea took 2.423606 |
+| Across the fall, draining down a column: ripple down the columns / along the rows | kept 1.0000 (law 1.0000) / 0.9056 (law 0.9061) |
+| Across the fall, draining along a row: ripple down the columns / along the rows | 0.6682 (0.6742) / 1.0000 (1.0000) |
+| Undrained share 0.25, ripple down the columns | 0.9046 (0.9061) |
+
+### 2. The figures
+
+Measured with one probe on every run, so stock and B were re-taken beside the new forms.
+- Stock and B reproduce last round's comb, network and relief figures to the digit.
+- The same-cell table differs from last round's by under a point, because the probe was rewritten.
+- The 1024 worlds are the 512 configuration at `atResolution`, as `ScaleFreeTest` builds them.
+- The clauses are the tests' own arithmetic, run with each form's default switched on in a scratch
+  edit that was never committed.
+
+| | Stock | B (`K dx dy`) | Across the fall | Undrained share |
+|---|---|---|---|---|
+| **Comb, down a column / along a row, km per 1,000 km²:** seed 7 | 0.408 / 0.061 | 0.077 / 0.000 | 0.102 / 0.002 | 0.322 / 0.014 |
+| seed 42 | 0.519 / 0.079 | 0.110 / 0.002 | 0.109 / 0.000 | 0.423 / 0.037 |
+| column comb at 1024, seeds 7 / 42 | 0.442 / 0.482 | 0.158 / 0.180 | 0.189 / 0.177 | 0.418 / 0.496 |
+| change from stock, 512 / 1024 | | −81, −79 / −64, −63% | −75, −79 / −57, −63% | −21, −18 / −5, +3% |
+| **Network**, km per 1,000 km², seeds 7 / 42 (guard's floor 23.4 / 27.1) | 31.64 / 36.61 | 20.77 / 25.34, fails | 24.45 / 29.24 | 30.15 / 34.29 |
+| **Network's growth** 512 → 1024 (`ScaleFreeTest`'s density), seeds 7 / 42 | 1.54 / 1.51 | 1.36 / 1.32 | 1.48 / 1.42 | 1.52 / 1.48 |
+| **`CombGuardTest`**, with the new floor | fails: comb | fails: network, and comb | fails: comb | fails: comb |
+| **Valley notch**, depth and times the bare ground (bars 0.0133 and 1.9) | 0.0244, 4.89× | 0.0108, 2.43×, **fails** | 0.0159, 3.24× | 0.0230, 4.62× |
+| notch by step: row / column / diagonal, seed 7 | 0.0243 / 0.0255 / 0.0242 | 0.0098 / 0.0122 / 0.0085 | 0.0139 / 0.0170 / 0.0143 | 0.0213 / 0.0237 / 0.0235 |
+| **Belt's flank**, pooled m (main 113) | 275 | 162 | 208 | 247 |
+| **Ranges' texture**, highest quarter, pooled m (bar 103.8) | 185.9 | 97.3, **under** | 125.6 | 166.5 |
+| **Plains' texture**, lowest quarter, pooled m (record 68.6) | 100.9, recorded | 60.6, passes | 77.4, recorded | 89.1, recorded |
+| **Dissection contrast** (armed clause) | passes | passes | passes | passes |
+| its B-I2 pin, seed 7 fed | 0.035 | 0.016 | 0.017 | 0.030 |
+| **Wet flank** | passes | passes | passes | passes |
+| **Mean step along a row**, m, seeds 7 / 42 | 223 / 263 | 120 / 148 | 147 / 179 | 201 / 238 |
+| **Lake bars, production:** bar cells of lake cells (share), seed 7 | 128 of 904 (0.141) | 20 of 610 (0.033) | 45 of 754 (0.060) | 57 of 777 (0.073) |
+| seed 42 | 117 of 1,147 (0.102) | 6 of 1,288 (0.005) | 33 of 1,528 (0.022) | 155 of 1,977 (0.079) |
+| **Lake bars, notch and ice off**, seed 7 | 139 of 971 (0.143) | 0 of 449 (0) | 18 of 652 (0.027) | 76 of 955 (0.080) |
+| seed 42 | 220 of 2,343 (0.094) | 11 of 961 (0.011) | 70 of 1,560 (0.045) | 169 of 2,225 (0.076) |
+| **Deltas:** sea-lobe cells, seeds 7 / 42 | 2,065 / 2,548 | 2,153 / 2,601 | 2,168 / 2,620 | 1,877 / 2,520 |
+| lake-fan cells | 4,556 / 5,717 | 4,751 / 5,938 | 4,819 / 6,291 | 4,761 / 6,042 |
+
+**How some rows were read.**
+- **The ranges' texture** is not asserted when the plains' known failure throws first. The figure
+  is what the clause computes. B's 97.3 would fail it, which last round did not report.
+- **The dissection contrast.** Its armed clause, the fed figure against the flat control, passes on
+  all four. Only the recorded pin's figures move.
+- **The wet flank** reads the first round's law rate before any sub-grid transport has acted, so its
+  figures are identical on all four runs. It cannot tell the forms apart.
+- **The lake bars** are `GlaciationTest`'s `combShare`: thin grid-bearing bars with a parallel
+  partner, as a share of the standing water.
+
+**The same-cell feedback.** The steepest third of the terrain before erosion, routed by production's
+router, read again on the finished drainage:
+
+| Run | Column share, before → after | Diagonal → column | Row → column | Column → column |
+|---|---|---|---|---|
+| Stock, seed 7 / 42 | 41.1 → 56.8% / 45.1 → 57.8% | 38.8 / 38.6% | 48.3 / 47.5% | 78.0 / 77.6% |
+| B | 41.1 → 39.0% / 45.2 → 43.5% | 20.1 / 24.0% | 25.0 / 29.3% | 63.8 / 65.1% |
+| Across the fall | 41.2 → 39.2% / 45.1 → 42.5% | 19.1 / 21.7% | 21.5 / 24.6% | 67.0 / 66.7% |
+| Undrained share | 41.2 → 46.7% / 45.1 → 48.6% | 27.8 / 29.0% | 40.9 / 40.4% | 67.6 / 68.0% |
+
+Across the fall stops the feedback as fully as B, with less of the network lost. The undrained share
+takes out about a quarter of it.
+
+### 3. The comb guard's floor
+
+`CombGuardTest` now passes a column comb up to **0.01 km per 1,000 km²**, whatever the rows carry.
+- **Where the figure comes from.** The control recorded in the guard's own KDoc: on the isotropic
+  synthetic surface, the router's parallel reaches carry 0.00 to 0.01 with a ridge of even 50 m
+  between them, half the guard's ridge. No candidate's figure entered it.
+- **What it changes.** On this head the guard records exactly what it did. Under B the comb is still
+  judged, and fails at 0.077 against 0.01, not against a row of nought.
+- **So the floor rescues nothing.** Every form still carries 8 to 19 times it.
+
+### 4. The crops
+
+Under `review/renders/`: `comb-<seed>-<size>-<atlas|elevation>-<across|share>.png`, beside last
+round's stock, A and B.
+- **The windows:** seed 7 at 1024, sheet pixels 1040-1360 by 440-660; 969495 at 2048, 2096-2356 by
+  820-1080.
+- **The worlds:** the plain 1024 and 2048 configurations, as last round's crops were. This round's
+  stock crop of seed 7 matches last round's to the eye.
+
+What the eye sees:
+- **Seed 7, across the fall.** The range keeps its shape. The stripes on its south flank are fewer
+  and broader than stock's, but still run down the columns. The lowland round the range keeps more
+  of its fine dissection than under B.
+- **Seed 7, undrained share.** It is hard to tell from stock: the flanks are still densely striped.
+- **Both forms on seed 7** leave a lake north of the range that stock drains.
+- **969495, across the fall.** The eastern flank is B's picture with a little more relief: fewer,
+  broader parallel valleys running to the coast, still parallel.
+- **969495, undrained share.** Stock's dense fine comb.
+
+### 5. Recommendation
+
+- **Drop the undrained share.** It is principled and cheap, and keeps everything the branch armed,
+  but it does not do the job: 20% off the comb at 512 and none at 1024. By construction it is
+  nought on every clamped channel cell, and the comb's cells are clamped.
+- **Across the fall is the better-founded of the three sub-grid forms, and better than B on every
+  count but one.**
+  - Against B it keeps a quarter more network and half again the valley depth, and restores the
+    ranges' texture.
+  - It removes nearly as much comb at 512 and slightly less at 1024.
+  - It stops the feedback as fully, and keeps the lake bars down to 0.02 to 0.06.
+  - It passes every dissection clause the branch armed, and the guard's network hold.
+- **But it does not fix the comb, and it costs the valleys a third of their depth.**
+  - The comb left, 0.10 to 0.19 km per 1,000 km², is ten to nineteen times the control's floor.
+  - The notch is 0.0159 against stock's 0.0244. That passes its bar, which was set on the tree
+    before S2, but it is a real loss.
+  - Seed 7's network is 4% over its floor at 512. At 1024 it is 1.35 times thinner than stock's
+    there, right at the tolerance.
+  - The network's growth with the grid barely improves (1.42 to 1.48).
+- **What this says about the approach.** B, the whole `K dx dy` with the double count in, takes
+  out 63 to 81% of the comb, and a form net of the double count can only take out less. So a
+  sub-grid transport at the scale the law derives does not remove the comb at this grid, whichever
+  net form is used. What survives, straight column gullies with ridges between, is not isolated.
+  Candidates, none tested:
+  - the Rho8 draw on the steep cells, where a clamped descent is always the steepest neighbour;
+  - the scheme's first-order smear along a column.
+- **If the maintainer wants a setting on now,** across the fall is the one whose derivation stands
+  and whose costs are measured above. It is not a comb fix, and turning it on would re-record the
+  plains' texture (77.4) and the comb guard's figures, and move the renders.
+
+### 6. Tests this round
+
+One Gradle build at a time. Only what the round touches:
+
+| Test | Result |
+|---|---|
+| `SubGridTransportTest` | 4 of 4 pass |
+| `WorldFingerprintTest` | 3 of 3 pass: the defaults move no bit |
+| `CombGuardTest` on the head, with the floor | known failure recorded, figures unchanged |
+| `ValleyIncisionTest`, `GroundTextureTest`, `ClimateFedErosionTest`'s wet flank and dissection clauses, `CombGuardTest` | on stock: all pass, known failures recorded |
+| The same, in scratch builds with each form's default on (never committed) | as in section 2: B red on the notch, the network hold, the plains' "arm this" and the pin's new figures; across the fall and the undrained share red only on the comb, the plains' and the pin's recorded figures |
+
+No full suite ran and `origin/main` was not merged. The probes (`SeedProbeCombRound2` in
+`:worldgen`, `SeedProbeCombCrops` in `:desktop`) are ignored files and are not committed.

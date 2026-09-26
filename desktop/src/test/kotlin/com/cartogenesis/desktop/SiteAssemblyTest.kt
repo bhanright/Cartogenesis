@@ -52,6 +52,30 @@ class SiteAssemblyTest {
         const val WORLD_BAND_HALF_MOST_BYTES = 102_400L
 
         /**
+         * The least and most of its frame a data layer may cover. The rivers covered 2.0% of the
+         * frame and the winds' arrows 7.2%, the currents and the rainfall half each, the sea and
+         * the land; a layer cut as the whole reading covers all of it and an empty one none.
+         */
+        const val LEAST_LAYER_COVER = 0.005
+        const val MOST_LAYER_COVER = 0.9
+
+        /**
+         * The least the relief's highest point may stand above the sea: a thousand metres, a hill
+         * a reader sees rise when the patch tilts. The patch was picked for its range.
+         */
+        const val LEAST_RELIEF_METRES = 1_000.0
+
+        /**
+         * What the page fetches only when a reader asks for it, by file, each with the most it may
+         * weigh: the lens's full-size world (507,604 bytes at 4096 by 2048 when it was made, fetched
+         * the first time the lens is used), each with 64 KiB for the picture moving when it is made
+         * again.
+         */
+        val FETCHED_WHEN_USED: Map<String, Long> = mapOf(
+            "img/world-full.webp" to 507_604L + 65_536L
+        )
+
+        /**
          * The ceiling on what the page fetches as it loads, by the kind of screen (see
          * [fetchedAtLoad]): the 1,373,328 and 1,570,774 bytes the list summed to when it was
          * written, each plus 64 KiB for the pictures and the page moving when they are made again.
@@ -65,7 +89,7 @@ class SiteAssemblyTest {
         )
     }
 
-    /** A WebP decoded through Skia as ARGB, row after row. */
+    /** A picture decoded through Skia as unpremultiplied ARGB, row after row. */
     private fun decodedPixels(file: File): IntArray {
         val image = org.jetbrains.skia.Image.makeFromEncoded(file.readBytes())
         val bitmap = org.jetbrains.skia.Bitmap()
@@ -79,8 +103,8 @@ class SiteAssemblyTest {
         // Skia's S32 is BGRA in memory on this platform.
         return IntArray(bytes.size / 4) { i ->
             val at = i * 4
-            (bytes[at + 2].toInt() and 0xFF shl 16) or (bytes[at + 1].toInt() and 0xFF shl 8) or
-                (bytes[at].toInt() and 0xFF)
+            (bytes[at + 3].toInt() and 0xFF shl 24) or (bytes[at + 2].toInt() and 0xFF shl 16) or
+                (bytes[at + 1].toInt() and 0xFF shl 8) or (bytes[at].toInt() and 0xFF)
         }
     }
 
@@ -182,7 +206,7 @@ class SiteAssemblyTest {
 
     /** The `<img>` a picture is published by, as the page writes it. */
     private fun imageTag(page: String, file: String): String =
-        Regex("""<img\s+src="img/${Regex.escape(file)}"[^>]*>""").find(page)?.value
+        Regex("""<img\s[^>]*?(?<![-\w])src="img/${Regex.escape(file)}"[^>]*>""").find(page)?.value
             ?: fail("the page has no <img> for img/$file")
 
     private fun attribute(tag: String, name: String): String =
@@ -232,7 +256,24 @@ class SiteAssemblyTest {
             "layer-temperature.webp" to (480 to 600),
             "layer-currents.webp" to (480 to 600),
             "layer-wind.webp" to (480 to 600),
-            "layer-rainfall.webp" to (480 to 600)
+            "layer-rainfall.webp" to (480 to 600),
+            // The data frame: the relief and the layers laid over it, each the same 800 by 600.
+            "data-relief.webp" to (800 to 600),
+            "data-temperature.webp" to (800 to 600),
+            "data-rainfall.webp" to (800 to 600),
+            "data-currents.webp" to (800 to 600),
+            "data-wind.webp" to (800 to 600),
+            "data-rivers.webp" to (800 to 600),
+            // The whole world under the lens, at a quarter and at full size, and the relief's patch.
+            "world-whole.webp" to (1024 to 512),
+            "world-full.webp" to (4096 to 2048),
+            "relief-natural.webp" to (640 to 400),
+            // Every seed is a world: five worlds whole, each half its 1024 by 512 sheet.
+            "seed-7.webp" to (512 to 256),
+            "seed-42.webp" to (512 to 256),
+            "seed-1066.webp" to (512 to 256),
+            "seed-2024.webp" to (512 to 256),
+            "seed-31337.webp" to (512 to 256)
         )
         assertEquals(
             expected.mapValues { it.value }.toSortedMap(),
@@ -242,10 +283,13 @@ class SiteAssemblyTest {
         )
 
         val page = file("index.html").readText()
-        // Three ways a picture is asked for without an img of its own shape: the link preview,
-        // named by the og:image; the full band, a <picture>'s source over the half band's img; and
-        // a style the slider fetches when it is picked.
+        // Four ways a picture is asked for without an img of its own shape: the link preview,
+        // named by the og:image; the full band, a <picture>'s source over the half band's img; a
+        // style the slider fetches when it is picked; and a picture an img names in `data-src`,
+        // fetched when it is first wanted (a data layer switched on, the lens first used), whose
+        // tag states its shape like any other.
         val offered = pickerValues(page).map { "style-$it.webp" }.toSet()
+        val waiting = Regex("""<img\s[^>]*data-src="img/([^"]+)"[^>]*>""").findAll(page).associate { it.groupValues[1] to it.value }
         val bandSources = Regex("""<source[^>]*srcset="img/${Regex.escape(SiteImagery.WORLD_BAND.file)}"""").findAll(page).count()
         assertTrue(bandSources >= 1, "the opening never asks for the full band")
         expected.forEach { (name, size) ->
@@ -265,7 +309,14 @@ class SiteAssemblyTest {
                 )
                 return@forEach
             }
-            if (!Regex("""<img\s+src="img/${Regex.escape(name)}"""").containsMatchIn(page)) {
+            waiting[name]?.let { tag ->
+                assertEquals(
+                    size, attribute(tag, "width").toInt() to attribute(tag, "height").toInt(),
+                    "the page reserves a different shape for img/$name, fetched when wanted, than the picture that was rendered"
+                )
+                return@forEach
+            }
+            if (!Regex("""<img\s[^>]*?(?<![-\w])src="img/${Regex.escape(name)}"""").containsMatchIn(page)) {
                 assertTrue(name in offered, "img/$name is rendered and nothing on the page asks for it")
                 return@forEach
             }
@@ -282,7 +333,7 @@ class SiteAssemblyTest {
 
         val published = File(site, "img").listFiles { f -> f.isFile }.orEmpty().map { it.name }
         assertEquals(
-            expected.keys.sorted(), published.sorted(),
+            (expected.keys + SiteImagery.RELIEF_HEIGHTS_FILE).sorted(), published.sorted(),
             "img/ holds something other than the pictures the page shows — a contact sheet left " +
                 "by -Pcontact, or a picture the page has stopped asking for"
         )
@@ -517,7 +568,7 @@ class SiteAssemblyTest {
         val asked = (Regex("""<link rel="preload"[^>]*href="([^"]+)"""").findAll(text).map { it.groupValues[1] } +
             Regex("""url\("(fonts/[^"]+)"\)""").findAll(text).map { it.groupValues[1] } +
             Regex("""<img\s[^>]*>""").findAll(text).map { it.value }.filterNot { it.contains("""loading="lazy"""") }
-                .map { attribute(it, "src") } +
+                .filter { Regex("""(?<![-\w])src=""").containsMatchIn(it) }.map { attribute(it, "src") } +
             Regex("""<source[^>]*srcset="([^"]+)"""").findAll(text).map { it.groupValues[1] }).toSet()
         val listed = fetchedAtLoad.values.flatten().toSet()
         assertTrue((asked - listed).isEmpty(), "the page asks for ${asked - listed} as it loads, which the stated load does not count")
@@ -532,10 +583,191 @@ class SiteAssemblyTest {
         }
     }
 
+    /**
+     * That the data frame lays each layer over one ground: every picture cut from one window that
+     * holds the data cards' window, laid on the page in SiteImagery's order with the relief at the
+     * bottom and the only one asked for as the page is read, and each layer cut as its reading
+     * says: the relief and temperature whole, the rest mostly clear.
+     *
+     * And that the layers are the application's own views taken apart, not new pictures: the winds'
+     * arrows over the relief are the winds view the Winds card shows, and the temperature layer is
+     * the Temperature card's picture where the two overlap, each measured over the card's window.
+     */
+    @Test
+    fun `the data frame lays the application's own layers over one ground`() {
+        val frame = SiteImagery.DATA_FRAME
+        val window = frame.first().window
+        assertEquals(1, frame.map { it.window }.distinct().size, "the data frame's pictures are cut from different windows")
+        val cards = SiteImagery.LAYERS_WINDOW
+        assertTrue(
+            cards.x >= window.x && cards.y >= window.y && cards.x + cards.width <= window.x + window.width &&
+                cards.y + cards.height <= window.y + window.height,
+            "the data frame's window $window does not hold the cards' window $cards, so it is not their ground"
+        )
+        assertEquals(SiteImagery.Cut.GROUND, frame.first().cut, "the data frame's bottom picture is not the relief's ground")
+
+        val page = file("index.html").readText()
+        val figure = Regex("""<figure class="datamap".*?</figure>""", RegexOption.DOT_MATCHES_ALL).find(page)?.value
+            ?: fail("the page has no data frame")
+        val laid = Regex("""<img\s[^>]*?(?:data-src|(?<![-\w])src)="img/([^"]+)"""").findAll(figure).map { it.groupValues[1] }.toList()
+        assertEquals(frame.map { it.file }, laid, "the page lays the data frame's pictures in another order, or other pictures")
+        val askedAsRead = Regex("""<img\s[^>]*?(?<![-\w])src="img/([^"]+)"""").findAll(figure).map { it.groupValues[1] }.toList()
+        assertEquals(listOf(frame.first().file), askedAsRead, "the data frame asks for more than its relief before a layer is switched on")
+
+        fun clearShare(figure: SiteImagery.Figure): Double {
+            val pixels = decodedPixels(file("img/${figure.file}"))
+            return pixels.count { it ushr 24 == 0 }.toDouble() / pixels.size
+        }
+        frame.forEach { layer ->
+            val clear = clearShare(layer)
+            when (layer.cut) {
+                SiteImagery.Cut.WHOLE, SiteImagery.Cut.GROUND ->
+                    assertEquals(0.0, clear, "img/${layer.file} is the whole reading and has clear pixels in it")
+                SiteImagery.Cut.MARKS, SiteImagery.Cut.WATER ->
+                    assertTrue(clear >= 0.8, "img/${layer.file} is marks alone and is clear over only %.3f of the frame".format(clear))
+                else -> assertTrue(clear in 0.2..0.8, "img/${layer.file} keeps land or sea and is clear over %.3f of the frame".format(clear))
+            }
+            println("SITE the data frame's ${layer.file} (${layer.cut}) is clear over %.3f".format(clear))
+        }
+
+        // Over the cards' window: the relief with the winds' arrows laid on it is the Winds card,
+        // and the temperature layer is the Temperature card, to within the encoder's loss (the card
+        // draws the rivers too, which the frame lays as a layer of its own).
+        val relief = decodedPixels(file("img/data-relief.webp"))
+        val wind = decodedPixels(file("img/data-wind.webp"))
+        val over = IntArray(relief.size) { at ->
+            val alpha = (wind[at] ushr 24) / 255.0
+            fun channel(shift: Int) = Math.round(((wind[at] shr shift) and 0xFF) * alpha + ((relief[at] shr shift) and 0xFF) * (1 - alpha)).toInt()
+            (channel(16) shl 16) or (channel(8) shl 8) or channel(0)
+        }
+        listOf(
+            "the relief with the winds laid over it" to over to "layer-wind.webp",
+            "the temperature layer" to decodedPixels(file("img/data-temperature.webp")) to "layer-temperature.webp"
+        ).forEach { (named, card) ->
+            val (what, pixels) = named
+            val cardPixels = decodedPixels(file("img/$card"))
+            var difference = 0L
+            val left = cards.x - window.x
+            val top = cards.y - window.y
+            for (row in 0 until cards.height) for (column in 0 until cards.width) {
+                val a = pixels[(top + row) * window.width + left + column]
+                val b = cardPixels[row * cards.width + column]
+                difference += abs((a shr 8 and 0xFF) - (b shr 8 and 0xFF))
+            }
+            val mean = difference.toDouble() / (cards.width * cards.height)
+            assertTrue(mean < PREVIEW_TAKEOVER_MOST_MEAN_DIFFERENCE,
+                "$what differs from the $card card by %.1f in green on average, so it is not that view taken apart".format(mean))
+            println("SITE $what is the $card card to %.2f in green on average".format(mean))
+        }
+    }
+
+    /**
+     * That the lens's full-size picture is fetched only when the lens is used, and weighs no more
+     * than stated: the page names it only in the lens's `data-src` and in the plain link a reader
+     * who cannot use the lens follows, and never as a picture's `src`, a preload or a source.
+     */
+    @Test
+    fun `what is fetched only when used is never asked for as the page loads, and stays within its weight`() {
+        val page = file("index.html").readText()
+        FETCHED_WHEN_USED.forEach { (path, mostBytes) ->
+            val named = Regex("""(?<![-\w])(src|srcset|href)="${Regex.escape(path)}"""").findAll(page).map { it.value }.toList()
+            assertTrue(named.none { it.startsWith("src") || it.startsWith("srcset") },
+                "the page asks for $path as it loads: $named")
+            assertTrue(Regex("""data-src="${Regex.escape(path)}"""").containsMatchIn(page), "nothing on the page fetches $path when it is wanted")
+            assertTrue(Regex("""<a href="${Regex.escape(path)}">""").containsMatchIn(page), "there is no plain link to $path")
+            assertTrue(fetchedAtLoad.values.none { path in it }, "$path is counted in what the page fetches as it loads")
+            val bytes = file(path).length()
+            assertTrue(bytes <= mostBytes, "$path is $bytes bytes, more than the $mostBytes stated for it")
+            println("SITE fetched only when used: $path, $bytes bytes against $mostBytes")
+        }
+    }
+
+    /**
+     * That the relief's heights are the patch's, and that the page reads them as they were written.
+     *
+     * The heights are a PNG of one point every few sheet pixels of the patch, both edges included,
+     * so their size follows from the texture's and the spacing; the page's canvas states the
+     * spacing, the steps per metre and the sheet's kilometres per pixel, which must be the ones
+     * they were written with, or the page would draw a relief of the wrong height or shape. The mesh
+     * has to fit a 16-bit index. And the heights are ground: none below the sea, which is drawn flat
+     * at nought, and some well above it.
+     */
+    @Test
+    fun `the relief's heights are the patch's and the page reads them at their own scale`() {
+        val texture = SiteImagery.RELIEF_TEXTURE
+        val heights = file("img/${SiteImagery.RELIEF_HEIGHTS_FILE}")
+        val image = org.jetbrains.skia.Image.makeFromEncoded(heights.readBytes())
+        val across = SiteImagery.RELIEF_POINTS_ACROSS
+        val down = SiteImagery.RELIEF_POINTS_DOWN
+        assertEquals(across to down, image.width to image.height, "the heights are not one point every ${SiteImagery.RELIEF_POINT_SPACING_PIXELS} pixels of the patch")
+        assertEquals(texture.width, (across - 1) * SiteImagery.RELIEF_POINT_SPACING_PIXELS, "the heights do not span the patch's picture across")
+        assertEquals(texture.height, (down - 1) * SiteImagery.RELIEF_POINT_SPACING_PIXELS, "the heights do not span the patch's picture down")
+        assertTrue(across * down <= 65_536, "the relief's mesh has ${across * down} points, more than a 16-bit index reaches")
+        image.close()
+        val pixels = decodedPixels(heights)
+        val metres = pixels.map { (((it shr 16) and 0xFF) * 256 + ((it shr 8) and 0xFF)).toDouble() / SiteImagery.RELIEF_STEPS_PER_METRE }
+        assertTrue(pixels.all { it ushr 24 == 0xFF && it and 0xFF == 0 }, "the heights carry something other than sixteen bits in red and green")
+        assertEquals(0.0, metres.min(), "the patch's lowest point is not the sea's surface")
+        assertTrue(metres.max() > LEAST_RELIEF_METRES, "the patch's highest point is ${metres.max()} m: no relief to draw")
+
+        val page = file("index.html").readText()
+        val canvas = Regex("""<canvas class="relief-canvas"[^>]*>""").find(page)?.value ?: fail("the page has no relief canvas")
+        assertEquals("img/${SiteImagery.RELIEF_HEIGHTS_FILE}", attribute(canvas, "data-heights"), "the relief reads another file's heights")
+        assertEquals(SiteImagery.RELIEF_POINT_SPACING_PIXELS, attribute(canvas, "data-point-spacing").toInt(), "the page spaces the relief's points differently from the heights")
+        assertEquals(SiteImagery.RELIEF_STEPS_PER_METRE, attribute(canvas, "data-steps-per-metre").toInt(), "the page reads the heights at another number of steps a metre")
+        val sheet = com.cartogenesis.cartography.SheetGeometry.of(SiteImagery.config())
+        assertEquals(sheet.kilometresPerPixel, attribute(canvas, "data-kilometres-per-pixel").toDouble(), "the page puts the relief on another scale than the sheet's")
+        val still = imageTag(page, texture.file)
+        assertEquals(texture.width to texture.height, attribute(canvas, "width").toInt() to attribute(canvas, "height").toInt(),
+            "the relief's canvas is not the shape of its still picture")
+        assertTrue(still.isNotEmpty())
+        println("SITE the relief: ${across}x$down points, highest %.0f m, ${heights.length()} bytes of heights, ${file("img/${texture.file}").length()} of picture, ${sheet.kilometresPerPixel} km a pixel"
+            .format(metres.max()))
+    }
+
+    /**
+     * That every world in "Every seed is a world" links to the world its picture shows: the link
+     * the application itself writes for that world, at the size and settings the picture was made
+     * with, drawn in the style it was drawn in; captioned with its seed; in the reel's order.
+     */
+    @Test
+    fun `every world in the reel links to the world its picture shows`() {
+        val page = file("index.html").readText()
+        val reel = Regex("""<ul class="reel">(.*?)</ul>""", RegexOption.DOT_MATCHES_ALL).find(page)?.groupValues?.get(1)
+            ?: fail("the page has no reel")
+        val items = Regex("""<li>(.*?)</li>""", RegexOption.DOT_MATCHES_ALL).findAll(reel).map { it.groupValues[1] }.toList()
+        assertEquals(SiteImagery.REEL.map { it.file }, items.map { item ->
+            Regex("""src="img/([^"]+)"""").find(item)?.groupValues?.get(1) ?: fail("a world in the reel has no picture: $item")
+        }, "the reel's pictures are not SiteImagery's reel, in order")
+        SiteImagery.REEL.zip(items).forEach { (figure, item) ->
+            val link = Regex("""<a href="([^"]+)">""").find(item)?.groupValues?.get(1)?.replace("&amp;", "&")
+                ?: fail("seed ${figure.seed} has no link")
+            val expected = com.cartogenesis.ui.WorldLinks.linkTo(
+                "/app/", SiteImagery.reelConfig(figure.seed), figure.options
+            )
+            assertEquals(expected, link, "seed ${figure.seed}'s link is not the application's own link to the world pictured")
+            assertEquals(SiteImagery.REEL_GRID_CELLS, SiteImagery.reelConfig(figure.seed).width, "seed ${figure.seed} is not made at the reel's size")
+            assertTrue(item.contains("Seed ${figure.seed}<"), "seed ${figure.seed}'s picture is not captioned with its seed")
+            println("SITE reel: ${figure.file} links to $link")
+        }
+    }
+
     @Test
     fun `no picture on the page is blank`() {
         SiteImagery.FIGURES.forEach { figure ->
-            val colours = colourCount(decodedPixels(file("img/${figure.file}")))
+            val pixels = decodedPixels(file("img/${figure.file}"))
+            if (figure.cut != SiteImagery.Cut.WHOLE && figure.cut != SiteImagery.Cut.GROUND) {
+                // A layer is mostly clear by design, so it is held to having something drawn in it
+                // and to leaving something clear, rather than to a count of colours.
+                val covered = pixels.count { it ushr 24 > 0 }.toDouble() / pixels.size
+                assertTrue(
+                    covered in LEAST_LAYER_COVER..MOST_LAYER_COVER,
+                    "img/${figure.file} covers %.4f of its frame: a layer that is blank, or one that is not a layer".format(covered)
+                )
+                println("SITE img/${figure.file} covers %.4f of its frame".format(covered))
+                return@forEach
+            }
+            val colours = colourCount(pixels)
             assertTrue(
                 colours >= LEAST_COLOURS_IN_A_MAP,
                 "img/${figure.file} holds $colours colours, fewer than $LEAST_COLOURS_IN_A_MAP: it " +

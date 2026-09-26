@@ -527,6 +527,69 @@
   .compare-pickers{display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px 20px;margin:14px 0 0}
   .compare-pickers label{display:flex;align-items:center;gap:10px}
 
+  /* The whole world under a lens: a round window onto the full-size picture,
+     moved by transforms over the whole one. The frame keeps a press from
+     opening the picture's own menu on a touch screen, and lets a sideways slide
+     move the lens while an upward one still scrolls the page. */
+  .lens{margin:0}
+  .lens-frame{position:relative;overflow:hidden;max-width:1024px;--lens:220px}
+  @media (max-width:599px){.lens-frame{--lens:150px}}
+  .live .lens-frame{touch-action:pan-y;-webkit-touch-callout:none;user-select:none;-webkit-user-select:none;cursor:zoom-in}
+  .live .lens-world{pointer-events:none}
+  .lens-glass{
+    position:absolute;left:0;top:0;width:var(--lens);height:var(--lens);border-radius:50%;overflow:hidden;
+    border:2px solid var(--brass);background:var(--ink-raised);pointer-events:none;
+    box-shadow:0 6px 24px rgba(0,0,0,.45);
+  }
+  .lens-glass img{position:absolute;left:0;top:0;max-width:none;transform-origin:0 0}
+  .live .lens-glass{opacity:0;transition:opacity .15s ease-out}
+  .live .lens-glass.on{opacity:1}
+  .lens-frame:focus-visible{outline:2px solid var(--brass);outline-offset:3px}
+
+  /* The ground in relief. The still is the picture the relief is textured with,
+     and stays under the canvas, so whatever becomes of the canvas the patch is
+     there. */
+  .relief{margin:36px 0 0;max-width:640px}
+  .relief-frame{position:relative;aspect-ratio:640/400;overflow:hidden}
+  .relief-frame img,.relief-canvas{position:absolute;inset:0;width:100%;height:100%}
+  .live .relief-canvas{opacity:0;transition:opacity .5s ease-out;touch-action:pan-y}
+  .live .relief-canvas.shown{opacity:1}
+
+  /* The data frame: the relief with each layer laid over it, faded in and out.
+     No display of its own outside `live`, as the step frame. */
+  .datamap{margin:0 0 36px;max-width:800px}
+  .live .datamap,.live .datamap[hidden]{display:block}
+  .datamap-frame{position:relative;aspect-ratio:800/600}
+  .datamap-frame img{position:absolute;inset:0;width:100%;height:100%}
+  .live .datamap-frame img[data-layer]{opacity:0;transition:opacity .45s ease-out}
+  .live .datamap-frame img[data-layer].on{opacity:1}
+  .datamap-overlays{display:flex;flex-wrap:wrap;align-items:center;gap:10px 12px;margin:14px 0 0}
+  .datamap-overlays .control[aria-pressed="true"]{background:var(--brass);color:var(--ink)}
+  /* With a script the data cards are the frame's switches: each drops its
+     picture, which the frame shows, and its heading becomes a button that
+     covers the card, so the whole card is the switch. */
+  .live .cards.layers .plate{display:none}
+  .layer-toggle{
+    font:inherit;color:inherit;background:none;border:0;padding:0;margin:0;text-align:left;cursor:pointer;
+  }
+  .layer-toggle::after{content:"";position:absolute;inset:-8px}
+  .layer-toggle:focus-visible{outline:none}
+  .layer-toggle:focus-visible::after{outline:2px solid var(--brass);outline-offset:0}
+
+  /* Every seed is a world: a row of other worlds, each whole, each a link that
+     opens it in the application. The link covers the card. */
+  .reel{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px 16px}
+  @media (min-width:600px){.reel{grid-template-columns:repeat(3,minmax(0,1fr))}}
+  @media (min-width:900px){.reel{grid-template-columns:repeat(5,minmax(0,1fr))}}
+  .reel li{position:relative;min-width:0}
+  .reel .plate{margin:0 0 10px;transition:border-color .15s}
+  .reel li:hover .plate,.reel li:focus-within .plate{border-color:var(--brass)}
+  .reel-seed{display:block;font-family:var(--mono);font-size:12.5px;line-height:1.4;color:var(--bone-dim)}
+  .reel a{display:block;font-size:14px;line-height:1.4;color:var(--brass);text-decoration:none;margin-top:2px}
+  .reel a::after{content:"";position:absolute;inset:0}
+  .reel a:focus-visible{outline:none}
+  .reel a:focus-visible::after{outline:2px solid var(--brass);outline-offset:4px}
+
   /* ---------- sections ------------------------------------------------------ */
   section{padding:56px 0 0}
   .section-head{display:flex;align-items:baseline;gap:16px;margin-bottom:24px}
@@ -666,7 +729,10 @@
     .splash .opening-map,
     .dl-more,
     .live .forming-frame img,
-    .live .card-number::after{transition:none}
+    .live .card-number::after,
+    .live .lens-glass,
+    .live .relief-canvas,
+    .live .datamap-frame img[data-layer]{transition:none}
   }
 
   /* ---------- the ask, at the foot --------------------------------------- */
@@ -832,6 +898,50 @@
     </div>
   </section>
 
+  <!-- The whole world and the ground inside it: a lens that shows the map at the size it was made,
+       and a patch of it in relief. The full-size picture is fetched only when the lens is first
+       used; the link in the caption is the same picture for a reader who cannot use the lens. -->
+  <section id="valley">
+    <div class="section-head">
+      <h2>From continent to valley</h2>
+      <span class="fill"></span>
+    </div>
+
+    <p class="section-lede">
+      One world whole, and the ground inside it at the size it was made.
+    </p>
+
+    <figure class="lens" id="lens">
+      <div class="plate lens-frame" id="lens-frame">
+        <img class="lens-world" src="img/world-whole.webp" width="1024" height="512" loading="lazy" decoding="async"
+             alt="The whole of a generated world in the Natural style: a northern continent with a snow-capped range down its middle, an eastern island across a strait, a southern land in the south-east, and ocean over most of the rest.">
+        <div class="lens-glass" id="lens-glass" aria-hidden="true" hidden>
+          <img id="lens-picture" data-src="img/world-full.webp" width="4096" height="2048" alt="">
+        </div>
+      </div>
+      <figcaption>
+        <span class="say">Point at the map to see it at full size, press and hold on a touch screen, or select the map and move the lens with the arrow keys.</span>
+        Seed 718106 · <a href="img/world-full.webp">The whole world at full size, 4096 × 2048</a>
+      </figcaption>
+    </figure>
+
+    <!-- A patch of the same world in relief: the engine's heights under the Natural picture, drawn
+         by the page's own WebGL. The picture is the patch as it stands; the script lays the relief
+         over it only where WebGL works and the reader has not asked for less motion. -->
+    <figure class="relief" id="relief">
+      <div class="plate relief-frame" id="relief-frame">
+        <img class="relief-still" id="relief-still" src="img/relief-natural.webp" width="640" height="400" loading="lazy" decoding="async"
+             alt="The western end of an island in the Natural style: a range of bare brown mountains along its north coast, falling south to green valleys whose rivers run to the south coast, a cape in the west and lakes at the eastern edge.">
+        <canvas class="relief-canvas" id="relief-canvas" width="640" height="400" aria-hidden="true" hidden
+                data-heights="img/relief-heights.png" data-point-spacing="2" data-steps-per-metre="4" data-kilometres-per-pixel="2.9296875"></canvas>
+      </div>
+      <figcaption>
+        <span class="say">The ground in relief, lit from the upper left: move the pointer over it to tilt it. Heights are drawn twenty times their true scale.</span>
+        Seed 718106
+      </figcaption>
+    </figure>
+  </section>
+
   <section id="styles">
     <div class="section-head">
       <h2>Realistic map styles</h2>
@@ -944,6 +1054,32 @@
       The temperature, ocean currents, winds and rainfall calculated for the same coastline.
     </p>
 
+    <!-- One frame over the cards' ground and more of it, the relief at the bottom and each layer
+         laid over it in turn. The four cards under it become its switches once a script runs: each
+         card's heading becomes a button that fades its layer in or out, and the cards drop their
+         pictures, which are this frame's ground read one way each. The rivers are an overlay of
+         their own. Only the relief and the first layer are asked for; a layer is
+         fetched the first time it is switched on. -->
+    <figure class="datamap" id="datamap" hidden>
+      <div class="plate datamap-frame" id="datamap-frame">
+        <img class="datamap-relief" src="img/data-relief.webp" width="800" height="600" loading="lazy" decoding="async"
+             alt="The relief of a stretch of coast and the strait beyond it: land shaded and tinted by height, the sea flat and dark.">
+        <img data-layer="temperature" data-src="img/data-temperature.webp" width="800" height="600" alt="">
+        <img data-layer="rainfall" data-src="img/data-rainfall.webp" width="800" height="600" alt="">
+        <img data-layer="currents" data-src="img/data-currents.webp" width="800" height="600" alt="">
+        <img data-layer="wind" data-src="img/data-wind.webp" width="800" height="600" alt="">
+        <img data-layer="rivers" data-src="img/data-rivers.webp" width="800" height="600" alt="">
+      </div>
+      <div class="datamap-overlays">
+        <span class="control-label">Over the map</span>
+        <button type="button" class="control" data-toggles="rivers" aria-pressed="false">Rivers</button>
+      </div>
+      <figcaption>
+        <span class="say">Choose a card below to lay its layer over the relief, or several at once.</span>
+        Seed 718106
+      </figcaption>
+    </figure>
+
     <figure>
       <ol class="cards layers">
         <li class="card">
@@ -992,6 +1128,53 @@
     <p class="section-lede">
       More map styles and data views are in the generator.
     </p>
+  </section>
+
+  <!-- Other worlds, each made as the application makes a world it is opened at with a seed and
+       nothing else, so each link opens the world its picture shows. The links are written in the
+       application's own link format (SiteAssemblyTest reads each back against it). -->
+  <section id="seeds">
+    <div class="section-head">
+      <h2>Every seed is a world</h2>
+      <span class="fill"></span>
+    </div>
+
+    <p class="section-lede">
+      Five more worlds, each made from its seed at the size and settings the browser starts with. Each link opens the world it shows.
+    </p>
+
+    <ul class="reel">
+      <li>
+        <div class="plate"><img src="img/seed-7.webp" width="512" height="256" loading="lazy" decoding="async"
+             alt="A world of two lands facing each other across shallow bays: an island in the west with a snow-capped peak, and a larger land to the east cut by lakes and rivers."></div>
+        <span class="reel-seed">Seed 7</span>
+        <a href="/app/?seed=7#v=1&amp;size=512&amp;style=natural">Open seed 7 in the app</a>
+      </li>
+      <li>
+        <div class="plate"><img src="img/seed-42.webp" width="512" height="256" loading="lazy" decoding="async"
+             alt="A world whose one long continent crosses the map from the south-west to the east, pinched to a neck in the middle, with lakes over its western half."></div>
+        <span class="reel-seed">Seed 42</span>
+        <a href="/app/?seed=42#v=1&amp;size=512&amp;style=natural">Open seed 42 in the app</a>
+      </li>
+      <li>
+        <div class="plate"><img src="img/seed-1066.webp" width="512" height="256" loading="lazy" decoding="async"
+             alt="A world of a branching continent, its arms reaching north-west, north-east and south to a snow-capped tip, with more land at the map's edges."></div>
+        <span class="reel-seed">Seed 1066</span>
+        <a href="/app/?seed=1066#v=1&amp;size=512&amp;style=natural">Open seed 1066 in the app</a>
+      </li>
+      <li>
+        <div class="plate"><img src="img/seed-2024.webp" width="512" height="256" loading="lazy" decoding="async"
+             alt="A world round an inland sea: a northern land with a chain of lakes, islands strung across the water, and coasts to the south."></div>
+        <span class="reel-seed">Seed 2024</span>
+        <a href="/app/?seed=2024#v=1&amp;size=512&amp;style=natural">Open seed 2024 in the app</a>
+      </li>
+      <li>
+        <div class="plate"><img src="img/seed-31337.webp" width="512" height="256" loading="lazy" decoding="async"
+             alt="A world of three lands: a western one with a snow-capped range, a small island between, and an eastern one of pale uplands."></div>
+        <span class="reel-seed">Seed 31337</span>
+        <a href="/app/?seed=31337#v=1&amp;size=512&amp;style=natural">Open seed 31337 in the app</a>
+      </li>
+    </ul>
   </section>
 
   <section>
@@ -1517,15 +1700,15 @@ sudo apt update &amp;&amp; sudo apt install cartogenesis</code></pre><button typ
   /* ---------- the tray ------------------------------------------------------
      In once the opening's own buttons have gone off the top of the screen; out
      while the download section is on screen, and while anything that must not
-     be covered is under it: the step slider, the style slider, the roadmap, the
-     report links and the footer. Each of those is watched where the tray lies,
+     be covered is under it: the step slider, the lens, the relief, the style
+     slider, the data frame, the roadmap, the report links and the footer. Each of those is watched where the tray lies,
      a band of the tray's own height along the top of the screen or along its
      foot, so nothing here reads the scroll. Hidden, it is inert as well, so the
      keyboard cannot reach what the eye cannot see. */
   var tray = document.getElementById('tray');
   var openingActions = document.getElementById('opening-actions');
   var install = document.getElementById('install');
-  var keepClear = ['forming', 'compare', 'next', 'report'].map(function (id) { return document.getElementById(id); })
+  var keepClear = ['forming', 'lens', 'relief', 'compare', 'datamap', 'next', 'report'].map(function (id) { return document.getElementById(id); })
     .concat([document.querySelector('footer')]).filter(Boolean);
   var buttonsGone = false, installOnScreen = false, covering = new Set();
   function showTray() {
@@ -1631,6 +1814,441 @@ sudo apt update &amp;&amp; sudo apt install cartogenesis</code></pre><button typ
     });
     compare.hidden = false;
     place();
+  }
+
+  /* The data frame. Each data card becomes the switch for its layer: its
+     heading's words move into a button that says whether it is pressed, and the
+     card's number square is ringed while its layer is on. A layer's picture is
+     fetched the first time it is switched on and faded in once it has decoded, so
+     it never arrives half drawn. */
+  var datamap = document.getElementById('datamap');
+  if (datamap) {
+    var layerPictures = {};
+    Array.prototype.forEach.call(datamap.querySelectorAll('img[data-layer]'), function (picture) {
+      layerPictures[picture.getAttribute('data-layer')] = picture;
+    });
+    var switches = [];
+    var switchLayer = function (name, on) {
+      var picture = layerPictures[name];
+      switches.forEach(function (control) {
+        if (control.getAttribute('data-toggles') !== name) return;
+        control.setAttribute('aria-pressed', on ? 'true' : 'false');
+        var card = control.closest('.card');
+        if (card) card.classList.toggle('lit', on);
+      });
+      if (!on) { picture.classList.remove('on'); return; }
+      if (!picture.getAttribute('src')) {
+        picture.loading = 'lazy';
+        picture.src = picture.getAttribute('data-src');
+      }
+      var shown = function () {
+        var stillOn = switches.some(function (control) {
+          return control.getAttribute('data-toggles') === name && control.getAttribute('aria-pressed') === 'true';
+        });
+        if (stillOn) picture.classList.add('on');
+      };
+      if (picture.decode) picture.decode().then(shown, shown); else shown();
+    };
+    Array.prototype.forEach.call(document.querySelectorAll('.cards.layers > .card'), function (card) {
+      var heading = card.querySelector('h3');
+      var name = card.querySelector('img').getAttribute('src').replace(/^img\/layer-|\.webp$/g, '');
+      if (!layerPictures[name]) return;
+      var control = document.createElement('button');
+      control.type = 'button';
+      control.className = 'layer-toggle';
+      control.setAttribute('data-toggles', name);
+      control.setAttribute('aria-pressed', 'false');
+      control.textContent = heading.textContent;
+      heading.textContent = '';
+      heading.appendChild(control);
+      switches.push(control);
+    });
+    Array.prototype.forEach.call(datamap.querySelectorAll('button[data-toggles]'), function (control) {
+      switches.push(control);
+    });
+    switches.forEach(function (control) {
+      control.addEventListener('click', function () {
+        switchLayer(control.getAttribute('data-toggles'), control.getAttribute('aria-pressed') !== 'true');
+      });
+    });
+    datamap.hidden = false;
+    switchLayer('temperature', true);
+  }
+
+  /* The lens. The whole world is laid at the frame's width; the lens shows the
+     full-size picture at one of its pixels to the CSS pixel, so it enlarges by
+     the full picture's width over the frame's. Until the full picture has
+     arrived the lens shows the whole one enlarged, so it answers at once; the
+     full one is asked for the first time the lens is used, and never before. */
+  var lensFrame = document.getElementById('lens-frame');
+  if (lensFrame) {
+    var glass = document.getElementById('lens-glass');
+    var glassPicture = document.getElementById('lens-picture');
+    var wholeWorld = lensFrame.querySelector('.lens-world');
+    /* The full picture's own width, which is also the width the lens lays it at:
+       one of its pixels to the CSS pixel. */
+    var FULL_WIDTH_PX = Number(glassPicture.getAttribute('width'));
+    glassPicture.style.width = FULL_WIDTH_PX + 'px';
+    glassPicture.style.height = glassPicture.getAttribute('height') + 'px';
+    /* How long a finger must rest before the lens comes up, and how far it may
+       wander meanwhile: a tap or the start of a scroll is not a request. */
+    var HOLD_MS = 280, HOLD_WANDER_PX = 10;
+    /* On a touch screen the lens stands this far above the finger's centre, so
+       the finger does not cover what it shows. */
+    var ABOVE_FINGER_SHARE = 0.75;
+    /* The arrow keys move the lens this share of the frame's width a press,
+       five times as far with Shift. */
+    var KEY_STEP_SHARE = 0.02, KEY_LEAP = 5;
+    var fullAsked = false;
+    var at = {x: 0.5, y: 0.5};
+    var askForFull = function () {
+      if (!glassPicture.getAttribute('src')) glassPicture.src = wholeWorld.currentSrc || wholeWorld.src;
+      if (fullAsked) return;
+      fullAsked = true;
+      var full = new Image();
+      full.decoding = 'async';
+      full.src = glassPicture.getAttribute('data-src');
+      var swap = function () { glassPicture.src = full.src; };
+      if (full.decode) full.decode().then(swap, function () {}); else full.onload = swap;
+    };
+    /* Places the lens with its centre at (x, y) in the frame, the point shown
+       being (x, y) less the lift, both in CSS pixels. */
+    var placeLens = function (x, y, lift) {
+      var frameWidth = lensFrame.clientWidth, frameHeight = lensFrame.clientHeight;
+      var shownX = clamp(x, 0, frameWidth), shownY = clamp(y, 0, frameHeight);
+      at = {x: shownX / frameWidth, y: shownY / frameHeight};
+      var enlarged = FULL_WIDTH_PX / frameWidth;
+      var radius = glass.offsetWidth / 2;
+      glass.style.transform = 'translate(' + (shownX - radius) + 'px,' + (shownY - lift - radius) + 'px)';
+      glassPicture.style.transform = 'translate(' + (radius - shownX * enlarged) + 'px,' + (radius - shownY * enlarged) + 'px)';
+    };
+    var showLens = function (on) {
+      if (on) { glass.hidden = false; askForFull(); }
+      glass.classList.toggle('on', on);
+    };
+    var pointIn = function (event) {
+      var box = lensFrame.getBoundingClientRect();
+      return {x: event.clientX - box.left, y: event.clientY - box.top};
+    };
+    var holding = null, held = false;
+    lensFrame.addEventListener('pointermove', function (event) {
+      var point = pointIn(event);
+      if (event.pointerType === 'touch') {
+        if (holding && !held && Math.hypot(point.x - holding.x, point.y - holding.y) > HOLD_WANDER_PX) {
+          clearTimeout(holding.timer);
+          holding = null;
+        }
+        if (held) placeLens(point.x, point.y, glass.offsetWidth * ABOVE_FINGER_SHARE);
+        return;
+      }
+      showLens(true);
+      placeLens(point.x, point.y, 0);
+    });
+    lensFrame.addEventListener('pointerleave', function (event) {
+      if (event.pointerType !== 'touch') showLens(false);
+    });
+    lensFrame.addEventListener('pointerdown', function (event) {
+      if (event.pointerType !== 'touch') return;
+      var point = pointIn(event);
+      holding = {x: point.x, y: point.y, timer: setTimeout(function () {
+        held = true;
+        showLens(true);
+        placeLens(point.x, point.y, glass.offsetWidth * ABOVE_FINGER_SHARE);
+      }, HOLD_MS)};
+    });
+    var letGo = function () {
+      if (holding) clearTimeout(holding.timer);
+      holding = null;
+      if (held) { held = false; showLens(false); }
+    };
+    lensFrame.addEventListener('pointerup', letGo);
+    lensFrame.addEventListener('pointercancel', letGo);
+    /* By keyboard: the frame takes the focus, the lens stands where it last was,
+       and the arrow keys move it. They are the lens's while the frame has the
+       focus, so they do not also scroll the page; every other key is left alone. */
+    var LENS_KEYS = {ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1]};
+    lensFrame.tabIndex = 0;
+    lensFrame.setAttribute('role', 'application');
+    lensFrame.setAttribute('aria-label', 'The whole world under a lens. The arrow keys move the lens; the link under the map opens the whole world at full size.');
+    lensFrame.addEventListener('focus', function () {
+      showLens(true);
+      placeLens(at.x * lensFrame.clientWidth, at.y * lensFrame.clientHeight, 0);
+    });
+    lensFrame.addEventListener('blur', function () { showLens(false); });
+    lensFrame.addEventListener('keydown', function (event) {
+      var move = LENS_KEYS[event.key];
+      if (!move) return;
+      event.preventDefault();
+      var step = lensFrame.clientWidth * KEY_STEP_SHARE * (event.shiftKey ? KEY_LEAP : 1);
+      placeLens(at.x * lensFrame.clientWidth + move[0] * step, at.y * lensFrame.clientHeight + move[1] * step, 0);
+    });
+  }
+
+  /* ---------- the ground in relief ------------------------------------------
+     The engine's heights for the patch as a mesh, textured with the patch's
+     picture and drawn by WebGL, tilting toward the pointer. Every point of the
+     mesh carries a normal taken from its neighbours' heights and the light is
+     worked out per pixel from the normals blended across each triangle, so the
+     shading runs smooth over the triangles' edges and none of them shows. Looked
+     at straight down it is the still picture under it, so the relief starts
+     exactly where the still stands; tilted, the view closes in just enough that
+     the patch's edges never come into the frame. Frames are asked for only
+     while the patch is on screen and still settling toward the pointer. Nothing
+     is fetched or drawn for a reader who asked for less motion, and anything
+     that goes wrong leaves the still picture as it is. */
+  var reliefCanvas = document.getElementById('relief-canvas');
+  if (reliefCanvas && mayMove && window.fetch && window.createImageBitmap && window.Promise) {
+    var reliefStill = document.getElementById('relief-still');
+    /* Heights are drawn this many times their true scale. The patch is some
+       1,900 km across and its range rises under 4 km (3,892 m when it was
+       drawn), so at its true scale the relief would stand a five-hundredth of
+       the patch's width: at twenty times the highest ground stands at about a
+       twenty-fourth of it, enough to see move as the patch tilts and not so much
+       that a valley hides behind its own hills. */
+    var RELIEF_EXAGGERATION = 20;
+    /* The farthest the patch tilts each way, in radians: fifteen degrees. */
+    var MOST_TILT = 15 * Math.PI / 180;
+    /* The camera's field of view, top to bottom: narrow, so the patch seen
+       straight down is nearly the flat picture. */
+    var FIELD_OF_VIEW = 20 * Math.PI / 180;
+    /* How much of the way to the pointer's tilt each frame goes, and how close
+       is close enough to stop asking for frames. */
+    var TILT_EASING = 0.12, TILT_SETTLED = 0.0004;
+    /* How strongly the light shapes the picture, which carries shading of its
+       own already: a half of the way from none to all of it. */
+    var LIGHT_SHARE = 0.5;
+    /* From the upper left, toward the reader, in the camera's frame. */
+    var LIGHT = (function () { var v = [-0.45, 0.55, 0.7], l = Math.hypot(v[0], v[1], v[2]); return [v[0] / l, v[1] / l, v[2] / l]; })();
+    var spacing = Number(reliefCanvas.getAttribute('data-point-spacing'));
+    var stepsPerMetre = Number(reliefCanvas.getAttribute('data-steps-per-metre'));
+    var kilometresPerPixel = Number(reliefCanvas.getAttribute('data-kilometres-per-pixel'));
+    var patchWidth = Number(reliefStill.getAttribute('width')), patchHeight = Number(reliefStill.getAttribute('height'));
+    var pointsAcross = patchWidth / spacing + 1, pointsDown = patchHeight / spacing + 1;
+    var gl = null, drawn = null, tilt = {x: 0, y: 0}, aim = {x: 0, y: 0}, reliefInView = false, reliefFrameAsked = false;
+
+    var giveUp = function () {
+      reliefCanvas.hidden = true;
+      reliefCanvas.classList.remove('shown');
+      drawn = null;
+    };
+
+    var compile = function (type, source) {
+      var shader = gl.createShader(type);
+      gl.shaderSource(shader, source);
+      gl.compileShader(shader);
+      if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) throw new Error('shader');
+      return shader;
+    };
+
+    /* The heights, in metres, one per point, row by row from the patch's top. */
+    var readHeights = function () {
+      return fetch(reliefCanvas.getAttribute('data-heights'))
+        .then(function (response) { if (!response.ok) throw new Error('heights'); return response.blob(); })
+        .then(function (blob) { return createImageBitmap(blob, {colorSpaceConversion: 'none', premultiplyAlpha: 'none'}); })
+        .then(function (bitmap) {
+          if (bitmap.width !== pointsAcross || bitmap.height !== pointsDown) throw new Error('heights');
+          var scratch = document.createElement('canvas');
+          scratch.width = bitmap.width;
+          scratch.height = bitmap.height;
+          var context = scratch.getContext('2d');
+          context.drawImage(bitmap, 0, 0);
+          var bytes = context.getImageData(0, 0, bitmap.width, bitmap.height).data;
+          var metres = new Float32Array(pointsAcross * pointsDown);
+          for (var point = 0; point < metres.length; point++) {
+            metres[point] = (bytes[point * 4] * 256 + bytes[point * 4 + 1]) / stepsPerMetre;
+          }
+          return metres;
+        });
+    };
+
+    /* The mesh: positions in the sheet's pixels about the patch's centre, north
+       up and heights toward the reader; the picture's place; and each point's
+       normal from the heights either side of it. */
+    var buildMesh = function (metres) {
+      var raise = RELIEF_EXAGGERATION / (1000 * kilometresPerPixel);
+      var count = pointsAcross * pointsDown;
+      var positions = new Float32Array(count * 3), places = new Float32Array(count * 2), normals = new Float32Array(count * 3);
+      var heightAt = function (column, row) {
+        return metres[clamp(row, 0, pointsDown - 1) * pointsAcross + clamp(column, 0, pointsAcross - 1)] * raise;
+      };
+      for (var row = 0; row < pointsDown; row++) {
+        for (var column = 0; column < pointsAcross; column++) {
+          var point = row * pointsAcross + column;
+          positions[point * 3] = column * spacing - patchWidth / 2;
+          positions[point * 3 + 1] = patchHeight / 2 - row * spacing;
+          positions[point * 3 + 2] = heightAt(column, row);
+          places[point * 2] = column * spacing / patchWidth;
+          places[point * 2 + 1] = row * spacing / patchHeight;
+          var eastward = (heightAt(column + 1, row) - heightAt(column - 1, row)) / (2 * spacing);
+          var northward = (heightAt(column, row - 1) - heightAt(column, row + 1)) / (2 * spacing);
+          var length = Math.hypot(eastward, northward, 1);
+          normals[point * 3] = -eastward / length;
+          normals[point * 3 + 1] = -northward / length;
+          normals[point * 3 + 2] = 1 / length;
+        }
+      }
+      var corners = new Uint16Array((pointsAcross - 1) * (pointsDown - 1) * 6), at = 0;
+      for (var down = 0; down < pointsDown - 1; down++) {
+        for (var across = 0; across < pointsAcross - 1; across++) {
+          var topLeft = down * pointsAcross + across, bottomLeft = topLeft + pointsAcross;
+          corners.set([topLeft, bottomLeft, topLeft + 1, topLeft + 1, bottomLeft, bottomLeft + 1], at);
+          at += 6;
+        }
+      }
+      return {positions: positions, places: places, normals: normals, corners: corners};
+    };
+
+    var buffer = function (target, data) {
+      var made = gl.createBuffer();
+      gl.bindBuffer(target, made);
+      gl.bufferData(target, data, gl.STATIC_DRAW);
+      return made;
+    };
+
+    var start = function (metres) {
+      gl = reliefCanvas.getContext('webgl', {alpha: false, antialias: true}) ||
+        reliefCanvas.getContext('experimental-webgl', {alpha: false, antialias: true});
+      if (!gl) throw new Error('no webgl');
+      var program = gl.createProgram();
+      gl.attachShader(program, compile(gl.VERTEX_SHADER,
+        'attribute vec3 position; attribute vec2 place; attribute vec3 normal;' +
+        'uniform mat4 model; uniform mat4 lens; uniform mat3 turn;' +
+        'varying vec2 vPlace; varying vec3 vNormal;' +
+        'void main() { vPlace = place; vNormal = turn * normal; gl_Position = lens * model * vec4(position, 1.0); }'));
+      gl.attachShader(program, compile(gl.FRAGMENT_SHADER,
+        'precision mediump float;' +
+        'uniform sampler2D ground; uniform vec3 light; uniform float share;' +
+        'varying vec2 vPlace; varying vec3 vNormal;' +
+        'void main() {' +
+        '  float lit = max(dot(normalize(vNormal), light), 0.0) / light.z;' +
+        '  gl_FragColor = vec4(texture2D(ground, vPlace).rgb * mix(1.0, lit, share), 1.0);' +
+        '}'));
+      gl.linkProgram(program);
+      if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error('link');
+      gl.useProgram(program);
+      var mesh = buildMesh(metres);
+      [['position', mesh.positions, 3], ['place', mesh.places, 2], ['normal', mesh.normals, 3]].forEach(function (attribute) {
+        buffer(gl.ARRAY_BUFFER, attribute[1]);
+        var location = gl.getAttribLocation(program, attribute[0]);
+        gl.enableVertexAttribArray(location);
+        gl.vertexAttribPointer(location, attribute[2], gl.FLOAT, false, 0, 0);
+      });
+      buffer(gl.ELEMENT_ARRAY_BUFFER, mesh.corners);
+      var texture = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, texture);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, reliefStill);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.uniform3fv(gl.getUniformLocation(program, 'light'), LIGHT);
+      gl.uniform1f(gl.getUniformLocation(program, 'share'), LIGHT_SHARE);
+      gl.enable(gl.DEPTH_TEST);
+      drawn = {
+        program: program, count: mesh.corners.length,
+        model: gl.getUniformLocation(program, 'model'), lens: gl.getUniformLocation(program, 'lens'),
+        turn: gl.getUniformLocation(program, 'turn')
+      };
+      reliefCanvas.addEventListener('webglcontextlost', giveUp);
+    };
+
+    /* Rotation about the east-west line by a, then about the north-south line
+       by b, column by column as WebGL reads a matrix. */
+    var turning = function (a, b) {
+      var ca = Math.cos(a), sa = Math.sin(a), cb = Math.cos(b), sb = Math.sin(b);
+      return [cb, sa * sb, -ca * sb, 0, ca, sa, sb, -sa * cb, ca * cb];
+    };
+
+    /* The camera straight above the patch at the distance its field of view
+       takes in exactly the patch's height, closing in by `closer`. */
+    var lensFor = function (closer) {
+      var focal = 1 / Math.tan(FIELD_OF_VIEW / 2), aspect = patchWidth / patchHeight;
+      var distance = focal * patchHeight / 2, near = distance / 4, far = distance * 4;
+      return [focal / aspect * closer, 0, 0, 0, 0, focal * closer, 0, 0,
+        0, 0, (far + near) / (near - far), -1, 0, 0, 2 * far * near / (near - far) - distance * (far + near) / (near - far), distance];
+    };
+
+    /* How much closer the view must be at this tilt for the patch's four corners
+       to lie outside the frame: the frame's corners, seen from its centre, must
+       fall inside the tilted patch's outline. */
+    var closingFor = function (rotation) {
+      var focal = 1 / Math.tan(FIELD_OF_VIEW / 2), aspect = patchWidth / patchHeight, distance = focal * patchHeight / 2;
+      var outline = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(function (corner) {
+        var x = corner[0] * patchWidth / 2, y = corner[1] * patchHeight / 2;
+        var turnedX = rotation[0] * x + rotation[3] * y, turnedY = rotation[1] * x + rotation[4] * y;
+        var turnedZ = rotation[2] * x + rotation[5] * y, depth = distance - turnedZ;
+        return [focal / aspect * turnedX / depth, focal * turnedY / depth];
+      });
+      var closer = 1;
+      [[-1, -1], [1, -1], [1, 1], [-1, 1]].forEach(function (corner) {
+        var reach = Infinity;
+        for (var edge = 0; edge < 4; edge++) {
+          var p = outline[edge], q = outline[(edge + 1) % 4];
+          var ex = q[0] - p[0], ey = q[1] - p[1];
+          var across = corner[0] * ey - corner[1] * ex;
+          if (Math.abs(across) < 1e-9) continue;
+          var t = (p[0] * ey - p[1] * ex) / across, u = (p[0] * corner[1] - p[1] * corner[0]) / across;
+          if (t > 0 && u >= 0 && u <= 1) reach = Math.min(reach, t);
+        }
+        closer = Math.max(closer, 1 / reach);
+      });
+      return closer;
+    };
+
+    var paintRelief = function () {
+      reliefFrameAsked = false;
+      if (!drawn) return;
+      tilt.x += (aim.x - tilt.x) * TILT_EASING;
+      tilt.y += (aim.y - tilt.y) * TILT_EASING;
+      var rotation = turning(tilt.x, tilt.y);
+      /* Laid out before it is measured, still at no opacity until it has been
+         drawn into, so the still picture shows until then. */
+      reliefCanvas.hidden = false;
+      var ratio = Math.min(window.devicePixelRatio || 1, 2);
+      var wide = Math.round(reliefCanvas.clientWidth * ratio), high = Math.round(reliefCanvas.clientHeight * ratio);
+      if (reliefCanvas.width !== wide || reliefCanvas.height !== high) { reliefCanvas.width = wide; reliefCanvas.height = high; }
+      gl.viewport(0, 0, wide, high);
+      gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+      gl.uniformMatrix4fv(drawn.model, false, [rotation[0], rotation[1], rotation[2], 0, rotation[3], rotation[4], rotation[5], 0,
+        rotation[6], rotation[7], rotation[8], 0, 0, 0, 0, 1]);
+      gl.uniformMatrix3fv(drawn.turn, false, rotation);
+      gl.uniformMatrix4fv(drawn.lens, false, lensFor(closingFor(rotation)));
+      gl.drawElements(gl.TRIANGLES, drawn.count, gl.UNSIGNED_SHORT, 0);
+      reliefCanvas.classList.add('shown');
+      if (reliefInView && (Math.abs(aim.x - tilt.x) > TILT_SETTLED || Math.abs(aim.y - tilt.y) > TILT_SETTLED)) askForReliefFrame();
+    };
+    var askForReliefFrame = function () {
+      if (reliefFrameAsked) return;
+      reliefFrameAsked = true;
+      requestAnimationFrame(paintRelief);
+    };
+
+    reliefCanvas.addEventListener('pointermove', function (event) {
+      var box = reliefCanvas.getBoundingClientRect();
+      aim = {x: clamp((event.clientY - box.top) / box.height * 2 - 1, -1, 1) * MOST_TILT,
+        y: clamp((event.clientX - box.left) / box.width * 2 - 1, -1, 1) * MOST_TILT};
+      askForReliefFrame();
+    });
+    reliefCanvas.addEventListener('pointerleave', function () { aim = {x: 0, y: 0}; askForReliefFrame(); });
+    if (lessMotion.addEventListener) {
+      lessMotion.addEventListener('change', function () { if (lessMotion.matches) giveUp(); });
+    }
+
+    var begun = false;
+    whileInView(reliefCanvas.parentNode, function (visible) {
+      reliefInView = visible;
+      if (visible && !begun) {
+        begun = true;
+        reliefStill.loading = 'eager';
+        var stillReady = reliefStill.decode ? reliefStill.decode() : Promise.resolve();
+        Promise.all([readHeights(), stillReady]).then(function (ready) {
+          start(ready[0]);
+          askForReliefFrame();
+        }).catch(giveUp);
+      } else if (visible) {
+        askForReliefFrame();
+      }
+    }, 0);
   }
 
   /* ---------- the download cards --------------------------------------------

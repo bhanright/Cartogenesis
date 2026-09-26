@@ -118,7 +118,11 @@ class SitePaletteContrastTest {
             Triple("the slider's style pickers", "bone", "ink-raised"),
             Triple("step and picker labels", "bone-dim", "ink"),
             Triple("play button", "brass", "ink"),
-            Triple("play button, hovered", "brass", "ink-sunk")
+            Triple("play button, hovered", "brass", "ink-sunk"),
+            // The second set: a data frame overlay switched on, the reel's seed and its link.
+            Triple("an overlay switch, pressed", "ink", "brass"),
+            Triple("a reel world's seed", "bone-dim", "ink"),
+            Triple("a reel world's link", "brass", "ink")
         )
 
         /**
@@ -272,6 +276,9 @@ class SitePaletteContrastTest {
         // The step on show is marked by a ring round its square, which is the only thing saying
         // which card the frame is showing; the suggested download by a rule beside its row.
         check("lit step ring", "parchment", "ink", NON_TEXT)
+        // The lens's rim, which says where the lens is over the map, and the frame a reel world
+        // takes when hovered or focused, on the page's ground.
+        check("lens rim and a reel world, hovered", "brass", "ink", NON_TEXT)
 
         // Measured and reported, but deliberately held to nothing. The hairline separates one
         // block of the page from the next and carries no information a reader would otherwise
@@ -404,5 +411,67 @@ class SitePaletteContrastTest {
         listOf("letter-unlit" to "the name, unlit", "letter-struck" to "the name, struck", "brass" to "the name, lit")
             .forEach { (name, where) -> checkValues("title card, $where", "--$name", colour(name), groundName, ground, TITLE_NAME_BAR) }
         checkValues("title card, the line under the name", "--bone", colour("bone"), groundName, ground, AA)
+    }
+
+    /**
+     * The ink panel of the opening, over [BRIGHTEST_BAND_PIXEL] at [opacityPercent] of the ink,
+     * mixed as a browser composites a translucent colour over what is behind it.
+     */
+    private fun panelOverTheBrightestBand(opacityPercent: Int): Int {
+        val ink = colour("ink")
+        val share = opacityPercent / 100.0
+        fun channel(shift: Int) = Math.round(
+            ((ink shr shift) and 0xFF) * share + ((BRIGHTEST_BAND_PIXEL shr shift) and 0xFF) * (1 - share)
+        ).toInt()
+        return (0xFF shl 24) or (channel(16) shl 16) or (channel(8) shl 8) or channel(0)
+    }
+
+    /** The WCAG level a ratio reaches, as the bar it clears: 7 (AAA), 4.5 (AA), 3 or nothing. */
+    private fun levelOf(ratio: Double, levels: List<Double>): Double = levels.firstOrNull { ratio >= it } ?: 0.0
+
+    /**
+     * That the opening's panel is only as translucent as its words allow, measured over the
+     * brightest ground the band can put behind it.
+     *
+     * The panel rises over the drifting map, so any pixel of the band can be behind any word on it,
+     * and the band holds pure white ice. The panel's opacity is not chosen by eye: it is the least
+     * whole percent of the ink at which no word on the panel, read over white through the panel,
+     * falls below the WCAG level it reaches on the solid ink (7:1 for body text that is AAA there,
+     * 4.5 for large text that is AAA there, 3 for the cue's outline), and the page is held to
+     * exactly that percent. Less would cost a word a level; more would make the panel less
+     * translucent than its words need.
+     */
+    @Test
+    fun `the opening's panel is as translucent as its words allow over the brightest band`() {
+        val background = declarationsOf(".opening-panel")["background"] ?: fail("the opening's panel has no background")
+        val percent = Regex("""color-mix\(\s*in srgb\s*,\s*var\(--ink\)\s+(\d+)%\s*,\s*transparent\s*\)""").find(background)
+            ?.groupValues?.get(1)?.toInt() ?: fail("the panel's ground is no longer the ink mixed with transparency: $background")
+        val bodyLevels = listOf(7.0, AA, AA_LARGE)
+        val largeLevels = listOf(AA, AA_LARGE)
+        val boundaryLevels = listOf(NON_TEXT)
+        // Every word and edge on the panel, with the levels its kind of text is judged on.
+        val panelPairs = listOf(
+            Triple("eyebrow", "brass", bodyLevels),
+            Triple("heading", "parchment", largeLevels),
+            Triple("lede", "bone", bodyLevels),
+            Triple("secondary button's label", "parchment", bodyLevels),
+            Triple("scroll cue's arrow", "parchment", boundaryLevels),
+            Triple("focus ring", "brass", boundaryLevels)
+        )
+        fun keepsEveryLevel(opacity: Int) = panelPairs.all { (_, ink, levels) ->
+            val solid = levelOf(ColorVision.contrast(colour(ink), colour("ink")), levels)
+            levelOf(ColorVision.contrast(colour(ink), panelOverTheBrightestBand(opacity)), levels) >= solid
+        }
+        val least = (0..100).first { keepsEveryLevel(it) }
+        panelPairs.forEach { (where, ink, levels) ->
+            val solid = levelOf(ColorVision.contrast(colour(ink), colour("ink")), levels)
+            checkValues("opening panel, $where", "--$ink", colour(ink), "ink $percent% over white",
+                panelOverTheBrightestBand(percent), solid)
+        }
+        assertEquals(
+            least, percent,
+            "the opening's panel is the ink at $percent%, and the least percent at which every word on it keeps its level over white is $least"
+        )
+        println("SITE the opening's panel is the ink at $percent%, the least that keeps every word's level over the band's brightest pixel")
     }
 }

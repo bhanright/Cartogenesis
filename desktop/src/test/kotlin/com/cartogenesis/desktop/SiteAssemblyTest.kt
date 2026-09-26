@@ -45,18 +45,19 @@ class SiteAssemblyTest {
         const val PREVIEW_TAKEOVER_MOST_MEAN_DIFFERENCE = 12.0
 
         /**
-         * The most the full band may weigh: 400 KiB, where it measured 373,698 bytes, 4096 by 800 at
-         * [SiteImagery.WORLD_BAND_QUALITY], on the implicit erosion's terrain (288,294 before it,
-         * on ground less finely cut). It is the page's largest request and every wide or dense
-         * screen fetches it as the page opens.
+         * The most the full band may weigh: 128 KiB, where it measured 105,912 bytes, 4096 by 800 at
+         * [SiteImagery.WORLD_BAND_QUALITY], once Site 5c moved its rows below the range's ice cap
+         * (373,698 on the author's old rows, over the range and the continent, on the implicit
+         * erosion's terrain). Lighter because the new rows hold more sea, which the encoder keeps in
+         * little; every wide or dense screen fetches it as the page opens.
          */
-        const val WORLD_BAND_MOST_BYTES = 409_600L
+        const val WORLD_BAND_MOST_BYTES = 131_072L
 
         /**
-         * The most the half band may weigh: 120 KiB, where it measured 113,314 bytes, 2048 by 400,
-         * on the implicit erosion's terrain (90,848 before it).
+         * The most the half band may weigh: 40 KiB, where it measured 34,438 bytes, 2048 by 400, on
+         * the rows Site 5c chose (113,314 on the old ones).
          */
-        const val WORLD_BAND_HALF_MOST_BYTES = 122_880L
+        const val WORLD_BAND_HALF_MOST_BYTES = 40_960L
 
         /**
          * The least and most of its frame a data layer may cover. The rivers covered 2.0% of the
@@ -84,19 +85,21 @@ class SiteAssemblyTest {
 
         /**
          * The ceiling on what the page fetches as it loads, by the kind of screen (see
-         * [fetchedAtLoad]): what the list sums to, 527,199 bytes narrow and 787,583 wide or dense,
+         * [fetchedAtLoad]): what the list sums to, 461,417 bytes narrow and 532,891 wide or dense,
          * each plus 64 KiB for the pictures and the page moving when they are made again.
          *
          * Measured once the page's faces were WOFF2 cut to its characters, which took 943,600
          * bytes off every screen, and its pictures were made on the implicit erosion's terrain,
-         * whose more finely cut ground put 60,837 and 123,775 bytes back. No lazy picture is fetched
+         * whose more finely cut ground put 60,837 and 123,775 bytes back. Site 5c then took 78,876
+         * and 267,786 off again: the band's rows moved south of the ice cap, onto ground that is
+         * more sea, and the page grew by 13,094 bytes for its review fixes. No lazy picture is fetched
          * as the page loads (docs/DESIGN_LEDGER.md, Site 5b), so the faces, the page and the
          * pictures above the fold are the whole of it, and a face grown back to TrueType would not
          * fit.
          */
         val LOAD_BYTES: Map<String, Long> = mapOf(
-            "narrow at one device pixel" to 527_199L + 65_536L,
-            "wide or dense" to 787_583L + 65_536L
+            "narrow at one device pixel" to 461_417L + 65_536L,
+            "wide or dense" to 532_891L + 65_536L
         )
 
         /**
@@ -312,12 +315,12 @@ class SiteAssemblyTest {
             "world-whole.webp" to (1024 to 512),
             "world-full.webp" to (4096 to 2048),
             "relief-natural.webp" to (640 to 400),
-            // Every seed is a world: five worlds whole, each half its 1024 by 512 sheet.
-            "seed-7.webp" to (512 to 256),
-            "seed-42.webp" to (512 to 256),
-            "seed-1066.webp" to (512 to 256),
-            "seed-2024.webp" to (512 to 256),
-            "seed-31337.webp" to (512 to 256)
+            // Every seed is a world: five worlds whole, each its 1024 by 512 sheet at its own pixels.
+            "seed-42.webp" to (1024 to 512),
+            "seed-1066.webp" to (1024 to 512),
+            "seed-2024.webp" to (1024 to 512),
+            "seed-777.webp" to (1024 to 512),
+            "seed-7.webp" to (1024 to 512)
         )
         assertEquals(
             expected.mapValues { it.value }.toSortedMap(),

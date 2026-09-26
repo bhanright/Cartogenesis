@@ -113,43 +113,47 @@ object SiteImagery {
     /**
      * The window the page's opening starts from, and the picture a link to the page previews.
      *
-     * A 2:1 window on the southern half of the northern continent, which carries in one frame
-     * everything the page claims — the snow-capped range down its middle, rivers draining both
-     * flanks to a south coast of bays and an estuary, lakes in the lowlands either side, and the
-     * continent's east coast turning north at the right-hand edge.
+     * A 2:1 window on the south-western peninsula of the northern continent: forested hills cut by
+     * rivers, an estuary branching into drowned valleys with a lake at its head, a coastal range
+     * along the peninsula's south-east shore, the continent's south coast running east under the
+     * range's foothills, and the shelf and the deep ocean below. Land meeting sea, water finding
+     * its way down, relief and climate in one frame, which is what the page is about.
      *
-     * Drawn in `MapStyle.NATURAL`, for the colour. The window did not have to move with the style:
-     * what it holds is what that style has most to say about — forest against a dry belt, a range
-     * between them, and a cobalt sea around it.
+     * Its rows are what matter most, since [WORLD_BAND] is these rows the whole way round the
+     * world: from row 896 they stand below the range's ice cap, whose lowest edge runs straight
+     * along rows 810 to 820 and down a column at about 2,000, below the two dry belts ruled along
+     * rows, and below the straight top of the drowned inlet east of the estuary (about row 876,
+     * columns 1,480 to 1,550), so the drift carries none of them. The implicit erosion's comb of gullies down the
+     * columns is least here of any band of 800 rows that holds no ice; it is left on the steep
+     * flanks of the southern land, which the drift passes (docs/TODO.md; docs/DESIGN_LEDGER.md,
+     * Site 5c, for the measure). Drawn in `MapStyle.NATURAL`, for the colour.
      */
-    val BAND = Window(1152, 320, 1600, 800)
+    val BAND = Window(576, 896, 1600, 800)
 
     /**
      * The window the map styles are compared in: 600 wide and 400 tall, at 1:1.
      *
-     * The south-eastern lobe of the northern continent: brown hills over a green coastal plain,
-     * rivers reaching the south and east coasts, and the shelf and the deep sea round the corner.
-     * Height, climate, water and sea in one frame, which is what the twelve styles part company
-     * over. It moved here in Site 5a from the south-western lowlands, which carried two of the
-     * generator's grid-shaped marks listed in docs/TODO.md (a dry belt ruled along a row, and an
-     * estuary sea with a straight west edge and a straight top); this window holds neither, and
-     * starts east of the fan of rays at the range's southern ice cap.
+     * The body of the south-western peninsula: forested hills cut by rivers, the drowned valleys
+     * of its estuary branching in at the top, the coastal range dark along its south-east shore,
+     * and the shelf falling to the deep sea on both coasts. Height, water and sea in one frame,
+     * which is what the twelve styles part company over. West of the drowned inlet whose straight
+     * top docs/TODO.md lists. It moved here in Site 5c from the
+     * south-eastern lobe, which on the implicit erosion's terrain carried a plain comb of gullies
+     * down the columns and a dry belt ruled along a row; this window holds neither.
      */
-    val STYLES_WINDOW = Window(2160, 580, 600, 400)
+    val STYLES_WINDOW = Window(864, 880, 600, 400)
 
     /**
-     * The window the four data layers are read in: 480 wide and 600 tall.
+     * The window the four data layers are read in: 480 wide and 600 tall, inside
+     * [DATA_FRAME_WINDOW].
      *
      * Taller than wide because the layers are latitude-organised — temperature bands, the trades
      * and the westerlies, a gyre turning between them — so a window that spans more latitude shows
-     * more of what there is to see. 600 rows of 2048 is a little over fifty degrees of latitude,
-     * and these are the fifty that carry the most: the belt where the westerlies give way to the
-     * trades runs through the upper half of the frame, so the Winds card shows the two blowing
-     * opposite ways rather than one of them filling the picture. Land above and water below, the
-     * south coast of the northern continent across the middle, because two of the four layers draw
-     * nothing on land and the other two draw nothing at sea.
+     * more of what there is to see: 600 rows of 2048 is a little over fifty degrees. Land above
+     * and water below, the continent's south coast across the middle, because two of the four
+     * layers draw nothing on land and the other two draw nothing at sea.
      */
-    val LAYERS_WINDOW = Window(2048, 512, 480, 600)
+    val LAYERS_WINDOW = Window(800, 880, 480, 600)
 
     /**
      * One picture on the page: a window of the map, read one way.
@@ -271,20 +275,24 @@ object SiteImagery {
             .map { view -> Figure("layer-${view.name.lowercase()}.webp", LAYERS_WINDOW, view) }
 
     /**
-     * The data frame's window: 800 by 600 at 1:1, holding [LAYERS_WINDOW] at its left.
+     * The data frame's window: 800 by 600 at 1:1, holding [LAYERS_WINDOW] 160 columns in from its left.
      *
-     * The same ground as the four data cards and more of it, eastward across the strait toward the
-     * eastern island, so the frame is wide enough to be read as one picture on a computer. Not
-     * westward, where the range's ice cap ends in the straight edge listed in docs/TODO.md; the
-     * short double line at the cards' window's top left is inside it, as it is in the cards.
+     * The same ground as the four data cards and more of it either side, so the frame is wide
+     * enough to be read as one picture on a computer: the south-western peninsula whole, its hills
+     * and rivers, its coastal range, its tip, and the ocean off both its coasts.
+     * The relief under the layers is the winds view's shaded ground, which shows a comb of gullies
+     * down the columns plainest of any picture on the page; Site 5c moved the frame and the cards
+     * here from the range's eastern flank, where the implicit erosion's terrain combs it most, and
+     * where the old frame held the edge of the ice cap.
      */
-    val DATA_FRAME_WINDOW = Window(2048, 512, 800, 600)
+    val DATA_FRAME_WINDOW = Window(640, 880, 800, 600)
 
     /**
      * The data frame's pictures, bottom to top as the page lays them: the relief, which is the
      * ground the application draws its winds over (the land shaded and tinted by height, the sea
-     * flat), then the four layers the cards name, then the rivers and lakes. (No realm borders: the
-     * frame's land is one realm from edge to edge, so a border layer would have nothing to draw.)
+     * flat), then the four layers the cards name, then the rivers and lakes. (No realm borders,
+     * though the frame's land holds several realms: the engine blends a border into the cells it
+     * crosses, so there is no layer of them to cut, see [Cut].)
      * Temperature is whole, since the view says something at sea as on land; rainfall keeps the
      * land and the currents the sea, each leaving clear where its view draws only a placeholder
      * colour; the winds are their arrows alone.
@@ -325,13 +333,16 @@ object SiteImagery {
     }
 
     /**
-     * The patch of ground the page draws in relief: 640 by 400 at 1:1 of the eastern island's
-     * western end, a range along its north coast falling to valleys and rivers in the south, the
-     * sea round its western cape and lakes at its eastern edge. West of where the dry belt ruled
-     * along a row crosses the island (about column 3,355 at rows 675 to 700, docs/TODO.md), and
-     * clear of the other three marks listed there.
+     * The patch of ground the page draws in relief: 640 by 400 at 1:1 of the south-western
+     * peninsula's coastal range, a ridge along the south-east shore with valleys and rivers
+     * behind it, a lake among the hills, and the sea falling away beyond the coast.
+     *
+     * Site 5c moved it here from the eastern island's western end, which on the implicit erosion's
+     * terrain carried a straight west coast down a column, a comb of gullies on the range's
+     * southern flank (plainer tilted than flat), and the scarp and the straight-edged delta flat
+     * docs/TODO.md lists. This patch holds none of them.
      */
-    val RELIEF_WINDOW = Window(2720, 470, 640, 400)
+    val RELIEF_WINDOW = Window(960, 960, 640, 400)
 
     /** The patch in the Natural style: the picture the relief is textured with, and its still. */
     val RELIEF_TEXTURE = Figure("relief-natural.webp", RELIEF_WINDOW, MapView.FANTASY, MapStyle.NATURAL)
@@ -362,12 +373,15 @@ object SiteImagery {
     /**
      * The worlds of "Every seed is a world", each made the way the application makes a world it
      * is opened at with only a seed: the generator's defaults at the browser's starting size, so
-     * the picture is the world the card's link opens. Five of eight looked at (1, 7, 42, 99, 1066,
-     * 2024, 31337 and 424242), picked to differ from one another: two lands across shallow bays, a
-     * long continent pinched in the middle, a branching one, an inland sea with islands, and three
-     * lands with an island between.
+     * the picture is the world the card's link opens. Five of fifteen looked at on the implicit
+     * erosion's terrain (1, 7, 12, 42, 99, 123, 777, 1066, 2024, 2026, 5000, 31337, 65536, 90210
+     * and 424242), picked to differ from one another and to show the fewest of the generator's
+     * grid-shaped marks at the size the page draws them: a long continent pinched in the middle, a
+     * branching one, an inland sea with islands, two lands across open sea, and two lands across
+     * shallow bays. Seven of the others were left for an ice cap ending in a wall down a column, a
+     * slab of ice with straight edges, a fan of rays, or a dry belt ruled along a row.
      */
-    val REEL_SEEDS: List<Long> = listOf(7L, 42L, 1066L, 2024L, 31337L)
+    val REEL_SEEDS: List<Long> = listOf(42L, 1066L, 2024L, 777L, 7L)
 
     /**
      * The size the reel's worlds are made at: 512, where a browser window starts, so the pictures
@@ -381,16 +395,17 @@ object SiteImagery {
         WorldGenConfig(seed = seed).atResolution(REEL_GRID_CELLS, REEL_GRID_CELLS)
 
     /**
-     * Each reel world whole in the Natural style, halved: 512 by 256 of its 1024 by 512 sheet. A
-     * reel card is at most about 210 pixels wide on a computer, so 512 covers it at two device
-     * pixels to the CSS pixel.
+     * Each reel world whole in the Natural style at its sheet's own pixels, 1024 by 512. The page
+     * draws the first two worlds half its column wide on a computer, about 525 CSS pixels, and
+     * every world the width of a phone's screen, about 340, so 1024 covers both at two device
+     * pixels to the CSS pixel, where the half-size pictures of Site 5b were enlarged.
      */
     val REEL: List<Figure> by lazy {
         REEL_SEEDS.map { seed ->
             val sheet = SheetGeometry.of(reelConfig(seed))
             Figure(
                 "seed-$seed.webp", Window(0, 0, sheet.widthPixels, sheet.heightPixels),
-                MapView.FANTASY, MapStyle.NATURAL, reduction = 2, seed = seed
+                MapView.FANTASY, MapStyle.NATURAL, seed = seed
             )
         }
     }

@@ -1399,3 +1399,141 @@ Only the classes a re-record touched were run again.
   coast window, and small lakes redrawn: chunk 6's water balance.
 - **The comb is unchanged and plain:** 969495's eastern flank, seed 42's western ranges, seed 7's
   upper-right range. It is recorded as the known failure above, for the square-cell chunk.
+
+## Session notes after the integration
+
+A note for the session that set this branch's rounds. It records everything done under those
+briefs and after them, in the one place those rounds were reported. **None of the replies meant for
+that session reached it:** this environment refuses messages to other sessions, so the three
+results below were reported only here and to the maintainer directly.
+
+### 1. The work under the briefs, in order
+
+| Brief | Commits on `chunk/3b-implicit-erosion` | Reported in |
+|---|---|---|
+| Comb, second round: the sub-grid transport net of the resolved incision | `43ab85f` (A reverted), `c250862` (two net forms), `79ea118` (the guard's floor), `071b0bb` (ledger) | [Comb experiments, second round](#comb-experiments-second-round) |
+| Comb, third round: the Rho8 draw in clamped descent, with the trimmed scope | `fa37334` (form C), `34cd797` (ledger) | [Comb experiments, third round](#comb-experiments-third-round) |
+| Merge preparation | `4d4ff73` (experiments removed), `8482c72` (the comb's known failure and TODO), `6a96fb6` (main merged), `3f1096d` and `69d8165` (re-records), `4dc7925` and `2e129db` (ledger) | [Integration with main](#integration-with-main) |
+
+**Outcomes in one line each:**
+- **Round 2:** across the fall removes about three quarters of the comb at 512 and keeps the
+  network and the armed clauses. It costs the valleys a third of their depth and leaves ten times
+  the guard's floor. The undrained share keeps everything and removes about a fifth.
+- **Round 3:** 85 to 87% of the combed cells are clamped to their cardinal, where no draw can
+  reach them. Form C left the comb within 1% of stock, and biased planes at the diagonal's bearing
+  by 12.3 degrees.
+- **Integration:** every experiment is removed and the comb is recorded as the half-height cell's
+  known failure. `origin/main` (`4d0a3da`) is merged. The two re-records and the map's records are
+  taken, one full run is green apart from the recorded failures and the software device's speed
+  clause, and the render set is under `review/renders/*-merged.png`.
+
+**Two things the integration section does not say:**
+- **A restart.** The container was restarted during the render set. The renders were then taken
+  one world per run, and none was lost.
+- **The branch head.** `chunk/3b-implicit-erosion` stands at `2e129db`, unchanged since the
+  integration. Nothing in this section changes it.
+
+### 2. After the briefs: a review of the landing page
+
+The maintainer asked for a review of the project's landing page with recommendations. It changed
+nothing on either of this review's branches.
+
+**How it was done.** The public site could not be reached from this environment, so the review
+read `site/` as it stands on `main` at `4d0a3da`:
+- the page's pictures rendered by `:desktop:renderSiteImagery` in a scratch worktree, since
+  removed;
+- the page served locally and read in a headless browser at 1440 and 390 pixels wide;
+- the first load measured by bytes, largest paint and layout shift.
+
+Anything the site's assembly fills in (the roadmap table, the bundle's size) may read differently on
+the published page.
+
+**What it found:**
+- **Well made in the main.** The tokens are the application's own, layout shift is nought, reduced
+  motion is honoured, every picture has its alt text and its size, and the copy is plain.
+- **The typefaces were 70% of the first load:** 1,067 KB of TrueType against 324 KB of pictures
+  and 131 KB of page.
+- **The hero band opens on a grid-shaped ice edge:** a straight vertical white wall with a stepped
+  edge, at the top left of the desktop band. It is a rule 13 shape, and the first thing a reader
+  sees.
+- **"How a world is made" tells its six steps twice:** six cards, then a player that repeats them.
+- **Dead space beside the interactive figures on a wide screen.** The relief, the style slider and
+  the data frame stand left-aligned at 600 to 800 pixels, with half the width empty beside them.
+- **Controls that don't read as controls.** The data frame's layer cards are its toggles but read
+  as captions, and the layers carry no key or units.
+- **The download cards' colours carry no meaning.** Windows is the primary button's brass and
+  Linux the error's red. At 360 and 390 pixels wide the Linux card's "For your system" tag runs 18
+  to 33 pixels past the screen.
+- **Smaller points:**
+  - the seed thumbnails are small and alike;
+  - the two hero buttons differ in width on a phone;
+  - worth confirming the published page does not show the bundle-size placeholder.
+
+**What it recommended adding:**
+- a seed field and a dice in the hero;
+- an installable, offline-capable browser app (a manifest, and a `theme-color`);
+- the steps driven by scrolling, with the present player as the fallback;
+- view transitions on the style slider;
+- a preview picture for each featured seed's link;
+- a light, parchment scheme;
+- structured data for search;
+- a larger seed gallery in several styles.
+
+**The quick wins it named:** the typefaces, and moving the hero band's window.
+
+### 3. After the briefs: the typefaces made WOFF2
+
+The maintainer asked for the typeface change. It is commit `369a63f`, on this session's own working
+branch taken from `main` at `4d0a3da`. **It is not on `chunk/3b-implicit-erosion` or on this review
+branch, and nothing is merged.** It touches only `site/`, the two build scripts' site sections and
+the site's tests. So it should merge without conflict into main or into this branch, whose
+integration merged the same `main`.
+
+**What it does:**
+- **The fonts.** The page's five faces are now WOFF2, cut from the application's own TrueType files
+  to the characters a Latin-script page uses: 1,093,056 bytes to 149,456.
+- **The generator.** `site/fonts/build_web_fonts.py` makes them reproducibly and writes
+  `site/fonts/faces.json`, the source each was cut from and the characters it keeps. Neither of
+  the two is published.
+- **The page and the build.** The page's preloads and `@font-face` rules name the WOFF2 files.
+  `:web:assembleSite` copies them with the rest of `site/`, and publishes the three font licences
+  beside them.
+
+**The renaming, a judgement for the maintainer.** A subset is a Modified Version under the SIL Open
+Font License, and IBM Plex reserves the name "Plex". So the two Plex faces are published as
+Cartogenesis Sans and Cartogenesis Mono, with their copyright and licence records kept. The
+footer credits Spectral and IBM Plex and links the three licences. Spectral reserves no name and
+keeps its own. If the maintainer would rather ask IBM for permission to keep the name, the rename
+is three lines of the script and five of the page.
+
+**The guards:**
+- **`SiteFontsTest`**, new, in the ordinary `:desktop:test` tier. It fails when an application
+  face changes without the fonts being cut again, and when the page or the roadmap sets a character
+  a subset dropped. It was shown failing on both: a changed recorded hash, and a character no
+  subset keeps.
+- **`SiteAssemblyTest`** reads WOFF2, checks that the licences are published and the generator is
+  not, and lowers its two load ceilings by exactly the bytes saved. The headroom each screen had
+  stays what it was.
+- **`:desktop:test`'s inputs** now declare the application's font folder, so a changed face cannot
+  pass from cache.
+
+**What was measured.** In the headless browser:
+- the first load falls from 1,522 KB to 602 KB on a wide screen, and from 1,511 KB to 590 KB on a
+  phone;
+- the hero's type renders to the same pixels as with the TrueType;
+- layout shift stays nought.
+
+`SiteFontsTest`, `SitePaletteContrastTest` and `SiteSourcesTest` pass: 31 tests.
+
+**What could not run here.** `:web:assembleSite`, and so `:desktop:siteTest`. The browser build's
+tooling download is refused here, as it was for every round. The lowered ceilings were checked by
+hand against the files the guard sums: about 64 KiB of headroom on both screens, as before.
+`:desktop:siteTest` should be run locally before the change is deployed.
+
+### 4. What is left for the maintainer
+
+- **Erosion.** Review `chunk/3b-implicit-erosion` at `2e129db` and its render set, then merge. The
+  comb waits on the square-cell chunk, with `CombGuardTest` as its acceptance test.
+- **Typefaces.** Decide on the Plex renaming, run `:desktop:siteTest` locally, and merge `369a63f`
+  when it suits.
+- **Landing page.** The page's other findings are recommendations only, and none is built.

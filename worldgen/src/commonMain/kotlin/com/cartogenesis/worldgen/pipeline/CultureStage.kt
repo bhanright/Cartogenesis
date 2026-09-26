@@ -101,17 +101,7 @@ object CultureStage {
             return null
         }
 
-        val landCells = sea.landCellCount
-        val units = BasinPartition.mergeSmall(
-            config, sea,
-            BasinPartition.compute(
-                config, sea, rivers,
-                (landCells * culturesConfig.maxRegionShare).toInt()
-                    .coerceAtLeast(SMALLEST_LARGE_REGION)
-            ),
-            (landCells * culturesConfig.minRegionShare).toInt()
-                .coerceAtLeast(SMALLEST_KEPT_REGION)
-        )
+        val units = regionUnits(config, sea, rivers)
         if (units.unitCount == 0) return null
 
         val profile = profile(config, sea, climate, units)
@@ -122,7 +112,28 @@ object CultureStage {
     }
 
     /**
-     * Floors on the region sizes, in cells, for the two shares in `CulturesConfig` that are
+     * The catchments cultural regions are cut from: the land in units of at most
+     * `CulturesConfig.maxRegionShare` of its area, the slivers under `minRegionShare` merged into
+     * a neighbour on their own landmass. Both shares are of the land's area on the ground, and
+     * every unit that results is within the larger.
+     */
+    internal fun regionUnits(config: WorldGenConfig, sea: SeaLevelResult, rivers: RiverResult): BasinUnits {
+        val culturesConfig = config.cultures
+        val landCells = sea.landCellCount
+        val cellAreaKm2 = config.squareKilometresPerCell
+        val largestKm2 =
+            maxOf(landCells * culturesConfig.maxRegionShare.toDouble(), SMALLEST_LARGE_REGION.toDouble()) *
+                cellAreaKm2
+        val smallestKm2 =
+            maxOf(landCells * culturesConfig.minRegionShare.toDouble(), SMALLEST_KEPT_REGION.toDouble()) *
+                cellAreaKm2
+        return BasinPartition.mergeSmall(
+            config, sea, BasinPartition.compute(config, sea, rivers, largestKm2), smallestKm2, largestKm2
+        )
+    }
+
+    /**
+     * Floors on the region sizes, in cells of the grid, for the two shares in `CulturesConfig` that are
      * expressed against the whole world's land: a share of a very small map rounds to nothing.
      */
     private const val SMALLEST_LARGE_REGION = 16

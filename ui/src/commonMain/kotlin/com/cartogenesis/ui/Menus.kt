@@ -77,6 +77,9 @@ internal enum class MenuCommand(
     SAVE("Save", Shortcut(Key.S, label = "Ctrl+S"), needsWorld = true),
     SAVE_AS("Save as…", Shortcut(Key.S, shift = true, label = "Ctrl+Shift+S"), needsWorld = true),
     EXPORT("Export…", Shortcut(Key.E, label = "Ctrl+E"), needsWorld = true),
+    // L for link. The desktop's only, like every shortcut here: in a tab Ctrl+L is the address
+    // bar's, and the browser binds none of these.
+    COPY_LINK("Copy link to this world", Shortcut(Key.L, label = "Ctrl+L"), needsWorld = true),
     SETTINGS("Settings…", Shortcut(Key.Comma, label = "Ctrl+,")),
     QUIT("Quit", Shortcut(Key.Q, label = "Ctrl+Q")),
     TOOLBAR("Toolbar over the map"),
@@ -90,6 +93,13 @@ internal object Menus {
     /**
      * File, in the order the spec gives.
      *
+     * Copy link sits after Export because it is the third way of handing the world on screen to
+     * somebody else — as a save, as a picture, as the recipe for it — and it is in File rather than
+     * on the panel because the panel's header is the world's settings and this is a thing done
+     * with them. The menu is the same one on the desktop, in a browser and, folded into one button,
+     * on a phone, so the item is within reach in every arrangement without taking a row of a
+     * 320 dp panel.
+     *
      * Quit is the one item whose presence depends on the host. A browser tab cannot close itself
      * (`window.close()` is refused for a page the script did not open), so offering it there would
      * be offering something that does nothing — see [Platform.canQuit].
@@ -100,6 +110,7 @@ internal object Menus {
         add(MenuCommand.SAVE)
         add(MenuCommand.SAVE_AS)
         add(MenuCommand.EXPORT)
+        add(MenuCommand.COPY_LINK)
         add(MenuCommand.SETTINGS)
         if (platform.canQuit) add(MenuCommand.QUIT)
     }

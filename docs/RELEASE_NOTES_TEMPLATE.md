@@ -7,8 +7,8 @@ which every release has.
 
 `SiteAssemblyTest` reads the Downloads table's file names and the Installing section's apt source
 line, and holds both to `site/downloads.txt` and `docs/INSTALL.md`: a table that has drifted from
-the page fails the build. The three card summaries under Installing are the page's own sentences,
-word for word, for the same reason — one copy, checked, rather than three that look alike.
+the page fails the build. The three summaries under Installing are `docs/INSTALL.md`'s, word for
+word, for the same reason; the page's download cards say the same things in a card's fewer words.
 
 Sizes in the table are measured off the files that were uploaded, not carried over from the last
 release. The two Linux rows are uploaded by `.github/workflows/release-linux.yml`; the rest are

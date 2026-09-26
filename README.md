@@ -110,12 +110,15 @@ the generator is written in those units and converted to whatever grid the world
 10. **Rivers and lakes.** Depressions are filled so no water dead-ends inland, flow is routed downhill
     and traced to the coast, and each basin's outlet incises its sill over time. A filled basin
     becomes a lake only as far as its water balance allows; where evaporation wins it sits below its
-    rim as an endorheic lake or dries to a playa. Rivers run from their farthest headwater, are drawn
-    at a width proportional to the square root of their discharge (Leopold and Maddock), and stop at
-    the shoreline.
+    rim as an endorheic lake or dries to a playa, and a basin that closes keeps its rain from the
+    basins below it. Discharge is the rain that falls, in millimetres, summed downstream. Rivers run
+    from their farthest headwater, are drawn at a width proportional to the square root of their
+    discharge (Leopold and Maddock), and stop at the shoreline.
 11. **Realms.** Borders are assigned by whole drainage catchment, so frontiers fall on watersheds.
-    Large catchments are split along their trunk river, enclaves dissolve into their surrounding
-    neighbour, and no realm holds more than 30% of the world. Each realm's population, exports and
+    Catchments are cut at their confluences to a bounded area of ground, a closed basin stays whole
+    with its lake, and a small one joins a neighbour on its own landmass. Large catchments are split
+    along their trunk river, enclaves dissolve into their surrounding neighbour, and no realm holds
+    more than 30% of the world's land. Each realm's population, exports and
     imports derive from the land it holds.
 12. **Peoples.** A second, independent layer: cultures spread from seeded hearths at a cost set by
     how unlike home the next land is, so a people's territory follows climate rather than politics.
@@ -223,11 +226,17 @@ seconds of encoding.
 
 ## Resolution, limits and acceleration
 
-The interface offers 2048, 4096 and 8192 exports; 8192 is shown disabled because the world's fields
-exhaust a 10 GB heap during generation, before anything is drawn. The ceiling lives in
-`Platform.exportCeiling` (4096 on the desktop and in the browser, 2048 in a phone-sized browser
-window). The browser starts at a generation resolution of 512 and the desktop at 1024, because a
-browser tab has one thread and generation blocks the page while it runs.
+The interface offers generation resolutions of 512 to 4096 and exports of 2048, 4096 and 8192. The
+desktop goes to 4096; 8192 is shown disabled because the world's fields exhaust a 10 GB heap during
+generation, before anything is drawn. The browser goes to 2048, on a phone or a computer, for the
+world on screen and for exports: a 4096 generation killed a desktop browser's tab before anything
+was drawn, so the 4096 chips are shown disabled there, a stored 4096 preference is brought down to
+2048 with a line saying why, and a 4096 save from the desktop is refused from its header rather than
+opened into a tab that cannot hold its 2.45 GB of arrays. One ceiling covers both rows because an
+export makes the world again at its own size; it lives in `Platform.generationCeiling`, with the two
+values and their measurements in `WorldCeilings`. The browser starts at a generation resolution of
+512 and the desktop at 1024, because a browser tab has one thread and generation blocks the page
+while it runs.
 
 **Graphics acceleration** is an opt-in toggle in the header and in Settings (as *Graphics
 acceleration at launch*). It runs the erosion sweeps and the ocean-current solve on the graphics
@@ -367,7 +376,8 @@ and checksummed on its own, so a save is written and read a chunk at a time: a 4
 of arrays, saves and opens without any array its size existing in between. The header is
 checksummed too, and each chunk's checksum is bound to the header and to the chunk's place, so an
 edited header, or a header put in front of another save's chunks, is found. The browser keeps its
-library in IndexedDB the same way, a mebibyte to a record. `WorldCodec` in
+library in IndexedDB the same way, a mebibyte to a record, or in a folder the reader chose, a
+mebibyte to a write. `WorldCodec` in
 `:cartography` is the whole format, shared by both front ends, with serializers generated from the
 config classes so a new setting cannot go missing from a save.
 
@@ -398,13 +408,70 @@ rather than opened as something else. And the copies a client makes when two mac
 world (`world (1).cgw`, `world (conflicted copy).cgw` and the like) are listed as worlds of their
 own, each of which opens, and saves, without touching the other.
 
+In the browser the library starts in the browser's own storage, where clearing the site's data
+removes it. In Chrome and Edge, which offer web pages a folder picker, the Library pane's **Choose a
+folder…** moves it into a folder on your device instead: the same `.cgw` files under the same
+names as the desktop's, so one folder, synced or not, serves both. Firefox and Safari offer no such
+picker; there the library stays in the browser's storage and moves in and out by Download and
+Upload. The browser remembers the folder between visits but asks again before a page may use it,
+so a new visit shows **Reconnect to <folder>** until you click it, and saves nowhere until then.
+**Use this browser's storage** goes back, remembered as a choice of its own, and worlds already in
+the browser's storage can be copied into the folder with one click. A new save is written under a
+temporary name, `.<name>.<token>.tmp`, which most file managers hide, and moved into place whole
+(not the desktop's `~<name>.<token>.tmp`: Chrome refuses a name that begins with a tilde in a
+folder on the disk); a save over an existing file goes through the browser's
+own swap file, committed only when complete. Writes from one tab are made in order; another tab,
+the desktop app or a sync client writing the same folder at the same moment is not ordered against
+it, but a save never leaves half a file, and a new save that finds its name taken takes the next
+free one. Two gaps remain that the browser gives a page no way to close. The name is checked once
+more immediately before the save is put in place, and a file that another program creates under
+that name in the moment between the check and the move is replaced by the save, because a browser
+cannot create a file only if it does not already exist. And in a browser too old to rename files in
+a folder on the disk, the save is copied into its name instead, so an empty `.cgw` with that name
+shows in the folder, and to a sync client, while the copy runs; a file another program writes into
+that name after the copy has checked it is empty, and before the copy starts, is written over, for
+the same reason. Nothing is uploaded anywhere: the
+page reads and writes that folder and nothing else.
+
+Chrome on Android offers the folder picker too, over Android's own storage rather than a directory,
+and two things are weaker there that a page cannot mend. A file cannot be renamed, so every new save
+is copied into its name, the empty `.cgw` showing while the copy runs. And the browser keeps its
+swap file in its own cache and, on close, empties the file and copies the new bytes into it, so a
+save over an existing world that fails partway can leave that file short. A new save is whole
+under its temporary name before it is copied, so when the copy fails that file is kept rather than
+removed, and the failure names it: renamed without its leading dot and ending in `.cgw`, it
+opens. The Library pane shows
+each save, open, delete and copy while it runs, a save with the megabytes written so far, and then
+how it ended, with the browser's own name for any failure (`NotAllowedError` and the like), on a
+phone as on a computer. Opening the app with `?foldertest` in its address, as
+`cartogenesis.com/app/?foldertest`, gives a page instead that takes each of the library's steps in
+a folder you pick, on files of its own named `cartogenesis-folder-check-…` that it removes again,
+and reports what the browser answered to each, as text to copy into a bug report.
+
 ## Menus, settings and themes
 
-A strip along the top carries **File** (random world, open library, save, save as, export, settings,
-quit on the desktop), **View** (theme, panel sections, the map toolbar) and **Help** (check for
+A strip along the top carries **File** (random world, open library, save, save as, export, copy
+link to this world, settings, quit on the desktop), **View** (theme, panel sections, the map toolbar) and **Help** (check for
 updates, report a bug, about). It is drawn in `:ui` so the browser build has it too; the desktop
-binds the usual keystrokes (Ctrl+N, Ctrl+O, Ctrl+S, Ctrl+Shift+S, Ctrl+E, Ctrl+comma, Ctrl+Q) and
-the browser binds none, so it never steals Ctrl+S from the tab.
+binds the usual keystrokes (Ctrl+N, Ctrl+O, Ctrl+S, Ctrl+Shift+S, Ctrl+E, Ctrl+L, Ctrl+comma,
+Ctrl+Q) and the browser binds none, so it never steals Ctrl+S from the tab.
+
+**Copy link to this world** puts on the clipboard an address that makes the world on screen again
+in the browser: `https://cartogenesis.com/app/?seed=718106#v=1&size=1024&plates=18&style=vellum`.
+The seed is in the query, so `/app/?seed=718106` typed by hand opens that seed at the size and
+settings a fresh window starts with; the rest follows `#`, which a browser never sends to the
+server: the link format's version, the size, and every setting of the world and of the drawing that
+differs from its default. The desktop copies the published address, the browser its own page's. A
+link carries no saved world, no name, no labels and no edits, and neither where the work runs nor
+the river density, which belong to the machine and the reader. Opened, a part the application
+cannot use (a seed that is not a number, a setting it does not know, a value outside its control's
+range) is set aside with one line of status and the rest applies; a size above the browser's
+ceiling is brought down to it with the reason; and a link in a format this build does not write is
+refused whole rather than misread. A link naming a size larger than the one the window starts at
+(512 in a browser, 1024 on the desktop) makes nothing until the reader answers one question: make it
+at the link's size, or open it at the starting size with the link's other settings. The question
+quotes how long that size took where it has been measured on that kind of machine (`LargeLinks`
+holds the figures and their sources) and says so where it has not.
 
 Settings persist through the `Platform` seam as one JSON document
 (`%APPDATA%\Cartogenesis\settings.json` on Windows, local storage in the browser); a document from a

@@ -372,10 +372,11 @@ object WorldCodec {
      * file of any size. [bytes] may be the whole file or any prefix long enough to hold the header.
      *
      * Throws [WorldFormatException] for anything that is not this build's format, in both
-     * directions, and for a header that disagrees with this build's layout. See the note above on
-     * why an older file is turned away rather than read with the keys it happens to share.
+     * directions, for a header that disagrees with this build's layout, and for a grid wider than
+     * [limit] allows. See the note above on why an older file is turned away rather than read with
+     * the keys it happens to share.
      */
-    fun decodeHeader(bytes: ByteArray): SaveHeader {
+    fun decodeHeader(bytes: ByteArray, limit: OpeningLimit? = null): SaveHeader {
         val headerLength = headerLengthFrom(bytes, minOf(bytes.size, PREFIX_BYTES))
         if (bytes.size - PREFIX_BYTES < headerLength) {
             throw WorldFormatException(
@@ -384,7 +385,7 @@ object WorldCodec {
             )
         }
         return headerFrom(
-            bytes.copyOfRange(PREFIX_BYTES, PREFIX_BYTES + headerLength), getInt(bytes, HEADER_CHECKSUM_OFFSET)
+            bytes.copyOfRange(PREFIX_BYTES, PREFIX_BYTES + headerLength), getInt(bytes, HEADER_CHECKSUM_OFFSET), limit
         )
     }
 
@@ -392,9 +393,14 @@ object WorldCodec {
      * The whole save from [source], checked from its first byte to its last.
      *
      * Throws [WorldFormatException] with the reason for anything short of a complete, consistent
-     * world of this format; [open] is the same with the reason handed back instead.
+     * world of this format, or for a grid wider than [limit] allows, which is refused from the
+     * header before any array is allocated; [open] is the same with the reason handed back instead.
      */
-    suspend fun read(source: SaveSource, compressor: Compressor = NoCompression): WorldSave {
+    suspend fun read(
+        source: SaveSource,
+        compressor: Compressor = NoCompression,
+        limit: OpeningLimit? = null
+    ): WorldSave {
         val prefix = ByteArray(PREFIX_BYTES)
         val arrived = source.readFully(prefix, 0, PREFIX_BYTES)
         val headerLength = headerLengthFrom(prefix, arrived)
@@ -403,7 +409,7 @@ object WorldCodec {
             throw WorldFormatException(SaveProblem.INCOMPLETE, "it ends inside its header")
         }
         val headerChecksum = getInt(prefix, HEADER_CHECKSUM_OFFSET)
-        val header = headerFrom(headerBytes, headerChecksum)
+        val header = headerFrom(headerBytes, headerChecksum, limit)
         val reader = PayloadReader(source, header.compression, compressor, header.payloadBytes, headerChecksum)
         val world = WorldSections.read(reader, header.document.config, header.sections, header.document.labels) {
             listsFrom(it)
@@ -418,9 +424,13 @@ object WorldCodec {
      * Only refusals are caught. A cancelled load is not one, and leaves as the cancellation it is;
      * a failure of the storage itself is the platform's to turn into [SaveProblem.UNREADABLE].
      */
-    suspend fun open(source: SaveSource, compressor: Compressor = NoCompression): LoadOutcome =
+    suspend fun open(
+        source: SaveSource,
+        compressor: Compressor = NoCompression,
+        limit: OpeningLimit? = null
+    ): LoadOutcome =
         try {
-            LoadOutcome.Loaded(read(source, compressor))
+            LoadOutcome.Loaded(read(source, compressor, limit))
         } catch (refused: WorldFormatException) {
             LoadOutcome.Refused(SaveRefusal(refused.problem, refused.detail))
         }
@@ -481,7 +491,7 @@ object WorldCodec {
      * this build's own for that grid, entry for entry. What the directory promises the payload is
      * then held to as it is read.
      */
-    private fun headerFrom(bytes: ByteArray, checksum: Int): SaveHeader {
+    private fun headerFrom(bytes: ByteArray, checksum: Int, limit: OpeningLimit?): SaveHeader {
         if (Crc32.of(bytes) != checksum) {
             throw WorldFormatException(SaveProblem.DAMAGED, "its header fails its checksum")
         }
@@ -507,6 +517,12 @@ object WorldCodec {
         if (config.width <= 0 || config.height <= 0) damaged("its grid is ${config.width} by ${config.height}")
         if (cells > LARGEST_GRID_CELLS) {
             throw WorldFormatException(SaveProblem.TOO_LARGE, "its grid is ${config.width} by ${config.height}")
+        }
+        if (limit != null && maxOf(config.width, config.height) > limit.largestSide) {
+            throw WorldFormatException(
+                SaveProblem.TOO_LARGE,
+                "its grid is ${config.width} by ${config.height}; ${limit.because}"
+            )
         }
 
         val lists = header.sections.firstOrNull() ?: damaged("its directory is empty")
@@ -537,3 +553,19 @@ object WorldCodec {
             throw WorldFormatException(SaveProblem.DAMAGED, "its lists do not parse: ${unparsed.message?.lineSequence()?.first()}")
         }
 }
+
+/**
+ * The widest grid a host will open, below the format's own [WorldCodec.LARGEST_GRID_CELLS], and
+ * what it tells a reader whose save is wider.
+ *
+ * The format's bound is what any build can read; this is what one host can *hold*. A browser tab
+ * that cannot make a 4096 world cannot hold the 2.45 GB of arrays a saved one opens into either, so
+ * it refuses the file from its header, with [because] saying where it can be opened, rather than
+ * decoding it into a tab that dies.
+ */
+data class OpeningLimit(
+    /** The most cells across or down a save may have to be opened here. */
+    val largestSide: Int,
+    /** The clause that follows the save's own grid in the refusal: why, and where else. */
+    val because: String
+)

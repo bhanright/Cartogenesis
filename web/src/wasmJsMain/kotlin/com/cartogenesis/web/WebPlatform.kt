@@ -6,6 +6,7 @@ import com.cartogenesis.cartography.DataLayer
 import com.cartogenesis.cartography.LoadOutcome
 import com.cartogenesis.cartography.MapSheet
 import com.cartogenesis.cartography.NoCompression
+import com.cartogenesis.cartography.OpeningLimit
 import com.cartogenesis.cartography.RenderOptions
 import com.cartogenesis.cartography.WorldCodec
 import com.cartogenesis.cartography.WorldDocument
@@ -14,9 +15,11 @@ import com.cartogenesis.ui.BuildInfo
 import com.cartogenesis.ui.ExportFormat
 import com.cartogenesis.ui.ExportOutcome
 import com.cartogenesis.ui.ExportSubjects
+import com.cartogenesis.ui.FolderChooser
 import com.cartogenesis.ui.MapImage
 import com.cartogenesis.ui.Platform
 import com.cartogenesis.ui.SettingsStore
+import com.cartogenesis.ui.WorldCeilings
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.ErosionAccelerator
 import com.cartogenesis.worldgen.pipeline.IceSheetAccelerator
@@ -27,9 +30,10 @@ import org.jetbrains.skia.Image
 /**
  * What a browser tab can offer.
  *
- * The three answers differ from the desktop's, and nothing else does: worlds live in IndexedDB
- * rather than on disk, exporting means handing the browser a file to download rather than writing
- * a path, and the graphics device is reached through WebGPU rather than OpenGL.
+ * The three answers differ from the desktop's, and nothing else does: worlds live in IndexedDB, or
+ * in a folder on the disk the reader chose where the browser allows a page one, rather than in a
+ * folder named by its path; exporting means handing the browser a file to download rather than
+ * writing a path; and the graphics device is reached through WebGPU rather than OpenGL.
  */
 class WebPlatform(
     override val accelerator: ErosionAccelerator?,
@@ -68,14 +72,14 @@ class WebPlatform(
     override val acceleratedWork: String = "erosion, ocean currents and the ice sheet"
 
     /**
-     * 2048 on a phone, 4096 otherwise.
+     * 2048, phone or not, on screen and as an export alike.
      *
-     * An export re-runs the whole pipeline at the target size and then rasterises it, which at 4096
-     * is sixteen times the working grid's cells in one blocking pass on the page's only thread —
-     * survivable on a laptop, and on a phone it is a tab the browser kills for memory. The chip for
-     * 4096 stays in the row, disabled, saying why, exactly as 8192 does everywhere.
+     * Not the phone's figure borrowed: a 4096 world killed a desktop browser's tab, on a machine
+     * with a graphics card, before anything was drawn. See [WorldCeilings.BROWSER_TAB] for
+     * the measurement. The 4096 chips stay in their rows, disabled, saying why, as 8192 does
+     * everywhere, and a saved 4096 world is refused by [BROWSER_OPENING_LIMIT] rather than opened.
      */
-    override fun exportCeiling(compact: Boolean): Int = if (compact) 2048 else 4096
+    override val generationCeiling: Int = WorldCeilings.BROWSER_TAB
 
     /**
      * `gzip` where `CompressionStream`/`DecompressionStream` exist, `none` otherwise.
@@ -91,6 +95,15 @@ class WebPlatform(
     override val libraryLocation: String =
         "This browser's IndexedDB storage. Clearing site data will remove them, so download " +
             "anything worth keeping."
+
+    /**
+     * A folder on the disk, where the browser offers `showDirectoryPicker`: Chrome and Edge. Asked
+     * of the feature rather than of the browser's name, so a browser that adds the API gets the
+     * choice and one that removes it loses it; without it this is null and nothing else about the
+     * library changes. See [BrowserFolderChooser].
+     */
+    override val folderChooser: FolderChooser? =
+        if (directoryPickerAvailable()) BrowserFolderChooser(compressor) else null
 
     override val supportsFileTransfer: Boolean = true
 
@@ -125,6 +138,18 @@ class WebPlatform(
     }
 
     /**
+     * The address the page was loaded at, read when the platform is made, which is before the
+     * first composition and so before the window decides which world it starts on.
+     */
+    override val openedAt: String = pageAddress()
+
+    /**
+     * This page, so a link copied here opens in the build it was copied from: the published one,
+     * a preview deployment or a local server alike.
+     */
+    override val worldLinkBase: String = pageAddressAlone()
+
+    /**
      * One `fetch`, made only when a reader asks for it.
      *
      * GitHub's releases API sends `Access-Control-Allow-Origin: *`, so this is an ordinary
@@ -147,7 +172,7 @@ class WebPlatform(
 
     override suspend fun uploadWorld(): LoadOutcome? {
         val source = pickFile() ?: return null
-        return WorldCodec.open(source, compressor)
+        return WorldCodec.open(source, compressor, BROWSER_OPENING_LIMIT)
     }
 
     override suspend fun export(
@@ -260,3 +285,17 @@ private object LocalStorageSettings : SettingsStore {
         runCatching { storageSet(KEY, text) }
     }
 }
+
+/**
+ * The widest save a browser tab opens: the tab's own ceiling, [WorldCeilings.BROWSER_TAB].
+ *
+ * A save wider than it is refused from its header, before any array is allocated, by the browser's
+ * storage, a folder library and an uploaded file alike. The alternative is not a slow open: a saved
+ * 4096 world is 2.45 GB of arrays, more than the heap a tab died at while making one, so decoding it
+ * is the dead tab the ceiling exists to prevent. The desktop opens it.
+ */
+internal val BROWSER_OPENING_LIMIT = OpeningLimit(
+    largestSide = WorldCeilings.BROWSER_TAB,
+    because = "a browser tab cannot hold a world larger than ${WorldCeilings.BROWSER_TAB} by " +
+        "${WorldCeilings.BROWSER_TAB}; the desktop app opens it"
+)

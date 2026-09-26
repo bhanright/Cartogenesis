@@ -16,6 +16,7 @@ import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 
 /**
  * [ByteWorldLibrary] over an in-memory map of names to bytes, so the library's contract can be
@@ -84,6 +85,23 @@ class WorldLibraryTest {
         assertEquals("A 1024 world", entry.document?.title)
         assertEquals(1_700_000_000_000L, entry.document?.savedAt)
         assertNull(entry.refusal, "a save this build just wrote should open")
+    }
+
+    @Test
+    fun `a save reports its bytes as they reach the library, and they add up to the file`() = runTest {
+        // What the library pane shows beside a save under way, so a slow save on a phone is seen
+        // moving rather than taken for one that did nothing.
+        val library = FakeByteWorldLibrary()
+        val counts = mutableListOf<Long>()
+        val key = withContext(SaveProgress { counts += it }) { library.save(document(), world) }
+        assertTrue(counts.isNotEmpty(), "a save reported no progress")
+        assertTrue(counts.zipWithNext().all { (before, after) -> after > before }, "the count went backwards or stood still: $counts")
+        assertEquals(library.blobs.getValue(key).size.toLong(), counts.last(), "the count does not add up to the file")
+
+        // And a save with nothing listening writes the same file.
+        val quiet = FakeByteWorldLibrary()
+        quiet.save(document(), world)
+        assertContentEquals(library.blobs.getValue(key), quiet.blobs.getValue(key))
     }
 
     @Test
@@ -194,6 +212,24 @@ class WorldLibraryTest {
         assertEquals("a (3).cgw", library.save(document(title = "Imported again"), world))
         assertContentEquals(original, library.blobs.getValue("a.cgw"))
         assertEquals("Imported", assertIs<LoadOutcome.Loaded>(library.load("a (2).cgw")).save.document.title)
+    }
+
+    @Test
+    fun `a copy from another library is a new file beside what is there, byte for byte`() = runTest {
+        // What the browser offers when the reader moves the library into a folder: the worlds in
+        // the browser's storage copied in, and none of the folder's own written over.
+        val from = FakeByteWorldLibrary()
+        val into = FakeByteWorldLibrary()
+        from.save(document(title = "In the browser"), world)
+        into.save(document(title = "Already in the folder"), world)
+        val folderOwn = into.blobs.getValue("a.cgw").copyOf()
+
+        assertEquals("a (2).cgw", into.copyFrom(from, "a.cgw"))
+        assertContentEquals(folderOwn, into.blobs.getValue("a.cgw"), "the copy wrote over the folder's own file")
+        assertContentEquals(from.blobs.getValue("a.cgw"), into.blobs.getValue("a (2).cgw"))
+        assertEquals(setOf("a.cgw"), from.blobs.keys, "the copy took the original away")
+        assertEquals("In the browser", assertIs<LoadOutcome.Loaded>(into.load("a (2).cgw")).save.document.title)
+        assertFailsWith<WorldFormatException> { into.copyFrom(from, "missing.cgw") }
     }
 
     @Test

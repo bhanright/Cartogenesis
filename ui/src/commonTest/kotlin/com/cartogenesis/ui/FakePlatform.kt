@@ -25,7 +25,7 @@ import com.cartogenesis.worldgen.pipeline.ThermalLimits
 internal open class FakePlatform(
     override val defaultResolution: Int = 512,
     override val accelerator: ErosionAccelerator? = null,
-    /** What [exportCeiling] answers, whatever the window's shape. */
+    /** What [generationCeiling] answers: 4096, the desktop's, unless a test asks for a browser's. */
     private val ceiling: Int = 4096,
     override val canQuit: Boolean = false,
     override val graphicsApiPresent: Boolean = true,
@@ -33,7 +33,7 @@ internal open class FakePlatform(
     private val stored: String? = null
 ) : Platform {
 
-    override fun exportCeiling(compact: Boolean): Int = ceiling
+    override val generationCeiling: Int get() = ceiling
 
     override val library: WorldLibrary = EmptyLibrary
     override val compressor: Compressor = NoCompression

@@ -163,7 +163,9 @@ class GlaciationTest : BorrowsSharedWorlds() {
         // Asserted, and failing: the two clauses above are this stage's whole purpose, and a
         // finding printed where nobody reads it is a guard that cannot fail (Audit III's C I4). So
         // both are run as a known failure, which goes red the day either the valley machinery or
-        // a change upstream of it brings them back, and says to arm them.
+        // a change upstream of it brings them back, and says to arm them. Re-recorded at chunk 6
+        // from an iced zone ratio of 1.08: the lake balance's inflow now counts every exit of a
+        // basin and none of a closed basin above it, which moves which basins hold water.
         KnownFailures.expect(
             "C I4: glaciated country holds no more lakes than the ice's absence leaves",
             "cold-country lakes 0.20 to 0.36 per 10k cells, iced zone ratio 0.86"
@@ -590,8 +592,9 @@ class GlaciationTest : BorrowsSharedWorlds() {
         // instead of stopping at the first that is over. On the implicit update before the uplift
         // was re-derived on it the ice added 5.00% and 3.18% on seeds 718106 and 7, a comb; with the
         // re-derived uplift it was inside the bar again (docs/DESIGN_LEDGER.md, Fix 3b). Recorded
-        // since the lake falls with its outlet: see [LAKE_FALLS_INTO_BARS].
-        KnownFailures.expect(LAKE_FALLS_INTO_BARS, "42 at 2.48%") {
+        // since the lake falls with its outlet: see [LAKE_FALLS_INTO_BARS]. Re-recorded from 2.48% on
+        // merging chunk 6, whose water balance moves which basins stand full.
+        KnownFailures.expect(LAKE_FALLS_INTO_BARS, "42 at 2.50%") {
             if (over.isNotEmpty()) {
                 throw RecordedViolation(
                     "the ice puts ${ICE_COMB_BAR * 100}% or more of these worlds' standing water into thin" +

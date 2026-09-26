@@ -55,86 +55,209 @@ internal class BasinUnits(
 internal object BasinPartition {
 
     /**
-     * @param maxUnitCells the largest catchment that will be left whole. Anything draining more
-     *   than this is cut at its confluences, so the pieces are its tributaries.
+     * The land cut into catchments no larger than [maxUnitAreaKm2] of ground each, every cell in
+     * the unit of the water it drains to.
+     *
+     * **Receivers first.** A cell joins the unit its receiver is in, so its receiver has to be
+     * settled before it is: the walk is [FlowRouting.drainageOrder], which lists sources first,
+     * taken in reverse. Ordering by the filled surface instead, lowest first, was right only while
+     * every receiver stood lower on the fill than its donor, and since the flats and the closed
+     * basins are routed along the true ground — [FlatRouting]'s potential, and
+     * [LakeWaterBalance.routeIntoWater] — a receiver is often higher. The old walk opened a new unit
+     * wherever it met one not yet settled, and those orphan units, a row or a column of a flat at a
+     * time, drew realm borders ruler-straight along the grid. Not [FlowRouting.heightOrder], for the
+     * same reason: it is the filled surface's order and not the network's.
+     *
+     * **Closed basins whole.** Every cell of an endorheic lake or a playa is a sink, and a sink opens
+     * a unit; so each of them opened its own, and a closed basin came apart into as many units as
+     * it had cells of water. The water of one lake, or one connected playa, is taken as one sink
+     * instead, and the land draining to it joins it up to the size rule below.
+     *
+     * **The size rule is an area on the ground.** Each cell's open area is its own ground plus
+     * whatever of its tributaries' it keeps; walking sources first, a cell keeps its tributaries
+     * smallest first while the total stays within [maxUnitAreaKm2] and cuts the rest at their
+     * mouths, where each becomes a unit of its own. So a unit is cut at a confluence, as before, and
+     * no unit holds more ground than the limit. A closed lake's own water is never cut and the land
+     * draining to it is cut at the limit like any other tributary, so the one unit that can exceed
+     * the limit is a body of water larger than it on its own. What it replaced compared the rain-weighted flow with a
+     * count of cells, so a dry catchment, whose cells weigh a fraction of a wet one's, ran several
+     * times the configured share before anything cut it (docs/DESIGN_LEDGER.md, chunk 6).
+     *
+     * [rivers] supplies the routing and the lakes; [sea] the land. Every land cell ends in exactly
+     * one unit and every unit lies on one landmass, since each cell drains to a neighbour.
      */
     fun compute(
         config: WorldGenConfig,
         sea: SeaLevelResult,
         rivers: RiverResult,
-        maxUnitCells: Int
+        maxUnitAreaKm2: Double
     ): BasinUnits {
         val cellsAcross = config.width
         val cellsDown = config.height
         val cellCount = cellsAcross * cellsDown
-        val flowTarget = rivers.flowTarget
-        val accumulation = rivers.flowAccumulation.data
-        val unitOf = IntArray(cellCount) { BasinUnits.NONE }
+        val cellAreaKm2 = config.squareKilometresPerCell
+        val sinkOf = closedWaterSinks(cellsAcross, cellsDown, sea, rivers)
+        val receiver = IntArray(cellCount) { cell ->
+            val downstream = rivers.flowTarget[cell]
+            when {
+                !sea.isLand[cell] -> -1
+                sinkOf[cell] >= 0 && sinkOf[cell] != cell -> sinkOf[cell]
+                downstream >= 0 && sea.isLand[downstream] -> downstream
+                else -> -1
+            }
+        }
+        val sourcesFirst = FlowRouting.drainageOrder(
+            cellsAcross, cellsDown, sea.isLand, receiver, sea.landCellCount
+        )
 
-        // Lowest first, so a cell's downstream neighbour is always already settled and can simply
-        // be asked which unit it joined.
-        val byElevation = LongArray(sea.landCellCount)
-        var written = 0
+        // Whose area each cell's is counted into. A body of closed water is one node: its own
+        // cells are counted at its sink and never cut, and the land draining to any cell of it is
+        // a tributary of the sink, kept or cut at the limit like any other. Counted cell by cell
+        // instead, each water cell kept its own slopes up to the limit and the sink then kept them
+        // all, so a lake's unit could be many times the limit.
+        val mustKeep = BooleanArray(cellCount)
+        val countedInto = IntArray(cellCount) { cell ->
+            val downstream = receiver[cell]
+            when {
+                downstream < 0 -> -1
+                sinkOf[cell] >= 0 -> { mustKeep[cell] = true; downstream }
+                sinkOf[downstream] >= 0 -> sinkOf[downstream]
+                else -> downstream
+            }
+        }
+
+        // Tributaries of each cell, in cell-index order, as one flat table: the cells counted into
+        // `cell` are tributary[firstTributary[cell] until firstTributary[cell + 1]].
+        val firstTributary = IntArray(cellCount + 1)
         for (cell in 0 until cellCount) {
-            if (sea.isLand[cell]) {
-                byElevation[written++] =
-                    FlowRouting.encode(rivers.filledElevation.data[cell], cell)
-            }
+            val downstream = countedInto[cell]
+            if (sea.isLand[cell] && downstream >= 0) firstTributary[downstream + 1]++
         }
-        byElevation.sort()
+        for (cell in 0 until cellCount) firstTributary[cell + 1] += firstTributary[cell]
+        val tributary = IntArray(firstTributary[cellCount])
+        val written = firstTributary.copyOf(cellCount)
+        for (cell in 0 until cellCount) {
+            val downstream = countedInto[cell]
+            if (sea.isLand[cell] && downstream >= 0) tributary[written[downstream]++] = cell
+        }
 
+        // Sources first: each cell's open area, and the mouths where a tributary is cut off.
+        val openAreaKm2 = DoubleArray(cellCount)
+        val opensUnit = BooleanArray(cellCount)
+        val kept = ArrayList<Int>()
+        for (cell in sourcesFirst) {
+            var area = cellAreaKm2
+            kept.clear()
+            for (slot in firstTributary[cell] until firstTributary[cell + 1]) {
+                val upstream = tributary[slot]
+                if (mustKeep[upstream]) area += openAreaKm2[upstream] else kept.add(upstream)
+            }
+            kept.sortWith(compareBy<Int> { openAreaKm2[it] }.thenBy { it })
+            for (upstream in kept) {
+                if (area + openAreaKm2[upstream] <= maxUnitAreaKm2) {
+                    area += openAreaKm2[upstream]
+                } else {
+                    opensUnit[upstream] = true
+                }
+            }
+            openAreaKm2[cell] = area
+            if (receiver[cell] < 0) opensUnit[cell] = true
+        }
+
+        // Receivers first: every cell joins its receiver's unit, or opens its own.
+        val unitOf = IntArray(cellCount) { BasinUnits.NONE }
         var unitCount = 0
-        val areas = ArrayList<Int>()
-        for (rank in byElevation.indices) {
-            val cell = FlowRouting.decodeIndex(byElevation[rank])
-            val downstream = flowTarget[cell]
-
-            val isTerminus = downstream < 0 || !sea.isLand[downstream]
-            // A confluence cut: this cell drains less than a whole unit's worth, but the water it
-            // joins drains more. That is precisely a tributary meeting a trunk, and it is where a
-            // basin naturally comes apart.
-            val isTributaryMouth = !isTerminus &&
-                accumulation[cell] < maxUnitCells &&
-                accumulation[downstream] >= maxUnitCells
-
-            val unit = if (isTerminus || isTributaryMouth) {
-                areas.add(0)
+        for (rank in sourcesFirst.indices.reversed()) {
+            val cell = sourcesFirst[rank]
+            unitOf[cell] = if (opensUnit[cell]) {
                 unitCount++
             } else {
-                unitOf[downstream]
+                val joined = unitOf[receiver[cell]]
+                check(joined != BasinUnits.NONE) {
+                    "BasinPartition: cell $cell reached before its receiver ${receiver[cell]}; " +
+                        "the drainage order is not topological"
+                }
+                joined
             }
-            // A downstream cell should always be settled by now, but a flow target pointing at an
-            // equal elevation could in principle break that; such a cell starts its own unit
-            // rather than corrupting another.
-            val settled = if (unit == BasinUnits.NONE) {
-                areas.add(0)
-                unitCount++
-            } else {
-                unit
-            }
-            unitOf[cell] = settled
-            areas[settled] = areas[settled] + 1
         }
 
-        val area = IntArray(unitCount) { areas[it] }
+        val area = IntArray(unitCount)
+        for (cell in 0 until cellCount) if (unitOf[cell] != BasinUnits.NONE) area[unitOf[cell]]++
         return build(cellsAcross, cellsDown, sea, unitOf, unitCount, area)
     }
 
     /**
-     * Merges units below [minUnitCells] into whichever neighbour they share the most edge with.
+     * Each closed basin's water as one sink: for every cell of one endorheic lake, or of one
+     * connected stretch of playa, the lowest-indexed cell of it; -1 everywhere else. Water cells
+     * are sinks in the routing itself (see [LakeWaterBalance.routeIntoWater]), so pointing each at
+     * its sink adds edges only between cells that had none, and the routing stays a forest.
+     */
+    private fun closedWaterSinks(
+        cellsAcross: Int,
+        cellsDown: Int,
+        sea: SeaLevelResult,
+        rivers: RiverResult
+    ): IntArray {
+        val cellCount = cellsAcross * cellsDown
+        val lakes = rivers.lakes
+        fun drainsNowhere(cell: Int): Boolean {
+            val downstream = rivers.flowTarget[cell]
+            return sea.isLand[cell] && (downstream < 0 || !sea.isLand[downstream])
+        }
+        val sinkOf = IntArray(cellCount) { -1 }
+        val stack = ArrayDeque<Int>()
+        for (start in 0 until cellCount) {
+            if (!drainsNowhere(start) || sinkOf[start] >= 0) continue
+            val closedLake = lakes.isLake(start) && lakes.lakes[lakes.lakeId[start]].endorheic
+            if (!closedLake && !lakes.isPlaya(start)) continue
+            sinkOf[start] = start
+            stack.addLast(start)
+            while (stack.isNotEmpty()) {
+                val cell = stack.removeLast()
+                FlowRouting.forEachNeighbour(
+                    cellsAcross, cellsDown, cell % cellsAcross, cell / cellsAcross
+                ) { neighbour ->
+                    val sameWater = sinkOf[neighbour] < 0 && drainsNowhere(neighbour) &&
+                        (if (closedLake) lakes.lakeId[neighbour] == lakes.lakeId[start]
+                        else lakes.isPlaya(neighbour))
+                    if (sameWater) {
+                        sinkOf[neighbour] = start
+                        stack.addLast(neighbour)
+                    }
+                }
+            }
+        }
+        return sinkOf
+    }
+
+    /**
+     * Merges each unit smaller than [minUnitAreaKm2] into the neighbour on its own landmass it
+     * shares the longest border with, so long as the two together stay within [maxUnitAreaKm2].
      *
      * Coastlines produce a great many tiny catchments — every gully reaching the sea is its own
      * terminus — and left alone they would make realms out of slivers. Merging by shared edge keeps
      * the result compact rather than stringy.
+     *
+     * **Over land only.** The strait crossings in [BasinUnits.neighbours] are for realms, which do
+     * put to sea; a catchment does not, and a small island merged into a unit across the water made
+     * one unit of two landmasses, which the landmass flood in [build] then read as one. **Never
+     * past the limit**, because a merge is the one step after [compute] that can grow a unit, and
+     * [compute]'s bound is only worth what the merge keeps of it. A unit with no land neighbour it
+     * fits beside stays as it is. The border is measured on the ground, a column's side being a
+     * row's height and a row's side a column's width; a neighbour met only corner to corner comes
+     * last. Ties go to the lower unit id.
      */
     fun mergeSmall(
         config: WorldGenConfig,
         sea: SeaLevelResult,
         units: BasinUnits,
-        minUnitCells: Int
+        minUnitAreaKm2: Double,
+        maxUnitAreaKm2: Double
     ): BasinUnits {
         val cellsAcross = config.width
         val cellsDown = config.height
+        val cellAreaKm2 = config.squareKilometresPerCell
+        val border = SharedBorders.of(cellsAcross, cellsDown, units)
         // Union-find: each unit points at the one it was merged into, or at itself.
         val mergedInto = IntArray(units.unitCount) { it }
 
@@ -152,17 +275,33 @@ internal object BasinPartition {
         }
 
         // Smallest first, so a merged unit can itself go on to absorb or be absorbed sensibly.
-        val smallestFirst = (0 until units.unitCount).sortedBy { units.area[it] }
+        val smallestFirst = (0 until units.unitCount).sortedWith(
+            compareBy<Int> { units.area[it] }.thenBy { it }
+        )
         val area = units.area.copyOf()
         for (unit in smallestFirst) {
             val root = resolve(unit)
-            if (area[root] >= minUnitCells) continue
-            val host = units.neighbours[unit]
-                .map { resolve(it) }
-                .filter { it != root }
-                .maxByOrNull { area[it] } ?: continue
+            if (area[root] * cellAreaKm2 >= minUnitAreaKm2) continue
+            var host = -1
+            var hostBorderKm = -1.0
+            var hostCorners = -1
+            border.forEachNeighbourOf(root) { other, borderSides ->
+                val mergedKm2 = (area[root] + area[other]) * cellAreaKm2
+                if (mergedKm2 > maxUnitAreaKm2) return@forEachNeighbourOf
+                val borderKm = borderSides.kilometres(config.cellWidthKm, config.cellHeightKm)
+                val better = borderKm > hostBorderKm ||
+                    (borderKm == hostBorderKm && borderSides.corners > hostCorners) ||
+                    (borderKm == hostBorderKm && borderSides.corners == hostCorners && other < host)
+                if (better) {
+                    host = other
+                    hostBorderKm = borderKm
+                    hostCorners = borderSides.corners
+                }
+            }
+            if (host < 0) continue
             mergedInto[root] = host
             area[host] += area[root]
+            border.merge(root, into = host)
         }
 
         // Renumber so the ids are contiguous again.
@@ -181,6 +320,80 @@ internal object BasinPartition {
         return build(cellsAcross, cellsDown, sea, unitOf, unitCount, areas)
     }
 
+    /**
+     * How long a border two units share, as counts of cell sides: [acrossRows] pairs side by side
+     * in a row, each sharing a side a row's height long; [acrossColumns] pairs one above the other,
+     * each a column's width; and [corners], pairs that touch only corner to corner.
+     */
+    private class BorderSides(
+        var acrossRows: Int = 0,
+        var acrossColumns: Int = 0,
+        var corners: Int = 0
+    ) {
+        fun kilometres(cellWidthKm: Double, cellHeightKm: Double): Double =
+            acrossRows * cellHeightKm + acrossColumns * cellWidthKm
+
+        fun add(other: BorderSides) {
+            acrossRows += other.acrossRows
+            acrossColumns += other.acrossColumns
+            corners += other.corners
+        }
+    }
+
+    /**
+     * Every pair of units that touch on land, with the border between them, kept current through
+     * merges. Counts rather than lengths, so the order a merge adds them up in cannot move a bit.
+     */
+    private class SharedBorders(private val bordersOf: Array<HashMap<Int, BorderSides>>) {
+
+        /** [action] on each unit touching [unit] by land, in ascending id order. */
+        fun forEachNeighbourOf(unit: Int, action: (Int, BorderSides) -> Unit) {
+            val borders = bordersOf[unit]
+            for (other in borders.keys.sorted()) action(other, borders.getValue(other))
+        }
+
+        fun merge(unit: Int, into: Int) {
+            val moving = bordersOf[unit]
+            val host = bordersOf[into]
+            for ((other, sides) in moving) {
+                if (other == into) continue
+                host.getOrPut(other) { BorderSides() }.add(sides)
+                val back = bordersOf[other]
+                back.remove(unit)
+                back.getOrPut(into) { BorderSides() }.add(sides)
+            }
+            host.remove(unit)
+            moving.clear()
+        }
+
+        companion object {
+            fun of(cellsAcross: Int, cellsDown: Int, units: BasinUnits): SharedBorders {
+                val bordersOf = Array(units.unitCount) { HashMap<Int, BorderSides>() }
+                fun touch(unit: Int, other: Int, record: (BorderSides) -> Unit) {
+                    if (unit == BasinUnits.NONE || other == BasinUnits.NONE || unit == other) return
+                    record(bordersOf[unit].getOrPut(other) { BorderSides() })
+                    record(bordersOf[other].getOrPut(unit) { BorderSides() })
+                }
+                for (row in 0 until cellsDown) {
+                    for (column in 0 until cellsAcross) {
+                        val unit = units.unitOf[row * cellsAcross + column]
+                        if (unit == BasinUnits.NONE) continue
+                        val east = row * cellsAcross + (column + 1) % cellsAcross
+                        touch(unit, units.unitOf[east]) { it.acrossRows++ }
+                        if (row + 1 == cellsDown) continue
+                        val south = (row + 1) * cellsAcross + column
+                        touch(unit, units.unitOf[south]) { it.acrossColumns++ }
+                        val southEast = (row + 1) * cellsAcross + (column + 1) % cellsAcross
+                        touch(unit, units.unitOf[southEast]) { it.corners++ }
+                        val southWest =
+                            (row + 1) * cellsAcross + (column + cellsAcross - 1) % cellsAcross
+                        touch(unit, units.unitOf[southWest]) { it.corners++ }
+                    }
+                }
+                return SharedBorders(bordersOf)
+            }
+        }
+    }
 
     /**
      * Cuts a catchment in two along its trunk river, so the water becomes an edge rather than a

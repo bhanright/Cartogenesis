@@ -2211,99 +2211,6 @@ data class ErosionConfig(
      */
     val outletIncision: Boolean = true,
     /**
-     * **An experiment, off by default (Fix 3b's comb round).** Whether the rounds carry the
-     * sediment a cell's *unresolved* channels and hillslopes move across its boundaries, as a
-     * conservative diffusion of the actual ground after each round's deposition walk.
-     *
-     * The form is the stream-power-plus-linear-diffusion model's (Perron, Dietrich and Kirchner,
-     * *Controls on the spacing of first-order valleys*, JGR Earth Surface 113, F04016, 2008;
-     * Theodoratos, Seybold and Kirchner, *Scaling and similarity of a stream-power incision and
-     * linear diffusion landscape evolution model*, Earth Surface Dynamics 6, 779-808, 2018):
-     * `dz/dt = U - K A^m S + D laplacian(z)`. Its two laws set a length,
-     * `lc = (D / K)^(1/(2m+1))`, the scale at which diffusion and incision are equally effective,
-     * and Perron and others find valley spacing proportional to it.
-     *
-     * **The scale, derived before it was measured.** Earth's soil creep has `D` of order 10^-3 to
-     * 10^-2 m² a year; with this model's `K` of 10^-6 a year ([bedrockErodibilityPerYear]) that
-     * puts `lc` at 30 to 100 m, and over the rounds' four million years creep moves material
-     * `sqrt(D t)`, about 0.1 km, against cells of 12 to 23 km at 512. Earth's creep at Earth's
-     * rate cannot act at this grid at all, so it is not what this is. What a coarse cell's resolved
-     * slope stands for is many unresolved channels and hillslopes, and the sediment *they* move
-     * across the cell's boundary follows the incision law itself on the cell's own ground: the
-     * flux per unit width out of a cell of side `delta` is its erosion `K a^m S` over the upslope
-     * length inside it, with sub-grid catchment `a ~ delta^2`, which is `K delta^(2m+1) S`:
-     * diffusive in form, with `D_sub = K delta^(2m+1)`, `K delta^2` at `m = 1/2`, taken here as
-     * `K e sqrt(w) dx dy` with the cell's cover factor `e` and runoff weight `w` as the incision
-     * reads them. That is `lc` set equal to the cell, from the law's own `K` and the cell's size,
-     * with no factor chosen: at 512, 274 m² a year on bare ground at mean rain. It is not chosen
-     * against the comb; it may count the cell's own-area cut the resolved incision already takes
-     * along its one receiver twice, which is what the experiment is for.
-     *
-     * Material crept into the sea leaves the model, booked as incised and lost to sea.
-     */
-    val subGridTransport: Boolean = false,
-    /**
-     * **An experiment, off by default (Fix 3b's second comb round).** [subGridTransport] net of the
-     * resolved incision, by direction: the unresolved transport only across each cell's fall to its
-     * receiver, never along it. Replaces [subGridTransport]'s form where on; at most one of the
-     * three sub-grid settings may be on.
-     *
-     * **Why along the receiver is counted twice.** The resolved incision already moves a cell's
-     * own ground down its one receiver. On a cell with nothing upstream, the area the law reads is
-     * the cell's own, `a = dx dy` weighted by its runoff `w`, so the pass takes
-     * `K e sqrt(w a) S` a year off the cell and hands it on: `K e sqrt(w) (dx dy)^(3/2) S` of
-     * material a year, across the face toward the receiver. [subGridTransport]'s flux across that
-     * same face, of length `L`, is `D_sub S L = K e sqrt(w) dx dy S L`. The two are the same flux:
-     * equal on a square cell, and on this map's cells, half as tall as wide, within `sqrt(2)` one
-     * way along a row and the other down a column, their geometric mean equal. Downstream, where
-     * the law's area is more than the cell's own, the resolved cut carries the own area's share and
-     * more. So along the receiver the sub-grid term adds a second copy of a flux the pass already
-     * makes, and across the fall it adds a flux nothing else makes: the hillslopes of a cell shed
-     * sideways into the next channel, which a single receiver cannot represent.
-     *
-     * **The form.** The sub-grid flux is `-D_sub grad z`; the part of the fall the receiver's cut
-     * carries is its component along `u`, the unit vector from the cell to its receiver on the
-     * ground (a cell width across a row, a row's height down a column). Net of it the flux is
-     * `-D_sub (I - u u^T) grad z`, diffusion only square to the resolved flow. The five-point scheme
-     * carries the tensor's diagonal: a face across a row takes `D_sub (1 - u_x^2)` and a face down a
-     * column `D_sub (1 - u_y^2)`. A cell draining down a column diffuses fully across the row and
-     * not at all down the column; one draining on a diagonal of this cell, 63.4 degrees off north,
-     * keeps a fifth across the row and four fifths down the column. The tensor's cross term, which
-     * is nought for a cardinal receiver, is left out, because a five-point stencil cannot carry it
-     * without losing monotonicity. A cell with no receiver, which the pass never cuts, keeps the
-     * whole `D_sub`. A face takes the mean of its two cells' shares of it, so the scheme stays
-     * conservative.
-     *
-     * No published form of this correction was found; Litwin, Malatesta and Sklar (*Hillslope
-     * diffusion and channel steepness in landscape evolution models*, Earth Surface Dynamics 13,
-     * 277-293, 2025) name the coupling it addresses, the stream-power-plus-diffusion model applying
-     * both laws in every cell. It is derived here from [subGridTransport]'s own flux, with no
-     * factor chosen.
-     */
-    val subGridTransportAcrossTheFall: Boolean = false,
-    /**
-     * **An experiment, off by default (Fix 3b's second comb round).** [subGridTransport] net of the
-     * resolved incision, by share: `D_sub` scaled by the share of the cell's own catchment its
-     * resolved channel does not drain. At most one of the three sub-grid settings may be on.
-     *
-     * **The share.** The router finds each cell's fall on its steepest facet by Tarboton's method
-     * (1997, *Water Resources Research* 33(2), 309-319), which divides the cell's own water between
-     * the facet's two neighbours, a share `p` to one and `1 - p` to the other, and then sends all of
-     * it to one of the two drawn at that share (Rho8; see `FlowRouting.flowDirections`). The
-     * resolved channel, the drawn receiver, is where `p` of the cell's own catchment really drains,
-     * and the incision's cut along it carries that share's transport, as
-     * [subGridTransportAcrossTheFall] derives. The other `1 - p` really drains to the neighbour the
-     * draw passed over, and no resolved flux carries it there. So the diffusivity net of the
-     * resolved incision is `D_sub (1 - p)`, applied as [subGridTransport]'s, isotropically.
-     *
-     * Nought where the descent is clamped to one neighbour, which is what an incised channel's cell
-     * always is, so a channel keeps its cut; the whole `D_sub` on a cell with no receiver. Unlike
-     * [subGridTransportAcrossTheFall] it still diffuses along the receiver, at the undrained share.
-     * No published form of it was found; it is derived here from the router's own partition, with
-     * no factor chosen.
-     */
-    val subGridTransportUndrainedShare: Boolean = false,
-    /**
      * How much harder the water cuts at a basin's outlet than it does in an ordinary channel, as a
      * multiple of the same stream-power coefficient.
      *
@@ -2979,8 +2886,9 @@ data class NationsConfig(
      */
     val upwellingFisheryBonus: Float = 0.16f,
     /**
-     * Largest catchment left whole, as a share of all land. Anything draining more than this is
-     * cut at its confluences, so the pieces are its tributaries.
+     * Largest catchment left whole, as a share of the land's area on the ground. Anything draining
+     * more ground than this is cut at its confluences, so the pieces are its tributaries and the
+     * reaches of its trunk between them, and no piece is larger.
      *
      * A single river basin can be a fifth of a continent. Left whole, every realm would be
      * enormous and shaped alike; cut too fine and realms become mosaics of scraps with no
@@ -3075,7 +2983,10 @@ data class CulturesConfig(
      * it, which on one seed meant a third of the world's land.
      */
     val hostileCrossingCost: Float = 6.0f,
-    /** Largest catchment left whole when dividing land into cultural regions, as a share of land. */
+    /**
+     * Largest catchment left whole when dividing land into cultural regions, as a share of the
+     * land's area on the ground; no region piece is larger.
+     */
     val maxRegionShare: Float = 0.030f,
     /** Smallest cultural region, as a share of land; anything under is merged into a neighbour. */
     val minRegionShare: Float = 0.006f
@@ -3121,27 +3032,6 @@ data class WorldGenConfig(
      * [com.cartogenesis.worldgen.pipeline.FlatRouting].
      */
     val flatPotential: Boolean = true,
-    /**
-     * **An experiment, off by default (Fix 3b's third comb round).** Whether a cell whose descent is
-     * clamped to one edge of its facet takes its receiver by Fairfield and Leymarie's Rho8 draw
-     * (1991, *Water Resources Research* 27(5), 709-717) rather than as exactly the steepest
-     * neighbour. Top level for the same reason as [facetRouting]. Needs [facetRouting].
-     *
-     * **Why only there.** The facet rule already draws between a facet's two neighbours wherever the
-     * descent lies inside the facet, and on a plane it takes each bearing's own share of columns,
-     * rows and diagonals (`RoutingGroundTest`). Rho8 on every cell would replace that with a rule
-     * whose drawn diagonal, adapted to this map's cells, is 9% short of the true reciprocal length
-     * on average: it would bias planes toward the cardinals. What the facet rule leaves undrawn is
-     * the clamped cell, which is where an incised channel's descent always lies.
-     *
-     * **What the derivation predicts, before it was measured.** See `FlowRouting.rho8Receiver`: a
-     * cell clamped to its cardinal keeps the cardinal under every draw, because each diagonal
-     * flanking it falls no more than the cardinal does and is never drawn shorter than its longer
-     * leg. So a gully cut down a column is not drawn off it. What the draw does move is a cell
-     * clamped to its diagonal, which it can send to a cardinal; on a plane falling exactly along
-     * the diagonal's bearing that is a bias toward the row, where the facet rule has none.
-     */
-    val clampedDescentDraw: Boolean = false,
     /**
      * Fraction of the world covered by ocean, 0..1.
      *

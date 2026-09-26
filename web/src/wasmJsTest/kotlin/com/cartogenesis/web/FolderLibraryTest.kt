@@ -1,0 +1,599 @@
+package com.cartogenesis.web
+
+import com.cartogenesis.cartography.Compressor
+import com.cartogenesis.cartography.LoadOutcome
+import com.cartogenesis.cartography.NoCompression
+import com.cartogenesis.cartography.SaveProblem
+import com.cartogenesis.cartography.WorldCodec
+import com.cartogenesis.cartography.WorldDocument
+import com.cartogenesis.worldgen.model.WorldMap
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertIs
+import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.minutes
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.joinAll
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.runTest
+
+/**
+ * The folder library held to the contract every library keeps — the one `WorldLibraryTest` states
+ * over bytes in memory and `DesktopWorldStoreTest` over a real folder — in a real browser, against a
+ * real `FileSystemDirectoryHandle`.
+ *
+ * The handle is one from the origin private file system, the only one a page can have without the
+ * reader choosing it in a picker, which no test can drive. Its handles are the same interface a
+ * picked folder's are, and in this file system the behaviours the library depends on were seen
+ * directly: a writable stream writes to a `<name>.crswap` beside its target and replaces the
+ * target only on `close`, `abort` leaves an existing file as it was, `getFileHandle(create)` makes
+ * an empty target before a byte is written and an aborted stream leaves it, and `move` renames.
+ * That a picked folder behaves the same is what Chrome documents, not something seen here. What
+ * this file system does not share: permission, always granted here, which `LibraryPlacesTest`
+ * covers with a fake instead; the operating system's file system under a picked folder, where
+ * Windows refuses to replace a file another program holds open; and any sync client.
+ */
+class FolderLibraryTest {
+
+    private fun document(id: String = "w1", title: String = "One", savedAt: Long = 1L, world: WorldMap) =
+        WorldDocument(id = id, title = title, config = world.config, savedAt = savedAt)
+
+    private fun titleIn(outcome: LoadOutcome): String = assertIs<LoadOutcome.Loaded>(outcome).save.document.title
+
+    @Test
+    fun `save, list, load and delete round trip by key, and nothing else is left in the folder`() = runTest(timeout = 5.minutes) {
+        val world = TestWorlds.small()
+        withTestFolder("roundtrip") { folder ->
+            val library = FolderWorldLibrary(folder.handle, WebGzipCompressor, "a test")
+            val key = library.save(document(world = world), world)
+            assertEquals("w1.cgw", key)
+            assertEquals(listOf("w1.cgw"), folder.entries(), "a temporary or swap file was left in the folder")
+
+            assertEquals(listOf("One"), library.list().map { it.document?.title })
+            val loaded = assertIs<LoadOutcome.Loaded>(library.load(key)).save
+            assertEquals(world.terrain.height.data.toList(), loaded.world.terrain.height.data.toList())
+
+            // Saved over, in place: the browser's swap file, committed on close, and nothing beside it.
+            library.save(document(title = "Two", world = world), world, key)
+            assertEquals("Two", titleIn(library.load(key)))
+            assertEquals(listOf("w1.cgw"), folder.entries())
+
+            library.delete(key)
+            assertEquals(emptyList(), folder.entries())
+            assertEquals(SaveProblem.UNREADABLE, assertIs<LoadOutcome.Refused>(library.load(key)).refusal.problem)
+        }
+    }
+
+    @Test
+    fun `a file whose name is not its id, and a sync client's copies, open and save as themselves`() = runTest(timeout = 5.minutes) {
+        val world = TestWorlds.small()
+        withTestFolder("names") { folder ->
+            val library = FolderWorldLibrary(folder.handle, WebGzipCompressor, "a test")
+            folder.writeRaw("cartogenesis-w1.cgw", WorldCodec.encode(document(world = world), world, WebGzipCompressor))
+            library.save(document(title = "Here", world = world), world)
+            folder.writeRaw("w1 (1).cgw", WorldCodec.encode(document(title = "There", savedAt = 2L, world = world), world, WebGzipCompressor))
+
+            val keys = library.list().map { it.key }
+            assertEquals(listOf("w1 (1).cgw", "cartogenesis-w1.cgw", "w1.cgw").sorted(), keys.sorted())
+            assertEquals("There", titleIn(library.load("w1 (1).cgw")))
+
+            val here = folder.readRaw("w1.cgw")
+            library.save(document(title = "There, mended", world = world), world, "w1 (1).cgw")
+            assertSameBytes(here, folder.readRaw("w1.cgw"), "saving one copy wrote over another")
+            assertEquals("There, mended", titleIn(library.load("w1 (1).cgw")))
+
+            library.delete("cartogenesis-w1.cgw")
+            assertEquals(listOf("w1 (1).cgw", "w1.cgw"), folder.entries())
+        }
+    }
+
+    @Test
+    fun `a new save never replaces a file already in the folder`() = runTest(timeout = 5.minutes) {
+        val world = TestWorlds.small()
+        withTestFolder("overwrite") { folder ->
+            val library = FolderWorldLibrary(folder.handle, WebGzipCompressor, "a test")
+            library.save(document(title = "In the folder", world = world), world)
+            val original = folder.readRaw("w1.cgw")
+
+            assertEquals("w1 (2).cgw", library.save(document(title = "Brought in", world = world), world))
+            assertEquals("w1 (3).cgw", library.save(document(title = "Brought in again", world = world), world))
+            assertSameBytes(original, folder.readRaw("w1.cgw"))
+            assertEquals("Brought in", titleIn(library.load("w1 (2).cgw")))
+            assertEquals(listOf("w1 (2).cgw", "w1 (3).cgw", "w1.cgw"), folder.entries())
+        }
+    }
+
+    @Test
+    fun `no key or id reaches outside the folder, and a crafted header is refused`() = runTest(timeout = 5.minutes) {
+        val world = TestWorlds.small()
+        withTestFolder("keys") { folder ->
+            val library = FolderWorldLibrary(folder.handle, WebGzipCompressor, "a test")
+            assertFailsWith<IllegalArgumentException> { library.save(document(id = "../escape", world = world), world) }
+            assertFailsWith<IllegalArgumentException> { library.save(document(world = world), world, "../escape.cgw") }
+            assertFailsWith<IllegalArgumentException> { library.delete("..\\escape.cgw") }
+            assertFailsWith<IllegalArgumentException> { library.load("C:escape.cgw") }
+            assertFailsWith<IllegalArgumentException> { library.delete("notes.json") }
+            assertEquals(emptyList(), folder.entries())
+
+            // Same length, so the header's own length still adds up: w9 becomes .., a path.
+            val crafted = WorldCodec.encode(document(id = "w9", world = world), world)
+            val at = crafted.indexOfSequence("\"id\":\"w9\"".encodeToByteArray())
+            crafted[at + 6] = '.'.code.toByte()
+            crafted[at + 7] = '.'.code.toByte()
+            folder.writeRaw("crafted.cgw", crafted)
+            val entry = library.list().single { it.key == "crafted.cgw" }
+            assertEquals(SaveProblem.DAMAGED, entry.refusal?.problem)
+            assertIs<LoadOutcome.Refused>(library.load("crafted.cgw"))
+        }
+    }
+
+    @Test
+    fun `a damaged file, one still arriving and one that cannot be read are listed with their reasons`() = runTest(timeout = 5.minutes) {
+        val world = TestWorlds.small()
+        withTestFolder("damaged") { folder ->
+            val library = FolderWorldLibrary(folder.handle, WebGzipCompressor, "a test")
+            val bytes = WorldCodec.encode(document(world = world), world, WebGzipCompressor)
+            folder.writeRaw("half.cgw", bytes.copyOf(bytes.size / 2))
+            folder.writeRaw("placeholder.cgw", ByteArray(bytes.size))
+            folder.writeRaw("notes.cgw", "not a world".encodeToByteArray())
+            // A name the folder holds and the storage will not read as a file, as the desktop's test
+            // stands in for an online-only placeholder: a folder of that name.
+            folder.makeFolder("online-only.cgw")
+
+            val listed = library.list().associateBy { it.key }
+            assertNotNull(listed.getValue("half.cgw").document, "its header is whole, so it lists as its world")
+            assertEquals(SaveProblem.INCOMPLETE, listed.getValue("placeholder.cgw").refusal?.problem)
+            assertEquals(SaveProblem.NOT_A_SAVE, listed.getValue("notes.cgw").refusal?.problem)
+            assertEquals(SaveProblem.UNREADABLE, listed.getValue("online-only.cgw").refusal?.problem)
+            assertEquals(SaveProblem.INCOMPLETE, assertIs<LoadOutcome.Refused>(library.load("half.cgw")).refusal.problem)
+            assertEquals(SaveProblem.UNREADABLE, assertIs<LoadOutcome.Refused>(library.load("online-only.cgw")).refusal.problem)
+            assertSameBytes(bytes.copyOf(bytes.size / 2), folder.readRaw("half.cgw"))
+        }
+    }
+
+    @Test
+    fun `a save of a file that is there which fails partway leaves the file whole and nothing beside it`() = runTest(timeout = 5.minutes) {
+        val world = TestWorlds.small()
+        withTestFolder("fail-existing") { folder ->
+            FolderWorldLibrary(folder.handle, NoCompression, "a test").save(document(title = "Kept", world = world), world)
+            val kept = folder.readRaw("w1.cgw")
+
+            val failing = FolderWorldLibrary(folder.handle, FailsAtChunk(1), "a test", SMALL_PARTS)
+            assertFailsWith<IllegalStateException> { failing.save(document(title = "Lost", world = world), world, "w1.cgw") }
+            assertSameBytes(kept, folder.readRaw("w1.cgw"))
+            assertEquals(listOf("w1.cgw"), folder.entries(), "the failed save left its swap file behind")
+        }
+    }
+
+    @Test
+    fun `a new save that fails partway leaves no file at all, under its name or any other`() =
+        runTest(timeout = 5.minutes) { failedNewSaveLeavesNothing(canMove = true) }
+
+    @Test
+    fun `a new save that fails partway leaves no file at all, where the browser cannot move a file`() =
+        runTest(timeout = 5.minutes) { failedNewSaveLeavesNothing(canMove = false) }
+
+    // `getFileHandle(create)` makes an empty file before a byte is written, and aborting the stream
+    // leaves it there: a new save written straight to its name left an empty w1.cgw, listed as a
+    // world that will not open, for every save that failed.
+    private suspend fun failedNewSaveLeavesNothing(canMove: Boolean) {
+        val world = TestWorlds.small()
+        withTestFolder("fail-new") { folder ->
+            withMoveIf(canMove) {
+                val failing = FolderWorldLibrary(folder.handle, FailsAtChunk(1), "a test", SMALL_PARTS)
+                assertFailsWith<IllegalStateException> { failing.save(document(world = world), world) }
+                assertEquals(emptyList(), folder.entries(), "a failed new save left a file behind")
+                // A key given whose file is not there is a new file too.
+                val failingAgain = FolderWorldLibrary(folder.handle, FailsAtChunk(1), "a test", SMALL_PARTS)
+                assertFailsWith<IllegalStateException> { failingAgain.save(document(world = world), world, "w1.cgw") }
+                assertEquals(emptyList(), folder.entries())
+            }
+        }
+    }
+
+    @Test
+    fun `a new save is never seen half made, and a cancelled one leaves nothing`() =
+        runTest(timeout = 5.minutes) { halfMadeNeverSeen(canMove = true) }
+
+    @Test
+    fun `a new save is never seen half made, where the browser cannot move a file`() =
+        runTest(timeout = 5.minutes) { halfMadeNeverSeen(canMove = false) }
+
+    private suspend fun TestScope.halfMadeNeverSeen(canMove: Boolean) {
+        val world = TestWorlds.small()
+        withTestFolder("half-made") { folder ->
+            withMoveIf(canMove) {
+                val paused = PausesAtChunk(1)
+                val library = FolderWorldLibrary(folder.handle, paused, "a test", SMALL_PARTS)
+                val saving = launch { library.save(document(world = world), world) }
+                paused.reached.await()
+                // Partway through: whatever the folder holds, no listing takes any of it for a save.
+                assertTrue(folder.entries().isNotEmpty(), "nothing was being written")
+                assertEquals(emptyList(), library.list(), "a save still being written was listed")
+                assertTrue(folder.entries().none { it.endsWith(".cgw") }, "a .cgw appeared before it was whole: ${folder.entries()}")
+
+                saving.cancel()
+                paused.release.complete(Unit)
+                saving.join()
+                assertEquals(emptyList(), folder.entries(), "a cancelled save left a file behind")
+            }
+        }
+    }
+
+    @Test
+    fun `a new save cancelled while a part is with the browser is not made`() =
+        runTest(timeout = 5.minutes) { cancelledWhileWriting(canMove = true, existing = false) }
+
+    @Test
+    fun `a new save cancelled while a part is with the browser is not made, where the browser cannot move a file`() =
+        runTest(timeout = 5.minutes) { cancelledWhileWriting(canMove = false, existing = false) }
+
+    @Test
+    fun `a save over a file cancelled while a part is with the browser leaves the file as it was`() =
+        runTest(timeout = 5.minutes) { cancelledWhileWriting(canMove = true, existing = true) }
+
+    // The cancel lands while the browser has a part of the save in hand and the library is waiting
+    // for it: not at a stand-in compressor, where any suspension would have seen it. A wait that
+    // could not be cancelled ran on through the close and the move and made the save whole.
+    private suspend fun TestScope.cancelledWhileWriting(canMove: Boolean, existing: Boolean) {
+        val world = TestWorlds.small()
+        withTestFolder("cancelled") { folder ->
+            withMoveIf(canMove) {
+                if (existing) FolderWorldLibrary(folder.handle, NoCompression, "a test").save(document(title = "Kept", world = world), world)
+                val before = folder.entries().associateWith { folder.readRaw(it) }
+                var lastHanded = -1
+                val cancelling = object : WriteSteps() {
+                    override suspend fun partHandedToStream(index: Int) {
+                        lastHanded = index
+                        if (index == CANCELLED_AT_PART) currentCoroutineContext()[Job]!!.cancel()
+                    }
+                }
+                val library = FolderWorldLibrary(folder.handle, NoCompression, "a test", SMALL_PARTS, cancelling)
+                val saving = launch { library.save(document(title = "Cancelled", world = world), world, if (existing) "w1.cgw" else null) }
+                saving.join()
+                assertTrue(saving.isCancelled)
+                assertEquals(before.keys.toList(), folder.entries(), "a cancelled save left the folder changed")
+                before.forEach { (name, bytes) -> assertSameBytes(bytes, folder.readRaw(name), "$name was changed by a cancelled save") }
+                // The wait on the part in the browser's hands is where the cancel is seen: a wait
+                // that could not be cancelled handed the browser every part left before it stopped.
+                assertEquals(CANCELLED_AT_PART, lastHanded, "the save went on writing after it was cancelled")
+            }
+        }
+    }
+
+    @Test
+    fun `a copy cancelled as its file is made leaves no empty file behind`() = runTest(timeout = 5.minutes) {
+        // The browser was asked to make w1.cgw and the wait for it was abandoned: the file was
+        // made all the same, empty, and nothing cleared it, so the listing showed a world that
+        // will not open.
+        val world = TestWorlds.small()
+        withTestFolder("cancel-target") { folder ->
+            withMoveIf(false) {
+                val cancelling = object : WriteSteps() {
+                    override suspend fun beforeTargetCreated(name: String) {
+                        currentCoroutineContext()[Job]!!.cancel()
+                    }
+                }
+                val library = FolderWorldLibrary(folder.handle, NoCompression, "a test", SMALL_PARTS, cancelling)
+                val saving = launch { library.save(document(world = world), world) }
+                saving.join()
+                assertTrue(saving.isCancelled)
+                assertEquals(emptyList(), folder.entries(), "a copy cancelled as its file was made left a file behind")
+            }
+        }
+    }
+
+    @Test
+    fun `a save cancelled as its stream is opened leaves no stream or swap file behind`() = runTest(timeout = 5.minutes) {
+        // The stream was being opened when the wait for it was abandoned: the browser opened it
+        // all the same, with its swap file beside the save, and nothing ever aborted it.
+        val world = TestWorlds.small()
+        withTestFolder("cancel-stream") { folder ->
+            FolderWorldLibrary(folder.handle, NoCompression, "a test").save(document(title = "Kept", world = world), world)
+            val kept = folder.readRaw("w1.cgw")
+            val cancelling = object : WriteSteps() {
+                override suspend fun beforeStreamOpened() {
+                    currentCoroutineContext()[Job]!!.cancel()
+                }
+            }
+            val library = FolderWorldLibrary(folder.handle, NoCompression, "a test", SMALL_PARTS, cancelling)
+            val saving = launch { library.save(document(title = "Cancelled", world = world), world, "w1.cgw") }
+            saving.join()
+            assertTrue(saving.isCancelled)
+            assertSameBytes(kept, folder.readRaw("w1.cgw"), "the file was changed by a save cancelled before it began")
+            // A save after it goes through, which also gives a stranded stream time to have opened.
+            FolderWorldLibrary(folder.handle, NoCompression, "a test").save(document(title = "After", world = world), world, "w1.cgw")
+            assertEquals("After", titleIn(library.load("w1.cgw")))
+            assertEquals(listOf("w1.cgw"), folder.entries(), "a stream abandoned as it opened left its swap file")
+            // And nothing holds the file open: the browser refuses to delete one a stream is open on
+            // (`NoModificationAllowedError`, seen in this file system), as it refuses to move one.
+            library.delete("w1.cgw")
+            assertEquals(emptyList(), folder.entries())
+        }
+    }
+
+    @Test
+    fun `a name taken by another writer during a save is not written over`() =
+        runTest(timeout = 5.minutes) { takenNameLeftAlone(canMove = true) }
+
+    @Test
+    fun `a name taken by another writer during a save is not written over, where the browser cannot move a file`() =
+        runTest(timeout = 5.minutes) { takenNameLeftAlone(canMove = false) }
+
+    // Another tab, the desktop application or a sync client puts w1.cgw in the folder while this
+    // tab is writing its own new w1.cgw. The name was free when the save began.
+    private suspend fun takenNameLeftAlone(canMove: Boolean) {
+        val world = TestWorlds.small()
+        withTestFolder("taken") { folder ->
+            withMoveIf(canMove) {
+                val theirs = WorldCodec.encode(document(title = "Theirs", world = world), world, WebGzipCompressor)
+                val interloper = OnChunk(1) { folder.writeRaw("w1.cgw", theirs) }
+                val library = FolderWorldLibrary(folder.handle, interloper, "a test")
+
+                assertEquals("w1 (2).cgw", library.save(document(title = "Ours", world = world), world))
+                assertSameBytes(theirs, folder.readRaw("w1.cgw"), "the other writer's file was written over")
+                assertEquals("Ours", titleIn(library.load("w1 (2).cgw")))
+                assertEquals(listOf("w1 (2).cgw", "w1.cgw"), folder.entries())
+            }
+        }
+    }
+
+    @Test
+    fun `a file another writer makes in the moment before the copy makes its own is left alone`() = runTest(timeout = 5.minutes) {
+        // Where the browser cannot move a file the save is copied into its name, and the file for
+        // it is made with `getFileHandle(create)`, which opens a file that is there as readily as
+        // it makes one. Another writer's w1.cgw, arriving after the last look at the folder, was
+        // opened and written over.
+        val world = TestWorlds.small()
+        withTestFolder("copy-taken") { folder ->
+            withMoveIf(false) {
+                val theirs = WorldCodec.encode(document(title = "Theirs", world = world), world, WebGzipCompressor)
+                var first = true
+                val interloper = object : WriteSteps() {
+                    override suspend fun beforeTargetCreated(name: String) {
+                        if (first) folder.writeRaw(name, theirs)
+                        first = false
+                    }
+                }
+                val library = FolderWorldLibrary(folder.handle, NoCompression, "a test", SMALL_PARTS, interloper)
+                assertEquals("w1 (2).cgw", library.save(document(title = "Ours", world = world), world))
+                assertSameBytes(theirs, folder.readRaw("w1.cgw"), "the other writer's file was written over")
+                assertEquals("Ours", titleIn(library.load("w1 (2).cgw")))
+                assertEquals(listOf("w1 (2).cgw", "w1.cgw"), folder.entries())
+            }
+        }
+    }
+
+    @Test
+    fun `a copy that fails partway keeps the whole save under its temporary name, and says so`() = runTest(timeout = 5.minutes) {
+        // The copy is the second write; the temporary file is already the whole save. On Android a
+        // write empties its file first, so a copy that fails can leave the name short, and removing
+        // the temporary file as well lost the save outright.
+        val world = TestWorlds.small()
+        withTestFolder("copy-fails") { folder ->
+            withMoveIf(false) {
+                var copying = false
+                val failsInTheCopy = object : WriteSteps() {
+                    override suspend fun beforeTargetCreated(name: String) {
+                        copying = true
+                    }
+                    override suspend fun partHandedToStream(index: Int) {
+                        if (copying && index == 1) error("the disk filled up")
+                    }
+                }
+                val library = FolderWorldLibrary(folder.handle, NoCompression, "a test", SMALL_PARTS, failsInTheCopy)
+                val failure = assertFailsWith<IllegalStateException> { library.save(document(world = world), world) }
+                assertTrue(copying, "the save never reached its copy")
+
+                val kept = folder.entries().singleOrNull()
+                assertNotNull(kept, "the whole save was removed with the failed copy: ${folder.entries()}")
+                assertTrue(kept.startsWith(".w1.cgw.") && kept.endsWith(".tmp"), "not the temporary file: $kept")
+                assertTrue(kept in failure.message.orEmpty(), "the failure did not say where the save is: ${failure.message}")
+                assertTrue("the disk filled up" in failure.message.orEmpty(), "the failure lost its reason: ${failure.message}")
+                assertEquals(emptyList(), library.list(), "the listing took the temporary file for a save")
+                // And it is the save, whole: under a name the library reads, it opens.
+                folder.writeRaw("recovered.cgw", folder.readRaw(kept))
+                assertEquals("One", titleIn(library.load("recovered.cgw")))
+            }
+        }
+    }
+
+    @Test
+    fun `a refused move is not taken as done because another writer's file of the same length is in the way`() =
+        runTest(timeout = 5.minutes) {
+            // Checked by length alone, the other writer's file passed for the save, and the
+            // temporary file, the only copy of the save, was removed.
+            val world = TestWorlds.small()
+            withTestFolder("move-same-length") { folder ->
+                val key = withAnotherWritersFileWhereMoveRefuses {
+                    FolderWorldLibrary(folder.handle, WebGzipCompressor, "a test").save(document(world = world), world)
+                }
+                val library = FolderWorldLibrary(folder.handle, WebGzipCompressor, "a test")
+                assertEquals("w1 (2).cgw", key, "the save took the other writer's name")
+                assertEquals("One", titleIn(library.load(key)))
+                assertTrue(folder.readRaw("w1.cgw").all { it == 7.toByte() }, "the other writer's file was changed")
+                assertEquals(listOf("w1 (2).cgw", "w1.cgw"), folder.entries())
+            }
+        }
+
+    @Test
+    fun `a temporary file that will not go away never takes the finished save with it`() = runTest(timeout = 5.minutes) {
+        // The copy was whole under its name; removing the temporary file then failed, and the
+        // failure was handled as the save's, which removed the finished save.
+        val world = TestWorlds.small()
+        withTestFolder("stuck-temporary") { folder ->
+            withMoveIf(false) {
+                val stuck = object : WriteSteps() {
+                    override suspend fun beforeTemporaryRemoved(name: String) {
+                        error("the file is held open")
+                    }
+                }
+                val library = FolderWorldLibrary(folder.handle, NoCompression, "a test", SMALL_PARTS, stuck)
+                assertEquals("w1.cgw", library.save(document(title = "Finished", world = world), world))
+                assertEquals("Finished", titleIn(library.load("w1.cgw")))
+                assertEquals(listOf("w1.cgw"), library.list().map { it.key })
+                assertTrue(folder.entries().any { it.endsWith(".tmp") }, "the temporary file was removed after all")
+            }
+        }
+    }
+
+    @Test
+    fun `overlapping saves of one file land in the order they were asked for`() = runTest(timeout = 5.minutes) {
+        val world = TestWorlds.small()
+        withTestFolder("order") { folder ->
+            val paused = PausesAtChunk(1)
+            val library = FolderWorldLibrary(folder.handle, paused, "a test", SMALL_PARTS)
+            val older = launch { library.save(document(title = "Older", world = world), world, "w1.cgw") }
+            paused.reached.await()
+            val newer = launch { library.save(document(title = "Newer", world = world), world, "w1.cgw") }
+            paused.release.complete(Unit)
+            joinAll(older, newer)
+            assertEquals("Newer", titleIn(library.load("w1.cgw")))
+            assertEquals(listOf("w1.cgw"), folder.entries())
+        }
+    }
+
+    @Test
+    fun `worlds in this browser's storage are copied into the folder beside its own`() = runTest(timeout = 5.minutes) {
+        val world = TestWorlds.small()
+        withTestFolder("copy") { folder ->
+            val browserStorage = IndexedDbLibrary(WebGzipCompressor, "a test")
+            val stored = browserStorage.save(document(id = "copytest", title = "From the browser", world = world), world)
+            try {
+                val library = FolderWorldLibrary(folder.handle, WebGzipCompressor, "a test")
+                library.save(document(id = "copytest", title = "The folder's own", world = world), world)
+                assertEquals("copytest (2).cgw", library.copyFrom(browserStorage, stored))
+                assertEquals("The folder's own", titleIn(library.load("copytest.cgw")))
+                assertEquals("From the browser", titleIn(library.load("copytest (2).cgw")))
+                assertEquals("From the browser", titleIn(browserStorage.load(stored)), "the copy took the original away")
+            } finally {
+                browserStorage.delete(stored)
+            }
+        }
+    }
+
+    @Test
+    fun `every name a save writes is one Chrome allows in a folder on the disk`() = runTest(timeout = 5.minutes) {
+        // The temporary name was ~<name>.<token>.tmp, which Chrome refuses in any folder a reader
+        // picks, a leading tilde being one of its rules; the private file system checks no names,
+        // so every new save passed here and failed there, on a phone as on a computer.
+        val temporary = FolderWorldLibrary.temporaryNameFor("w1 (2).cgw", "0f8fad5b-d9cb-469f-a165-70867728950e")
+        assertTrue(chromeAllowsOnTheDisk(temporary), "Chrome refuses $temporary in a folder on the disk")
+        assertTrue(!chromeAllowsOnTheDisk("~w1.cgw.0f8fad5b-d9cb-469f-a165-70867728950e.tmp"), "the transcribed rule lets the tilde through")
+
+        val world = TestWorlds.small()
+        withTestFolder("disk-names") { folder ->
+            val browserStorage = IndexedDbLibrary(WebGzipCompressor, "a test")
+            val stored = browserStorage.save(document(id = "disknames", title = "From the browser", world = world), world)
+            try {
+                withDiskNameRule {
+                    val library = FolderWorldLibrary(folder.handle, WebGzipCompressor, "a test")
+                    assertEquals("w1.cgw", library.save(document(world = world), world))
+                    assertEquals("w1 (2).cgw", library.save(document(title = "Beside it", world = world), world))
+                    library.save(document(title = "Over it", world = world), world, "w1.cgw")
+                    assertEquals("disknames.cgw", library.copyFrom(browserStorage, stored))
+                    assertEquals("Over it", titleIn(library.load("w1.cgw")))
+                    library.delete("w1 (2).cgw")
+                }
+                assertEquals(listOf("disknames.cgw", "w1.cgw"), folder.entries())
+            } finally {
+                browserStorage.delete(stored)
+            }
+        }
+    }
+
+    @Test
+    fun `where the browser refuses to move a file, as Chrome on Android does, a new save is copied into its name`() =
+        runTest(timeout = 5.minutes) {
+            // Chrome on Android has move on every file handle and cannot rename a file in a folder a
+            // phone picked; its refusal is not NotSupportedError, and was taken for the save failing.
+            val world = TestWorlds.small()
+            for (refusal in listOf("InvalidStateError", "InvalidModificationError", "NotSupportedError")) {
+                withTestFolder("move-refused") { folder ->
+                    withDiskNameRule {
+                        withEveryMoveRefused(refusal) {
+                            val library = FolderWorldLibrary(folder.handle, WebGzipCompressor, "a test")
+                            assertEquals("w1.cgw", library.save(document(world = world), world), "with move refused as $refusal")
+                            assertEquals("w1 (2).cgw", library.save(document(title = "Beside it", world = world), world))
+                            assertEquals("One", titleIn(library.load("w1.cgw")))
+                        }
+                    }
+                    assertEquals(listOf("w1 (2).cgw", "w1.cgw"), folder.entries(), "with move refused as $refusal")
+                }
+            }
+        }
+
+    @Test
+    fun `a method the browser lacks is a failure with the browser's own name, not an exception past the library`() =
+        runTest(timeout = 5.minutes) {
+            val world = TestWorlds.small()
+            withTestFolder("no-writable") { folder ->
+                val library = FolderWorldLibrary(folder.handle, WebGzipCompressor, "a test")
+                val held = hideCreateWritable()
+                val failure = try {
+                    runCatching { library.save(document(world = world), world) }.exceptionOrNull()
+                } finally {
+                    restoreCreateWritable(held)
+                }
+                assertIs<FolderException>(failure, "the failure was not the folder's: $failure")
+                assertTrue("TypeError" in failure.message.orEmpty(), "the browser's name for it was lost: ${failure.message}")
+                assertEquals(emptyList(), folder.entries(), "the failed save left a file")
+            }
+        }
+}
+
+/** Stores every chunk raw and throws on chunk [failingChunk], as a disk that fills up partway would. */
+private class FailsAtChunk(private val failingChunk: Int) : Compressor {
+    private var chunks = 0
+    override val name: String get() = "none"
+    override suspend fun compress(data: ByteArray): ByteArray? {
+        if (++chunks == failingChunk) error("the disk filled up")
+        return null
+    }
+    override suspend fun decompress(data: ByteArray, limitBytes: Int): ByteArray? = null
+}
+
+/** Stores every chunk raw, and at chunk [pausingChunk] says so and waits to be released. */
+private class PausesAtChunk(private val pausingChunk: Int) : Compressor {
+    private var chunks = 0
+    val reached = CompletableDeferred<Unit>()
+    val release = CompletableDeferred<Unit>()
+    override val name: String get() = "none"
+    override suspend fun compress(data: ByteArray): ByteArray? {
+        if (++chunks == pausingChunk) {
+            reached.complete(Unit)
+            release.await()
+        }
+        return null
+    }
+    override suspend fun decompress(data: ByteArray, limitBytes: Int): ByteArray? = null
+}
+
+/** Stores every chunk raw, and runs [action] once, at chunk [chunk]. */
+private class OnChunk(private val chunk: Int, private val action: suspend () -> Unit) : Compressor {
+    private var chunks = 0
+    override val name: String get() = "none"
+    override suspend fun compress(data: ByteArray): ByteArray? {
+        if (++chunks == chunk) action()
+        return null
+    }
+    override suspend fun decompress(data: ByteArray, limitBytes: Int): ByteArray? = null
+}
+
+/**
+ * Four kibibytes a part for the tests that stop a save partway: a 32 world's payload is a single
+ * codec chunk, so the stand-in compressors above act on the first one, and parts this small mean
+ * the header ahead of it has already gone into the stream when they do.
+ */
+private const val SMALL_PARTS = 1 shl 12
+
+/** Which part the cancel lands at: the third, well inside a 32 world's forty or so at [SMALL_PARTS]. */
+private const val CANCELLED_AT_PART = 2
+
+private fun ByteArray.indexOfSequence(sequence: ByteArray): Int =
+    (0..size - sequence.size).first { start -> sequence.indices.all { this[start + it] == sequence[it] } }

@@ -341,6 +341,38 @@ class WorldCodecTest {
         assertRefused(longHeader, SaveProblem.TOO_LARGE, "header claims")
     }
 
+    /**
+     * A host's opening limit refuses a wider save from its header alone, and says the host's why.
+     *
+     * The case a browser tab is in with a 4096 save from the desktop, on a 64 world and a limit
+     * one cell narrower: refused as too large, with the grid and the host's own clause in the
+     * reason, and refused the same from the prefix and the header with no payload behind them —
+     * so nothing the size of the world is read, let alone allocated. At the world's own width it
+     * opens, and with no limit the format's own bound is the only one.
+     */
+    @Test
+    fun `a save wider than the host's opening limit is refused from its header`() = runTest {
+        val bytes = rawSave()
+        val side = synthetic.width
+        val narrower = OpeningLimit(largestSide = side - 1, because = "this host holds less")
+
+        val refused = WorldCodec.open(ByteArraySource(bytes), limit = narrower) as? LoadOutcome.Refused
+            ?: throw AssertionError("a save wider than the host's limit opened")
+        assertEquals(SaveProblem.TOO_LARGE, refused.refusal.problem)
+        assertTrue("its grid is $side by $side" in refused.refusal.detail, refused.refusal.detail)
+        assertTrue("this host holds less" in refused.refusal.detail, refused.refusal.detail)
+
+        val headerOnly = bytes.copyOf(WorldCodec.PREFIX_BYTES + getInt(bytes, WorldCodec.HEADER_LENGTH_OFFSET))
+        assertTrue(headerOnly.size < bytes.size, "the save has no payload to leave out")
+        assertEquals(
+            SaveProblem.TOO_LARGE,
+            assertFailsWith<WorldFormatException> { WorldCodec.decodeHeader(headerOnly, narrower) }.problem
+        )
+
+        assertTrue(WorldCodec.open(ByteArraySource(bytes), limit = OpeningLimit(side, "unused")) is LoadOutcome.Loaded)
+        assertTrue(WorldCodec.open(ByteArraySource(bytes)) is LoadOutcome.Loaded)
+    }
+
     @Test
     fun `an id that names nothing in the world is refused`() = runTest {
         // A lake id one past the lakes: the old reader accepted it, and the raster threw on the

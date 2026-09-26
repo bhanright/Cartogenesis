@@ -150,7 +150,7 @@ internal object DrownedValleys {
         val arriving =
             catchmentArrivingByCell(
                 cut, cellCount, config.seed, config.cellHeightInCellWidths, config.facetRouting,
-                config.flatPotential, config.clampedDescentDraw
+                config.flatPotential
             )
         carryCatchmentDownTheValleys(drowned, arriving, cut.isLand, height)
 
@@ -402,8 +402,7 @@ internal object DrownedValleys {
         seed: Long,
         cellHeightInCellWidths: Double,
         byFacet: Boolean,
-        overPotential: Boolean,
-        drawInClampedDescent: Boolean
+        overPotential: Boolean
     ): FloatArray {
         val cellsAcross = cut.relativeElevation.width
         val cellsDown = cut.relativeElevation.height
@@ -412,7 +411,7 @@ internal object DrownedValleys {
         )
         val directions = FlowRouting.flowDirections(
             cellsAcross, cellsDown, cut.isLand, cut.relativeElevation, filled, seed, cellHeightInCellWidths,
-            byFacet, overPotential, drawInClampedDescent = drawInClampedDescent
+            byFacet, overPotential
         )
         val catchment = FlowRouting.accumulate(
             cellsAcross, cellsDown, cut.isLand, filled, directions, cut.landCellCount

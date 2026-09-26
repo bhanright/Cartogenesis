@@ -4,6 +4,7 @@ import com.cartogenesis.cartography.Isobaths
 import com.cartogenesis.cartography.MapStyle
 import com.cartogenesis.cartography.MapView
 import com.cartogenesis.cartography.RenderOptions
+import com.cartogenesis.cartography.SheetGeometry
 import com.cartogenesis.ui.MapImage
 import com.cartogenesis.worldgen.WorldGenerationEngine
 import com.cartogenesis.worldgen.generateBlocking
@@ -155,27 +156,31 @@ class ClimateReliefGalleryTest {
     }
 
     /**
-     * Where a detail-sized window holds the most of what [detail] is looking for.
+     * The top-left corner, in sheet pixels, of the detail-sized window of the sheet that holds the
+     * most of what [detail] is looking for.
      *
-     * Searched on a coarse lattice and sampled every fourth cell each way: the window only has to
+     * Searched over the sheet [crop] cuts from, each sampled pixel read as the cell under it through
+     * [SheetGeometry.cellAt], so the window frames the ground it names whatever shape the sheet is
+     * drawn at. On a coarse lattice and sampled every fourth pixel each way: the window only has to
      * be a good one, not the best one, and the full search is a hundred million tests.
      */
     private fun densestWindow(world: WorldMap, detail: Detail): Pair<Int, Int> {
+        val geometry = SheetGeometry.of(world)
         var best = Pair(0, 0)
         var bestCount = -1
         var top = 0
-        while (top + DETAIL_HEIGHT <= world.height) {
+        while (top + DETAIL_HEIGHT <= geometry.heightPixels) {
             var left = 0
-            while (left + DETAIL_WIDTH <= world.width) {
+            while (left + DETAIL_WIDTH <= geometry.widthPixels) {
                 var count = 0
                 var y = top
                 while (y < top + DETAIL_HEIGHT) {
                     var x = left
                     while (x < left + DETAIL_WIDTH) {
-                        if (detail.wanted(world, y * world.width + x)) count++
-                        x += 4
+                        if (detail.wanted(world, geometry.cellAt(x.toFloat(), y.toFloat()))) count++
+                        x += WINDOW_SAMPLE_PIXELS
                     }
-                    y += 4
+                    y += WINDOW_SAMPLE_PIXELS
                 }
                 if (count > bestCount) {
                     bestCount = count
@@ -196,8 +201,14 @@ class ClimateReliefGalleryTest {
         const val DETAIL_WIDTH = 800
         const val DETAIL_HEIGHT = 600
 
-        /** How far the window slides between tries. */
+        /** How far the window slides between tries, in sheet pixels. */
         const val SEARCH_STEP = 100
+
+        /**
+         * How far apart, in sheet pixels, a window's contents are sampled each way: a sixteenth of
+         * its pixels is enough to rank windows against one another.
+         */
+        const val WINDOW_SAMPLE_PIXELS = 4
 
         /** Where the sea floor is worth contouring: below the shelf and above the abyssal plain. */
         const val SEA_SLOPE_SHALLOW = -0.55f

@@ -5,6 +5,7 @@ import com.cartogenesis.cartography.MapSheet
 import com.cartogenesis.cartography.MapStyle
 import com.cartogenesis.cartography.MapView
 import com.cartogenesis.cartography.RenderOptions
+import com.cartogenesis.cartography.SheetGeometry
 import com.cartogenesis.ui.MapImage
 import com.cartogenesis.worldgen.WorldGenerationEngine
 import com.cartogenesis.worldgen.generateBlocking
@@ -39,15 +40,28 @@ class StraightRunRenderTest {
         const val AUTHORS_SIDE = 1024
         const val EXPORT_SIDE = 2048
 
-        /** A 1:1 window big enough to hold the bar and the country either side of it. */
+        /**
+         * A 1:1 window of the sheet, in its pixels, big enough to hold the bar and the country
+         * either side of it.
+         */
         const val CROP = 384
 
-        /** Where F15 found the bar on 298405 at 1024: 53 cells centred here. */
-        const val BAR_X = 503
-        const val BAR_Y = 866
+        /**
+         * Where F15 found the bar on 298405 at 1024: 53 cells centred on this column and row of
+         * the grid. Cells, not pixels: the window is placed on the sheet through [SheetGeometry],
+         * so it frames the same ground whatever shape the sheet is drawn at.
+         */
+        const val BAR_COLUMN = 503
+        const val BAR_ROW = 866
 
         /** Seed 99 at the size its stuck basin was measured on. */
         const val STUCK_SIDE = 512
+
+        /**
+         * How far apart, in sheet pixels, a window's water is sampled each way: a sixteenth of the
+         * pixels is enough to rank windows, which only have to find the basin, not measure it.
+         */
+        const val WINDOW_SAMPLE_PIXELS = 4
     }
 
     private fun authorsWorld(side: Int, byFacet: Boolean): WorldMap =
@@ -83,9 +97,13 @@ class StraightRunRenderTest {
                 authors, options, MapRasterizer.rasterize(authors, options), MapSheet.UNGENERALISED
             )
             written += write(dir, "298405-1024-$which-whole.png", sheet)
+            val authorsGeometry = SheetGeometry.of(authors)
+            val barX = authorsGeometry.sheetX(BAR_COLUMN + 0.5f).toInt()
+            val barY = authorsGeometry.sheetY(BAR_ROW + 0.5f).toInt()
+            println("F18 BAR cell $BAR_COLUMN,$BAR_ROW is sheet pixel $barX,$barY")
             written += write(
                 dir, "298405-1024-$which-bar.png",
-                crop(sheet, BAR_X - CROP / 2, BAR_Y - CROP / 2, AUTHORS_SIDE)
+                crop(sheet, barX - CROP / 2, barY - CROP / 2)
             )
             sheet.close()
 
@@ -94,12 +112,12 @@ class StraightRunRenderTest {
                 site, options, MapRasterizer.rasterize(site, options), MapSheet.UNGENERALISED
             )
             written += write(dir, "718106-2048-$which-whole.png", exportSheet)
-            val window = riverWindow ?: busiestWindow(site, options, EXPORT_SIDE).also {
+            val window = riverWindow ?: busiestWindow(site, options).also {
                 riverWindow = it
             }
             written += write(
                 dir, "718106-2048-$which-rivers.png",
-                crop(exportSheet, window.first, window.second, EXPORT_SIDE)
+                crop(exportSheet, window.first, window.second)
             )
             exportSheet.close()
         }
@@ -136,10 +154,10 @@ class StraightRunRenderTest {
                 val sheet = MapImage.toBitmap(
                     world, options, MapRasterizer.rasterize(world, options), MapSheet.UNGENERALISED
                 )
-                val at = window ?: wettestWindow(world, side).also { window = it }
+                val at = window ?: wettestWindow(world).also { window = it }
                 written += write(dir, "$seed-$side-$what-$which-whole.png", sheet)
                 written += write(
-                    dir, "$seed-$side-$what-$which.png", crop(sheet, at.first, at.second, side)
+                    dir, "$seed-$side-$what-$which.png", crop(sheet, at.first, at.second)
                 )
                 sheet.close()
             }
@@ -168,47 +186,54 @@ class StraightRunRenderTest {
         )
     }
 
-    /** The [CROP]-square window holding the most standing water: where the stuck basins are. */
-    private fun wettestWindow(world: WorldMap, side: Int): Pair<Int, Int> {
+    /**
+     * The top-left corner, in sheet pixels, of the [CROP]-square window of the sheet holding the
+     * most standing water: where the stuck basins are. Searched over the sheet itself and sampled
+     * through [SheetGeometry.cellAt], so it is the window [crop] cuts whatever the sheet's shape.
+     */
+    private fun wettestWindow(world: WorldMap): Pair<Int, Int> {
+        val geometry = SheetGeometry.of(world)
         val lake = world.rivers.lakes.lakeId
-        var most = 0
-        var at = (side - CROP) / 2 to (side - CROP) / 2
-        var top = 0
-        while (top <= side - CROP) {
-            var left = 0
-            while (left <= side - CROP) {
-                var wet = 0
-                for (row in top until top + CROP step 4) {
-                    for (column in left until left + CROP step 4) {
-                        if (lake[row * side + column] >= 0) wet++
-                    }
+        return bestWindow(geometry) { left, top ->
+            var wet = 0
+            for (y in top until top + CROP step WINDOW_SAMPLE_PIXELS) {
+                for (x in left until left + CROP step WINDOW_SAMPLE_PIXELS) {
+                    if (lake[geometry.cellAt(x.toFloat(), y.toFloat())] >= 0) wet++
                 }
-                if (wet > most) {
-                    most = wet
-                    at = left to top
-                }
-                left += CROP / 4
             }
-            top += CROP / 4
+            wet
         }
-        return at
     }
 
-    /** The top-left corner of the [CROP]-square window with the most river in it. */
-    private fun busiestWindow(map: WorldMap, options: RenderOptions, side: Int): Pair<Int, Int> {
-        val rivers = MapRasterizer.overlay(map, options, MapSheet.UNGENERALISED).rivers
+    /**
+     * The top-left corner, in sheet pixels, of the [CROP]-square window of the sheet with the most
+     * river in it. A river's runs are in cell coordinates, so each is carried onto the sheet
+     * through [SheetGeometry] before it is counted.
+     */
+    private fun busiestWindow(map: WorldMap, options: RenderOptions): Pair<Int, Int> {
+        val geometry = SheetGeometry.of(map)
+        val runStarts = MapRasterizer.overlay(map, options, MapSheet.UNGENERALISED).rivers.map {
+            geometry.sheetX(it.fromX) to geometry.sheetY(it.fromY)
+        }
+        return bestWindow(geometry) { left, top ->
+            runStarts.count { (x, y) -> x >= left && x < left + CROP && y >= top && y < top + CROP }
+        }
+    }
+
+    /**
+     * The top-left corner of the [CROP]-square window of [geometry]'s sheet that [score] rates
+     * highest, sliding a quarter of a window at a time; the middle of the sheet when none scores.
+     */
+    private fun bestWindow(geometry: SheetGeometry, score: (Int, Int) -> Int): Pair<Int, Int> {
         var most = 0
-        var at = (side - CROP) / 2 to (side - CROP) / 2
+        var at = (geometry.widthPixels - CROP) / 2 to (geometry.heightPixels - CROP) / 2
         var top = 0
-        while (top <= side - CROP) {
+        while (top <= geometry.heightPixels - CROP) {
             var left = 0
-            while (left <= side - CROP) {
-                val inside = rivers.count { segment ->
-                    segment.fromX >= left && segment.fromX < left + CROP &&
-                        segment.fromY >= top && segment.fromY < top + CROP
-                }
-                if (inside > most) {
-                    most = inside
+            while (left <= geometry.widthPixels - CROP) {
+                val found = score(left, top)
+                if (found > most) {
+                    most = found
                     at = left to top
                 }
                 left += CROP / 4
@@ -225,10 +250,10 @@ class StraightRunRenderTest {
         return file.absolutePath
     }
 
-    /** A [CROP]-square window out of [bitmap] at 1:1, clamped to the sheet. */
-    private fun crop(bitmap: Bitmap, left: Int, top: Int, side: Int): Bitmap {
-        val fromLeft = left.coerceIn(0, side - CROP)
-        val fromTop = top.coerceIn(0, side - CROP)
+    /** A [CROP]-square window out of [bitmap] at 1:1, its corner in sheet pixels, clamped to it. */
+    private fun crop(bitmap: Bitmap, left: Int, top: Int): Bitmap {
+        val fromLeft = left.coerceIn(0, bitmap.width - CROP)
+        val fromTop = top.coerceIn(0, bitmap.height - CROP)
         val source = bitmap.readPixels() ?: error("could not read the rendered map back")
         val window = Bitmap()
         window.allocPixels(ImageInfo.makeS32(CROP, CROP, ColorAlphaType.PREMUL))

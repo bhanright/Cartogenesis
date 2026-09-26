@@ -468,10 +468,12 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
         // the Caspian's share from Fix 2 to Fix 3, and the notch begun at the lip took it down at
         // Fix 3; on the law's terrain with the uplift re-derived it stood over it again, and once
         // a lake falls with its outlet it is under it (0.113% of the land) and what fails is two
-        // worlds keeping more than half their water.
+        // worlds keeping more than half their water. Re-recorded on merging chunk 6, whose closed
+        // basins take the rain leaving them at every exit: seed 7's water went from 1.1530% to
+        // 0.8764%, and now goes to 0.8455%.
         KnownFailures.expect(
             NOTCH_SHORT_ON_THE_LAWS_TERRAIN,
-            "seed 718106's water 0.7704% to 0.5995%; seed 7's water 1.1530% to 0.8764%"
+            "seed 718106's water 0.7704% to 0.5995%; seed 7's water 1.1550% to 0.8455%"
         ) {
             if (overCaspian.isNotEmpty() || notHalved.isNotEmpty()) {
                 val found = (overCaspian + notHalved).joinToString("; ")

@@ -87,19 +87,11 @@ internal object GeometryExpectations {
     fun at512(expected: Expectations) = with(expected) {
         known("7/coast as inked/FACING", "1@(-1,-1)=3.756")
         known("7/isobaths/ARCS", "1@(90,427)=122.9")
-        known("7/isotherms/FACETS", "1@(254,60)=188.0")
-        known("7/sea temperature anomaly/RIGHT_ANGLES", "1@(251,178)=1.000")
-        known("7/sea temperature anomaly/CORNER_RATE", "1@(-1,-1)=3.550")
+        known("7/isotherms/FACETS", "2@(261,78)=193.0 +(254,60)")
         known("42/coast as inked/FACING", "1@(-1,-1)=3.535")
-        known("42/sea temperature anomaly/ALIGNED_SIDE", "2@(406,456)=232.0 +(373,492)")
-        known("42/sea temperature anomaly/FACETS", "2@(405,456)=234.0 +(373,492)")
-        known("42/sea temperature anomaly/CREASES", "1@(10,456)=14.77")
         known("1234/coast as inked/FACING", "1@(-1,-1)=3.710")
-        known("1234/sea temperature anomaly/CREASES", "4@(470,116)=21.76 +(242,116)(346,116)(2,477)")
-        known("1234/sea temperature anomaly/RIGHT_ANGLES", "2@(0,70)=1.000 +(0,91)")
         known("99/coast as inked/FACING", "1@(-1,-1)=3.235")
-        known("99/sea temperature anomaly/ALIGNED_SIDE", "1@(115,423)=136.0")
-        known("99/sea temperature anomaly/CREASES", "2@(290,490)=13.20 +(146,343)")
+        known("99/ice as drawn/FACETS", "1@(39,449)=172.0")
         insufficient("coast", Detector.ISOTROPY, 7L, 42L, 1234L, 99L)
         insufficient("coast", Detector.RECTANGLE, 42L, 1234L, 99L)
         insufficient("coast", Detector.ORIENTATION, 7L, 42L, 1234L, 99L)
@@ -178,8 +170,11 @@ internal object GeometryExpectations {
         insufficient("floodplain deposits", Detector.ORIENTATION, 7L, 42L, 1234L, 99L)
         insufficient("realm borders", Detector.ISOTROPY, 7L, 42L, 1234L, 99L)
         // Since chunk 6's catchments no realm on these four is a ring small enough to measure; seed
-        // 1234 joined the other three on the implicit erosion's terrain.
-        insufficient("realm borders", Detector.RECTANGLE, 7L, 42L, 1234L, 99L)
+        // 1234 joined the other three on the implicit erosion's terrain. On 4a's climate seed 7
+        // has one again, and seed 99's peoples, settled on the same ground by a different climate,
+        // leave no ring of their own small enough.
+        insufficient("peoples' borders", Detector.RECTANGLE, 99L)
+        insufficient("realm borders", Detector.RECTANGLE, 42L, 1234L, 99L)
         insufficient("realm borders", Detector.ORIENTATION, 7L, 42L, 1234L, 99L)
         insufficient("biome edges", Detector.ISOTROPY, 7L, 1234L, 99L)
         insufficient("biome edges", Detector.ORIENTATION, 7L, 42L, 1234L, 99L)
@@ -192,7 +187,8 @@ internal object GeometryExpectations {
         insufficient("isohyets", Detector.ISOTROPY, 7L, 42L, 1234L, 99L)
         insufficient("isohyets", Detector.ORIENTATION, 7L, 42L, 1234L, 99L)
         insufficient("sea temperature anomaly", Detector.ISOTROPY, 7L, 42L, 1234L, 99L)
-        insufficient("sea temperature anomaly", Detector.RECTANGLE, 7L, 99L)
+        insufficient("sea temperature anomaly", Detector.RECTANGLE, 7L, 42L, 1234L)
+        insufficient("sea temperature anomaly", Detector.FACETS, 7L, 42L, 1234L, 99L)
         insufficient("sea temperature anomaly", Detector.ORIENTATION, 7L, 42L, 1234L, 99L)
     }
 

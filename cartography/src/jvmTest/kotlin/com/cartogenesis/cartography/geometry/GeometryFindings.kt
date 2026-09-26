@@ -116,8 +116,11 @@ internal object GeometryFindings {
     const val ISOHYET_CREASE = "an isohyet creases between straight runs"
 
     /**
-     * The currents view's sea temperature anomaly runs straight along rows at 512, 189 to 217
-     * steps, and doubles back in straight hairpins; at 2048 it draws no line at its levels.
+     * The currents view's sea temperature anomaly ran straight along rows at 512, 189 to 217
+     * steps, and doubled back in straight hairpins; at 2048 it drew no line at its levels. Chunk
+     * 4a, which solved the currents on the ground and measured the anomaly from a band of latitude
+     * rather than one row, cleared every such clause on the four standard worlds; the finding stays
+     * mapped so that a return is named.
      */
     const val ANOMALY_ALONG_ROWS = "the sea temperature anomaly runs straight along rows"
 }

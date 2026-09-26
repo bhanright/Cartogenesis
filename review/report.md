@@ -1216,7 +1216,7 @@ the ground, from east toward south.
 | Isotropic synthetic surface (64 waves), three seeds | off → on | 42.2–43.9%, unchanged to 0.02 points | 16.7–16.8 → 18.6–18.7% | 39.3–41.0 → 37.5–39.1% | within 0.4° |
 
 - **Residuals.** On the three bearings asked for, and on the pooled planes, the residual with C on is
-  the facet rule's own: 0.01 to 0.22 degrees. The draw acts on none of those planes.
+  the facet rule's own: 0.00 to 0.22 degrees. The draw acts on none of those planes.
 - **The diagonal's bearing.** This is the one plane whose descent is clamped to a diagonal. There C
   sends half the cells along the row and turns the mean bearing **12.3 degrees** toward it. So C does
   bias a plane's mean bearing, at exactly the bearing where it acts.

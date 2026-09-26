@@ -134,6 +134,23 @@
   Whether that is a feedback, a channel cut down a column tilting its neighbours down the column,
   is what the comb round tests next.
 
+  **Three rounds of experiments, and the planned fix: square cells.** `CombGuardTest` measures the
+  comb and records it as a known failure (0.41 and 0.52 km of comb per 1,000 km² down a column on
+  seeds 7 and 42 at 512, against 0.06 and 0.08 along a row). The rounds established three things;
+  the figures are in docs/DESIGN_LEDGER.md, Fix 3b.
+  - **A feedback.** On the same steep cells followed through the rounds, the column share goes
+    from the router's own figure to about 57%: the rounds turn two diagonal steps in five, and half
+    the row steps, into column steps.
+  - **Out of reach of any draw.** 85 to 87% of the combed cells have a descent clamped to their
+    cardinal, which every draw leaves where it is: a Rho8 draw in clamped descent left the comb as
+    it was.
+  - **Sub-grid transport costs the valleys.** Diffusion at the law's own scale cuts the comb by three
+    quarters to four fifths, but takes a third of the valleys' depth and a fifth to a third of the
+    network, and still leaves ten times the guard's floor.
+
+  The fix is cells square on the ground, twice as many across as down, so a column and a row are
+  the same step. `CombGuardTest` is its acceptance test. 2026-09-26, Fix 3b.
+
 - **The sea-level percentile hands the sea's highest cell to the land where the sea fills its rank
   exactly.** `SeaLevelStage.thresholdAtRank` finds the bin where the cells counted so far reach the
   target rank, `>=`, and when the target is the bin's last cell the index is clamped to it and the

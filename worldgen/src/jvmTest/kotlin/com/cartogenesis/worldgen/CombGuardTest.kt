@@ -34,8 +34,9 @@ import kotlin.test.assertTrue
  * contrast and the wet flank) are run beside it wherever a change to the erosion is weighed.
  *
  * On chunk 3b's head (bb7b606) the columns carry 0.41 and 0.52 km of comb per 1,000 km² of land on
- * seeds 7 and 42 at 512, and the rows 0.06 and 0.08: recorded, and the comb experiments in
- * docs/DESIGN_LEDGER.md, Fix 3b, are measured against it.
+ * seeds 7 and 42 at 512, and the rows 0.06 and 0.08: recorded as [COMB_UNTIL_SQUARE_CELLS]. Three
+ * rounds of experiments, in docs/DESIGN_LEDGER.md, Fix 3b, found no fix at this cell shape, and the
+ * planned fix is cells square on the ground; this guard is its acceptance test.
  */
 class CombGuardTest {
 
@@ -67,7 +68,7 @@ class CombGuardTest {
                 figures += figure
             }
         }
-        KnownFailures.expect(COMB_ON_THE_FLANKS, RECORDED) {
+        KnownFailures.expect(COMB_UNTIL_SQUARE_CELLS, RECORDED) {
             if (complaints.isNotEmpty()) {
                 throw RecordedViolation(
                     "the flanks are combed down the columns, over $ROW_FACTOR times the rows' comb, in km of comb per " +
@@ -82,9 +83,12 @@ class CombGuardTest {
         /**
          * The known failure: the comb chunk 3b's renders show, which the guard was written against.
          * Not the router's (`RoutingGroundTest`), and more than the rule's own straight reaches
-         * make; what the rounds do to build it is measured in docs/DESIGN_LEDGER.md, Fix 3b.
+         * make; the rounds turn the steep ground down the columns on cells half as tall as wide,
+         * and no draw or sub-grid transport tried at that shape removed it (docs/DESIGN_LEDGER.md,
+         * Fix 3b; `docs/TODO.md`). Square cells on the ground are the planned fix.
          */
-        const val COMB_ON_THE_FLANKS = "the erosion: the flanks are combed by straight parallel gullies down the columns"
+        const val COMB_UNTIL_SQUARE_CELLS =
+            "the half-height cell: the flanks are combed by straight parallel gullies down the columns, until the cells are square on the ground"
 
         const val RECORDED = "seed 7 0.41 down a column against 0.06 along a row; seed 42 0.52 down a column against 0.08 along a row"
 

@@ -348,6 +348,32 @@
   (2950, 820) on the sheet, and a delta flat with straight edges at about (3010-3055, 800-835).
   Both are in the relief, where the tilt makes the scarp plainer; no window of that size on the
   island's range avoids them and the dry belt at once.
+- **The ocean's device path is slower than the processor.** Chunk 4a's circulation and heat are
+  solved on the card behind `OceanAccelerator` and agree with the processor to the bit, but each
+  batch of relaxation passes goes to the card and comes back, and the multigrid's restriction,
+  prolongation and Krylov steps stay on the processor between batches: the whole stage takes 5.0
+  to 6.7 s with the device against 1.7 to 2.8 s without it on seeds 42, 718106 and 59758
+  (`GpuOceanTest`). Keeping the whole V-cycle resident on the card, the transfers and the Krylov
+  vectors with it, is what would make the device pay; until then the graphics switch costs the
+  ocean time. 2026-09-26, 4a.
+- **The gyres' boundaries run along lines of latitude.** The belts' stress is a function of
+  latitude alone, so where the regional wind is weak the curl changes sign along a row and the
+  boundary between a subtropical and a subpolar gyre, and the warm band beside it, runs straight
+  across a basin: on 969495 at 2048 at about 41 to 45 S and 43 N, softened by the eddies to a
+  gradient about 100 km wide but straight. Earth's are bent by the continents' own winds and by
+  the separated boundary currents' paths (the Gulf Stream's and the Kuroshio's extensions), which
+  Stommel's balance with no inertia does not make. A wind that knows the continents, or an
+  inertial term, is the cure. 2026-09-26, 4a.
+- **A planet's size and spin are not yet settings.** Everything the ocean solves reads the radius
+  from `WorldScale.radiusMeters` and the spin from `WorldScale.ROTATION_RATE_PER_S`, and
+  `OceanPlanetSizeTest` holds the laws at twice the radius; what a setting would still need is
+  the equatorial eddy diffusivity's scaling with β, for which no published scaling was found (see
+  `OceanHeat.diffusivity`), and every other stage's lengths audited the same way. 2026-09-26, 4a.
+- **The site's words for its currents picture predate the solved circulation.** The picture is
+  rendered at assembly (`:desktop:renderSiteImagery`), so it shows chunk 4a's currents, but its
+  description in `site/index.html`, "rows of small pale arrows over the sea running east along the
+  coast", was written of the Poisson gyres 4a replaced; look at the window when the site is next
+  assembled and describe what it shows. 2026-09-26, 4a.
 - **Six operators still count a row as a column, each outside Fix 2's list.** Found by reading the
   code, not by a guard: the climate stage's rainfall blur (a square box of cells, sized by
   `RAIN_BLUR_REFERENCE_WIDTH`) and its two coastal-reach blurs, the water exposure and the offshore
@@ -1594,6 +1620,9 @@
   are as much the cold sea stabilising the air as less evaporation: over a coast washed by a cold
   current, scale the release rate down (a marine inversion) so the moisture passes inland. Guard
   on a subtropical west coast with a cold current: a coastal desert appears. 2026-09-12.
+  Built as `ClimateConfig.marineInversion` by W3 and recorded as not delivered; with 4a's solved
+  gyres the cold water is on the west coasts but mostly poleward of 35 degrees, and the inversion
+  and the upwelling that makes Earth's cold coasts cold are chunk 4b's. 2026-09-26.
 - **D8 holds a bearing on smooth slopes.** On a planar hillside a drawn river runs 20-35 cells in
   one of the eight grid directions before it bends (seed 59758 at 2048, (34,1095) to (68,1095),
   drops 3e-3 to 9e-3 per cell), because steepest descent on a plane always picks the same

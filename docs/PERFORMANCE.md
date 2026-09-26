@@ -160,9 +160,9 @@ Machine as above (RTX 3070 Ti). Date not recorded when measured; moved here from
 2026-09-15.
 
 Erosion is a pure stencil over independent cells, which is what makes it worth running on a graphics
-device. The ocean's stream function is solved there too, because the gyres set the sea temperature,
-which sets the climate. Realm expansion is a Dijkstra over a priority queue and would not suit a GPU
-regardless.
+device. The ocean's circulation and its heat are relaxed there too, because the gyres set the sea
+temperature, which sets the climate, though today that path is slower than the processor (below).
+Realm expansion is a Dijkstra over a priority queue and would not suit a GPU regardless.
 
 | Path | Erosion sweeps | Against |
 |---|---|---|
@@ -176,6 +176,38 @@ differed yet" is not a guarantee that it never will. So a world generated with a
 its terrain in the save (`TerrainSnapshot`) rather than relying on regeneration; a world generated
 on the processor stores nothing extra, because for it the seed really is enough. The browser path
 can be checked on any machine by loading the web build with `?selftest` in the URL.
+
+## The ocean's circulation and its heat
+
+Machine as above. Measured 2026-09-26 on seed 42 by chunk 4a's probes and by `GpuOceanTest`; every
+world above 512 built as the app builds it. The whole ocean stage, with the heat carried to the map:
+
+| Path | 512 | 1024 | 2048 |
+|---|---|---|---|
+| Processor, all threads | 2.8 s | — | 2.7 s |
+| Processor, one thread | 3.3 s | 3.8 s | — |
+| Wasm in Node, one thread | 10.5 s | 12.0 s | — |
+| OpenGL device, desktop | 6.7 s | — | 6.6 s |
+| Before 4a, one thread | 0.45 s | 1.24 s | — |
+| Before 4a, Wasm | 0.88 s | 2.83 s | — |
+
+**The cost hardly moves with the map, because the solve grid does not.** The circulation and the
+heat are solved on a grid sized by the planet's physics, `4πΩ/r` rows rounded to 960 by 1,920,
+which holds Stommel's boundary layer across two cells at its narrowest and is the same for every
+map size (`OceanStage.solveGrid`); only the carry to the map grows with it. Most of the time is the
+heat's Krylov solve (fourteen iterations of a multigrid-preconditioned BiCGSTAB), not the
+circulation's multigrid (eight V-cycles).
+
+**The device is slower than the processor.** It relaxes each batch of passes on the card and hands
+the grid back, and the multigrid's other steps stay on the processor between batches; grids under
+2^16 cells are declined as not worth the trip (`GpuOcean`). The two agree to the bit. Keeping the
+whole solve resident on the card is recorded in `TODO.md`.
+
+**The browser pays about ten seconds for it.** A 512 world in a tab spends about 10.5 s of one
+thread on the ocean where it spent under one. The desktop is what the generator is designed for
+and a browser runs a cut-down trial of it, allowed 40 to 50 s for a whole generation in the
+slowest browsers; the stage stays inside that. The stage-by-stage
+table above predates 4a: its ocean row, 0.6 s at 2048, is the Poisson solve 4a replaced.
 
 ## The browser's one thread
 

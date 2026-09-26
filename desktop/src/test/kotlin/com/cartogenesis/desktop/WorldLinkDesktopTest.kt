@@ -124,7 +124,8 @@ class WorldLinkDesktopTest {
         val platform = Recording(openedAt = "${WorldLinks.PUBLIC_APP_ADDRESS}?seed=718106#v=1&size=512&plates=9")
         runDesktopComposeUiTest(width = 1440, height = 900) {
             setContent { CartogenesisTheme(dark = false) { CartogenesisApp(platform) } }
-            waitUntil(timeoutMillis = WAIT_MS) { shown(QUESTION_TITLE) }
+            awaitQuestionOrWorld()
+            assertTrue(shown(QUESTION_TITLE), "the window made the link's world without asking")
             val question = textOf(QUESTION_LEAD)
             println("LARGE LINK asked on the desktop: $question")
             assertTrue("This link makes a 512 world, larger than the $WINDOW_CELLS" in question, question)
@@ -157,7 +158,8 @@ class WorldLinkDesktopTest {
         val platform = Recording(openedAt = "${WorldLinks.PUBLIC_APP_ADDRESS}?seed=718106#v=1&size=512&plates=9")
         runDesktopComposeUiTest(width = 1440, height = 900) {
             setContent { CartogenesisTheme(dark = false) { CartogenesisApp(platform) } }
-            waitUntil(timeoutMillis = WAIT_MS) { shown(QUESTION_TITLE) }
+            awaitQuestionOrWorld()
+            assertTrue(shown(QUESTION_TITLE), "the window made the link's world without asking")
             onNodeWithText("Make it at 512").performClick()
             waitUntil(timeoutMillis = WAIT_MS) { worldOnTheMap() != null && !shown("Stop") }
             waitForIdle()
@@ -181,13 +183,22 @@ class WorldLinkDesktopTest {
         )
         runDesktopComposeUiTest(width = 1440, height = 900) {
             setContent { CartogenesisTheme(dark = false) { CartogenesisApp(platform) } }
-            waitUntil(timeoutMillis = WAIT_MS) {
-                shown(QUESTION_TITLE) || (worldOnTheMap() != null && !shown("Stop"))
-            }
-            waitForIdle()
+            awaitQuestionOrWorld()
             assertTrue(!shown(QUESTION_TITLE), "a link at the default size asked first")
             assertEquals(718106L to 512, worldOnTheMap())
         }
+    }
+
+    /**
+     * Until the window has either asked or finished a world, whichever it does, so a window that
+     * should have asked and did not fails on the assertion that says so rather than on a timeout.
+     */
+    @OptIn(ExperimentalTestApi::class)
+    private fun DesktopComposeUiTest.awaitQuestionOrWorld() {
+        waitUntil(timeoutMillis = WAIT_MS) {
+            shown(QUESTION_TITLE) || (worldOnTheMap() != null && !shown("Stop"))
+        }
+        waitForIdle()
     }
 
     @OptIn(ExperimentalTestApi::class)

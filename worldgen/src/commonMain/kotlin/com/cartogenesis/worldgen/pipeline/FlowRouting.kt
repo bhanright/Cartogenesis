@@ -170,6 +170,11 @@ internal object FlowRouting {
      * @param overPotential false to route the fill's flats over its own staircase rather than over
      *   the potential [FlatRouting] lays, the control the ruled-run census over raised ground is
      *   measured against. See [com.cartogenesis.worldgen.model.WorldGenConfig.flatPotential].
+     * @param undrainedShare when given, filled with each land cell's share of its own fall that the
+     *   facet sends to the neighbour the draw did *not* choose: the diagonal's share where the
+     *   cardinal was drawn and the cardinal's where the diagonal was, nought where the descent is
+     *   clamped to one neighbour, and one where the cell has no receiver. It changes nothing the
+     *   routing returns. Read by [HydraulicErosion.subGridCreep]'s undrained-share form.
      */
     fun flowDirections(
         width: Int,
@@ -180,7 +185,8 @@ internal object FlowRouting {
         seed: Long,
         cellHeightInCellWidths: Double,
         byFacet: Boolean = true,
-        overPotential: Boolean = true
+        overPotential: Boolean = true,
+        undrainedShare: FloatArray? = null
     ): IntArray {
         val receiver = IntArray(width * height) { -1 }
         // The filled field, except across the flats the fill raised, where it is the potential
@@ -199,6 +205,7 @@ internal object FlowRouting {
                     receiver[cell] = steepestNeighbourOf(
                         width, height, isLand, trueGround, routingSurface, column, row, steps
                     )
+                    if (undrainedShare != null) undrainedShare[cell] = if (receiver[cell] < 0) 1f else 0f
                     continue
                 }
 
@@ -278,6 +285,13 @@ internal object FlowRouting {
                     diagonalShare >= 1.0 -> facetDiagonal
                     subGridDraw(column, row, seed) < diagonalShare -> facetDiagonal
                     else -> facetCardinal
+                }
+                if (undrainedShare != null) {
+                    undrainedShare[cell] = when {
+                        steepestFacetSlope <= 0.0 -> 1f
+                        receiver[cell] == facetDiagonal -> (1.0 - diagonalShare.coerceIn(0.0, 1.0)).toFloat()
+                        else -> diagonalShare.coerceIn(0.0, 1.0).toFloat()
+                    }
                 }
             }
         }

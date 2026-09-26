@@ -182,16 +182,6 @@ tasks.register<Test>("audit") {
 val siteImageryDir = rootProject.layout.projectDirectory.dir("web/build/site-imagery")
 
 /**
- * The application's own type, which the comparison strips' naming bands are lettered in.
- *
- * The same directory `:web:assembleSite` copies the page's five faces out of, so the band under a
- * figure and the caption beside it are the same cut of the same typeface. Handed to the renderer as
- * a path rather than looked for from the working directory, because only the build knows where the
- * checkout is.
- */
-val siteFontDir = rootProject.layout.projectDirectory.dir("ui/src/commonMain/composeResources/font")
-
-/**
  * Renders every picture on cartogenesis.com from the engine, into `web/build/site-imagery`.
  *
  * It lives in `:desktop` and writes into `:web`'s build directory because that is where the two
@@ -209,8 +199,7 @@ val siteFontDir = rootProject.layout.projectDirectory.dir("ui/src/commonMain/com
  * seconds between them. Measured 2026-09-12, when the page showed seven figures.
  *
  * `-Pcontact` additionally writes the whole map at half size with a coordinate grid over it and
- * the page's windows outlined, which is how a window is chosen, and each finished figure at the
- * width the page gives it as a PNG, which is how its lettering is judged. Not wanted by a deploy.
+ * the page's windows outlined, which is how a window is chosen. Not wanted by a deploy.
  */
 tasks.register<JavaExec>("renderSiteImagery") {
     group = "distribution"
@@ -227,22 +216,16 @@ tasks.register<JavaExec>("renderSiteImagery") {
     }
 
     val output = siteImageryDir.asFile
-    val fonts = siteFontDir.asFile
-    argumentProviders.add { listOf(output.absolutePath, fonts.absolutePath) }
+    argumentProviders.add { listOf(output.absolutePath) }
     outputs.dir(output)
     // The pictures are a function of the generator, so any change to it must re-render them. The
     // whole source of the three modules that decide what a map looks like is the input; anything
-    // narrower would let a change to a stage ship yesterday's coastline. The two faces the strips'
-    // naming bands are set in are inputs for the same reason: replace a face and the lettering in
-    // the published figures changes.
+    // narrower would let a change to a stage ship yesterday's coastline. The pictures carry no
+    // lettering since each became a card's, so no typeface is an input.
     inputs.files(
         rootProject.fileTree("worldgen/src"),
         rootProject.fileTree("cartography/src"),
-        rootProject.files("desktop/src/main/kotlin/com/cartogenesis/desktop/SiteImagery.kt"),
-        rootProject.files(
-            "ui/src/commonMain/composeResources/font/plex_sans_medium.ttf",
-            "ui/src/commonMain/composeResources/font/plex_sans_regular.ttf"
-        )
+        rootProject.files("desktop/src/main/kotlin/com/cartogenesis/desktop/SiteImagery.kt")
     ).withPropertyName("generatorSourcesThatDecideWhatTheFiguresShow")
         .withPathSensitivity(PathSensitivity.RELATIVE)
 }
@@ -258,8 +241,8 @@ tasks.register<Test>("siteTest") {
         includeTestsMatching(siteAssemblyClass)
         isFailOnNoMatchingTests = true
     }
-    // It reads a tree of files and generates nothing, and it runs beside the other modules' suites,
-    // so it takes the smallest heap of the root build script's budget rather than the exports'.
+    // It reads a tree of files and generates nothing: the largest thing it holds is the opening's
+    // band decoded, 4096 by 800 pixels, 13 MB.
     maxHeapSize = "512m"
     // What this test reads is another project's build output. Declaring it as an input here is
     // what Gradle would want, but it also makes Gradle refuse the build for using an output
@@ -350,5 +333,11 @@ tasks.withType<Test>().configureEach {
     inputs.files(
         rootProject.files("docs/INSTALL.md", "docs/RELEASE_NOTES_TEMPLATE.md")
     ).withPropertyName("documentsReadByTheSiteSourcesTest")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+
+    // `FolderInteropTest` reads the desktop's save that the browser's tests open, from `:web`'s
+    // test sources: the same trap, the same declaration.
+    inputs.files(rootProject.fileTree("web/src/wasmJsTest/kotlin"))
+        .withPropertyName("browserTestSourcesReadByTheFolderInteropTest")
         .withPathSensitivity(PathSensitivity.RELATIVE)
 }

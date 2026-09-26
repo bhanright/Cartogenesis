@@ -51,8 +51,9 @@ class SavesAndExportsTest {
         // the pane says saving under the same name updates it in place.
         var fresh = 0
         val next = { "doc-${++fresh}" }
-        val first = DocumentIdentity("doc-0", key = null, seed = null).afterGenerating(1L, next).at("doc-0.cgw")
-        assertEquals(DocumentIdentity("doc-0", "doc-0.cgw", 1L), first)
+        val shelf = MemoryLibrary()
+        val first = DocumentIdentity("doc-0", key = null, seed = null).afterGenerating(1L, next).at("doc-0.cgw", shelf)
+        assertEquals(DocumentIdentity("doc-0", "doc-0.cgw", 1L, shelf), first)
 
         val random = first.afterGenerating(2L, next)
         assertNotEquals(first.id, random.id)
@@ -63,15 +64,57 @@ class SavesAndExportsTest {
         // A file from outside the library is a new document too, whatever id it carries: that id
         // may be a library save's, and a first Save filed under it wrote over that save.
         val world = WorldDocument(id = "doc-0", title = "Brought in", config = WorldGenConfig(seed = 1L), savedAt = 1L)
-        val imported = DocumentIdentity.opened(world, key = null, freshId = next)
+        val imported = DocumentIdentity.opened(world, key = null, from = null, freshId = next)
         assertNotEquals("doc-0", imported.id)
         assertNull(imported.key)
-        assertEquals(DocumentIdentity("doc-0", "doc-0.cgw", 1L), DocumentIdentity.opened(world, "doc-0.cgw", next))
+        assertEquals(DocumentIdentity("doc-0", "doc-0.cgw", 1L, shelf), DocumentIdentity.opened(world, "doc-0.cgw", shelf, next))
         // Save as is a new document for the same world.
         val copy = first.savedAs(next)
         assertNotEquals(first.id, copy.id)
         assertNull(copy.key)
         assertEquals(first.seed, copy.seed)
+    }
+
+    @Test
+    fun `a save that finishes after another file was opened leaves that file's key alone`() {
+        // Save x.cgw, and while it is written open "x (1).cgw", a sync client's conflict copy that
+        // carries the same id. Matched by id, the finished save gave the copy x.cgw's key, and the
+        // copy's next Save wrote over x.cgw.
+        val shelf = MemoryLibrary()
+        val next = { "fresh" }
+        val document = OpenDocument(DocumentIdentity("x", "x.cgw", 1L, shelf))
+        val ticket = document.saving()
+
+        val copy = WorldDocument(id = "x", title = "The conflict copy", config = WorldGenConfig(seed = 1L), savedAt = 2L)
+        document.becomes(DocumentIdentity.opened(copy, "x (1).cgw", shelf, next))
+        assertEquals("x (1).cgw", document.keyFor(document.saving(), shelf))
+
+        document.saved(ticket, "x.cgw", shelf)
+        assertEquals("x (1).cgw", document.identity.key, "the finished save gave the copy another file's key")
+        assertEquals("x", document.identity.id)
+
+        // And a save of the document that is still on screen records where it went.
+        val again = document.saving()
+        document.saved(again, "x (1).cgw", shelf)
+        assertEquals("x (1).cgw", document.identity.key)
+        // The same world made again at its own seed is the same document, and its saves still land.
+        val beforeGenerating = document.saving()
+        document.afterGenerating(1L, next)
+        document.saved(beforeGenerating, "x (1).cgw", shelf)
+        assertEquals("x (1).cgw", document.identity.key)
+    }
+
+    @Test
+    fun `a key is written back only into the library it came from`() {
+        // The library moved — to another folder, or between this browser's storage and a folder
+        // on the disk — and Save wrote the world opened from one place over whatever file of the
+        // same name the other place held.
+        val browserStorage = MemoryLibrary()
+        val folder = MemoryLibrary()
+        val opened = DocumentIdentity("doc-0", key = null, seed = 1L).at("doc-0.cgw", browserStorage)
+        assertEquals("doc-0.cgw", opened.keyIn(browserStorage))
+        assertNull(opened.keyIn(folder), "a key from this browser's storage was written into the folder")
+        assertNull(DocumentIdentity("doc-0", "doc-0.cgw", 1L).keyIn(folder), "a key with no library was trusted")
     }
 
     @Test

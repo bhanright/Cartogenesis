@@ -11,7 +11,7 @@ site/
   _redirects    Cloudflare Pages redirects
 ```
 
-That is the whole of it: two pages and two host files. Three things the site serves are *not* in
+That is the whole of it: two pages and two host files. Four things the site serves are *not* in
 here, because keeping a second copy of any of them is how a copy goes stale:
 
 - **The application**, built from `:web` and dropped in under `app/` at assembly time.
@@ -24,6 +24,9 @@ here, because keeping a second copy of any of them is how a copy goes stale:
   with the author's settings, cut to fixed windows — so a release that changes what a coastline looks
   like changes the coastline the page shows. See `SiteImagery.kt` for the seed, the windows and
   how to pick a new one.
+- **Any version number or file size.** The download cards link each file to `/releases/latest`,
+  and the page's script asks GitHub's API for the latest release once a visit and turns each link
+  into the file itself with its size; if the API refuses or fails, the links stay as they are.
 
 ## Assembling it
 
@@ -67,7 +70,16 @@ Assembles the site and then runs `SiteAssemblyTest` over the tree that would be 
 bundles and the five the page sets its type in, no source map, a loader stamp that is a commit
 rather than the placeholder, `_headers` and `_redirects` present, every figure the page shows
 rendered at the size the page reserves for it, no request to a font host, and no link to any site
-but this project's (ground rule 10). It lives in `:desktop` because the web module compiles
+but this project's (ground rule 10). For the living figures it holds the six steps to one window
+and one scale, the slider's twelve styles to one window with only two asked for as the page loads,
+the band the opening drifts, at both its sizes, to joining itself end to end and beginning at the
+link preview's window, the page's release lookup, run in Node against the list of files a release
+carries and against a malformed answer, a missing file, a refusal and a failure, and the bytes the
+page fetches as it loads to a stated ceiling. For the second set it holds the data frame's layers to
+one ground and to being the application's own views taken apart, the lens's full-size world to
+being fetched only when the lens is used and to its stated weight, the relief's heights
+(`img/relief-heights.png`, the one figure that is not a WebP) to the patch and to the scale the
+page reads them at, and every world in the seed reel to the application's own link to it. It lives in `:desktop` because the web module compiles
 to wasm and cannot read files. It is deliberately excluded from `:desktop:test`, which has no reason
 to build 12 MB of WebAssembly and would otherwise be judging whatever an earlier run left behind.
 

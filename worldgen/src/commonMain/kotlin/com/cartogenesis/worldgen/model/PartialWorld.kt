@@ -19,15 +19,18 @@ import com.cartogenesis.worldgen.pipeline.TerrainResult
  * [WorldMap] — every stage present — satisfies this directly, which is what lets a live,
  * fully-generated world be handed back to the engine as `previous` exactly as before; nothing
  * about the ordinary "settings changed, reuse what still matches" path had to change for this to
- * exist. The other case is a save missing an array a newer build added: the loader has real data
- * for the stages a section survived for and nothing for the rest, and hands that mixture over as a
- * [LoadedWorld] rather than refusing to open the file.
+ * exist. A save is not the other case: the codec hands back a whole [WorldMap] or refuses the
+ * file, so the only [LoadedWorld] with a stage missing is one a test builds.
  *
- * The engine does not need to treat an absent stage as a special case at all. Each stage's guard
- * already reads `it.<stage> === <freshlyChosenValue>` before trusting the next one downstream, so
- * a `null` here — which can never `===` anything a stage computes — fails that guard exactly as a
- * recomputed (and therefore differently-identified) stage would. "A missing stage forces
- * everything after it to regenerate" falls out of the existing reuse chain for free.
+ * The engine does not need to treat an absent stage as a special case at all. A missing stage is
+ * regenerated because there is nothing to reuse, and every stage after the first is guarded on
+ * `it.<upstream> === <freshlyChosenValue>` for one stage it is built from, the latest, which is
+ * reused only where every earlier one it is built from was. So a `null` here — which can never
+ * `===` anything a stage computes — fails the guards that read it exactly as a recomputed (and
+ * therefore differently-identified) stage would. "A missing stage forces every
+ * stage built from it, directly or through another, to regenerate" falls out of the existing
+ * reuse chain for free; a stage not built from it, as the peoples are not built from the realms,
+ * is still reused.
  */
 interface PartialWorld {
     val config: WorldGenConfig
@@ -45,14 +48,13 @@ interface PartialWorld {
 }
 
 /**
- * A [PartialWorld] reconstructed from a save: present where a stage's sections survived in the
- * file, `null` where they did not.
+ * A [PartialWorld] with whichever stages it is given, `null` where it is not given one.
  *
- * This is the shape [com.cartogenesis.cartography.WorldSections.rebuild] returns. It is never
+ * Nothing in the program builds one: a save opens as a whole [WorldMap] or not at all. It is never
  * rendered or saved directly — it exists only to be handed to
  * [com.cartogenesis.worldgen.WorldGenerationEngine.generate] as `previous`, which turns it into a
  * complete [WorldMap] by regenerating whatever is missing (and, by the guard chain above,
- * everything downstream of it).
+ * every stage built from it).
  */
 data class LoadedWorld(
     override val config: WorldGenConfig,

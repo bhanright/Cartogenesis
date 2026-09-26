@@ -78,6 +78,21 @@ internal external fun hideLoadingMessage()
 @JsFun("() => location.search.indexOf('selftest') >= 0")
 internal external fun selfTestRequested(): Boolean
 
+/**
+ * The page's whole address, query and fragment included: where a link to a world arrives.
+ * `String(...)` because a Kotlin string has to be handed a JavaScript string, and `location.href`
+ * is one already on every browser this build runs in; the conversion is the guard, not a habit.
+ */
+@JsFun("() => String(location.href)")
+internal external fun pageAddress(): String
+
+/**
+ * The page's address with no query and no fragment: the origin and the path, which is what a
+ * link copied in this tab begins with.
+ */
+@JsFun("() => String(location.origin + location.pathname)")
+internal external fun pageAddressAlone(): String
+
 @JsFun("(text) => { window.__selftest = text; console.log(text); }")
 internal external fun publishSelfTest(text: String)
 

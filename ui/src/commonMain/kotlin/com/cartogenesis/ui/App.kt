@@ -79,10 +79,13 @@ import com.cartogenesis.cartography.MapRasterizer
 import com.cartogenesis.cartography.MapSheet
 import com.cartogenesis.cartography.NationOverride
 import com.cartogenesis.cartography.WorldDocument
+import com.cartogenesis.cartography.WorldLibrary
 import com.cartogenesis.cartography.WorldSave
 import com.cartogenesis.worldgen.model.LabelKind
 import com.cartogenesis.worldgen.model.MapLabel
 import com.cartogenesis.cartography.RenderOptions
+import com.cartogenesis.cartography.SaveProblem
+import com.cartogenesis.cartography.SaveProgress
 import com.cartogenesis.cartography.SheetGeometry
 import com.cartogenesis.cartography.WorldOverrides
 import com.cartogenesis.cartography.resolve
@@ -92,6 +95,7 @@ import com.cartogenesis.worldgen.model.WorldMap
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.math.roundToInt
 import kotlin.random.Random
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
@@ -123,24 +127,34 @@ fun CartogenesisRoot(platform: Platform) {
     /** What reading the settings found worth saying, for the status line once the window is up. */
     var launchNotice by remember { mutableStateOf("") }
 
-    // The library folder is applied here, before anything is drawn or listed, because it is where
-    // the library *is* rather than a default for next time: a window that opened on the default
-    // folder listed none of the reader's worlds, while Settings named the folder they were in.
-    LaunchedEffect(platform) {
-        val stored = SettingsCodec.decode(runCatching { platform.settingsStore.read() }.getOrNull())
-        val folder = stored.libraryFolder
-        if (folder.isNotBlank() && !runCatching { platform.useLibraryFolder(folder) }.getOrDefault(false)) {
-            launchNotice = "The library folder $folder is not available; the library is in " +
-                platform.libraryLocation
-        }
-        settings = stored
-    }
-
     // One writer, fed the newest preferences and nothing older. The river density slider changes
     // them on every mark it passes, and a write launched per change let an older write land last;
     // here the writes are made one after another, and a change that arrives while one is under way
     // replaces anything still waiting, so the last preferences set are the last ones written.
     val unwritten = remember { Channel<AppSettings>(Channel.CONFLATED) }
+
+    // The library folder is applied here, before anything is drawn or listed, because it is where
+    // the library *is* rather than a default for next time: a window that opened on the default
+    // folder listed none of the reader's worlds, while Settings named the folder they were in.
+    LaunchedEffect(platform) {
+        val read = SettingsCodec.decode(runCatching { platform.settingsStore.read() }.getOrNull())
+        // A size this host cannot make, from an older build or another session, is brought down to
+        // the ceiling and said once: the clamped document is written back, so the next launch has
+        // nothing to say.
+        val held = SettingsEffects.withinCeiling(read, platform.generationCeiling)
+        val stored = held.settings
+        if (stored != read) unwritten.trySend(stored)
+        val folder = stored.libraryFolder
+        val folderNotice =
+            if (folder.isNotBlank() && !runCatching { platform.useLibraryFolder(folder) }.getOrDefault(false)) {
+                "The library folder $folder is not available; the library is in ${platform.libraryLocation}"
+            } else {
+                null
+            }
+        launchNotice = listOfNotNull(held.notice, folderNotice).joinToString(" ")
+        settings = stored
+    }
+
     LaunchedEffect(platform) {
         for (updated in unwritten) {
             runCatching { platform.settingsStore.write(SettingsCodec.encode(updated)) }
@@ -216,14 +230,37 @@ private fun Application(
     latestSettings[0] = settings
     /** What this arrangement puts within reach. See [Arrangements]. */
     val reachable = remember(shape, platform) { Arrangements.of(shape, platform) }
-    /** 2048 in a phone browser, 4096 otherwise. See [Platform.exportCeiling]. */
-    val exportCeiling = platform.exportCeiling(compact)
-    var config by remember {
-        mutableStateOf(
-            SettingsEffects.startingConfig(settings, platform, freshSeed(), compact)
+    /** The largest world this host makes, on screen or as an export. See [Platform.generationCeiling]. */
+    val generationCeiling = platform.generationCeiling
+    /**
+     * The world the address names, if it names one: a browser opened at a link starts on that
+     * world rather than on a fresh seed. Read once, when the window first composes, and applied
+     * over what the window would have started with, so a link says only what differs from it.
+     */
+    val linkStarting = remember { SettingsEffects.startingConfig(settings, platform, freshSeed(), compact) }
+    val linkStartingOptions = remember { SettingsEffects.startingRenderOptions(settings) }
+    val opening = remember {
+        WorldLinks.read(
+            address = platform.openedAt,
+            starting = linkStarting,
+            startingOptions = linkStartingOptions,
+            ceiling = generationCeiling
         )
     }
-    var options by remember { mutableStateOf(SettingsEffects.startingRenderOptions(settings)) }
+    /**
+     * The question a link larger than this host's starting size asks before anything is made, or
+     * null when there is none to ask — see [LargeLinks]. Worded once, for the arrangement the window
+     * opened in, since the figure is about the machine the window opened on.
+     */
+    var largeLinkQuestion by remember {
+        mutableStateOf(
+            opening.linkedSize?.takeIf { LargeLinks.asks(opening, platform.defaultResolution) }?.let { size ->
+                LargeLinks.question(size, platform.defaultResolution, GenerationHost.of(platform, compact))
+            }
+        )
+    }
+    var config by remember { mutableStateOf(opening.config) }
+    var options by remember { mutableStateOf(opening.options) }
 
     // The river density is stored with the preferences as soon as it moves, so the next window -
     // and every world opened in it - is drawn at the reader's own mark. See
@@ -266,7 +303,17 @@ private fun Application(
     // Notices only, now: what an export or a save did. What used to be the status line — the seed,
     // the size, the realm count and the time — is the cartouche in the map's legend, and is read
     // off the world itself rather than accumulated into a sentence here.
-    var status by remember { mutableStateOf(launchNotice) }
+    var status by remember {
+        mutableStateOf(listOfNotNull(launchNotice.ifBlank { null }, opening.notice).joinToString(" "))
+    }
+    /**
+     * What the link said about the world it named, held until that world is on screen: a finished
+     * generation clears the status line, and this line is about the world it has just made. Dropped
+     * by any other ending, so it never reappears under a later world.
+     */
+    var linkNoticeAfterGenerating by remember {
+        mutableStateOf(opening.notice.takeIf { opening.generates })
+    }
     /** How long the last generation took, for the cartouche's footnote. Zero for an opened save. */
     var generationMillis by remember { mutableStateOf(0L) }
     // The preference is the *starting* format, not a live binding: changing the default in the
@@ -309,16 +356,36 @@ private fun Application(
     var pendingLabel by remember { mutableStateOf<Pair<Float, Float>?>(null) }
     var labelMode by remember { mutableStateOf(false) }
     /** Which document the world on screen is, and where Save writes it. See [DocumentIdentity]. */
-    var identity by remember { mutableStateOf(DocumentIdentity(randomId(), key = null, seed = null)) }
+    val document = remember { OpenDocument(DocumentIdentity(randomId(), key = null, seed = null)) }
     // The world's name: generated after each generation, editable in the header, and what the
     // save is filed under. See [WorldNaming] for the rule about which of those wins when.
     val naming = remember { WorldNaming() }
-    var saved by remember { mutableStateOf(listOf<LibraryEntry>()) }
-    val store = platform.library
+    /**
+     * The worlds the pane lists, with the library that listed them. A row's Open and Delete go to
+     * that library and no other, and the pane draws the rows only while it is still the library in
+     * use: between a move and the next listing there are no rows, rather than the last place's rows
+     * under the new place's name, where a Delete removed the new place's file of the same name.
+     */
+    var shelf by remember { mutableStateOf(LibraryShelf(library = null, entries = emptyList())) }
+    /**
+     * Which library is in use: the platform's own, or a folder the reader chose where the browser
+     * allows one. Every list, open, save and delete asks it at the moment it starts, and keeps the
+     * answer to the end, so an operation under way when the reader switches finishes in the place
+     * it was asked of.
+     */
+    val places = remember(platform) { LibraryPlaces(platform) }
+    /** Every save, open, delete and copy, under way and ended, for the library pane. See [LibraryActivity]. */
+    val libraryActivity = remember { LibraryActivity() }
+    /** How many worlds this browser's storage holds while a folder is in use, for the offer to copy them. */
+    var hostWorldCount by remember { mutableStateOf(0) }
     // Nothing generates until this is armed - by Go, New world, or Generate. Opening a save from
     // the library arms it too, since a world is then on screen and later edits should live-update
     // it exactly as if it had been generated here.
-    val gate = remember { GenerationGate() }
+    // A link is the reader asking for a world by name, so a window opened at one is armed already -
+    // unless it names a large world, which waits for the reader's answer to [LargeLinkDialog].
+    val gate = remember {
+        GenerationGate().also { if (opening.generates && largeLinkQuestion == null) it.request() }
+    }
     // Which of the panel's sections are unrolled. Remembered here rather than inside the panel so
     // that a trip to the atlas or the library and back does not roll them all up again.
     val sections = remember { SectionState() }
@@ -342,11 +409,11 @@ private fun Application(
     // What opening a save amounts to, whether it came from the library or from an uploaded file:
     // hand the world back to the engine as the world to reuse, which recomputes nothing.
     //
-    // [key] is where it was opened from in the library, which is where Save will write it back,
-    // or null for a file from outside the library.
-    fun openSave(save: WorldSave, key: String?) {
+    // [key] is where it was opened from in the library [from], which is where Save will write it
+    // back, or null for a file from outside the library.
+    fun openSave(save: WorldSave, key: String?, from: WorldLibrary?) {
         val opened = save.document
-        identity = DocumentIdentity.opened(opened, key, ::randomId)
+        document.becomes(DocumentIdentity.opened(opened, key, from, ::randomId))
         naming.opened(opened.config.seed, opened.title)
         overrides = opened.overrides
         labels = opened.labels
@@ -362,18 +429,40 @@ private fun Application(
 
     /** The document [shown] is filed under, which is what Save and Download hand on. */
     fun documentOf(shown: WorldMap): WorldDocument =
-        documentFor(shown, identity, naming.title, overrides, labels, epochMillis())
+        documentFor(shown, document.identity, naming.title, overrides, labels, epochMillis())
 
-    /** The library listed again, or a line saying why it could not be. */
+    /**
+     * A line saying [what] failed and why, and what became of the library if the failure was the
+     * folder's: leave to use it withdrawn, or the folder gone from under the page.
+     */
+    suspend fun failureLine(what: String, failure: Throwable, library: WorldLibrary): String {
+        val line = "$what: ${failure.message ?: failure::class.simpleName}"
+        val moved = places.afterFailure(library) ?: return line
+        return "$line. $moved"
+    }
+
+    /**
+     * The library listed again, or a line saying why it could not be.
+     *
+     * A listing that finishes after the reader has moved the library is of the place they left,
+     * and is dropped rather than shown as the place they are in.
+     */
     suspend fun refreshLibrary() {
-        saved = try {
-            store.list()
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (failure: Throwable) {
-            status = "Could not list the library: ${failure.message ?: failure::class.simpleName}"
+        val listing = places.library
+        val listed = if (listing == null) {
             emptyList()
+        } else {
+            try {
+                listing.list()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Throwable) {
+                status = failureLine("Could not list the library", failure, listing)
+                emptyList()
+            }
         }
+        if (places.library === listing) shelf = LibraryShelf(listing, listed)
+        hostWorldCount = places.hostWorldCount()
     }
 
     /**
@@ -383,50 +472,85 @@ private fun Application(
      * quota, a full disk. That is a message, not a crash. The world goes in the file, not the
      * recipe for it: nothing here depends on this machine reproducing the same world from the same
      * seed, which is what the whole format was changed for.
+     *
+     * The library is the one in use when Save is pressed, and the key is written back only if it
+     * is that library's: a world opened from one place and saved into another is filed there as
+     * new, never over a file that happens to share its name. See [DocumentIdentity.keyIn].
      */
     fun saveWorld() {
         val current = world
         if (current == null) {
             status = "Generate a world before saving it."
+            libraryActivity.say(status, failed = true)
             return
         }
-        val document = documentOf(current)
-        val writing = identity
+        val target = places.library
+        if (target == null) {
+            status = "Reconnect to the library's folder, or choose this browser's storage, before saving."
+            libraryActivity.say(status, failed = true)
+            return
+        }
+        val filed = documentOf(current)
+        val ticket = document.saving()
+        // Shown before the coroutine is even started, so a save waiting its turn is visibly a save.
+        val work = libraryActivity.begin("Saving \"${filed.title}\"")
         scope.launch {
-            status = try {
-                saving.withLock {
-                    // Where the document was last written, read now rather than when Save was
-                    // pressed: an earlier Save of it may have finished while this one waited.
-                    val destination = if (identity.id == writing.id) identity.key else writing.key
-                    val key = store.save(document, current, destination)
-                    // Unless a world at another seed has taken this one's place while it was written.
-                    if (identity.id == writing.id) identity = identity.at(key)
+            try {
+                status = try {
+                    saving.withLock {
+                        // Where the document was last written, read now rather than when Save was
+                        // pressed: an earlier Save of it may have finished while this one waited.
+                        val key = withContext(SaveProgress { work.bytesWritten = it }) {
+                            target.save(filed, current, document.keyFor(ticket, target))
+                        }
+                        // Unless another document has taken this one's place while it was written.
+                        document.saved(ticket, key, target)
+                    }
+                    val line = "Saved \"${filed.title}\""
+                    libraryActivity.end(work, line, failed = false)
+                    refreshLibrary()
+                    line
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (failure: Throwable) {
+                    failureLine("Could not save \"${filed.title}\"", failure, target)
+                        .also { libraryActivity.end(work, it, failed = true) }
                 }
-                refreshLibrary()
-                "Saved \"${document.title}\""
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (failure: Throwable) {
-                "Could not save \"${document.title}\": ${failure.message ?: failure::class.simpleName}"
+            } finally {
+                libraryActivity.drop(work)
             }
         }
     }
 
-    /** Opens the library's [key]: the world, or a line saying why it will not open. */
-    fun openFromLibrary(key: String) {
+    /** Opens [key] from [source], the library that listed it: the world, or why it will not open. */
+    fun openFromLibrary(key: String, source: WorldLibrary?) {
+        source ?: return
+        val work = libraryActivity.begin("Opening $key")
         scope.launch {
-            status = try {
-                when (val outcome = store.load(key)) {
-                    is LoadOutcome.Loaded -> {
-                        openSave(outcome.save, key)
-                        "Opened \"${outcome.save.document.title}\""
+            var failed = true
+            try {
+                status = try {
+                    when (val outcome = source.load(key)) {
+                        is LoadOutcome.Loaded -> {
+                            openSave(outcome.save, key, source)
+                            failed = false
+                            "Opened \"${outcome.save.document.title}\""
+                        }
+                        is LoadOutcome.Refused -> {
+                            val line = "Could not open $key: ${outcome.refusal.message}"
+                            // A file the storage would not read may be a folder the page has lost.
+                            val moved = if (outcome.refusal.problem == SaveProblem.UNREADABLE) places.afterFailure(source) else null
+                            if (moved == null) line else "$line. $moved"
+                        }
                     }
-                    is LoadOutcome.Refused -> "Could not open $key: ${outcome.refusal.message}"
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (failure: Throwable) {
+                    failureLine("Could not open $key", failure, source)
                 }
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (failure: Throwable) {
-                "Could not open $key: ${failure.message ?: failure::class.simpleName}"
+                libraryActivity.end(work, status, failed)
+            } finally {
+                libraryActivity.drop(work)
             }
         }
     }
@@ -472,7 +596,13 @@ private fun Application(
         )
     }
 
-    LaunchedEffect(Unit) { refreshLibrary() }
+    // Where the library is, settled before anything is listed: a folder remembered from the last
+    // visit is read back and asked about, and the first listing is of wherever that leaves it.
+    LaunchedEffect(places) { places.start()?.let { status = it } }
+
+    // Listed again whenever the library moves, so the pane never shows one place's worlds under
+    // another place's name.
+    LaunchedEffect(places.place, places.started) { refreshLibrary() }
 
     // The library and the atlas are whole screens of their own, and a settings sheet pulled up over
     // the top third of one is a sheet in the way. Choosing either puts it down; nothing puts it
@@ -515,7 +645,20 @@ private fun Application(
 
             MenuCommand.SAVE_AS -> saveAs = true
 
-            MenuCommand.EXPORT -> startExport(SettingsEffects.exportSizeWithin(settings, exportCeiling))
+            MenuCommand.EXPORT -> startExport(SettingsEffects.exportSizeWithin(settings, generationCeiling))
+
+            // The world on screen and the drawing on screen, not the panel's settings: the panel
+            // may already be on the next world while this one is still the one being looked at.
+            // Called inside the click, as the bug report's copy is, because a browser lets a page
+            // write the clipboard only while it is handling the reader's gesture.
+            MenuCommand.COPY_LINK -> world?.let { shown ->
+                status = WorldLinks.copy(
+                    platform,
+                    shown.config,
+                    options,
+                    hasEdits = labels.isNotEmpty() || overrides != WorldOverrides()
+                )
+            }
 
             MenuCommand.SETTINGS -> showSettings = true
 
@@ -578,6 +721,13 @@ private fun Application(
     // has to run - and because after a Stop it is the only key that can move.
     LaunchedEffect(config, gate.requests) {
         if (!gate.hasGenerated) return@LaunchedEffect
+        // Every way to a size above the ceiling is already closed — the chips, the stored settings
+        // and the saves a browser refuses to open — so this is the guarantee rather than the rule:
+        // a world the host cannot finish is refused in a sentence rather than begun.
+        WorldCeilings.whyOutOfReach(config.width, generationCeiling)?.let { reason ->
+            status = "$reason."
+            return@LaunchedEffect
+        }
         // This effect's own coroutine is what Stop cancels: cancelling it unwinds the pipeline
         // wherever it has got to, and the engine notices between rounds rather than at the end.
         val thisRun = coroutineContext[Job]
@@ -628,10 +778,12 @@ private fun Application(
             naming.generated(config.seed, Cartouches.suggest(generated))
             // And by the same rule a world at another seed is another document, so the next Save
             // writes a new file rather than over the last world's.
-            identity = identity.afterGenerating(generated.config.seed, ::randomId)
-            // Any notice from an earlier export or save is about a world no longer on screen.
-            status = ""
+            document.afterGenerating(generated.config.seed, ::randomId)
+            // Any notice from an earlier export or save is about a world no longer on screen. What
+            // a link said about the world it named is about this one, and stays.
+            status = linkNoticeAfterGenerating.orEmpty()
         } finally {
+            linkNoticeAfterGenerating = null
             // In a `finally` because the settings have to come back whichever way this ended, and
             // the way that matters is the throw a cancelled coroutine unwinds with. Writing a
             // snapshot value is not a suspending call, so it still works after the cancellation.
@@ -713,7 +865,37 @@ private fun Application(
                     }
                 }
             },
-            onDismiss = { showSettings = false }
+            onDismiss = { showSettings = false },
+            libraryLocation =
+                if (places.offersFolders) places.location else SettingsEffects.libraryLocation(settings, platform)
+        )
+    }
+
+    largeLinkQuestion?.let { question ->
+        val linkSize = opening.linkedSize ?: return@let
+        LargeLinkDialog(
+            question = question,
+            linkSize = linkSize,
+            defaultSize = platform.defaultResolution,
+            onMakeIt = {
+                largeLinkQuestion = null
+                gate.request()
+            },
+            onAtDefault = {
+                // Read again at the default size rather than the link's world scaled down, so every
+                // other pair reaches the world by the same path it would have at the link's size.
+                val atDefault = WorldLinks.readAtSize(
+                    platform.openedAt, linkStarting, linkStartingOptions, generationCeiling,
+                    size = platform.defaultResolution
+                )
+                config = atDefault.config
+                options = atDefault.options
+                // The link's line said what the link's size came to; this world is at another.
+                status = listOfNotNull(launchNotice.ifBlank { null }, atDefault.notice).joinToString(" ")
+                linkNoticeAfterGenerating = atDefault.notice
+                largeLinkQuestion = null
+                gate.request()
+            }
         )
     }
 
@@ -732,7 +914,7 @@ private fun Application(
             onConfirm = { title ->
                 // A new document rather than a new name on the old one, which is the difference
                 // between Save as and renaming: the world already in the library stays there.
-                identity = identity.savedAs(::randomId)
+                document.becomes(document.identity.savedAs(::randomId))
                 naming.rename(title)
                 saveAs = false
                 saveWorld()
@@ -807,8 +989,11 @@ private fun Application(
         if (screen == Screen.LIBRARY) {
             LibraryPane(
                 title = naming.name,
-                worlds = saved,
-                location = platform.libraryLocation,
+                worlds = shelf.entries.takeIf { shelf.library === places.library }.orEmpty(),
+                location = places.location,
+                place = if (places.offersFolders) places.place else null,
+                libraryInUse = places.library != null,
+                hostWorldCount = hostWorldCount,
                 supportsFileTransfer = platform.supportsFileTransfer,
                 hasWorld = current != null,
                 onTitleChange = naming::rename,
@@ -819,15 +1004,15 @@ private fun Application(
                     // Handing over the same bytes a save would have written - the format is
                     // shared, so this is the whole of moving a world to the other front end.
                     if (current != null) {
-                        val document = documentOf(current)
+                        val filed = documentOf(current)
                         scope.launch {
                             status = try {
-                                platform.downloadWorld(document, current)
-                                "Downloaded \"${document.title}\""
+                                platform.downloadWorld(filed, current)
+                                "Downloaded \"${filed.title}\""
                             } catch (cancelled: CancellationException) {
                                 throw cancelled
                             } catch (failure: Throwable) {
-                                "Could not download \"${document.title}\": ${failure.message ?: failure::class.simpleName}"
+                                "Could not download \"${filed.title}\": ${failure.message ?: failure::class.simpleName}"
                             }
                         }
                     }
@@ -838,7 +1023,7 @@ private fun Application(
                             when (val outcome = platform.uploadWorld()) {
                                 null -> "No file opened"
                                 is LoadOutcome.Loaded -> {
-                                    openSave(outcome.save, key = null)
+                                    openSave(outcome.save, key = null, from = null)
                                     "Opened \"${outcome.save.document.title}\" from file"
                                 }
                                 is LoadOutcome.Refused -> "Could not open the file: ${outcome.refusal.message}"
@@ -853,20 +1038,67 @@ private fun Application(
                 // Handing the saved world back as the world to reuse is the whole of opening it:
                 // the generation the settings change kicks off finds every stage already matching
                 // its config and computes none of them.
-                onOpen = { key -> openFromLibrary(key) },
+                onOpen = { key -> openFromLibrary(key, shelf.library) },
                 onDelete = { key ->
-                    scope.launch {
-                        status = try {
-                            store.delete(key)
-                            "Deleted $key"
-                        } catch (cancelled: CancellationException) {
-                            throw cancelled
-                        } catch (failure: Throwable) {
-                            "Could not delete $key: ${failure.message ?: failure::class.simpleName}"
+                    val target = shelf.library
+                    if (target != null) {
+                        val work = libraryActivity.begin("Deleting $key")
+                        scope.launch {
+                            try {
+                                var failed = true
+                                status = try {
+                                    target.delete(key)
+                                    failed = false
+                                    "Deleted $key"
+                                } catch (cancelled: CancellationException) {
+                                    throw cancelled
+                                } catch (failure: Throwable) {
+                                    failureLine("Could not delete $key", failure, target)
+                                }
+                                libraryActivity.end(work, status, failed)
+                                refreshLibrary()
+                            } finally {
+                                libraryActivity.drop(work)
+                            }
                         }
-                        refreshLibrary()
                     }
-                }
+                },
+                // The picker and the permission prompt are allowed only while the browser is
+                // still handling the click, so both coroutines start undispatched: the call that
+                // opens either runs inside this handler, before anything else can suspend.
+                onChooseFolder = {
+                    scope.launch(start = CoroutineStart.UNDISPATCHED) { places.choose()?.let { status = it } }
+                },
+                onReconnect = {
+                    scope.launch(start = CoroutineStart.UNDISPATCHED) { places.reconnect()?.let { status = it } }
+                },
+                onUseHostStorage = {
+                    scope.launch { places.useHostStorage()?.let { status = it } }
+                },
+                onCopyIntoFolder = {
+                    val work = libraryActivity.begin("Copying this browser's worlds into the folder")
+                    scope.launch {
+                        try {
+                            val copied = try {
+                                places.copyHostWorldsIntoFolder()
+                            } catch (cancelled: CancellationException) {
+                                throw cancelled
+                            } catch (failure: Throwable) {
+                                // Listing either library can fail before a world is copied.
+                                LibraryPlaces.CopyOutcome(
+                                    "Could not copy the worlds: ${failure.message ?: failure::class.simpleName}",
+                                    failed = true
+                                )
+                            }
+                            status = copied.line
+                            libraryActivity.end(work, copied.line, copied.failed)
+                            refreshLibrary()
+                        } finally {
+                            libraryActivity.drop(work)
+                        }
+                    }
+                },
+                activity = libraryActivity
             )
         } else if (screen == Screen.ATLAS && current != null) {
             AtlasPane(
@@ -923,6 +1155,9 @@ private fun Application(
 
     /** What is under way, if anything: the generation's stage, or else the running export. */
     val underWay: String? = if (generating != null) stage ?: "Generating" else exports.running?.stage
+        // A save asked for from the menu over the map, where the library pane that would show it is
+        // not on screen. Over the library the pane says it itself.
+        ?: libraryActivity.underWay.firstOrNull()?.doing?.takeIf { screen != Screen.LIBRARY }
 
     /** The progress banner, between the toolbar and the map while a world or an export is being made. */
     val banner: @Composable () -> Unit = {
@@ -986,7 +1221,7 @@ private fun Application(
             hasWorld = world != null,
             worldSize = world?.width,
             exportChoice = exportChoice,
-            exportCeiling = exportCeiling,
+            generationCeiling = generationCeiling,
             exportSizes = reachable.exportSizes,
             pictureFormats = reachable.pictureFormats,
             dataLayers = reachable.dataLayers,
@@ -1010,7 +1245,7 @@ private fun Application(
             // is the guarantee, and it is what a size restored from an older build's
             // preference — which could still say 8192 — passes through. It applies to a data
             // layer exactly as it does to a picture: both re-run the pipeline at that size.
-            onExport = { startExport(Exports.clamp(it, exportCeiling)) },
+            onExport = { startExport(Exports.clamp(it, generationCeiling)) },
             onToggleAtlas = {
                 screen = if (screen == Screen.ATLAS) Screen.MAP else Screen.ATLAS
             },
@@ -1701,7 +1936,8 @@ private fun PanelHeader(
     /** Cells across the world on screen, or null before there is one. */
     worldSize: Int?,
     exportChoice: ExportChoice,
-    exportCeiling: Int,
+    /** The largest world this host makes; see [Platform.generationCeiling]. */
+    generationCeiling: Int,
     exportSizes: List<Int>,
     pictureFormats: List<ExportFormat>,
     dataLayers: List<DataLayer>,
@@ -1749,18 +1985,30 @@ private fun PanelHeader(
         ) { Text("Random world", maxLines = 1) }
     }
 
+    val resolutions = Knobs.resolutionChoices(generationCeiling)
     Labelled("Generation resolution", "${config.width} px") {
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            Knobs.RESOLUTIONS.forEach { size ->
+            resolutions.forEach { choice ->
                 FilterChip(
-                    selected = config.width == size,
-                    onClick = { onResolution(size) },
-                    label = { Text("$size", maxLines = 1) },
-                    enabled = !busy,
+                    selected = config.width == choice.size,
+                    onClick = { onResolution(choice.size) },
+                    label = { Text("${choice.size}", maxLines = 1) },
+                    enabled = !busy && choice.enabled,
                     modifier = Modifier.weight(1f)
                 )
             }
         }
+    }
+
+    // Why a chip above is greyed out, printed under the row rather than on hover: in a browser it
+    // is always true, and a phone has no pointer to hover with. Only where a chip is out of reach,
+    // so the desktop's header is as it was.
+    resolutions.mapNotNull { it.whyOutOfReach }.forEach { reason ->
+        Text(
+            reason,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 
     // What the two larger chips cost on the device this arrangement is drawn for, in seconds,
@@ -1790,7 +2038,7 @@ private fun PanelHeader(
 
     // Export, which would otherwise want a 200 dp column of its own on the far side of the map.
     OutputOptions(
-        worldSize, exportChoice, exportCeiling, exportSizes,
+        worldSize, exportChoice, generationCeiling, exportSizes,
         pictureFormats, dataLayers, onExportChoice, onExport
     )
 
@@ -2070,7 +2318,7 @@ private fun OutputOptions(
     /** Cells across the world on screen, or null before there is one to export. */
     worldSize: Int?,
     exportChoice: ExportChoice,
-    exportCeiling: Int,
+    generationCeiling: Int,
     sizes: List<Int>,
     pictureFormats: List<ExportFormat>,
     dataLayers: List<DataLayer>,
@@ -2103,19 +2351,21 @@ private fun OutputOptions(
     }
     // One line of small print, which the unreachable size borrows while the pointer is on it. In
     // the same slot rather than under the row, so nothing moves when it changes.
-    val unreachable = reachingFor
+    val choices = SizeChoice.row(sizes, generationCeiling)
+    val unreachable = choices.firstOrNull { it.size == reachingFor }?.whyOutOfReach
     Text(
-        if (unreachable != null) Exports.unreachableNote(unreachable) else exportChoice.detail,
+        unreachable ?: exportChoice.detail,
         style = MaterialTheme.typography.labelSmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        sizes.forEach { size ->
-            // A size this build cannot finish keeps its chip — the row would otherwise change
+        choices.forEach { choice ->
+            val size = choice.size
+            // A size this host cannot finish keeps its chip — the row would otherwise change
             // width when the ceiling moves, and a missing control says nothing about why it is
             // missing. It is drawn in the muted colour, it cannot be pressed, and hovering it
-            // says what is wrong.
-            val withinCeiling = Exports.reachable(size, exportCeiling)
+            // says what is wrong, in the small print above the row.
+            val withinCeiling = choice.enabled
             val hoverSource = remember { MutableInteractionSource() }
             val hovered by hoverSource.collectIsHoveredAsState()
             LaunchedEffect(hovered, withinCeiling) {
@@ -2126,7 +2376,7 @@ private fun OutputOptions(
             // generation under way does not touch until it is finished. A second press starts a
             // second export in the first one's place.
             Button(
-                onClick = { onExport(Exports.clamp(size, exportCeiling)) },
+                onClick = { onExport(Exports.clamp(size, generationCeiling)) },
                 enabled = withinCeiling && worldSize != null,
                 contentPadding = TIGHT,
                 modifier = Modifier.weight(1f).hoverable(hoverSource)
@@ -2317,3 +2567,6 @@ private fun NameLabelDialog(onDismiss: () -> Unit, onConfirm: (String, LabelKind
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
 }
+
+/** A listing of the library, and the library it is a listing of: see `shelf` in [Application]. */
+internal class LibraryShelf(val library: WorldLibrary?, val entries: List<LibraryEntry>)

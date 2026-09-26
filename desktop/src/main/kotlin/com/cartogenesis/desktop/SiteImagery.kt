@@ -1,5 +1,6 @@
 package com.cartogenesis.desktop
 
+import com.cartogenesis.cartography.MapRasterizer
 import com.cartogenesis.cartography.MapStyle
 import com.cartogenesis.cartography.MapView
 import com.cartogenesis.cartography.RenderOptions
@@ -13,18 +14,15 @@ import org.jetbrains.skia.Bitmap
 import org.jetbrains.skia.Canvas
 import org.jetbrains.skia.ColorAlphaType
 import org.jetbrains.skia.EncodedImageFormat
-import org.jetbrains.skia.Font
-import org.jetbrains.skia.FontEdging
-import org.jetbrains.skia.FontMgr
-import org.jetbrains.skia.FontStyle
+import org.jetbrains.skia.FilterMipmap
+import org.jetbrains.skia.FilterMode
 import org.jetbrains.skia.Image
 import org.jetbrains.skia.ImageInfo
+import org.jetbrains.skia.MipmapMode
 import org.jetbrains.skia.Paint
 import org.jetbrains.skia.PaintMode
 import org.jetbrains.skia.Rect
-import org.jetbrains.skia.Typeface
 import java.io.File
-import kotlin.math.roundToInt
 
 /**
  * Every picture on cartogenesis.com, rendered from the engine at assembly time.
@@ -41,18 +39,22 @@ import kotlin.math.roundToInt
  * mark the renderer makes is sized in *output pixels*, so a 1:1 window shows the pen the renderer
  * actually draws with, while a downscaled whole map shows a thinner one that exists nowhere.
  *
- * A figure is one window and one or more [Panel]s — the same window read a different way in each,
- * laid out with a naming band under every panel, in the manner of a game's resolution-comparison
- * screenshot. One image rather than several, because the claim being made is that these are the
- * *same ground*, and separate pictures in a row on a page are not evidence of that: a strip cut
- * from one window is. A strip with more than one panel is published twice, once [Layout.ACROSS] and
- * once [Layout.DOWN], because the shape that carries the comparison on a desktop does not fit a
- * phone. See docs/DESIGN_LEDGER.md, Site 3, for what the page has asked for and when.
+ * A figure is one window read one way. Most are one card's picture on the page; the rest are the
+ * band round the world the page opens on, at two sizes, the nine styles the comparison slider
+ * fetches when picked, the data frame's relief and the layers laid over it, the whole world under
+ * the lens at a quarter and at full size, the patch drawn in relief (whose heights are written
+ * beside the pictures, [RELIEF_HEIGHTS_FILE]), five other worlds whole, and the picture a link to
+ * the page previews.
+ * Wider ground is halved rather than cropped wider (see [Figure.reduction]). Pictures that are
+ * compared share one window — the six steps, the twelve styles, the four data views — which is
+ * what makes them the same ground: there is one window for the row's pictures to be cut from.
+ * The page names each picture in its own words rather than in lettering drawn into the file, so
+ * nothing here sets type. See docs/DESIGN_LEDGER.md, Site 3, Site 4, Site 5a and Site 6, for
+ * what the page has asked for and when.
  *
  * It has to run on the deploy runner, which is Linux with no graphics card and no display. Nothing
  * here asks for either: the rasteriser is called on its processor path, and Skia only ever writes
- * into memory. The band's type is the page's own, read out of the application's font resources,
- * whose directory the Gradle task passes in; a runner without them falls back to a system sans.
+ * into memory.
  */
 object SiteImagery {
 
@@ -109,7 +111,7 @@ object SiteImagery {
     data class Window(val x: Int, val y: Int, val width: Int, val height: Int)
 
     /**
-     * The band across the top of the page: the hero.
+     * The window the page's opening starts from, and the picture a link to the page previews.
      *
      * A 2:1 window on the southern half of the northern continent, which carries in one frame
      * everything the page claims — the snow-capped range down its middle, rivers draining both
@@ -123,255 +125,382 @@ object SiteImagery {
     val BAND = Window(1152, 320, 1600, 800)
 
     /**
-     * The window the three physical styles are compared in: square, 640 on a side.
+     * The window the map styles are compared in: 600 wide and 400 tall, at 1:1.
      *
-     * The northern continent's south-western lowlands, chosen so that the three styles are asked
-     * the questions they answer differently. It holds the dry tan belt that crosses them, the
-     * green country either side of it, the western flank of the range at its right-hand edge and
-     * the south coast below — which is where the styles part company, because Atlas and Natural
-     * tint the ground by its climate as well as its height and Schoolroom tints it by height
-     * alone. Three styles agreeing about a green coast would prove nothing. Which window each
-     * release has used, and why each moved, is in docs/DESIGN_LEDGER.md.
+     * The south-eastern lobe of the northern continent: brown hills over a green coastal plain,
+     * rivers reaching the south and east coasts, and the shelf and the deep sea round the corner.
+     * Height, climate, water and sea in one frame, which is what the twelve styles part company
+     * over. It moved here in Site 5a from the south-western lowlands, which carried two of the
+     * generator's grid-shaped marks listed in docs/TODO.md (a dry belt ruled along a row, and an
+     * estuary sea with a straight west edge and a straight top); this window holds neither, and
+     * starts east of the fan of rays at the range's southern ice cap.
      */
-    val STYLES_WINDOW = Window(1152, 512, 640, 640)
+    val STYLES_WINDOW = Window(2160, 580, 600, 400)
 
     /**
      * The window the four data layers are read in: 480 wide and 600 tall.
      *
-     * Taller than wide on purpose, twice over. The layers are latitude-organised — temperature
-     * bands, the trades and the westerlies, a gyre turning between them — so a window that spans
-     * more latitude shows more of what there is to see; and a taller panel carries a taller naming
-     * band, which is what keeps the four bands' second line readable once four panels are fitted
-     * into the page's column (three panels can afford a wider window, four cannot).
-     *
-     * 600 rows of 2048 is a little over fifty degrees of latitude, and these are the fifty that
-     * carry the most: the belt where the westerlies give way to the trades runs through the upper
-     * half of the frame, so the Winds panel shows the two blowing opposite ways rather than one of
-     * them filling the panel. Land above and water below, the south coast of the northern
-     * continent across the middle, because two of the four layers draw nothing on land and the
-     * other two draw nothing at sea.
+     * Taller than wide because the layers are latitude-organised — temperature bands, the trades
+     * and the westerlies, a gyre turning between them — so a window that spans more latitude shows
+     * more of what there is to see. 600 rows of 2048 is a little over fifty degrees of latitude,
+     * and these are the fifty that carry the most: the belt where the westerlies give way to the
+     * trades runs through the upper half of the frame, so the Winds card shows the two blowing
+     * opposite ways rather than one of them filling the picture. Land above and water below, the
+     * south coast of the northern continent across the middle, because two of the four layers draw
+     * nothing on land and the other two draw nothing at sea.
      */
     val LAYERS_WINDOW = Window(2048, 512, 480, 600)
 
     /**
-     * The gap between two panels of a strip, in the strip's own pixels.
-     *
-     * A hairline, not a gutter: the panels are edge to edge, and this only says where one stops.
-     * Two pixels rather than one because the strip is fitted to the page's column at a little over
-     * half size, and a single pixel would fall between two of the reader's.
-     */
-    const val DIVIDER = 2
-
-    /**
-     * The divider's colour: `--brass-dim` from the page.
-     *
-     * It has to read against both of the grounds it can land between — the Atlas style's near-black
-     * sea and the Schoolroom style's pale paper — and the page's own hairline, which is what a
-     * rule on the page is drawn in, disappears against the first of those.
-     */
-    const val DIVIDER_COLOUR = 0xFF8D7326.toInt()
-
-    /**
-     * The naming band's height, as one part in this many of the map above it.
-     *
-     * A ninth, so the band is a tenth of the finished panel — the proportion the comparison
-     * screenshots this borrows from use, which is enough to carry a name and a line under it and
-     * little enough that it reads as a caption on the picture rather than as a strip of interface.
-     */
-    const val BAND_IN_PANELS = 9
-
-    /**
-     * A naming band's flat tint and the colour its text is set in, both named as the page names
-     * them in its own `:root`.
-     *
-     * Flat tints rather than a wash over the map: a band has to be legible whatever the panel above
-     * it happens to be doing, and a panel is free to be a pale classroom map or a black sea. Each
-     * panel of a strip takes the next tint in this order, so the bands are told apart at a glance
-     * the way the reference comparison's are.
-     *
-     * The names are the contract with the page: `SiteAssemblyTest` resolves each against the page's
-     * own custom properties, fails if the two have drifted apart, and measures the pair against
-     * WCAG AA — the same bar, by the same arithmetic, that `SitePaletteContrastTest` holds the rest
-     * of the page to. `--brass-dim` is a tint here and never an ink: it carries no pairing with
-     * either `--parchment` or `--ink` that reaches 4.5:1.
-     */
-    enum class BandTint(
-        val groundName: String,
-        val ground: Int,
-        val inkName: String,
-        val ink: Int
-    ) {
-        SUNK("ink-sunk", 0xFF21252A.toInt(), "parchment", 0xFFF2E7CF.toInt()),
-        HAIRLINE("hairline", 0xFF363C44.toInt(), "parchment", 0xFFF2E7CF.toInt()),
-        OXBLOOD("oxblood", 0xFF5D0000.toInt(), "parchment", 0xFFF2E7CF.toInt()),
-        BRASS("brass", 0xFFC9A227.toInt(), "ink", 0xFF121417.toInt())
-    }
-
-    /**
-     * One panel of a figure: a reading of the window, and the band that names it.
-     *
-     * [name] is set in capitals in the band and is the word the page's `alt` text has to list;
-     * [detail] is the line under it, and says what the reading *is*. Both are taken from what the
-     * code already says — a style's own `detail`, a climate field's own KDoc — rather than written
-     * for the page, because the page's prose is the author's to write and a caption that describes a
-     * map only works when a person wrote it. [detail] may be empty where there is nothing factual
-     * to add.
-     */
-    data class Panel(
-        val view: MapView,
-        val style: MapStyle,
-        val name: String,
-        val detail: String,
-        val band: BandTint,
-        val options: RenderOptions = RenderOptions(view = view, style = style)
-    )
-
-    /**
-     * Which way a figure's panels are laid out.
-     *
-     * A strip laid [ACROSS] is the comparison the author asked for, and it is the wrong shape for a
-     * phone: fitted to a 375px screen its bands come out five pixels tall, and left at its own size
-     * it has to be scrolled sideways, which is a thing readers do not discover. So the same panels
-     * are composed a second time [DOWN] and the page hands that file to a narrow screen. Two files
-     * and one list of panels: the page lays out neither, so the two variants cannot come to
-     * disagree about what a panel is or about what its band says.
-     */
-    enum class Layout { ACROSS, DOWN }
-
-    /**
-     * What the page asks for: one window, and the panels it is read in.
-     *
-     * The window belongs to the figure rather than to the panel, which is the invariant the whole
-     * idea rests on — the panels of a strip cannot be showing different ground, because there is
-     * only one window for them to be cut from.
+     * One picture on the page: a window of the map, read one way.
      *
      * [file] is the name the page references, so renaming one here renames it there, and
-     * `SiteAssemblyTest` is what notices when only one of the two moves. [stackedFile] is the same
-     * panels laid [Layout.DOWN], or null for a figure the page shows only one way.
+     * `SiteAssemblyTest` is what notices when only one of the two moves. The four data views ignore
+     * [style] — their colours carry meaning, and a prettier ramp would make them lie (see
+     * `MapView.styled`) — so `MapStyle.ATLAS` stands there as the renderer's own default and
+     * decides nothing.
+     *
+     * [reduction] is how many sheet pixels go into each of the picture's, one way: 1 is the 1:1 cut
+     * the class describes, and every comparison card is cut that way. A pipeline step whose work is
+     * only legible over a wider stretch of ground — plates a continent across, realms a coast long —
+     * is cut from a window that many times wider and taller and averaged down to the card's size,
+     * by halving, so a power of two.
+     *
+     * [showWater] off draws the map without its rivers and lakes, which is how the stage before the
+     * water is routed is shown: the same sheet, with only the step's own work taken off it.
      */
     data class Figure(
         val file: String,
         val window: Window,
-        val panels: List<Panel>,
-        val stackedFile: String? = null,
-        val quality: Int = WEBP_QUALITY
+        val view: MapView,
+        val style: MapStyle = MapStyle.ATLAS,
+        val reduction: Int = 1,
+        val quality: Int = WEBP_QUALITY,
+        val showWater: Boolean = true,
+        val cut: Cut = Cut.WHOLE,
+        val seed: Long = SEED
     ) {
-        /**
-         * Zero for a figure of one panel.
-         *
-         * A band answers "which of these is this?", and a picture with nothing beside it poses no
-         * such question. It is also what keeps the hero the plain 1600x800 export it has always
-         * been, and the link-preview image a scraper reads unlettered.
-         */
-        val bandHeight: Int
-            get() = if (panels.size > 1) (window.height.toFloat() / BAND_IN_PANELS).roundToInt()
-            else 0
-
-        /** One finished panel: the window, and the band under it. */
-        val panelHeight: Int get() = window.height + bandHeight
-
-        /** Every way this figure is published, in the order the files are written. */
-        val layouts: List<Layout>
-            get() = if (stackedFile == null) listOf(Layout.ACROSS)
-            else listOf(Layout.ACROSS, Layout.DOWN)
-
-        fun fileFor(layout: Layout): String =
-            if (layout == Layout.ACROSS) file
-            else stackedFile ?: error("$file is not published stacked")
-
-        fun width(layout: Layout): Int = when (layout) {
-            Layout.ACROSS -> panels.size * window.width + (panels.size - 1) * DIVIDER
-            Layout.DOWN -> window.width
+        init {
+            require(reduction >= 1 && reduction and (reduction - 1) == 0) {
+                "$file: a reduction of $reduction is not a power of two, so it cannot be halved to"
+            }
+            require(window.width % reduction == 0 && window.height % reduction == 0) {
+                "$file: a ${window.width}x${window.height} window does not divide by $reduction"
+            }
         }
 
-        fun height(layout: Layout): Int = when (layout) {
-            Layout.ACROSS -> panelHeight
-            Layout.DOWN -> panels.size * panelHeight + (panels.size - 1) * DIVIDER
+        /**
+         * How the application would draw it. A layer cut from its reading to lie over another
+         * picture leaves out the coastline, which the picture under it already carries.
+         */
+        val options: RenderOptions
+            get() = RenderOptions(
+                view = view, style = style, showRivers = showWater, showLakes = showWater,
+                showCoastline = cut.keepsCoastline
+            )
+
+        /** The picture's own width in pixels, which the page's `width` attribute states. */
+        val width: Int get() = window.width / reduction
+
+        /** The picture's own height in pixels, which the page's `height` attribute states. */
+        val height: Int get() = window.height / reduction
+
+        /**
+         * What the reading is called in the application: the style's own label for a map drawn in
+         * a style, the view's own label for a data view. A comparison card's heading on the page
+         * is this word, so the card says what the toolbar says over the same picture.
+         */
+        val readingName: String get() = if (view == MapView.FANTASY) style.label else view.label
+    }
+
+    /**
+     * How much of a reading a figure keeps.
+     *
+     * Most figures are a reading as the application draws it. The data frame's layers are laid
+     * one over another on the page and faded in and out over the relief, so each keeps only its
+     * own part and leaves the rest of the sheet clear. The application draws a map in two passes,
+     * one colour per cell and then marks over the cells at their own width (river courses, a flow
+     * view's arrows, the coastline), so the marks come away as a transparent layer for nothing: the
+     * same overlay drawn over a clear raster. The realm borders do not: the application lays them
+     * into the cells as a blend of ink and ground, so there is no layer of them to take (see
+     * docs/DESIGN_LEDGER.md, Site 5b). [keepsCoastline] is false for a layer that lies over a
+     * picture which already has one.
+     */
+    enum class Cut(val keepsCoastline: Boolean) {
+        /** The reading as the application draws it: its cells and every mark over them. */
+        WHOLE(true),
+        /** The reading's cells alone, without the marks drawn over them. */
+        GROUND(true),
+        /** The whole reading over land; the sea left clear, where the view carries nothing. */
+        LAND(true),
+        /** The reading's cells over the sea and its marks; the land left clear. */
+        SEA_AND_MARKS(false),
+        /** Only the marks drawn over the cells, on a clear sheet: a flow view's arrows. */
+        MARKS(false),
+        /** The lakes' cells and the river courses, on a clear sheet. */
+        WATER(false)
+    }
+
+    /**
+     * The picture a link to the page previews: [BAND] in the Natural style, named by the page's
+     * `og:image`. The page itself does not draw it; its opening is [WORLD_BAND], whose first
+     * stretch is this window.
+     */
+    val HERO = Figure("natural.webp", BAND, MapView.FANTASY, MapStyle.NATURAL)
+
+    /**
+     * Every map style the application offers, each cut from [STYLES_WINDOW]: the comparison
+     * slider's twelve pictures, in the application's own order.
+     */
+    val STYLE_PICTURES: List<Figure> = MapStyle.entries
+        .map { style -> Figure("style-${style.name.lowercase()}.webp", STYLES_WINDOW, MapView.FANTASY, style) }
+
+    /**
+     * The three styles that have a card each, the same files the slider shows.
+     *
+     * Atlas, Schoolroom and Natural because they are the three that tint the ground differently for
+     * a reason a reader can be told in one line: height and climate, height alone, and the colours
+     * a satellite sees.
+     */
+    val STYLE_CARDS: List<Figure> = listOf(MapStyle.ATLAS, MapStyle.SCHOOLROOM, MapStyle.NATURAL)
+        .map { style -> STYLE_PICTURES.single { it.style == style } }
+
+    /** The four data views, one card each, all cut from [LAYERS_WINDOW]. */
+    val LAYER_CARDS: List<Figure> =
+        listOf(MapView.TEMPERATURE, MapView.CURRENTS, MapView.WIND, MapView.RAINFALL)
+            .map { view -> Figure("layer-${view.name.lowercase()}.webp", LAYERS_WINDOW, view) }
+
+    /**
+     * The data frame's window: 800 by 600 at 1:1, holding [LAYERS_WINDOW] at its left.
+     *
+     * The same ground as the four data cards and more of it, eastward across the strait toward the
+     * eastern island, so the frame is wide enough to be read as one picture on a computer. Not
+     * westward, where the range's ice cap ends in the straight edge listed in docs/TODO.md; the
+     * short double line at the cards' window's top left is inside it, as it is in the cards.
+     */
+    val DATA_FRAME_WINDOW = Window(2048, 512, 800, 600)
+
+    /**
+     * The data frame's pictures, bottom to top as the page lays them: the relief, which is the
+     * ground the application draws its winds over (the land shaded and tinted by height, the sea
+     * flat), then the four layers the cards name, then the rivers and lakes. (No realm borders: the
+     * frame's land is one realm from edge to edge, so a border layer would have nothing to draw.)
+     * Temperature is whole, since the view says something at sea as on land; rainfall keeps the
+     * land and the currents the sea, each leaving clear where its view draws only a placeholder
+     * colour; the winds are their arrows alone.
+     */
+    val DATA_FRAME: List<Figure> = listOf(
+        Figure("data-relief.webp", DATA_FRAME_WINDOW, MapView.WIND, showWater = false, cut = Cut.GROUND),
+        Figure("data-temperature.webp", DATA_FRAME_WINDOW, MapView.TEMPERATURE, showWater = false),
+        Figure("data-rainfall.webp", DATA_FRAME_WINDOW, MapView.RAINFALL, showWater = false, cut = Cut.LAND),
+        Figure(
+            "data-currents.webp", DATA_FRAME_WINDOW, MapView.CURRENTS, showWater = false,
+            cut = Cut.SEA_AND_MARKS
+        ),
+        Figure("data-wind.webp", DATA_FRAME_WINDOW, MapView.WIND, showWater = false, cut = Cut.MARKS),
+        Figure("data-rivers.webp", DATA_FRAME_WINDOW, MapView.FANTASY, MapStyle.NATURAL, cut = Cut.WATER)
+    )
+
+    /**
+     * The whole world in the Natural style at a quarter of the sheet's pixels each way, 1024 by
+     * 512: the picture the zoom lens is moved over.
+     */
+    val WORLD_WHOLE: Figure by lazy {
+        Figure(
+            "world-whole.webp", Window(0, 0, SHEET_WIDTH_PIXELS, SheetGeometry.of(config()).heightPixels),
+            MapView.FANTASY, MapStyle.NATURAL, reduction = 4
+        )
+    }
+
+    /**
+     * The same at the sheet's own pixels, 4096 by 2048: what the lens shows under the pointer,
+     * fetched only when a reader first uses the lens. At the bands' quality, because it is read
+     * moving under a lens and never still at its full size.
+     */
+    val WORLD_FULL: Figure by lazy {
+        Figure(
+            "world-full.webp", WORLD_WHOLE.window, MapView.FANTASY, MapStyle.NATURAL,
+            quality = WORLD_BAND_QUALITY
+        )
+    }
+
+    /**
+     * The patch of ground the page draws in relief: 640 by 400 at 1:1 of the eastern island's
+     * western end, a range along its north coast falling to valleys and rivers in the south, the
+     * sea round its western cape and lakes at its eastern edge. West of where the dry belt ruled
+     * along a row crosses the island (about column 3,355 at rows 675 to 700, docs/TODO.md), and
+     * clear of the other three marks listed there.
+     */
+    val RELIEF_WINDOW = Window(2720, 470, 640, 400)
+
+    /** The patch in the Natural style: the picture the relief is textured with, and its still. */
+    val RELIEF_TEXTURE = Figure("relief-natural.webp", RELIEF_WINDOW, MapView.FANTASY, MapStyle.NATURAL)
+
+    /** The file the patch's heights are published in. */
+    const val RELIEF_HEIGHTS_FILE = "relief-heights.png"
+
+    /**
+     * Sheet pixels between neighbouring points of the relief's mesh, both ways: two, one cell
+     * across and two down, so the mesh follows the ground as finely as the grid across it. That is
+     * 321 by 201 points for the 640 by 400 patch, 64,521, under the 65,536 a 16-bit index reaches,
+     * which every WebGL has.
+     */
+    const val RELIEF_POINT_SPACING_PIXELS = 2
+
+    /**
+     * Height steps per metre in the heights file: a quarter of a metre a step, which puts 16,383
+     * metres at the top of sixteen bits, above any ground the generator makes (its ruler's land
+     * half is [com.cartogenesis.worldgen.model.WorldScale.highestLandMetres], 6,000, and an ice
+     * sheet stands on it at most 4,776 more).
+     */
+    const val RELIEF_STEPS_PER_METRE = 4
+
+    /** The relief's points across and down: one every [RELIEF_POINT_SPACING_PIXELS], both edges included. */
+    val RELIEF_POINTS_ACROSS: Int get() = RELIEF_WINDOW.width / RELIEF_POINT_SPACING_PIXELS + 1
+    val RELIEF_POINTS_DOWN: Int get() = RELIEF_WINDOW.height / RELIEF_POINT_SPACING_PIXELS + 1
+
+    /**
+     * The worlds of "Every seed is a world", each made the way the application makes a world it
+     * is opened at with only a seed: the generator's defaults at the browser's starting size, so
+     * the picture is the world the card's link opens. Five of eight looked at (1, 7, 42, 99, 1066,
+     * 2024, 31337 and 424242), picked to differ from one another: two lands across shallow bays, a
+     * long continent pinched in the middle, a branching one, an inland sea with islands, and three
+     * lands with an island between.
+     */
+    val REEL_SEEDS: List<Long> = listOf(7L, 42L, 1066L, 2024L, 31337L)
+
+    /**
+     * The size the reel's worlds are made at: 512, where a browser window starts, so the pictures
+     * are the worlds the links open. It also keeps the site's build quick: a few seconds a world,
+     * where the author's world at 2048 is most of a minute.
+     */
+    const val REEL_GRID_CELLS = 512
+
+    /** A reel world's settings: the generator's defaults at [REEL_GRID_CELLS], as a link with only a seed makes. */
+    fun reelConfig(seed: Long): WorldGenConfig =
+        WorldGenConfig(seed = seed).atResolution(REEL_GRID_CELLS, REEL_GRID_CELLS)
+
+    /**
+     * Each reel world whole in the Natural style, halved: 512 by 256 of its 1024 by 512 sheet. A
+     * reel card is at most about 210 pixels wide on a computer, so 512 covers it at two device
+     * pixels to the CSS pixel.
+     */
+    val REEL: List<Figure> by lazy {
+        REEL_SEEDS.map { seed ->
+            val sheet = SheetGeometry.of(reelConfig(seed))
+            Figure(
+                "seed-$seed.webp", Window(0, 0, sheet.widthPixels, sheet.heightPixels),
+                MapView.FANTASY, MapStyle.NATURAL, reduction = 2, seed = seed
+            )
         }
     }
 
     /**
-     * Every figure the page shows, in the order it shows them: the hero, the three styles that draw
-     * the world as a physical map, and the four layers the map is drawn from.
+     * The one window every step of "How a world is made" is pictured in: 1040 by 560 of the sheet,
+     * halved to 520 by 280.
      *
-     * A list rather than a fixed set, because the page has carried other figures before and may
-     * again — four readings of one band and three annotated details, for a day. See
-     * docs/DESIGN_LEDGER.md, Site 2 and Site 3, for what was tried and what was kept.
-     *
-     * The four data views ignore the style — their colours carry meaning, and a prettier ramp would
-     * make them lie (see `MapView.styled`) — so `MapStyle.ATLAS` stands there as the renderer's own
-     * default and decides nothing.
+     * One window and one scale, because the page plays the six pictures in turn in one frame and
+     * the land must not jump between them: what changes from frame to frame is the step's own
+     * work. The south-western peninsula of the northern continent, halved so that plates and
+     * realms have room to show: the continent's plate meeting two ocean plates round its coast,
+     * valleys cut into its hills, the shelf, a climate that runs from forest on the west coast to
+     * dry grassland inland, rivers reaching both coasts, and several realms. Its top edge stands
+     * below the dry belt the generator rules along a row, and its right-hand edge west of the
+     * estuary with a straight west edge (both in docs/TODO.md), so neither is in any frame.
      */
-    val FIGURES: List<Figure> = listOf(
+    val STAGE_WINDOW = Window(440, 740, 1040, 560)
+
+    /**
+     * The six steps, each pictured by the view that shows what that step makes, in the page's order:
+     * the tectonic plates; the elevation, for the land the erosion cut; Natural, for the coast and
+     * shelf the sea level drew; the biomes, for the climate; Natural again with its rivers and lakes,
+     * for the water; and the political view, for the realms. The first four are drawn without the
+     * rivers and lakes, which the fifth step makes, so the water arrives in the frame when its step
+     * does rather than being there from the start.
+     */
+    val STEP_CARDS: List<Figure> = listOf(
+        Figure("step-plates.webp", STAGE_WINDOW, MapView.PLATES, reduction = 2, showWater = false),
+        Figure("step-erosion.webp", STAGE_WINDOW, MapView.ELEVATION, reduction = 2, showWater = false),
         Figure(
-            "natural.webp", BAND,
-            listOf(panelFor(MapStyle.NATURAL, BandTint.SUNK))
+            "step-seas.webp", STAGE_WINDOW, MapView.FANTASY, MapStyle.NATURAL, reduction = 2,
+            showWater = false
         ),
-        Figure(
-            "styles.webp", STYLES_WINDOW,
-            listOf(
-                panelFor(MapStyle.ATLAS, BandTint.SUNK),
-                panelFor(MapStyle.SCHOOLROOM, BandTint.HAIRLINE),
-                panelFor(MapStyle.NATURAL, BandTint.OXBLOOD)
-            ),
-            stackedFile = "styles-stacked.webp"
-        ),
-        Figure(
-            "layers.webp", LAYERS_WINDOW,
-            listOf(
-                layer(MapView.TEMPERATURE, "Mean annual, in degrees Celsius", BandTint.SUNK),
-                layer(
-                    MapView.CURRENTS,
-                    "Surface flow, warm and cold against its latitude",
-                    BandTint.HAIRLINE
-                ),
-                layer(MapView.WIND, "The prevailing wind through the year", BandTint.OXBLOOD),
-                layer(MapView.RAINFALL, "Annual rainfall", BandTint.BRASS)
-            ),
-            stackedFile = "layers-stacked.webp"
-        )
+        Figure("step-climate.webp", STAGE_WINDOW, MapView.BIOMES, reduction = 2, showWater = false),
+        Figure("step-rivers.webp", STAGE_WINDOW, MapView.FANTASY, MapStyle.NATURAL, reduction = 2),
+        Figure("step-realms.webp", STAGE_WINDOW, MapView.POLITICAL, reduction = 2)
     )
 
     /**
-     * A style's panel, named and described in the style's own words.
-     *
-     * `MapStyle.label` and `MapStyle.detail` are what the application's own style picker shows, so
-     * the band under the picture says what the toolbar says over it, and neither the page nor this
-     * file holds a second copy to fall out of step.
+     * The sheet's width in pixels for the world [generate] makes, which is how wide a strip round
+     * the whole world is.
      */
-    private fun panelFor(style: MapStyle, band: BandTint) =
-        Panel(MapView.FANTASY, style, style.label, style.detail, band)
+    val SHEET_WIDTH_PIXELS: Int get() = SheetGeometry.of(config()).widthPixels
 
     /**
-     * A data layer's panel, named in the view's own words.
+     * How hard the encoder works on the two bands, the one picture every reader fetches as the
+     * page opens.
      *
-     * [detail] says what the view actually draws, taken from the field's KDoc in `ClimateStage` and
-     * `OceanStage`: the mean annual temperature; the ocean's surface flow, coloured by how much
-     * warmer or colder the water is than the average for its latitude; the annual prevailing wind;
-     * the annual rainfall.
+     * Lower than [WEBP_QUALITY] because the band is never read still at its own pixels: it is
+     * drawn at most the height of the screen and it drifts, so the encoder's softening of a coast's
+     * last pixel is not something a reader is shown, while the full band is the page's largest
+     * request. See docs/DESIGN_LEDGER.md, Site 6, for the bytes measured at each quality.
      */
-    private fun layer(view: MapView, detail: String, band: BandTint) =
-        Panel(view, MapStyle.ATLAS, view.label, detail, band)
+    const val WORLD_BAND_QUALITY = 60
+
+    /**
+     * The band the page opens on: [BAND]'s rows all the way round the world at the sheet's own
+     * pixels, 4096 by 800.
+     *
+     * It starts where [BAND] starts, so its first 1600 columns are the link preview's picture, and
+     * the settled opening, a 2:1 plate showing the band's first stretch, is the author's window. It
+     * runs the whole circumference, so its last column is the sheet column west of its first and
+     * the band joins itself end to end as it drifts. Full size because the page draws it up to the
+     * height of the screen, where half its rows would be enlarged on any wide or dense one.
+     */
+    val WORLD_BAND: Figure by lazy {
+        Figure(
+            "world-band.webp", Window(BAND.x, BAND.y, SHEET_WIDTH_PIXELS, BAND.height),
+            MapView.FANTASY, MapStyle.NATURAL, quality = WORLD_BAND_QUALITY
+        )
+    }
+
+    /**
+     * [WORLD_BAND] halved, 2048 by 400, for a narrow screen at about one device pixel to the CSS
+     * pixel.
+     *
+     * The settled plate on a screen narrower than the page's 700-pixel breakpoint is at most 326
+     * CSS pixels tall (the 700 less two 24-pixel gutters, halved), which these 400 rows cover up to
+     * 1.2 device pixels to the CSS pixel; the page's `<picture>` sends every wider or denser screen
+     * the full band.
+     */
+    val WORLD_BAND_HALF: Figure by lazy {
+        Figure(
+            "world-band-half.webp", WORLD_BAND.window, MapView.FANTASY, MapStyle.NATURAL,
+            reduction = 2, quality = WORLD_BAND_QUALITY
+        )
+    }
+
+    /** Every picture the page shows, in the order it shows them. */
+    val FIGURES: List<Figure> by lazy {
+        listOf(HERO, WORLD_BAND, WORLD_BAND_HALF) + STEP_CARDS + listOf(WORLD_WHOLE, WORLD_FULL, RELIEF_TEXTURE) +
+            STYLE_PICTURES + DATA_FRAME + LAYER_CARDS + REEL
+    }
 
     @JvmStatic
     fun main(args: Array<String>) {
         val outputDir = File(args.firstOrNull() ?: "build/site-imagery").absoluteFile
         outputDir.mkdirs()
         // Whatever an earlier run left here would be published as though the page still asked
-        // for it: assembleSite copies every WebP in this directory. So the directory starts empty,
-        // and a figure the page has stopped showing stops being rendered and stops being shipped.
+        // for it: assembleSite copies every WebP in this directory, and the relief's heights. So
+        // the directory starts empty, and a figure the page has stopped showing stops being
+        // rendered and stops being shipped.
         // SiteAssemblyTest caught exactly that the first time the figure list shrank.
         outputDir.listFiles()?.forEach { it.delete() }
 
-        val lettering = Lettering(args.getOrNull(1)?.let(::File))
-        println("SITE IMAGERY band type: ${lettering.provenance}")
-
         // A contact sheet is the whole map at half size with a coordinate grid over it and the
         // page's windows outlined, written beside the figures so that whoever next moves a window
-        // can read coordinates off a picture instead of guessing. A preview is a finished strip at
-        // the width the page shows it, as a PNG, so it can be judged without a WebP decoder. Both
-        // are off by default: they are another rasterisation each and a megabyte of PNG per sheet,
-        // and a deploy has no use for either.
+        // can read coordinates off a picture instead of guessing. Off by default: it is another
+        // rasterisation and a megabyte of PNG per reading, and a deploy has no use for either.
         val contact = System.getProperty("cartogenesis.siteImagery.contact") == "true"
 
         val started = System.currentTimeMillis()
@@ -383,50 +512,61 @@ object SiteImagery {
                 "realms=${world.nations.nations.size})"
         )
 
-        // One rasterisation per distinct reading rather than one per panel: the hero and the styles
-        // strip's first panel are the same reading of the same world, and a 2048 sheet is 16 MB and
-        // most of a second.
-        val sheets = Sheets(world)
+        // One rasterisation per distinct reading rather than one per figure: the link preview, the
+        // band and the Natural style card are the same reading of the same world, and a 2048 sheet
+        // is 32 MB and most of a second.
         var total = 0L
-        var files = 0
-        try {
-            for (figure in FIGURES) {
-                for (layout in figure.layouts) {
-                    val bytes = write(sheets, figure, layout, lettering, outputDir)
-                    total += bytes
-                    files++
-                    println(
-                        "  ${figure.fileFor(layout).padEnd(22)} " +
-                            "${figure.width(layout)}x${figure.height(layout)}  " +
-                            "${bytes / 1024} KB  (${figure.panels.joinToString { it.name }} " +
-                            "${layout.name.lowercase()}, window " +
-                            "${figure.window.width}x${figure.window.height} at " +
-                            "${figure.window.x},${figure.window.y}, quality ${figure.quality})"
-                    )
-                    if (contact) writePreview(sheets, figure, layout, lettering, outputDir)
-                }
+        fun writeAll(sheets: Sheets, figures: List<Figure>) {
+            for (figure in figures) {
+                val bytes = write(sheets, figure, outputDir)
+                total += bytes
+                println(
+                    "  ${figure.file.padEnd(24)} ${figure.width}x${figure.height}  " +
+                        "$bytes bytes  (${figure.readingName} ${figure.cut}, window " +
+                        "${figure.window.width}x${figure.window.height} at " +
+                        "${figure.window.x},${figure.window.y} reduced ${figure.reduction}, " +
+                        "quality ${figure.quality})"
+                )
             }
+        }
+        val sheets = Sheets(world)
+        try {
+            writeAll(sheets, FIGURES.filter { it.seed == SEED })
+            total += writeReliefHeights(world, outputDir)
             if (contact) writeContactSheets(sheets, outputDir)
         } finally {
             sheets.close()
-            lettering.close()
+        }
+        // The reel's worlds, one at a time, each let go before the next is made.
+        FIGURES.filter { it.seed != SEED }.groupBy { it.seed }.forEach { (seed, figures) ->
+            val madeAt = System.currentTimeMillis()
+            val reelWorld = WorldGenerationEngine.generateBlocking(reelConfig(seed))
+            println("SITE IMAGERY seed=$seed ${reelWorld.width}x${reelWorld.height} generated in ${System.currentTimeMillis() - madeAt} ms")
+            val reelSheets = Sheets(reelWorld)
+            try {
+                writeAll(reelSheets, figures)
+            } finally {
+                reelSheets.close()
+            }
         }
 
         val finished = System.currentTimeMillis()
         println(
-            "SITE IMAGERY ${FIGURES.size} figures in $files files, ${total / 1024} KB total, " +
+            "SITE IMAGERY ${FIGURES.size} figures, $total bytes total, " +
                 "${(finished - started) / 1000}s including generation"
         )
     }
 
     /** [SEED] at [GRID_CELLS], with the settings the page names. */
-    fun generate(): WorldMap {
+    fun generate(): WorldMap = WorldGenerationEngine.generateBlocking(config())
+
+    /** The settings [generate] runs: [SEED] at [GRID_CELLS] with the page's sea, plates and realms. */
+    fun config(): WorldGenConfig {
         val base = WorldGenConfig(seed = SEED, width = 512, height = 512, seaLevel = SEA_LEVEL)
-        val config = base.copy(
+        return base.copy(
             tectonics = base.tectonics.copy(plateCount = PLATES),
             nations = base.nations.copy(nationCount = REALMS)
         ).atResolution(GRID_CELLS, GRID_CELLS)
-        return WorldGenerationEngine.generateBlocking(config)
     }
 
     /**
@@ -437,13 +577,39 @@ object SiteImagery {
      * display; the processor is the reference path in any case.
      */
     private class Sheets(private val world: WorldMap) : AutoCloseable {
-        private val bitmaps = LinkedHashMap<RenderOptions, Bitmap>()
-        private val images = LinkedHashMap<RenderOptions, Image>()
+        private val bitmaps = LinkedHashMap<Pair<RenderOptions, Cut>, Bitmap>()
+        private val images = LinkedHashMap<Pair<RenderOptions, Cut>, Image>()
+        private val geometry = SheetGeometry.of(world)
 
-        fun of(options: RenderOptions): Image = images.getOrPut(options) {
-            val bitmap = MapImage.toBitmap(world, options)
-            bitmaps[options] = bitmap
+        fun of(options: RenderOptions, cut: Cut = Cut.WHOLE): Image = images.getOrPut(options to cut) {
+            val bitmap = when (cut) {
+                Cut.WHOLE -> MapImage.toBitmap(world, options)
+                Cut.GROUND -> MapImage.sheetBitmap(geometry, MapRasterizer.rasterize(world, options))
+                Cut.LAND, Cut.SEA_AND_MARKS, Cut.MARKS, Cut.WATER ->
+                    MapImage.toBitmap(world, options, cellsKept(options, cut))
+            }
+            bitmaps[options to cut] = bitmap
             Image.makeFromBitmap(bitmap)
+        }
+
+        /**
+         * The reading's cells with every cell [cut] does not keep made clear, for the overlay to be
+         * drawn over: the marks then land on a transparent sheet with their own edges' coverage.
+         */
+        private fun cellsKept(options: RenderOptions, cut: Cut): IntArray {
+            val cells = MapRasterizer.rasterize(world, options)
+            val land = world.sea.isLand
+            val lakes = world.rivers.lakes
+            for (cell in cells.indices) {
+                val kept = when (cut) {
+                    Cut.LAND -> land[cell]
+                    Cut.SEA_AND_MARKS -> !land[cell]
+                    Cut.WATER -> lakes.isLake(cell)
+                    else -> false
+                }
+                if (!kept) cells[cell] = CLEAR
+            }
+            return cells
         }
 
         /** The sheet's width in pixels: where a window wraps round the seam. */
@@ -458,84 +624,66 @@ object SiteImagery {
         }
     }
 
-    /** Draws one figure one way round and writes it as WebP. Returns the size on disk. */
-    private fun write(
-        sheets: Sheets,
-        figure: Figure,
-        layout: Layout,
-        lettering: Lettering,
-        outputDir: File
-    ): Long {
-        val name = figure.fileFor(layout)
-        val strip = Bitmap().apply {
-            allocPixels(
-                ImageInfo.makeS32(
-                    figure.width(layout), figure.height(layout), ColorAlphaType.PREMUL
-                )
-            )
+    /** Cuts one figure out of its sheet and writes it as WebP. Returns the size on disk. */
+    private fun write(sheets: Sheets, figure: Figure, outputDir: File): Long {
+        val window = figure.window
+        // The map wraps east-west and nowhere else: a window off the top or the bottom of the
+        // sheet would be cut with a band of nothing in it.
+        require(window.y >= 0 && window.y + window.height <= sheets.mapHeight) {
+            "${figure.file}: rows ${window.y} to ${window.y + window.height} are not all on a " +
+                "sheet ${sheets.mapHeight} pixels tall"
         }
-        drawStrip(Canvas(strip), sheets, figure, layout, lettering)
+        var picture = Bitmap().apply {
+            allocPixels(ImageInfo.makeS32(window.width, window.height, ColorAlphaType.PREMUL))
+            // A layer leaves most of its sheet clear, so what the allocation held must not show.
+            erase(CLEAR)
+        }
+        drawWindow(Canvas(picture), sheets.of(figure.options, figure.cut), window, sheets.mapWidth)
+        var reduced = 1
+        while (reduced < figure.reduction) {
+            val half = halved(picture)
+            picture.close()
+            picture = half
+            reduced *= 2
+        }
 
-        val image = Image.makeFromBitmap(strip)
+        val image = Image.makeFromBitmap(picture)
         val data = image.encodeToData(EncodedImageFormat.WEBP, figure.quality)
-            ?: error("Skia could not encode $name as WebP")
-        val destination = File(outputDir, name)
+            ?: error("Skia could not encode ${figure.file} as WebP")
+        val destination = File(outputDir, figure.file)
         destination.writeBytes(data.bytes)
 
         image.close()
-        strip.close()
+        picture.close()
         return destination.length()
     }
 
     /**
-     * The panels one after another, the hairlines between them, and a naming band under each.
+     * [source] at half its width and height, each pixel the mean of the four it covers.
      *
-     * The only thing [layout] changes is which way "after" runs. Everything that decides what a
-     * panel *is* — the window, the reading, the band's tint and its two lines, and the one pair of
-     * type sizes the whole figure is lettered at — is computed once and used by both variants, so a
-     * phone and a desktop are looking at the same figure turned a different way round.
+     * Bilinear sampling at exactly half scale reads every destination pixel from the corner the
+     * four source pixels share, so it weighs them equally: a box filter, which is what a reduction
+     * of a map wants — a realm's colour averaged with its neighbour's at a border and nowhere else,
+     * and no ringing at a coast.
      */
-    private fun drawStrip(
-        canvas: Canvas,
-        sheets: Sheets,
-        figure: Figure,
-        layout: Layout,
-        lettering: Lettering
-    ) {
-        val window = figure.window
-        val bandHeight = figure.bandHeight
-        // One size for a strip's bands rather than one per panel: a band whose own text happened to
-        // be long would otherwise be set smaller than the band beside it, and the three would read
-        // as three different captions instead of one comparison.
-        val plan = lettering.plan(figure, window.width.toFloat(), bandHeight.toFloat())
-        val across = layout == Layout.ACROSS
-
-        var along = 0
-        for ((index, panel) in figure.panels.withIndex()) {
-            canvas.save()
-            if (across) canvas.translate(along.toFloat(), 0f)
-            else canvas.translate(0f, along.toFloat())
-            drawWindow(canvas, sheets.of(panel.options), window, sheets.mapWidth)
-            if (bandHeight > 0) {
-                drawBand(canvas, panel, window.width, window.height, bandHeight, plan)
-            }
-            canvas.restore()
-
-            along += if (across) window.width else figure.panelHeight
-            if (index < figure.panels.lastIndex) {
-                val rule = if (across) {
-                    Rect.makeXYWH(
-                        along.toFloat(), 0f, DIVIDER.toFloat(), figure.height(layout).toFloat()
-                    )
-                } else {
-                    Rect.makeXYWH(
-                        0f, along.toFloat(), figure.width(layout).toFloat(), DIVIDER.toFloat()
-                    )
-                }
-                canvas.drawRect(rule, Paint().apply { color = DIVIDER_COLOUR })
-                along += DIVIDER
-            }
+    private fun halved(source: Bitmap): Bitmap {
+        val width = source.width / 2
+        val height = source.height / 2
+        val half = Bitmap().apply {
+            allocPixels(ImageInfo.makeS32(width, height, ColorAlphaType.PREMUL))
+            erase(CLEAR)
         }
+        val image = Image.makeFromBitmap(source)
+        Canvas(half).drawImageRect(
+            image,
+            Rect.makeWH(source.width.toFloat(), source.height.toFloat()),
+            Rect.makeWH(width.toFloat(), height.toFloat()),
+            FilterMipmap(FilterMode.LINEAR, MipmapMode.NONE),
+            null,
+            true
+        )
+        image.close()
+        return half
     }
 
     /**
@@ -569,245 +717,70 @@ object SiteImagery {
         }
     }
 
-    /** The flat tint under one panel, with the panel's name in it and a line saying what it is. */
-    private fun drawBand(
-        canvas: Canvas,
-        panel: Panel,
-        width: Int,
-        top: Int,
-        height: Int,
-        plan: Lettering.Plan
-    ) {
-        canvas.drawRect(
-            Rect.makeXYWH(0f, top.toFloat(), width.toFloat(), height.toFloat()),
-            Paint().apply { color = panel.band.ground }
+    /** A pixel with nothing in it: transparent black, which is also its premultiplied form. */
+    private const val CLEAR = 0
+
+    /**
+     * Writes the relief patch's heights beside the pictures, as [RELIEF_HEIGHTS_FILE], and returns
+     * its size on disk.
+     *
+     * One point every [RELIEF_POINT_SPACING_PIXELS] of [RELIEF_WINDOW], both edges included, each
+     * the ground's height in metres at that place on the sheet, read bilinearly between the four
+     * cells round it: the land's height above the sea, a lake's water surface where it stands above
+     * the ground, and the sea flat at nought, since the picture shows the water's surface and not
+     * the floor under it. Stored in [RELIEF_STEPS_PER_METRE] steps as sixteen bits across the red
+     * (high byte) and green (low byte) of a PNG, which every browser decodes without loss; the page
+     * reads it back through a canvas.
+     */
+    private fun writeReliefHeights(world: WorldMap, outputDir: File): Long {
+        val sheet = SheetGeometry.of(world)
+        val elevation = world.sea.relativeElevation
+        val land = world.sea.isLand
+        val lakes = world.rivers.lakes
+        val metresPerUnit = world.config.scale.highestLandMetres
+        fun groundMetres(column: Int, row: Int): Float {
+            val cell = elevation.clampY(row) * elevation.width + elevation.wrapX(column)
+            if (!land[cell]) return 0f
+            val ground = if (lakes.isLake(cell)) maxOf(elevation.data[cell], lakes.surfaceAt(cell)) else elevation.data[cell]
+            return (ground * metresPerUnit).coerceAtLeast(0f)
+        }
+        val across = RELIEF_POINTS_ACROSS
+        val down = RELIEF_POINTS_DOWN
+        val bytes = ByteArray(across * down * 4)
+        var highest = 0f
+        for (row in 0 until down) for (column in 0 until across) {
+            // The point's place in cells, measured from cell centres.
+            val cellX = (RELIEF_WINDOW.x + column * RELIEF_POINT_SPACING_PIXELS).toFloat() / sheet.pixelsPerCellAcross - 0.5f
+            val cellY = (RELIEF_WINDOW.y + row * RELIEF_POINT_SPACING_PIXELS).toFloat() / sheet.pixelsPerCellDown - 0.5f
+            val left = kotlin.math.floor(cellX).toInt()
+            val top = kotlin.math.floor(cellY).toInt()
+            val east = cellX - left
+            val south = cellY - top
+            val metres = (groundMetres(left, top) * (1 - east) + groundMetres(left + 1, top) * east) * (1 - south) +
+                (groundMetres(left, top + 1) * (1 - east) + groundMetres(left + 1, top + 1) * east) * south
+            highest = maxOf(highest, metres)
+            val steps = Math.round(metres * RELIEF_STEPS_PER_METRE).coerceIn(0, 0xFFFF)
+            val at = (row * across + column) * 4
+            // Skia's S32 is blue, green, red, alpha in memory on this platform.
+            bytes[at] = 0
+            bytes[at + 1] = (steps and 0xFF).toByte()
+            bytes[at + 2] = (steps shr 8).toByte()
+            bytes[at + 3] = 0xFF.toByte()
+        }
+        val bitmap = Bitmap()
+        bitmap.installPixels(ImageInfo.makeS32(across, down, ColorAlphaType.OPAQUE), bytes, across * 4)
+        val image = Image.makeFromBitmap(bitmap)
+        val png = image.encodeToData(EncodedImageFormat.PNG) ?: error("Skia could not encode the relief's heights")
+        val destination = File(outputDir, RELIEF_HEIGHTS_FILE)
+        destination.writeBytes(png.bytes)
+        image.close()
+        bitmap.close()
+        println(
+            "  ${RELIEF_HEIGHTS_FILE.padEnd(24)} ${across}x$down  ${destination.length()} bytes  (heights, highest %.0f m, ".format(highest) +
+                "${sheet.kilometresPerPixel} km a sheet pixel)"
         )
-        plan.draw(canvas, panel, width / 2f, top.toFloat(), height.toFloat())
+        return destination.length()
     }
-
-    /**
-     * The band's type, and how a band's two lines are set in it.
-     *
-     * The faces are the application's own — IBM Plex Sans, the face the page measures things in —
-     * loaded from the resource directory the Gradle task passes in so that the strip is lettered in
-     * the same cut of the same typeface the page around it uses. A run without that directory
-     * (someone running the class by hand, a checkout without the resources) falls back to whatever
-     * sans the host has, because a strip lettered in the wrong face is still a strip and a build
-     * that fails for want of a font is not.
-     */
-    private class Lettering(fontDir: File?) : AutoCloseable {
-        private val medium: Typeface?
-        private val regular: Typeface?
-
-        /** What to print in the build log, so a deploy says which type it actually used. */
-        val provenance: String
-
-        init {
-            val fromResources = face(fontDir, "plex_sans_medium.ttf") to
-                face(fontDir, "plex_sans_regular.ttf")
-            if (fromResources.first != null && fromResources.second != null) {
-                medium = fromResources.first
-                regular = fromResources.second
-                provenance = "IBM Plex Sans, from ${fontDir?.absolutePath}"
-            } else {
-                medium = systemSans(FontStyle.BOLD)
-                regular = systemSans(FontStyle.NORMAL)
-                provenance = "the host's default sans (no Plex Sans at ${fontDir?.absolutePath})"
-            }
-        }
-
-        private fun face(dir: File?, name: String): Typeface? {
-            val file = dir?.resolve(name)?.takeIf { it.isFile } ?: return null
-            return runCatching { FontMgr.default.makeFromFile(file.absolutePath) }.getOrNull()
-        }
-
-        private fun systemSans(style: FontStyle): Typeface? =
-            runCatching { FontMgr.default.matchFamilyStyle("", style) }.getOrNull()
-
-        /**
-         * How one strip's bands are set: the two sizes, and where the two baselines fall.
-         *
-         * The name is set at two fifths of the band and the line under it at a little over a
-         * quarter, then both are brought down together until the longest text in the strip fits
-         * the panel with a margin — so a strip's bands share one pair of sizes whatever any one of
-         * them has to say, and nothing is ever cropped or allowed to run to the panel's edge.
-         */
-        fun plan(figure: Figure, panelWidth: Float, bandHeight: Float): Plan {
-            val margin = bandHeight * SIDE_MARGIN
-            val room = panelWidth - 2 * margin
-            var scale = 1f
-            for (panel in figure.panels) {
-                val name = panel.name.uppercase()
-                scale = minOf(
-                    scale, fit(name, medium, NAME_SHARE, bandHeight, room, NAME_TRACKING)
-                )
-                if (panel.detail.isNotEmpty()) {
-                    scale = minOf(
-                        scale, fit(panel.detail, regular, DETAIL_SHARE, bandHeight, room, 0f)
-                    )
-                }
-            }
-            return Plan(
-                Font(medium, bandHeight * NAME_SHARE * scale).tuned(),
-                Font(regular, bandHeight * DETAIL_SHARE * scale).tuned()
-            )
-        }
-
-        /** How far a line has to be brought down to fit [room], or 1 if it already fits. */
-        private fun fit(
-            text: String,
-            face: Typeface?,
-            share: Float,
-            bandHeight: Float,
-            room: Float,
-            tracking: Float
-        ): Float {
-            val font = Font(face, bandHeight * share)
-            val width = font.measureTextWidth(text) + tracking * font.size * (text.length - 1)
-            font.close()
-            return if (width <= room) 1f else room / width
-        }
-
-        private fun Font.tuned(): Font = apply {
-            edging = FontEdging.ANTI_ALIAS
-            isSubpixel = true
-        }
-
-        override fun close() {
-            medium?.close()
-            regular?.close()
-        }
-
-        /** One strip's band type, ready to letter a panel with. */
-        inner class Plan(private val nameFont: Font, private val detailFont: Font) {
-
-            fun draw(canvas: Canvas, panel: Panel, centre: Float, top: Float, height: Float) {
-                val paint = Paint().apply { color = panel.band.ink; mode = PaintMode.FILL }
-                val name = panel.name.uppercase()
-                // Measured rather than taken from the metrics: capHeight is optional in a font's
-                // tables, and the ink of the actual string is what has to sit in the middle of the
-                // band. A run of capitals has no descender, so its bounds are its cap height.
-                val nameInk = -nameFont.measureText(name).top
-                val detailInk =
-                    if (panel.detail.isEmpty()) 0f else -detailFont.measureText(panel.detail).top
-                val gap = if (panel.detail.isEmpty()) 0f else height * LINE_GAP
-                val block = nameInk + gap + detailInk
-                val nameBaseline = top + (height - block) / 2f + nameInk
-
-                tracked(canvas, name, nameFont, paint, centre, nameBaseline, NAME_TRACKING)
-                if (panel.detail.isNotEmpty()) {
-                    val baseline = nameBaseline + gap + detailInk
-                    val width = detailFont.measureTextWidth(panel.detail)
-                    canvas.drawString(panel.detail, centre - width / 2f, baseline, detailFont, paint)
-                }
-            }
-
-            /**
-             * A line of capitals, centred, with air between the letters.
-             *
-             * Drawn glyph by glyph because Skia has no tracking on a plain `drawString`, and a run
-             * of capitals set solid reads as a word rather than as a label. The kerning a font would
-             * apply between a pair is lost with it, which for spaced capitals is the point.
-             */
-            private fun tracked(
-                canvas: Canvas,
-                text: String,
-                font: Font,
-                paint: Paint,
-                centre: Float,
-                baseline: Float,
-                tracking: Float
-            ) {
-                val space = font.size * tracking
-                val width = text.sumOf { font.measureTextWidth(it.toString()).toDouble() }
-                    .toFloat() + space * (text.length - 1)
-                var x = centre - width / 2f
-                for (character in text) {
-                    val glyph = character.toString()
-                    canvas.drawString(glyph, x, baseline, font, paint)
-                    x += font.measureTextWidth(glyph) + space
-                }
-            }
-        }
-
-        private companion object {
-            /** The name's size, as a share of the band. */
-            const val NAME_SHARE = 0.40f
-
-            /** The line under it, small enough to be read second and large enough to be read. */
-            const val DETAIL_SHARE = 0.28f
-
-            /** Air between the letters of the name, as a share of its size. */
-            const val NAME_TRACKING = 0.07f
-
-            /** Between the two baselines' ink, as a share of the band. */
-            const val LINE_GAP = 0.11f
-
-            /**
-             * Clear at each end of a band, as a share of the band's height.
-             *
-             * It is what a line is brought down to fit inside, and the longest line in either strip
-             * — the Natural style's own description of itself, which is this file's to letter and
-             * not to shorten — is what spends it.
-             */
-            const val SIDE_MARGIN = 0.30f
-        }
-    }
-
-    /**
-     * A finished figure at the width the page's column gives it, as a PNG.
-     *
-     * The figures ship as WebP, which is not a format a person can open everywhere, and the thing
-     * that most needs looking at before a strip is published is whether its lettering survives
-     * being fitted into the page — which is a question about the *displayed* size, not the file's.
-     * So this is the picture the reader actually gets, at the size they get it.
-     */
-    private fun writePreview(
-        sheets: Sheets,
-        figure: Figure,
-        layout: Layout,
-        lettering: Lettering,
-        outputDir: File
-    ) {
-        val drawnWidth = figure.width(layout)
-        val drawnHeight = figure.height(layout)
-        val column = if (layout == Layout.ACROSS) PAGE_COLUMN else PHONE_COLUMN
-        val scale = column.toFloat() / drawnWidth
-        val height = (drawnHeight * scale).roundToInt()
-        val strip = Bitmap().apply {
-            allocPixels(ImageInfo.makeS32(drawnWidth, drawnHeight, ColorAlphaType.PREMUL))
-        }
-        drawStrip(Canvas(strip), sheets, figure, layout, lettering)
-        val full = Image.makeFromBitmap(strip)
-
-        val shrunk = Bitmap().apply {
-            allocPixels(ImageInfo.makeS32(column, height, ColorAlphaType.PREMUL))
-        }
-        Canvas(shrunk).drawImageRect(
-            full,
-            Rect.makeWH(drawnWidth.toFloat(), drawnHeight.toFloat()),
-            Rect.makeWH(column.toFloat(), height.toFloat())
-        )
-        val name = "preview-" + figure.fileFor(layout).removeSuffix(".webp") + ".png"
-        val png = Image.makeFromBitmap(shrunk).encodeToData(EncodedImageFormat.PNG)!!
-        File(outputDir, name).writeBytes(png.bytes)
-        println("  preview $name (${column}x$height, the figure as the page shows it)")
-
-        shrunk.close()
-        full.close()
-        strip.close()
-    }
-
-    /**
-     * How wide a figure is drawn on the page: the 1120px measure less its 24px gutters, and the
-     * same measure on a 375px phone.
-     *
-     * Only [writePreview] uses them, and only to answer "is this legible where it lands?". Nothing
-     * that ships is sized by either — a figure is cut at the render's own pixels and left to the
-     * browser to fit.
-     */
-    private const val PAGE_COLUMN = 1072
-    private const val PHONE_COLUMN = 327
 
     /** The contact sheet's fine grid, in the render's own pixels. */
     private const val GRID_MINOR_PIXELS = 128
@@ -834,21 +807,19 @@ object SiteImagery {
      * map before it is rendered.
      */
     private fun writeContactSheets(sheets: Sheets, outputDir: File) {
-        val readings = FIGURES.flatMap { it.panels }
-            .map { Triple(it.view, it.style, it.options) }
-            .distinctBy { it.first to it.second }
+        val readings = FIGURES.filter { it.seed == SEED && it.cut == Cut.WHOLE }.distinctBy { it.view to it.style }
         val mapWidth = sheets.mapWidth
         val mapHeight = sheets.mapHeight
         val contactWidth = mapWidth / 2
         val contactHeight = mapHeight / 2
-        for ((view, style, options) in readings) {
-            val name = "contact-${view.name.lowercase()}-${style.name.lowercase()}"
+        for (reading in readings) {
+            val name = "contact-${reading.view.name.lowercase()}-${reading.style.name.lowercase()}"
             val sheet = Bitmap().apply {
                 allocPixels(ImageInfo.makeS32(contactWidth, contactHeight, ColorAlphaType.PREMUL))
             }
             val canvas = Canvas(sheet)
             canvas.drawImageRect(
-                sheets.of(options),
+                sheets.of(reading.options),
                 Rect.makeWH(mapWidth.toFloat(), mapHeight.toFloat()),
                 Rect.makeWH(contactWidth.toFloat(), contactHeight.toFloat())
             )
@@ -869,7 +840,7 @@ object SiteImagery {
             val outline = Paint().apply {
                 color = WINDOW_OUTLINE_INK; strokeWidth = 3f; mode = PaintMode.STROKE
             }
-            FIGURES.map { it.window }.distinct().forEach { window ->
+            FIGURES.filter { it.seed == SEED }.map { it.window }.distinct().forEach { window ->
                 canvas.drawRect(
                     Rect.makeXYWH(
                         window.x / 2f, window.y / 2f, window.width / 2f, window.height / 2f

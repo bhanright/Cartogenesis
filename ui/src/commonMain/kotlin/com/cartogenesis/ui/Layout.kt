@@ -195,7 +195,7 @@ internal object Arrangements {
      * how far in they are than a percentage does. Nothing else is lost: the ten styles
      * move from a segmented row into a menu, the three menus into one button, and every knob is in
      * the sheet. The export chips are not lost either — both the picture formats and the data
-     * layers are in the sheet's header, at the sizes [Platform.exportCeiling] allows a phone.
+     * layers are in the sheet's header, at the sizes [Platform.generationCeiling] allows a browser.
      */
     private fun compact(platform: Platform) = Reachable(
         knobs = headerKnobs(platform) + PANEL_SECTIONS.flatMap { Knobs.inSection(it) },

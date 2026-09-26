@@ -54,6 +54,11 @@ kotlin {
             // suspend. Nothing else here needs a coroutine.
             implementation(libs.kotlinx.coroutines.test)
         }
+        // The whole-world fingerprint, which the link guard holds a linked world to; see
+        // `:worldgen`'s build script for why the files are shared rather than depended on.
+        named("jvmTest") {
+            kotlin.srcDir(rootProject.layout.projectDirectory.dir("worldgen/src/sharedTestSupport/kotlin"))
+        }
     }
 }
 

@@ -305,13 +305,49 @@
   a column cannot be narrower than a cell. The vector ink laid over it (the traced coast, rivers,
   graticule, glyphs, lettering) is not affected. What removes it is a grid whose cells are square on
   the ground; per-pixel kernels were declined for it. 2026-09-24, Fix A.
-- **Nobody has drawn a 4096 world's sheet in a real browser.** Fix A made it 8192 by 4096 pixels,
-  twice the width it was, and the pane hands it to Skia on a WebGL canvas, whose largest texture is
-  the device's `MAX_TEXTURE_SIZE`: 16,384 on most desktop graphics cards, as little as 4,096 on some
-  phones and older integrated ones. Whether Skia tiles an image over that limit or draws nothing
-  has not been seen, and no wasm test draws on a real canvas. The exports do not depend on it: they
-  are encoded from the bitmap in memory. Before the next release, generate a 4096 world on screen in
-  a browser and look; if it fails, cap the pane's picture or draw it in tiles. 2026-09-24, Fix A.
+- **A 4096 world cannot be made in a browser tab, so its 8192 by 4096 sheet has never been drawn
+  there.** Tried on 2026-09-25 in Edge 153 on an RTX 3070 Ti (WebGL through ANGLE on Direct3D 11,
+  `MAX_TEXTURE_SIZE` 16,384): the tab's JavaScript heap stood at 1.4 GB five minutes into the
+  generation and 2.7 GB at seven, still wearing down the mountains, and the tab then died before
+  anything was drawn. A 2048 world in the same tab generated in about four minutes (heap peaking
+  near 2.3 GB) and drew its 4096 by 2048 sheet correctly, at 2.9 km a pixel. So the question Fix A
+  left, whether Skia draws an image wider than a device's texture limit (as little as 4,096 on some
+  phones and older integrated graphics), is untested only for the 4096 world, and that world does
+  not get as far as drawing. Not known whether this is new since the ground's ruler or as old as
+  the 4096 chip. 2026-09-25, after Fix A.
+  **The cap is in** (2026-09-25): the browser stops at 2048 for the world on screen and for exports,
+  its 4096 chips shown disabled with the reason, a stored 4096 preference brought down to 2048 with a
+  line saying so, and a 4096 save refused from its header, since its 2.45 GB of arrays is more than
+  the heap the tab died at (`Platform.generationCeiling`, `WorldCeilings.BROWSER_TAB`,
+  `OpeningLimit`). **Still open:** making a 4096 world fit a tab, and then drawing its sheet there,
+  which is the Skia texture-limit question above. When it fits, `WorldCeilings.BROWSER_TAB` is the
+  one number to raise; the browser's opening limit and every size row follow it.
+- **Four grid-shaped marks on seed 718106 at 2048, seen while cutting the site's card pictures.**
+  Each breaks rule 13; whether the geometry guard's detectors see them has not been checked:
+  - the ice caps end in an edge straight down a column, with a fan of rays off it (the ice's work;
+    compare the known failure that the sheet's edge runs straight along a row);
+  - the dry belt crosses the northern lowlands as a band ruled along a row (the climate's);
+  - the estuary sea in the site's styles window has a straight west edge and a straight top (the
+    sea level's drowned basins), and shows on the site's Schoolroom card;
+  - a short straight double line at the top left of the site's data-view window, in all four cards.
+  The site's windows were kept (the three styles and four views must show the same ground), so the
+  last two are on the page until the generator is fixed; the site's pictures are all made again
+  once the audit's major fixes have merged, and the windows re-picked then if any mark remains.
+  2026-09-25, Site 4. Site 5a moved the styles window, and with it the Schoolroom card, off the
+  estuary, and put the six steps and the twelve styles in windows that hold none of the four; the
+  dry belt also crosses the eastern island along the same rows (about 675 to 700 of the 2048
+  sheet). Two remain on the page where the figure cannot move: the band the opening drifts (Site 6,
+  now at the sheet's full 4096 by 800 and the page's largest picture) is the author's window all
+  the way round the world, so it carries the range's ice cap with its straight edge and the dry
+  belt the whole way, and its settled plate shows both; the data-view window's double line is
+  unchanged. Site 5b added three figures that cannot avoid them: the lens's whole world and its
+  full-size picture carry all four, the data frame (the cards' window widened east) carries the
+  double line as the cards do, and the reel's five worlds at 512 show their own ice caps and dry
+  belts. Two more marks were seen while picking the relief's patch, the eastern island's western
+  end at (2720, 470): a scarp running nearly straight down a column from about (2960, 717) to
+  (2950, 820) on the sheet, and a delta flat with straight edges at about (3010-3055, 800-835).
+  Both are in the relief, where the tilt makes the scarp plainer; no window of that size on the
+  island's range avoids them and the dry belt at once.
 - **Six operators still count a row as a column, each outside Fix 2's list.** Found by reading the
   code, not by a guard: the climate stage's rainfall blur (a square box of cells, sized by
   `RAIN_BLUR_REFERENCE_WIDTH`) and its two coastal-reach blurs, the water exposure and the offshore
@@ -1538,7 +1574,14 @@
   a settlement wants from water (discharge it can drink and float a boat on) rather than about the
   drawing, and answering it moves every realm on every map, so it wants its own measurement and its
   own guard. The older half of this entry stands too: the figure is a constant and not the setting,
-  so it was already not what a moved slider drew. 2026-09-12, restated 2026-09-21 at R1.
+  so it was already not what a moved slider drew. Since chunk 6 the runoff it sums and the discharge
+  it compares with are both `Runoff.annualWeightMm`, in millimetres, so the two are at least in one
+  unit. 2026-09-12, restated 2026-09-21 at R1 and 2026-09-25 at chunk 6.
+- **`ClimateStage` still says the river and realm stages read its 0..1 rainfall.** The comment above
+  the normalised copy in `ClimateStage.generate` lists `RiverStage`'s and `NationStage`'s runoff
+  weighting among the copy's consumers; since chunk 6 both read `precipitationMm` through
+  `Runoff.annualWeightMm`. Left for the chunk that corrects that stage's divisor KDoc, since chunk 6
+  was not to edit the climate stage. 2026-09-25.
 - **Realm governments are decided by cell counts, not areas.** `Atlas.government`'s empire and
   free-city bars count cells, so the same world exported at a finer grid promotes every realm: the
   `minCells` class of defect again. Express them as shares of the land and pin with the resolution

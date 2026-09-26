@@ -17,12 +17,53 @@
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%23121417'/><path d='M4 22c4-6 8 2 12-4s8 2 12-4' fill='none' stroke='%23c9a227' stroke-width='2.2' stroke-linecap='round'/><path d='M4 27c4-6 8 2 12-4s8 2 12-4' fill='none' stroke='%235d0000' stroke-width='2.2' stroke-linecap='round'/></svg>">
 
-<!-- The two faces the first screenful is set in. The other three are asked for by @font-face
-     below and fetched when the reader gets to them. Fonts are fetched in CORS mode even from the
-     same origin, so `crossorigin` is not optional here: without it the preload is discarded and
-     the file is downloaded a second time. -->
-<link rel="preload" as="font" type="font/ttf" href="fonts/spectral_regular.ttf" crossorigin>
+<!-- The two faces the first screenful is set in: the heading's and the title card's semibold, and
+     the sans the lede is read in. The other three are asked for by @font-face below and fetched
+     when the page first sets type in them. Fonts are fetched in CORS mode even from the same
+     origin, so `crossorigin` is not optional here: without it the preload is discarded and the file
+     is downloaded a second time. -->
+<link rel="preload" as="font" type="font/ttf" href="fonts/spectral_semibold.ttf" crossorigin>
 <link rel="preload" as="font" type="font/ttf" href="fonts/plex_sans_regular.ttf" crossorigin>
+
+<!-- Classes set before anything is painted, so that nothing a reader sees is drawn one way and then
+     swapped for another. `live` says scripts run, so the figures that need one take their space
+     from the first paint. `reveal` arms the cards' reveal: only when the browser can say when a
+     card comes into view and the reader has not asked for less motion. `unfold` pins the opening
+     while the page scrolls, so its panel can rise over the map: the reveal's two conditions, and a
+     screen at least 500 pixels tall, below which no width sets the opening's panel with a quarter
+     of the screen left for the map (the panel is never under about 380 pixels tall). `splash` puts
+     the title card up first: once a visit, which the browser has to be able to remember, and never
+     for a reader who arrived at a place further down the page. With scripts off none is set and
+     the opening is simply there, settled. If the page's own script does not finish, all four come
+     off again once the document has been read, and the page is the one a reader without scripts
+     gets. -->
+<script>
+(function () {
+  var html = document.documentElement;
+  html.className += ' live';
+  if ('IntersectionObserver' in window &&
+      !(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches)) {
+    html.className += ' reveal';
+    if (window.matchMedia('(min-height: 500px)').matches) {
+      html.className += ' unfold';
+      var firstThisVisit = false;
+      try {
+        firstThisVisit = !location.hash &&
+          sessionStorage.getItem('cartogenesis-opening-seen') !== 'yes';
+        if (firstThisVisit) sessionStorage.setItem('cartogenesis-opening-seen', 'yes');
+      } catch (unavailable) {
+        firstThisVisit = false;
+      }
+      if (firstThisVisit) html.className += ' splash';
+    }
+  }
+  document.addEventListener('DOMContentLoaded', function () {
+    if (html.getAttribute('data-scripted') !== 'yes') {
+      html.className = html.className.replace(/\s*\b(live|reveal|unfold|splash)\b/g, '');
+    }
+  });
+})();
+</script>
 
 <style>
   /* ==========================================================================
@@ -83,8 +124,17 @@
     --mono:"IBM Plex Mono","Cascadia Mono",Consolas,"Liberation Mono",monospace;
 
     --measure:1120px;
+    --gutter:24px;
+  }
+  /* The page's two colours of its own, which the application has no use for: the
+     title card's name is set in white over the map before it lights, and each
+     letter flashes pale gold on its way to the brass it stays. Nowhere else. */
+  .title-card{
+    --letter-unlit:#ffffff;
+    --letter-struck:#ffe7a1;
   }
   *{box-sizing:border-box}
+  html{background:var(--ink)}
   body{
     margin:0;background:var(--ink);color:var(--bone);
     font-family:var(--sans);font-size:16px;line-height:1.65;
@@ -92,75 +142,195 @@
   }
   a{color:inherit}
   :focus-visible{outline:2px solid var(--brass);outline-offset:3px}
-  .wrap{max-width:var(--measure);margin:0 auto;padding:0 24px}
+  .wrap{max-width:var(--measure);margin:0 auto;padding:0 var(--gutter)}
 
-  /* ---------- topbar: the wordmark, and nothing that belongs to anyone else -- */
-  .topbar{border-bottom:1px solid var(--hairline)}
-  .topbar .wrap{display:flex;align-items:baseline;gap:22px;padding-top:16px;padding-bottom:14px}
   /* The wordmark the author chose (2026-09-12): the name in spaced capitals with its second half in
-     brass, and the one-line description beside it — the treatment the earlier page had, set in
-     the page's own Spectral rather than that page's Cinzel. */
+     brass, set in the page's own Spectral. It rides in the tray now that the page has no top bar. */
   .wordmark{
     font-family:var(--serif);font-weight:600;font-size:18px;line-height:1;
     letter-spacing:.2em;text-transform:uppercase;color:var(--parchment);margin:0;
   }
   .wordmark span{color:var(--brass)}
-  .topline{font-family:var(--sans);font-size:14px;color:var(--bone-dim);white-space:nowrap}
-  @media (max-width:520px){.topline{display:none}}
 
-  /* ---------- hero ---------------------------------------------------------- */
-  .hero{
-    display:grid;gap:36px 48px;align-items:center;
-    grid-template-columns:minmax(0,1fr);
-    padding:56px 0 16px;
+  .btn{
+    display:inline-flex;align-items:center;justify-content:center;min-height:46px;padding:0 20px;
+    font-family:var(--sans);font-weight:500;font-size:15px;line-height:1.2;text-decoration:none;
+    border:1px solid var(--brass);border-radius:2px;
+    transition:background-color .15s,border-color .15s;
   }
-  @media (min-width:900px){
-    /* The text column is the wider of the two because the headline sets on two lines and the
-       break is chosen, not left to the browser: at this width line one is "Build a world".
-       The crop is 2:1, so half the row is already more height than it needs. */
-    .hero{grid-template-columns:minmax(0,1fr) minmax(0,.9fr);padding:88px 0 40px}
+  .btn.primary{background:var(--brass);color:var(--ink)}
+  .btn.primary:hover,.btn.primary:focus-visible{background:var(--parchment);border-color:var(--parchment)}
+  .btn.secondary{background:transparent;color:var(--parchment);border-color:var(--hairline)}
+  .btn.secondary:hover,.btn.secondary:focus-visible{border-color:var(--brass)}
+
+  /* ---------- the opening --------------------------------------------------- */
+  /* The drifting world across the top of the screen and an ink panel under it
+     with the heading and the two ways in; as the page scrolls the panel rises
+     over the map like a curtain and the map pulls in to sit beneath the heading
+     as a framed plate.
+
+     Written three ways. As it stands here, with no class, it is the opening
+     settled: the panel, then the plate in the page's flow, which is what a
+     reader without scripts, a reader who asked for less motion and a screen too
+     short for the rest all get. Under `unfold` the stage is pinned over a runway
+     of one more screen and laid out as the opening at rest, the map filling what
+     the panel leaves; the script then moves the map, the band inside it and the
+     panel by transforms alone, as far as the scroll has gone. Under `splash` the
+     map is laid over the whole stage for the title card. Every size the script
+     reads is the stage's own, whose height is the small viewport's (`svh`), so a
+     phone's toolbar showing and hiding changes nothing the opening is measured
+     by. */
+  .opening{position:relative;z-index:0;background:var(--ink)}
+  .opening-stage{padding:clamp(8px,6vh,48px) 0 40px}
+  /* The panel is the ink at 97%, so the map can only just be seen passing
+     behind it as it rises. 97 is not a look: it is the least whole percent at
+     which no word on the panel, read over the brightest pixel the band holds
+     (pure white ice), falls below the WCAG level it reaches on the solid ink.
+     SitePaletteContrastTest measures it and holds the page to it; the brass
+     eyebrow, at 7.63:1 on the ink and 7.13 at 97% over white, is the pair that
+     sets it, since at 96% it drops under AAA's 7. */
+  .opening-panel{
+    display:flex;flex-direction:column;align-items:center;text-align:center;
+    padding:clamp(22px,4vh,40px) var(--gutter) clamp(18px,3vh,32px);
+    background:color-mix(in srgb,var(--ink) 97%,transparent);
   }
   .eyebrow{
-    font-family:var(--mono);font-size:13px;letter-spacing:.14em;text-transform:uppercase;
-    color:var(--brass);margin:0 0 22px;
+    font-family:var(--mono);font-size:12px;line-height:1;letter-spacing:.2em;text-transform:uppercase;
+    color:var(--brass);margin:0 0 14px;
   }
-  /* The hero is the page's one large statement, so it is set a size class above everything
-     below it: the headline at up to 54px against the 24px section heads, the lede at 20px
-     against 16px body. 54px is the largest size at which "from the ground up." still fits the
-     text column at 900px wide, which is where the two-column hero switches on. */
   h1{
-    font-family:var(--serif);font-weight:400;
-    font-size:clamp(34px,4.2vw,54px);line-height:1.1;letter-spacing:-.01em;
-    margin:0;color:var(--parchment);
+    font-family:var(--serif);font-weight:600;color:var(--parchment);
+    font-size:clamp(34px,5.6vw,72px);line-height:1.02;letter-spacing:-.01em;margin:0 0 14px;
+    text-wrap:balance;max-width:14em;
   }
-  /* Inline by default, so a narrow column wraps the sentence wherever it likes rather than
-     stranding "up." alone on a line of its own. The chosen break is switched on with the
-     two-column hero below, where there is room for it. */
-  h1 .line{display:inline}
-  @media (min-width:900px){ h1 .line{display:block} }
-  .lede{
-    margin:24px 0 0;color:var(--bone-dim);font-size:clamp(17px,1.6vw,20px);line-height:1.5;
-    max-width:40ch;
+  .lede{margin:0 0 20px;color:var(--bone);max-width:36em}
+  .actions{display:flex;flex-wrap:wrap;justify-content:center;gap:12px}
+  .opening-cue{
+    margin-top:18px;width:36px;height:36px;padding:0;border-radius:50%;border:1px solid var(--hairline);
+    background:transparent;color:var(--parchment);cursor:pointer;transition:border-color .15s;
   }
+  .unfold .opening-cue{display:grid;place-items:center}
+  .opening-cue:hover{border-color:var(--brass)}
+  .opening-cue svg{width:14px;height:14px}
 
-  .actions{display:flex;flex-wrap:wrap;gap:14px;margin:34px 0 0}
-  .btn{
-    display:inline-block;text-decoration:none;font-family:var(--sans);font-weight:500;
-    font-size:15.5px;line-height:1.2;padding:14px 24px;border-radius:2px;
-    border:1px solid transparent;transition:background-color .15s,border-color .15s,color .15s;
+  /* The plate: 2:1, as wide as the column allows up to 960, and the band inside
+     it as tall as the plate, so what shows is the band's first stretch, which is
+     the author's window. */
+  .opening-plate{
+    position:relative;width:min(960px,calc(100% - 2 * var(--gutter)));aspect-ratio:2/1;margin:0 auto;
+    border:1px solid var(--hairline);background:var(--ink-raised);overflow:hidden;
   }
-  .btn.primary{background:var(--oxblood);color:var(--parchment);border-color:var(--oxblood)}
-  .btn.primary:hover,.btn.primary:focus-visible{
-    background:var(--oxblood-lit);border-color:var(--oxblood-lit);
+  .opening-map{position:absolute;inset:0;overflow:hidden;background:var(--ink-raised)}
+  .opening-band{position:absolute;left:0;top:0;height:100%;transform-origin:0 0}
+  /* The band laid twice end to end and slid by half the pair: once round the
+     world every four minutes, and the second copy is the same file, so it costs
+     no second request. */
+  .band-track{display:flex;height:100%;width:max-content}
+  .band-track picture,.band-track img{display:block;height:100%;width:auto}
+  .live .band-track{animation:band-drift 240s linear infinite}
+  .opening-map.paused .band-track{animation-play-state:paused}
+  @keyframes band-drift{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+  .opening-frame{display:none}
+  .band-pause{
+    width:30px;height:30px;padding:0;border-radius:50%;cursor:pointer;
+    border:1px solid var(--hairline);background:var(--ink);color:var(--parchment);
+    transition:border-color .15s;
   }
-  .btn.secondary{background:transparent;color:var(--brass);border-color:var(--brass)}
-  .btn.secondary:hover,.btn.secondary:focus-visible{background:var(--ink-sunk)}
-  .trust{
-    font-family:var(--mono);font-size:13px;color:var(--bone-dim);
-    margin:18px 0 0;letter-spacing:.02em;
+  .band-pause:hover{border-color:var(--brass)}
+  .band-pause svg{display:block;width:12px;height:12px;margin:auto}
+  .band-pause .play{display:none}
+  .band-pause[aria-pressed="true"] .play{display:block}
+  .band-pause[aria-pressed="true"] .pause{display:none}
+  .live .band-pause{position:absolute;right:12px;top:12px;z-index:2}
+
+  .unfold .opening{height:200vh;height:200svh;margin-bottom:calc(-1 * var(--overlap, 0px))}
+  .unfold .opening-stage{
+    position:sticky;top:0;height:100vh;height:100svh;overflow:hidden;padding:0;
+    display:flex;flex-direction:column;
+  }
+  .unfold .opening-panel{position:relative;z-index:2;flex:none}
+  .unfold .opening-plate{display:contents}
+  .unfold .opening-map{
+    position:relative;inset:auto;order:-1;flex:1 1 auto;min-height:0;z-index:1;transform-origin:0 0;
+  }
+  /* The plate's hairline is drawn round the map wherever the map is, as four
+     edges each stretched along its own length only, so the line stays one pixel
+     whatever the map's size. (Drawn at the plate's settled place instead, it
+     showed as an empty rectangle below the map on a wide screen mid-way, where the
+     map is still far wider than the plate it is heading for.) */
+  .unfold .opening-frame{
+    display:block;position:absolute;left:0;top:0;z-index:1;pointer-events:none;opacity:0;
+  }
+  .opening-frame i{position:absolute;left:0;top:0;background:var(--hairline);transform-origin:0 0}
+  .unfold .band-pause{left:0;top:0;right:auto;z-index:1}
+
+  /* The title card: the name over the whole map, and the line under it. The
+     name's letters light one by one, left to right, like keys struck along a
+     keyboard: white, a bright flash, then the page's brass, and they stay lit.
+     The words sit on a scrim of their own, an ellipse flat across the middle
+     55 hundredths of its radius, which holds every letter, and feathered out
+     over the map beyond; flat, it is dark enough that the lit brass reads over
+     the brightest ice the band holds. */
+  .title-card{display:none}
+  .splash .title-card{
+    display:grid;place-items:center;position:absolute;inset:0;z-index:3;text-align:center;
+    padding:0 var(--gutter);pointer-events:none;
+  }
+  .title-words{position:relative;isolation:isolate;padding:clamp(16px,3vw,36px) clamp(12px,3vw,40px)}
+  .title-words::before{
+    content:"";position:absolute;z-index:-1;inset:-130% -50%;
+    background:radial-gradient(closest-side,color-mix(in srgb,var(--ink) 74%,transparent) 55%,transparent 100%);
+  }
+  .title-name{
+    margin:0;font-family:var(--serif);font-weight:600;text-transform:uppercase;white-space:nowrap;
+    color:var(--letter-unlit);font-size:clamp(22px,7.2vw,92px);line-height:1;letter-spacing:.24em;
+    padding-left:.24em;text-shadow:0 2px 24px rgba(0,0,0,.45);
+  }
+  .title-name span{display:inline-block}
+  .splash .title-name.struck span{animation:key-struck .72s cubic-bezier(.3,.7,.3,1) calc(var(--i) * 115ms) both}
+  @keyframes key-struck{
+    0%{color:var(--letter-unlit);text-shadow:0 2px 24px rgba(0,0,0,.45)}
+    38%{color:var(--letter-struck);text-shadow:0 0 22px rgba(255,214,110,.85),0 0 4px rgba(255,236,170,.9)}
+    100%{color:var(--brass);text-shadow:0 0 16px rgba(201,162,39,.45),0 2px 24px rgba(0,0,0,.45)}
+  }
+  .title-line{
+    margin:18px 0 0;font-family:var(--serif);font-weight:400;font-style:italic;color:var(--bone);
+    font-size:clamp(17px,2.2vw,26px);line-height:1.3;text-shadow:0 1px 14px rgba(0,0,0,.5);
+  }
+  .splash .opening-map{position:absolute;inset:0;opacity:0;transition:opacity .7s ease-out}
+  .splash .opening-map.shown{opacity:1}
+  .splash .opening-panel{transform:translateY(100vh);transform:translateY(100svh)}
+
+  /* ---------- the tray ------------------------------------------------------ */
+  /* The wordmark and the two ways in, once the opening's own buttons have gone
+     by: along the top on a computer, along the foot on a phone, where it drops
+     the wordmark to give the two buttons the width. It steps aside while the
+     download section is on screen, and wherever it would cover a control or the
+     page's last words (the script says where). Hidden, it is out of reach of
+     the keyboard as well as out of sight. */
+  .tray{
+    position:fixed;left:0;right:0;top:0;z-index:30;padding-top:env(safe-area-inset-top,0px);
+    background:var(--ink);background:color-mix(in srgb,var(--ink) 92%,transparent);
+    -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);border-bottom:1px solid var(--hairline);
+  }
+  .live .tray{visibility:hidden;transform:translateY(-100%);transition:transform .28s ease,visibility 0s linear .28s}
+  .live .tray.on{visibility:visible;transform:none;transition:transform .28s ease}
+  .tray-row{display:flex;align-items:center;gap:12px;min-height:60px}
+  .tray .wordmark{margin:0 auto 0 0}
+  .tray .btn{min-height:38px;padding:0 14px;font-size:14px}
+  @media (max-width:699px){
+    .tray{
+      top:auto;bottom:0;padding-top:0;padding-bottom:env(safe-area-inset-bottom,0px);
+      border-bottom:0;border-top:1px solid var(--hairline);
+    }
+    .live .tray{transform:translateY(100%)}
+    .live .tray.on{transform:none}
+    .tray .wordmark{display:none}
+    .tray .btn{flex:1;padding:0 10px;white-space:nowrap}
   }
 
   /* ---------- figures ------------------------------------------------------- */
+  main{position:relative;z-index:1;background:var(--ink)}
   figure{margin:0}
   .plate{border:1px solid var(--hairline);background:var(--ink-raised);line-height:0}
   .plate img{display:block;width:100%;height:auto}
@@ -175,42 +345,250 @@
     display:block;font-family:var(--sans);font-size:14px;line-height:1.5;margin-bottom:3px;
   }
 
-  /* ---------- comparison strips --------------------------------------------- */
-  /* One image, not a row of images. What these figures claim is that the panels
-     are the same ground read different ways, and a row of separate pictures is
-     no evidence of that — a strip cut from one window is, which is why the
-     panels, the hairlines between them and the naming bands are all drawn into
-     the file by SiteImagery rather than assembled here.
-
-     Two files, then, and not two layouts: a phone gets the same panels composed
-     one above the other, chosen by the <picture> below at the same 900px the
-     headline's line break uses. So there is no CSS here at all — nothing on
-     this page arranges a panel, and the wide strip and the stacked one cannot
-     drift apart, because neither of them is assembled by the page. */
   .section-lede{margin:0 0 20px;color:var(--bone-dim);font-size:15px;max-width:64ch}
   /* The same sentence after a figure rather than before it, so it takes its air
      above instead of below. A rule on where it sits rather than a second class,
      because it is the same kind of line doing the same job. */
   figure+.section-lede{margin:20px 0 0}
 
-  /* ---------- how a world is made ------------------------------------------- */
-  /* The six cards from the earlier page, in this page's panel: the author kept the words and the
-     new dress (2026-09-12). The oxblood rule on the left is what tells a step of the pipeline
-     from a note further down, which shares the panel but not the rule. */
-  .steps{display:grid;gap:20px}
-  @media (min-width:600px){.steps{grid-template-columns:1fr 1fr}}
-  @media (min-width:900px){.steps{grid-template-columns:1fr 1fr 1fr;gap:24px}}
-  .steps .panel{border-left:2px solid var(--oxblood-lit)}
+  /* ---------- numbered cards ------------------------------------------------ */
+  /* A row of cards, each a picture, a numbered brass square on one hairline that
+     runs across the row, and a name with a line under it. Three rows on the page:
+     the six steps of the pipeline, the three styles and the four data views.
 
-  /* ---------- notices ------------------------------------------------------- */
-  .notice{
-    margin:22px 0 0;padding:14px 16px;
-    border:1px solid var(--hairline);border-left:2px solid var(--brass-dim);
-    background:var(--ink-raised);font-size:14px;line-height:1.6;color:var(--bone-dim);
+     The line is drawn by the cards rather than by the row: each card carries the
+     stretch of it from its own left edge to the next card's, so a row that wraps
+     on to a second line starts a second line of its own and no rule has to know
+     where a row ends. The last card's stretch runs on into the gap past the row's
+     edge, which the list clips. On a phone the cards stack and each card's
+     stretch turns to run down the left, from its square to the next one. */
+  .cards{
+    --card-gap:24px;--row-gap:36px;--mark:28px;
+    list-style:none;margin:0;padding:0;
+    display:grid;grid-template-columns:minmax(0,1fr);gap:var(--row-gap) var(--card-gap);
+    overflow-x:clip;
   }
-  .notice b{color:var(--bone);font-weight:500}
-  .notice[hidden]{display:none}
-  .notice a{color:var(--brass)}
+  .card{position:relative;min-width:0}
+  .card .plate{margin:0 0 16px}
+  .card-mark{position:relative;height:var(--mark);margin:0 0 14px}
+  .card-mark::before{
+    content:"";position:absolute;left:0;right:calc(-1 * var(--card-gap));
+    top:calc(50% - .5px);height:1px;background:var(--brass);transform-origin:left center;
+  }
+  .card-number{
+    position:relative;display:flex;align-items:center;justify-content:center;
+    width:var(--mark);height:var(--mark);background:var(--brass);color:var(--ink);
+    font-family:var(--mono);font-size:12px;line-height:1;letter-spacing:.04em;
+  }
+  .card h3{
+    font-family:var(--serif);font-size:17px;font-weight:600;line-height:1.3;
+    margin:0 0 6px;color:var(--parchment);
+  }
+  .card p{margin:0;color:var(--bone-dim);font-size:14.5px;line-height:1.6}
+  /* The seed and the scale under a row of comparison cards, as the figures had. */
+  .cards+figcaption{margin-top:22px}
+
+  /* Stacked: the square sits at the head of each card on the left, and each
+     card's stretch of line drops from its square to the next card's. The last
+     one's stops at its own square, so the line ends where the sequence does. */
+  @media (max-width:599px){
+    .card{padding-left:calc(var(--mark) + 16px)}
+    .card-mark{position:absolute;left:0;top:0;bottom:calc(-1 * var(--row-gap));height:auto;margin:0}
+    .card:last-child .card-mark{bottom:auto;height:var(--mark)}
+    .card-mark::before{
+      left:calc(var(--mark) / 2 - .5px);right:auto;top:0;bottom:0;width:1px;height:auto;
+      transform-origin:center top;
+    }
+  }
+  /* Across: three styles side by side from the phone breakpoint up; four views
+     and six steps two to a row until there is room for four and three, at the
+     900px where the page's wider rows begin. */
+  @media (min-width:600px){
+    .cards.styles{grid-template-columns:repeat(3,minmax(0,1fr))}
+    .cards.layers,.cards.steps{grid-template-columns:repeat(2,minmax(0,1fr))}
+  }
+  @media (min-width:900px){
+    .cards.layers{grid-template-columns:repeat(4,minmax(0,1fr))}
+    .cards.steps{grid-template-columns:repeat(3,minmax(0,1fr))}
+  }
+
+  /* The reveal. Everything below is scoped to the class the script in the head
+     sets, so a page without that script, or read with motion reduced, never
+     hides a card in the first place. Opacity and transform only: neither moves
+     anything else on the page, so every card has taken its space before it
+     shows. When a card comes into view its stretch of line draws across (or
+     down), its square appears where the stretch starts, and its picture and
+     words fade and rise; the cards that arrive together go in turn, --order
+     apart, which the script sets. */
+  .reveal .card{--step:180ms;--order:0}
+  .reveal .card-mark::before{
+    transform:scaleX(0);
+    transition:transform var(--step) linear calc(var(--order) * var(--step));
+  }
+  .reveal .card-number{
+    opacity:0;transform:scale(.6);
+    transition:opacity .25s ease-out calc(var(--order) * var(--step)),
+               transform .25s ease-out calc(var(--order) * var(--step));
+  }
+  .reveal .card > :not(.card-mark){
+    opacity:0;transform:translateY(14px);
+    transition:opacity .5s ease-out calc(var(--order) * var(--step) + 90ms),
+               transform .5s ease-out calc(var(--order) * var(--step) + 90ms);
+  }
+  @media (max-width:599px){ .reveal .card-mark::before{transform:scaleY(0)} }
+  .reveal .card.shown .card-mark::before,
+  .reveal .card.shown .card-number,
+  .reveal .card.shown > :not(.card-mark){opacity:1;transform:none}
+  /* A reader who asks for less motion after the page has loaded, and a printed
+     page, get every card at once, still. */
+  @media (prefers-reduced-motion: reduce), print{
+    .reveal .card-mark::before,
+    .reveal .card-number,
+    .reveal .card > :not(.card-mark){opacity:1;transform:none;transition:none}
+  }
+
+  /* ---------- living figures ---------------------------------------------- */
+  /* Figures that move or answer the reader. Each is our own few lines here and in
+     the script at the foot, and each keeps to the reveal's rules: opacity and
+     transform only, so nothing moves the layout; started and stopped by what is
+     in view; stilled for a reader who asks for less motion; and every rule that
+     keeps something out of sight is scoped to a class only the head's script
+     sets. The parts that need a script at all carry `hidden` in the markup, so a
+     reader without scripts never meets a control that does nothing. */
+  .control{
+    font-family:var(--mono);font-size:12.5px;line-height:1.2;letter-spacing:.04em;
+    color:var(--brass);background:transparent;border:1px solid var(--brass);border-radius:2px;
+    padding:9px 14px;min-height:36px;cursor:pointer;
+  }
+  .control:hover,.control:focus-visible{background:var(--ink-sunk)}
+  input[type=range]{accent-color:var(--brass)}
+  select{
+    font-family:var(--mono);font-size:13px;color:var(--bone);background:var(--ink-raised);
+    border:1px solid var(--hairline);border-radius:2px;padding:7px 8px;min-height:36px;
+  }
+  .control-label{font-family:var(--mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--bone-dim)}
+
+  /* How a world is made, played: the six steps' own pictures stacked in one
+     frame, one window of one world at one scale, crossfading in turn, under the
+     cards it plays, with only the step's name beside it. */
+  /* No display of its own outside `live`: an author's display beats the
+     `hidden` attribute, and without a script the frame has to stay hidden. */
+  .forming{gap:18px 36px;align-items:center;margin:40px 0 0}
+  .live .forming,.live .forming[hidden]{display:grid}
+  @media (min-width:900px){.forming{grid-template-columns:minmax(0,520px) minmax(0,1fr)}}
+  .forming-frame{position:relative;aspect-ratio:520/280}
+  .forming-frame img{position:absolute;inset:0;width:100%;height:100%}
+  .live .forming-frame img{opacity:0;transition:opacity .7s ease-in-out}
+  .live .forming-frame img.current{opacity:1}
+  .forming-stage{display:flex;align-items:center;gap:14px;margin:0 0 18px}
+  /* The step on show, numbered as its card is, in a square of its own: the
+     cards' squares are the reveal's to hide until their row comes into view. */
+  .forming-number{
+    flex:none;display:flex;align-items:center;justify-content:center;width:28px;height:28px;
+    background:var(--brass);color:var(--ink);font-family:var(--mono);font-size:12px;line-height:1;
+    letter-spacing:.04em;
+  }
+  .forming-name{font-family:var(--serif);font-size:19px;font-weight:600;line-height:1.3;color:var(--parchment)}
+  .forming-controls{display:flex;flex-wrap:wrap;align-items:center;gap:12px 16px}
+  .forming-controls input{flex:1;min-width:160px}
+  /* The step on show, lit on the cards' line while the frame is in view: a
+     ring round its square in parchment. */
+  .live .card-number::after{
+    content:"";position:absolute;inset:-5px;border:2px solid var(--parchment);
+    opacity:0;transition:opacity .3s ease-out;
+  }
+  .live .card.lit .card-number::after{opacity:1}
+
+  /* Any two styles over one ground, split by a handle the reader drags. The
+     wipe is two transforms: the top picture's box slides left by what is cut
+     and the picture inside it slides right by the same, so it stays put while
+     its edge moves. The range input over the whole frame is the handle itself,
+     so a pointer, a finger and the arrow keys all move it. */
+  .compare{margin:36px 0 0;max-width:600px}
+  .live .compare[hidden]{display:block}
+  .compare-frame{position:relative;aspect-ratio:600/400;overflow:hidden;--split:50%}
+  .compare-frame img{position:absolute;inset:0;width:100%;height:100%}
+  .compare-over{position:absolute;inset:0;overflow:hidden;transform:translateX(calc(var(--split) - 100%))}
+  .compare-over img{transform:translateX(calc(100% - var(--split)))}
+  .compare-range{position:absolute;inset:0;width:100%;height:100%;margin:0;cursor:ew-resize;touch-action:pan-y}
+  .live .compare-range{opacity:0}
+  .compare-handle{
+    position:absolute;inset:0;pointer-events:none;
+    transform:translateX(calc(var(--split) - 100%));
+  }
+  .compare-handle::after{
+    content:"";position:absolute;top:0;bottom:0;right:-1px;width:2px;background:var(--brass);
+  }
+  .compare-handle::before{
+    content:"";position:absolute;top:50%;right:-10px;width:20px;height:20px;margin-top:-10px;
+    background:var(--brass);border:1px solid var(--ink);
+  }
+  .compare-range:focus-visible ~ .compare-handle::before{outline:2px solid var(--brass);outline-offset:3px}
+  .compare-pickers{display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px 20px;margin:14px 0 0}
+  .compare-pickers label{display:flex;align-items:center;gap:10px}
+
+  /* The whole world under a lens: a round window onto the full-size picture,
+     moved by transforms over the whole one. The frame keeps a press from
+     opening the picture's own menu on a touch screen, and lets a sideways slide
+     move the lens while an upward one still scrolls the page. */
+  .lens{margin:0}
+  .lens-frame{position:relative;overflow:hidden;max-width:1024px;--lens:220px}
+  @media (max-width:599px){.lens-frame{--lens:150px}}
+  .live .lens-frame{touch-action:pan-y;-webkit-touch-callout:none;user-select:none;-webkit-user-select:none;cursor:zoom-in}
+  .live .lens-world{pointer-events:none}
+  .lens-glass{
+    position:absolute;left:0;top:0;width:var(--lens);height:var(--lens);border-radius:50%;overflow:hidden;
+    border:2px solid var(--brass);background:var(--ink-raised);pointer-events:none;
+    box-shadow:0 6px 24px rgba(0,0,0,.45);
+  }
+  .lens-glass img{position:absolute;left:0;top:0;max-width:none;transform-origin:0 0}
+  .live .lens-glass{opacity:0;transition:opacity .15s ease-out}
+  .live .lens-glass.on{opacity:1}
+  .lens-frame:focus-visible{outline:2px solid var(--brass);outline-offset:3px}
+
+  /* The ground in relief. The still is the picture the relief is textured with,
+     and stays under the canvas, so whatever becomes of the canvas the patch is
+     there. */
+  .relief{margin:36px 0 0;max-width:640px}
+  .relief-frame{position:relative;aspect-ratio:640/400;overflow:hidden}
+  .relief-frame img,.relief-canvas{position:absolute;inset:0;width:100%;height:100%}
+  .live .relief-canvas{opacity:0;transition:opacity .5s ease-out;touch-action:pan-y}
+  .live .relief-canvas.shown{opacity:1}
+
+  /* The data frame: the relief with each layer laid over it, faded in and out.
+     No display of its own outside `live`, as the step frame. */
+  .datamap{margin:0 0 36px;max-width:800px}
+  .live .datamap,.live .datamap[hidden]{display:block}
+  .datamap-frame{position:relative;aspect-ratio:800/600}
+  .datamap-frame img{position:absolute;inset:0;width:100%;height:100%}
+  .live .datamap-frame img[data-layer]{opacity:0;transition:opacity .45s ease-out}
+  .live .datamap-frame img[data-layer].on{opacity:1}
+  .datamap-overlays{display:flex;flex-wrap:wrap;align-items:center;gap:10px 12px;margin:14px 0 0}
+  .datamap-overlays .control[aria-pressed="true"]{background:var(--brass);color:var(--ink)}
+  /* With a script the data cards are the frame's switches: each drops its
+     picture, which the frame shows, and its heading becomes a button that
+     covers the card, so the whole card is the switch. */
+  .live .cards.layers .plate{display:none}
+  .layer-toggle{
+    font:inherit;color:inherit;background:none;border:0;padding:0;margin:0;text-align:left;cursor:pointer;
+  }
+  .layer-toggle::after{content:"";position:absolute;inset:-8px}
+  .layer-toggle:focus-visible{outline:none}
+  .layer-toggle:focus-visible::after{outline:2px solid var(--brass);outline-offset:0}
+
+  /* Every seed is a world: a row of other worlds, each whole, each a link that
+     opens it in the application. The link covers the card. */
+  .reel{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px 16px}
+  @media (min-width:600px){.reel{grid-template-columns:repeat(3,minmax(0,1fr))}}
+  @media (min-width:900px){.reel{grid-template-columns:repeat(5,minmax(0,1fr))}}
+  .reel li{position:relative;min-width:0}
+  .reel .plate{margin:0 0 10px;transition:border-color .15s}
+  .reel li:hover .plate,.reel li:focus-within .plate{border-color:var(--brass)}
+  .reel-seed{display:block;font-family:var(--mono);font-size:12.5px;line-height:1.4;color:var(--bone-dim)}
+  .reel a{display:block;font-size:14px;line-height:1.4;color:var(--brass);text-decoration:none;margin-top:2px}
+  .reel a::after{content:"";position:absolute;inset:0}
+  .reel a:focus-visible{outline:none}
+  .reel a:focus-visible::after{outline:2px solid var(--brass);outline-offset:4px}
 
   /* ---------- sections ------------------------------------------------------ */
   section{padding:56px 0 0}
@@ -255,50 +633,108 @@
   }
 
   /* ---------- download and installation ----------------------------------- */
-  /* A ledger rather than a grid of cards. Four panels in two columns left the Windows and
-     browser boxes mostly empty beside the Linux one, because the row takes the tallest panel's
-     height and Linux carries three lines of command that the others do not. Rows on the page's
-     own ground take each platform's own height and no more: the name in the left column, what
-     to do in the right, a hairline between one platform and the next.
+  /* A card per platform, in the page's palette: Windows in brass, Linux in the
+     oxblood the page lights its buttons with, the browser on the sunk ink with
+     a hairline. Each shows what it is in a line; chosen, it opens across the row
+     with its files and what to know, and the other two move beneath it. With
+     scripts off every card is open and spans the row, so every file and every
+     instruction is there to read.
 
-     A file name inside a sentence is set in the mono face and nothing else — no ground, no
-     border. It is there to mark where the prose stops and a literal string starts, and a tinted
-     box around three words in a paragraph is a bigger interruption than the thing it marks. */
+     Each card names its own ground and inks, and everything in it is drawn from
+     those, so the contrast guard measures each card's text on that card's own
+     ground rather than on the page's. The dim line is the card's ink mixed with
+     its ground rather than made translucent, so the colour it is read in is one
+     a guard can compute. */
   code{font-family:var(--mono);font-size:.92em;color:var(--bone)}
-  .ledger{border-top:1px solid var(--hairline);margin:0 0 28px}
-  .ledger .row{
-    display:grid;grid-template-columns:minmax(0,1fr);gap:6px 32px;
-    padding:20px 0;border-bottom:1px solid var(--hairline);min-width:0;
+  .dl{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+  .dl-card{
+    --card-ground:var(--ink-sunk);--card-ink:var(--parchment);
+    --card-ink-dim:color-mix(in srgb,var(--card-ink) 78%,var(--card-ground));
+    --card-chip:color-mix(in srgb,var(--card-ink) 14%,var(--card-ground));
+    --card-well:color-mix(in srgb,var(--ink) 34%,var(--card-ground));
+    position:relative;grid-column:1 / -1;min-width:0;border-radius:18px;overflow:hidden;
+    background:var(--card-ground);color:var(--card-ink);
   }
-  @media (min-width:700px){.ledger .row{grid-template-columns:160px minmax(0,1fr)}}
-  .ledger h3{
-    font-family:var(--serif);font-size:17px;font-weight:600;line-height:1.3;
-    margin:0;color:var(--parchment);
+  .dl-card.windows{--card-ground:var(--brass);--card-ink:var(--ink)}
+  .dl-card.linux{--card-ground:var(--oxblood-lit);--card-ink:var(--parchment)}
+  .dl-card.browser{--card-ground:var(--ink-sunk);--card-ink:var(--parchment);box-shadow:inset 0 0 0 1px var(--hairline)}
+  .live .dl-card:not(.open){grid-column:auto}
+  .dl-inner{transform-origin:0 0}
+  .dl-head{
+    display:flex;flex-direction:column;justify-content:space-between;gap:22px;width:100%;margin:0;
+    padding:18px 18px 6px;border:0;border-radius:18px;background:none;font:inherit;color:inherit;
+    text-align:left;
   }
-  .ledger h3 .tag{display:inline-block;margin:6px 0 0 10px;vertical-align:0}
-  @media (min-width:700px){.ledger h3 .tag{display:block;margin:8px 0 0;width:max-content}}
-  .ledger .what{min-width:0}
-  .ledger .what p{margin:0 0 10px;color:var(--bone-dim);font-size:14.5px;line-height:1.6}
-  .ledger .what p:last-child{margin-bottom:0}
-  /* The files themselves, on one line under the instruction, in the mono face and dimmer than
-     the prose: a reader looking for the name finds it in the same place on every row. */
-  .ledger .files{font-family:var(--mono);font-size:12.5px;color:var(--bone-dim);line-height:1.7}
-  .ledger .files code{color:var(--bone);font-size:inherit}
-  /* A block a reader copies: on the sunk ground rather than the page's own, so the three lines
-     read as something handed over rather than as more of the paragraph above them. It scrolls
-     sideways instead of wrapping — a source line broken across two lines pastes as two commands,
-     and the second one is not a command. min-width:0 on the row is what lets it scroll rather
-     than push the column wide. */
-  .cmd{
-    font-family:var(--mono);font-size:12.5px;line-height:1.8;color:var(--bone);
-    background:var(--ink-sunk);border:1px solid var(--hairline);
-    margin:10px 0 12px;padding:12px 14px;overflow-x:auto;white-space:pre;
+  .live .dl-head{cursor:pointer}
+  .live .dl-card:not(.open) .dl-head{min-height:172px;padding-bottom:16px}
+  .dl-head:focus-visible{outline:2px solid var(--card-ink);outline-offset:-4px}
+  .dl-top{display:flex;justify-content:space-between;align-items:flex-start}
+  .dl-icon{width:30px;height:30px}
+  .dl-more{display:none;width:30px;height:30px;border-radius:50%;background:var(--card-chip);transition:transform .3s}
+  .live .dl-more{display:grid;place-items:center}
+  .dl-more svg{width:14px;height:14px}
+  .dl-card.open .dl-more{transform:rotate(45deg)}
+  .dl-name{display:block;font-family:var(--sans);font-weight:500;font-size:19px;line-height:1.2}
+  .dl-sum{display:block;font-family:var(--sans);font-weight:500;font-size:14px;line-height:1.35;color:var(--card-ink-dim);margin-top:4px}
+  .dl-tag{
+    margin-left:8px;font-family:var(--mono);font-size:12px;line-height:1;letter-spacing:.06em;padding:4px 7px;
+    border-radius:999px;background:var(--card-chip);color:var(--card-ink);vertical-align:2px;white-space:nowrap;
   }
-  .cmd code{font-size:inherit}
-  /* The release page, once, as the button the hero's download button leads to rather than as a
-     fifth fact in the list. */
-  .ledger-actions{display:flex;flex-wrap:wrap;gap:14px;align-items:center}
-  .ledger-actions .note{font-size:14px;color:var(--bone-dim);margin:0}
+  .dl-body{padding:0 18px 20px;display:grid;grid-template-columns:minmax(0,1fr);gap:14px}
+  .live .dl-card:not(.open) .dl-body{display:none}
+  .dl-body p{margin:0;color:var(--card-ink-dim);font-size:15px;line-height:1.6;max-width:62ch}
+  .dl-card code{color:inherit}
+  .dl-files{display:flex;flex-wrap:wrap;gap:10px}
+  .dl-file{
+    display:inline-flex;align-items:baseline;gap:8px;text-decoration:none;color:var(--card-ink);
+    border:1px solid currentColor;border-radius:999px;padding:10px 16px;
+    font-family:var(--sans);font-weight:500;font-size:14px;line-height:1;
+  }
+  .dl-file small{font-family:var(--mono);font-size:12px;line-height:1}
+  .dl-file.first{background:var(--card-ink);border-color:var(--card-ink);color:var(--card-ground)}
+  .dl-card.browser .dl-file.first{background:var(--brass);border-color:var(--brass);color:var(--ink)}
+  .dl-file:focus-visible{outline:2px solid var(--card-ink);outline-offset:3px}
+  /* The three apt commands, in a well of the card's own ground, scrolling
+     sideways rather than wrapping: a source line broken across two lines pastes
+     as two commands, and the second is not a command. */
+  .dl-cmd{
+    position:relative;margin:0;background:var(--card-well);border-radius:12px;padding:12px 14px;
+    font-family:var(--mono);font-size:13px;line-height:1.55;color:var(--card-ink);
+    overflow-x:auto;white-space:pre;
+  }
+  .dl-cmd-box{position:relative;min-width:0}
+  .live .dl-cmd{padding-top:40px}
+  .dl-copy{
+    position:absolute;right:8px;top:8px;font-family:var(--mono);font-size:12px;line-height:1;
+    color:var(--card-ink);background:var(--card-chip);border:0;border-radius:999px;padding:6px 10px;cursor:pointer;
+  }
+  .dl-notes{margin:0;padding-left:18px;color:var(--card-ink-dim);font-size:14px;line-height:1.55;display:grid;gap:4px}
+  .dl-all{display:inline-block;margin:22px 0 0;color:var(--brass);font-size:15px}
+  @media (max-width:699px){
+    .dl{grid-template-columns:repeat(2,minmax(0,1fr))}
+    .live .dl-card.browser:not(.open){grid-column:1 / -1}
+    .live .dl-card:not(.open) .dl-head{min-height:140px}
+  }
+
+  /* A reader who asks for less motion, after the page has loaded, gets every
+     living figure still: no drift, no letters struck, no tray sliding, no
+     crossfade, no fade on the lit ring, the lens, the relief or a data layer.
+     (The opening, the title card and the relief are
+     never armed for that reader in the first place; these catch a preference
+     set after the page has loaded.) */
+  @media (prefers-reduced-motion: reduce){
+    .live .band-track,
+    .splash .title-name.struck span{animation:none}
+    .live .tray,
+    .live .tray.on,
+    .splash .opening-map,
+    .dl-more,
+    .live .forming-frame img,
+    .live .card-number::after,
+    .live .lens-glass,
+    .live .relief-canvas,
+    .live .datamap-frame img[data-layer]{transition:none}
+  }
 
   /* ---------- the ask, at the foot --------------------------------------- */
   /* Two lines of the same weight, side by side where there is room and stacked
@@ -320,51 +756,69 @@
 </style>
 </head>
 <body>
-
-<header class="topbar">
-  <div class="wrap">
+<!-- The tray, which only a script can bring in: it follows the reader once the opening's own
+     buttons have gone by. -->
+<header class="tray" id="tray" hidden>
+  <div class="wrap tray-row">
     <p class="wordmark">Carto<span>genesis</span></p>
-    <span class="topline">Procedural world-map generator</span>
+    <a class="btn primary" href="/app/">Open in the browser</a>
+    <a class="btn secondary" href="#install">Download the app</a>
   </div>
 </header>
 
-<main class="wrap">
-
-  <div class="hero">
-    <div>
-      <p class="eyebrow">Open source, free to use</p>
-      <h1>
-        <span class="line">Build a world</span>
-        <span class="line">from the ground up.</span>
-      </h1>
-      <p class="lede">
-        Generate a world map from a seed. Shape its terrain, rivers, climate and borders, then choose a map style and export the result.
-      </p>
-
-      <div class="actions">
+<!-- The opening: an ink panel with the heading and the two ways in, and the world drifting across
+     the top of the screen above it, which settles into a plate beneath the heading as the page
+     scrolls. The band is one picture of the world all the way round, laid twice end to end so it
+     can turn without a seam; narrow screens at about one device pixel to the CSS pixel get it at
+     half size (see SiteImagery.WORLD_BAND_HALF for the arithmetic), everything else full size. -->
+<div class="opening" id="opening">
+  <div class="opening-stage" id="opening-stage">
+    <div class="opening-panel" id="opening-panel">
+      <p class="eyebrow">Open source · Free to use</p>
+      <h1>Build a world from the ground up.</h1>
+      <p class="lede">Generate a world map from a seed. Shape its terrain, rivers, climate and borders, then choose a map style and export the result.</p>
+      <div class="actions" id="opening-actions">
         <a class="btn primary" href="/app/" id="launch">Open in the browser</a>
         <a class="btn secondary" href="#install" id="launch-desktop">Download the Desktop App (Windows/Linux)</a>
       </div>
-      <p class="trust">Free and open source · Your maps stay on your device</p>
-
-      <div class="notice" id="small-screen" hidden>
-        <b>Works on phones.</b>
-        Worlds generate at 512 by default here, and 2048 works; exports are capped at 2048.
-        The desktop app goes further.
+      <button type="button" class="opening-cue" id="opening-cue" aria-label="Scroll down to the page" hidden>
+        <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M7 1v11M2 7l5 5 5-5"/></svg>
+      </button>
+    </div>
+    <div class="opening-plate">
+      <div class="opening-map" id="opening-map">
+        <div class="opening-band" id="opening-band">
+          <div class="band-track">
+            <picture>
+              <source media="(min-width: 700px), (min-resolution: 1.2dppx), (-webkit-min-device-pixel-ratio: 1.2)" srcset="img/world-band.webp">
+              <img src="img/world-band-half.webp" width="4096" height="800" fetchpriority="high"
+                   alt="A band of a generated world in the Natural style, all the way round it: a continent with a snow-capped range down its middle and rivers running to a southern coast of bays and lakes, a second land across a strait to the east, a wide ocean, and the forested coast of a third land beyond it.">
+            </picture>
+            <picture aria-hidden="true">
+              <source media="(min-width: 700px), (min-resolution: 1.2dppx), (-webkit-min-device-pixel-ratio: 1.2)" srcset="img/world-band.webp">
+              <img src="img/world-band-half.webp" width="4096" height="800" alt="">
+            </picture>
+          </div>
+        </div>
+      </div>
+      <span class="opening-frame" id="opening-frame"><i></i><i></i><i></i><i></i></span>
+      <button type="button" class="band-pause" id="band-pause" aria-pressed="false" aria-label="Pause the turning world" hidden>
+        <svg class="pause" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true"><path d="M2.5 1.5h2.4v9H2.5zM7.1 1.5h2.4v9H7.1z"/></svg>
+        <svg class="play" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true"><path d="M3 1.3l7.2 4.7L3 10.7z"/></svg>
+      </button>
+    </div>
+    <!-- The title card the first visit opens on. Decorative: the heading is the h1 above. -->
+    <div class="title-card" id="title-card" aria-hidden="true">
+      <div class="title-words">
+        <p class="title-name" id="title-name"><span style="--i:0">C</span><span style="--i:1">a</span><span style="--i:2">r</span><span style="--i:3">t</span><span style="--i:4">o</span><span style="--i:5">g</span><span style="--i:6">e</span><span style="--i:7">n</span><span style="--i:8">e</span><span style="--i:9">s</span><span style="--i:10">i</span><span style="--i:11">s</span></p>
+        <p class="title-line">Build a world from the ground up</p>
       </div>
     </div>
-
-    <figure>
-      <div class="plate">
-        <img src="img/natural.webp" width="1600" height="800" fetchpriority="high"
-             alt="A generated world map in the Natural style: a northern continent with a mountain range along its spine, a river system draining to a ragged southern coast, lakes, offshore islands, and the coast of a second continent at the right.">
-      </div>
-      <figcaption>
-        <span class="say">A generated world in the Natural style, with mountain ranges, river systems, lakes and islands.</span>
-        Seed 718106 · 62% ocean · 14 tectonic plates
-      </figcaption>
-    </figure>
   </div>
+</div>
+
+<main>
+<div class="wrap">
 
   <section id="how">
     <div class="section-head">
@@ -372,32 +826,121 @@
       <span class="fill"></span>
     </div>
 
-    <div class="steps">
-      <div class="panel">
+    <ol class="cards steps">
+      <li class="card">
+        <div class="plate">
+          <img src="img/step-plates.webp" width="520" height="280" loading="lazy" decoding="async"
+               alt="The tectonic plates view of a peninsula: the continent's plate in pale blue over the shaded relief, an ocean plate in pink to the west and another in yellow to the south-east, with a glowing seam where each meets the continent.">
+        </div>
+        <div class="card-mark"><span class="card-number">01</span></div>
         <h3>Plates and mountains</h3>
         <p>Moving tectonic plates form mountain ranges, volcanic arcs and broad plateaus. Where plates pull apart, rift valleys can fill with water.</p>
-      </div>
-      <div class="panel">
+      </li>
+      <li class="card">
+        <div class="plate">
+          <img src="img/step-erosion.webp" width="520" height="280" loading="lazy" decoding="async"
+               alt="The same peninsula in the elevation view: green lowlands and hills cut by valleys, darker ground along its steep south-east coast, and the sea floor in blues.">
+        </div>
+        <div class="card-mark"><span class="card-number">02</span></div>
         <h3>Erosion</h3>
         <p>Erosion reshapes the terrain. Slopes collapse, rivers carve valleys, and sediment builds floodplains, fans and deltas.</p>
-      </div>
-      <div class="panel">
+      </li>
+      <li class="card">
+        <div class="plate">
+          <img src="img/step-seas.webp" width="520" height="280" loading="lazy" decoding="async"
+               alt="The same peninsula in the Natural style before its rivers: a pale band of shallow shelf water along every coast, and the deep blue sea beyond it.">
+        </div>
+        <div class="card-mark"><span class="card-number">03</span></div>
         <h3>Seas and ice</h3>
         <p>Continental shelves lie along the coasts. Glaciers shape cold mountains, and ice sheets leave behind basins and lakes.</p>
-      </div>
-      <div class="panel">
+      </li>
+      <li class="card">
+        <div class="plate">
+          <img src="img/step-climate.webp" width="520" height="280" loading="lazy" decoding="async"
+               alt="The same peninsula in the biomes view: green forest along the coasts, yellow grassland across its dry middle, and paler country to the north.">
+        </div>
+        <div class="card-mark"><span class="card-number">04</span></div>
         <h3>Climate</h3>
         <p>Seasons, ocean currents and terrain shape temperature and rainfall. Climate zones decide where forests, grasslands and deserts form.</p>
-      </div>
-      <div class="panel">
+      </li>
+      <li class="card">
+        <div class="plate">
+          <img src="img/step-rivers.webp" width="520" height="280" loading="lazy" decoding="async"
+               alt="The same peninsula in the Natural style with its water: rivers running from the hills to both coasts, and a lake at the head of an inlet in the east.">
+        </div>
+        <div class="card-mark"><span class="card-number">05</span></div>
         <h3>Rivers and lakes</h3>
         <p>Water flows downhill into rivers, lakes and seas. In dry inland basins, evaporation can shrink a lake and leave salt behind.</p>
-      </div>
-      <div class="panel">
+      </li>
+      <li class="card">
+        <div class="plate">
+          <img src="img/step-realms.webp" width="520" height="280" loading="lazy" decoding="async"
+               alt="The same peninsula in the political view: realms in flat tints of yellow, violet, blue and green over the relief, their borders following rivers and ridges.">
+        </div>
+        <div class="card-mark"><span class="card-number">06</span></div>
         <h3>Realms and peoples</h3>
         <p>Geography shapes borders and settlement. Realms follow rivers, coasts and watersheds, while peoples spread into familiar terrain and across political borders.</p>
+      </li>
+    </ol>
+
+    <!-- The six steps played in one frame, under the cards they play: the cards' own pictures,
+         which share one window and one scale, so the land stays put and only each step's work
+         changes. Beside it, only the step's name: its card above says the rest. -->
+    <div class="forming" id="forming" hidden>
+      <div class="plate forming-frame" aria-hidden="true"></div>
+      <div class="forming-side">
+        <p class="forming-stage"><span class="forming-number" id="forming-number">01</span><span class="forming-name" id="forming-name">Plates and mountains</span></p>
+        <div class="forming-controls">
+          <button type="button" class="control" id="forming-play" aria-pressed="false">Play</button>
+          <label class="control-label" for="forming-stage">Step</label>
+          <input type="range" id="forming-stage" min="1" max="6" step="1" value="1">
+        </div>
       </div>
     </div>
+  </section>
+
+  <!-- The whole world and the ground inside it: a lens that shows the map at the size it was made,
+       and a patch of it in relief. The full-size picture is fetched only when the lens is first
+       used; the link in the caption is the same picture for a reader who cannot use the lens. -->
+  <section id="valley">
+    <div class="section-head">
+      <h2>From continent to valley</h2>
+      <span class="fill"></span>
+    </div>
+
+    <p class="section-lede">
+      One world whole, and the ground inside it at the size it was made.
+    </p>
+
+    <figure class="lens" id="lens">
+      <div class="plate lens-frame" id="lens-frame">
+        <img class="lens-world" src="img/world-whole.webp" width="1024" height="512" loading="lazy" decoding="async"
+             alt="The whole of a generated world in the Natural style: a northern continent with a snow-capped range down its middle, an eastern island across a strait, a southern land in the south-east, and ocean over most of the rest.">
+        <div class="lens-glass" id="lens-glass" aria-hidden="true" hidden>
+          <img id="lens-picture" data-src="img/world-full.webp" width="4096" height="2048" alt="">
+        </div>
+      </div>
+      <figcaption>
+        <span class="say">Point at the map to see it at full size, press and hold on a touch screen, or select the map and move the lens with the arrow keys.</span>
+        Seed 718106 · <a href="img/world-full.webp">The whole world at full size, 4096 × 2048</a>
+      </figcaption>
+    </figure>
+
+    <!-- A patch of the same world in relief: the engine's heights under the Natural picture, drawn
+         by the page's own WebGL. The picture is the patch as it stands; the script lays the relief
+         over it only where WebGL works and the reader has not asked for less motion. -->
+    <figure class="relief" id="relief">
+      <div class="plate relief-frame" id="relief-frame">
+        <img class="relief-still" id="relief-still" src="img/relief-natural.webp" width="640" height="400" loading="lazy" decoding="async"
+             alt="The western end of an island in the Natural style: a range of bare brown mountains along its north coast, falling south to green valleys whose rivers run to the south coast, a cape in the west and lakes at the eastern edge.">
+        <canvas class="relief-canvas" id="relief-canvas" width="640" height="400" aria-hidden="true" hidden
+                data-heights="img/relief-heights.png" data-point-spacing="2" data-steps-per-metre="4" data-kilometres-per-pixel="2.9296875"></canvas>
+      </div>
+      <figcaption>
+        <span class="say">The ground in relief, lit from the upper left: move the pointer over it to tilt it. Heights are drawn twenty times their true scale.</span>
+        Seed 718106
+      </figcaption>
+    </figure>
   </section>
 
   <section id="styles">
@@ -407,19 +950,96 @@
     </div>
 
     <p class="section-lede">
-      Compare the same landscape in Atlas, Schoolroom and Natural. Atlas combines elevation and climate colours, Schoolroom shows elevation, and Natural uses colours taken from satellite imagery.
+      Compare the same landscape in Atlas, Schoolroom and Natural.
     </p>
 
     <figure>
-      <div class="plate">
-        <picture>
-          <source media="(max-width: 899px)" srcset="img/styles-stacked.webp" width="640" height="2137">
-          <img src="img/styles.webp" width="1924" height="711" loading="lazy" decoding="async"
-               alt="The same square of a generated world drawn three times. Atlas colours the land by height and climate in muted greens and tans with a pale blue sea. Schoolroom colours it by height alone in bright greens and oranges. Natural uses satellite colours: dark green forest, ochre plains, rust ranges and a cobalt sea. Labelled Atlas, Schoolroom and Natural.">
-        </picture>
-      </div>
+      <ol class="cards styles">
+        <li class="card">
+          <div class="plate">
+            <img src="img/style-atlas.webp" width="600" height="400" loading="lazy" decoding="async"
+                 alt="A corner of coast in the Atlas style, land tinted by height and climate: brown hills over a green coastal plain, rivers winding to the south and east coasts, and a blue sea deepening offshore.">
+          </div>
+          <div class="card-mark"><span class="card-number">01</span></div>
+          <h3>Atlas</h3>
+          <p>Combines elevation and climate colours.</p>
+        </li>
+        <li class="card">
+          <div class="plate">
+            <img src="img/style-schoolroom.webp" width="600" height="400" loading="lazy" decoding="async"
+                 alt="The same coast in the Schoolroom style, land tinted by height alone: green lowlands rising to yellow and orange hills, blue rivers, and a pale blue sea with faint depth contours.">
+          </div>
+          <div class="card-mark"><span class="card-number">02</span></div>
+          <h3>Schoolroom</h3>
+          <p>Shows elevation alone.</p>
+        </li>
+        <li class="card">
+          <div class="plate">
+            <img src="img/style-natural.webp" width="600" height="400" loading="lazy" decoding="async"
+                 alt="The same coast in the Natural style, in satellite colours: olive and green lowlands under bare brown hills, rivers in pale blue, and a cobalt sea.">
+          </div>
+          <div class="card-mark"><span class="card-number">03</span></div>
+          <h3>Natural</h3>
+          <p>Uses colours taken from satellite imagery.</p>
+        </li>
+      </ol>
       <figcaption>
         <span class="say">The same region in Atlas, Schoolroom and Natural, at the same scale.</span>
+        Seed 718106
+      </figcaption>
+    </figure>
+
+    <!-- Any two of the twelve styles over the same ground. Only the two on show are asked for; a
+         style is fetched when it is picked. The pictures are the cards' own window, so the default
+         pair are the Atlas and Natural cards' files and cost nothing more. -->
+    <figure class="compare" id="compare" hidden>
+      <div class="plate compare-frame">
+        <img class="compare-right" src="img/style-natural.webp" width="600" height="400" loading="lazy" decoding="async"
+             alt="The coast in the Natural style.">
+        <div class="compare-over">
+          <img class="compare-left" src="img/style-atlas.webp" width="600" height="400" loading="lazy" decoding="async"
+               alt="The coast in the Atlas style.">
+        </div>
+        <input type="range" class="compare-range" id="compare-range" min="0" max="100" step="1" value="50"
+               aria-label="Where the picture divides between the two styles">
+        <div class="compare-handle" aria-hidden="true"></div>
+      </div>
+      <div class="compare-pickers">
+        <label><span class="control-label">Left</span>
+          <select id="compare-left-style">
+              <option value="atlas" selected>Atlas</option>
+              <option value="vellum">Vellum</option>
+              <option value="ink_wash">Ink wash</option>
+              <option value="nautical">Nautical</option>
+              <option value="midnight">Midnight</option>
+              <option value="schoolroom">Schoolroom</option>
+              <option value="verdant">Verdant</option>
+              <option value="scroll">Scroll</option>
+              <option value="pen_and_ink">Pen and ink</option>
+              <option value="mars">Mars</option>
+              <option value="natural">Natural</option>
+              <option value="clear">Colour-blind</option>
+          </select>
+        </label>
+        <label><span class="control-label">Right</span>
+          <select id="compare-right-style">
+              <option value="atlas">Atlas</option>
+              <option value="vellum">Vellum</option>
+              <option value="ink_wash">Ink wash</option>
+              <option value="nautical">Nautical</option>
+              <option value="midnight">Midnight</option>
+              <option value="schoolroom">Schoolroom</option>
+              <option value="verdant">Verdant</option>
+              <option value="scroll">Scroll</option>
+              <option value="pen_and_ink">Pen and ink</option>
+              <option value="mars">Mars</option>
+              <option value="natural" selected>Natural</option>
+              <option value="clear">Colour-blind</option>
+          </select>
+        </label>
+      </div>
+      <figcaption>
+        <span class="say">Any two of the twelve styles over the same ground. Drag the divider, or move it with the arrow keys.</span>
         Seed 718106
       </figcaption>
     </figure>
@@ -435,14 +1055,71 @@
       The temperature, ocean currents, winds and rainfall calculated for the same coastline.
     </p>
 
-    <figure>
-      <div class="plate">
-        <picture>
-          <source media="(max-width: 899px)" srcset="img/layers-stacked.webp" width="480" height="2674">
-          <img src="img/layers.webp" width="1926" height="667" loading="lazy" decoding="async"
-               alt="The same stretch of coast drawn four times. Temperature shades the land from orange in the lowlands to white on the peaks. Ocean currents draws small arrows over the sea. Winds draws larger arrows, blue eastward in the north and orange westward in the south. Rainfall shades the land from yellow where it is dry to green where it is wet. Labelled Temperature, Ocean currents, Winds and Rainfall.">
-        </picture>
+    <!-- One frame over the cards' ground and more of it, the relief at the bottom and each layer
+         laid over it in turn. The four cards under it become its switches once a script runs: each
+         card's heading becomes a button that fades its layer in or out, and the cards drop their
+         pictures, which are this frame's ground read one way each. The rivers are an overlay of
+         their own. Only the relief and the first layer are asked for; a layer is
+         fetched the first time it is switched on. -->
+    <figure class="datamap" id="datamap" hidden>
+      <div class="plate datamap-frame" id="datamap-frame">
+        <img class="datamap-relief" src="img/data-relief.webp" width="800" height="600" loading="lazy" decoding="async"
+             alt="The relief of a stretch of coast and the strait beyond it: land shaded and tinted by height, the sea flat and dark.">
+        <img data-layer="temperature" data-src="img/data-temperature.webp" width="800" height="600" alt="">
+        <img data-layer="rainfall" data-src="img/data-rainfall.webp" width="800" height="600" alt="">
+        <img data-layer="currents" data-src="img/data-currents.webp" width="800" height="600" alt="">
+        <img data-layer="wind" data-src="img/data-wind.webp" width="800" height="600" alt="">
+        <img data-layer="rivers" data-src="img/data-rivers.webp" width="800" height="600" alt="">
       </div>
+      <div class="datamap-overlays">
+        <span class="control-label">Over the map</span>
+        <button type="button" class="control" data-toggles="rivers" aria-pressed="false">Rivers</button>
+      </div>
+      <figcaption>
+        <span class="say">Choose a card below to lay its layer over the relief, or several at once.</span>
+        Seed 718106
+      </figcaption>
+    </figure>
+
+    <figure>
+      <ol class="cards layers">
+        <li class="card">
+          <div class="plate">
+            <img src="img/layer-temperature.webp" width="480" height="600" loading="lazy" decoding="async"
+                 alt="A stretch of coast in the temperature view: the land in pale blues and whites, coldest blue in the north-west, warming to orange along the shore, and the sea a flat warm orange.">
+          </div>
+          <div class="card-mark"><span class="card-number">01</span></div>
+          <h3>Temperature</h3>
+          <p>The mean annual temperature, in degrees Celsius.</p>
+        </li>
+        <li class="card">
+          <div class="plate">
+            <img src="img/layer-currents.webp" width="480" height="600" loading="lazy" decoding="async"
+                 alt="The same coast in the ocean currents view: the land a dark ground, and rows of small pale arrows over the sea running east along the coast.">
+          </div>
+          <div class="card-mark"><span class="card-number">02</span></div>
+          <h3>Ocean currents</h3>
+          <p>The surface flow, coloured warm or cold against its latitude.</p>
+        </li>
+        <li class="card">
+          <div class="plate">
+            <img src="img/layer-wind.webp" width="480" height="600" loading="lazy" decoding="async"
+                 alt="The same coast in the winds view: large arrows, blue ones blowing to the south-east over the north of the land and the open sea, and orange ones blowing to the south-west along the coast.">
+          </div>
+          <div class="card-mark"><span class="card-number">03</span></div>
+          <h3>Winds</h3>
+          <p>The prevailing wind through the year.</p>
+        </li>
+        <li class="card">
+          <div class="plate">
+            <img src="img/layer-rainfall.webp" width="480" height="600" loading="lazy" decoding="async"
+                 alt="The same coast in the rainfall view: the land shaded from pale yellow where it is dry in the north to green and deep blue where it is wettest along the shore, and the sea dark.">
+          </div>
+          <div class="card-mark"><span class="card-number">04</span></div>
+          <h3>Rainfall</h3>
+          <p>The annual rainfall, from dry to wet.</p>
+        </li>
+      </ol>
       <figcaption>
         <span class="say">Four views of the same coastline: its temperature, currents, winds and rainfall.</span>
         Seed 718106
@@ -452,6 +1129,53 @@
     <p class="section-lede">
       More map styles and data views are in the generator.
     </p>
+  </section>
+
+  <!-- Other worlds, each made as the application makes a world it is opened at with a seed and
+       nothing else, so each link opens the world its picture shows. The links are written in the
+       application's own link format (SiteAssemblyTest reads each back against it). -->
+  <section id="seeds">
+    <div class="section-head">
+      <h2>Every seed is a world</h2>
+      <span class="fill"></span>
+    </div>
+
+    <p class="section-lede">
+      Five more worlds, each made from its seed at the size and settings the browser starts with. Each link opens the world it shows.
+    </p>
+
+    <ul class="reel">
+      <li>
+        <div class="plate"><img src="img/seed-7.webp" width="512" height="256" loading="lazy" decoding="async"
+             alt="A world of two lands facing each other across shallow bays: an island in the west with a snow-capped peak, and a larger land to the east cut by lakes and rivers."></div>
+        <span class="reel-seed">Seed 7</span>
+        <a href="/app/?seed=7#v=1&amp;size=512&amp;style=natural">Open seed 7 in the app</a>
+      </li>
+      <li>
+        <div class="plate"><img src="img/seed-42.webp" width="512" height="256" loading="lazy" decoding="async"
+             alt="A world whose one long continent crosses the map from the south-west to the east, pinched to a neck in the middle, with lakes over its western half."></div>
+        <span class="reel-seed">Seed 42</span>
+        <a href="/app/?seed=42#v=1&amp;size=512&amp;style=natural">Open seed 42 in the app</a>
+      </li>
+      <li>
+        <div class="plate"><img src="img/seed-1066.webp" width="512" height="256" loading="lazy" decoding="async"
+             alt="A world of a branching continent, its arms reaching north-west, north-east and south to a snow-capped tip, with more land at the map's edges."></div>
+        <span class="reel-seed">Seed 1066</span>
+        <a href="/app/?seed=1066#v=1&amp;size=512&amp;style=natural">Open seed 1066 in the app</a>
+      </li>
+      <li>
+        <div class="plate"><img src="img/seed-2024.webp" width="512" height="256" loading="lazy" decoding="async"
+             alt="A world round an inland sea: a northern land with a chain of lakes, islands strung across the water, and coasts to the south."></div>
+        <span class="reel-seed">Seed 2024</span>
+        <a href="/app/?seed=2024#v=1&amp;size=512&amp;style=natural">Open seed 2024 in the app</a>
+      </li>
+      <li>
+        <div class="plate"><img src="img/seed-31337.webp" width="512" height="256" loading="lazy" decoding="async"
+             alt="A world of three lands: a western one with a snow-capped range, a small island between, and an eastern one of pale uplands."></div>
+        <span class="reel-seed">Seed 31337</span>
+        <a href="/app/?seed=31337#v=1&amp;size=512&amp;style=natural">Open seed 31337 in the app</a>
+      </li>
+    </ul>
   </section>
 
   <section>
@@ -465,8 +1189,8 @@
       <div><dt>Styles</dt><dd>Twelve map styles, including Atlas, Vellum, Ink wash, Nautical, Pen and ink, Mars, Natural and a colour-blind-safe palette.</dd></div>
       <div><dt>Themes</dt><dd>Seventeen interface themes, including light, dark, high contrast and colour-blind options.</dd></div>
       <div><dt>Editing</dt><dd>Edit generated names and borders. Your changes are saved with the world.</dd></div>
-      <div><dt>Saves</dt><dd>Save a world and reopen the same file in the browser or the desktop app.</dd></div>
-      <div><dt>Export</dt><dd>Export map images as PNG, WebP or JPEG, drawn at the world's true shape, or the data behind the map, one sample per cell: a 16-bit heightmap with its metre scale, and biome and realm index maps with their legends. Worlds up to 4096 × 4096 in the browser and on the desktop, whose map image is 8192 × 4096; phones are capped at 2048 × 2048.</dd></div>
+      <div><dt>Saves</dt><dd>Save a world and reopen the same file in the browser or the desktop app. In Chrome and Edge the browser's library can live in a folder on your device, including one a sync service keeps in step.</dd></div>
+      <div><dt>Export</dt><dd>Export map images as PNG, WebP or JPEG, drawn at the world's true shape, or the data behind the map, one sample per cell: a 16-bit heightmap with its metre scale, and biome and realm index maps with their legends. The desktop app makes worlds up to 4096 × 4096, whose map image is 8192 × 4096. The browser, on a phone or a computer, stops at 2048 × 2048.</dd></div>
       <div><dt>Resolution</dt><dd>Choose the world's resolution. Higher settings add detail and need more memory; the browser starts at 512, the desktop app at 1024.</dd></div>
       <div><dt>Acceleration</dt><dd>Optional graphics acceleration speeds up erosion and export rendering: WebGPU in the browser, OpenGL on the desktop.</dd></div>
     </dl>
@@ -485,12 +1209,13 @@
              a visitor actually fetches to run the generator, measured off the assembled tree. The
              loading shell carries the same token and therefore the same figure. -->
         <p>Use a recent Chrome, Edge, Firefox or Safari. The first visit downloads the generator, about __BUNDLE_MB__&nbsp;MB, and caches it; nothing you make is uploaded anywhere.</p>
+        <p>Saved worlds stay in the browser's own storage, or, in Chrome and Edge, in a folder on your device that you choose in the Library. The desktop app opens the same files; the browser opens the desktop's up to 2048.</p>
         <p>Optional graphics acceleration uses WebGPU where the browser offers it.</p>
       </div>
 
       <div class="panel">
         <h3>Sizes, formats and speed</h3>
-        <p>An export regenerates the world at the size you ask for, so the detail is real rather than enlarged. The map image is drawn at the world's true shape, twice as wide as it is tall: a 2048 world is a 4096 × 2048 picture. Larger worlds take longer and use more memory. On phones, browser exports are capped at a 2048 world, a 4096 × 2048 picture, to keep memory in bounds.</p>
+        <p>An export regenerates the world at the size you ask for, so the detail is real rather than enlarged. The map image is drawn at the world's true shape, twice as wide as it is tall: a 2048 world is a 4096 × 2048 picture. Larger worlds take longer and use more memory. The browser stops at a 2048 world, a 4096 × 2048 picture, for the world on screen and for exports. Larger worlds need the desktop app.</p>
         <p>PNG keeps every pixel. WebP is smaller and softens thin rivers and borders slightly.</p>
       </div>
 
@@ -509,14 +1234,15 @@
 
   <!-- Installing, after the Notes and before the roadmap: a reader who has read what the program
        is and what it will and will not do is the reader ready to be told how to get it, and the
-       roadmap is the answer to a different question. One card per platform, Linux the fullest
-       because it is the one with variables in it — which package manager, which driver, where the
-       launcher lives.
+       roadmap is the answer to a different question. One card per platform.
 
-       Every file name here is checked against site/downloads.txt by SiteAssemblyTest, and the
-       source line below is checked word for word against the one in docs/INSTALL.md: a page that
-       names a file the release does not carry, or a source line that differs by a character from
-       the documented one, is a page that sends a reader somewhere that does not work. -->
+       Every file a release carries has a pill here, and each pill names its file in `data-asset`,
+       with <version> where the release's own number goes. Checked against site/downloads.txt by
+       SiteSourcesTest, both ways. The pill links to /releases/latest, which works whatever the
+       release is called; the script at the foot asks GitHub for the latest release once, and turns
+       each pill whose file the release carries into a link to that file with its size. So no
+       version and no size is ever written here, and none goes stale. The apt source line is
+       checked word for word against the one in docs/INSTALL.md. -->
   <section id="install">
     <div class="section-head">
       <h2>Download and Installation</h2>
@@ -524,42 +1250,96 @@
     </div>
 
     <p class="section-lede">
-      Choose a download for Windows or Linux, or run Cartogenesis in the browser.
+      Choose your system for its files and how to install them. The browser version runs anywhere; the desktop app makes larger worlds.
     </p>
 
-    <div class="ledger">
-      <div class="row">
-        <h3>Windows</h3>
-        <div class="what">
-          <p>Unzip the portable zip and run <code>Cartogenesis.exe</code>. Nothing is installed. Or choose the MSI installer. It is unsigned, so Windows shows a SmartScreen warning. If you trust the download, choose “More info”, then “Run anyway”.</p>
-          <p class="files"><code>Cartogenesis-&lt;version&gt;-windows-portable.zip</code> · <code>Cartogenesis-&lt;version&gt;.msi</code></p>
+    <div class="dl" id="dl">
+      <div class="dl-card windows" data-system="windows">
+        <div class="dl-inner">
+          <button type="button" class="dl-head" aria-expanded="true" aria-controls="dl-windows">
+            <span class="dl-top">
+              <svg class="dl-icon" viewBox="0 0 30 30" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4.5 6.5q0-1.5 1.5-1.5h18q1.5 0 1.5 1.5v13q0 1.5-1.5 1.5H6q-1.5 0-1.5-1.5z"/><path d="M11 26h8M15 21v5"/></svg>
+              <span class="dl-more" aria-hidden="true"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 2v10M2 7h10"/></svg></span>
+            </span>
+            <span>
+              <span class="dl-name">Windows<span class="dl-tag" hidden>For your system</span></span>
+              <span class="dl-sum">MSI installer or portable zip · 64-bit</span>
+            </span>
+          </button>
+          <div class="dl-body" id="dl-windows">
+            <div class="dl-files">
+              <a class="dl-file first" href="/releases/latest" data-asset="Cartogenesis-&lt;version&gt;.msi">MSI installer</a>
+              <a class="dl-file" href="/releases/latest" data-asset="Cartogenesis-&lt;version&gt;-windows-portable.zip">Portable zip</a>
+            </div>
+            <p>The portable zip installs nothing: unzip it and run <code>Cartogenesis.exe</code>. The MSI installer adds a Start menu entry. It is unsigned, so Windows shows a SmartScreen warning. If you trust the download, choose “More info”, then “Run anyway”.</p>
+            <ul class="dl-notes">
+              <li>Java is bundled, with nothing else to install.</li>
+              <li>Draws exported pictures on the graphics card where there is one, and runs erosion, ocean currents and the ice sheet on it when you switch graphics acceleration on.</li>
+            </ul>
+          </div>
         </div>
       </div>
 
-      <div class="row">
-        <h3>Linux<span class="tag">Debian · Ubuntu</span></h3>
-        <div class="what">
-          <p>The apt repository is recommended. The three commands below fetch the signing key, add the source line and run apt install. Alternatively, install the <code>.deb</code> with apt, or unpack and run the portable tarball. Java is bundled, with nothing else to install. The open-source graphics stack (Mesa) was tested. The proprietary NVIDIA driver was not. Saved worlds live in <code>~/.cartogenesis/worlds</code>.</p>
-          <pre class="cmd"><code>sudo curl -fsSL https://cartogenesis.com/apt/key.asc -o /etc/apt/keyrings/cartogenesis.asc
+      <div class="dl-card linux" data-system="linux">
+        <div class="dl-inner">
+          <button type="button" class="dl-head" aria-expanded="true" aria-controls="dl-linux">
+            <span class="dl-top">
+              <svg class="dl-icon" viewBox="0 0 30 30" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4.5 6.5q0-1.5 1.5-1.5h18q1.5 0 1.5 1.5v17q0 1.5-1.5 1.5H6q-1.5 0-1.5-1.5z"/><path d="M8.5 11.5l4 3-4 3M14.5 18.5h7"/></svg>
+              <span class="dl-more" aria-hidden="true"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 2v10M2 7h10"/></svg></span>
+            </span>
+            <span>
+              <span class="dl-name">Linux<span class="dl-tag" hidden>For your system</span></span>
+              <span class="dl-sum">apt repository, .deb or tarball · Debian, Ubuntu</span>
+            </span>
+          </button>
+          <div class="dl-body" id="dl-linux">
+            <p>The apt repository is recommended, so later releases arrive with <code>apt upgrade</code>. These three commands fetch the signing key, add the source line and install:</p>
+            <div class="dl-cmd-box"><pre class="dl-cmd"><code id="dl-apt">sudo curl -fsSL https://cartogenesis.com/apt/key.asc -o /etc/apt/keyrings/cartogenesis.asc
 echo "deb [signed-by=/etc/apt/keyrings/cartogenesis.asc] https://cartogenesis.com/apt stable main" | sudo tee /etc/apt/sources.list.d/cartogenesis.list
-sudo apt update &amp;&amp; sudo apt install cartogenesis</code></pre>
-          <p class="files"><code>Cartogenesis-&lt;version&gt;-linux-amd64.deb</code> · <code>Cartogenesis-&lt;version&gt;-linux-portable.tar.gz</code></p>
+sudo apt update &amp;&amp; sudo apt install cartogenesis</code></pre><button type="button" class="dl-copy" data-copy="dl-apt" hidden>Copy</button></div>
+            <div class="dl-files">
+              <a class="dl-file first" href="/releases/latest" data-asset="Cartogenesis-&lt;version&gt;-linux-amd64.deb">.deb package</a>
+              <a class="dl-file" href="/releases/latest" data-asset="Cartogenesis-&lt;version&gt;-linux-portable.tar.gz">Portable tarball</a>
+            </div>
+            <p>Or install the <code>.deb</code> with apt, or unpack the portable tarball and run it.</p>
+            <ul class="dl-notes">
+              <li>Java is bundled, with nothing else to install.</li>
+              <li>The open-source graphics stack (Mesa) was tested. The proprietary NVIDIA driver was not.</li>
+              <li>Saved worlds live in <code>~/.cartogenesis/worlds</code>.</li>
+            </ul>
+          </div>
         </div>
       </div>
 
-      <div class="row">
-        <h3>Browser</h3>
-        <div class="what">
-          <p>Run Cartogenesis at cartogenesis.com. Nothing is installed and nothing is uploaded. You can also host the web zip yourself over HTTPS.</p>
-          <p class="files"><code>Cartogenesis-&lt;version&gt;-web.zip</code></p>
+      <div class="dl-card browser" data-system="browser">
+        <div class="dl-inner">
+          <button type="button" class="dl-head" aria-expanded="true" aria-controls="dl-browser">
+            <span class="dl-top">
+              <svg class="dl-icon" viewBox="0 0 30 30" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="15" cy="15" r="11"/><path d="M4 15h22M15 4c3.5 3.2 5 7 5 11s-1.5 7.8-5 11c-3.5-3.2-5-7-5-11s1.5-7.8 5-11z"/></svg>
+              <span class="dl-more" aria-hidden="true"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 2v10M2 7h10"/></svg></span>
+            </span>
+            <span>
+              <span class="dl-name">Browser<span class="dl-tag" hidden>For your system</span></span>
+              <span class="dl-sum">Nothing to install · worlds up to 2048</span>
+            </span>
+          </button>
+          <div class="dl-body" id="dl-browser">
+            <div class="dl-files">
+              <a class="dl-file first" href="/app/">Open in the browser</a>
+              <a class="dl-file" href="/releases/latest" data-asset="Cartogenesis-&lt;version&gt;-web.zip">Web zip, to host yourself</a>
+            </div>
+            <p>Runs in a recent Chrome, Edge, Firefox or Safari. Nothing is installed and nothing you make is uploaded: worlds are kept in the browser's own storage or, in Chrome and Edge, in a folder you choose, the same files the desktop app keeps.</p>
+            <ul class="dl-notes">
+              <li>Makes worlds up to 2048 in the browser; the desktop app goes to 4096.</li>
+              <li>On a phone, worlds generate at 512 by default, and 2048 works.</li>
+              <li>To host it yourself, serve the web zip's contents over HTTPS.</li>
+            </ul>
+          </div>
         </div>
       </div>
     </div>
 
-    <div class="ledger-actions">
-      <a class="btn secondary" href="/releases/latest" id="install-releases" target="_blank" rel="noopener">Get the latest release ↗</a>
-      <p class="note">Every file above, for the current release, with the notes saying what changed in it.</p>
-    </div>
+    <a class="dl-all" href="/releases/latest" id="install-releases" target="_blank" rel="noopener">Every file, with the release notes ↗</a>
   </section>
 
   <section id="next">
@@ -588,6 +1368,7 @@ sudo apt update &amp;&amp; sudo apt install cartogenesis</code></pre>
     <p>Have a feature in mind? Say so. <a href="https://github.com/bhanright/Cartogenesis/issues/new?template=feature.yml">Suggest a feature</a>, or write to <a href="mailto:dev@cartogenesis.com">dev@cartogenesis.com</a>.</p>
   </section>
 
+</div>
 </main>
 
 <footer>
@@ -598,26 +1379,1084 @@ sudo apt update &amp;&amp; sudo apt install cartogenesis</code></pre>
 
 <script>
 (function () {
-  /* The phone note is about what a phone can do, so it is shown to phones: a narrow
-     viewport *and* a coarse pointer, which a small desktop window is not. */
-  if (window.matchMedia('(max-width: 820px)').matches &&
-      window.matchMedia('(pointer: coarse)').matches) {
-    var note = document.getElementById('small-screen');
-    if (note) note.hidden = false;
+  var html = document.documentElement;
+  function armed(name) { return (' ' + html.className + ' ').indexOf(' ' + name + ' ') >= 0; }
+  var lessMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+  var mayMove = armed('reveal');
+
+  /* The cards' reveal, armed by the head's script. Each card is watched on its
+     own and started once, the first time it comes into view; the cards that
+     come into view together — a row on a wide screen — are given their order in
+     the document, so they go in turn along the line. Nothing here follows the
+     scroll position: a card that has been shown stays shown. */
+  if (mayMove) {
+    var cards = Array.prototype.slice.call(document.querySelectorAll('.cards > .card'));
+    var watcher = new IntersectionObserver(function (entries) {
+      var arriving = [];
+      entries.forEach(function (entry) {
+        if (entry.isIntersecting) arriving.push(entry.target);
+      });
+      arriving.sort(function (a, b) { return cards.indexOf(a) - cards.indexOf(b); });
+      arriving.forEach(function (card, order) {
+        card.style.setProperty('--order', order);
+        card.classList.add('shown');
+        watcher.unobserve(card);
+      });
+    }, {threshold: 0.2});
+    cards.forEach(function (card) { watcher.observe(card); });
   }
 
-  /* The latest release, read live so the page never carries a stale version number.
-     Silent on failure: the link works either way. */
-  var line = document.getElementById('release-line');
-  if (line && window.fetch) {
-    fetch('https://api.github.com/repos/bhanright/Cartogenesis/releases/latest',
-          {headers: {'Accept': 'application/vnd.github+json'}})
-      .then(function (r) { return r.ok ? r.json() : null; })
-      .then(function (j) {
-        if (j && j.tag_name) line.textContent = 'Get the latest release (' + j.tag_name + ') ↗';
-      })
-      .catch(function () {});
+  /* Calls back with true and false as an element comes into view and leaves it,
+     or once with true where the browser cannot say. */
+  function whileInView(element, callback, threshold) {
+    if (!('IntersectionObserver' in window)) { callback(true); return; }
+    new IntersectionObserver(function (entries) {
+      callback(entries[entries.length - 1].isIntersecting);
+    }, {threshold: threshold === undefined ? 0.25 : threshold}).observe(element);
   }
+
+  function clamp(value, least, most) { return Math.min(most, Math.max(least, value)); }
+  function lerp(from, to, share) { return from + (to - from) * share; }
+  /* Smooth at both ends: the curtain lifts gently, moves, and settles. */
+  function easeInOut(share) {
+    return share < 0.5 ? 4 * share * share * share : 1 - Math.pow(-2 * share + 2, 3) / 2;
+  }
+
+  /* ---------- the opening ---------------------------------------------------
+     Everything below that runs per frame runs only while the opening is on
+     screen: the scroll is listened to only then, and each scroll asks for one
+     frame at most. The drift is the style sheet's own animation, which the
+     browser runs off the page's thread; it is paused whenever the opening is
+     off screen. The scroll is read and never steered: nothing here prevents,
+     delays or snaps it. */
+  var opening = document.getElementById('opening');
+  var stage = document.getElementById('opening-stage');
+  var panel = document.getElementById('opening-panel');
+  var map = document.getElementById('opening-map');
+  var band = document.getElementById('opening-band');
+  var frame = document.getElementById('opening-frame');
+  /* Top, bottom, left and right. */
+  var frameEdges = Array.prototype.slice.call(frame.children);
+  var cue = document.getElementById('opening-cue');
+  var pause = document.getElementById('band-pause');
+  var titleCard = document.getElementById('title-card');
+  var titleName = document.getElementById('title-name');
+
+  /* The band's width over its height, as the page lays it (4096 by 800). */
+  var BAND_ASPECT = 4096 / 800;
+  /* The page's side margin, as the style sheet's --gutter. */
+  var GUTTER_PX = 24;
+  /* The settled plate: 2:1, at most as wide as the page's column less its
+     gutters, and never so narrow that the band is a strip of detail nobody can
+     read; below that the opening is shown settled in the page's flow instead. */
+  var PLATE_MOST_WIDTH_PX = 960;
+  var PLATE_LEAST_WIDTH_PX = 240;
+  /* At rest the map has at least a quarter of the screen above the panel, or
+     the opening is shown settled instead: less is a sliver, not a world. */
+  var OPEN_MAP_LEAST_SHARE = 0.25;
+  /* Where the panel settles: six hundredths of the screen from the top, between
+     8 and 48 pixels, as the study had it. */
+  var SETTLED_PANEL_TOP_SHARE = 0.06, SETTLED_PANEL_TOP_LEAST_PX = 8, SETTLED_PANEL_TOP_MOST_PX = 48;
+  /* The least ground left under the settled plate before the next section. */
+  var PLATE_FOOT_SHARE = 0.04, PLATE_FOOT_LEAST_PX = 20;
+  /* The gap the next section rises to under the plate. */
+  var NEXT_SECTION_GAP_SHARE = 0.06, NEXT_SECTION_GAP_LEAST_PX = 40;
+  /* The plate's hairline fades in over the last two fifths of the settling. */
+  var FRAME_FADES_IN_FROM = 0.6;
+  /* The pause control's size and its inset from the map's corner, as styled. */
+  var PAUSE_SIZE_PX = 30, PAUSE_INSET_PX = 12;
+  /* How far below the screen the panel waits while the title card is up. */
+  var PANEL_BELOW_SCREEN_PX = 8;
+
+  var layout = null;
+  var splash = armed('splash') ? 1 : 0;
+  var frameAsked = false;
+  var pausedByReader = false;
+  var openingInView = true;
+
+  /* Takes the page back to the settled opening in its flow, for good or until a
+     resize finds room again: the reader asked for less motion, or the screen is
+     too short to pin the opening. */
+  function settleInFlow() {
+    if (armed('splash')) endSplash();
+    html.classList.remove('unfold');
+    layout = null;
+    watchScroll(false);
+    [map, band, panel, frame, cue, pause].forEach(function (element) {
+      element.style.transform = '';
+      element.style.opacity = '';
+    });
+    opening.style.removeProperty('--overlap');
+    cue.hidden = true;
+  }
+
+  /* The opening's geometry, measured off the stage, whose height is the small
+     viewport's: the one measure of the screen every size below is taken from. */
+  function measure() {
+    if (!armed('unfold')) return;
+    var stageHeight = stage.getBoundingClientRect().height;
+    var width = stage.clientWidth;
+    var panelHeight = panel.offsetHeight;
+    var openHeight = stageHeight - panelHeight;
+    var settledPanelTop = clamp(stageHeight * SETTLED_PANEL_TOP_SHARE, SETTLED_PANEL_TOP_LEAST_PX, SETTLED_PANEL_TOP_MOST_PX);
+    var plateTop = settledPanelTop + panelHeight;
+    var room = stageHeight - plateTop - Math.max(PLATE_FOOT_LEAST_PX, stageHeight * PLATE_FOOT_SHARE);
+    /* Space short, the plate keeps its 2:1 and narrows. */
+    var plateWidth = Math.min(PLATE_MOST_WIDTH_PX, width - 2 * GUTTER_PX, 2 * room);
+    var fits = openHeight >= stageHeight * OPEN_MAP_LEAST_SHARE &&
+      plateWidth >= PLATE_LEAST_WIDTH_PX &&
+      /* The band laid twice must cover the open map however far it has drifted. */
+      width <= BAND_ASPECT * openHeight;
+    if (!fits) { settleInFlow(); return; }
+    var plateHeight = plateWidth / 2;
+    var overlap = Math.max(0, stageHeight - (plateTop + plateHeight) -
+      Math.max(NEXT_SECTION_GAP_LEAST_PX, stageHeight * NEXT_SECTION_GAP_SHARE));
+    opening.style.setProperty('--overlap', overlap + 'px');
+    var plateLeft = (width - plateWidth) / 2;
+    /* The frame's four edges at the stage's width and the open map's height,
+       which paint() then stretches to the map's size along each edge's length. */
+    frameEdges.forEach(function (edge, at) {
+      var across = at < 2;
+      edge.style.width = across ? width + 'px' : '1px';
+      edge.style.height = across ? '1px' : stageHeight + 'px';
+    });
+    layout = {
+      stageHeight: stageHeight, width: width, openHeight: openHeight, settledPanelTop: settledPanelTop,
+      plate: {left: plateLeft, top: plateTop, width: plateWidth, height: plateHeight},
+      overlap: overlap
+    };
+  }
+
+  /* How far the reader has scrolled through the runway, 0 at rest and 1 settled. */
+  function runLength() { return opening.offsetHeight - layout.stageHeight - layout.overlap; }
+  function scrolled() {
+    var run = runLength();
+    return run <= 0 ? 1 : clamp(-opening.getBoundingClientRect().top / run, 0, 1);
+  }
+
+  /* Puts the map, the band in it, the panel, the frame, the cue and the pause
+     control where the scroll (and the title card, while it is up) says, by
+     transforms and opacity alone, relative to where the style sheet lays each
+     out: under `splash` the map over the whole stage and the panel at its top,
+     under `unfold` the map over what the panel leaves and the panel under it. */
+  function paint() {
+    frameAsked = false;
+    if (!layout) return;
+    var raw = scrolled();
+    var settled = easeInOut(raw);
+    var carded = easeInOut(splash);
+    var inSplash = armed('splash');
+    var restHeight = lerp(layout.openHeight, layout.stageHeight, carded);
+    var x = lerp(0, layout.plate.left, settled);
+    var y = lerp(0, layout.plate.top, settled);
+    var width = lerp(layout.width, layout.plate.width, settled);
+    var height = lerp(restHeight, layout.plate.height, settled);
+    var panelTop = lerp(lerp(layout.openHeight, layout.stageHeight + PANEL_BELOW_SCREEN_PX, carded),
+      layout.settledPanelTop, settled);
+    var laidHeight = inSplash ? layout.stageHeight : layout.openHeight;
+    var laidPanelTop = inSplash ? 0 : layout.openHeight;
+    var scaleAcross = width / layout.width, scaleDown = height / laidHeight;
+    map.style.transform = 'translate(' + x + 'px,' + y + 'px) scale(' + scaleAcross + ',' + scaleDown + ')';
+    /* The band keeps its own shape whatever the map's: it is as tall as the
+       map, and the map's box clips what is wider. */
+    band.style.transform = 'scaleX(' + (scaleDown / scaleAcross) + ')';
+    panel.style.transform = 'translateY(' + (panelTop - laidPanelTop) + 'px)';
+    frame.style.opacity = String(clamp((settled - FRAME_FADES_IN_FROM) / (1 - FRAME_FADES_IN_FROM), 0, 1));
+    /* Round the map as it now stands: each edge laid at its side and stretched
+       along its length alone. */
+    var alongAcross = width / layout.width, alongDown = height / layout.stageHeight;
+    frameEdges[0].style.transform = 'translate(' + x + 'px,' + y + 'px) scaleX(' + alongAcross + ')';
+    frameEdges[1].style.transform = 'translate(' + x + 'px,' + (y + height - 1) + 'px) scaleX(' + alongAcross + ')';
+    frameEdges[2].style.transform = 'translate(' + x + 'px,' + y + 'px) scaleY(' + alongDown + ')';
+    frameEdges[3].style.transform = 'translate(' + (x + width - 1) + 'px,' + y + 'px) scaleY(' + alongDown + ')';
+    cue.style.opacity = String(1 - Math.min(1, raw * 3));
+    pause.style.transform = 'translate(' + (x + width - PAUSE_SIZE_PX - PAUSE_INSET_PX) + 'px,' +
+      (y + PAUSE_INSET_PX) + 'px)';
+    if (inSplash) {
+      titleCard.style.opacity = String(Math.max(0, (splash - 0.4) / 0.6));
+      titleCard.style.transform = 'scale(' + lerp(0.97, 1, carded) + ')';
+    }
+  }
+  function askForFrame() {
+    if (frameAsked) return;
+    frameAsked = true;
+    requestAnimationFrame(paint);
+  }
+  function onScroll() {
+    if (armed('splash')) skipSplash();
+    askForFrame();
+  }
+  var scrollWatched = false;
+  function watchScroll(on) {
+    if (on && !scrollWatched) addEventListener('scroll', onScroll, {passive: true});
+    if (!on && scrollWatched) removeEventListener('scroll', onScroll);
+    scrollWatched = on;
+  }
+  function showDriftState() {
+    map.classList.toggle('paused', pausedByReader || !openingInView);
+    pause.setAttribute('aria-pressed', pausedByReader ? 'true' : 'false');
+  }
+
+  new IntersectionObserver(function (entries) {
+    openingInView = entries[entries.length - 1].isIntersecting;
+    watchScroll(openingInView && !!layout);
+    showDriftState();
+    if (openingInView) askForFrame();
+  }).observe(opening);
+
+  addEventListener('resize', function () {
+    if (!armed('unfold') && mayMove && !lessMotion.matches) html.classList.add('unfold');
+    measure();
+    if (layout) { cue.hidden = false; watchScroll(openingInView); }
+    askForFrame();
+  });
+  if (lessMotion.addEventListener) {
+    lessMotion.addEventListener('change', function () { if (lessMotion.matches) settleInFlow(); });
+  }
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(function () { measure(); askForFrame(); });
+  }
+
+  cue.addEventListener('click', function () {
+    if (!layout) return;
+    var settledAt = opening.getBoundingClientRect().top + window.scrollY + runLength();
+    window.scrollTo({top: settledAt, behavior: lessMotion.matches ? 'auto' : 'smooth'});
+  });
+  pause.addEventListener('click', function () {
+    pausedByReader = !pausedByReader;
+    showDriftState();
+  });
+
+  /* The title card. It stands for HOLD_MS from when the map shows, which is when
+     the band has arrived and decoded or WAIT_FOR_MAP_MS has passed, whichever is
+     first; then over SETTLE_MS the map comes down into the opening, the card
+     fades and the panel rises. A scroll, a tap or a key while it is up sends it
+     at once, over SKIP_MS. The letters light in the style sheet, 115 ms apart
+     and 720 ms each: the twelfth is lit 1985 ms after the first, and the card
+     rests lit for the half second after that. */
+  var HOLD_MS = 2500;
+  var SETTLE_MS = 1300;
+  var WAIT_FOR_MAP_MS = 1500;
+  var SKIP_MS = 280;
+  var splashRunning = null;
+  var holdTimer = null;
+  var SKIPPING_EVENTS = ['wheel', 'touchstart', 'keydown', 'pointerdown'];
+
+  function runSplash(to, milliseconds, then) {
+    var from = splash;
+    var started = performance.now();
+    function step(now) {
+      if (splashRunning !== step) return;
+      var share = Math.min(1, (now - started) / milliseconds);
+      splash = lerp(from, to, share);
+      paint();
+      if (share < 1) requestAnimationFrame(step); else then();
+    }
+    splashRunning = step;
+    requestAnimationFrame(step);
+  }
+  function showMap() { map.classList.add('shown'); }
+  function endSplash() {
+    splashRunning = null;
+    clearTimeout(holdTimer);
+    SKIPPING_EVENTS.forEach(function (type) { removeEventListener(type, skipSplash); });
+    splash = 0;
+    html.classList.remove('splash');
+    titleCard.style.opacity = '';
+    titleCard.style.transform = '';
+    if (mayMove) pause.hidden = false;
+    paint();
+  }
+  var skipping = false;
+  function skipSplash() {
+    if (!armed('splash') || skipping) return;
+    skipping = true;
+    showMap();
+    clearTimeout(holdTimer);
+    runSplash(0, SKIP_MS, endSplash);
+  }
+  function playSplash() {
+    SKIPPING_EVENTS.forEach(function (type) { addEventListener(type, skipSplash, {passive: true}); });
+    var picture = map.querySelector('img');
+    var decoded = picture.decode ? picture.decode().catch(function () {}) : Promise.resolve();
+    var waited = new Promise(function (resolve) { setTimeout(resolve, WAIT_FOR_MAP_MS); });
+    Promise.race([decoded, waited]).then(function () {
+      if (!armed('splash') || skipping) return;
+      showMap();
+      titleName.classList.add('struck');
+      holdTimer = setTimeout(function () {
+        if (armed('splash')) runSplash(0, SETTLE_MS, endSplash);
+      }, HOLD_MS);
+    });
+  }
+
+  measure();
+  if (layout) {
+    cue.hidden = false;
+    if (armed('splash')) playSplash();
+  }
+  if (mayMove && !armed('splash')) pause.hidden = false;
+  paint();
+
+  /* ---------- the tray ------------------------------------------------------
+     In once the opening's own buttons have gone off the top of the screen; out
+     while the download section is on screen, and while anything that must not
+     be covered is under it: the step slider, the lens, the relief, the style
+     slider, the data frame, the roadmap, the report links and the footer. Each of those is watched where the tray lies,
+     a band of the tray's own height along the top of the screen or along its
+     foot, so nothing here reads the scroll. Hidden, it is inert as well, so the
+     keyboard cannot reach what the eye cannot see. */
+  var tray = document.getElementById('tray');
+  var openingActions = document.getElementById('opening-actions');
+  var install = document.getElementById('install');
+  var keepClear = ['forming', 'lens', 'relief', 'compare', 'datamap', 'next', 'report'].map(function (id) { return document.getElementById(id); })
+    .concat([document.querySelector('footer')]).filter(Boolean);
+  var buttonsGone = false, installOnScreen = false, covering = new Set();
+  function showTray() {
+    var on = buttonsGone && !installOnScreen && covering.size === 0;
+    tray.classList.toggle('on', on);
+    if (on) tray.removeAttribute('inert'); else tray.setAttribute('inert', '');
+  }
+  if (tray && 'IntersectionObserver' in window) {
+    tray.setAttribute('inert', '');
+    tray.hidden = false;
+    new IntersectionObserver(function (entries) {
+      var entry = entries[entries.length - 1];
+      buttonsGone = !entry.isIntersecting && entry.boundingClientRect.bottom <= 0;
+      showTray();
+    }).observe(openingActions);
+    new IntersectionObserver(function (entries) {
+      installOnScreen = entries[entries.length - 1].isIntersecting;
+      showTray();
+    }, {rootMargin: '0px 0px -20% 0px'}).observe(install);
+    var clearanceWatcher = null;
+    var watchClearance = function () {
+      if (clearanceWatcher) clearanceWatcher.disconnect();
+      covering.clear();
+      var along = Math.ceil(tray.offsetHeight);
+      var beyond = Math.max(0, window.innerHeight - along);
+      var atFoot = window.matchMedia('(max-width: 699px)').matches;
+      clearanceWatcher = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          if (entry.isIntersecting) covering.add(entry.target); else covering.delete(entry.target);
+        });
+        showTray();
+      }, {rootMargin: atFoot ? '-' + beyond + 'px 0px 0px 0px' : '0px 0px -' + beyond + 'px 0px'});
+      keepClear.forEach(function (element) { clearanceWatcher.observe(element); });
+    };
+    watchClearance();
+    addEventListener('resize', watchClearance);
+  }
+
+  /* How a world is made, played. The frame holds the six cards' own pictures,
+     one of them on show at a time with its step's name; it plays while in view,
+     and a reader who asked for less motion gets the step control and no play
+     button. */
+  var forming = document.getElementById('forming');
+  if (forming) {
+    var stepCards = Array.prototype.slice.call(document.querySelectorAll('.cards.steps > .card'));
+    var formingFrame = forming.querySelector('.forming-frame');
+    var stepControl = document.getElementById('forming-stage');
+    var playButton = document.getElementById('forming-play');
+    var frames = stepCards.map(function (card) {
+      var picture = card.querySelector('img').cloneNode();
+      picture.alt = '';
+      formingFrame.appendChild(picture);
+      return picture;
+    });
+    var shown = 0, playing = mayMove, formingInView = false, timer = null;
+    var STEP_MILLISECONDS = 2600;
+    var show = function (step) {
+      shown = step;
+      frames.forEach(function (picture, at) { picture.classList.toggle('current', at === step); });
+      stepCards.forEach(function (card, at) { card.classList.toggle('lit', formingInView && at === step); });
+      var name = stepCards[step].querySelector('h3').textContent;
+      document.getElementById('forming-number').textContent = '0' + (step + 1);
+      document.getElementById('forming-name').textContent = name;
+      stepControl.value = step + 1;
+      stepControl.setAttribute('aria-valuetext', 'Step ' + (step + 1) + ' of ' + frames.length + ': ' + name);
+    };
+    var run = function () {
+      var go = playing && formingInView;
+      if (go && !timer) timer = setInterval(function () { show((shown + 1) % frames.length); }, STEP_MILLISECONDS);
+      if (!go && timer) { clearInterval(timer); timer = null; }
+      playButton.textContent = playing ? 'Pause' : 'Play';
+      playButton.setAttribute('aria-pressed', playing ? 'true' : 'false');
+    };
+    if (!mayMove) playButton.hidden = true;
+    playButton.addEventListener('click', function () { playing = !playing; run(); });
+    stepControl.addEventListener('input', function () {
+      playing = false;
+      show(Number(stepControl.value) - 1);
+      run();
+    });
+    whileInView(forming, function (visible) { formingInView = visible; show(shown); run(); });
+    forming.hidden = false;
+    show(0);
+    run();
+  }
+
+  /* Any two styles, compared. Only the two on show are fetched: a picked style
+     is asked for when it is picked. */
+  var compare = document.getElementById('compare');
+  if (compare) {
+    var compareFrame = compare.querySelector('.compare-frame');
+    var divider = document.getElementById('compare-range');
+    var place = function () { compareFrame.style.setProperty('--split', divider.value + '%'); };
+    divider.addEventListener('input', place);
+    [['compare-left-style', '.compare-left'], ['compare-right-style', '.compare-right']].forEach(function (pair) {
+      var picker = document.getElementById(pair[0]);
+      var picture = compare.querySelector(pair[1]);
+      picker.addEventListener('change', function () {
+        var label = picker.options[picker.selectedIndex].text;
+        picture.src = 'img/style-' + picker.value + '.webp';
+        picture.alt = 'The coast in the ' + label + ' style.';
+      });
+    });
+    compare.hidden = false;
+    place();
+  }
+
+  /* The data frame. Each data card becomes the switch for its layer: its
+     heading's words move into a button that says whether it is pressed, and the
+     card's number square is ringed while its layer is on. A layer's picture is
+     fetched the first time it is switched on and faded in once it has decoded, so
+     it never arrives half drawn. */
+  var datamap = document.getElementById('datamap');
+  if (datamap) {
+    var layerPictures = {};
+    Array.prototype.forEach.call(datamap.querySelectorAll('img[data-layer]'), function (picture) {
+      layerPictures[picture.getAttribute('data-layer')] = picture;
+    });
+    var switches = [];
+    var switchLayer = function (name, on) {
+      var picture = layerPictures[name];
+      switches.forEach(function (control) {
+        if (control.getAttribute('data-toggles') !== name) return;
+        control.setAttribute('aria-pressed', on ? 'true' : 'false');
+        var card = control.closest('.card');
+        if (card) card.classList.toggle('lit', on);
+      });
+      if (!on) { picture.classList.remove('on'); return; }
+      if (!picture.getAttribute('src')) {
+        picture.loading = 'lazy';
+        picture.src = picture.getAttribute('data-src');
+      }
+      var shown = function () {
+        var stillOn = switches.some(function (control) {
+          return control.getAttribute('data-toggles') === name && control.getAttribute('aria-pressed') === 'true';
+        });
+        if (stillOn) picture.classList.add('on');
+      };
+      if (picture.decode) picture.decode().then(shown, shown); else shown();
+    };
+    Array.prototype.forEach.call(document.querySelectorAll('.cards.layers > .card'), function (card) {
+      var heading = card.querySelector('h3');
+      var name = card.querySelector('img').getAttribute('src').replace(/^img\/layer-|\.webp$/g, '');
+      if (!layerPictures[name]) return;
+      var control = document.createElement('button');
+      control.type = 'button';
+      control.className = 'layer-toggle';
+      control.setAttribute('data-toggles', name);
+      control.setAttribute('aria-pressed', 'false');
+      control.textContent = heading.textContent;
+      heading.textContent = '';
+      heading.appendChild(control);
+      switches.push(control);
+    });
+    Array.prototype.forEach.call(datamap.querySelectorAll('button[data-toggles]'), function (control) {
+      switches.push(control);
+    });
+    switches.forEach(function (control) {
+      control.addEventListener('click', function () {
+        switchLayer(control.getAttribute('data-toggles'), control.getAttribute('aria-pressed') !== 'true');
+      });
+    });
+    datamap.hidden = false;
+    switchLayer('temperature', true);
+  }
+
+  /* The lens. The whole world is laid at the frame's width; the lens shows the
+     full-size picture at one of its pixels to the CSS pixel, so it enlarges by
+     the full picture's width over the frame's. Until the full picture has
+     arrived the lens shows the whole one enlarged, so it answers at once; the
+     full one is asked for the first time the lens is used, and never before. */
+  var lensFrame = document.getElementById('lens-frame');
+  if (lensFrame) {
+    var glass = document.getElementById('lens-glass');
+    var glassPicture = document.getElementById('lens-picture');
+    var wholeWorld = lensFrame.querySelector('.lens-world');
+    /* The full picture's own width, which is also the width the lens lays it at:
+       one of its pixels to the CSS pixel. */
+    var FULL_WIDTH_PX = Number(glassPicture.getAttribute('width'));
+    glassPicture.style.width = FULL_WIDTH_PX + 'px';
+    glassPicture.style.height = glassPicture.getAttribute('height') + 'px';
+    /* How long a finger must rest before the lens comes up, and how far it may
+       wander meanwhile: a tap or the start of a scroll is not a request. */
+    var HOLD_MS = 280, HOLD_WANDER_PX = 10;
+    /* On a touch screen the lens stands this far above the finger's centre, so
+       the finger does not cover what it shows. */
+    var ABOVE_FINGER_SHARE = 0.75;
+    /* The arrow keys move the lens this share of the frame's width a press,
+       five times as far with Shift. */
+    var KEY_STEP_SHARE = 0.02, KEY_LEAP = 5;
+    var fullAsked = false;
+    var at = {x: 0.5, y: 0.5};
+    var askForFull = function () {
+      if (!glassPicture.getAttribute('src')) glassPicture.src = wholeWorld.currentSrc || wholeWorld.src;
+      if (fullAsked) return;
+      fullAsked = true;
+      var full = new Image();
+      full.decoding = 'async';
+      full.src = glassPicture.getAttribute('data-src');
+      var swap = function () { glassPicture.src = full.src; };
+      if (full.decode) full.decode().then(swap, function () {}); else full.onload = swap;
+    };
+    /* Places the lens with its centre at (x, y) in the frame, the point shown
+       being (x, y) less the lift, both in CSS pixels. */
+    var placeLens = function (x, y, lift) {
+      var frameWidth = lensFrame.clientWidth, frameHeight = lensFrame.clientHeight;
+      var shownX = clamp(x, 0, frameWidth), shownY = clamp(y, 0, frameHeight);
+      at = {x: shownX / frameWidth, y: shownY / frameHeight};
+      var enlarged = FULL_WIDTH_PX / frameWidth;
+      var radius = glass.offsetWidth / 2;
+      glass.style.transform = 'translate(' + (shownX - radius) + 'px,' + (shownY - lift - radius) + 'px)';
+      glassPicture.style.transform = 'translate(' + (radius - shownX * enlarged) + 'px,' + (radius - shownY * enlarged) + 'px)';
+    };
+    var showLens = function (on) {
+      if (on) { glass.hidden = false; askForFull(); }
+      glass.classList.toggle('on', on);
+    };
+    var pointIn = function (event) {
+      var box = lensFrame.getBoundingClientRect();
+      return {x: event.clientX - box.left, y: event.clientY - box.top};
+    };
+    var holding = null, held = false;
+    lensFrame.addEventListener('pointermove', function (event) {
+      var point = pointIn(event);
+      if (event.pointerType === 'touch') {
+        if (holding && !held && Math.hypot(point.x - holding.x, point.y - holding.y) > HOLD_WANDER_PX) {
+          clearTimeout(holding.timer);
+          holding = null;
+        }
+        if (held) placeLens(point.x, point.y, glass.offsetWidth * ABOVE_FINGER_SHARE);
+        return;
+      }
+      showLens(true);
+      placeLens(point.x, point.y, 0);
+    });
+    lensFrame.addEventListener('pointerleave', function (event) {
+      if (event.pointerType !== 'touch') showLens(false);
+    });
+    lensFrame.addEventListener('pointerdown', function (event) {
+      if (event.pointerType !== 'touch') return;
+      var point = pointIn(event);
+      holding = {x: point.x, y: point.y, timer: setTimeout(function () {
+        held = true;
+        showLens(true);
+        placeLens(point.x, point.y, glass.offsetWidth * ABOVE_FINGER_SHARE);
+      }, HOLD_MS)};
+    });
+    var letGo = function () {
+      if (holding) clearTimeout(holding.timer);
+      holding = null;
+      if (held) { held = false; showLens(false); }
+    };
+    lensFrame.addEventListener('pointerup', letGo);
+    lensFrame.addEventListener('pointercancel', letGo);
+    /* By keyboard: the frame takes the focus, the lens stands where it last was,
+       and the arrow keys move it. They are the lens's while the frame has the
+       focus, so they do not also scroll the page; every other key is left alone. */
+    var LENS_KEYS = {ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1]};
+    lensFrame.tabIndex = 0;
+    lensFrame.setAttribute('role', 'application');
+    lensFrame.setAttribute('aria-label', 'The whole world under a lens. The arrow keys move the lens; the link under the map opens the whole world at full size.');
+    lensFrame.addEventListener('focus', function () {
+      showLens(true);
+      placeLens(at.x * lensFrame.clientWidth, at.y * lensFrame.clientHeight, 0);
+    });
+    lensFrame.addEventListener('blur', function () { showLens(false); });
+    lensFrame.addEventListener('keydown', function (event) {
+      var move = LENS_KEYS[event.key];
+      if (!move) return;
+      event.preventDefault();
+      var step = lensFrame.clientWidth * KEY_STEP_SHARE * (event.shiftKey ? KEY_LEAP : 1);
+      placeLens(at.x * lensFrame.clientWidth + move[0] * step, at.y * lensFrame.clientHeight + move[1] * step, 0);
+    });
+  }
+
+  /* ---------- the ground in relief ------------------------------------------
+     The engine's heights for the patch as a mesh, textured with the patch's
+     picture and drawn by WebGL, tilting toward the pointer. Every point of the
+     mesh carries a normal taken from its neighbours' heights and the light is
+     worked out per pixel from the normals blended across each triangle, so the
+     shading runs smooth over the triangles' edges and none of them shows. Looked
+     at straight down it is the still picture under it, so the relief starts
+     exactly where the still stands; tilted, the view closes in just enough that
+     the patch's edges never come into the frame. Frames are asked for only
+     while the patch is on screen and still settling toward the pointer. Nothing
+     is fetched or drawn for a reader who asked for less motion, and anything
+     that goes wrong leaves the still picture as it is. */
+  var reliefCanvas = document.getElementById('relief-canvas');
+  if (reliefCanvas && mayMove && window.fetch && window.createImageBitmap && window.Promise) {
+    var reliefStill = document.getElementById('relief-still');
+    /* Heights are drawn this many times their true scale. The patch is some
+       1,900 km across and its range rises under 4 km (3,892 m when it was
+       drawn), so at its true scale the relief would stand a five-hundredth of
+       the patch's width: at twenty times the highest ground stands at about a
+       twenty-fourth of it, enough to see move as the patch tilts and not so much
+       that a valley hides behind its own hills. */
+    var RELIEF_EXAGGERATION = 20;
+    /* The farthest the patch tilts each way, in radians: fifteen degrees. */
+    var MOST_TILT = 15 * Math.PI / 180;
+    /* The camera's field of view, top to bottom: narrow, so the patch seen
+       straight down is nearly the flat picture. */
+    var FIELD_OF_VIEW = 20 * Math.PI / 180;
+    /* How much of the way to the pointer's tilt each frame goes, and how close
+       is close enough to stop asking for frames. */
+    var TILT_EASING = 0.12, TILT_SETTLED = 0.0004;
+    /* How strongly the light shapes the picture, which carries shading of its
+       own already: a half of the way from none to all of it. */
+    var LIGHT_SHARE = 0.5;
+    /* From the upper left, toward the reader, in the camera's frame. */
+    var LIGHT = (function () { var v = [-0.45, 0.55, 0.7], l = Math.hypot(v[0], v[1], v[2]); return [v[0] / l, v[1] / l, v[2] / l]; })();
+    var spacing = Number(reliefCanvas.getAttribute('data-point-spacing'));
+    var stepsPerMetre = Number(reliefCanvas.getAttribute('data-steps-per-metre'));
+    var kilometresPerPixel = Number(reliefCanvas.getAttribute('data-kilometres-per-pixel'));
+    var patchWidth = Number(reliefStill.getAttribute('width')), patchHeight = Number(reliefStill.getAttribute('height'));
+    var pointsAcross = patchWidth / spacing + 1, pointsDown = patchHeight / spacing + 1;
+    var gl = null, drawn = null, tilt = {x: 0, y: 0}, aim = {x: 0, y: 0}, reliefInView = false, reliefFrameAsked = false;
+
+    var giveUp = function () {
+      reliefCanvas.hidden = true;
+      reliefCanvas.classList.remove('shown');
+      drawn = null;
+    };
+
+    var compile = function (type, source) {
+      var shader = gl.createShader(type);
+      gl.shaderSource(shader, source);
+      gl.compileShader(shader);
+      if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) throw new Error('shader');
+      return shader;
+    };
+
+    /* The heights, in metres, one per point, row by row from the patch's top. */
+    var readHeights = function () {
+      return fetch(reliefCanvas.getAttribute('data-heights'))
+        .then(function (response) { if (!response.ok) throw new Error('heights'); return response.blob(); })
+        .then(function (blob) { return createImageBitmap(blob, {colorSpaceConversion: 'none', premultiplyAlpha: 'none'}); })
+        .then(function (bitmap) {
+          if (bitmap.width !== pointsAcross || bitmap.height !== pointsDown) throw new Error('heights');
+          var scratch = document.createElement('canvas');
+          scratch.width = bitmap.width;
+          scratch.height = bitmap.height;
+          var context = scratch.getContext('2d');
+          context.drawImage(bitmap, 0, 0);
+          var bytes = context.getImageData(0, 0, bitmap.width, bitmap.height).data;
+          var metres = new Float32Array(pointsAcross * pointsDown);
+          for (var point = 0; point < metres.length; point++) {
+            metres[point] = (bytes[point * 4] * 256 + bytes[point * 4 + 1]) / stepsPerMetre;
+          }
+          return metres;
+        });
+    };
+
+    /* The mesh: positions in the sheet's pixels about the patch's centre, north
+       up and heights toward the reader; the picture's place; and each point's
+       normal from the heights either side of it. */
+    var buildMesh = function (metres) {
+      var raise = RELIEF_EXAGGERATION / (1000 * kilometresPerPixel);
+      var count = pointsAcross * pointsDown;
+      var positions = new Float32Array(count * 3), places = new Float32Array(count * 2), normals = new Float32Array(count * 3);
+      var heightAt = function (column, row) {
+        return metres[clamp(row, 0, pointsDown - 1) * pointsAcross + clamp(column, 0, pointsAcross - 1)] * raise;
+      };
+      for (var row = 0; row < pointsDown; row++) {
+        for (var column = 0; column < pointsAcross; column++) {
+          var point = row * pointsAcross + column;
+          positions[point * 3] = column * spacing - patchWidth / 2;
+          positions[point * 3 + 1] = patchHeight / 2 - row * spacing;
+          positions[point * 3 + 2] = heightAt(column, row);
+          places[point * 2] = column * spacing / patchWidth;
+          places[point * 2 + 1] = row * spacing / patchHeight;
+          var eastward = (heightAt(column + 1, row) - heightAt(column - 1, row)) / (2 * spacing);
+          var northward = (heightAt(column, row - 1) - heightAt(column, row + 1)) / (2 * spacing);
+          var length = Math.hypot(eastward, northward, 1);
+          normals[point * 3] = -eastward / length;
+          normals[point * 3 + 1] = -northward / length;
+          normals[point * 3 + 2] = 1 / length;
+        }
+      }
+      var corners = new Uint16Array((pointsAcross - 1) * (pointsDown - 1) * 6), at = 0;
+      for (var down = 0; down < pointsDown - 1; down++) {
+        for (var across = 0; across < pointsAcross - 1; across++) {
+          var topLeft = down * pointsAcross + across, bottomLeft = topLeft + pointsAcross;
+          corners.set([topLeft, bottomLeft, topLeft + 1, topLeft + 1, bottomLeft, bottomLeft + 1], at);
+          at += 6;
+        }
+      }
+      return {positions: positions, places: places, normals: normals, corners: corners};
+    };
+
+    var buffer = function (target, data) {
+      var made = gl.createBuffer();
+      gl.bindBuffer(target, made);
+      gl.bufferData(target, data, gl.STATIC_DRAW);
+      return made;
+    };
+
+    var start = function (metres) {
+      gl = reliefCanvas.getContext('webgl', {alpha: false, antialias: true}) ||
+        reliefCanvas.getContext('experimental-webgl', {alpha: false, antialias: true});
+      if (!gl) throw new Error('no webgl');
+      var program = gl.createProgram();
+      gl.attachShader(program, compile(gl.VERTEX_SHADER,
+        'attribute vec3 position; attribute vec2 place; attribute vec3 normal;' +
+        'uniform mat4 model; uniform mat4 lens; uniform mat3 turn;' +
+        'varying vec2 vPlace; varying vec3 vNormal;' +
+        'void main() { vPlace = place; vNormal = turn * normal; gl_Position = lens * model * vec4(position, 1.0); }'));
+      gl.attachShader(program, compile(gl.FRAGMENT_SHADER,
+        'precision mediump float;' +
+        'uniform sampler2D ground; uniform vec3 light; uniform float share;' +
+        'varying vec2 vPlace; varying vec3 vNormal;' +
+        'void main() {' +
+        '  float lit = max(dot(normalize(vNormal), light), 0.0) / light.z;' +
+        '  gl_FragColor = vec4(texture2D(ground, vPlace).rgb * mix(1.0, lit, share), 1.0);' +
+        '}'));
+      gl.linkProgram(program);
+      if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error('link');
+      gl.useProgram(program);
+      var mesh = buildMesh(metres);
+      [['position', mesh.positions, 3], ['place', mesh.places, 2], ['normal', mesh.normals, 3]].forEach(function (attribute) {
+        buffer(gl.ARRAY_BUFFER, attribute[1]);
+        var location = gl.getAttribLocation(program, attribute[0]);
+        gl.enableVertexAttribArray(location);
+        gl.vertexAttribPointer(location, attribute[2], gl.FLOAT, false, 0, 0);
+      });
+      buffer(gl.ELEMENT_ARRAY_BUFFER, mesh.corners);
+      var texture = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, texture);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, reliefStill);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.uniform3fv(gl.getUniformLocation(program, 'light'), LIGHT);
+      gl.uniform1f(gl.getUniformLocation(program, 'share'), LIGHT_SHARE);
+      gl.enable(gl.DEPTH_TEST);
+      drawn = {
+        program: program, count: mesh.corners.length,
+        model: gl.getUniformLocation(program, 'model'), lens: gl.getUniformLocation(program, 'lens'),
+        turn: gl.getUniformLocation(program, 'turn')
+      };
+      reliefCanvas.addEventListener('webglcontextlost', giveUp);
+    };
+
+    /* Rotation about the east-west line by a, then about the north-south line
+       by b, column by column as WebGL reads a matrix. */
+    var turning = function (a, b) {
+      var ca = Math.cos(a), sa = Math.sin(a), cb = Math.cos(b), sb = Math.sin(b);
+      return [cb, sa * sb, -ca * sb, 0, ca, sa, sb, -sa * cb, ca * cb];
+    };
+
+    /* The camera straight above the patch at the distance its field of view
+       takes in exactly the patch's height, closing in by `closer`. */
+    var lensFor = function (closer) {
+      var focal = 1 / Math.tan(FIELD_OF_VIEW / 2), aspect = patchWidth / patchHeight;
+      var distance = focal * patchHeight / 2, near = distance / 4, far = distance * 4;
+      return [focal / aspect * closer, 0, 0, 0, 0, focal * closer, 0, 0,
+        0, 0, (far + near) / (near - far), -1, 0, 0, 2 * far * near / (near - far) - distance * (far + near) / (near - far), distance];
+    };
+
+    /* How much closer the view must be at this tilt for the patch's four corners
+       to lie outside the frame: the frame's corners, seen from its centre, must
+       fall inside the tilted patch's outline. */
+    var closingFor = function (rotation) {
+      var focal = 1 / Math.tan(FIELD_OF_VIEW / 2), aspect = patchWidth / patchHeight, distance = focal * patchHeight / 2;
+      var outline = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(function (corner) {
+        var x = corner[0] * patchWidth / 2, y = corner[1] * patchHeight / 2;
+        var turnedX = rotation[0] * x + rotation[3] * y, turnedY = rotation[1] * x + rotation[4] * y;
+        var turnedZ = rotation[2] * x + rotation[5] * y, depth = distance - turnedZ;
+        return [focal / aspect * turnedX / depth, focal * turnedY / depth];
+      });
+      var closer = 1;
+      [[-1, -1], [1, -1], [1, 1], [-1, 1]].forEach(function (corner) {
+        var reach = Infinity;
+        for (var edge = 0; edge < 4; edge++) {
+          var p = outline[edge], q = outline[(edge + 1) % 4];
+          var ex = q[0] - p[0], ey = q[1] - p[1];
+          var across = corner[0] * ey - corner[1] * ex;
+          if (Math.abs(across) < 1e-9) continue;
+          var t = (p[0] * ey - p[1] * ex) / across, u = (p[0] * corner[1] - p[1] * corner[0]) / across;
+          if (t > 0 && u >= 0 && u <= 1) reach = Math.min(reach, t);
+        }
+        closer = Math.max(closer, 1 / reach);
+      });
+      return closer;
+    };
+
+    var paintRelief = function () {
+      reliefFrameAsked = false;
+      if (!drawn) return;
+      tilt.x += (aim.x - tilt.x) * TILT_EASING;
+      tilt.y += (aim.y - tilt.y) * TILT_EASING;
+      var rotation = turning(tilt.x, tilt.y);
+      /* Laid out before it is measured, still at no opacity until it has been
+         drawn into, so the still picture shows until then. */
+      reliefCanvas.hidden = false;
+      var ratio = Math.min(window.devicePixelRatio || 1, 2);
+      var wide = Math.round(reliefCanvas.clientWidth * ratio), high = Math.round(reliefCanvas.clientHeight * ratio);
+      if (reliefCanvas.width !== wide || reliefCanvas.height !== high) { reliefCanvas.width = wide; reliefCanvas.height = high; }
+      gl.viewport(0, 0, wide, high);
+      gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+      gl.uniformMatrix4fv(drawn.model, false, [rotation[0], rotation[1], rotation[2], 0, rotation[3], rotation[4], rotation[5], 0,
+        rotation[6], rotation[7], rotation[8], 0, 0, 0, 0, 1]);
+      gl.uniformMatrix3fv(drawn.turn, false, rotation);
+      gl.uniformMatrix4fv(drawn.lens, false, lensFor(closingFor(rotation)));
+      gl.drawElements(gl.TRIANGLES, drawn.count, gl.UNSIGNED_SHORT, 0);
+      reliefCanvas.classList.add('shown');
+      if (reliefInView && (Math.abs(aim.x - tilt.x) > TILT_SETTLED || Math.abs(aim.y - tilt.y) > TILT_SETTLED)) askForReliefFrame();
+    };
+    var askForReliefFrame = function () {
+      if (reliefFrameAsked) return;
+      reliefFrameAsked = true;
+      requestAnimationFrame(paintRelief);
+    };
+
+    reliefCanvas.addEventListener('pointermove', function (event) {
+      var box = reliefCanvas.getBoundingClientRect();
+      aim = {x: clamp((event.clientY - box.top) / box.height * 2 - 1, -1, 1) * MOST_TILT,
+        y: clamp((event.clientX - box.left) / box.width * 2 - 1, -1, 1) * MOST_TILT};
+      askForReliefFrame();
+    });
+    reliefCanvas.addEventListener('pointerleave', function () { aim = {x: 0, y: 0}; askForReliefFrame(); });
+    if (lessMotion.addEventListener) {
+      lessMotion.addEventListener('change', function () { if (lessMotion.matches) giveUp(); });
+    }
+
+    var begun = false;
+    whileInView(reliefCanvas.parentNode, function (visible) {
+      reliefInView = visible;
+      if (visible && !begun) {
+        begun = true;
+        reliefStill.loading = 'eager';
+        var stillReady = reliefStill.decode ? reliefStill.decode() : Promise.resolve();
+        Promise.all([readHeights(), stillReady]).then(function (ready) {
+          start(ready[0]);
+          askForReliefFrame();
+        }).catch(giveUp);
+      } else if (visible) {
+        askForReliefFrame();
+      }
+    }, 0);
+  }
+
+  /* ---------- the download cards --------------------------------------------
+     The one chosen opens across the row and the others move beneath it. The
+     move measures where every card was, lets the grid lay them out anew, and
+     slides each from its old place and size to its new one (first, last,
+     invert, play); each card's contents are scaled the other way at every step,
+     so the words keep their shape while the card around them changes its. */
+  var downloads = document.getElementById('dl');
+  var platformCards = Array.prototype.slice.call(downloads.querySelectorAll('.dl-card'));
+  var ownOrder = platformCards.slice();
+  var CARD_MOVE_MS = 420;
+  var CARD_MOVE_STEPS = 12;
+  function easeOut(share) { return 1 - Math.pow(1 - share, 3); }
+  function headOf(card) { return card.querySelector('.dl-head'); }
+  function rearrange(change) {
+    var before = new Map(platformCards.map(function (card) { return [card, card.getBoundingClientRect()]; }));
+    change();
+    if (lessMotion.matches || !Element.prototype.animate) return;
+    platformCards.forEach(function (card) {
+      var was = before.get(card), now = card.getBoundingClientRect();
+      if (!now.width || !now.height) return;
+      var dx = was.left - now.left, dy = was.top - now.top;
+      var across = was.width / now.width, down = was.height / now.height;
+      if (Math.abs(dx) < 1 && Math.abs(dy) < 1 && Math.abs(across - 1) < 0.01 && Math.abs(down - 1) < 0.01) return;
+      var outer = [], inner = [];
+      for (var step = 0; step <= CARD_MOVE_STEPS; step++) {
+        var share = easeOut(step / CARD_MOVE_STEPS);
+        var scaleAcross = lerp(across, 1, share), scaleDown = lerp(down, 1, share);
+        outer.push({offset: step / CARD_MOVE_STEPS, transformOrigin: '0 0',
+          transform: 'translate(' + lerp(dx, 0, share) + 'px,' + lerp(dy, 0, share) + 'px) scale(' + scaleAcross + ',' + scaleDown + ')'});
+        inner.push({offset: step / CARD_MOVE_STEPS, transform: 'scale(' + (1 / scaleAcross) + ',' + (1 / scaleDown) + ')'});
+      }
+      card.animate(outer, {duration: CARD_MOVE_MS, easing: 'linear'});
+      card.querySelector('.dl-inner').animate(inner, {duration: CARD_MOVE_MS, easing: 'linear'});
+      if (card.classList.contains('open')) {
+        card.querySelector('.dl-body').animate([{opacity: 0}, {opacity: 0, offset: 0.45}, {opacity: 1}], {duration: CARD_MOVE_MS + 60});
+      }
+    });
+  }
+  function choose(chosen) {
+    var opens = chosen && !chosen.classList.contains('open');
+    rearrange(function () {
+      platformCards.forEach(function (card) {
+        var on = opens && card === chosen;
+        card.classList.toggle('open', on);
+        headOf(card).setAttribute('aria-expanded', on ? 'true' : 'false');
+      });
+      /* The open card goes first, so it spans the row above the other two;
+         closed, they go back to their own order. */
+      if (opens) downloads.insertBefore(chosen, downloads.firstChild);
+      else ownOrder.forEach(function (card) { downloads.appendChild(card); });
+    });
+  }
+  platformCards.forEach(function (card) {
+    headOf(card).setAttribute('aria-expanded', 'false');
+    headOf(card).addEventListener('click', function () { choose(card); });
+  });
+  document.addEventListener('keydown', function (event) {
+    if (event.key !== 'Escape') return;
+    var open = downloads.querySelector('.dl-card.open');
+    if (!open) return;
+    var focusWasInside = open.contains(document.activeElement);
+    choose(null);
+    if (focusWasInside) headOf(open).focus();
+  });
+  Array.prototype.forEach.call(downloads.querySelectorAll('.dl-copy'), function (button) {
+    button.hidden = false;
+    button.addEventListener('click', function () {
+      var source = document.getElementById(button.getAttribute('data-copy'));
+      function said(words) {
+        button.textContent = words;
+        setTimeout(function () { button.textContent = 'Copy'; }, 1600);
+      }
+      function selectInstead() {
+        var range = document.createRange();
+        range.selectNodeContents(source);
+        var selection = getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+        said('Selected');
+      }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(source.textContent).then(function () { said('Copied'); }, selectInstead);
+      } else {
+        selectInstead();
+      }
+    });
+  });
+
+  /* The card that suits this reader's system, marked where it stands and not
+     opened. Read from what the browser reports; nothing is said when it is not
+     recognised. */
+  function systemOfThisDevice() {
+    var agent = navigator.userAgent || '';
+    var platform = (navigator.userAgentData && navigator.userAgentData.platform) || '';
+    var both = platform + ' ' + agent;
+    if (/Android|iPhone|iPad|iPod|CrOS|Chrome OS|ChromeOS/i.test(both)) return 'browser';
+    if (/^Windows$/i.test(platform) || (!platform && /Windows NT/.test(agent))) return 'windows';
+    if (/^macOS$/i.test(platform) || (!platform && /Macintosh|Mac OS X/.test(agent))) return 'browser';
+    if (/^Linux$/i.test(platform) || (!platform && /Linux|X11/.test(agent))) return 'linux';
+    return null;
+  }
+  var system = systemOfThisDevice();
+  var suggested = system && downloads.querySelector('.dl-card[data-system="' + system + '"] .dl-tag');
+  if (suggested) suggested.hidden = false;
+
+  /* ---------- the latest release, read live ---------------------------------
+     So the page never carries a version number or a size that has gone stale.
+     One request for the whole page, made once it has loaded; given up after
+     RELEASE_LOOKUP_TIMEOUT_MS; its answer, or its failure, kept for the visit
+     for RELEASE_KEPT_MS, so a reader moving about the site does not spend the
+     sixty requests an hour GitHub allows an address. Each file is matched on
+     its own, by its exact name with the release's version put in, so a release
+     that lacks one file leaves that one link as it was written: to the release
+     page, with no size. Everything between the two markers below is run by
+     SiteAssemblyTest against the list of files a release carries, with a
+     malformed answer, a missing file, a refusal and a failure. */
+  /* release lookup begins */
+  var RELEASE_API = 'https://api.github.com/repos/bhanright/Cartogenesis/releases/latest';
+  var RELEASE_FILES = 'https://github.com/bhanright/Cartogenesis/releases/download/';
+  var RELEASE_KEPT_KEY = 'cartogenesis-latest-release';
+  /* A release document is a few kilobytes and the API answers in well under a
+     second; a lookup still going after five has lost its reader. */
+  var RELEASE_LOOKUP_TIMEOUT_MS = 5000;
+  /* Releases are cut days apart; a quarter of an hour of one visit is safe. */
+  var RELEASE_KEPT_MS = 15 * 60 * 1000;
+
+  /* The parts of GitHub's answer the page uses, or null for anything else. */
+  function releaseFromAnswer(answer) {
+    if (!answer || typeof answer.tag_name !== 'string' || !/^v?\d[\w.-]*$/.test(answer.tag_name) ||
+        !Array.isArray(answer.assets)) return null;
+    return {
+      tag: answer.tag_name,
+      files: answer.assets.filter(function (asset) {
+        return asset && typeof asset.name === 'string' && typeof asset.size === 'number' &&
+          typeof asset.browser_download_url === 'string' &&
+          asset.browser_download_url.indexOf(RELEASE_FILES) === 0;
+      }).map(function (asset) {
+        return {name: asset.name, size: asset.size, url: asset.browser_download_url};
+      })
+    };
+  }
+
+  /* The release's own file for a name written with <version>, or null. */
+  function releaseFileFor(release, pattern) {
+    var name = pattern.replace('<version>', release.tag.replace(/^v/, ''));
+    for (var at = 0; at < release.files.length; at++) {
+      if (release.files[at].name === name) return release.files[at];
+    }
+    return null;
+  }
+
+  /* A size as the page writes it: megabytes to one place. */
+  function sizeInWords(bytes) { return (bytes / 1048576).toFixed(1) + ' MB'; }
+
+  /* The latest release, from the visit's keeping or from GitHub; null when
+     there is none to be had. */
+  function lookUpLatestRelease(fetchRelease, keeping, now, timeoutMs) {
+    try {
+      var kept = JSON.parse(keeping.getItem(RELEASE_KEPT_KEY) || 'null');
+      if (kept && now() - kept.at < RELEASE_KEPT_MS) return Promise.resolve(kept.release);
+    } catch (unreadable) {}
+    function keep(release) {
+      try { keeping.setItem(RELEASE_KEPT_KEY, JSON.stringify({at: now(), release: release})); } catch (full) {}
+      return release;
+    }
+    var controller = typeof AbortController === 'function' ? new AbortController() : null;
+    var gaveUp = new Promise(function (resolve) {
+      setTimeout(function () { if (controller) controller.abort(); resolve('timed out'); }, timeoutMs);
+    });
+    var asked = fetchRelease(RELEASE_API, {
+      headers: {'Accept': 'application/vnd.github+json'},
+      signal: controller ? controller.signal : undefined
+    }).then(function (response) {
+      return response.ok ? response.json().then(releaseFromAnswer) : null;
+    });
+    return Promise.race([asked, gaveUp]).then(function (answer) {
+      return answer === 'timed out' ? null : keep(answer);
+    }, function () { return keep(null); });
+  }
+  /* release lookup ends */
+
+  function offerRelease(release) {
+    if (!release) return;
+    var line = document.getElementById('release-line');
+    if (line) line.textContent = 'Get the latest release (' + release.tag + ') ↗';
+    Array.prototype.forEach.call(downloads.querySelectorAll('.dl-file[data-asset]'), function (pill) {
+      var file = releaseFileFor(release, pill.getAttribute('data-asset'));
+      if (!file) return;
+      pill.href = file.url;
+      var size = document.createElement('small');
+      size.textContent = sizeInWords(file.size);
+      pill.appendChild(size);
+    });
+  }
+  if (window.fetch && window.Promise) {
+    var keeping = {getItem: function () { return null; }, setItem: function () {}};
+    try { if (window.sessionStorage) keeping = window.sessionStorage; } catch (blocked) {}
+    var askOnce = function () {
+      lookUpLatestRelease(window.fetch.bind(window), keeping, Date.now, RELEASE_LOOKUP_TIMEOUT_MS)
+        .then(offerRelease, function () {});
+    };
+    if (document.readyState === 'complete') askOnce(); else addEventListener('load', askOnce);
+  }
+
+  html.setAttribute('data-scripted', 'yes');
 })();
 </script>
 

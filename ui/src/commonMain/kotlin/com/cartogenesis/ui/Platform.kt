@@ -109,13 +109,27 @@ interface Platform {
     val libraryLocation: String
 
     /**
+     * How the reader may move [library] into a folder on the disk they choose, or null where this
+     * host offers no such thing.
+     *
+     * A browser question. Chrome and Edge let a page ask for a folder and keep it across visits
+     * (the File System Access API); Firefox and Safari do not, and there the library stays in the
+     * browser's own storage with nothing offered in its place. The desktop's library is a folder
+     * already, chosen in Settings by its path, so it answers null too. See [LibraryPlaces], which
+     * is what the interface asks rather than asking this directly.
+     */
+    val folderChooser: FolderChooser? get() = null
+
+    /**
      * Whether the library pane's download/upload buttons appear.
      *
      * The desktop's library already lives on disk as ordinary `.cgw` files a user can move by
      * hand, so it declines this rather than duplicating a file dialog the OS already gives them.
      * The browser's library lives in IndexedDB, invisible to anything outside the page, so a
-     * download and a file picker are the only way a save moves in or out of it — which is also
-     * the only way a world crosses between the two front ends, since the format is shared.
+     * download and a file picker are the only way a save moves in or out of it — and, in a browser
+     * with no [folderChooser], the only way a world crosses between the two front ends, since the
+     * format is shared. Where the reader has put the library in a folder, the buttons stay: a
+     * download is still the way to hand one world to somebody else.
      *
      * A runtime flag rather than an `expect`/`actual` split: the pane is shared code, and what it
      * draws should depend on what this platform can do, not on which target compiled it.
@@ -208,21 +222,18 @@ interface Platform {
     val coarsePointer: Boolean get() = false
 
     /**
-     * The largest export this build can actually finish.
+     * The largest world this host can make, in cells across: what the working resolution may be
+     * set to and what an export may be asked for. One number rather than two, because an export
+     * makes the world again at its own size, so the two could only disagree by offering a size
+     * that ends the same way from either row.
      *
-     * Not a taste: 8192 does not complete. It exhausts a 10 GB heap inside the generator after
-     * about nineteen minutes, before a single pixel of the map is drawn — so the chip for it is
-     * offered disabled rather than removed, and any size above this one falls back to it. See
-     * docs/DESIGN_LEDGER.md for the measurement. It is a value on the platform, and not a constant in the panel, so that the build
-     * which fixes the memory can raise the ceiling without the interface being touched: the export
-     * row draws whatever this says.
-     *
-     * [compact] is true in a phone-shaped window, and is a question rather than an assumption
-     * because the answer differs by host: a desktop window narrowed to 700 dp is still a desktop
-     * with every core and a 12 GB heap, while the same 700 dp in a browser is a phone with one
-     * thread. The web front end caps itself at 2048 there; the desktop ignores the argument.
+     * [WorldCeilings.DESKTOP] by default and on the desktop, [WorldCeilings.BROWSER_TAB] in every
+     * browser, phone or not; each says what was measured to put it there. A value on the platform
+     * rather than a constant in the panel, so that the build which makes a larger world fit raises
+     * this and every row that offers a size follows: a size above it stays in its row, disabled,
+     * with [WorldCeilings.whyOutOfReach] saying why.
      */
-    fun exportCeiling(compact: Boolean): Int = 4096
+    val generationCeiling: Int get() = WorldCeilings.DESKTOP
 
     /**
      * Draws [world] at [size] and puts the result wherever this platform puts finished files: a
@@ -308,6 +319,26 @@ interface Platform {
      * business knowing what a reader has copied.
      */
     fun copyToClipboard(text: String) {}
+
+    /**
+     * The whole address this application was opened at, query and fragment included, or null where
+     * it was not opened at an address at all.
+     *
+     * A browser answers with the page's own address, read once when the page loads, and that is
+     * where a link to a world arrives: see [WorldLinks.read]. The desktop is started from a
+     * program, not an address, and answers null, so it opens as it always has.
+     */
+    val openedAt: String? get() = null
+
+    /**
+     * The page address a copied link to a world begins with, with no query or fragment of its own.
+     *
+     * The browser answers with its own page, so a link copied from a test deployment or a local
+     * build opens in that build. The desktop is no page, and its link has to open for somebody who
+     * has never installed anything, so it takes the published application's address, which is the
+     * default: [WorldLinks.PUBLIC_APP_ADDRESS].
+     */
+    val worldLinkBase: String get() = WorldLinks.PUBLIC_APP_ADDRESS
 
     /**
      * Which front end this is, in the word a bug report's form offers: "Desktop" or "Browser".
@@ -419,3 +450,47 @@ expect fun randomId(): String
 
 /** A saved world's timestamp, in whatever form is natural for the host. */
 expect fun formatTimestamp(millis: Long): String
+
+/**
+ * The two ceilings a host can have on the size of world it makes, and the sentence for a size above
+ * one of them. See [Platform.generationCeiling].
+ *
+ * Public because the web front end, which is a module of its own, declares the browser's.
+ */
+object WorldCeilings {
+
+    /**
+     * The largest world any build finishes: 4096 cells across.
+     *
+     * Not a taste. 8192 exhausts a 10 GB heap inside the generator after about nineteen minutes,
+     * before a single pixel of the map is drawn, so its export chip is offered disabled rather than
+     * removed. See docs/DESIGN_LEDGER.md, G2, for the measurement.
+     */
+    const val DESKTOP: Int = 4096
+
+    /**
+     * The largest world a browser tab finishes: 2048 cells across.
+     *
+     * A 4096 generation in Edge on an RTX 3070 Ti held a 2.7 GB heap seven minutes in, still
+     * eroding, and the tab then died before anything was drawn; a 2048 world in the same tab
+     * finished in about four minutes with its heap near 2.3 GB. A saved 4096 world is 2.45 GB of
+     * arrays before anything is drawn from it (see `WorldCodec.FORMAT_VERSION`), more than the heap
+     * that tab died at, so a tab cannot open one either. See docs/TODO.md, "A 4096 world cannot be
+     * made in a browser tab", for the measurement and for what making it fit is still owed.
+     */
+    const val BROWSER_TAB: Int = 2048
+
+    /**
+     * Why a world [size] cells across cannot be made under [ceiling], or null when it can.
+     *
+     * A size the desktop reaches and this host does not can only be a browser's limit, because the
+     * browser's is the only ceiling below the desktop's; a size above the desktop's waits for a
+     * later release everywhere. Either way the sentence says where the size can be had, because a
+     * reader told only "no" has no idea whether to ask again.
+     */
+    fun whyOutOfReach(size: Int, ceiling: Int): String? = when {
+        size <= ceiling -> null
+        size <= DESKTOP -> "A $size world needs more memory than a browser tab is given; the desktop app makes it"
+        else -> "$size needs more memory than this build can hold; it waits for a later release"
+    }
+}

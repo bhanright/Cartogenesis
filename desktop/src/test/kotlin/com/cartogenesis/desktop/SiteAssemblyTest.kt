@@ -1,12 +1,12 @@
 package com.cartogenesis.desktop
 
-import com.cartogenesis.cartography.ColorVision
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.test.fail
+import kotlin.math.abs
 
 /**
  * Checks the tree `:web:assembleSite` builds for cartogenesis.com, before it is uploaded.
@@ -24,43 +24,78 @@ import kotlin.test.fail
 class SiteAssemblyTest {
 
     private companion object {
-
         /**
-         * WCAG 2.1 AA for body text (1.4.3), the bar `SitePaletteContrastTest` holds the rest of
-         * the page to. The naming bands are held to it rather than to the large-text bar, because
-         * the line under a band's name is small text by any measure.
-         */
-        const val AA = 4.5
-
-        /**
-         * How far a decoded pixel of a hairline may sit from the divider's brightness, in levels
-         * of Rec. 601 luma.
-         *
-         * Brightness and not colour, because the figures are lossy WebP, which keeps brightness at
-         * every pixel and colour at every second one: a two-pixel line of the divider's brass
-         * between two dark bands decodes as #7C7153, 45 levels bluer than it was drawn, with its
-         * brightness within one level. Measured on the assembled strips, both ways round: within 8
-         * levels every divider line keeps 0.92 of its length or more, and no other line more than
-         * 0.29. A calibration on the figures as built, not a figure of the codec's.
-         */
-        const val DIVIDER_LUMA_TOLERANCE = 8.0
-
-        /**
-         * The share of a line's pixels within [DIVIDER_LUMA_TOLERANCE] of the divider's brightness
-         * for the line to be part of a hairline: most of it, which sits between the 0.92 the
-         * dividers keep and the 0.29 no line of a map or a band reaches.
-         */
-        const val DIVIDER_SHARE = 0.5
-
-        /**
-         * The fewest colours, at five bits a channel, the map in a panel can hold: a panel of one
-         * flat colour decodes to one after lossy compression, and the strips' panels as built to
-         * between six hundred and three and a half thousand.
+         * The fewest colours, at five bits a channel, a map picture can hold: a picture of one flat
+         * colour decodes to one after lossy compression, and the pictures as built to between
+         * about three hundred (the currents view, whose land is one dark ground) and four and a half
+         * thousand.
          */
         const val LEAST_COLOURS_IN_A_MAP = 32
+
+        /**
+         * How far, on average in the green channel out of 255, the band's first stretch may be
+         * from the link preview at the band's scale before the settled plate would show a
+         * different window from the author's. The two are the same window encoded apart, so what
+         * is left is the encoder's loss at each; a band cut one stretch along the world measures
+         * many times this.
+         */
+        const val PREVIEW_TAKEOVER_MOST_MEAN_DIFFERENCE = 12.0
+
+        /**
+         * The most the full band may weigh: 320 KiB, where it measured 288,294 bytes, 4096 by 800 at
+         * [SiteImagery.WORLD_BAND_QUALITY]. It is the page's largest request and every wide or
+         * dense screen fetches it as the page opens.
+         */
+        const val WORLD_BAND_MOST_BYTES = 327_680L
+
+        /** The most the half band may weigh: 100 KiB, where it measured 90,848 bytes, 2048 by 400. */
+        const val WORLD_BAND_HALF_MOST_BYTES = 102_400L
+
+        /**
+         * The least and most of its frame a data layer may cover. The rivers covered 2.0% of the
+         * frame and the winds' arrows 7.2%, the currents and the rainfall half each, the sea and
+         * the land; a layer cut as the whole reading covers all of it and an empty one none.
+         */
+        const val LEAST_LAYER_COVER = 0.005
+        const val MOST_LAYER_COVER = 0.9
+
+        /**
+         * The least the relief's highest point may stand above the sea: a thousand metres, a hill
+         * a reader sees rise when the patch tilts. The patch was picked for its range.
+         */
+        const val LEAST_RELIEF_METRES = 1_000.0
+
+        /**
+         * What the page fetches only when a reader asks for it, by file, each with the most it may
+         * weigh: the lens's full-size world (507,604 bytes at 4096 by 2048 when it was made, fetched
+         * the first time the lens is used), each with 64 KiB for the picture moving when it is made
+         * again.
+         */
+        val FETCHED_WHEN_USED: Map<String, Long> = mapOf(
+            "img/world-full.webp" to 507_604L + 65_536L
+        )
+
+        /**
+         * The ceiling on what the page fetches as it loads, by the kind of screen (see
+         * [fetchedAtLoad]): the 1,409,962 and 1,607,408 bytes the list summed to for Site 5b, each
+         * plus 64 KiB for the pictures and the page moving when they are made again.
+         *
+         * Site 6's page summed to 1,373,328 and 1,570,774, so Site 5b costs every screen 36,634
+         * bytes more, all of it the page itself (136,906 bytes where it was 100,272): the markup,
+         * style and script of the data frame, the lens, the relief and the reel. None of their
+         * pictures is fetched as the page loads; a headless Chrome at 375 and 1280 wide, at one and
+         * two device pixels, on a first visit and a returning one, fetched the same pictures as for
+         * Site 6, the new ones all being lazy and further down the page than the distance a lazy
+         * picture is fetched ahead (docs/DESIGN_LEDGER.md, Site 5b). Site 5a's page fetched
+         * 1,432,079 by the same count.
+         */
+        val LOAD_BYTES: Map<String, Long> = mapOf(
+            "narrow at one device pixel" to 1_409_962L + 65_536L,
+            "wide or dense" to 1_607_408L + 65_536L
+        )
     }
 
-    /** A WebP decoded through Skia as ARGB, row after row. */
+    /** A picture decoded through Skia as unpremultiplied ARGB, row after row. */
     private fun decodedPixels(file: File): IntArray {
         val image = org.jetbrains.skia.Image.makeFromEncoded(file.readBytes())
         val bitmap = org.jetbrains.skia.Bitmap()
@@ -74,54 +109,14 @@ class SiteAssemblyTest {
         // Skia's S32 is BGRA in memory on this platform.
         return IntArray(bytes.size / 4) { i ->
             val at = i * 4
-            (bytes[at + 2].toInt() and 0xFF shl 16) or (bytes[at + 1].toInt() and 0xFF shl 8) or
-                (bytes[at].toInt() and 0xFF)
+            (bytes[at + 3].toInt() and 0xFF shl 24) or (bytes[at + 2].toInt() and 0xFF shl 16) or
+                (bytes[at + 1].toInt() and 0xFF shl 8) or (bytes[at].toInt() and 0xFF)
         }
     }
 
-    /** Rec. 601 luma, the brightness lossy WebP stores at every pixel. */
-    private fun luma(argb: Int): Double =
-        0.299 * ((argb shr 16) and 0xFF) + 0.587 * ((argb shr 8) and 0xFF) + 0.114 * (argb and 0xFF)
-
-    /**
-     * The hairlines across a strip: runs of whole lines — columns for panels laid across, rows for
-     * panels laid down — most of whose pixels are as bright as [SiteImagery.DIVIDER_COLOUR], each
-     * run one hairline.
-     */
-    private fun dividerRules(pixels: IntArray, width: Int, height: Int, layout: SiteImagery.Layout): List<IntRange> {
-        val across = layout == SiteImagery.Layout.ACROSS
-        val lines = if (across) width else height
-        val length = if (across) height else width
-        val dividerLuma = luma(SiteImagery.DIVIDER_COLOUR)
-        fun near(argb: Int): Boolean = kotlin.math.abs(luma(argb) - dividerLuma) <= DIVIDER_LUMA_TOLERANCE
-        val isRule = BooleanArray(lines) { line ->
-            val matching = (0 until length).count { along ->
-                near(if (across) pixels[along * width + line] else pixels[line * width + along])
-            }
-            matching >= DIVIDER_SHARE * length
-        }
-        val rules = ArrayList<IntRange>()
-        var start = -1
-        for (line in 0..lines) {
-            val rule = line < lines && isRule[line]
-            if (rule && start < 0) start = line
-            if (!rule && start >= 0) { rules.add(start until line); start = -1 }
-        }
-        return rules
-    }
-
-    /** How many colours, at five bits a channel, the map part of each panel holds. */
-    private fun mapColourCounts(pixels: IntArray, width: Int, figure: SiteImagery.Figure, layout: SiteImagery.Layout): List<Int> =
-        figure.panels.indices.map { index ->
-            val left = if (layout == SiteImagery.Layout.ACROSS) index * (figure.window.width + SiteImagery.DIVIDER) else 0
-            val top = if (layout == SiteImagery.Layout.ACROSS) 0 else index * (figure.panelHeight + SiteImagery.DIVIDER)
-            val colours = HashSet<Int>()
-            for (row in top until top + figure.window.height) for (column in left until left + figure.window.width) {
-                val argb = pixels[row * width + column]
-                colours.add((argb shr 3) and 0x1F1F1F)
-            }
-            colours.size
-        }
+    /** How many colours, at five bits a channel, a decoded picture holds. */
+    private fun colourCount(pixels: IntArray): Int =
+        pixels.mapTo(HashSet()) { argb -> (argb shr 3) and 0x1F1F1F }.size
 
     private val repoRoot: File
         get() {
@@ -189,7 +184,7 @@ class SiteAssemblyTest {
     }
 
     @Test
-    fun `the description page and its hero are published`() {
+    fun `the description page and its link preview are published`() {
         val index = file("index.html")
         assertTrue(index.length() > 4_000, "index.html is ${index.length()} bytes — that is not the page")
         assertTrue(
@@ -197,9 +192,8 @@ class SiteAssemblyTest {
             "the description page no longer points at /app/, so its launch button goes nowhere"
         )
 
-        // The hero is also the link preview image, so a scraper reads this exact file — and reads
-        // it at the address the og:image names, which is why that is checked and not only the tag
-        // the page draws with.
+        // The link preview image: a scraper reads this exact file at the address the og:image
+        // names. The page no longer draws it; its opening's band begins with the same window.
         val hero = file("img/natural.webp")
         val header = hero.asLatin1()
         assertTrue(
@@ -212,209 +206,580 @@ class SiteAssemblyTest {
         )
         assertEquals(
             1600 to 800, webpDimensions(hero),
-            "the hero is no longer 1600x800. The page reserves that shape in the img tag, so a " +
-                "different one reflows the whole first screenful as it loads."
+            "the link preview is no longer 1600x800, the 2:1 a link's preview is drawn at"
         )
     }
 
-    /**
-     * The tag a figure is published by, as the page writes it.
-     *
-     * Either the `<img>` a wide screen loads or the `<source>` a phone is handed instead: both
-     * carry the file's name and both state its shape, and which of the two a given figure appears
-     * in is the page's business rather than this guard's. Matching the whole tag rather than
-     * hunting for the file name is what lets the width, the height and the `alt` be read out of it.
-     */
-    private fun imageTag(page: String, file: String): String {
-        val quoted = Regex.escape(file)
-        return Regex("""<img\s+src="img/$quoted"[^>]*>""").find(page)?.value
-            ?: Regex("""<source[^>]*srcset="img/$quoted"[^>]*>""").find(page)?.value
-            ?: fail("the page has no <img> or <source> for img/$file")
-    }
+    /** The `<img>` a picture is published by, as the page writes it. */
+    private fun imageTag(page: String, file: String): String =
+        Regex("""<img\s[^>]*?(?<![-\w])src="img/${Regex.escape(file)}"[^>]*>""").find(page)?.value
+            ?: fail("the page has no <img> for img/$file")
 
     private fun attribute(tag: String, name: String): String =
         Regex("""$name="([^"]*)"""").find(tag)?.groupValues?.get(1)
             ?: fail("""$tag has no $name attribute""")
 
-    /**
-     * The panel names a strip's `alt` text promises, in order.
-     *
-     * The text ends "Labelled A, B and C." — a shape rather than a word count, so that the list a
-     * reader who cannot see the figure is given and the list `SiteImagery` actually letters the
-     * bands with can be compared name for name. A panel dropped from either side moves one of the
-     * two lists and not the other.
-     *
-     * The capital is optional because the clause has been both: it was the tail of one sentence
-     * ("…drawn three times, labelled Atlas, Schoolroom and Natural.") until the alts were widened
-     * to say what each panel *shows*, which is the half of WCAG 1.1.1 a complex image needs and a
-     * list of names does not give. It is a sentence of its own now, and either spelling is the same
-     * promise.
-     */
-    private fun namesPromised(alt: String): List<String> {
-        val listed = Regex("""[Ll]abelled ([^.]*)""").find(alt)?.groupValues?.get(1).orEmpty()
-        assertTrue(
-            listed.isNotEmpty(),
-            "a comparison strip's alt text has to end \"Labelled A, B and C.\" so that what it " +
-                "promises can be compared with what is drawn; this one reads \"$alt\""
-        )
-        return listed.split(Regex(""",\s*|\s+and\s+""")).map { it.trim() }.filter { it.isNotEmpty() }
-    }
+    /** The `<li class="card">` a picture is the picture of, or a failure. */
+    private fun cardOf(page: String, file: String): String =
+        Regex("""<li class="card">.*?</li>""", RegexOption.DOT_MATCHES_ALL).findAll(page)
+            .map { it.value }.firstOrNull { it.contains("\"img/$file\"") }
+            ?: fail("img/$file is not the picture of any card on the page")
 
     @Test
-    fun `every figure the page shows was rendered, at the size the page reserves`() {
-        // These names are the contract between SiteImagery.FIGURES and the page's img tags.
-        // Renaming one side alone deploys a broken figure that nothing else would notice.
+    fun `every picture the page shows was rendered, at the size the page reserves`() {
+        // These names and sizes are the contract between SiteImagery.FIGURES and the page's img
+        // tags, written out rather than read from either side: renaming or reshaping one side
+        // alone deploys a broken picture or a card that jumps as it loads, and nothing else would
+        // notice.
         val expected = mapOf(
+            // The link preview, which the page's og:image names.
             "natural.webp" to (1600 to 800),
-            "styles.webp" to (1924 to 711),
-            "layers.webp" to (1926 to 667),
-            // The same panels stacked, which is what a phone is handed: one window wide, and as
-            // many finished panels tall as there are readings, with a hairline between each pair.
-            "styles-stacked.webp" to (640 to 2137),
-            "layers-stacked.webp" to (480 to 2674)
+            // The band the opening drifts, round the whole world, full size and halved.
+            "world-band.webp" to (4096 to 800),
+            "world-band-half.webp" to (2048 to 400),
+            // How a world is made: one picture a step, one window halved, played in one frame.
+            "step-plates.webp" to (520 to 280),
+            "step-erosion.webp" to (520 to 280),
+            "step-seas.webp" to (520 to 280),
+            "step-climate.webp" to (520 to 280),
+            "step-rivers.webp" to (520 to 280),
+            "step-realms.webp" to (520 to 280),
+            // The twelve styles, each the same 600 by 400 window: three are cards, all twelve are
+            // the comparison slider's.
+            "style-atlas.webp" to (600 to 400),
+            "style-vellum.webp" to (600 to 400),
+            "style-ink_wash.webp" to (600 to 400),
+            "style-nautical.webp" to (600 to 400),
+            "style-midnight.webp" to (600 to 400),
+            "style-schoolroom.webp" to (600 to 400),
+            "style-verdant.webp" to (600 to 400),
+            "style-scroll.webp" to (600 to 400),
+            "style-pen_and_ink.webp" to (600 to 400),
+            "style-mars.webp" to (600 to 400),
+            "style-natural.webp" to (600 to 400),
+            "style-clear.webp" to (600 to 400),
+            // The four data views, each the same 480 by 600 window.
+            "layer-temperature.webp" to (480 to 600),
+            "layer-currents.webp" to (480 to 600),
+            "layer-wind.webp" to (480 to 600),
+            "layer-rainfall.webp" to (480 to 600),
+            // The data frame: the relief and the layers laid over it, each the same 800 by 600.
+            "data-relief.webp" to (800 to 600),
+            "data-temperature.webp" to (800 to 600),
+            "data-rainfall.webp" to (800 to 600),
+            "data-currents.webp" to (800 to 600),
+            "data-wind.webp" to (800 to 600),
+            "data-rivers.webp" to (800 to 600),
+            // The whole world under the lens, at a quarter and at full size, and the relief's patch.
+            "world-whole.webp" to (1024 to 512),
+            "world-full.webp" to (4096 to 2048),
+            "relief-natural.webp" to (640 to 400),
+            // Every seed is a world: five worlds whole, each half its 1024 by 512 sheet.
+            "seed-7.webp" to (512 to 256),
+            "seed-42.webp" to (512 to 256),
+            "seed-1066.webp" to (512 to 256),
+            "seed-2024.webp" to (512 to 256),
+            "seed-31337.webp" to (512 to 256)
         )
+        assertEquals(
+            expected.mapValues { it.value }.toSortedMap(),
+            SiteImagery.FIGURES.associate { it.file to (it.width to it.height) }.toSortedMap(),
+            "SiteImagery renders a different set of pictures, or different sizes, from the ones " +
+                "this guard and the page were written for"
+        )
+
         val page = file("index.html").readText()
+        // Four ways a picture is asked for without an img of its own shape: the link preview,
+        // named by the og:image; the full band, a <picture>'s source over the half band's img; a
+        // style the slider fetches when it is picked; and a picture an img names in `data-src`,
+        // fetched when it is first wanted (a data layer switched on, the lens first used), whose
+        // tag states its shape like any other.
+        val offered = pickerValues(page).map { "style-$it.webp" }.toSet()
+        val waiting = Regex("""<img\s[^>]*data-src="img/([^"]+)"[^>]*>""").findAll(page).associate { it.groupValues[1] to it.value }
+        val bandSources = Regex("""<source[^>]*srcset="img/${Regex.escape(SiteImagery.WORLD_BAND.file)}"""").findAll(page).count()
+        assertTrue(bandSources >= 1, "the opening never asks for the full band")
         expected.forEach { (name, size) ->
             assertEquals(size, webpDimensions(file("img/$name")), "img/$name is the wrong size")
+            if (name == SiteImagery.HERO.file || name == SiteImagery.WORLD_BAND.file) return@forEach
+            if (name == SiteImagery.WORLD_BAND_HALF.file) {
+                // Laid at the band's shape, the full band's, which the half band shares.
+                val tag = imageTag(page, name)
+                assertEquals(
+                    SiteImagery.WORLD_BAND.width * size.second, SiteImagery.WORLD_BAND.height * size.first,
+                    "the two bands are not the same shape"
+                )
+                assertEquals(
+                    SiteImagery.WORLD_BAND.width to SiteImagery.WORLD_BAND.height,
+                    attribute(tag, "width").toInt() to attribute(tag, "height").toInt(),
+                    "the page lays the band out at a shape that is not the band's"
+                )
+                return@forEach
+            }
+            waiting[name]?.let { tag ->
+                assertEquals(
+                    size, attribute(tag, "width").toInt() to attribute(tag, "height").toInt(),
+                    "the page reserves a different shape for img/$name, fetched when wanted, than the picture that was rendered"
+                )
+                return@forEach
+            }
+            if (!Regex("""<img\s[^>]*?(?<![-\w])src="img/${Regex.escape(name)}"""").containsMatchIn(page)) {
+                assertTrue(name in offered, "img/$name is rendered and nothing on the page asks for it")
+                return@forEach
+            }
             val tag = imageTag(page, name)
-            // Stated in the tag as well as rendered: the page reserves each figure's shape so the
-            // first screenful does not reflow as they load, and a reserved shape that is not the
-            // figure's shape reflows it twice over.
+            // Stated in the tag as well as rendered: the page reserves each picture's shape so the
+            // page does not reflow as they load, and a reserved shape that is not the picture's
+            // shape reflows it twice over.
             assertEquals(
                 size,
                 attribute(tag, "width").toInt() to attribute(tag, "height").toInt(),
-                "the page reserves a different shape for img/$name than the figure that was rendered"
+                "the page reserves a different shape for img/$name than the picture that was rendered"
             )
         }
 
         val published = File(site, "img").listFiles { f -> f.isFile }.orEmpty().map { it.name }
         assertEquals(
-            expected.keys.sorted(), published.sorted(),
-            "img/ holds something other than the figures the page shows — a contact sheet left " +
-                "by -Pcontact, or a figure the page has stopped asking for"
+            (expected.keys + SiteImagery.RELIEF_HEIGHTS_FILE).sorted(), published.sorted(),
+            "img/ holds something other than the pictures the page shows — a contact sheet left " +
+                "by -Pcontact, or a picture the page has stopped asking for"
+        )
+        println(
+            "SITE ${expected.size} pictures, ${published.sumOf { File(site, "img/$it").length() }} " +
+                "bytes: " + published.sorted().joinToString { "$it ${File(site, "img/$it").length()}" }
         )
     }
 
     /**
-     * That every variant of a comparison strip draws exactly the panels the page says it draws.
+     * That each row of comparison cards is the same ground read a different way in each card, and
+     * that each card is headed by the name of the reading its picture shows.
      *
-     * A strip is one image, so a panel that stopped being rendered would not 404 and would not
-     * break the layout: the figure would simply arrive one panel short, with the page's prose and
-     * its `alt` text still promising three. And now that a phone is handed a second file, a panel
-     * could go missing from one variant alone and be invisible to anyone reviewing on the other.
-     *
-     * So both files are counted, each along its own axis — the wide one is *n* windows plus the
-     * hairlines between them, the stacked one is *n* finished panels plus the same hairlines — and
-     * both are held to the one list of names in the `alt`, which the two variants share because
-     * they are the same figure turned a different way round.
+     * The pictures are separate files now, so nothing in a file says it is the same window as its
+     * neighbour's: that is held here, by the figure table sharing one window across the row. And
+     * the name a reader is given for a picture is the card's heading rather than lettering in the
+     * picture, so the heading is held to what the picture is — the style's or the view's own label,
+     * the word the application's toolbar uses for it.
      */
     @Test
-    fun `each comparison strip draws the panels the page's alt text lists`() {
+    fun `each row of comparison cards reads one window a different way in each card`() {
         val page = file("index.html").readText()
-        val strips = SiteImagery.FIGURES.filter { it.panels.size > 1 }
-        assertTrue(
-            strips.isNotEmpty(),
-            "SiteImagery has no comparison strip left; the page's style and layer sections are " +
-                "about figures that are no longer rendered"
-        )
-
-        strips.forEach { figure ->
-            val alt = attribute(imageTag(page, figure.file), "alt")
+        mapOf(
+            "the style cards" to SiteImagery.STYLE_CARDS,
+            "the data views" to SiteImagery.LAYER_CARDS
+        ).forEach { (row, figures) ->
+            assertTrue(figures.size > 1, "$row have fewer than two cards, so compare nothing")
             assertEquals(
-                figure.panels.map { it.name }, namesPromised(alt),
-                "img/${figure.file} letters its bands ${figure.panels.joinToString { it.name }}, " +
-                    "and the page's alt text promises a reader ${namesPromised(alt)}"
+                1, figures.map { it.window }.distinct().size,
+                "$row are cut from different windows, so they are not the same ground: " +
+                    figures.joinToString { "${it.file} ${it.window}" }
             )
-
-            // The window belongs to the figure and not to the panel, so the panels of a strip
-            // cannot be showing different ground. What they must not share is the reading: two
-            // panels drawing the same view in the same style would be a comparison of nothing.
             assertEquals(
-                figure.panels.size,
-                figure.panels.map { it.view to it.style }.distinct().size,
-                "two panels of img/${figure.file} are the same reading of the same window"
+                figures.size, figures.map { it.view to it.style }.distinct().size,
+                "two of $row are the same reading of the same window"
             )
-
-            assertEquals(
-                listOf(SiteImagery.Layout.ACROSS, SiteImagery.Layout.DOWN), figure.layouts,
-                "a comparison strip is published both ways round, or a phone is left scrolling " +
-                    "${figure.file} sideways"
+            assertTrue(
+                figures.all { it.reduction == 1 },
+                "$row are cut at the sheet's own pixels, and one of them is reduced"
             )
-
-            figure.layouts.forEach { layout ->
-                val name = figure.fileFor(layout)
-                val drawn = webpDimensions(file("img/$name"))
+            figures.forEach { figure ->
+                val heading = Regex("""<h3>([^<]*)</h3>""").find(cardOf(page, figure.file))
+                    ?.groupValues?.get(1) ?: fail("the card for img/${figure.file} has no heading")
                 assertEquals(
-                    figure.width(layout) to figure.height(layout), drawn,
-                    "img/$name is not the size ${figure.panels.size} panels of " +
-                        "${figure.window.width}x${figure.window.height} come to laid " +
-                        layout.name.lowercase()
-                )
-                // How many panels are in the file, counted off the decoded picture rather than
-                // from its size, which the assertion above has already tied to the figure table:
-                // the hairlines between panels, found where a whole line of pixels is the
-                // divider's colour, and the map inside each panel, which must not be blank.
-                val picture = decodedPixels(file("img/$name"))
-                val rules = dividerRules(picture, drawn.first, drawn.second, layout)
-                assertEquals(
-                    figure.panels.size - 1, rules.size,
-                    "img/$name has ${rules.size} hairlines across it where ${figure.panels.size} " +
-                        "panels have ${figure.panels.size - 1}"
-                )
-                val blank = mapColourCounts(picture, drawn.first, figure, layout)
-                    .withIndex().filter { it.value < LEAST_COLOURS_IN_A_MAP }.map { it.index }
-                assertTrue(
-                    blank.isEmpty(),
-                    "img/$name has blank panels at ${blank.map { figure.panels[it].name }}: " +
-                        "fewer than $LEAST_COLOURS_IN_A_MAP colours in the map"
-                )
-                println(
-                    "SITE $name ${drawn.first}x${drawn.second}, ${figure.panels.size} panels of " +
-                        "${figure.window.width}x${figure.window.height} laid " +
-                        "${layout.name.lowercase()} at ${figure.window.x},${figure.window.y}: " +
-                        figure.panels.joinToString { it.name }
+                    figure.readingName, heading,
+                    "img/${figure.file} is the ${figure.readingName} reading, and its card is headed \"$heading\""
                 )
             }
+            println("SITE $row: " + figures.joinToString { it.readingName } + " at ${figures.first().window}")
+        }
+    }
+
+    /** The `value` of every option the slider's two pickers offer, left picker first. */
+    private fun pickerValues(page: String): List<String> {
+        val figure = compareFigure(page)
+        return Regex("""<option value="([^"]*)"""").findAll(figure).map { it.groupValues[1] }.toList()
+    }
+
+    /** The slider's `<figure>`, as the page writes it. */
+    private fun compareFigure(page: String): String =
+        Regex("""<figure class="compare"[^>]*>.*?</figure>""", RegexOption.DOT_MATCHES_ALL).find(page)?.value
+            ?: fail("the page has no comparison slider")
+
+    /**
+     * That the frame which plays "How a world is made" shows one ground at one scale: the six
+     * steps' pictures, which are the frame's, cut from one window with one reduction, and in the
+     * cards' order.
+     *
+     * The frame crossfades from each picture to the next, so a picture from another window, or the
+     * same window at another scale, is the land jumping under the reader between two steps.
+     */
+    @Test
+    fun `the six steps are one window at one scale`() {
+        val steps = SiteImagery.STEP_CARDS
+        assertEquals(6, steps.size, "How a world is made has ${steps.size} steps to play, not six")
+        assertEquals(1, steps.map { it.window }.distinct().size, "the steps are cut from different windows: " +
+            steps.joinToString { "${it.file} ${it.window}" })
+        assertEquals(1, steps.map { it.reduction }.distinct().size, "the steps are drawn at different scales: " +
+            steps.joinToString { "${it.file} 1:${it.reduction}" })
+        assertEquals(1, steps.map { it.width to it.height }.distinct().size, "the steps are different sizes")
+        val page = file("index.html").readText()
+        val order = Regex("""<ol class="cards steps">.*?</ol>""", RegexOption.DOT_MATCHES_ALL).find(page)?.value
+            ?.let { cards -> Regex("""src="img/([^"]+)"""").findAll(cards).map { it.groupValues[1] }.toList() }
+            ?: fail("the page has no row of step cards")
+        assertEquals(steps.map { it.file }, order, "the step cards are not the steps, in order")
+        println("SITE the six steps: one window ${steps.first().window} at 1:${steps.first().reduction}")
+    }
+
+    /**
+     * That the slider compares every style the application offers over one ground, and asks for
+     * only the two it shows.
+     *
+     * The page's weight at load may grow by two pictures at most for the slider, and grows by none:
+     * its default pair are the Atlas and Natural cards' own files. The other ten are named only as
+     * a picker's option and fetched when picked.
+     */
+    @Test
+    fun `the slider offers all twelve styles on one ground and loads two`() {
+        val styles = SiteImagery.STYLE_PICTURES
+        assertEquals(
+            com.cartogenesis.cartography.MapStyle.entries.toList(), styles.map { it.style },
+            "the slider's pictures are not every style the application offers, in its order"
+        )
+        assertEquals(1, styles.map { it.window }.distinct().size, "the twelve styles are cut from different windows")
+        assertTrue(styles.all { it.reduction == 1 }, "a style picture is reduced, so the pens are not the renderer's")
+        assertTrue(SiteImagery.STYLE_CARDS.all { it in styles }, "a style card is not one of the slider's pictures")
+
+        val page = file("index.html").readText()
+        val figure = compareFigure(page)
+        val pickers = Regex("""<select[^>]*>(.*?)</select>""", RegexOption.DOT_MATCHES_ALL).findAll(figure)
+            .map { select ->
+                Regex("""<option value="([^"]*)"[^>]*>([^<]*)</option>""").findAll(select.groupValues[1])
+                    .map { it.groupValues[1] to it.groupValues[2] }.toList()
+            }.toList()
+        assertEquals(2, pickers.size, "the slider has ${pickers.size} pickers, where it has a left and a right")
+        val offered = styles.map { it.file.removePrefix("style-").removeSuffix(".webp") to it.style.label }
+        pickers.forEach { assertEquals(offered, it, "a picker does not offer the twelve styles by their own names") }
+
+        val loaded = Regex("""<img\s[^>]*src="([^"]+)"""").findAll(figure).map { it.groupValues[1] }.toList()
+        assertEquals(2, loaded.size, "the slider asks for ${loaded.size} pictures as the page loads, not two: $loaded")
+        val cards = SiteImagery.STYLE_CARDS.map { "img/${it.file}" }
+        println(
+            "SITE the slider offers ${styles.size} styles and loads ${loaded.size}: $loaded" +
+                ", of which ${loaded.count { it in cards }} are card pictures already on the page"
+        )
+    }
+
+    /**
+     * That the band the opening drifts joins itself end to end at both its sizes, that its first
+     * stretch is the link preview's window, and that neither size has grown past its stated weight.
+     *
+     * The world wraps east-west and the band is its whole circumference, laid twice on one track,
+     * so as the track slides the band's last column is followed by its first: those two have to be
+     * neighbours on the ground. Held to how much one column differs from the next anywhere inside
+     * the band, where every pair is neighbours by construction: the seam may differ as much as the
+     * roughest of those and no more. The half band's seam measured 24 against a roughest of 49 as
+     * the strip of Site 5a; a strip stopped 512 pixels short of the circumference measured 164.
+     */
+    @Test
+    fun `the band joins itself at both sizes and begins where the preview is`() {
+        val hero = decodedPixels(file("img/${SiteImagery.HERO.file}"))
+        val heroWidth = SiteImagery.HERO.width
+        listOf(
+            SiteImagery.WORLD_BAND to WORLD_BAND_MOST_BYTES,
+            SiteImagery.WORLD_BAND_HALF to WORLD_BAND_HALF_MOST_BYTES
+        ).forEach { (figure, mostBytes) ->
+            val published = file("img/${figure.file}")
+            val pixels = decodedPixels(published)
+            val width = figure.width
+            val height = figure.height
+            fun columnDifference(left: Int, right: Int): Double {
+                var sum = 0L
+                for (row in 0 until height) {
+                    val a = pixels[row * width + left]
+                    val b = pixels[row * width + right]
+                    sum += abs((a shr 16 and 0xFF) - (b shr 16 and 0xFF)) +
+                        abs((a shr 8 and 0xFF) - (b shr 8 and 0xFF)) + abs((a and 0xFF) - (b and 0xFF))
+                }
+                return sum.toDouble() / height
+            }
+            val roughest = (0 until width - 1).maxOf { columnDifference(it, it + 1) }
+            val seam = columnDifference(width - 1, 0)
+            assertTrue(
+                seam <= roughest,
+                "${figure.file}'s last column and its first differ by %.1f a pixel, and no two neighbouring columns inside it by more than %.1f: the band does not join itself"
+                    .format(seam, roughest)
+            )
+
+            // The first stretch, against the link preview at the band's scale.
+            val across = heroWidth / figure.reduction
+            var difference = 0L
+            for (row in 0 until height) for (column in 0 until across) {
+                val a = pixels[row * width + column]
+                val b = hero[(row * figure.reduction) * heroWidth + column * figure.reduction]
+                difference += abs((a shr 8 and 0xFF) - (b shr 8 and 0xFF))
+            }
+            val meanGreen = difference.toDouble() / (height * across)
+            assertTrue(
+                meanGreen < PREVIEW_TAKEOVER_MOST_MEAN_DIFFERENCE,
+                "${figure.file}'s first $across columns differ from the link preview by %.1f in green on average: the band does not begin at the author's window"
+                    .format(meanGreen)
+            )
+            assertTrue(
+                published.length() <= mostBytes,
+                "${figure.file} is ${published.length()} bytes, more than the $mostBytes stated for it"
+            )
+            // The brightest pixel, for the title card's scrim: the contrast guard measures the card's
+            // words over pure white, which is the brightest a pixel can be and, here, is.
+            val brightest = pixels.maxOf { (it shr 16 and 0xFF) + (it shr 8 and 0xFF) + (it and 0xFF) }
+            println(
+                "SITE ${figure.file}: seam %.1f against %.1f at the roughest inside, first stretch %.1f from the preview, %d bytes, brightest pixel %d of 765"
+                    .format(seam, roughest, meanGreen, published.length(), brightest)
+            )
         }
     }
 
     /**
-     * That a naming band's lettering is legible on its own tint, and that the tint is the page's.
+     * What a headless Chrome fetched as the page loaded, by name, for a screen 375 pixels wide at
+     * one device pixel to the CSS pixel and for every other screen it was measured on (375 at two,
+     * 1280 at one and at two), on a first visit with the title card and on a returning one alike
+     * (see docs/DESIGN_LEDGER.md, Site 6). Every face the style sheet names is fetched, not only
+     * the two the head preloads, because the whole page is laid out at once and every face is set
+     * somewhere in it; one of the two bands; and the six steps' pictures, which are lazy but stand
+     * inside the distance a browser fetches lazy pictures ahead of the reader.
+     */
+    private val fetchedAtLoad: Map<String, List<String>> by lazy {
+        val always = listOf(
+            "fonts/spectral_regular.ttf", "fonts/spectral_semibold.ttf", "fonts/plex_sans_regular.ttf",
+            "fonts/plex_sans_medium.ttf", "fonts/plex_mono_regular.ttf"
+        ) + SiteImagery.STEP_CARDS.map { "img/${it.file}" }
+        mapOf(
+            "narrow at one device pixel" to always + "img/${SiteImagery.WORLD_BAND_HALF.file}",
+            "wide or dense" to always + "img/${SiteImagery.WORLD_BAND.file}"
+        )
+    }
+
+    /**
+     * What the page fetches as it loads, and a ceiling on it, restated for Site 5b.
      *
-     * The bands are drawn into the figure, so nothing on the page measures them: they are pixels by
-     * the time a browser sees them, and `SitePaletteContrastTest` only ever sees CSS. A band is
-     * text a reader is asked to read, though, and it is the only text on this site that the page's
-     * own guard cannot reach — so it is measured here, by the same arithmetic and against the same
-     * bar, and the tint is checked against the custom property it claims to be so that the strips
-     * cannot quietly stop matching the page around them.
+     * Site 5a's guard counted the page, the two preloaded faces, the eager pictures and the six
+     * steps, and so missed the three faces the style sheet asks for, which a headless Chrome
+     * fetched at load every time, and anything a style sheet or a `<picture>`'s source asks for. So
+     * the list here is what was measured, by name ([fetchedAtLoad]), and this checks it both ways:
+     * everything the page asks for without waiting (a preload, a face, an eager picture or a
+     * `<picture>`'s source) is on the list, and the list, summed off the published files, stays
+     * under a stated ceiling for each kind of screen.
      */
     @Test
-    fun `every naming band is the page's own tint, and legible on it`() {
-        val page = file("index.html").readText()
-        val palette = Regex("""--([a-z-]+):\s*#([0-9a-fA-F]{6})\s*;""").findAll(page)
-            .associate { it.groupValues[1] to (0xFF000000.toInt() or it.groupValues[2].toInt(16)) }
-
-        SiteImagery.BandTint.entries.forEach { tint ->
-            fun fromPage(name: String) = palette[name]
-                ?: fail("a band is tinted --$name, and the page no longer defines that")
-            assertEquals(
-                fromPage(tint.groundName), tint.ground,
-                "${tint.name}'s ground is not the --${tint.groundName} the page sets"
-            )
-            assertEquals(
-                fromPage(tint.inkName), tint.ink,
-                "${tint.name}'s lettering is not the --${tint.inkName} the page sets"
-            )
-            val ratio = ColorVision.contrast(tint.ink, tint.ground)
+    fun `the page's load stays within its stated weight`() {
+        val page = file("index.html")
+        val text = page.readText()
+        val asked = (Regex("""<link rel="preload"[^>]*href="([^"]+)"""").findAll(text).map { it.groupValues[1] } +
+            Regex("""url\("(fonts/[^"]+)"\)""").findAll(text).map { it.groupValues[1] } +
+            Regex("""<img\s[^>]*>""").findAll(text).map { it.value }.filterNot { it.contains("""loading="lazy"""") }
+                .filter { Regex("""(?<![-\w])src=""").containsMatchIn(it) }.map { attribute(it, "src") } +
+            Regex("""<source[^>]*srcset="([^"]+)"""").findAll(text).map { it.groupValues[1] }).toSet()
+        val listed = fetchedAtLoad.values.flatten().toSet()
+        assertTrue((asked - listed).isEmpty(), "the page asks for ${asked - listed} as it loads, which the stated load does not count")
+        fetchedAtLoad.forEach { (screen, files) ->
+            val atLoad = page.length() + files.sumOf { file(it).length() }
+            val ceiling = LOAD_BYTES.getValue(screen)
+            println("SITE at load, $screen: $atLoad bytes (page ${page.length()}, " + files.joinToString { "$it ${file(it).length()}" } + ")")
             assertTrue(
-                ratio >= AA,
-                "a band's --${tint.inkName} on --${tint.groundName} measures " +
-                    "${"%.2f".format(ratio)}:1, under the $AA:1 the rest of the page keeps"
+                atLoad <= ceiling,
+                "the page fetches $atLoad bytes as it loads on a $screen screen, more than the $ceiling stated for it"
             )
-            println(
-                "SITE band ${tint.name}: --${tint.inkName} on --${tint.groundName} " +
-                    "${"%.2f".format(ratio)}:1"
+        }
+    }
+
+    /**
+     * That the data frame lays each layer over one ground: every picture cut from one window that
+     * holds the data cards' window, laid on the page in SiteImagery's order with the relief at the
+     * bottom and the only one asked for as the page is read, and each layer cut as its reading
+     * says: the relief and temperature whole, the rest mostly clear.
+     *
+     * And that the layers are the application's own views taken apart, not new pictures: the winds'
+     * arrows over the relief are the winds view the Winds card shows, and the temperature layer is
+     * the Temperature card's picture where the two overlap, each measured over the card's window.
+     */
+    @Test
+    fun `the data frame lays the application's own layers over one ground`() {
+        val frame = SiteImagery.DATA_FRAME
+        val window = frame.first().window
+        assertEquals(1, frame.map { it.window }.distinct().size, "the data frame's pictures are cut from different windows")
+        val cards = SiteImagery.LAYERS_WINDOW
+        assertTrue(
+            cards.x >= window.x && cards.y >= window.y && cards.x + cards.width <= window.x + window.width &&
+                cards.y + cards.height <= window.y + window.height,
+            "the data frame's window $window does not hold the cards' window $cards, so it is not their ground"
+        )
+        assertEquals(SiteImagery.Cut.GROUND, frame.first().cut, "the data frame's bottom picture is not the relief's ground")
+
+        val page = file("index.html").readText()
+        val figure = Regex("""<figure class="datamap".*?</figure>""", RegexOption.DOT_MATCHES_ALL).find(page)?.value
+            ?: fail("the page has no data frame")
+        val laid = Regex("""<img\s[^>]*?(?:data-src|(?<![-\w])src)="img/([^"]+)"""").findAll(figure).map { it.groupValues[1] }.toList()
+        assertEquals(frame.map { it.file }, laid, "the page lays the data frame's pictures in another order, or other pictures")
+        val askedAsRead = Regex("""<img\s[^>]*?(?<![-\w])src="img/([^"]+)"""").findAll(figure).map { it.groupValues[1] }.toList()
+        assertEquals(listOf(frame.first().file), askedAsRead, "the data frame asks for more than its relief before a layer is switched on")
+
+        fun clearShare(figure: SiteImagery.Figure): Double {
+            val pixels = decodedPixels(file("img/${figure.file}"))
+            return pixels.count { it ushr 24 == 0 }.toDouble() / pixels.size
+        }
+        frame.forEach { layer ->
+            val clear = clearShare(layer)
+            when (layer.cut) {
+                SiteImagery.Cut.WHOLE, SiteImagery.Cut.GROUND ->
+                    assertEquals(0.0, clear, "img/${layer.file} is the whole reading and has clear pixels in it")
+                SiteImagery.Cut.MARKS, SiteImagery.Cut.WATER ->
+                    assertTrue(clear >= 0.8, "img/${layer.file} is marks alone and is clear over only %.3f of the frame".format(clear))
+                else -> assertTrue(clear in 0.2..0.8, "img/${layer.file} keeps land or sea and is clear over %.3f of the frame".format(clear))
+            }
+            println("SITE the data frame's ${layer.file} (${layer.cut}) is clear over %.3f".format(clear))
+        }
+
+        // Over the cards' window: the relief with the winds' arrows laid on it is the Winds card,
+        // and the temperature layer is the Temperature card, to within the encoder's loss (the card
+        // draws the rivers too, which the frame lays as a layer of its own).
+        val relief = decodedPixels(file("img/data-relief.webp"))
+        val wind = decodedPixels(file("img/data-wind.webp"))
+        val over = IntArray(relief.size) { at ->
+            val alpha = (wind[at] ushr 24) / 255.0
+            fun channel(shift: Int) = Math.round(((wind[at] shr shift) and 0xFF) * alpha + ((relief[at] shr shift) and 0xFF) * (1 - alpha)).toInt()
+            (channel(16) shl 16) or (channel(8) shl 8) or channel(0)
+        }
+        listOf(
+            "the relief with the winds laid over it" to over to "layer-wind.webp",
+            "the temperature layer" to decodedPixels(file("img/data-temperature.webp")) to "layer-temperature.webp"
+        ).forEach { (named, card) ->
+            val (what, pixels) = named
+            val cardPixels = decodedPixels(file("img/$card"))
+            var difference = 0L
+            val left = cards.x - window.x
+            val top = cards.y - window.y
+            for (row in 0 until cards.height) for (column in 0 until cards.width) {
+                val a = pixels[(top + row) * window.width + left + column]
+                val b = cardPixels[row * cards.width + column]
+                difference += abs((a shr 8 and 0xFF) - (b shr 8 and 0xFF))
+            }
+            val mean = difference.toDouble() / (cards.width * cards.height)
+            assertTrue(mean < PREVIEW_TAKEOVER_MOST_MEAN_DIFFERENCE,
+                "$what differs from the $card card by %.1f in green on average, so it is not that view taken apart".format(mean))
+            println("SITE $what is the $card card to %.2f in green on average".format(mean))
+        }
+    }
+
+    /**
+     * That the lens's full-size picture is fetched only when the lens is used, and weighs no more
+     * than stated: the page names it only in the lens's `data-src` and in the plain link a reader
+     * who cannot use the lens follows, and never as a picture's `src`, a preload or a source.
+     */
+    @Test
+    fun `what is fetched only when used is never asked for as the page loads, and stays within its weight`() {
+        val page = file("index.html").readText()
+        FETCHED_WHEN_USED.forEach { (path, mostBytes) ->
+            val named = Regex("""(?<![-\w])(src|srcset|href)="${Regex.escape(path)}"""").findAll(page).map { it.value }.toList()
+            assertTrue(named.none { it.startsWith("src") || it.startsWith("srcset") },
+                "the page asks for $path as it loads: $named")
+            assertTrue(Regex("""data-src="${Regex.escape(path)}"""").containsMatchIn(page), "nothing on the page fetches $path when it is wanted")
+            assertTrue(Regex("""<a href="${Regex.escape(path)}">""").containsMatchIn(page), "there is no plain link to $path")
+            assertTrue(fetchedAtLoad.values.none { path in it }, "$path is counted in what the page fetches as it loads")
+            val bytes = file(path).length()
+            assertTrue(bytes <= mostBytes, "$path is $bytes bytes, more than the $mostBytes stated for it")
+            println("SITE fetched only when used: $path, $bytes bytes against $mostBytes")
+        }
+    }
+
+    /**
+     * That the relief's heights are the patch's, and that the page reads them as they were written.
+     *
+     * The heights are a PNG of one point every few sheet pixels of the patch, both edges included,
+     * so their size follows from the texture's and the spacing; the page's canvas states the
+     * spacing, the steps per metre and the sheet's kilometres per pixel, which must be the ones
+     * they were written with, or the page would draw a relief of the wrong height or shape. The mesh
+     * has to fit a 16-bit index. And the heights are ground: none below the sea, which is drawn flat
+     * at nought, and some well above it.
+     */
+    @Test
+    fun `the relief's heights are the patch's and the page reads them at their own scale`() {
+        val texture = SiteImagery.RELIEF_TEXTURE
+        val heights = file("img/${SiteImagery.RELIEF_HEIGHTS_FILE}")
+        val image = org.jetbrains.skia.Image.makeFromEncoded(heights.readBytes())
+        val across = SiteImagery.RELIEF_POINTS_ACROSS
+        val down = SiteImagery.RELIEF_POINTS_DOWN
+        assertEquals(across to down, image.width to image.height, "the heights are not one point every ${SiteImagery.RELIEF_POINT_SPACING_PIXELS} pixels of the patch")
+        assertEquals(texture.width, (across - 1) * SiteImagery.RELIEF_POINT_SPACING_PIXELS, "the heights do not span the patch's picture across")
+        assertEquals(texture.height, (down - 1) * SiteImagery.RELIEF_POINT_SPACING_PIXELS, "the heights do not span the patch's picture down")
+        assertTrue(across * down <= 65_536, "the relief's mesh has ${across * down} points, more than a 16-bit index reaches")
+        image.close()
+        val pixels = decodedPixels(heights)
+        val metres = pixels.map { (((it shr 16) and 0xFF) * 256 + ((it shr 8) and 0xFF)).toDouble() / SiteImagery.RELIEF_STEPS_PER_METRE }
+        assertTrue(pixels.all { it ushr 24 == 0xFF && it and 0xFF == 0 }, "the heights carry something other than sixteen bits in red and green")
+        assertEquals(0.0, metres.min(), "the patch's lowest point is not the sea's surface")
+        assertTrue(metres.max() > LEAST_RELIEF_METRES, "the patch's highest point is ${metres.max()} m: no relief to draw")
+
+        val page = file("index.html").readText()
+        val canvas = Regex("""<canvas class="relief-canvas"[^>]*>""").find(page)?.value ?: fail("the page has no relief canvas")
+        assertEquals("img/${SiteImagery.RELIEF_HEIGHTS_FILE}", attribute(canvas, "data-heights"), "the relief reads another file's heights")
+        assertEquals(SiteImagery.RELIEF_POINT_SPACING_PIXELS, attribute(canvas, "data-point-spacing").toInt(), "the page spaces the relief's points differently from the heights")
+        assertEquals(SiteImagery.RELIEF_STEPS_PER_METRE, attribute(canvas, "data-steps-per-metre").toInt(), "the page reads the heights at another number of steps a metre")
+        val sheet = com.cartogenesis.cartography.SheetGeometry.of(SiteImagery.config())
+        assertEquals(sheet.kilometresPerPixel, attribute(canvas, "data-kilometres-per-pixel").toDouble(), "the page puts the relief on another scale than the sheet's")
+        val still = imageTag(page, texture.file)
+        assertEquals(texture.width to texture.height, attribute(canvas, "width").toInt() to attribute(canvas, "height").toInt(),
+            "the relief's canvas is not the shape of its still picture")
+        assertTrue(still.isNotEmpty())
+        println("SITE the relief: ${across}x$down points, highest %.0f m, ${heights.length()} bytes of heights, ${file("img/${texture.file}").length()} of picture, ${sheet.kilometresPerPixel} km a pixel"
+            .format(metres.max()))
+    }
+
+    /**
+     * That every world in "Every seed is a world" links to the world its picture shows: the link
+     * the application itself writes for that world, at the size and settings the picture was made
+     * with, drawn in the style it was drawn in; captioned with its seed; in the reel's order.
+     */
+    @Test
+    fun `every world in the reel links to the world its picture shows`() {
+        val page = file("index.html").readText()
+        val reel = Regex("""<ul class="reel">(.*?)</ul>""", RegexOption.DOT_MATCHES_ALL).find(page)?.groupValues?.get(1)
+            ?: fail("the page has no reel")
+        val items = Regex("""<li>(.*?)</li>""", RegexOption.DOT_MATCHES_ALL).findAll(reel).map { it.groupValues[1] }.toList()
+        assertEquals(SiteImagery.REEL.map { it.file }, items.map { item ->
+            Regex("""src="img/([^"]+)"""").find(item)?.groupValues?.get(1) ?: fail("a world in the reel has no picture: $item")
+        }, "the reel's pictures are not SiteImagery's reel, in order")
+        SiteImagery.REEL.zip(items).forEach { (figure, item) ->
+            val link = Regex("""<a href="([^"]+)">""").find(item)?.groupValues?.get(1)?.replace("&amp;", "&")
+                ?: fail("seed ${figure.seed} has no link")
+            val expected = com.cartogenesis.ui.WorldLinks.linkTo(
+                "/app/", SiteImagery.reelConfig(figure.seed), figure.options
             )
+            assertEquals(expected, link, "seed ${figure.seed}'s link is not the application's own link to the world pictured")
+            assertEquals(SiteImagery.REEL_GRID_CELLS, SiteImagery.reelConfig(figure.seed).width, "seed ${figure.seed} is not made at the reel's size")
+            assertTrue(item.contains("Seed ${figure.seed}<"), "seed ${figure.seed}'s picture is not captioned with its seed")
+            println("SITE reel: ${figure.file} links to $link")
+        }
+    }
+
+    @Test
+    fun `no picture on the page is blank`() {
+        SiteImagery.FIGURES.forEach { figure ->
+            val pixels = decodedPixels(file("img/${figure.file}"))
+            if (figure.cut != SiteImagery.Cut.WHOLE && figure.cut != SiteImagery.Cut.GROUND) {
+                // A layer is mostly clear by design, so it is held to having something drawn in it
+                // and to leaving something clear, rather than to a count of colours.
+                val covered = pixels.count { it ushr 24 > 0 }.toDouble() / pixels.size
+                assertTrue(
+                    covered in LEAST_LAYER_COVER..MOST_LAYER_COVER,
+                    "img/${figure.file} covers %.4f of its frame: a layer that is blank, or one that is not a layer".format(covered)
+                )
+                println("SITE img/${figure.file} covers %.4f of its frame".format(covered))
+                return@forEach
+            }
+            val colours = colourCount(pixels)
+            assertTrue(
+                colours >= LEAST_COLOURS_IN_A_MAP,
+                "img/${figure.file} holds $colours colours, fewer than $LEAST_COLOURS_IN_A_MAP: it " +
+                    "has come out blank, or as one flat tint with no map in it"
+            )
+            println("SITE img/${figure.file} holds $colours colours at five bits a channel")
         }
     }
 
@@ -441,10 +806,14 @@ class SiteAssemblyTest {
             Regex("""$property[^\n]*?(\d+)""").find(web)?.groupValues?.get(1)?.toInt()
                 ?: fail("WebPlatform.kt no longer states $property")
 
-        val ceiling = desktop.exportCeiling(compact = false)
-        val phoneCeiling = Regex("""exportCeiling\(compact: Boolean\): Int = if \(compact\) (\d+)""")
-            .find(web)?.groupValues?.get(1)?.toInt()
-            ?: fail("WebPlatform.kt no longer caps a phone's export")
+        val ceiling = desktop.generationCeiling
+        val browserCeiling = when (
+            Regex("""override val generationCeiling: Int = WorldCeilings\.(\w+)""").find(web)?.groupValues?.get(1)
+        ) {
+            "BROWSER_TAB" -> com.cartogenesis.ui.WorldCeilings.BROWSER_TAB
+            "DESKTOP" -> com.cartogenesis.ui.WorldCeilings.DESKTOP
+            else -> fail("WebPlatform.kt no longer states the browser's ceiling as one of WorldCeilings'")
+        }
 
         val exports = row("Export")
         assertTrue(
@@ -452,8 +821,8 @@ class SiteAssemblyTest {
             "the Export row does not quote the $ceiling × $ceiling this build can finish: \"$exports\""
         )
         assertTrue(
-            exports.contains("$phoneCeiling × $phoneCeiling"),
-            "the Export row does not quote the phone's cap of $phoneCeiling: \"$exports\""
+            Regex("""browser[^.]*\b$browserCeiling × $browserCeiling\b""").containsMatchIn(exports),
+            "the Export row does not quote the browser's ceiling of $browserCeiling: \"$exports\""
         )
         // And what a world at the ceiling comes out as for a picture: its true-shape sheet, which
         // is not the grid's own size.
@@ -476,7 +845,7 @@ class SiteAssemblyTest {
             "the Resolution row does not say what the desktop starts at: \"$resolutions\""
         )
         println(
-            "SITE the Features list quotes $ceiling as the ceiling, $phoneCeiling on a phone, " +
+            "SITE the Features list quotes $ceiling as the ceiling, $browserCeiling in the browser, " +
                 "and ${webNumber("override val defaultResolution")}/${desktop.defaultResolution} " +
                 "as the starting grids"
         )
@@ -813,21 +1182,21 @@ class SiteAssemblyTest {
     }
 
     /**
-     * That the download button names the platforms there are downloads for.
+     * That the opening's download button names the platforms there are downloads for.
      *
      * It read "Download for Windows (recommended)" for as long as Windows was the only one, and a
      * label like that survives a new platform perfectly happily: the button still works, and it
      * still tells a Linux reader the program is not for them.
      */
     @Test
-    fun `the hero's download button names both desktop platforms`() {
+    fun `the opening's download button names both desktop platforms`() {
         val page = file("index.html").readText()
         val label = Regex("""id="launch-desktop"[^>]*>([^<]*)<""").find(page)?.groupValues?.get(1)
-            ?: fail("the hero no longer has a download button")
+            ?: fail("the opening no longer has a download button")
         listOf("Windows", "Linux").forEach {
             assertTrue(
                 label.contains(it),
-                "the hero's download button reads \"$label\" and there is a $it download"
+                "the opening's download button reads \"$label\" and there is a $it download"
             )
         }
 
@@ -844,7 +1213,7 @@ class SiteAssemblyTest {
             at < page.indexOf("""<section id="next">"""),
             "the Download and Installation section has moved below the roadmap"
         )
-        println("SITE the hero's download button reads \"$label\"")
+        println("SITE the opening's download button reads \"$label\"")
     }
 
     @Test
@@ -870,4 +1239,117 @@ class SiteAssemblyTest {
                 maps.joinToString { it.name }
         )
     }
+
+    /**
+     * The files a release carries, from `site/downloads.txt`, with `<version>` where its number goes.
+     */
+    private val releaseFileNames: List<String> by lazy {
+        File(repoRoot, "site/downloads.txt").readLines().map { it.substringBefore('#').trim() }.filter { it.isNotEmpty() }
+    }
+
+    /**
+     * Runs the page's own release lookup, as published, in Node against a release made of every
+     * file `site/downloads.txt` lists, and against the ways that release can fail to arrive.
+     *
+     * The lookup is the part of the page's script between its two markers. It takes what it
+     * depends on — the network, the visit's storage, the clock and its time limit — as arguments,
+     * so here it is handed stand-ins for each and asked: does every file a release carries match
+     * its own pill, and only its own; does a release that lacks a file leave only that pill as it
+     * was; do a malformed answer, a refusal (the API's rate limit is a 403), a failed request and a
+     * request that never answers all come back as no release, so every pill stays a link to the
+     * release page with no size; is a refusal kept for the visit rather than asked again on every
+     * page; and is a download that is not on this project's own release page ignored. Node is
+     * already on the deploy runner, which is Linux with the Actions image's tools, and on the
+     * machines this is built on.
+     */
+    @Test
+    fun `the release lookup finds every file the release carries and falls back on every failure`() {
+        val page = file("index.html").readText()
+        val lookup = Regex("""/\* release lookup begins \*/(.*?)/\* release lookup ends \*/""", RegexOption.DOT_MATCHES_ALL)
+            .find(page)?.groupValues?.get(1) ?: fail("the page's release lookup is no longer marked")
+        val work = kotlin.io.path.createTempDirectory("release-lookup").toFile()
+        try {
+            File(work, "lookup.js").writeText(lookup)
+            File(work, "names.json").writeText(releaseFileNames.joinToString(",", "[", "]") { "\"$it\"" })
+            File(work, "run.js").writeText(RELEASE_LOOKUP_HARNESS)
+            val process = ProcessBuilder("node", "run.js").directory(work).redirectErrorStream(true).start()
+            val output = process.inputStream.bufferedReader().readText()
+            assertTrue(process.waitFor(60, java.util.concurrent.TimeUnit.SECONDS), "Node did not finish the release lookup's cases")
+            assertEquals(0, process.exitValue(), "Node could not run the release lookup: $output")
+            val results = output.lines().filter { it.startsWith("CASE ") }
+            println(results.joinToString("\n") { "SITE release lookup $it" })
+            val failed = results.filter { it.endsWith(" FAIL") || it.contains(" FAIL ") }
+            assertTrue(results.size >= 9, "the release lookup's harness reported ${results.size} cases: $output")
+            assertTrue(failed.isEmpty(), "the release lookup got these wrong:\n" + failed.joinToString("\n"))
+        } finally {
+            work.deleteRecursively()
+        }
+    }
+
+    /**
+     * The cases, in Node. Each prints `CASE <name> PASS` or `CASE <name> FAIL <why>`. The release
+     * is made from `names.json`, the list the page's pills are held to, so a file added to a
+     * release is a file this asks the lookup to find.
+     */
+    private val RELEASE_LOOKUP_HARNESS = """
+const fs = require('fs');
+const block = fs.readFileSync('lookup.js', 'utf8');
+const names = JSON.parse(fs.readFileSync('names.json', 'utf8'));
+const api = new Function(block + '; return {releaseFromAnswer, releaseFileFor, lookUpLatestRelease, sizeInWords};')();
+const version = '3.2.0';
+const home = 'https://github.com/bhanright/Cartogenesis/releases/download/v' + version + '/';
+const asset = (pattern, at) => ({name: pattern.replace('<version>', version), size: 1048576 * (10 + at), browser_download_url: home + pattern.replace('<version>', version)});
+const whole = {tag_name: 'v' + version, assets: names.map(asset)};
+function keeping() { const kept = new Map(); return {getItem: (k) => kept.has(k) ? kept.get(k) : null, setItem: (k, v) => kept.set(k, String(v))}; }
+function answering(status, body, counter) {
+  return () => { counter.calls++; return Promise.resolve({ok: status >= 200 && status < 300, status,
+    json: () => typeof body === 'string' ? Promise.reject(new SyntaxError('not JSON')) : Promise.resolve(JSON.parse(JSON.stringify(body)))}); };
+}
+let clock = 0; const now = () => clock;
+const say = (name, ok, why) => console.log('CASE ' + name + (ok ? ' PASS' : ' FAIL ' + (why || '')));
+(async () => {
+  let counter = {calls: 0};
+  let release = await api.lookUpLatestRelease(answering(200, whole, counter), keeping(), now, 1000);
+  const found = names.map((n) => release && api.releaseFileFor(release, n));
+  say('every-file-matches-its-own-pill', found.every((f, at) => f && f.name === names[at].replace('<version>', version) && f.size === whole.assets[at].size),
+    JSON.stringify(found));
+  say('no-two-pills-share-a-file', new Set(found.map((f) => f && f.name)).size === names.length);
+  say('size-in-words', api.sizeInWords(107692851) === '102.7 MB', api.sizeInWords(107692851));
+
+  const lacking = {tag_name: 'v' + version, assets: whole.assets.slice(1)};
+  release = await api.lookUpLatestRelease(answering(200, lacking, {calls: 0}), keeping(), now, 1000);
+  const partly = names.map((n) => api.releaseFileFor(release, n));
+  say('a-missing-file-leaves-only-its-pill', partly[0] === null && partly.slice(1).every(Boolean), JSON.stringify(partly.map(Boolean)));
+
+  release = await api.lookUpLatestRelease(answering(200, 'not json', {calls: 0}), keeping(), now, 1000);
+  say('malformed-answer-is-no-release', release === null, JSON.stringify(release));
+  release = await api.lookUpLatestRelease(answering(200, {message: 'Not Found'}, {calls: 0}), keeping(), now, 1000);
+  say('answer-of-the-wrong-shape-is-no-release', release === null, JSON.stringify(release));
+
+  counter = {calls: 0};
+  const store = keeping();
+  release = await api.lookUpLatestRelease(answering(403, {message: 'API rate limit exceeded'}, counter), store, now, 1000);
+  const again = await api.lookUpLatestRelease(answering(200, whole, counter), store, now, 1000);
+  say('a-refusal-is-no-release-and-is-kept-for-the-visit', release === null && again === null && counter.calls === 1, 'calls ' + counter.calls);
+
+  release = await api.lookUpLatestRelease(() => Promise.reject(new TypeError('offline')), keeping(), now, 1000);
+  say('a-failed-request-is-no-release', release === null);
+
+  const started = Date.now();
+  release = await api.lookUpLatestRelease(() => new Promise(() => {}), keeping(), now, 50);
+  say('a-request-that-never-answers-is-given-up', release === null && Date.now() - started < 1000, (Date.now() - started) + ' ms');
+
+  counter = {calls: 0};
+  const kept = keeping();
+  await api.lookUpLatestRelease(answering(200, whole, counter), kept, now, 1000);
+  const second = await api.lookUpLatestRelease(answering(200, whole, counter), kept, now, 1000);
+  clock += 16 * 60 * 1000;
+  await api.lookUpLatestRelease(answering(200, whole, counter), kept, now, 1000);
+  say('an-answer-is-kept-for-a-quarter-hour-and-no-longer', second && counter.calls === 2, 'calls ' + counter.calls);
+
+  const foreign = {tag_name: 'v' + version, assets: [Object.assign(asset(names[0], 0), {browser_download_url: 'https://mirror.invalid/' + names[0]})]};
+  release = await api.lookUpLatestRelease(answering(200, foreign, {calls: 0}), keeping(), now, 1000);
+  say('a-download-off-this-project-is-ignored', release && api.releaseFileFor(release, names[0]) === null);
+})().catch((e) => { console.log('CASE harness FAIL ' + e); });
+""".trimIndent()
 }

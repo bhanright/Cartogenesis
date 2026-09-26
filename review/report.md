@@ -1272,3 +1272,130 @@ So there are no crops of C, and nothing is said here about its drawn rivers unde
 
 The probes (`SeedProbeRho8Router`, `SeedProbeCombKinds`, and `SeedProbeCombRound2` with two more
 variants) are ignored files and are not committed.
+
+## Integration with main
+
+**Branch:** `chunk/3b-implicit-erosion` at `2e129db`, with `origin/main` (`4d0a3da`) merged in. Not
+merged into main, and no pull request: the merge waits on this review.
+
+| Commit | What it does |
+|---|---|
+| `4d4ff73` | Removes the comb experiments. |
+| `8482c72` | Records the comb as a known failure whose fix is square cells, and adds the TODO entry. |
+| `6a96fb6` | Merges `origin/main`. |
+| `3f1096d` | Re-records the two generator clauses the merge moved. |
+| `69d8165` | Re-records the map's records the merge moved. |
+| `4dc7925`, `2e129db` | The ledger's integration note. |
+
+### 1. What was removed
+
+Reverts of `fa37334`, `c250862` and `9a3fc39`, each clean. Taken out:
+- **Candidate B:** `ErosionConfig.subGridTransport`, `HydraulicErosion.subGridCreep`,
+  `Rates.subGridDiffusivity` and the cell's metre sizes added for it.
+- **Its two net forms:** `subGridTransportAcrossTheFall` and `subGridTransportUndrainedShare`,
+  with `SubGridTransportTest`.
+- **The router's facet-share output:** `flowDirections`' `undrainedShare`.
+- **Form C:** `WorldGenConfig.clampedDescentDraw` and `rho8Receiver`, the parameter threaded through
+  the seven routing call sites, the three reuse guards, the `IncrementalReuseTest` variant and
+  `RoutingGroundTest`'s invariant case.
+
+Against the tree before the experiments (`16a92c8`), the only code difference left is
+`CombGuardTest`'s floor. Candidate A was already reverted in round 2. The ledger rows and this
+report's three comb sections are kept as the history.
+
+### 2. The comb as a known failure
+
+- **The guard.** `CombGuardTest` keeps its floor, derived from the control (0.01 km per 1,000 km²).
+  Its comb clause is recorded through `KnownFailures` under the finding *the half-height cell: the
+  flanks are combed by straight parallel gullies down the columns, until the cells are square on
+  the ground*.
+- **Its figures on the merged head:** seed 7 at 0.408 down a column against 0.061 along a row, seed
+  42 at 0.519 against 0.080. The recorded signature (0.41 against 0.06, 0.52 against 0.08) is
+  unchanged.
+- **The network hold passes:** 31.66 and 36.63 km per 1,000 km².
+- **`docs/TODO.md`** closes the comb's entry with what the three rounds established:
+  - the feedback toward the columns;
+  - 85 to 87% of combed cells clamped to their cardinal, out of reach of any draw;
+  - the sub-grid forms' cost to the valleys and the network;
+  - square cells as the fix, with `CombGuardTest` as its acceptance test.
+
+### 3. The graphics-card erosion path
+
+- **What it runs.** `ErosionAccelerator` takes only the thermal sweeps, the relaxation, and falls
+  back to the processor when it declines. Every hydraulic round runs on the processor in both modes,
+  the implicit incision among them. So GPU mode runs the same update as the processor.
+- **Parity, measured under a virtual display on llvmpipe:**
+  - the sweeps alone differ by 0.000e+00, exactly;
+  - the finished terrain by 0.000000 mean and worst at the six places the test prints;
+  - a stopped run returns in 427 ms and still matches.
+- **Nothing to record in TODO.** The implicit pass on the card is still only specified there, from
+  the first report.
+
+### 4. The conflicts and how each was resolved
+
+Six files conflicted:
+
+| File | Both sides | Resolution |
+|---|---|---|
+| `docs/DESIGN_LEDGER.md` | each appended rows to the table | both kept, this branch's two rows first |
+| `GlaciationTest` | each re-recorded the glacial lakes' figure for its own terrain | this branch's kept; the merged head's run matched it, so it stands |
+| `OutletIncisionTest` | chunk 6 re-recorded the drowned-basin sill clause under a finding this branch had armed and retired | this branch's armed clause kept; it passes on the merged head |
+| `RealmSpreadTest` | both armed the largest-realm clause, for different reasons | main's assertion kept, with one comment saying both armed it |
+| `GeometryExpectations` | both added the same realm-border line | main's comment kept; the seeds re-taken below |
+| `RecordedRenders` | each pinned its own fingerprints | regenerated on the merged worlds by `RegenerateRecordedRenders` |
+
+### 5. What the merge moved, re-recorded
+
+| Clause | Before | Merged head | Why |
+|---|---|---|---|
+| The notch's water (`OutletIncisionTest`, recorded) | seed 7 1.1530% → 0.8764% | 1.1550% → 0.8455% | chunk 6's closed basins take the rain leaving them at every exit, less every closed basin above, so a basin holds a different amount |
+| The ice's bars (`GlaciationTest`, recorded) | seed 42 at 2.48% | 2.50% | the same water balance moves which basins stand full |
+| The twelve render fingerprints | this branch's | regenerated | the merged worlds' lakes and rivers |
+| Geometry guard, 1234 / lakes' open water / combs | too small to measure | measured, passes | seed 1234 holds more open water |
+| Geometry guard, 1234 / realm borders / rectangles | measured | too small to measure | since chunk 6's catchments, no realm is a ring small enough, as on the other three seeds |
+
+No other clause moved, and no red needed a rerun to be believed.
+
+### 6. Tests
+
+One full run, counted from the JUnit XML:
+- `:worldgen:jvmTest` alone, on `6a96fb6`;
+- the other three modules together, on `3f1096d` with the regenerated render fingerprints;
+- the graphics-card classes under `xvfb-run -a -s "-screen 0 1280x1024x24"` on `69d8165`.
+
+Only the classes a re-record touched were run again.
+
+| Task | Tests | Failures | Errors | Skipped | Afterwards |
+|---|---|---|---|---|---|
+| `:worldgen:jvmTest` | 283 | 2 | 0 | 0 | the two re-recorded; `OutletIncisionTest` and `GlaciationTest` then pass. 21 known failures reported |
+| `:cartography:jvmTest` | 120 | 1 | 0 | 0 | `GeometryGuardTest`'s two expectations; it and `PenAndInkTest` then pass. The full run's known-failure report holds 354 lines (known failures and clauses too small to measure together); the geometry guard's own rerun, 17 and 330 |
+| `:ui:jvmTest` | 165 | 0 | 0 | 0 | 5 known failures |
+| `:desktop:test` | 138 | 0 | 0 | 19 | 2 known failures. The skips are the graphics-card classes without a display (13) and the benchmarks (6) |
+| Graphics-card classes under a virtual display | 13 | 1 | 0 | 0 | `GpuErosionTest`'s speed clause: 1.1× against 2.0× on llvmpipe, a software renderer, which fails it by nature; not counted as a defect |
+
+**Not run, as instructed:** `:ui:wasmJsTest`, `:worldgen:wasmJsTest`, `:web:wasmJsTest` and
+`:desktop:siteTest`. They are to be run locally.
+
+### 7. The renders
+
+- **The set.** The first report's full set, on the merged head: seeds 7 and 42 at 1024 and 969495 at
+  2048, in the Atlas view and as elevation, whole, coast and range. The windows are the first
+  report's, recovered to the pixel from its own crops. The files are under `review/renders/` with
+  the suffix `-merged`.
+- **Against the review round's (`-review`),** the share of pixels off by more than 32 levels:
+
+  | World | Whole | Coast | Range |
+  |---|---|---|---|
+  | 7 at 1024 | 0.04% | 0.07% | 0.03% |
+  | 42 at 1024 | 0.11% | 0.36% | 0.26% |
+  | 969495 at 2048 | 0.05% | 0.14% | 0.08% |
+
+  The elevation views move by the same shares, give or take a hundredth.
+
+**What the eye sees.**
+- Main's changes barely touch these maps. The relief, the coasts and the lakes read as the review
+  round's.
+- The differences are a handful of river courses re-routed, most visibly on the right of seed 42's
+  coast window, and small lakes redrawn: chunk 6's water balance.
+- **The comb is unchanged and plain:** 969495's eastern flank, seed 42's western ranges, seed 7's
+  upper-right range. It is recorded as the known failure above, for the square-cell chunk.

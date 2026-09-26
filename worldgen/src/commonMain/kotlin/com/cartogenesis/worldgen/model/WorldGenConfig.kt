@@ -2243,25 +2243,6 @@ data class ErosionConfig(
      */
     val subGridTransport: Boolean = false,
     /**
-     * **An experiment, off by default (Fix 3b's comb round).** Whether the incision cuts only the
-     * cells `ChannelInitiation`'s criterion makes channels.
-     *
-     * The mask is taken each round, after that round's routing and before the notch, from:
-     * the runoff-weighted area in square kilometres over the round's own drainage, each cell
-     * weighted by its rainfall as a share of Earth's land mean (715 mm) as `ChannelInitiation`
-     * weights it, from the rounds' provisional rainfall in millimetres, or Earth's mean where the
-     * climate feed is off and the rounds have no rain; the true ground's gradient to the round's
-     * receiver; and the rounds' provisional cover against `RiverConfig`'s threshold and cover
-     * gain, bare where the feed is off. The frozen-ground rule is not applied: the rounds carry
-     * no summer temperature. An initiated channel is carried downstream over the round's drainage,
-     * through lakes, so a flatter reach below a head still incises. The mask is never reused: each
-     * round's routing invalidates it. Cells left out are not cut, and still pass their base to the
-     * cells above, still hold standing water, and still take and carry spoil in the deposition
-     * walk. The outlet notch cuts only a basin's spill path, which carries the basin's whole
-     * discharge and is a channel by the same criterion, so it is left as it is.
-     */
-    val incisionNeedsChannelHead: Boolean = false,
-    /**
      * How much harder the water cuts at a basin's outlet than it does in an ordinary channel, as a
      * multiple of the same stream-power coefficient.
      *

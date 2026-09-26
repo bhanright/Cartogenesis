@@ -175,6 +175,10 @@ internal object FlowRouting {
      *   cardinal was drawn and the cardinal's where the diagonal was, nought where the descent is
      *   clamped to one neighbour, and one where the cell has no receiver. It changes nothing the
      *   routing returns. Read by [HydraulicErosion.subGridCreep]'s undrained-share form.
+     * @param drawInClampedDescent true to choose the receiver of a cell whose descent is clamped to
+     *   one edge of its facet by Fairfield and Leymarie's own draw, [rho8Receiver], rather than as
+     *   exactly the steepest neighbour. An experiment, off by default; see
+     *   [com.cartogenesis.worldgen.model.WorldGenConfig.clampedDescentDraw].
      */
     fun flowDirections(
         width: Int,
@@ -186,7 +190,8 @@ internal object FlowRouting {
         cellHeightInCellWidths: Double,
         byFacet: Boolean = true,
         overPotential: Boolean = true,
-        undrainedShare: FloatArray? = null
+        undrainedShare: FloatArray? = null,
+        drawInClampedDescent: Boolean = false
     ): IntArray {
         val receiver = IntArray(width * height) { -1 }
         // The filled field, except across the flats the fill raised, where it is the potential
@@ -213,6 +218,7 @@ internal object FlowRouting {
                 var facetCardinal = -1
                 var facetDiagonal = -1
                 var diagonalShare = 0.0
+                var steepestIsClamped = false
 
                 for (side in CARDINAL_COLUMN_STEP.indices) {
                     val cardinalColumnStep = CARDINAL_COLUMN_STEP[side]
@@ -275,12 +281,15 @@ internal object FlowRouting {
                             facetCardinal = cardinal
                             facetDiagonal = diagonal
                             diagonalShare = shareTowardTheDiagonal
+                            steepestIsClamped = clampedToTheCardinal || clampedToTheDiagonal
                         }
                     }
                 }
 
                 receiver[cell] = when {
                     steepestFacetSlope <= 0.0 -> -1
+                    drawInClampedDescent && steepestIsClamped ->
+                        rho8Receiver(width, height, routingSurface, column, row, steps, subGridDraw(column, row, seed))
                     diagonalShare <= 0.0 -> facetCardinal
                     diagonalShare >= 1.0 -> facetDiagonal
                     subGridDraw(column, row, seed) < diagonalShare -> facetDiagonal
@@ -296,6 +305,64 @@ internal object FlowRouting {
             }
         }
         return receiver
+    }
+
+    /**
+     * Fairfield and Leymarie's Rho8 choice (1991, *Water Resources Research* 27(5), 709-717) for
+     * the cell at [column], [row], with [draw] its per-cell number uniform on 0..1: the neighbour
+     * with the steepest fall on [routingSurface], a cardinal's fall taken over its own step and a
+     * diagonal's over a length drawn for the cell. Returns -1 only where nothing is lower.
+     *
+     * **The drawn length, adapted to this map's cells.** On their square cells the diagonal's slope
+     * is its fall times `rho = 1 / (2 - r)`, `r` uniform: its length is drawn uniformly between one
+     * cell side and two, whose reciprocal's mean, `ln 2`, stands in for `1 / sqrt(2)`. One and two
+     * are the bounds the triangle inequality puts on a diagonal: no shorter than its longer leg, no
+     * longer than its two legs end to end. On a cell [GroundSteps.northSouth] as tall as it is wide
+     * those bounds are the longer leg and the sum of both, so the length is
+     * `longer + (1 - r) * shorter`: on this map one to one and a half cell widths, whose
+     * reciprocal's mean, `2 ln 1.5 = 0.811`, stands for the true `1 / sqrt(1.25) = 0.894`, 9% under
+     * where the square's is 2% under. It is their rule on this cell, not a figure chosen here.
+     *
+     * **What it can and cannot do, which follows from those bounds.** Where the descent is clamped to
+     * a cardinal, both diagonals flanking it fall no more than the cardinal does, and each is drawn
+     * at least as long as its longer leg, which is at least the cardinal's step: neither can be
+     * steeper than the cardinal under any draw, so the cardinal is kept. Only a diagonal on the far
+     * side of another cardinal could win, and on ground falling toward the kept cardinal those rise.
+     * Where the descent is clamped to a diagonal, the drawn length can exceed the true one, so a
+     * cardinal can be drawn instead of it. See
+     * [com.cartogenesis.worldgen.model.WorldGenConfig.clampedDescentDraw].
+     */
+    private fun rho8Receiver(
+        width: Int,
+        height: Int,
+        routingSurface: DoubleArray,
+        column: Int,
+        row: Int,
+        steps: GroundSteps,
+        draw: Double
+    ): Int {
+        val here = routingSurface[row * width + column]
+        val longerLeg = maxOf(steps.eastWest, steps.northSouth).toDouble()
+        val shorterLeg = minOf(steps.eastWest, steps.northSouth).toDouble()
+        val drawnDiagonal = longerLeg + (1.0 - draw) * shorterLeg
+        var steepest = -1
+        var steepestSlope = 0.0
+        for (rowStep in -1..1) {
+            for (columnStep in -1..1) {
+                if (rowStep == 0 && columnStep == 0) continue
+                val neighbour = neighbourAt(width, height, column + columnStep, row + rowStep)
+                if (neighbour < 0) continue
+                val fall = here - routingSurface[neighbour]
+                if (fall <= 0.0) continue
+                val length = if (rowStep != 0 && columnStep != 0) drawnDiagonal else steps.of(columnStep, rowStep).toDouble()
+                val slope = fall / length
+                if (slope > steepestSlope) {
+                    steepestSlope = slope
+                    steepest = neighbour
+                }
+            }
+        }
+        return steepest
     }
 
     /**

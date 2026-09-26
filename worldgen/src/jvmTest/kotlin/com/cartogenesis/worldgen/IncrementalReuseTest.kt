@@ -95,6 +95,7 @@ class IncrementalReuseTest {
             "climateFeed" to base.copy(erosion = base.erosion.copy(climateFeed = false)),
             "facetRouting" to base.copy(facetRouting = false),
             "flatPotential" to base.copy(flatPotential = false),
+            "clampedDescentDraw" to base.copy(clampedDescentDraw = true),
             "seaLevel" to base.copy(seaLevel = base.seaLevel - 0.04f),
             "sea" to base.copy(sea = base.sea.copy(shelfDepthMetres = base.sea.shelfDepthMetres + 500f)),
             // H5: the lowstand is the one field of the sea section that reaches *back* into

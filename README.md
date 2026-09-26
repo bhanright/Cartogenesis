@@ -465,7 +465,11 @@ the river density, which belong to the machine and the reader. Opened, a part th
 cannot use (a seed that is not a number, a setting it does not know, a value outside its control's
 range) is set aside with one line of status and the rest applies; a size above the browser's
 ceiling is brought down to it with the reason; and a link in a format this build does not write is
-refused whole rather than misread.
+refused whole rather than misread. A link naming a size larger than the one the window starts at
+(512 in a browser, 1024 on the desktop) makes nothing until the reader answers one question: make it
+at the link's size, or open it at the starting size with the link's other settings. The question
+quotes how long that size took where it has been measured on that kind of machine (`LargeLinks`
+holds the figures and their sources) and says so where it has not.
 
 Settings persist through the `Platform` seam as one JSON document
 (`%APPDATA%\Cartogenesis\settings.json` on Windows, local storage in the browser); a document from a

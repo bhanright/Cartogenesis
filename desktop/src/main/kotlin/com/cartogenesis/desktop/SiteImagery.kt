@@ -111,24 +111,40 @@ object SiteImagery {
     data class Window(val x: Int, val y: Int, val width: Int, val height: Int)
 
     /**
-     * The window the page's opening starts from, and the picture a link to the page previews.
+     * The world the page's opening shows, and a link to the page previews: seed 1, made as the
+     * application makes a world opened with only a seed and then taken to 2048 (the generator's
+     * defaults at 512, brought up to [GRID_CELLS] the way the panel's size chips take a world),
+     * so the page's link to it, `/app/?seed=1`, opens the same world at the reader's own size.
      *
-     * A 2:1 window on the south-western peninsula of the northern continent: forested hills cut by
-     * rivers, an estuary branching into drowned valleys with a lake at its head, a coastal range
-     * along the peninsula's south-east shore, the continent's south coast running east under the
-     * range's foothills, and the shelf and the deep ocean below. Land meeting sea, water finding
-     * its way down, relief and climate in one frame, which is what the page is about.
-     *
-     * Its rows are what matter most, since [WORLD_BAND] is these rows the whole way round the
-     * world: from row 896 they stand below the range's ice cap, whose lowest edge runs straight
-     * along rows 810 to 820 and down a column at about 2,000, below the two dry belts ruled along
-     * rows, and below the straight top of the drowned inlet east of the estuary (about row 876,
-     * columns 1,480 to 1,550), so the drift carries none of them. The implicit erosion's comb of gullies down the
-     * columns is least here of any band of 800 rows that holds no ice; it is left on the steep
-     * flanks of the southern land, which the drift passes (docs/TODO.md; docs/DESIGN_LEDGER.md,
-     * Site 5c, for the measure). Drawn in `MapStyle.NATURAL`, for the colour.
+     * Not [SEED], whose every band of 800 rows carries a grid-shaped mark the page's first picture
+     * must not: its ice cap's straight edges, its dry belts ruled along rows, or its subduction
+     * coast running straight down a column. Chosen by the maintainer from three strips measured
+     * across 21 worlds for straight runs, comb and land (docs/DESIGN_LEDGER.md and docs/TODO.md,
+     * Site 5c); every other figure on the page stays on [SEED].
      */
-    val BAND = Window(576, 896, 1600, 800)
+    const val BAND_SEED = 1L
+
+    /** The settings [BAND_SEED]'s world is made with: the defaults at 512, taken to [GRID_CELLS]. */
+    fun bandConfig(): WorldGenConfig =
+        WorldGenConfig(seed = BAND_SEED, width = 512, height = 512).atResolution(GRID_CELLS, GRID_CELLS)
+
+    /**
+     * The window the page's opening starts from, and the picture a link to the page previews, on
+     * [BAND_SEED]'s sheet.
+     *
+     * A 2:1 window on a continent's snow-capped range, its rivers draining to coasts on both
+     * sides, lakes in the lowlands and the shelf and the ocean round it: height, water, climate
+     * and sea in one frame, which is what the page is about.
+     *
+     * Its rows matter most, since [WORLD_BAND] is these rows the whole way round the world: rows
+     * 848 to 1,648 hold no ice flat, no belt ruled along a row, and, of every run on a coast, a
+     * shelf break or an ice edge that stays within 12 km of its chord for more than 403 km (the
+     * Himalayan front's straightest stretch), two, of 427 and 473 km, where any other 800 rows of
+     * 21 worlds held more. It starts at column 3,264, so the preview's first 1,600 columns cross
+     * the sheet's seam, which the map does not have: the world wraps east and west. Drawn in
+     * `MapStyle.NATURAL`, for the colour.
+     */
+    val BAND = Window(3264, 848, 1600, 800)
 
     /**
      * The window the map styles are compared in: 600 wide and 400 tall, at 1:1.
@@ -250,7 +266,7 @@ object SiteImagery {
      * `og:image`. The page itself does not draw it; its opening is [WORLD_BAND], whose first
      * stretch is this window.
      */
-    val HERO = Figure("natural.webp", BAND, MapView.FANTASY, MapStyle.NATURAL)
+    val HERO = Figure("natural.webp", BAND, MapView.FANTASY, MapStyle.NATURAL, seed = BAND_SEED)
 
     /**
      * Every map style the application offers, each cut from [STYLES_WINDOW]: the comparison
@@ -467,7 +483,7 @@ object SiteImagery {
      * pixels, 4096 by 800.
      *
      * It starts where [BAND] starts, so its first 1600 columns are the link preview's picture, and
-     * the settled opening, a 2:1 plate showing the band's first stretch, is the author's window. It
+     * the settled opening, a 2:1 plate showing the band's first stretch, is the link preview's window. It
      * runs the whole circumference, so its last column is the sheet column west of its first and
      * the band joins itself end to end as it drifts. Full size because the page draws it up to the
      * height of the screen, where half its rows would be enlarged on any wide or dense one.
@@ -475,7 +491,7 @@ object SiteImagery {
     val WORLD_BAND: Figure by lazy {
         Figure(
             "world-band.webp", Window(BAND.x, BAND.y, SHEET_WIDTH_PIXELS, BAND.height),
-            MapView.FANTASY, MapStyle.NATURAL, quality = WORLD_BAND_QUALITY
+            MapView.FANTASY, MapStyle.NATURAL, quality = WORLD_BAND_QUALITY, seed = BAND_SEED
         )
     }
 
@@ -491,7 +507,7 @@ object SiteImagery {
     val WORLD_BAND_HALF: Figure by lazy {
         Figure(
             "world-band-half.webp", WORLD_BAND.window, MapView.FANTASY, MapStyle.NATURAL,
-            reduction = 2, quality = WORLD_BAND_QUALITY
+            reduction = 2, quality = WORLD_BAND_QUALITY, seed = BAND_SEED
         )
     }
 
@@ -552,10 +568,10 @@ object SiteImagery {
         } finally {
             sheets.close()
         }
-        // The reel's worlds, one at a time, each let go before the next is made.
+        // The opening's world and the reel's, one at a time, each let go before the next is made.
         FIGURES.filter { it.seed != SEED }.groupBy { it.seed }.forEach { (seed, figures) ->
             val madeAt = System.currentTimeMillis()
-            val reelWorld = WorldGenerationEngine.generateBlocking(reelConfig(seed))
+            val reelWorld = WorldGenerationEngine.generateBlocking(if (seed == BAND_SEED) bandConfig() else reelConfig(seed))
             println("SITE IMAGERY seed=$seed ${reelWorld.width}x${reelWorld.height} generated in ${System.currentTimeMillis() - madeAt} ms")
             val reelSheets = Sheets(reelWorld)
             try {

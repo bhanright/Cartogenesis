@@ -20,7 +20,8 @@ here, because keeping a second copy of any of them is how a copy goes stale:
   application keeps them.
 - **Every picture**, under `img/`. There are no image files in this folder at all. They are
   rendered from the engine at assembly time by `:desktop:renderSiteImagery` — seed 718106 at 2048
-  with the author's settings, cut to fixed windows — so a release that changes what a coastline looks
+  with the author's settings, cut to fixed windows, and the opening's band and link preview from seed 1,
+  whose rows hold fewer straight runs — so a release that changes what a coastline looks
   like changes the coastline the page shows. See `SiteImagery.kt` for the seed, the windows and
   how to pick a new one.
 - **Any version number or file size.** The download cards link each file to `/releases/latest`,

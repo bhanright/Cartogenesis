@@ -237,6 +237,10 @@
   }
   .lede{margin:0 0 20px;color:var(--bone);max-width:36em}
   .actions{display:flex;flex-wrap:wrap;justify-content:center;gap:12px}
+  /* The seed of the world the map shows, in the captions' quiet mono. In bone
+     rather than the captions' dim bone, because it sits on the panel, which the
+     map shows through, and bone keeps AA there over the band's brightest pixel. */
+  .band-seed{margin:14px 0 0;font-family:var(--mono);font-size:12px;line-height:1.5;letter-spacing:.04em;color:var(--bone)}
   /* On a phone the second button's words do not fit beside the first's, so the
      two stack; stacked, they take one width, the column's, rather than each its
      own words'. */
@@ -934,6 +938,9 @@
         <a class="btn primary" href="/app/" id="launch">Try it in your browser</a>
         <a class="btn secondary" href="#install" id="launch-desktop">Download the Desktop App (Windows/Linux)</a>
       </div>
+      <!-- The world the map above is: its seed, and the application's own link to it.
+           SiteSourcesTest holds both to the seed SiteImagery draws the band from. -->
+      <p class="band-seed">The map: seed 1 · <a href="/app/?seed=1">Open it in the app</a></p>
       <button type="button" class="opening-cue" id="opening-cue" aria-label="Scroll to the rest of the page" hidden>
         <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M7 1v11M2 7l5 5 5-5"/></svg>
       </button>
@@ -945,7 +952,7 @@
             <picture>
               <source media="(min-width: 700px), (min-resolution: 1.2dppx), (-webkit-min-device-pixel-ratio: 1.2)" srcset="img/world-band.webp">
               <img src="img/world-band-half.webp" width="4096" height="800" fetchpriority="high"
-                   alt="A band of a generated world in the Natural style, all the way round it: a forested peninsula whose estuary branches inland, a coast running east under the foothills of a range, a wide ocean, and a southern land joined by a narrow neck to the island north of it.">
+                   alt="A band of a generated world in the Natural style, all the way round it: a continent whose snow-capped range drains by rivers to coasts on both sides, a lake in its southern lowlands, a wide ocean, and forested islands and the coast of a second land beyond it.">
             </picture>
             <picture aria-hidden="true">
               <source media="(min-width: 700px), (min-resolution: 1.2dppx), (-webkit-min-device-pixel-ratio: 1.2)" srcset="img/world-band.webp">

@@ -1061,6 +1061,30 @@ class SiteSourcesTest {
     }
 
     /**
+     * That the opening names the world its map shows, and links to it: the seed the page writes
+     * beside the band, and the seed in its link to the application, are both the seed
+     * `SiteImagery` makes the band, its half and the link preview from. The band is not the world
+     * every other figure is cut from, so a caption naming the wrong seed would send a reader to a
+     * different world from the one they were shown.
+     */
+    @Test
+    fun `the opening names the seed its map is drawn from`() {
+        val caption = Regex("""<p class="band-seed">(.*?)</p>""", RegexOption.DOT_MATCHES_ALL).find(page)?.groupValues?.get(1)
+            ?: fail("the opening does not say which world its map shows")
+        val named = Regex("""seed (\d+)""").find(caption.replace(Regex("""<[^>]+>"""), " "))?.groupValues?.get(1)?.toLong()
+            ?: fail("the opening's caption names no seed: $caption")
+        val linked = Regex("""href="/app/\?seed=(\d+)"""").find(caption)?.groupValues?.get(1)?.toLong()
+            ?: fail("the opening's caption does not link to the application at a seed: $caption")
+        val drawn = listOf(SiteImagery.HERO, SiteImagery.WORLD_BAND, SiteImagery.WORLD_BAND_HALF).map { it.seed }.distinct()
+        assertEquals(listOf(SiteImagery.BAND_SEED), drawn, "the band, its half and the link preview are not drawn from one seed")
+        assertEquals(SiteImagery.BAND_SEED, named, "the opening names seed $named and its map is drawn from ${SiteImagery.BAND_SEED}")
+        assertEquals(SiteImagery.BAND_SEED, linked, "the opening links to seed $linked and its map is drawn from ${SiteImagery.BAND_SEED}")
+        assertTrue(page.indexOf("""<p class="band-seed">""") > page.indexOf("""<div class="opening"""") &&
+            page.indexOf("""<p class="band-seed">""") < page.indexOf("<main>"), "the band's caption is not in the opening beside it")
+        println("SITE the opening names and links seed $named, the seed its band is drawn from")
+    }
+
+    /**
      * That no constant is declared twice in the page's script.
      *
      * The script is one function, and a `var` is the function's however deep in a block it is

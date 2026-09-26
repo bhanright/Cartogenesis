@@ -499,6 +499,7 @@ class SitePaletteContrastTest {
             Triple("eyebrow", "brass", AA),
             Triple("heading", "parchment", AA_LARGE),
             Triple("lede", "bone", AA),
+            Triple("the map's seed and its link", "bone", AA),
             Triple("secondary button's label", "parchment", AA),
             Triple("scroll cue's arrow", "parchment", NON_TEXT),
             Triple("focus ring", "brass", NON_TEXT)

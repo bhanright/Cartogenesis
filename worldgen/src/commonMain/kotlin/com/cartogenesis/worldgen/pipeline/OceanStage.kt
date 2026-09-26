@@ -609,9 +609,11 @@ object OceanStage {
      * degrees a row, against the water's own 0.04, over the five rows where fifty coastal cells
      * left, and that step ran straight across every ocean on the map as a line along the row.
      * Putting each row's mean back to zero would put the line back, since the step is what the
-     * row's mean is made of, so it is not done. What it leaves on the four standard worlds and on
-     * 969495 at 2048: each row's mean anomaly 0.08 to 0.13 degrees root mean square, at most 0.29
-     * to 0.59, and the whole ocean's 0.004 to 0.006.
+     * row's mean is made of, so it is not done. What it leaves, on seeds 7 and 42 at 512 and 1024
+     * and on 969495 at 2048: each row's mean anomaly 0.08 to 0.13 degrees root mean square and at
+     * most 0.29 to 0.59; and on the four standard worlds at 512 the whole ocean's, by area, 0.009 to
+     * 0.012 below zero. `OceanCurrentTest` holds the heat those stand for under the energy
+     * balance's own miss against Earth's transport, 2%: they carry 0.07 to 1.05% of it.
      *
      * Only the departure is averaged over the band, and the profile is added back row by row, so
      * the profile's curvature is not averaged into the reference: averaged whole, the temperature

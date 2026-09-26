@@ -171,7 +171,10 @@ interface Platform {
      *
      * Behind the same switch as [accelerator], and with more riding on it than either of the
      * others: the sheet's surface *is* the elevation the rest of the pipeline reads, so a profile
-     * that rounds differently is a different world in the plainest possible sense.
+     * that rounds differently is a different world in the plainest possible sense. The switch is
+     * the config's, and the glaciation stage reads it where it would call the device, so a host
+     * offers its device here whatever the reader has chosen and nothing is drawn on it while the
+     * switch is off.
      */
     val iceAccelerator: IceSheetAccelerator? get() = null
 

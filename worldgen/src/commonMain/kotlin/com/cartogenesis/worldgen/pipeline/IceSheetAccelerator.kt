@@ -15,8 +15,9 @@ package com.cartogenesis.worldgen.pipeline
  * a worse shader than they are a loop.
  *
  * As with [OceanAccelerator], an implementation is expected to produce *approximately* the CPU's
- * answer: a card is free to round a square root differently. `IceSheetParityTest` measures how far
- * apart the two are and holds them to a bar rather than to the bit.
+ * answer: a card is free to round a square root differently. `GpuIceSheetTest` measures how far
+ * apart the two are on [IceSheetParity]'s fixture and holds them to a bar rather than to the bit;
+ * a browser's device can be reached only from a page, so `?selftest` reports the same measure.
  */
 interface IceSheetAccelerator {
 

@@ -17,7 +17,11 @@ import com.cartogenesis.worldgen.pipeline.IceSheetAccelerator
  *
  * As everywhere else on this seam, the arithmetic is not bit-for-bit the processor's — a device is
  * free to round a square root its own way — which is why a world generated on it carries its
- * fields in the save rather than being regenerated from its seed.
+ * fields in the save rather than being regenerated from its seed. Nor can it be held as tightly as
+ * the desktop's: GLSL's `precise` fixes the order of the operations it covers, and WGSL has no such
+ * qualifier (the word is reserved and nothing more) and lets an implementation reassociate and
+ * fuse (WGSL §15.7.5). How far a browser's device sits from the processor is therefore measured on
+ * `IceSheetParity`'s fixture by the `?selftest` page, not promised here.
  */
 class WebGpuIceSheet private constructor(
     private val device: JsHandle,
@@ -43,6 +47,8 @@ class WebGpuIceSheet private constructor(
             cellCount != bedRelative.size.toLong() ||
             cellCount != onTheSheet.size.toLong()
         ) return null
+        // A device whose compiler refused the module once is not handed four grids to refuse again.
+        if (iceSheetRefused(device)) return null
 
         val margin = allocateFloats(marginDistanceKm.size)
         val nearest = allocateSignedWords(nearestMarginCell.size)
@@ -59,7 +65,8 @@ class WebGpuIceSheet private constructor(
         val result = awaitPromise(
             runIceSheet(
                 device, cellsAcross, cellsDown, margin, nearest, bed, sheetWords,
-                metresPerRootKilometre, metresPerFieldUnit, cellHeightInCellWidths, cellSpanKm
+                metresPerRootKilometre, metresPerFieldUnit, cellHeightInCellWidths, cellSpanKm,
+                ICE_SHEET_WGSL
             )
         )
         if (result == null || isNullish(result)) return null
@@ -84,6 +91,9 @@ class WebGpuIceSheet private constructor(
             WebGpuIceSheet(erosion.device, erosion.name)
     }
 }
+
+@JsFun("(device) => !!device.__iceSheetRefused")
+private external fun iceSheetRefused(device: JsHandle): Boolean
 
 @JsFun("(size) => new Int32Array(size)")
 private external fun allocateSignedWords(size: Int): JsHandle
@@ -116,8 +126,8 @@ private external fun receiverOf(result: JsHandle): JsHandle
  */
 @JsFun(
     """(device, width, height, marginData, nearestData, bedData, sheetData,
-         metresPerRootKm, metresPerFieldUnit, rowScale, cellSpanKm) => (async () => {
-        if (device.__lost) return null;
+         metresPerRootKm, metresPerFieldUnit, rowScale, cellSpanKm, source) => (async () => {
+        if (device.__lost || device.__iceSheetRefused) return null;
         // Every storage type here is a 32-bit word; 16 squared is the baseline 256 invocations.
         const bytesPerCell = 4;
         const workGroupSide = 16;
@@ -135,111 +145,21 @@ private external fun receiverOf(result: JsHandle): JsHandle
         device.pushErrorScope('out-of-memory');
         let scopesOpen = true;
         try {
-            const source = `
-                // Six values and two words of padding: a struct in the uniform address space has
-                // to be a multiple of 16 bytes, and one that is not reads back as zeros rather
-                // than failing, which would make the width zero and the output untouched.
-                struct Params {
-                    width: u32,
-                    height: u32,
-                    metresPerRootKm: f32,
-                    metresPerFieldUnit: f32,
-                    rowScale: f32,
-                    cellSpanKm: f32,
-                    pad0: f32,
-                    pad1: f32,
-                };
-                @group(0) @binding(0) var<storage, read> marginKm: array<f32>;
-                @group(0) @binding(1) var<storage, read> nearest: array<i32>;
-                @group(0) @binding(2) var<storage, read> bed: array<f32>;
-                @group(0) @binding(3) var<storage, read> onTheSheet: array<u32>;
-                @group(0) @binding(4) var<storage, read_write> thickness: array<f32>;
-                @group(0) @binding(5) var<storage, read_write> receiver: array<i32>;
-                @group(0) @binding(6) var<uniform> params: Params;
-
-                // IceSheet.surfaceMetres, less the bed under it. The margin's own bed is floored
-                // at the waterline: a marine margin is where the ice meets the sea, and the sea
-                // is where its surface starts. No backtick may appear anywhere in this shader --
-                // the whole source is a JavaScript template literal and one would end it.
-                @compute @workgroup_size(16, 16)
-                fn profile(@builtin(global_invocation_id) gid: vec3<u32>) {
-                    let x = gid.x;
-                    let y = gid.y;
-                    if (x >= params.width || y >= params.height) { return; }
-                    let cell = y * params.width + x;
-                    if (onTheSheet[cell] == 0u) { thickness[cell] = 0.0; return; }
-
-                    // The mean of the plastic curve over the cell, not its value at the cell's
-                    // middle: IceSheet.profileMetres, with the roots factored out as that
-                    // function spells them, which is what keeps a device within a float's own
-                    // precision of the processor instead of two decimal digits short of it.
-                    let far = marginKm[cell];
-                    var rise = 0.0;
-                    if (far > 0.0) {
-                        let near = max(far - params.cellSpanKm, 0.0);
-                        let rootFar = sqrt(far);
-                        let rootNear = sqrt(near);
-                        let mean = (near + rootNear * rootFar + far) / (rootNear + rootFar);
-                        rise = (2.0 / 3.0) * params.metresPerRootKm * mean;
-                    }
-                    let from = nearest[cell];
-                    var marginBed = 0.0;
-                    if (from >= 0) {
-                        marginBed = max(bed[u32(from)] * params.metresPerFieldUnit, 0.0);
-                    }
-                    let surface = marginBed + rise;
-                    thickness[cell] = max(surface - bed[cell] * params.metresPerFieldUnit, 0.0);
-                }
-
-                fn surfaceAt(cell: u32) -> f32 {
-                    return bed[cell] + thickness[cell] / params.metresPerFieldUnit;
-                }
-
-                // IceSheet.steepestDescent, tie-break included: a tie here decides a bearing, and
-                // a bearing decides where a trough goes, so it goes to the lower cell index in
-                // both places rather than to whichever of the eight was looked at first.
-                @compute @workgroup_size(16, 16)
-                fn flow(@builtin(global_invocation_id) gid: vec3<u32>) {
-                    let x = i32(gid.x);
-                    let y = i32(gid.y);
-                    if (x >= i32(params.width) || y >= i32(params.height)) { return; }
-                    let cell = u32(y) * params.width + u32(x);
-                    if (onTheSheet[cell] == 0u) { receiver[cell] = -1; return; }
-
-                    let across = i32(params.width);
-                    let here = surfaceAt(cell);
-                    var best = -1;
-                    var bestGradient = 0.0;
-                    for (var rowStep = -1; rowStep <= 1; rowStep = rowStep + 1) {
-                        let neighbourRow = y + rowStep;
-                        if (neighbourRow < 0 || neighbourRow >= i32(params.height)) { continue; }
-                        for (var columnStep = -1; columnStep <= 1; columnStep = columnStep + 1) {
-                            if (rowStep == 0 && columnStep == 0) { continue; }
-                            let neighbourColumn = (x + columnStep + across) % across;
-                            let neighbour = neighbourRow * across + neighbourColumn;
-                            let fall = here - surfaceAt(u32(neighbour));
-                            if (fall <= 0.0) { continue; }
-                            // Per unit of ground walked, not per cell: a step down the map is
-                            // rowScale steps across it, and a flow that did not know would drift.
-                            let eastward = f32(columnStep);
-                            let southward = f32(rowStep) * params.rowScale;
-                            let walked = sqrt(eastward * eastward + southward * southward);
-                            let gradient = fall / walked;
-                            if (gradient > bestGradient ||
-                                (gradient == bestGradient && neighbour < best)) {
-                                bestGradient = gradient;
-                                best = neighbour;
-                            }
-                        }
-                    }
-                    receiver[cell] = best;
-                }
-            `;
             // Pipelines belong to the device and are independent of the grid.
             if (!device.__iceSheetPipelines) {
                 const module = device.createShaderModule({code: source});
                 const info = await module.getCompilationInfo();
-                if (info.messages.some(message => message.type === 'error')) return null;
+                const errors = info.messages.filter(message => message.type === 'error');
+                if (errors.length > 0) {
+                    // Said aloud, as erosion says it, and said once: a module that will not
+                    // compile will not compile on the next generation either, so the device is
+                    // marked and every later call declines before anything is copied to it.
+                    device.__iceSheetRefused = true;
+                    console.error('Cartogenesis: the ice sheet WGSL would not compile -',
+                        errors.map(error => error.lineNum + ':' + error.linePos + ' ' +
+                            error.message).join('; '));
+                    return null;
+                }
                 const readOnly = {type: 'read-only-storage'};
                 const layout = device.createBindGroupLayout({entries: [
                     {binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: readOnly},
@@ -338,5 +258,113 @@ private external fun runIceSheet(
     metresPerRootKm: Float,
     metresPerFieldUnit: Float,
     rowScale: Float,
-    cellSpanKm: Float
+    cellSpanKm: Float,
+    source: String
 ): JsHandle
+
+/**
+ * The ice sheet's two passes, one module with two entry points: `profile` writes each cell's
+ * thickness, and `flow` reads the surface those thicknesses make and picks each cell's steepest
+ * descent. Read by `WgslReservedWordsTest` and `WgslCompilesTest` as well as compiled here.
+ */
+internal val ICE_SHEET_WGSL = """
+    // Six values and two words of padding: a struct in the uniform address space has
+    // to be a multiple of 16 bytes, and one that is not reads back as zeros rather
+    // than failing, which would make the width zero and the output untouched.
+    struct Params {
+        width: u32,
+        height: u32,
+        metresPerRootKm: f32,
+        metresPerFieldUnit: f32,
+        rowScale: f32,
+        cellSpanKm: f32,
+        pad0: f32,
+        pad1: f32,
+    };
+    @group(0) @binding(0) var<storage, read> marginKm: array<f32>;
+    @group(0) @binding(1) var<storage, read> nearest: array<i32>;
+    @group(0) @binding(2) var<storage, read> bed: array<f32>;
+    @group(0) @binding(3) var<storage, read> onTheSheet: array<u32>;
+    @group(0) @binding(4) var<storage, read_write> thickness: array<f32>;
+    @group(0) @binding(5) var<storage, read_write> receiver: array<i32>;
+    @group(0) @binding(6) var<uniform> params: Params;
+
+    // IceSheet.surfaceMetres, less the bed under it. The margin's own bed is floored
+    // at the waterline: a marine margin is where the ice meets the sea, and the sea
+    // is where its surface starts.
+    @compute @workgroup_size(16, 16)
+    fn profile(@builtin(global_invocation_id) gid: vec3<u32>) {
+        let x = gid.x;
+        let y = gid.y;
+        if (x >= params.width || y >= params.height) { return; }
+        let cell = y * params.width + x;
+        if (onTheSheet[cell] == 0u) { thickness[cell] = 0.0; return; }
+
+        // The mean of the plastic curve over the cell, not its value at the cell's
+        // middle: IceSheet.profileMetres, with the roots factored out as that
+        // function spells them, which is what keeps a device within a float's own
+        // precision of the processor instead of two decimal digits short of it.
+        let far = marginKm[cell];
+        var rise = 0.0;
+        if (far > 0.0) {
+            let near = max(far - params.cellSpanKm, 0.0);
+            let rootFar = sqrt(far);
+            let rootNear = sqrt(near);
+            let mean = (near + rootNear * rootFar + far) / (rootNear + rootFar);
+            rise = (2.0 / 3.0) * params.metresPerRootKm * mean;
+        }
+        // Not "from", which the desktop's GLSL calls it: WGSL reserves that word (section
+        // 16.2), and one reserved word is enough for the whole module to fail to compile.
+        let marginCell = nearest[cell];
+        var marginBed = 0.0;
+        if (marginCell >= 0) {
+            marginBed = max(bed[u32(marginCell)] * params.metresPerFieldUnit, 0.0);
+        }
+        let surface = marginBed + rise;
+        thickness[cell] = max(surface - bed[cell] * params.metresPerFieldUnit, 0.0);
+    }
+
+    fn surfaceAt(cell: u32) -> f32 {
+        return bed[cell] + thickness[cell] / params.metresPerFieldUnit;
+    }
+
+    // IceSheet.steepestDescent, tie-break included: a tie here decides a bearing, and
+    // a bearing decides where a trough goes, so it goes to the lower cell index in
+    // both places rather than to whichever of the eight was looked at first.
+    @compute @workgroup_size(16, 16)
+    fn flow(@builtin(global_invocation_id) gid: vec3<u32>) {
+        let x = i32(gid.x);
+        let y = i32(gid.y);
+        if (x >= i32(params.width) || y >= i32(params.height)) { return; }
+        let cell = u32(y) * params.width + u32(x);
+        if (onTheSheet[cell] == 0u) { receiver[cell] = -1; return; }
+
+        let across = i32(params.width);
+        let here = surfaceAt(cell);
+        var best = -1;
+        var bestGradient = 0.0;
+        for (var rowStep = -1; rowStep <= 1; rowStep = rowStep + 1) {
+            let neighbourRow = y + rowStep;
+            if (neighbourRow < 0 || neighbourRow >= i32(params.height)) { continue; }
+            for (var columnStep = -1; columnStep <= 1; columnStep = columnStep + 1) {
+                if (rowStep == 0 && columnStep == 0) { continue; }
+                let neighbourColumn = (x + columnStep + across) % across;
+                let neighbour = neighbourRow * across + neighbourColumn;
+                let fall = here - surfaceAt(u32(neighbour));
+                if (fall <= 0.0) { continue; }
+                // Per unit of ground walked, not per cell: a step down the map is
+                // rowScale steps across it, and a flow that did not know would drift.
+                let eastward = f32(columnStep);
+                let southward = f32(rowStep) * params.rowScale;
+                let walked = sqrt(eastward * eastward + southward * southward);
+                let gradient = fall / walked;
+                if (gradient > bestGradient ||
+                    (gradient == bestGradient && neighbour < best)) {
+                    bestGradient = gradient;
+                    best = neighbour;
+                }
+            }
+        }
+        receiver[cell] = best;
+    }
+""".trimIndent()

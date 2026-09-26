@@ -61,9 +61,14 @@ fun interface GenerationProgress {
 /**
  * Runs the generation pipeline.
  *
- * Suspending for [ErosionAccelerator] and [OceanAccelerator]: stages do ordinary blocking work, but
- * a GPU accelerator has to await its device and its results, so the one call that might do so
- * makes the whole chain suspend. Nothing suspends when generating on the CPU.
+ * Suspending for [ErosionAccelerator], [OceanAccelerator] and [IceSheetAccelerator]: stages do
+ * ordinary blocking work, but a GPU accelerator has to await its device and its results, so the
+ * calls that might do so make the whole chain suspend. Nothing suspends when generating on the CPU.
+ *
+ * Each of the three is asked only when the config's one graphics switch,
+ * `config.erosion.acceleration`, is [com.cartogenesis.worldgen.model.Acceleration.GPU]; the stage
+ * that would use it decides, so a caller may hand every device it has whatever the setting says.
+ * With the switch off the world is the processor's, on every machine.
  *
  * Generation is fully deterministic for a given config, which is what lets HD export re-run at a
  * higher resolution instead of upscaling a preview bitmap.
@@ -105,14 +110,20 @@ object WorldGenerationEngine {
         config: WorldGenConfig,
         previous: PartialWorld? = null,
         /**
-         * Used only when the config asks for it, and only for erosion. Declared before [progress]
+         * Used only when the config asks for it, for erosion's sweeps. Declared before [progress]
          * rather than after so that a trailing lambda at a call site still binds to the progress
          * callback, which is what every caller means by it.
          */
         accelerator: ErosionAccelerator? = null,
-        /** Uses the same graphics acceleration preference as erosion; null keeps the CPU solve. */
+        /**
+         * Used only when the config asks for it, through the same switch as erosion's, for the
+         * ocean's stream function; null keeps the CPU solve.
+         */
         oceanAccelerator: OceanAccelerator? = null,
-        /** The same preference again, for the ice sheet's profile and surface flow; see rule 8. */
+        /**
+         * Used only when the config asks for it, through the same switch again, for the ice
+         * sheet's profile and surface flow; null keeps the CPU's. See rule 8.
+         */
         iceAccelerator: IceSheetAccelerator? = null,
         /**
          * Filled in with the layers the map draws that no stage's result carries, for the geometry

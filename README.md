@@ -239,9 +239,10 @@ values and their measurements in `WorldCeilings`. The browser starts at a genera
 while it runs.
 
 **Graphics acceleration** is an opt-in toggle in the header and in Settings (as *Graphics
-acceleration at launch*). It runs the erosion sweeps and the ocean-current solve on the graphics
-device on both platforms, and the export raster on the desktop as well (OpenGL compute on the
-desktop, WGSL in the browser); the panel says which through the `Platform` seam. Drawing the map
+acceleration at launch*). It runs the erosion sweeps, the ocean-current solve and the ice sheet's
+profile and flow on the graphics device on both platforms, and the export raster on the desktop as
+well (OpenGL compute on the desktop, WGSL in the browser); the panel says which through the
+`Platform` seam. Drawing the map
 runs on the graphics device unconditionally, outside this toggle, because rasterising pixels makes
 no promise about reproducing a world from its seed. The accelerated erosion agrees with the
 processor to about seven parts in a million but is not bit-identical, so a world generated with

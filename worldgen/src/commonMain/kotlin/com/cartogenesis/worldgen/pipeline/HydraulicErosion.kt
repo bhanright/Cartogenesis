@@ -271,19 +271,6 @@ internal object HydraulicErosion {
         val courantCoefficient: Float =
             incisionCoefficient / scale.landHalfOfField * config.width
 
-        /**
-         * The diffusivity of a cell's unresolved channels and hillslopes on bare ground at mean
-         * rain, in square metres a year: `K dx dy`. See [ErosionConfig.subGridTransport] for its
-         * derivation; the cover's factor and the square root of the runoff weight multiply it per
-         * cell.
-         */
-        val subGridDiffusivity: Double =
-            erosion.bedrockErodibilityPerYear.toDouble() * config.cellWidthKm * 1000.0 * config.cellHeightKm * 1000.0
-
-        /** Metres on the ground across a cell and down a row. */
-        val cellWidthMetres: Double = config.cellWidthKm * 1000.0
-        val cellHeightMetres: Double = config.cellHeightKm * 1000.0
-
         /** [POND_DEPTH_METRES] as a share of the land's relief, which is what the routing works in. */
         val pondDepth: Float = scale.reliefShareOfMetres(POND_DEPTH_METRES)
 
@@ -660,12 +647,6 @@ internal object HydraulicErosion {
         // that round's shoreline is known. Allocated here so the rounds share them.
         val runoff = FloatArray(cellsAcross * cellsDown)
         val erodibility = FloatArray(cellsAcross * cellsDown)
-        require(listOf(erosion.subGridTransport, erosion.subGridTransportAcrossTheFall, erosion.subGridTransportUndrainedShare).count { it } <= 1) {
-            "at most one form of the sub-grid transport may be on"
-        }
-        // What the round's routing leaves undrained by each cell's receiver, for the sub-grid
-        // transport's undrained-share form; see [ErosionConfig.subGridTransportUndrainedShare].
-        val undrainedShare = if (erosion.subGridTransportUndrainedShare) FloatArray(cellsAcross * cellsDown) else null
         // The closing breach and the post-cut outlet pass route over surfaces the rounds never
         // routed over, each with its own shoreline, so each takes its own normalisation.
         val spoilRunoff = FloatArray(cellsAcross * cellsDown)
@@ -896,8 +877,7 @@ internal object HydraulicErosion {
             )
             val directions = FlowRouting.flowDirections(
                 cellsAcross, cellsDown, sea.isLand, sea.relativeElevation, filled,
-                config.seed, config.cellHeightInCellWidths, config.facetRouting, config.flatPotential,
-                undrainedShare, config.clampedDescentDraw
+                config.seed, config.cellHeightInCellWidths, config.facetRouting, config.flatPotential
             )
             // Discharge and not catchment: each cell hands on what falls on it, so what arrives
             // at a channel is `Q = P * A` and the accumulation is a rainfall-weighted cell count
@@ -1390,7 +1370,7 @@ internal object HydraulicErosion {
                         FlowRouting.flowDirections(
                             cellsAcross, cellsDown, after.isLand, spoilGround, spoilFilled,
                             config.seed, config.cellHeightInCellWidths, config.facetRouting,
-                            config.flatPotential, drawInClampedDescent = config.clampedDescentDraw
+                            config.flatPotential
                         )
                     // The closing breach cuts the sill a fresh delta laid across a drainage, and
                     // what it has to cut with is the discharge behind that sill. Weighted as the
@@ -1430,7 +1410,7 @@ internal object HydraulicErosion {
                 val opened = openMouths(
                     cellsAcross, cellsDown, working, provisionalSeaLevel, config.scale, spoil,
                     rates.pondDepth, config.seed, config.cellHeightInCellWidths, config.facetRouting,
-                    config.flatPotential, config.clampedDescentDraw,
+                    config.flatPotential,
                     rainfallMm, weightSums
                 )
                 incised += opened.removed
@@ -1442,19 +1422,6 @@ internal object HydraulicErosion {
                     pits, PitStage.CLOSING, cellsAcross, isLand, directions, area.data, landCells, surfaceOf,
                     null, openingPit
                 )
-            }
-
-            // The unresolved channels' and hillslopes' own transport, an experiment behind its
-            // setting: see [ErosionConfig.subGridTransport] and [subGridCreep].
-            if (erosion.subGridTransport || erosion.subGridTransportAcrossTheFall || erosion.subGridTransportUndrainedShare) {
-                val toSea = subGridCreep(
-                    rates, cellsAcross, cellsDown, isLand, sea.shorelineHeight, erodibility, runoff, working.data,
-                    scale.yearsPerHydraulicRound,
-                    receiver = if (erosion.subGridTransportAcrossTheFall) directions else null,
-                    undrainedShare = undrainedShare
-                )
-                incised += toSea
-                lost += toSea
             }
 
             working = relax(working)
@@ -1788,7 +1755,6 @@ internal object HydraulicErosion {
         cellHeightInCellWidths: Double,
         byFacet: Boolean,
         overPotential: Boolean,
-        drawInClampedDescent: Boolean,
         /** The march's rainfall in millimetres, floored; this pass normalises it for itself. */
         rainfallMm: FloatArray,
         weightSums: ((String, Double, Int) -> Unit)?
@@ -1813,7 +1779,7 @@ internal object HydraulicErosion {
             FlowRouting.fillDepressions(cellsAcross, cellsDown, isLand, sea.relativeElevation)
         val flow = FlowRouting.flowDirections(
             cellsAcross, cellsDown, isLand, sea.relativeElevation, filled, seed, cellHeightInCellWidths,
-            byFacet, overPotential, drawInClampedDescent = drawInClampedDescent
+            byFacet, overPotential
         )
         // Weighted as the rounds weighted it, so a groove is cut where a river's water is and not
         // merely where a lot of ground drains — and normalised over this pass's own land, which is
@@ -2329,125 +2295,6 @@ internal object HydraulicErosion {
                 watch.cut(round, cell, receiver, courantNumber, height, baseBefore, baseAfter, after)
             }
         }
-    }
-
-    /**
-     * One round of the sub-grid transport [ErosionConfig.subGridTransport] describes: linear
-     * diffusion of [surface] over the land for [years], conservative between land cells, with the
-     * diffusivity [Rates.subGridDiffusivity] times each cell's [erodibility] and the square root
-     * of its [runoff] weight, a face taking the mean of its two cells'.
-     *
-     * Net of the resolved incision in one of two ways, or neither. Given [receiver], each cell's
-     * diffusivity on a face is taken down by the square of its receiver's bearing across that face,
-     * [ErosionConfig.subGridTransportAcrossTheFall]'s form. Given [undrainedShare], it is scaled by
-     * that share, [ErosionConfig.subGridTransportUndrainedShare]'s form. Not both.
-     *
-     * Five-point, on the ground: a face across a row is a cell width long and one down a column a
-     * row's height, each difference over its own length squared. Explicit, in as many equal steps
-     * as keep the fastest cell's `dt D (2/dx^2 + 2/dy^2)` at or under a fifth: stable is under
-     * one, and a fifth keeps the steps' own damping within a hundredth of the law's on a ripple
-     * eight rows long (`SubGridTransportTest`). The sea is a
-     * boundary at [shorelineHeight]: land above it loses to it what the face carries, never more
-     * than its own height over the shoreline, and the sea gives nothing back. The poles are closed.
-     *
-     * @return what crept into the sea, summed in the height field's unit.
-     */
-    internal fun subGridCreep(
-        rates: Rates,
-        cellsAcross: Int,
-        cellsDown: Int,
-        isLand: BooleanArray,
-        shorelineHeight: Float,
-        erodibility: FloatArray,
-        runoff: FloatArray,
-        surface: FloatArray,
-        years: Double,
-        receiver: IntArray? = null,
-        undrainedShare: FloatArray? = null
-    ): Double {
-        require(receiver == null || undrainedShare == null) { "one net form of the sub-grid transport at a time" }
-        val cellCount = cellsAcross * cellsDown
-        // Each cell's diffusivity on its faces across a row and on its faces down a column.
-        val acrossRowDiffusivity = DoubleArray(cellCount)
-        val downColumnDiffusivity = DoubleArray(cellCount)
-        var fastest = 0.0
-        for (cell in 0 until cellCount) {
-            if (!isLand[cell]) continue
-            var whole = rates.subGridDiffusivity * erodibility[cell] * sqrt(runoff[cell].coerceAtLeast(0f).toDouble())
-            if (undrainedShare != null) whole *= undrainedShare[cell].coerceIn(0f, 1f)
-            val alongRowShareOfFall = if (receiver != null) {
-                receiverBearingAlongRowSquared(rates, cellsAcross, cell, receiver[cell])
-            } else null
-            // The receiver's bearing squared along the row is what the face across the row loses,
-            // and its bearing down the column what the face down the column loses: I - u u^T.
-            acrossRowDiffusivity[cell] = if (alongRowShareOfFall != null) whole * (1.0 - alongRowShareOfFall) else whole
-            downColumnDiffusivity[cell] = if (alongRowShareOfFall != null) whole * alongRowShareOfFall else whole
-            if (whole > fastest) fastest = whole
-        }
-        if (fastest <= 0.0) return 0.0
-        val acrossRow = 1.0 / (rates.cellWidthMetres * rates.cellWidthMetres)
-        val downColumn = 1.0 / (rates.cellHeightMetres * rates.cellHeightMetres)
-        val steps = kotlin.math.ceil(years * fastest * (2 * acrossRow + 2 * downColumn) / 0.2).toInt().coerceAtLeast(1)
-        val dt = years / steps
-        val height = DoubleArray(cellCount) { surface[it].toDouble() }
-        val change = DoubleArray(cellCount)
-        val shore = shorelineHeight.toDouble()
-        var toSea = 0.0
-        repeat(steps) {
-            change.fill(0.0)
-            for (cell in 0 until cellCount) {
-                if (!isLand[cell]) continue
-                val row = cell / cellsAcross
-                val column = cell % cellsAcross
-                // East and south faces between land cells, each once.
-                val east = row * cellsAcross + (column + 1) % cellsAcross
-                val faces = if (row + 1 < cellsDown) 2 else 1
-                for (face in 0 until faces) {
-                    val other = if (face == 0) east else cell + cellsAcross
-                    val weight = if (face == 0) acrossRow else downColumn
-                    val faceDiffusivity = if (face == 0) acrossRowDiffusivity else downColumnDiffusivity
-                    if (isLand[other]) {
-                        val flux = 0.5 * (faceDiffusivity[cell] + faceDiffusivity[other]) * weight * dt * (height[cell] - height[other])
-                        change[cell] -= flux
-                        change[other] += flux
-                    }
-                }
-                // Every face onto the sea, from this cell's side.
-                if (height[cell] > shore) {
-                    var out = 0.0
-                    val west = row * cellsAcross + (column - 1 + cellsAcross) % cellsAcross
-                    val acrossRowRate = acrossRowDiffusivity[cell] * acrossRow * dt * (height[cell] - shore)
-                    val downColumnRate = downColumnDiffusivity[cell] * downColumn * dt * (height[cell] - shore)
-                    if (!isLand[east]) out += acrossRowRate
-                    if (!isLand[west]) out += acrossRowRate
-                    if (row > 0 && !isLand[cell - cellsAcross]) out += downColumnRate
-                    if (row + 1 < cellsDown && !isLand[cell + cellsAcross]) out += downColumnRate
-                    out = minOf(out, height[cell] - shore)
-                    change[cell] -= out
-                    toSea += out
-                }
-            }
-            for (cell in 0 until cellCount) if (isLand[cell]) height[cell] += change[cell]
-        }
-        for (cell in 0 until cellCount) if (isLand[cell]) surface[cell] = height[cell].toFloat()
-        return toSea
-    }
-
-    /**
-     * `u_x^2`, the square of the along-row component of the unit vector from [cell] to [receiver] on
-     * the ground, a cell width across a row and a row's height down a column, the world wrapping
-     * east-west; its down-column component squared is one less this. Nought, so that neither face
-     * loses anything, where the cell has no receiver.
-     */
-    private fun receiverBearingAlongRowSquared(rates: Rates, cellsAcross: Int, cell: Int, receiver: Int): Double? {
-        if (receiver < 0) return null
-        var columnStep = receiver % cellsAcross - cell % cellsAcross
-        if (columnStep > 1) columnStep -= cellsAcross
-        if (columnStep < -1) columnStep += cellsAcross
-        val rowStep = receiver / cellsAcross - cell / cellsAcross
-        val alongRowMetres = columnStep * rates.cellWidthMetres
-        val downColumnMetres = rowStep * rates.cellHeightMetres
-        return alongRowMetres * alongRowMetres / (alongRowMetres * alongRowMetres + downColumnMetres * downColumnMetres)
     }
 
     /**

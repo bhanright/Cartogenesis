@@ -194,7 +194,7 @@ object RiverStage {
         val filled = fillDepressions(cellsAcross, cellsDown, sea)
         val flowTarget = computeFlowDirections(
             cellsAcross, cellsDown, sea, filled, config.seed, config.cellHeightInCellWidths,
-            config.facetRouting, config.flatPotential, config.clampedDescentDraw
+            config.facetRouting, config.flatPotential
         )
 
         // Lakes are sized before the water is accumulated, because an endorheic basin changes the
@@ -446,11 +446,10 @@ object RiverStage {
         seed: Long,
         cellHeightInCellWidths: Double,
         byFacet: Boolean,
-        overPotential: Boolean,
-        drawInClampedDescent: Boolean
+        overPotential: Boolean
     ): IntArray = FlowRouting.flowDirections(
         width, height, sea.isLand, sea.relativeElevation, filled, seed, cellHeightInCellWidths,
-        byFacet, overPotential, drawInClampedDescent = drawInClampedDescent
+        byFacet, overPotential
     )
 
     /**

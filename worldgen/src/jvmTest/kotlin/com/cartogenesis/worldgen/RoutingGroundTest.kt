@@ -309,58 +309,6 @@ class RoutingGroundTest {
         assertTrue(failures.isEmpty(), "the flat's Laplacian: $failures")
     }
 
-    /**
-     * With `WorldGenConfig.clampedDescentDraw` on, the router's two invariants still hold: every
-     * receiver stands strictly lower on the filled surface than its cell, and following receivers
-     * from any cell reaches the sea without coming back on itself, so the network is a forest.
-     *
-     * On rough ground cut by gullies down the columns and on the diagonals, so that many cells'
-     * descent is clamped to one edge of its facet and the draw is exercised: the case also requires
-     * that the draw changed some receivers, or it would be testing the rule it replaces.
-     */
-    @Test
-    fun `the draw in clamped descent keeps every receiver lower and the network a forest`() {
-        val side = 96
-        val isLand = BooleanArray(side * side) { cell ->
-            val row = cell / side
-            val column = cell % side
-            row in 2 until side - 2 && column in 2 until side - 2
-        }
-        val ground = FloatField.of(side, side) { column, row ->
-            val rough = FlowRouting.seededNoise(column, row, 11L) * 0.02f
-            val gullyDownTheColumns = if (column % 6 == 0) 0.05f else 0f
-            val gullyOnTheDiagonal = if ((column + 2 * row) % 9 == 0) 0.03f else 0f
-            (0.2f + 0.004f * row + rough - gullyDownTheColumns - gullyOnTheDiagonal)
-        }
-        val filled = FlowRouting.fillDepressions(side, side, isLand, ground)
-        fun route(draw: Boolean) = FlowRouting.flowDirections(
-            side, side, isLand, ground, filled, config.seed, rowScale,
-            byFacet = true, overPotential = false, drawInClampedDescent = draw
-        )
-        val plain = route(draw = false)
-        val drawn = route(draw = true)
-        var changed = 0
-        var higher = 0
-        var cycles = 0
-        for (cell in 0 until side * side) {
-            if (!isLand[cell]) continue
-            val receiver = drawn[cell]
-            if (receiver != plain[cell]) changed++
-            if (receiver >= 0 && isLand[receiver] && filled.data[receiver] >= filled.data[cell]) higher++
-            var at = cell
-            var steps = 0
-            while (at >= 0 && isLand[at] && steps <= side * side) {
-                at = drawn[at]
-                steps++
-            }
-            if (steps > side * side) cycles++
-        }
-        println("ROUTING draw in clamped descent: $changed receivers changed, $higher not lower, $cycles cells on a cycle")
-        assertTrue(changed > 0, "the draw changed no receiver, so nothing here exercised it")
-        assertTrue(higher == 0, "$higher receivers stand no lower on the filled surface than their cells")
-        assertTrue(cycles == 0, "$cycles cells never reach the sea: the network is not a forest")
-    }
-
     private companion object {
         const val SIDE = 256
 

@@ -94,7 +94,16 @@ page fetches as it loads to a stated ceiling. For the second set it holds the da
 one ground and to being the application's own views taken apart, the lens's full-size world to
 being fetched only when the lens is used and to its stated weight, the relief's heights
 (`img/relief-heights.png`, the one figure that is not a WebP) to the patch and to the scale the
-page reads them at, and every world in the seed reel to the application's own link to it. It lives in `:desktop` because the web module compiles
+page reads them at, and every world in the seed reel to the application's own link to it. The
+structured data for search is held to the page's own statements: every address in it one the page
+links, its licence the repository's LICENSE. And some of it is measured in a browser: a headless
+Chrome, which the guard starts itself, finds where Chrome is installed (or where
+`CARTOGENESIS_CHROME` points) and drives over the DevTools protocol, lays the page out at every
+width from a 360 phone to a 3440 monitor and holds nothing on it to running past the screen or out
+of its box, at rest, with each download card open and with scripts off; and, under touch at 360,
+390 and 768, holds a lens pressed at the map's centre, corners and edges to standing whole on the
+screen and clear of the finger. A machine without Chrome fails those two by name; the deploy
+runner's image has it. It lives in `:desktop` because the web module compiles
 to wasm and cannot read files. It is deliberately excluded from `:desktop:test`, which has no reason
 to build 12 MB of WebAssembly and would otherwise be judging whatever an earlier run left behind.
 

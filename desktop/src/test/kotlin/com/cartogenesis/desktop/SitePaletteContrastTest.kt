@@ -119,10 +119,14 @@ class SitePaletteContrastTest {
             Triple("step and picker labels", "bone-dim", "ink"),
             Triple("play button", "brass", "ink"),
             Triple("play button, hovered", "brass", "ink-sunk"),
-            // The second set: a data frame overlay switched on, the reel's seed and its link.
-            Triple("an overlay switch, pressed", "ink", "brass"),
+            // The second set: the reel's seed and its link.
             Triple("a reel world's seed", "bone-dim", "ink"),
-            Triple("a reel world's link", "brass", "ink")
+            Triple("a reel world's link", "brass", "ink"),
+            // The data frame's checkboxes: each layer's name and the line under it, on the page.
+            Triple("a layer's name, beside its checkbox", "parchment", "ink"),
+            Triple("a layer's description", "bone-dim", "ink"),
+            // The reader's own system, marked on its download card by a tag of the brass.
+            Triple("the Your system tag", "ink", "brass")
         )
 
         /**
@@ -133,7 +137,7 @@ class SitePaletteContrastTest {
         val CARD_PAIRS: List<Triple<String, String, String>> = listOf(
             Triple("name, the + control, other pills, links", "card-ink", "card-ground"),
             Triple("summary line, instructions and notes", "card-ink-dim", "card-ground"),
-            Triple("the For your system tag, the Copy button", "card-ink", "card-chip"),
+            Triple("the + control, the Copy button", "card-ink", "card-chip"),
             Triple("the apt commands, on a card that carries commands", "card-ink", "card-well"),
             Triple("the first pill, filled", "card-ground", "card-ink")
         )
@@ -352,37 +356,80 @@ class SitePaletteContrastTest {
         return custom[name]?.let { resolve(it, custom) } ?: colour(name)
     }
 
+    /** Every innermost rule of the style sheet: its selectors, each trimmed, and its declarations. */
+    private fun rules(): List<Pair<List<String>, String>> =
+        Regex("""([^{}]+)\{([^{}]*)\}""").findAll(styleSheet).map { rule ->
+            rule.groupValues[1].split(',').map { it.trim().replace(Regex("""\s+"""), " ") } to rule.groupValues[2]
+        }.toList()
+
     /**
-     * That every download card's words meet AA on that card's own ground.
+     * That the download cards are alike, that only the reader's own system is marked, in brass,
+     * and that every word on a card meets AA on the cards' ground.
      *
-     * The cards are the one place the page sets type on grounds other than its own: Windows on
-     * brass, Linux on the lit oxblood, the browser on the sunk ink. Each card's ground and inks are
-     * read out of the card's own rule, over the defaults every card starts from, and each of
-     * [CARD_PAIRS] measured with them, so a card whose ground or dim ink moves is measured as it
-     * now is rather than as it was written here.
+     * The cards used to wear a colour each, Windows the primary button's brass and Linux the error
+     * red, and the colours meant nothing. So no card's own rule may set a ground, an ink or a
+     * background, and every card is measured on the one ground and inks every card is given, read
+     * out of the cards' rule so a change to them is measured as it is. The mark is the page's brass:
+     * a ring round the card, held to the non-text bar on the card's ground and on the page's, and a
+     * tag of the ink on the brass. The command well is measured because one card carries commands.
      */
     @Test
-    fun `every download card's words meet AA on its own ground`() {
-        val defaults = declarationsOf(".dl-card").filterKeys { it.startsWith("--card-") }.mapKeys { it.key.removePrefix("--") }
-        assertTrue(defaults.keys.containsAll(listOf("card-ground", "card-ink", "card-ink-dim", "card-chip", "card-well")),
-            "the cards no longer name their ground, inks, chip and well: ${defaults.keys}")
-        val cards = listOf("windows", "linux", "browser")
-        cards.forEach { card ->
-            val own = declarationsOf(".dl-card.$card").filterKeys { it.startsWith("--card-") }.mapKeys { it.key.removePrefix("--") }
-            val custom = defaults + own
-            // The command well is measured on the cards that have one.
-            val markup = Regex("""<div class="dl-card $card"[\s\S]*?(?=<div class="dl-card |<a class="dl-all")""").find(page)?.value
-                ?: fail("the page has no $card card")
-            val pairs = CARD_PAIRS.filter { (_, _, ground) -> ground != "card-well" || markup.contains("""class="dl-cmd""") }
-            pairs.forEach { (where, ink, ground) ->
-                val inkValue = resolve("var(--$ink)", custom)
-                val groundValue = resolve("var(--$ground)", custom)
-                checkValues("$card card, $where", "--$ink", inkValue, "--$ground", groundValue, AA)
-            }
-            // The focus ring is drawn in the card's ink.
-            checkValues("$card card, focus ring", "--card-ink", resolve("var(--card-ink)", custom),
-                "--card-ground", resolve("var(--card-ground)", custom), NON_TEXT)
+    fun `the download cards are alike, and only the reader's system is marked, in brass`() {
+        val own = rules().filter { (selectors, body) ->
+            selectors.any { Regex("""\.dl-card\.(windows|linux|browser)\b""").containsMatchIn(it) } &&
+                Regex("""--card-|background|(?<![-\w])color\s*:|box-shadow""").containsMatchIn(body)
         }
+        assertTrue(own.isEmpty(), "a download card is coloured on its own, so its colour says something: ${own.map { it.first }}")
+        val custom = declarationsOf(".dl-card").filterKeys { it.startsWith("--card-") }.mapKeys { it.key.removePrefix("--") }
+        assertTrue(custom.keys.containsAll(listOf("card-ground", "card-ink", "card-ink-dim", "card-chip", "card-well")),
+            "the cards no longer name their ground, inks, chip and well: ${custom.keys}")
+        assertTrue(page.contains("""class="dl-cmd""""), "no card carries commands, so the command well measures nothing")
+        CARD_PAIRS.forEach { (where, ink, ground) ->
+            checkValues("a card, $where", "--$ink", resolve("var(--$ink)", custom), "--$ground", resolve("var(--$ground)", custom), AA)
+        }
+        val cardGround = resolve("var(--card-ground)", custom)
+        // The focus ring is drawn in the card's ink.
+        checkValues("a card, focus ring", "--card-ink", resolve("var(--card-ink)", custom), "--card-ground", cardGround, NON_TEXT)
+
+        val ring = declarationsOf(".dl-card.yours")["box-shadow"] ?: fail("the reader's own card has no ring")
+        assertTrue(ring.contains("var(--brass)"), "the reader's own card is ringed in something other than the brass: $ring")
+        checkValues("your system's ring, on the card", "--brass", colour("brass"), "--card-ground", cardGround, NON_TEXT)
+        checkValues("your system's ring, on the page", "--brass", colour("brass"), "--ink", colour("ink"), NON_TEXT)
+        val tag = declarationsOf(".dl-tag")
+        assertEquals("var(--brass)" to "var(--ink)", tag["background"] to tag["color"], "the Your system tag is not the ink on the brass")
+    }
+
+    /**
+     * That no colour on the page stands for an error, since the page has none to show. The
+     * application's two error colours are defined, because the page's palette is the window's
+     * value for value, and used by no rule.
+     */
+    @Test
+    fun `no colour on the page stands for an error`() {
+        val errorColours = PALETTE.keys.filter { it.startsWith("oxblood") }
+        assertEquals(2, errorColours.size, "the palette's error colours are not the two oxbloods")
+        val using = rules().filter { (_, body) -> errorColours.any { body.contains("var(--$it)") } }.flatMap { it.first }
+        assertTrue(using.isEmpty(), "these rules colour something in the application's error colours: $using")
+    }
+
+    /**
+     * That the data frame's checkboxes can be seen in each of their states on the page's ground:
+     * the rim unticked and hovered, the fill ticked, the tick on the fill, and the focus ring, each
+     * read out of the checkbox's own rules.
+     */
+    @Test
+    fun `the data frame's checkboxes are seen in every state`() {
+        fun colourIn(selector: String, property: String): String {
+            val value = declarationsOf(selector)[property] ?: fail("$selector sets no $property")
+            return Regex("""var\(--([\w-]+)\)""").find(value)?.groupValues?.get(1) ?: fail("$selector's $property is not a palette colour: $value")
+        }
+        listOf(
+            Triple("a checkbox's rim, unticked", colourIn(".layer-box input", "border"), "ink"),
+            Triple("a checkbox's rim, hovered", colourIn(".layer-box input:hover", "border-color"), "ink"),
+            Triple("a checkbox's fill, ticked", colourIn(".layer-box input:checked", "background"), "ink"),
+            Triple("a checkbox's tick, on its fill", colourIn(".layer-tick", "border"), colourIn(".layer-box input:checked", "background")),
+            Triple("a checkbox's focus ring", colourIn(".layer-box input:focus-visible", "outline"), "ink")
+        ).forEach { (where, ink, ground) -> check(where, ink, ground, NON_TEXT) }
     }
 
     /**

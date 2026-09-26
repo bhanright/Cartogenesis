@@ -47,8 +47,12 @@ class SiteSourcesTest {
             fail("could not find the repository root from ${File(".").absolutePath}")
         }
 
-    /** The landing page as it is written, before assembly. */
-    private val page: String by lazy { File(repoRoot, "site/index.html").readText() }
+    /**
+     * The landing page as it is written, before assembly, with its lines ended as the repository
+     * ends them: a checkout that ends them with a carriage return as well (Git's `autocrlf` on
+     * Windows) reads the same.
+     */
+    private val page: String by lazy { File(repoRoot, "site/index.html").readText().replace("\r\n", "\n") }
 
     /**
      * That the Features list still counts the map styles the application offers.
@@ -564,7 +568,7 @@ class SiteSourcesTest {
     private val reliefScript: String by lazy { scriptBetween("---------- the ground in relief", "---------- the download cards") }
 
     /** The part of [pageScript] that works the data frame, from its heading to the lens's. */
-    private val dataFrameScript: String by lazy { scriptBetween("The data frame. Each data card", "The lens. The whole world") }
+    private val dataFrameScript: String by lazy { scriptBetween("The data frame. Each checkbox", "The lens. The whole world") }
 
     private fun scriptBetween(start: String, end: String): String {
         val from = pageScript.indexOf(start)
@@ -574,13 +578,18 @@ class SiteSourcesTest {
     }
 
     /**
-     * The one default the page may prevent: an arrow key pressed while the zoom lens has the
-     * focus, which moves the lens rather than the page. A key pressed on a focused control that
-     * the control consumes is the control's, as a range input's arrows are its own; every other key,
-     * and every wheel and touch, is left to the page.
+     * The defaults the page may prevent, all of them the zoom lens's: an arrow key pressed while
+     * the lens has the focus, which moves the lens rather than the page; and, while a finger holds
+     * the lens and only then, the touch's movement, which moves the lens rather than scrolling the
+     * page, and the long press's menu. A key pressed on a focused control that the control consumes
+     * is the control's, as a range input's arrows are its own; every other key, every wheel, and
+     * every touch that is not holding the lens is left to the page. The one listener registered as
+     * able to hold the scroll back is the lens's touch listener, and it holds back nothing unless
+     * the lens is held.
      */
-    private fun lensArrowsAreTheOnlyDefaultPrevented() {
-        assertEquals(1, Regex("""preventDefault""").findAll(page).count(), "the page prevents a default in more than the lens's arrow keys")
+    private fun onlyTheLensPreventsADefault() {
+        assertEquals(3, Regex("""preventDefault""").findAll(page).count(),
+            "the page prevents a default in more places than the lens's arrow keys, its held touch and its long press")
         val keys = Regex("""lensFrame\.addEventListener\('keydown', function \(event\) \{(.*?)\n    \}\);""", RegexOption.DOT_MATCHES_ALL)
             .find(lensScript)?.groupValues?.get(1) ?: fail("the lens has no key handler, and the page prevents a default somewhere")
         val prevented = keys.indexOf("event.preventDefault()")
@@ -589,12 +598,16 @@ class SiteSourcesTest {
             "the lens prevents a key's default without first making sure it is one of its arrow keys")
         assertTrue(Regex("""var LENS_KEYS = \{ArrowLeft: \[-1, 0\], ArrowRight: \[1, 0\], ArrowUp: \[0, -1\], ArrowDown: \[0, 1\]\};""").containsMatchIn(lensScript),
             "the lens's keys are not exactly the four arrows")
+        assertTrue(lensScript.contains("lensFrame.addEventListener('touchmove', function (event) {\n      if (held && event.cancelable) event.preventDefault();\n    }, {passive: false});"),
+            "the lens's touch listener is not the one that holds the scroll back only while the lens is held")
+        assertTrue(lensScript.contains("lensFrame.addEventListener('contextmenu', function (event) {\n      if (holding || held) event.preventDefault();\n    });"),
+            "the lens holds back a menu other than while a finger is on it")
+        assertEquals(1, Regex("""passive\s*:\s*false""").findAll(page).count(), "the page registers a listener other than the lens's held touch that may hold the scroll back")
     }
 
     @Test
     fun `the page reads the scroll and never steers it`() {
-        lensArrowsAreTheOnlyDefaultPrevented()
-        assertTrue(!Regex("""passive\s*:\s*false""").containsMatchIn(page), "the page registers a listener that may hold the scroll back")
+        onlyTheLensPreventsADefault()
         assertTrue(!Regex("""scroll-snap""").containsMatchIn(styleSheet), "the style sheet snaps the scroll")
         assertTrue(!Regex("""(^|[\s,}])(html|body)\s*\{[^}]*overflow\s*:\s*hidden""").containsMatchIn(styleSheet), "the style sheet locks the page's scroll")
 
@@ -770,36 +783,61 @@ class SiteSourcesTest {
     }
 
     /**
-     * That every layer of the data frame is switched by a real button that says whether it is
-     * pressed, one per data card and one per overlay, and that without a script the cards are as
-     * they were.
+     * That every layer of the data frame is switched by a checkbox of the browser's own, with a
+     * label of its own, and that nothing of the pressed buttons it replaced is left.
      *
-     * The four data cards become the frame's switches once a script runs: each card's heading's
-     * words move into a button that carries `aria-pressed`, which a keyboard reaches and presses
-     * like any button. So the markup holds plain headings (a reader without scripts meets no button
-     * that does nothing), the script makes the buttons and keeps `aria-pressed` in step, and every
-     * data card's picture names a layer the frame has. The two overlays are buttons in the markup,
-     * inside the frame, which stays hidden without a script.
+     * A checkbox is what a layer switch is: Tab reaches it, Space ticks it and a screen reader says
+     * whether it is ticked, all without a line of the page's script. So each layer the frame can
+     * show has exactly one `<input type="checkbox">` whose value names it, a `<label for>` naming
+     * it in words, and a description; the four with a card are named and described in their card's
+     * own words, so the two cannot come to say different things. The frame, and so every checkbox,
+     * is hidden in the markup, which leaves a reader without scripts the four cards and their
+     * pictures; with a script the cards step aside, behind the script's class. The ticks in the
+     * markup are the frame's first state, which the script lays on as the page opens, and it
+     * follows each box's own `change` from then on.
      */
     @Test
-    fun `the data frame's layers are switched by real buttons that say whether they are pressed`() {
+    fun `the data frame's layers are switched by checkboxes, each with its own label`() {
         val layers = Regex("""<img data-layer="([^"]+)"""").findAll(dataFrame).map { it.groupValues[1] }.toList()
         assertTrue(layers.size >= 4, "the data frame has ${layers.size} layers")
-        val cardLayers = Regex("""<ol class="cards layers">.*?</ol>""", RegexOption.DOT_MATCHES_ALL).find(page)?.value
-            ?.let { cards -> Regex("""src="img/layer-([a-z]+)\.webp"""").findAll(cards).map { it.groupValues[1] }.toList() }
+        val boxes = Regex("""<input\s[^>]*>""").findAll(dataFrame).map { it.value }.toList()
+        assertTrue(boxes.all { it.contains("""type="checkbox"""") }, "a layer control is not a checkbox: ${boxes.filterNot { it.contains("""type="checkbox"""") }}")
+        fun attribute(tag: String, name: String) = Regex("""\s$name="([^"]*)"""").find(tag)?.groupValues?.get(1)
+        assertEquals(layers.sorted(), boxes.map { attribute(it, "value") }.sortedBy { it }, "the frame's layers are not one checkbox each")
+        val cards = Regex("""<ol class="cards layers">.*?</ol>""", RegexOption.DOT_MATCHES_ALL).find(page)?.value
+            ?.let { row -> Regex("""<li class="card">.*?</li>""", RegexOption.DOT_MATCHES_ALL).findAll(row).map { it.value }.toList() }
             ?: fail("the page has no data cards")
-        assertEquals(4, cardLayers.size, "the page has ${cardLayers.size} data cards")
-        assertTrue(layers.containsAll(cardLayers), "a data card names a layer the frame does not have: ${cardLayers - layers.toSet()}")
-        val overlays = Regex("""<button type="button" class="control" data-toggles="([^"]+)" aria-pressed="false">""").findAll(dataFrame)
-            .map { it.groupValues[1] }.toList()
-        assertEquals(layers - cardLayers.toSet(), overlays, "the layers no card switches are not each switched by an overlay button that says it is not pressed")
-        assertTrue(Regex("""<figure class="datamap"[^>]*\shidden""").containsMatchIn(page), "the data frame shows without a script")
-        assertTrue(!Regex("""<h3>\s*<button""").containsMatchIn(page), "a card's heading is a button in the markup, which does nothing without a script")
-        listOf("document.createElement('button')", "control.type = 'button'", "control.setAttribute('aria-pressed', 'false')",
-            "control.setAttribute('aria-pressed', on ? 'true' : 'false')").forEach {
-            assertTrue(dataFrameScript.contains(it), "the data frame's script no longer does $it")
+        val cardWords = cards.associate { card ->
+            val layer = Regex("""src="img/layer-([a-z]+)\.webp"""").find(card)?.groupValues?.get(1) ?: fail("a data card has no layer picture: $card")
+            layer to (Regex("""<h3>([^<]*)</h3>""").find(card)!!.groupValues[1] to Regex("""<p>([^<]*)</p>""").find(card)!!.groupValues[1])
         }
-        println("SITE the data frame has ${layers.size} layers, ${cardLayers.size} switched by the cards and ${overlays.size} by overlay buttons")
+        assertEquals(4, cardWords.size, "the page has ${cardWords.size} data cards")
+        boxes.forEach { box ->
+            val id = attribute(box, "id") ?: fail("a layer's checkbox has no id for its label: $box")
+            val layer = attribute(box, "value")!!
+            val label = Regex("""<label for="${Regex.escape(id)}">([^<]+)</label>""").find(dataFrame)?.groupValues?.get(1)
+                ?: fail("the $layer checkbox has no label of its own")
+            val describedBy = attribute(box, "aria-describedby") ?: fail("the $layer checkbox is not described")
+            val description = Regex("""id="${Regex.escape(describedBy)}">([^<]+)<""").find(dataFrame)?.groupValues?.get(1)
+                ?: fail("the $layer checkbox is described by $describedBy, which the frame does not hold")
+            cardWords[layer]?.let { (heading, line) ->
+                assertEquals(heading, label, "the $layer checkbox is labelled otherwise than its card is headed")
+                assertEquals(line, description, "the $layer checkbox is described otherwise than its card")
+            }
+            assertEquals("off", attribute(box, "autocomplete"), "the $layer checkbox may come back ticked from an earlier visit, unlike the frame")
+        }
+        assertTrue(cardWords.keys.all { it in layers }, "a data card names a layer the frame does not have")
+        listOf("aria-pressed", "data-toggles", "layer-toggle", "<button").forEach {
+            assertTrue(!dataFrame.contains(it) && !dataFrameScript.contains(it), "the data frame still carries $it from the buttons the checkboxes replaced")
+        }
+        assertTrue(!styleSheet.contains("layer-toggle") && !styleSheet.contains("datamap-overlays"), "the style sheet still styles the buttons the checkboxes replaced")
+        assertTrue(Regex("""<figure class="datamap"[^>]*\shidden""").containsMatchIn(page), "the data frame and its checkboxes show without a script")
+        assertTrue(rules(styleSheet).any { (selectors, body) -> ".live .layer-cards" in selectors && body.contains("display:none") },
+            "the data cards do not step aside for the frame once a script runs")
+        listOf("addEventListener('change', function () { showLayer(box); })", "layerBoxes.forEach(showLayer)", "if (!box.checked)").forEach {
+            assertTrue(dataFrameScript.contains(it), "the data frame no longer follows its checkboxes: it lacks $it")
+        }
+        println("SITE the data frame's ${layers.size} layers are ${boxes.size} checkboxes, each labelled, ${cardWords.size} in their card's words")
     }
 
     /**
@@ -823,6 +861,110 @@ class SiteSourcesTest {
             assertTrue(lensScript.contains(it), "the lens no longer answers $it")
         }
         println("SITE the lens answers pointer, touch and keys and fetches $full on first use")
+    }
+
+    /**
+     * That a finger resting on the lens's map keeps its press for the lens, and a finger passing
+     * over it does not.
+     *
+     * A hold and a swipe are told apart by time and distance: a finger that rests for the hold
+     * without wandering further than a few pixels is a hold, and one that moves further first is a
+     * swipe, which the page scrolls for as anywhere else, since the map lets vertical pans (and
+     * pinches) through to the browser. Only while a finger is down on the map is the frame
+     * `pressed`, which alone turns off the long-press callout and text selection, and only while
+     * the lens is held does its touch listener hold the scroll back and its menu listener the
+     * long-press menu (the listeners themselves are held to that in the scroll guard above). Held,
+     * the lens is placed on the screen rather than in its clipping frame.
+     */
+    @Test
+    fun `the lens keeps a press only while a finger holds it`() {
+        val frameRules = rules(styleSheet).filter { (selectors, _) -> selectors.any { it.startsWith(".live .lens-frame") } }
+        val touchAction = frameRules.firstNotNullOfOrNull { (_, body) -> Regex("""touch-action\s*:\s*([^;}]+)""").find(body)?.groupValues?.get(1)?.trim() }
+            ?: fail("the lens's frame says nothing of how a touch on it is taken")
+        assertEquals(setOf("pan-y", "pinch-zoom"), touchAction.split(Regex("""\s+""")).toSet(),
+            "the lens's frame does not let a vertical swipe scroll the page and a pinch zoom it, and nothing more: $touchAction")
+        val keeping = listOf("-webkit-touch-callout\\s*:\\s*none", "(?<![-\\w])user-select\\s*:\\s*none", "-webkit-user-select\\s*:\\s*none")
+        rules(styleSheet).forEach { (selectors, body) ->
+            keeping.forEach { declaration ->
+                if (Regex(declaration).containsMatchIn(body)) {
+                    assertTrue(selectors.all { it == ".live .lens-frame.pressed" },
+                        "$selectors turn off the callout or selection other than while a finger is on the lens's map")
+                }
+            }
+        }
+        val pressed = rules(styleSheet).firstOrNull { (selectors, _) -> ".live .lens-frame.pressed" in selectors }?.second
+            ?: fail("nothing keeps the long press's callout and selection off while a finger is on the lens")
+        keeping.forEach { assertTrue(Regex(it).containsMatchIn(pressed), "a finger on the lens's map can still bring up what $it keeps off") }
+        assertTrue(lensScript.contains("lensFrame.classList.add('pressed');") && lensScript.contains("lensFrame.classList.remove('pressed');"),
+            "the frame is never marked pressed, or never unmarked")
+        assertTrue(Regex("""Math\.hypot\(point\.x - holding\.x, point\.y - holding\.y\) > HOLD_WANDER_PX""").containsMatchIn(lensScript) &&
+            Regex("""var LENS_HOLD_MS = \d+, HOLD_WANDER_PX = \d+;""").containsMatchIn(lensScript),
+            "a hold is no longer told from a swipe by how long and how far the finger rests")
+        assertTrue(rules(styleSheet).any { (selectors, body) -> ".live .lens-glass.held" in selectors && body.contains("position:fixed") },
+            "the held lens is not placed on the screen, so the map's frame clips it")
+        println("SITE the lens keeps a press only while held: touch-action $touchAction, callout and selection off only while pressed")
+    }
+
+    /**
+     * That a style picked in the slider crossfades in, by the browser's view transition where it
+     * has one and the page's own opacity fade where it does not, and is simply made for a reader
+     * who asked for less motion, or while the frame is off the screen.
+     *
+     * The crossfade is one function every picker's change goes through, the keyboard's as the
+     * pointer's, and its first line is the instant path. The fallback fades a copy of the old
+     * picture out over the new by a rule scoped to the script's class, stilled in the reduced-motion
+     * block; the view transition animates only the two sides of the frame, never the rest of the
+     * page, and is stilled there too.
+     */
+    @Test
+    fun `a picked style crossfades, and is made at once for less motion`() {
+        val compareScript = scriptBetween("Any two styles, compared.", "The data frame. Each checkbox")
+        val crossfade = Regex("""var crossfade = function \(picture, change\) \{(.*?)\n    \};""", RegexOption.DOT_MATCHES_ALL)
+            .find(compareScript)?.groupValues?.get(1) ?: fail("the slider has no crossfade")
+        val lines = crossfade.trim().lines().map { it.trim() }
+        assertEquals("if (lessMotion.matches || !compareInView) { change(); return; }", lines.first(),
+            "the crossfade does not first make the change at once for a reader who asked for less motion, or off the screen")
+        assertTrue(lines[1] == "if (document.startViewTransition) { document.startViewTransition(change); return; }",
+            "the crossfade does not use the browser's view transition where there is one")
+        assertTrue(crossfade.contains("fading.classList.add('compare-fading');") && crossfade.contains("fading.classList.add('faded');"),
+            "the crossfade has no fade of its own where the browser has no view transition")
+        val onChange = Regex("""picker\.addEventListener\('change', function \(\) \{(.*?)\n      \}\);""", RegexOption.DOT_MATCHES_ALL)
+            .find(compareScript)?.groupValues?.get(1) ?: fail("the slider's pickers answer no change")
+        assertTrue(onChange.contains("crossfade(picture, function () {") && !onChange.replace(Regex("""crossfade\(picture, function \(\) \{.*""", RegexOption.DOT_MATCHES_ALL), "").contains("picture.src"),
+            "a picker's change puts its picture up other than through the crossfade")
+        assertTrue(!compareScript.contains("requestAnimationFrame"), "the slider asks for frames of its own")
+        assertTrue(rules(styleSheet).any { (selectors, body) -> ".live .compare-fading.faded" in selectors && Regex("""opacity\s*:\s*0(?![.\d])""").containsMatchIn(body) },
+            "the fallback's fade is not an opacity rule behind the script's class")
+        val stilled = rules(reducedMotionRules).flatMap { (selectors, body) -> selectors.map { it to body } }
+        assertTrue(stilled.any { (selector, body) -> selector == ".live .compare-fading" && body.contains("transition:none") },
+            "the fallback's fade is not stilled for a reader who asks for less motion")
+        listOf("::view-transition-group(*)", "::view-transition-old(*)", "::view-transition-new(*)").forEach { pseudo ->
+            assertTrue(stilled.any { (selector, body) -> selector == pseudo && body.contains("animation:none") },
+                "$pseudo is not stilled for a reader who asks for less motion")
+        }
+        val named = rules(styleSheet).filter { (_, body) -> body.contains("view-transition-name") }.flatMap { it.first }
+        assertEquals(setOf(".compare-over", ".compare-right"), named.toSet(), "the view transition captures something other than the slider's two sides")
+        assertTrue(rules(styleSheet).any { (selectors, body) -> selectors.containsAll(listOf("::view-transition-old(root)", "::view-transition-new(root)")) && body.contains("animation:none") },
+            "the view transition animates the whole page, not only the slider")
+        println("SITE a picked style crossfades by view transition or the page's own fade, and is made at once for less motion")
+    }
+
+    /**
+     * That no constant is declared twice in the page's script.
+     *
+     * The script is one function, and a `var` is the function's however deep in a block it is
+     * written, so a second declaration of a name is the same variable given a second value. That
+     * happened: the lens's hold of 280 ms took the title card's name, HOLD_MS, and from the moment
+     * the lens's block ran the card stood 0.28 s instead of 2.5 (Site 5c measured it, 1,590 ms from
+     * the map shown to the card gone where the design is 3,800).
+     */
+    @Test
+    fun `no constant is declared twice in the page's script`() {
+        val declared = Regex("""(?:\bvar\s+|,\s*)([A-Z][A-Z0-9_]{2,})\s*=""").findAll(pageScript).map { it.groupValues[1] }.toList()
+        assertTrue(declared.size > 10, "the script declares ${declared.size} constants; this read nothing")
+        val twice = declared.groupingBy { it }.eachCount().filterValues { it > 1 }.keys
+        assertTrue(twice.isEmpty(), "the page's script declares $twice more than once, and a var is the whole script's")
+        println("SITE the page's script declares ${declared.size} constants, each once")
     }
 
     /**

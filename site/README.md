@@ -7,18 +7,17 @@ site/
   index.html    the description page, served at /
   app/
     index.html  the loading shell, served at /app/ — see "What the shell depends on"
+  fonts/        the page's five typefaces as WOFF2, and the script that cuts them — see below
   _headers      Cloudflare Pages response headers
   _redirects    Cloudflare Pages redirects
 ```
 
-That is the whole of it: two pages and two host files. Four things the site serves are *not* in
+That is the whole of it: two pages, the page's typefaces and two host files. Four things the site serves are *not* in
 here, because keeping a second copy of any of them is how a copy goes stale:
 
 - **The application**, built from `:web` and dropped in under `app/` at assembly time.
-- **The typefaces**, under `fonts/`. The five faces the page sets its type in are copied out of
-  `ui/src/commonMain/composeResources/font`, which is where the application keeps them, so the
-  page and the app cannot drift on to different cuts of Spectral. (The sixth bundled face, Plex
-  Mono bold, is not copied: the page never asks for it.)
+- **The typefaces' licences**, copied into `fonts/` from `ui/licences`, which is where the
+  application keeps them.
 - **Every picture**, under `img/`. There are no image files in this folder at all. They are
   rendered from the engine at assembly time by `:desktop:renderSiteImagery` — seed 718106 at 2048
   with the author's settings, cut to fixed windows — so a release that changes what a coastline looks
@@ -27,6 +26,22 @@ here, because keeping a second copy of any of them is how a copy goes stale:
 - **Any version number or file size.** The download cards link each file to `/releases/latest`,
   and the page's script asks GitHub's API for the latest release once a visit and turns each link
   into the file itself with its size; if the API refuses or fails, the links stay as they are.
+
+The typefaces themselves are here, under `fonts/`, as WOFF2: the five faces the page sets its type
+in, cut from the application's own TrueType files in `ui/src/commonMain/composeResources/font` to
+the characters a Latin-script page uses. As TrueType the five are 1,093,056 bytes, which was most of
+what the page fetched as it loaded; cut and compressed they are 149,456. `fonts/build_web_fonts.py`
+makes them (it needs `pip install fonttools brotli`) and writes `fonts/faces.json`, the record of
+which application file each was cut from and which characters it keeps; neither of those two is
+published. `SiteFontsTest`, in the ordinary `:desktop:test` tier, fails when an application face
+changes and the script has not been run again, and when the page or the roadmap uses a character a
+subset dropped, so the page still cannot drift on to a different cut of Spectral than the app's.
+(The sixth bundled face, Plex Mono bold, is not cut: the page never asks for it.)
+
+The two IBM Plex faces are published as Cartogenesis Sans and Cartogenesis Mono. A subset is a
+Modified Version under the SIL Open Font License, and IBM Plex reserves the name "Plex", which a
+Modified Version may not carry without IBM's written permission. Spectral reserves no name and keeps
+its own.
 
 ## Assembling it
 

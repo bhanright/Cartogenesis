@@ -335,6 +335,12 @@ tasks.withType<Test>().configureEach {
     ).withPropertyName("documentsReadByTheSiteSourcesTest")
         .withPathSensitivity(PathSensitivity.RELATIVE)
 
+    // `SiteFontsTest` holds the page's web fonts to the application's faces they were cut from,
+    // read by path rather than off the classpath: the same trap, the same declaration.
+    inputs.files(rootProject.fileTree("ui/src/commonMain/composeResources/font"))
+        .withPropertyName("applicationFacesReadByTheSiteFontsTest")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+
     // `FolderInteropTest` reads the desktop's save that the browser's tests open, from `:web`'s
     // test sources: the same trap, the same declaration.
     inputs.files(rootProject.fileTree("web/src/wasmJsTest/kotlin"))

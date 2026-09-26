@@ -140,21 +140,6 @@ fun engineDownloadMegabytes(appDirectory: File): String {
     return "${tenthsOfAMegabyte / 10}.${tenthsOfAMegabyte % 10}"
 }
 
-/**
- * The five faces the landing page sets its type in, taken from the application's own resources.
- *
- * The sixth bundled face, Plex Mono bold, is not here: the page never asks for it, and 154 KB of
- * a weight nothing draws a glyph of is 154 KB. The page's `@font-face` rules name these files, so
- * `SiteAssemblyTest` checks that both lists still agree.
- */
-val siteFontFiles = listOf(
-    "spectral_regular.ttf",
-    "spectral_semibold.ttf",
-    "plex_sans_regular.ttf",
-    "plex_sans_medium.ttf",
-    "plex_mono_regular.ttf"
-)
-
 /** Where `:desktop:renderSiteImagery` leaves the figures the page shows. */
 val siteImagery = rootProject.layout.projectDirectory.dir("web/build/site-imagery")
 
@@ -272,6 +257,10 @@ tasks.register<Sync>("assembleSite") {
         // every :desktop: test task declares site/ as an input, so the deploy builds it straight
         // into the assembled tree after this task has run. See docs/DEPLOYMENT.md.
         exclude("downloads.txt")
+        // The web fonts' generator and its record of what each was cut from, which SiteFontsTest
+        // reads: the fonts are published, these two are not.
+        exclude("fonts/build_web_fonts.py")
+        exclude("fonts/faces.json")
         exclude("apt/.gitignore")
         exclude("apt/conf/**")
 
@@ -290,12 +279,11 @@ tasks.register<Sync>("assembleSite") {
         }
     }
 
-    // The page's typefaces, copied rather than committed a second time: the repository keeps one
-    // copy of each face, under ui/, and the site is assembled from it.
+    // The page's typefaces are site/fonts/*.woff2, cut from the application's own faces by
+    // site/fonts/build_web_fonts.py and copied with the rest of site/. Their licences are the
+    // application's, published beside them as the SIL Open Font License asks.
     into("fonts") {
-        from(rootProject.layout.projectDirectory.dir("ui/src/commonMain/composeResources/font")) {
-            siteFontFiles.forEach { include(it) }
-        }
+        from(rootProject.layout.projectDirectory.dir("ui/licences")) { include("OFL-*.txt") }
     }
 
     // The figures, and the relief's heights, which are a PNG because they must arrive without

@@ -88,11 +88,18 @@ class SiteAssemblyTest {
          * Site 6, the new ones all being lazy and further down the page than the distance a lazy
          * picture is fetched ahead (docs/DESIGN_LEDGER.md, Site 5b). Site 5a's page fetched
          * 1,432,079 by the same count.
+         *
+         * Lowered by what the page's faces lost when they became WOFF2 cut to its characters
+         * ([FACES_MADE_WOFF2_BYTES]), so the headroom each screen had stays what it was and the
+         * faces cannot grow back unnoticed.
          */
         val LOAD_BYTES: Map<String, Long> = mapOf(
-            "narrow at one device pixel" to 1_409_962L + 65_536L,
-            "wide or dense" to 1_607_408L + 65_536L
+            "narrow at one device pixel" to 1_409_962L - FACES_MADE_WOFF2_BYTES + 65_536L,
+            "wide or dense" to 1_607_408L - FACES_MADE_WOFF2_BYTES + 65_536L
         )
+
+        /** What the five faces weighed as TrueType, less what they weigh as the page's WOFF2. */
+        const val FACES_MADE_WOFF2_BYTES = 1_093_056L - 149_456L
     }
 
     /** A picture decoded through Skia as unpremultiplied ARGB, row after row. */
@@ -547,8 +554,8 @@ class SiteAssemblyTest {
      */
     private val fetchedAtLoad: Map<String, List<String>> by lazy {
         val always = listOf(
-            "fonts/spectral_regular.ttf", "fonts/spectral_semibold.ttf", "fonts/plex_sans_regular.ttf",
-            "fonts/plex_sans_medium.ttf", "fonts/plex_mono_regular.ttf"
+            "fonts/spectral_regular.woff2", "fonts/spectral_semibold.woff2", "fonts/plex_sans_regular.woff2",
+            "fonts/plex_sans_medium.woff2", "fonts/plex_mono_regular.woff2"
         ) + SiteImagery.STEP_CARDS.map { "img/${it.file}" }
         mapOf(
             "narrow at one device pixel" to always + "img/${SiteImagery.WORLD_BAND_HALF.file}",
@@ -1052,29 +1059,37 @@ class SiteAssemblyTest {
     @Test
     fun `the five typefaces are published and none is fetched from anywhere else`() {
         val faces = listOf(
-            "spectral_regular.ttf",
-            "spectral_semibold.ttf",
-            "plex_sans_regular.ttf",
-            "plex_sans_medium.ttf",
-            "plex_mono_regular.ttf"
+            "spectral_regular.woff2",
+            "spectral_semibold.woff2",
+            "plex_sans_regular.woff2",
+            "plex_sans_medium.woff2",
+            "plex_mono_regular.woff2"
         )
         val page = file("index.html").readText()
         faces.forEach { face ->
             val font = file("fonts/$face")
             assertTrue(
-                font.length() > 50_000,
-                "fonts/$face is only ${font.length()} bytes — that is not a TrueType face"
+                font.length() > 10_000,
+                "fonts/$face is only ${font.length()} bytes — that is not a face"
             )
-            // 0x00010000 is the TrueType outline version tag. Anything else here means the file
-            // was copied through a text filter, which is silent and fatal.
+            // "wOF2" is the WOFF2 signature. Anything else here means the file was copied through
+            // a text filter, which is silent and fatal.
             assertEquals(
-                listOf(0, 1, 0, 0), font.readBytes().take(4).map { it.toInt() and 0xFF },
-                "fonts/$face does not begin with the TrueType version tag"
+                "wOF2".map { it.code }, font.readBytes().take(4).map { it.toInt() and 0xFF },
+                "fonts/$face does not begin with the WOFF2 signature"
             )
             assertTrue(
                 page.contains("fonts/$face"),
                 "fonts/$face is published but no @font-face rule asks for it"
             )
+        }
+        // A subset is a Modified Version under the SIL Open Font License, which travels with it.
+        listOf("OFL-Spectral.txt", "OFL-IBMPlexSans.txt", "OFL-IBMPlexMono.txt").forEach { licence ->
+            assertTrue(File(site, "fonts/$licence").isFile, "fonts/$licence is not published beside the faces")
+        }
+        // The generator and its record are the repository's, not the site's.
+        listOf("build_web_fonts.py", "faces.json").forEach { tool ->
+            assertFalse(File(site, "fonts/$tool").exists(), "fonts/$tool is published, and is not part of the site")
         }
 
         // The point of self-hosting: a page that asks a font host for a typeface tells that host

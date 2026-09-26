@@ -22,6 +22,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.unit.dp
 
 /**
@@ -552,5 +554,41 @@ internal fun SaveAsDialog(initial: String, onDismiss: () -> Unit, onConfirm: (St
             ) { Text("Save") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
+}
+
+/**
+ * [LargeLinks]' question: a link names a world [linkSize] across, above the [defaultSize] this
+ * host starts at, and nothing is made until the reader picks one of the two sizes.
+ *
+ * There is no third way out. Pressing outside the dialog or Escape does nothing, because either
+ * would have to mean one of the two answers and neither is safe to assume: a reader who followed a
+ * link asked for a world, and closing the question on no world at all would leave a blank window
+ * with nothing saying why the link did nothing. The smaller answer holds the focus when the dialog opens, so
+ * Enter takes the quick one and Tab reaches the other; both are ordinary buttons with their sizes
+ * in their names.
+ */
+@Composable
+internal fun LargeLinkDialog(
+    question: String,
+    linkSize: Int,
+    defaultSize: Int,
+    onMakeIt: () -> Unit,
+    onAtDefault: () -> Unit
+) {
+    val atDefaultFocus = remember { FocusRequester() }
+    AlertDialog(
+        onDismissRequest = {},
+        title = { Text("A large world") },
+        text = { Text(question, style = MaterialTheme.typography.bodyMedium) },
+        confirmButton = {
+            TextButton(onClick = onMakeIt) { Text(LargeLinks.makeItLabel(linkSize)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onAtDefault, modifier = Modifier.focusRequester(atDefaultFocus)) {
+                Text(LargeLinks.atDefaultLabel(defaultSize))
+            }
+            LaunchedEffect(atDefaultFocus) { atDefaultFocus.requestFocus() }
+        }
     )
 }

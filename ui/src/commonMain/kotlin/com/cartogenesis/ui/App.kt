@@ -237,12 +237,26 @@ private fun Application(
      * world rather than on a fresh seed. Read once, when the window first composes, and applied
      * over what the window would have started with, so a link says only what differs from it.
      */
+    val linkStarting = remember { SettingsEffects.startingConfig(settings, platform, freshSeed(), compact) }
+    val linkStartingOptions = remember { SettingsEffects.startingRenderOptions(settings) }
     val opening = remember {
         WorldLinks.read(
             address = platform.openedAt,
-            starting = SettingsEffects.startingConfig(settings, platform, freshSeed(), compact),
-            startingOptions = SettingsEffects.startingRenderOptions(settings),
+            starting = linkStarting,
+            startingOptions = linkStartingOptions,
             ceiling = generationCeiling
+        )
+    }
+    /**
+     * The question a link larger than this host's starting size asks before anything is made, or
+     * null when there is none to ask — see [LargeLinks]. Worded once, for the arrangement the window
+     * opened in, since the figure is about the machine the window opened on.
+     */
+    var largeLinkQuestion by remember {
+        mutableStateOf(
+            opening.linkedSize?.takeIf { LargeLinks.asks(opening, platform.defaultResolution) }?.let { size ->
+                LargeLinks.question(size, platform.defaultResolution, GenerationHost.of(platform, compact))
+            }
         )
     }
     var config by remember { mutableStateOf(opening.config) }
@@ -367,8 +381,11 @@ private fun Application(
     // Nothing generates until this is armed - by Go, New world, or Generate. Opening a save from
     // the library arms it too, since a world is then on screen and later edits should live-update
     // it exactly as if it had been generated here.
-    // A link is the reader asking for a world by name, so a window opened at one is armed already.
-    val gate = remember { GenerationGate().also { if (opening.generates) it.request() } }
+    // A link is the reader asking for a world by name, so a window opened at one is armed already -
+    // unless it names a large world, which waits for the reader's answer to [LargeLinkDialog].
+    val gate = remember {
+        GenerationGate().also { if (opening.generates && largeLinkQuestion == null) it.request() }
+    }
     // Which of the panel's sections are unrolled. Remembered here rather than inside the panel so
     // that a trip to the atlas or the library and back does not roll them all up again.
     val sections = remember { SectionState() }
@@ -851,6 +868,34 @@ private fun Application(
             onDismiss = { showSettings = false },
             libraryLocation =
                 if (places.offersFolders) places.location else SettingsEffects.libraryLocation(settings, platform)
+        )
+    }
+
+    largeLinkQuestion?.let { question ->
+        val linkSize = opening.linkedSize ?: return@let
+        LargeLinkDialog(
+            question = question,
+            linkSize = linkSize,
+            defaultSize = platform.defaultResolution,
+            onMakeIt = {
+                largeLinkQuestion = null
+                gate.request()
+            },
+            onAtDefault = {
+                // Read again at the default size rather than the link's world scaled down, so every
+                // other pair reaches the world by the same path it would have at the link's size.
+                val atDefault = WorldLinks.readAtSize(
+                    platform.openedAt, linkStarting, linkStartingOptions, generationCeiling,
+                    size = platform.defaultResolution
+                )
+                config = atDefault.config
+                options = atDefault.options
+                // The link's line said what the link's size came to; this world is at another.
+                status = listOfNotNull(launchNotice.ifBlank { null }, atDefault.notice).joinToString(" ")
+                linkNoticeAfterGenerating = atDefault.notice
+                largeLinkQuestion = null
+                gate.request()
+            }
         )
     }
 

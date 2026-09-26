@@ -592,8 +592,9 @@ class GlaciationTest : BorrowsSharedWorlds() {
         // instead of stopping at the first that is over. On the implicit update before the uplift
         // was re-derived on it the ice added 5.00% and 3.18% on seeds 718106 and 7, a comb; with the
         // re-derived uplift it was inside the bar again (docs/DESIGN_LEDGER.md, Fix 3b). Recorded
-        // since the lake falls with its outlet: see [LAKE_FALLS_INTO_BARS].
-        KnownFailures.expect(LAKE_FALLS_INTO_BARS, "42 at 2.48%") {
+        // since the lake falls with its outlet: see [LAKE_FALLS_INTO_BARS]. Re-recorded from 2.48% on
+        // merging chunk 6, whose water balance moves which basins stand full.
+        KnownFailures.expect(LAKE_FALLS_INTO_BARS, "42 at 2.50%") {
             if (over.isNotEmpty()) {
                 throw RecordedViolation(
                     "the ice puts ${ICE_COMB_BAR * 100}% or more of these worlds' standing water into thin" +

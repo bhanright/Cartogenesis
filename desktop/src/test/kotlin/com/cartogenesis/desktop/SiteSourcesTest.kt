@@ -452,6 +452,15 @@ class SiteSourcesTest {
     private val stillProperties = setOf("color", "background-color", "border-color", "visibility")
 
     /**
+     * The properties of a drawing a transition may change besides opacity and transform: how much
+     * of a stroke is drawn and what a shape is filled with. Both are paint inside an icon of fixed
+     * size (the data frame's round toggles), so they move nothing else; they move the drawing,
+     * though, so a rule that changes them is stilled for less motion like one that moves by
+     * transform.
+     */
+    private val drawingProperties = setOf("stroke-dashoffset", "fill")
+
+    /**
      * The one animation allowed more than opacity and transform: the title card's letters, struck
      * one by one, change their colour and their glow and nothing else. Neither moves anything.
      */
@@ -475,9 +484,9 @@ class SiteSourcesTest {
             Regex("""transition\s*:\s*([^;}]+)""").find(body)?.groupValues?.get(1)?.let { value ->
                 if (value.trim() == "none") return@let
                 val properties = value.split(',').map { it.trim().substringBefore(' ') }
-                val strangers = properties - stillProperties - setOf("opacity", "transform")
+                val strangers = properties - stillProperties - drawingProperties - setOf("opacity", "transform")
                 assertTrue(strangers.isEmpty(), "$selectors transition $strangers, which moves the layout or is not ours to move")
-                if (properties.any { it == "opacity" || it == "transform" }) selectors.forEach { moving[it] = "transition" }
+                if (properties.any { it == "opacity" || it == "transform" || it in drawingProperties }) selectors.forEach { moving[it] = "transition" }
             }
             if (Regex("""(^|[;\s])animation\s*:""").containsMatchIn(body) && !body.contains(Regex("""animation\s*:\s*none"""))) {
                 selectors.forEach { moving[it] = "animation" }
@@ -815,7 +824,8 @@ class SiteSourcesTest {
         boxes.forEach { box ->
             val id = attribute(box, "id") ?: fail("a layer's checkbox has no id for its label: $box")
             val layer = attribute(box, "value")!!
-            val label = Regex("""<label for="${Regex.escape(id)}">([^<]+)</label>""").find(dataFrame)?.groupValues?.get(1)
+            val label = Regex("""<label\s[^>]*for="${Regex.escape(id)}"[^>]*>(.*?)</label>""", RegexOption.DOT_MATCHES_ALL).find(dataFrame)
+                ?.groupValues?.get(1)?.replace(Regex("""<clipPath.*?</clipPath>|<[^>]+>""", RegexOption.DOT_MATCHES_ALL), "")?.trim()
                 ?: fail("the $layer checkbox has no label of its own")
             val describedBy = attribute(box, "aria-describedby") ?: fail("the $layer checkbox is not described")
             val description = Regex("""id="${Regex.escape(describedBy)}">([^<]+)<""").find(dataFrame)?.groupValues?.get(1)
@@ -861,6 +871,59 @@ class SiteSourcesTest {
             assertTrue(lensScript.contains(it), "the lens no longer answers $it")
         }
         println("SITE the lens answers pointer, touch and keys and fetches $full on first use")
+    }
+
+    /**
+     * That each of the data frame's layers is turned on and off by a round toggle drawn over its
+     * native checkbox, and that every toggle's drawing changes at once for a reader who asks for
+     * less motion.
+     *
+     * The checkbox stays the control: in the page, out of sight by a clip rather than by
+     * `display: none`, `visibility: hidden` or no opacity, any of which would take it off the
+     * keyboard or out of what a screen reader reads; its label holds the toggle, whose round is
+     * hidden from a screen reader so the label reads as the layer's name; and the round takes the
+     * brass focus ring when the checkbox has the keyboard's focus. Each toggle has a drawing of its
+     * own, some part of which a rule changes when its checkbox is ticked, and every rule that
+     * animates a part of a drawing is stilled in the reduced-motion block.
+     */
+    @Test
+    fun `each layer's round toggle is its native checkbox's label and changes at once for less motion`() {
+        val choices = Regex("""<div class="layer-choice">(.*?)</div>""", RegexOption.DOT_MATCHES_ALL).findAll(dataFrame).map { it.groupValues[1] }.toList()
+        assertTrue(choices.size >= 5, "the data frame has ${choices.size} layer toggles")
+        val sheet = rules(styleSheet)
+        val hidingInput = sheet.filter { (selectors, _) -> selectors.any { it.split(Regex("""[\s>+~]+""")).last().contains(".layer-input") && !it.contains(":") } }
+        assertTrue(hidingInput.isNotEmpty(), "nothing hides the layers' checkboxes from the eye")
+        hidingInput.forEach { (selectors, body) ->
+            assertTrue(!Regex("""display\s*:\s*none|visibility\s*:\s*hidden|opacity\s*:\s*0(?![.\d])""").containsMatchIn(body),
+                "$selectors takes the layers' checkboxes off the keyboard as well as out of sight: $body")
+        }
+        assertTrue(hidingInput.any { (_, body) -> body.contains("clip-path:inset(50%)") }, "the layers' checkboxes are not clipped out of sight")
+        assertTrue(sheet.any { (selectors, body) -> ".layer-input:focus-visible + .layer-switch .layer-round" in selectors && body.contains("outline:2px solid var(--brass)") },
+            "a toggle does not show the focus ring when its checkbox has the keyboard's focus")
+        val drawingClasses = mutableSetOf<String>()
+        choices.forEach { choice ->
+            val input = Regex("""<input\s[^>]*>""").find(choice)?.value ?: fail("a layer toggle has no checkbox: $choice")
+            assertTrue(input.contains("""type="checkbox"""") && input.contains("""class="layer-input""""), "a layer toggle's control is not its native checkbox: $input")
+            val id = Regex("""\sid="([^"]+)"""").find(input)!!.groupValues[1]
+            val label = Regex("""<label class="layer-switch" for="${Regex.escape(id)}">(.*?)</label>""", RegexOption.DOT_MATCHES_ALL).find(choice)?.groupValues?.get(1)
+                ?: fail("the $id checkbox's label is not its round toggle")
+            assertTrue(choice.indexOf(input) < choice.indexOf("<label"), "the $id checkbox does not come before its toggle, which its ticked rules follow")
+            assertTrue(Regex("""<span class="layer-round" aria-hidden="true"><svg class="layer-icon"""").containsMatchIn(label), "the $id toggle has no drawing, or reads it aloud")
+            val parts = Regex("""class="([^"]+)"""").findAll(Regex("""<svg.*?</svg>""", RegexOption.DOT_MATCHES_ALL).find(label)!!.value)
+                .flatMap { it.groupValues[1].split(' ') }.filter { it != "layer-icon" }.toSet()
+            val changing = parts.filter { part -> sheet.any { (selectors, _) -> selectors.any { it.startsWith(".layer-input:checked + .layer-switch .$part") } } }
+            assertTrue(changing.isNotEmpty(), "nothing in the $id toggle's drawing changes when it is ticked")
+            drawingClasses += changing
+        }
+        val stilled = rules(reducedMotionRules).filter { (_, body) -> body.contains("transition:none") }.flatMap { it.first }.toSet()
+        val animated = sheet.filter { (selectors, body) ->
+            Regex("""transition\s*:\s*(?!none)""").containsMatchIn(body) &&
+                selectors.any { selector -> selector == ".layer-round" || drawingClasses.any { selector == ".$it" } }
+        }.flatMap { it.first }
+        assertTrue(animated.size > drawingClasses.size / 2, "the toggles' drawings do not animate; this checked nothing")
+        val unstilled = animated.filter { it !in stilled }
+        assertTrue(unstilled.isEmpty(), "these toggle parts still animate for a reader who asks for less motion: $unstilled")
+        println("SITE ${choices.size} layer toggles over native checkboxes; ${drawingClasses.size} drawing parts change when ticked, ${animated.size} animate, all stilled for less motion")
     }
 
     /**

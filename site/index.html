@@ -213,17 +213,18 @@
      by. */
   .opening{position:relative;z-index:0;background:var(--ink)}
   .opening-stage{padding:clamp(8px,6vh,48px) 0 40px}
-  /* The panel is the ink at 97%, so the map can only just be seen passing
-     behind it as it rises. 97 is not a look: it is the least whole percent at
-     which no word on the panel, read over the brightest pixel the band holds
-     (pure white ice), falls below the WCAG level it reaches on the solid ink.
-     SitePaletteContrastTest measures it and holds the page to it; the brass
-     eyebrow, at 7.63:1 on the ink and 7.13 at 97% over white, is the pair that
-     sets it, since at 96% it drops under AAA's 7. */
+  /* The panel is the ink at 84%, so the map shows through it as it rises: the
+     maintainer's choice of four tried over the band (97, 92, 88 and 84). The
+     rule it keeps is AA: every word on the panel, read through it over the
+     brightest pixel the band can hold (pure white), stays at or above WCAG AA
+     for its size. The brass eyebrow sets the floor, 4.72:1 at 84% over white
+     against AA's 4.5; it would still pass at 83 (4.58) and falls below at 82
+     (4.42). SitePaletteContrastTest measures it over white and SiteAssemblyTest
+     over the brightest pixel of the band the page ships. */
   .opening-panel{
     display:flex;flex-direction:column;align-items:center;text-align:center;
     padding:clamp(22px,4vh,40px) var(--gutter) clamp(18px,3vh,32px);
-    background:color-mix(in srgb,var(--ink) 97%,transparent);
+    background:color-mix(in srgb,var(--ink) 84%,transparent);
   }
   .eyebrow{
     font-family:var(--mono);font-size:12px;line-height:1;letter-spacing:.2em;text-transform:uppercase;
@@ -625,37 +626,64 @@
      heading and described by its card's line: with a script the frame and its
      checkboxes carry everything the four cards say, so the cards, which are the
      same ground read four ways in four pictures, are the page without a script
-     and step aside with one. The box is the browser's own checkbox, drawn in the
-     page's colours: a bone rim unticked, filled brass with an ink tick when
-     ticked, the brass focus ring every control has. */
+     and step aside with one.
+
+     Each checkbox is the browser's own, kept in the page and reachable by Tab
+     and Space, but hidden from the eye: what a reader sees and presses is its
+     label, a round toggle with a drawing of its layer that changes when the
+     layer goes on. Off, the drawing is in bone on the sunk ink with a bone rim;
+     on, it is in the ink on the brass. Each drawing moves in its own way as it
+     turns on (a thermometer's column rises, waves and winds draw out, a drop
+     fills, a river runs its course), by transform, stroke offset, fill and
+     opacity inside an icon of fixed size, so nothing else on the page moves;
+     under reduced motion it changes at once. */
   .live .layer-cards{display:none}
   .datamap-layers{margin:16px 0 0;padding:0;border:0;min-width:0}
   .datamap-layers legend{padding:0;margin:0 0 6px}
   .layer-choices{display:grid;gap:0 28px}
   @media (min-width:600px) and (max-width:1099px){.layer-choices{grid-template-columns:repeat(2,minmax(0,1fr))}}
-  .layer-choice{
-    display:grid;grid-template-columns:22px minmax(0,1fr);gap:2px 12px;align-items:start;
-    padding:10px 0;border-top:1px solid var(--hairline);
+  .layer-choice{position:relative;padding:10px 0;border-top:1px solid var(--hairline)}
+  /* Out of sight and still in the page: focusable, pressable, read aloud. */
+  .layer-input{
+    position:absolute;left:0;top:10px;width:1px;height:1px;margin:0;padding:0;border:0;
+    overflow:hidden;clip-path:inset(50%);white-space:nowrap;
   }
-  .layer-box{position:relative;grid-row:1 / span 2;width:22px;height:22px;margin-top:1px}
-  .layer-box input{
-    -webkit-appearance:none;appearance:none;display:block;margin:0;width:22px;height:22px;cursor:pointer;
-    border:2px solid var(--bone-dim);border-radius:3px;background:transparent;
+  .layer-switch{display:flex;align-items:center;gap:12px;cursor:pointer}
+  .layer-round{
+    flex:none;display:grid;place-items:center;width:40px;height:40px;border-radius:50%;
+    border:2px solid var(--bone-dim);background:var(--ink-sunk);color:var(--bone);
+    transition:background-color .3s ease-out,border-color .3s ease-out,color .3s ease-out;
   }
-  .layer-box input:hover{border-color:var(--parchment)}
-  .layer-box input:checked{background:var(--brass);border-color:var(--brass)}
-  .layer-box input:focus-visible{outline:2px solid var(--brass);outline-offset:3px}
-  /* The tick: two strokes of the ink, the short and the long arm of a corner
-     turned on its side. */
-  .layer-tick{
-    display:none;position:absolute;left:8px;top:4px;width:6px;height:11px;pointer-events:none;
-    border:solid var(--ink);border-width:0 2.5px 2.5px 0;transform:rotate(45deg);
+  .layer-switch:hover .layer-round{border-color:var(--parchment)}
+  .layer-input:checked + .layer-switch .layer-round{background:var(--brass);border-color:var(--brass);color:var(--ink)}
+  .layer-input:focus-visible + .layer-switch .layer-round{outline:2px solid var(--brass);outline-offset:3px}
+  .layer-icon{
+    display:block;width:24px;height:24px;overflow:visible;
+    fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;
   }
-  .layer-box input:checked + .layer-tick{display:block}
-  .layer-choice label{
-    font-family:var(--serif);font-size:17px;font-weight:600;line-height:1.3;color:var(--parchment);cursor:pointer;
-  }
-  .layer-says{color:var(--bone-dim);font-size:14px;line-height:1.5}
+  .layer-name{font-family:var(--serif);font-size:17px;font-weight:600;line-height:1.3;color:var(--parchment)}
+  .layer-says{display:block;margin:2px 0 0 52px;color:var(--bone-dim);font-size:14px;line-height:1.5}
+
+  /* Temperature: the column rises up the thermometer and the bulb fills. */
+  .thermo-column{fill:currentColor;stroke:none;transform-box:fill-box;transform-origin:50% 100%;transform:scaleY(.3);
+    transition:transform .35s ease-out}
+  .thermo-bulb{fill:currentColor;stroke:none;opacity:.4;transition:opacity .35s ease-out}
+  .layer-input:checked + .layer-switch .thermo-column{transform:none}
+  .layer-input:checked + .layer-switch .thermo-bulb{opacity:1}
+  /* Ocean currents: the middle wave is there already; the two beside it ripple in. */
+  .wave-in{stroke-dasharray:100;stroke-dashoffset:72;transition:stroke-dashoffset .4s ease-out}
+  .wave-in.later{transition-delay:.08s}
+  .layer-input:checked + .layer-switch .wave-in{stroke-dashoffset:0}
+  /* Winds: the streaks sweep out to their curls. */
+  .wind-streak{stroke-dasharray:100;stroke-dashoffset:48;transition:stroke-dashoffset .35s ease-out}
+  .layer-input:checked + .layer-switch .wind-streak{stroke-dashoffset:0}
+  /* Rainfall: the drop fills from the bottom. */
+  .drop-water{fill:currentColor;stroke:none;transform:translateY(11px);transition:transform .35s ease-out}
+  .layer-input:checked + .layer-switch .drop-water{transform:none}
+  /* Rivers: the river runs its course from its source to the sea. */
+  .river-course{stroke-dasharray:100;stroke-dashoffset:40;transition:stroke-dashoffset .4s ease-out}
+  .river-source{fill:currentColor;stroke:none}
+  .layer-input:checked + .layer-switch .river-course{stroke-dashoffset:0}
 
   /* On a wide screen the three figures that are narrower than the column (the
      relief, the style slider and the data frame) each take their words and
@@ -848,7 +876,14 @@
     .live .lens-glass,
     .live .relief-canvas,
     .live .datamap-frame img[data-layer],
-    .live .compare-fading{transition:none}
+    .live .compare-fading,
+    .layer-round,
+    .thermo-column,
+    .thermo-bulb,
+    .wave-in,
+    .wind-streak,
+    .drop-water,
+    .river-course{transition:none}
     ::view-transition-group(*),
     ::view-transition-old(*),
     ::view-transition-new(*){animation:none}
@@ -1027,7 +1062,7 @@
     </div>
 
     <p class="section-lede">
-      One world whole, and the ground inside it at the size it was made.
+      See the whole world, then look closer at its rivers, valleys and coastlines.
     </p>
 
     <figure class="lens" id="lens">
@@ -1193,28 +1228,28 @@
         <legend class="control-label">Layers over the relief</legend>
         <div class="layer-choices">
           <div class="layer-choice">
-            <span class="layer-box"><input type="checkbox" id="layer-temperature" value="temperature" autocomplete="off" checked aria-describedby="layer-temperature-says"><span class="layer-tick" aria-hidden="true"></span></span>
-            <label for="layer-temperature">Temperature</label>
+            <input class="layer-input" type="checkbox" id="layer-temperature" value="temperature" autocomplete="off" checked aria-describedby="layer-temperature-says">
+            <label class="layer-switch" for="layer-temperature"><span class="layer-round" aria-hidden="true"><svg class="layer-icon" viewBox="0 0 24 24" focusable="false"><path d="M10 4.6a2 2 0 0 1 4 0v9.1a4 4 0 1 1-4 0z"/><rect class="thermo-column" x="11.1" y="6" width="1.8" height="10.5" rx=".9"/><circle class="thermo-bulb" cx="12" cy="17.2" r="2.1"/></svg></span><span class="layer-name">Temperature</span></label>
             <span class="layer-says" id="layer-temperature-says">The mean annual temperature, in degrees Celsius.</span>
           </div>
           <div class="layer-choice">
-            <span class="layer-box"><input type="checkbox" id="layer-currents" value="currents" autocomplete="off" aria-describedby="layer-currents-says"><span class="layer-tick" aria-hidden="true"></span></span>
-            <label for="layer-currents">Ocean currents</label>
+            <input class="layer-input" type="checkbox" id="layer-currents" value="currents" autocomplete="off" aria-describedby="layer-currents-says">
+            <label class="layer-switch" for="layer-currents"><span class="layer-round" aria-hidden="true"><svg class="layer-icon" viewBox="0 0 24 24" focusable="false"><path class="wave-in" pathLength="100" d="M3 7.5c2.2-2 3.8-2 6 0s3.8 2 6 0 3.8-2 6 0"/><path d="M3 12c2.2-2 3.8-2 6 0s3.8 2 6 0 3.8-2 6 0"/><path class="wave-in later" pathLength="100" d="M3 16.5c2.2-2 3.8-2 6 0s3.8 2 6 0 3.8-2 6 0"/></svg></span><span class="layer-name">Ocean currents</span></label>
             <span class="layer-says" id="layer-currents-says">The surface flow, coloured warm or cold against its latitude.</span>
           </div>
           <div class="layer-choice">
-            <span class="layer-box"><input type="checkbox" id="layer-wind" value="wind" autocomplete="off" aria-describedby="layer-wind-says"><span class="layer-tick" aria-hidden="true"></span></span>
-            <label for="layer-wind">Winds</label>
+            <input class="layer-input" type="checkbox" id="layer-wind" value="wind" autocomplete="off" aria-describedby="layer-wind-says">
+            <label class="layer-switch" for="layer-wind"><span class="layer-round" aria-hidden="true"><svg class="layer-icon" viewBox="0 0 24 24" focusable="false"><path class="wind-streak" pathLength="100" d="M3 8.5h10.5a2.6 2.6 0 1 0-2.6-2.6"/><path class="wind-streak" pathLength="100" d="M3 12.5h15a2.8 2.8 0 1 1-2.8 2.8"/><path class="wind-streak" pathLength="100" d="M3 16.5h7"/></svg></span><span class="layer-name">Winds</span></label>
             <span class="layer-says" id="layer-wind-says">The prevailing wind through the year.</span>
           </div>
           <div class="layer-choice">
-            <span class="layer-box"><input type="checkbox" id="layer-rainfall" value="rainfall" autocomplete="off" aria-describedby="layer-rainfall-says"><span class="layer-tick" aria-hidden="true"></span></span>
-            <label for="layer-rainfall">Rainfall</label>
+            <input class="layer-input" type="checkbox" id="layer-rainfall" value="rainfall" autocomplete="off" aria-describedby="layer-rainfall-says">
+            <label class="layer-switch" for="layer-rainfall"><span class="layer-round" aria-hidden="true"><svg class="layer-icon" viewBox="0 0 24 24" focusable="false"><clipPath id="layer-drop-inside"><path d="M12 3.6c3.1 4.1 5.4 7.2 5.4 10a5.4 5.4 0 0 1-10.8 0c0-2.8 2.3-5.9 5.4-10z"/></clipPath><g clip-path="url(#layer-drop-inside)"><rect class="drop-water" x="5" y="3" width="14" height="17"/></g><path d="M12 3.6c3.1 4.1 5.4 7.2 5.4 10a5.4 5.4 0 0 1-10.8 0c0-2.8 2.3-5.9 5.4-10z"/></svg></span><span class="layer-name">Rainfall</span></label>
             <span class="layer-says" id="layer-rainfall-says">The annual rainfall, from dry to wet.</span>
           </div>
           <div class="layer-choice">
-            <span class="layer-box"><input type="checkbox" id="layer-rivers" value="rivers" autocomplete="off" aria-describedby="layer-rivers-says"><span class="layer-tick" aria-hidden="true"></span></span>
-            <label for="layer-rivers">Rivers</label>
+            <input class="layer-input" type="checkbox" id="layer-rivers" value="rivers" autocomplete="off" aria-describedby="layer-rivers-says">
+            <label class="layer-switch" for="layer-rivers"><span class="layer-round" aria-hidden="true"><svg class="layer-icon" viewBox="0 0 24 24" focusable="false"><circle class="river-source" cx="5" cy="4.5" r="1.7"/><path class="river-course" pathLength="100" d="M5 4.5c2.6 2.2 1 4.8 4 6.2s5.6-.4 6.6 2.6-1.6 4.4 1.2 6.2 2.4.3 3.2.5"/></svg></span><span class="layer-name">Rivers</span></label>
             <span class="layer-says" id="layer-rivers-says">The rivers and lakes, over any layer.</span>
           </div>
         </div>

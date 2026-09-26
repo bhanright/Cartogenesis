@@ -570,11 +570,34 @@ class SiteAssemblyTest {
             // The brightest pixel, for the title card's scrim: the contrast guard measures the card's
             // words over pure white, which is the brightest a pixel can be and, here, is.
             val brightest = pixels.maxOf { (it shr 16 and 0xFF) + (it shr 8 and 0xFF) + (it and 0xFF) }
+            // And the opening's panel over it: the brass eyebrow, the panel's floor, through the
+            // panel over the band's brightest pixel, at AA. SitePaletteContrastTest holds it over
+            // pure white, which no band can pass; this is the band as it ships.
+            val brightestPixel = pixels.maxBy { (it shr 16 and 0xFF) + (it shr 8 and 0xFF) + (it and 0xFF) }
+            val eyebrow = panelEyebrowContrastOver(brightestPixel)
+            assertTrue(eyebrow >= 4.5, "${figure.file}'s brightest pixel puts the opening's brass eyebrow at %.2f:1 through the panel, under AA".format(eyebrow))
+            println("SITE ${figure.file}: the opening's eyebrow reads at %.2f:1 through the panel over its brightest pixel".format(eyebrow))
             println(
                 "SITE ${figure.file}: seam %.1f against %.1f at the roughest inside, first stretch %.1f from the preview, %d bytes, brightest pixel %d of 765"
                     .format(seam, roughest, meanGreen, published.length(), brightest)
             )
         }
+    }
+
+    /**
+     * The brass eyebrow's contrast through the opening's panel, the page's ink at the share its style
+     * sheet mixes, over [pixel]: a browser composites the panel over the band channel by channel.
+     */
+    private fun panelEyebrowContrastOver(pixel: Int): Double {
+        val page = file("index.html").readText()
+        fun named(name: String) = Regex("""--$name:\s*#([0-9a-fA-F]{6})""").find(page)?.groupValues?.get(1)?.toInt(16)
+            ?: fail("the page defines no --$name")
+        val share = (Regex("""\.opening-panel\{[^}]*color-mix\(in srgb,var\(--ink\) (\d+)%,transparent\)""").find(page)
+            ?.groupValues?.get(1) ?: fail("the opening's panel is no longer the ink mixed with transparency")).toInt() / 100.0
+        val ink = named("ink")
+        fun channel(shift: Int) = Math.round(((ink shr shift) and 0xFF) * share + ((pixel shr shift) and 0xFF) * (1 - share)).toInt()
+        val ground = (0xFF shl 24) or (channel(16) shl 16) or (channel(8) shl 8) or channel(0)
+        return com.cartogenesis.cartography.ColorVision.contrast((0xFF shl 24) or named("brass"), ground)
     }
 
     /**

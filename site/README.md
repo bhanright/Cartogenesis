@@ -104,7 +104,7 @@ of its box, at rest, with each download card open and with scripts off; and, und
 390 and 768, holds a lens pressed at the map's centre, corners and edges to standing whole on the
 screen and clear of the finger, and a swipe over it to scrolling the page while a held finger does
 not. A machine without Chrome fails those three by name rather than passing them unmeasured;
-GitHub's hosted Ubuntu image, which the deploy runs on, carries Chrome. It lives in `:desktop` because the web module compiles
+the deploy's runner image carries Chrome. It lives in `:desktop` because the web module compiles
 to wasm and cannot read files. It is deliberately excluded from `:desktop:test`, which has no reason
 to build 12 MB of WebAssembly and would otherwise be judging whatever an earlier run left behind.
 

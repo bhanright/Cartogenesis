@@ -856,7 +856,7 @@ class SiteSourcesTest {
         assertTrue(Regex("""\.live \.relief-canvas\{opacity:0""").containsMatchIn(page), "the canvas is not kept at no opacity until it is shown")
         assertTrue(reliefScript.contains("dot(normalize(vNormal), light)") && reliefScript.contains("varying vec3 vNormal"),
             "the light is not worked out per pixel from a normal blended across each triangle")
-        assertTrue(!Regex("""dFdx|dFdy|flat\s""").containsMatchIn(reliefScript), "the relief shades a triangle by its own flat face")
+        assertTrue(!Regex("""dFdx|dFdy|\bflat\s+(varying|in|out)\b""").containsMatchIn(reliefScript), "the relief shades a triangle by its own flat face")
         // The caption states the exaggeration the script draws with.
         val exaggeration = Regex("""var RELIEF_EXAGGERATION = (\d+);""").find(reliefScript)?.groupValues?.get(1)
             ?: fail("the relief states no exaggeration")

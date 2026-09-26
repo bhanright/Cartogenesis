@@ -77,15 +77,21 @@ class SiteAssemblyTest {
 
         /**
          * The ceiling on what the page fetches as it loads, by the kind of screen (see
-         * [fetchedAtLoad]): the 1,373,328 and 1,570,774 bytes the list summed to when it was
-         * written, each plus 64 KiB for the pictures and the page moving when they are made again.
-         * By the same count Site 5a's page fetched 1,432,079 (its guard said 798,445, having left out
-         * three faces), so the opening costs a wide or dense screen 138,695 bytes more, the full band
-         * against the hero it replaced, and a narrow one at one device pixel 58,751 less.
+         * [fetchedAtLoad]): the 1,409,962 and 1,607,408 bytes the list summed to for Site 5b, each
+         * plus 64 KiB for the pictures and the page moving when they are made again.
+         *
+         * Site 6's page summed to 1,373,328 and 1,570,774, so Site 5b costs every screen 36,634
+         * bytes more, all of it the page itself (136,906 bytes where it was 100,272): the markup,
+         * style and script of the data frame, the lens, the relief and the reel. None of their
+         * pictures is fetched as the page loads; a headless Chrome at 375 and 1280 wide, at one and
+         * two device pixels, on a first visit and a returning one, fetched the same pictures as for
+         * Site 6, the new ones all being lazy and further down the page than the distance a lazy
+         * picture is fetched ahead (docs/DESIGN_LEDGER.md, Site 5b). Site 5a's page fetched
+         * 1,432,079 by the same count.
          */
-        val LOAD_BYTES_SITE_6: Map<String, Long> = mapOf(
-            "narrow at one device pixel" to 1_373_328L + 65_536L,
-            "wide or dense" to 1_570_774L + 65_536L
+        val LOAD_BYTES: Map<String, Long> = mapOf(
+            "narrow at one device pixel" to 1_409_962L + 65_536L,
+            "wide or dense" to 1_607_408L + 65_536L
         )
     }
 
@@ -551,7 +557,7 @@ class SiteAssemblyTest {
     }
 
     /**
-     * What the page fetches as it loads, and a ceiling on it, restated for Site 6.
+     * What the page fetches as it loads, and a ceiling on it, restated for Site 5b.
      *
      * Site 5a's guard counted the page, the two preloaded faces, the eager pictures and the six
      * steps, and so missed the three faces the style sheet asks for, which a headless Chrome
@@ -574,7 +580,7 @@ class SiteAssemblyTest {
         assertTrue((asked - listed).isEmpty(), "the page asks for ${asked - listed} as it loads, which the stated load does not count")
         fetchedAtLoad.forEach { (screen, files) ->
             val atLoad = page.length() + files.sumOf { file(it).length() }
-            val ceiling = LOAD_BYTES_SITE_6.getValue(screen)
+            val ceiling = LOAD_BYTES.getValue(screen)
             println("SITE at load, $screen: $atLoad bytes (page ${page.length()}, " + files.joinToString { "$it ${file(it).length()}" } + ")")
             assertTrue(
                 atLoad <= ceiling,

@@ -1068,7 +1068,8 @@ takes out about a quarter of it.
   between them, half the guard's ridge. No candidate's figure entered it.
 - **What it changes.** On this head the guard records exactly what it did. Under B the comb is still
   judged, and fails at 0.077 against 0.01, not against a row of nought.
-- **So the floor rescues nothing.** Every form still carries 8 to 19 times it.
+- **So the floor rescues nothing.** B carries 8 to 18 times it, across the fall 10 to 19 times, and
+  the undrained share 32 to 50 times.
 
 ### 4. The crops
 
@@ -1093,10 +1094,11 @@ What the eye sees:
 
 - **Drop the undrained share.** It is principled and cheap, and keeps everything the branch armed,
   but it does not do the job: 20% off the comb at 512 and none at 1024. By construction it is
-  nought on every clamped channel cell, and the comb's cells are clamped.
+  nought on every cell whose descent is clamped to one neighbour, as an incised gully's is. That is
+  the likely reason it leaves the comb, but I did not measure it.
 - **Across the fall is the better-founded of the three sub-grid forms, and better than B on every
   count but one.**
-  - Against B it keeps a quarter more network and half again the valley depth, and restores the
+  - Against B it keeps a sixth more network and half again the valley depth, and restores the
     ranges' texture.
   - It removes nearly as much comb at 512 and slightly less at 1024.
   - It stops the feedback as fully, and keeps the lake bars down to 0.02 to 0.06.

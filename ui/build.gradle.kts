@@ -93,6 +93,15 @@ tasks.named<Test>("jvmTest") {
         .withPropertyName("issueFormsReadByTheBugReportFormTest")
         .withPathSensitivity(PathSensitivity.RELATIVE)
 
+    // `InterfaceGlyphsTest` reads the characters out of `:web`'s sources, which this module does
+    // not compile, and holds them to the bundled faces: both inputs, for the same reason.
+    inputs.files(rootProject.fileTree("web/src") { include("**/*.kt") })
+        .withPropertyName("webSourcesReadByTheInterfaceGlyphsTest")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.files(fileTree("src/commonMain/composeResources/font"))
+        .withPropertyName("facesReadByTheInterfaceGlyphsTest")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+
     // The known failures the tests record (`KnownFailures`, a twin of `:cartography`'s): a file
     // handed to the tests, cleared before the task runs and printed once it has, pass or fail, as
     // `:cartography`'s build script does for its own.

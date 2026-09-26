@@ -1,5 +1,6 @@
 package com.cartogenesis.desktop
 
+import com.cartogenesis.cartography.MapRasterizer
 import com.cartogenesis.cartography.MapStyle
 import com.cartogenesis.cartography.MapView
 import com.cartogenesis.cartography.RenderOptions
@@ -40,7 +41,10 @@ import java.io.File
  *
  * A figure is one window read one way. Most are one card's picture on the page; the rest are the
  * band round the world the page opens on, at two sizes, the nine styles the comparison slider
- * fetches when picked, and the picture a link to the page previews.
+ * fetches when picked, the data frame's relief and the layers laid over it, the whole world under
+ * the lens at a quarter and at full size, the patch drawn in relief (whose heights are written
+ * beside the pictures, [RELIEF_HEIGHTS_FILE]), five other worlds whole, and the picture a link to
+ * the page previews.
  * Wider ground is halved rather than cropped wider (see [Figure.reduction]). Pictures that are
  * compared share one window — the six steps, the twelve styles, the four data views — which is
  * what makes them the same ground: there is one window for the row's pictures to be cut from.
@@ -172,7 +176,9 @@ object SiteImagery {
         val style: MapStyle = MapStyle.ATLAS,
         val reduction: Int = 1,
         val quality: Int = WEBP_QUALITY,
-        val showWater: Boolean = true
+        val showWater: Boolean = true,
+        val cut: Cut = Cut.WHOLE,
+        val seed: Long = SEED
     ) {
         init {
             require(reduction >= 1 && reduction and (reduction - 1) == 0) {
@@ -183,8 +189,15 @@ object SiteImagery {
             }
         }
 
+        /**
+         * How the application would draw it. A layer cut from its reading to lie over another
+         * picture leaves out the coastline, which the picture under it already carries.
+         */
         val options: RenderOptions
-            get() = RenderOptions(view = view, style = style, showRivers = showWater, showLakes = showWater)
+            get() = RenderOptions(
+                view = view, style = style, showRivers = showWater, showLakes = showWater,
+                showCoastline = cut.keepsCoastline
+            )
 
         /** The picture's own width in pixels, which the page's `width` attribute states. */
         val width: Int get() = window.width / reduction
@@ -198,6 +211,34 @@ object SiteImagery {
          * is this word, so the card says what the toolbar says over the same picture.
          */
         val readingName: String get() = if (view == MapView.FANTASY) style.label else view.label
+    }
+
+    /**
+     * How much of a reading a figure keeps.
+     *
+     * Most figures are a reading as the application draws it. The data frame's layers are laid
+     * one over another on the page and faded in and out over the relief, so each keeps only its
+     * own part and leaves the rest of the sheet clear. The application draws a map in two passes,
+     * one colour per cell and then marks over the cells at their own width (river courses, a flow
+     * view's arrows, the coastline), so the marks come away as a transparent layer for nothing: the
+     * same overlay drawn over a clear raster. The realm borders do not: the application lays them
+     * into the cells as a blend of ink and ground, so there is no layer of them to take (see
+     * docs/DESIGN_LEDGER.md, Site 5b). [keepsCoastline] is false for a layer that lies over a
+     * picture which already has one.
+     */
+    enum class Cut(val keepsCoastline: Boolean) {
+        /** The reading as the application draws it: its cells and every mark over them. */
+        WHOLE(true),
+        /** The reading's cells alone, without the marks drawn over them. */
+        GROUND(true),
+        /** The whole reading over land; the sea left clear, where the view carries nothing. */
+        LAND(true),
+        /** The reading's cells over the sea and its marks; the land left clear. */
+        SEA_AND_MARKS(false),
+        /** Only the marks drawn over the cells, on a clear sheet: a flow view's arrows. */
+        MARKS(false),
+        /** The lakes' cells and the river courses, on a clear sheet. */
+        WATER(false)
     }
 
     /**
@@ -228,6 +269,131 @@ object SiteImagery {
     val LAYER_CARDS: List<Figure> =
         listOf(MapView.TEMPERATURE, MapView.CURRENTS, MapView.WIND, MapView.RAINFALL)
             .map { view -> Figure("layer-${view.name.lowercase()}.webp", LAYERS_WINDOW, view) }
+
+    /**
+     * The data frame's window: 800 by 600 at 1:1, holding [LAYERS_WINDOW] at its left.
+     *
+     * The same ground as the four data cards and more of it, eastward across the strait toward the
+     * eastern island, so the frame is wide enough to be read as one picture on a computer. Not
+     * westward, where the range's ice cap ends in the straight edge listed in docs/TODO.md; the
+     * short double line at the cards' window's top left is inside it, as it is in the cards.
+     */
+    val DATA_FRAME_WINDOW = Window(2048, 512, 800, 600)
+
+    /**
+     * The data frame's pictures, bottom to top as the page lays them: the relief, which is the
+     * ground the application draws its winds over (the land shaded and tinted by height, the sea
+     * flat), then the four layers the cards name, then the rivers and lakes. (No realm borders: the
+     * frame's land is one realm from edge to edge, so a border layer would have nothing to draw.)
+     * Temperature is whole, since the view says something at sea as on land; rainfall keeps the
+     * land and the currents the sea, each leaving clear where its view draws only a placeholder
+     * colour; the winds are their arrows alone.
+     */
+    val DATA_FRAME: List<Figure> = listOf(
+        Figure("data-relief.webp", DATA_FRAME_WINDOW, MapView.WIND, showWater = false, cut = Cut.GROUND),
+        Figure("data-temperature.webp", DATA_FRAME_WINDOW, MapView.TEMPERATURE, showWater = false),
+        Figure("data-rainfall.webp", DATA_FRAME_WINDOW, MapView.RAINFALL, showWater = false, cut = Cut.LAND),
+        Figure(
+            "data-currents.webp", DATA_FRAME_WINDOW, MapView.CURRENTS, showWater = false,
+            cut = Cut.SEA_AND_MARKS
+        ),
+        Figure("data-wind.webp", DATA_FRAME_WINDOW, MapView.WIND, showWater = false, cut = Cut.MARKS),
+        Figure("data-rivers.webp", DATA_FRAME_WINDOW, MapView.FANTASY, MapStyle.NATURAL, cut = Cut.WATER)
+    )
+
+    /**
+     * The whole world in the Natural style at a quarter of the sheet's pixels each way, 1024 by
+     * 512: the picture the zoom lens is moved over.
+     */
+    val WORLD_WHOLE: Figure by lazy {
+        Figure(
+            "world-whole.webp", Window(0, 0, SHEET_WIDTH_PIXELS, SheetGeometry.of(config()).heightPixels),
+            MapView.FANTASY, MapStyle.NATURAL, reduction = 4
+        )
+    }
+
+    /**
+     * The same at the sheet's own pixels, 4096 by 2048: what the lens shows under the pointer,
+     * fetched only when a reader first uses the lens. At the bands' quality, because it is read
+     * moving under a lens and never still at its full size.
+     */
+    val WORLD_FULL: Figure by lazy {
+        Figure(
+            "world-full.webp", WORLD_WHOLE.window, MapView.FANTASY, MapStyle.NATURAL,
+            quality = WORLD_BAND_QUALITY
+        )
+    }
+
+    /**
+     * The patch of ground the page draws in relief: 640 by 400 at 1:1 of the eastern island's
+     * western end, a range along its north coast falling to valleys and rivers in the south, the
+     * sea round its western cape and lakes at its eastern edge. West of where the dry belt ruled
+     * along a row crosses the island (about column 3,355 at rows 675 to 700, docs/TODO.md), and
+     * clear of the other three marks listed there.
+     */
+    val RELIEF_WINDOW = Window(2720, 470, 640, 400)
+
+    /** The patch in the Natural style: the picture the relief is textured with, and its still. */
+    val RELIEF_TEXTURE = Figure("relief-natural.webp", RELIEF_WINDOW, MapView.FANTASY, MapStyle.NATURAL)
+
+    /** The file the patch's heights are published in. */
+    const val RELIEF_HEIGHTS_FILE = "relief-heights.png"
+
+    /**
+     * Sheet pixels between neighbouring points of the relief's mesh, both ways: two, one cell
+     * across and two down, so the mesh follows the ground as finely as the grid across it. That is
+     * 321 by 201 points for the 640 by 400 patch, 64,521, under the 65,536 a 16-bit index reaches,
+     * which every WebGL has.
+     */
+    const val RELIEF_POINT_SPACING_PIXELS = 2
+
+    /**
+     * Height steps per metre in the heights file: a quarter of a metre a step, which puts 16,383
+     * metres at the top of sixteen bits, above any ground the generator makes (its ruler's land
+     * half is [com.cartogenesis.worldgen.model.WorldScale.highestLandMetres], 6,000, and an ice
+     * sheet stands on it at most 4,776 more).
+     */
+    const val RELIEF_STEPS_PER_METRE = 4
+
+    /** The relief's points across and down: one every [RELIEF_POINT_SPACING_PIXELS], both edges included. */
+    val RELIEF_POINTS_ACROSS: Int get() = RELIEF_WINDOW.width / RELIEF_POINT_SPACING_PIXELS + 1
+    val RELIEF_POINTS_DOWN: Int get() = RELIEF_WINDOW.height / RELIEF_POINT_SPACING_PIXELS + 1
+
+    /**
+     * The worlds of "Every seed is a world", each made the way the application makes a world it
+     * is opened at with only a seed: the generator's defaults at the browser's starting size, so
+     * the picture is the world the card's link opens. Five of eight looked at (1, 7, 42, 99, 1066,
+     * 2024, 31337 and 424242), picked to differ from one another: two lands across shallow bays, a
+     * long continent pinched in the middle, a branching one, an inland sea with islands, and three
+     * lands with an island between.
+     */
+    val REEL_SEEDS: List<Long> = listOf(7L, 42L, 1066L, 2024L, 31337L)
+
+    /**
+     * The size the reel's worlds are made at: 512, where a browser window starts, so the pictures
+     * are the worlds the links open. It also keeps the site's build quick: a few seconds a world,
+     * where the author's world at 2048 is most of a minute.
+     */
+    const val REEL_GRID_CELLS = 512
+
+    /** A reel world's settings: the generator's defaults at [REEL_GRID_CELLS], as a link with only a seed makes. */
+    fun reelConfig(seed: Long): WorldGenConfig =
+        WorldGenConfig(seed = seed).atResolution(REEL_GRID_CELLS, REEL_GRID_CELLS)
+
+    /**
+     * Each reel world whole in the Natural style, halved: 512 by 256 of its 1024 by 512 sheet. A
+     * reel card is at most about 210 pixels wide on a computer, so 512 covers it at two device
+     * pixels to the CSS pixel.
+     */
+    val REEL: List<Figure> by lazy {
+        REEL_SEEDS.map { seed ->
+            val sheet = SheetGeometry.of(reelConfig(seed))
+            Figure(
+                "seed-$seed.webp", Window(0, 0, sheet.widthPixels, sheet.heightPixels),
+                MapView.FANTASY, MapStyle.NATURAL, reduction = 2, seed = seed
+            )
+        }
+    }
 
     /**
      * The one window every step of "How a world is made" is pictured in: 1040 by 560 of the sheet,
@@ -316,7 +482,8 @@ object SiteImagery {
 
     /** Every picture the page shows, in the order it shows them. */
     val FIGURES: List<Figure> by lazy {
-        listOf(HERO, WORLD_BAND, WORLD_BAND_HALF) + STEP_CARDS + STYLE_PICTURES + LAYER_CARDS
+        listOf(HERO, WORLD_BAND, WORLD_BAND_HALF) + STEP_CARDS + listOf(WORLD_WHOLE, WORLD_FULL, RELIEF_TEXTURE) +
+            STYLE_PICTURES + DATA_FRAME + LAYER_CARDS + REEL
     }
 
     @JvmStatic
@@ -324,8 +491,9 @@ object SiteImagery {
         val outputDir = File(args.firstOrNull() ?: "build/site-imagery").absoluteFile
         outputDir.mkdirs()
         // Whatever an earlier run left here would be published as though the page still asked
-        // for it: assembleSite copies every WebP in this directory. So the directory starts empty,
-        // and a figure the page has stopped showing stops being rendered and stops being shipped.
+        // for it: assembleSite copies every WebP in this directory, and the relief's heights. So
+        // the directory starts empty, and a figure the page has stopped showing stops being
+        // rendered and stops being shipped.
         // SiteAssemblyTest caught exactly that the first time the figure list shrank.
         outputDir.listFiles()?.forEach { it.delete() }
 
@@ -347,23 +515,39 @@ object SiteImagery {
         // One rasterisation per distinct reading rather than one per figure: the link preview, the
         // band and the Natural style card are the same reading of the same world, and a 2048 sheet
         // is 32 MB and most of a second.
-        val sheets = Sheets(world)
         var total = 0L
-        try {
-            for (figure in FIGURES) {
+        fun writeAll(sheets: Sheets, figures: List<Figure>) {
+            for (figure in figures) {
                 val bytes = write(sheets, figure, outputDir)
                 total += bytes
                 println(
                     "  ${figure.file.padEnd(24)} ${figure.width}x${figure.height}  " +
-                        "$bytes bytes  (${figure.readingName}, window " +
+                        "$bytes bytes  (${figure.readingName} ${figure.cut}, window " +
                         "${figure.window.width}x${figure.window.height} at " +
                         "${figure.window.x},${figure.window.y} reduced ${figure.reduction}, " +
                         "quality ${figure.quality})"
                 )
             }
+        }
+        val sheets = Sheets(world)
+        try {
+            writeAll(sheets, FIGURES.filter { it.seed == SEED })
+            total += writeReliefHeights(world, outputDir)
             if (contact) writeContactSheets(sheets, outputDir)
         } finally {
             sheets.close()
+        }
+        // The reel's worlds, one at a time, each let go before the next is made.
+        FIGURES.filter { it.seed != SEED }.groupBy { it.seed }.forEach { (seed, figures) ->
+            val madeAt = System.currentTimeMillis()
+            val reelWorld = WorldGenerationEngine.generateBlocking(reelConfig(seed))
+            println("SITE IMAGERY seed=$seed ${reelWorld.width}x${reelWorld.height} generated in ${System.currentTimeMillis() - madeAt} ms")
+            val reelSheets = Sheets(reelWorld)
+            try {
+                writeAll(reelSheets, figures)
+            } finally {
+                reelSheets.close()
+            }
         }
 
         val finished = System.currentTimeMillis()
@@ -393,13 +577,39 @@ object SiteImagery {
      * display; the processor is the reference path in any case.
      */
     private class Sheets(private val world: WorldMap) : AutoCloseable {
-        private val bitmaps = LinkedHashMap<RenderOptions, Bitmap>()
-        private val images = LinkedHashMap<RenderOptions, Image>()
+        private val bitmaps = LinkedHashMap<Pair<RenderOptions, Cut>, Bitmap>()
+        private val images = LinkedHashMap<Pair<RenderOptions, Cut>, Image>()
+        private val geometry = SheetGeometry.of(world)
 
-        fun of(options: RenderOptions): Image = images.getOrPut(options) {
-            val bitmap = MapImage.toBitmap(world, options)
-            bitmaps[options] = bitmap
+        fun of(options: RenderOptions, cut: Cut = Cut.WHOLE): Image = images.getOrPut(options to cut) {
+            val bitmap = when (cut) {
+                Cut.WHOLE -> MapImage.toBitmap(world, options)
+                Cut.GROUND -> MapImage.sheetBitmap(geometry, MapRasterizer.rasterize(world, options))
+                Cut.LAND, Cut.SEA_AND_MARKS, Cut.MARKS, Cut.WATER ->
+                    MapImage.toBitmap(world, options, cellsKept(options, cut))
+            }
+            bitmaps[options to cut] = bitmap
             Image.makeFromBitmap(bitmap)
+        }
+
+        /**
+         * The reading's cells with every cell [cut] does not keep made clear, for the overlay to be
+         * drawn over: the marks then land on a transparent sheet with their own edges' coverage.
+         */
+        private fun cellsKept(options: RenderOptions, cut: Cut): IntArray {
+            val cells = MapRasterizer.rasterize(world, options)
+            val land = world.sea.isLand
+            val lakes = world.rivers.lakes
+            for (cell in cells.indices) {
+                val kept = when (cut) {
+                    Cut.LAND -> land[cell]
+                    Cut.SEA_AND_MARKS -> !land[cell]
+                    Cut.WATER -> lakes.isLake(cell)
+                    else -> false
+                }
+                if (!kept) cells[cell] = CLEAR
+            }
+            return cells
         }
 
         /** The sheet's width in pixels: where a window wraps round the seam. */
@@ -425,8 +635,10 @@ object SiteImagery {
         }
         var picture = Bitmap().apply {
             allocPixels(ImageInfo.makeS32(window.width, window.height, ColorAlphaType.PREMUL))
+            // A layer leaves most of its sheet clear, so what the allocation held must not show.
+            erase(CLEAR)
         }
-        drawWindow(Canvas(picture), sheets.of(figure.options), window, sheets.mapWidth)
+        drawWindow(Canvas(picture), sheets.of(figure.options, figure.cut), window, sheets.mapWidth)
         var reduced = 1
         while (reduced < figure.reduction) {
             val half = halved(picture)
@@ -459,6 +671,7 @@ object SiteImagery {
         val height = source.height / 2
         val half = Bitmap().apply {
             allocPixels(ImageInfo.makeS32(width, height, ColorAlphaType.PREMUL))
+            erase(CLEAR)
         }
         val image = Image.makeFromBitmap(source)
         Canvas(half).drawImageRect(
@@ -504,6 +717,71 @@ object SiteImagery {
         }
     }
 
+    /** A pixel with nothing in it: transparent black, which is also its premultiplied form. */
+    private const val CLEAR = 0
+
+    /**
+     * Writes the relief patch's heights beside the pictures, as [RELIEF_HEIGHTS_FILE], and returns
+     * its size on disk.
+     *
+     * One point every [RELIEF_POINT_SPACING_PIXELS] of [RELIEF_WINDOW], both edges included, each
+     * the ground's height in metres at that place on the sheet, read bilinearly between the four
+     * cells round it: the land's height above the sea, a lake's water surface where it stands above
+     * the ground, and the sea flat at nought, since the picture shows the water's surface and not
+     * the floor under it. Stored in [RELIEF_STEPS_PER_METRE] steps as sixteen bits across the red
+     * (high byte) and green (low byte) of a PNG, which every browser decodes without loss; the page
+     * reads it back through a canvas.
+     */
+    private fun writeReliefHeights(world: WorldMap, outputDir: File): Long {
+        val sheet = SheetGeometry.of(world)
+        val elevation = world.sea.relativeElevation
+        val land = world.sea.isLand
+        val lakes = world.rivers.lakes
+        val metresPerUnit = world.config.scale.highestLandMetres
+        fun groundMetres(column: Int, row: Int): Float {
+            val cell = elevation.clampY(row) * elevation.width + elevation.wrapX(column)
+            if (!land[cell]) return 0f
+            val ground = if (lakes.isLake(cell)) maxOf(elevation.data[cell], lakes.surfaceAt(cell)) else elevation.data[cell]
+            return (ground * metresPerUnit).coerceAtLeast(0f)
+        }
+        val across = RELIEF_POINTS_ACROSS
+        val down = RELIEF_POINTS_DOWN
+        val bytes = ByteArray(across * down * 4)
+        var highest = 0f
+        for (row in 0 until down) for (column in 0 until across) {
+            // The point's place in cells, measured from cell centres.
+            val cellX = (RELIEF_WINDOW.x + column * RELIEF_POINT_SPACING_PIXELS).toFloat() / sheet.pixelsPerCellAcross - 0.5f
+            val cellY = (RELIEF_WINDOW.y + row * RELIEF_POINT_SPACING_PIXELS).toFloat() / sheet.pixelsPerCellDown - 0.5f
+            val left = kotlin.math.floor(cellX).toInt()
+            val top = kotlin.math.floor(cellY).toInt()
+            val east = cellX - left
+            val south = cellY - top
+            val metres = (groundMetres(left, top) * (1 - east) + groundMetres(left + 1, top) * east) * (1 - south) +
+                (groundMetres(left, top + 1) * (1 - east) + groundMetres(left + 1, top + 1) * east) * south
+            highest = maxOf(highest, metres)
+            val steps = Math.round(metres * RELIEF_STEPS_PER_METRE).coerceIn(0, 0xFFFF)
+            val at = (row * across + column) * 4
+            // Skia's S32 is blue, green, red, alpha in memory on this platform.
+            bytes[at] = 0
+            bytes[at + 1] = (steps and 0xFF).toByte()
+            bytes[at + 2] = (steps shr 8).toByte()
+            bytes[at + 3] = 0xFF.toByte()
+        }
+        val bitmap = Bitmap()
+        bitmap.installPixels(ImageInfo.makeS32(across, down, ColorAlphaType.OPAQUE), bytes, across * 4)
+        val image = Image.makeFromBitmap(bitmap)
+        val png = image.encodeToData(EncodedImageFormat.PNG) ?: error("Skia could not encode the relief's heights")
+        val destination = File(outputDir, RELIEF_HEIGHTS_FILE)
+        destination.writeBytes(png.bytes)
+        image.close()
+        bitmap.close()
+        println(
+            "  ${RELIEF_HEIGHTS_FILE.padEnd(24)} ${across}x$down  ${destination.length()} bytes  (heights, highest %.0f m, ".format(highest) +
+                "${sheet.kilometresPerPixel} km a sheet pixel)"
+        )
+        return destination.length()
+    }
+
     /** The contact sheet's fine grid, in the render's own pixels. */
     private const val GRID_MINOR_PIXELS = 128
 
@@ -529,7 +807,7 @@ object SiteImagery {
      * map before it is rendered.
      */
     private fun writeContactSheets(sheets: Sheets, outputDir: File) {
-        val readings = FIGURES.distinctBy { it.view to it.style }
+        val readings = FIGURES.filter { it.seed == SEED && it.cut == Cut.WHOLE }.distinctBy { it.view to it.style }
         val mapWidth = sheets.mapWidth
         val mapHeight = sheets.mapHeight
         val contactWidth = mapWidth / 2
@@ -562,7 +840,7 @@ object SiteImagery {
             val outline = Paint().apply {
                 color = WINDOW_OUTLINE_INK; strokeWidth = 3f; mode = PaintMode.STROKE
             }
-            FIGURES.map { it.window }.distinct().forEach { window ->
+            FIGURES.filter { it.seed == SEED }.map { it.window }.distinct().forEach { window ->
                 canvas.drawRect(
                     Rect.makeXYWH(
                         window.x / 2f, window.y / 2f, window.width / 2f, window.height / 2f

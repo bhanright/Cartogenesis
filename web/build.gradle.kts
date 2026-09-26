@@ -298,10 +298,11 @@ tasks.register<Sync>("assembleSite") {
         }
     }
 
-    // The figures. `include` rather than the whole directory because `-Pcontact` leaves contact
-    // sheets in there, which are a tool for choosing a crop and not part of the site.
+    // The figures, and the relief's heights, which are a PNG because they must arrive without
+    // loss. `include` rather than the whole directory because `-Pcontact` leaves contact sheets in
+    // there, which are a tool for choosing a crop and not part of the site.
     into("img") {
-        from(siteImagery) { include("*.webp") }
+        from(siteImagery) { include("*.webp", "relief-heights.png") }
     }
 
     // A task stands in for its own output files, and brings the dependency on itself with it.

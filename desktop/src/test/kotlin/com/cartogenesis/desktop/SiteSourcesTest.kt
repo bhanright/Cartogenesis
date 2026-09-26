@@ -557,9 +557,43 @@ class SiteSourcesTest {
      * screen), so no scroll anywhere else on the page does any work; and every frame the page asks
      * for is asked for by the opening, whose frames run only while it is on screen.
      */
+    /** The part of [pageScript] that works the zoom lens, from its heading to the relief's. */
+    private val lensScript: String by lazy { scriptBetween("The lens. The whole world", "---------- the ground in relief") }
+
+    /** The part of [pageScript] that draws the relief, from its heading to the download cards'. */
+    private val reliefScript: String by lazy { scriptBetween("---------- the ground in relief", "---------- the download cards") }
+
+    /** The part of [pageScript] that works the data frame, from its heading to the lens's. */
+    private val dataFrameScript: String by lazy { scriptBetween("The data frame. Each data card", "The lens. The whole world") }
+
+    private fun scriptBetween(start: String, end: String): String {
+        val from = pageScript.indexOf(start)
+        val to = pageScript.indexOf(end)
+        assertTrue(from in 0 until to, "the page's script has no block from \"$start\" to \"$end\"")
+        return pageScript.substring(from, to)
+    }
+
+    /**
+     * The one default the page may prevent: an arrow key pressed while the zoom lens has the
+     * focus, which moves the lens rather than the page. A key pressed on a focused control that
+     * the control consumes is the control's, as a range input's arrows are its own; every other key,
+     * and every wheel and touch, is left to the page.
+     */
+    private fun lensArrowsAreTheOnlyDefaultPrevented() {
+        assertEquals(1, Regex("""preventDefault""").findAll(page).count(), "the page prevents a default in more than the lens's arrow keys")
+        val keys = Regex("""lensFrame\.addEventListener\('keydown', function \(event\) \{(.*?)\n    \}\);""", RegexOption.DOT_MATCHES_ALL)
+            .find(lensScript)?.groupValues?.get(1) ?: fail("the lens has no key handler, and the page prevents a default somewhere")
+        val prevented = keys.indexOf("event.preventDefault()")
+        val onlyArrows = keys.indexOf("if (!move) return;")
+        assertTrue(onlyArrows in 0 until prevented && keys.contains("LENS_KEYS[event.key]"),
+            "the lens prevents a key's default without first making sure it is one of its arrow keys")
+        assertTrue(Regex("""var LENS_KEYS = \{ArrowLeft: \[-1, 0\], ArrowRight: \[1, 0\], ArrowUp: \[0, -1\], ArrowDown: \[0, 1\]\};""").containsMatchIn(lensScript),
+            "the lens's keys are not exactly the four arrows")
+    }
+
     @Test
     fun `the page reads the scroll and never steers it`() {
-        assertTrue(!page.contains("preventDefault"), "the page prevents a default, which is how a scroll is taken over")
+        lensArrowsAreTheOnlyDefaultPrevented()
         assertTrue(!Regex("""passive\s*:\s*false""").containsMatchIn(page), "the page registers a listener that may hold the scroll back")
         assertTrue(!Regex("""scroll-snap""").containsMatchIn(styleSheet), "the style sheet snaps the scroll")
         assertTrue(!Regex("""(^|[\s,}])(html|body)\s*\{[^}]*overflow\s*:\s*hidden""").containsMatchIn(styleSheet), "the style sheet locks the page's scroll")
@@ -584,9 +618,14 @@ class SiteSourcesTest {
 
         val frames = Regex("""requestAnimationFrame\(""").findAll(pageScript).count()
         val openingFrames = Regex("""requestAnimationFrame\(""").findAll(openingScript).count()
+        val reliefFrames = Regex("""requestAnimationFrame\(""").findAll(reliefScript).count()
         assertTrue(frames > 0, "the opening asks for no frames; this checked nothing")
-        assertEquals(frames, openingFrames, "something other than the opening asks for frames, so per-frame work runs off the opening")
-        println("SITE the scroll is read in one passive listener that comes off, scrolled for only by the cue, and $frames frame requests, all the opening's")
+        assertEquals(frames, openingFrames + reliefFrames,
+            "something other than the opening and the relief asks for frames, so per-frame work runs off both")
+        // The relief's frames are asked for again only while it is on screen and still settling.
+        assertTrue(reliefScript.contains("if (reliefInView && (Math.abs(aim.x - tilt.x) > TILT_SETTLED"),
+            "the relief asks for its next frame whether or not it is on screen and still moving")
+        println("SITE the scroll is read in one passive listener that comes off, scrolled for only by the cue, and $frames frame requests, the opening's and the relief's")
     }
 
     /**
@@ -722,5 +761,135 @@ class SiteSourcesTest {
         val pause = Regex("""<button[^>]*id="band-pause"[^>]*>""").find(page)?.value ?: fail("the opening has no control to pause the drift")
         assertTrue(pause.contains("aria-pressed"), "the pause control does not say whether it is pressed")
         println("SITE the hidden tray is invisible to the keyboard and inert; the drift has a pause control")
+    }
+
+    /** The data frame's `<figure>`, as the page writes it. */
+    private val dataFrame: String by lazy {
+        Regex("""<figure class="datamap"[^>]*>.*?</figure>""", RegexOption.DOT_MATCHES_ALL).find(page)?.value
+            ?: fail("the page has no data frame")
+    }
+
+    /**
+     * That every layer of the data frame is switched by a real button that says whether it is
+     * pressed, one per data card and one per overlay, and that without a script the cards are as
+     * they were.
+     *
+     * The four data cards become the frame's switches once a script runs: each card's heading's
+     * words move into a button that carries `aria-pressed`, which a keyboard reaches and presses
+     * like any button. So the markup holds plain headings (a reader without scripts meets no button
+     * that does nothing), the script makes the buttons and keeps `aria-pressed` in step, and every
+     * data card's picture names a layer the frame has. The two overlays are buttons in the markup,
+     * inside the frame, which stays hidden without a script.
+     */
+    @Test
+    fun `the data frame's layers are switched by real buttons that say whether they are pressed`() {
+        val layers = Regex("""<img data-layer="([^"]+)"""").findAll(dataFrame).map { it.groupValues[1] }.toList()
+        assertTrue(layers.size >= 4, "the data frame has ${layers.size} layers")
+        val cardLayers = Regex("""<ol class="cards layers">.*?</ol>""", RegexOption.DOT_MATCHES_ALL).find(page)?.value
+            ?.let { cards -> Regex("""src="img/layer-([a-z]+)\.webp"""").findAll(cards).map { it.groupValues[1] }.toList() }
+            ?: fail("the page has no data cards")
+        assertEquals(4, cardLayers.size, "the page has ${cardLayers.size} data cards")
+        assertTrue(layers.containsAll(cardLayers), "a data card names a layer the frame does not have: ${cardLayers - layers.toSet()}")
+        val overlays = Regex("""<button type="button" class="control" data-toggles="([^"]+)" aria-pressed="false">""").findAll(dataFrame)
+            .map { it.groupValues[1] }.toList()
+        assertEquals(layers - cardLayers.toSet(), overlays, "the layers no card switches are not each switched by an overlay button that says it is not pressed")
+        assertTrue(Regex("""<figure class="datamap"[^>]*\shidden""").containsMatchIn(page), "the data frame shows without a script")
+        assertTrue(!Regex("""<h3>\s*<button""").containsMatchIn(page), "a card's heading is a button in the markup, which does nothing without a script")
+        listOf("document.createElement('button')", "control.type = 'button'", "control.setAttribute('aria-pressed', 'false')",
+            "control.setAttribute('aria-pressed', on ? 'true' : 'false')").forEach {
+            assertTrue(dataFrameScript.contains(it), "the data frame's script no longer does $it")
+        }
+        println("SITE the data frame has ${layers.size} layers, ${cardLayers.size} switched by the cards and ${overlays.size} by overlay buttons")
+    }
+
+    /**
+     * That the lens can be worked by pointer, touch and keyboard, and fetches its full-size picture
+     * only when it is first used.
+     *
+     * The full picture is named only in the lens's `data-src` and in a plain link, which is the
+     * accessible way to the same picture; it is asked for only from the function that shows the
+     * lens. The frame takes the focus once a script runs and the arrow keys move the lens.
+     */
+    @Test
+    fun `the lens is worked by pointer, touch and keys, and fetches its full picture on first use`() {
+        val full = Regex("""<img id="lens-picture"[^>]*\sdata-src="(img/[^"]+)"""").find(page)?.groupValues?.get(1)
+            ?: fail("the lens names no full-size picture to fetch when used")
+        assertTrue(!Regex("""(?<!data-)src="${Regex.escape(full)}"""").containsMatchIn(page), "the page asks for the lens's full picture as it loads")
+        assertTrue(Regex("""<a href="${Regex.escape(full)}">[^<]+</a>""").containsMatchIn(page), "there is no plain link to the full picture for a reader who cannot use the lens")
+        val asked = Regex("""askForFull\(\)""").findAll(lensScript).count()
+        assertEquals(1, asked, "the full picture is asked for from $asked places, where showing the lens is the one")
+        assertTrue(lensScript.contains("if (on) { glass.hidden = false; askForFull(); }"), "the full picture is asked for somewhere other than when the lens is shown")
+        listOf("'pointermove'", "'pointerdown'", "'pointerup'", "'pointercancel'", "'focus'", "'keydown'", "lensFrame.tabIndex = 0").forEach {
+            assertTrue(lensScript.contains(it), "the lens no longer answers $it")
+        }
+        println("SITE the lens answers pointer, touch and keys and fetches $full on first use")
+    }
+
+    /**
+     * That the relief is the still picture wherever it cannot be the relief.
+     *
+     * The still picture is in the markup with its own description, and the canvas over it is
+     * hidden in the markup and described by nothing, so a reader without scripts, a browser without
+     * WebGL and a reader who asked for less motion all get the picture. The script starts only when
+     * motion may be shown; whatever fails on the way (no WebGL, a shader that will not compile, the
+     * heights not arriving or not the size the patch needs) leaves the canvas hidden, and so does a
+     * lost context; the canvas is shown only once a frame has been drawn into it. And the triangles
+     * are kept out of sight by the light: it is worked out per pixel from a normal blended across
+     * each triangle and normalised again, never from a triangle's own flat face.
+     */
+    @Test
+    fun `the relief falls back to its still picture and never shows its triangles`() {
+        val still = Regex("""<img class="relief-still"[^>]*>""").find(page)?.value ?: fail("the relief has no still picture")
+        assertTrue(Regex("""\salt="[^"]+"""").containsMatchIn(still), "the relief's still picture says nothing to a reader who cannot see it")
+        val canvas = Regex("""<canvas class="relief-canvas"[^>]*>""").find(page)?.value ?: fail("the relief has no canvas")
+        assertTrue(Regex("""\shidden(?=[\s>])""").containsMatchIn(canvas) && canvas.contains("""aria-hidden="true""""),
+            "the relief's canvas shows, or is read out, before a script has drawn into it")
+        assertTrue(page.indexOf(still) < page.indexOf(canvas), "the still picture is not under the canvas")
+        assertTrue(reliefScript.contains("if (reliefCanvas && mayMove &&"), "the relief starts whether or not the reader asked for less motion")
+        assertTrue(reliefScript.contains(".catch(giveUp)"), "a failure on the way to the relief does not leave the still picture")
+        assertTrue(reliefScript.contains("addEventListener('webglcontextlost', giveUp)"), "a lost context does not leave the still picture")
+        assertTrue(reliefScript.contains("if (bitmap.width !== pointsAcross || bitmap.height !== pointsDown) throw"),
+            "heights of the wrong size would be drawn")
+        val drawn = reliefScript.indexOf("gl.drawElements(")
+        val shown = reliefScript.indexOf("reliefCanvas.classList.add('shown')")
+        assertTrue(drawn in 0 until shown, "the canvas is shown before anything has been drawn into it")
+        assertTrue(Regex("""\.live \.relief-canvas\{opacity:0""").containsMatchIn(page), "the canvas is not kept at no opacity until it is shown")
+        assertTrue(reliefScript.contains("dot(normalize(vNormal), light)") && reliefScript.contains("varying vec3 vNormal"),
+            "the light is not worked out per pixel from a normal blended across each triangle")
+        assertTrue(!Regex("""dFdx|dFdy|\bflat\s+(varying|in|out)\b""").containsMatchIn(reliefScript), "the relief shades a triangle by its own flat face")
+        // The caption states the exaggeration the script draws with.
+        val exaggeration = Regex("""var RELIEF_EXAGGERATION = (\d+);""").find(reliefScript)?.groupValues?.get(1)
+            ?: fail("the relief states no exaggeration")
+        val caption = Regex("""<figure class="relief".*?</figure>""", RegexOption.DOT_MATCHES_ALL).find(page)?.value ?: fail("the relief has no figure")
+        val said = Regex("""drawn (\w+) times their true scale""").find(caption)?.groupValues?.get(1)
+            ?: fail("the relief's caption does not say how much its heights are exaggerated")
+        assertEquals(exaggeration, NUMBER_WORDS_BY_TENS[said] ?: said,
+            "the caption says the heights are drawn $said times their scale and the script draws them $exaggeration times")
+        println("SITE the relief falls back to its still, is shown only once drawn, is lit per pixel, and says its heights are $said times their scale")
+    }
+
+    /** The multiples of ten the relief's caption may spell out, by the number they mean. */
+    private val NUMBER_WORDS_BY_TENS = mapOf(
+        "ten" to "10", "twenty" to "20", "thirty" to "30", "forty" to "40", "fifty" to "50",
+        "sixty" to "60", "seventy" to "70", "eighty" to "80", "ninety" to "90", "a hundred" to "100"
+    )
+
+    /**
+     * That every world in "Every seed is a world" is a link a keyboard reaches, named by what it
+     * does, to the application.
+     */
+    @Test
+    fun `every world in the reel is a link the keyboard reaches`() {
+        val reel = Regex("""<ul class="reel">(.*?)</ul>""", RegexOption.DOT_MATCHES_ALL).find(page)?.groupValues?.get(1)
+            ?: fail("the page has no reel")
+        val links = Regex("""<a\s[^>]*>([^<]*)</a>""").findAll(reel).toList()
+        assertTrue(links.size >= 4, "the reel has ${links.size} worlds")
+        links.forEach { link ->
+            val tag = Regex("""<a\s[^>]*>""").find(link.value)!!.value
+            assertTrue(Regex("""href="/app/\?seed=\d+#""").containsMatchIn(tag), "a reel link does not open the application at a seed: $tag")
+            assertTrue(!tag.contains("tabindex"), "a reel link is taken out of the keyboard's order: $tag")
+            assertTrue(Regex("""Open seed \d+ in the app""").matches(link.groupValues[1].trim()), "a reel link does not say what it opens: ${link.value}")
+        }
+        println("SITE the reel's ${links.size} worlds are each a link the keyboard reaches")
     }
 }

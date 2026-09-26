@@ -167,7 +167,14 @@
   now at the sheet's full 4096 by 800 and the page's largest picture) is the author's window all
   the way round the world, so it carries the range's ice cap with its straight edge and the dry
   belt the whole way, and its settled plate shows both; the data-view window's double line is
-  unchanged.
+  unchanged. Site 5b added three figures that cannot avoid them: the lens's whole world and its
+  full-size picture carry all four, the data frame (the cards' window widened east) carries the
+  double line as the cards do, and the reel's five worlds at 512 show their own ice caps and dry
+  belts. Two more marks were seen while picking the relief's patch, the eastern island's western
+  end at (2720, 470): a scarp running nearly straight down a column from about (2960, 717) to
+  (2950, 820) on the sheet, and a delta flat with straight edges at about (3010-3055, 800-835).
+  Both are in the relief, where the tilt makes the scarp plainer; no window of that size on the
+  island's range avoids them and the dry belt at once.
 - **Six operators still count a row as a column, each outside Fix 2's list.** Found by reading the
   code, not by a guard: the climate stage's rainfall blur (a square box of cells, sized by
   `RAIN_BLUR_REFERENCE_WIDTH`) and its two coastal-reach blurs, the water exposure and the offshore

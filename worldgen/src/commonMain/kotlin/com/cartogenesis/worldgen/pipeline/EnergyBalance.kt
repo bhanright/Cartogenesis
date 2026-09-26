@@ -614,7 +614,7 @@ object EnergyBalance {
      * passes; eight is a ceiling rather than a count.
      */
     private const val MAX_SECANT_PASSES = 8
-    private const val SECANT_TOLERANCE_C = 0.05
+    internal const val SECANT_TOLERANCE_C = 0.05
 
     /**
      * The least the sun may be dimmed to.

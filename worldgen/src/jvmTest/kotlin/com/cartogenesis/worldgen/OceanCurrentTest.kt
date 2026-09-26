@@ -1,8 +1,12 @@
 package com.cartogenesis.worldgen
 
 import com.cartogenesis.worldgen.model.WorldGenConfig
+import com.cartogenesis.worldgen.pipeline.ClimateStage
+import com.cartogenesis.worldgen.pipeline.EnergyBalance
 import com.cartogenesis.worldgen.pipeline.OceanStage
+import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.cos
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -16,6 +20,15 @@ import kotlin.test.assertTrue
  * mean flow at 40 to 50 degrees and a poleward western boundary current in every subtropical basin.
  */
 class OceanCurrentTest : BorrowsSharedWorlds() {
+
+    private companion object {
+        /**
+         * The share of the energy balance's meridional transport the anomaly's row means may stand
+         * for: its smallest miss against Trenberth and Caron's measured transport, 0.1 PW of 5.0 at
+         * 45 degrees. See `the anomaly's row means carry less heat than the energy balance's own miss`.
+         */
+        const val DOUBLE_COUNT_SHARE = 0.02
+    }
 
     /**
      * The westerlies' band flows east in both hemispheres, the subtropical gyres return poleward
@@ -66,6 +79,94 @@ class OceanCurrentTest : BorrowsSharedWorlds() {
             "the warm quartile is only ${"%.1f".format((pooled - 1) * 100)}% better settled than" +
                 " the cold one pooled over the three seeds, where the coastal term is worth 2%"
         )
+    }
+
+    /**
+     * The anomaly's reference is a band mean, so a row's anomaly does not average exactly to zero
+     * (see `OceanStage.buildAnomaly`); the heat those row means stand for is too small to count the
+     * energy balance's meridional transport twice by any amount the balance can itself answer for.
+     *
+     * A row whose water sits `m` degrees off its zonal mean gives the air `λ m` watts a square
+     * meter more than the energy balance knows about, `λ` the surface exchange. Summed from a pole
+     * to a latitude, with the whole ocean's net taken out first, that is a transport across the
+     * latitude the currents carry on top of the balance's own. It is held to a share of the
+     * balance's transport there, `2π a² D cos φ dT/dφ`, read as `EnergyBalanceTest`'s transport
+     * report reads it, on the same world. The share is [DOUBLE_COUNT_SHARE]: against Trenberth and
+     * Caron's measured transport, the balance's own reads 4.6, 4.9 and 3.2 PW at 30, 45 and 60
+     * degrees to Earth's 5.3, 5.0 and 3.3, so a double count under 2% is inside the smallest of
+     * its own misses.
+     *
+     * The whole ocean's net, set aside above, is a mean offset of the sea's temperature rather
+     * than a transport. It is held under `EnergyBalance.SECANT_TOLERANCE_C`, the twentieth of a
+     * degree to which the balance itself sets the planet's global mean when a world asks for a
+     * warmer or a cooler climate: an offset under it is one the balance could not have placed. Its
+     * spin-up residual, a few ten-thousandths, is printed beside it and is not the bar: that is how
+     * far the balance's own mean still moved in its last year, not how closely it is set.
+     */
+    @Test
+    fun `the anomaly's row means carry less heat than the energy balance's own miss`() {
+        val failures = ArrayList<String>()
+        for (seed in listOf(7L, 42L, 1234L, 99L)) {
+            val world = SharedWorlds.world(WorldGenConfig(seed = seed, width = 512, height = 512))
+            val across = world.width
+            val down = world.height
+            val radiusMeters = world.config.scale.radiusMeters
+            val exchange = EnergyBalance.SURFACE_EXCHANGE_W_PER_M2_C
+            val rowSourceW = DoubleArray(down)
+            val rowWaterAreaM2 = DoubleArray(down)
+            for (row in 0 until down) {
+                val latitude = ClimateStage.latitudeOf(row, down) * PI / 180.0
+                val cellAreaM2 = (2 * PI * radiusMeters * cos(latitude) / across) * (PI * radiusMeters / down)
+                var anomalySumC = 0.0
+                var water = 0
+                for (column in 0 until across) {
+                    val cell = row * across + column
+                    if (world.sea.isLand[cell]) continue
+                    anomalySumC += world.ocean.anomaly.data[cell]
+                    water++
+                }
+                rowSourceW[row] = exchange * anomalySumC * cellAreaM2
+                rowWaterAreaM2[row] = water * cellAreaM2
+            }
+            val netPerM2 = rowSourceW.sum() / rowWaterAreaM2.sum()
+            val oceanMeanC = netPerM2 / exchange
+            val zonal = ClimateStage.zonalClimate(world.config, world.sea)
+            val landFraction = EnergyBalance.landFractionByBand(across, down, world.sea.isLand)
+            fun bandMeanC(degrees: Double): Double {
+                val band = ((EnergyBalance.POLE_DEGREES - degrees) * EnergyBalance.BANDS /
+                    EnergyBalance.POLE_TO_POLE_DEGREES).toInt().coerceIn(0, EnergyBalance.BANDS - 1)
+                val share = landFraction[band].toDouble()
+                return share * zonal.land.annualC[band] + (1 - share) * zonal.sea.annualC[band]
+            }
+            val shares = ArrayList<String>()
+            for (degrees in listOf(30.0, 45.0, 60.0, -30.0, -45.0, -60.0)) {
+                val poleward = if (degrees > 0) 1.0 else -1.0
+                val step = 5.0
+                val gradientPerRadian = (bandMeanC(degrees - step) - bandMeanC(degrees + step)) / (2 * step * PI / 180.0)
+                val balanceW = abs(
+                    2 * PI * radiusMeters * radiusMeters * EnergyBalance.diffusivityAt(abs(degrees)) *
+                        cos(degrees * PI / 180.0) * gradientPerRadian
+                )
+                var doubleCountW = 0.0
+                for (row in 0 until down) {
+                    val latitude = ClimateStage.latitudeOf(row, down).toDouble()
+                    if ((latitude - degrees) * poleward <= 0.0) continue
+                    doubleCountW += rowSourceW[row] - netPerM2 * rowWaterAreaM2[row]
+                }
+                val share = abs(doubleCountW) / balanceW
+                shares += "%+.0f %.2f%%".format(degrees, share * 100)
+                if (share >= DOUBLE_COUNT_SHARE) {
+                    failures += "seed $seed: the row means carry %.2f%% of the balance's transport across %+.0f".format(share * 100, degrees)
+                }
+            }
+            println("OCEAN DOUBLE COUNT seed $seed: " + shares.joinToString() +
+                "; whole ocean %+.4f C against the balance's spin-up residual %.4f C".format(oceanMeanC, zonal.spinUpResidualC))
+            if (abs(oceanMeanC) >= EnergyBalance.SECANT_TOLERANCE_C) {
+                failures += "seed $seed: the whole ocean's anomaly is %+.4f C, past the %.2f C the balance sets its mean to"
+                    .format(oceanMeanC, EnergyBalance.SECANT_TOLERANCE_C)
+            }
+        }
+        assertTrue(failures.isEmpty(), failures.joinToString("\n"))
     }
 
     /** The warm quartile's coastal habitability over the cold quartile's, as a ratio. */

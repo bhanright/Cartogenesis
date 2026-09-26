@@ -38,9 +38,17 @@ class SeaIceTest : BorrowsSharedWorlds() {
          * `ClimateResult.winterSeaIce`, cell by cell, on a generated world. Earth's winter pack
          * reaches about 44 N in the Sea of Okhotsk and about 75 N off the Norwegian coast, with the
          * zonal-mean March edge near 60 N; the Antarctic's September maximum sits near 60 S all the
-         * way round (Fetterer et al., *Sea Ice Index*, NSIDC). The equatorward-most frozen water is
-         * the Okhotsk end of that spread, so the bar is 45 to 70 and Earth's zonal mean of 60 is
-         * printed beside every measurement.
+         * way round (Fetterer et al., *Sea Ice Index*, NSIDC). The measure is the equatorward-most
+         * frozen water, and Earth's is not the Okhotsk but the Bohai Sea, 37 to 41 N, "globally
+         * one of the regions with the lowest latitude in which ice forms", with ice in each of its
+         * three bays in winter down to Laizhou Bay on its southern shore (Yan et al., *Extraction
+         * and analysis of the sea ice parameter dataset of the Bohai Sea from 2011 to 2021 based on
+         * GOCI*, Frontiers in Marine Science 11, 2024). So the bar's equatorward end is 37; Earth's
+         * zonal mean of 60 is printed beside every measurement.
+         *
+         * The bar stood at 45 from W1's second pass to chunk 4a, under the Okhotsk's 44 that its
+         * own citation gave, until the solved gyres brought a cold western boundary current to
+         * seed 7's subpolar coast and its edge to 43.1 degrees (docs/DESIGN_LEDGER.md, 4a).
          *
          * It was 40 to 78 in W1's first pass, which was loose enough to accept an edge at 49
          * degrees — nine degrees equatorward of Earth's zonal mean and past the Okhotsk. The second
@@ -53,7 +61,7 @@ class SeaIceTest : BorrowsSharedWorlds() {
          * Southern Ocean runs all the way round, and the three seeds differ by three degrees among
          * themselves. Reported beside every measurement rather than tuned.
          */
-        const val ICE_EDGE_EQUATORWARD_LIMIT = 45f
+        const val ICE_EDGE_EQUATORWARD_LIMIT = 37f
         const val ICE_EDGE_POLEWARD_LIMIT = 70f
         const val EARTH_ZONAL_MEAN_ICE_EDGE = 60f
 

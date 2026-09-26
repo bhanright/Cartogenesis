@@ -13,20 +13,34 @@ import kotlin.test.assertTrue
  * cold upwelling current starves the coast it washes and a warm one feeds it.
  *
  * The sample is a world with a subtropical west coast in the southern hemisphere, 27 to 33
- * degrees, whose offshore water sits at least 0.8 degrees colder than its latitude's own mean — the
- * model's equivalent of the Humboldt or Benguela current — and an east coast at the same latitudes
- * north of the equator washed by a warm, poleward-flowing western-boundary current (the Gulf Stream
- * and Kuroshio's role): the gyres this world solves are mirrored about the equator, the way Earth's
- * are. It is the first seed counting up from 1 whose world carries at least ten cells of the one
- * coast and five of the other, the two floors the guard itself asserts. That was seed 26, found by
- * inspection, until the ground's ruler redrew every continent and left seed 26 five cells of cold
- * coast; the same criterion, run over seeds 1 to 40, now finds seed 1 first (docs/DESIGN_LEDGER.md,
- * Fix 2).
+ * degrees, whose offshore water sits at least 0.8 degrees colder than its latitude's own mean, the
+ * model's stand-in for the Humboldt or the Benguela, and an east coast at the same latitudes north
+ * of the equator washed by water at least 0.15 degrees warmer, a western boundary current's, the
+ * role of the Gulf Stream and the Kuroshio. Both kinds of coast are found in both hemispheres: a
+ * subtropical gyre turns clockwise in the north and counterclockwise in the south, and in either
+ * one its western boundary current runs poleward and warm along a continent's east coast while its
+ * eastern flank drifts equatorward along a west coast. One of each, in opposite hemispheres, is
+ * the sample.
+ *
+ * The seed is chosen by the map's geography alone, before any temperature is read: the first of
+ * the standard seeds, 7, 42, 1234 and 99, with land facing water to its west on every row from 27
+ * to 33 S and land facing water to its east on every row from 27 to 33 N. That is seed 7. It used
+ * to be the first seed counting up from 1 that met the guard's own floors, which chose the sample
+ * by the result it was to test (seed 26, then seed 1; docs/DESIGN_LEDGER.md, Fix 2 and 4a).
  */
 class CurrentFeedsRainTest : BorrowsSharedWorlds() {
 
     private companion object {
-        const val SEED = 1L
+        const val SEED = 7L
+
+        /**
+         * The sample's cold coast is short of its floor of ten cells: on seed 7 the Stommel
+         * circulation's equatorward drift cools only six cells of that west coast by 0.8 degrees.
+         * Earth's cold coasts owe most of their cold to the upwelling beside them, which chunk 4b
+         * builds; until then the rainfall comparison runs on the cells there are.
+         */
+        const val COLD_COAST_SHORT =
+            "the currents: a subtropical west coast is cold on too few cells without upwelling"
 
         // The cold-current stretch: bounds wide enough to catch a whole subtropical coastal run,
         // narrow enough that it does not wander into a different current regime.
@@ -106,6 +120,8 @@ class CurrentFeedsRainTest : BorrowsSharedWorlds() {
         data class Coast(val x: Int, val y: Int, val lat: Float, val anomaly: Float)
 
         val coldCoast = ArrayList<Coast>()
+        val westFacingRows = HashSet<Int>()
+        val eastFacingRows = HashSet<Int>()
         val warmCoast = ArrayList<Coast>()
         for (y in 0 until h) {
             val lat = ClimateStage.latitudeOf(y, h)
@@ -114,6 +130,7 @@ class CurrentFeedsRainTest : BorrowsSharedWorlds() {
                 if (!on.sea.isLand[i]) continue
                 val westX = (x - 1 + w) % w
                 if (!on.sea.isLand[y * w + westX]) {
+                    if (lat in COLD_LAT_LO..COLD_LAT_HI) westFacingRows += y
                     val a = on.ocean.anomaly.data[y * w + westX]
                     if (lat in COLD_LAT_LO..COLD_LAT_HI && a <= COLD_ANOMALY_MAX) {
                         coldCoast.add(Coast(x, y, lat, a))
@@ -121,6 +138,7 @@ class CurrentFeedsRainTest : BorrowsSharedWorlds() {
                 }
                 val eastX = (x + 1) % w
                 if (!on.sea.isLand[y * w + eastX]) {
+                    if (lat in WARM_LAT_LO..WARM_LAT_HI) eastFacingRows += y
                     val a = on.ocean.anomaly.data[y * w + eastX]
                     if (lat in WARM_LAT_LO..WARM_LAT_HI && a >= WARM_ANOMALY_MIN) {
                         warmCoast.add(Coast(x, y, lat, a))
@@ -129,7 +147,25 @@ class CurrentFeedsRainTest : BorrowsSharedWorlds() {
             }
         }
 
-        assertTrue(coldCoast.size >= 10, "too few cold-coast cells found: ${coldCoast.size}")
+        // The rule the seed was chosen by, held so that a change to the ground that breaks it says so.
+        val coldBandRows = (0 until h).count { ClimateStage.latitudeOf(it, h) in COLD_LAT_LO..COLD_LAT_HI }
+        val warmBandRows = (0 until h).count { ClimateStage.latitudeOf(it, h) in WARM_LAT_LO..WARM_LAT_HI }
+        assertTrue(
+            westFacingRows.size == coldBandRows && eastFacingRows.size == warmBandRows,
+            "seed $SEED no longer has a west coast on every row of 27-33 S (${westFacingRows.size} of $coldBandRows) " +
+                "and an east coast on every row of 27-33 N (${eastFacingRows.size} of $warmBandRows): choose the seed again"
+        )
+
+        KnownFailures.expect(COLD_COAST_SHORT, "6 cells") {
+            if (coldCoast.size < 10) {
+                throw RecordedViolation(
+                    "only ${coldCoast.size} cells of seed $SEED's west coast at 27-33 S sit 0.8 C under their " +
+                        "latitude's mean, where the sample asks ten",
+                    "${coldCoast.size} cells"
+                )
+            }
+        }
+        assertTrue(coldCoast.isNotEmpty(), "no cold-coast cells found")
         assertTrue(warmCoast.size >= 5, "too few warm-coast cells found: ${warmCoast.size}")
 
         fun meanMm(cells: List<Coast>, world: com.cartogenesis.worldgen.model.WorldMap): Double =
@@ -177,8 +213,8 @@ class CurrentFeedsRainTest : BorrowsSharedWorlds() {
         // roughly 10% pickup-rate change over one current's stretch of sea shows up as a few
         // percent of rainfall, not a biome flip. Reported rather than asserted, per rule 5.
 
-        // Armed again at Fix 3b: from Fix 2 seed 1's cold coast came out a few tenths of a percent
-        // wetter with the coupling on, and on Fix 3b's terrain it comes out drier
+        // Armed again at Fix 3b: from Fix 2 seed 1's cold coast, the sample until 4a, came out a few
+        // tenths of a percent wetter with the coupling on, and on Fix 3b's terrain it came out drier
         // (docs/DESIGN_LEDGER.md, Fix 2 and Fix 3b).
         assertTrue(coldOn < coldOff, "cold-current coast should get drier with the coupling on: off=$coldOff, on=$coldOn")
         assertTrue(

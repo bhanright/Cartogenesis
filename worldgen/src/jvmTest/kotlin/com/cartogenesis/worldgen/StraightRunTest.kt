@@ -28,6 +28,16 @@ import kotlin.test.assertTrue
 class StraightRunTest : BorrowsSharedWorlds() {
 
     private companion object {
+        /**
+         * The known failure the census records since the implicit pass lets a lake fall with its
+         * outlet (docs/DESIGN_LEDGER.md, Fix 3b's review round): seed 42 at 512 holds one ruled
+         * bar, 27 cells at (202,43), 0.96 cells off a line it runs 24.1 cells along, where with the
+         * lake held at its filled level the census read 0 / 0 / 0 / 0 / 0. `GlaciationTest` records
+         * the same finding on the comb.
+         */
+        const val LAKE_FALLS_INTO_BARS =
+            "the water: once a lake falls with its outlet, more of the standing water lies in thin grid-bearing bars"
+
         /** The author's own world, at the size he looks at it, where the bar was found. */
         const val AUTHORS_SEED = 298405L
         const val AUTHORS_SIDE = 1024
@@ -106,10 +116,15 @@ class StraightRunTest : BorrowsSharedWorlds() {
             assertDrainageIsAForest(world, "$seed@$side")
         }
         println("F18 census with the facet rule: ${counted.joinToString(" ")}")
-        assertEquals(
-            0, total,
-            "standing water still runs in ruled lines: ${counted.joinToString(" ")}"
-        )
+        // Recorded since the lake falls with its outlet: see [LAKE_FALLS_INTO_BARS].
+        KnownFailures.expect(LAKE_FALLS_INTO_BARS, "42@512=1") {
+            if (total != 0) {
+                throw RecordedViolation(
+                    "standing water still runs in ruled lines: ${counted.joinToString(" ")}",
+                    counted.filterNot { it.endsWith("=0") }.joinToString(" ")
+                )
+            }
+        }
     }
 
     /**

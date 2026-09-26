@@ -58,6 +58,8 @@ class RealmSpreadTest : BorrowsSharedWorlds() {
             largestShares += seed to largest.toDouble() / land
         }
         val cap = WorldGenConfig().nations.maxRealmShare.toDouble()
+        // Fix 3b's terrain had brought it under the cap on its own, where seed 1234's largest realm
+        // held 29% (docs/DESIGN_LEDGER.md, Fix 3b); both sides armed it before they were merged.
         val over = largestShares.filter { it.second > cap }
         assertTrue(
             over.isEmpty(),

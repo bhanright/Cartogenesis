@@ -196,9 +196,11 @@ class EngravingPlan(sheet: SheetGeometry) {
          * Lehmann's rule is that a hachure map leaves the flat blank and darkens with the slope, so
          * there has to be a figure for flat. Set from the ground rather than by eye: it is the tenth
          * percentile of the land slope of seed 234475 measured at this stencil, so a tenth of the
-         * land — the deltas, the basin floors, the coastal plain — takes no ink at all.
+         * land — the deltas, the basin floors, the coastal plain — takes no ink at all. It was 0.07
+         * until the incision became the stream-power law's implicit update, whose ground is rougher:
+         * the tenth percentile reads 0.084 there (docs/DESIGN_LEDGER.md, Fix 3b).
          */
-        const val SLOPE_FLOOR: Float = 0.07f
+        const val SLOPE_FLOOR: Float = 0.08f
 
         /**
          * The steepness at which a stroke is fully black, as a fraction of the way from

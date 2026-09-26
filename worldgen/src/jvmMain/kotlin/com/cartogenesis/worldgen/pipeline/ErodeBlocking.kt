@@ -90,19 +90,32 @@ internal fun erodeBlockingObservingCover(
     height: FloatField,
     upliftRateMmPerYear: FloatField?,
     shieldCut: Boolean = true,
-    /**
-     * The clamp is switched off for the cover's own guard, and only there. It bounds a cell's cut
-     * by the receiver's *new* height, so whether it bites on a given cell depends on how much the
-     * cells upstream of it were cut — which is exactly what the guard is varying. Left on, a few
-     * cells in a hundred thousand are clamped in one run and not the other, and the quotient there
-     * is the clamp's arithmetic rather than the cover's. The clamp is not part of the erodibility
-     * law, so taking it out is what makes the comparison exact rather than what makes it pass.
-     */
+    /** See [erodeBlockingWithReceiverClamp]; production keeps it on. */
     receiverClamp: Boolean = true,
-    weightSums: ((String, Double, Int) -> Unit)? = null
+    weightSums: ((String, Double, Int) -> Unit)? = null,
+    /** Handed every cell the incision reaches, as [erodeBlockingWatchingIncision] hands it. */
+    incisionWatch: IncisionWatch? = null
 ): ErosionResult = runBlocking {
     ErosionStage.apply(
         config, height, upliftRateMmPerYear, null, null, null, receiverClamp = receiverClamp,
-        weightSums = weightSums, shieldCut = shieldCut
+        weightSums = weightSums, shieldCut = shieldCut, incisionWatch = incisionWatch
+    )
+}
+
+/**
+ * The whole stage, handing every cell the implicit incision reaches and every round's result to
+ * [watch]: what the incision's guards observe production through, since the finished heights hide
+ * the law's rate and the level each cell was cut toward.
+ */
+internal fun erodeBlockingWatchingIncision(
+    config: WorldGenConfig,
+    height: FloatField,
+    upliftRateMmPerYear: FloatField?,
+    watch: IncisionWatch,
+    receiverClamp: Boolean = true
+): ErosionResult = runBlocking {
+    ErosionStage.apply(
+        config, height, upliftRateMmPerYear, null, null, null, receiverClamp = receiverClamp,
+        incisionWatch = watch
     )
 }

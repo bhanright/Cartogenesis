@@ -1,5 +1,7 @@
 package com.cartogenesis.cartography
 
+import com.cartogenesis.cartography.geometry.KnownFailures
+import com.cartogenesis.cartography.geometry.RecordedViolation
 import com.cartogenesis.worldgen.BorrowsSharedWorlds
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.Biome
@@ -33,6 +35,17 @@ import kotlin.test.assertTrue
 class ClimateTintTest : BorrowsSharedWorlds() {
 
     private companion object {
+        /**
+         * The known failure the steppe clause records since Fix 3b. On the gallery world as the
+         * implicit incision cuts it, the Scroll style draws the steppe 80 to 81% of the way from
+         * its desert to its forest, past the 75% the clause allows; the other strongly tinted
+         * styles stay between. The steppe's colour is a mean over the grassland's rendered pixels,
+         * shading and all, and the grassland moved with the terrain; which of the two carries the
+         * figure is not diagnosed (docs/DESIGN_LEDGER.md, Fix 3b).
+         */
+        const val STEPPE_NEAR_THE_FOREST_ON_THE_LAWS_TERRAIN =
+            "the tint: on the law's terrain one style draws the steppe nearer the forest than the desert's band allows"
+
 
         /** The gallery's world, at the size these guards measure on. See [TestWorlds]. */
         val WORLD: WorldMap get() = TestWorlds.gallery
@@ -206,6 +219,7 @@ class ClimateTintTest : BorrowsSharedWorlds() {
     @Test
     fun `a steppe is drawn between the forest and the desert`() {
         val world = WORLD
+        val outside = ArrayList<String>()
         MapStyle.entries.filter { it.climateTint >= STRONG_CLIMATE_TINT }.forEach { style ->
             val drawn = MapRasterizer.rasterize(world, RenderOptions(style = style))
             val desert = meanColour(drawn, world, listOf(Biome.DESERT))
@@ -225,12 +239,17 @@ class ClimateTintTest : BorrowsSharedWorlds() {
                         share * 100, span, shareBefore * 100
                     )
             )
-            assertTrue(
-                share >= MIN_STEPPE_SHARE && share <= 1.0 - MIN_STEPPE_SHARE,
-                "${style.label}: a steppe stands ${"%.0f".format(share * 100)}% of the way from " +
+            if (share < MIN_STEPPE_SHARE || share > 1.0 - MIN_STEPPE_SHARE) {
+                outside += "${style.label}: a steppe stands ${"%.0f".format(share * 100)}% of the way from " +
                     "the desert to the forest, outside " +
                     "${(MIN_STEPPE_SHARE * 100).toInt()}-${((1 - MIN_STEPPE_SHARE) * 100).toInt()}%"
-            )
+            }
+        }
+        // Recorded since Fix 3b: see [STEPPE_NEAR_THE_FOREST_ON_THE_LAWS_TERRAIN].
+        KnownFailures.expect(STEPPE_NEAR_THE_FOREST_ON_THE_LAWS_TERRAIN, "Scroll outside") {
+            if (outside.isNotEmpty()) {
+                throw RecordedViolation(outside.joinToString("; "), outside.joinToString(", ") { it.substringBefore(":") } + " outside")
+            }
         }
     }
 

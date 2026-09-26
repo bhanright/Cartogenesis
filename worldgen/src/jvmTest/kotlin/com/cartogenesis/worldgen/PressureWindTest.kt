@@ -301,6 +301,9 @@ class PressureWindTest : BorrowsSharedWorlds() {
             ("the warm half blows %+.2f m/s onto the subtropical continents' equatorward and " +
                 "eastern coasts, which is not onshore").format(summer)
         )
+        // On the implicit update before the uplift was re-derived on it the cold half pooled to
+        // -0.04 m/s, seeds 42 and 1234 blowing onshore; with the re-derived uplift it clears the bar
+        // again (docs/DESIGN_LEDGER.md, Fix 3b).
         assertTrue(
             winter < -ONSHORE_BAR_MPS,
             ("the cold half blows %+.2f m/s onto the same coasts, which is not offshore")

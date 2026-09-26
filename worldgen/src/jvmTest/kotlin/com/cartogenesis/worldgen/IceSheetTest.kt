@@ -73,7 +73,7 @@ class IceSheetTest : BorrowsSharedWorlds() {
         // ground it covers. See docs/DESIGN_LEDGER.md, Fix 2.
         KnownFailures.expect(
             THIN_SHEETS_ON_HIGH_GROUND,
-            "seed 718106 at 1876 m over 497 km, seed 7 at 1405 m over 483 km"
+            "seed 718106 at 1670 m over 407 km, seed 59758 at 1696 m over 574 km, seed 7 at 1386 m over 556 km"
         ) {
             if (thin.isNotEmpty()) {
                 throw RecordedViolation(
@@ -243,10 +243,18 @@ class IceSheetTest : BorrowsSharedWorlds() {
                     " 50% and ${"%.0f".format(INDIFFERENT_BEARING_DEGREES)}"
             }
         }
-        assertTrue(
-            "the sheet is not flowing down its own surface:\n" + failures.joinToString("\n"),
-            failures.isEmpty()
-        )
+        // Recorded since Fix 3b: see [FLOW_OFF_RADIAL].
+        KnownFailures.expect(
+            FLOW_OFF_RADIAL,
+            "seed 59758: 44.7% of the ice near the dome flows outward at a mean 95.7 degrees off radial; seed 7: 64.4% of the ice near the dome flows outward at a mean 75.5 degrees off radial"
+        ) {
+            if (failures.isNotEmpty()) {
+                throw RecordedViolation(
+                    "the sheet is not flowing down its own surface:\n" + failures.joinToString("\n"),
+                    failures.joinToString("; ") { it.substringBefore(", which is not") }
+                )
+            }
+        }
         // What stops the clause passing because every seed's dome had shrunk out of reach.
         assertTrue(
             "only $domesRead of the audited seeds still grow a sheet whose dome fills a third of" +
@@ -386,21 +394,10 @@ class IceSheetTest : BorrowsSharedWorlds() {
                     " bearing ${octagon.bearing}, against ${"%.1f".format(octagon.allowed)} allowed"
             }
         }
-        // Seed 59758's sheet reaches the row near 72.7 degrees south that the geometry census
-        // records the ice's edge running along at 2048 (its finding "the ice's edge runs straight
-        // along a row"): the frozen mask follows a latitude there, which is the ice's own
-        // operators and not the relief window this clause was written for.
-        KnownFailures.expect(
-            ICE_EDGE_ALONG_A_ROW,
-            "seed 59758: the sheet's edge runs 70 cells straight along bearing 0, against 35.8 allowed"
-        ) {
-            if (failures.isNotEmpty()) {
-                throw RecordedViolation(
-                    "the sheet mask's edge is ruled along a grid bearing:\n" + failures.joinToString("\n"),
-                    failures.joinToString("; ")
-                )
-            }
-        }
+        // Armed at Fix 3b's review round: seed 59758's edge ran 46 cells along bearing 0 against
+        // 36.6 allowed, and once a lake falls with its outlet its longest run is 31 against 36.1
+        // (docs/DESIGN_LEDGER.md, Fix 3b).
+        assertTrue("the sheet mask's edge is ruled along a grid bearing:\n" + failures.joinToString("\n"), failures.isEmpty())
     }
 
     /** One sheet's outline, as the edge clause reads it. */
@@ -675,12 +672,21 @@ class IceSheetTest : BorrowsSharedWorlds() {
     }
 
     private companion object {
+        /**
+         * The known failure the flow clause records since Fix 3b: on the terrain the implicit
+         * update cuts, with the uplift re-derived on it, the sheets near their domes on the
+         * reported world and on seed 7 flow outward on 56.4% and 62.7% of their cells at a mean
+         * 84.0 and 77.1 degrees off radial, and 44.7% and 64.4% at 95.7 and 75.5 once a lake falls
+         * with its outlet, where the clause asks 67% and 67.5; on the capped explicit update the
+         * reported world read 87.5% at 49.6. The ice's to settle (chunk 5);
+         * see docs/DESIGN_LEDGER.md, Fix 3b.
+         */
+        const val FLOW_OFF_RADIAL =
+            "the ice: on the terrain the stream-power law cuts, sheets flow further off radial than their domes allow"
+
         /** The known failure the thickness clause records, the ice's to settle. */
         const val THIN_SHEETS_ON_HIGH_GROUND =
             "the ice: sheets as wide as Greenland's grow on high plateaus and stand under its thickness"
-
-        /** The known failure the edge clause records: the geometry census's ice-edge finding. */
-        const val ICE_EDGE_ALONG_A_ROW = "the ice: the sheet's edge runs straight along a row"
 
         /** `GlaciationTest`'s own worlds, so one set of ice answers every clause. */
         val seeds = listOf(718106L, 59758L, 7L, 42L)

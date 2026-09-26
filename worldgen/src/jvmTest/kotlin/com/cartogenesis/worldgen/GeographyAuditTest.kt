@@ -371,25 +371,6 @@ internal class DesertBands {
      */
     private val asserted = booleanArrayOf(true, true, false)
 
-    private companion object {
-        /**
-         * The pooled tropical clause, which Fix 2's redrawn continents tipped.
-         *
-         * With every operator on the ground's ruler the four worlds' tropics hold x0.63, x1.04,
-         * x0.87 and x0.04 of each world's own desert share, pooling to x0.69 against the bar of
-         * x0.54, twice Earth's x0.27; the horse latitudes read x2.11 pooled against Earth's x2.05,
-         * so the belt is where it was and what grew is desert on the equator's side of it. The
-         * continents are new on every seed (the plate partition is Euclidean on the ground now),
-         * and the belts, measured on the ground now, reach as far north and south of a boundary
-         * as east and west of it, so a range across the easterly trades is as broad as one along
-         * them; which of the two carries the figure is not separated. Recorded rather than
-         * re-derived, because Earth's figure did not move, and left to the climate's next chunk.
-         * See docs/DESIGN_LEDGER.md, Fix 2.
-         */
-        const val TROPICAL_DESERT_POOLED =
-            "the climate: on the continents the ground's ruler draws, the tropics hold more of the desert than Earth's, pooled"
-    }
-
     private val pooledDesert = LongArray(3)
     private val pooledLand = LongArray(3)
     private val perSeedDesert = LinkedHashMap<Long, LongArray>()
@@ -427,7 +408,7 @@ internal class DesertBands {
             // Earth's x0.27. That is the mechanism working, not the belt failing: pooled over the
             // four seeds the tropics stayed inside their bar, and the horse latitudes' clause, which
             // is what this guard exists for, is untouched. See docs/DESIGN_LEDGER.md, W3. The
-            // pooled figure no longer stays inside it: see [TROPICAL_DESERT_POOLED].
+            // pooled figure left it from Fix 2 to Fix 3 and is inside it again on Fix 3b's terrain.
             perSeed.forEach { complaint ->
                 if (everyBand || !complaint.contains(names[0])) {
                     complaints.add(complaint)
@@ -442,22 +423,13 @@ internal class DesertBands {
 
     fun assertAgainstEarth(seeds: List<Long>) {
         val complaints = report(seeds, "AUDIT BAND", everyBand = false)
-        // The pooled tropical clause runs as a known failure; every other clause is asserted.
-        val tropical = complaints.filter { it.contains("pooled ${names[0]} ") }
-        KnownFailures.expect(TROPICAL_DESERT_POOLED, "pooled 0-15 deg at x0.69") {
-            if (tropical.isNotEmpty()) {
-                throw RecordedViolation(
-                    "the tropics hold too much of the four worlds' desert: $tropical",
-                    tropical.joinToString { it.substringAfter("AUDIT BAND ").substringBefore(" against") }
-                )
-            }
-        }
-        val rest = complaints - tropical.toSet()
+        // Every clause asserted: the pooled tropical one, recorded from Fix 2, is inside its bar on
+        // Fix 3b's terrain (docs/DESIGN_LEDGER.md, Fix 3b).
         assertTrue(
-            rest.isEmpty(),
+            complaints.isEmpty(),
             "desert sits in the wrong latitudes against Earth's Koeppen BW shares (0-15 deg 5.2% " +
                 "of that band's land, 15-45 deg 39.2%, 45-90 deg 2.2%, all Earth's land 19.1%; " +
-                "see DesertBands for the derivation): $rest"
+                "see DesertBands for the derivation): $complaints"
         )
     }
 

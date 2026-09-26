@@ -41,18 +41,14 @@ class GroundIsotropyTest : BorrowsSharedWorlds() {
      * times that. Each world is held to three of its own spreads, and the four together to three of
      * theirs. A world isotropic in cells reads 2.
      *
-     * It fails today, on a defect the ruler does not reach, and runs as a known failure under it.
-     * With every operator on the ground's ruler the plate stage's own coast reads 1.09 and 0.91 on
-     * seeds 42 and 7 and the thermal sweeps leave it there, but the twelve hydraulic rounds take
-     * the erosion stage's own land to 1.56 and 1.48: the incision is capped at half the drop to a
-     * cell's receiver in a round, a drop is in proportion to the step's length on the ground, and a
-     * step down a column is half as long as one along a row, so wherever the cap and not the
-     * stream-power law sets the cut — most channels, by Audit III's B-D1 — a channel running
-     * north-south is cut half as deep a round as one running east-west on the same slope, and the
-     * valleys the coast is notched by run east-west. Weakening the law until the cap stops binding
-     * takes the ratio to 1.14 and 1.04 at a tenth of its strength and to 1.05 and 0.91 at three
-     * hundredths, on seeds 42 and 7. The erosion's units, which set how often the cap binds, are
-     * the next chunk's; see docs/DESIGN_LEDGER.md, Fix 2.
+     * It fails today and runs as a known failure. Through Fix 3 the cause was the incision's cap
+     * per step (Audit III's B-D1): the cut was capped at half the drop to a cell's receiver, a drop
+     * is in proportion to the step, and a step down a column is half as long on the ground, so a
+     * channel running north-south was cut half as deep a round. The implicit update removed that
+     * cap, and the notches and a knickpoint's retreat now read the same by bearing
+     * (`ValleyIncisionTest`, `ImplicitIncisionTest`); the ratio did not follow them to 1, and what
+     * holds it there is not isolated. See [COAST_RUNS_EAST_WEST] and docs/DESIGN_LEDGER.md, Fix 2,
+     * Fix 3 and Fix 3b, for the figures.
      */
     @Test
     fun `the coastline runs as far north-south as east-west on the ground`() {
@@ -69,8 +65,8 @@ class GroundIsotropyTest : BorrowsSharedWorlds() {
         val pooledBar = SPREADS * ratioSpread(ratios.sumOf { it.lengthKm })
         println("ISOTROPY the four worlds together: ratio %.3f, the log of which may stand %.3f from nothing".format(pooled, pooledBar))
         KnownFailures.expect(
-            INCISION_CAPPED_PER_STEP,
-            "seed 7 1.32, seed 42 1.41, seed 1234 1.41, seed 99 1.41, together 1.39"
+            COAST_RUNS_EAST_WEST,
+            "seed 42 1.15, seed 1234 1.14, seed 99 1.17, together 1.13"
         ) {
             val past = ratios.indices.filter { abs(ln(ratios[it].ratio)) > SPREADS * ratioSpread(ratios[it].lengthKm) }
             if (past.isNotEmpty() || abs(ln(pooled)) > pooledBar) {
@@ -100,6 +96,7 @@ class GroundIsotropyTest : BorrowsSharedWorlds() {
      */
     @Test
     fun `slopes stand as steep facing one way as another on the ground`() {
+        val steeper = ArrayList<String>()
         seeds.forEach { seed ->
             val world = SharedWorlds.world(WorldGenConfig(seed = seed, width = 512, height = 512))
             val falls = steepFalls(world)
@@ -107,12 +104,16 @@ class GroundIsotropyTest : BorrowsSharedWorlds() {
                 "ISOTROPY seed %d: 95th percentile of land fall over a cell width of ground, %.1f m/km along a row and %.1f down a column"
                     .format(seed, falls[0], falls[1])
             )
-            assertTrue(
-                maxOf(falls[0], falls[1]) / minOf(falls[0], falls[1]) <= 1.0 + SLOPE_SPREAD,
-                "seed $seed: the steep ground falls ${"%.1f".format(falls[0])} m/km along a row and " +
-                    "${"%.1f".format(falls[1])} down a column"
-            )
+            if (maxOf(falls[0], falls[1]) / minOf(falls[0], falls[1]) > 1.0 + SLOPE_SPREAD) {
+                steeper += String.format(java.util.Locale.ROOT, "seed %d %.1f along a row, %.1f down a column", seed, falls[0], falls[1])
+            }
         }
+        // Armed again at Fix 3b: under the capped explicit update seed 99's steep ground read 14.9
+        // m/km along a row and 18.0 down a column; with the cap gone it reads 25.9 and 26.7.
+        assertTrue(
+            steeper.isEmpty(),
+            "the steep ground falls further down a column than along a row, past a fifth: " + steeper.joinToString()
+        )
     }
 
     /**
@@ -188,9 +189,16 @@ class GroundIsotropyTest : BorrowsSharedWorlds() {
         /** How many of its own spreads a coast's ratio may stand from 1. */
         const val SPREADS = 3.0
 
-        /** The known failure the coastline clause records. */
-        const val INCISION_CAPPED_PER_STEP =
-            "Audit III B-D1: the incision's cap sets the cut, and a cap per step cuts a north-south channel half as deep a round"
+        /**
+         * The known failure the coastline clause records since Fix 3b. It was Audit III's B-D1, the
+         * incision's cap per step, until the implicit update took the cap away; the ratio fell from
+         * 1.39 pooled at Fix 2 to 1.12 at Fix 3 and reads 1.12 now, with the incision's own
+         * notches the same depth by bearing. What holds it over 1 is not isolated: candidates are
+         * the operators `TODO.md` lists as still counting a row as a column (the thermal sweeps'
+         * count among them) and D8 routing's own bearings.
+         */
+        const val COAST_RUNS_EAST_WEST =
+            "the ground: the coast still runs further east-west than north-south once the incision's per-step cap is gone, the cause not isolated"
 
 
         /** The steep ground the slope case reads. */

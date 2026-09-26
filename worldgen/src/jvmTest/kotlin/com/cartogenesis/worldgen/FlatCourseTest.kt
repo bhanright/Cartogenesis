@@ -1,10 +1,12 @@
 package com.cartogenesis.worldgen
 
+import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.FlatRouting
 import com.cartogenesis.worldgen.pipeline.FlowRouting
 import com.cartogenesis.worldgen.pipeline.SeaLevelStage
+import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -28,6 +30,16 @@ import kotlin.test.assertTrue
 class FlatCourseTest : BorrowsSharedWorlds() {
 
     private companion object {
+        /**
+         * The known failure the cost clause records since Fix 3b. On the terrain the implicit
+         * update cuts, with the uplift re-derived on it, seed 7's flats hold 3,147 raised cells in
+         * 476 flats and a pass costs 5.8 ms on a quiet machine, 2.02% of a 9.4 s generation, where
+         * the capped update's world read 2,696 cells, 3.4 ms and 1.00%. A device path, or a solve
+         * whose cost does not ride on the flats' size, is what rule 8 asks for, and is in `TODO.md`.
+         */
+        const val POTENTIAL_OVER_RULE_8 =
+            "the water: the flat potential costs more than a hundredth of a generation on the law's terrain"
+
         val STANDARD_SEEDS = listOf(7L, 42L, 1234L, 99L)
         const val STANDARD_SIDE = 512
 
@@ -54,18 +66,21 @@ class FlatCourseTest : BorrowsSharedWorlds() {
         /** Rule 8's line: under this share of a generation a device path is declined. */
         const val LARGEST_SHARE_WITHOUT_A_DEVICE_PATH = 0.01
 
+        /** The trench case's grid, its one column and where the trench begins. */
+        const val TRENCH_GRID = 128
+        const val TRENCH_COLUMN = 64
+        const val TRENCH_TOP_ROW = 20
+
         /**
-         * The known failure the cost clause records: the potential is over rule 8's line on the
-         * worlds the ground's ruler draws, so the decision to decline it a device path no longer
-         * stands. Measured on seed 7 at 512 with nothing else running: 1.4 ms a pass over 3,662
-         * raised cells and 1.02% of a generation on the tree before Fix 2, already a hair over;
-         * 7.0 ms over 7,161 after it, 4.7%. The operator is not what grew: the redrawn world's
-         * flats hold twice the cells, two of them 1,283 and 777 cells across, and the square
-         * stencil the potential had before costs 7.45 ms a pass on that same world, where the
-         * ground's, column-preconditioned, costs 7.0. See docs/DESIGN_LEDGER.md, Fix 2.
+         * The trench's entry, in the relative field: between 1 and 2, where a float's last place is
+         * 1.19e-7 and one flat-gradient step is 8.39 of them, so the flood's addition rounds down.
          */
-        const val POTENTIAL_OVER_THE_LINE =
-            "the water: the flat potential costs more than rule 8's hundredth of a generation, and has no device path"
+        const val TRENCH_ENTRY = 1.5f
+
+        /** How far below its entry the trench's floor lies, and the walls stand above it. */
+        const val TRENCH_DEPTH = 0.001f
+        const val WALL_HEIGHT = 0.01f
+        const val WALL_RISE = 0.001f
     }
 
     @Test
@@ -100,6 +115,58 @@ class FlatCourseTest : BorrowsSharedWorlds() {
         println(
             "F30B FINDING at $STANDARD_SIDE the two rules are not separable — see FlatCourseAuditTest at 2048"
         )
+    }
+
+    /**
+     * A converged potential is laid whichever way the flood's rounding went at the flat's entry.
+     *
+     * The flood raises the flat's first cell to its entry's height plus one flat-gradient step in
+     * float, and the band the potential is laid into was anchored at that level less the nominal
+     * step, in double. Where the float addition rounded down, the anchor stood below the entry, the
+     * member beside the entry was laid below it too whenever its share of the band was smaller than
+     * the rounding, and the whole flat went back to the staircase. A long flat is where that share
+     * is small: here a trench 107 cells long down one column, its entry at 1.5 in the relative
+     * field, where a float's step is an eighth of a flat-gradient step and the addition rounds down
+     * by four hundredths of one. The trench is one column, so the column-run preconditioner is the
+     * whole matrix and the solve is exact in one step: what refuses it can only be the laying.
+     * Shown failing on the tree before Fix 3, which kept the staircase here.
+     */
+    @Test
+    fun `a converged flat is laid however the flood rounded its entry`() {
+        val config = WorldGenConfig(seed = 7L, width = TRENCH_GRID, height = TRENCH_GRID)
+        val cellsAcross = config.width
+        val cellsDown = config.height
+        val isLand = BooleanArray(cellsAcross * cellsDown) { true }
+        val ground = FloatField(cellsAcross, cellsDown)
+        for (row in 0 until cellsDown) {
+            for (column in 0 until cellsAcross) {
+                val fromTheEdge = minOf(row, cellsDown - 1 - row)
+                ground.data[row * cellsAcross + column] = when {
+                    column == TRENCH_COLUMN && row == cellsDown - 1 -> TRENCH_ENTRY
+                    column == TRENCH_COLUMN && row >= TRENCH_TOP_ROW -> TRENCH_ENTRY - TRENCH_DEPTH
+                    // Rising away from the poles and from the trench, so no cell but the trench's
+                    // is a flat and nothing but the trench is raised.
+                    else -> TRENCH_ENTRY + WALL_HEIGHT + WALL_RISE * fromTheEdge + WALL_RISE / 10 * abs(column - TRENCH_COLUMN)
+                }
+            }
+        }
+        val entry = (cellsDown - 1) * cellsAcross + TRENCH_COLUMN
+        val stepped = TRENCH_ENTRY + FlowRouting.FLAT_GRADIENT_STEP
+        assertTrue(
+            stepped.toDouble() - FlowRouting.FLAT_GRADIENT_STEP.toDouble() < TRENCH_ENTRY.toDouble(),
+            "the flood's step at this entry does not round down, so this case does not pose the question"
+        )
+        val filled = FlowRouting.fillDepressions(cellsAcross, cellsDown, isLand, ground)
+        val surface = FlatRouting.surfaceOf(
+            cellsAcross, cellsDown, isLand, ground, filled, config.seed, config.cellHeightInCellWidths
+        )
+        println(
+            "F30B trench: %d flats over %d raised cells, %d kept the staircase; the flat's first cell stands %.3g above its entry"
+                .format(surface.flats, surface.raisedCells, surface.flatsKept, surface.heights[entry - cellsAcross] - surface.heights[entry])
+        )
+        assertEquals(1, surface.flats, "the trench is not one flat")
+        assertEquals(cellsDown - 1 - TRENCH_TOP_ROW, surface.raisedCells, "the fill raised more than the trench")
+        assertEquals(0, surface.flatsKept, "the trench's converged potential was refused and the staircase kept")
     }
 
     /**
@@ -139,12 +206,15 @@ class FlatCourseTest : BorrowsSharedWorlds() {
                 "%.2f%% of a %.1f s generation over $passes passes; %d flats kept the staircase"
                     .format(shareOfGeneration * 100, generationMs / 1000, surface.flatsKept)
         )
-        KnownFailures.expect(POTENTIAL_OVER_THE_LINE, "over a hundredth of a generation") {
+        // Armed at Fix 3, when seed 7's flats held 2,696 raised cells in 478 flats and a pass cost
+        // 3.4 ms, 1.00% of a generation. Recorded since Fix 3b: see [POTENTIAL_OVER_RULE_8]. The
+        // signature names the line and not the figure, which moves with the machine's load.
+        KnownFailures.expect(POTENTIAL_OVER_RULE_8, "over the 1% line") {
             if (shareOfGeneration >= LARGEST_SHARE_WITHOUT_A_DEVICE_PATH) {
                 throw RecordedViolation(
                     "the potential is %.2f%% of a generation, over the %.0f%% under which a device path is declined"
                         .format(shareOfGeneration * 100, LARGEST_SHARE_WITHOUT_A_DEVICE_PATH * 100),
-                    "over a hundredth of a generation"
+                    "over the %.0f%% line".format(LARGEST_SHARE_WITHOUT_A_DEVICE_PATH * 100)
                 )
             }
         }

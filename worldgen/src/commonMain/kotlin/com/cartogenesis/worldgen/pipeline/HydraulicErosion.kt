@@ -48,6 +48,13 @@ internal data class RoundMass(
     /** The deepest fill anywhere on the map, over any basin's lowest ground. */
     val deepestBasin: Float = 0f,
     /**
+     * How deep the standing fill lies over the land as the round opens, in metres: the fill's
+     * depth over the ground summed over every cell raised by more than the pond depth, over the
+     * land's cell count. The volume of water the basins hold, spread over the land, so it answers
+     * how deep the fill is without depending on which basin happens to be the largest.
+     */
+    val fillDepthOverLandMetres: Double = 0.0,
+    /**
      * Channel cells standing lower than the cell they drain into, counted after each of the round's
      * mechanisms in turn: as the round opened, after the outlet notch, after the incision, after
      * the deposition, after the closing passes, and after the thermal relaxation.
@@ -71,6 +78,58 @@ internal data class RoundMass(
      */
     val channelPits: IntArray = IntArray(0)
 )
+
+/**
+ * What the implicit incision pass did to each cell it reached, for the guards that have to see the
+ * law's rate and the base level a cell was cut toward, which the finished heights hide.
+ * Diagnostics only: nothing reads an answer back, and a pass with no watcher computes nothing for
+ * one.
+ */
+internal interface IncisionWatch {
+
+    /**
+     * One land cell with a receiver, as the implicit pass met it, every height in the height
+     * field's own units.
+     *
+     * [courantNumber] is the round's `F` for the cell (see [HydraulicErosion.Rates.courantCoefficient]),
+     * dimensionless. [before] is the cell's height as the pass found it and [after] as it left it.
+     * [baseBefore] and [baseAfter] are the level the cell grades to, before the pass and once its
+     * receiver was final: the receiver's own ground on land, the round's shoreline where the
+     * receiver is sea, and the water's surface where the receiver stands under a filled basin's
+     * water. The law's explicit rate on the ground as the pass found it, the stream-power term, is
+     * `courantNumber * (before - baseBefore)`; the cut the pass realised is `before - after`.
+     */
+    fun cut(
+        round: Int,
+        cell: Int,
+        receiver: Int,
+        courantNumber: Float,
+        before: Float,
+        baseBefore: Float,
+        baseAfter: Float,
+        after: Float
+    )
+
+    /**
+     * The implicit pass has cut every cell of [round]. [surface] is the height field as it left it;
+     * [ground] (the depression-filled surface the routing ran on) and [relative] are the round's
+     * shoreline-relative fields after the outlet notch, whose land half is [landRange] of the
+     * height field; [shorelineHeight] is the round's shoreline in the height field. Every array is
+     * the pass's own and must not be written.
+     */
+    fun incised(
+        round: Int,
+        isLand: BooleanArray,
+        directions: IntArray,
+        ground: FloatArray,
+        relative: FloatArray,
+        discharge: FloatArray,
+        landCells: Float,
+        landRange: Float,
+        shorelineHeight: Float,
+        surface: FloatArray
+    )
+}
 
 /** The points in a round the pit census above is taken at. */
 internal object PitStage {
@@ -152,11 +211,13 @@ internal object HydraulicErosion {
          *
          * `E = K * A^m * S^n` with m = 0.5 and n = 1, over
          * [WorldScale.yearsPerHydraulicRound]. The stage holds the catchment as a share of all
-         * land and the slope as a rise per map width, so `sqrt(A)` is `sqrt(share * landArea)` and
-         * `S` is that rise times [WorldScale.reliefSpanMetres] over the map's width in metres; the
-         * cut is spent on the same field, whose whole 0..1 is that same span, so the two cancel
-         * and what is left is `K * years * sqrt(landArea) / worldWidth`. Everything but the share
-         * and the rise is constant over a generation, and this is it.
+         * land and the slope as a rise per map width, so `sqrt(A)` is `sqrt(share * landArea)`.
+         * The rise is read on the shoreline-relative field, whose unit is
+         * [WorldScale.highestLandMetres], so `S` is that rise times `highestLandMetres` over the
+         * map's width in metres; the cut is spent on the height field, whose unit is
+         * [WorldScale.reliefSpanMetres], so the metres are divided by that. What is left is
+         * `K * years * sqrt(landArea) / worldWidth * highestLandMetres / reliefSpanMetres`.
+         * Everything but the share and the rise is constant over a generation, and this is it.
          *
          * The land's area is the configured share of the world rather than the round's own count
          * of land cells. Sea level is a percentile, so that share *is* the land's area by
@@ -164,34 +225,51 @@ internal object HydraulicErosion {
          * round to round as the lowstand moved the shoreline, which is a property of the sea's
          * history and not of the rock.
          *
-         * The cancellation above is S2's second pass and it fixed a real error. S1 read the
-         * slope's rise as `highestLandMetres` per unit of the height field, which was the honest
-         * reading while the field was renormalised to its own extremes and its unit was whatever a
-         * given world made it; S2 gave the field an absolute scale whose unit *is*
-         * [WorldScale.reliefSpanMetres], and the two terms then cancel. Left in, the factor made
-         * the stage cut 2.67 times less per round than `K` and the time step together said.
-         *
-         * What moved is the time step and not the coefficient, and
-         * [WorldScale.yearsPerHydraulicRound] sets out why it was the better of the two: raising
-         * the cut instead was built and measured, and twelve rounds at 2.67 times the incision wear
-         * this landscape away rather than sharpening it. So the coefficient is the same float it
-         * has always been, every world is unmoved to the last bit, and what changed is the label
-         * on the clock.
+         * The ratio of the two rulers was taken to cancel from S2's second pass until Fix 3, and
+         * the round was labelled 2.67 times shorter to keep the cut; see
+         * [WorldScale.yearsPerHydraulicRound]. The label is back at the years the cut is worth and
+         * the ratio back in the coefficient, which is the same float it was.
          */
         val incisionCoefficient: Float = run {
             val landAreaKm2 = (1.0 - config.seaLevel.toDouble().coerceIn(0.0, 1.0)) * scale.worldAreaKm2
             val perYear = erosion.bedrockErodibilityPerYear.toDouble() * scale.yearsPerHydraulicRound
             val geometry = sqrt(landAreaKm2) / scale.worldWidthKm
-            (perYear * geometry).toFloat()
+            val landRulerOverFieldRuler = scale.highestLandMetres.toDouble() / scale.reliefSpanMetres.toDouble()
+            (perYear * geometry * landRulerOverFieldRuler).toFloat()
         }
 
         /**
          * The same rate in the shoreline-relative units the outlet notch is measured and spent in,
          * which is [incisionCoefficient] read off the land's half of the ruler instead of the
-         * whole field's.
+         * whole field's: `K * years * sqrt(landArea) / worldWidth`, which reads no vertical ruler.
          */
         val relativeIncisionCoefficient: Float =
             incisionCoefficient * scale.reliefSpanMetres / scale.highestLandMetres
+
+        /**
+         * The part of a round's Courant number `F` that is the same for every cell: `F` is this
+         * times `sqrt(share) * erodibility / stepCellWidths`, where `share` is the cell's share of
+         * the land's water, `erodibility` the cover's factor on it and `stepCellWidths` the step to
+         * its receiver on the ground in cell widths. All four factors are dimensionless, so `F` is.
+         *
+         * `F` is the stream-power law's cut in one round over the drop that cut is taken from, both
+         * in the height field's unit. From [incisionCoefficient] as it is spent: the law's cut is
+         * `incisionCoefficient * sqrt(share) * slope * erodibility`, in the height field's unit,
+         * where `slope` is `drop / stepCellWidths * cellsAcross` and the drop is read on the
+         * shoreline-relative field. That drop is `dropInField / landHalfOfField`, the land's half
+         * of the field being the relative field's unit, so the cut is
+         * `incisionCoefficient / landHalfOfField * cellsAcross * sqrt(share) * erodibility /
+         * stepCellWidths` times the drop in the height field's own unit. The factor before
+         * `sqrt(share)` is this. At the stock world it is `relativeIncisionCoefficient *
+         * cellsAcross`, 0.1467 times the grid's width, which over `sqrt` of the land's cell count
+         * makes `F` about `0.24 sqrt(cells of catchment)` along a row at every grid.
+         *
+         * `F` is what decides whether an explicit step is bounded: past one it asks for more than
+         * the drop. The implicit update the rounds spend it through is bounded at every `F`; see
+         * the pass in [apply].
+         */
+        val courantCoefficient: Float =
+            incisionCoefficient / scale.landHalfOfField * config.width
 
         /** [POND_DEPTH_METRES] as a share of the land's relief, which is what the routing works in. */
         val pondDepth: Float = scale.reliefShareOfMetres(POND_DEPTH_METRES)
@@ -404,7 +482,7 @@ internal object HydraulicErosion {
      *
      * This is the whole of what makes the stage's arithmetic keep working, and it must not be
      * simplified away. The accumulation sums these weights over a catchment and the stage divides
-     * that sum by the land's cell count to get a share — in [cut] and in the transport capacity
+     * that sum by the land's cell count to get a share — in [incise] and in the transport capacity
      * both. With a mean of exactly 1 the land's total weight *is* its cell count, so both
      * divisions go on meaning "this cell's share of the land's water" and
      * [Rates.incisionCoefficient] keeps the calibration it was derived with. Without it the
@@ -501,9 +579,10 @@ internal object HydraulicErosion {
      *   is why a valley is a V and not a slot.
      */
     /**
-     * @param receiverClamp whether a cell's incision is bounded below by the new elevation of the
-     *   cell it drains into. Only ever false in the guard that shows what happens without it; see
-     *   the block that applies it.
+     * @param receiverClamp whether a cell standing at or below the level it grades to is left
+     *   alone rather than moved toward it, the half of the receiver bound the implicit update does
+     *   not carry by construction. Only ever false in the guards that show what happens without
+     *   it; see [incise].
      */
     suspend fun apply(
         config: WorldGenConfig,
@@ -526,8 +605,10 @@ internal object HydraulicErosion {
          * invariant on trust.
          */
         weightSums: ((String, Double, Int) -> Unit)? = null,
-        /** Whether [cut] takes the cover's factor. Only ever false in the cover's own guard. */
+        /** Whether [incise] takes the cover's factor. Only ever false in the cover's own guard. */
         shieldCut: Boolean = true,
+        /** Handed every cell's cut and every round's result; see [IncisionWatch]. */
+        incisionWatch: IncisionWatch? = null,
         relax: suspend (FloatField) -> FloatField
     ): FloatField {
         val erosion = config.erosion
@@ -885,6 +966,15 @@ internal object HydraulicErosion {
             } else {
                 null
             }
+            var openingFillDepthMetres = 0.0
+            if (onRound != null) {
+                var summed = 0.0
+                for (cell in ground.indices) {
+                    val standing = ground[cell] - relative[cell]
+                    if (isLand[cell] && standing > rates.pondDepth) summed += standing.toDouble()
+                }
+                openingFillDepthMetres = summed * config.scale.highestLandMetres / landCells
+            }
             var notched = 0.0
             var notchCells = 0
             if (notch != null && erosion.outletIncision) {
@@ -906,75 +996,24 @@ internal object HydraulicErosion {
                 )
             }
 
-            // The incision, from the outlets upstream — and no cell is cut below the cell it drains
-            // into.
+            // The incision: Braun and Willett's implicit update, from the outlets upstream. See
+            // [incise] for the update, its bounds and what it does and does not promise.
             //
-            // Stream power on its own lowers a cell by what its own discharge and its own slope
-            // allow, and says nothing about what the cell below it is doing in the same round. Two
-            // neighbours on one channel are cut by different amounts, and often enough the upper
-            // one is cut further: it may carry nearly the same catchment down a steeper reach.
-            // Then the round ends with a hole in the river's bed. The next round's priority flood
-            // has to raise that hole to route through it, so it becomes standing water, and along a
-            // channel the holes line up into a rank of thin bars lying at a grid bearing — which is
-            // exactly the shape `GlaciationTest`'s comb measurement exists to catch. Measured
-            // per mechanism before anything was clamped, the incision made thousands of these
-            // holes, the outlet notch none at all on any seed, and the thermal relaxation fewer
-            // than it took away; what is left after this clamp is the spoil, a few hundred cells
-            // where a floodplain laid at the end of the last round stands above the channel
-            // feeding it — an alluvial dam, which is a real landform and which the deposition's
-            // own no-uphill rule owns. So this is the only clamp in the file, and it is here on
-            // the evidence rather than on suspicion. `ReceiverClampTest` prints the table; see
-            // docs/DESIGN_LEDGER.md, H5b, for the counts.
-            //
-            // The bound is Braun and Willett's (2013, *Geomorphology* 180-181, 170-179 — the
-            // FastScape scheme), and every landscape-evolution model since has carried it:
-            // `z_i' >= z_r'`, a node's new elevation is never below its receiver's new elevation.
-            // Their implicit solution gets it by construction, since the new height is a weighted
-            // average of the old height and the receiver's new one; the same thing is had
-            // explicitly by walking the D8 tree from the outlets upstream, so that a cell's
-            // receiver is already final when the cell is cut, and refusing the part of the cut that
-            // would take it below. What is refused is not lost from the budget — it is simply
-            // material the water did not have the room to remove, exactly as the existing cap at
-            // half the drop and the cap at the shoreline are.
-            //
-            // The order is [FlowRouting.drainageOrder] read backwards: that order places a cell
-            // after everything that drains into it, so reversed it places every receiver before its
-            // donors. Ties do not arise — D8 gives each cell one receiver and the walk is a tree,
-            // so each cell is cut exactly once against one already-final floor.
-            //
-            // Two passes rather than one because the spoil has to travel the other way: a cell must
-            // know what its tributaries brought it before it decides whether to settle any of it,
-            // which is sources-first. So this pass only cuts, records what it took in [incisedAt],
-            // and leaves everything else — the sediment load, the deposition, the fans — to the
-            // walk below, which adds each cell's own yield to its load at the same point the single
-            // combined pass used to.
-            for (rank in order.indices.reversed()) {
-                val cell = order[rank]
-                val receiver = directions[cell]
-                if (receiver < 0) continue
-                val toSea = !isLand[receiver]
-                val drop = ground[cell] - if (toSea) relative[receiver] else ground[receiver]
-                if (drop <= 0f) continue
-                var taken =
-                    cut(
-                        rates, cell, receiver, cellsAcross, drop, area, landCells, relative,
-                        erodibility
-                    )
-                if (receiverClamp && !toSea) {
-                    // In the height field's own units, which is what the cut is spent in. A cell
-                    // already sitting below its receiver — the floor of a filled basin, where the
-                    // routing runs on the fill and the ground beneath it does not slope at all —
-                    // is not cut this round: there is no channel under standing water to deepen.
-                    val room = surfaceOf[cell] - surfaceOf[receiver]
-                    taken = if (room <= 0f) 0f else minOf(taken, room)
-                }
-                if (taken <= 0f) continue
-                if (!carryingSediment) {
-                    surfaceOf[cell] -= taken
-                } else {
-                    incisedAt[cell] = -raise(surfaceOf, cell, -taken.toDouble())
-                }
-            }
+            // It replaces the explicit cut and nothing else in the round: the uplift and the
+            // flexure above run first, the routing and the notch before it, and the deposition
+            // walk below is fed what it took through [incisedAt], sources first, as it always was.
+            incise(
+                rates, cellsAcross, order, directions, isLand, ground, relative, area.data, landCells, landRange,
+                sea.shorelineHeight, erodibility, surfaceOf,
+                incisedAt = if (carryingSediment) incisedAt else null,
+                onlyAboveBase = receiverClamp,
+                watch = incisionWatch,
+                round = round
+            )
+            incisionWatch?.incised(
+                round, isLand, directions, ground, relative, area.data, landCells, landRange,
+                sea.shorelineHeight, surfaceOf
+            )
 
             if (onRound != null) {
                 census(
@@ -1004,7 +1043,7 @@ internal object HydraulicErosion {
                 if (!carryingSediment) continue
 
                 val toSea = !isLand[receiver]
-                val drop = ground[cell] - if (toSea) relative[receiver] else ground[receiver]
+                val drop = fallToReceiver(ground, isLand, cell, receiver)
 
                 // Under standing water there is no channel to aggrade: the river here *is* the
                 // lake, its gradient is the epsilon the flood-fill left, and anything it was
@@ -1414,6 +1453,7 @@ internal object HydraulicErosion {
                             if (it.largest >= 0) it.spill[it.largest] else -1
                         } ?: -1,
                         deepestBasin = notch?.deepest ?: 0f,
+                        fillDepthOverLandMetres = openingFillDepthMetres,
                         channelPits = pits.copyOf()
                     )
                 )
@@ -1608,7 +1648,7 @@ internal object HydraulicErosion {
      * half is also the only thing their result licenses. The runoff weight is normalised for
      * exactly this reason and in exactly this way.
      *
-     * Only the ordinary stream-power cut in [cut] reads it, which is every hillslope and channel
+     * Only the ordinary stream-power cut in [incise] reads it, which is every hillslope and channel
      * cell of every round. The outlet notch and the distributary grooves do not, and the reason is
      * not that the ground there is bare: a notch is a spill's base-level fall, spent over a fixed
      * reach to grade a sill down to the water it drains to, rather than a cell deciding how much
@@ -1805,6 +1845,15 @@ internal object HydraulicErosion {
      * fills, because the router needs an outlet for every cell in a single pass, and this is where
      * the other half is put back.
      *
+     * The breach begins at the lip, the basin's pour point, and not at the first cell outside its
+     * deep water: where the lake shelves those are different cells, and a breach begun on the
+     * margin stopped on it (see [FlowRouting.Spillways.entry]). The outflow's power is measured
+     * from the lip too, over the catchment gathered there and the channel below it, because that
+     * is the water crossing the sill and the slope it crosses at; measured from the margin, the
+     * level margin diluted the slope. And the surface is carried back from the lip across the
+     * margin as far as the margin stands above it, so a round whose drop is deeper than the margin
+     * lowers the whole sill rather than leaving the margin as a new one.
+     *
      * @param settled the surface deposition is judged against, lowered with the terrain, or null
      *   when nothing is being carried.
      * @param load where the spoil goes, or null when there is no walk left to carry it — in which
@@ -1918,7 +1967,10 @@ internal object HydraulicErosion {
             // cells that length is cut into, and whichever way it runs.
             val gradient = rates.notchFallPerCell
             while (cell >= 0 && isLand[cell] && fromLipCellWidths < rates.outletReachCells) {
-                val cutLevel = newLevel - fromLipCellWidths * gradient
+                // Inside the rounds the sea is the base level below the lip too, and the falling
+                // surface stops at it rather than running a few centimetres a cell past it.
+                val falling = newLevel - fromLipCellWidths * gradient
+                val cutLevel = if (belowSea) falling else falling.coerceAtLeast(SHORELINE)
                 if (relative[cell] <= cutLevel) break
                 val take = (relative[cell] - cutLevel).toDouble() * landRange
                 val ponded = ground[cell] - relative[cell] > rates.pondDepth
@@ -1937,6 +1989,52 @@ internal object HydraulicErosion {
                 val next = directions[cell]
                 fromLipCellWidths += if (next >= 0) steps.between(cell, next, cellsAcross) else steps.eastWest
                 cell = next
+            }
+
+            // Back across the lake's shallow margin, from the lip to where the deep water begins:
+            // the same surface, rising by the same gradient per cell away from the lip, stopping at
+            // the first cell already below it. Nothing to do where the ground falls straight from
+            // the water to the lip, which is where the entry is the lip itself.
+            var backCellWidths = 0f
+            val entry = notch.entry[basin]
+            if (entry >= 0 && entry != spill) {
+                var marginCells = 0
+                var walker = entry
+                var marginWidths = 0f
+                while (walker >= 0 && walker != spill && isLand[walker] && marginWidths <= rates.outletReachCells) {
+                    val next = directions[walker]
+                    marginWidths += if (next >= 0) steps.between(walker, next, cellsAcross) else steps.eastWest
+                    marginCells++
+                    walker = next
+                }
+                if (walker == spill) {
+                    val margin = IntArray(marginCells)
+                    walker = entry
+                    for (index in 0 until marginCells) {
+                        margin[index] = walker
+                        walker = directions[walker]
+                    }
+                    var downstream = spill
+                    for (index in marginCells - 1 downTo 0) {
+                        val marginCell = margin[index]
+                        backCellWidths += steps.between(marginCell, downstream, cellsAcross)
+                        val cutLevel = newLevel + backCellWidths * gradient
+                        if (relative[marginCell] <= cutLevel) break
+                        val take = (relative[marginCell] - cutLevel).toDouble() * landRange
+                        val ponded = ground[marginCell] - relative[marginCell] > rates.pondDepth
+                        val removedHere = -raise(surfaceOf, marginCell, -take)
+                        if (removedHere > 0.0) {
+                            val asRelative = (removedHere / landRange).toFloat()
+                            relative[marginCell] -= asRelative
+                            if (!ponded) ground[marginCell] -= asRelative
+                            settled?.let { it[marginCell] -= asRelative }
+                            load?.let { it[marginCell] += removedHere }
+                            moved += removedHere
+                            cells++
+                        }
+                        downstream = marginCell
+                    }
+                }
             }
 
             // And, on the far side of the cut only, the sill on the *basin's* own side.
@@ -1964,8 +2062,7 @@ internal object HydraulicErosion {
             // donors of equal catchment falls to the lower cell index, so the channel is one
             // specific channel on every machine.
             if (belowSea) {
-                var backCellWidths = 0f
-                var from = spill
+                var from = if (entry >= 0) entry else spill
                 while (backCellWidths <= rates.outletReachCells) {
                     var bestDonor = -1
                     var bestArea = -1f
@@ -2060,39 +2157,163 @@ internal object HydraulicErosion {
     }
 
     /**
-     * Stream-power incision, held back by whatever is growing on the cell, and capped by the drop
-     * it sits on and by the sea it grades to.
-     *
-     * Two caps live here and a third lives at the call site. Half the drop, so a channel cannot cut
-     * past the ground it is falling toward in a single round. And never below the sea, which is the
-     * base level every river grades to: a river reaching the coast stops cutting because there is
-     * nothing left to fall, and without that limit the last cells before the shore incise hardest —
-     * they have the whole catchment behind them and open water in front — and the coastline shreds
-     * into drowned valleys and islands. The third is the receiver clamp, which belongs to the
-     * ordered pass rather than to this arithmetic because it needs the receiver's *new* height.
+     * How far [cell] falls to the water level it drains to, in shoreline-relative units: to its
+     * receiver's filled surface on land, and to the shoreline, which is zero, where the receiver is
+     * sea. The sea's surface is the base level a river grades to, and a depth below it is on the
+     * sea's half of the ruler, not the land's; the two cannot be subtracted.
      */
-    private fun cut(
-        rates: Rates,
-        cell: Int,
-        receiver: Int,
-        cellsAcross: Int,
-        drop: Float,
-        area: FloatField,
-        landCells: Float,
-        relative: FloatArray,
-        /** The cover's factor on this cell, already relative to the land's mean. */
-        erodibility: FloatArray
-    ): Float {
-        val distance = rates.groundSteps.between(cell, receiver, cellsAcross)
-        val slope = drop / distance * cellsAcross
-        // The land's water and not its area: [normaliseOverLand] carries a mean of one over the
-        // land, so dividing the weighted accumulation by the land's cell count still gives this
-        // cell's share of everything that falls on the map.
-        val share = area.data[cell] / landCells
+    private fun fallToReceiver(ground: FloatArray, isLand: BooleanArray, cell: Int, receiver: Int): Float =
+        ground[cell] - if (isLand[receiver]) ground[receiver] else 0f
 
-        val incision = rates.incisionCoefficient * sqrt(share) * slope * erodibility[cell]
-        val aboveSea = relative[cell].coerceAtLeast(0f)
-        return minOf(incision, drop * 0.5f, aboveSea)
+    /**
+     * One round of stream-power incision over [surfaceOf], by Braun and Willett's implicit update
+     * (*A very efficient O(n), implicit and parallel method to solve the stream power equation
+     * governing fluvial incision and landscape evolution*, Geomorphology 180-181, 2013): the
+     * FastScape scheme, at `n = 1`.
+     *
+     * **The law.** `E = K A^m S^n` with `m = 0.5` and `n = 1`, spent over the round's years. Per
+     * cell that is `F` times the drop to the ground the cell falls toward, where `F` is
+     * [Rates.courantCoefficient] times `sqrt(share) * erodibility / stepCellWidths`: [discharge] over
+     * [landCells] is the share, [erodibility] the cover's factor and the step the one to the
+     * receiver on the ground. The explicit update, `z' = z - F (z - z_r)`, is bounded only while
+     * `F` is under one, and on this map `F` is about `0.24 sqrt(cells of catchment)`: two where a
+     * drawn river starts and tens on a trunk. So it needed a cap, and the cap set every drawn
+     * channel's cut (docs/DESIGN_LEDGER.md, Fix 3).
+     *
+     * **The update.** Taken at the end of the round instead, the law reads the receiver's *new*
+     * height, `z' = z - F (z' - z_r')`, which solves to `z' = (z + F z_r') / (1 + F)`: the cell
+     * keeps `1 / (1 + F)` of its height over its receiver's new one and loses `F / (1 + F)` of it.
+     * [order] is `FlowRouting.drainageOrder`, which puts every cell after everything draining into
+     * it, so read backwards it reaches every receiver before its donors and `z_r'` is final when
+     * it is read. One pass, O(n), no iteration and no limiter.
+     *
+     * **The bounds, which hold on [surfaceOf] as this returns.**
+     * - *The base level a cell grades to*, `z_r'`: its receiver's new ground on land; the round's
+     *   [shorelineHeight] where the receiver is sea, so a river mouth grades to the sea's surface
+     *   and the cap the explicit update needed at the shoreline is this boundary condition; and
+     *   the water's surface where the receiver stands under a filled basin's water by more than
+     *   [Rates.pondDepth], because a river entering a lake grades to the lake as one entering the
+     *   sea grades to the sea.
+     * - *A lake falls with its outlet.* Its surface for the pass is the lower of its filled level
+     *   and the level its outlet drains to once the outlet is cut, carried upstream through the
+     *   lake's cells (receivers first, so the outlet is final before the lake behind it). A cell
+     *   under that surface is neither cut nor raised; a cell the falling water uncovers is graded
+     *   like any other; and an inflow grades to the surface as it now stands. The filled surface
+     *   [ground] is read only to find the water and its level before the pass: everywhere else the
+     *   pass works on the actual ground [surfaceOf] as the notch left it.
+     * - *No cell the pass moves ends below its base level.* The update is a weighted mean of the
+     *   cell's own height and `z_r'`, with weights `1 / (1 + F)` and `F / (1 + F)`, both positive
+     *   for any `F`, so it lies between them; carried out as `z_r' + (z - z_r') / (1 + F)` in
+     *   double, it rounds to a float between the two. Cells the pass leaves alone keep their
+     *   height, below their base or not: a basin's floor under water, and a cell already at or
+     *   below the level it grades to.
+     * - *No cell is raised.* A cell standing at or below its base level is neither cut nor
+     *   raised: the floor of a basin, where the routing runs over the fill and the ground does not
+     *   slope, has no channel to deepen, and the weighted mean would lift it toward its receiver,
+     *   which is deposition by the back door. The test is against the receiver's *new* height, so
+     *   a cell that stood below its receiver when the round opened is cut once the receiver has
+     *   been cut below it. [onlyAboveBase] false takes this rule out, and is only ever the guards'
+     *   control.
+     *
+     * **What it does not promise.** Stability is not accuracy. At [WorldScale.yearsPerHydraulicRound]
+     * a round, a cell with a large `F` loses nearly its whole drop in one step, and the scheme
+     * spreads a knickpoint over a few cells as any first-order upwind scheme does, a numerical
+     * diffusion that scales with the step; a shorter round would resolve a profile's shape more
+     * finely and would not change where it grades to. And the realised cut is not proportional to
+     * the law's rate: it is `F / (1 + F)` of the drop, so a factor that multiplies `F`, the cover's
+     * or the rain's, multiplies the cut fully where `F` is small and less and less as it grows.
+     * The law's rate is `F (z - z_r)` on the ground as the pass found it, which [watch] is handed.
+     *
+     * @param ground the depression-filled surface the round routed on, and [relative] the actual
+     *   one, both shoreline-relative with the land's half of the field, [landRange], as their unit;
+     *   read only to find standing water.
+     * @param incisedAt where what each cell lost goes, in the height field's unit, for the
+     *   deposition walk; null when nothing is carried.
+     */
+    internal fun incise(
+        rates: Rates,
+        cellsAcross: Int,
+        order: IntArray,
+        directions: IntArray,
+        isLand: BooleanArray,
+        ground: FloatArray,
+        relative: FloatArray,
+        discharge: FloatArray,
+        landCells: Float,
+        landRange: Float,
+        shorelineHeight: Float,
+        erodibility: FloatArray,
+        surfaceOf: FloatArray,
+        incisedAt: DoubleArray?,
+        onlyAboveBase: Boolean = true,
+        watch: IncisionWatch? = null,
+        round: Int = 0
+    ) {
+        val asFound = if (watch != null) surfaceOf.copyOf() else null
+        // The water's surface over each cell of a filled basin for this pass, NaN elsewhere: set
+        // receivers first, so the outlet's new height is known before the lake behind it.
+        val waterSurface = FloatArray(surfaceOf.size) { Float.NaN }
+        for (rank in order.indices.reversed()) {
+            val cell = order[rank]
+            val receiver = directions[cell]
+            val underStandingWater = ground[cell] - relative[cell] > rates.pondDepth
+            if (receiver < 0) {
+                if (underStandingWater) waterSurface[cell] = shorelineHeight + ground[cell] * landRange
+                continue
+            }
+            val baseAfter = baseLevel(receiver, surfaceOf, isLand, waterSurface, shorelineHeight)
+            if (underStandingWater) {
+                // The lake falls with its outlet: its surface is its filled level or the level its
+                // outlet now drains to, whichever is lower, and a cell behind another lake cell
+                // shares that cell's surface.
+                val filledLevel = shorelineHeight + ground[cell] * landRange
+                val downstream = if (isLand[receiver] && !waterSurface[receiver].isNaN()) waterSurface[receiver] else baseAfter
+                waterSurface[cell] = minOf(filledLevel, downstream)
+            }
+            val height = surfaceOf[cell]
+            val stepCellWidths = rates.groundSteps.between(cell, receiver, cellsAcross)
+            val courantNumber =
+                rates.courantCoefficient * sqrt(discharge[cell] / landCells) * erodibility[cell] / stepCellWidths
+            // Under the water as it now stands there is no channel to cut and nothing to raise; a
+            // cell the falling water has uncovered is graded like any other.
+            val submerged = underStandingWater && height <= waterSurface[cell]
+            val after =
+                if (submerged || (height <= baseAfter && onlyAboveBase)) height
+                else (baseAfter + (height - baseAfter).toDouble() / (1.0 + courantNumber)).toFloat()
+            if (after != height) {
+                surfaceOf[cell] = after
+                if (incisedAt != null && after < height) incisedAt[cell] = height.toDouble() - after.toDouble()
+            }
+            if (watch != null && asFound != null) {
+                // Before the pass the lake stood at its filled level.
+                val baseBefore = when {
+                    !isLand[receiver] -> shorelineHeight
+                    ground[receiver] - relative[receiver] > rates.pondDepth ->
+                        maxOf(asFound[receiver], shorelineHeight + ground[receiver] * landRange)
+                    else -> asFound[receiver]
+                }
+                watch.cut(round, cell, receiver, courantNumber, height, baseBefore, baseAfter, after)
+            }
+        }
+    }
+
+    /**
+     * The level a cell draining into [receiver] grades to, in the height field's unit: the round's
+     * shoreline where the receiver is sea; where the receiver stands under a filled basin's water,
+     * that water's surface as this pass leaves it ([waterSurface], already set, receivers being
+     * first), or the receiver's ground if the falling water has uncovered it; and otherwise the
+     * receiver's own ground in [surface]. See [incise].
+     */
+    private fun baseLevel(
+        receiver: Int,
+        surface: FloatArray,
+        isLand: BooleanArray,
+        waterSurface: FloatArray,
+        shorelineHeight: Float
+    ): Float = when {
+        !isLand[receiver] -> shorelineHeight
+        !waterSurface[receiver].isNaN() -> maxOf(surface[receiver], waterSurface[receiver])
+        else -> surface[receiver]
     }
 
     /**
@@ -2250,6 +2471,9 @@ internal object HydraulicErosion {
         for (value in values) sum += value.toDouble()
         return sum
     }
+
+    /** The shoreline on the shoreline-relative field, which is where that field is zero. */
+    private const val SHORELINE = 0f
 
     /** Millimetres in a metre, for the uplift rates this stage is handed in millimetres a year. */
     private const val MILLIMETRES_PER_METRE = 1_000.0

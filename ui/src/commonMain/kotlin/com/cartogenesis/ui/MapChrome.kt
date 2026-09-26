@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.Icon
@@ -210,7 +211,7 @@ private fun StyleMenu(
                 color = if (dimmed) OverMap.ParchmentDim else OverMap.Parchment,
                 maxLines = 1
             )
-            Text("▾", style = MaterialTheme.typography.labelMedium, color = OverMap.ParchmentDim)
+            DropdownMark()
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             styles.forEach { style ->
@@ -308,6 +309,29 @@ private fun RuledButton(onClick: () -> Unit, content: @Composable RowScope.() ->
 }
 
 /**
+ * The mark at the end of a ruled button that says a list opens under it.
+ *
+ * Drawn as a vector, the way the palette mark at the other end of the style button is, rather than
+ * set as the character `▾`: the sans the label is set in has no such glyph, and the browser build
+ * has no system font behind the bundled ones, so the character came out as an empty box there
+ * (`InterfaceGlyphsTest` now holds every character the interface writes to the faces it bundles).
+ * The box is the label's line height, so the mark scales with the type — High contrast's larger
+ * step included — and sits in the line exactly as the text does; the triangle is ten of the
+ * icon's twenty-four units across, about half the label's em. Decorative: the button's own words
+ * already say what it opens.
+ */
+@Composable
+private fun DropdownMark() {
+    val lineHeight = MaterialTheme.typography.labelMedium.lineHeight
+    Icon(
+        Icons.Filled.ArrowDropDown,
+        contentDescription = null,
+        tint = OverMap.ParchmentDim,
+        modifier = Modifier.size(with(LocalDensity.current) { lineHeight.toDp() })
+    )
+}
+
+/**
  * `View  Fantasy ▾`, and fifteen of them behind it.
  *
  * The menu itself is an ordinary Material menu and so takes the *theme's* paper rather than
@@ -333,7 +357,7 @@ private fun ViewMenu(
                 color = OverMap.Parchment,
                 maxLines = 1
             )
-            Text("▾", style = MaterialTheme.typography.labelMedium, color = OverMap.ParchmentDim)
+            DropdownMark()
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             views.forEach { view ->

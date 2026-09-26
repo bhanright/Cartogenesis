@@ -42,14 +42,18 @@ class SiteAssemblyTest {
         const val PREVIEW_TAKEOVER_MOST_MEAN_DIFFERENCE = 12.0
 
         /**
-         * The most the full band may weigh: 320 KiB, where it measured 288,294 bytes, 4096 by 800 at
-         * [SiteImagery.WORLD_BAND_QUALITY]. It is the page's largest request and every wide or
-         * dense screen fetches it as the page opens.
+         * The most the full band may weigh: 400 KiB, where it measured 373,698 bytes, 4096 by 800 at
+         * [SiteImagery.WORLD_BAND_QUALITY], on the implicit erosion's terrain (288,294 before it,
+         * on ground less finely cut). It is the page's largest request and every wide or dense
+         * screen fetches it as the page opens.
          */
-        const val WORLD_BAND_MOST_BYTES = 327_680L
+        const val WORLD_BAND_MOST_BYTES = 409_600L
 
-        /** The most the half band may weigh: 100 KiB, where it measured 90,848 bytes, 2048 by 400. */
-        const val WORLD_BAND_HALF_MOST_BYTES = 102_400L
+        /**
+         * The most the half band may weigh: 120 KiB, where it measured 113,314 bytes, 2048 by 400,
+         * on the implicit erosion's terrain (90,848 before it).
+         */
+        const val WORLD_BAND_HALF_MOST_BYTES = 122_880L
 
         /**
          * The least and most of its frame a data layer may cover. The rivers covered 2.0% of the
@@ -67,39 +71,30 @@ class SiteAssemblyTest {
 
         /**
          * What the page fetches only when a reader asks for it, by file, each with the most it may
-         * weigh: the lens's full-size world (507,604 bytes at 4096 by 2048 when it was made, fetched
-         * the first time the lens is used), each with 64 KiB for the picture moving when it is made
-         * again.
+         * weigh: the lens's full-size world (639,082 bytes at 4096 by 2048 on the implicit
+         * erosion's terrain, 507,604 before it; fetched the first time the lens is used), each with
+         * 64 KiB for the picture moving when it is made again.
          */
         val FETCHED_WHEN_USED: Map<String, Long> = mapOf(
-            "img/world-full.webp" to 507_604L + 65_536L
+            "img/world-full.webp" to 639_082L + 65_536L
         )
 
         /**
          * The ceiling on what the page fetches as it loads, by the kind of screen (see
-         * [fetchedAtLoad]): the 1,409,962 and 1,607,408 bytes the list summed to for Site 5b, each
-         * plus 64 KiB for the pictures and the page moving when they are made again.
+         * [fetchedAtLoad]): what the list sums to, 527,199 bytes narrow and 787,583 wide or dense,
+         * each plus 64 KiB for the pictures and the page moving when they are made again.
          *
-         * Site 6's page summed to 1,373,328 and 1,570,774, so Site 5b costs every screen 36,634
-         * bytes more, all of it the page itself (136,906 bytes where it was 100,272): the markup,
-         * style and script of the data frame, the lens, the relief and the reel. None of their
-         * pictures is fetched as the page loads; a headless Chrome at 375 and 1280 wide, at one and
-         * two device pixels, on a first visit and a returning one, fetched the same pictures as for
-         * Site 6, the new ones all being lazy and further down the page than the distance a lazy
-         * picture is fetched ahead (docs/DESIGN_LEDGER.md, Site 5b). Site 5a's page fetched
-         * 1,432,079 by the same count.
-         *
-         * Lowered by what the page's faces lost when they became WOFF2 cut to its characters
-         * ([FACES_MADE_WOFF2_BYTES]), so the headroom each screen had stays what it was and the
-         * faces cannot grow back unnoticed.
+         * Measured once the page's faces were WOFF2 cut to its characters, which took 943,600
+         * bytes off every screen, and its pictures were made on the implicit erosion's terrain,
+         * whose more finely cut ground put 60,837 and 123,775 bytes back. No lazy picture is fetched
+         * as the page loads (docs/DESIGN_LEDGER.md, Site 5b), so the faces, the page and the
+         * pictures above the fold are the whole of it, and a face grown back to TrueType would not
+         * fit.
          */
         val LOAD_BYTES: Map<String, Long> = mapOf(
-            "narrow at one device pixel" to 1_409_962L - FACES_MADE_WOFF2_BYTES + 65_536L,
-            "wide or dense" to 1_607_408L - FACES_MADE_WOFF2_BYTES + 65_536L
+            "narrow at one device pixel" to 527_199L + 65_536L,
+            "wide or dense" to 787_583L + 65_536L
         )
-
-        /** What the five faces weighed as TrueType, less what they weigh as the page's WOFF2. */
-        const val FACES_MADE_WOFF2_BYTES = 1_093_056L - 149_456L
     }
 
     /** A picture decoded through Skia as unpremultiplied ARGB, row after row. */

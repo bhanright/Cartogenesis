@@ -75,7 +75,11 @@ and one scale, the slider's twelve styles to one window with only two asked for 
 the band the opening drifts, at both its sizes, to joining itself end to end and beginning at the
 link preview's window, the page's release lookup, run in Node against the list of files a release
 carries and against a malformed answer, a missing file, a refusal and a failure, and the bytes the
-page fetches as it loads to a stated ceiling. It lives in `:desktop` because the web module compiles
+page fetches as it loads to a stated ceiling. For the second set it holds the data frame's layers to
+one ground and to being the application's own views taken apart, the lens's full-size world to
+being fetched only when the lens is used and to its stated weight, the relief's heights
+(`img/relief-heights.png`, the one figure that is not a WebP) to the patch and to the scale the
+page reads them at, and every world in the seed reel to the application's own link to it. It lives in `:desktop` because the web module compiles
 to wasm and cannot read files. It is deliberately excluded from `:desktop:test`, which has no reason
 to build 12 MB of WebAssembly and would otherwise be judging whatever an earlier run left behind.
 

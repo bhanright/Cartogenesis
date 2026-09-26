@@ -3122,6 +3122,27 @@ data class WorldGenConfig(
      */
     val flatPotential: Boolean = true,
     /**
+     * **An experiment, off by default (Fix 3b's third comb round).** Whether a cell whose descent is
+     * clamped to one edge of its facet takes its receiver by Fairfield and Leymarie's Rho8 draw
+     * (1991, *Water Resources Research* 27(5), 709-717) rather than as exactly the steepest
+     * neighbour. Top level for the same reason as [facetRouting]. Needs [facetRouting].
+     *
+     * **Why only there.** The facet rule already draws between a facet's two neighbours wherever the
+     * descent lies inside the facet, and on a plane it takes each bearing's own share of columns,
+     * rows and diagonals (`RoutingGroundTest`). Rho8 on every cell would replace that with a rule
+     * whose drawn diagonal, adapted to this map's cells, is 9% short of the true reciprocal length
+     * on average: it would bias planes toward the cardinals. What the facet rule leaves undrawn is
+     * the clamped cell, which is where an incised channel's descent always lies.
+     *
+     * **What the derivation predicts, before it was measured.** See `FlowRouting.rho8Receiver`: a
+     * cell clamped to its cardinal keeps the cardinal under every draw, because each diagonal
+     * flanking it falls no more than the cardinal does and is never drawn shorter than its longer
+     * leg. So a gully cut down a column is not drawn off it. What the draw does move is a cell
+     * clamped to its diagonal, which it can send to a cardinal; on a plane falling exactly along
+     * the diagonal's bearing that is a bias toward the row, where the facet rule has none.
+     */
+    val clampedDescentDraw: Boolean = false,
+    /**
      * Fraction of the world covered by ocean, 0..1.
      *
      * Read twice since S2, and the two readings are the point of the chunk. The plate stage draws

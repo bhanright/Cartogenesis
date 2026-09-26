@@ -363,7 +363,8 @@ object GlaciationStage {
             config.seed,
             config.cellHeightInCellWidths,
             config.facetRouting,
-            config.flatPotential
+            config.flatPotential,
+            drawInClampedDescent = config.clampedDescentDraw
         )
         val order =
             FlowRouting.drainageOrder(cellsAcross, cellsDown, isLand, directions, sea.landCellCount)

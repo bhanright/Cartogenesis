@@ -508,7 +508,8 @@ object SeaLevelStage {
                 config.seed,
                 config.cellHeightInCellWidths,
                 config.facetRouting,
-                config.flatPotential
+                config.flatPotential,
+                drawInClampedDescent = config.clampedDescentDraw
             )
             // The land count and the land mask must agree, because every walk below sizes its
             // arrays by the one and fills them from the other; a mismatch would surface as an index

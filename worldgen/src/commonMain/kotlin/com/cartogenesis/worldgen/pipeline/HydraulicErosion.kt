@@ -897,7 +897,7 @@ internal object HydraulicErosion {
             val directions = FlowRouting.flowDirections(
                 cellsAcross, cellsDown, sea.isLand, sea.relativeElevation, filled,
                 config.seed, config.cellHeightInCellWidths, config.facetRouting, config.flatPotential,
-                undrainedShare
+                undrainedShare, config.clampedDescentDraw
             )
             // Discharge and not catchment: each cell hands on what falls on it, so what arrives
             // at a channel is `Q = P * A` and the accumulation is a rainfall-weighted cell count
@@ -1390,7 +1390,7 @@ internal object HydraulicErosion {
                         FlowRouting.flowDirections(
                             cellsAcross, cellsDown, after.isLand, spoilGround, spoilFilled,
                             config.seed, config.cellHeightInCellWidths, config.facetRouting,
-                            config.flatPotential
+                            config.flatPotential, drawInClampedDescent = config.clampedDescentDraw
                         )
                     // The closing breach cuts the sill a fresh delta laid across a drainage, and
                     // what it has to cut with is the discharge behind that sill. Weighted as the
@@ -1430,7 +1430,7 @@ internal object HydraulicErosion {
                 val opened = openMouths(
                     cellsAcross, cellsDown, working, provisionalSeaLevel, config.scale, spoil,
                     rates.pondDepth, config.seed, config.cellHeightInCellWidths, config.facetRouting,
-                    config.flatPotential,
+                    config.flatPotential, config.clampedDescentDraw,
                     rainfallMm, weightSums
                 )
                 incised += opened.removed
@@ -1788,6 +1788,7 @@ internal object HydraulicErosion {
         cellHeightInCellWidths: Double,
         byFacet: Boolean,
         overPotential: Boolean,
+        drawInClampedDescent: Boolean,
         /** The march's rainfall in millimetres, floored; this pass normalises it for itself. */
         rainfallMm: FloatArray,
         weightSums: ((String, Double, Int) -> Unit)?
@@ -1812,7 +1813,7 @@ internal object HydraulicErosion {
             FlowRouting.fillDepressions(cellsAcross, cellsDown, isLand, sea.relativeElevation)
         val flow = FlowRouting.flowDirections(
             cellsAcross, cellsDown, isLand, sea.relativeElevation, filled, seed, cellHeightInCellWidths,
-            byFacet, overPotential
+            byFacet, overPotential, drawInClampedDescent = drawInClampedDescent
         )
         // Weighted as the rounds weighted it, so a groove is cut where a river's water is and not
         // merely where a lot of ground drains — and normalised over this pass's own land, which is

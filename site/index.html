@@ -22,8 +22,8 @@
      when the page first sets type in them. Fonts are fetched in CORS mode even from the same
      origin, so `crossorigin` is not optional here: without it the preload is discarded and the file
      is downloaded a second time. -->
-<link rel="preload" as="font" type="font/ttf" href="fonts/spectral_semibold.ttf" crossorigin>
-<link rel="preload" as="font" type="font/ttf" href="fonts/plex_sans_regular.ttf" crossorigin>
+<link rel="preload" as="font" type="font/woff2" href="fonts/spectral_semibold.woff2" crossorigin>
+<link rel="preload" as="font" type="font/woff2" href="fonts/plex_sans_regular.woff2" crossorigin>
 
 <!-- Classes set before anything is painted, so that nothing a reader sees is drawn one way and then
      swapped for another. `live` says scripts run, so the figures that need one take their space
@@ -71,11 +71,14 @@
 
      Spectral names things, IBM Plex Sans measures them, IBM Plex Mono carries
      seeds and figure captions — the same split, in the same faces, as the
-     window the reader is about to open. The five files are copied out of
-     ui/src/commonMain/composeResources/font by :web:assembleSite, so there is
-     one copy of each face in the repository and the page cannot drift from the
-     app. All three families are SIL Open Font License 1.1; the licences travel
-     with the application (ui/licences) and are listed in its Notices screen.
+     window the reader is about to open. The five files are WOFF2 cut to a
+     Latin-script page's characters from the faces the application bundles, by
+     site/fonts/build_web_fonts.py, about an eighth of the TrueType's weight;
+     SiteFontsTest fails if an application face changes without them. All three
+     families are SIL Open Font License 1.1, and the licences are published
+     beside the files. A subset is a Modified Version under that licence, and
+     IBM Plex reserves its name, so the two Plex faces are published as
+     Cartogenesis Sans and Cartogenesis Mono: the same outlines, renamed.
 
      Nothing here is fetched from anywhere else. A landing page that asks a font
      host for a typeface tells that host who reads it, and it fails oddly when
@@ -83,23 +86,23 @@
      ========================================================================== */
   @font-face{
     font-family:"Spectral";font-style:normal;font-weight:400;font-display:swap;
-    src:url("fonts/spectral_regular.ttf") format("truetype");
+    src:url("fonts/spectral_regular.woff2") format("woff2");
   }
   @font-face{
     font-family:"Spectral";font-style:normal;font-weight:600;font-display:swap;
-    src:url("fonts/spectral_semibold.ttf") format("truetype");
+    src:url("fonts/spectral_semibold.woff2") format("woff2");
   }
   @font-face{
-    font-family:"IBM Plex Sans";font-style:normal;font-weight:400;font-display:swap;
-    src:url("fonts/plex_sans_regular.ttf") format("truetype");
+    font-family:"Cartogenesis Sans";font-style:normal;font-weight:400;font-display:swap;
+    src:url("fonts/plex_sans_regular.woff2") format("woff2");
   }
   @font-face{
-    font-family:"IBM Plex Sans";font-style:normal;font-weight:500;font-display:swap;
-    src:url("fonts/plex_sans_medium.ttf") format("truetype");
+    font-family:"Cartogenesis Sans";font-style:normal;font-weight:500;font-display:swap;
+    src:url("fonts/plex_sans_medium.woff2") format("woff2");
   }
   @font-face{
-    font-family:"IBM Plex Mono";font-style:normal;font-weight:400;font-display:swap;
-    src:url("fonts/plex_mono_regular.ttf") format("truetype");
+    font-family:"Cartogenesis Mono";font-style:normal;font-weight:400;font-display:swap;
+    src:url("fonts/plex_mono_regular.woff2") format("woff2");
   }
 
   :root{
@@ -119,9 +122,9 @@
     --oxblood:#5d0000;
     --oxblood-lit:#7e1414;
 
-    --sans:"IBM Plex Sans","Segoe UI",system-ui,-apple-system,sans-serif;
+    --sans:"Cartogenesis Sans","Segoe UI",system-ui,-apple-system,sans-serif;
     --serif:"Spectral","Palatino Linotype","Book Antiqua",Palatino,Georgia,serif;
-    --mono:"IBM Plex Mono","Cascadia Mono",Consolas,"Liberation Mono",monospace;
+    --mono:"Cartogenesis Mono","Cascadia Mono",Consolas,"Liberation Mono",monospace;
 
     --measure:1120px;
     --gutter:24px;
@@ -1373,7 +1376,7 @@ sudo apt update &amp;&amp; sudo apt install cartogenesis</code></pre><button typ
 
 <footer>
   <div class="wrap">
-    <p>Cartogenesis is open source under the <a href="https://github.com/bhanright/Cartogenesis/blob/main/LICENSE" target="_blank" rel="noopener">MIT licence</a>; the source is at <a href="https://github.com/bhanright/Cartogenesis" target="_blank" rel="noopener">github.com/bhanright/Cartogenesis</a>. Spectral and IBM Plex are used under the SIL Open Font License 1.1.</p>
+    <p>Cartogenesis is open source under the <a href="https://github.com/bhanright/Cartogenesis/blob/main/LICENSE" target="_blank" rel="noopener">MIT licence</a>; the source is at <a href="https://github.com/bhanright/Cartogenesis" target="_blank" rel="noopener">github.com/bhanright/Cartogenesis</a>. Spectral and IBM Plex are used under the SIL Open Font License 1.1 (<a href="fonts/OFL-Spectral.txt">Spectral</a>, <a href="fonts/OFL-IBMPlexSans.txt">Plex Sans</a>, <a href="fonts/OFL-IBMPlexMono.txt">Plex Mono</a>); this page serves the Plex faces trimmed and renamed Cartogenesis Sans and Mono, as that licence asks.</p>
   </div>
 </footer>
 

@@ -46,7 +46,7 @@ class WebGpuOcean private constructor(
             setFloat(weights, cell * WEIGHTS_PER_CELL + 3, stencil.southWeight[cell])
         }
         val result = awaitPromise(
-            runOcean(device, cellsAcross, cellsDown, water, forcing, stream, weights, passes)
+            runOcean(device, OCEAN_RELAXATION_WGSL, cellsAcross, cellsDown, water, forcing, stream, weights, passes)
         )
         if (result == null || isNullish(result)) return null
         return FloatArray(cellCount.toInt()) { getFloat(result, it) }
@@ -76,7 +76,7 @@ private external fun setWaterWord(array: JsHandle, index: Int, value: Int)
 
 /** Each compute-pass boundary makes the previous colour visible across all work groups. */
 @JsFun(
-    """(device, width, height, waterData, forcingData, startData, weightData, passes) => (async () => {
+    """(device, source, width, height, waterData, forcingData, startData, weightData, passes) => (async () => {
         if (device.__lost) return null;
         // Both storage types are 32-bit words; 16 squared is the baseline 256 invocations.
         const bytesPerCell = 4;
@@ -96,44 +96,6 @@ private external fun setWaterWord(array: JsHandle, index: Int, value: Int)
         device.pushErrorScope('out-of-memory');
         let scopesOpen = true;
         try {
-            const source = `
-                struct Params { width: u32, height: u32, padding0: u32, padding1: u32 };
-                @group(0) @binding(0) var<storage, read> water: array<u32>;
-                @group(0) @binding(1) var<storage, read> forcing: array<f32>;
-                @group(0) @binding(2) var<storage, read_write> stream: array<f32>;
-                @group(0) @binding(3) var<uniform> params: Params;
-                @group(0) @binding(4) var<storage, read> weights: array<vec4<f32>>;
-
-                fn relax(gid: vec3<u32>, colour: u32) {
-                    let x = gid.x;
-                    let y = gid.y;
-                    if (x >= params.width || y >= params.height || ((x + y) & 1u) != colour) {
-                        return;
-                    }
-                    let cell = y * params.width + x;
-                    if (water[cell] == 0u) { stream[cell] = 0.0; return; }
-                    let east = (x + 1u) % params.width;
-                    let west = (x + params.width - 1u) % params.width;
-                    // Beyond either pole the stream function is zero: a wall no water crosses.
-                    var streamNorth = 0.0;
-                    if (y > 0u) { streamNorth = stream[cell - params.width]; }
-                    var streamSouth = 0.0;
-                    if (y + 1u < params.height) { streamSouth = stream[cell + params.width]; }
-                    let weight = weights[cell];
-                    // Grouped left to right, as the reference sums them. WGSL has no way to
-                    // forbid reassociation, so this is as close as a browser can be held to the
-                    // processor's own order. No backtick may appear anywhere in this shader: the
-                    // whole source is a JavaScript template literal and one would end it.
-                    let relaxed = (((weight.x * stream[y * params.width + east]
-                        + weight.y * stream[y * params.width + west])
-                        + weight.z * streamNorth) + weight.w * streamSouth) - forcing[cell];
-                    stream[cell] = relaxed;
-                }
-                @compute @workgroup_size(16, 16)
-                fn red(@builtin(global_invocation_id) gid: vec3<u32>) { relax(gid, 0u); }
-                @compute @workgroup_size(16, 16)
-                fn black(@builtin(global_invocation_id) gid: vec3<u32>) { relax(gid, 1u); }
-            `;
             // Pipelines belong to the device and are independent of the grid and forcing.
             if (!device.__oceanPipelines) {
                 const module = device.createShaderModule({code: source});
@@ -221,6 +183,7 @@ private external fun setWaterWord(array: JsHandle, index: Int, value: Int)
 )
 private external fun runOcean(
     device: JsHandle,
+    source: String,
     width: Int,
     height: Int,
     water: JsHandle,
@@ -229,3 +192,49 @@ private external fun runOcean(
     weights: JsHandle,
     passes: Int
 ): JsHandle
+
+/**
+ * One relaxation pass over one color of the ocean's stencil, the processor's
+ * `OceanCirculation.relax`: every water cell of the color set to `e x_east + w x_west + n x_north +
+ * s x_south - f` from its own four weights, land held at zero, columns wrapping.
+ *
+ * A Kotlin constant handed to the page's script rather than text inside it, so the shader can be
+ * read, checked for WGSL's reserved words and compiled by a test without a browser.
+ */
+internal const val OCEAN_RELAXATION_WGSL = """
+struct Params { width: u32, height: u32, padding0: u32, padding1: u32 };
+@group(0) @binding(0) var<storage, read> water: array<u32>;
+@group(0) @binding(1) var<storage, read> forcing: array<f32>;
+@group(0) @binding(2) var<storage, read_write> stream: array<f32>;
+@group(0) @binding(3) var<uniform> params: Params;
+@group(0) @binding(4) var<storage, read> weights: array<vec4<f32>>;
+
+fn relax(gid: vec3<u32>, colour: u32) {
+    let x = gid.x;
+    let y = gid.y;
+    if (x >= params.width || y >= params.height || ((x + y) & 1u) != colour) {
+        return;
+    }
+    let cell = y * params.width + x;
+    if (water[cell] == 0u) { stream[cell] = 0.0; return; }
+    let east = (x + 1u) % params.width;
+    let west = (x + params.width - 1u) % params.width;
+    // An edge row's weight toward its pole is zero, so what lies beyond is never read.
+    var streamNorth = 0.0;
+    if (y > 0u) { streamNorth = stream[cell - params.width]; }
+    var streamSouth = 0.0;
+    if (y + 1u < params.height) { streamSouth = stream[cell + params.width]; }
+    let weight = weights[cell];
+    // Grouped left to right, as the reference sums them. WGSL has no way to
+    // forbid reassociation, so this is as close as a browser can be held to the
+    // processor's own order.
+    let relaxed = (((weight.x * stream[y * params.width + east]
+        + weight.y * stream[y * params.width + west])
+        + weight.z * streamNorth) + weight.w * streamSouth) - forcing[cell];
+    stream[cell] = relaxed;
+}
+@compute @workgroup_size(16, 16)
+fn red(@builtin(global_invocation_id) gid: vec3<u32>) { relax(gid, 0u); }
+@compute @workgroup_size(16, 16)
+fn black(@builtin(global_invocation_id) gid: vec3<u32>) { relax(gid, 1u); }
+"""

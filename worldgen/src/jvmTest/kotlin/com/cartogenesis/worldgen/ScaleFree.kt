@@ -45,7 +45,13 @@ internal object ScaleFree {
         val iceShareOfLand: Double,
         /** Desert as a share of the land in each of the three latitude bands. */
         val desertByBand: DoubleArray,
-        val landKm2: Double
+        val landKm2: Double,
+        /** The sea-surface anomaly's spread over the water, 5th to 95th percentile, degrees Celsius. */
+        val anomalySpanC: Double,
+        /** The coast's maritime term, mean magnitude on land 40 to 60 km from the water, degrees Celsius. */
+        val maritimeAt50KmC: Double,
+        /** The same 135 to 165 km inland. */
+        val maritimeAt150KmC: Double
     )
 
     /** The three bands `GeographyAuditTest` reports the deserts in, by absolute latitude. */
@@ -66,6 +72,17 @@ internal object ScaleFree {
      * than the network.
      */
     const val CHANNEL_SUPPORT_KM2 = 5_000.0
+
+    /** The anomaly's spread is read between these two percentiles of the water's cells. */
+    private const val LOWER_PERCENTILE = 0.05
+    private const val UPPER_PERCENTILE = 0.95
+
+    /**
+     * The two bands of land the maritime term is read in, kilometers from the water: about 50 and
+     * about 150 inland, each twenty to thirty kilometers deep so a 512 grid's 23 km cells fill them.
+     */
+    private val MARITIME_NEAR_KM = 40.0 to 60.0
+    private val MARITIME_FAR_KM = 135.0 to 165.0
 
     fun measure(world: WorldMap, label: String): Measurement {
         val config = world.config
@@ -149,6 +166,28 @@ internal object ScaleFree {
             if (bandCells[it] == 0.0) 0.0 else desertCells[it] / bandCells[it]
         }
 
+        // The ocean's anomaly and the maritime term the climate adds from it, as the climate adds it.
+        val anomalies = ArrayList<Float>()
+        for (cell in 0 until cellCount) if (!isLand[cell]) anomalies.add(world.ocean.anomaly.data[cell])
+        anomalies.sort()
+        val anomalySpanC = if (anomalies.isEmpty()) 0.0 else
+            (anomalies[((anomalies.size - 1) * UPPER_PERCENTILE).toInt()] - anomalies[((anomalies.size - 1) * LOWER_PERCENTILE).toInt()]).toDouble()
+        val maritime = com.cartogenesis.worldgen.model.FloatField(cellsAcross, cellsDown)
+        ClimateStage.applyMaritimeInfluence(config, world.sea, world.ocean, maritime, ClimateStage.waterExposure(config, world.sea))
+        val distance = ClimateStage.waterDistance(config, world.sea)
+        fun maritimeBetween(fromKm: Double, toKm: Double): Double {
+            var sum = 0.0
+            var count = 0
+            for (cell in 0 until cellCount) {
+                if (!isLand[cell]) continue
+                val km = distance.data[cell] * cellWidthKm
+                if (km < fromKm || km >= toKm) continue
+                sum += abs(maritime.data[cell])
+                count++
+            }
+            return if (count == 0) 0.0 else sum / count
+        }
+
         return Measurement(
             label = label,
             cellsAcross = cellsAcross,
@@ -159,7 +198,10 @@ internal object ScaleFree {
             largestLakeKm2 = largestLakeKm2,
             iceShareOfLand = if (landCells == 0L) 0.0 else iceCells.toDouble() / landCells,
             desertByBand = desertByBand,
-            landKm2 = landKm2
+            landKm2 = landKm2,
+            anomalySpanC = anomalySpanC,
+            maritimeAt50KmC = maritimeBetween(MARITIME_NEAR_KM.first, MARITIME_NEAR_KM.second),
+            maritimeAt150KmC = maritimeBetween(MARITIME_FAR_KM.first, MARITIME_FAR_KM.second)
         )
     }
 
@@ -178,6 +220,8 @@ internal object ScaleFree {
                     measurement.iceShareOfLand,
                     bands,
                     measurement.landKm2
+                ) + "  anomaly span %.3f C  maritime %.4f C at 50 km, %.4f C at 150 km".format(
+                    measurement.anomalySpanC, measurement.maritimeAt50KmC, measurement.maritimeAt150KmC
                 )
         )
     }
@@ -262,6 +306,34 @@ internal object ScaleFree {
             why = "a share of the land, so scale-free by construction — except that the snow" +
                 " balance reads each cell's altitude and a finer grid resolves higher ground." +
                 " Measured x1.07, x1.88, x0.83 and x0.64 from 512 to 1024"
+        ),
+        Tolerance(
+            name = "anomaly span",
+            expectedFor = { 1.0 },
+            factor = 1.25,
+            asserted = true,
+            why = "the ocean is solved on one grid sized by the planet's physics whatever the map's" +
+                " size, so the anomaly differs between grids only by being read onto the map's cells" +
+                " and by the coast the map draws. The relief's factor, the tightest the suite asserts." +
+                " Measured x1.01 from 512 to 1024 and x1.04 from 512 to 2048 on seed 42 when the" +
+                " ocean chunk landed; before it, when the solve counted cells, x0.54 and x0.27"
+        ),
+        Tolerance(
+            name = "maritime 50",
+            expectedFor = { 1.0 },
+            factor = 1.25,
+            asserted = false,
+            why = "the coast's reach is still a box counted in cells, OceanConfig.coastalReachCells, so" +
+                " it reaches half as far on the ground at twice the grid; its repair is the coastal" +
+                " climate's chunk. Held at the 512 grid's 234 km the term reads x0.96 and x0.94 at" +
+                " 1024 and 2048 on seed 42"
+        ),
+        Tolerance(
+            name = "maritime 150",
+            expectedFor = { 1.0 },
+            factor = 1.25,
+            asserted = false,
+            why = "as the 50 km band: the box's reach in cells, at 150 km past its edge on a 1024 grid"
         )
     )
 
@@ -284,7 +356,10 @@ internal object ScaleFree {
             coarse.coastlineKm to fine.coastlineKm,
             coarse.drainageDensityKmPerKm2 to fine.drainageDensityKmPerKm2,
             coarse.largestLakeKm2 to fine.largestLakeKm2,
-            coarse.iceShareOfLand to fine.iceShareOfLand
+            coarse.iceShareOfLand to fine.iceShareOfLand,
+            coarse.anomalySpanC to fine.anomalySpanC,
+            coarse.maritimeAt50KmC to fine.maritimeAt50KmC,
+            coarse.maritimeAt150KmC to fine.maritimeAt150KmC
         )
         val complaints = ArrayList<String>()
         val findings = ArrayList<Pair<Double, String>>()

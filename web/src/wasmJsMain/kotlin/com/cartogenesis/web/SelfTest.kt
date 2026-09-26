@@ -16,6 +16,10 @@ import com.cartogenesis.worldgen.WorldGenerationEngine
 import com.cartogenesis.worldgen.model.Acceleration
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.pipeline.ErosionStage
+import com.cartogenesis.worldgen.pipeline.OceanCirculation
+import com.cartogenesis.worldgen.pipeline.OceanHeat
+import com.cartogenesis.worldgen.pipeline.OceanResult
+import com.cartogenesis.worldgen.pipeline.OceanStage
 import com.cartogenesis.worldgen.pipeline.PlateStage
 import com.cartogenesis.worldgen.pipeline.TerrainStage
 import kotlin.math.abs
@@ -45,11 +49,65 @@ import org.jetbrains.skia.Image
  */
 internal suspend fun runSelfTest(accelerator: WebGpuErosion?): String {
     val gpu = if (accelerator == null) "no WebGPU device available" else runGpuSelfTest(accelerator)
+    val ocean = if (accelerator == null) "" else runOceanSelfTest(WebGpuOcean.sharingDeviceWith(accelerator))
     val storage = runStorageSelfTest()
     val exports = runExportSelfTest()
     val bomb = runDecompressionSelfTest()
-    return "SELFTEST $gpu $storage $exports $bomb"
+    return "SELFTEST $gpu $ocean $storage $exports $bomb"
 }
+
+/**
+ * The ocean's kernel against the processor: fifty passes of a Stommel basin's stencil and of a
+ * heat stencil on the device and on the processor from the same start, and a whole ocean both ways
+ * on a small world. Reported, not asserted, as the erosion's figures are: the desktop's
+ * `GpuOceanTest` holds the bounds, and this is the only place a browser's device can be reached.
+ */
+private suspend fun runOceanSelfTest(ocean: WebGpuOcean): String {
+    val across = 512
+    val down = 256
+    val dx = 6_250.0
+    val isWater = BooleanArray(across * down) { val column = it % across; column != 0 && column != across - 1 }
+    val forcing = DoubleArray(across * down) { cell -> -1e-12 * kotlin.math.sin(kotlin.math.PI * (cell / across + 0.5) / down) }
+    val circulation = OceanCirculation.stencil(across, down, dx, dx, isWater, DoubleArray(down) { 6.61e-11 }, OceanStage.BOTTOM_DRAG_PER_S, forcing)
+    val stream = FloatArray(across * down) { cell ->
+        (2e4 * kotlin.math.sin(kotlin.math.PI * (cell % across) / across) * kotlin.math.sin(kotlin.math.PI * (cell / across + 0.5) / down)).toFloat()
+    }
+    val target = FloatArray(across * down) { cell -> if (isWater[cell]) 5f + 20f * (cell / across) / down else 0f }
+    val heat = OceanHeat.stencil(across, down, dx, dx, isWater, stream, target, OceanStage.RELAXATION_SECONDS, withTarget = true)
+    val report = StringBuilder("ocean device=${ocean.name}")
+    for ((name, stencil) in listOf("circulation" to circulation, "heat" to heat)) {
+        val start = FloatArray(across * down) { if (isWater[it]) 1f else 0f }
+        val onCpu = start.copyOf().also { OceanCirculation.relax(stencil, it, OCEAN_BATCH_PASSES) }
+        val onGpu = ocean.solve(stencil, start, OCEAN_BATCH_PASSES)
+        if (onGpu == null) {
+            report.append(" $name=declined")
+            continue
+        }
+        var worst = 0f
+        for (cell in onCpu.indices) worst = maxOf(worst, abs(onCpu[cell] - onGpu[cell]))
+        report.append(" ${name}WorstDelta=$worst")
+    }
+    val config = WorldGenConfig(seed = 234475L, width = 128, height = 128)
+    val sea = WorldGenerationEngine.generate(config.copy(ocean = config.ocean.copy(enabled = false))).sea
+    var onCpu: OceanResult? = null
+    var onGpu: OceanResult? = null
+    val cpuElapsed = measureTime { onCpu = OceanStage.generate(config, sea) }
+    val gpuConfig = config.copy(erosion = config.erosion.copy(acceleration = Acceleration.GPU))
+    val gpuElapsed = measureTime { onGpu = OceanStage.generate(gpuConfig, sea, ocean) }
+    var worstSpeed = 0f
+    var worstAnomaly = 0f
+    for (cell in sea.isLand.indices) {
+        if (sea.isLand[cell]) continue
+        worstSpeed = maxOf(worstSpeed, abs(onCpu!!.velocityX.data[cell] - onGpu!!.velocityX.data[cell]), abs(onCpu!!.velocityY.data[cell] - onGpu!!.velocityY.data[cell]))
+        worstAnomaly = maxOf(worstAnomaly, abs(onCpu!!.anomaly.data[cell] - onGpu!!.anomaly.data[cell]))
+    }
+    report.append(" oceanCpu=${cpuElapsed.inWholeMilliseconds}ms oceanGpu=${gpuElapsed.inWholeMilliseconds}ms")
+    report.append(" worstCurrentDeltaMps=$worstSpeed worstAnomalyDeltaC=$worstAnomaly")
+    return report.toString()
+}
+
+/** Passes in the ocean's batch comparison: the desktop parity test's own fifty. */
+private const val OCEAN_BATCH_PASSES = 50
 
 private suspend fun runGpuSelfTest(accelerator: WebGpuErosion): String {
     val config = WorldGenConfig(seed = 234475L, width = 512, height = 512)

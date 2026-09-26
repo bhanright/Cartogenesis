@@ -997,7 +997,7 @@ object ClimateStage {
      * it reads exactly 0 once the blur's support runs out. The marine blend needs the other
      * question answered — see [waterDistance] and [marineAirFraction].
      */
-    private fun waterExposure(config: WorldGenConfig, sea: SeaLevelResult): FloatField {
+    internal fun waterExposure(config: WorldGenConfig, sea: SeaLevelResult): FloatField {
         val cellsAcross = config.width
         val cellsDown = config.height
         val radiusCells = config.ocean.coastalReachCells.coerceAtLeast(1)
@@ -1102,7 +1102,7 @@ object ClimateStage {
      * fix is a directed one — the water upwind — which needs W2's surface winds. Left as it is,
      * with the finding written down.
      */
-    private fun applyMaritimeInfluence(
+    internal fun applyMaritimeInfluence(
         config: WorldGenConfig,
         sea: SeaLevelResult,
         ocean: OceanResult,

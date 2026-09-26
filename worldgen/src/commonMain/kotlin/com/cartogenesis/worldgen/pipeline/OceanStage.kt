@@ -8,6 +8,7 @@ import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.cos
+import kotlin.math.exp
 import kotlin.math.floor
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
@@ -589,13 +590,22 @@ object OceanStage {
 
     /**
      * Fills [anomaly] with each water cell's departure, in degrees Celsius, from the mean
-     * temperature of the open water on its own row. Land is left at zero.
+     * temperature of the open water near its latitude. Land is left at zero.
      *
      * The departure from the zonal mean and not from the latitude profile, so the energy balance's
-     * own meridional transport is not counted a second time: the anomaly moves heat along a row and
-     * never changes a row's mean.
+     * own meridional transport, which is the ocean's and the air's together, is not counted a
+     * second time: the anomaly moves heat along a latitude and leaves its mean where it was.
+     *
+     * The mean is taken over a band of latitude rather than one row, a Gaussian whose standard
+     * deviation is the heat's own length `sqrt(K τ)`: the distance the eddies spread the water's
+     * heat in the time the air takes to reset it, 140 km at 45 degrees and 280 km at the equator
+     * (see [OceanHeat.diffusivity] and [RELAXATION_SECONDS]). The temperature cannot change faster
+     * than that across latitude, so a row's own mean that does is the coastline's cells entering and
+     * leaving the row, not the water: on 969495 at 2048 the one-row mean fell 0.1 degrees a row,
+     * against the water's own 0.04, over the five rows where fifty coastal cells left, and that
+     * step ran straight across every ocean on the map as a line along the row.
      */
-    private fun buildAnomaly(
+    internal fun buildAnomaly(
         config: WorldGenConfig,
         sea: SeaLevelResult,
         temperature: FloatField,
@@ -603,21 +613,43 @@ object OceanStage {
     ) {
         val cellsAcross = config.width
         val cellsDown = config.height
+        val rowHeightMeters = worldHeightMeters(config.scale) / cellsDown
+        val temperatureSumC = DoubleArray(cellsDown)
+        val waterCells = IntArray(cellsDown)
         for (row in 0 until cellsDown) {
-            var temperatureSum = 0.0
-            var waterCells = 0
-            for (column in 0 until cellsAcross) {
-                if (!sea.isLand[row * cellsAcross + column]) {
-                    temperatureSum += temperature.data[row * cellsAcross + column]
-                    waterCells++
-                }
-            }
-            if (waterCells == 0) continue
-            val rowMeanC = (temperatureSum / waterCells).toFloat()
             for (column in 0 until cellsAcross) {
                 val cell = row * cellsAcross + column
-                if (!sea.isLand[cell]) anomaly.data[cell] = temperature.data[cell] - rowMeanC
+                if (!sea.isLand[cell]) {
+                    temperatureSumC[row] += temperature.data[cell]
+                    waterCells[row]++
+                }
+            }
+        }
+        for (row in 0 until cellsDown) {
+            if (waterCells[row] == 0) continue
+            val latitude = ClimateStage.latitudeOf(row, cellsDown).toDouble()
+            val spreadMeters = sqrt(OceanHeat.diffusivity(latitude) * RELAXATION_SECONDS)
+            val spreadRows = spreadMeters / rowHeightMeters
+            val reachRows = ceil(ZONAL_MEAN_REACH_IN_SPREADS * spreadRows).toInt()
+            var weightedSumC = 0.0
+            var weightedCells = 0.0
+            for (other in maxOf(0, row - reachRows)..minOf(cellsDown - 1, row + reachRows)) {
+                val rowsAway = (other - row) / spreadRows
+                val weight = exp(-0.5 * rowsAway * rowsAway)
+                weightedSumC += weight * temperatureSumC[other]
+                weightedCells += weight * waterCells[other]
+            }
+            val zonalMeanC = (weightedSumC / weightedCells).toFloat()
+            for (column in 0 until cellsAcross) {
+                val cell = row * cellsAcross + column
+                if (!sea.isLand[cell]) anomaly.data[cell] = temperature.data[cell] - zonalMeanC
             }
         }
     }
+
+    /**
+     * How far, in standard deviations, [buildAnomaly]'s Gaussian band reaches: a normal curve
+     * holds all but 0.27% of its weight within three.
+     */
+    private const val ZONAL_MEAN_REACH_IN_SPREADS = 3.0
 }

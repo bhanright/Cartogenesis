@@ -242,6 +242,36 @@ class OceanHeatTest {
     }
 
     /**
+     * A coast that ends on one row does not draw that row across the ocean's anomaly.
+     *
+     * The western half of the map turns to land from row 300 down, and the water is 3 degrees
+     * warmer at the eastern edge than the western, so the mean of a single row steps by 0.75
+     * degrees there while the water itself changes by 0.05 a row. The anomaly's reference, the
+     * temperature less the anomaly, may move by no more than a quarter of that step across any
+     * row: a band mean four rows wide already would, and the band here is about twenty.
+     */
+    @Test
+    fun `a coast ending on a row does not draw a line along it in the anomaly`() {
+        val size = 512
+        val coastRow = 300
+        val config = WorldGenConfig(seed = 1L, width = size, height = size)
+        val isLand = BooleanArray(size * size) { cell -> cell / size >= coastRow && cell % size < size / 2 }
+        val sea = SeaLevelResult(0.5f, isLand, FloatField(size, size), size)
+        val temperature = FloatField(size, size)
+        for (cell in isLand.indices) {
+            if (!isLand[cell]) temperature.data[cell] = 20f - 0.05f * (cell / size) + 3f * (cell % size) / size
+        }
+        val anomaly = FloatField(size, size)
+        OceanStage.buildAnomaly(config, sea, temperature, anomaly)
+        val column = size * 3 / 4
+        fun referenceC(row: Int) = temperature.data[row * size + column] - anomaly.data[row * size + column]
+        var steepest = 0f
+        for (row in 0 until size - 1) steepest = maxOf(steepest, abs(referenceC(row + 1) - referenceC(row)))
+        println("OCEAN anomaly reference: steepest change across a row $steepest C")
+        assertTrue(steepest < 0.75f / 4, "the anomaly's reference moved $steepest C across one row")
+    }
+
+    /**
      * The solve converges on a deliberately difficult fixture: a narrow inlet one cell wide, a pond
      * cut off from the sea behind a strip of land a coarse cell straddles, and a current; and the
      * same solve stopped at a tenth of its iterations has not.

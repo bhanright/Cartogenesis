@@ -262,7 +262,7 @@ class OceanHeatTest {
             if (!isLand[cell]) temperature.data[cell] = 20f - 0.05f * (cell / size) + 3f * (cell % size) / size
         }
         val anomaly = FloatField(size, size)
-        OceanStage.buildAnomaly(config, sea, temperature, anomaly)
+        OceanStage.buildAnomaly(config, sea, temperature, FloatArray(size) { row -> 20f - 0.05f * row }, anomaly)
         val column = size * 3 / 4
         fun referenceC(row: Int) = temperature.data[row * size + column] - anomaly.data[row * size + column]
         var steepest = 0f

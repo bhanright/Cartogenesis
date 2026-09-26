@@ -239,7 +239,8 @@ object OceanStage {
 
         val solved = circulate(config, sea, zonal, relax)
         carryToMap(config, sea, solved, velocityX, velocityY, temperature)
-        buildAnomaly(config, sea, temperature, anomaly)
+        val profileC = FloatArray(cellsDown) { row -> zonal.waterC(ClimateStage.latitudeOf(row, cellsDown), Season.ANNUAL) }
+        buildAnomaly(config, sea, temperature, profileC, anomaly)
         return OceanResult(velocityX, velocityY, temperature, anomaly)
     }
 
@@ -590,37 +591,49 @@ object OceanStage {
 
     /**
      * Fills [anomaly] with each water cell's departure, in degrees Celsius, from the mean
-     * temperature of the open water near its latitude. Land is left at zero.
+     * temperature of the open water near its latitude. Land is left at zero. [profileC] is the
+     * energy balance's sea-surface temperature for each map row, the profile the heat relaxes to.
      *
      * The departure from the zonal mean and not from the latitude profile, so the energy balance's
      * own meridional transport, which is the ocean's and the air's together, is not counted a
-     * second time: the anomaly moves heat along a latitude and leaves its mean where it was.
+     * second time: the anomaly moves heat along a latitude and leaves its mean close to where it
+     * was.
      *
-     * The mean is taken over a band of latitude rather than one row, a Gaussian whose standard
+     * Close to, not exactly: the currents' own zonal mean, the water's mean departure from the
+     * profile, is taken over a band of latitude rather than one row, a Gaussian whose standard
      * deviation is the heat's own length `sqrt(K τ)`: the distance the eddies spread the water's
      * heat in the time the air takes to reset it, 140 km at 45 degrees and 280 km at the equator
-     * (see [OceanHeat.diffusivity] and [RELAXATION_SECONDS]). The temperature cannot change faster
-     * than that across latitude, so a row's own mean that does is the coastline's cells entering and
-     * leaving the row, not the water: on 969495 at 2048 the one-row mean fell 0.1 degrees a row,
-     * against the water's own 0.04, over the five rows where fifty coastal cells left, and that
-     * step ran straight across every ocean on the map as a line along the row.
+     * (see [OceanHeat.diffusivity] and [RELAXATION_SECONDS]). The water's temperature cannot change
+     * faster than that across latitude, so a one-row mean that does is the coastline's cells
+     * entering and leaving the row, not the water: on 969495 at 2048 the one-row mean fell 0.1
+     * degrees a row, against the water's own 0.04, over the five rows where fifty coastal cells
+     * left, and that step ran straight across every ocean on the map as a line along the row.
+     * Putting each row's mean back to zero would put the line back, since the step is what the
+     * row's mean is made of, so it is not done. What it leaves on the four standard worlds and on
+     * 969495 at 2048: each row's mean anomaly 0.08 to 0.13 degrees root mean square, at most 0.29
+     * to 0.59, and the whole ocean's 0.004 to 0.006.
+     *
+     * Only the departure is averaged over the band, and the profile is added back row by row, so
+     * the profile's curvature is not averaged into the reference: averaged whole, the temperature
+     * itself put each row's mean 0.3 degrees root mean square off zero and the whole ocean's 0.1.
      */
     internal fun buildAnomaly(
         config: WorldGenConfig,
         sea: SeaLevelResult,
         temperature: FloatField,
+        profileC: FloatArray,
         anomaly: FloatField
     ) {
         val cellsAcross = config.width
         val cellsDown = config.height
         val rowHeightMeters = worldHeightMeters(config.scale) / cellsDown
-        val temperatureSumC = DoubleArray(cellsDown)
+        val departureSumC = DoubleArray(cellsDown)
         val waterCells = IntArray(cellsDown)
         for (row in 0 until cellsDown) {
             for (column in 0 until cellsAcross) {
                 val cell = row * cellsAcross + column
                 if (!sea.isLand[cell]) {
-                    temperatureSumC[row] += temperature.data[cell]
+                    departureSumC[row] += temperature.data[cell] - profileC[row]
                     waterCells[row]++
                 }
             }
@@ -636,10 +649,10 @@ object OceanStage {
             for (other in maxOf(0, row - reachRows)..minOf(cellsDown - 1, row + reachRows)) {
                 val rowsAway = (other - row) / spreadRows
                 val weight = exp(-0.5 * rowsAway * rowsAway)
-                weightedSumC += weight * temperatureSumC[other]
+                weightedSumC += weight * departureSumC[other]
                 weightedCells += weight * waterCells[other]
             }
-            val zonalMeanC = (weightedSumC / weightedCells).toFloat()
+            val zonalMeanC = profileC[row] + (weightedSumC / weightedCells).toFloat()
             for (column in 0 until cellsAcross) {
                 val cell = row * cellsAcross + column
                 if (!sea.isLand[cell]) anomaly.data[cell] = temperature.data[cell] - zonalMeanC

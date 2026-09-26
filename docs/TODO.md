@@ -1605,13 +1605,45 @@
   straight run of coast and the pale bench of constant width down its west side are not E4's
   half-graben. They are the trench, whose profile is `trenchDepth * strength * narrow` — a function
   of the distance to the boundary and of nothing else, which is a plane along strike, and every
-  contour of a plane is a straight line. Every other belt on the map varies along its own length.
+  contour of a plane is a straight line. Every other belt's stamp varies along its own length,
+  though the collision belts the map draws do not (the next entry).
   Giving the trench the same swell was written, run and reverted: at `rangeVariationCycles`'s
   wavelength (about 160 cells at 2048, against a bench 30 cells long) it slides the coast onto a
   different straight contour instead of bending it, and the window went from 108 cells of thin
   grid-bearing water and a 31-cell run to 146 and 39. Wants a shorter wavelength on the trench, or
   dissection of a coastal plain too flat for the hydraulic rounds to cut. E4/B2's geometry.
   2026-09-12, measured at E7.
+- **A collision belt is drawn as a ruled wall, because the uplift rate is a clamp of its stamp (rule
+  13).** Seen on the review renders of 969495 at 2048: a belt running north-east with straight,
+  parallel sides and a smooth flank of constant width, the same before and after the implicit
+  incision. The stamp is not what the map draws. `PlateStage.recordUpliftRate` gives a cell its
+  class's full rate wherever the stamp stands above `crustAgeReference` (650 m). That takes in 86 to
+  89% of 969495's collision cells with a rate, and 54 to 92% on seeds 7, 42 and 718106. The erosion
+  then lifts that footprint by 248 m a round for twelve rounds, so the finished belt is the rate's
+  mesa. It is a contour of a stamp that is a function of distance from a warped bisector, times
+  width noises 706 and 1,714 km long. The rate drops the pair's convergence (the belt reported
+  converges at 0.25 and rises as fast as its 0.73 neighbour), the swell of `rangeVariationCycles`
+  and the roughness. Measured on that belt at the renders' configuration, over 780 km: width 254 km
+  with a coefficient of variation of 0.055; edges within 5 to 6 km rms of a straight line; a
+  boundary within 12 km of its chord for 974 km; and a flank 37 km wide, varying by 4 to 6 km.
+  Earth's most regular front, the Himalaya, is a small circle of radius 1,696 km (Bendick and Bilham
+  2001), and stays within 12 km of a chord for only 403 km. On the app's configuration, 10 of the 14
+  belts on land on 969495 at 2048 and seeds 7, 42 and 718106 at 1024 have an edge straighter than
+  that. The geometry guard misses it: its runs break at 1.1 cell widths, and dissection breaks the
+  contour long before the belt bends. The repair, in order:
+  1. the rate in proportion to the stamp at a reference convergence, with `IsostasyTest`'s
+     derivation re-stated;
+  2. convergent runs segmented along strike on `arcAlongRun`, as rifts are, with each segment's
+     width, height and front offset drawn from the detachment-strength and shortening variation that
+     makes Earth's salients and recesses (Macedo and Marshak 1999; Jordan et al. 1983; Isacks 1988),
+     and crests stepped en echelon where the pair is oblique;
+  3. convergence projected on the local boundary normal;
+  4. a straightness clause at hundreds of kilometres, shown failing on this belt.
+
+  The graphics-card path is specified with the rate. Note: the review render set was built with
+  `WorldGenConfig(seed, size, size)` outright rather than through `atResolution`, so its belts are a
+  quarter of the app's width at 2048 and its boundaries straighter still. 2026-09-26, found on the
+  Fix 3b review renders.
 - **A rift that meets the coast should be drowned across its whole width.** A half-graben's floor is
   a wedge and the water in a coastal one stands at the waterline, so the hinge shelf is dry: the
   author's trough on 718106 at 2048 keeps 38% of its flat floor under water and shows the rest as a

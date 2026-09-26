@@ -12,7 +12,7 @@
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://cartogenesis.com/">
 <meta property="og:title" content="Cartogenesis — Procedural World-Map Generator">
-<meta property="og:description" content="Build a world from the ground up. Terrain, rivers, climate and borders, shaped by geography from a seed — then a map you can pan, restyle, save and export.">
+<meta property="og:description" content="Build a world from the ground up. Cartogenesis generates terrain, rivers, climate and borders from a seed, then draws a map you can explore, restyle, save and export.">
 <meta property="og:image" content="https://cartogenesis.com/img/natural.webp">
 <meta name="twitter:card" content="summary_large_image">
 <!-- What a search engine reads about the program, in schema.org's words. One SoftwareApplication
@@ -914,7 +914,7 @@
 <header class="tray" id="tray" hidden>
   <div class="wrap tray-row">
     <p class="wordmark">Carto<span>genesis</span></p>
-    <a class="btn primary" href="/app/">Open in the browser</a>
+    <a class="btn primary" href="/app/">Try it in your browser</a>
     <a class="btn secondary" href="#install">Download the app</a>
   </div>
 </header>
@@ -931,10 +931,10 @@
       <h1>Build a world from the ground up.</h1>
       <p class="lede">Generate a world map from a seed. Shape its terrain, rivers, climate and borders, then choose a map style and export the result.</p>
       <div class="actions" id="opening-actions">
-        <a class="btn primary" href="/app/" id="launch">Open in the browser</a>
+        <a class="btn primary" href="/app/" id="launch">Try it in your browser</a>
         <a class="btn secondary" href="#install" id="launch-desktop">Download the Desktop App (Windows/Linux)</a>
       </div>
-      <button type="button" class="opening-cue" id="opening-cue" aria-label="Scroll down to the page" hidden>
+      <button type="button" class="opening-cue" id="opening-cue" aria-label="Scroll to the rest of the page" hidden>
         <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M7 1v11M2 7l5 5 5-5"/></svg>
       </button>
     </div>
@@ -983,7 +983,7 @@
       <li class="card">
         <div class="plate">
           <img src="img/step-plates.webp" width="520" height="280" loading="lazy" decoding="async"
-               alt="The tectonic plates view of a peninsula: the continent's plate in pale blue over the shaded relief, an ocean plate in pink to the west and another in yellow to the south-east, with a glowing seam where each meets the continent.">
+               alt="The tectonic plates view of a peninsula: the continent's plate in pale blue over the shaded relief, an ocean plate in pink to the west and another in yellow to the south-east, with a glowing seam where each meets the continent's plate.">
         </div>
         <div class="card-mark"><span class="card-number">01</span></div>
         <h3>Plates and mountains</h3>
@@ -1023,7 +1023,7 @@
         </div>
         <div class="card-mark"><span class="card-number">05</span></div>
         <h3>Rivers and lakes</h3>
-        <p>Water flows downhill into rivers, lakes and seas. In dry inland basins, evaporation can shrink a lake and leave salt behind.</p>
+        <p>Water flows downhill into rivers, lakes and seas. In dry inland basins, evaporation shrinks lakes, and some dry out completely.</p>
       </li>
       <li class="card">
         <div class="plate">
@@ -1032,7 +1032,7 @@
         </div>
         <div class="card-mark"><span class="card-number">06</span></div>
         <h3>Realms and peoples</h3>
-        <p>Geography shapes borders and settlement. Realms follow rivers, coasts and watersheds, while peoples spread into familiar terrain and across political borders.</p>
+        <p>Geography shapes borders and settlement. Realms follow rivers, coasts and watersheds. Peoples spread through land like their homeland, whatever the borders.</p>
       </li>
     </ol>
 
@@ -1074,8 +1074,8 @@
         </div>
       </div>
       <figcaption>
-        <span class="say">Point at the map to see it at full size, press and hold on a touch screen, or select the map and move the lens with the arrow keys.</span>
-        Seed 718106 · <a href="img/world-full.webp">The whole world at full size, 4096 × 2048</a>
+        <span class="say">Move the pointer over the map to magnify it. On a touch screen, press and hold. With a keyboard, press Tab to reach the map and move the magnifier with the arrow keys.</span>
+        Seed 718106 · <a href="img/world-full.webp">Open the whole map at full size (4096 × 2048 pixels)</a>
       </figcaption>
     </figure>
 
@@ -1090,7 +1090,7 @@
                 data-heights="img/relief-heights.png" data-point-spacing="2" data-steps-per-metre="4" data-kilometres-per-pixel="2.9296875"></canvas>
       </div>
       <figcaption>
-        <span class="say">The ground in relief, lit from the upper left: move the pointer over it to tilt it. Heights are drawn twenty times their true scale.</span>
+        <span class="say">A 3D view of the same land, lit from the upper left. Move the pointer over it to tilt it.</span>
         Seed 718106
       </figcaption>
     </figure>
@@ -1098,7 +1098,7 @@
 
   <section id="styles">
     <div class="section-head">
-      <h2>Realistic map styles</h2>
+      <h2>Map styles</h2>
       <span class="fill"></span>
     </div>
 
@@ -1115,12 +1115,12 @@
           </div>
           <div class="card-mark"><span class="card-number">01</span></div>
           <h3>Atlas</h3>
-          <p>Combines elevation and climate colours.</p>
+          <p>Combines elevation and climate colors.</p>
         </li>
         <li class="card">
           <div class="plate">
             <img src="img/style-schoolroom.webp" width="600" height="400" loading="lazy" decoding="async"
-                 alt="The same peninsula in the Schoolroom style, land tinted by height alone: green lowlands rising to a yellow and orange ridge along the coast, blue rivers, and a pale blue sea with faint depth contours.">
+                 alt="The same peninsula in the Schoolroom style.">
           </div>
           <div class="card-mark"><span class="card-number">02</span></div>
           <h3>Schoolroom</h3>
@@ -1129,15 +1129,15 @@
         <li class="card">
           <div class="plate">
             <img src="img/style-natural.webp" width="600" height="400" loading="lazy" decoding="async"
-                 alt="The same peninsula in the Natural style, in satellite colours: forested green hills, brown slopes along the coastal range, rivers in pale blue, and a cobalt sea.">
+                 alt="The same peninsula in the Natural style, in satellite colors: forested green hills, brown slopes along the coastal range, rivers in pale blue, and a cobalt sea.">
           </div>
           <div class="card-mark"><span class="card-number">03</span></div>
           <h3>Natural</h3>
-          <p>Uses colours taken from satellite imagery.</p>
+          <p>Uses colors taken from satellite imagery.</p>
         </li>
       </ol>
       <figcaption>
-        <span class="say">The same region in Atlas, Schoolroom and Natural, at the same scale.</span>
+        <span class="say">All three at the same scale.</span>
         Seed 718106
       </figcaption>
     </figure>
@@ -1171,7 +1171,7 @@
               <option value="pen_and_ink">Pen and ink</option>
               <option value="mars">Mars</option>
               <option value="natural">Natural</option>
-              <option value="clear">Colour-blind</option>
+              <option value="clear">Color-blind</option>
           </select>
         </label>
         <label><span class="control-label">Right</span>
@@ -1187,12 +1187,12 @@
               <option value="pen_and_ink">Pen and ink</option>
               <option value="mars">Mars</option>
               <option value="natural" selected>Natural</option>
-              <option value="clear">Colour-blind</option>
+              <option value="clear">Color-blind</option>
           </select>
         </label>
       </div>
       <figcaption>
-        <span class="say">Any two of the twelve styles over the same ground. Drag the divider, or move it with the arrow keys.</span>
+        <span class="say">Pick any two of the twelve styles to compare the same place. Drag the divider, or move it with the arrow keys.</span>
         Seed 718106
       </figcaption>
     </figure>
@@ -1205,7 +1205,7 @@
     </div>
 
     <p class="section-lede">
-      The temperature, ocean currents, winds and rainfall calculated for the same coastline.
+      The same coastline again, showing the temperature, ocean currents, winds and rainfall the generator worked out for it.
     </p>
 
     <!-- One frame over the cards' ground and more of it, the relief at the bottom and each layer
@@ -1230,12 +1230,12 @@
           <div class="layer-choice">
             <input class="layer-input" type="checkbox" id="layer-temperature" value="temperature" autocomplete="off" checked aria-describedby="layer-temperature-says">
             <label class="layer-switch" for="layer-temperature"><span class="layer-round" aria-hidden="true"><svg class="layer-icon" viewBox="0 0 24 24" focusable="false"><path d="M10 4.6a2 2 0 0 1 4 0v9.1a4 4 0 1 1-4 0z"/><rect class="thermo-column" x="11.1" y="6" width="1.8" height="10.5" rx=".9"/><circle class="thermo-bulb" cx="12" cy="17.2" r="2.1"/></svg></span><span class="layer-name">Temperature</span></label>
-            <span class="layer-says" id="layer-temperature-says">The mean annual temperature, in degrees Celsius.</span>
+            <span class="layer-says" id="layer-temperature-says">The average temperature over the year, from cold to hot.</span>
           </div>
           <div class="layer-choice">
             <input class="layer-input" type="checkbox" id="layer-currents" value="currents" autocomplete="off" aria-describedby="layer-currents-says">
             <label class="layer-switch" for="layer-currents"><span class="layer-round" aria-hidden="true"><svg class="layer-icon" viewBox="0 0 24 24" focusable="false"><path class="wave-in" pathLength="100" d="M3 7.5c2.2-2 3.8-2 6 0s3.8 2 6 0 3.8-2 6 0"/><path d="M3 12c2.2-2 3.8-2 6 0s3.8 2 6 0 3.8-2 6 0"/><path class="wave-in later" pathLength="100" d="M3 16.5c2.2-2 3.8-2 6 0s3.8 2 6 0 3.8-2 6 0"/></svg></span><span class="layer-name">Ocean currents</span></label>
-            <span class="layer-says" id="layer-currents-says">The surface flow, coloured warm or cold against its latitude.</span>
+            <span class="layer-says" id="layer-currents-says">Surface currents, colored by whether the water is warmer or colder than usual for its latitude.</span>
           </div>
           <div class="layer-choice">
             <input class="layer-input" type="checkbox" id="layer-wind" value="wind" autocomplete="off" aria-describedby="layer-wind-says">
@@ -1255,7 +1255,7 @@
         </div>
       </fieldset>
       <figcaption>
-        <span class="say">Tick a layer to lay it over the relief, or several at once.</span>
+        <span class="say">Turn on one or more layers to see them over the relief map.</span>
         Seed 718106
       </figcaption>
     </figure>
@@ -1269,16 +1269,16 @@
           </div>
           <div class="card-mark"><span class="card-number">01</span></div>
           <h3>Temperature</h3>
-          <p>The mean annual temperature, in degrees Celsius.</p>
+          <p>The average temperature over the year, from cold to hot.</p>
         </li>
         <li class="card">
           <div class="plate">
             <img src="img/layer-currents.webp" width="480" height="600" loading="lazy" decoding="async"
-                 alt="The same peninsula in the ocean currents view: the land a dark ground, and rows of small pale arrows over the sea, running north up the west coast and turning west off the south coast.">
+                 alt="The same peninsula in the ocean currents view: the land a dark ground, and rows of small pale arrows over the sea indicate the direction of ocean currents.">
           </div>
           <div class="card-mark"><span class="card-number">02</span></div>
           <h3>Ocean currents</h3>
-          <p>The surface flow, coloured warm or cold against its latitude.</p>
+          <p>Surface currents, colored by whether the water is warmer or colder than usual for its latitude.</p>
         </li>
         <li class="card">
           <div class="plate">
@@ -1320,7 +1320,7 @@
     </div>
 
     <p class="section-lede">
-      Five more worlds, each made from its seed at the size and settings the browser starts with. Each link opens the world it shows.
+      Five more worlds, each from a different seed, made at the browser version's starting size and settings. Open any of them to explore it in the app.
     </p>
 
     <ul class="reel">
@@ -1365,13 +1365,13 @@
 
     <dl class="spec">
       <div><dt>Views</dt><dd>Fifteen views, including political borders, peoples, elevation, biomes, seasonal temperature and rainfall, tectonic plates, ocean currents and winds.</dd></div>
-      <div><dt>Styles</dt><dd>Twelve map styles, including Atlas, Vellum, Ink wash, Nautical, Pen and ink, Mars, Natural and a colour-blind-safe palette.</dd></div>
-      <div><dt>Themes</dt><dd>Seventeen interface themes, including light, dark, high contrast and colour-blind options.</dd></div>
-      <div><dt>Editing</dt><dd>Edit generated names and borders. Your changes are saved with the world.</dd></div>
-      <div><dt>Saves</dt><dd>Save a world and reopen the same file in the browser or the desktop app. In Chrome and Edge the browser's library can live in a folder on your device, including one a sync service keeps in step.</dd></div>
-      <div><dt>Export</dt><dd>Export map images as PNG, WebP or JPEG, drawn at the world's true shape, or the data behind the map, one sample per cell: a 16-bit heightmap with its metre scale, and biome and realm index maps with their legends. The desktop app makes worlds up to 4096 × 4096, whose map image is 8192 × 4096. The browser, on a phone or a computer, stops at 2048 × 2048.</dd></div>
+      <div><dt>Styles</dt><dd>Twelve map styles, including Atlas, Vellum, Ink wash, Nautical, Pen and ink, Mars, Natural and a color-blind-safe palette.</dd></div>
+      <div><dt>Themes</dt><dd>Seventeen interface themes, including light, dark, high contrast and color-blind options.</dd></div>
+      <div><dt>Editing</dt><dd>Rename realms, capitals and landmarks, edit their details and notes, and place your own labels. Future updates will add a full atlas system for editing borders, landmarks and labels in more depth.</dd></div>
+      <div><dt>Saves</dt><dd>Save a world and reopen the same file in the browser or the desktop app.</dd></div>
+      <div><dt>Export</dt><dd>Export the map as a PNG, WebP or JPEG image. You can also export the data behind it for other tools: a 16-bit heightmap with its scale in meters, and biome and realm maps with their legends. The desktop app makes worlds up to 4096, whose map images are 8192 × 4096 pixels. The browser version, on a phone or a computer, goes up to 2048.</dd></div>
       <div><dt>Resolution</dt><dd>Choose the world's resolution. Higher settings add detail and need more memory; the browser starts at 512, the desktop app at 1024.</dd></div>
-      <div><dt>Acceleration</dt><dd>Optional graphics acceleration speeds up erosion and export rendering: WebGPU in the browser, OpenGL on the desktop.</dd></div>
+      <div><dt>Acceleration</dt><dd>Optional graphics acceleration uses the graphics card to speed up erosion, ocean currents and ice sheets, through WebGPU in the browser and OpenGL on the desktop. The desktop app also draws exported maps on the graphics card.</dd></div>
     </dl>
   </section>
 
@@ -1388,24 +1388,24 @@
              a visitor actually fetches to run the generator, measured off the assembled tree. The
              loading shell carries the same token and therefore the same figure. -->
         <p>Use a recent Chrome, Edge, Firefox or Safari. The first visit downloads the generator, about __BUNDLE_MB__&nbsp;MB, and caches it; nothing you make is uploaded anywhere.</p>
-        <p>Saved worlds stay in the browser's own storage, or, in Chrome and Edge, in a folder on your device that you choose in the Library. The desktop app opens the same files; the browser opens the desktop's up to 2048.</p>
+        <p>Saved worlds stay in the browser's own storage, or, in Chrome and Edge, in a folder on your device that you choose in the Library. The desktop app opens worlds saved in the browser, and the browser opens desktop saves up to 2048.</p>
         <p>Optional graphics acceleration uses WebGPU where the browser offers it.</p>
       </div>
 
       <div class="panel">
         <h3>Sizes, formats and speed</h3>
-        <p>An export regenerates the world at the size you ask for, so the detail is real rather than enlarged. The map image is drawn at the world's true shape, twice as wide as it is tall: a 2048 world is a 4096 × 2048 picture. Larger worlds take longer and use more memory. The browser stops at a 2048 world, a 4096 × 2048 picture, for the world on screen and for exports. Larger worlds need the desktop app.</p>
+        <p>Exporting at a different size builds the world again at that size. The extra detail is newly generated, and small features can differ from the world on screen. Map images are twice as wide as they are tall, so a 2048 world exports as a 4096 × 2048 picture. Larger worlds take longer and use more memory. The browser version makes and exports worlds up to 2048. For larger worlds, use the desktop app.</p>
         <p>PNG keeps every pixel. WebP is smaller and softens thin rivers and borders slightly.</p>
       </div>
 
       <div class="panel">
-        <h3>The Atlas is a work in progress</h3>
-        <p>Today the Atlas lists a world's realms and landmarks and lets you rename them and place labels. Your changes are saved with the world. A later release, planned for 5.0, adds named continents, seas, bays, straits and ranges, with labels set out the way a printed atlas sets them.</p>
+        <h3>The Atlas panel is a work in progress</h3>
+        <p>Today the Atlas panel in the app lists a world's realms and landmarks. You can rename them and place your own labels, and your changes are saved with the world. Version 5.0 is planned to add named continents, seas, bays, straits and mountain ranges, labeled the way a printed atlas labels them.</p>
       </div>
 
       <a class="panel" href="/releases/latest" id="downloads" target="_blank" rel="noopener">
         <h3>Desktop version<span class="tag">Windows · Linux</span></h3>
-        <p>Generate larger worlds with a desktop app that uses every processor thread. Download and Installation below says what each platform offers and how to install it; the steps live there rather than here, so there is one copy of them to keep true.</p>
+        <p>The desktop app makes larger worlds, up to 4096, and spreads the work across your processor's cores. See the download section below for each system's files and how to install them.</p>
         <span class="go" id="release-line">Get the latest release ↗</span>
       </a>
     </div>
@@ -1424,12 +1424,12 @@
        checked word for word against the one in docs/INSTALL.md. -->
   <section id="install">
     <div class="section-head">
-      <h2>Download and Installation</h2>
+      <h2>Download and install</h2>
       <span class="fill"></span>
     </div>
 
     <p class="section-lede">
-      Choose your system for its files and how to install them. The browser version runs anywhere; the desktop app makes larger worlds.
+      Choose your system to see its downloads and how to install them. The browser version needs no installing, but the desktop app makes larger worlds and leverages the GPU more effectively. 
     </p>
 
     <div class="dl" id="dl">
@@ -1450,9 +1450,9 @@
               <a class="dl-file first" href="/releases/latest" data-asset="Cartogenesis-&lt;version&gt;.msi">MSI installer</a>
               <a class="dl-file" href="/releases/latest" data-asset="Cartogenesis-&lt;version&gt;-windows-portable.zip">Portable zip</a>
             </div>
-            <p>The portable zip installs nothing: unzip it and run <code>Cartogenesis.exe</code>. The MSI installer adds a Start menu entry. It is unsigned, so Windows shows a SmartScreen warning. If you trust the download, choose “More info”, then “Run anyway”.</p>
+            <p>The portable zip installs nothing: unzip it and run <code>Cartogenesis.exe</code>. The MSI installer runs a wizard to install it in your chosen program directory like any other program. It is unsigned, so Windows shows a SmartScreen warning. If you trust the download, choose “More info”, then “Run anyway”.</p>
             <ul class="dl-notes">
-              <li>Java is bundled, with nothing else to install.</li>
+              <li>Java is included, so there is nothing else to install.</li>
               <li>Draws exported pictures on the graphics card where there is one, and runs erosion, ocean currents and the ice sheet on it when you switch graphics acceleration on.</li>
             </ul>
           </div>
@@ -1482,9 +1482,9 @@ sudo apt update &amp;&amp; sudo apt install cartogenesis</code></pre><button typ
             </div>
             <p>Or install the <code>.deb</code> with apt, or unpack the portable tarball and run it.</p>
             <ul class="dl-notes">
-              <li>Java is bundled, with nothing else to install.</li>
-              <li>The open-source graphics stack (Mesa) was tested. The proprietary NVIDIA driver was not.</li>
-              <li>Saved worlds live in <code>~/.cartogenesis/worlds</code>.</li>
+              <li>Java is included, so there is nothing else to install.</li>
+              <li>Graphics acceleration has been tested with the open-source Mesa drivers, but not yet with NVIDIA's own driver.</li>
+              <li>Saved worlds go in <code>~/.cartogenesis/worlds</code> unless you choose another folder.</li>
             </ul>
           </div>
         </div>
@@ -1504,10 +1504,10 @@ sudo apt update &amp;&amp; sudo apt install cartogenesis</code></pre><button typ
           </button>
           <div class="dl-body" id="dl-browser">
             <div class="dl-files">
-              <a class="dl-file first" href="/app/">Open in the browser</a>
+              <a class="dl-file first" href="/app/">Try it in your browser</a>
               <a class="dl-file" href="/releases/latest" data-asset="Cartogenesis-&lt;version&gt;-web.zip">Web zip, to host yourself</a>
             </div>
-            <p>Runs in a recent Chrome, Edge, Firefox or Safari. Nothing is installed and nothing you make is uploaded: worlds are kept in the browser's own storage or, in Chrome and Edge, in a folder you choose, the same files the desktop app keeps.</p>
+            <p>Runs in a recent Chrome, Edge, Firefox or Safari. Nothing is installed, and nothing you make is uploaded. Your worlds are saved in a folder you choose, as the same file format the desktop app uses.</p>
             <ul class="dl-notes">
               <li>Makes worlds up to 2048 in the browser; the desktop app goes to 4096.</li>
               <li>On a phone, worlds generate at 512 by default, and 2048 works.</li>
@@ -1528,7 +1528,7 @@ sudo apt update &amp;&amp; sudo apt install cartogenesis</code></pre><button typ
     </div>
 
     <p class="section-lede">
-      Planned releases and what each one brings. No dates: a release lands when its work is done.
+      Recent releases, the current one, and upcoming plans. Email <a href="mailto:dev@cartogenesis.com">dev@cartogenesis.com</a> to suggest a feature, or click the Suggest a feature link at the bottom of the page to send it through GitHub.
     </p>
 
     <!-- The table below is drawn from ROADMAP.md by :web:assembleSite, which replaces this
@@ -1552,7 +1552,7 @@ sudo apt update &amp;&amp; sudo apt install cartogenesis</code></pre><button typ
 
 <footer>
   <div class="wrap">
-    <p>Cartogenesis is open source under the <a href="https://github.com/bhanright/Cartogenesis/blob/main/LICENSE" target="_blank" rel="noopener">MIT licence</a>; the source is at <a href="https://github.com/bhanright/Cartogenesis" target="_blank" rel="noopener">github.com/bhanright/Cartogenesis</a>. Spectral and IBM Plex are used under the SIL Open Font License 1.1 (<a href="fonts/OFL-Spectral.txt">Spectral</a>, <a href="fonts/OFL-IBMPlexSans.txt">Plex Sans</a>, <a href="fonts/OFL-IBMPlexMono.txt">Plex Mono</a>); this page serves the Plex faces trimmed and renamed Cartogenesis Sans and Mono, as that licence asks.</p>
+    <p>Cartogenesis is open source under the <a href="https://github.com/bhanright/Cartogenesis/blob/main/LICENSE" target="_blank" rel="noopener">MIT license</a>; the source is at <a href="https://github.com/bhanright/Cartogenesis" target="_blank" rel="noopener">github.com/bhanright/Cartogenesis</a>. Spectral and IBM Plex are used under the SIL Open Font License 1.1 (<a href="fonts/OFL-Spectral.txt">Spectral</a>, <a href="fonts/OFL-IBMPlexSans.txt">Plex Sans</a>, <a href="fonts/OFL-IBMPlexMono.txt">Plex Mono</a>); this page serves the Plex faces trimmed and renamed Cartogenesis Sans and Mono, as that license asks.</p>
   </div>
 </footer>
 
@@ -2212,7 +2212,7 @@ sudo apt update &amp;&amp; sudo apt install cartogenesis</code></pre><button typ
     var LENS_KEYS = {ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1]};
     lensFrame.tabIndex = 0;
     lensFrame.setAttribute('role', 'application');
-    lensFrame.setAttribute('aria-label', 'The whole world under a lens. The arrow keys move the lens; the link under the map opens the whole world at full size.');
+    lensFrame.setAttribute('aria-label', 'Magnifier over the world map. Use the arrow keys to move it. The link below the map opens the full-size map.');
     lensFrame.addEventListener('focus', function () {
       showLens(true);
       placeLens(at.x * lensFrame.clientWidth, at.y * lensFrame.clientHeight, 0);

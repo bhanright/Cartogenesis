@@ -496,7 +496,9 @@ class SiteAssemblyTest {
                     .map { it.groupValues[1] to it.groupValues[2] }.toList()
             }.toList()
         assertEquals(2, pickers.size, "the slider has ${pickers.size} pickers, where it has a left and a right")
-        val offered = styles.map { it.file.removePrefix("style-").removeSuffix(".webp") to it.style.label }
+        // By the application's own names, spelled as the page spells: the page is in American
+        // English and the application's labels are not all (Colour-blind).
+        val offered = styles.map { it.file.removePrefix("style-").removeSuffix(".webp") to it.style.label.replace("Colour", "Color") }
         pickers.forEach { assertEquals(offered, it, "a picker does not offer the twelve styles by their own names") }
 
         val loaded = Regex("""<img\s[^>]*src="([^"]+)"""").findAll(figure).map { it.groupValues[1] }.toList()
@@ -880,12 +882,14 @@ class SiteAssemblyTest {
         }
 
         val exports = row("Export")
+        // A world's size is written as its cells across, "up to 4096", or as a square, "4096 × 4096".
+        fun quotesSize(text: String, size: Int) = text.contains("$size × $size") || Regex("""\bup to $size\b""").containsMatchIn(text)
         assertTrue(
-            exports.contains("$ceiling × $ceiling"),
-            "the Export row does not quote the $ceiling × $ceiling this build can finish: \"$exports\""
+            Regex("""desktop app[^.]*""").findAll(exports).any { quotesSize(it.value, ceiling) },
+            "the Export row does not quote the $ceiling this build can finish: \"$exports\""
         )
         assertTrue(
-            Regex("""browser[^.]*\b$browserCeiling × $browserCeiling\b""").containsMatchIn(exports),
+            Regex("""browser[^.]*""").findAll(exports).any { quotesSize(it.value, browserCeiling) },
             "the Export row does not quote the browser's ceiling of $browserCeiling: \"$exports\""
         )
         // And what a world at the ceiling comes out as for a picture: its true-shape sheet, which
@@ -1055,7 +1059,7 @@ class SiteAssemblyTest {
     fun `the Atlas note names the release the roadmap gives the full atlas`() {
         val page = file("index.html").readText()
         val atlasRelease = roadmap.last { it.brings.contains("atlas", ignoreCase = true) }.release
-        val note = Regex("""<h3>The Atlas is a work in progress</h3>\s*<p>([^<]*)</p>""")
+        val note = Regex("""<h3>The Atlas panel is a work in progress</h3>\s*<p>([^<]*)</p>""")
             .find(page)?.groupValues?.get(1)
             ?: fail("the Notes no longer carry the Atlas card")
         assertTrue(

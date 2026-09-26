@@ -1013,6 +1013,54 @@ class SiteSourcesTest {
     }
 
     /**
+     * Common British spellings, as whole words. The page is written in American English (the
+     * maintainer's choice of 2026-09-26), so none of these may appear anywhere a reader sees or
+     * hears the page. Code is not held to it: a custom property or an identifier may keep its
+     * spelling, since no reader meets it.
+     */
+    private val BRITISH_SPELLINGS = Regex(
+        """\b(colou(?:rs?|red|ring|rful)|grey(?:s|er|ish|scale)?|centre[ds]?|""" +
+            """(?:kilo|centi|milli)?metres?|licence[sd]?|organis(?:e|es|ed|ing|ation)|analys(?:e|es|ed|ing)|""" +
+            """(?:recogni|reali|customi|optimi|visuali|prioriti|minimi|maximi|generali|normali|emphasi|summari|""" +
+            """finali|initiali|locali|randomi|standardi|synchroni|utili|categori|characteri|symboli|speciali|""" +
+            """stabili|capitali|authori|memori)s(?:e|es|ed|ing|ation)|labell(?:ed|ing)|travell(?:ed|ing|er)|""" +
+            """modell(?:ed|ing)|cancell(?:ed|ing)|favour(?:s|ed|ite)?|behaviours?|neighbours?|""" +
+            """harbours?|honours?|catalogues?|programmes?|defence|whilst)\b""",
+        RegexOption.IGNORE_CASE
+    )
+
+    /**
+     * That the page and its roadmap are in American English everywhere a reader meets them: the
+     * page's text, its pictures' descriptions and the controls' names a screen reader speaks, the
+     * title, the description and the link preview's words, the structured data for search, the
+     * words the page's script writes into the page, and ROADMAP.md, which the page's roadmap is
+     * drawn from.
+     */
+    @Test
+    fun `the page and its roadmap are spelled in American English`() {
+        val shown = page.replace(Regex("""<style>.*?</style>|<script>.*?</script>|<!--.*?-->""", RegexOption.DOT_MATCHES_ALL), " ")
+            .replace(Regex("""<[^>]+>"""), " ")
+        val attributes = Regex("""\s(?:alt|aria-label|title|placeholder|content)="([^"]*)"""").findAll(page).joinToString(" ") { it.groupValues[1] }
+        val structured = Regex("""<script type="application/ld\+json">(.*?)</script>""", RegexOption.DOT_MATCHES_ALL).findAll(page)
+            .joinToString(" ") { it.groupValues[1] }
+        // What the script writes where a reader meets it: text, a picture's description and an
+        // accessible name or value; the words are the quoted strings in each such expression.
+        val written = Regex("""(?:textContent|\.alt)\s*=\s*([^;]+);|setAttribute\('aria-[\w-]+',\s*([^;]+)\);""").findAll(pageScript)
+            .flatMap { Regex("""'([^'\n]*)'""").findAll(it.value.substringAfter('=').substringAfter(',')) }
+            .joinToString(" ") { it.groupValues[1] }
+        assertTrue(written.contains("arrow keys"), "the script's written words were not found; this read nothing of them")
+        val roadmap = File(repoRoot, "ROADMAP.md").readText()
+        val found = listOf(
+            "the page's text" to shown, "descriptions, names and meta" to attributes, "the structured data" to structured,
+            "the words the script writes" to written, "ROADMAP.md" to roadmap
+        ).mapNotNull { (where, text) ->
+            BRITISH_SPELLINGS.findAll(text).map { it.value }.toSortedSet().takeIf { it.isNotEmpty() }?.let { "$where: $it" }
+        }
+        assertTrue(found.isEmpty(), "British spellings where a reader meets them: " + found.joinToString("; "))
+        println("SITE the page and ROADMAP.md are in American English where a reader meets them")
+    }
+
+    /**
      * That no constant is declared twice in the page's script.
      *
      * The script is one function, and a `var` is the function's however deep in a block it is
@@ -1062,15 +1110,17 @@ class SiteSourcesTest {
         assertTrue(reliefScript.contains("dot(normalize(vNormal), light)") && reliefScript.contains("varying vec3 vNormal"),
             "the light is not worked out per pixel from a normal blended across each triangle")
         assertTrue(!Regex("""dFdx|dFdy|\bflat\s+(varying|in|out)\b""").containsMatchIn(reliefScript), "the relief shades a triangle by its own flat face")
-        // The caption states the exaggeration the script draws with.
+        // A caption that states the exaggeration states the one the script draws with. (The
+        // caption no longer states one, since the copy review of 2026-09-26; this holds any that
+        // comes back.)
         val exaggeration = Regex("""var RELIEF_EXAGGERATION = (\d+);""").find(reliefScript)?.groupValues?.get(1)
             ?: fail("the relief states no exaggeration")
         val caption = Regex("""<figure class="relief".*?</figure>""", RegexOption.DOT_MATCHES_ALL).find(page)?.value ?: fail("the relief has no figure")
-        val said = Regex("""drawn (\w+) times their true scale""").find(caption)?.groupValues?.get(1)
-            ?: fail("the relief's caption does not say how much its heights are exaggerated")
-        assertEquals(exaggeration, NUMBER_WORDS_BY_TENS[said] ?: said,
-            "the caption says the heights are drawn $said times their scale and the script draws them $exaggeration times")
-        println("SITE the relief falls back to its still, is shown only once drawn, is lit per pixel, and says its heights are $said times their scale")
+        Regex("""(\w+) times (?:their true scale|taller)""").find(caption)?.groupValues?.get(1)?.let { said ->
+            assertEquals(exaggeration, NUMBER_WORDS_BY_TENS[said.lowercase()] ?: said,
+                "the caption says the heights are drawn $said times their scale and the script draws them $exaggeration times")
+        }
+        println("SITE the relief falls back to its still, is shown only once drawn, and is lit per pixel; the script raises its heights $exaggeration times")
     }
 
     /** The multiples of ten the relief's caption may spell out, by the number they mean. */

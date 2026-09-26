@@ -215,23 +215,29 @@ class OceanHeatTest {
     /**
      * The solve grid keeps a strip of land one map cell wide as land, at every map size: the ocean's
      * water is only what every map cell under a solve cell calls water.
+     *
+     * At 2048 a map cell, 5.9 km, is narrower than a solve cell, 6.25 km, so a mask read at each
+     * solve cell's center would step over one strip in fifteen; sixteen neighboring positions of
+     * the strip are tried there for that reason.
      */
     @Test
     fun `a strip of land one map cell wide is land on the solve grid at every size`() {
         for (size in listOf(128, 512, 2048)) {
             val config = WorldGenConfig(seed = 1L, width = size, height = size)
-            val strip = size / 3
-            val isLand = BooleanArray(size * size) { it % size == strip }
-            val sea = SeaLevelResult(0.5f, isLand, FloatField(size, size), size)
             val (across, down) = OceanStage.solveGrid(config.scale)
-            val water = OceanStage.waterOn(config, sea, across, down)
-            val firstColumn = strip * across / size
-            val lastColumn = ((strip + 1) * across + size - 1) / size - 1
-            var leaks = 0
-            for (row in 0 until down) {
-                if ((firstColumn..lastColumn).all { water[row * across + it] }) leaks++
+            val positions = if (size == 2048) (size / 3 until size / 3 + 16) else listOf(size / 3)
+            for (strip in positions) {
+                val isLand = BooleanArray(size * size) { it % size == strip }
+                val sea = SeaLevelResult(0.5f, isLand, FloatField(size, size), size)
+                val water = OceanStage.waterOn(config, sea, across, down)
+                val firstColumn = strip * across / size
+                val lastColumn = ((strip + 1) * across + size - 1) / size - 1
+                var leaks = 0
+                for (row in 0 until down) {
+                    if ((firstColumn..lastColumn).all { water[row * across + it] }) leaks++
+                }
+                assertEquals(0, leaks, "at $size a strip at column $strip opens on $leaks rows of the solve grid")
             }
-            assertEquals(0, leaks, "at $size the strip opens on $leaks rows of the solve grid")
         }
     }
 

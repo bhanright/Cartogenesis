@@ -812,7 +812,7 @@ class SiteSourcesTest {
      */
     @Test
     fun `the lens is worked by pointer, touch and keys, and fetches its full picture on first use`() {
-        val full = Regex("""<img id="lens-picture" data-src="(img/[^"]+)"""").find(page)?.groupValues?.get(1)
+        val full = Regex("""<img id="lens-picture"[^>]*\sdata-src="(img/[^"]+)"""").find(page)?.groupValues?.get(1)
             ?: fail("the lens names no full-size picture to fetch when used")
         assertTrue(!Regex("""(?<!data-)src="${Regex.escape(full)}"""").containsMatchIn(page), "the page asks for the lens's full picture as it loads")
         assertTrue(Regex("""<a href="${Regex.escape(full)}">[^<]+</a>""").containsMatchIn(page), "there is no plain link to the full picture for a reader who cannot use the lens")

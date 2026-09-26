@@ -313,10 +313,12 @@ internal val ICE_SHEET_WGSL = """
             let mean = (near + rootNear * rootFar + far) / (rootNear + rootFar);
             rise = (2.0 / 3.0) * params.metresPerRootKm * mean;
         }
-        let from = nearest[cell];
+        // Not "from", which the desktop's GLSL calls it: WGSL reserves that word (section
+        // 16.2), and one reserved word is enough for the whole module to fail to compile.
+        let marginCell = nearest[cell];
         var marginBed = 0.0;
-        if (from >= 0) {
-            marginBed = max(bed[u32(from)] * params.metresPerFieldUnit, 0.0);
+        if (marginCell >= 0) {
+            marginBed = max(bed[u32(marginCell)] * params.metresPerFieldUnit, 0.0);
         }
         let surface = marginBed + rise;
         thickness[cell] = max(surface - bed[cell] * params.metresPerFieldUnit, 0.0);

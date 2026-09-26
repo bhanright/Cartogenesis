@@ -2243,24 +2243,66 @@ data class ErosionConfig(
      */
     val subGridTransport: Boolean = false,
     /**
-     * **An experiment, off by default (Fix 3b's comb round).** Whether the incision cuts only the
-     * cells `ChannelInitiation`'s criterion makes channels.
+     * **An experiment, off by default (Fix 3b's second comb round).** [subGridTransport] net of the
+     * resolved incision, by direction: the unresolved transport only across each cell's fall to its
+     * receiver, never along it. Replaces [subGridTransport]'s form where on; at most one of the
+     * three sub-grid settings may be on.
      *
-     * The mask is taken each round, after that round's routing and before the notch, from:
-     * the runoff-weighted area in square kilometres over the round's own drainage, each cell
-     * weighted by its rainfall as a share of Earth's land mean (715 mm) as `ChannelInitiation`
-     * weights it, from the rounds' provisional rainfall in millimetres, or Earth's mean where the
-     * climate feed is off and the rounds have no rain; the true ground's gradient to the round's
-     * receiver; and the rounds' provisional cover against `RiverConfig`'s threshold and cover
-     * gain, bare where the feed is off. The frozen-ground rule is not applied: the rounds carry
-     * no summer temperature. An initiated channel is carried downstream over the round's drainage,
-     * through lakes, so a flatter reach below a head still incises. The mask is never reused: each
-     * round's routing invalidates it. Cells left out are not cut, and still pass their base to the
-     * cells above, still hold standing water, and still take and carry spoil in the deposition
-     * walk. The outlet notch cuts only a basin's spill path, which carries the basin's whole
-     * discharge and is a channel by the same criterion, so it is left as it is.
+     * **Why along the receiver is counted twice.** The resolved incision already moves a cell's
+     * own ground down its one receiver. On a cell with nothing upstream, the area the law reads is
+     * the cell's own, `a = dx dy` weighted by its runoff `w`, so the pass takes
+     * `K e sqrt(w a) S` a year off the cell and hands it on: `K e sqrt(w) (dx dy)^(3/2) S` of
+     * material a year, across the face toward the receiver. [subGridTransport]'s flux across that
+     * same face, of length `L`, is `D_sub S L = K e sqrt(w) dx dy S L`. The two are the same flux:
+     * equal on a square cell, and on this map's cells, half as tall as wide, within `sqrt(2)` one
+     * way along a row and the other down a column, their geometric mean equal. Downstream, where
+     * the law's area is more than the cell's own, the resolved cut carries the own area's share and
+     * more. So along the receiver the sub-grid term adds a second copy of a flux the pass already
+     * makes, and across the fall it adds a flux nothing else makes: the hillslopes of a cell shed
+     * sideways into the next channel, which a single receiver cannot represent.
+     *
+     * **The form.** The sub-grid flux is `-D_sub grad z`; the part of the fall the receiver's cut
+     * carries is its component along `u`, the unit vector from the cell to its receiver on the
+     * ground (a cell width across a row, a row's height down a column). Net of it the flux is
+     * `-D_sub (I - u u^T) grad z`, diffusion only square to the resolved flow. The five-point scheme
+     * carries the tensor's diagonal: a face across a row takes `D_sub (1 - u_x^2)` and a face down a
+     * column `D_sub (1 - u_y^2)`. A cell draining down a column diffuses fully across the row and
+     * not at all down the column; one draining on a diagonal of this cell, 63.4 degrees off north,
+     * keeps a fifth across the row and four fifths down the column. The tensor's cross term, which
+     * is nought for a cardinal receiver, is left out, because a five-point stencil cannot carry it
+     * without losing monotonicity. A cell with no receiver, which the pass never cuts, keeps the
+     * whole `D_sub`. A face takes the mean of its two cells' shares of it, so the scheme stays
+     * conservative.
+     *
+     * No published form of this correction was found; Litwin, Malatesta and Sklar (*Hillslope
+     * diffusion and channel steepness in landscape evolution models*, Earth Surface Dynamics 13,
+     * 277-293, 2025) name the coupling it addresses, the stream-power-plus-diffusion model applying
+     * both laws in every cell. It is derived here from [subGridTransport]'s own flux, with no
+     * factor chosen.
      */
-    val incisionNeedsChannelHead: Boolean = false,
+    val subGridTransportAcrossTheFall: Boolean = false,
+    /**
+     * **An experiment, off by default (Fix 3b's second comb round).** [subGridTransport] net of the
+     * resolved incision, by share: `D_sub` scaled by the share of the cell's own catchment its
+     * resolved channel does not drain. At most one of the three sub-grid settings may be on.
+     *
+     * **The share.** The router finds each cell's fall on its steepest facet by Tarboton's method
+     * (1997, *Water Resources Research* 33(2), 309-319), which divides the cell's own water between
+     * the facet's two neighbours, a share `p` to one and `1 - p` to the other, and then sends all of
+     * it to one of the two drawn at that share (Rho8; see `FlowRouting.flowDirections`). The
+     * resolved channel, the drawn receiver, is where `p` of the cell's own catchment really drains,
+     * and the incision's cut along it carries that share's transport, as
+     * [subGridTransportAcrossTheFall] derives. The other `1 - p` really drains to the neighbour the
+     * draw passed over, and no resolved flux carries it there. So the diffusivity net of the
+     * resolved incision is `D_sub (1 - p)`, applied as [subGridTransport]'s, isotropically.
+     *
+     * Nought where the descent is clamped to one neighbour, which is what an incised channel's cell
+     * always is, so a channel keeps its cut; the whole `D_sub` on a cell with no receiver. Unlike
+     * [subGridTransportAcrossTheFall] it still diffuses along the receiver, at the undrained share.
+     * No published form of it was found; it is derived here from the router's own partition, with
+     * no factor chosen.
+     */
+    val subGridTransportUndrainedShare: Boolean = false,
     /**
      * How much harder the water cuts at a basin's outlet than it does in an ordinary channel, as a
      * multiple of the same stream-power coefficient.

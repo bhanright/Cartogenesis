@@ -192,19 +192,6 @@ class ImplicitIncisionTest {
             afterAt[cell] = after
         }
 
-        var excludedCells = 0
-
-        /**
-         * A cell the head criterion left out: the pass must not have moved it, and the law's own
-         * clauses above are not asked of it.
-         */
-        override fun excluded(round: Int, cell: Int, before: Float, after: Float) {
-            excludedCells++
-            if (after != before && violations.size < 20) {
-                violations.add("round $round cell $cell was left out of the incision and moved from ${before * spanMetres} m to ${after * spanMetres} m")
-            }
-        }
-
         override fun incised(
             round: Int, isLand: BooleanArray, directions: IntArray, ground: FloatArray, relative: FloatArray,
             discharge: FloatArray, landCells: Float, landRange: Float, shorelineHeight: Float, surface: FloatArray
@@ -321,27 +308,6 @@ class ImplicitIncisionTest {
         assertTrue(bounds.mouths > 0, "no river mouth was reached")
         assertTrue(bounds.leftAlone > 0, "no cell stood at or below its base, so the eligibility rule saw nothing")
         assertTrue(bounds.madeEligible > 0, "no cell was made eligible by its receiver's cut")
-        assertTrue(bounds.violations.isEmpty(), "the pass broke its bounds: ${bounds.violations}")
-    }
-
-    /**
-     * With the head-criterion experiment on (`ErosionConfig.incisionNeedsChannelHead`), the cells
-     * it leaves out are not moved, and every clause above still holds on the cells it cuts. Seed 42
-     * at 512 again, through the same watch, which is told which cells were left out.
-     */
-    @Test
-    fun `with the head criterion on, the cells it leaves out stand and the rest keep the bounds`() {
-        val base = WorldGenConfig(seed = 42L, width = 512, height = 512)
-        val config = base.copy(erosion = base.erosion.copy(incisionNeedsChannelHead = true))
-        val plates = PlateStage.generate(config, TerrainStage.generate(config))
-        val bounds = Bounds(config.width * config.height, config.scale.reliefSpanMetres, HydraulicErosion.Rates(config).pondDepth)
-        erodeBlockingWatchingIncision(config, plates.height, plates.upliftRateMmPerYear, bounds)
-        println(
-            "IMPLICIT with the head criterion seed 42@512: ${bounds.cuts} cuts, ${bounds.excludedCells} cells left out, " +
-                "${bounds.largeCourant} at F over one; ${bounds.violations.size} violations"
-        )
-        assertTrue(bounds.excludedCells > 0, "the criterion left nothing out, so this case saw nothing to test")
-        assertTrue(bounds.cuts > 0, "the pass cut nothing")
         assertTrue(bounds.violations.isEmpty(), "the pass broke its bounds: ${bounds.violations}")
     }
 

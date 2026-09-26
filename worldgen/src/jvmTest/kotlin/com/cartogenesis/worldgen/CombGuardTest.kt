@@ -24,7 +24,8 @@ import kotlin.test.assertTrue
  * columns as along the rows on seeds 7 and 42, at any ridge; so the column may carry up to
  * [ROW_FACTOR] times the row's comb. That surface's parallel reaches never have a ridge of 50 m
  * between them (0.00 to 0.01 km per 1,000 km²), so a [RIDGE_METRES] ridge is twice what the rule's
- * own parallel reaches reach.
+ * own parallel reaches reach, and that same figure is the floor, [COMB_FLOOR_KM_PER_1000_KM2], under
+ * which a column comb passes whatever the rows carry.
  *
  * **Held with the network,** because a comb can be removed by removing channels. The channel
  * network the criterion initiates may not thin below its figure on the head this guard was written
@@ -58,7 +59,7 @@ class CombGuardTest {
                 "seed $seed's network thinned to ${census.channelKmPer1000Km2} km per 1000 km2 from $networkFloor, " +
                     "past ScaleFreeTest's $NETWORK_FACTOR: a comb removed by removing channels"
             )
-            val allowed = ROW_FACTOR * census.row.combedKmPer1000Km2
+            val allowed = maxOf(ROW_FACTOR * census.row.combedKmPer1000Km2, COMB_FLOOR_KM_PER_1000_KM2)
             val figure = String.format(Locale.ROOT, "seed %d %.2f down a column against %.2f along a row", seed,
                 census.column.combedKmPer1000Km2, census.row.combedKmPer1000Km2)
             if (census.column.combedKmPer1000Km2 > allowed) {
@@ -107,6 +108,16 @@ class CombGuardTest {
 
         /** How much more comb the columns may carry than the rows: the rule's own 3.1, rounded up. */
         const val ROW_FACTOR = 3.5
+
+        /**
+         * The comb the columns may carry however little the rows carry, in km per 1,000 km² of
+         * land: without it the ratio fails a world whose row comb is nought on any column comb at
+         * all. From the control, not from any world under test: on the isotropic synthetic surface
+         * the router's own parallel reaches carry 0.00 to 0.01 km per 1,000 km² with a ridge of
+         * even 50 m between them, half [RIDGE_METRES], so a column comb of 0.01 at the full ridge
+         * is no more than the rule makes by itself.
+         */
+        const val COMB_FLOOR_KM_PER_1000_KM2 = 0.01
 
         /** How far the network may thin: `ScaleFreeTest`'s grid tolerance. */
         const val NETWORK_FACTOR = 1.35

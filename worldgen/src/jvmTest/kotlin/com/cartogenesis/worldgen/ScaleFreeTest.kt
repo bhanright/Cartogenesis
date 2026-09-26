@@ -129,11 +129,17 @@ class ScaleFreeTest : BorrowsSharedWorlds() {
                 )
             }
         }
-        assertTrue(
-            "the channel-head criterion is not the same criterion at two grids:" +
-                " ${complaints.joinToString("; ")}",
-            complaints.isEmpty()
-        )
+        // Recorded since Fix 3b: see [IMPLICIT_CUT_MOVES_WITH_THE_GRID].
+        KnownFailures.expect(IMPLICIT_CUT_MOVES_WITH_THE_GRID, "seeds 7, 42, 1234 and 99 over 1.35") {
+            if (complaints.isNotEmpty()) {
+                throw RecordedViolation(
+                    "the channel-head criterion is not the same criterion at two grids: ${complaints.joinToString("; ")}",
+                    "seeds " + complaints.map { it.substringAfter("seed ").substringBefore(":") }.let {
+                        if (it.size == 1) it.single() else it.dropLast(1).joinToString(", ") + " and " + it.last()
+                    } + " over $CHANNEL_DENSITY_FACTOR"
+                )
+            }
+        }
     }
 
     /**
@@ -214,6 +220,21 @@ class ScaleFreeTest : BorrowsSharedWorlds() {
     }
 
     internal companion object {
+        /**
+         * The known failure the channel-head clause records since Fix 3b. From 512 to 1024 the
+         * criterion's network grows by 1.48, 1.44, 1.38 and 1.43 on seeds 7, 42, 1234 and 99,
+         * where on the capped explicit update it grew by 1.16, 1.18, 1.15 and 1.23, and at 512 it
+         * is half as dense again (0.028 to 0.037 km/km2 against 0.017 to 0.025). Once a lake falls
+         * with its outlet it grows by 1.54, 1.51, 1.42 and 1.45. It is not the round's length: at
+         * 1024 with twenty-four rounds of half the years the network is 1.004, 1.019, 1.000 and
+         * 0.999 times the stock 1024's, so the time step has converged and the growth is the
+         * grid's. Which part of the grid (the criterion's slope over a shorter step, `F` doubling
+         * at a fixed catchment when the cell halves, or the routing) is not isolated; see
+         * docs/DESIGN_LEDGER.md, Fix 3b and its review round.
+         */
+        const val IMPLICIT_CUT_MOVES_WITH_THE_GRID =
+            "the erosion: the channel network the implicit update leaves grows denser on a finer grid, and the round's length is not why"
+
         /** The standard seeds, which are `GeographyAuditTest`'s and `EarthLikenessTest`'s. */
         val SEEDS = listOf(7L, 42L, 1234L, 99L)
 

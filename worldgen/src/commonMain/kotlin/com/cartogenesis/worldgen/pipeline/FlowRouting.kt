@@ -321,14 +321,11 @@ internal object FlowRouting {
      * A number in 0..1 standing for the relief a grid this coarse cannot hold, which is what
      * decides a step the slope itself leaves open.
      *
-     * The same smooth field [LakeWaterBalance.jitter] is built on, salted so the two decisions are
-     * independent, and smooth for the reason that one is: a value that changes from cell to cell
-     * makes each cell round its bearing on its own and the course staggers, while a field that
-     * turns over a few cells rounds a whole reach one way and the next reach the other, which is a
-     * course that meanders. It also keeps neighbouring flow lines agreeing with each other, so a
-     * hillside's drainage stays the coherent thing the terrain says it is instead of being
-     * scrambled cell by cell — which matters more than the wander itself, because everything below
-     * this reads that network: the basins, their spills, and the sills the outlet pass has to cut.
+     * A hash of the cell alone, [seededNoise] at the cell's own column and row, salted so it is
+     * independent of the lattice [LakeWaterBalance.jitter] samples: uniform on 0..1 and
+     * uncorrelated from one cell to the next. It does not read the smooth field; [flowDirections]
+     * says why a smooth draw was tried and dropped. Uniform is what makes the diagonal's share of a
+     * plane's steps the facet's own share, which `RoutingGroundTest` holds on planes at every bearing.
      */
     private fun subGridDraw(column: Int, row: Int, seed: Long): Double =
         ((seededNoise(column, row, seed xor SUB_GRID_DRAW_SALT) + 1f) * 0.5f).toDouble()
@@ -476,8 +473,18 @@ internal object FlowRouting {
      */
     class Spillways(
         val count: Int,
-        /** The rim cell each basin spills over, or -1 where it has none the water can cut. */
+        /**
+         * The rim cell each basin spills over — its pour point, the first cell on the outflow's
+         * path that the fill did not raise — or -1 where it has none the water can cut.
+         */
         val spill: IntArray,
+        /**
+         * The first cell outside the basin's deep water that the basin drains to, which is the
+         * [spill] itself where the ground falls straight from the water to the rim, and a cell of
+         * the lake's shallow margin where it shelves: raised by the fill, but by no more than the
+         * pond depth. The outflow's path runs from here to the [spill].
+         */
+        val entry: IntArray,
         /** The level of that rim: the height the fill raised the whole basin to. */
         val level: FloatArray,
         /** The lowest true ground in the basin: the level at which it holds no water at all. */
@@ -503,8 +510,15 @@ internal object FlowRouting {
      *
      * Ponded cells are grouped by connectivity, seeded in ascending index order and walked with an
      * explicit stack, so the labelling is one specific labelling rather than any valid one. The
-     * spill of a basin is the lowest cell outside it that a cell inside it drains to, ties broken
-     * on the cell index — no set, no map, and nothing that depends on a hash.
+     * basin's entry is the lowest cell outside it that a cell inside it drains to, ties broken on
+     * the cell index — no set, no map, and nothing that depends on a hash — and its spill is where
+     * the outflow's path from there first stands on ground the fill left alone.
+     *
+     * The two differ where the lake shelves. A basin is the cells raised by more than the pond
+     * depth, so a gently sloping margin between the deep water and the rim is raised by less and is
+     * outside it, and the entry lands on that margin, as far below the lip as the margin is deep.
+     * Read as the rim, it was where the outlet notch began, and a notch that begins below the lip
+     * stops at once without touching it (Audit III's B-D3; docs/DESIGN_LEDGER.md, Fix 3).
      *
      * @param elevation the true ground, before the fill raised anything.
      * @param filled the surface the routing actually runs on.
@@ -525,6 +539,7 @@ internal object FlowRouting {
         val seen = BooleanArray(cellCount)
         var stack = IntArray(1024)
 
+        var entries = IntArray(64)
         var spills = IntArray(64)
         var levels = FloatArray(64)
         var floors = FloatArray(64)
@@ -574,17 +589,34 @@ internal object FlowRouting {
                 }
             }
 
+            // Down the outflow's path from the entry, across whatever of the margin the fill raised,
+            // to the first cell it did not: the lip. A path that reaches the sea or the map's edge
+            // first has no lip of land, and the entry stands for it as it always did.
+            var pourPoint = spill
+            if (spill >= 0) {
+                var cell = spill
+                var steps = 0
+                while (cell >= 0 && isLand[cell] && filled[cell] > elevation[cell] && steps < cellCount) {
+                    cell = flowTarget[cell]
+                    steps++
+                }
+                if (cell >= 0 && isLand[cell]) pourPoint = cell
+            }
+            val pourLevel = if (pourPoint >= 0) filled[pourPoint] else spillLevel
+
             if (basins == spills.size) {
+                entries = entries.copyOf(basins * 2)
                 spills = spills.copyOf(basins * 2)
                 levels = levels.copyOf(basins * 2)
                 floors = floors.copyOf(basins * 2)
                 counts = counts.copyOf(basins * 2)
             }
-            spills[basins] = spill
-            levels[basins] = if (spill >= 0) spillLevel else basinFloor
+            entries[basins] = spill
+            spills[basins] = pourPoint
+            levels[basins] = if (pourPoint >= 0) pourLevel else basinFloor
             floors[basins] = basinFloor
             counts[basins] = cells
-            val fillDepth = if (spill >= 0) spillLevel - basinFloor else 0f
+            val fillDepth = if (pourPoint >= 0) pourLevel - basinFloor else 0f
             if (cells > largestCells) {
                 largest = basins
                 largestCells = cells
@@ -595,7 +627,7 @@ internal object FlowRouting {
         }
 
         return Spillways(
-            basins, spills, levels, floors, counts, largest, largestCells, largestDepth, deepest
+            basins, spills, entries, levels, floors, counts, largest, largestCells, largestDepth, deepest
         )
     }
 

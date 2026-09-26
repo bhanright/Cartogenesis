@@ -442,21 +442,21 @@ class IsostasyTest : BorrowsSharedWorlds() {
      */
     @Test
     fun `steady-state relief goes as uplift over erodibility`() {
-        val upliftRates = listOf(0.05f, 0.1f, 0.2f, 0.4f)
+        val upliftRates = listOf(0.01875f, 0.0375f, 0.075f, 0.15f)
         val erodibilities = listOf(0.5e-6f, 1e-6f, 2e-6f, 4e-6f)
 
         val byUplift = upliftRates.map { rate -> syntheticBelt(rate, 1e-6f) }
-        val byErodibility = erodibilities.map { erodibility -> syntheticBelt(0.1f, erodibility) }
+        val byErodibility = erodibilities.map { erodibility -> syntheticBelt(0.0375f, erodibility) }
 
         upliftRates.zip(byUplift).forEach { (rate, belt) ->
             println(
-                "ISOSTASY steady state U=%.2f mm/yr K=1.0e-6: relief %.0f m of %.0f m uplifted (%.2f removed)"
+                "ISOSTASY steady state U=%.4f mm/yr K=1.0e-6: relief %.0f m of %.0f m uplifted (%.2f removed)"
                     .format(rate, belt.reliefMetres, belt.upliftedMetres, belt.removedShare)
             )
         }
         erodibilities.zip(byErodibility).forEach { (erodibility, belt) ->
             println(
-                "ISOSTASY steady state U=0.10 mm/yr K=%.1e: relief %.0f m of %.0f m uplifted (%.2f removed)"
+                "ISOSTASY steady state U=0.0375 mm/yr K=%.1e: relief %.0f m of %.0f m uplifted (%.2f removed)"
                     .format(erodibility, belt.reliefMetres, belt.upliftedMetres, belt.removedShare)
             )
         }
@@ -517,30 +517,24 @@ class IsostasyTest : BorrowsSharedWorlds() {
      * stream-power law is detachment-limited and says nothing about a plate with strength.
      */
     private fun syntheticBelt(upliftMmPerYear: Float, erodibilityPerYear: Float): Belt {
-        val rounds = 600
+        val rounds = BELT_ROUNDS
         val base = WorldGenConfig(seed = 4242L, width = 128, height = 128)
         val config = base.copy(
             seaLevel = 0.5f,
             // A small world and a short round, because the relation being tested is about one
             // channel and this map's own are the wrong size for it. Steady-state relief is
             // `(U / K) / sqrt(A)` along a channel, and on a 12,000 km world a mid-belt catchment
-            // is 10^12 m² — so the relief a millimetre a year would hold up is a few centimetres,
-            // and every round's cut runs into the half-the-drop cap long before the rock has any
-            // say in it. Two hundred kilometres across puts the catchments where a real orogen's
-            // are and the relief in hundreds of metres; a twenty-thousand-year round keeps each
-            // round's bite well inside the cap, so what limits the cut is the stream power and
-            // not the arithmetic that guards it.
+            // is 10^12 m², so the relief a millimetre a year would hold up is a few centimetres.
+            // Two hundred kilometres across puts the catchments where a real orogen's are and the
+            // relief in hundreds of metres.
             //
-            // Twenty thousand and six hundred rounds, where it was forty thousand and three hundred
-            // before the cut measured a step on the ground (docs/DESIGN_LEDGER.md, Fix 2), and the
-            // twelve million years between them unchanged. The belt's rivers
-            // run down columns, and a step down a column is a row's height, half a cell width, now
-            // that the incision measures it on the ground: the same slope falls half as far in a
-            // step, and a round's bite, which is in proportion to the slope, is twice as large a
-            // share of the drop the cap is read off. The forty-thousand-year round was sized on
-            // the step the cut used to assume, and on the true one it reached the cap on the softest
-            // rock: relief went as K^-0.74. Half the round is the same share of the cap it was.
-            scale = base.scale.copy(worldWidthKm = 200.0, yearsPerHydraulicRound = 20_000.0),
+            // Twenty thousand years and sixteen hundred rounds, 32 million years. The round was
+            // sized while an explicit update capped each round's bite at half the drop and had to
+            // stay inside that cap for the law to be what was read (docs/DESIGN_LEDGER.md, Fix 2
+            // and Fix 3). The implicit update has no cap and its steady state is the law's at any
+            // round, so the length now matters only for how finely the approach to balance is
+            // resolved, and the run keeps the years it was given.
+            scale = base.scale.copy(worldWidthKm = 200.0, yearsPerHydraulicRound = BELT_ROUND_YEARS),
             isostasy = base.isostasy.copy(flexure = false),
             erosion = base.erosion.copy(
                 hydraulicRounds = rounds,
@@ -629,17 +623,20 @@ class IsostasyTest : BorrowsSharedWorlds() {
      * The uplift rate against the erosion it is racing, which is where the rate came from.
      *
      * England and Molnar (*Surface uplift, uplift of rocks, and exhumation of rocks*, Geology 18,
-     * 1990) exist to insist that rock uplift and surface uplift are different quantities and that
-     * exhumation is the difference: the Himalaya's rock rises five millimetres a year and its
-     * surface gains about half of one, because the rest comes off as sediment. A model can only
-     * copy the *surface* figure — the rock rate it needs is that plus whatever its own rivers
-     * remove, which is a property of this grid and this erodibility and has to be measured.
+     * 1990) exist to insist that rock uplift, surface uplift and exhumation are three quantities:
+     * rock uplift is surface uplift plus exhumation. The Himalaya's rock rises five millimetres a
+     * year and its surface gains about half of one, because the rest comes off as sediment. A model
+     * can only copy the *surface* figure; the rock rate it needs is that plus whatever its own
+     * rivers and hillslopes remove, which is a property of this grid and this erodibility and has
+     * to be measured.
      *
-     * So this runs the standard worlds with every uplift rate at zero, measures what the rounds
-     * take off a present belt, and holds `collisionUpliftMmPerYear` to Earth's surface uplift plus
-     * that. It is the derivation of the constant, run rather than remembered — which matters,
-     * because S2's first pass took the same measurement against a round four times too long and a
-     * terrain with a quarter of the mid-band relief, and reached a rate a third of this one.
+     * So this runs the standard worlds with every uplift rate at zero and the flexure off, and
+     * measures what the rounds take off the present belts: the mean lowering of the ground over the
+     * collisional and Andean belts' land, over the twelve rounds' years. With the flexure off that
+     * lowering is the net denudation and nothing else; with it on, the plate's rebound under the
+     * unloading would hide part of it, and the rebound is the third quantity, the flexural response,
+     * which the rounds apply to the uplift the setting feeds them and which this derivation keeps
+     * out. The rate held is Earth's surface uplift plus that denudation, run rather than remembered.
      */
     @Test
     fun `the collision rate is Earth's surface uplift plus this model's own denudation`() {
@@ -651,7 +648,8 @@ class IsostasyTest : BorrowsSharedWorlds() {
                     andeanUpliftMmPerYear = 0f,
                     islandArcUpliftMmPerYear = 0f,
                     riftShoulderUpliftMmPerYear = 0f
-                )
+                ),
+                isostasy = base.isostasy.copy(flexure = false)
             )
             val world = SharedWorlds.world(still)
             val rate = beltDenudationMmPerYear(world)
@@ -669,11 +667,12 @@ class IsostasyTest : BorrowsSharedWorlds() {
                 tectonics.collisionUpliftMmPerYear
             )
         )
-        assertEquals(
-            "the collision uplift rate is not Earth's surface uplift plus what this model's own" +
-                " rivers take off a belt",
-            implied, tectonics.collisionUpliftMmPerYear.toDouble(),
-            UPLIFT_RATE_TOLERANCE_MM_PER_YEAR
+        // Armed again at Fix 3b, whose implicit incision lets the law and not the cap set the
+        // denudation this is derived from (docs/DESIGN_LEDGER.md, Fix 3 and Fix 3b).
+        assertTrue(
+            "the collision uplift rate is not Earth's surface uplift plus what this model's own rivers take off a " +
+                "belt: %.3f implied against the %.3f the setting carries".format(implied, tectonics.collisionUpliftMmPerYear),
+            abs(implied - tectonics.collisionUpliftMmPerYear) <= UPLIFT_RATE_TOLERANCE_MM_PER_YEAR
         )
         // And the ratios between the four are England & Molnar's, unchanged by the scale above.
         assertEquals(
@@ -789,7 +788,7 @@ class IsostasyTest : BorrowsSharedWorlds() {
         // out; the plates' shape, queued as its own chunk, is where the collision's ground is decided.
         KnownFailures.expect(
             FORELAND_AT_THE_EDGE_OF_THE_COLLISION,
-            "moat at 48-56 cell widths, 378 m under the belt, rising 0 m beyond it"
+            "moat at 48-56 cell widths, 586 m under the belt, rising 0 m beyond it"
         ) {
             if (beyondTheMoat - inTheForeland < MIN_FOREBULGE_METRES) {
                 throw RecordedViolation(
@@ -918,27 +917,17 @@ class IsostasyTest : BorrowsSharedWorlds() {
                 " rather than the clause dropped",
             interiorCells > 0 && thicknessThere > 0f
         )
-        // Over Airy's own share by a thousandth since the ground was put on its ruler and seed 7's
-        // cap grew broad enough for its interior to sink at nearly the whole of it. The stage
-        // refers the bend to the mean over the ice-free ground and fades it by a distance to the
-        // ice counted in cells, both the ice's own operators (`GlaciationStage.iceLoadDepression`),
-        // and the clause divides by one column's thickness where the plate carries its neighbours'
-        // too; which of these puts the metre over is the ice's chunk to settle, not this one.
-        KnownFailures.expect(ICE_BED_PAST_AIRY, "323 m under 1158 m of ice, 0.279 against 0.278") {
-            if (realised !in (airyRatio * CAP_SHARE_OF_AIRY_FLOOR)..airyRatio.toDouble()) {
-                throw RecordedViolation(
-                    "the bed under the cap sank ${"%.0f".format(deepestUnderIce)} m under" +
-                        " ${"%.0f".format(thicknessThere)} m of ice, a ratio of ${"%.3f".format(realised)}," +
-                        " which is not between ${"%.3f".format(airyRatio * CAP_SHARE_OF_AIRY_FLOOR)} and" +
-                        " ${"%.3f".format(airyRatio)} - Airy's `iceDensity / mantleDensity` and the share" +
-                        " of it a plate of this stiffness lets through",
-                    String.format(
-                        java.util.Locale.ROOT, "%.0f m under %.0f m of ice, %.3f against %.3f",
-                        deepestUnderIce, thicknessThere, realised, airyRatio
-                    )
-                )
-            }
-        }
+        // Over Airy's own share from Fix 2 to Fix 3 (0.279 against 0.278), inside it at Fix 3, over
+        // it on the implicit update before the uplift was re-derived (0.284), and inside it again
+        // with the uplift re-derived (docs/DESIGN_LEDGER.md, Fix 2 and Fix 3b).
+        assertTrue(
+            "the bed under the cap sank ${"%.0f".format(deepestUnderIce)} m under" +
+                " ${"%.0f".format(thicknessThere)} m of ice, a ratio of ${"%.3f".format(realised)}," +
+                " which is not between ${"%.3f".format(airyRatio * CAP_SHARE_OF_AIRY_FLOOR)} and" +
+                " ${"%.3f".format(airyRatio)} - Airy's `iceDensity / mantleDensity` and the share" +
+                " of it a plate of this stiffness lets through",
+            realised in (airyRatio * CAP_SHARE_OF_AIRY_FLOOR)..airyRatio.toDouble()
+        )
         assertTrue(
             "the moat round the ice is ${"%.0f".format(deepestMoat)} m deep, which is not between" +
                 " a fifth and the whole of the ${"%.0f".format(thickest * airyRatio)} m the" +
@@ -1050,25 +1039,29 @@ class IsostasyTest : BorrowsSharedWorlds() {
          * How far the collision rate may sit from Earth's surface uplift plus the measured
          * denudation, in millimetres a year.
          *
-         * A twentieth. The denudation is a mean over five worlds whose own figures the case prints,
-         * and they spread over the best part of a tenth of a millimetre; half that is tight enough
-         * that the constant cannot drift away from its derivation unnoticed and loose enough that a
-         * seed's chaos cannot fail it. (The figures this was first written against, 0.398 to 0.454,
-         * were measured before the rounds were re-clocked; `TectonicsConfig.collisionUpliftMmPerYear`
-         * carries today's.)
+         * Two hundredths: half the spread of the five worlds' own figures, which the case prints.
+         * On the implicit incision they run 0.220 to 0.261 mm a year, four hundredths apart; half
+         * that is tight enough that the constant cannot drift away from its derivation unnoticed
+         * and loose enough that a seed's chaos cannot fail it. By the same rule it was sixteen
+         * thousandths under the cap (0.059 to 0.091) and a twentieth on the clock before Fix 3.
          */
-        const val UPLIFT_RATE_TOLERANCE_MM_PER_YEAR = 0.05
+        const val UPLIFT_RATE_TOLERANCE_MM_PER_YEAR = 0.02
+
 
         /** The known failure the forebulge clause records. See docs/DESIGN_LEDGER.md, Fix 2. */
         const val FORELAND_AT_THE_EDGE_OF_THE_COLLISION =
             "the plates: on the ground's ruler seed 42's foreland falls to the edge of the collision's own ground"
 
-        /** The known failure the ice-load clause records, the ice's to settle. */
-        const val ICE_BED_PAST_AIRY =
-            "the ice: the bed under seed 7's cap sinks past Airy's share of its own column"
-
         /** Millimetres in a metre, for the denudation rate above. */
         const val METRES_TO_MILLIMETRES = 1_000.0
+
+        /**
+         * The synthetic belt's round, in years, and how many of them it runs: 32 million years in
+         * all, long enough for the belt to reach its balance. The round was sized under the
+         * explicit update's cap; see [syntheticBelt].
+         */
+        const val BELT_ROUND_YEARS = 20_000.0
+        const val BELT_ROUNDS = 1_600
 
         /** How much relief the plain under a synthetic belt carries, peak to peak, in metres. */
         const val PLAIN_RELIEF_METRES = 100f

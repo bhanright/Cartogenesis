@@ -156,26 +156,29 @@ class UnitsTest : BorrowsSharedWorlds() {
      * The control: a figure the pipeline reads off no vertical ruler does not move when the land's
      * ceiling does, and the comparison the first test makes refuses it.
      *
-     * The stream-power coefficient is `K` times the round's length times the land's area over the
-     * world's width ([HydraulicErosion.Rates.incisionCoefficient]): a rate on the whole field's
-     * span, with no metre of land relief in it. So read at the stock ruler and at one twice as tall
-     * it has to be the same float, and it has to fail the halving the first test asks of every
-     * land-relief constant — which is what keeps the three tests above from passing vacuously: if
-     * the ruler were not actually reaching the constants, they would look exactly like this one.
-     * Both readings are the pipeline's own, taken through `Rates` at each ruler.
+     * The stream-power coefficient in the land's own unit is `K` times the round's length times
+     * the root of the land's area over the world's width
+     * ([HydraulicErosion.Rates.relativeIncisionCoefficient]): a cut per unit of land relief for a
+     * slope in units of land relief, with no metre of either in it. So read at the stock ruler and
+     * at one twice as tall it has to be the same number, to the float products it is made of, and
+     * it has to fail the halving the first test asks of every land-relief constant — which is what
+     * keeps the three tests above from passing vacuously: if the ruler were not actually reaching
+     * the constants, they would look exactly like this one. Both readings are the pipeline's own,
+     * taken through `Rates` at each ruler. It was the height field's coefficient until Fix 3, which
+     * reads the ruler and should: a cut spent on the field is a share of `reliefSpanMetres`.
      */
     @Test
     fun `a constant with no unit does not move when the ruler does`() {
         val taller = stock.copy(
             scale = stock.scale.copy(highestLandMetres = stock.scale.highestLandMetres * 2f)
         )
-        val here = HydraulicErosion.Rates(stock).incisionCoefficient.toDouble()
-        val there = HydraulicErosion.Rates(taller).incisionCoefficient.toDouble()
-        println("UNITS control incisionCoefficient %.6g, %.6g at twice the ceiling".format(here, there))
+        val here = HydraulicErosion.Rates(stock).relativeIncisionCoefficient.toDouble()
+        val there = HydraulicErosion.Rates(taller).relativeIncisionCoefficient.toDouble()
+        println("UNITS control relativeIncisionCoefficient %.6g, %.6g at twice the ceiling".format(here, there))
         assertEquals(
             "the stream-power coefficient moved when only the land's ceiling did, so it is reading" +
                 " a ruler it has no business with",
-            here, there, 0.0
+            here, there, here * FLOAT_PRODUCT_ROUNDING
         )
         assertTrue(
             "the stream-power coefficient halved with the land's ceiling, so the first test's" +
@@ -315,5 +318,12 @@ class UnitsTest : BorrowsSharedWorlds() {
          * to its own extremes, so this test held a *ratio* inside a factor of 1.7 instead.
          */
         const val SHORELINE_RESIDUAL_METRES = 1_000.0
+
+        /**
+         * How far two readings of a figure made of the same float products may differ, as a share
+         * of it: a few of a float's last places, which is what reading a ratio of two rulers into a
+         * float and back out again costs.
+         */
+        const val FLOAT_PRODUCT_ROUNDING = 1e-6
     }
 }

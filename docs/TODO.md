@@ -1,5 +1,174 @@
 # To do
 
+- **The implicit incision has no graphics-card path (Fix 3b's stage 2).** Fix 3b replaced the
+  explicit cut with Braun and Willett's implicit update on the processor (`HydraulicErosion.incise`):
+  one walk of `FlowRouting.drainageOrder` backwards, receivers first, each cell
+  `z' = (z + F z_r') / (1 + F)`, with a cell at or below its base level left alone. The incision has
+  never had a device kernel (the explicit one did not either), so this adds the first, not a parity.
+  The specification, for the next session:
+  - **The per-cell map.** Each cell's new height is a function of its receiver's new height `x`:
+    `z' = min(c, a + b x)` with `b = F / (1 + F)`, which is at least 0, `a = z / (1 + F)` and
+    `c = z`, the cap of not cutting a cell at or below its receiver (at or below its base, `a + b x`
+    is at least `z` and the minimum keeps `z`; above it, `a + b x` is under `z`). `F` is computed
+    per cell as the processor does, `Rates.courantCoefficient * sqrt(share) * erodibility / step`.
+  - **Composition.** Maps of that form compose into the same form: a cell's map applied after its
+    receiver's, `min(c1, a1 + b1 min(c2, a2 + b2 x))`, is `min(C, A + B x)` with
+    `C = min(c1, a1 + b1 c2)`, `A = a1 + b1 a2` and `B = b1 b2`, because `b1 >= 0` lets the outer
+    affine map pass inside the minimum. So pointer jumping works on `(a, b, c)` triples: each pass
+    replaces a cell's triple with its composition with its receiver's current triple and its
+    pointer with its receiver's pointer, and after `ceil(log2(depth))` passes every cell's triple is
+    expressed against a terminal.
+  - **Terminals.** A cell whose receiver is sea is a terminal at the round's shoreline height; a
+    cell whose receiver stands under a filled basin's water by more than the pond depth is a
+    terminal at that water's surface (the processor's `baseLevel`); a cell with no receiver (the
+    polar edge) keeps its height, the triple `(z, 0, z)`. At the end each cell's height is its
+    triple evaluated at its terminal's level.
+  - **Buffers.** Separate read and write buffers for the triples and the pointers in every pass,
+    never updated in place, so a pass reads only the previous pass's values and the result does not
+    depend on the order the device runs the cells in.
+  - **Dispatch count.** From the measured chain depth: the longest receiver chain on the round's
+    network, taken on the processor from the drainage order (or bounded by a first pass), and
+    `ceil(log2)` of it passes; it is a few thousand cells at 2048, so about twelve passes.
+  - **Parity.** Against the processor, cell for cell, as `GpuErosionTest` does for the thermal
+    sweeps. Sums of `a` terms along a chain of thousands accumulate float error; the processor
+    carries the update in double and rounds once per cell, so the device's tolerance has to be
+    derived from the chain depth, not assumed. The deposition walk stays on the processor, fed the
+    cuts the device returns.
+  2026-09-25, Fix 3b.
+
+- **The erosion's calibrations set under the capped explicit cut are open (Fix 3b).** Re-examined
+  when the implicit update let the law set every cut, and none re-tuned:
+  - `ErosionConfig.transportCapacity` (20) is a ratio to the incision's coefficient and a
+    measurement that it barely matters, neither of which read the cap, so it stands; it is not an
+    Earth figure. The deposition keeps under a hundredth of what the rounds cut (0.8 to 0.9% on
+    seeds 7, 42 and 1234 at 512).
+  - `ErosionConfig.deltaShare` (0.15), `deltaFreeboardMetres` and `deltaMinCatchment` were chosen
+    by what they did to the culture guard's figures on the capped worlds: set to make worlds pass.
+    An Earth figure for the share of a river's load its delta keeps would derive the first.
+  - `ErosionConfig.outletIncisionRatio` (1.125) was chosen on the largest lake at three grids,
+    also to make worlds pass. On the law's terrain the notch left seed 99 a lake 2.1 times the
+    Caspian's share and the fill 82% as deep as the control's; once a lake falls with its outlet
+    seed 99's lake is under the Caspian's share, seeds 718106 and 7 keep more than half their
+    water, and the fill stands 82.5% as deep (`OutletIncisionTest` records both).
+    Whether a knickpoint should cut harder than an ordinary reach at all is the question.
+  2026-09-25, Fix 3b.
+
+- **The channel network the implicit incision leaves grows denser on a finer grid, and the round's
+  length is not why.** `ScaleFreeTest`'s channel-head clause reads 1.38 to 1.48 from 512 to 1024 on
+  the four standard seeds (1.42 to 1.54 once a lake falls with its outlet), over its 1.35, where the
+  capped update read 1.15 to 1.23. Measured at Fix 3b's review round: at 1024 with twenty-four rounds
+  of half the years, the density is 1.004, 1.019, 1.000 and 0.999 times the stock 1024's on seeds 7,
+  42, 1234 and 99. The time step has converged; the growth is the grid's, and the round's length is
+  not a resolution parameter for it. Not isolated: whether it is the criterion reading a slope over
+  a shorter step, `F` doubling at a fixed catchment when the cell halves, or the routing. A 2048
+  comparison would say whether it settles. 2026-09-25, Fix 3b and its review round.
+
+- **About a tenth of the standing water without the ice lies in thin parallel grid-bearing bars
+  (rule 13).** `GlaciationTest`'s comb clause measures the ice's own addition, which passes; but
+  with the ice off the share of lake cells in parallel bars at a grid bearing is 0.108, 0.078 and
+  0.120 on seeds 718106, 42 and 7 at 1024 (notch off, one epoch) on the implicit update, where it
+  was 0.014, 0.008 and 0.012 on the capped one. The worlds hold far less standing water (1,676, 7,175
+  and 3,892 lake cells against 12,257, 24,088 and 19,488), so in cells it is 181, 560 and 467 against
+  172, 193 and 234. Before the uplift was re-derived the ice itself added a comb (5.00% and 3.18% on
+  718106 and 7). What makes the bars, and whether they are drainage lines the fill leaves standing
+  along grid-bearing valleys, is not diagnosed; a guard on the drainage without the ice is owed.
+  2026-09-25, Fix 3b.
+
+  **And a sixth once a lake falls with its outlet.** Fix 3b's review round made a lake's surface
+  in the implicit pass fall with its outlet's cut, instead of standing at its filled level for the
+  whole pass, so an inflow grades to the lowered water. With the ice off the bars' share rose to
+  0.167, 0.168 and 0.153 (561, 1,214 and 642 cells of 3,363, 7,224 and 4,198), and with the ice on
+  to 0.159, 0.163 and 0.137. The ice's own share is still no higher than the bare world's, but on
+  seed 42 the glaciated world holds 1,554 more lake cells, and the comb clause, which counts cells,
+  is over its fiftieth at 2.48%. `StraightRunTest`'s census finds its first ruled bar since the facet
+  rule: 27 cells on seed 42 at 512. Both are recorded under the one finding. The likeliest reading,
+  not tested: inflows now cut to a lower base, so more grid-bearing channels are deep enough for
+  the next round's fill to stand in. 2026-09-25, Fix 3b review round.
+
+- **Steep flanks are combed by single-cell gullies down the columns, and the implicit incision makes
+  it show (rule 13).** On the renders of seeds 7 and 42 at 1024 the flanks of east-west ranges carry
+  straight north-south gullies about a cell apart. Measured on steep land (a fall over 20 m/km to the
+  receiver) at 1024: 59 to 64% of cells drain straight down a column on all three trees measured
+  (main, the capped update and the implicit one), where the router's own rule on ground with no
+  preferred bearing sends 44.9% down a column (35% was the nearest bearing's figure, the wrong rule;
+  see the restatement below); and 21 to 29% of those have both row neighbours draining the same way
+  on all three. So the column preference is not new. What is
+  new is that the law now cuts those channels to grade, twice as much ground is steep (155,444 cells
+  against main's 71,442 on seed 7), and the comb that the cap kept shallow is plain to the eye. The
+  geometry guard does not see it. Earth's first-order valleys are spaced by the ratio of hillslope
+  transport to incision (Perron, Kirchner and Dietrich 2009), and this model's hillslopes have no
+  length of their own (the X1d entry above); a transport length in kilometres, and a guard on the
+  share of steep ground draining down a column against what the cell's shape predicts, are what
+  would answer it. 2026-09-25, Fix 3b.
+
+  **The update does not make the comb (Fix 3b's review round, reported).** On synthetic ridges on a
+  256 grid (cells 46.9 km by 23.4 km), a 4,000 m crest falling linearly over 50 cell widths either
+  side with 2 m of roughness, twelve rounds at 0.29 and 0.738 mm a year, the channels (eight cells
+  upstream or more) follow the fall line on both bearings under both updates: 94 to 99% down a
+  column on the east-west ridge and 89 to 92% along a row on the north-south one. The share of
+  channel cells with a parallel channel draining the same way within two cell widths of ground
+  across the fall line is 97 to 99% under the capped update on both bearings and 56 to 59%
+  (east-west) and 69 to 71% (north-south) under the implicit one. The cap combs more, and more
+  evenly; the implicit update combs less, and no more on east-west ridges than north-south, and
+  cuts what comb there is to grade. With 20 m of roughness on a 1,500 m crest, where the roughness
+  outweighs the ridge's fall, the order is the same (61 and 80% capped, 19 and 51% implicit). The
+  columns the generated worlds' steep ground prefers are therefore not the update's; what they are
+  is not isolated. The steep-cell count used above is no instrument for it once the valleys are cut
+  deep: on the synthetic ridges the steepest third of the ground is valley walls, and it drains
+  across the fall line (62 to 68% along a row on the east-west ridge).
+
+  **What the routing gives on planes, and what is left (Fix 3b's comb round, restated).** The
+  review round's cause paragraph read the steep ground's column share against 35%, the share the
+  nearest of the eight bearings would give on cells half as tall as wide. The router is not that
+  rule: it is Tarboton's facet direction with Fairfield and Leymarie's Rho8 draw, which takes the
+  diagonal with the share of the facet's far edge the descent crosses, so its mean step is true but
+  it takes the cardinal more often than the nearest bearing does. Its own expectation over isotropic
+  bearings is 44.87% down a column, 15.31% along a row and 39.82% on a diagonal; on production's
+  router, on planes at 360 bearings on three seeds, it takes 45.04, 15.38 and 39.58%, each within
+  1.5 standard errors (`RoutingGroundTest`, which fails the plain steepest-of-eight rule at 35.6,
+  14.4 and 50.0). Against that baseline the review round's figures read: the isotropic synthetic
+  surfaces 47.4 and 51.4% down a column, 2.5 to 6.5 points over the rule, which is the ensemble of
+  rough, filled, steep-selected ground and not a plane; the terrain before erosion 41.8 and 44.5%,
+  at the rule; and the finished world 59.1 and 60.5%, 14 to 16 points over it. So the router is
+  not the cause on planes and has no residual worth correcting there; what the rounds do is.
+  Whether that is a feedback, a channel cut down a column tilting its neighbours down the column,
+  is what the comb round tests next.
+
+  **Three rounds of experiments, and the planned fix: square cells.** `CombGuardTest` measures the
+  comb and records it as a known failure (0.41 and 0.52 km of comb per 1,000 km² down a column on
+  seeds 7 and 42 at 512, against 0.06 and 0.08 along a row). The rounds established three things;
+  the figures are in docs/DESIGN_LEDGER.md, Fix 3b.
+  - **A feedback.** On the same steep cells followed through the rounds, the column share goes
+    from the router's own figure to about 57%: the rounds turn two diagonal steps in five, and half
+    the row steps, into column steps.
+  - **Out of reach of any draw.** 85 to 87% of the combed cells have a descent clamped to their
+    cardinal, which every draw leaves where it is: a Rho8 draw in clamped descent left the comb as
+    it was.
+  - **Sub-grid transport costs the valleys.** Diffusion at the law's own scale cuts the comb by three
+    quarters to four fifths, but takes a third of the valleys' depth and a fifth to a third of the
+    network, and still leaves ten times the guard's floor.
+
+  The fix is cells square on the ground, twice as many across as down, so a column and a row are
+  the same step. `CombGuardTest` is its acceptance test. 2026-09-26, Fix 3b.
+
+- **The sea-level percentile hands the sea's highest cell to the land where the sea fills its rank
+  exactly.** `SeaLevelStage.thresholdAtRank` finds the bin where the cells counted so far reach the
+  target rank, `>=`, and when the target is the bin's last cell the index is clamped to it and the
+  returned threshold is the highest *sea* value, so every cell at that value counts as land: cut at
+  half sea, four cells at 0.1, 0.1, 0.9 and 0.9 come out all land, and four at 0.1, 0.2, 0.8 and
+  0.9 three land of four. On a real world the error is a cell or a few; on a synthetic one whose
+  sea shares a depth it is the whole sea (Fix 3's clock
+  guard gives its sea distinct depths and reads the catchment as the stage defines it). The smallest
+  fix is `>` in the bracket search, which finds the bin holding the target rank's own cell and
+  returns its value. Every world moves by the cells at the boundary, so it wants a fingerprint check
+  of its own. 2026-09-25, Fix 3.
+
+- **The flat potential's cost is over rule 8's line.** After Fix 3 seed 7's flats at 512 held 2,696
+  raised cells in 478 flats and a pass cost 3.4 ms, 1.00% of a generation over 33 passes. On the
+  law's terrain (Fix 3b) they hold 3,147 cells in 476 flats and a pass costs 5.8 ms on a quiet
+  machine, 2.02% of a 9.4 s generation, and `FlatCourseTest` records it. A device path, or a solve
+  whose cost does not ride on the flats' size, is owed. 2026-09-25, Fix 3 and Fix 3b.
+
 - **The Earth reference behind the river density is one dataset.** The Cartography panel's River
   density slider scales the ink from a quarter of Earth's figure to every course the sheet's scale
   allows, with Earth's figure as the default mark, so the reader can now have the old drawing back
@@ -114,7 +283,11 @@
   coastline now projects 1.32, 1.41, 1.41 and 1.41 times as far east-west as north-south, 1.39
   pooled, where the same measure read 1.88 to 2.00 before (`GroundIsotropyTest`). What is left is
   the incision's cap per step, Audit III's B-D1, which cuts a channel running north-south half as
-  far a round; the test records it as a known failure and the erosion's units are the next chunk's.
+  far a round; the test records it as a known failure. Fix 3 put the erosion in one unit and the
+  ratio came to 1.12 pooled, still over on seed 1234 at 1.19. Fix 3b's implicit update took the cap
+  away and the notches are the same depth by bearing, and the ratio still reads 1.12 pooled, seed 99
+  past what its length allows at 1.16; `GroundIsotropyTest` records it under a finding of its own,
+  the cause not isolated.
   Over the seven worlds `CoastalSpacingAuditTest` prints, the coastline reads 1.41, 1.48 and 1.53 at
   512, 1024 and 2048 where it read 1.93, 1.99 and 2.06, and the 2,000 m contour 1.46, 1.47 and 1.48
   where it read 1.99, 2.00 and 2.04. The coast's figure still rises with the grid; why is not
@@ -197,11 +370,13 @@
     (`IsostasyTest`); sheets as wide as Greenland's grow on high plateaus and stand under its 2,000 m
     (`IceSheetTest`, seeds 718106 and 7); seed 59758's sheet edge runs 70 cells along a row, the
     census's ice-edge finding (`IceSheetTest`);
-  - *the erosion* (chunk 3): the coast's projection ratio and the valley notch, a quarter to a third
-    shallower where a course steps down a column, both under B-D1 (`GroundIsotropyTest`,
-    `ValleyIncisionTest`); seed 1234's windward flank cut 1.26 times as hard for 3.5 times the rain,
-    under the law's 1.49 (`ClimateFedErosionTest`);
-  - *the water*: the notch's three largest-basin clauses (`OutletIncisionTest`); the flat potential
+  - *the erosion* (chunk 3, done as Fix 3 and Fix 3b): the coast's projection ratio and the valley
+    notch, both under B-D1 (`GroundIsotropyTest`, `ValleyIncisionTest`); seed 1234's windward flank
+    cut 1.26 times as hard for 3.5 times the rain, under the law's 1.49, 1.12 since Fix 3
+    (`ClimateFedErosionTest`). The notch and the flank are armed at Fix 3b; the coast's ratio is
+    recorded under its own finding;
+  - *the water*: the notch's three largest-basin clauses (`OutletIncisionTest`), armed again at Fix 3
+    once the notch began at the basin's lip; the flat potential
     at 4.7% of a generation on seed 7, past rule 8's hundredth, because the redrawn world's flats
     hold twice the cells (`FlatCourseTest`) — a device path, or a cheaper solve, is owed;
   - *the climate*: the pooled recycling ratio, 0.292 against Earth's 0.30 (`MoistureBudgetTest`,
@@ -224,6 +399,7 @@
   What the ruler does not reach is recorded under `GroundIsotropyTest`'s known failure: the cut is
   capped at half the drop to a cell's receiver in a round, a drop is in proportion to the step, and
   where the cap sets the cut (Audit III's B-D1) a north-south channel is cut half as deep a round.
+  Since Fix 3b the cap is gone and the notches read the same by bearing.
 - **The moisture march does not conserve its water, in two places.** In `ClimateStage.marchLandStep` the parcel's stock is capped to the cold cap *after* its rain for the cell has been taken, so the water the cap removes over cold ground is neither rained nor carried: it leaves the budget silently. In `marchSeaStep` the rain over open water is reported (`moisture * seaRainPerCell`) but never subtracted from the stock handed to the next cell, so the ocean reservoir approaches saturation whatever the sea rain rate is set to. Both were found by reading the code against the ledger's recycling figure, which therefore does not by itself show the budget is right. The fix is an instrumented budget first (every source, every sink, the storage change and the boundary flux summing to zero per lap), then the two corrections, then re-measuring recycling and the interior mean; it belongs to the chunk on wetter interiors, because closing the sea leak alone will move every coast. Beside it: the 1,000 km depletion length cites van der Ent and Savenije (2011) for a figure that paper gives as 500-2,000 km for tropical and mountain recycling, with 3,000-5,000 km in temperate climates and over 7,000 in deserts, so the constant's justification is misread and the transport time and the rain lifetime want testing separately. 2026-09-21.
 - **A lake fan outlives its lake, and what it leaves is a sill.** On 718106 at 2048 the deposited world holds 23,362 cells of standing water (graded) and 24,421 (ungraded) against 20,998 with no deposition at all, and the window where deposition ponds the most - `[48,400,203,650]`, found by `BayHeadDeltaAuditTest` - holds one lake of 1,038 cells the no-deposition world does not have. `DepositionLog` says its shore is ringed with lake-fan spoil, and a render of the log's mechanism over the window (looked at during T4, not kept) shows that spoil lying in a ring well outside the present shore. The reading of that picture, which is an inference and not a measurement: the rounds ponded a far larger basin there, fans were built into it, the basin's rim was cut and it drained, and the spoil laid across its floor was left standing across the hollow in the middle. A fan is stopped two pond depths short of the surface it is built toward (`HydraulicErosion`, the lake inflow branch) so that every cell it touches is still water afterwards, and that is true of the surface it was built toward and not of the one the basin drains to later; sediment sits in its own array until `settle` adds it to the terrain at the end, so the per-round breaches lower the rock under it and not it. Nothing forbids cutting it afterwards: the closing breach is blind to mechanism and `openMouths` cuts any spoil under a drawn course, so what preserved these lakes is one of their limits - the closing breach's stream power, floor and reach, or `openMouths`' discharge threshold, which a small basin's outflow does not meet - and which one is not yet measured. The graded rule has no say in any of it, which is why the two settings hold nearly the same water in that window (3,699 and 3,687); over the whole world they make fourteen and thirteen lakes the no-deposition world lacks, 5,600 and 6,100 cells, and the audit case prints, for each, the gross deposition on its shore by mechanism. The audit's water clause is therefore printed as a census and not asserted. What would answer it: find which limit preserved the lakes (a round-by-round trace of one basin's spill and floor), then either stop a fan short of the floor of the basin's outlet rather than of its surface or give the closing breach a drained basin's former discharge, and measure whole-world standing water against the no-deposition world on both authored seeds at 1024 and 2048. With it, a discriminating guard for the graded rule itself, which no per-merge test has: a controlled channel whose upstream margin leaves the ungraded rule headroom to deposit and the graded rule none, shown failing by forcing the graded branch to a zero grade. Whole-world standing water on deposited worlds has stood at or above the no-deposition figure since E6 (1.04x and 1.16x at 1024 then; 1.26x and 0.99x at 1024 and 1.11x and 1.16x at 2048 on the 3.2 tree), so this is not new, only named. 2026-09-22.
 - **The audit tier cannot be finished on the machine T3 ran it on, and the fault is the machine.**

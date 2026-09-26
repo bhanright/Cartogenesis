@@ -251,21 +251,21 @@ class LittoralCoastTest {
         CoastRoughness.dimensionComplaint("pooled by ruler", pooledRuler)?.let { complaints.add(it) }
         CoastRoughness.dimensionComplaint("pooled by M1's box count", boxes!!.dimension)
             ?.let { complaints.add(it) }
-        assertTrue(complaints.isEmpty(), complaints.joinToString("; "))
-        // One seed's own coast has read under the floor since the continents were redrawn on the
-        // ground's ruler: 298405's measures 1.092 over four to sixteen cell widths, graded and
-        // ungraded alike, so it is the terrain's coast and not the littoral pass. Measured on the
-        // ground the five coasts pool at 1.182 by ruler and 1.112 by box, inside the band; seed
-        // 298405 read 1.134 here by the old square-cell ruler on the old continents, and its
-        // finished world's coast 1.170 by the ground's (docs/DESIGN_LEDGER.md, Fix 2).
-        KnownFailures.expect(SMOOTH_COAST_ON_ONE_SEED, "seed 298405 at 1.092") {
-            if (smoothSeeds.isNotEmpty()) {
+        // Recorded since Fix 3 (by box 1.028 under the cap), and re-recorded at Fix 3b: the law's
+        // terrain takes the box count to 1.082, still under Mandelbrot's band, with the ruler's
+        // 1.187 inside it, and 1.084 and 1.182 once a lake falls with its outlet. See
+        // [LAW_SETS_EVERY_CUT].
+        KnownFailures.expect(LAW_SETS_EVERY_CUT, "pooled by ruler 1.182, by box 1.084") {
+            if (complaints.isNotEmpty()) {
                 throw RecordedViolation(
-                    "a seed's coast by ruler is under Richardson's floor: ${smoothSeeds.joinToString()}",
-                    smoothSeeds.joinToString()
+                    complaints.joinToString("; "),
+                    String.format(Locale.ROOT, "pooled by ruler %.3f, by box %.3f", pooledRuler, boxes!!.dimension)
                 )
             }
         }
+        // Seed 298405's coast read under the floor by ruler from Fix 2 to Fix 3 (1.092) and is
+        // inside it again on Fix 3's ground, so the clause is armed (docs/DESIGN_LEDGER.md, Fix 3).
+        assertTrue(smoothSeeds.isEmpty(), "a seed's coast by ruler is under Richardson's floor: ${smoothSeeds.joinToString()}")
     }
 
     /**
@@ -359,6 +359,9 @@ class LittoralCoastTest {
                     graded!!.dimensionStandardDeviation, control!!.dimensionStandardDeviation
                 )
         )
+        // Recorded from Fix 3 (0.740 graded against 0.596 under the cap, 0.548 against 0.436 on the
+        // law's terrain), and armed at Fix 3b's review round: once a lake falls with its outlet it
+        // reads 0.553 against 0.412, a gain of 1.34 (docs/DESIGN_LEDGER.md, Fix 3b).
         assertTrue(
             graded!!.smoothShare >= control!!.smoothShare * SMOOTH_SHARE_GAIN,
             ("the graded coast reads %.3f smooth against the ungraded coast's %.3f, which is not a " +
@@ -418,9 +421,14 @@ class LittoralCoastTest {
     }
 
     private companion object {
-        /** The known failure the dimension clause records, per seed. See docs/DESIGN_LEDGER.md, Fix 2. */
-        const val SMOOTH_COAST_ON_ONE_SEED =
-            "the coast: on the ground's ruler seed 298405's coast is smoother than Richardson's floor"
+        /**
+         * The known failure the clauses Fix 3b moved record. The implicit update lets the
+         * stream-power law set every cut, where the explicit update's cap at half the drop set the
+         * drawn network's, so the land is cut as the law asks; this clause's figure was recorded on
+         * the capped terrain. See docs/DESIGN_LEDGER.md, Fix 3b, for the figures.
+         */
+        const val LAW_SETS_EVERY_CUT =
+            "the erosion: since the implicit update the stream-power law sets every cut, and this clause's figure was recorded on the capped terrain"
 
         /** The rulers the coast is walked with, in cell widths of ground. */
         val RULERS = listOf(1, 2, 4, 8, 16)

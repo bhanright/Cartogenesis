@@ -1,6 +1,9 @@
 package com.cartogenesis.worldgen
 
+import com.cartogenesis.worldgen.pipeline.FlatRouting
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
@@ -29,6 +32,41 @@ class FlatCourseAuditTest {
     private companion object {
         const val CROP_SEED = 718106L
         const val CROP_SIDE = 2048
+
+        /** The author's two worlds at the size they are drawn at: the crop's, and the delta mouth's. */
+        val KEPT_FLAT_SEEDS = listOf(718106L, 59758L)
+    }
+
+    /**
+     * No flat anywhere in a generation goes back to the staircase: every routing pass's potential,
+     * the hydraulic rounds', the closing passes', the sea-level cut's and the river stage's, counted
+     * as each is laid, on the two worlds at 2048.
+     *
+     * A converged solve can always be laid, and was refused only where the band it is laid into
+     * stood below the flat's entry by the flood's own rounding; see `FlatCourseTest`'s trench and
+     * docs/DESIGN_LEDGER.md, Fix 3, for the counts before and after. Generated here rather than
+     * borrowed, because every pass has to be watched as it runs.
+     */
+    @Test
+    fun `no routing pass at 2048 keeps a flat's staircase`() {
+        KEPT_FLAT_SEEDS.forEach { seed ->
+            val passes = AtomicInteger()
+            val flats = AtomicInteger()
+            val kept = AtomicInteger()
+            FlatRouting.surfaceWatch = { surface ->
+                passes.incrementAndGet()
+                flats.addAndGet(surface.flats)
+                kept.addAndGet(surface.flatsKept)
+            }
+            try {
+                WorldGenerationEngine.generateBlocking(FlatCourse.config(seed, CROP_SIDE, overPotential = true))
+            } finally {
+                FlatRouting.surfaceWatch = null
+            }
+            println("F30B seed $seed@$CROP_SIDE: ${passes.get()} routing passes laid ${flats.get()} flats, ${kept.get()} kept the staircase")
+            assertTrue(passes.get() > 0, "seed $seed: no routing pass was watched")
+            assertEquals(0, kept.get(), "seed $seed: ${kept.get()} flats over ${passes.get()} routing passes kept the staircase")
+        }
     }
 
     @Test

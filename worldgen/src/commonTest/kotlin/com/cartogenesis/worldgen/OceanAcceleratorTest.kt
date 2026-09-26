@@ -2,7 +2,6 @@ package com.cartogenesis.worldgen
 
 import com.cartogenesis.worldgen.model.Acceleration
 import com.cartogenesis.worldgen.model.FloatField
-import com.cartogenesis.worldgen.model.OceanHeatGrid
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.pipeline.OceanAccelerator
 import com.cartogenesis.worldgen.pipeline.OceanCirculation
@@ -57,8 +56,8 @@ class OceanAcceleratorTest {
         }
         OceanStage.generate(acceleratedConfig, sea, recording)
         val stencil = checkNotNull(seen)
-        assertEquals(CELLS_ACROSS, stencil.cellsAcross)
-        assertEquals(CELLS_ACROSS, stencil.cellsDown)
+        val (across, down) = OceanStage.solveGrid(config.scale)
+        assertTrue(stencil.cellsAcross <= across && stencil.cellsDown <= down, "a stencil larger than the solve grid")
         assertTrue(stencil.forcing.any { it != 0f }, "a forcing of nothing would spin nothing")
     }
 
@@ -106,9 +105,7 @@ class OceanAcceleratorTest {
     private companion object {
         const val CELLS_ACROSS = 8
 
-        val config = WorldGenConfig(width = CELLS_ACROSS, height = CELLS_ACROSS).let {
-            it.copy(ocean = it.ocean.copy(heatGrid = OceanHeatGrid.FINE))
-        }
+        val config = WorldGenConfig(width = CELLS_ACROSS, height = CELLS_ACROSS)
 
         val acceleratedConfig =
             config.copy(erosion = config.erosion.copy(acceleration = Acceleration.GPU))

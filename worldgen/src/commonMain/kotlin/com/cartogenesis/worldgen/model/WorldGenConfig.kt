@@ -221,28 +221,28 @@ data class WorldScale(
     val worldAreaKm2: Double get() = worldWidthKm * worldWidthKm * WORLD_HEIGHT_AS_SHARE_OF_WIDTH
 
     /**
-     * The planet's radius, in metres: the equator's length, [worldWidthKm], over two pi.
+     * The planet's radius, in meters: the equator's length, [worldWidthKm], over two pi.
      *
      * The one place the planet's size becomes a radius. Everything whose physics reads the size of
      * the planet rather than the size of a cell reads it here, so a world of another size is a
      * world of another size throughout.
      */
-    val radiusMetres: Double get() = worldWidthKm * METRES_PER_KM / (2.0 * kotlin.math.PI)
+    val radiusMeters: Double get() = worldWidthKm * METRES_PER_KM / (2.0 * kotlin.math.PI)
 
-    /** How far one degree of latitude runs on the ground, in metres: a meridian's length over 180. */
-    val metresPerDegreeLatitude: Double get() = radiusMetres * kotlin.math.PI / DEGREES_POLE_TO_POLE
+    /** How far one degree of latitude runs on the ground, in meters: a meridian's length over 180. */
+    val metersPerDegreeLatitude: Double get() = radiusMeters * kotlin.math.PI / DEGREES_POLE_TO_POLE
 
     /**
-     * β, how fast the Coriolis parameter grows northward, in radians a second per metre, at
-     * [latitudeDegrees]: `2Ω cos φ / a`, with Ω [ROTATION_RATE_PER_S] and `a` [radiusMetres].
+     * β, how fast the Coriolis parameter grows northward, in radians a second per meter, at
+     * [latitudeDegrees]: `2Ω cos φ / a`, with Ω [ROTATION_RATE_PER_S] and `a` [radiusMeters].
      *
      * Positive in both hemispheres, since the Coriolis parameter rises northward in both. It is what
      * piles a gyre's return flow against the western side of its basin; a planet a third the size
      * of Earth's that turns as fast has a β three times Earth's, and a western boundary current a
      * third as wide.
      */
-    fun planetaryVorticityGradientPerMetreSecond(latitudeDegrees: Double): Double =
-        2.0 * ROTATION_RATE_PER_S * kotlin.math.cos(latitudeDegrees * kotlin.math.PI / 180.0) / radiusMetres
+    fun planetaryVorticityGradientPerMeterSecond(latitudeDegrees: Double): Double =
+        2.0 * ROTATION_RATE_PER_S * kotlin.math.cos(latitudeDegrees * kotlin.math.PI / 180.0) / radiusMeters
 
     companion object {
         /** Pole to pole against the equator's whole circumference, on an equirectangular map. */
@@ -1925,30 +1925,12 @@ enum class WildernessMode(val label: String) {
 data class OceanConfig(
     val enabled: Boolean = true,
     /**
-     * Where the circulation is solved and the heat carried. Temporary: the three forms measured
-     * against one another before one is chosen. See [OceanHeatGrid].
-     */
-    val heatGrid: OceanHeatGrid = OceanHeatGrid.PHYSICS,
-    /**
      * How far inland a coast feels its water, in cells, and how strongly. This is what makes a
      * mild west coast at high latitude and an arid one beside a cold current.
      */
     val coastalReachCells: Int = 10,
     val coastalInfluence: Float = 0.85f
 )
-
-/** The three grids the ocean's heat can be carried on. Temporary, until one is chosen. */
-@Serializable
-enum class OceanHeatGrid {
-    /** The map's own grid. */
-    FINE,
-    /** Square cells two to the narrowest Stommel layer, or the map's grid where that is finer. */
-    PHYSICS,
-    /** Square cells, a fixed number of rows per row of the map. */
-    MAP_SHARE,
-    /** The physics-sized grid at every size, finer than the map's where the map's is coarser. */
-    PHYSICS_ALWAYS
-}
 
 /** Where the erosion sweeps run. */
 @Serializable

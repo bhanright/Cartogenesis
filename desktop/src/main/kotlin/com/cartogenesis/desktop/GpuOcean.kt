@@ -7,7 +7,7 @@ import kotlinx.coroutines.currentCoroutineContext
 import org.lwjgl.opengl.GL43C
 
 /**
- * Relaxes the ocean's stream function on the graphics card.
+ * Relaxes the ocean's two problems, its circulation and its heat, on the graphics card.
  *
  * The algorithm is the processor's, unchanged ([com.cartogenesis.worldgen.pipeline.OceanCirculation.relax]).
  * Red-black Gauss-Seidel colours the grid by the parity of column plus row, so no two cells of one
@@ -61,13 +61,13 @@ class GpuOcean private constructor(override val name: String) : OceanAccelerator
                 upload(buffers[WATER_BINDING], waterWords)
                 upload(buffers[FORCING_BINDING], stencil.forcing)
                 upload(buffers[STREAM_BINDING], start, GL43C.GL_DYNAMIC_COPY)
-                // Four weights a row, east, west, north and south, as one vec4 per row.
-                val weights = FloatArray(cellsDown * WEIGHTS_PER_ROW)
-                for (row in 0 until cellsDown) {
-                    weights[row * WEIGHTS_PER_ROW] = stencil.eastWeight[row]
-                    weights[row * WEIGHTS_PER_ROW + 1] = stencil.westWeight[row]
-                    weights[row * WEIGHTS_PER_ROW + 2] = stencil.northWeight[row]
-                    weights[row * WEIGHTS_PER_ROW + 3] = stencil.southWeight[row]
+                // Four weights a cell, east, west, north and south, as one vec4 per cell.
+                val weights = FloatArray(start.size * WEIGHTS_PER_CELL)
+                for (cell in start.indices) {
+                    weights[cell * WEIGHTS_PER_CELL] = stencil.eastWeight[cell]
+                    weights[cell * WEIGHTS_PER_CELL + 1] = stencil.westWeight[cell]
+                    weights[cell * WEIGHTS_PER_CELL + 2] = stencil.northWeight[cell]
+                    weights[cell * WEIGHTS_PER_CELL + 3] = stencil.southWeight[cell]
                 }
                 upload(buffers[WEIGHTS_BINDING], weights)
                 if (GL43C.glGetError() != GL43C.GL_NO_ERROR) return@run null
@@ -125,8 +125,8 @@ class GpuOcean private constructor(override val name: String) : OceanAccelerator
         private const val STREAM_BINDING = 2
         private const val WEIGHTS_BINDING = 3
 
-        /** East, west, north and south: one vec4 of weights per row. */
-        private const val WEIGHTS_PER_ROW = 4
+        /** East, west, north and south: one vec4 of weights per cell. */
+        private const val WEIGHTS_PER_CELL = 4
 
         /**
          * The side of a work group, in invocations. 16x16 is 256, which every device supporting
@@ -159,8 +159,10 @@ class GpuOcean private constructor(override val name: String) : OceanAccelerator
         }
 
         /**
-         * One relaxation pass over one colour: every cell of the colour set to the value that
-         * satisfies the discrete Stommel balance given its four neighbours.
+         * One relaxation pass over one color: every water cell of the color set to the value that
+         * satisfies its balance given its four neighbors, `e x_east + w x_west + n x_north +
+         * s x_south - f`. Columns wrap; an edge row's weight toward its pole is zero; land is held
+         * at zero.
          *
          * Columns wrap; beyond either pole ψ is zero, a wall; land pins ψ at zero.
          */
@@ -189,7 +191,7 @@ class GpuOcean private constructor(override val name: String) : OceanAccelerator
                 int west = (x + uWidth - 1) % uWidth;
                 float streamNorth = y > 0 ? stream[cell - uWidth] : 0.0;
                 float streamSouth = y + 1 < uHeight ? stream[cell + uWidth] : 0.0;
-                vec4 weight = weights[y];
+                vec4 weight = weights[cell];
 
                 // Held to the reference's own order and its separate multiplies: a driver free to
                 // fuse or reassociate these would drift a little further from the processor with

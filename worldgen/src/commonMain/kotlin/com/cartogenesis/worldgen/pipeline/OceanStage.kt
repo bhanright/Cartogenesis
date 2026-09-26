@@ -2,11 +2,11 @@ package com.cartogenesis.worldgen.pipeline
 
 import com.cartogenesis.worldgen.model.Acceleration
 import com.cartogenesis.worldgen.model.FloatField
-import com.cartogenesis.worldgen.model.OceanHeatGrid
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldScale
 import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.ceil
 import kotlin.math.cos
 import kotlin.math.floor
 import kotlin.math.roundToInt
@@ -15,9 +15,9 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 
 data class OceanResult(
-    /** The surface current's eastward component, in metres a second; zero on land. */
+    /** The surface current's eastward component, in meters a second; zero on land. */
     val velocityX: FloatField,
-    /** Its southward component, in metres a second, rows running south as the map's do. */
+    /** Its southward component, in meters a second, rows running south as the map's do; zero on land. */
     val velocityY: FloatField,
     /** Sea-surface temperature in degrees Celsius. */
     val temperature: FloatField,
@@ -34,14 +34,15 @@ data class OceanResult(
  * Step 5b: wind-driven surface currents, and the sea temperature they carry.
  *
  * The currents are solved, not drawn: Stommel's balance between the curl of the wind's stress, the
- * change of the Coriolis parameter with latitude and friction at the bottom of the wind-driven
- * layer, inside whatever basins the coasts make. See [OceanCirculation] for the equation and its
- * discretisation and [OceanHeat] for how the temperature is carried. Every figure is a physical one
- * derived from the planet — its radius through [WorldScale], its rotation through
- * [WorldScale.ROTATION_RATE_PER_S] — so a world of another size gets the circulation its own
- * physics gives, and nothing here counts cells.
+ * change of the Coriolis parameter with latitude and friction under the wind-driven layer, inside
+ * whatever basins the coasts make ([OceanCirculation]). The heat is then carried by those currents,
+ * mixed by eddies and relaxed toward each latitude's temperature ([OceanHeat]). Every figure is a
+ * physical one derived from the planet — its radius through [WorldScale], its rotation through
+ * [WorldScale.ROTATION_RATE_PER_S] — and both problems are solved on a grid sized by the physics
+ * ([solveGrid]) rather than by the map, so a world of another size gets the circulation its own
+ * physics gives, and a map of another size gets the same ocean.
  *
- * See docs/DESIGN_LEDGER.md, G3, H4 and the ocean's row.
+ * See docs/DESIGN_LEDGER.md, G3, H4 and the ocean's circulation row.
  */
 object OceanStage {
 
@@ -60,7 +61,7 @@ object OceanStage {
     /** Degrees of cosine phase per degree of latitude inside the trade belt: 90 over 30. */
     private const val TRADE_PHASE_PER_DEGREE = 3.0
 
-    /** The same for the two belts poleward of the trades: 90 over the 15 from centre to edge. */
+    /** The same for the two belts poleward of the trades: 90 over the 15 from center to edge. */
     private const val MID_AND_POLAR_PHASE_PER_DEGREE = 6.0
 
     /**
@@ -70,18 +71,18 @@ object OceanStage {
     private const val POLAR_EASTERLY_STRENGTH = 0.6f
 
     /**
-     * The neutral drag coefficient of the sea surface for a 10 m wind of 4 to 11 metres a second
+     * The neutral drag coefficient of the sea surface for a 10 m wind of 4 to 11 meters a second
      * (Large and Pond 1981, *J. Phys. Oceanogr.* 11, 324-336). [PressureWind.BELT_SPEED_MPS] is
      * taken as a representative 10 m wind inside that range: it is the zonal-mean surface wind of
-     * the belts' centres, an assumption rather than a measured 10 m wind.
+     * the belts' centers, an assumption rather than a measured 10 m wind.
      */
     private const val DRAG_COEFFICIENT = 1.2e-3
 
-    /** Density of sea water at the surface, in kilograms a cubic metre. */
+    /** Density of sea water at the surface, in kilograms a cubic meter. */
     private const val SEAWATER_DENSITY_KG_PER_M3 = 1025.0
 
     /**
-     * The depth of the wind-driven layer, in metres, whose mean velocity the stream function is.
+     * The depth of the wind-driven layer, in meters, whose mean velocity the stream function is.
      *
      * The subtropical gyres' main thermocline lies at 500 to 1,000 m (Luyten, Pedlosky and Stommel
      * 1983, *J. Phys. Oceanogr.* 13, 292-309), and the wind-driven transport is carried above it.
@@ -90,14 +91,14 @@ object OceanStage {
      */
     private const val WIND_DRIVEN_LAYER_DEPTH_M = 500.0
 
-    /** Earth's mean radius, in metres: only to derive [BOTTOM_DRAG_PER_S] from an Earth figure. */
+    /** Earth's mean radius, in meters: only to derive [BOTTOM_DRAG_PER_S] from an Earth figure. */
     private const val EARTH_MEAN_RADIUS_M = 6.371e6
 
     /** The latitude the Gulf Stream's width below is read at: the Florida Current and Cape Hatteras. */
     private const val GULF_STREAM_LATITUDE_DEGREES = 30.0
 
     /**
-     * The e-folding width of a western boundary current, in metres: half of the roughly 100 km
+     * The e-folding width of a western boundary current, in meters: half of the roughly 100 km
      * over which the Gulf Stream's surface speed falls away from its core off Florida and Cape
      * Hatteras (Stommel 1965, *The Gulf Stream*; Halkin and Rossby 1985, *J. Phys. Oceanogr.* 15,
      * 1439-1452).
@@ -108,7 +109,7 @@ object OceanStage {
      * The linear bottom-drag rate `r` of the wind-driven layer, per second.
      *
      * Stommel's layer is `δ_S = r/β`, so Earth's own western boundary current gives `r`: β at 30
-     * degrees on Earth, `2Ω cos φ / a` = 1.98e-11 per metre-second, times [GULF_STREAM_WIDTH_M], is
+     * degrees on Earth, `2Ω cos φ / a` = 1.98e-11 per meter-second, times [GULF_STREAM_WIDTH_M], is
      * 9.9e-7 per second, a spin-down time `1/r` of 11.7 days. Friction is a property of the water
      * and not of the planet's size, so this figure is carried to any world unchanged and its layer
      * width comes out of that world's own β.
@@ -128,24 +129,22 @@ object OceanStage {
         EnergyBalance.MIXED_LAYER_HEAT_CAPACITY_J_PER_M2_C / EnergyBalance.SURFACE_EXCHANGE_W_PER_M2_C
 
     /**
-     * How many cells of the physics-sized grid span the narrowest Stommel layer.
+     * How many cells of the solve grid span the narrowest Stommel layer.
      *
-     * Two. The layer's velocity profile is `exp(-x/δ_S)`, and a central difference over a
-     * spacing Δ reads it `sinh(q)/q` too fast, `q = Δ/δ_S`: 17.5% at one cell a layer, 4.2% at
-     * two. Two keeps the boundary current's speed, and so how far its water gets in τ, within a
-     * twentieth.
+     * Two. The layer's velocity profile is `exp(-x/δ_S)`, and a central difference over a spacing Δ
+     * reads it `sinh(q)/q` too fast, `q = Δ/δ_S`: 17.5% at one cell a layer, 4.2% at two. Two keeps
+     * the boundary current's speed, and so how far its water gets in τ, within a twentieth.
      */
     private const val CELLS_ACROSS_STOMMEL_LAYER = 2.0
 
-    /**
-     * Rows of the map-share grid per row of the map. Chosen so that at the 512 grid the map-share
-     * grid's spacing is close to the physics-sized grid's on this planet.
-     */
-    private const val MAP_SHARE_ROWS_PER_MAP_ROW = 1.75
+    /** Meters in a kilometer. */
+    private const val METERS_PER_KM = 1_000.0
 
-    /** What the last solve did, for the measurements. Not read by the generator. */
-    var lastSolveReport: String = ""
-        internal set
+    /** A share of a fine cell below which an overlap is taken for an edge merely touched. */
+    private const val TOUCHING_SHARE = 1e-6
+
+    /** How far, in solve cells, a map cell looks for water when no corner around it is water. */
+    private const val NEAREST_WATER_REACH_CELLS = 2
 
     /**
      * A sea with its temperature but without its currents: the base sea-surface temperature by
@@ -160,10 +159,10 @@ object OceanStage {
     /**
      * Solves the surface circulation for a world and carries its temperature around it.
      *
-     * [sea] supplies the land mask the gyres close against. The result's velocities are in metres
-     * a second, its temperature in degrees Celsius, and its anomaly in degrees away from the mean
-     * of the same row's open water. With `OceanConfig.enabled` off, every velocity and every
-     * anomaly is zero and the temperature is the bare latitude profile.
+     * [sea] supplies the land mask the gyres close against. The result's velocities are in meters a
+     * second, its temperature in degrees Celsius, and its anomaly in degrees away from the mean of
+     * the same row's open water. With `OceanConfig.enabled` off, every velocity and every anomaly is
+     * zero and the temperature is the bare latitude profile.
      */
     fun generate(config: WorldGenConfig, sea: SeaLevelResult): OceanResult =
         generateOcean(config, sea) { stencil, start, passes ->
@@ -172,11 +171,12 @@ object OceanStage {
         }
 
     /**
-     * The same circulation, solved on [accelerator] when the reader has graphics acceleration on.
+     * The same ocean, relaxed on [accelerator] when the reader has graphics acceleration on.
      *
-     * The accelerator is asked only for relaxation passes; the stencil that goes in and the residual
-     * that decides when to stop are the processor's own, so the two paths differ in arithmetic and
-     * nothing else. A device that declines gets the reference passes instead.
+     * The accelerator is asked only for relaxation passes; the stencils that go in and the residuals
+     * that decide when to stop are the processor's own, so the two paths differ in arithmetic and
+     * nothing else. A device that declines gets the reference passes instead, unless the generation
+     * has been cancelled, which is asked before every batch either way.
      */
     suspend fun generate(
         config: WorldGenConfig,
@@ -186,15 +186,36 @@ object OceanStage {
         // The one graphics switch the interface offers lives in the erosion section, and governs
         // every stage that can leave the processor rather than erosion alone.
         val device = if (config.erosion.acceleration == Acceleration.GPU) accelerator else null
+        currentCoroutineContext().ensureActive()
         device?.solve(stencil, start, passes)
             ?: run {
                 // A device that gave up because the generation was cancelled must not hand the
-                // whole solve to the processor: ask before falling back.
+                // rest of the solve to the processor: ask before falling back.
                 currentCoroutineContext().ensureActive()
                 OceanCirculation.relax(stencil, start, passes)
                 start
             }
     }
+
+    /**
+     * The two solves on the solve grid, before anything is carried to the map: what the tests read
+     * to hold the solves to their own tolerances and to the analytic answers.
+     */
+    internal class Circulation(
+        val cellsAcross: Int,
+        val cellsDown: Int,
+        val cellWidthMeters: Double,
+        val cellHeightMeters: Double,
+        val isWater: BooleanArray,
+        /** ψ, square meters a second. */
+        val stream: FloatArray,
+        val eastwardMps: FloatArray,
+        val northwardMps: FloatArray,
+        /** Degrees Celsius, zero on land. */
+        val temperatureC: FloatArray,
+        val flow: OceanCirculation.Solution,
+        val heat: OceanCirculation.Solution
+    )
 
     private inline fun generateOcean(
         config: WorldGenConfig,
@@ -215,103 +236,79 @@ object OceanStage {
         fillBaseTemperature(config, sea, zonal, temperature)
         if (!config.ocean.enabled) return OceanResult(velocityX, velocityY, temperature, anomaly)
 
-        val wind = regionalWind(config, sea)
-        val grid = heatGrid(config)
-        val report = StringBuilder()
-
-        val solveStarted = kotlin.time.TimeSource.Monotonic.markNow()
-        val levels = gridLevels(config, sea, wind, grid.first, grid.second)
-        val solvedStencil = levels.first()
-        val solution = OceanCirculation.solve(levels, relax)
-        val stream = solution.stream
-        report.append("${grid.first}x${grid.second} levels ${levels.size} cycles ${solution.cycles} residual ${solution.relativeResidual} solve ${solveStarted.elapsedNow().inWholeMilliseconds} ms")
-        run {
-            // Diagnostic, temporary: the float floor of the residual and where the worst cell is.
-            val res = OceanCirculation.residual(solvedStencil, stream)
-            val largestF = OceanCirculation.largest(OceanCirculation.balanceOf(solvedStencil))
-            var worstCell = 0; var worst = 0.0; var floor = 0.0; var psiMax = 0.0
-            for (cell in res.indices) {
-                if (!solvedStencil.isWater[cell]) continue
-                val a = kotlin.math.abs(res[cell]); if (a > worst) { worst = a; worstCell = cell }
-                val f = 2.0 * 1.1920929e-7 * kotlin.math.abs(stream[cell]) * solvedStencil.centreWeight[cell / grid.first]
-                if (f > floor) floor = f
-                psiMax = maxOf(psiMax, kotlin.math.abs(stream[cell].toDouble()))
-            }
-            report.append(" history " + solution.history.filterIndexed { i, _ -> i < 12 || i % 20 == 0 }.joinToString(",") { it.toString().take(7) })
-            report.append(" [psi max $psiMax m2/s, float floor ${floor / largestF}, worst at row ${worstCell / grid.first} col ${worstCell % grid.first} psi ${stream[worstCell]}]")
-        }
-        val (across, down) = grid
-        val gridWidthMetres = config.scale.worldWidthKm * METRES_PER_KM / across
-        val gridHeightMetres = worldHeightMetres(config) / down
-        val eastward = FloatArray(across * down)
-        val northward = FloatArray(across * down)
-        OceanCirculation.velocities(solvedStencil, stream, gridWidthMetres, gridHeightMetres, eastward, northward)
-
-        val heatStarted = kotlin.time.TimeSource.Monotonic.markNow()
-        val latitudeRowC = FloatArray(down) { zonal.waterC(ClimateStage.latitudeOf(it, down), Season.ANNUAL) }
-        val gridTemperature = OceanHeat.carry(
-            across, down, gridWidthMetres, gridHeightMetres, solvedStencil.isWater, eastward, northward,
-            latitudeRowC, RELAXATION_SECONDS
-        )
-        report.append(" heat ${heatStarted.elapsedNow().inWholeMilliseconds} ms")
-        lastSolveReport = report.toString()
-
-        if (across == cellsAcross && down == cellsDown) {
-            for (cell in 0 until cellsAcross * cellsDown) {
-                if (sea.isLand[cell]) continue
-                velocityX.data[cell] = eastward[cell]
-                velocityY.data[cell] = -northward[cell]
-                temperature.data[cell] = gridTemperature[cell]
-            }
-        } else {
-            for (row in 0 until cellsDown) {
-                val gridRow = (row + 0.5f) * down / cellsDown - 0.5f
-                for (column in 0 until cellsAcross) {
-                    val cell = row * cellsAcross + column
-                    if (sea.isLand[cell]) continue
-                    val gridColumn = (column + 0.5f) * across / cellsAcross - 0.5f
-                    velocityX.data[cell] = OceanHeat.sample(eastward, across, down, gridColumn, gridRow)
-                    velocityY.data[cell] = -OceanHeat.sample(northward, across, down, gridColumn, gridRow)
-                    val carried = sampleWater(gridTemperature, solvedStencil.isWater, across, down, gridColumn, gridRow)
-                    if (!carried.isNaN()) temperature.data[cell] = carried
-                }
-            }
-        }
+        val solved = circulate(config, sea, zonal, relax)
+        carryToMap(config, sea, solved, velocityX, velocityY, temperature)
         buildAnomaly(config, sea, temperature, anomaly)
         return OceanResult(velocityX, velocityY, temperature, anomaly)
     }
 
-    private const val METRES_PER_KM = 1_000.0
+    /** The circulation and its heat on the solve grid. See [Circulation]. */
+    internal inline fun circulate(
+        config: WorldGenConfig,
+        sea: SeaLevelResult,
+        zonal: ZonalClimate,
+        relax: (OceanStencil, FloatArray, Int) -> FloatArray
+    ): Circulation {
+        val (across, down) = solveGrid(config.scale)
+        val widthMeters = config.scale.worldWidthKm * METERS_PER_KM / across
+        val heightMeters = worldHeightMeters(config.scale) / down
+        val wind = regionalWind(config, sea)
+        val isWater = waterOn(config, sea, across, down)
 
-    private fun worldHeightMetres(config: WorldGenConfig): Double =
-        config.scale.worldWidthKm * WorldScale.WORLD_HEIGHT_AS_SHARE_OF_WIDTH * METRES_PER_KM
+        val flowLevels = OceanCirculation.levels(
+            circulationStencil(config, wind, isWater, across, down, withForcing = true), widthMeters, heightMeters,
+            everyCellWater = true
+        ) { coarseAcross, coarseDown, coarseWater ->
+            circulationStencil(config, wind, coarseWater, coarseAcross, coarseDown, withForcing = false)
+        }
+        val flow = OceanCirculation.solve(
+            flowLevels, FloatArray(across * down), OceanCirculation.RESIDUAL_TOLERANCE, poleIsWall = true,
+            bodies = null, relax
+        )
+        val stream = flow.values
+        val eastward = FloatArray(across * down)
+        val northward = FloatArray(across * down)
+        OceanCirculation.velocities(flowLevels.first(), stream, widthMeters, heightMeters, eastward, northward)
 
-    /**
-     * The grid the circulation is solved on and the heat carried on, as columns and rows.
-     *
-     * Temporary: the three forms the maintainer is choosing between. See `OceanConfig.heatGrid`.
-     */
-    internal fun heatGrid(config: WorldGenConfig): Pair<Int, Int> {
-        val cellsAcross = config.width
-        val cellsDown = config.height
-        val heightShare = WorldScale.WORLD_HEIGHT_AS_SHARE_OF_WIDTH
-        return when (config.ocean.heatGrid) {
-            OceanHeatGrid.FINE -> cellsAcross to cellsDown
-            OceanHeatGrid.PHYSICS, OceanHeatGrid.PHYSICS_ALWAYS -> {
-                val spacingMetres = narrowestStommelLayerMetres(config.scale) / CELLS_ACROSS_STOMMEL_LAYER
-                val fineWidthMetres = config.scale.cellWidthKm(cellsAcross) * METRES_PER_KM
-                if (spacingMetres < fineWidthMetres && config.ocean.heatGrid == OceanHeatGrid.PHYSICS) {
-                    cellsAcross to cellsDown
-                } else {
-                    val down = rowsForCycle((worldHeightMetres(config) / spacingMetres).roundToInt())
-                    evenColumns(down, heightShare) to down
-                }
-            }
-            OceanHeatGrid.MAP_SHARE -> {
-                val down = (cellsDown * MAP_SHARE_ROWS_PER_MAP_ROW).roundToInt()
-                evenColumns(down, heightShare) to down
+        val targetC = FloatArray(across * down)
+        for (row in 0 until down) {
+            val latitudeC = zonal.waterC(ClimateStage.latitudeOf(row, down), Season.ANNUAL)
+            for (cell in row * across until (row + 1) * across) {
+                if (isWater[cell]) targetC[cell] = latitudeC
             }
         }
+        val heatLevels = OceanCirculation.levels(
+            OceanHeat.stencil(across, down, widthMeters, heightMeters, isWater, stream, targetC, RELAXATION_SECONDS, withTarget = true),
+            widthMeters, heightMeters, everyCellWater = false
+        ) { coarseAcross, coarseDown, coarseWater ->
+            OceanHeat.stencil(
+                coarseAcross, coarseDown,
+                config.scale.worldWidthKm * METERS_PER_KM / coarseAcross, worldHeightMeters(config.scale) / coarseDown,
+                coarseWater, resample(stream, across, down, coarseAcross, coarseDown),
+                FloatArray(coarseAcross * coarseDown), RELAXATION_SECONDS, withTarget = false
+            )
+        }
+        val heat = OceanCirculation.solveByKrylov(
+            heatLevels, targetC.copyOf(), OceanCirculation.RESIDUAL_TOLERANCE, poleIsWall = false,
+            OceanCirculation.waterBodies(isWater, across, down), relax
+        )
+        return Circulation(across, down, widthMeters, heightMeters, isWater, stream, eastward, northward, heat.values, flow, heat)
+    }
+
+    /**
+     * The grid both problems are solved on, as columns and rows: square cells on the ground, two to
+     * the narrowest Stommel layer.
+     *
+     * Sized by the physics and not by the map. The narrowest layer is `r/β` where β is largest, at
+     * the equator, `2Ω/a`, so the rows are `π a / (r a / 4Ω)`, which is `4πΩ/r`: about 925 on any
+     * planet that turns as Earth does, whatever its radius, since a larger planet has a wider
+     * layer to resolve in proportion. Rounded up for the V-cycle, never coarser than asked.
+     */
+    internal fun solveGrid(scale: WorldScale): Pair<Int, Int> {
+        val spacingMeters = narrowestStommelLayerMeters(scale) / CELLS_ACROSS_STOMMEL_LAYER
+        val down = rowsForCycle(ceil(worldHeightMeters(scale) / spacingMeters).toInt())
+        val across = (down / WorldScale.WORLD_HEIGHT_AS_SHARE_OF_WIDTH).roundToInt()
+        return (across + (across and 1)) to down
     }
 
     /**
@@ -325,40 +322,18 @@ object OceanStage {
         return (rows + step - 1) / step * step
     }
 
-    /** Twice the rows on the true-shape world, rounded to an even count so red-black holds on the cylinder. */
-    private fun evenColumns(down: Int, heightShare: Double): Int {
-        val across = (down / heightShare).roundToInt()
-        return across + (across and 1)
-    }
-
     /**
-     * The narrowest Stommel layer anywhere, in metres: `r/β` where β is largest, at the equator,
+     * The narrowest Stommel layer anywhere, in meters: `r/β` where β is largest, at the equator,
      * `2Ω/a`. The subtropical gyres' western boundary currents reach the equator in this world's
      * belts, whose trades peak there.
      */
-    fun narrowestStommelLayerMetres(scale: WorldScale): Double =
-        BOTTOM_DRAG_PER_S / scale.planetaryVorticityGradientPerMetreSecond(0.0)
+    fun narrowestStommelLayerMeters(scale: WorldScale): Double =
+        BOTTOM_DRAG_PER_S / scale.planetaryVorticityGradientPerMeterSecond(0.0)
 
-    /**
-     * The grids of the V-cycle for [across] by [down], finest first: the solve grid with its
-     * forcing, then each coarser one with none, since what a coarse grid solves for is a correction.
-     */
-    private fun gridLevels(
-        config: WorldGenConfig,
-        sea: SeaLevelResult,
-        wind: PressureWind.Vectors?,
-        across: Int,
-        down: Int
-    ): List<OceanStencil> {
-        val finest = stencilOn(config, wind, waterOn(config, sea, across, down), across, down, withForcing = true)
-        return OceanCirculation.levels(
-            finest, config.scale.worldWidthKm * METRES_PER_KM / across, worldHeightMetres(config) / down
-        ) { coarseAcross, coarseDown, isWater ->
-            stencilOn(config, wind, isWater, coarseAcross, coarseDown, withForcing = false)
-        }
-    }
+    private fun worldHeightMeters(scale: WorldScale): Double =
+        scale.worldWidthKm * WorldScale.WORLD_HEIGHT_AS_SHARE_OF_WIDTH * METERS_PER_KM
 
-    /** The regional surface wind on the full grid, metres a second, eastward and southward; null when the belts are the whole wind. */
+    /** The regional surface wind on the full grid, meters a second, eastward and southward; null when the belts are the whole wind. */
     private fun regionalWind(config: WorldGenConfig, sea: SeaLevelResult): PressureWind.Vectors? {
         if (!config.climate.pressureWinds) return null
         // The temperature the pressure is read off leaves out the current anomaly, which this stage
@@ -388,35 +363,42 @@ object OceanStage {
     }
 
     /**
-     * Which cells of a grid are water: the full grid's own mask on the full grid, and elsewhere
-     * the full grid's water share read bilinearly at the cell's centre, water from a half. A
-     * resampling of the coast, so a coarser grid's coast follows the ground's rather than a union
-     * of fixed blocks.
+     * Which cells of the solve grid are water: those every map cell they overlap is water.
+     *
+     * Conservative on purpose. The coast moves seaward by at most one solve cell, a few kilometers,
+     * and in exchange a strip of land that is one map cell wide is always land on the solve grid
+     * too, whichever grid is finer, so no current and no heat crosses it. A resampling of the coast
+     * rather than a union of fixed blocks: the solve grid's cells do not line up with the map's.
      */
     private fun waterOn(config: WorldGenConfig, sea: SeaLevelResult, across: Int, down: Int): BooleanArray {
         val cellsAcross = config.width
         val cellsDown = config.height
-        if (across == cellsAcross && down == cellsDown) return BooleanArray(across * down) { !sea.isLand[it] }
-        val waterShare = FloatArray(cellsAcross * cellsDown) { if (sea.isLand[it]) 0f else 1f }
         val isWater = BooleanArray(across * down)
+        val columnsPerCell = cellsAcross.toDouble() / across
+        val rowsPerCell = cellsDown.toDouble() / down
         for (row in 0 until down) {
-            val fineRow = (row + 0.5f) * cellsDown / down - 0.5f
+            val firstRow = floor(row * rowsPerCell + TOUCHING_SHARE).toInt()
+            val lastRow = (ceil((row + 1) * rowsPerCell - TOUCHING_SHARE).toInt() - 1).coerceAtMost(cellsDown - 1)
             for (column in 0 until across) {
-                val fineColumn = (column + 0.5f) * cellsAcross / across - 0.5f
-                isWater[row * across + column] =
-                    OceanHeat.sample(waterShare, cellsAcross, cellsDown, fineColumn, fineRow) >= HALF
+                val firstColumn = floor(column * columnsPerCell + TOUCHING_SHARE).toInt()
+                val lastColumn = (ceil((column + 1) * columnsPerCell - TOUCHING_SHARE).toInt() - 1).coerceAtMost(cellsAcross - 1)
+                var allWater = true
+                for (mapRow in firstRow..lastRow) {
+                    for (mapColumn in firstColumn..lastColumn) {
+                        if (sea.isLand[mapRow * cellsAcross + mapColumn]) allWater = false
+                    }
+                }
+                isWater[row * across + column] = allWater
             }
         }
         return isWater
     }
 
-    private const val HALF = 0.5f
-
     /**
-     * The Stommel problem on one grid: the stress of the belts' wind and the regional wind together,
-     * `ρ_air C_D |W| W`, its curl by central differences in metres, and β per row.
+     * The circulation's problem on one grid: the stress of the belts' wind and the regional wind
+     * together, `ρ_air C_D |W| W`, its curl by central differences in meters, and β per row.
      */
-    private fun stencilOn(
+    private fun circulationStencil(
         config: WorldGenConfig,
         wind: PressureWind.Vectors?,
         isWater: BooleanArray,
@@ -426,27 +408,32 @@ object OceanStage {
     ): OceanStencil {
         val cellsAcross = config.width
         val cellsDown = config.height
-        val widthMetres = config.scale.worldWidthKm * METRES_PER_KM / across
-        val heightMetres = worldHeightMetres(config) / down
+        val widthMeters = config.scale.worldWidthKm * METERS_PER_KM / across
+        val heightMeters = worldHeightMeters(config.scale) / down
+        val beta = DoubleArray(down) {
+            config.scale.planetaryVorticityGradientPerMeterSecond(ClimateStage.latitudeOf(it, down).toDouble())
+        }
+        if (!withForcing) {
+            return OceanCirculation.stencil(across, down, widthMeters, heightMeters, isWater, beta, BOTTOM_DRAG_PER_S, DoubleArray(across * down))
+        }
         val stressEast = DoubleArray(across * down)
         val stressNorth = DoubleArray(across * down)
         for (row in 0 until down) {
             val latitude = ClimateStage.latitudeOf(row, down)
             val beltEast = PressureWind.BELT_SPEED_MPS * beltWindShare(latitude)
-            val fineRow = (row + 0.5f) * cellsDown / down - 0.5f
+            val mapRow = (row + 0.5f) * cellsDown / down - 0.5f
             for (column in 0 until across) {
                 val cell = row * across + column
                 var east = beltEast.toDouble()
                 var north = 0.0
                 if (wind != null) {
-                    val fineColumn = (column + 0.5f) * cellsAcross / across - 0.5f
-                    east += OceanHeat.sample(wind.eastwardMps, cellsAcross, cellsDown, fineColumn, fineRow)
-                    north -= OceanHeat.sample(wind.southwardMps, cellsAcross, cellsDown, fineColumn, fineRow)
+                    val mapColumn = (column + 0.5f) * cellsAcross / across - 0.5f
+                    east += sample(wind.eastwardMps, cellsAcross, cellsDown, mapColumn, mapRow)
+                    north -= sample(wind.southwardMps, cellsAcross, cellsDown, mapColumn, mapRow)
                 }
-                val speed = sqrt(east * east + north * north)
-                val dragPerMetre = PressureWind.AIR_DENSITY_KG_PER_M3 * DRAG_COEFFICIENT * speed
-                stressEast[cell] = dragPerMetre * east
-                stressNorth[cell] = dragPerMetre * north
+                val dragPerMeter = PressureWind.AIR_DENSITY_KG_PER_M3 * DRAG_COEFFICIENT * sqrt(east * east + north * north)
+                stressEast[cell] = dragPerMeter * east
+                stressNorth[cell] = dragPerMeter * north
             }
         }
         val forcing = DoubleArray(across * down)
@@ -454,36 +441,91 @@ object OceanStage {
         for (row in 0 until down) {
             val rowNorth = (row - 1).coerceAtLeast(0)
             val rowSouth = (row + 1).coerceAtMost(down - 1)
-            val northToSouthMetres = (rowSouth - rowNorth) * heightMetres
+            val northToSouthMeters = (rowSouth - rowNorth) * heightMeters
             for (column in 0 until across) {
                 val columnEast = if (column + 1 == across) 0 else column + 1
                 val columnWest = if (column == 0) across - 1 else column - 1
                 val dStressNorthDx = (stressNorth[row * across + columnEast] -
-                    stressNorth[row * across + columnWest]) / (2.0 * widthMetres)
+                    stressNorth[row * across + columnWest]) / (2.0 * widthMeters)
                 // y runs north, and the row to the north is the one above.
                 val dStressEastDy = (stressEast[rowNorth * across + column] -
-                    stressEast[rowSouth * across + column]) / northToSouthMetres
+                    stressEast[rowSouth * across + column]) / northToSouthMeters
                 forcing[row * across + column] = (dStressNorthDx - dStressEastDy) * perDensityDepth
             }
         }
-        val beta = DoubleArray(down) {
-            config.scale.planetaryVorticityGradientPerMetreSecond(ClimateStage.latitudeOf(it, down).toDouble())
+        return OceanCirculation.stencil(across, down, widthMeters, heightMeters, isWater, beta, BOTTOM_DRAG_PER_S, forcing)
+    }
+
+    /** A field on one grid read bilinearly at every cell center of another covering the same map. */
+    private fun resample(field: FloatArray, fromAcross: Int, fromDown: Int, toAcross: Int, toDown: Int): FloatArray {
+        val result = FloatArray(toAcross * toDown)
+        for (row in 0 until toDown) {
+            val fromRow = (row + 0.5f) * fromDown / toDown - 0.5f
+            for (column in 0 until toAcross) {
+                val fromColumn = (column + 0.5f) * fromAcross / toAcross - 0.5f
+                result[row * toAcross + column] = sample(field, fromAcross, fromDown, fromColumn, fromRow)
+            }
         }
-        return OceanCirculation.stencil(
-            across, down, widthMetres, heightMetres, isWater, beta, BOTTOM_DRAG_PER_S,
-            if (withForcing) forcing else DoubleArray(across * down)
-        )
+        return result
+    }
+
+    /** A per-cell field bilinearly at a fractional position between cell centers; columns wrap, rows clamp. */
+    private fun sample(field: FloatArray, cellsAcross: Int, cellsDown: Int, column: Float, row: Float): Float {
+        val left = floor(column).toInt()
+        val acrossBlend = column - left
+        val westColumn = ((left % cellsAcross) + cellsAcross) % cellsAcross
+        val eastColumn = if (westColumn + 1 == cellsAcross) 0 else westColumn + 1
+        val clampedRow = row.coerceIn(0f, (cellsDown - 1).toFloat())
+        val above = minOf(clampedRow.toInt(), cellsDown - 1)
+        val below = minOf(above + 1, cellsDown - 1)
+        val downBlend = clampedRow - above
+        val top = field[above * cellsAcross + westColumn] * (1f - acrossBlend) + field[above * cellsAcross + eastColumn] * acrossBlend
+        val bottom = field[below * cellsAcross + westColumn] * (1f - acrossBlend) + field[below * cellsAcross + eastColumn] * acrossBlend
+        return top * (1f - downBlend) + bottom * downBlend
+    }
+
+    /**
+     * The solve grid's currents and temperature on the map's cells: the currents read bilinearly,
+     * zero on the map's land; the temperature read bilinearly over the water corners alone,
+     * renormalized, and where none of the four is water, from the nearest water cell within
+     * [NEAREST_WATER_REACH_CELLS]; failing that the cell keeps its latitude's temperature.
+     */
+    private fun carryToMap(
+        config: WorldGenConfig,
+        sea: SeaLevelResult,
+        solved: Circulation,
+        velocityX: FloatField,
+        velocityY: FloatField,
+        temperature: FloatField
+    ) {
+        val cellsAcross = config.width
+        val cellsDown = config.height
+        val across = solved.cellsAcross
+        val down = solved.cellsDown
+        for (row in 0 until cellsDown) {
+            val gridRow = (row + 0.5f) * down / cellsDown - 0.5f
+            for (column in 0 until cellsAcross) {
+                val cell = row * cellsAcross + column
+                if (sea.isLand[cell]) continue
+                val gridColumn = (column + 0.5f) * across / cellsAcross - 0.5f
+                velocityX.data[cell] = sample(solved.eastwardMps, across, down, gridColumn, gridRow)
+                velocityY.data[cell] = -sample(solved.northwardMps, across, down, gridColumn, gridRow)
+                val carried = sampleWater(solved.temperatureC, solved.isWater, across, down, gridColumn, gridRow)
+                if (!carried.isNaN()) temperature.data[cell] = carried
+            }
+        }
     }
 
     /**
      * A field defined on water, read bilinearly at a fractional position with the land corners
-     * left out and the weights renormalised over the water ones; NaN where all four are land.
+     * left out and the weights renormalized over the water ones; where all four are land, the
+     * nearest water cell's value within [NEAREST_WATER_REACH_CELLS], by distance in cells; NaN
+     * beyond that.
      */
     private fun sampleWater(field: FloatArray, isWater: BooleanArray, across: Int, down: Int, column: Float, row: Float): Float {
         val left = floor(column).toInt()
         val acrossBlend = column - left
-        var westColumn = left % across
-        if (westColumn < 0) westColumn += across
+        val westColumn = ((left % across) + across) % across
         val eastColumn = if (westColumn + 1 == across) 0 else westColumn + 1
         val clampedRow = row.coerceIn(0f, (down - 1).toFloat())
         val above = minOf(clampedRow.toInt(), down - 1)
@@ -500,7 +542,27 @@ object OceanStage {
         add(above * across + eastColumn, acrossBlend * (1f - downBlend))
         add(below * across + westColumn, (1f - acrossBlend) * downBlend)
         add(below * across + eastColumn, acrossBlend * downBlend)
-        return if (weight > 0f) sum / weight else Float.NaN
+        if (weight > 0f) return sum / weight
+        var nearest = Float.NaN
+        var nearestDistance = Float.MAX_VALUE
+        val centerColumn = (column + 0.5f).toInt()
+        val centerRow = (row + 0.5f).toInt()
+        for (rowOffset in -NEAREST_WATER_REACH_CELLS..NEAREST_WATER_REACH_CELLS) {
+            val candidateRow = centerRow + rowOffset
+            if (candidateRow < 0 || candidateRow >= down) continue
+            for (columnOffset in -NEAREST_WATER_REACH_CELLS..NEAREST_WATER_REACH_CELLS) {
+                val candidateColumn = ((centerColumn + columnOffset) % across + across) % across
+                val cell = candidateRow * across + candidateColumn
+                if (!isWater[cell]) continue
+                val distance = (candidateRow - row) * (candidateRow - row) +
+                    (centerColumn + columnOffset - column) * (centerColumn + columnOffset - column)
+                if (distance < nearestDistance) {
+                    nearestDistance = distance
+                    nearest = field[cell]
+                }
+            }
+        }
+        return nearest
     }
 
     /**
@@ -528,6 +590,10 @@ object OceanStage {
     /**
      * Fills [anomaly] with each water cell's departure, in degrees Celsius, from the mean
      * temperature of the open water on its own row. Land is left at zero.
+     *
+     * The departure from the zonal mean and not from the latitude profile, so the energy balance's
+     * own meridional transport is not counted a second time: the anomaly moves heat along a row and
+     * never changes a row's mean.
      */
     private fun buildAnomaly(
         config: WorldGenConfig,

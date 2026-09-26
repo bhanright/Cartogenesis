@@ -37,13 +37,13 @@ class WebGpuOcean private constructor(
             setFloat(forcing, cell, stencil.forcing[cell])
             setFloat(stream, cell, start[cell])
         }
-        // East, west, north and south: one vec4 of weights per row.
-        val weights = allocateFloats(cellsDown * WEIGHTS_PER_ROW)
-        for (row in 0 until cellsDown) {
-            setFloat(weights, row * WEIGHTS_PER_ROW, stencil.eastWeight[row])
-            setFloat(weights, row * WEIGHTS_PER_ROW + 1, stencil.westWeight[row])
-            setFloat(weights, row * WEIGHTS_PER_ROW + 2, stencil.northWeight[row])
-            setFloat(weights, row * WEIGHTS_PER_ROW + 3, stencil.southWeight[row])
+        // East, west, north and south: one vec4 of weights per cell.
+        val weights = allocateFloats(cellCount.toInt() * WEIGHTS_PER_CELL)
+        for (cell in 0 until cellCount.toInt()) {
+            setFloat(weights, cell * WEIGHTS_PER_CELL, stencil.eastWeight[cell])
+            setFloat(weights, cell * WEIGHTS_PER_CELL + 1, stencil.westWeight[cell])
+            setFloat(weights, cell * WEIGHTS_PER_CELL + 2, stencil.northWeight[cell])
+            setFloat(weights, cell * WEIGHTS_PER_CELL + 3, stencil.southWeight[cell])
         }
         val result = awaitPromise(
             runOcean(device, cellsAcross, cellsDown, water, forcing, stream, weights, passes)
@@ -53,8 +53,8 @@ class WebGpuOcean private constructor(
     }
 
     companion object {
-        /** East, west, north and south: the four weights each row carries. */
-        private const val WEIGHTS_PER_ROW = 4
+        /** East, west, north and south: the four weights each cell carries. */
+        private const val WEIGHTS_PER_CELL = 4
 
         /**
          * The ocean solver on the device erosion is already using.
@@ -82,7 +82,8 @@ private external fun setWaterWord(array: JsHandle, index: Int, value: Int)
         const bytesPerCell = 4;
         const workGroupSide = 16;
         const bytes = width * height * bytesPerCell;
-        if (bytes > device.limits.maxStorageBufferBindingSize || bytes > device.limits.maxBufferSize) {
+        // The weights are four words a cell, the largest buffer bound.
+        if (bytes * 4 > device.limits.maxStorageBufferBindingSize || bytes * 4 > device.limits.maxBufferSize) {
             return null;
         }
         const allocated = [];
@@ -118,7 +119,7 @@ private external fun setWaterWord(array: JsHandle, index: Int, value: Int)
                     if (y > 0u) { streamNorth = stream[cell - params.width]; }
                     var streamSouth = 0.0;
                     if (y + 1u < params.height) { streamSouth = stream[cell + params.width]; }
-                    let weight = weights[y];
+                    let weight = weights[cell];
                     // Grouped left to right, as the reference sums them. WGSL has no way to
                     // forbid reassociation, so this is as close as a browser can be held to the
                     // processor's own order. No backtick may appear anywhere in this shader: the
@@ -159,7 +160,7 @@ private external fun setWaterWord(array: JsHandle, index: Int, value: Int)
             const water = buffer(bytes, storageUsage);
             const forcing = buffer(bytes, storageUsage);
             const stream = buffer(bytes, storageUsage | GPUBufferUsage.COPY_SRC);
-            const weights = buffer(height * 16, storageUsage);
+            const weights = buffer(bytes * 4, storageUsage);
             const readback = buffer(bytes, GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ);
             // Four 32-bit words keep the uniform binding at 16 bytes.
             const params = buffer(16, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST);

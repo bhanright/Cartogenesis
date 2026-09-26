@@ -363,7 +363,27 @@
   end at (2720, 470): a scarp running nearly straight down a column from about (2960, 717) to
   (2950, 820) on the sheet, and a delta flat with straight edges at about (3010-3055, 800-835).
   Both are in the relief, where the tilt makes the scarp plainer; no window of that size on the
-  island's range avoids them and the dry belt at once.
+  island's range avoids them and the dry belt at once. On the implicit erosion's terrain Site 5c
+  looked at every window again and moved four: the styles, the data frame (with the data cards)
+  and the relief onto the south-western peninsula, where the comb of gullies down the columns is
+  least, and the opening's band off seed 718106 altogether (below); the six steps stayed. What the
+  page still shows, because the figure cannot move off it: the lens's whole world carries every
+  mark, and the reel's worlds at 512, whole, show small glacier flats of their own.
+- **No strip of 800 rows round any world measured is free of long straight runs.** Site 5c traced
+  every coast (as drawn, and smoothed to 12 km), shelf break, ice-sheet edge, ice-flat edge and
+  land-biome belt edge on the 2048 sheet of 21 worlds (718106, and 1, 3, 7, 8, 12, 21, 42, 64, 99,
+  123, 300, 777, 1066, 2024, 2026, 5000, 31337, 65536, 90210 and 424242 made as the application
+  makes a world with only a seed, taken to 2048) and flagged every run that stays within 12 km of
+  its chord for more than 403 km, the Himalayan front's straightest stretch (Bendick and Bilham
+  2001). Every band of 800 rows on every world holds at least one; the fewest on a band with 40%
+  land or more is three. On 718106 the land-rich bands carry 22 or more, among them the ice cap's
+  flats and the subduction coast straight down a column (the trench-is-a-plane entry). The page's
+  band is now seed 1's rows 848 to 1,648 from column 3,264, the maintainer's choice of three
+  offered; it keeps two coast runs, the smoothed coast from about (735, 1007) to (819, 1126) on the
+  sheet, 427 km, and the shelf break from about (2139, 1530) to (2295, 1572), 473 km, and one belt
+  edge of 434 km along a row near 1,375; its range's flanks also show the comb of gullies down
+  the columns, plainest of the three offered. The full picture refresh after the square grid picks the
+  band again, by the same measure. 2026-09-26, Site 5c.
 - **Six operators still count a row as a column, each outside Fix 2's list.** Found by reading the
   code, not by a guard: the climate stage's rainfall blur (a square box of cells, sized by
   `RAIN_BLUR_REFERENCE_WIDTH`) and its two coastal-reach blurs, the water exposure and the offshore

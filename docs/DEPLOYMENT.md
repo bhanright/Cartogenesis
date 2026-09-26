@@ -9,7 +9,11 @@ covers the site's own contents and how to deploy by hand.
 `./gradlew :web:assembleSite` builds the application and assembles it with `site/` into
 `web/build/site`: it drops the source map and the build's own emitted `index.html`, and stamps the
 loader's URL with the commit. `./gradlew :desktop:siteTest` does the same and then checks the tree
-it produced.
+it produced. Three of its checks lay the page out in a headless Chrome, which the test starts
+itself (see `HeadlessChrome` in `:desktop`'s tests): the page running past the screen at widths
+from 360 to 3440, and the zoom lens under a finger. So the machine that runs it needs Chrome,
+found where it is installed or where `CARTOGENESIS_CHROME` points; without it those three fail
+by name rather than passing unmeasured.
 
 `.github/workflows/site.yml` runs both on any pushed `v*` tag, or by hand from the Actions tab, and
 uploads `web/build/site` to the Cloudflare Pages project `cartogenesis` using two repository

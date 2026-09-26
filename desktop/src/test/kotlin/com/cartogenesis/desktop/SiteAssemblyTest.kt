@@ -7,6 +7,9 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.test.fail
 import kotlin.math.abs
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 
 /**
  * Checks the tree `:web:assembleSite` builds for cartogenesis.com, before it is uploaded.
@@ -42,18 +45,20 @@ class SiteAssemblyTest {
         const val PREVIEW_TAKEOVER_MOST_MEAN_DIFFERENCE = 12.0
 
         /**
-         * The most the full band may weigh: 400 KiB, where it measured 373,698 bytes, 4096 by 800 at
-         * [SiteImagery.WORLD_BAND_QUALITY], on the implicit erosion's terrain (288,294 before it,
-         * on ground less finely cut). It is the page's largest request and every wide or dense
-         * screen fetches it as the page opens.
+         * The most the full band may weigh: 300 KiB, where it measured 277,620 bytes, 4096 by 800 at
+         * [SiteImagery.WORLD_BAND_QUALITY], on seed 1's rows 848 to 1,648, the band Site 5c moved to
+         * (105,912 on 718106's rows 896 to 1,696, which were two thirds sea, and 373,698 on the
+         * author's first rows). Heavier because the new rows are land for four tenths of their
+         * length, ranges and rivers the encoder keeps; every wide or dense screen fetches it as the
+         * page opens.
          */
-        const val WORLD_BAND_MOST_BYTES = 409_600L
+        const val WORLD_BAND_MOST_BYTES = 307_200L
 
         /**
-         * The most the half band may weigh: 120 KiB, where it measured 113,314 bytes, 2048 by 400,
-         * on the implicit erosion's terrain (90,848 before it).
+         * The most the half band may weigh: 96 KiB, where it measured 85,432 bytes, 2048 by 400, on
+         * seed 1's rows (34,438 on 718106's rows 896 to 1,696).
          */
-        const val WORLD_BAND_HALF_MOST_BYTES = 122_880L
+        const val WORLD_BAND_HALF_MOST_BYTES = 98_304L
 
         /**
          * The least and most of its frame a data layer may cover. The rivers covered 2.0% of the
@@ -81,19 +86,57 @@ class SiteAssemblyTest {
 
         /**
          * The ceiling on what the page fetches as it loads, by the kind of screen (see
-         * [fetchedAtLoad]): what the list sums to, 527,199 bytes narrow and 787,583 wide or dense,
+         * [fetchedAtLoad]): what the list sums to, 517,404 bytes narrow and 709,592 wide or dense,
          * each plus 64 KiB for the pictures and the page moving when they are made again.
          *
          * Measured once the page's faces were WOFF2 cut to its characters, which took 943,600
          * bytes off every screen, and its pictures were made on the implicit erosion's terrain,
-         * whose more finely cut ground put 60,837 and 123,775 bytes back. No lazy picture is fetched
+         * whose more finely cut ground put 60,837 and 123,775 bytes back. Site 5c then took 78,876
+         * and 267,786 off again: the band's rows moved south of the ice cap, onto ground that is
+         * more sea, and the page grew by 13,094 bytes for its review fixes; the band then moved to
+         * seed 1's rows, four tenths land, which put 50,994 back on the half band's screens and
+         * 171,708 on the full band's, the page having grown by another 4,993 for the round toggles,
+         * the copy review and the band's caption. No lazy picture is fetched
          * as the page loads (docs/DESIGN_LEDGER.md, Site 5b), so the faces, the page and the
          * pictures above the fold are the whole of it, and a face grown back to TrueType would not
          * fit.
          */
         val LOAD_BYTES: Map<String, Long> = mapOf(
-            "narrow at one device pixel" to 527_199L + 65_536L,
-            "wide or dense" to 787_583L + 65_536L
+            "narrow at one device pixel" to 517_404L + 65_536L,
+            "wide or dense" to 709_592L + 65_536L
+        )
+
+        /**
+         * How long the page is given after a load or a scroll before it is measured: its fonts are
+         * in by then, and this is time for the script's own layout (the opening measures itself
+         * once its type is in) and for an observer's first answer.
+         */
+        const val LAYOUT_SETTLES_MS = 300L
+
+        /**
+         * How long a finger rests before the held lens is measured: the page's hold, 280 ms, and
+         * time for the lens to fade in, 150 ms.
+         */
+        const val LENS_HELD_AFTER_MS = 480L
+
+        /** How far inside the map's edge a press at an edge or a corner lands, in CSS pixels. */
+        const val PRESS_INSET_PX = 3.0
+
+        /**
+         * A swipe as a finger makes one: ten moves of 15 CSS pixels, 150 in all, one a frame at
+         * 60 frames a second.
+         */
+        const val SWIPE_STEPS = 10
+        const val SWIPE_STEP_PX = 15.0
+        const val FINGER_EVENT_MS = 16L
+
+        /**
+         * The names of what a page's structured data could say about a program that this page
+         * never states: a rating, a review, a count of anything, and who made or publishes it.
+         */
+        val STATED_NOWHERE = setOf(
+            "aggregaterating", "review", "reviews", "interactionstatistic", "author", "creator",
+            "publisher", "contentrating", "award"
         )
     }
 
@@ -276,12 +319,12 @@ class SiteAssemblyTest {
             "world-whole.webp" to (1024 to 512),
             "world-full.webp" to (4096 to 2048),
             "relief-natural.webp" to (640 to 400),
-            // Every seed is a world: five worlds whole, each half its 1024 by 512 sheet.
-            "seed-7.webp" to (512 to 256),
-            "seed-42.webp" to (512 to 256),
-            "seed-1066.webp" to (512 to 256),
-            "seed-2024.webp" to (512 to 256),
-            "seed-31337.webp" to (512 to 256)
+            // Every seed is a world: five worlds whole, each its 1024 by 512 sheet at its own pixels.
+            "seed-42.webp" to (1024 to 512),
+            "seed-1066.webp" to (1024 to 512),
+            "seed-2024.webp" to (1024 to 512),
+            "seed-777.webp" to (1024 to 512),
+            "seed-7.webp" to (1024 to 512)
         )
         assertEquals(
             expected.mapValues { it.value }.toSortedMap(),
@@ -457,7 +500,9 @@ class SiteAssemblyTest {
                     .map { it.groupValues[1] to it.groupValues[2] }.toList()
             }.toList()
         assertEquals(2, pickers.size, "the slider has ${pickers.size} pickers, where it has a left and a right")
-        val offered = styles.map { it.file.removePrefix("style-").removeSuffix(".webp") to it.style.label }
+        // By the application's own names, spelled as the page spells: the page is in American
+        // English and the application's labels are not all (Colour-blind).
+        val offered = styles.map { it.file.removePrefix("style-").removeSuffix(".webp") to it.style.label.replace("Colour", "Color") }
         pickers.forEach { assertEquals(offered, it, "a picker does not offer the twelve styles by their own names") }
 
         val loaded = Regex("""<img\s[^>]*src="([^"]+)"""").findAll(figure).map { it.groupValues[1] }.toList()
@@ -531,11 +576,34 @@ class SiteAssemblyTest {
             // The brightest pixel, for the title card's scrim: the contrast guard measures the card's
             // words over pure white, which is the brightest a pixel can be and, here, is.
             val brightest = pixels.maxOf { (it shr 16 and 0xFF) + (it shr 8 and 0xFF) + (it and 0xFF) }
+            // And the opening's panel over it: the brass eyebrow, the panel's floor, through the
+            // panel over the band's brightest pixel, at AA. SitePaletteContrastTest holds it over
+            // pure white, which no band can pass; this is the band as it ships.
+            val brightestPixel = pixels.maxBy { (it shr 16 and 0xFF) + (it shr 8 and 0xFF) + (it and 0xFF) }
+            val eyebrow = panelEyebrowContrastOver(brightestPixel)
+            assertTrue(eyebrow >= 4.5, "${figure.file}'s brightest pixel puts the opening's brass eyebrow at %.2f:1 through the panel, under AA".format(eyebrow))
+            println("SITE ${figure.file}: the opening's eyebrow reads at %.2f:1 through the panel over its brightest pixel".format(eyebrow))
             println(
                 "SITE ${figure.file}: seam %.1f against %.1f at the roughest inside, first stretch %.1f from the preview, %d bytes, brightest pixel %d of 765"
                     .format(seam, roughest, meanGreen, published.length(), brightest)
             )
         }
+    }
+
+    /**
+     * The brass eyebrow's contrast through the opening's panel, the page's ink at the share its style
+     * sheet mixes, over [pixel]: a browser composites the panel over the band channel by channel.
+     */
+    private fun panelEyebrowContrastOver(pixel: Int): Double {
+        val page = file("index.html").readText()
+        fun named(name: String) = Regex("""--$name:\s*#([0-9a-fA-F]{6})""").find(page)?.groupValues?.get(1)?.toInt(16)
+            ?: fail("the page defines no --$name")
+        val share = (Regex("""\.opening-panel\{[^}]*color-mix\(in srgb,var\(--ink\) (\d+)%,transparent\)""").find(page)
+            ?.groupValues?.get(1) ?: fail("the opening's panel is no longer the ink mixed with transparency")).toInt() / 100.0
+        val ink = named("ink")
+        fun channel(shift: Int) = Math.round(((ink shr shift) and 0xFF) * share + ((pixel shr shift) and 0xFF) * (1 - share)).toInt()
+        val ground = (0xFF shl 24) or (channel(16) shl 16) or (channel(8) shl 8) or channel(0)
+        return com.cartogenesis.cartography.ColorVision.contrast((0xFF shl 24) or named("brass"), ground)
     }
 
     /**
@@ -818,12 +886,14 @@ class SiteAssemblyTest {
         }
 
         val exports = row("Export")
+        // A world's size is written as its cells across, "up to 4096", or as a square, "4096 × 4096".
+        fun quotesSize(text: String, size: Int) = text.contains("$size × $size") || Regex("""\bup to $size\b""").containsMatchIn(text)
         assertTrue(
-            exports.contains("$ceiling × $ceiling"),
-            "the Export row does not quote the $ceiling × $ceiling this build can finish: \"$exports\""
+            Regex("""desktop app[^.]*""").findAll(exports).any { quotesSize(it.value, ceiling) },
+            "the Export row does not quote the $ceiling this build can finish: \"$exports\""
         )
         assertTrue(
-            Regex("""browser[^.]*\b$browserCeiling × $browserCeiling\b""").containsMatchIn(exports),
+            Regex("""browser[^.]*""").findAll(exports).any { quotesSize(it.value, browserCeiling) },
             "the Export row does not quote the browser's ceiling of $browserCeiling: \"$exports\""
         )
         // And what a world at the ceiling comes out as for a picture: its true-shape sheet, which
@@ -993,7 +1063,7 @@ class SiteAssemblyTest {
     fun `the Atlas note names the release the roadmap gives the full atlas`() {
         val page = file("index.html").readText()
         val atlasRelease = roadmap.last { it.brings.contains("atlas", ignoreCase = true) }.release
-        val note = Regex("""<h3>The Atlas is a work in progress</h3>\s*<p>([^<]*)</p>""")
+        val note = Regex("""<h3>The Atlas panel is a work in progress</h3>\s*<p>([^<]*)</p>""")
             .find(page)?.groupValues?.get(1)
             ?: fail("the Notes no longer carry the Atlas card")
         assertTrue(
@@ -1102,8 +1172,9 @@ class SiteAssemblyTest {
         // else fails, a font host and an analytics script included.
         // www.w3.org is the SVG namespace in the inline data-URI favicon. It is an identifier
         // rather than an address: no browser ever fetches it, and an SVG without it does not
-        // render at all.
-        val allowed = setOf("cartogenesis.com", "github.com", "api.github.com", "www.w3.org")
+        // render at all. schema.org is the same kind of name: the vocabulary the structured data
+        // for search is written in, which no browser or search engine fetches from the page.
+        val allowed = setOf("cartogenesis.com", "github.com", "api.github.com", "www.w3.org", "schema.org")
         val strangers = Regex("""https?://([A-Za-z0-9.-]+)""")
             .findAll(file("index.html").readText())
             .map { it.groupValues[1] }
@@ -1294,6 +1365,252 @@ class SiteAssemblyTest {
         } finally {
             work.deleteRecursively()
         }
+    }
+
+    /**
+     * The screens the page is laid out on by the layout guards below: every width its screenshots
+     * are taken at, from the narrowest phone a reader is likely to hold (360) to an ultra-wide
+     * monitor (3440), each at a height usual for it.
+     */
+    private val screens = listOf(
+        360 to 780, 375 to 812, 390 to 844, 768 to 1024, 1280 to 900, 1920 to 1080, 2560 to 1440, 3440 to 1440
+    )
+
+    /**
+     * What a reader would see cut off, measured by the browser: the page scrolling sideways, any
+     * box running past the screen's edge, and any box running out of the box that clips it, which
+     * on a card with rounded corners is a word cut in half. Four clips are the page's own design
+     * and what is inside them is not measured: the opening's map, which holds a band wider than any
+     * screen; the style slider's frame, which wipes one picture over another; the lens's frame; and
+     * the apt commands, which scroll sideways rather than wrap, because a wrapped command pastes as
+     * two. An element laid out as `display: contents` has no box, and clips nothing.
+     */
+    private val overflowProbe = """(() => {
+  const designedClips = ['opening-map', 'compare-frame', 'lens-frame', 'dl-cmd'];
+  const width = document.documentElement.clientWidth;
+  const name = (e) => e.tagName.toLowerCase() + (e.id ? '#' + e.id : '') +
+    (typeof e.className === 'string' && e.className.trim() ? '.' + e.className.trim().split(/\s+/).join('.') : '');
+  const faults = [];
+  if (document.documentElement.scrollWidth > innerWidth) faults.push('the page scrolls sideways by ' + (document.documentElement.scrollWidth - innerWidth));
+  for (const e of document.body.querySelectorAll('*')) {
+    const box = e.getBoundingClientRect();
+    if (!box.width || !box.height || getComputedStyle(e).visibility !== 'visible') continue;
+    let designed = false, clip = null;
+    for (let a = e.parentElement; a && a !== document.body; a = a.parentElement) {
+      if (designedClips.some((c) => a.classList.contains(c))) { designed = true; break; }
+      const s = getComputedStyle(a);
+      if (!clip && s.display !== 'contents' && s.overflowX !== 'visible') clip = a;
+    }
+    if (designed) continue;
+    if (box.left < -0.5 || box.right > width + 0.5) faults.push(name(e) + ' runs from ' + Math.round(box.left) + ' to ' + Math.round(box.right) + ' on a screen ' + width + ' wide');
+    else if (clip) {
+      const c = clip.getBoundingClientRect();
+      if (box.left < c.left - 0.5 || box.right > c.right + 0.5) faults.push(name(e) + ' runs from ' + Math.round(box.left) + ' to ' + Math.round(box.right) + ', out of ' + name(clip) + ' from ' + Math.round(c.left) + ' to ' + Math.round(c.right));
+    }
+  }
+  return faults;
+})()"""
+
+    /**
+     * Every "Your system" tag shown at once: a reader's system shows one, and which one depends on
+     * the machine measuring, so the guard shows all three and so measures every card with its tag.
+     */
+    private val everyTagShown = "document.querySelectorAll('.dl-tag').forEach((tag) => { tag.hidden = false; });"
+
+    /**
+     * That nothing on the page runs past the screen, or out of the box that holds it, at any width
+     * from a 360 phone to a 3440 monitor: at rest, with each download card opened, and with scripts
+     * off, when every card is open at once. Measured by Chrome itself (see [HeadlessChrome]), with
+     * every card's "Your system" tag shown, which is the part that ran 18 to 33 pixels past a 360
+     * and a 390 screen, held to the Linux card's name line (Site 5c).
+     */
+    @Test
+    fun `nothing on the page runs past the screen or out of its box at any width`() {
+        val faults = mutableListOf<String>()
+        HeadlessChrome.start(site).use { chrome ->
+            screens.forEach { (width, height) ->
+                chrome.open("#measure", width, height)
+                chrome.pause(LAYOUT_SETTLES_MS)
+                chrome.evaluate("(() => { $everyTagShown return $overflowProbe; })()").jsonArray
+                    .forEach { faults += "$width wide, at rest: ${it.jsonPrimitive.content}" }
+                // Motion reduced, so a card opened is laid out at once rather than sliding there.
+                chrome.open("#measure", width, height, reducedMotion = true)
+                listOf("windows", "linux", "browser").forEach { system ->
+                    chrome.evaluate("(() => { $everyTagShown document.querySelector('.dl-card.$system .dl-head').click(); return $overflowProbe; })()")
+                        .jsonArray.forEach { faults += "$width wide, the $system card open: ${it.jsonPrimitive.content}" }
+                }
+                chrome.open("#measure", width, height, scripts = false)
+                chrome.evaluate(overflowProbe).jsonArray.forEach { faults += "$width wide, no script: ${it.jsonPrimitive.content}" }
+                println("SITE layout at $width wide: ${faults.count { it.startsWith("$width wide") }} faults")
+            }
+        }
+        assertTrue(faults.isEmpty(), "these run past the screen or out of their box:\n" + faults.joinToString("\n"))
+    }
+
+    /**
+     * That a lens held by a finger is wholly on the screen, clear of the tray and of the finger,
+     * and not cut by the map's frame, wherever on the map the finger rests: its centre, its four
+     * corners and the middle of each edge, with the map at the top of the screen and at its foot,
+     * at 360, 390 and 768 wide under touch. Visible is asked of the browser itself: every point on
+     * the lens's rim, and its centre, is the lens when the browser is asked what is there.
+     */
+    @Test
+    fun `a lens held by a finger stays whole on the screen and clear of the finger`() {
+        val faults = mutableListOf<String>()
+        var presses = 0
+        HeadlessChrome.start(site).use { chrome ->
+            listOf(360 to 780, 390 to 844, 768 to 1024).forEach { (width, height) ->
+                chrome.open("#measure", width, height, touch = true)
+                listOf("top" to "b.top - 12", "foot" to "b.bottom - innerHeight + 12").forEach { (where, scroll) ->
+                    chrome.evaluate("(() => { const b = document.getElementById('lens-frame').getBoundingClientRect(); window.scrollBy(0, $scroll); return true; })()")
+                    chrome.pause(LAYOUT_SETTLES_MS)
+                    val frame = chrome.evaluate("(() => { const b = document.getElementById('lens-frame').getBoundingClientRect(); return [b.left, b.top, b.right, b.bottom]; })()")
+                        .jsonArray.map { it.jsonPrimitive.content.toDouble() }
+                    val across = listOf(frame[0] + PRESS_INSET_PX, (frame[0] + frame[2]) / 2, frame[2] - PRESS_INSET_PX)
+                    val down = listOf(frame[1] + PRESS_INSET_PX, (frame[1] + frame[3]) / 2, frame[3] - PRESS_INSET_PX)
+                    for (y in down) for (x in across) {
+                        chrome.touchDown(x, y)
+                        chrome.pause(LENS_HELD_AFTER_MS)
+                        val found = chrome.evaluate("(() => { $lensProbe return held($x, $y); })()").jsonArray
+                        chrome.touchUp()
+                        chrome.pause(LAYOUT_SETTLES_MS)
+                        presses++
+                        found.forEach { faults += "$width wide, map at the $where, finger at (%.0f, %.0f): ${it.jsonPrimitive.content}".format(x, y) }
+                    }
+                }
+            }
+        }
+        println("SITE the held lens: $presses presses at 360, 390 and 768 wide, ${faults.size} faults")
+        assertTrue(faults.isEmpty(), "the held lens is not wholly on the screen and clear of the finger:\n" + faults.joinToString("\n"))
+    }
+
+    /**
+     * That a finger swiping up over the lens's map scrolls the page as it would anywhere else, and
+     * a finger that has held the lens and then moves up moves the lens and not the page, the lens
+     * staying up. Both on a 375 phone under touch, the finger's moves 16 ms apart, as a finger's
+     * events arrive.
+     */
+    @Test
+    fun `a swipe over the lens's map scrolls the page, and a held finger does not`() {
+        HeadlessChrome.start(site).use { chrome ->
+            chrome.open("#measure", 375, 812)
+            chrome.evaluate("(() => { document.getElementById('lens-frame').scrollIntoView({block: 'center'}); return true; })()")
+            chrome.pause(LAYOUT_SETTLES_MS)
+            fun centre() = chrome.evaluate("(() => { const b = document.getElementById('lens-frame').getBoundingClientRect(); return [(b.left + b.right) / 2, (b.top + b.bottom) / 2]; })()")
+                .jsonArray.map { it.jsonPrimitive.content.toDouble() }
+            fun scrolled() = chrome.evaluate("scrollY").jsonPrimitive.content.toDouble()
+            fun slideUp(x: Double, y: Double, afterRestMs: Long): Boolean {
+                chrome.touchDown(x, y)
+                if (afterRestMs > 0) chrome.pause(afterRestMs)
+                for (step in 1..SWIPE_STEPS) {
+                    chrome.touchMove(x, y - step * SWIPE_STEP_PX)
+                    chrome.pause(FINGER_EVENT_MS)
+                }
+                val lensUp = chrome.evaluate("document.getElementById('lens-glass').classList.contains('on')").jsonPrimitive.content == "true"
+                chrome.touchUp()
+                chrome.pause(LAYOUT_SETTLES_MS * 2)
+                return lensUp
+            }
+            val (x, y) = centre()
+            val before = scrolled()
+            slideUp(x, y, 0)
+            val afterSwipe = scrolled()
+            assertTrue(afterSwipe - before > SWIPE_STEPS * SWIPE_STEP_PX / 2,
+                "a swipe up over the lens's map scrolled the page ${afterSwipe - before} pixels, where a swipe elsewhere scrolls it")
+            val (heldX, heldY) = centre()
+            val lensUp = slideUp(heldX, heldY, LENS_HELD_AFTER_MS)
+            val afterHold = scrolled()
+            assertEquals(afterSwipe, afterHold, "a finger holding the lens and moving scrolled the page under it")
+            assertTrue(lensUp, "a finger holding the lens and moving lost the lens")
+            println("SITE a swipe over the lens's map scrolled ${afterSwipe - before} px; a held finger moving scrolled ${afterHold - afterSwipe} px and kept the lens")
+        }
+    }
+
+    /**
+     * The held lens measured: shown, inside the screen, off the tray
+     * where the tray is up, its centre farther from the finger than its radius, and the lens itself
+     * at its centre and at four points just inside its rim when the browser is asked what is there,
+     * which a frame clipping it or anything laid over it would answer otherwise.
+     */
+    private val lensProbe = """
+const held = (fingerX, fingerY) => {
+  const faults = [];
+  const glass = document.getElementById('lens-glass');
+  if (!glass.classList.contains('on')) return ['the lens is not shown'];
+  const b = glass.getBoundingClientRect();
+  const edge = 0;
+  const right = document.documentElement.clientWidth - edge, bottom = innerHeight - edge;
+  let top = edge, foot = bottom;
+  const tray = document.getElementById('tray');
+  if (tray.classList.contains('on')) {
+    const t = tray.getBoundingClientRect();
+    if (t.top <= 0) top = Math.max(top, t.bottom); else foot = Math.min(foot, t.top);
+  }
+  if (b.left < edge - 0.5 || b.right > right + 0.5 || b.top < top - 0.5 || b.bottom > foot + 0.5)
+    faults.push('the lens stands at ' + [b.left, b.top, b.right, b.bottom].map(Math.round) + ', off the screen from ' + [edge, top, right, foot].map(Math.round));
+  const radius = b.width / 2, x = b.left + radius, y = b.top + radius;
+  if (Math.hypot(x - fingerX, y - fingerY) <= radius) faults.push('the lens is over the finger');
+  const was = glass.style.pointerEvents;
+  glass.style.pointerEvents = 'auto';
+  for (const [dx, dy] of [[0, 0], [0, -1], [0, 1], [-1, 0], [1, 0]]) {
+    const px = x + dx * (radius - 4), py = y + dy * (radius - 4);
+    const there = document.elementFromPoint(px, py);
+    if (!there || !glass.contains(there)) faults.push('at (' + Math.round(px) + ', ' + Math.round(py) + ') the browser finds ' + (there ? there.tagName + '.' + there.className : 'nothing') + ', not the lens');
+  }
+  glass.style.pointerEvents = was;
+  return faults;
+};"""
+
+    /**
+     * The JSON-LD block the page gives a search engine, parsed.
+     *
+     * That it states only what the page states: every address in it is one the page itself links
+     * or names (the `@context`, schema.org's vocabulary, is an identifier and not an address, like
+     * the SVG namespace in the favicon); its licence is the one the repository's LICENSE file
+     * declares, by the name on the file's first line; its description is a sentence the page says;
+     * and nothing in it is a rating, a review, a count of downloads, an author or a publisher,
+     * none of which the page states.
+     */
+    @Test
+    fun `the structured data states only what the page does`() {
+        val page = file("index.html").readText()
+        val blocks = Regex("""<script type="application/ld\+json">(.*?)</script>""", RegexOption.DOT_MATCHES_ALL).findAll(page).toList()
+        assertEquals(1, blocks.size, "the page carries ${blocks.size} blocks of structured data, where it has one")
+        val data = kotlinx.serialization.json.Json.parseToJsonElement(blocks.single().groupValues[1]).jsonObject
+        assertEquals("https://schema.org", data["@context"]?.jsonPrimitive?.content, "the structured data is not in schema.org's vocabulary")
+
+        val home = java.net.URI("https://cartogenesis.com/")
+        val outside = page.replace(blocks.single().value, "")
+        val linked = Regex("""(?:href|src|srcset|data-src|content)="([^"]+)"""").findAll(outside)
+            .map { it.groupValues[1].replace("&amp;", "&") }
+            .filter { it.startsWith("/") || it.startsWith("http") || it.startsWith("img/") || it.startsWith("fonts/") }
+            .map { home.resolve(it).toString() }.toSet()
+        val addresses = mutableListOf<String>()
+        fun walk(element: kotlinx.serialization.json.JsonElement, key: String) {
+            when (element) {
+                is kotlinx.serialization.json.JsonObject -> element.forEach { (name, value) ->
+                    assertTrue(name.lowercase() !in STATED_NOWHERE, "the structured data states $name, which the page does not")
+                    walk(value, name)
+                }
+                is kotlinx.serialization.json.JsonArray -> element.forEach { walk(it, key) }
+                is kotlinx.serialization.json.JsonPrimitive ->
+                    if (key != "@context" && Regex("""^https?://""").containsMatchIn(element.content)) addresses += element.content
+            }
+        }
+        walk(data, "")
+        assertTrue(addresses.isNotEmpty(), "the structured data names no address; this checked nothing")
+        val strangers = addresses.filterNot { it in linked }
+        assertTrue(strangers.isEmpty(), "the structured data names addresses the page does not link: $strangers")
+
+        val licence = File(repoRoot, "LICENSE").readLines().first { it.isNotBlank() }.trim()
+        val stated = data["license"]?.jsonObject ?: fail("the structured data states no licence")
+        assertEquals(licence, stated["name"]?.jsonPrimitive?.content, "the structured data's licence is not the one LICENSE declares")
+        assertTrue(stated["url"]?.jsonPrimitive?.content?.endsWith("/LICENSE") == true, "the licence's address is not the repository's LICENSE")
+
+        val description = data["description"]?.jsonPrimitive?.content ?: fail("the structured data has no description")
+        assertTrue(outside.replace(Regex("""<[^>]+>"""), " ").replace(Regex("""\s+"""), " ").contains(description),
+            "the structured data's description is not a sentence the page says: \"$description\"")
+        println("SITE structured data: ${data["@type"]?.jsonPrimitive?.content}, ${addresses.size} addresses all linked by the page, licence \"$licence\"")
     }
 
     /**

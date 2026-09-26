@@ -669,11 +669,12 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
          * 0.88% of 1.15%, more than half, and the fill stands 82.5% as deep as the control's. The notch is still an explicit cut at 1.125 times the law's rate,
          * a ratio chosen on the capped update's lakes; the ordinary reach below it is the law's
          * implicit cut now, and the uplift that lifts the belts is two and a half times what it
-         * was. Which of these leaves seed 99's basin standing is not isolated, and the notch's
-         * ratio is recorded as open (docs/DESIGN_LEDGER.md, Fix 3b; `ErosionConfig.outletIncisionRatio`).
+         * was. Which of these leaves two worlds holding more than half their water is not
+         * isolated, and the notch's ratio is recorded as open (docs/DESIGN_LEDGER.md, Fix 3b;
+         * `ErosionConfig.outletIncisionRatio`).
          */
         const val NOTCH_SHORT_ON_THE_LAWS_TERRAIN =
-            "the water: on the law's terrain the outlet notch no longer holds every world's largest lake under the Caspian"
+            "the water: on the law's terrain the outlet notch no longer halves every world's standing water and fill"
 
         /** The shelving basin's grid: 93.75 km cells, so the notch's 1,500 km reach is sixteen of them. */
         const val SHELF_GRID = 128

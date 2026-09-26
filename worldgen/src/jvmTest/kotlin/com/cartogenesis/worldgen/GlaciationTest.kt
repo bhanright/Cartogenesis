@@ -163,9 +163,10 @@ class GlaciationTest : BorrowsSharedWorlds() {
         // Asserted, and failing: the two clauses above are this stage's whole purpose, and a
         // finding printed where nobody reads it is a guard that cannot fail (Audit III's C I4). So
         // both are run as a known failure, which goes red the day either the valley machinery or
-        // a change upstream of it brings them back, and says to arm them. Re-recorded at chunk 6
-        // from an iced zone ratio of 1.08: the lake balance's inflow now counts every exit of a
-        // basin and none of a closed basin above it, which moves which basins hold water.
+        // a change upstream of it brings them back, and says to arm them. Recorded on the implicit
+        // update's terrain. On the capped update's the ratio was 1.08, and chunk 6's lake balance
+        // (the inflow counts every exit of a basin and none of a closed basin above it) took that
+        // to 1.02; on the implicit terrain the same balance leaves it at 0.86.
         KnownFailures.expect(
             "C I4: glaciated country holds no more lakes than the ice's absence leaves",
             "cold-country lakes 0.20 to 0.36 per 10k cells, iced zone ratio 0.86"

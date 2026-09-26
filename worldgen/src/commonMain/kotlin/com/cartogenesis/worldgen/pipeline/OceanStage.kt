@@ -290,7 +290,7 @@ object OceanStage {
         }
         val heat = OceanCirculation.solveByKrylov(
             heatLevels, targetC.copyOf(), OceanCirculation.RESIDUAL_TOLERANCE, poleIsWall = false,
-            OceanCirculation.waterBodies(isWater, across, down), relax
+            OceanCirculation.waterBodies(isWater, across, down), relax = relax
         )
         return Circulation(across, down, widthMeters, heightMeters, isWater, stream, eastward, northward, heat.values, flow, heat)
     }
@@ -370,7 +370,7 @@ object OceanStage {
      * too, whichever grid is finer, so no current and no heat crosses it. A resampling of the coast
      * rather than a union of fixed blocks: the solve grid's cells do not line up with the map's.
      */
-    private fun waterOn(config: WorldGenConfig, sea: SeaLevelResult, across: Int, down: Int): BooleanArray {
+    internal fun waterOn(config: WorldGenConfig, sea: SeaLevelResult, across: Int, down: Int): BooleanArray {
         val cellsAcross = config.width
         val cellsDown = config.height
         val isWater = BooleanArray(across * down)

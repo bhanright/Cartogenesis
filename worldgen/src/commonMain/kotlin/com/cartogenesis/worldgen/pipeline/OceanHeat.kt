@@ -95,7 +95,8 @@ object OceanHeat {
      * [stream] is the circulation's ψ on this grid, in square meters a second; [targetC] is the
      * temperature each cell relaxes toward, in degrees Celsius, zero on land; [relaxationSeconds] is
      * τ. With [withTarget] off the right-hand side is zero, for a coarse grid of the cycle that
-     * solves for a correction. Rows are latitude bands pole to pole, as the map's.
+     * solves for a correction. Rows are latitude bands pole to pole, as the map's. [diffusivityAt] is
+     * [diffusivity] except where a guard holds it constant to compare directions.
      */
     fun stencil(
         cellsAcross: Int,
@@ -106,7 +107,8 @@ object OceanHeat {
         stream: FloatArray,
         targetC: FloatArray,
         relaxationSeconds: Double,
-        withTarget: Boolean
+        withTarget: Boolean,
+        diffusivityAt: (latitudeDegrees: Double) -> Double = ::diffusivity
     ): OceanStencil {
         val cells = cellsAcross * cellsDown
         val east = FloatArray(cells)
@@ -117,9 +119,9 @@ object OceanHeat {
         val balance = DoubleArray(cells)
         val relaxationRate = 1.0 / relaxationSeconds
         // Diffusivity along each row and across each boundary between two rows.
-        val alongRow = DoubleArray(cellsDown) { diffusivity(ClimateStage.latitudeOf(it, cellsDown).toDouble()) }
+        val alongRow = DoubleArray(cellsDown) { diffusivityAt(ClimateStage.latitudeOf(it, cellsDown).toDouble()) }
         val acrossBoundary = DoubleArray(cellsDown + 1) { boundary ->
-            diffusivity(90.0 - 180.0 * boundary / cellsDown)
+            diffusivityAt(90.0 - 180.0 * boundary / cellsDown)
         }
         for (row in 0 until cellsDown) {
             for (column in 0 until cellsAcross) {

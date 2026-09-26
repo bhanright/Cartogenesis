@@ -111,7 +111,8 @@ class OceanCirculationTest {
      *  - the basin turns anticyclonically, clockwise in the north: eastward in its northern part,
      *    westward in its southern;
      *  - the interior flows equatorward at Sverdrup's `v = F / β`;
-     *  - the western boundary carries the whole interior's transport back, poleward.
+     *  - the western boundary carries the interior's transport back, poleward, all of it within a
+     *    few Stommel layers of the coast.
      */
     @Test
     fun `a basin under a negative curl turns clockwise, with Sverdrup's interior and a western return`() {
@@ -131,24 +132,29 @@ class OceanCirculationTest {
             assertTrue(eastward(northRow, middleColumn) > 0.0 && eastward(southRow, middleColumn) < 0.0,
                 "at ${spacing / 1000} km and aspect $aspect the basin does not turn clockwise")
 
+            // Sverdrup's `v = F/β` is the interior's balance with the friction dropped; in a basin
+            // 1,600 km tall the friction left by the forcing's curvature, `r k² / β` of a basin's
+            // width, is some tenth of it, so the interior is held to Stommel's own solution and
+            // Sverdrup's figure is printed beside it.
             val sverdrup = amplitude / beta
             val interior = northward(middleRow, middleColumn)
-            println("OCEAN interior at ${spacing / 1000} km, aspect $aspect: v = $interior m/s against Sverdrup's $sverdrup")
-            assertTrue(abs(interior - sverdrup) < abs(sverdrup) * FIVE_PERCENT,
-                "the interior flows at $interior m/s where Sverdrup's balance gives $sverdrup")
+            val x = middleColumn * basin.dx
+            val y = (basin.down - 0.5 - middleRow) * basin.dy
+            val exact = (analytic(basin, x + 1.0, y) - analytic(basin, x - 1.0, y)) / 2.0
+            println("OCEAN interior at ${spacing / 1000} km, aspect $aspect: v = $interior m/s against Stommel's $exact and Sverdrup's $sverdrup")
+            assertTrue(interior < 0.0, "the interior does not flow equatorward under a negative curl")
+            assertTrue(abs(interior - exact) < abs(exact) * FIVE_PERCENT,
+                "the interior flows at $interior m/s where Stommel's basin gives $exact")
 
-            // Transport across the middle row, west of the interior and east of it: equal and opposite.
-            var returnTransport = 0.0
-            var interiorTransport = 0.0
+            // The western boundary returns the interior's transport: across the layer, out to five
+            // of its widths, ψ rises to what Stommel's basin has there, carried poleward.
             val boundaryEdge = (WESTERN_LAYERS * drag / beta / basin.dx).toInt().coerceAtLeast(2)
-            for (column in 1 until across - 1) {
-                val flux = northward(middleRow, column) * basin.dx
-                if (column <= boundaryEdge) returnTransport += flux else interiorTransport += flux
-            }
-            println("OCEAN transport at ${spacing / 1000} km, aspect $aspect: western ${returnTransport} m²/s against interior $interiorTransport")
-            assertTrue(returnTransport > 0.0, "the western boundary does not carry water poleward")
-            assertTrue(abs(returnTransport + interiorTransport) < abs(interiorTransport) * FIVE_PERCENT,
-                "the western boundary returns $returnTransport m²/s of the interior's $interiorTransport")
+            val returnTransport = stream[middleRow * across + boundaryEdge].toDouble()
+            val exactReturn = analytic(basin, boundaryEdge * basin.dx, y)
+            println("OCEAN western return at ${spacing / 1000} km, aspect $aspect: $returnTransport m²/s across the layer against Stommel's $exactReturn")
+            assertTrue(northward(middleRow, 1) > 0.0, "the western boundary does not carry water poleward")
+            assertTrue(abs(returnTransport - exactReturn) < abs(exactReturn) * FIVE_PERCENT,
+                "the western boundary returns $returnTransport m²/s where Stommel's basin returns $exactReturn")
         }
     }
 

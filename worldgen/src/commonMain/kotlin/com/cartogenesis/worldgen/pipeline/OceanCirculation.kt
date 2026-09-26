@@ -451,7 +451,7 @@ object OceanCirculation {
     /**
      * The same solve by BiCGSTAB (van der Vorst 1992, *SIAM J. Sci. Stat. Comput.* 13, 631-644),
      * each iteration preconditioned by one V-cycle and [correctBodyMeans], until the residual is
-     * under [tolerance] of the largest right-hand side or [MOST_CYCLES] iterations have run.
+     * under [tolerance] of the largest right-hand side or [mostIterations] have run.
      *
      * For the heat, whose V-cycle alone stalls where a coarse grid cannot represent the water: a
      * channel one cell wide, a sea behind a strip of land, a boundary current narrower than a coarse
@@ -465,6 +465,7 @@ object OceanCirculation {
         tolerance: Double,
         poleIsWall: Boolean,
         bodies: WaterBodies,
+        mostIterations: Int = MOST_CYCLES,
         relax: (OceanStencil, FloatArray, Int) -> FloatArray
     ): Solution {
         val finest = levels.first()
@@ -472,7 +473,10 @@ object OceanCirculation {
         val homogeneous = withBalance(finest, DoubleArray(cells))
         val largestBalance = largest(balanceOf(finest))
         val x = DoubleArray(cells) { start[it].toDouble() }
-        val r = residual(finest, start)
+        val balance = balanceOf(finest)
+        val r = DoubleArray(cells)
+        applyOperator(homogeneous, x, r)
+        for (cell in 0 until cells) r[cell] = if (finest.isWater[cell]) balance[cell] - r[cell] else 0.0
         var residualNow = if (largestBalance > 0.0) largest(r) / largestBalance else 0.0
         val shadow = r.copyOf()
         val p = DoubleArray(cells)
@@ -481,7 +485,7 @@ object OceanCirculation {
         var alpha = 1.0
         var omega = 1.0
         var iterations = 0
-        while (residualNow >= tolerance && iterations < MOST_CYCLES) {
+        while (residualNow >= tolerance && iterations < mostIterations) {
             val rhoNext = dot(shadow, r)
             if (rhoNext == 0.0 || omega == 0.0) break
             val beta = (rhoNext / rho) * (alpha / omega)
@@ -512,8 +516,7 @@ object OceanCirculation {
         // the single-precision answer has a floor of its own: a temperature stored to one part in
         // ten million, times the center weight, is a thousandth or so of the largest right-hand
         // side where the eddies are strongest, since that weight is some eight thousand times the
-        // relaxation's. See docs/DESIGN_LEDGER.md, the ocean's circulation row, for the error this
-        // leaves against a solve run to a hundred times finer a tolerance.
+        // relaxation's.
         return Solution(FloatArray(cells) { x[it].toFloat() }, iterations, residualNow)
     }
 
@@ -539,11 +542,34 @@ object OceanCirculation {
      */
     internal const val PRECONDITIONER_COARSEST_PASSES = 200
 
-    /** `L z` into [into], for the operator with no right-hand side: minus its residual. */
+    /**
+     * `L z` into [into], in double precision: `(e z_east + w z_west + n z_north + s z_south - z) ×
+     * center` over the water, zero on land. Double because the center weight is thousands of times
+     * the relaxation where the eddies are strongest, and a product carried in single precision
+     * would hand the Krylov iteration an operator a thousandth out, which it cannot converge past.
+     */
     fun applyOperator(homogeneous: OceanStencil, z: DoubleArray, into: DoubleArray) {
-        val values = FloatArray(z.size) { z[it].toFloat() }
-        val residual = residual(homogeneous, values)
-        for (cell in into.indices) into[cell] = -residual[cell]
+        val across = homogeneous.cellsAcross
+        val down = homogeneous.cellsDown
+        parallelChunks(0, down) { startRow, endRow ->
+            for (row in startRow until endRow) {
+                for (column in 0 until across) {
+                    val cell = row * across + column
+                    if (!homogeneous.isWater[cell]) {
+                        into[cell] = 0.0
+                        continue
+                    }
+                    val columnEast = if (column + 1 == across) 0 else column + 1
+                    val columnWest = if (column == 0) across - 1 else column - 1
+                    val north = if (row > 0) z[cell - across] else 0.0
+                    val south = if (row + 1 < down) z[cell + across] else 0.0
+                    val neighbors = homogeneous.eastWeight[cell] * z[row * across + columnEast] +
+                        homogeneous.westWeight[cell] * z[row * across + columnWest] +
+                        homogeneous.northWeight[cell] * north + homogeneous.southWeight[cell] * south
+                    into[cell] = (neighbors - z[cell]) * homogeneous.centreWeight[cell]
+                }
+            }
+        }
     }
 
     fun dot(a: DoubleArray, b: DoubleArray): Double {
@@ -651,7 +677,8 @@ object OceanCirculation {
         }
         val coarsest = stencils[count - 1]!!
         if (count > 1) {
-            if (fixedCoarsestPasses > 0) relax(coarsest, values[count - 1]!!, fixedCoarsestPasses)
+            // On the processor either way: the coarsest grid is a few hundred cells.
+            if (fixedCoarsestPasses > 0) OceanCirculation.relax(coarsest, values[count - 1]!!, fixedCoarsestPasses)
             else relaxToConvergence(coarsest, values[count - 1]!!, tolerance * COARSEST_TOLERANCE_SHARE)
         }
         for (level in count - 2 downTo 0) {

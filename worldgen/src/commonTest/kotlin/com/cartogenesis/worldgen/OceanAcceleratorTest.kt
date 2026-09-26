@@ -13,6 +13,9 @@ import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 
 /**
@@ -87,6 +90,29 @@ class OceanAcceleratorTest {
         assertSameOcean(reference, declined)
     }
 
+    /**
+     * A generation cancelled while a device declines does not hand the rest of the solve to the
+     * processor: it stops at the next relaxation. The device cancels the generation and declines on
+     * its first ask; were the stage to fall back and carry on, the next batch of passes would ask it
+     * again.
+     */
+    @Test
+    fun `a cancelled generation does not fall back to the processor`() = runTest {
+        var asks = 0
+        val cancelling = object : OceanAccelerator {
+            override val name = "cancelling test device"
+            override suspend fun solve(stencil: OceanStencil, start: FloatArray, passes: Int): FloatArray? {
+                asks++
+                currentCoroutineContext().cancel()
+                return null
+            }
+        }
+        val generation = launch { OceanStage.generate(acceleratedConfig, sea, cancelling) }
+        generation.join()
+        assertTrue(generation.isCancelled, "the generation was not cancelled")
+        assertEquals(1, asks, "the device was asked $asks times after the generation was cancelled on the first")
+    }
+
     private fun decliningAccelerator(onAsk: () -> Unit) = object : OceanAccelerator {
         override val name = "declining test device"
         override suspend fun solve(stencil: OceanStencil, start: FloatArray, passes: Int): FloatArray? {
@@ -110,8 +136,14 @@ class OceanAcceleratorTest {
         val acceleratedConfig =
             config.copy(erosion = config.erosion.copy(acceleration = Acceleration.GPU))
 
-        /** A meridional wall of land, so the gyres have a coast to close against. */
-        val sea = BooleanArray(CELLS_ACROSS * CELLS_ACROSS) { it % CELLS_ACROSS == 3 }.let { land ->
+        /**
+         * One square sea in a world of land, a quarter of the map across: the ocean is solved on a
+         * grid sized by the physics whatever the map, so a small sea is what keeps these cases
+         * quick, since land settles in no passes at all.
+         */
+        val sea = BooleanArray(CELLS_ACROSS * CELLS_ACROSS) { cell ->
+            (cell % CELLS_ACROSS) !in 3..4 || (cell / CELLS_ACROSS) !in 2..3
+        }.let { land ->
             SeaLevelResult(0.5f, land, FloatField(CELLS_ACROSS, CELLS_ACROSS), land.count { it })
         }
     }

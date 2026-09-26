@@ -1,5 +1,21 @@
 # To do
 
+- **The WGSL compile check never executes where the tiers run (chunk 5a).** `WgslCompilesTest`
+  asks a device's compiler for every module in `WGSL_MODULES` and prints `WGSL COMPILE CHECK
+  executed` or `skipped`; in this machine's headless Chrome 153 under Karma it skips, because
+  `navigator.gpu` is there and `requestAdapter` gives nothing, and CI's headless Chrome on
+  `ubuntu-latest` has not been seen to do better (read the line in the `:web:wasmJsTest` XML after a
+  CI run). Until a headless adapter is found — a software one launched with WebGPU flags through a
+  Karma custom launcher is the thing to try — only `WgslReservedWordsTest` guards the sources in a
+  tier, and the compiler is asked by hand through `?selftest` in a browser with a device. The ice
+  kernel's new console report of a refused module has likewise been read, not seen: the renamed
+  module compiled on the only device tried.
+- **The ocean's WGSL is still written inside its JavaScript function (chunk 5a).** It is not in
+  `WGSL_MODULES`, so neither WGSL guard reads it; the chunk rewriting the ocean moves it there.
+- **`--gpu-check` probes the erosion sweeps and the export raster only.** The ocean's and the ice
+  sheet's shaders compile on the same context and are not reported; a driver that takes one and
+  refuses another would be seen only as a world drawn on the processor.
+
 - **The implicit incision has no graphics-card path (Fix 3b's stage 2).** Fix 3b replaced the
   explicit cut with Braun and Willett's implicit update on the processor (`HydraulicErosion.incise`):
   one walk of `FlowRouting.drainageOrder` backwards, receivers first, each cell

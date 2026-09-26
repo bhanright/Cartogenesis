@@ -69,7 +69,8 @@ import kotlin.math.sqrt
  *
  * The profile and the surface flow are per-cell arithmetic over two fields, which is rule 8's
  * case, so both go through [IceSheetAccelerator] with this object's own code as the reference and
- * `IceSheetParityTest` measuring the two against each other.
+ * `GpuIceSheetTest` on the desktop measuring the two against each other on [IceSheetParity]'s
+ * fixture, and the browser's `?selftest` page reporting the same measure for its device.
  */
 object IceSheet {
 

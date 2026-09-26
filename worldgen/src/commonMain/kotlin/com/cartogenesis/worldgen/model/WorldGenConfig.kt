@@ -1922,7 +1922,11 @@ data class OceanConfig(
     val coastalInfluence: Float = 0.85f
 )
 
-/** Where the erosion sweeps run. */
+/**
+ * Where the work that can leave the processor runs: erosion's sweeps, the ocean's stream function
+ * and the ice sheet's profile and surface flow. One switch for all three, held in [ErosionConfig]
+ * because erosion was the first; each stage reads it where it would call its device.
+ */
 @Serializable
 enum class Acceleration(val label: String) {
     /** Every machine agrees, so a seed and a config are enough to reproduce the world anywhere. */
@@ -1931,7 +1935,7 @@ enum class Acceleration(val label: String) {
      * Far faster, and not bit-for-bit reproducible. Graphics hardware rounds differently, fuses
      * multiplies and adds, and may reorder a sum, so the same seed yields terrain that is visually
      * the same world but not numerically the same one. A world generated this way therefore has to
-     * carry its terrain in the save rather than rely on being regenerated.
+     * carry its terrain, its ocean and its ice in the save rather than rely on being regenerated.
      */
     GPU("GPU")
 }
@@ -1941,8 +1945,9 @@ enum class Acceleration(val label: String) {
 data class ErosionConfig(
     val enabled: Boolean = true,
     /**
-     * Where the sweeps run. Off the CPU this stage is many times faster, at the cost of the world
-     * no longer being reproducible from its seed alone — see [Acceleration].
+     * Where the sweeps run, and with them the ocean's stream function and the ice sheet's profile.
+     * Off the CPU this stage is many times faster, at the cost of the world no longer being
+     * reproducible from its seed alone — see [Acceleration].
      */
     val acceleration: Acceleration = Acceleration.CPU,
     /**

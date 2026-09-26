@@ -41,7 +41,7 @@ class WebGpuErosion private constructor(
         val result = awaitPromise(
             runErosion(
                 device, width, height, input, limits.eastWest, limits.northSouth, limits.diagonal,
-                passes, rate
+                passes, rate, EROSION_RATES_WGSL, EROSION_TRANSFER_WGSL
             )
         )
         if (result == null || isNullish(result)) return null

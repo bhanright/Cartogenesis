@@ -50,110 +50,17 @@ internal external fun deviceLabel(device: JsHandle): String
  * excess above the critical slope, the other moves it. Two dispatches per sweep, ping-ponging
  * between a pair of storage buffers, and a single readback at the end — the copy back is the
  * expensive part, so it happens once rather than per sweep.
+ *
+ * The two shaders arrive as [ratesSource] and [transferSource], [EROSION_RATES_WGSL] and
+ * [EROSION_TRANSFER_WGSL], rather than written into this function, so the tests can read them.
  */
 @JsFun(
-    """(device, width, height, heightsBuffer, eastWest, northSouth, diagonal, passes, rate) => (async () => {
+    """(device, width, height, heightsBuffer, eastWest, northSouth, diagonal, passes, rate,
+         ratesSource, transferSource) => (async () => {
         if (device.__lost) return null;
 
         const cells = width * height;
         const settled = eastWest * 1e-3;
-
-        const shared = `
-            // Seven values, and a word of padding to reach 32 bytes. A struct in the uniform
-            // address space has to be a multiple of 16 bytes; short of it the binding reads as
-            // zeros rather than failing, which makes width zero, sends every invocation down the
-            // out-of-bounds early return, and leaves the output untouched. The three limits are
-            // ErosionStage.thermalLimits: the steepest drop toward a neighbour along a row, down a
-            // column and on a diagonal, which differ because a row is not as tall as a column is
-            // wide.
-            struct Params {
-                width: u32,
-                height: u32,
-                eastWest: f32,
-                northSouth: f32,
-                diagonal: f32,
-                rate: f32,
-                settled: f32,
-                pad0: f32,
-            };
-            @group(0) @binding(0) var<storage, read> source: array<f32>;
-            @group(0) @binding(1) var<storage, read_write> destination: array<f32>;
-            @group(0) @binding(2) var<storage, read_write> rates: array<f32>;
-            @group(0) @binding(3) var<uniform> params: Params;
-
-            const OFFSETS = array<vec2<i32>, 8>(
-                vec2<i32>( 1, 0), vec2<i32>(-1, 0), vec2<i32>(0,  1), vec2<i32>(0, -1),
-                vec2<i32>( 1, 1), vec2<i32>( 1,-1), vec2<i32>(-1, 1), vec2<i32>(-1,-1)
-            );
-
-            // The world is a cylinder: x wraps, y does not.
-            fn indexOf(x: i32, y: i32) -> u32 {
-                let w = i32(params.width);
-                return u32(y) * params.width + u32((x + w) % w);
-            }
-        `;
-
-        const phaseA = shared + `
-            @compute @workgroup_size(16, 16)
-            fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
-                let x = i32(gid.x);
-                let y = i32(gid.y);
-                if (x >= i32(params.width) || y >= i32(params.height)) { return; }
-
-                let i = u32(y) * params.width + u32(x);
-                let here = source[i];
-                var excess = 0.0;
-                var steepest = 0.0;
-
-                for (var n = 0; n < 8; n = n + 1) {
-                    let ny = y + OFFSETS[n].y;
-                    if (ny < 0 || ny >= i32(params.height)) { continue; }
-                    let drop = here - source[indexOf(x + OFFSETS[n].x, ny)];
-                    if (drop <= 0.0) { continue; }
-                    steepest = max(steepest, drop);
-                    var limit = params.diagonal;
-                    if (n < 2) { limit = params.eastWest; } else if (n < 4) { limit = params.northSouth; }
-                    if (drop > limit) { excess = excess + (drop - limit); }
-                }
-
-                if (excess <= params.settled) {
-                    rates[i] = 0.0;
-                } else {
-                    rates[i] = min(params.rate * excess, steepest * 0.5) / excess;
-                }
-            }
-        `;
-
-        const phaseB = shared + `
-            @compute @workgroup_size(16, 16)
-            fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
-                let x = i32(gid.x);
-                let y = i32(gid.y);
-                if (x >= i32(params.width) || y >= i32(params.height)) { return; }
-
-                let i = u32(y) * params.width + u32(x);
-                let here = source[i];
-                var received = 0.0;
-                var given = 0.0;
-
-                for (var n = 0; n < 8; n = n + 1) {
-                    let ny = y + OFFSETS[n].y;
-                    if (ny < 0 || ny >= i32(params.height)) { continue; }
-                    let j = indexOf(x + OFFSETS[n].x, ny);
-                    var limit = params.diagonal;
-                    if (n < 2) { limit = params.eastWest; } else if (n < 4) { limit = params.northSouth; }
-
-                    let incoming = source[j] - here;
-                    if (incoming > limit) {
-                        received = received + rates[j] * (incoming - limit);
-                    } else if (-incoming > limit) {
-                        given = given + rates[i] * (-incoming - limit);
-                    }
-                }
-
-                destination[i] = here - given + received;
-            }
-        `;
 
         const bytes = cells * 4;
         const usage = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST;
@@ -194,8 +101,8 @@ internal external fun deviceLabel(device: JsHandle): String
             layout: pipelineLayout,
             compute: { module: device.createShaderModule({ code: code }), entryPoint: 'main' }
         });
-        const pipelineA = build(phaseA);
-        const pipelineB = build(phaseB);
+        const pipelineA = build(ratesSource);
+        const pipelineB = build(transferSource);
         const compileError = await device.popErrorScope();
         if (compileError) {
             console.error('Cartogenesis: WGSL would not compile -', compileError.message);
@@ -261,7 +168,9 @@ internal external fun runErosion(
     northSouthLimit: Float,
     diagonalLimit: Float,
     passes: Int,
-    rate: Float
+    rate: Float,
+    ratesSource: String,
+    transferSource: String
 ): JsHandle
 
 @JsFun("(size) => new Float32Array(size)")
@@ -296,3 +205,112 @@ internal suspend fun awaitPromise(promise: JsHandle): JsHandle? =
             reject = { continuation.resume(null) }
         )
     }
+
+/**
+ * What the two erosion passes share: the uniforms, the three buffers and the neighbour table. A
+ * prefix of each pass's module rather than a module of its own, because WGSL has no includes.
+ */
+private val EROSION_SHARED_WGSL = """
+    // Seven values, and a word of padding to reach 32 bytes. A struct in the uniform
+    // address space has to be a multiple of 16 bytes; short of it the binding reads as
+    // zeros rather than failing, which makes width zero, sends every invocation down the
+    // out-of-bounds early return, and leaves the output untouched. The three limits are
+    // ErosionStage.thermalLimits: the steepest drop toward a neighbour along a row, down a
+    // column and on a diagonal, which differ because a row is not as tall as a column is
+    // wide.
+    struct Params {
+        width: u32,
+        height: u32,
+        eastWest: f32,
+        northSouth: f32,
+        diagonal: f32,
+        rate: f32,
+        settled: f32,
+        pad0: f32,
+    };
+    @group(0) @binding(0) var<storage, read> source: array<f32>;
+    @group(0) @binding(1) var<storage, read_write> destination: array<f32>;
+    @group(0) @binding(2) var<storage, read_write> rates: array<f32>;
+    @group(0) @binding(3) var<uniform> params: Params;
+
+    const OFFSETS = array<vec2<i32>, 8>(
+        vec2<i32>( 1, 0), vec2<i32>(-1, 0), vec2<i32>(0,  1), vec2<i32>(0, -1),
+        vec2<i32>( 1, 1), vec2<i32>( 1,-1), vec2<i32>(-1, 1), vec2<i32>(-1,-1)
+    );
+
+    // The world is a cylinder: x wraps, y does not.
+    fn indexOf(x: i32, y: i32) -> u32 {
+        let w = i32(params.width);
+        return u32(y) * params.width + u32((x + w) % w);
+    }
+""".trimIndent()
+
+/** Between the shared prefix and a pass, so the prefix's last line is not run into the next. */
+private const val LINE_BREAK = "\n"
+
+/**
+ * The first pass of an erosion sweep: how much each cell hands over per unit of excess above the
+ * critical slope. Read by `WgslReservedWordsTest` and `WgslCompilesTest` as well as compiled here.
+ */
+internal val EROSION_RATES_WGSL = EROSION_SHARED_WGSL + LINE_BREAK + """
+    @compute @workgroup_size(16, 16)
+    fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+        let x = i32(gid.x);
+        let y = i32(gid.y);
+        if (x >= i32(params.width) || y >= i32(params.height)) { return; }
+
+        let i = u32(y) * params.width + u32(x);
+        let here = source[i];
+        var excess = 0.0;
+        var steepest = 0.0;
+
+        for (var n = 0; n < 8; n = n + 1) {
+            let ny = y + OFFSETS[n].y;
+            if (ny < 0 || ny >= i32(params.height)) { continue; }
+            let drop = here - source[indexOf(x + OFFSETS[n].x, ny)];
+            if (drop <= 0.0) { continue; }
+            steepest = max(steepest, drop);
+            var limit = params.diagonal;
+            if (n < 2) { limit = params.eastWest; } else if (n < 4) { limit = params.northSouth; }
+            if (drop > limit) { excess = excess + (drop - limit); }
+        }
+
+        if (excess <= params.settled) {
+            rates[i] = 0.0;
+        } else {
+            rates[i] = min(params.rate * excess, steepest * 0.5) / excess;
+        }
+    }
+""".trimIndent()
+
+/** The second pass of an erosion sweep: each cell gives and receives at the rates the first set. */
+internal val EROSION_TRANSFER_WGSL = EROSION_SHARED_WGSL + LINE_BREAK + """
+    @compute @workgroup_size(16, 16)
+    fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+        let x = i32(gid.x);
+        let y = i32(gid.y);
+        if (x >= i32(params.width) || y >= i32(params.height)) { return; }
+
+        let i = u32(y) * params.width + u32(x);
+        let here = source[i];
+        var received = 0.0;
+        var given = 0.0;
+
+        for (var n = 0; n < 8; n = n + 1) {
+            let ny = y + OFFSETS[n].y;
+            if (ny < 0 || ny >= i32(params.height)) { continue; }
+            let j = indexOf(x + OFFSETS[n].x, ny);
+            var limit = params.diagonal;
+            if (n < 2) { limit = params.eastWest; } else if (n < 4) { limit = params.northSouth; }
+
+            let incoming = source[j] - here;
+            if (incoming > limit) {
+                received = received + rates[j] * (incoming - limit);
+            } else if (-incoming > limit) {
+                given = given + rates[i] * (-incoming - limit);
+            }
+        }
+
+        destination[i] = here - given + received;
+    }
+""".trimIndent()

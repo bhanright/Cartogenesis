@@ -164,7 +164,9 @@ class DesktopPlatform(
     private val oceanProbe = GpuOcean.createOrNull()
 
     // And the ice sheet's profile, on the same device and behind the same switch, because the
-    // sheet's surface is the elevation every stage after it reads.
+    // sheet's surface is the elevation every stage after it reads. Offered whatever the switch
+    // says: the glaciation stage reads the switch where it would call the card, as erosion and
+    // the ocean do, so with it off the sheet is the processor's on every machine.
     private val iceProbe = GpuIceSheet.createOrNull()
 
     override val accelerator: ErosionAccelerator? get() = erosionProbe.accelerator

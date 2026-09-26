@@ -1,10 +1,7 @@
 package com.cartogenesis.desktop
 
-import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.pipeline.IceSheet
-import kotlin.math.abs
-import kotlin.math.sqrt
-import kotlin.random.Random
+import com.cartogenesis.worldgen.pipeline.IceSheetParity
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Test
@@ -32,63 +29,23 @@ class GpuIceSheetTest {
         val accelerator = probe.accelerator
         assumeTrue(accelerator != null, "no graphics device: ${probe.unavailableBecause}")
 
-        val config = WorldGenConfig(seed = 718106L, width = 256, height = 256)
-        val cellsAcross = config.width
-        val cellsDown = config.height
-        val cellCount = cellsAcross * cellsDown
-
         // A synthetic bed and a synthetic mask rather than a generated world: the seam takes
         // arrays, so what is being measured is the arithmetic and not the pipeline that feeds it.
-        val random = Random(4242)
-        val bed = FloatArray(cellCount) { random.nextFloat() * 0.4f }
-        val frozen = BooleanArray(cellCount) { cell ->
-            val row = cell / cellsAcross
-            row < cellsDown / 3 || row > cellsDown * 2 / 3
-        }
-        val onTheSheet = BooleanArray(cellCount) { frozen[it] && random.nextFloat() > 0.05f }
-        val metresPerRootKm =
-            IceSheet.metresPerRootKilometre(config.isostasy.iceDensity, config.isostasy.gravity)
-        val metresPerFieldUnit = config.scale.highestLandMetres
-        val rowScale = config.cellHeightInCellWidths.toFloat()
-        val cellSpanKm = sqrt(config.squareKilometresPerCell).toFloat()
-        val margin = IceSheet.marginDistanceKm(
-            config, frozen, bed, metresPerFieldUnit, metresPerRootKm, cellSpanKm
-        )
-
-        val onTheProcessor = IceSheet.profile(
-            margin, bed, onTheSheet, metresPerRootKm, metresPerFieldUnit, cellSpanKm
-        )
-        val processorFlow = IceSheet.flowReceivers(
-            cellsAcross, cellsDown, bed, onTheProcessor, onTheSheet, metresPerFieldUnit, rowScale
-        )
-        val onTheCard = runBlocking {
-            accelerator!!.sheet(
-                cellsAcross, cellsDown, margin.distanceKm, margin.nearestCell, bed, onTheSheet,
-                metresPerRootKm, metresPerFieldUnit, rowScale, cellSpanKm
-            )
-        }
+        // The browser's self-test measures its device on the same fixture.
+        val fixture = IceSheetParity.fixture()
+        val onTheCard = runBlocking { fixture.askDevice(accelerator!!) }
         assumeTrue(onTheCard != null, "the device declined the job")
-
-        var worstThickness = 0f
-        var thickest = 0f
-        var disagreed = 0
-        var sheetCells = 0
-        for (cell in 0 until cellCount) {
-            if (!onTheSheet[cell]) continue
-            sheetCells++
-            val apart = abs(onTheCard!!.thicknessMetres[cell] - onTheProcessor[cell])
-            if (apart > worstThickness) worstThickness = apart
-            if (onTheProcessor[cell] > thickest) thickest = onTheProcessor[cell]
-            if (onTheCard.flowReceiver[cell] != processorFlow[cell]) disagreed++
-        }
-        val relative = if (thickest <= 0f) 0f else worstThickness / thickest
-        val disagreedShare = if (sheetCells == 0) 0f else disagreed.toFloat() / sheetCells
+        val gap = fixture.compare(onTheCard!!)
+        val sheetCells = gap.sheetCells
+        val worstThickness = gap.worstThicknessMetres
+        val relative = gap.worstThicknessShare
+        val disagreedShare = gap.receiversDifferingShare
         println(
             ("I1 PARITY %d sheet cells: the thickness is at worst %.4f m apart, %.2e of the" +
                 " thickest %.0f m; %d receivers differ, %.4f%% of them")
                 .format(
-                    sheetCells, worstThickness, relative, thickest, disagreed,
-                    disagreedShare * 100
+                    sheetCells, worstThickness, relative, gap.thickestMetres,
+                    gap.receiversDiffering, disagreedShare * 100
                 )
         )
         assertTrue(sheetCells > 0, "the synthetic mask left no sheet to measure")

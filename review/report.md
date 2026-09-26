@@ -1135,3 +1135,140 @@ One Gradle build at a time. Only what the round touches:
 
 No full suite ran and `origin/main` was not merged. The probes (`SeedProbeCombRound2` in
 `:worldgen`, `SeedProbeCombCrops` in `:desktop`) are ignored files and are not committed.
+
+## Comb experiments, third round
+
+**Branch:** `chunk/3b-implicit-erosion` at `34cd797`. Not merged, `origin/main` not merged in, no pull
+request, no full suites, no render set. At 512 on seeds 7 and 42 throughout.
+
+| Commit | What it does |
+|---|---|
+| `fa37334` | Form C, the draw in clamped descent, behind `WorldGenConfig.clampedDescentDraw`, off by default; the invariant case in `RoutingGroundTest`; the setting in every routing stage, the reuse guards and `IncrementalReuseTest`. |
+| `34cd797` | The ledger records the round. |
+
+**The answer, plainly: no.** C does not remove the comb, alone or with across the fall, and cannot:
+the comb's cells are ones the draw leaves where they are by construction. By the brief, this is where
+the candidates stop. The next step is the maintainer's choice: the square-cell grid, or accepting
+across the fall.
+
+### 1. The census first: what kind of descent the comb's cells have
+
+`CombCensus`'s own arithmetic, on stock worlds, with each cell's descent read from the production
+router:
+- **clamped to the cardinal:** an undrained share of nought and a cardinal receiver;
+- **clamped to the diagonal:** a share of nought and a diagonal receiver;
+- **drawn inside the facet:** a share above nought.
+
+The recomputed routing agrees with the world's drainage on 99.9 and 100% of the combed cells.
+
+| Seed 7 / 42 | Cells | Clamped to the cardinal | Clamped to the diagonal | Drawn inside the facet |
+|---|---|---|---|---|
+| Combed, down a column | 959 / 1,214 | 86.9 / 84.8% | 0.0 / 0.0% | 13.1 / 15.2% |
+| Sustained straight reaches, down a column | 6,381 / 7,654 | 79.5 / 78.2% | 0.1 / 0.1% | 20.4 / 21.7% |
+| Combed, along a row | 72 / 92 | 90.3 / 92.4% | 5.6 / 0.0% | 4.2 / 7.6% |
+| Every channel cell | 51,377 / 59,522 | 60.0 / 58.2% clamped, either edge | | |
+
+So most of the comb's cells are clamped to their cardinal. None is clamped to a diagonal. The rest
+are already drawn by the facet rule.
+
+### 2. Form C as built, and why it cannot reach those cells
+
+- **The rule.** Where a cell's descent is clamped to one edge of its steepest facet, its receiver is
+  the neighbour with the steepest fall under Fairfield and Leymarie's Rho8 (1991, *Water Resources
+  Research* 27(5), 709-717):
+  - a cardinal's fall over its own step;
+  - a diagonal's over a length drawn per cell from the same `subGridDraw` hash as the facet draw.
+- **The drawn length, adapted to this cell.**
+  - Their `rho = 1 / (2 - r)` draws the diagonal's length uniformly between one side and two. Those
+    are the triangle inequality's bounds on a diagonal: no shorter than its longer leg, no longer
+    than both legs end to end.
+  - On a cell half as tall as wide that is `longer + (1 - r) * shorter`: one to one and a half cell
+    widths.
+  - The mean reciprocal is `2 ln 1.5 = 0.811` against the true `0.894`, 9% short, where theirs on
+    the square is 2% short.
+- **Only on clamped cells, not every cell.**
+  - Inside a facet, the facet rule already draws, and it is unbiased on planes.
+  - Rho8 on every cell would replace that with the 9%-short diagonal, a bias toward the cardinals.
+- **Why it cannot reach the comb.**
+  - A cell clamped to its cardinal has both flanking diagonals falling no more than the cardinal.
+  - Each diagonal is drawn at least as long as its longer leg, which is at least the cardinal's step.
+  - So under every draw neither diagonal is steeper, and the cardinal is kept.
+  - Only a diagonal beyond another cardinal could win, and on ground falling toward the kept
+    cardinal those rise.
+  - So C acts only on cells clamped to a diagonal. The census puts none of the comb there.
+- **Invariants.** `RoutingGroundTest` checks them with the draw on, over rough ground cut by gullies
+  down the columns and on the diagonals: 83 receivers changed, none standing no lower on the filled
+  surface, and no cycle. `WorldFingerprintTest` is unchanged. `IncrementalReuseTest` passes with the
+  new variant.
+
+### 3. The router's own expectation with C on
+
+Production's router, interior cells of 160-cell planes on seeds 7, 42 and 1234. Bearings are on
+the ground, from east toward south.
+
+| Plane | Draw | Column | Row | Diagonal | Mean bearing (true) |
+|---|---|---|---|---|---|
+| Due north-south, the comb's bearing | off / on | 100.00 / 100.00% | 0 / 0 | 0 / 0 | 90.00 / 90.00 (90) |
+| 22.5° off it | off / on | 79.28 / 79.28% | 0 / 0 | 20.72 / 20.72% | 67.49 / 67.49 (67.5) |
+| 45° off it | off / on | 50.38 / 50.38% | 0 / 0 | 49.62 / 49.62% | 45.22 / 45.22 (45) |
+| The diagonal's own bearing, 63.4° off it | off / on | 0 / 0 | 0 / 49.29% | 100 / 50.71% | 26.57 / **14.23** (26.57) |
+| 360 bearings, pooled | off / on | 44.77 / 44.77% | 15.25 / 15.25% | 39.98 / 39.98% | |
+| Isotropic synthetic surface (64 waves), three seeds | off → on | 42.2–43.9%, unchanged to 0.02 points | 16.7–16.8 → 18.6–18.7% | 39.3–41.0 → 37.5–39.1% | within 0.4° |
+
+- **Residuals.** On the three bearings asked for, and on the pooled planes, the residual with C on is
+  the facet rule's own: 0.01 to 0.22 degrees. The draw acts on none of those planes.
+- **The diagonal's bearing.** This is the one plane whose descent is clamped to a diagonal. There C
+  sends half the cells along the row and turns the mean bearing **12.3 degrees** toward it. So C does
+  bias a plane's mean bearing, at exactly the bearing where it acts.
+- **On isotropic ground** it moves about 1.8% of receivers, all from diagonals to rows. None goes to
+  or from a column.
+
+### 4. The figures (the census said the comb is out of reach, so the trimmed set)
+
+Stock, B and across the fall are round 2's figures, not re-run.
+
+| | Stock | Across the fall | C | C with across the fall |
+|---|---|---|---|---|
+| Column comb / row comb, seed 7 | 0.408 / 0.061 | 0.102 / 0.002 | 0.413 / 0.071 | 0.111 / 0.002 |
+| seed 42 | 0.519 / 0.079 | 0.109 / 0.000 | 0.519 / 0.085 | 0.111 / 0.002 |
+| column comb against its comparison run | | | +1%, 0% on stock | +9%, +2% on across the fall |
+| Network, km per 1,000 km², seeds 7 / 42 | 31.64 / 36.61 | 24.45 / 29.24 | 31.54 / 36.49 | 24.43 / 29.51 |
+| `CombGuardTest` | fails: comb | fails: comb | fails: comb | fails: comb |
+| Valley notch, depth and times the bare ground | 0.0244, 4.89× | 0.0159, 3.24× | 0.0243, 4.91× | 0.0159, 3.24× |
+| Same-cell column share, before → after, seed 7 | 41.1 → 56.8% | 41.2 → 39.2% | 41.1 → 56.7% | 41.1 → 38.9% |
+| seed 42 | 45.1 → 57.8% | 45.1 → 42.5% | 45.1 → 57.8% | 45.1 → 42.2% |
+| Diagonal → column, seeds 7 / 42 | 38.8 / 38.6% | 19.1 / 21.7% | 38.6 / 38.7% | 18.9 / 21.5% |
+| Row → column | 48.3 / 47.5% | 21.5 / 24.6% | 47.6 / 47.6% | 22.1 / 24.6% |
+| Column → column | 78.0 / 77.6% | 67.0 / 66.7% | 78.2 / 77.6% | 66.0 / 66.0% |
+
+**What was skipped.** Neither run moved the comb by a quarter against its comparison run, so the
+following were not taken, per the trimmed brief:
+- 1024;
+- the other dissection clauses, the plains' texture, the lake bars and the deltas;
+- the crops.
+
+So there are no crops of C, and nothing is said here about its drawn rivers under rule 13.
+
+### 5. Recommendation
+
+- **Drop C.** By its own derivation, the census and the measurement, it does not reach the comb.
+  - Alone it leaves the comb, the network, the notch and the feedback as stock has them, within 1%.
+  - With across the fall it leaves that form's figures within 9%.
+  - It adds a 12-degree bias on planes at the diagonal's bearing that the router does not have now.
+- **Neither run removes the comb to the guard's floor or near it.** C alone keeps the valleys and the
+  network, and the comb. C with across the fall is across the fall again: three quarters of the comb
+  gone, the valleys a third shallower, the network a fifth thinner.
+- **The candidates stop here, as the brief says.** The choice is the maintainer's: the square-cell
+  grid, or accepting across the fall.
+
+### 6. Tests this round
+
+| Test | Result |
+|---|---|
+| `RoutingGroundTest`, whole, with the new invariant case | 5 of 5 pass |
+| `WorldFingerprintTest` | 3 of 3 pass |
+| `IncrementalReuseTest`, with the new variant | 5 of 5 pass |
+| `ValleyIncisionTest` in scratch builds with C, and with C and across the fall (never committed) | pass, figures in section 4 |
+
+The probes (`SeedProbeRho8Router`, `SeedProbeCombKinds`, and `SeedProbeCombRound2` with two more
+variants) are ignored files and are not committed.

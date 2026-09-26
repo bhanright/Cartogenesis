@@ -1,30 +1,27 @@
 package com.cartogenesis.desktop
 
 import com.cartogenesis.worldgen.pipeline.OceanAccelerator
+import com.cartogenesis.worldgen.pipeline.OceanStencil
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
 import org.lwjgl.opengl.GL43C
 
 /**
- * Solves the coarse stream function on the graphics card.
+ * Relaxes the ocean's stream function on the graphics card.
  *
- * The algorithm is the CPU one, unchanged. Red-black Gauss-Seidel colours the grid by the parity of
- * column plus row, so no two cells of one colour are neighbours and a whole colour can be updated
- * at once from the other colour's current values. That is one dispatch per colour and two per
- * relaxation pass, with a memory barrier between them because the second colour reads cells the
- * first colour's other work groups wrote.
+ * The algorithm is the processor's, unchanged ([com.cartogenesis.worldgen.pipeline.OceanCirculation.relax]).
+ * Red-black Gauss-Seidel colours the grid by the parity of column plus row, so no two cells of one
+ * colour are neighbours and a whole colour can be updated at once from the other colour's current
+ * values. That is one dispatch per colour and two per relaxation pass, with a memory barrier
+ * between them because the second colour reads cells the first colour's other work groups wrote.
  *
- * Two things this deliberately does not do:
+ * It does not relax the whole grid in one dispatch and call it Jacobi: Gauss-Seidel's eigenvalues
+ * are Jacobi's squared, which is what keeps this operator's relaxation from diverging.
  *
- * It does not relax the whole grid in one dispatch and call it Jacobi. Over-relaxation above one
- * is only legal on Gauss-Seidel; applied to Jacobi it diverges, and the CPU solver's own comment
- * says so. Halving the dispatch count would cost the configured omega of 1.7 and with it most of
- * the convergence the 3000 passes buy.
- *
- * It does not promise the CPU's answer to the last bit. The card is free to round differently, so
- * the currents that come back are the same circulation and not the same numbers — which is why
- * choosing this path makes a world carry its ocean in the save rather than be regenerated from
- * its seed.
+ * It does not promise the processor's answer to the last bit. The card is free to round
+ * differently, so the currents that come back are the same circulation and not the same numbers,
+ * which is why choosing this path makes a world carry its ocean in the save rather than be
+ * regenerated from its seed.
  */
 class GpuOcean private constructor(override val name: String) : OceanAccelerator {
 
@@ -35,58 +32,52 @@ class GpuOcean private constructor(override val name: String) : OceanAccelerator
     private var relaxProgram = 0
 
     override suspend fun solve(
-        cellsAcross: Int,
-        cellsDown: Int,
-        isWater: BooleanArray,
-        forcing: FloatArray,
-        passes: Int,
-        overRelaxation: Float
+        stencil: OceanStencil,
+        start: FloatArray,
+        passes: Int
     ): FloatArray? {
+        val cellsAcross = stencil.cellsAcross
+        val cellsDown = stencil.cellsDown
         // Red-black needs the two colours to stay independent across the seam, and on an odd-width
         // cylinder column 0 and column width-1 have the same parity and are neighbours.
         if (cellsAcross <= 0 || cellsAcross % 2 != 0 || cellsDown <= 0 || passes < 0) return null
         val cellCount = cellsAcross.toLong() * cellsDown
-        if (cellCount != isWater.size.toLong() || cellCount != forcing.size.toLong()) return null
+        if (cellCount != stencil.isWater.size.toLong() || cellCount != start.size.toLong()) return null
 
         // Who is waiting for this batch, so the loop below can find out whether they still are. A
         // batch of passes is one blocking call on the context's own thread and nothing inside it
         // suspends, so a generation cancelled while it runs would otherwise be discovered only
-        // once every pass had finished. Giving up looks like a decline, which is the seam's own
-        // way of saying "not me".
+        // once every pass had finished. Giving up looks like a decline, and the caller checks
+        // whether it was wanted before falling back.
         val stillWanted = currentCoroutineContext()[Job]
         return GlContext.run("Ocean currents") {
             if (relaxProgram == 0) return@run null
 
-            val buffers = IntArray(3)
+            val buffers = IntArray(4)
             GL43C.glGenBuffers(buffers)
-            val waterBuffer = buffers[WATER_BINDING]
-            val forcingBuffer = buffers[FORCING_BINDING]
-            val streamBuffer = buffers[STREAM_BINDING]
-
             try {
                 // A boolean has no storage width the card agrees on, so the mask crosses as words.
-                val waterWords = IntArray(isWater.size) { if (isWater[it]) 1 else 0 }
-                GL43C.glBindBuffer(GL43C.GL_SHADER_STORAGE_BUFFER, waterBuffer)
-                GL43C.glBufferData(GL43C.GL_SHADER_STORAGE_BUFFER, waterWords, GL43C.GL_STATIC_DRAW)
-                GL43C.glBindBuffer(GL43C.GL_SHADER_STORAGE_BUFFER, forcingBuffer)
-                GL43C.glBufferData(GL43C.GL_SHADER_STORAGE_BUFFER, forcing, GL43C.GL_STATIC_DRAW)
-                // The solve starts from a stream function of zero, as the CPU's array does.
-                GL43C.glBindBuffer(GL43C.GL_SHADER_STORAGE_BUFFER, streamBuffer)
-                GL43C.glBufferData(
-                    GL43C.GL_SHADER_STORAGE_BUFFER, FloatArray(forcing.size), GL43C.GL_DYNAMIC_COPY
-                )
+                val waterWords = IntArray(stencil.isWater.size) { if (stencil.isWater[it]) 1 else 0 }
+                upload(buffers[WATER_BINDING], waterWords)
+                upload(buffers[FORCING_BINDING], stencil.forcing)
+                upload(buffers[STREAM_BINDING], start, GL43C.GL_DYNAMIC_COPY)
+                // Four weights a row, east, west, north and south, as one vec4 per row.
+                val weights = FloatArray(cellsDown * WEIGHTS_PER_ROW)
+                for (row in 0 until cellsDown) {
+                    weights[row * WEIGHTS_PER_ROW] = stencil.eastWeight[row]
+                    weights[row * WEIGHTS_PER_ROW + 1] = stencil.westWeight[row]
+                    weights[row * WEIGHTS_PER_ROW + 2] = stencil.northWeight[row]
+                    weights[row * WEIGHTS_PER_ROW + 3] = stencil.southWeight[row]
+                }
+                upload(buffers[WEIGHTS_BINDING], weights)
                 if (GL43C.glGetError() != GL43C.GL_NO_ERROR) return@run null
-
-                GL43C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, WATER_BINDING, waterBuffer)
-                GL43C.glBindBufferBase(
-                    GL43C.GL_SHADER_STORAGE_BUFFER, FORCING_BINDING, forcingBuffer
-                )
-                GL43C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, STREAM_BINDING, streamBuffer)
+                for (binding in buffers.indices) {
+                    GL43C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, binding, buffers[binding])
+                }
 
                 GL43C.glUseProgram(relaxProgram)
                 GL43C.glUniform1i(uniform("uWidth"), cellsAcross)
                 GL43C.glUniform1i(uniform("uHeight"), cellsDown)
-                GL43C.glUniform1f(uniform("uOverRelaxation"), overRelaxation)
                 val colourUniform = uniform("uColour")
 
                 val groupsAcross = (cellsAcross + WORK_GROUP_SIDE - 1) / WORK_GROUP_SIDE
@@ -103,17 +94,26 @@ class GpuOcean private constructor(override val name: String) : OceanAccelerator
 
                 // And the readback below reads what all of them wrote.
                 GL43C.glMemoryBarrier(GL43C.GL_BUFFER_UPDATE_BARRIER_BIT)
-                val coarseStream = FloatArray(forcing.size)
-                GL43C.glBindBuffer(GL43C.GL_SHADER_STORAGE_BUFFER, streamBuffer)
-                GL43C.glGetBufferSubData(GL43C.GL_SHADER_STORAGE_BUFFER, 0L, coarseStream)
-                if (GL43C.glGetError() == GL43C.GL_NO_ERROR) coarseStream else null
+                val stream = FloatArray(start.size)
+                GL43C.glBindBuffer(GL43C.GL_SHADER_STORAGE_BUFFER, buffers[STREAM_BINDING])
+                GL43C.glGetBufferSubData(GL43C.GL_SHADER_STORAGE_BUFFER, 0L, stream)
+                if (GL43C.glGetError() == GL43C.GL_NO_ERROR) stream else null
             } finally {
-                // However the run ended, the three buffers go back: the context outlives every
-                // generation that uses it, and a solve that walked out without freeing them would
-                // leave it a little smaller each time.
+                // However the run ended, the buffers go back: the context outlives every
+                // generation that uses it.
                 GL43C.glDeleteBuffers(buffers)
             }
         }
+    }
+
+    private fun upload(buffer: Int, data: IntArray) {
+        GL43C.glBindBuffer(GL43C.GL_SHADER_STORAGE_BUFFER, buffer)
+        GL43C.glBufferData(GL43C.GL_SHADER_STORAGE_BUFFER, data, GL43C.GL_STATIC_DRAW)
+    }
+
+    private fun upload(buffer: Int, data: FloatArray, usage: Int = GL43C.GL_STATIC_DRAW) {
+        GL43C.glBindBuffer(GL43C.GL_SHADER_STORAGE_BUFFER, buffer)
+        GL43C.glBufferData(GL43C.GL_SHADER_STORAGE_BUFFER, data, usage)
     }
 
     private fun uniform(name: String) = GL43C.glGetUniformLocation(relaxProgram, name)
@@ -123,13 +123,16 @@ class GpuOcean private constructor(override val name: String) : OceanAccelerator
         private const val WATER_BINDING = 0
         private const val FORCING_BINDING = 1
         private const val STREAM_BINDING = 2
+        private const val WEIGHTS_BINDING = 3
+
+        /** East, west, north and south: one vec4 of weights per row. */
+        private const val WEIGHTS_PER_ROW = 4
 
         /**
          * The side of a work group, in invocations. 16x16 is 256, which every device supporting
-         * compute shaders is required to allow.
-         *
-         * The same figure is written into `layout(local_size_x...)` in [SOURCE]; a shader's
-         * declaration cannot read a Kotlin constant, so the two are kept in step by hand.
+         * compute shaders is required to allow. The same figure is written into
+         * `layout(local_size_x...)` in [SOURCE]; a shader's declaration cannot read a Kotlin
+         * constant, so the two are kept in step by hand.
          */
         private const val WORK_GROUP_SIDE = 16
 
@@ -156,13 +159,10 @@ class GpuOcean private constructor(override val name: String) : OceanAccelerator
         }
 
         /**
-         * One relaxation pass over one colour: the cell that satisfies the discrete Poisson
-         * equation given its four neighbours, blended toward by [overRelaxation].
+         * One relaxation pass over one colour: every cell of the colour set to the value that
+         * satisfies the discrete Stommel balance given its four neighbours.
          *
-         * The world is a cylinder, so columns wrap and rows clamp — a row 0 cell reads itself as
-         * its northern neighbour, which is what the CPU reference does and what keeps the pole a
-         * reflecting wall rather than a hole. Land pins the stream function at zero, which is what
-         * turns a coast into something the circulation has to close against.
+         * Columns wrap; beyond either pole ψ is zero, a wall; land pins ψ at zero.
          */
         private val SOURCE = """
             #version 430
@@ -171,11 +171,11 @@ class GpuOcean private constructor(override val name: String) : OceanAccelerator
             layout(std430, binding = 0) readonly buffer Water { uint water[]; };
             layout(std430, binding = 1) readonly buffer Forcing { float forcing[]; };
             layout(std430, binding = 2) buffer Stream { float stream[]; };
+            layout(std430, binding = 3) readonly buffer Weights { vec4 weights[]; };
 
             uniform int uWidth;
             uniform int uHeight;
             uniform int uColour;
-            uniform float uOverRelaxation;
 
             void main() {
                 int x = int(gl_GlobalInvocationID.x);
@@ -187,17 +187,19 @@ class GpuOcean private constructor(override val name: String) : OceanAccelerator
 
                 int east = (x + 1) % uWidth;
                 int west = (x + uWidth - 1) % uWidth;
-                int north = max(y - 1, 0);
-                int south = min(y + 1, uHeight - 1);
+                float streamNorth = y > 0 ? stream[cell - uWidth] : 0.0;
+                float streamSouth = y + 1 < uHeight ? stream[cell + uWidth] : 0.0;
+                vec4 weight = weights[y];
 
                 // Held to the reference's own order and its separate multiplies: a driver free to
-                // fuse or reassociate these would drift a little further from the CPU with every
-                // one of the three thousand passes.
-                precise float neighbourSum = stream[y * uWidth + east] + stream[y * uWidth + west]
-                    + stream[north * uWidth + x] + stream[south * uWidth + x];
-                precise float relaxed = (neighbourSum - forcing[cell]) * 0.25;
-                precise float here = stream[cell];
-                stream[cell] = here + (relaxed - here) * uOverRelaxation;
+                // fuse or reassociate these would drift a little further from the processor with
+                // every pass.
+                precise float eastTerm = weight.x * stream[y * uWidth + east];
+                precise float westTerm = weight.y * stream[y * uWidth + west];
+                precise float northTerm = weight.z * streamNorth;
+                precise float southTerm = weight.w * streamSouth;
+                precise float relaxed = ((eastTerm + westTerm) + northTerm) + southTerm - forcing[cell];
+                stream[cell] = relaxed;
             }
         """.trimIndent()
     }

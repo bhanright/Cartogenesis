@@ -553,7 +553,7 @@ object EnergyBalance {
      * the sea surface closely and departs from it only as far as the land beside it and the heat
      * arriving from other latitudes push it.
      */
-    private const val SURFACE_EXCHANGE_W_PER_M2_C = 25.0
+    internal const val SURFACE_EXCHANGE_W_PER_M2_C = 25.0
 
     /**
      * How fast the two air columns of one band trade heat with each other, in watts per square

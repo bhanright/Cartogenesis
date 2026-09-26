@@ -15,6 +15,34 @@
 <meta property="og:description" content="Build a world from the ground up. Terrain, rivers, climate and borders, shaped by geography from a seed — then a map you can pan, restyle, save and export.">
 <meta property="og:image" content="https://cartogenesis.com/img/natural.webp">
 <meta name="twitter:card" content="summary_large_image">
+<!-- What a search engine reads about the program, in schema.org's words. One SoftwareApplication
+     rather than a WebApplication beside it, because it is one program on three systems: the
+     browser is one of them, and its address is where the program is used (the UseAction). Every
+     statement here is one the page makes itself: the name, the lede, the systems the download cards
+     offer, free to use, the licence and the source in the footer, and the link preview as its
+     screenshot. The offer's currency is the one word the page does not say: schema.org's Offer
+     has no price without one, and nought is nought in every currency. Nothing about ratings,
+     reviews or counts, which the page does not state.
+     SiteAssemblyTest reads it as JSON and holds every address in it to one the page links, and its
+     licence to the repository's LICENSE. -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Cartogenesis",
+  "description": "Generate a world map from a seed. Shape its terrain, rivers, climate and borders, then choose a map style and export the result.",
+  "url": "https://cartogenesis.com/",
+  "applicationCategory": "DesignApplication",
+  "operatingSystem": "Windows, Linux, Web browser",
+  "isAccessibleForFree": true,
+  "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"},
+  "downloadUrl": "https://cartogenesis.com/releases/latest",
+  "potentialAction": {"@type": "UseAction", "target": "https://cartogenesis.com/app/"},
+  "screenshot": "https://cartogenesis.com/img/natural.webp",
+  "license": {"@type": "CreativeWork", "name": "MIT License", "url": "https://github.com/bhanright/Cartogenesis/blob/main/LICENSE"},
+  "isBasedOn": {"@type": "SoftwareSourceCode", "codeRepository": "https://github.com/bhanright/Cartogenesis"}
+}
+</script>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%23121417'/><path d='M4 22c4-6 8 2 12-4s8 2 12-4' fill='none' stroke='%23c9a227' stroke-width='2.2' stroke-linecap='round'/><path d='M4 27c4-6 8 2 12-4s8 2 12-4' fill='none' stroke='%235d0000' stroke-width='2.2' stroke-linecap='round'/></svg>">
 
 <!-- The two faces the first screenful is set in: the heading's and the title card's semibold, and
@@ -208,6 +236,12 @@
   }
   .lede{margin:0 0 20px;color:var(--bone);max-width:36em}
   .actions{display:flex;flex-wrap:wrap;justify-content:center;gap:12px}
+  /* On a phone the second button's words do not fit beside the first's, so the
+     two stack; stacked, they take one width, the column's, rather than each its
+     own words'. */
+  @media (max-width:599px){
+    .actions{display:grid;grid-template-columns:minmax(0,1fr);width:100%;max-width:420px}
+  }
   .opening-cue{
     margin-top:18px;width:36px;height:36px;padding:0;border-radius:50%;border:1px solid var(--hairline);
     background:transparent;color:var(--parchment);cursor:pointer;transition:border-color .15s;
@@ -511,6 +545,18 @@
   .live .compare[hidden]{display:block}
   .compare-frame{position:relative;aspect-ratio:600/400;overflow:hidden;--split:50%}
   .compare-frame img{position:absolute;inset:0;width:100%;height:100%}
+  /* A style picked crossfades from the one it replaces. Where the browser has
+     view transitions, each side of the frame is captured on its own and the
+     browser fades the old picture into the new; the rest of the page is not
+     animated at all. Elsewhere the old picture is laid over the new as a copy
+     and faded out. A reader who asks for less motion gets the new picture at
+     once either way. */
+  .compare-over{view-transition-name:compare-left}
+  .compare-right{view-transition-name:compare-right}
+  ::view-transition-group(compare-left),::view-transition-group(compare-right){animation-duration:.4s}
+  ::view-transition-old(root),::view-transition-new(root){animation:none}
+  .live .compare-fading{transition:opacity .4s ease-out}
+  .live .compare-fading.faded{opacity:0}
   .compare-over{position:absolute;inset:0;overflow:hidden;transform:translateX(calc(var(--split) - 100%))}
   .compare-over img{transform:translateX(calc(100% - var(--split)))}
   .compare-range{position:absolute;inset:0;width:100%;height:100%;margin:0;cursor:ew-resize;touch-action:pan-y}
@@ -537,8 +583,17 @@
   .lens{margin:0}
   .lens-frame{position:relative;overflow:hidden;max-width:1024px;--lens:220px}
   @media (max-width:599px){.lens-frame{--lens:150px}}
-  .live .lens-frame{touch-action:pan-y;-webkit-touch-callout:none;user-select:none;-webkit-user-select:none;cursor:zoom-in}
+  /* A slide up or down the map scrolls the page and a pinch zooms it, as
+     anywhere else; a sideways slide is the lens's. */
+  .live .lens-frame{touch-action:pan-y pinch-zoom;cursor:zoom-in}
   .live .lens-world{pointer-events:none}
+  /* While a finger rests on the map, and only then, the press is the lens's:
+     no callout or image menu, no text selected. */
+  .live .lens-frame.pressed{-webkit-touch-callout:none;user-select:none;-webkit-user-select:none}
+  /* Held by a finger, the lens leaves the map's frame for the screen, which is
+     where the script places it: above the finger where there is room, else
+     below it, else beside it, and always wholly on the screen. */
+  .live .lens-glass.held{position:fixed;z-index:20}
   .lens-glass{
     position:absolute;left:0;top:0;width:var(--lens);height:var(--lens);border-radius:50%;overflow:hidden;
     border:2px solid var(--brass);background:var(--ink-raised);pointer-events:none;
@@ -566,24 +621,73 @@
   .datamap-frame img{position:absolute;inset:0;width:100%;height:100%}
   .live .datamap-frame img[data-layer]{opacity:0;transition:opacity .45s ease-out}
   .live .datamap-frame img[data-layer].on{opacity:1}
-  .datamap-overlays{display:flex;flex-wrap:wrap;align-items:center;gap:10px 12px;margin:14px 0 0}
-  .datamap-overlays .control[aria-pressed="true"]{background:var(--brass);color:var(--ink)}
-  /* With a script the data cards are the frame's switches: each drops its
-     picture, which the frame shows, and its heading becomes a button that
-     covers the card, so the whole card is the switch. */
-  .live .cards.layers .plate{display:none}
-  .layer-toggle{
-    font:inherit;color:inherit;background:none;border:0;padding:0;margin:0;text-align:left;cursor:pointer;
+  /* The frame's layers are checkboxes, one a layer, each named by its card's
+     heading and described by its card's line: with a script the frame and its
+     checkboxes carry everything the four cards say, so the cards, which are the
+     same ground read four ways in four pictures, are the page without a script
+     and step aside with one. The box is the browser's own checkbox, drawn in the
+     page's colours: a bone rim unticked, filled brass with an ink tick when
+     ticked, the brass focus ring every control has. */
+  .live .layer-cards{display:none}
+  .datamap-layers{margin:16px 0 0;padding:0;border:0;min-width:0}
+  .datamap-layers legend{padding:0;margin:0 0 6px}
+  .layer-choices{display:grid;gap:0 28px}
+  @media (min-width:600px) and (max-width:1099px){.layer-choices{grid-template-columns:repeat(2,minmax(0,1fr))}}
+  .layer-choice{
+    display:grid;grid-template-columns:22px minmax(0,1fr);gap:2px 12px;align-items:start;
+    padding:10px 0;border-top:1px solid var(--hairline);
   }
-  .layer-toggle::after{content:"";position:absolute;inset:-8px}
-  .layer-toggle:focus-visible{outline:none}
-  .layer-toggle:focus-visible::after{outline:2px solid var(--brass);outline-offset:0}
+  .layer-box{position:relative;grid-row:1 / span 2;width:22px;height:22px;margin-top:1px}
+  .layer-box input{
+    -webkit-appearance:none;appearance:none;display:block;margin:0;width:22px;height:22px;cursor:pointer;
+    border:2px solid var(--bone-dim);border-radius:3px;background:transparent;
+  }
+  .layer-box input:hover{border-color:var(--parchment)}
+  .layer-box input:checked{background:var(--brass);border-color:var(--brass)}
+  .layer-box input:focus-visible{outline:2px solid var(--brass);outline-offset:3px}
+  /* The tick: two strokes of the ink, the short and the long arm of a corner
+     turned on its side. */
+  .layer-tick{
+    display:none;position:absolute;left:8px;top:4px;width:6px;height:11px;pointer-events:none;
+    border:solid var(--ink);border-width:0 2.5px 2.5px 0;transform:rotate(45deg);
+  }
+  .layer-box input:checked + .layer-tick{display:block}
+  .layer-choice label{
+    font-family:var(--serif);font-size:17px;font-weight:600;line-height:1.3;color:var(--parchment);cursor:pointer;
+  }
+  .layer-says{color:var(--bone-dim);font-size:14px;line-height:1.5}
+
+  /* On a wide screen the three figures that are narrower than the column (the
+     relief, the style slider and the data frame) each take their words and
+     controls beside them rather than under them: the picture stays at its own
+     pixels, never enlarged past what was drawn, the controls sit next to what
+     they change, and the words keep a reading measure in the column beside it.
+     1100 is where the widest of them, the data frame's 800, leaves 240 for a
+     column of words beside it. */
+  @media (min-width:1100px){
+    .relief,.live .compare,.live .datamap{
+      display:grid;max-width:none;gap:0 32px;align-items:start;align-content:start;
+    }
+    .relief{grid-template-columns:minmax(0,640px) minmax(0,1fr)}
+    .live .compare{grid-template-columns:minmax(0,600px) minmax(0,1fr)}
+    .live .datamap{grid-template-columns:minmax(0,800px) minmax(0,1fr)}
+    .relief > .plate,.compare > .plate,.datamap > .plate{grid-column:1;grid-row:1 / span 3}
+    .relief > figcaption,.compare > figcaption,.datamap > figcaption,
+    .compare-pickers,.datamap-layers{grid-column:2;margin:0 0 18px}
+    .compare-pickers{flex-direction:column;align-items:flex-start}
+  }
 
   /* Every seed is a world: a row of other worlds, each whole, each a link that
      opens it in the application. The link covers the card. */
-  .reel{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px 16px}
-  @media (min-width:600px){.reel{grid-template-columns:repeat(3,minmax(0,1fr))}}
-  @media (min-width:900px){.reel{grid-template-columns:repeat(5,minmax(0,1fr))}}
+  /* One world to a row on a phone, where each is the width of the screen; from
+     600 up, two large ones over three smaller, on six columns, so the column's
+     whole width is used and no world is drawn smaller than a third of it. */
+  .reel{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:minmax(0,1fr);gap:28px 20px}
+  @media (min-width:600px){
+    .reel{grid-template-columns:repeat(6,minmax(0,1fr))}
+    .reel li{grid-column:span 2}
+    .reel li:nth-child(-n+2){grid-column:span 3}
+  }
   .reel li{position:relative;min-width:0}
   .reel .plate{margin:0 0 10px;transition:border-color .15s}
   .reel li:hover .plate,.reel li:focus-within .plate{border-color:var(--brass)}
@@ -636,18 +740,21 @@
   }
 
   /* ---------- download and installation ----------------------------------- */
-  /* A card per platform, in the page's palette: Windows in brass, Linux in the
-     oxblood the page lights its buttons with, the browser on the sunk ink with
-     a hairline. Each shows what it is in a line; chosen, it opens across the row
-     with its files and what to know, and the other two move beneath it. With
-     scripts off every card is open and spans the row, so every file and every
-     instruction is there to read.
+  /* A card per platform, all three alike: the sunk ink with a hairline, because
+     no platform is the page's favourite and a colour on one would say it was.
+     The one mark is the reader's own system, where the script can tell it: a
+     brass ring and a Your system tag, brass being the page's word for "this
+     one". No card wears the oxblood, which the application keeps for errors.
+     Each shows what it is in a line; chosen, it opens across the row with its
+     files and what to know, and the other two move beneath it. With scripts off
+     every card is open and spans the row, so every file and every instruction
+     is there to read.
 
-     Each card names its own ground and inks, and everything in it is drawn from
-     those, so the contrast guard measures each card's text on that card's own
-     ground rather than on the page's. The dim line is the card's ink mixed with
-     its ground rather than made translucent, so the colour it is read in is one
-     a guard can compute. */
+     The cards name their ground and inks, and everything in them is drawn from
+     those, so the contrast guard measures their text on the cards' own ground
+     rather than on the page's. The dim line is the ink mixed with the ground
+     rather than made translucent, so the colour it is read in is one a guard
+     can compute. */
   code{font-family:var(--mono);font-size:.92em;color:var(--bone)}
   .dl{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
   .dl-card{
@@ -656,11 +763,9 @@
     --card-chip:color-mix(in srgb,var(--card-ink) 14%,var(--card-ground));
     --card-well:color-mix(in srgb,var(--ink) 34%,var(--card-ground));
     position:relative;grid-column:1 / -1;min-width:0;border-radius:18px;overflow:hidden;
-    background:var(--card-ground);color:var(--card-ink);
+    background:var(--card-ground);color:var(--card-ink);box-shadow:inset 0 0 0 1px var(--hairline);
   }
-  .dl-card.windows{--card-ground:var(--brass);--card-ink:var(--ink)}
-  .dl-card.linux{--card-ground:var(--oxblood-lit);--card-ink:var(--parchment)}
-  .dl-card.browser{--card-ground:var(--ink-sunk);--card-ink:var(--parchment);box-shadow:inset 0 0 0 1px var(--hairline)}
+  .dl-card.yours{box-shadow:inset 0 0 0 2px var(--brass)}
   .live .dl-card:not(.open){grid-column:auto}
   .dl-inner{transform-origin:0 0}
   .dl-head{
@@ -677,11 +782,18 @@
   .live .dl-more{display:grid;place-items:center}
   .dl-more svg{width:14px;height:14px}
   .dl-card.open .dl-more{transform:rotate(45deg)}
-  .dl-name{display:block;font-family:var(--sans);font-weight:500;font-size:19px;line-height:1.2}
+  /* The name and the tag share a line where the card is wide enough and the tag
+     drops under the name where it is not: on a phone two cards share the row and
+     a card's words have about 113 pixels (Site 5c measured the old tag, held to
+     the name's line, running 33 pixels past a 360 screen). */
+  .dl-name{
+    display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;
+    font-family:var(--sans);font-weight:500;font-size:19px;line-height:1.2;
+  }
   .dl-sum{display:block;font-family:var(--sans);font-weight:500;font-size:14px;line-height:1.35;color:var(--card-ink-dim);margin-top:4px}
   .dl-tag{
-    margin-left:8px;font-family:var(--mono);font-size:12px;line-height:1;letter-spacing:.06em;padding:4px 7px;
-    border-radius:999px;background:var(--card-chip);color:var(--card-ink);vertical-align:2px;white-space:nowrap;
+    max-width:100%;font-family:var(--mono);font-size:12px;line-height:1.2;letter-spacing:.06em;padding:3px 7px;
+    border-radius:10px;background:var(--brass);color:var(--ink);
   }
   .dl-body{padding:0 18px 20px;display:grid;grid-template-columns:minmax(0,1fr);gap:14px}
   .live .dl-card:not(.open) .dl-body{display:none}
@@ -695,7 +807,6 @@
   }
   .dl-file small{font-family:var(--mono);font-size:12px;line-height:1}
   .dl-file.first{background:var(--card-ink);border-color:var(--card-ink);color:var(--card-ground)}
-  .dl-card.browser .dl-file.first{background:var(--brass);border-color:var(--brass);color:var(--ink)}
   .dl-file:focus-visible{outline:2px solid var(--card-ink);outline-offset:3px}
   /* The three apt commands, in a well of the card's own ground, scrolling
      sideways rather than wrapping: a source line broken across two lines pastes
@@ -736,7 +847,11 @@
     .live .card-number::after,
     .live .lens-glass,
     .live .relief-canvas,
-    .live .datamap-frame img[data-layer]{transition:none}
+    .live .datamap-frame img[data-layer],
+    .live .compare-fading{transition:none}
+    ::view-transition-group(*),
+    ::view-transition-old(*),
+    ::view-transition-new(*){animation:none}
   }
 
   /* ---------- the ask, at the foot --------------------------------------- */
@@ -1059,11 +1174,11 @@
     </p>
 
     <!-- One frame over the cards' ground and more of it, the relief at the bottom and each layer
-         laid over it in turn. The four cards under it become its switches once a script runs: each
-         card's heading becomes a button that fades its layer in or out, and the cards drop their
-         pictures, which are this frame's ground read one way each. The rivers are an overlay of
-         their own. Only the relief and the first layer are asked for; a layer is
-         fetched the first time it is switched on. -->
+         laid over it in turn, each switched by a checkbox named and described by its card's own
+         words (SiteSourcesTest holds the two to the same words), and the rivers by one of their own.
+         The frame and its checkboxes need a script, so they are hidden in the markup and the cards
+         under them are the page without one; with one, the cards step aside. Only the relief and
+         the first layer are asked for; a layer is fetched the first time it is switched on. -->
     <figure class="datamap" id="datamap" hidden>
       <div class="plate datamap-frame" id="datamap-frame">
         <img class="datamap-relief" src="img/data-relief.webp" width="800" height="600" loading="lazy" decoding="async"
@@ -1074,17 +1189,43 @@
         <img data-layer="wind" data-src="img/data-wind.webp" width="800" height="600" alt="">
         <img data-layer="rivers" data-src="img/data-rivers.webp" width="800" height="600" alt="">
       </div>
-      <div class="datamap-overlays">
-        <span class="control-label">Over the map</span>
-        <button type="button" class="control" data-toggles="rivers" aria-pressed="false">Rivers</button>
-      </div>
+      <fieldset class="datamap-layers">
+        <legend class="control-label">Layers over the relief</legend>
+        <div class="layer-choices">
+          <div class="layer-choice">
+            <span class="layer-box"><input type="checkbox" id="layer-temperature" value="temperature" autocomplete="off" checked aria-describedby="layer-temperature-says"><span class="layer-tick" aria-hidden="true"></span></span>
+            <label for="layer-temperature">Temperature</label>
+            <span class="layer-says" id="layer-temperature-says">The mean annual temperature, in degrees Celsius.</span>
+          </div>
+          <div class="layer-choice">
+            <span class="layer-box"><input type="checkbox" id="layer-currents" value="currents" autocomplete="off" aria-describedby="layer-currents-says"><span class="layer-tick" aria-hidden="true"></span></span>
+            <label for="layer-currents">Ocean currents</label>
+            <span class="layer-says" id="layer-currents-says">The surface flow, coloured warm or cold against its latitude.</span>
+          </div>
+          <div class="layer-choice">
+            <span class="layer-box"><input type="checkbox" id="layer-wind" value="wind" autocomplete="off" aria-describedby="layer-wind-says"><span class="layer-tick" aria-hidden="true"></span></span>
+            <label for="layer-wind">Winds</label>
+            <span class="layer-says" id="layer-wind-says">The prevailing wind through the year.</span>
+          </div>
+          <div class="layer-choice">
+            <span class="layer-box"><input type="checkbox" id="layer-rainfall" value="rainfall" autocomplete="off" aria-describedby="layer-rainfall-says"><span class="layer-tick" aria-hidden="true"></span></span>
+            <label for="layer-rainfall">Rainfall</label>
+            <span class="layer-says" id="layer-rainfall-says">The annual rainfall, from dry to wet.</span>
+          </div>
+          <div class="layer-choice">
+            <span class="layer-box"><input type="checkbox" id="layer-rivers" value="rivers" autocomplete="off" aria-describedby="layer-rivers-says"><span class="layer-tick" aria-hidden="true"></span></span>
+            <label for="layer-rivers">Rivers</label>
+            <span class="layer-says" id="layer-rivers-says">The rivers and lakes, over any layer.</span>
+          </div>
+        </div>
+      </fieldset>
       <figcaption>
-        <span class="say">Choose a card below to lay its layer over the relief, or several at once.</span>
+        <span class="say">Tick a layer to lay it over the relief, or several at once.</span>
         Seed 718106
       </figcaption>
     </figure>
 
-    <figure>
+    <figure class="layer-cards">
       <ol class="cards layers">
         <li class="card">
           <div class="plate">
@@ -1265,7 +1406,7 @@
               <span class="dl-more" aria-hidden="true"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 2v10M2 7h10"/></svg></span>
             </span>
             <span>
-              <span class="dl-name">Windows<span class="dl-tag" hidden>For your system</span></span>
+              <span class="dl-name">Windows <span class="dl-tag" hidden>Your system</span></span>
               <span class="dl-sum">MSI installer or portable zip · 64-bit</span>
             </span>
           </button>
@@ -1291,7 +1432,7 @@
               <span class="dl-more" aria-hidden="true"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 2v10M2 7h10"/></svg></span>
             </span>
             <span>
-              <span class="dl-name">Linux<span class="dl-tag" hidden>For your system</span></span>
+              <span class="dl-name">Linux <span class="dl-tag" hidden>Your system</span></span>
               <span class="dl-sum">apt repository, .deb or tarball · Debian, Ubuntu</span>
             </span>
           </button>
@@ -1322,7 +1463,7 @@ sudo apt update &amp;&amp; sudo apt install cartogenesis</code></pre><button typ
               <span class="dl-more" aria-hidden="true"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 2v10M2 7h10"/></svg></span>
             </span>
             <span>
-              <span class="dl-name">Browser<span class="dl-tag" hidden>For your system</span></span>
+              <span class="dl-name">Browser <span class="dl-tag" hidden>Your system</span></span>
               <span class="dl-sum">Nothing to install · worlds up to 2048</span>
             </span>
           </button>
@@ -1800,83 +1941,85 @@ sudo apt update &amp;&amp; sudo apt install cartogenesis</code></pre><button typ
   }
 
   /* Any two styles, compared. Only the two on show are fetched: a picked style
-     is asked for when it is picked. */
+     is asked for when it is picked, and put up once it has decoded, so the
+     change is one step and never a picture arriving in pieces. The change
+     crossfades (see the style sheet), unless the reader asked for less motion or
+     the frame is off the screen, where it is simply made. A picker changed from
+     the keyboard changes the picture by the same path. */
   var compare = document.getElementById('compare');
   if (compare) {
     var compareFrame = compare.querySelector('.compare-frame');
     var divider = document.getElementById('compare-range');
     var place = function () { compareFrame.style.setProperty('--split', divider.value + '%'); };
     divider.addEventListener('input', place);
+    var compareInView = false;
+    whileInView(compareFrame, function (visible) { compareInView = visible; }, 0);
+    /* How long the fallback's fading copy is kept at most, should its
+       transition never report its end: the fade's 400 ms and a margin. */
+    var FADING_COPY_KEPT_MS = 700;
+    var crossfade = function (picture, change) {
+      if (lessMotion.matches || !compareInView) { change(); return; }
+      if (document.startViewTransition) { document.startViewTransition(change); return; }
+      var fading = picture.cloneNode();
+      fading.alt = '';
+      fading.style.viewTransitionName = 'none';
+      fading.classList.add('compare-fading');
+      picture.parentNode.insertBefore(fading, picture.nextSibling);
+      change();
+      var gone = function () { if (fading.parentNode) fading.parentNode.removeChild(fading); };
+      fading.addEventListener('transitionend', gone);
+      setTimeout(gone, FADING_COPY_KEPT_MS);
+      /* Read back before it is faded, so the browser starts it at full strength
+         rather than taking the two states as one. */
+      void fading.offsetWidth;
+      fading.classList.add('faded');
+    };
     [['compare-left-style', '.compare-left'], ['compare-right-style', '.compare-right']].forEach(function (pair) {
       var picker = document.getElementById(pair[0]);
       var picture = compare.querySelector(pair[1]);
       picker.addEventListener('change', function () {
         var label = picker.options[picker.selectedIndex].text;
-        picture.src = 'img/style-' + picker.value + '.webp';
-        picture.alt = 'The coast in the ' + label + ' style.';
+        var source = 'img/style-' + picker.value + '.webp';
+        var next = new Image();
+        next.src = source;
+        var ready = next.decode ? next.decode().catch(function () {}) : Promise.resolve();
+        ready.then(function () {
+          if (picker.value !== source.replace(/^img\/style-|\.webp$/g, '')) return;
+          crossfade(picture, function () {
+            picture.src = source;
+            picture.alt = 'The coast in the ' + label + ' style.';
+            /* A view transition waits for this before it takes the new picture. */
+            return picture.decode ? picture.decode().catch(function () {}) : undefined;
+          });
+        });
       });
     });
     compare.hidden = false;
     place();
   }
 
-  /* The data frame. Each data card becomes the switch for its layer: its
-     heading's words move into a button that says whether it is pressed, and the
-     card's number square is ringed while its layer is on. A layer's picture is
-     fetched the first time it is switched on and faded in once it has decoded, so
-     it never arrives half drawn. */
+  /* The data frame. Each checkbox shows or hides its layer over the relief,
+     and the frame starts as the ticks in the markup say. A layer's picture is
+     fetched the first time it is ticked and faded in once it has decoded, so it
+     never arrives half drawn; untick it before then and it never shows. */
   var datamap = document.getElementById('datamap');
   if (datamap) {
-    var layerPictures = {};
-    Array.prototype.forEach.call(datamap.querySelectorAll('img[data-layer]'), function (picture) {
-      layerPictures[picture.getAttribute('data-layer')] = picture;
-    });
-    var switches = [];
-    var switchLayer = function (name, on) {
-      var picture = layerPictures[name];
-      switches.forEach(function (control) {
-        if (control.getAttribute('data-toggles') !== name) return;
-        control.setAttribute('aria-pressed', on ? 'true' : 'false');
-        var card = control.closest('.card');
-        if (card) card.classList.toggle('lit', on);
-      });
-      if (!on) { picture.classList.remove('on'); return; }
+    var layerBoxes = Array.prototype.slice.call(datamap.querySelectorAll('input[type="checkbox"]'));
+    var showLayer = function (box) {
+      var picture = datamap.querySelector('img[data-layer="' + box.value + '"]');
+      if (!box.checked) { picture.classList.remove('on'); return; }
       if (!picture.getAttribute('src')) {
         picture.loading = 'lazy';
         picture.src = picture.getAttribute('data-src');
       }
-      var shown = function () {
-        var stillOn = switches.some(function (control) {
-          return control.getAttribute('data-toggles') === name && control.getAttribute('aria-pressed') === 'true';
-        });
-        if (stillOn) picture.classList.add('on');
-      };
+      var shown = function () { if (box.checked) picture.classList.add('on'); };
       if (picture.decode) picture.decode().then(shown, shown); else shown();
     };
-    Array.prototype.forEach.call(document.querySelectorAll('.cards.layers > .card'), function (card) {
-      var heading = card.querySelector('h3');
-      var name = card.querySelector('img').getAttribute('src').replace(/^img\/layer-|\.webp$/g, '');
-      if (!layerPictures[name]) return;
-      var control = document.createElement('button');
-      control.type = 'button';
-      control.className = 'layer-toggle';
-      control.setAttribute('data-toggles', name);
-      control.setAttribute('aria-pressed', 'false');
-      control.textContent = heading.textContent;
-      heading.textContent = '';
-      heading.appendChild(control);
-      switches.push(control);
-    });
-    Array.prototype.forEach.call(datamap.querySelectorAll('button[data-toggles]'), function (control) {
-      switches.push(control);
-    });
-    switches.forEach(function (control) {
-      control.addEventListener('click', function () {
-        switchLayer(control.getAttribute('data-toggles'), control.getAttribute('aria-pressed') !== 'true');
-      });
+    layerBoxes.forEach(function (box) {
+      box.addEventListener('change', function () { showLayer(box); });
     });
     datamap.hidden = false;
-    switchLayer('temperature', true);
+    layerBoxes.forEach(showLayer);
   }
 
   /* The lens. The whole world is laid at the frame's width; the lens shows the
@@ -1896,7 +2039,7 @@ sudo apt update &amp;&amp; sudo apt install cartogenesis</code></pre><button typ
     glassPicture.style.height = glassPicture.getAttribute('height') + 'px';
     /* How long a finger must rest before the lens comes up, and how far it may
        wander meanwhile: a tap or the start of a scroll is not a request. */
-    var HOLD_MS = 280, HOLD_WANDER_PX = 10;
+    var LENS_HOLD_MS = 280, HOLD_WANDER_PX = 10;
     /* On a touch screen the lens stands this far above the finger's centre, so
        the finger does not cover what it shows. */
     var ABOVE_FINGER_SHARE = 0.75;
@@ -1918,6 +2061,7 @@ sudo apt update &amp;&amp; sudo apt install cartogenesis</code></pre><button typ
     /* Places the lens with its centre at (x, y) in the frame, the point shown
        being (x, y) less the lift, both in CSS pixels. */
     var placeLens = function (x, y, lift) {
+      glass.classList.remove('held');
       var frameWidth = lensFrame.clientWidth, frameHeight = lensFrame.clientHeight;
       var shownX = clamp(x, 0, frameWidth), shownY = clamp(y, 0, frameHeight);
       at = {x: shownX / frameWidth, y: shownY / frameHeight};
@@ -1934,6 +2078,54 @@ sudo apt update &amp;&amp; sudo apt install cartogenesis</code></pre><button typ
       var box = lensFrame.getBoundingClientRect();
       return {x: event.clientX - box.left, y: event.clientY - box.top};
     };
+    /* Held by a finger, the lens is placed on the screen rather than in the
+       frame, which on a phone is about 200 pixels tall and would clip a lens
+       lifted above a finger anywhere in its upper half. Above the finger where
+       the screen has room, else below it, else beside it, then kept wholly on
+       the screen, clear of its edges by LENS_EDGE_PX and clear of the tray while
+       the tray is up; lifted by ABOVE_FINGER_SHARE of its width, its nearer edge
+       stands a quarter of its width off the finger's point. */
+    var LENS_EDGE_PX = 8;
+    var screenForLens = function () {
+      var area = {left: LENS_EDGE_PX, top: LENS_EDGE_PX,
+        right: document.documentElement.clientWidth - LENS_EDGE_PX, bottom: window.innerHeight - LENS_EDGE_PX};
+      var tray = document.getElementById('tray');
+      if (tray && tray.classList.contains('on')) {
+        var band = tray.getBoundingClientRect();
+        if (band.top <= 0) area.top = Math.max(area.top, band.bottom + LENS_EDGE_PX);
+        else area.bottom = Math.min(area.bottom, band.top - LENS_EDGE_PX);
+      }
+      return area;
+    };
+    var lensBesideFinger = function (fingerX, fingerY, radius, lift, area) {
+      var fitsDown = function (centre) { return centre - radius >= area.top && centre + radius <= area.bottom; };
+      var fitsAcross = function (centre) { return centre - radius >= area.left && centre + radius <= area.right; };
+      var x = fingerX, y = fingerY - lift;
+      if (!fitsDown(y)) y = fingerY + lift;
+      if (!fitsDown(y)) {
+        y = fingerY;
+        x = fitsAcross(fingerX - lift) ? fingerX - lift : fingerX + lift;
+      }
+      return {x: clamp(x, area.left + radius, area.right - radius), y: clamp(y, area.top + radius, area.bottom - radius)};
+    };
+    /* Places the held lens for a finger at (x, y) in the frame, showing the
+       ground under the finger. */
+    var placeHeldLens = function (x, y) {
+      var frameWidth = lensFrame.clientWidth, frameHeight = lensFrame.clientHeight;
+      var shownX = clamp(x, 0, frameWidth), shownY = clamp(y, 0, frameHeight);
+      at = {x: shownX / frameWidth, y: shownY / frameHeight};
+      var box = lensFrame.getBoundingClientRect();
+      var radius = glass.offsetWidth / 2;
+      var centre = lensBesideFinger(box.left + shownX, box.top + shownY, radius, glass.offsetWidth * ABOVE_FINGER_SHARE, screenForLens());
+      var enlarged = FULL_WIDTH_PX / frameWidth;
+      glass.style.transform = 'translate(' + (centre.x - radius) + 'px,' + (centre.y - radius) + 'px)';
+      glassPicture.style.transform = 'translate(' + (radius - shownX * enlarged) + 'px,' + (radius - shownY * enlarged) + 'px)';
+    };
+    /* A finger on the map is a hold once it has rested LENS_HOLD_MS within
+       HOLD_WANDER_PX; one that moves further first is a swipe, and the page
+       scrolls for it as anywhere else. Only while it holds does the lens keep
+       the press: the page does not scroll under it (the touch listener below,
+       which prevents nothing until then) and no long-press menu opens. */
     var holding = null, held = false;
     lensFrame.addEventListener('pointermove', function (event) {
       var point = pointIn(event);
@@ -1941,8 +2133,9 @@ sudo apt update &amp;&amp; sudo apt install cartogenesis</code></pre><button typ
         if (holding && !held && Math.hypot(point.x - holding.x, point.y - holding.y) > HOLD_WANDER_PX) {
           clearTimeout(holding.timer);
           holding = null;
+          lensFrame.classList.remove('pressed');
         }
-        if (held) placeLens(point.x, point.y, glass.offsetWidth * ABOVE_FINGER_SHARE);
+        if (held) placeHeldLens(point.x, point.y);
         return;
       }
       showLens(true);
@@ -1954,19 +2147,30 @@ sudo apt update &amp;&amp; sudo apt install cartogenesis</code></pre><button typ
     lensFrame.addEventListener('pointerdown', function (event) {
       if (event.pointerType !== 'touch') return;
       var point = pointIn(event);
+      lensFrame.classList.add('pressed');
       holding = {x: point.x, y: point.y, timer: setTimeout(function () {
         held = true;
+        glass.classList.add('held');
         showLens(true);
-        placeLens(point.x, point.y, glass.offsetWidth * ABOVE_FINGER_SHARE);
-      }, HOLD_MS)};
+        placeHeldLens(point.x, point.y);
+      }, LENS_HOLD_MS)};
     });
     var letGo = function () {
       if (holding) clearTimeout(holding.timer);
       holding = null;
+      lensFrame.classList.remove('pressed');
+      /* It fades where it stands, still placed on the screen: the next pointer
+         or key to show it places it in the frame again. */
       if (held) { held = false; showLens(false); }
     };
     lensFrame.addEventListener('pointerup', letGo);
     lensFrame.addEventListener('pointercancel', letGo);
+    lensFrame.addEventListener('touchmove', function (event) {
+      if (held && event.cancelable) event.preventDefault();
+    }, {passive: false});
+    lensFrame.addEventListener('contextmenu', function (event) {
+      if (holding || held) event.preventDefault();
+    });
     /* By keyboard: the frame takes the focus, the lens stands where it last was,
        and the arrow keys move it. They are the lens's while the frame has the
        focus, so they do not also scroll the page; every other key is left alone. */
@@ -2357,8 +2561,11 @@ sudo apt update &amp;&amp; sudo apt install cartogenesis</code></pre><button typ
     return null;
   }
   var system = systemOfThisDevice();
-  var suggested = system && downloads.querySelector('.dl-card[data-system="' + system + '"] .dl-tag');
-  if (suggested) suggested.hidden = false;
+  var yours = system && downloads.querySelector('.dl-card[data-system="' + system + '"]');
+  if (yours) {
+    yours.classList.add('yours');
+    yours.querySelector('.dl-tag').hidden = false;
+  }
 
   /* ---------- the latest release, read live ---------------------------------
      So the page never carries a version number or a size that has gone stale.

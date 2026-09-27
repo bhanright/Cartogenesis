@@ -7,8 +7,12 @@ import com.cartogenesis.worldgen.pipeline.OceanHeat
 import com.cartogenesis.worldgen.pipeline.OceanStage
 import com.cartogenesis.worldgen.pipeline.OceanStencil
 import com.cartogenesis.worldgen.pipeline.SeaLevelResult
+import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.atan2
+import kotlin.math.cos
 import kotlin.math.max
+import kotlin.math.sin
 import kotlin.math.sqrt
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -31,7 +35,7 @@ class OceanHeatTest {
         isWater: BooleanArray,
         stream: FloatArray,
         target: FloatArray,
-        diffusivity: (Double) -> Double = OceanHeat::diffusivity,
+        diffusivity: (Double) -> Double = { OceanHeat.diffusivity(it, WORLD_RADIUS_M) },
         tolerance: Double = OceanCirculation.RESIDUAL_TOLERANCE,
         mostIterations: Int = OceanCirculation.MOST_CYCLES
     ): OceanCirculation.Solution {
@@ -242,6 +246,96 @@ class OceanHeatTest {
     }
 
     /**
+     * A closed basin neither makes heat nor loses it at its coast.
+     *
+     * An irregular basin with an island in it, stirred by a current whose ψ is nowhere zero on the
+     * water beside the coast, relaxing toward a temperature that varies across it. Nothing leaves a
+     * closed basin, so in the steady state the heat the air puts in must equal what it takes out:
+     * `Σ (T - T_lat) / τ = 0` over the water. That holds for the discrete balance exactly when the
+     * face velocities the heat is carried by have no divergence over each cell's open faces, which
+     * needs no flow through any face that is shut at a coast. Held two ways: the carrying part of
+     * the operator summed over the basin, for the solved field, is zero to the rounding of its
+     * single-precision weights; and the solved field's budget is zero to the solve's tolerance.
+     * With a temperature uniform everywhere, the solve returns it to rounding.
+     *
+     * The uniform case alone cannot see a leak: the operator is in the advective form, which
+     * carries a constant as a constant whatever the flow does at the coast. The budget sees it.
+     */
+    @Test
+    fun `a closed basin neither makes nor loses heat at its coast`() {
+        for (aspect in listOf(1.0, 0.5)) {
+            val across = 96
+            val down = (48 / aspect).toInt()
+            val dx = 50_000.0
+            val dy = dx * aspect
+            val widthMeters = across * dx
+            val heightMeters = down * dy
+            val radiusMeters = 0.42 * minOf(widthMeters, heightMeters)
+            val isWater = BooleanArray(across * down) { cell ->
+                val x = (cell % across + 0.5) * dx - widthMeters / 2
+                val y = (cell / across + 0.5) * dy - heightMeters / 2
+                val angle = atan2(y, x)
+                val coast = radiusMeters * (1 + 0.18 * sin(3 * angle) + 0.09 * cos(5 * angle) + 0.05 * sin(11 * angle))
+                val islandX = x - 0.35 * radiusMeters
+                val islandY = y + 0.2 * radiusMeters
+                sqrt(x * x + y * y) < coast && sqrt(islandX * islandX + islandY * islandY) > 0.15 * radiusMeters
+            }
+            val stream = FloatArray(across * down) { cell ->
+                if (!isWater[cell]) 0f else {
+                    val x = (cell % across + 0.5) / across
+                    val y = (cell / across + 0.5) / down
+                    (50_000.0 * (sin(2 * PI * x + 0.3) * cos(PI * y) + 0.5 * x)).toFloat()
+                }
+            }
+            val target = FloatArray(across * down) { cell ->
+                if (!isWater[cell]) 0f else (25.0 - 20.0 * (cell / across + 0.5) / down + 3.0 * sin(0.2 * (cell % across))).toFloat()
+            }
+            val finest = OceanHeat.stencil(
+                across, down, dx, dy, isWater, stream, target, tau, withTarget = true,
+                diffusivityAt = { OceanHeat.diffusivity(it, WORLD_RADIUS_M) }
+            )
+            val solved = solve(across, down, dx, dy, isWater, stream, target, tolerance = 1e-9).values
+
+            // The carrying part of the operator, Σ_f w_f (T - T_neighbor), summed over the basin.
+            var carried = 0.0
+            var carriedScale = 0.0
+            for (cell in isWater.indices) {
+                if (!isWater[cell]) continue
+                val row = cell / across
+                val column = cell % across
+                val weight = finest.centreWeight[cell]
+                val here = solved[cell].toDouble()
+                val neighbors = listOf(
+                    finest.eastWeight[cell] to row * across + (column + 1) % across,
+                    finest.westWeight[cell] to row * across + (column + across - 1) % across,
+                    finest.northWeight[cell] to (if (row > 0) cell - across else cell),
+                    finest.southWeight[cell] to (if (row + 1 < down) cell + across else cell)
+                )
+                for ((share, neighbor) in neighbors) {
+                    val term = weight * share * (here - solved[neighbor])
+                    carried += term
+                    carriedScale += abs(term)
+                }
+            }
+            var budget = 0.0
+            var budgetScale = 0.0
+            for (cell in isWater.indices) {
+                if (!isWater[cell]) continue
+                budget += solved[cell] - target[cell]
+                budgetScale += abs(solved[cell] - target[cell])
+            }
+            val uniform = FloatArray(across * down) { if (isWater[it]) 14f else 0f }
+            val flat = solve(across, down, dx, dy, isWater, stream, uniform, tolerance = 1e-9).values
+            var flatWorst = 0.0
+            for (cell in isWater.indices) if (isWater[cell]) flatWorst = max(flatWorst, abs(flat[cell] - 14.0))
+            println("OCEAN heat budget at aspect $aspect: carried ${carried / carriedScale} of its own size, budget ${budget / budgetScale} of the exchange, uniform off by $flatWorst C")
+            assertTrue(abs(carried) < CARRIED_ROUNDING * carriedScale, "at aspect $aspect the coast makes heat: the carrying terms sum to ${carried / carriedScale} of their size")
+            assertTrue(abs(budget) < BUDGET_TOLERANCE * budgetScale, "at aspect $aspect the basin's heat budget is off by ${budget / budgetScale} of its exchange")
+            assertTrue(flatWorst < UNIFORM_ROUNDING_C, "at aspect $aspect a uniform temperature came back off by $flatWorst C")
+        }
+    }
+
+    /**
      * A coast that ends on one row does not draw that row across the ocean's anomaly.
      *
      * The western half of the map turns to land from row 300 down, and the water is 3 degrees
@@ -308,18 +402,43 @@ class OceanHeatTest {
             "a tenth of the iterations already converged, so the fixture does not test the iteration count")
     }
 
-    /** Zhurbas and Oh's figures, read back: 2,500 m²/s at 45 degrees, the cap by 10.2, the pole's least. */
+    /**
+     * `K = V R_d` read back: Zhurbas and Oh's 2,500 m²/s at 45 degrees on any planet, no cap
+     * anywhere, and the equatorial deformation radius Chelton et al. give on Earth, 240 km, which
+     * makes the equator's diffusivity finite and scales it with the square root of the radius, since
+     * β goes as one over it. Rising monotonically from the pole to the equator in both hemispheres.
+     */
     @Test
-    fun `the eddy diffusivity is the drifters' at the latitudes they were measured`() {
-        assertEquals(OceanHeat.MIDLATITUDE_DIFFUSIVITY_M2_PER_S, OceanHeat.diffusivity(45.0), 1e-6)
-        assertEquals(OceanHeat.MIDLATITUDE_DIFFUSIVITY_M2_PER_S, OceanHeat.diffusivity(-45.0), 1e-6)
-        assertEquals(OceanHeat.EQUATORIAL_DIFFUSIVITY_M2_PER_S, OceanHeat.diffusivity(0.0), 1e-6)
-        assertEquals(OceanHeat.EQUATORIAL_DIFFUSIVITY_M2_PER_S, OceanHeat.diffusivity(10.0), 1e-6)
-        assertTrue(OceanHeat.diffusivity(10.5) < OceanHeat.EQUATORIAL_DIFFUSIVITY_M2_PER_S)
-        assertTrue(OceanHeat.diffusivity(89.0) < OceanHeat.MIDLATITUDE_DIFFUSIVITY_M2_PER_S)
+    fun `the eddy diffusivity is V times the deformation radius, finite at the equator`() {
+        val earthRadius = OceanStage.EARTH_MEAN_RADIUS_M
+        for (radius in listOf(earthRadius, WORLD_RADIUS_M)) {
+            assertEquals(OceanHeat.MIDLATITUDE_DIFFUSIVITY_M2_PER_S, OceanHeat.diffusivity(45.0, radius), 1e-6)
+            assertEquals(OceanHeat.MIDLATITUDE_DIFFUSIVITY_M2_PER_S, OceanHeat.diffusivity(-45.0, radius), 1e-6)
+            // Within the equatorial radius's reach β falls a little as cos φ does, so K rises by a
+            // fraction of a percent (cos 7.9° is 0.991) before `c / |f|` takes over; poleward of that
+            // it only falls.
+            val atEquator = OceanHeat.diffusivity(0.0, radius)
+            var previous = Double.POSITIVE_INFINITY
+            for (tenth in 0..899) {
+                val here = OceanHeat.diffusivity(tenth / 10.0, radius)
+                assertTrue(here.isFinite(), "K is not a number at ${tenth / 10.0} degrees")
+                if (tenth < EQUATORIAL_REACH_TENTHS) {
+                    assertTrue(here <= atEquator * 1.01, "K near the equator rises past its equatorial figure at ${tenth / 10.0}")
+                } else {
+                    assertTrue(here <= previous, "K rises poleward at ${tenth / 10.0} degrees on a radius of $radius m")
+                    previous = here
+                }
+                assertEquals(here, OceanHeat.diffusivity(-tenth / 10.0, radius), 1e-9)
+            }
+        }
+        assertEquals(240_000.0, OceanHeat.deformationRadiusMeters(0.0, earthRadius), 1e-6)
+        val earthEquator = OceanHeat.diffusivity(0.0, earthRadius)
+        println("OCEAN eddy diffusivity at the equator: $earthEquator m²/s on Earth, ${OceanHeat.diffusivity(0.0, WORLD_RADIUS_M)} at ${WORLD_RADIUS_M / 1000} km")
+        assertTrue(earthEquator in 20_000.0..30_000.0, "Earth's equatorial K $earthEquator outside the drifters' eastern-Pacific 2-3 × 10⁴")
+        assertEquals(sqrt(earthRadius / WORLD_RADIUS_M), earthEquator / OceanHeat.diffusivity(0.0, WORLD_RADIUS_M), 1e-9)
         val stencil: OceanStencil = OceanHeat.stencil(
             8, 8, 10_000.0, 5_000.0, BooleanArray(64) { true }, FloatArray(64) { (it * 1000).toFloat() },
-            FloatArray(64) { 10f }, tau, withTarget = true
+            FloatArray(64) { 10f }, tau, withTarget = true, diffusivityAt = { OceanHeat.diffusivity(it, WORLD_RADIUS_M) }
         )
         for (cell in 0 until 64) {
             val sum = stencil.eastWeight[cell] + stencil.westWeight[cell] + stencil.northWeight[cell] + stencil.southWeight[cell]
@@ -330,6 +449,15 @@ class OceanHeatTest {
 
     private companion object {
         const val STEP_C = 10f
+
+        /** The generator's own planet, a radius of 1,910 km. */
+        val WORLD_RADIUS_M = WorldGenConfig().scale.radiusMeters
+
+        /**
+         * Where the equatorial radius stops being the smaller, in tenths of a degree, rounded up
+         * past the larger of the two planets' meeting latitudes: 4.3 on Earth, 7.9 at 1,910 km.
+         */
+        const val EQUATORIAL_REACH_TENTHS = 80
 
         /** The land along each shore of a channel, in cells. */
         const val SHORE_CELLS = 2
@@ -345,5 +473,22 @@ class OceanHeatTest {
 
         /** What may cross a strip of land, in degrees Celsius: the solve's own tolerance, a thousandth. */
         const val BARRIER_TOLERANCE_C = 1e-3
+
+        /**
+         * How far the carrying terms may sum from zero, as a share of their own size: the rounding
+         * of weights stored in single precision, 6e-8 each, over some four thousand cells' terms
+         * adding at random, about 4e-6, with room for a factor of ten.
+         */
+        const val CARRIED_ROUNDING = 5e-5
+
+        /**
+         * How far the basin's budget may stand from zero, as a share of the exchange with the air:
+         * the solve is taken to a relative residual of 1e-9, and the temperatures are stored in single
+         * precision, a part in ten million of 25 C against departures of a few degrees.
+         */
+        const val BUDGET_TOLERANCE = 1e-4
+
+        /** A uniform temperature back to within the single-precision rounding of 14 C, with room. */
+        const val UNIFORM_ROUNDING_C = 1e-4
     }
 }

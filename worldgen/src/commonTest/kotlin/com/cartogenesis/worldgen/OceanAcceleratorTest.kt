@@ -12,6 +12,7 @@ import com.cartogenesis.worldgen.pipeline.SeaLevelResult
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.currentCoroutineContext
@@ -111,6 +112,50 @@ class OceanAcceleratorTest {
         generation.join()
         assertTrue(generation.isCancelled, "the generation was not cancelled")
         assertEquals(1, asks, "the device was asked $asks times after the generation was cancelled on the first")
+    }
+
+    /**
+     * A device whose passes come back as no numbers at all fails the processor's check on its solve,
+     * and the ocean is solved again on the processor: the reference answer, not a field of NaN
+     * handed on as a sea.
+     */
+    @Test
+    fun `a device that answers with no numbers leaves the reference answer`() = runTest {
+        val reference = OceanStage.generate(config, sea)
+        val broken = object : OceanAccelerator {
+            override val name = "broken test device"
+            override suspend fun solve(stencil: OceanStencil, start: FloatArray, passes: Int): FloatArray =
+                FloatArray(start.size) { Float.NaN }
+        }
+        assertSameOcean(reference, OceanStage.generate(acceleratedConfig, sea, broken))
+    }
+
+    /**
+     * On the processor there is nothing to fall back to, so a solve that stops without an answer
+     * fails the stage by name. Forced here with relaxation that makes no numbers, which a NaN
+     * residual would otherwise let through, since it compares false with any tolerance.
+     */
+    @Test
+    fun `a solve that does not converge fails the stage`() {
+        val zonal = com.cartogenesis.worldgen.pipeline.ClimateStage.zonalClimate(config, sea)
+        val failure = assertFailsWith<OceanCirculation.OceanSolveFailure> {
+            OceanStage.circulate(config, sea, zonal) { _, start, _ -> start.fill(Float.NaN); start }
+        }
+        assertTrue(failure.message!!.contains("the circulation"), "the failure does not name its solve: ${failure.message}")
+    }
+
+    /**
+     * A solve that runs out of iterations short of its tolerance fails too, its numbers finite,
+     * and one that reached its tolerance is handed on as it is.
+     */
+    @Test
+    fun `a solve that stops short of its tolerance fails by name`() {
+        val stopped = OceanCirculation.Solution(FloatArray(4) { 1f }, OceanCirculation.MOST_CYCLES, 0.2)
+        assertFailsWith<OceanCirculation.OceanSolveFailure> {
+            OceanCirculation.requireSolved("a stopped solve", stopped, OceanCirculation.RESIDUAL_TOLERANCE)
+        }
+        val solved = OceanCirculation.Solution(FloatArray(4) { 1f }, 3, 1e-4)
+        assertEquals(solved, OceanCirculation.requireSolved("a finished solve", solved, OceanCirculation.RESIDUAL_TOLERANCE))
     }
 
     private fun decliningAccelerator(onAsk: () -> Unit) = object : OceanAccelerator {

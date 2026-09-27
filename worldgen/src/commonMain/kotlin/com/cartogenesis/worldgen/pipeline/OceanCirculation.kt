@@ -125,6 +125,32 @@ object OceanCirculation {
     class Solution(val values: FloatArray, val cycles: Int, val relativeResidual: Double)
 
     /**
+     * A solve that ended without an answer: its residual not under its tolerance when it stopped,
+     * or a value, or the residual itself, not a number. Thrown rather than handed on, because a
+     * stopped solve's field looks like an ocean and is not one, and a world saved with it would carry
+     * the wrong sea for its seed with nothing to say so.
+     */
+    class OceanSolveFailure(message: String) : IllegalStateException(message)
+
+    /**
+     * [solution] if it is an answer to [tolerance], and otherwise an [OceanSolveFailure] naming
+     * [what] failed and how. A residual that is not a number compares false with any tolerance, so it
+     * is asked for as finite first, and every value with it.
+     */
+    fun requireSolved(what: String, solution: Solution, tolerance: Double): Solution {
+        val residualFinite = solution.relativeResidual.isFinite()
+        val firstBad = solution.values.indexOfFirst { !it.isFinite() }
+        if (!residualFinite || firstBad >= 0 || solution.relativeResidual >= tolerance) {
+            throw OceanSolveFailure(
+                "$what did not solve: relative residual ${solution.relativeResidual} after ${solution.cycles} " +
+                    "iterations against a tolerance of $tolerance" +
+                    (if (firstBad >= 0) ", and cell $firstBad holds ${solution.values[firstBad]}" else "")
+            )
+        }
+        return solution
+    }
+
+    /**
      * Builds the circulation's problem for one grid.
      *
      * [cellWidthMeters] and [cellHeightMeters] are the grid's own spacing on the ground; they need

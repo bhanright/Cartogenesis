@@ -73,7 +73,10 @@ private suspend fun runOceanSelfTest(ocean: WebGpuOcean): String {
         (2e4 * kotlin.math.sin(kotlin.math.PI * (cell % across) / across) * kotlin.math.sin(kotlin.math.PI * (cell / across + 0.5) / down)).toFloat()
     }
     val target = FloatArray(across * down) { cell -> if (isWater[cell]) 5f + 20f * (cell / across) / down else 0f }
-    val heat = OceanHeat.stencil(across, down, dx, dx, isWater, stream, target, OceanStage.RELAXATION_SECONDS, withTarget = true)
+    val heat = OceanHeat.stencil(
+        across, down, dx, dx, isWater, stream, target, OceanStage.RELAXATION_SECONDS, withTarget = true,
+        diffusivityAt = { OceanHeat.diffusivity(it, WorldGenConfig().scale.radiusMeters) }
+    )
     val report = StringBuilder("ocean device=${ocean.name}")
     for ((name, stencil) in listOf("circulation" to circulation, "heat" to heat)) {
         val start = FloatArray(across * down) { if (isWater[it]) 1f else 0f }

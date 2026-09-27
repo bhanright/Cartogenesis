@@ -92,8 +92,11 @@ object OceanStage {
      */
     private const val WIND_DRIVEN_LAYER_DEPTH_M = 500.0
 
-    /** Earth's mean radius, in meters: only to derive [BOTTOM_DRAG_PER_S] from an Earth figure. */
-    private const val EARTH_MEAN_RADIUS_M = 6.371e6
+    /**
+     * Earth's mean radius, in meters: only to derive figures from Earth's measurements, this
+     * stage's [BOTTOM_DRAG_PER_S] and `OceanHeat.BAROCLINIC_WAVE_SPEED_M_PER_S`.
+     */
+    internal const val EARTH_MEAN_RADIUS_M = 6.371e6
 
     /** The latitude the Gulf Stream's width below is read at: the Florida Current and Cape Hatteras. */
     private const val GULF_STREAM_LATITUDE_DEGREES = 30.0
@@ -162,8 +165,12 @@ object OceanStage {
      *
      * [sea] supplies the land mask the gyres close against. The result's velocities are in meters a
      * second, its temperature in degrees Celsius, and its anomaly in degrees away from the mean of
-     * the same row's open water. With `OceanConfig.enabled` off, every velocity and every anomaly is
-     * zero and the temperature is the bare latitude profile.
+     * the open water near its latitude (see [buildAnomaly]). With `OceanConfig.enabled` off, every
+     * velocity and every anomaly is zero and the temperature is the bare latitude profile.
+     *
+     * A solve that fails, on the processor, fails the stage with an
+     * [OceanCirculation.OceanSolveFailure]: the processor is the reference, and there is nothing
+     * truer to fall back to.
      */
     fun generate(config: WorldGenConfig, sea: SeaLevelResult): OceanResult =
         generateOcean(config, sea) { stencil, start, passes ->
@@ -178,24 +185,41 @@ object OceanStage {
      * that decide when to stop are the processor's own, so the two paths differ in arithmetic and
      * nothing else. A device that declines gets the reference passes instead, unless the generation
      * has been cancelled, which is asked before every batch either way.
+     *
+     * A solve relaxed on the device that fails the processor's own check (see [generate]) is solved
+     * again on the processor from the start, as a device that declines is: the device's passes are a
+     * way to the reference answer, and when they do not reach it the reference is still there.
      */
     suspend fun generate(
         config: WorldGenConfig,
         sea: SeaLevelResult,
         accelerator: OceanAccelerator?
-    ): OceanResult = generateOcean(config, sea) { stencil, start, passes ->
+    ): OceanResult {
         // The one graphics switch the interface offers lives in the erosion section, and governs
         // every stage that can leave the processor rather than erosion alone.
         val device = if (config.erosion.acceleration == Acceleration.GPU) accelerator else null
-        currentCoroutineContext().ensureActive()
-        device?.solve(stencil, start, passes)
-            ?: run {
-                // A device that gave up because the generation was cancelled must not hand the
-                // rest of the solve to the processor: ask before falling back.
-                currentCoroutineContext().ensureActive()
-                OceanCirculation.relax(stencil, start, passes)
-                start
+        if (device != null) {
+            try {
+                return generateOcean(config, sea) { stencil, start, passes ->
+                    currentCoroutineContext().ensureActive()
+                    device.solve(stencil, start, passes)
+                        ?: run {
+                            // A device that gave up because the generation was cancelled must not
+                            // hand the rest of the solve to the processor: ask before falling back.
+                            currentCoroutineContext().ensureActive()
+                            OceanCirculation.relax(stencil, start, passes)
+                            start
+                        }
+                }
+            } catch (failure: OceanCirculation.OceanSolveFailure) {
+                // Falls through to the processor's solve below.
             }
+        }
+        return generateOcean(config, sea) { stencil, start, passes ->
+            currentCoroutineContext().ensureActive()
+            OceanCirculation.relax(stencil, start, passes)
+            start
+        }
     }
 
     /**
@@ -263,9 +287,13 @@ object OceanStage {
         ) { coarseAcross, coarseDown, coarseWater ->
             circulationStencil(config, wind, coarseWater, coarseAcross, coarseDown, withForcing = false)
         }
-        val flow = OceanCirculation.solve(
-            flowLevels, FloatArray(across * down), OceanCirculation.RESIDUAL_TOLERANCE, poleIsWall = true,
-            bodies = null, relax
+        val flow = OceanCirculation.requireSolved(
+            "the circulation",
+            OceanCirculation.solve(
+                flowLevels, FloatArray(across * down), OceanCirculation.RESIDUAL_TOLERANCE, poleIsWall = true,
+                bodies = null, relax
+            ),
+            OceanCirculation.RESIDUAL_TOLERANCE
         )
         val stream = flow.values
         val eastward = FloatArray(across * down)
@@ -280,19 +308,27 @@ object OceanStage {
             }
         }
         val heatLevels = OceanCirculation.levels(
-            OceanHeat.stencil(across, down, widthMeters, heightMeters, isWater, stream, targetC, RELAXATION_SECONDS, withTarget = true),
+            OceanHeat.stencil(
+                across, down, widthMeters, heightMeters, isWater, stream, targetC, RELAXATION_SECONDS, withTarget = true,
+                diffusivityAt = { OceanHeat.diffusivity(it, config.scale.radiusMeters) }
+            ),
             widthMeters, heightMeters, everyCellWater = false
         ) { coarseAcross, coarseDown, coarseWater ->
             OceanHeat.stencil(
                 coarseAcross, coarseDown,
                 config.scale.worldWidthKm * METERS_PER_KM / coarseAcross, worldHeightMeters(config.scale) / coarseDown,
                 coarseWater, resample(stream, across, down, coarseAcross, coarseDown),
-                FloatArray(coarseAcross * coarseDown), RELAXATION_SECONDS, withTarget = false
+                FloatArray(coarseAcross * coarseDown), RELAXATION_SECONDS, withTarget = false,
+                diffusivityAt = { OceanHeat.diffusivity(it, config.scale.radiusMeters) }
             )
         }
-        val heat = OceanCirculation.solveByKrylov(
-            heatLevels, targetC.copyOf(), OceanCirculation.RESIDUAL_TOLERANCE, poleIsWall = false,
-            OceanCirculation.waterBodies(isWater, across, down), relax = relax
+        val heat = OceanCirculation.requireSolved(
+            "the sea's heat",
+            OceanCirculation.solveByKrylov(
+                heatLevels, targetC.copyOf(), OceanCirculation.RESIDUAL_TOLERANCE, poleIsWall = false,
+                OceanCirculation.waterBodies(isWater, across, down), relax = relax
+            ),
+            OceanCirculation.RESIDUAL_TOLERANCE
         )
         return Circulation(across, down, widthMeters, heightMeters, isWater, stream, eastward, northward, heat.values, flow, heat)
     }
@@ -602,8 +638,9 @@ object OceanStage {
      * Close to, not exactly: the currents' own zonal mean, the water's mean departure from the
      * profile, is taken over a band of latitude rather than one row, a Gaussian whose standard
      * deviation is the heat's own length `sqrt(K τ)`: the distance the eddies spread the water's
-     * heat in the time the air takes to reset it, 140 km at 45 degrees and 280 km at the equator
-     * (see [OceanHeat.diffusivity] and [RELAXATION_SECONDS]). The water's temperature cannot change
+     * heat in the time the air takes to reset it, 140 km at 45 degrees and, at this generator's
+     * radius of 1,910 km, 320 km at the equator (see [OceanHeat.diffusivity] and
+     * [RELAXATION_SECONDS]). The water's temperature cannot change
      * faster than that across latitude, so a one-row mean that does is the coastline's cells
      * entering and leaving the row, not the water: on 969495 at 2048 the one-row mean fell 0.1
      * degrees a row, against the water's own 0.04, over the five rows where fifty coastal cells
@@ -643,7 +680,7 @@ object OceanStage {
         for (row in 0 until cellsDown) {
             if (waterCells[row] == 0) continue
             val latitude = ClimateStage.latitudeOf(row, cellsDown).toDouble()
-            val spreadMeters = sqrt(OceanHeat.diffusivity(latitude) * RELAXATION_SECONDS)
+            val spreadMeters = sqrt(OceanHeat.diffusivity(latitude, config.scale.radiusMeters) * RELAXATION_SECONDS)
             val spreadRows = spreadMeters / rowHeightMeters
             val reachRows = ceil(ZONAL_MEAN_REACH_IN_SPREADS * spreadRows).toInt()
             var weightedSumC = 0.0

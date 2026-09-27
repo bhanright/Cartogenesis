@@ -362,13 +362,19 @@
   across a basin: on 969495 at 2048 at about 41 to 45 S and 43 N, softened by the eddies to a
   gradient about 100 km wide but straight. Earth's are bent by the continents' own winds and by
   the separated boundary currents' paths (the Gulf Stream's and the Kuroshio's extensions), which
-  Stommel's balance with no inertia does not make. A wind that knows the continents, or an
-  inertial term, is the cure. 2026-09-26, 4a.
+  Stommel's balance with no inertia does not make. **Chunk 4b owns it**, by the maintainer's
+  decision: it adds pressure cells over the oceans, so the wind's stress varies along a latitude
+  and the curl's zero line bends with it. 4a merges with the fronts recorded here. 2026-09-26, 4a.
 - **A planet's size and spin are not yet settings.** Everything the ocean solves reads the radius
   from `WorldScale.radiusMeters` and the spin from `WorldScale.ROTATION_RATE_PER_S`, and
   `OceanPlanetSizeTest` holds the laws at twice the radius; what a setting would still need is
   the equatorial eddy diffusivity's scaling with β, for which no published scaling was found (see
   `OceanHeat.diffusivity`), and every other stage's lengths audited the same way. 2026-09-26, 4a.
+- **`CurrentFeedsRainTest` counts its coasts in cells.** Its floors, ten cells of cold coast and
+  five of warm, and the one-cell step it takes offshore to read the water are counts of cells, so
+  on a square-cell grid, or at another resolution, they ask for a different length of coast. They
+  want restating as lengths of coast on the ground, in kilometers, when the grid changes.
+  2026-09-26, 4a.
 - **The site's words for its currents picture predate the solved circulation.** The picture is
   rendered at assembly (`:desktop:renderSiteImagery`), so it shows chunk 4a's currents, but its
   description in `site/index.html`, "rows of small pale arrows over the sea running east along the

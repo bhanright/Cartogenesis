@@ -171,7 +171,10 @@ class GpuOceanTest {
             (2e4 * sin(Math.PI * column / across) * sin(Math.PI * (row + 0.5) / down)).toFloat()
         }
         val target = FloatArray(across * down) { cell -> if (isWater[cell]) 5f + 20f * (cell / across) / down else 0f }
-        return OceanHeat.stencil(across, down, dx, dy, isWater, stream, target, OceanStage.RELAXATION_SECONDS, withTarget = true)
+        return OceanHeat.stencil(
+            across, down, dx, dy, isWater, stream, target, OceanStage.RELAXATION_SECONDS, withTarget = true,
+            diffusivityAt = { OceanHeat.diffusivity(it, WorldGenConfig().scale.radiusMeters) }
+        )
     }
 
     private fun worstDifference(expected: FloatArray, actual: FloatArray): Double {

@@ -3,9 +3,11 @@ package com.cartogenesis.worldgen.pipeline
 import com.cartogenesis.worldgen.model.WorldScale
 import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.cos
 import kotlin.math.expm1
 import kotlin.math.min
 import kotlin.math.sin
+import kotlin.math.sqrt
 
 /**
  * The sea-surface temperature the currents carry: the steady state of
@@ -31,13 +33,21 @@ import kotlin.math.sin
  * so the operator is strictly diagonally dominant with a margin of `1/τ`: monotone, and its solution
  * cannot be further from the converged one than τ times the largest residual.
  *
- * **The velocity through a face** is taken from ψ at the face's two corners, each the mean of the
- * four cell centers around it, so the discrete divergence of the face velocities is exactly zero
- * over every cell of open water.
+ * **The velocity through a face** is taken from ψ at the face's two corners, so the flux through a
+ * cell's four faces sums to zero whatever the corners hold: `(ψ_NE - ψ_SE) - (ψ_NW - ψ_SW) - (ψ_NE -
+ * ψ_NW) + (ψ_SE - ψ_SW)` is zero term by term. A corner in open water is the mean of the four cell
+ * centers around it.
  *
  * **The coast** is a face with no flux: no current crosses it and no eddy mixes across it, so no
  * heat leaves the water through land, and a strip of land a cell wide keeps two seas apart. Nor
- * does any heat cross a pole.
+ * does any heat cross a pole. For the flux left on the open faces to still sum to zero over each
+ * cell, the velocity through a shut face must itself be zero, which is the coast's own condition,
+ * no flow through it: so a corner that touches land takes the coast's ψ, zero, which the
+ * circulation holds on every land body alike, and a face shut at the coast has both its corners
+ * there. A corner averaged across the coast instead, land counted as zero among three waters, is
+ * not zero, the shut face carries a velocity the heat never sees, and the advective form then
+ * makes or loses heat at the coast in proportion to it (`a closed basin neither makes nor loses
+ * heat at its coast`, `OceanHeatTest`).
  */
 object OceanHeat {
 
@@ -56,38 +66,70 @@ object OceanHeat {
     /** Where [MIDLATITUDE_DIFFUSIVITY_M2_PER_S] is read, in degrees of latitude. */
     const val MIDLATITUDE_DEGREES = 45.0
 
-    /**
-     * The eddy diffusivity along the equator, in square meters a second: 10,000, Zhurbas and Oh's
-     * "about 1 × 10⁴ ... along the whole length of the equator" (see [MIDLATITUDE_DIFFUSIVITY_M2_PER_S]).
-     * The ceiling [diffusivity] rises to toward the equator.
-     */
-    const val EQUATORIAL_DIFFUSIVITY_M2_PER_S = 10_000.0
+    /** Chelton et al.'s near-equatorial deformation radius on Earth, in meters; see [BAROCLINIC_WAVE_SPEED_M_PER_S]. */
+    private const val EQUATORIAL_DEFORMATION_RADIUS_EARTH_M = 240_000.0
 
     /**
-     * The eddy diffusivity at [latitudeDegrees], in square meters a second.
+     * The speed of the first baroclinic mode's gravity waves, in meters a second: 2.64, the one
+     * figure for the water column's stratification this generator takes, held the same at every
+     * latitude as it has no stratification of its own to vary.
+     *
+     * Derived from Chelton et al. (1998, *J. Phys. Oceanogr.* 28, 433-460), whose deformation radius
+     * "decreases from about 240 km in the near-equatorial band to less than 10 km at latitudes
+     * higher than about 60 degrees", and who take it within about five degrees of the equator as the
+     * equatorial radius `sqrt(c / 2β)`: so `c = 2 β R²` with Earth's β at the equator,
+     * `2Ω / a`, and R = 240 km. Their mapped speeds run from under 1 m/s at high latitudes to near 3
+     * in the tropics, so one speed read at the equator is the tropics' own and too fast poleward,
+     * where the radius it makes is still the one [diffusivity] is scaled from at 45 degrees.
+     */
+    const val BAROCLINIC_WAVE_SPEED_M_PER_S: Double =
+        2.0 * (2.0 * WorldScale.ROTATION_RATE_PER_S / OceanStage.EARTH_MEAN_RADIUS_M) *
+            EQUATORIAL_DEFORMATION_RADIUS_EARTH_M * EQUATORIAL_DEFORMATION_RADIUS_EARTH_M
+
+    /**
+     * The first baroclinic deformation radius at [latitudeDegrees] on a planet of [radiusMeters], in
+     * meters: `c / |f|` away from the equator and the equatorial radius `sqrt(c / 2β)` near it,
+     * whichever is the smaller (Chelton et al. 1998, as [BAROCLINIC_WAVE_SPEED_M_PER_S]). The two
+     * meet at 4.3 degrees on Earth; β grows as the planet shrinks, so on a smaller world the
+     * equatorial radius is shorter and takes over further from the equator, 7.9 degrees at a
+     * radius of 1,910 km.
+     */
+    fun deformationRadiusMeters(latitudeDegrees: Double, radiusMeters: Double): Double {
+        val latitude = latitudeDegrees * PI / 180.0
+        val coriolis = abs(2.0 * WorldScale.ROTATION_RATE_PER_S * sin(latitude))
+        val beta = 2.0 * WorldScale.ROTATION_RATE_PER_S * cos(latitude) / radiusMeters
+        val offEquator = if (coriolis == 0.0) Double.POSITIVE_INFINITY else BAROCLINIC_WAVE_SPEED_M_PER_S / coriolis
+        val equatorial = if (beta <= 0.0) Double.POSITIVE_INFINITY else sqrt(BAROCLINIC_WAVE_SPEED_M_PER_S / (2.0 * beta))
+        return min(offEquator, equatorial)
+    }
+
+    /**
+     * The eddies' velocity scale `V` in `K = V R_d`, in meters a second: 0.098, what makes `K`
+     * [MIDLATITUDE_DIFFUSIVITY_M2_PER_S] at [MIDLATITUDE_DEGREES], where the deformation radius is
+     * `c / |f|` on any planet, since `f` does not read the radius.
+     */
+    val EDDY_VELOCITY_MPS: Double =
+        MIDLATITUDE_DIFFUSIVITY_M2_PER_S * 2.0 * WorldScale.ROTATION_RATE_PER_S * sin(MIDLATITUDE_DEGREES * PI / 180.0) /
+            BAROCLINIC_WAVE_SPEED_M_PER_S
+
+    /**
+     * The eddy diffusivity at [latitudeDegrees] on a planet of [radiusMeters], in square meters a
+     * second: `K = V R_d`.
      *
      * Zhurbas and Oh find the drifters' Lagrangian length scale in the midlatitudes close to the
      * first baroclinic Rossby radius of deformation, and suggest `K = V · R_d` there, with `V` the
-     * eddies' velocity scale. `R_d = c / |f|`: the first baroclinic mode's speed `c` is the water
-     * column's stratification, and `f = 2Ω sin φ` the planet's spin. So `K` goes as `1 / |sin φ|`
-     * from its midlatitude figure, held constant in `V` and `c`, which this generator has no
-     * stratification or eddy field to vary. Neither reads the planet's radius, and the rotation is
-     * [WorldScale.ROTATION_RATE_PER_S]: a world of any size has Earth's midlatitude diffusivities.
-     *
-     * Toward the equator the same drifters show the scaling break down, with the Lagrangian length
-     * falling below `R_d`, which grows without bound as `f` goes to zero; so the diffusivity is
-     * capped at the equator's measured figure, [EQUATORIAL_DIFFUSIVITY_M2_PER_S]. The cap is reached at
-     * 10.2 degrees. The equatorial deformation radius `sqrt(c / 2β)` would put a scaling with the
-     * planet's radius there, as its square root; the drifters say the mixing there is not the
-     * midlatitude eddies', and no published scaling of the equatorial figure with β was found, so
-     * the measured figure is carried to every radius and this is stated rather than guessed at.
+     * eddies' velocity scale ([EDDY_VELOCITY_MPS]), held constant, as this generator has no eddy
+     * field to vary it. Away from the equator `R_d = c / |f|`, so `K` goes as `1 / |sin φ|` from its
+     * midlatitude figure, and reads no radius: a world of any size has Earth's midlatitude
+     * diffusivities. Near the equator `c / |f|` grows without bound, and the deformation radius
+     * there is the equatorial one, `sqrt(c / 2β)` ([deformationRadiusMeters]), which is finite, so
+     * no cap is needed: `K` rises toward the equator and levels off at `V sqrt(c / 2β)`. That reads
+     * the radius through β, as its square root: 23,500 m²/s on Earth, inside the 2-3 × 10⁴ Zhurbas
+     * and Oh measure in the eastern equatorial Pacific and above their 1 × 10⁴ along the rest of the
+     * equator, and 12,900 at this generator's radius of 1,910 km.
      */
-    fun diffusivity(latitudeDegrees: Double): Double {
-        val midlatitudeSine = sin(MIDLATITUDE_DEGREES * PI / 180.0)
-        val sine = abs(sin(latitudeDegrees * PI / 180.0))
-        val scaled = MIDLATITUDE_DIFFUSIVITY_M2_PER_S * midlatitudeSine / sine
-        return if (sine == 0.0) EQUATORIAL_DIFFUSIVITY_M2_PER_S else min(scaled, EQUATORIAL_DIFFUSIVITY_M2_PER_S)
-    }
+    fun diffusivity(latitudeDegrees: Double, radiusMeters: Double): Double =
+        EDDY_VELOCITY_MPS * deformationRadiusMeters(latitudeDegrees, radiusMeters)
 
     /**
      * The heat problem on one grid.
@@ -96,7 +138,8 @@ object OceanHeat {
      * temperature each cell relaxes toward, in degrees Celsius, zero on land; [relaxationSeconds] is
      * τ. With [withTarget] off the right-hand side is zero, for a coarse grid of the cycle that
      * solves for a correction. Rows are latitude bands pole to pole, as the map's. [diffusivityAt] is
-     * [diffusivity] except where a guard holds it constant to compare directions.
+     * [diffusivity] on the world's radius, except where a guard holds it constant to compare
+     * directions.
      */
     fun stencil(
         cellsAcross: Int,
@@ -108,7 +151,7 @@ object OceanHeat {
         targetC: FloatArray,
         relaxationSeconds: Double,
         withTarget: Boolean,
-        diffusivityAt: (latitudeDegrees: Double) -> Double = ::diffusivity
+        diffusivityAt: (latitudeDegrees: Double) -> Double
     ): OceanStencil {
         val cells = cellsAcross * cellsDown
         val east = FloatArray(cells)
@@ -189,13 +232,17 @@ object OceanHeat {
 
     private const val BERNOULLI_SERIES_BELOW = 1e-3
 
+    /** ψ on every coast, in square meters a second: the circulation holds every land cell at zero. */
+    private const val COAST_STREAM_M2_PER_S = 0.0
+
     /** Beyond this the exponential overflows a double and the weight is zero to its last digit. */
     private const val BERNOULLI_ZERO_ABOVE = 700.0
 
     /**
      * ψ at the corner between columns [westColumn] and [eastColumn] on the [north] or south side
-     * of [row]: the mean of the four cell centers around it, land holding ψ at zero, and beyond a
-     * pole minus the edge row's, the circulation's wall, which puts the corner on the pole at zero.
+     * of [row]: zero where any of the four cells around it is land, the coast's ψ, and otherwise
+     * their mean; beyond a pole the edge row's negated, the circulation's wall, which puts the
+     * corner on the pole at zero.
      */
     private fun corner(
         stream: FloatArray,
@@ -208,10 +255,14 @@ object OceanHeat {
         north: Boolean
     ): Double {
         val otherRow = if (north) row - 1 else row + 1
+        fun onLand(anyRow: Int, column: Int): Boolean =
+            anyRow in 0 until cellsDown && !isWater[anyRow * cellsAcross + column]
+        if (onLand(row, westColumn) || onLand(row, eastColumn) || onLand(otherRow, westColumn) || onLand(otherRow, eastColumn)) {
+            return COAST_STREAM_M2_PER_S
+        }
         fun at(anyRow: Int, column: Int): Double {
             if (anyRow < 0 || anyRow >= cellsDown) return -at(row, column)
-            val cell = anyRow * cellsAcross + column
-            return if (isWater[cell]) stream[cell].toDouble() else 0.0
+            return stream[anyRow * cellsAcross + column].toDouble()
         }
         return (at(row, westColumn) + at(row, eastColumn) + at(otherRow, westColumn) + at(otherRow, eastColumn)) / 4.0
     }

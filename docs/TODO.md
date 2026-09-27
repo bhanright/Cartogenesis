@@ -1732,6 +1732,25 @@
   `WorldGenConfig(seed, size, size)` outright rather than through `atResolution`, so its belts are a
   quarter of the app's width at 2048 and its boundaries straighter still. 2026-09-26, found on the
   Fix 3b review renders.
+- **A drowned basin opens to the sea through a strait one cell wide and hundreds of kilometers
+  long.** On seed 1 at 2048, in the site's opening band (sheet window 3264, 848, 1600 by 800, which
+  crosses the east-west seam), a channel of sea one cell wide runs from an inland arm of the sea
+  west along the southern foot of the east-west range to the coast: roughly 670 pixels of the
+  4096-pixel sheet, about 2,000 km at 2.9 km a pixel, measured by eye from the band, around rows
+  1,340 to 1,420. `SeaLevelStage.drainDrownedBasins` makes it: a basin whose floor stands below the
+  waterline has its outlet notch cut down to the waterline, so the basin joins the ocean at the next
+  labeling and the map shows "an arm of the sea with a narrow mouth". The notch is as wide as the
+  river's one-cell course, so the mouth is one cell wide for the whole length of the river that cut
+  it. It runs where it does because the collision belt's foot is a straight valley the length of
+  the belt (the entry above). Water colors (2026-09-27) stopped the coast being inked shut over
+  it, so it now draws as a thin line of water instead of a black one, but the feature itself has no
+  Earth analogue: drowned valleys (rias, fjords, the Chesapeake's arms) are the valley's own width
+  flooded, and sea straits such as the Bosporus are short. A sill taken below the waterline should
+  let the sea into the valley floor across its width below that level, and a basin whose outlet
+  cannot be taken below the waterline should stay a lake, or a dry depression, as the Caspian, the
+  Dead Sea and the Qattara do. Wants measuring (the channel's length, width and count across the
+  standard worlds) and a rule for how wide a drowned outlet opens. The ruled belts' repair may
+  remove this one; others may remain. 2026-09-27, seen by the maintainer on the live site.
 - **A rift that meets the coast should be drowned across its whole width.** A half-graben's floor is
   a wedge and the water in a coastal one stands at the waterline, so the hinge shelf is dry: the
   author's trough on 718106 at 2048 keeps 38% of its flat floor under water and shows the rest as a

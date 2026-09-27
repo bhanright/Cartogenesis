@@ -24,8 +24,8 @@ class OceanCurrentTest : BorrowsSharedWorlds() {
     private companion object {
         /**
          * The share of the energy balance's meridional transport the anomaly's row means may stand
-         * for: its smallest miss against Trenberth and Caron's measured transport, 0.1 PW of 5.0 at
-         * 45 degrees. See `the anomaly's row means carry less heat than the energy balance's own miss`.
+         * for: a chosen tolerance, not a derived bound. See `the anomaly's row means carry a small
+         * share of the energy balance's transport` for why this figure.
          */
         const val DOUBLE_COUNT_SHARE = 0.02
     }
@@ -83,28 +83,33 @@ class OceanCurrentTest : BorrowsSharedWorlds() {
 
     /**
      * The anomaly's reference is a band mean, so a row's anomaly does not average exactly to zero
-     * (see `OceanStage.buildAnomaly`); the heat those row means stand for is too small to count the
-     * energy balance's meridional transport twice by any amount the balance can itself answer for.
+     * (see `OceanStage.buildAnomaly`); the heat those row means stand for is held to a small share of
+     * the energy balance's own meridional transport, so that it is not counted a second time by much.
      *
      * A row whose water sits `m` degrees off its zonal mean gives the air `λ m` watts a square
      * meter more than the energy balance knows about, `λ` the surface exchange. Summed from a pole
      * to a latitude, with the whole ocean's net taken out first, that is a transport across the
      * latitude the currents carry on top of the balance's own. It is held to a share of the
      * balance's transport there, `2π a² D cos φ dT/dφ`, read as `EnergyBalanceTest`'s transport
-     * report reads it, on the same world. The share is [DOUBLE_COUNT_SHARE]: against Trenberth and
-     * Caron's measured transport, the balance's own reads 4.6, 4.9 and 3.2 PW at 30, 45 and 60
-     * degrees to Earth's 5.3, 5.0 and 3.3, so a double count under 2% is inside the smallest of
-     * its own misses.
+     * report reads it, on the same world, and must be under [DOUBLE_COUNT_SHARE] of it.
+     *
+     * Both bars here are chosen tolerances, not derived error bounds. 2% of the transport is chosen
+     * because it is small beside how far the balance's own transport stands from Earth's: 4.6, 4.9
+     * and 3.2 PW at 30, 45 and 60 degrees against Trenberth and Caron's 5.3, 5.0 and 3.3, misses of
+     * 13, 2 and 3%; an addition that size is not one anything this generator is measured against
+     * could tell apart. That comparison is the reason for the figure, not a bound on the error an
+     * added transport makes, which would need the balance run again with it.
      *
      * The whole ocean's net, set aside above, is a mean offset of the sea's temperature rather
-     * than a transport. It is held under `EnergyBalance.SECANT_TOLERANCE_C`, the twentieth of a
-     * degree to which the balance itself sets the planet's global mean when a world asks for a
-     * warmer or a cooler climate: an offset under it is one the balance could not have placed. Its
-     * spin-up residual, a few ten-thousandths, is printed beside it and is not the bar: that is how
-     * far the balance's own mean still moved in its last year, not how closely it is set.
+     * than a transport. It is held under `EnergyBalance.SECANT_TOLERANCE_C`, a twentieth of a
+     * degree: chosen as the closeness to which the balance itself is asked to set the planet's
+     * global mean when a world asks for a warmer or a cooler climate, again a comparison and not a
+     * bound. Its spin-up residual, a few ten-thousandths, is printed beside it.
+     *
+     * Every figure must be a number: a NaN compares false with any bar, and would pass it.
      */
     @Test
-    fun `the anomaly's row means carry less heat than the energy balance's own miss`() {
+    fun `the anomaly's row means carry a small share of the energy balance's transport`() {
         val failures = ArrayList<String>()
         for (seed in listOf(7L, 42L, 1234L, 99L)) {
             val world = SharedWorlds.world(WorldGenConfig(seed = seed, width = 512, height = 512))
@@ -155,13 +160,13 @@ class OceanCurrentTest : BorrowsSharedWorlds() {
                 }
                 val share = abs(doubleCountW) / balanceW
                 shares += "%+.0f %.2f%%".format(degrees, share * 100)
-                if (share >= DOUBLE_COUNT_SHARE) {
+                if (!share.isFinite() || share >= DOUBLE_COUNT_SHARE) {
                     failures += "seed $seed: the row means carry %.2f%% of the balance's transport across %+.0f".format(share * 100, degrees)
                 }
             }
             println("OCEAN DOUBLE COUNT seed $seed: " + shares.joinToString() +
                 "; whole ocean %+.4f C against the balance's spin-up residual %.4f C".format(oceanMeanC, zonal.spinUpResidualC))
-            if (abs(oceanMeanC) >= EnergyBalance.SECANT_TOLERANCE_C) {
+            if (!oceanMeanC.isFinite() || abs(oceanMeanC) >= EnergyBalance.SECANT_TOLERANCE_C) {
                 failures += "seed $seed: the whole ocean's anomaly is %+.4f C, past the %.2f C the balance sets its mean to"
                     .format(oceanMeanC, EnergyBalance.SECANT_TOLERANCE_C)
             }

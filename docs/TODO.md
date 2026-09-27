@@ -177,11 +177,16 @@
   returns its value. Every world moves by the cells at the boundary, so it wants a fingerprint check
   of its own. 2026-09-25, Fix 3.
 
-- **The flat potential's cost is over rule 8's line.** After Fix 3 seed 7's flats at 512 held 2,696
+- **The flat potential's cost sits on rule 8's line.** After Fix 3 seed 7's flats at 512 held 2,696
   raised cells in 478 flats and a pass cost 3.4 ms, 1.00% of a generation over 33 passes. On the
-  law's terrain (Fix 3b) they hold 3,147 cells in 476 flats and a pass costs 5.8 ms on a quiet
-  machine, 2.02% of a 9.4 s generation, and `FlatCourseTest` records it. A device path, or a solve
-  whose cost does not ride on the flats' size, is owed. 2026-09-25, Fix 3 and Fix 3b.
+  law's terrain (Fix 3b) they held 3,147 cells in 476 flats at 5.8 ms a pass, 2.02% of a 9.4 s
+  generation. Since 4a solves the ocean on the processor, the generation is longer: 479 flats and
+  3,223 raised cells at 3.4 to 3.7 ms a pass read 0.99% of a 12.2 s generation in one run and
+  1.03% of an 11.0 s one in the next. A line the share straddles with the machine's load cannot be
+  asserted, so `FlatCourseTest` now prints it (`F30B COST`) rather than recording a known failure
+  that flips. Whether the potential needs a device path is still open. A device path, or a solve
+  whose cost does not ride on the flats' size, settles it either way, and a faster ocean would put
+  the share back over the line. 2026-09-25, Fix 3 and Fix 3b; 2026-09-27, 4a.
 
 - **The Earth reference behind the river density is one dataset.** The Cartography panel's River
   density slider scales the ink from a quarter of Earth's figure to every course the sheet's scale

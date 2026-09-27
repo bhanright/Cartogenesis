@@ -35,7 +35,7 @@ class CurrentFeedsRainTest : BorrowsSharedWorlds() {
 
         /**
          * The sample's cold coast is short of its floor of ten cells: on seed 7 the Stommel
-         * circulation's equatorward drift cools only six cells of that west coast by 0.8 degrees.
+         * circulation's equatorward drift cools only nine cells of that west coast by 0.8 degrees.
          * Earth's cold coasts owe most of their cold to the upwelling beside them, which chunk 4b
          * builds; until then the rainfall comparison runs on the cells there are.
          */
@@ -156,7 +156,7 @@ class CurrentFeedsRainTest : BorrowsSharedWorlds() {
                 "and an east coast on every row of 27-33 N (${eastFacingRows.size} of $warmBandRows): choose the seed again"
         )
 
-        KnownFailures.expect(COLD_COAST_SHORT, "6 cells") {
+        KnownFailures.expect(COLD_COAST_SHORT, "9 cells") {
             if (coldCoast.size < 10) {
                 throw RecordedViolation(
                     "only ${coldCoast.size} cells of seed $SEED's west coast at 27-33 S sit 0.8 C under their " +

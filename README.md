@@ -95,9 +95,12 @@ the generator is written in those units and converted to whatever grid the world
    out as graded arcs while coasts under mountains keep their rias.
 6. **Shelves.** Sea floor near a coast is remapped onto a shallow continental shelf falling away to
    the abyss, so the coastline reads as bathymetry rather than an underwater cliff.
-7. **Currents.** Ocean currents are calculated from wind stress within each ocean basin. The
-   resulting gyres produce warm poleward currents along western ocean margins and cold equatorward
-   currents along eastern margins.
+7. **Currents.** The wind's stress drives Stommel's circulation, solved on a grid sized by the
+   planet's own physics rather than the map's: bottom friction and the change of the Coriolis
+   effect with latitude crowd each gyre's return flow into a narrow current along the basin's
+   western side. The sea temperature is then solved as a steady balance between the currents
+   carrying heat, the eddies spreading it and the air resetting it, so warm water runs poleward
+   along western margins and cooler water drifts equatorward along the eastern ones.
 8. **Climate.** Temperature comes from a one-dimensional energy balance over latitude bands marched
    through the year, with separate air columns over land and sea and a shallow ocean slab, so
    continents get winters and coasts stay milder. Albedo follows the ice the model grows. Rainfall

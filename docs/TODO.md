@@ -10,8 +10,6 @@
   tier, and the compiler is asked by hand through `?selftest` in a browser with a device. The ice
   kernel's new console report of a refused module has likewise been read, not seen: the renamed
   module compiled on the only device tried.
-- **The ocean's WGSL is still written inside its JavaScript function (chunk 5a).** It is not in
-  `WGSL_MODULES`, so neither WGSL guard reads it; the chunk rewriting the ocean moves it there.
 - **`--gpu-check` probes the erosion sweeps and the export raster only.** The ocean's and the ice
   sheet's shaders compile on the same context and are not reported; a driver that takes one and
   refuses another would be seen only as a world drawn on the processor.
@@ -179,11 +177,16 @@
   returns its value. Every world moves by the cells at the boundary, so it wants a fingerprint check
   of its own. 2026-09-25, Fix 3.
 
-- **The flat potential's cost is over rule 8's line.** After Fix 3 seed 7's flats at 512 held 2,696
+- **The flat potential's cost sits on rule 8's line.** After Fix 3 seed 7's flats at 512 held 2,696
   raised cells in 478 flats and a pass cost 3.4 ms, 1.00% of a generation over 33 passes. On the
-  law's terrain (Fix 3b) they hold 3,147 cells in 476 flats and a pass costs 5.8 ms on a quiet
-  machine, 2.02% of a 9.4 s generation, and `FlatCourseTest` records it. A device path, or a solve
-  whose cost does not ride on the flats' size, is owed. 2026-09-25, Fix 3 and Fix 3b.
+  law's terrain (Fix 3b) they held 3,147 cells in 476 flats at 5.8 ms a pass, 2.02% of a 9.4 s
+  generation. Since 4a solves the ocean on the processor, the generation is longer: 479 flats and
+  3,223 raised cells at 3.4 to 3.7 ms a pass read 0.99% of a 12.2 s generation in one run and
+  1.03% of an 11.0 s one in the next. A line the share straddles with the machine's load cannot be
+  asserted, so `FlatCourseTest` now prints it (`F30B COST`) rather than recording a known failure
+  that flips. Whether the potential needs a device path is still open. A device path, or a solve
+  whose cost does not ride on the flats' size, settles it either way, and a faster ocean would put
+  the share back over the line. 2026-09-25, Fix 3 and Fix 3b; 2026-09-27, 4a.
 
 - **The Earth reference behind the river density is one dataset.** The Cartography panel's River
   density slider scales the ink from a quarter of Earth's figure to every course the sheet's scale
@@ -384,11 +387,57 @@
   edge of 434 km along a row near 1,375; its range's flanks also show the comb of gullies down
   the columns, plainest of the three offered. The full picture refresh after the square grid picks the
   band again, by the same measure. 2026-09-26, Site 5c.
+- **The ocean's device path is slower than the processor.** Chunk 4a's circulation and heat are
+  solved on the card behind `OceanAccelerator` and agree with the processor to the bit, but each
+  batch of relaxation passes goes to the card and comes back, and the multigrid's restriction,
+  prolongation and Krylov steps stay on the processor between batches: the whole stage takes 5.0
+  to 6.7 s with the device against 1.7 to 2.8 s without it on seeds 42, 718106 and 59758
+  (`GpuOceanTest`). Keeping the whole V-cycle resident on the card, the transfers and the Krylov
+  vectors with it, is what would make the device pay; until then the graphics switch costs the
+  ocean time. 2026-09-26, 4a.
+- **The gyres' boundaries run along lines of latitude.** The belts' stress is a function of
+  latitude alone, so where the regional wind is weak the curl changes sign along a row and the
+  boundary between a subtropical and a subpolar gyre, and the warm band beside it, runs straight
+  across a basin: on 969495 at 2048 at about 41 to 45 S and 43 N, softened by the eddies to a
+  gradient about 100 km wide but straight. Earth's are bent by the continents' own winds and by
+  the separated boundary currents' paths (the Gulf Stream's and the Kuroshio's extensions), which
+  Stommel's balance with no inertia does not make. **Chunk 4b owns it**, by the maintainer's
+  decision: it adds pressure cells over the oceans, so the wind's stress varies along a latitude
+  and the curl's zero line bends with it. 4a merges with the fronts recorded here. 2026-09-26, 4a.
+- **A planet's size and spin are not yet settings.** Everything the ocean solves reads the radius
+  from `WorldScale.radiusMeters` and the spin from `WorldScale.ROTATION_RATE_PER_S`, and
+  `OceanPlanetSizeTest` holds the laws at twice the radius, the eddy diffusivity's equatorial
+  deformation radius among them (`OceanHeat.diffusivity`); what a setting would still need is
+  every other stage's lengths audited the same way, and a spin read from the setting where
+  `ROTATION_RATE_PER_S` is read now. 2026-09-26, 4a.
+- **Chunk 4a's climate moved the drawn ice's straight runs at 2048, recorded for the ice chunks.**
+  The drawn ice follows the climate, so solving the gyres moved `ICE_EDGE_ALONG_A_ROW`'s marks in
+  the 2048 census (`GeometryExpectations.at2048`), base 3a66025 against 4a's head: seed 42's
+  facets clean against 199.0 cell widths; 969495's clean against two runs, 215.0; 1234's 179.3
+  against 188.6; 718106's 273.0 at (1030, 1761) against two runs, 189.0 at (998, 1784); 99's
+  row-bearing preference clean against 1.647; and 59758's cleared, 1.555 against clean. They go
+  to the ice chunks, which will change what the map draws as ice: the maintainer has chosen that
+  the drawn ice follows the sheet's thickness, which retakes every one of these. 2026-09-26, 4a.
+- **Peoples' borders follow circular arcs on 59758 at 2048.** Two arcs of about 123 degrees on
+  circles 10 to 12 cells across, `PEOPLES_BORDER_ARC`, a finding first made by 4a's census: base
+  3a66025 clean, 4a's head two. The peoples settle by habitability, which the solved currents
+  moved, so this is 4a's climate reaching a rule of the peoples' that draws a round edge where
+  its inputs allow one. 2026-09-26, 4a.
+- **A realm border follows a circular arc on 59758 at 2048.** One arc of 127 degrees on a circle
+  11 cells across, 0.22 cells rms, `REALM_BORDER_ARC`: base 3a66025 clean, 4a's head 127.5.
+  Realms follow habitability too, so this is 4a's climate moving a border onto a round path, as
+  with the peoples' arcs above. 2026-09-26, 4a.
+- **`CurrentFeedsRainTest` counts its coasts in cells.** Its floors, ten cells of cold coast and
+  five of warm, and the one-cell step it takes offshore to read the water are counts of cells, so
+  on a square-cell grid, or at another resolution, they ask for a different length of coast. They
+  want restating as lengths of coast on the ground, in kilometers, when the grid changes.
+  2026-09-26, 4a.
 - **Six operators still count a row as a column, each outside Fix 2's list.** Found by reading the
   code, not by a guard: the climate stage's rainfall blur (a square box of cells, sized by
   `RAIN_BLUR_REFERENCE_WIDTH`) and its two coastal-reach blurs, the water exposure and the offshore
-  anomaly's spread, whose radius is `OceanConfig.coastalReachCells` (the ocean's chunk); the realms'
-  two blurs (`NationStage`); the seeded field that jitters flat routing and the lake balance, a
+  anomaly's spread, whose radius is `OceanConfig.coastalReachCells` (chunk 4b, the coastal
+  climate); the realms' two blurs (`NationStage`); the seeded field that jitters flat routing and
+  the lake balance, a
   lattice of eight cells each way (`FlowRouting.smoothSeededField`); the thermal sweeps' count,
   which spends `debrisTravelKm` as sweeps of one cell, a row down a column
   (`ErosionStage.sweepsFor`); and the glaciation's two distance fields (the `JumpFloodDistance`
@@ -1629,6 +1678,9 @@
   are as much the cold sea stabilising the air as less evaporation: over a coast washed by a cold
   current, scale the release rate down (a marine inversion) so the moisture passes inland. Guard
   on a subtropical west coast with a cold current: a coastal desert appears. 2026-09-12.
+  Built as `ClimateConfig.marineInversion` by W3 and recorded as not delivered; with 4a's solved
+  gyres the cold water is on the west coasts but mostly poleward of 35 degrees, and the inversion
+  and the upwelling that makes Earth's cold coasts cold are chunk 4b's. 2026-09-26.
 - **D8 holds a bearing on smooth slopes.** On a planar hillside a drawn river runs 20-35 cells in
   one of the eight grid directions before it bends (seed 59758 at 2048, (34,1095) to (68,1095),
   drops 3e-3 to 9e-3 per cell), because steepest descent on a plane always picks the same

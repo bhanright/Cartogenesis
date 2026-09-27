@@ -509,6 +509,8 @@ object MapRasterizer {
             val pitchPixels = pitchColumns * geometry.pixelsPerCellAcross
             val pitchRows = (pitchPixels / geometry.pixelsPerCellDown).coerceAtLeast(1)
             flowArrowReachPixels = pitchPixels * HALF_A_CELL
+            val cellWidthMetres = world.config.scale.cellWidthKm(cellsAcross) * METRES_PER_KM
+            val cellHeightMetres = world.config.scale.cellHeightKm(cellsDown) * METRES_PER_KM
             var row = pitchRows / 2
             while (row < cellsDown) {
                 var column = pitchColumns / 2
@@ -516,17 +518,19 @@ object MapRasterizer {
                     val cell = row * cellsAcross + column
                     if (options.view == MapView.CURRENTS) {
                         if (!world.sea.isLand[cell]) {
-                            val eastward = world.ocean.velocityX.data[cell]
-                            val southward = world.ocean.velocityY.data[cell]
-                            val speed =
-                                kotlin.math.sqrt(eastward * eastward + southward * southward)
-                            if (speed > STILLEST_DRAWN_CURRENT) {
+                            val eastwardMps = world.ocean.velocityX.data[cell]
+                            val southwardMps = world.ocean.velocityY.data[cell]
+                            val speedMps =
+                                kotlin.math.sqrt(eastwardMps * eastwardMps + southwardMps * southwardMps)
+                            if (speedMps > STILLEST_DRAWN_CURRENT_MPS) {
+                                // A ground velocity is a different number of cells a second on
+                                // each axis, so each is converted by its own cell's length.
                                 flow.add(
                                     arrowOnTheSheet(
-                                        column, row, eastward, southward, geometry,
-                                        (speed / world.config.ocean.speedCellsPerPass)
-                                            .coerceIn(0f, 1f),
-                                        CURRENT_ARROW_INK
+                                        column, row,
+                                        (eastwardMps / cellWidthMetres).toFloat(),
+                                        (southwardMps / cellHeightMetres).toFloat(),
+                                        geometry, currentStrength(speedMps), CURRENT_ARROW_INK
                                     )
                                 )
                             }
@@ -610,9 +614,9 @@ object MapRasterizer {
      * A flow arrow at the centre of the cell at [column], [row], pointing where a flow of
      * [eastward] columns and [southward] rows goes on the sheet.
      *
-     * Both flows are carried in the grid's own units — the currents in cells per pass, the wind's
-     * slant in rows per column — so a step of the flow is that many columns and rows, and on the
-     * sheet it is that many of each axis's pixels.
+     * Both flows are handed over in the grid's own units — the currents in cells a second along
+     * each axis, the wind's slant in rows per column — so a step of the flow is that many columns
+     * and rows, and on the sheet it is that many of each axis's pixels.
      */
     private fun arrowOnTheSheet(
         column: Int,
@@ -699,12 +703,35 @@ object MapRasterizer {
     private const val CLOSEST_ARROWS_CELLS = 6
 
     /**
-     * The slowest current that still gets an arrow, in cells per pass.
+     * The slowest current that still gets an arrow, in metres a second: a millimetre, 86 metres a
+     * day.
      *
-     * A thousandth of a cell a pass is a gyre's dead centre and the corners of enclosed seas, where
-     * the direction is numerical noise: an arrow there points somewhere definite and means nothing.
+     * A gyre's interior moves at a few millimetres a second (the Sverdrup flow), so this drops only
+     * a gyre's dead centre and the corners of enclosed seas, where the direction is numerical noise:
+     * an arrow there points somewhere definite and means nothing.
      */
-    private const val STILLEST_DRAWN_CURRENT = 1e-3f
+    private const val STILLEST_DRAWN_CURRENT_MPS = 1e-3f
+
+    /**
+     * The current drawn at full strength, in metres a second: the Gulf Stream's core, the fastest
+     * of Earth's great currents at the surface.
+     */
+    private const val FULL_STRENGTH_CURRENT_MPS = 1f
+
+    /** Metres in a kilometre, for the cell lengths the arrows are converted by. */
+    private const val METRES_PER_KM = 1_000.0
+
+    /**
+     * How strongly a current's arrow is drawn, 0 to 1, on a logarithmic scale from
+     * [STILLEST_DRAWN_CURRENT_MPS] to [FULL_STRENGTH_CURRENT_MPS].
+     *
+     * Logarithmic because the currents span three decades of speed, a gyre's interior at
+     * millimetres a second and its western boundary at a metre, and a linear fade would leave every
+     * arrow but the boundary currents' invisible.
+     */
+    private fun currentStrength(speedMps: Float): Float =
+        (kotlin.math.ln(speedMps / STILLEST_DRAWN_CURRENT_MPS) /
+            kotlin.math.ln(FULL_STRENGTH_CURRENT_MPS / STILLEST_DRAWN_CURRENT_MPS)).coerceIn(0f, 1f)
 
     /**
      * How strongly a wind arrow is drawn.

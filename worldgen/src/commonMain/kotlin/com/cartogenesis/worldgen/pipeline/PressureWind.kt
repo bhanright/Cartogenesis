@@ -3,6 +3,7 @@ package com.cartogenesis.worldgen.pipeline
 import com.cartogenesis.worldgen.math.BoxBlur
 import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.WorldGenConfig
+import com.cartogenesis.worldgen.model.WorldScale
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.atan
@@ -114,16 +115,7 @@ internal object PressureWind {
     private const val REFERENCE_COLUMN_K = 288.15
 
     /** Density of air at sea level, in kilograms per cubic metre, at the standard atmosphere. */
-    private const val AIR_DENSITY_KG_PER_M3 = 1.225f
-
-    /**
-     * The planet's rotation rate, in radians a second: `2 pi` over one sidereal day of 86,164
-     * seconds. Earth's, because the configuration has no rotation period to read — every other
-     * planetary figure the generator takes (radius through [com.cartogenesis.worldgen.model
-     * .WorldScale], obliquity through `ClimateConfig.seasonalTiltDegrees`) is settable and this
-     * one is not yet, so it is stated here rather than hidden in an expression.
-     */
-    private const val ROTATION_RATE_PER_S = 7.2921159e-5f
+    internal const val AIR_DENSITY_KG_PER_M3 = 1.225f
 
     /**
      * The Brunt-Vaisala frequency of the mid-latitude troposphere, in radians a second, and the
@@ -163,14 +155,14 @@ internal object PressureWind {
      * is this radius, not some multiple of it, and the number below means what it says.
      */
     fun rossbyRadiusKm(): Double {
-        val coriolisAt45 = 2.0 * ROTATION_RATE_PER_S *
+        val coriolisAt45 = 2.0 * WorldScale.ROTATION_RATE_PER_S *
             sin(ROSSBY_REFERENCE_LATITUDE_DEGREES * DEGREES_TO_RADIANS)
         return BUOYANCY_FREQUENCY_PER_S * TROPOPAUSE_DEPTH_M / coriolisAt45 / 1_000.0
     }
 
     /** The Coriolis parameter at a latitude, in radians a second: `f = 2 omega sin(phi)`. */
     fun coriolisParameter(latitudeDegrees: Float): Float =
-        2f * ROTATION_RATE_PER_S * sin(latitudeDegrees * DEGREES_TO_RADIANS).toFloat()
+        2f * WorldScale.ROTATION_RATE_PER_S * sin(latitudeDegrees * DEGREES_TO_RADIANS).toFloat()
 
     /**
      * The linear surface drag, in radians a second, that turns the wind across the isobars by

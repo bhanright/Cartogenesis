@@ -220,12 +220,47 @@ data class WorldScale(
     /** The whole world's surface in square kilometres, land and sea alike. */
     val worldAreaKm2: Double get() = worldWidthKm * worldWidthKm * WORLD_HEIGHT_AS_SHARE_OF_WIDTH
 
+    /**
+     * The planet's radius, in meters: the equator's length, [worldWidthKm], over two pi.
+     *
+     * The one place the planet's size becomes a radius. Everything whose physics reads the size of
+     * the planet rather than the size of a cell reads it here, so a world of another size is a
+     * world of another size throughout.
+     */
+    val radiusMeters: Double get() = worldWidthKm * METRES_PER_KM / (2.0 * kotlin.math.PI)
+
+    /** How far one degree of latitude runs on the ground, in meters: a meridian's length over 180. */
+    val metersPerDegreeLatitude: Double get() = radiusMeters * kotlin.math.PI / DEGREES_POLE_TO_POLE
+
+    /**
+     * β, how fast the Coriolis parameter grows northward, in radians a second per meter, at
+     * [latitudeDegrees]: `2Ω cos φ / a`, with Ω [ROTATION_RATE_PER_S] and `a` [radiusMeters].
+     *
+     * Positive in both hemispheres, since the Coriolis parameter rises northward in both. It is what
+     * piles a gyre's return flow against the western side of its basin; a planet a third the size
+     * of Earth's that turns as fast has a β three times Earth's, and a western boundary current a
+     * third as wide.
+     */
+    fun planetaryVorticityGradientPerMeterSecond(latitudeDegrees: Double): Double =
+        2.0 * ROTATION_RATE_PER_S * kotlin.math.cos(latitudeDegrees * kotlin.math.PI / 180.0) / radiusMeters
+
     companion object {
         /** Pole to pole against the equator's whole circumference, on an equirectangular map. */
         const val WORLD_HEIGHT_AS_SHARE_OF_WIDTH = 0.5
 
         /** Metres in a kilometre, so no stage has to write the conversion out. */
         const val METRES_PER_KM = 1_000f
+
+        /** Degrees of latitude from pole to pole. */
+        private const val DEGREES_POLE_TO_POLE = 180.0
+
+        /**
+         * The planet's rotation rate, in radians a second: `2 pi` over one sidereal day of 86,164
+         * seconds. Earth's, because the configuration has no rotation period to read; every stage
+         * that needs the planet's spin reads it here, so there is one figure to make settable if a
+         * rotation period is ever offered.
+         */
+        const val ROTATION_RATE_PER_S = 7.2921159e-5f
     }
 }
 
@@ -1889,31 +1924,6 @@ enum class WildernessMode(val label: String) {
 @Serializable
 data class OceanConfig(
     val enabled: Boolean = true,
-    /** Strength of the wind stress driving the gyres. */
-    val forcing: Float = 1.0f,
-    /**
-     * Grid the stream function is solved on. Gyres are basin-scale, and Jacobi spreads information
-     * about one cell per pass, so at full resolution closing a basin would take tens of thousands
-     * of passes. A small grid converges properly and costs far less.
-     */
-    val solveResolution: Int = 128,
-    /** Over-relaxation factor. Above 1 converges faster; at or above 2 it diverges. */
-    val overRelaxation: Float = 1.7f,
-    /**
-     * Jacobi sweeps used to solve for the stream function. Too few and basins do not close into
-     * gyres; the cost is linear and this stage is a small share of generation either way.
-     */
-    val relaxationPasses: Int = 3000,
-    /** Scales stream-function gradients into cells of travel per advection pass. */
-    val speedCellsPerPass: Float = 1.6f,
-    val advectionPasses: Int = 200,
-    /** How much of the upstream temperature a cell takes each pass. */
-    val advectionRate: Float = 0.5f,
-    /**
-     * How strongly water is pulled back toward its latitude's own temperature each pass. Without
-     * it a current would carry tropical water all the way to the pole.
-     */
-    val relaxationRate: Float = 0.02f,
     /**
      * How far inland a coast feels its water, in cells, and how strongly. This is what makes a
      * mild west coast at high latitude and an arid one beside a cold current.

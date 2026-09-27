@@ -573,7 +573,9 @@ object MapRasterizer {
 
         val coast =
             if (options.showCoastline) {
-                Shoreline.of(world.sea.isLand, geometry, sheet)
+                // Round the open sea: a channel too narrow for two shores is drawn as the water
+                // it is, and the coast runs across its mouth. See [NarrowSea].
+                Shoreline.of(NarrowSea.banks(world), geometry, sheet)
             } else {
                 emptyList()
             }
@@ -1123,19 +1125,25 @@ object MapRasterizer {
         return Isobaths.ink(depth, slopePerPixel, slopeOnTheGround, interval, flattestSlope)
     }
 
+    /**
+     * Inks the landward cell of every shore that faces open sea. A neighbour in [NarrowSea] is a
+     * bank rather than a shore, so a channel one cell wide is left as water rather than inked from
+     * both sides into a line.
+     */
     private fun drawCoastline(world: WorldMap, style: MapStyle, pixels: IntArray) {
         val cellsAcross = world.width
         val cellsDown = world.height
         val land = world.sea.isLand
+        val banks = NarrowSea.banks(world)
         for (row in 0 until cellsDown) {
             for (column in 0 until cellsAcross) {
                 val cell = row * cellsAcross + column
                 if (!land[cell]) continue
-                val toTheEast = land[row * cellsAcross + (column + 1) % cellsAcross]
+                val toTheEast = banks[row * cellsAcross + (column + 1) % cellsAcross]
                 // The southern edge of the sheet has no cell beyond it, and a pole is not a coast:
                 // taken as land, so the bottom row is never inked along its whole width.
                 val toTheSouth =
-                    if (row + 1 < cellsDown) land[(row + 1) * cellsAcross + column] else true
+                    if (row + 1 < cellsDown) banks[(row + 1) * cellsAcross + column] else true
                 if (!toTheEast || !toTheSouth) {
                     pixels[cell] = MapPalette.blend(
                         pixels[cell], style.coastline, style.coastlineStrength

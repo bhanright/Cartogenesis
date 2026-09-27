@@ -37,9 +37,19 @@ enum class MapStyle(
     internal val paper: Int,
     internal val biomeWash: Float,
     internal val biomeMuting: Float,
+    /**
+     * The water, in one colour for a river and for a lake's shallows.
+     *
+     * A survey's hydrography and an atlas's water are one colour, because they are one water: a
+     * river drawn dark ink blue running into a lake painted pale reads as two substances and as a
+     * line across the lake where the two meet. So [lake] is this colour, the lake at a river's
+     * depth, and [lakeDeep] carries the same water further down its ramp. The one exception is a
+     * line-art style, whose lakes are paper ruled in [coastline], and there this is that ink.
+     * `WaterColorTest` holds all of it and what each style's water measures against its ground.
+     */
     internal val river: Int,
+    /** A lake's shallows: [river] itself, so the two are one water where they meet. */
     internal val lake: Int,
-    internal val lakeDeep: Int,
     internal val coastline: Int,
     internal val coastlineStrength: Float,
     internal val border: Int,
@@ -130,9 +140,10 @@ enum class MapStyle(
         paper = 0xFFF2E4C6.toInt(),
         biomeWash = 0.45f,
         biomeMuting = 0f,
+        // The atlas's own river blue for both. The lake was a lighter blue, which put a pale body
+        // at the end of every darker river.
         river = 0xFF3C7EA8.toInt(),
-        lake = 0xFF4E92B4.toInt(),
-        lakeDeep = 0xFF2F6B8C.toInt(),
+        lake = 0xFF3C7EA8.toInt(),
         coastline = 0xFF3E4A52.toInt(),
         coastlineStrength = 0.55f,
         border = 0xFF2A2118.toInt(),
@@ -171,9 +182,11 @@ enum class MapStyle(
         paper = 0xFFF0E3C2.toInt(),
         biomeWash = 0.22f,
         biomeMuting = 0.55f,
-        river = 0xFF6E5B3C.toInt(),
-        lake = 0xFFBFB08A.toInt(),
-        lakeDeep = 0xFFA6976F.toInt(),
+        // A sepia wash, a shade lighter than the ink the rivers were, for the rivers and the lakes
+        // alike. The lake was a pale buff that measured 2.7 CIEDE2000 from the ground around it:
+        // on this chart a lake was a patch nobody could find, with a dark line ending at it.
+        river = 0xFF7A6644.toInt(),
+        lake = 0xFF7A6644.toInt(),
         coastline = 0xFF5B4A2F.toInt(),
         coastlineStrength = 0.7f,
         border = 0xFF6B3F2A.toInt(),
@@ -209,9 +222,10 @@ enum class MapStyle(
         paper = 0xFFF7F5EE.toInt(),
         biomeWash = 0.10f,
         biomeMuting = 0.80f,
-        river = 0xFF44505A.toInt(),
-        lake = 0xFF9FADB5.toInt(),
-        lakeDeep = 0xFF7F8D96.toInt(),
+        // One grey-blue ink for all the water, between the dark ink the rivers were and the pale
+        // wash the lakes were: a brush lays a river and a lake with the same load.
+        river = 0xFF5E6B75.toInt(),
+        lake = 0xFF5E6B75.toInt(),
         coastline = 0xFF2B2F33.toInt(),
         coastlineStrength = 0.8f,
         border = 0xFF7A2E28.toInt(),
@@ -246,9 +260,11 @@ enum class MapStyle(
         paper = 0xFFF4EAD2.toInt(),
         biomeWash = 0.14f,
         biomeMuting = 0.62f,
-        river = 0xFF3E6E8C.toInt(),
-        lake = 0xFFAFD2E0.toInt(),
-        lakeDeep = 0xFF87B4C8.toInt(),
+        // A chart's inland water in one blue, lighter than the river ink it was so a lake is not a
+        // dark blot on the buff. The lake was the sea's own pale band, 2.6 CIEDE2000 from the sea
+        // at its shallowest measure, so a lake read as a stray piece of sea.
+        river = 0xFF5E8FAD.toInt(),
+        lake = 0xFF5E8FAD.toInt(),
         coastline = 0xFF23384A.toInt(),
         coastlineStrength = 0.85f,
         border = 0xFF8A3B2E.toInt(),
@@ -266,8 +282,8 @@ enum class MapStyle(
     ),
 
     /**
-     * The same world after dark. Deep indigo water, slate land, and rivers left bright so they
-     * still read — the one thing that must not disappear when everything else is dimmed.
+     * The same world after dark. Deep indigo sea, slate land, and rivers and lakes left bright so
+     * they still read — the one thing that must not disappear when everything else is dimmed.
      */
     MIDNIGHT(
         label = "Midnight",
@@ -283,9 +299,10 @@ enum class MapStyle(
         paper = 0xFF1A2130.toInt(),
         biomeWash = 0.18f,
         biomeMuting = 0.70f,
+        // The bright rivers stay, and the lakes take the same light: moonlit water is the one
+        // bright thing on a night map, and a dark lake at the end of a bright river read as a hole.
         river = 0xFF7FC6E8.toInt(),
-        lake = 0xFF3E7396.toInt(),
-        lakeDeep = 0xFF27516E.toInt(),
+        lake = 0xFF7FC6E8.toInt(),
         coastline = 0xFF9FB4C6.toInt(),
         coastlineStrength = 0.35f,
         border = 0xFFD8A05A.toInt(),
@@ -332,9 +349,10 @@ enum class MapStyle(
         // as the other two styles with no wash hold it.
         biomeWash = 0f,
         biomeMuting = 1f,
+        // The wall map's one inland blue, for rivers and lakes alike. The lake was the sea's second
+        // stop, 4.4 CIEDE2000 from the sea, so a lake read as sea with the river drawn over it.
         river = 0xFF2F6FA0.toInt(),
-        lake = 0xFF7FC0D5.toInt(),
-        lakeDeep = 0xFF4E9AB8.toInt(),
+        lake = 0xFF2F6FA0.toInt(),
         coastline = 0xFF2E3B44.toInt(),
         coastlineStrength = 0.6f,
         border = 0xFFB03A3A.toInt(),
@@ -372,9 +390,10 @@ enum class MapStyle(
         // Barely muted, unlike the aged styles: on these maps the forest is a named place and is
         // meant to read as forest, not as a shade the terrain happens to take.
         biomeMuting = 0.08f,
+        // The river teal for the lakes too. The lake was the sea's shallowest stop exactly, so an
+        // inland lake and a coastal bay were one colour and the river into it another.
         river = 0xFF2C7A86.toInt(),
-        lake = 0xFF3E9DA4.toInt(),
-        lakeDeep = 0xFF1A6873.toInt(),
+        lake = 0xFF2C7A86.toInt(),
         coastline = 0xFF123C44.toInt(),
         coastlineStrength = 0.8f,
         border = 0xFF7A4A22.toInt(),
@@ -408,9 +427,10 @@ enum class MapStyle(
         paper = 0xFFE9E2C4.toInt(),
         biomeWash = 0.30f,
         biomeMuting = 0.45f,
+        // The river's jade for the lakes. They were the sea's middle stop, a pale jade that
+        // measured 1.0 CIEDE2000 from the sea and less than the river from the ground.
         river = 0xFF5F7A72.toInt(),
-        lake = 0xFF9DB4AB.toInt(),
-        lakeDeep = 0xFF7E9A92.toInt(),
+        lake = 0xFF5F7A72.toInt(),
         coastline = 0xFF4A4632.toInt(),
         coastlineStrength = 0.72f,
         border = 0xFFA32F26.toInt(),
@@ -467,7 +487,6 @@ enum class MapStyle(
         river = 0xFF17130F.toInt(),
         // Paper, so the lake branch leaves the water blank and the ruling is all that is on it.
         lake = 0xFFFBF8F0.toInt(),
-        lakeDeep = 0xFFFBF8F0.toInt(),
         coastline = 0xFF17130F.toInt(),
         coastlineStrength = 0.95f,
         border = 0xFFA82820.toInt(),
@@ -536,9 +555,10 @@ enum class MapStyle(
         biomeMuting = 0.68f,
         // Dry channels: darker than everything around them, which is the only way a riverbed reads
         // on a world with no water to make it brighter.
+        // The dry channel's shadow for the dry lake beds as well, which was nearly so already; the
+        // lake had been the basalt of the old sea floor instead.
         river = 0xFF3B2A20.toInt(),
-        lake = 0xFF352A24.toInt(),
-        lakeDeep = 0xFF211A17.toInt(),
+        lake = 0xFF3B2A20.toInt(),
         coastline = 0xFF6B4A31.toInt(),
         // A third of the usual weight. The old shoreline is a scarp the wind has been working on,
         // not an inked edge.
@@ -671,9 +691,10 @@ enum class MapStyle(
         // reference is a handful of pixels across and every box over it takes in its banks, so it
         // is derived from the shelf rather than sampled badly.
         river = 0xFF4499A9.toInt(),
-        // A lake is shallow water and takes the shelf's colour; a deep one takes the open sea's.
-        lake = 0xFF09839C.toInt(),
-        lakeDeep = 0xFF004892.toInt(),
+        // The river's colour, so a river and the lake it runs into are one water. It had been the
+        // shelf's turquoise, deepening to the open sea's cobalt: a lake the sea's colour exactly,
+        // with a lighter river ending in it.
+        lake = 0xFF4499A9.toInt(),
         // The boreal forest east of Hudson Bay — the darkest ground anywhere in the reference at a
         // relative luminance of 0.030 — taken down to a third of itself. A photograph of a planet
         // has no ink in it, and this is the nearest thing to one it owns. A third rather than a
@@ -739,9 +760,9 @@ enum class MapStyle(
      *  - **Realms come from Paul Tol's nine "muted" colours**, which were chosen for exactly this
      *    and are the best nine anyone has published, with a hatch over each further turn of the
      *    cycle so that a tenth realm is told from the first by its texture rather than by a
-     *    tenth hue nobody could find. Rivers are white, which is the only ink that reads over
-     *    every stop of the ramp and over the slate as well; the coastline is a single black cell
-     *    at full strength.
+     *    tenth hue nobody could find. Rivers and lakes are white, which is the only ink that
+     *    reads over every stop of the ramp and over the slate as well; the coastline is a single
+     *    black cell at full strength.
      *
      * The diagnostic views are untouched, as they are by every style: their colours mean specific
      * things — a temperature, a biome, a plate — and a legend is what makes those readable.
@@ -769,8 +790,9 @@ enum class MapStyle(
         // White, because it is the only ink that reads over the dark shore, the pale highland and
         // the slate sea alike.
         river = 0xFFFFFFFF.toInt(),
-        lake = 0xFF1F2A3A.toInt(),
-        lakeDeep = 0xFF1F2A3A.toInt(),
+        // White as well, for the reason the rivers are: the lakes had been the sea's slate, which
+        // left every river a white line running into a dark hole.
+        lake = 0xFFFFFFFF.toInt(),
         coastline = 0xFF000000.toInt(),
         // Full strength: one black cell, not a blend of black with whatever it crosses.
         coastlineStrength = 1f,
@@ -861,6 +883,14 @@ enum class MapStyle(
         else -> MapPalette.blend(color, paper, glyphMuting)
     }
 
+    /**
+     * A lake 500 m deep, the darkest [MapRasterizer] draws one: [lake] shaded to
+     * [DEEP_LAKE_SHADE], so the depth shading runs on down the ramp the river and the shallows
+     * begin rather than toward a second colour. A line-art style's lake is paper at every depth.
+     */
+    internal val lakeDeep: Int
+        get() = if (lineArt) lake else MapPalette.shade(lake, DEEP_LAKE_SHADE)
+
     /** Relief, exaggerated or softened. 1 leaves the hillshade exactly as computed. */
     internal fun relief(shade: Float): Float = 1f + (shade - 1f) * reliefStrength
 
@@ -950,6 +980,16 @@ enum class MapStyle(
     }
 
     companion object {
+        /**
+         * How much of its shallows' light a lake 500 m deep keeps: seven tenths.
+         *
+         * The step Atlas drew between its shallow and its deep lake before the water was made one,
+         * #4E92B4 to #2F6B8C, is 0.60, 0.73 and 0.78 channel by channel, 0.70 on average; kept as
+         * one factor for every style so a deep lake in each is the same water, darker by the same
+         * share.
+         */
+        internal const val DEEP_LAKE_SHADE: Float = 0.7f
+
         /**
          * How dark a hatch stroke runs over the fill beneath it.
          *

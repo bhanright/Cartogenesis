@@ -121,7 +121,12 @@ class RasterRecipe(
     // ---- per-cell fields ----
     /** Elevation relative to the shoreline: positive on land, negative at sea. */
     val elevation: FloatArray,
-    /** 1 where the cell is land, 0 at sea. One byte a cell, so an upload can pack four to a word. */
+    /**
+     * [LAND] where the cell is land, [OPEN_SEA] at sea, and [NARROW_SEA] on sea that the coast
+     * treats as a bank rather than a shore ([NarrowSea]). One byte a cell, so an upload can pack
+     * four to a word; carried in this byte rather than a field of its own because the device has
+     * no binding left to give it (see [shoreDistance]).
+     */
     val land: ByteArray,
     /** Biome ordinal per cell, as an index into [biomeColors]. */
     val biome: ByteArray?,
@@ -301,6 +306,11 @@ class RasterRecipe(
 
     companion object {
 
+        /** The values [land] carries a cell as. The shader reads the same three numbers. */
+        const val OPEN_SEA: Byte = 0
+        const val LAND: Byte = 1
+        const val NARROW_SEA: Byte = 2
+
         /**
          * The shading's own median, for a caller that builds a recipe by hand rather than through
          * [of] — `GpuRasterTest`'s synthetic world is the one there is.
@@ -335,7 +345,14 @@ class RasterRecipe(
 
             val land = ByteArray(cellCount)
             val isLand = world.sea.isLand
-            for (cell in 0 until cellCount) if (isLand[cell]) land[cell] = 1
+            val narrow = NarrowSea.mask(isLand, cellsAcross)
+            for (cell in 0 until cellCount) {
+                land[cell] = when {
+                    isLand[cell] -> LAND
+                    narrow[cell] -> NARROW_SEA
+                    else -> OPEN_SEA
+                }
+            }
 
             var biomes: ByteArray? = null
             var scalarA: FloatArray? = null

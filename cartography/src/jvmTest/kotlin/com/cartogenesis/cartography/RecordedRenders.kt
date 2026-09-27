@@ -24,7 +24,7 @@ internal object RecordedRenders {
         MapStyle.INK_WASH to -1832799449,
         MapStyle.NAUTICAL to 1344496023,
         MapStyle.MIDNIGHT to -1721545860,
-        MapStyle.SCHOOLROOM to 411892921,
+        MapStyle.SCHOOLROOM to -4712975,
         MapStyle.VERDANT to -2139266755,
         MapStyle.SCROLL to -1636402969,
         MapStyle.PEN_AND_INK to -99415620,

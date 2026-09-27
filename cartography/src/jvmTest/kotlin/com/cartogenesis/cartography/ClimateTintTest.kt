@@ -31,6 +31,10 @@ import kotlin.test.assertTrue
  * above its red, and that is the promise being kept rather than a desert drawn as a lawn; what is
  * asserted of it here is that the climate leaves it exactly where the ramp put it, and
  * `ClearStyleTest` holds the ramp itself to its CIEDE2000 ladder.
+ *
+ * [MapStyle.SCHOOLROOM] is measured beside the rest and exempt for a reason of its own: it colors
+ * the land by elevation alone, so a lowland desert takes the ramp's lowland green exactly as a
+ * physical wall map prints it, and `SchoolroomElevationTest` holds it to that promise instead.
  */
 class ClimateTintTest : BorrowsSharedWorlds() {
 
@@ -192,7 +196,7 @@ class ClimateTintTest : BorrowsSharedWorlds() {
                         controlShare, controlHueTotal / desert.size
                     )
             )
-            if (style != MapStyle.CLEAR) {
+            if (style != MapStyle.CLEAR && style != MapStyle.SCHOOLROOM) {
                 assertTrue(
                     green == 0,
                     "$green of ${desert.size} desert cells read green in ${style.label}"
@@ -380,15 +384,21 @@ class ClimateTintTest : BorrowsSharedWorlds() {
     }
 
     /**
-     * That the two styles which hold the modulation at zero draw exactly what they drew before it.
+     * That the styles which hold the modulation at zero draw exactly what they drew before it.
      *
-     * The colour-blind ramp is a promise measured in CIEDE2000 and the engraving has no tint at all,
-     * so both must come out of [MapStyle.ground] as the plain ramp and the plain wash — the same
-     * arithmetic, in the same order, that `MapStyle.tint(land(height))` was.
+     * The colour-blind ramp is a promise measured in CIEDE2000, the engraving has no tint at all
+     * and the Schoolroom's tint is a key to elevation alone, so all three must come out of
+     * [MapStyle.ground] as the plain ramp and the plain wash — the same arithmetic, in the same
+     * order, that `MapStyle.tint(land(height))` was.
      */
     @Test
     fun `the styles that hold the climate at zero are untouched by it`() {
-        listOf(MapStyle.CLEAR, MapStyle.PEN_AND_INK).forEach { style ->
+        MapStyle.entries.filter { it.climateTint == 0f }.also { held ->
+            assertTrue(
+                held.containsAll(listOf(MapStyle.CLEAR, MapStyle.PEN_AND_INK, MapStyle.SCHOOLROOM)),
+                "a style that promises no climate now lets some through: ${held.map { it.label }}"
+            )
+        }.forEach { style ->
             for (step in 0..20) {
                 val height = step / 20f
                 Biome.entries.forEach { biome ->

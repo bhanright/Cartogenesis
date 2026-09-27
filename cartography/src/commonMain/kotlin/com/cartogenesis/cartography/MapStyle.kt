@@ -51,9 +51,9 @@ enum class MapStyle(
      * Imhof's modulated hypsometric series, in one number: at 1 a desert is sand at every height, a
      * frozen coast is pale and a wood is dark ground, and at 0 the ramp is the ramp. See
      * [ClimateTint], which computes the three things a cell's climate has to say, and [ground],
-     * which spends this on them. Two styles hold it at 0 and each has a reason of its own — a pen
-     * has no tint to modulate, and the colour-blind ramp is a promise measured in CIEDE2000 that
-     * nothing may move.
+     * which spends this on them. Three styles hold it at 0 and each has a reason of its own — a pen
+     * has no tint to modulate, the colour-blind ramp is a promise measured in CIEDE2000 that
+     * nothing may move, and the Schoolroom's tint is a key to elevation alone.
      */
     internal val climateTint: Float,
     /**
@@ -305,6 +305,15 @@ enum class MapStyle(
      * The pull-down physical map from a schoolroom wall. Saturated hypsometric tints stepping
      * green to yellow to orange to brown, a flat pale sea, and none of the restraint of a
      * cartographer's chart — these were printed to be legible from the back of a classroom.
+     *
+     * The land's color is its elevation and nothing else: the ramp read at the cell's height, with
+     * no climate bending it ([climateTint] 0) and no vegetation washed over it ([biomeWash] 0). A
+     * lowland desert is therefore as green as a lowland forest, which is what the wall map did
+     * and what separates this style from [ATLAS]. The ramp's eight stops sit on the declared
+     * ruler, `WorldScale.highestLandMetres` over seven intervals: 0, 857, 1,714, 2,571, 3,429,
+     * 4,286, 5,143 and 6,000 m above sea level at the stock scale, the same heights on every world.
+     * The relief shading, the sea's depth ramp and contours, and the ink are unchanged, and
+     * `SchoolroomElevationTest` holds the land to the ramp.
      */
     SCHOOLROOM(
         label = "Schoolroom",
@@ -318,8 +327,11 @@ enum class MapStyle(
             0xFFE8A94A.toInt(), 0xFFD97B34.toInt(), 0xFFB4552A.toInt(), 0xFFF0E6DC.toInt()
         ),
         paper = 0xFFF3EEE2.toInt(),
-        biomeWash = 0.12f,
-        biomeMuting = 0.35f,
+        // Off: a wall map's tint is a height key, and a wash of vegetation over it would make a
+        // band mean two things. With no wash the muting is never read; it is held at the paper,
+        // as the other two styles with no wash hold it.
+        biomeWash = 0f,
+        biomeMuting = 1f,
         river = 0xFF2F6FA0.toInt(),
         lake = 0xFF7FC0D5.toInt(),
         lakeDeep = 0xFF4E9AB8.toInt(),
@@ -328,11 +340,10 @@ enum class MapStyle(
         border = 0xFFB03A3A.toInt(),
         wilderness = 0xFFBFB9A8.toInt(),
         reliefStrength = 0.45f,
-        // The full effect, as on Atlas, and for a blunter reason: the pull-down map printed the
-        // Sahara yellow and the Congo dark green, and that is most of what it was for. Anything
-        // less leaves this ramp's lowland green under a coastal desert, because the green band of
-        // a classroom map runs a third of the way up the sheet before it turns to sand.
-        climateTint = 1f,
+        // Off. The style's promise is elevation alone, so the climate may not move a cell along
+        // the ramp, pale it or darken it; a coastal desert takes the lowland green, as the green
+        // band of a physical wall map runs a third of the way up the sheet wherever the land is.
+        climateTint = 0f,
         isobathInk = 0.10f,
         glyphMuting = 0.2f,
         lineArt = false,

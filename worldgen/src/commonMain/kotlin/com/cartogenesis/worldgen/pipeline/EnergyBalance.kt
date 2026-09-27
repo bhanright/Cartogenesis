@@ -488,6 +488,12 @@ object EnergyBalance {
      */
     private const val LAND_HEAT_CAPACITY_J_PER_M2_C = 1.7e7
 
+    /** The mixed layer's depth, in meters: see [MIXED_LAYER_HEAT_CAPACITY_J_PER_M2_C]. */
+    internal const val MIXED_LAYER_DEPTH_M = 50.0
+
+    /** Sea water's heat capacity per cubic meter per degree, in joules. */
+    private const val SEAWATER_HEAT_CAPACITY_J_PER_M3_C = 4.0e6
+
     /**
      * Heat stored per square metre of the ocean's **mixed layer** for each degree it warms, in
      * joules: a 50 m slab of sea water at 4.0 MJ per cubic metre per degree.
@@ -499,7 +505,7 @@ object EnergyBalance {
      * The air that sits on it is [MARINE_AIR_HEAT_CAPACITY_J_PER_M2_C] and is a separate reservoir,
      * which is the whole point: twenty times less memory, so it swings while the water does not.
      */
-    internal const val MIXED_LAYER_HEAT_CAPACITY_J_PER_M2_C = 50.0 * 4.0e6
+    internal const val MIXED_LAYER_HEAT_CAPACITY_J_PER_M2_C = MIXED_LAYER_DEPTH_M * SEAWATER_HEAT_CAPACITY_J_PER_M3_C
 
     /**
      * Heat stored per square metre of **marine air** for each degree it warms, in joules: the
@@ -531,7 +537,7 @@ object EnergyBalance {
      * inertia the air can only hand the water about half its amplitude, and Earth's air-sea
      * difference over the open ocean is nearer a degree all year. See TODO.md.
      */
-    private const val MARINE_AIR_HEAT_CAPACITY_J_PER_M2_C = 1.04e7
+    internal const val MARINE_AIR_HEAT_CAPACITY_J_PER_M2_C = 1.04e7
 
     /**
      * How fast the sea surface and the air above it trade heat, in watts per square metre per
@@ -549,7 +555,7 @@ object EnergyBalance {
      * uses — and that dependence is not modelled here; 25 is the mid-latitude figure, which is
      * where the coasts this matters for are.
      *
-     * It sets how fast the air forgets the water: `C_air / 25` is six days, so marine air tracks
+     * It sets how fast the air forgets the water: `C_air / 25` is 4.8 days, so marine air tracks
      * the sea surface closely and departs from it only as far as the land beside it and the heat
      * arriving from other latitudes push it.
      */
@@ -1133,7 +1139,7 @@ object EnergyBalance {
             // year the flux integrates to nothing, so ordering it here is what makes the two
             // columns' annual means identical rather than a few tenths apart — which matters,
             // because one of them is compared against a marine-air climatology and the other
-            // against a sea-surface one. Implicit in the pair, because six days of air memory
+            // against a sea-surface one. Implicit in the pair, because 4.8 days of air memory
             // against a step of one day is close enough to stiff to matter.
             val water = waterC[band]
             val waterHeat = geometry.mixedLayerHeatCapacity[band]

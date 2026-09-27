@@ -642,8 +642,8 @@ object OceanCirculation {
      * Shifts each body of water by the uniform amount that zeroes its summed residual.
      *
      * For an operator in which every row's weights fall short of one by its own margin (the heat's,
-     * whose margin is `1/τ`), a uniform shift δ of one body changes each of its cells' residual by
-     * exactly the margin times δ, whatever the currents and eddies do inside it. So the shift that
+     * whose margin is `1/τ` and the rising water's `w/h`, or the pressure's α), a uniform shift δ
+     * of one body changes each of its cells' residual by exactly the margin times δ, whatever the currents and eddies do inside it. So the shift that
      * zeroes the body's summed residual is minus the sum of its residuals over the sum of its margins,
      * and it is the correction a coarse grid cannot give: a coarse cell that straddles a strip of
      * land joins two bodies the fine grid keeps apart, and a small sea cut off from the ocean would

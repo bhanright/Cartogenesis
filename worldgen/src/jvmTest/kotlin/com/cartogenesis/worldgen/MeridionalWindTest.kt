@@ -17,7 +17,7 @@ import kotlin.test.assertTrue
  *
  * Three claims, in descending order of how firmly they can be pinned.
  *
- * The first is the promise the setting makes: at `meridionalWind = 0` the diagonal march is the
+ * The first is the promise the setting makes: at `meridionalWindShare = 0` the diagonal march is the
  * old per-row scan, arithmetic for arithmetic, and the rainfall it produces is the same down to
  * the last bit. That is checked against checksums taken from the build before the change.
  *
@@ -78,7 +78,7 @@ class MeridionalWindTest : BorrowsSharedWorlds() {
     }
 
     /**
-     * The promise the setting makes: at `meridionalWind = 0` the diagonal march is the old per-row
+     * The promise the setting makes: at `meridionalWindShare = 0` the diagonal march is the old per-row
      * scan, arithmetic for arithmetic.
      *
      * This used to be checked against checksums pinned from a build without the slant, and those
@@ -95,7 +95,7 @@ class MeridionalWindTest : BorrowsSharedWorlds() {
      * and run on the generated world's own fields (its temperature, its terrain, its currents), not
      * on anything this test derives independently. What is left to differ between the two is only
      * the shape of the march: one row at a time, no meridional blend, which is what
-     * `meridionalWind = 0` is supposed to buy. If a future chunk changes what feeds the march, both
+     * `meridionalWindShare = 0` is supposed to buy. If a future chunk changes what feeds the march, both
      * sides move together and the claim stays true by construction; if a future chunk changes the
      * *march itself* without changing [ClimateStage.marchSeaStep]/[ClimateStage.marchLandStep] to
      * match, this is exactly the guard that would catch it.
@@ -107,7 +107,7 @@ class MeridionalWindTest : BorrowsSharedWorlds() {
             val world = SharedWorlds.world(
                 base.copy(
                     climate = base.climate.copy(
-                        meridionalWind = 0f, pressureWinds = false
+                        meridionalWindShare = 0f, pressureWinds = false
                     )
                 )
             )
@@ -295,13 +295,13 @@ class MeridionalWindTest : BorrowsSharedWorlds() {
         val flat = SharedWorlds.world(
             WorldGenConfig(seed = 42L, width = 128, height = 128).let {
                 it.copy(
-                    climate = it.climate.copy(meridionalWind = 0f, pressureWinds = false)
+                    climate = it.climate.copy(meridionalWindShare = 0f, pressureWinds = false)
                 )
             }
         )
         assertTrue(
             flat.climate.windMeridional.data.all { it == 0f },
-            "a meridionalWind of zero should leave the wind purely zonal"
+            "a meridionalWindShare of zero should leave the wind purely zonal"
         )
     }
 
@@ -318,7 +318,7 @@ class MeridionalWindTest : BorrowsSharedWorlds() {
             val zonal = SharedWorlds.world(
                 base.copy(
                     climate = base.climate.copy(
-                        meridionalWind = 0f, pressureWinds = false
+                        meridionalWindShare = 0f, pressureWinds = false
                     )
                 )
             )
@@ -424,12 +424,12 @@ class MeridionalWindTest : BorrowsSharedWorlds() {
     @Test
     fun `a tropical coast has a wet season and a dry one`() {
         val base = WorldGenConfig(seed = MONSOON_SEED, width = SIZE, height = SIZE)
-        val figures = listOf(0f, 0.3f).map { slant ->
+        val figures = listOf(0f, 0.15f).map { slant ->
             // With the pressure departure off, as the class holds every world it builds: left on,
             // the "zonal" world carried the pressure wind's meridional component, and the two
             // worlds differed by more than the slant (Audit III's I-10).
             val world = SharedWorlds.world(
-                base.copy(climate = base.climate.copy(meridionalWind = slant, pressureWinds = false))
+                base.copy(climate = base.climate.copy(meridionalWindShare = slant, pressureWinds = false))
             )
             largestRegion(world, monsoonMask(world)) / world.sea.landCellCount.toDouble()
         }

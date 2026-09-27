@@ -150,10 +150,9 @@ class IncrementalReuseTest {
                 climate = base.climate.copy(vegetationRecycling = !base.climate.vegetationRecycling)
             ),
             // The slant of the wind belts is the same section again. It turns the wind the
-            // moisture march follows, though not the ocean's: the currents are forced by the belt
-            // profile and the pressure wind, and neither reads it.
-            "meridionalWind" to base.copy(
-                climate = base.climate.copy(meridionalWind = 0f)
+            // moisture march follows and, since the belts became one vector, the ocean's stress.
+            "meridionalWindShare" to base.copy(
+                climate = base.climate.copy(meridionalWindShare = 0f)
             ),
             "lapseRateCPerKm" to base.copy(
                 climate = base.climate.copy(
@@ -182,6 +181,7 @@ class IncrementalReuseTest {
             "waterBalance" to base.copy(lakes = base.lakes.copy(waterBalance = false)),
             "runoffFraction" to base.copy(lakes = base.lakes.copy(runoffFraction = 0.08f)),
             "ocean" to base.copy(ocean = base.ocean.copy(enabled = !base.ocean.enabled)),
+            "upwelling" to base.copy(ocean = base.ocean.copy(upwelling = !base.ocean.upwelling)),
             "nations" to base.copy(nations = base.nations.copy(nationCount = base.nations.nationCount + 4)),
             "wilderness" to base.copy(
                 nations = base.nations.copy(wilderness = WildernessMode.LEAVE_WILDERNESS)

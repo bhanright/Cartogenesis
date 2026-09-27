@@ -1,5 +1,6 @@
 package com.cartogenesis.worldgen.pipeline
 
+import com.cartogenesis.worldgen.concurrent.parallelChunks
 import com.cartogenesis.worldgen.model.Acceleration
 import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.WorldGenConfig
@@ -46,30 +47,6 @@ data class OceanResult(
  * See docs/DESIGN_LEDGER.md, G3, H4 and the ocean's circulation row.
  */
 object OceanStage {
-
-    /** Where the trade-wind belt gives way to the westerlies, in degrees of latitude. */
-    private const val TRADE_BELT_EDGE_DEGREES = 30f
-
-    /** Where the westerlies give way to the polar easterlies, in degrees of latitude. */
-    private const val WESTERLY_BELT_EDGE_DEGREES = 60f
-
-    /** Middle of the westerly belt, where its eastward wind is strongest. */
-    private const val WESTERLY_BELT_CENTRE_DEGREES = 45f
-
-    /** Middle of the polar-easterly belt, where its westward wind is strongest. */
-    private const val POLAR_BELT_CENTRE_DEGREES = 75f
-
-    /** Degrees of cosine phase per degree of latitude inside the trade belt: 90 over 30. */
-    private const val TRADE_PHASE_PER_DEGREE = 3.0
-
-    /** The same for the two belts poleward of the trades: 90 over the 15 from center to edge. */
-    private const val MID_AND_POLAR_PHASE_PER_DEGREE = 6.0
-
-    /**
-     * How much weaker the polar easterlies blow than the trades and the westerlies: the polar cell
-     * is the shallowest and weakest of the three.
-     */
-    private const val POLAR_EASTERLY_STRENGTH = 0.6f
 
     /**
      * The neutral drag coefficient of the sea surface for a 10 m wind of 4 to 11 meters a second
@@ -239,7 +216,15 @@ object OceanStage {
         /** Degrees Celsius, zero on land. */
         val temperatureC: FloatArray,
         val flow: OceanCirculation.Solution,
-        val heat: OceanCirculation.Solution
+        val heat: OceanCirculation.Solution,
+        /** The year's mean wind stress on the sea, newtons a square meter, eastward and northward. */
+        val stress: Stress,
+        /**
+         * The Ekman layer's vertical velocity at its base, meters a second, positive upward: the
+         * divergence of its transport ([upwellingMps]). Zero on land, and everywhere with
+         * `OceanConfig.upwelling` off.
+         */
+        val upwellingMps: FloatArray
     )
 
     private inline fun generateOcean(
@@ -278,14 +263,14 @@ object OceanStage {
         val (across, down) = solveGrid(config.scale)
         val widthMeters = config.scale.worldWidthKm * METERS_PER_KM / across
         val heightMeters = worldHeightMeters(config.scale) / down
-        val wind = regionalWind(config, sea)
         val isWater = waterOn(config, sea, across, down)
+        val stress = meanStress(config, sea, zonal, across, down, relax)
 
         val flowLevels = OceanCirculation.levels(
-            circulationStencil(config, wind, isWater, across, down, withForcing = true), widthMeters, heightMeters,
-            everyCellWater = true
+            circulationStencil(config, curlForcing(stress, across, down, widthMeters, heightMeters), isWater, across, down),
+            widthMeters, heightMeters, everyCellWater = true
         ) { coarseAcross, coarseDown, coarseWater ->
-            circulationStencil(config, wind, coarseWater, coarseAcross, coarseDown, withForcing = false)
+            circulationStencil(config, null, coarseWater, coarseAcross, coarseDown)
         }
         val flow = OceanCirculation.requireSolved(
             "the circulation",
@@ -301,16 +286,27 @@ object OceanStage {
         OceanCirculation.velocities(flowLevels.first(), stream, widthMeters, heightMeters, eastward, northward)
 
         val targetC = FloatArray(across * down)
+        val subsurfaceC = FloatArray(across * down)
         for (row in 0 until down) {
-            val latitudeC = zonal.waterC(ClimateStage.latitudeOf(row, down), Season.ANNUAL)
+            val latitude = ClimateStage.latitudeOf(row, down)
+            val latitudeC = zonal.waterC(latitude, Season.ANNUAL)
+            val risingC = subsurfaceTemperatureC(zonal, latitude)
             for (cell in row * across until (row + 1) * across) {
-                if (isWater[cell]) targetC[cell] = latitudeC
+                if (isWater[cell]) {
+                    targetC[cell] = latitudeC
+                    subsurfaceC[cell] = risingC
+                }
             }
         }
+        val upwelling = if (config.ocean.upwelling) {
+            upwellingMps(stress, isWater, across, down, widthMeters, heightMeters)
+        } else FloatArray(across * down)
+        val entrainment = entrainmentPerS(upwelling)
         val heatLevels = OceanCirculation.levels(
             OceanHeat.stencil(
                 across, down, widthMeters, heightMeters, isWater, stream, targetC, RELAXATION_SECONDS, withTarget = true,
-                diffusivityAt = { OceanHeat.diffusivity(it, config.scale.radiusMeters) }
+                diffusivityAt = { OceanHeat.diffusivity(it, config.scale.radiusMeters) },
+                entrainmentPerS = entrainment, subsurfaceC = subsurfaceC
             ),
             widthMeters, heightMeters, everyCellWater = false
         ) { coarseAcross, coarseDown, coarseWater ->
@@ -319,7 +315,8 @@ object OceanStage {
                 config.scale.worldWidthKm * METERS_PER_KM / coarseAcross, worldHeightMeters(config.scale) / coarseDown,
                 coarseWater, resample(stream, across, down, coarseAcross, coarseDown),
                 FloatArray(coarseAcross * coarseDown), RELAXATION_SECONDS, withTarget = false,
-                diffusivityAt = { OceanHeat.diffusivity(it, config.scale.radiusMeters) }
+                diffusivityAt = { OceanHeat.diffusivity(it, config.scale.radiusMeters) },
+                entrainmentPerS = coarseMean(entrainment, across, down, coarseAcross, coarseDown), subsurfaceC = null
             )
         }
         val heat = OceanCirculation.requireSolved(
@@ -330,7 +327,10 @@ object OceanStage {
             ),
             OceanCirculation.RESIDUAL_TOLERANCE
         )
-        return Circulation(across, down, widthMeters, heightMeters, isWater, stream, eastward, northward, heat.values, flow, heat)
+        return Circulation(
+            across, down, widthMeters, heightMeters, isWater, stream, eastward, northward, heat.values, flow, heat,
+            stress, upwelling
+        )
     }
 
     /**
@@ -354,7 +354,7 @@ object OceanStage {
      * V-cycle reaches a grid small enough to relax to convergence. Up, so the spacing is never
      * coarser than the one asked for; by at most one part in sixteen.
      */
-    private fun rowsForCycle(rows: Int): Int {
+    internal fun rowsForCycle(rows: Int): Int {
         var step = 1
         while ((rows + step - 1) / step > OceanCirculation.COARSEST_ROWS * 2) step *= 2
         return (rows + step - 1) / step * step
@@ -370,35 +370,6 @@ object OceanStage {
 
     private fun worldHeightMeters(scale: WorldScale): Double =
         scale.worldWidthKm * WorldScale.WORLD_HEIGHT_AS_SHARE_OF_WIDTH * METERS_PER_KM
-
-    /** The regional surface wind on the full grid, meters a second, eastward and southward; null when the belts are the whole wind. */
-    private fun regionalWind(config: WorldGenConfig, sea: SeaLevelResult): PressureWind.Vectors? {
-        if (!config.climate.pressureWinds) return null
-        // The temperature the pressure is read off leaves out the current anomaly, which this stage
-        // has not computed and could not have: the currents cannot be forced by a wind forced by
-        // the currents. The annual wind, because a gyre turns over in years.
-        val pressureHpa =
-            PressureWind.pressureAnomalyHpa(config, ClimateStage.buildTemperature(config, sea))
-        return PressureWind.surfaceWind(config, sea, pressureHpa)
-    }
-
-    /**
-     * The belts' zonal wind at a latitude as a share of [PressureWind.BELT_SPEED_MPS], positive
-     * eastward: the trades westward at the equator, the westerlies at 45 degrees, the polar
-     * easterlies at 75 at [POLAR_EASTERLY_STRENGTH].
-     */
-    internal fun beltWindShare(latitude: Float): Float {
-        val absoluteLatitude = abs(latitude)
-        return when {
-            absoluteLatitude < TRADE_BELT_EDGE_DEGREES ->
-                -cos(latitude * TRADE_PHASE_PER_DEGREE * PI / 180.0).toFloat()
-            absoluteLatitude < WESTERLY_BELT_EDGE_DEGREES ->
-                cos((absoluteLatitude - WESTERLY_BELT_CENTRE_DEGREES) * MID_AND_POLAR_PHASE_PER_DEGREE * PI / 180.0).toFloat()
-            else ->
-                -cos((absoluteLatitude - POLAR_BELT_CENTRE_DEGREES) * MID_AND_POLAR_PHASE_PER_DEGREE * PI / 180.0).toFloat() *
-                    POLAR_EASTERLY_STRENGTH
-        }
-    }
 
     /**
      * Which cells of the solve grid are water: those every map cell they overlap is water.
@@ -433,47 +404,129 @@ object OceanStage {
     }
 
     /**
-     * The circulation's problem on one grid: the stress of the belts' wind and the regional wind
-     * together, `ρ_air C_D |W| W`, its curl by central differences in meters, and β per row.
+     * The circulation's problem on one grid: β per row and, on the finest grid, [forcing], the curl
+     * of the stress over `ρ H` per cell ([curlForcing]); a coarse grid of the cycle has none.
      */
     private fun circulationStencil(
         config: WorldGenConfig,
-        wind: PressureWind.Vectors?,
+        forcing: DoubleArray?,
         isWater: BooleanArray,
         across: Int,
-        down: Int,
-        withForcing: Boolean
+        down: Int
     ): OceanStencil {
-        val cellsAcross = config.width
-        val cellsDown = config.height
         val widthMeters = config.scale.worldWidthKm * METERS_PER_KM / across
         val heightMeters = worldHeightMeters(config.scale) / down
         val beta = DoubleArray(down) {
             config.scale.planetaryVorticityGradientPerMeterSecond(ClimateStage.latitudeOf(it, down).toDouble())
         }
-        if (!withForcing) {
-            return OceanCirculation.stencil(across, down, widthMeters, heightMeters, isWater, beta, BOTTOM_DRAG_PER_S, DoubleArray(across * down))
+        return OceanCirculation.stencil(
+            across, down, widthMeters, heightMeters, isWater, beta, BOTTOM_DRAG_PER_S, forcing ?: DoubleArray(across * down)
+        )
+    }
+
+    /** A wind stress on the solve grid, newtons a square meter, eastward and northward, per cell. */
+    internal class Stress(val eastward: DoubleArray, val northward: DoubleArray)
+
+    /**
+     * The year's mean wind stress on the sea, on the solve grid: the mean of the two half-years'
+     * stresses, each `ρ_air C_D |W| W` of that half-year's wind, the belts ([SurfaceBelts]) and, with
+     * `ClimateConfig.pressureWinds` on, the departure the season's solved pressure drives
+     * ([PressureResponse]).
+     *
+     * The mean of the stresses and not the stress of the mean wind: the stress is quadratic in the
+     * wind, and a gyre that turns over in years integrates the stress. The pressure is read off the
+     * air column's own temperature ([ClimateStage.columnTemperature]), which leaves out the current
+     * anomaly this stage has not computed and could not have, since the currents cannot be forced by
+     * a wind their warmth forced. The departure is taken with the sea's drag over every cell, land
+     * included, so a coast puts no step of its own into the curl.
+     */
+    internal inline fun meanStress(
+        config: WorldGenConfig,
+        sea: SeaLevelResult,
+        zonal: ZonalClimate,
+        across: Int,
+        down: Int,
+        relax: (OceanStencil, FloatArray, Int) -> FloatArray
+    ): Stress {
+        val climate = config.climate
+        val tiltDegrees = if (climate.seasons) climate.seasonalTiltDegrees else 0f
+        val marineFraction = if (climate.pressureWinds) ClimateStage.marineAirFraction(config, sea) else null
+        val eastward = DoubleArray(across * down)
+        val northward = DoubleArray(across * down)
+        for (warm in booleanArrayOf(true, false)) {
+            val response = if (marineFraction != null) {
+                val season = if (warm) Season.WARM_HALF else Season.COLD_HALF
+                PressureResponse.solve(config, sea, ClimateStage.columnTemperature(config, zonal, marineFraction, season), relax)
+            } else null
+            addHalfYearStress(config, response, tiltDegrees, warm, across, down, eastward, northward)
         }
-        val stressEast = DoubleArray(across * down)
-        val stressNorth = DoubleArray(across * down)
-        for (row in 0 until down) {
-            val latitude = ClimateStage.latitudeOf(row, down)
-            val beltEast = PressureWind.BELT_SPEED_MPS * beltWindShare(latitude)
-            val mapRow = (row + 0.5f) * cellsDown / down - 0.5f
-            for (column in 0 until across) {
-                val cell = row * across + column
-                var east = beltEast.toDouble()
-                var north = 0.0
-                if (wind != null) {
-                    val mapColumn = (column + 0.5f) * cellsAcross / across - 0.5f
-                    east += sample(wind.eastwardMps, cellsAcross, cellsDown, mapColumn, mapRow)
-                    north -= sample(wind.southwardMps, cellsAcross, cellsDown, mapColumn, mapRow)
+        return Stress(eastward, northward)
+    }
+
+    /** Adds one half-year's share of [meanStress] to [eastward] and [northward]. */
+    internal fun addHalfYearStress(
+        config: WorldGenConfig,
+        response: PressureResponse.Response?,
+        tiltDegrees: Float,
+        warm: Boolean,
+        across: Int,
+        down: Int,
+        eastward: DoubleArray,
+        northward: DoubleArray
+    ) {
+        val gradient = response?.let { PressureResponse.gradient(it) }
+        parallelChunks(0, down) { startRow, endRow ->
+            for (row in startRow until endRow) {
+                val latitude = ClimateStage.latitudeOf(row, down)
+                val belts = SurfaceBelts.windMps(latitude, tiltDegrees, warm, config.climate.meridionalWindShare)
+                for (column in 0 until across) {
+                    var east = belts.eastwardMps.toDouble()
+                    var north = belts.northwardMps.toDouble()
+                    if (response != null && gradient != null) {
+                        val departure = departureAt(response, gradient, latitude, row, column, across, down)
+                        east += departure.eastwardMps
+                        north += departure.northwardMps
+                    }
+                    val dragPerMeter = PressureWind.AIR_DENSITY_KG_PER_M3 * DRAG_COEFFICIENT * sqrt(east * east + north * north)
+                    val cell = row * across + column
+                    eastward[cell] += HALF_YEAR_SHARE * dragPerMeter * east
+                    northward[cell] += HALF_YEAR_SHARE * dragPerMeter * north
                 }
-                val dragPerMeter = PressureWind.AIR_DENSITY_KG_PER_M3 * DRAG_COEFFICIENT * sqrt(east * east + north * north)
-                stressEast[cell] = dragPerMeter * east
-                stressNorth[cell] = dragPerMeter * north
             }
         }
+    }
+
+    /**
+     * The wind [response] drives at the center of cell ([row], [column]) of a grid [across] by
+     * [down] covering the map, meters a second, with the sea's drag: its gradient read smoothly
+     * ([PressureResponse.smoothSample]) and balanced as it was solved.
+     */
+    internal fun departureAt(
+        response: PressureResponse.Response,
+        gradient: PressureResponse.Gradient,
+        latitude: Float,
+        row: Int,
+        column: Int,
+        across: Int,
+        down: Int
+    ): SurfaceBelts.Wind {
+        val responseRow = (row + 0.5) * response.cellsDown / down - 0.5
+        val responseColumn = (column + 0.5) * response.cellsAcross / across - 0.5
+        return PressureResponse.windMps(
+            latitude.toDouble(), PressureResponse.SEA_DRAG_PER_S,
+            PressureResponse.smoothSample(gradient.eastward, response.cellsAcross, response.cellsDown, responseColumn, responseRow),
+            PressureResponse.smoothSample(gradient.northward, response.cellsAcross, response.cellsDown, responseColumn, responseRow)
+        )
+    }
+
+    /** Each half-year's share of the year. */
+    private const val HALF_YEAR_SHARE = 0.5
+
+    /**
+     * The circulation's right-hand side per cell, `curl_z τ / (ρ H)`, per second squared: the
+     * stress's curl by central differences in meters, columns wrapping and the edge rows one-sided.
+     */
+    private fun curlForcing(stress: Stress, across: Int, down: Int, widthMeters: Double, heightMeters: Double): DoubleArray {
         val forcing = DoubleArray(across * down)
         val perDensityDepth = 1.0 / (SEAWATER_DENSITY_KG_PER_M3 * WIND_DRIVEN_LAYER_DEPTH_M)
         for (row in 0 until down) {
@@ -483,16 +536,121 @@ object OceanStage {
             for (column in 0 until across) {
                 val columnEast = if (column + 1 == across) 0 else column + 1
                 val columnWest = if (column == 0) across - 1 else column - 1
-                val dStressNorthDx = (stressNorth[row * across + columnEast] -
-                    stressNorth[row * across + columnWest]) / (2.0 * widthMeters)
+                val dStressNorthDx = (stress.northward[row * across + columnEast] -
+                    stress.northward[row * across + columnWest]) / (2.0 * widthMeters)
                 // y runs north, and the row to the north is the one above.
-                val dStressEastDy = (stressEast[rowNorth * across + column] -
-                    stressEast[rowSouth * across + column]) / northToSouthMeters
+                val dStressEastDy = (stress.eastward[rowNorth * across + column] -
+                    stress.eastward[rowSouth * across + column]) / northToSouthMeters
                 forcing[row * across + column] = (dStressNorthDx - dStressEastDy) * perDensityDepth
             }
         }
-        return OceanCirculation.stencil(across, down, widthMeters, heightMeters, isWater, beta, BOTTOM_DRAG_PER_S, forcing)
+        return forcing
     }
+
+    /**
+     * `r`, the friction of the wind-driven surface layer on the water beneath it, per second:
+     * (2 days)⁻¹ on a 50 m layer, Zebiak and Cane's (1987, *Mon. Wea. Rev.* 115, 2262-2278). It is
+     * what keeps the layer's transport finite where `f` vanishes, so the equator needs no case of
+     * its own.
+     */
+    internal const val SURFACE_LAYER_FRICTION_PER_S: Double = 1.0 / (2.0 * 86_400.0)
+
+    /**
+     * `h`, the depth of the mixed layer an upwelling entrains into, meters: the energy balance's own
+     * fifty-meter slab ([EnergyBalance.MIXED_LAYER_DEPTH_M]).
+     */
+    internal const val MIXED_LAYER_DEPTH_M: Double = EnergyBalance.MIXED_LAYER_DEPTH_M
+
+    /**
+     * The surface layer's transport under a stress, square meters a second, eastward and northward:
+     * the damped Ekman balance `M = τ (r - i f) / (ρ (r² + f²))` in complex form, with `r`
+     * [SURFACE_LAYER_FRICTION_PER_S]. Where `f` is much larger than `r` this is Ekman's `τ/(ρf)`
+     * to the right of the wind in the north and to the left in the south; on the equator it runs
+     * down the wind at `τ/(ρr)`.
+     */
+    internal fun ekmanTransport(stressEast: Double, stressNorth: Double, latitudeDegrees: Double): Pair<Double, Double> {
+        val coriolis = PressureResponse.coriolisPerS(latitudeDegrees)
+        val friction = SURFACE_LAYER_FRICTION_PER_S
+        val perDensity = 1.0 / (SEAWATER_DENSITY_KG_PER_M3 * (friction * friction + coriolis * coriolis))
+        return (friction * stressEast + coriolis * stressNorth) * perDensity to
+            (friction * stressNorth - coriolis * stressEast) * perDensity
+    }
+
+    /**
+     * The upward velocity at the Ekman layer's base, meters a second, per cell of the solve grid:
+     * the divergence of [ekmanTransport], counted on the cells' faces. A face's transport is the
+     * mean of the two cells' either side of it, and none crosses a face with land on either side or
+     * a pole, so what the wind drives offshore along a coast rises in the water cells beside it,
+     * exactly as much as leaves them. The coast's upwelling, the open ocean's and the equator's are
+     * one law.
+     */
+    internal fun upwellingMps(
+        stress: Stress,
+        isWater: BooleanArray,
+        across: Int,
+        down: Int,
+        widthMeters: Double,
+        heightMeters: Double
+    ): FloatArray {
+        val eastward = DoubleArray(across * down)
+        val northward = DoubleArray(across * down)
+        for (row in 0 until down) {
+            val latitude = ClimateStage.latitudeOf(row, down).toDouble()
+            for (cell in row * across until (row + 1) * across) {
+                val (east, north) = ekmanTransport(stress.eastward[cell], stress.northward[cell], latitude)
+                eastward[cell] = east
+                northward[cell] = north
+            }
+        }
+        val upward = FloatArray(across * down)
+        for (row in 0 until down) {
+            for (column in 0 until across) {
+                val cell = row * across + column
+                if (!isWater[cell]) continue
+                val eastCell = row * across + if (column + 1 == across) 0 else column + 1
+                val westCell = row * across + if (column == 0) across - 1 else column - 1
+                val outEast = if (isWater[eastCell]) (eastward[cell] + eastward[eastCell]) / 2.0 else 0.0
+                val inWest = if (isWater[westCell]) (eastward[cell] + eastward[westCell]) / 2.0 else 0.0
+                val outNorth = if (row > 0 && isWater[cell - across]) (northward[cell] + northward[cell - across]) / 2.0 else 0.0
+                val inSouth = if (row + 1 < down && isWater[cell + across]) (northward[cell] + northward[cell + across]) / 2.0 else 0.0
+                upward[cell] = ((outEast - inWest) / widthMeters + (outNorth - inSouth) / heightMeters).toFloat()
+            }
+        }
+        return upward
+    }
+
+    /**
+     * The rate the rising water renews the mixed layer, per second: `w/h` where the layer's base
+     * rises, and nothing where it sinks, since water leaving the layer downward leaves at the
+     * layer's own temperature and changes nothing.
+     */
+    internal fun entrainmentPerS(upwellingMps: FloatArray): FloatArray =
+        FloatArray(upwellingMps.size) { cell -> (maxOf(upwellingMps[cell].toDouble(), 0.0) / MIXED_LAYER_DEPTH_M).toFloat() }
+
+    /**
+     * A rate per unit area on a coarse grid of the cycle: the mean of the fine cells each covers, as
+     * a residual is carried down, so a coastal strip one fine cell wide keeps its total on every
+     * grid, where a bilinear read would fall between its samples.
+     */
+    private fun coarseMean(fine: FloatArray, fineAcross: Int, fineDown: Int, coarseAcross: Int, coarseDown: Int): FloatArray {
+        val coarse = OceanCirculation.restrict(DoubleArray(fine.size) { fine[it].toDouble() }, fineAcross, fineDown, coarseAcross, coarseDown)
+        return FloatArray(coarse.size) { coarse[it].toFloat() }
+    }
+
+    /**
+     * `T_sub`, the temperature of the water an upwelling brings up, degrees Celsius, at [latitude]:
+     * the latitude's coldest-month mixed layer from the energy balance.
+     *
+     * A stated proxy, not a derived thermocline. The water under a summer mixed layer is what the
+     * winter before left there, sealed off as the layer shoaled and brought back by whatever lifts
+     * it (Stommel 1979, *PNAS* 76, 3051-3055, the mixed layer's "demon"), and the energy balance
+     * knows that water's temperature and no other. Earth's upwelled water rises from the upper
+     * thermocline, below the deepest winter layer, and is colder still, so this undershoots the cold
+     * of a real upwelling coast. `OceanUpwellingTest` holds it no warmer than the annual water it
+     * replaces, so the term can only cool.
+     */
+    internal fun subsurfaceTemperatureC(zonal: ZonalClimate, latitude: Float): Float =
+        zonal.waterC(latitude, Season.WINTER)
 
     /** A field on one grid read bilinearly at every cell center of another covering the same map. */
     private fun resample(field: FloatArray, fromAcross: Int, fromDown: Int, toAcross: Int, toDown: Int): FloatArray {

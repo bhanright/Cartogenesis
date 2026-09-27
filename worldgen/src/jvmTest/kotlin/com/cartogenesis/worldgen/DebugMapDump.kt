@@ -227,9 +227,9 @@ class DebugMapDump {
         outputDir.mkdirs()
         listOf(7L, 42L, 1234L).forEach { seed ->
             val base = WorldGenConfig(seed = seed, width = 512, height = 512)
-            listOf(0f, 0.3f).forEach { slant ->
+            listOf(0f, 0.15f).forEach { slant ->
                 val world = WorldGenerationEngine.generateBlocking(
-                    base.copy(climate = base.climate.copy(meridionalWind = slant))
+                    base.copy(climate = base.climate.copy(meridionalWindShare = slant))
                 )
                 val tag = "seed$seed-slant$slant"
                 write(render(world, Mode.SUMMER_RAINFALL), "$tag-rainfall-summer.png")

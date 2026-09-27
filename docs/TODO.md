@@ -367,9 +367,27 @@
   and the curl's zero line bends with it. 4a merges with the fronts recorded here. 2026-09-26, 4a.
 - **A planet's size and spin are not yet settings.** Everything the ocean solves reads the radius
   from `WorldScale.radiusMeters` and the spin from `WorldScale.ROTATION_RATE_PER_S`, and
-  `OceanPlanetSizeTest` holds the laws at twice the radius; what a setting would still need is
-  the equatorial eddy diffusivity's scaling with β, for which no published scaling was found (see
-  `OceanHeat.diffusivity`), and every other stage's lengths audited the same way. 2026-09-26, 4a.
+  `OceanPlanetSizeTest` holds the laws at twice the radius, the eddy diffusivity's equatorial
+  deformation radius among them (`OceanHeat.diffusivity`); what a setting would still need is
+  every other stage's lengths audited the same way, and a spin read from the setting where
+  `ROTATION_RATE_PER_S` is read now. 2026-09-26, 4a.
+- **Chunk 4a's climate moved the drawn ice's straight runs at 2048, recorded for the ice chunks.**
+  The drawn ice follows the climate, so solving the gyres moved `ICE_EDGE_ALONG_A_ROW`'s marks in
+  the 2048 census (`GeometryExpectations.at2048`), base 3a66025 against 4a's head: seed 42's
+  facets clean against 199.0 cell widths; 969495's clean against two runs, 215.0; 1234's 179.3
+  against 188.6; 718106's 273.0 at (1030, 1761) against two runs, 189.0 at (998, 1784); 99's
+  row-bearing preference clean against 1.647; and 59758's cleared, 1.555 against clean. They go
+  to the ice chunks, which will change what the map draws as ice: the maintainer has chosen that
+  the drawn ice follows the sheet's thickness, which retakes every one of these. 2026-09-26, 4a.
+- **Peoples' borders follow circular arcs on 59758 at 2048.** Two arcs of about 123 degrees on
+  circles 10 to 12 cells across, `PEOPLES_BORDER_ARC`, a finding first made by 4a's census: base
+  3a66025 clean, 4a's head two. The peoples settle by habitability, which the solved currents
+  moved, so this is 4a's climate reaching a rule of the peoples' that draws a round edge where
+  its inputs allow one. 2026-09-26, 4a.
+- **A realm border follows a circular arc on 59758 at 2048.** One arc of 127 degrees on a circle
+  11 cells across, 0.22 cells rms, `REALM_BORDER_ARC`: base 3a66025 clean, 4a's head 127.5.
+  Realms follow habitability too, so this is 4a's climate moving a border onto a round path, as
+  with the peoples' arcs above. 2026-09-26, 4a.
 - **`CurrentFeedsRainTest` counts its coasts in cells.** Its floors, ten cells of cold coast and
   five of warm, and the one-cell step it takes offshore to read the water are counts of cells, so
   on a square-cell grid, or at another resolution, they ask for a different length of coast. They

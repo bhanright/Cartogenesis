@@ -36,7 +36,7 @@ import com.cartogenesis.worldgen.pipeline.Biome
  *
  * Every one of these is a number between 0 and 1 computed per cell from fields the world already
  * carries, and a style decides through [MapStyle.climateTint] how much of it to let through — the
- * full effect on Atlas, a suggestion on the aged papers, nothing at all on the two styles whose
+ * full effect on Atlas, a suggestion on the aged papers, nothing at all on the three styles whose
  * ramps are a promise to the reader.
  */
 internal object ClimateTint {
@@ -142,7 +142,7 @@ internal object ClimateTint {
      *
      * Three sevenths is the fourth of the eight stops every one of these ramps is written with, and
      * on each of them that stop is where the series leaves the colours of vegetation and enters the
-     * colours of earth: Atlas's sand, Schoolroom's yellow, Verdant's tan, Mars's ochre. Dry ground
+     * colours of earth: Atlas's sand, Verdant's tan, Mars's ochre, Natural's umber. Dry ground
      * starts there and climbs the rest of the ramp from it — compressed rather than clipped, so a
      * desert mountain still reaches the snow line and height still reads as height.
      */

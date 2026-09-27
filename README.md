@@ -134,9 +134,9 @@ it still deviates from Earth, is in [docs/GEOGRAPHY.md](docs/GEOGRAPHY.md).
 The twelve styles are **Atlas** (elevation and climate tints), **Vellum** (aged parchment and
 sepia ink), **Ink wash** (sumi-e grey on pale paper), **Nautical** (an admiralty chart with
 depth-banded water), **Midnight** (moonlit, rivers left luminous), **Schoolroom** (a saturated
-classroom wall map), **Verdant** (illustrated fantasy: teal sea, cream land, deep woods),
-**Scroll** (painted parchment, jade sea, vermilion marks), **Pen and ink** (line art, relief hatched
-by slope), **Mars** (the same world as a dry planet), **Natural** (a palette sampled from a Blue
+classroom wall map, the land tinted by elevation alone), **Verdant** (illustrated fantasy: teal
+sea, cream land, deep woods), **Scroll** (painted parchment, jade sea, vermilion marks), **Pen and
+ink** (line art, relief hatched by slope), **Mars** (the same world as a dry planet), **Natural** (a palette sampled from a Blue
 Marble photograph of Earth) and **Colour-blind** (a cividis land ramp over one flat sea, so nothing
 is told by hue alone).
 

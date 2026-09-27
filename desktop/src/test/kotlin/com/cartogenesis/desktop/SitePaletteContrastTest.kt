@@ -119,10 +119,14 @@ class SitePaletteContrastTest {
             Triple("step and picker labels", "bone-dim", "ink"),
             Triple("play button", "brass", "ink"),
             Triple("play button, hovered", "brass", "ink-sunk"),
-            // The second set: a data frame overlay switched on, the reel's seed and its link.
-            Triple("an overlay switch, pressed", "ink", "brass"),
+            // The second set: the reel's seed and its link.
             Triple("a reel world's seed", "bone-dim", "ink"),
-            Triple("a reel world's link", "brass", "ink")
+            Triple("a reel world's link", "brass", "ink"),
+            // The data frame's checkboxes: each layer's name and the line under it, on the page.
+            Triple("a layer's name, beside its checkbox", "parchment", "ink"),
+            Triple("a layer's description", "bone-dim", "ink"),
+            // The reader's own system, marked on its download card by a tag of the brass.
+            Triple("the Your system tag", "ink", "brass")
         )
 
         /**
@@ -133,7 +137,7 @@ class SitePaletteContrastTest {
         val CARD_PAIRS: List<Triple<String, String, String>> = listOf(
             Triple("name, the + control, other pills, links", "card-ink", "card-ground"),
             Triple("summary line, instructions and notes", "card-ink-dim", "card-ground"),
-            Triple("the For your system tag, the Copy button", "card-ink", "card-chip"),
+            Triple("the + control, the Copy button", "card-ink", "card-chip"),
             Triple("the apt commands, on a card that carries commands", "card-ink", "card-well"),
             Triple("the first pill, filled", "card-ground", "card-ink")
         )
@@ -352,37 +356,88 @@ class SitePaletteContrastTest {
         return custom[name]?.let { resolve(it, custom) } ?: colour(name)
     }
 
+    /** Every innermost rule of the style sheet: its selectors, each trimmed, and its declarations. */
+    private fun rules(): List<Pair<List<String>, String>> =
+        Regex("""([^{}]+)\{([^{}]*)\}""").findAll(styleSheet).map { rule ->
+            rule.groupValues[1].split(',').map { it.trim().replace(Regex("""\s+"""), " ") } to rule.groupValues[2]
+        }.toList()
+
     /**
-     * That every download card's words meet AA on that card's own ground.
+     * That the download cards are alike, that only the reader's own system is marked, in brass,
+     * and that every word on a card meets AA on the cards' ground.
      *
-     * The cards are the one place the page sets type on grounds other than its own: Windows on
-     * brass, Linux on the lit oxblood, the browser on the sunk ink. Each card's ground and inks are
-     * read out of the card's own rule, over the defaults every card starts from, and each of
-     * [CARD_PAIRS] measured with them, so a card whose ground or dim ink moves is measured as it
-     * now is rather than as it was written here.
+     * The cards used to wear a colour each, Windows the primary button's brass and Linux the error
+     * red, and the colours meant nothing. So no card's own rule may set a ground, an ink or a
+     * background, and every card is measured on the one ground and inks every card is given, read
+     * out of the cards' rule so a change to them is measured as it is. The mark is the page's brass:
+     * a ring round the card, held to the non-text bar on the card's ground and on the page's, and a
+     * tag of the ink on the brass. The command well is measured because one card carries commands.
      */
     @Test
-    fun `every download card's words meet AA on its own ground`() {
-        val defaults = declarationsOf(".dl-card").filterKeys { it.startsWith("--card-") }.mapKeys { it.key.removePrefix("--") }
-        assertTrue(defaults.keys.containsAll(listOf("card-ground", "card-ink", "card-ink-dim", "card-chip", "card-well")),
-            "the cards no longer name their ground, inks, chip and well: ${defaults.keys}")
-        val cards = listOf("windows", "linux", "browser")
-        cards.forEach { card ->
-            val own = declarationsOf(".dl-card.$card").filterKeys { it.startsWith("--card-") }.mapKeys { it.key.removePrefix("--") }
-            val custom = defaults + own
-            // The command well is measured on the cards that have one.
-            val markup = Regex("""<div class="dl-card $card"[\s\S]*?(?=<div class="dl-card |<a class="dl-all")""").find(page)?.value
-                ?: fail("the page has no $card card")
-            val pairs = CARD_PAIRS.filter { (_, _, ground) -> ground != "card-well" || markup.contains("""class="dl-cmd""") }
-            pairs.forEach { (where, ink, ground) ->
-                val inkValue = resolve("var(--$ink)", custom)
-                val groundValue = resolve("var(--$ground)", custom)
-                checkValues("$card card, $where", "--$ink", inkValue, "--$ground", groundValue, AA)
-            }
-            // The focus ring is drawn in the card's ink.
-            checkValues("$card card, focus ring", "--card-ink", resolve("var(--card-ink)", custom),
-                "--card-ground", resolve("var(--card-ground)", custom), NON_TEXT)
+    fun `the download cards are alike, and only the reader's system is marked, in brass`() {
+        val own = rules().filter { (selectors, body) ->
+            selectors.any { Regex("""\.dl-card\.(windows|linux|browser)\b""").containsMatchIn(it) } &&
+                Regex("""--card-|background|(?<![-\w])color\s*:|box-shadow""").containsMatchIn(body)
         }
+        assertTrue(own.isEmpty(), "a download card is coloured on its own, so its colour says something: ${own.map { it.first }}")
+        val custom = declarationsOf(".dl-card").filterKeys { it.startsWith("--card-") }.mapKeys { it.key.removePrefix("--") }
+        assertTrue(custom.keys.containsAll(listOf("card-ground", "card-ink", "card-ink-dim", "card-chip", "card-well")),
+            "the cards no longer name their ground, inks, chip and well: ${custom.keys}")
+        assertTrue(page.contains("""class="dl-cmd""""), "no card carries commands, so the command well measures nothing")
+        CARD_PAIRS.forEach { (where, ink, ground) ->
+            checkValues("a card, $where", "--$ink", resolve("var(--$ink)", custom), "--$ground", resolve("var(--$ground)", custom), AA)
+        }
+        val cardGround = resolve("var(--card-ground)", custom)
+        // The focus ring is drawn in the card's ink.
+        checkValues("a card, focus ring", "--card-ink", resolve("var(--card-ink)", custom), "--card-ground", cardGround, NON_TEXT)
+
+        val ring = declarationsOf(".dl-card.yours")["box-shadow"] ?: fail("the reader's own card has no ring")
+        assertTrue(ring.contains("var(--brass)"), "the reader's own card is ringed in something other than the brass: $ring")
+        checkValues("your system's ring, on the card", "--brass", colour("brass"), "--card-ground", cardGround, NON_TEXT)
+        checkValues("your system's ring, on the page", "--brass", colour("brass"), "--ink", colour("ink"), NON_TEXT)
+        val tag = declarationsOf(".dl-tag")
+        assertEquals("var(--brass)" to "var(--ink)", tag["background"] to tag["color"], "the Your system tag is not the ink on the brass")
+    }
+
+    /**
+     * That no colour on the page stands for an error, since the page has none to show. The
+     * application's two error colours are defined, because the page's palette is the window's
+     * value for value, and used by no rule.
+     */
+    @Test
+    fun `no colour on the page stands for an error`() {
+        val errorColours = PALETTE.keys.filter { it.startsWith("oxblood") }
+        assertEquals(2, errorColours.size, "the palette's error colours are not the two oxbloods")
+        val using = rules().filter { (_, body) -> errorColours.any { body.contains("var(--$it)") } }.flatMap { it.first }
+        assertTrue(using.isEmpty(), "these rules colour something in the application's error colours: $using")
+    }
+
+    /**
+     * That the data frame's round toggles can be seen in each of their states on what they sit on:
+     * off, the rim on the page's ground and the drawing on the sunk ink inside it; hovered, the
+     * rim; on, the brass round on the page's ground and the drawing in the ink on the brass; and
+     * the focus ring on the page's ground. Each colour is read out of the toggle's own rules, and
+     * the drawings are drawn in the round's own colour (`currentColor`), so the round's colour is
+     * the drawing's. A drawing is a graphic whose shape says which layer it is, so each is held to
+     * the non-text bar.
+     */
+    @Test
+    fun `the data frame's toggles are seen in every state`() {
+        fun colourIn(selector: String, property: String): String {
+            val value = declarationsOf(selector)[property] ?: fail("$selector sets no $property")
+            return Regex("""var\(--([\w-]+)\)""").find(value)?.groupValues?.get(1) ?: fail("$selector's $property is not a palette colour: $value")
+        }
+        val icon = declarationsOf(".layer-icon")
+        assertEquals("currentColor", icon["stroke"], "the toggles' drawings are not drawn in the round's own colour")
+        val on = ".layer-input:checked + .layer-switch .layer-round"
+        listOf(
+            Triple("a toggle's rim, off", colourIn(".layer-round", "border"), "ink"),
+            Triple("a toggle's drawing, off", colourIn(".layer-round", "color"), colourIn(".layer-round", "background")),
+            Triple("a toggle's rim, hovered", colourIn(".layer-switch:hover .layer-round", "border-color"), "ink"),
+            Triple("a toggle's round, on", colourIn(on, "background"), "ink"),
+            Triple("a toggle's drawing, on", colourIn(on, "color"), colourIn(on, "background")),
+            Triple("a toggle's focus ring", colourIn(".layer-input:focus-visible + .layer-switch .layer-round", "outline"), "ink")
+        ).forEach { (where, ink, ground) -> check(where, ink, ground, NON_TEXT) }
     }
 
     /**
@@ -426,52 +481,44 @@ class SitePaletteContrastTest {
         return (0xFF shl 24) or (channel(16) shl 16) or (channel(8) shl 8) or channel(0)
     }
 
-    /** The WCAG level a ratio reaches, as the bar it clears: 7 (AAA), 4.5 (AA), 3 or nothing. */
-    private fun levelOf(ratio: Double, levels: List<Double>): Double = levels.firstOrNull { ratio >= it } ?: 0.0
-
     /**
-     * That the opening's panel is only as translucent as its words allow, measured over the
-     * brightest ground the band can put behind it.
+     * That every word and edge on the opening's panel stays at WCAG AA for its size when read
+     * through the panel over the brightest pixel the band can put behind it.
      *
      * The panel rises over the drifting map, so any pixel of the band can be behind any word on it,
-     * and the band holds pure white ice. The panel's opacity is not chosen by eye: it is the least
-     * whole percent of the ink at which no word on the panel, read over white through the panel,
-     * falls below the WCAG level it reaches on the solid ink (7:1 for body text that is AAA there,
-     * 4.5 for large text that is AAA there, 3 for the cue's outline), and the page is held to
-     * exactly that percent. Less would cost a word a level; more would make the panel less
-     * translucent than its words need.
+     * and a band can hold pure white. How translucent the panel is was chosen by eye over the band
+     * (84% of the ink, from 97, 92, 88 and 84 tried); what is held here is the floor under that
+     * choice: body text at 4.5:1, the heading, which is large text, at 3.0, and the cue's outline
+     * and the focus ring at the non-text 3.0. The brass eyebrow is the pair that sets the floor.
+     * `SiteAssemblyTest` measures the same pair over the brightest pixel of the band as built.
      */
     @Test
-    fun `the opening's panel is as translucent as its words allow over the brightest band`() {
-        val background = declarationsOf(".opening-panel")["background"] ?: fail("the opening's panel has no background")
-        val percent = Regex("""color-mix\(\s*in srgb\s*,\s*var\(--ink\)\s+(\d+)%\s*,\s*transparent\s*\)""").find(background)
-            ?.groupValues?.get(1)?.toInt() ?: fail("the panel's ground is no longer the ink mixed with transparency: $background")
-        val bodyLevels = listOf(7.0, AA, AA_LARGE)
-        val largeLevels = listOf(AA, AA_LARGE)
-        val boundaryLevels = listOf(NON_TEXT)
-        // Every word and edge on the panel, with the levels its kind of text is judged on.
+    fun `the opening's panel keeps every word at AA over the brightest band`() {
+        val percent = panelInkPercent()
         val panelPairs = listOf(
-            Triple("eyebrow", "brass", bodyLevels),
-            Triple("heading", "parchment", largeLevels),
-            Triple("lede", "bone", bodyLevels),
-            Triple("secondary button's label", "parchment", bodyLevels),
-            Triple("scroll cue's arrow", "parchment", boundaryLevels),
-            Triple("focus ring", "brass", boundaryLevels)
+            Triple("eyebrow", "brass", AA),
+            Triple("heading", "parchment", AA_LARGE),
+            Triple("lede", "bone", AA),
+            Triple("the map's seed and its link", "bone", AA),
+            Triple("secondary button's label", "parchment", AA),
+            Triple("scroll cue's arrow", "parchment", NON_TEXT),
+            Triple("focus ring", "brass", NON_TEXT)
         )
-        fun keepsEveryLevel(opacity: Int) = panelPairs.all { (_, ink, levels) ->
-            val solid = levelOf(ColorVision.contrast(colour(ink), colour("ink")), levels)
-            levelOf(ColorVision.contrast(colour(ink), panelOverTheBrightestBand(opacity)), levels) >= solid
+        panelPairs.forEach { (where, ink, bar) ->
+            checkValues("opening panel, $where", "--$ink", colour(ink), "ink $percent% over white", panelOverTheBrightestBand(percent), bar)
         }
-        val least = (0..100).first { keepsEveryLevel(it) }
-        panelPairs.forEach { (where, ink, levels) ->
-            val solid = levelOf(ColorVision.contrast(colour(ink), colour("ink")), levels)
-            checkValues("opening panel, $where", "--$ink", colour(ink), "ink $percent% over white",
-                panelOverTheBrightestBand(percent), solid)
-        }
-        assertEquals(
-            least, percent,
-            "the opening's panel is the ink at $percent%, and the least percent at which every word on it keeps its level over white is $least"
-        )
-        println("SITE the opening's panel is the ink at $percent%, the least that keeps every word's level over the band's brightest pixel")
+        val least = (0..100).first { opacity -> panelPairs.all { (_, ink, bar) -> ColorVision.contrast(colour(ink), panelOverTheBrightestBand(opacity)) >= bar } }
+        println("SITE the opening's panel is the ink at $percent%; the least that keeps every word at AA over white is $least%" +
+            " (the eyebrow %.2f:1 at $percent%%, %.2f at ${least}%%, %.2f at ${least - 1}%%)".format(
+                ColorVision.contrast(colour("brass"), panelOverTheBrightestBand(percent)),
+                ColorVision.contrast(colour("brass"), panelOverTheBrightestBand(least)),
+                ColorVision.contrast(colour("brass"), panelOverTheBrightestBand(least - 1))))
+    }
+
+    /** The share of the ink the opening's panel is, in whole percent, as the style sheet writes it. */
+    private fun panelInkPercent(): Int {
+        val background = declarationsOf(".opening-panel")["background"] ?: fail("the opening's panel has no background")
+        return Regex("""color-mix\(\s*in srgb\s*,\s*var\(--ink\)\s+(\d+)%\s*,\s*transparent\s*\)""").find(background)
+            ?.groupValues?.get(1)?.toInt() ?: fail("the panel's ground is no longer the ink mixed with transparency: $background")
     }
 }

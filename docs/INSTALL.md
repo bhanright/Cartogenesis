@@ -97,8 +97,13 @@ graphics stack — Mesa, with nouveau, NVK and zink — where the GPU check foun
 accelerated erosion and export paths ran. The proprietary NVIDIA driver is untested on Linux: it is
 expected to work and has not been shown to.
 
-Acceleration is optional either way. Without a usable device the generator runs on the processor
-and produces the same world, more slowly. To see which way it went before opening the window:
+Acceleration is optional either way, and off until the reader turns it on (*Graphics
+acceleration* in the header, or at launch in Settings). With it off, or with no usable device, every stage runs on the
+processor and a seed makes the same world on every machine. With it on, the erosion sweeps, the
+ocean's currents and the ice sheet's profile run on the device, whose arithmetic differs from the
+processor's in the last digits, so the world is the same world to the eye and not to the bit; its
+save carries its fields rather than relying on the seed. To see whether a device was found before
+opening the window:
 
 ```bash
 /opt/cartogenesis/bin/Cartogenesis --gpu-check

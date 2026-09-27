@@ -2,6 +2,7 @@ package com.cartogenesis.worldgen.pipeline
 
 import com.cartogenesis.worldgen.math.JumpFloodDistance
 import com.cartogenesis.worldgen.math.LongMinHeap
+import com.cartogenesis.worldgen.model.Acceleration
 import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.GlaciationConfig
 import com.cartogenesis.worldgen.model.IsostasyConfig
@@ -282,7 +283,11 @@ object GlaciationStage {
          * back to the plain temperature mask. See [ClimateStage.provisionalSnowBalance].
          */
         snowBalance: FloatField? = null,
-        /** Somewhere other than the CPU for the sheet's profile and surface flow; see rule 8. */
+        /**
+         * Somewhere other than the CPU for the sheet's profile and surface flow; see rule 8. Asked
+         * only when [WorldGenConfig.erosion]'s acceleration is [Acceleration.GPU], so a host may
+         * hand its device over whatever the setting says.
+         */
         accelerator: IceSheetAccelerator? = null
     ): SeaLevelResult = apply(config, sea, snowBalance, accelerator, onBudget = null)
 
@@ -583,7 +588,14 @@ object GlaciationStage {
             if (body >= 0 && field.size[body] >= smallestSheetCells) sheetBody[cell] = true
         }
 
-        val accelerated = accelerator?.sheet(
+        // The one graphics switch the interface offers lives in the erosion section and governs
+        // every stage that can leave the processor, as it does the ocean's. Asked here rather than
+        // by each caller, because a device the host merely *has* is not one the reader chose: a
+        // card answers in its own last digits, so a sheet drawn on it is a different world, and
+        // with the switch off the seed has to make the processor's world on every machine.
+        val deviceForTheSheet =
+            if (config.erosion.acceleration == Acceleration.GPU) accelerator else null
+        val accelerated = deviceForTheSheet?.sheet(
             cellsAcross, cellsDown, margin.distanceKm, margin.nearestCell, relative, sheetBody,
             metresPerRootKm, config.scale.highestLandMetres,
             config.cellHeightInCellWidths.toFloat(), cellSpanKm

@@ -16,6 +16,7 @@ import com.cartogenesis.worldgen.WorldGenerationEngine
 import com.cartogenesis.worldgen.model.Acceleration
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.pipeline.ErosionStage
+import com.cartogenesis.worldgen.pipeline.IceSheetParity
 import com.cartogenesis.worldgen.pipeline.OceanCirculation
 import com.cartogenesis.worldgen.pipeline.OceanHeat
 import com.cartogenesis.worldgen.pipeline.OceanResult
@@ -46,14 +47,36 @@ import org.jetbrains.skia.Image
  *
  * The GPU answers are still expected to differ slightly — that is the premise of the whole
  * feature — so this reports the size of the difference rather than asserting there is none.
+ *
+ * The ice sheet's kernel is measured the same way, on the synthetic fixture the desktop's
+ * `GpuIceSheetTest` holds its card to, so the browser's figure and the desktop's are the same
+ * measure on the same sheet.
  */
 internal suspend fun runSelfTest(accelerator: WebGpuErosion?): String {
     val gpu = if (accelerator == null) "no WebGPU device available" else runGpuSelfTest(accelerator)
     val ocean = if (accelerator == null) "" else runOceanSelfTest(WebGpuOcean.sharingDeviceWith(accelerator))
+    val ice = if (accelerator == null) "ice no WebGPU device" else runIceSelfTest(accelerator)
     val storage = runStorageSelfTest()
     val exports = runExportSelfTest()
     val bomb = runDecompressionSelfTest()
-    return "SELFTEST $gpu $ocean $storage $exports $bomb"
+    return "SELFTEST $gpu $ocean $ice $storage $exports $bomb"
+}
+
+/**
+ * The ice kernel against [IceSheetParity]'s processor answer: the worst thickness difference in
+ * metres and as a share of the thickest ice, and how many flow receivers differ. A device that
+ * declines, which is what a kernel that will not compile does, says so in place of the figures;
+ * the compiler's own message is in the console.
+ */
+private suspend fun runIceSelfTest(erosion: WebGpuErosion): String {
+    val fixture = IceSheetParity.fixture()
+    val device = WebGpuIceSheet.sharingDeviceWith(erosion)
+    val onTheDevice = fixture.askDevice(device) ?: return "ice device=${device.name} declined"
+    val gap = fixture.compare(onTheDevice)
+    return "ice device=${device.name} sheetCells=${gap.sheetCells} " +
+        "worstThicknessMetres=${gap.worstThicknessMetres} " +
+        "worstThicknessShare=${gap.worstThicknessShare} thickestMetres=${gap.thickestMetres} " +
+        "receiversDiffering=${gap.receiversDiffering}"
 }
 
 /**

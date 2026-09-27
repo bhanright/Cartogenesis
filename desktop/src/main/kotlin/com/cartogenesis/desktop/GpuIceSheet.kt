@@ -11,7 +11,7 @@ import org.lwjgl.opengl.GL43C
  * those thicknesses make and picks each cell's steepest descent. There is no iteration and no
  * convergence to lose, so unlike `GpuOcean` there is nothing here a driver could compound an error
  * through — the only difference between this and the CPU is how the two round one square root and
- * one division, which is what `IceSheetParityTest` measures.
+ * one division, which is what `GpuIceSheetTest` measures, on the fixture `IceSheetParity` builds.
  *
  * The two halves have to be separate dispatches rather than one. The flow at a cell reads its
  * neighbours' thicknesses, and a neighbour may be in another work group, so the whole grid's
@@ -169,8 +169,10 @@ class GpuIceSheet private constructor(override val name: String) : IceSheetAccel
          * nothing.
          *
          * `IceSheet.surfaceMetres` in one line, with the margin's own bed floored at the waterline
-         * for the reason that function gives. `precise` throughout, so a driver free to fuse the
-         * multiply and add does not walk away from the reference at the third decimal.
+         * for the reason that function gives. Every value the output is made from is `precise`,
+         * so a driver free to fuse the multiply and add does not walk away from the reference at
+         * the third decimal: GLSL applies the qualifier to every operation within the function
+         * that feeds a `precise` variable, so the thickness is formed in one before it is stored.
          */
         private val PROFILE_SOURCE = """
             #version 430
@@ -212,7 +214,8 @@ class GpuIceSheet private constructor(override val name: String) : IceSheetAccel
                 precise float marginBed =
                     from < 0 ? 0.0 : max(bed[from] * uMetresPerFieldUnit, 0.0);
                 precise float surface = marginBed + profile;
-                thickness[cell] = max(surface - bed[cell] * uMetresPerFieldUnit, 0.0);
+                precise float thicknessHere = max(surface - bed[cell] * uMetresPerFieldUnit, 0.0);
+                thickness[cell] = thicknessHere;
             }
         """.trimIndent()
 
@@ -222,6 +225,8 @@ class GpuIceSheet private constructor(override val name: String) : IceSheetAccel
          *
          * `IceSheet.steepestDescent`, including its tie-break to the lower cell index, which is
          * not a detail: a tie here decides a bearing, and a bearing decides where a trough goes.
+         * `precise` on every value the choice is made from, the surface included: the qualifier
+         * reaches back only within one function, so `surfaceAt` holds its own.
          */
         private val FLOW_SOURCE = """
             #version 430
@@ -238,7 +243,8 @@ class GpuIceSheet private constructor(override val name: String) : IceSheetAccel
             uniform float uRowScale;
 
             float surfaceAt(int cell) {
-                return bed[cell] + thickness[cell] / uMetresPerFieldUnit;
+                precise float surface = bed[cell] + thickness[cell] / uMetresPerFieldUnit;
+                return surface;
             }
 
             void main() {

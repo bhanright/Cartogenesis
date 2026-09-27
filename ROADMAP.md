@@ -8,21 +8,21 @@ table disagree, so there is nothing to keep in step by hand.
 
 | Release | What it brings |
 | --- | --- |
-| 3.0.0 | The realism audit: the plates, the seas, the air and the water measured against Earth, and corrected where the measurement showed how. |
-| 3.1.0 | Rainfall that holds up at larger map sizes, monsoon coasts, ice sheets with the shape and weight of ice, and softer woodland edges. |
-| 3.2.0 (current) | Erosion shaped by rain and vegetation, rivers that begin with the slope and the flow, and ice sheets without stripes down their flanks. |
+| 3.0.0 | Plates, oceans, climate and rivers checked against real figures from Earth, and corrected where they fell short. |
+| 3.1.0 | More consistent rainfall on large maps, monsoon coasts, more realistic ice sheets, and softer edges between forest and open land. |
+| 3.2.0 (current) | Erosion that depends on rainfall and plant cover, rivers that start where the slope and water flow allow, and ice sheets without stripes down their sides. |
 | 3.3 | Waves that shape beaches, spits and barrier islands. |
 | 3.x | Saved worlds that keep opening after an update. |
 | 3.x | Wetter continental interiors, and cold currents that make coastal deserts. |
 | 3.x | Rivers that widen downstream, with meanders, braided reaches and marshes. |
-| 3.x | More control over how the map is drawn: relief exaggeration and the direction of the light, how small a lake is still shown, the strength of the climate colouring, line weight, and the graticule's spacing. |
+| 3.x | More control over how the map is drawn: how tall the hills look and where the light comes from, the smallest lake shown, the strength of the climate colors, line thickness, and the spacing of the latitude and longitude lines. |
 | 3.x | A topographic map style with contour lines. |
-| 3.x | Hydraulic erosion on the graphics card. |
-| 3.x | A choice of world width. |
+| 3.x | River erosion on the graphics card, for faster generation. |
+| 3.x | A choice of how big the planet is. |
 | 4.0 | The world as a sphere: a globe to turn, and a choice of map projections for the whole-world map and for exports. |
 | 4.x | Faster generation on more desktop graphics cards. |
-| 4.x | Import a heightmap, from Wonderdraft or any greyscale image, as the terrain a world is generated from. |
-| 4.x | Choose the kind of world the generator starts from, and paint the land yourself: continents form where and as you draw them, coastlines stay where you put them subject to erosion, and the climate, rivers and everything else are still generated on top. |
-| 5.0 | The atlas: named land and sea features, with labels arranged the way a printed map arranges them. Renaming places and moving labels already work and stay. |
-| 5.x | Estuaries, reefs and atolls. |
-| 6.0 | Symbol packs placed on layers over the generated map. |
+| 4.x | Import a heightmap, from Wonderdraft or any grayscale image, as the terrain a world is generated from. |
+| 4.x | Choose the kind of world to start from, and paint the land yourself. Continents form where you draw them, coastlines stay close to where you put them (subject to erosion), and the climate, rivers and everything else are generated as usual. |
+| 5.0 | The atlas: named land and sea features, labeled the way a printed atlas labels them. Renaming places and placing labels already work and will carry over. |
+| 5.x | Tidal estuaries, coral reefs and atolls. |
+| 6.0 | Sets of map symbols, such as trees, hills and towns, to place over the map. |

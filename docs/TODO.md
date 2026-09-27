@@ -1,5 +1,19 @@
 # To do
 
+- **The WGSL compile check never executes where the tiers run (chunk 5a).** `WgslCompilesTest`
+  asks a device's compiler for every module in `WGSL_MODULES` and prints `WGSL COMPILE CHECK
+  executed` or `skipped`; in this machine's headless Chrome 153 under Karma it skips, because
+  `navigator.gpu` is there and `requestAdapter` gives nothing, and CI's headless Chrome on
+  `ubuntu-latest` has not been seen to do better (read the line in the `:web:wasmJsTest` XML after a
+  CI run). Until a headless adapter is found — a software one launched with WebGPU flags through a
+  Karma custom launcher is the thing to try — only `WgslReservedWordsTest` guards the sources in a
+  tier, and the compiler is asked by hand through `?selftest` in a browser with a device. The ice
+  kernel's new console report of a refused module has likewise been read, not seen: the renamed
+  module compiled on the only device tried.
+- **`--gpu-check` probes the erosion sweeps and the export raster only.** The ocean's and the ice
+  sheet's shaders compile on the same context and are not reported; a driver that takes one and
+  refuses another would be seen only as a world drawn on the processor.
+
 - **The implicit incision has no graphics-card path (Fix 3b's stage 2).** Fix 3b replaced the
   explicit cut with Braun and Willett's implicit update on the processor (`HydraulicErosion.incise`):
   one walk of `FlowRouting.drainageOrder` backwards, receivers first, each cell
@@ -347,7 +361,27 @@
   end at (2720, 470): a scarp running nearly straight down a column from about (2960, 717) to
   (2950, 820) on the sheet, and a delta flat with straight edges at about (3010-3055, 800-835).
   Both are in the relief, where the tilt makes the scarp plainer; no window of that size on the
-  island's range avoids them and the dry belt at once.
+  island's range avoids them and the dry belt at once. On the implicit erosion's terrain Site 5c
+  looked at every window again and moved four: the styles, the data frame (with the data cards)
+  and the relief onto the south-western peninsula, where the comb of gullies down the columns is
+  least, and the opening's band off seed 718106 altogether (below); the six steps stayed. What the
+  page still shows, because the figure cannot move off it: the lens's whole world carries every
+  mark, and the reel's worlds at 512, whole, show small glacier flats of their own.
+- **No strip of 800 rows round any world measured is free of long straight runs.** Site 5c traced
+  every coast (as drawn, and smoothed to 12 km), shelf break, ice-sheet edge, ice-flat edge and
+  land-biome belt edge on the 2048 sheet of 21 worlds (718106, and 1, 3, 7, 8, 12, 21, 42, 64, 99,
+  123, 300, 777, 1066, 2024, 2026, 5000, 31337, 65536, 90210 and 424242 made as the application
+  makes a world with only a seed, taken to 2048) and flagged every run that stays within 12 km of
+  its chord for more than 403 km, the Himalayan front's straightest stretch (Bendick and Bilham
+  2001). Every band of 800 rows on every world holds at least one; the fewest on a band with 40%
+  land or more is three. On 718106 the land-rich bands carry 22 or more, among them the ice cap's
+  flats and the subduction coast straight down a column (the trench-is-a-plane entry). The page's
+  band is now seed 1's rows 848 to 1,648 from column 3,264, the maintainer's choice of three
+  offered; it keeps two coast runs, the smoothed coast from about (735, 1007) to (819, 1126) on the
+  sheet, 427 km, and the shelf break from about (2139, 1530) to (2295, 1572), 473 km, and one belt
+  edge of 434 km along a row near 1,375; its range's flanks also show the comb of gullies down
+  the columns, plainest of the three offered. The full picture refresh after the square grid picks the
+  band again, by the same measure. 2026-09-26, Site 5c.
 - **The ocean's device path is slower than the processor.** Chunk 4a's circulation and heat are
   solved on the card behind `OceanAccelerator` and agree with the processor to the bit, but each
   batch of relaxation passes goes to the card and comes back, and the multigrid's restriction,
@@ -393,11 +427,6 @@
   on a square-cell grid, or at another resolution, they ask for a different length of coast. They
   want restating as lengths of coast on the ground, in kilometers, when the grid changes.
   2026-09-26, 4a.
-- **The site's words for its currents picture predate the solved circulation.** The picture is
-  rendered at assembly (`:desktop:renderSiteImagery`), so it shows chunk 4a's currents, but its
-  description in `site/index.html`, "rows of small pale arrows over the sea running east along the
-  coast", was written of the Poisson gyres 4a replaced; look at the window when the site is next
-  assembled and describe what it shows. 2026-09-26, 4a.
 - **Six operators still count a row as a column, each outside Fix 2's list.** Found by reading the
   code, not by a guard: the climate stage's rainfall blur (a square box of cells, sized by
   `RAIN_BLUR_REFERENCE_WIDTH`) and its two coastal-reach blurs, the water exposure and the offshore

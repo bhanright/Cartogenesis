@@ -623,8 +623,18 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
                 );
             }
 
+            /* RasterRecipe.land: 0 open sea, 1 land, 2 sea too narrow for a shore (NarrowSea). */
+            uint landByte(int i) {
+                return (landBits[i >> 2] >> ((uint(i) & 3u) * 8u)) & 0xFFu;
+            }
+
             bool isLand(int i) {
-                return ((landBits[i >> 2] >> ((uint(i) & 3u) * 8u)) & 0xFFu) != 0u;
+                return landByte(i) == 1u;
+            }
+
+            /* What the coast is inked round: land, and sea too narrow to have a coast of its own. */
+            bool isBank(int i) {
+                return landByte(i) != 0u;
             }
 
             int biomeAt(int i) {
@@ -1036,9 +1046,9 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
                     }
                 }
 
-                if (uShowCoastline != 0 && land) {
-                    bool right = isLand(y * uWidth + (x + 1) % uWidth);
-                    bool down = y + 1 < uHeight ? isLand((y + 1) * uWidth + x) : true;
+                if (uShowCoastline != 0 && isBank(i)) {
+                    bool right = isBank(y * uWidth + (x + 1) % uWidth);
+                    bool down = y + 1 < uHeight ? isBank((y + 1) * uWidth + x) : true;
                     if (!right || !down) colour = blend(colour, uCoastline, uCoastlineStrength);
                 }
 

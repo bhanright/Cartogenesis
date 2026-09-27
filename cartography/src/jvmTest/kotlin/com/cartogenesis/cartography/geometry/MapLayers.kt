@@ -5,6 +5,7 @@ import com.cartogenesis.cartography.MapRasterizer
 import com.cartogenesis.cartography.MapSheet
 import com.cartogenesis.cartography.SheetGeometry
 import com.cartogenesis.cartography.MapView
+import com.cartogenesis.cartography.NarrowSea
 import com.cartogenesis.cartography.RenderOptions
 import com.cartogenesis.cartography.RiverSelection
 import com.cartogenesis.cartography.Shoreline
@@ -78,8 +79,8 @@ internal enum class LineClass(val label: String) {
  * What is here, and where each comes from, is the census's inventory:
  *
  *  - **coast**: the land mask, `SeaLevelResult.isLand`.
- *  - **coast as drawn**: the pane's generalised shoreline, [Shoreline.of] on a 900-pixel pane's
- *    sheet, which is what the overlay strokes.
+ *  - **coast as drawn**: the pane's generalised shoreline, [Shoreline.of] round
+ *    [NarrowSea.banks] on a 900-pixel pane's sheet, which is what the overlay strokes.
  *  - **coast as inked**: the raster's own coast line, read off the rendering, for which way the
  *    shores it draws face ([FacingShares]); its shapes are the coast's and are read there.
  *  - **lakes**: every cell `LakeResult.lakeId` names, and **lakes' open water**, the part a drawn
@@ -277,18 +278,19 @@ internal object MapLayers {
 
     /**
      * Which shores the raster's own coast ink covers, read off the rendering: the atlas drawn with
-     * its coast and without, and the cells whose colour the coast changed.
+     * its coast and without, and the cells whose colour the coast changed. The shores are those of
+     * [NarrowSea.banks], which is what the coast is drawn round.
      */
     private fun coastInk(world: WorldMap, frame: GridFrame): FacingShares {
         val withCoast = MapRasterizer.rasterize(world, RenderOptions(view = MapView.FANTASY, showCoastline = true))
         val withoutCoast = MapRasterizer.rasterize(world, RenderOptions(view = MapView.FANTASY, showCoastline = false))
         val inked = BooleanArray(frame.cellCount) { withCoast[it] != withoutCoast[it] }
-        return FacingShares.of(world.sea.isLand, inked, frame)
+        return FacingShares.of(NarrowSea.banks(world), inked, frame)
     }
 
     /** The pane's stroked coast, in kilometres; a ring the tracer closed by repeating its start is closed. */
     private fun shorelineAsDrawn(world: WorldMap, frame: GridFrame, sheet: MapSheet): List<Outline> =
-        Shoreline.of(world.sea.isLand, SheetGeometry.of(world), sheet).map { line ->
+        Shoreline.of(NarrowSea.banks(world), SheetGeometry.of(world), sheet).map { line ->
             val count = line.size / 2
             val repeats = count > 2 && line[0] == line[line.size - 2] && line[1] == line[line.size - 1]
             val kept = if (repeats) count - 1 else count

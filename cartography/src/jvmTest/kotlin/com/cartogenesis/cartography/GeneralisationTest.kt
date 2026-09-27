@@ -143,7 +143,9 @@ class GeneralisationTest : BorrowsSharedWorlds() {
     @Test
     fun `every traced vertex sits on the boundary the raster inks`() {
         val map = world(42L)
-        val land = map.sea.isLand
+        // What the coast is drawn round, trace and raster alike: land, and sea too narrow for a
+        // shore of its own.
+        val land = NarrowSea.banks(map)
         val withCoast = MapRasterizer.rasterize(map, RenderOptions(view = MapView.FANTASY, showCoastline = true))
         val withoutCoast = MapRasterizer.rasterize(map, RenderOptions(view = MapView.FANTASY, showCoastline = false))
         var checked = 0

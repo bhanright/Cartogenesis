@@ -38,9 +38,12 @@ internal object GeometryExpectations {
             finding(layer, Detector.FACETS, F.COAST_STRAIGHT)
         }
         finding("coast as drawn", Detector.RIGHT_ANGLES, F.COAST_SQUARE_NOTCH)
-        // The corner rate counts the same notches: seed 42's drawn coast at 2048 reads 0.314
+        // The land's own straight edge, which the drawn coast shows once the one-cell notches
+        // that broke it are drawn as water (`NarrowSea`).
+        finding("coast as drawn", Detector.ALIGNED_SIDE, F.COAST_STRAIGHT)
+        // The corner rate counts the same notches: seed 42's drawn coast at 2048 read 0.314
         // square corners per thousand cell widths, first seen by 4a's census of the ground Fix 3,
-        // Fix 3b and chunk 6 left.
+        // Fix 3b and chunk 6 left, and cleared once the coast was drawn round the narrow sea.
         finding("coast as drawn", Detector.CORNER_RATE, F.COAST_SQUARE_NOTCH)
         finding("lake fans", Detector.ARCS, F.LAKE_FANS_STAMPED)
         finding("river courses", Detector.ARCS, F.RIVER_ARC)
@@ -98,12 +101,12 @@ internal object GeometryExpectations {
 
     /** The four standard worlds at 512. */
     fun at512(expected: Expectations) = with(expected) {
-        known("7/coast as inked/FACING", "1@(-1,-1)=3.756")
+        known("7/coast as inked/FACING", "1@(-1,-1)=4.722")
         known("7/isobaths/ARCS", "1@(90,427)=122.9")
         known("7/isotherms/FACETS", "2@(261,78)=193.0 +(254,60)")
-        known("42/coast as inked/FACING", "1@(-1,-1)=3.535")
-        known("1234/coast as inked/FACING", "1@(-1,-1)=3.710")
-        known("99/coast as inked/FACING", "1@(-1,-1)=3.235")
+        known("42/coast as inked/FACING", "1@(-1,-1)=4.343")
+        known("1234/coast as inked/FACING", "1@(-1,-1)=4.570")
+        known("99/coast as inked/FACING", "1@(-1,-1)=3.944")
         known("99/ice as drawn/FACETS", "1@(39,449)=172.0")
         insufficient("coast", Detector.ISOTROPY, 7L, 42L, 1234L, 99L)
         insufficient("coast", Detector.RECTANGLE, 42L, 1234L, 99L)
@@ -207,22 +210,21 @@ internal object GeometryExpectations {
 
     /** The six audited worlds and 969495 at 2048. */
     fun at2048(expected: Expectations) = with(expected) {
-        known("7/coast as inked/FACING", "1@(-1,-1)=2.984")
+        known("7/coast as inked/FACING", "1@(-1,-1)=4.040")
         known("7/isobaths/FACETS", "6@(1377,238)=82.37 +(525,115)(1168,698)(1169,701)(1169,704)(1992,1937)")
         known("7/isobaths/ARCS", "9@(1215,186)=187.0 +(120,51)(491,101)(1216,170)(1216,183)(138,189)(154,287)(183,502)(1931,808)")
         known("7/plate boundaries/ALIGNED_SIDE", "2@(1719,75)=67.00 +(1635,555)")
         known("7/plate boundaries/FACETS", "6@(1173,1104)=77.13 +(1175,1104)(1365,1136)(457,1240)(459,1245)(661,1638)")
         known("7/isotherms/ISOTROPY", "1@(0,-1)=1.944")
         known("7/isotherms/FACETS", "3@(141,1816)=191.1 +(1041,238)(1894,390)")
-        known("42/coast as inked/FACING", "1@(-1,-1)=2.888")
+        known("42/coast as inked/FACING", "1@(-1,-1)=3.992")
         known("42/isobaths/FACETS", "6@(934,172)=80.69 +(1811,854)(1813,855)(1814,857)(16,1086)(1871,1660)")
         known("42/isobaths/ARCS", "10@(999,1615)=183.2 +(1931,946)(781,1232)(781,1236)(1471,1309)(835,1316)(876,1582)(439,1879)(439,1881)(440,1881)")
         known("42/realm borders/ALIGNED_SIDE", "1@(405,97)=65.00")
         known("42/plate boundaries/ALIGNED_SIDE", "1@(587,679)=87.00")
         known("42/isotherms/ISOTROPY", "1@(0,-1)=2.013")
         known("42/isotherms/FACETS", "5@(1746,1735)=305.1 +(1272,232)(1103,1455)(295,1555)(1370,1658)")
-        known("1234/coast as drawn/RIGHT_ANGLES", "1@(468,1181)=1.000")
-        known("1234/coast as inked/FACING", "1@(-1,-1)=2.888")
+        known("1234/coast as inked/FACING", "1@(-1,-1)=3.736")
         known("1234/river courses/RIGHT_ANGLES", "2@(257,1484)=1.000 +(1367,1754)")
         known("1234/river courses/ARCS", "2@(288,1453)=131.1 +(1442,1554)")
         known("1234/rivers as drawn/RIGHT_ANGLES", "1@(257,1484)=1.000")
@@ -231,7 +233,8 @@ internal object GeometryExpectations {
         known("1234/plate boundaries/ALIGNED_SIDE", "1@(856,858)=79.00")
         known("1234/plate boundaries/FACETS", "3@(855,819)=78.01 +(856,826)(446,1043)")
         known("1234/isotherms/FACETS", "5@(1037,312)=323.1 +(1490,168)(1858,245)(1839,394)(1278,589)")
-        known("99/coast as inked/FACING", "1@(-1,-1)=2.756")
+        known("99/coast as drawn/ALIGNED_SIDE", "1@(879,212)=111.0")
+        known("99/coast as inked/FACING", "1@(-1,-1)=3.369")
         known("99/river courses/ARCS", "1@(492,836)=134.5")
         known("99/isobaths/FACETS", "4@(1915,1543)=72.28 +(1569,951)(804,1500)(745,1565)")
         known("99/isobaths/ARCS", "11@(1159,1647)=139.2 +(285,30)(1260,505)(1261,520)(233,1048)(657,1084)(658,1086)(1213,1688)(1263,1757)(1369,1866)(1372,1882)")
@@ -240,11 +243,11 @@ internal object GeometryExpectations {
         known("99/plate boundaries/FACETS", "1@(919,65)=66.00")
         known("99/isotherms/ISOTROPY", "1@(0,-1)=1.830")
         known("99/isotherms/FACETS", "3@(67,1734)=371.1 +(1102,479)(976,1545)")
-        known("718106/coast as inked/FACING", "1@(-1,-1)=3.013")
+        known("718106/coast as inked/FACING", "1@(-1,-1)=3.855")
         known("718106/isobaths/FACETS", "5@(1715,362)=82.71 +(1716,358)(2047,727)(861,948)(482,1323)")
         known("718106/isobaths/ARCS", "25@(1981,1310)=204.7 +(1797,325)(169,428)(79,862)(842,966)(1065,1075)(1981,1289)(1980,1310)(1980,1311)(1981,1314)(1369,1321)(2000,1345)(36,1413)(36,1430)(35,1431)(876,1717)(921,1801)(965,1861)(964,1862)(965,1863)(962,1877)(964,1877)(962,1878)(963,1878)(966,1878)")
         known("718106/isotherms/FACETS", "7@(400,1814)=276.0 +(1633,252)(1556,312)(2018,1572)(938,1722)(1777,1735)(1960,1807)")
-        known("59758/coast as inked/FACING", "1@(-1,-1)=3.107")
+        known("59758/coast as inked/FACING", "1@(-1,-1)=3.976")
         known("59758/river courses/RIGHT_ANGLES", "1@(1985,1521)=1.000")
         known("59758/isobaths/FACETS", "4@(1654,241)=77.95 +(1677,547)(213,739)(1669,1302)")
         known("59758/isobaths/ARCS", "12@(251,1333)=158.1 +(1867,34)(1926,34)(1865,101)(1865,104)(614,271)(628,408)(620,409)(1342,874)(61,1054)(251,1334)(250,1355)")
@@ -255,7 +258,7 @@ internal object GeometryExpectations {
         known("59758/plate boundaries/FACETS", "1@(1666,1320)=63.57")
         known("59758/isotherms/ISOTROPY", "1@(0,-1)=1.909")
         known("59758/isotherms/FACETS", "2@(751,399)=193.3 +(293,1888)")
-        known("969495/coast as inked/FACING", "1@(-1,-1)=2.951")
+        known("969495/coast as inked/FACING", "1@(-1,-1)=4.401")
         known("969495/isobaths/FACETS", "5@(1756,219)=73.56 +(1760,210)(1763,211)(1765,214)(169,1409)")
         known("969495/isobaths/ARCS", "8@(1280,750)=146.7 +(701,252)(587,288)(587,293)(1271,504)(1280,740)(1279,743)(1278,753)")
         known("969495/plate boundaries/ALIGNED_SIDE", "1@(237,507)=64.00")
@@ -263,6 +266,7 @@ internal object GeometryExpectations {
         known("969495/isotherms/FACETS", "6@(1257,394)=247.3 +(1186,157)(1220,236)(1962,1721)(1670,1734)(527,1800)")
         insufficient("coast", Detector.RECTANGLE, 42L, 718106L)
         insufficient("coast", Detector.ORIENTATION, 7L, 42L, 1234L, 99L, 718106L, 59758L, 969495L)
+        insufficient("coast as drawn", Detector.ISOTROPY, 7L, 42L, 1234L, 99L, 718106L, 969495L)
         insufficient("coast as drawn", Detector.ORIENTATION, 7L, 42L, 1234L, 99L, 718106L, 59758L, 969495L)
         insufficient("lakes", Detector.ISOTROPY, 7L, 42L, 1234L, 99L, 718106L, 59758L)
         insufficient("lakes", Detector.ORIENTATION, 7L, 42L, 1234L, 99L, 718106L, 59758L, 969495L)
@@ -340,7 +344,6 @@ internal object GeometryExpectations {
         known("1234/isotherms/ISOTROPY", "1@(0,-1)=1.938")
         known("1234/terrain contours/ARCS", "2@(1527,1732)=129.0 +(1822,2020)")
         known("1234/terrain contours/FACETS", "3@(1769,1410)=65.97 +(1768,1411)(1766,1412)")
-        known("42/coast as drawn/CORNER_RATE", "1@(-1,-1)=0.3136")
         known("42/coast as drawn/FACETS", "1@(1388,611)=69.57")
         known("42/coast/FACETS", "1@(1388,611)=69.57")
         known("42/ice as drawn/FACETS", "1@(1266,240)=199.0")
@@ -362,7 +365,6 @@ internal object GeometryExpectations {
         known("969495/lakes' open water/ARCS", "1@(1119,1850)=233.4")
         known("969495/lakes/ARCS", "1@(1119,1850)=233.5")
         known("969495/realm borders/ARCS", "1@(831,1445)=123.4")
-        known("99/coast as drawn/ARCS", "1@(152,1037)=120.8")
         known("99/ice as drawn/ISOTROPY", "1@(0,-1)=1.647")
         known("99/ice carving/ARCS", "1@(1537,70)=125.3")
         known("99/ice sheet ground/ARCS", "1@(1537,70)=125.3")

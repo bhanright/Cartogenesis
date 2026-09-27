@@ -11,10 +11,11 @@ package com.cartogenesis.cartography.geometry
 internal object GeometryFindings {
 
     /**
-     * The raster coast (`MapRasterizer.drawCoastline`) inks a land cell only where the water lies
-     * to its east or south, so east- and south-facing shores are drawn whole and north- and
-     * west-facing ones two in five: the least-drawn facing 2.2 to 2.6 times under the most on
-     * every world at both grids.
+     * The raster coast (`MapRasterizer.drawCoastline`) inks a bank cell only where the open water
+     * lies to its east or south, so east- and south-facing shores are drawn whole, north-facing
+     * ones 35 to 50% and west-facing a fifth to three tenths: the most-drawn facing 3.4 to 4.7
+     * times the least on every world at both grids, since the narrow sea became a bank
+     * (`NarrowSea`) and the east- and south-facing shores beside it stopped counting as undrawn.
      */
     const val COAST_INK = "the raster coast inks east- and south-facing shores only"
 
@@ -54,10 +55,19 @@ internal object GeometryFindings {
     /** A river course jogs through two square corners a few cells apart (1234 and 59758 at 2048). */
     const val RIVER_SQUARE_CORNERS = "a river course jogs through square corners"
 
-    /** A coast turns a square notch a few cells across (1234 and 718106 at 2048). */
+    /**
+     * A coast turns a square notch a few cells across. None is left on the drawn coast since it
+     * was drawn round the narrow sea (`NarrowSea`): 1234's at (468, 1181) at 2048 and 42's corner
+     * rate of 0.314 per thousand cell widths at 2048 both cleared with it. Kept attributed in case
+     * one returns.
+     */
     const val COAST_SQUARE_NOTCH = "a coast turns a square notch"
 
-    /** A coast runs ruler-straight for 388 km at 4 degrees (59758 at 2048, in the far south). */
+    /**
+     * A coast runs ruler-straight for 388 km at 4 degrees (59758 at 2048, in the far south), and
+     * the drawn coast of 99 at 2048 straight down a column for 111 steps at (879, 212), where the
+     * land's edge is straight and only one-cell notches, now drawn as water, had broken it.
+     */
     const val COAST_STRAIGHT = "a coast runs ruler-straight"
 
     /**

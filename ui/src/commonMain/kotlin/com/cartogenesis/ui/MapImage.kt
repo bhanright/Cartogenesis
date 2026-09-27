@@ -13,6 +13,7 @@ import com.cartogenesis.cartography.SheetGeometry
 import com.cartogenesis.worldgen.model.WorldMap
 import org.jetbrains.skia.Bitmap
 import org.jetbrains.skia.Canvas
+import org.jetbrains.skia.ClipMode
 import org.jetbrains.skia.ColorAlphaType
 import org.jetbrains.skia.Image
 import org.jetbrains.skia.ImageInfo
@@ -190,6 +191,25 @@ object MapImage {
                 mode = PaintMode.STROKE
                 strokeCap = PaintStrokeCap.ROUND
             }
+            // The lake is drawn over the river: nothing of a stroke lands on open lake water, so a
+            // river's line stops at the shore however wide its pen. The raster's own cells, so the
+            // shore the stroke stops at is the one the lake is painted to.
+            canvas.save()
+            val lakes = overlay.openLakeWater
+            if (lakes.isNotEmpty()) {
+                val lakeWater = Path()
+                var at = 0
+                while (at < lakes.size) {
+                    lakeWater.addRect(
+                        Rect(
+                            onSheet.sheetX(lakes[at]), onSheet.sheetY(lakes[at + 1]),
+                            onSheet.sheetX(lakes[at + 2]), onSheet.sheetY(lakes[at + 3])
+                        )
+                    )
+                    at += LAKE_RUN_FLOATS
+                }
+                canvas.clipPath(lakeWater, ClipMode.DIFFERENCE, false)
+            }
             overlay.rivers.forEach { segment ->
                 paint.strokeWidth = segment.widthPixels
                 canvas.drawLine(
@@ -197,6 +217,7 @@ object MapImage {
                     onSheet.sheetX(segment.toX), onSheet.sheetY(segment.toY), paint
                 )
             }
+            canvas.restore()
         }
 
         if (overlay.flow.isNotEmpty()) {
@@ -384,6 +405,9 @@ object MapImage {
         }
         return path
     }
+
+    /** Left, top, right, bottom: one run of [MapOverlay.openLakeWater]. */
+    private const val LAKE_RUN_FLOATS = 4
 
     /** How opaque the scale bar's plate is: enough to read against, not enough to be a hole. */
     private const val PLATE_ALPHA = 0xD0

@@ -74,10 +74,12 @@ class WaterDrawnAsWaterTest {
     /**
      * The channel the page's opening band showed as a near-black line, on the world the band is cut
      * from: seed 1 at 2048, in the band's own window, where it crosses the sheet's east-west seam.
+     * And the rivers against that world's lakes, over the whole sheet: at 2048 the widest pen is
+     * five cells across, and it is here, not at 512, that a stroke's side reached into a lake.
      * At 2048, so in the audit tier.
      */
     @Test
-    fun `the channel in the opening band is drawn as water`() {
+    fun `the water in the opening band is drawn as water`() {
         val world = WorldGenerationEngine.generateBlocking(SiteImagery.bandConfig())
         val swallowed = swallowedNarrowSea(world, SiteImagery.BAND)
         println("WATER narrow sea in the band: ${swallowed.swallowed} of ${swallowed.checked} cells inked over")
@@ -92,7 +94,11 @@ class WaterDrawnAsWaterTest {
             "WATER river pixels inside open lake water on the band's world: ${reach.pixelsInside}; " +
                 "deepest %.2f px".format(reach.deepestPixels)
         )
-        assertTrue(reach.deepestPixels <= RIVER_REACH_INTO_LAKE_PIXELS)
+        assertTrue(
+            reach.deepestPixels <= RIVER_REACH_INTO_LAKE_PIXELS,
+            "on the band's world a river's line runs %.2f px into a lake's open water, past %.2f"
+                .format(reach.deepestPixels, RIVER_REACH_INTO_LAKE_PIXELS)
+        )
     }
 
     private class Reach(val riverPixels: Int, val pixelsInside: Int, val deepestPixels: Double)
@@ -217,13 +223,15 @@ class WaterDrawnAsWaterTest {
         const val GALLERY_SEED = 234475L
 
         /**
-         * How far a river's line may reach into a lake's open water, in sheet pixels: one.
+         * How far a river's line may reach into a lake's open water, in sheet pixels: one, the
+         * lake's own shore pixels and nothing past them.
          *
-         * The line is cut back so its round cap is tangent to the shore (`trimmedAtTheShore`), so
-         * all that may cross it is the antialiased edge of the stroke, which is a pixel; the pixels
-         * of the shore itself are within one pixel of it on either side.
+         * The lake is drawn over the rivers (`MapOverlay.openLakeWater`), so no stroke lands on
+         * open water at all; one pixel is what a pixel on the shore measures from the land beside
+         * it, and the most an antialiased edge could put there. Before the lake was drawn over
+         * them, the sides of the wider strokes reached two pixels in on seed 1 at 2048.
          */
-        const val RIVER_REACH_INTO_LAKE_PIXELS = 1.5
+        const val RIVER_REACH_INTO_LAKE_PIXELS = 1.0
 
         /**
          * How far a pixel's colour may move under the coast and still be the water it was: 5

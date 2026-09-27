@@ -174,6 +174,18 @@ class MapOverlay(
     /** How many separate rivers those segments belong to, after [RiverSelection.drawnOn]. */
     val riversDrawn: Int,
     /**
+     * Where the lakes' open water lies, which a front end draws over the rivers: the rivers are
+     * stroked everywhere but here.
+     *
+     * Runs of open-water cells along a row, four floats each — left, top, right, bottom — in cell
+     * coordinates, so the lake a river is kept out of is exactly the lake the raster painted. A
+     * river's course already ends at the shore ([trimmedAtTheShore]), but a stroke is wider than a
+     * cell at the larger sheets, and where a river runs beside a lake or meets it at an angle the
+     * side of its stroke crossed the shore; measured on seed 1 at 2048, two pixels in. Empty where
+     * the view does not draw the lakes.
+     */
+    val openLakeWater: FloatArray,
+    /**
      * The coast as polylines in cell coordinates, generalised for the sheet. Each is `x, y, x, y, …`
      * and a closed ring repeats its first point; see [Shoreline].
      */
@@ -584,6 +596,8 @@ object MapRasterizer {
             sheet = geometry,
             rivers = rivers,
             riversDrawn = drawnRivers.size,
+            openLakeWater =
+                if (skipInLakes && rivers.isNotEmpty()) openWaterRuns(world) else FloatArray(0),
             coastline = coast,
             landmarks = glyphs,
             flow = flow,
@@ -606,6 +620,29 @@ object MapRasterizer {
                 else (glyphRadiusPixels * GLYPH_OUTLINE_SHARE_OF_RADIUS)
                     .coerceAtLeast(THINNEST_LINE_PIXELS)
         )
+    }
+
+    /** [MapOverlay.openLakeWater]: each row's runs of open lake water, as left, top, right, bottom. */
+    private fun openWaterRuns(world: WorldMap): FloatArray {
+        val cellsAcross = world.width
+        val open = world.rivers.lakes.openWater
+        val runs = ArrayList<Float>()
+        for (row in 0 until world.height) {
+            var column = 0
+            while (column < cellsAcross) {
+                if (!open[row * cellsAcross + column]) {
+                    column++
+                    continue
+                }
+                val start = column
+                while (column < cellsAcross && open[row * cellsAcross + column]) column++
+                runs.add(start.toFloat())
+                runs.add(row.toFloat())
+                runs.add(column.toFloat())
+                runs.add((row + 1).toFloat())
+            }
+        }
+        return runs.toFloatArray()
     }
 
     /**

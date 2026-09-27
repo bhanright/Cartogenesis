@@ -137,9 +137,9 @@ val auditOnlyClasses = listOf(
     "com.cartogenesis.desktop.GpuOceanTest.ocean wall clock at export sizes",
     "com.cartogenesis.desktop.StyleGalleryTest.the engraved style, at 512 and at 2048",
     "com.cartogenesis.desktop.GpuErosionTest.how far a world drifts when the gpu generates it",
-    // The page's opening band, seed 1 at 2048: its narrow sea drawn as water, read off the sheet.
+    // The page's opening band, seed 1 at 2048: its narrow sea and its lakes drawn as water.
     // Its 512 twin in the same class runs on every merge.
-    "com.cartogenesis.desktop.WaterDrawnAsWaterTest.the channel in the opening band is drawn as water"
+    "com.cartogenesis.desktop.WaterDrawnAsWaterTest.the water in the opening band is drawn as water"
 )
 
 /**

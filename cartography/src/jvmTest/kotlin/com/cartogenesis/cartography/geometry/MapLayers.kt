@@ -278,13 +278,14 @@ internal object MapLayers {
 
     /**
      * Which shores the raster's own coast ink covers, read off the rendering: the atlas drawn with
-     * its coast and without, and the cells whose colour the coast changed.
+     * its coast and without, and the cells whose colour the coast changed. The shores are those of
+     * [NarrowSea.banks], which is what the coast is drawn round.
      */
     private fun coastInk(world: WorldMap, frame: GridFrame): FacingShares {
         val withCoast = MapRasterizer.rasterize(world, RenderOptions(view = MapView.FANTASY, showCoastline = true))
         val withoutCoast = MapRasterizer.rasterize(world, RenderOptions(view = MapView.FANTASY, showCoastline = false))
         val inked = BooleanArray(frame.cellCount) { withCoast[it] != withoutCoast[it] }
-        return FacingShares.of(world.sea.isLand, inked, frame)
+        return FacingShares.of(NarrowSea.banks(world), inked, frame)
     }
 
     /** The pane's stroked coast, in kilometres; a ring the tracer closed by repeating its start is closed. */

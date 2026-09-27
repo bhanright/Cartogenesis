@@ -1046,7 +1046,7 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
                     }
                 }
 
-                if (uShowCoastline != 0 && land) {
+                if (uShowCoastline != 0 && isBank(i)) {
                     bool right = isBank(y * uWidth + (x + 1) % uWidth);
                     bool down = y + 1 < uHeight ? isBank((y + 1) * uWidth + x) : true;
                     if (!right || !down) colour = blend(colour, uCoastline, uCoastlineStrength);

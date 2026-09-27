@@ -261,8 +261,8 @@ enum class MapStyle(
         biomeWash = 0.14f,
         biomeMuting = 0.62f,
         // A chart's inland water in one blue, lighter than the river ink it was so a lake is not a
-        // dark blot on the buff. The lake was the sea's own pale band, 2.6 CIEDE2000 from the sea
-        // at its shallowest measure, so a lake read as a stray piece of sea.
+        // dark blot on the buff. The lake was the sea's own pale band, within 2.6 CIEDE2000 of a
+        // tenth of the sea on the gallery's world, so a lake read as a stray piece of sea.
         river = 0xFF5E8FAD.toInt(),
         lake = 0xFF5E8FAD.toInt(),
         coastline = 0xFF23384A.toInt(),
@@ -350,7 +350,8 @@ enum class MapStyle(
         biomeWash = 0f,
         biomeMuting = 1f,
         // The wall map's one inland blue, for rivers and lakes alike. The lake was the sea's second
-        // stop, 4.4 CIEDE2000 from the sea, so a lake read as sea with the river drawn over it.
+        // stop, within 4.4 CIEDE2000 of a tenth of the sea, so a lake read as sea with the river
+        // drawn over it.
         river = 0xFF2F6FA0.toInt(),
         lake = 0xFF2F6FA0.toInt(),
         coastline = 0xFF2E3B44.toInt(),
@@ -428,7 +429,8 @@ enum class MapStyle(
         biomeWash = 0.30f,
         biomeMuting = 0.45f,
         // The river's jade for the lakes. They were the sea's middle stop, a pale jade that
-        // measured 1.0 CIEDE2000 from the sea and less than the river from the ground.
+        // came within 1.0 CIEDE2000 of a tenth of the sea and stood less far from the ground than
+        // the river did.
         river = 0xFF5F7A72.toInt(),
         lake = 0xFF5F7A72.toInt(),
         coastline = 0xFF4A4632.toInt(),

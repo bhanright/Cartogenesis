@@ -1163,19 +1163,18 @@ object MapRasterizer {
     }
 
     /**
-     * Inks the landward cell of every shore that faces open sea. A neighbour in [NarrowSea] is a
-     * bank rather than a shore, so a channel one cell wide is left as water rather than inked from
-     * both sides into a line.
+     * Inks the landward cell of every shore that faces open sea, round the same banks the traced
+     * coast runs round ([NarrowSea.banks]): a channel too narrow for two shores is left as water,
+     * and only its cell at the mouth, where the coast crosses it, takes the ink.
      */
     private fun drawCoastline(world: WorldMap, style: MapStyle, pixels: IntArray) {
         val cellsAcross = world.width
         val cellsDown = world.height
-        val land = world.sea.isLand
         val banks = NarrowSea.banks(world)
         for (row in 0 until cellsDown) {
             for (column in 0 until cellsAcross) {
                 val cell = row * cellsAcross + column
-                if (!land[cell]) continue
+                if (!banks[cell]) continue
                 val toTheEast = banks[row * cellsAcross + (column + 1) % cellsAcross]
                 // The southern edge of the sheet has no cell beyond it, and a pole is not a coast:
                 // taken as land, so the bottom row is never inked along its whole width.

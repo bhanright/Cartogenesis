@@ -4,90 +4,82 @@ import com.cartogenesis.worldgen.model.Acceleration
 import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.pipeline.OceanAccelerator
+import com.cartogenesis.worldgen.pipeline.OceanCirculation
 import com.cartogenesis.worldgen.pipeline.OceanResult
 import com.cartogenesis.worldgen.pipeline.OceanStage
+import com.cartogenesis.worldgen.pipeline.OceanStencil
 import com.cartogenesis.worldgen.pipeline.SeaLevelResult
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 
 /**
  * The seam itself, with no device behind it.
  *
  * Three promises, none of which need graphics hardware to check: the accelerator is asked only when
- * the reader has turned acceleration on, it is handed the coarse problem the CPU would have solved,
+ * the reader has turned acceleration on, it is handed the stencil the processor would have relaxed,
  * and a decline leaves the reference answer untouched rather than a half-solved one.
  */
 class OceanAcceleratorTest {
 
     @Test
     fun `the device is asked only when acceleration is on`() = runTest {
-        val asks = mutableListOf<Int>()
-        val counting = decliningAccelerator { passes -> asks += passes }
+        var asks = 0
+        val counting = decliningAccelerator { asks++ }
 
         OceanStage.generate(config, sea, counting)
-        assertEquals(emptyList(), asks, "the processor path must not reach for a device")
+        assertEquals(0, asks, "the processor path must not reach for a device")
 
         OceanStage.generate(acceleratedConfig, sea, counting)
-        assertEquals(listOf(RELAXATION_PASSES), asks, "the accelerated path asked once")
+        val asked = asks
+        assertTrue(asked > 0, "the accelerated path asked")
 
         val noOcean = acceleratedConfig.copy(ocean = config.ocean.copy(enabled = false))
         OceanStage.generate(noOcean, sea, counting)
-        assertEquals(listOf(RELAXATION_PASSES), asks, "a world with no currents has none to solve")
+        assertEquals(asked, asks, "a world with no currents has none to solve")
 
         OceanStage.generate(acceleratedConfig, sea, null)
-        assertEquals(listOf(RELAXATION_PASSES), asks, "a host with no device solves on the CPU")
+        assertEquals(asked, asks, "a host with no device solves on the processor")
     }
 
     @Test
-    fun `the device is handed the coarse problem and not the full grid`() = runTest {
-        var seen: Problem? = null
+    fun `the device is handed a stencil with a forcing in it`() = runTest {
+        var seen: OceanStencil? = null
         val recording = object : OceanAccelerator {
             override val name = "recording test device"
-            override suspend fun solve(
-                cellsAcross: Int,
-                cellsDown: Int,
-                isWater: BooleanArray,
-                forcing: FloatArray,
-                passes: Int,
-                overRelaxation: Float
-            ): FloatArray? {
-                seen = Problem(cellsAcross, cellsDown, isWater.size, forcing, overRelaxation)
+            override suspend fun solve(stencil: OceanStencil, start: FloatArray, passes: Int): FloatArray? {
+                seen = stencil
                 return null
             }
         }
         OceanStage.generate(acceleratedConfig, sea, recording)
-
-        val problem = checkNotNull(seen)
-        assertEquals(SOLVE_RESOLUTION, problem.cellsAcross)
-        assertEquals(SOLVE_RESOLUTION, problem.cellsDown)
-        assertEquals(SOLVE_RESOLUTION * SOLVE_RESOLUTION, problem.maskCells)
-        assertEquals(config.ocean.overRelaxation, problem.overRelaxation)
-        assertTrue(problem.forcing.any { it != 0f }, "a forcing of nothing would spin nothing")
+        val stencil = checkNotNull(seen)
+        val (across, down) = OceanStage.solveGrid(config.scale)
+        assertTrue(stencil.cellsAcross <= across && stencil.cellsDown <= down, "a stencil larger than the solve grid")
+        assertTrue(stencil.forcing.any { it != 0f }, "a forcing of nothing would spin nothing")
     }
 
     /**
-     * The problem the device is handed is the CPU's own, array for array: a device that answers
-     * with the reference solve of whatever it was handed gives back the reference ocean to the last
-     * bit only if the mask, the forcing, the passes and the relaxation it was handed are the ones
-     * the CPU would have solved. The case above checks the sizes and that the forcing is not
-     * nothing; this is what says it is the right forcing on the right mask.
+     * A device that answers with the reference relaxation of whatever it was handed gives back the
+     * reference ocean to the last bit only if the stencil, the start and the passes it was handed
+     * are the ones the processor would have relaxed.
      */
     @Test
-    fun `the device is handed exactly the problem the CPU solves`() = runTest {
+    fun `the device is handed exactly the problem the processor solves`() = runTest {
         val reference = OceanStage.generate(config, sea)
         val answeringLikeTheCpu = object : OceanAccelerator {
             override val name = "reference-solving test device"
-            override suspend fun solve(
-                cellsAcross: Int,
-                cellsDown: Int,
-                isWater: BooleanArray,
-                forcing: FloatArray,
-                passes: Int,
-                overRelaxation: Float
-            ): FloatArray = OceanStage.solveOnCpu(cellsAcross, cellsDown, isWater, forcing, passes, overRelaxation)
+            override suspend fun solve(stencil: OceanStencil, start: FloatArray, passes: Int): FloatArray {
+                val stream = start.copyOf()
+                OceanCirculation.relax(stencil, stream, passes)
+                return stream
+            }
         }
         assertSameOcean(reference, OceanStage.generate(acceleratedConfig, sea, answeringLikeTheCpu))
     }
@@ -99,25 +91,77 @@ class OceanAcceleratorTest {
         assertSameOcean(reference, declined)
     }
 
-    private data class Problem(
-        val cellsAcross: Int,
-        val cellsDown: Int,
-        val maskCells: Int,
-        val forcing: FloatArray,
-        val overRelaxation: Float
-    )
+    /**
+     * A generation cancelled while a device declines does not hand the rest of the solve to the
+     * processor: it stops at the next relaxation. The device cancels the generation and declines on
+     * its first ask; were the stage to fall back and carry on, the next batch of passes would ask it
+     * again.
+     */
+    @Test
+    fun `a cancelled generation does not fall back to the processor`() = runTest {
+        var asks = 0
+        val cancelling = object : OceanAccelerator {
+            override val name = "cancelling test device"
+            override suspend fun solve(stencil: OceanStencil, start: FloatArray, passes: Int): FloatArray? {
+                asks++
+                currentCoroutineContext().cancel()
+                return null
+            }
+        }
+        val generation = launch { OceanStage.generate(acceleratedConfig, sea, cancelling) }
+        generation.join()
+        assertTrue(generation.isCancelled, "the generation was not cancelled")
+        assertEquals(1, asks, "the device was asked $asks times after the generation was cancelled on the first")
+    }
 
-    private fun decliningAccelerator(onAsk: (Int) -> Unit) = object : OceanAccelerator {
+    /**
+     * A device whose passes come back as no numbers at all fails the processor's check on its solve,
+     * and the ocean is solved again on the processor: the reference answer, not a field of NaN
+     * handed on as a sea.
+     */
+    @Test
+    fun `a device that answers with no numbers leaves the reference answer`() = runTest {
+        val reference = OceanStage.generate(config, sea)
+        val broken = object : OceanAccelerator {
+            override val name = "broken test device"
+            override suspend fun solve(stencil: OceanStencil, start: FloatArray, passes: Int): FloatArray =
+                FloatArray(start.size) { Float.NaN }
+        }
+        assertSameOcean(reference, OceanStage.generate(acceleratedConfig, sea, broken))
+    }
+
+    /**
+     * On the processor there is nothing to fall back to, so a solve that stops without an answer
+     * fails the stage by name. Forced here with relaxation that makes no numbers, which a NaN
+     * residual would otherwise let through, since it compares false with any tolerance.
+     */
+    @Test
+    fun `a solve that does not converge fails the stage`() {
+        val zonal = com.cartogenesis.worldgen.pipeline.ClimateStage.zonalClimate(config, sea)
+        val failure = assertFailsWith<OceanCirculation.OceanSolveFailure> {
+            OceanStage.circulate(config, sea, zonal) { _, start, _ -> start.fill(Float.NaN); start }
+        }
+        assertTrue(failure.message!!.contains("the circulation"), "the failure does not name its solve: ${failure.message}")
+    }
+
+    /**
+     * A solve that runs out of iterations short of its tolerance fails too, its numbers finite,
+     * and one that reached its tolerance is handed on as it is.
+     */
+    @Test
+    fun `a solve that stops short of its tolerance fails by name`() {
+        val stopped = OceanCirculation.Solution(FloatArray(4) { 1f }, OceanCirculation.MOST_CYCLES, 0.2)
+        assertFailsWith<OceanCirculation.OceanSolveFailure> {
+            OceanCirculation.requireSolved("a stopped solve", stopped, OceanCirculation.RESIDUAL_TOLERANCE)
+        }
+        val solved = OceanCirculation.Solution(FloatArray(4) { 1f }, 3, 1e-4)
+        assertEquals(solved, OceanCirculation.requireSolved("a finished solve", solved, OceanCirculation.RESIDUAL_TOLERANCE))
+    }
+
+    private fun decliningAccelerator(onAsk: () -> Unit) = object : OceanAccelerator {
         override val name = "declining test device"
-        override suspend fun solve(
-            cellsAcross: Int,
-            cellsDown: Int,
-            isWater: BooleanArray,
-            forcing: FloatArray,
-            passes: Int,
-            overRelaxation: Float
-        ): FloatArray? {
-            onAsk(passes)
+        override suspend fun solve(stencil: OceanStencil, start: FloatArray, passes: Int): FloatArray? {
+            onAsk()
             return null
         }
     }
@@ -131,29 +175,21 @@ class OceanAcceleratorTest {
 
     private companion object {
         const val CELLS_ACROSS = 8
-        const val SOLVE_RESOLUTION = 4
-        const val RELAXATION_PASSES = 3
 
-        val config = WorldGenConfig(width = CELLS_ACROSS, height = CELLS_ACROSS).let {
-            it.copy(
-                ocean = it.ocean.copy(
-                    solveResolution = SOLVE_RESOLUTION,
-                    relaxationPasses = RELAXATION_PASSES
-                )
-            )
-        }
+        val config = WorldGenConfig(width = CELLS_ACROSS, height = CELLS_ACROSS)
 
         val acceleratedConfig =
             config.copy(erosion = config.erosion.copy(acceleration = Acceleration.GPU))
 
-        /** A meridional wall of land, so the gyres have a coast to close against. */
-        val sea = BooleanArray(CELLS_ACROSS * CELLS_ACROSS) { it % CELLS_ACROSS == 3 }.let { land ->
-            SeaLevelResult(
-                0.5f,
-                land,
-                FloatField(CELLS_ACROSS, CELLS_ACROSS),
-                land.count { it }
-            )
+        /**
+         * One square sea in a world of land, a quarter of the map across: the ocean is solved on a
+         * grid sized by the physics whatever the map, so a small sea is what keeps these cases
+         * quick, since land settles in no passes at all.
+         */
+        val sea = BooleanArray(CELLS_ACROSS * CELLS_ACROSS) { cell ->
+            (cell % CELLS_ACROSS) !in 3..4 || (cell / CELLS_ACROSS) !in 2..3
+        }.let { land ->
+            SeaLevelResult(0.5f, land, FloatField(CELLS_ACROSS, CELLS_ACROSS), land.count { it })
         }
     }
 }

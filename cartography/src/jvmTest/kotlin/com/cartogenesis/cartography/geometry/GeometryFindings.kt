@@ -13,9 +13,9 @@ internal object GeometryFindings {
     /**
      * The raster coast (`MapRasterizer.drawCoastline`) inks a bank cell only where the open water
      * lies to its east or south, so east- and south-facing shores are drawn whole, north-facing
-     * ones 38 to 50% and west-facing 21 to 25%: the most-drawn facing 3.4 to 4.7 times the least on
-     * every world at both grids, since the narrow sea became a bank (`NarrowSea`) and the east- and
-     * south-facing shores beside it stopped counting as undrawn.
+     * ones 35 to 50% and west-facing a fifth to three tenths: the most-drawn facing 3.4 to 4.7
+     * times the least on every world at both grids, since the narrow sea became a bank
+     * (`NarrowSea`) and the east- and south-facing shores beside it stopped counting as undrawn.
      */
     const val COAST_INK = "the raster coast inks east- and south-facing shores only"
 
@@ -43,6 +43,12 @@ internal object GeometryFindings {
     /** Lake fans have round rims. */
     const val LAKE_FANS_STAMPED = "lake fans have round rims"
 
+    /**
+     * A lake's shore follows a circular arc to within a quarter of a cell: 969495's at (1119, 1850)
+     * at 2048, 233 degrees of a circle 10.5 cells across, first seen by 4a's census.
+     */
+    const val LAKE_SHORE_ARC = "a lake's shore follows a circular arc"
+
     /** A river course follows a circular arc to within a quarter of a cell. */
     const val RIVER_ARC = "a river course follows a circular arc"
 
@@ -50,8 +56,10 @@ internal object GeometryFindings {
     const val RIVER_SQUARE_CORNERS = "a river course jogs through square corners"
 
     /**
-     * A coast turns a square notch a few cells across (718106 at 2048). 1234's at 2048 was a
-     * channel of sea one cell wide, drawn as water since `NarrowSea`.
+     * A coast turns a square notch a few cells across. None is left on the drawn coast since it
+     * was drawn round the narrow sea (`NarrowSea`): 1234's at (468, 1181) at 2048 and 42's corner
+     * rate of 0.314 per thousand cell widths at 2048 both cleared with it. Kept attributed in case
+     * one returns.
      */
     const val COAST_SQUARE_NOTCH = "a coast turns a square notch"
 
@@ -95,6 +103,12 @@ internal object GeometryFindings {
     /** The peoples' borders run along grid lines and turn square, following ice and biome edges. */
     const val PEOPLES_BORDERS_ON_THE_GRID = "peoples' borders run along grid lines"
 
+    /**
+     * A peoples' border follows a circular arc to within a quarter of a cell: two on 59758 at 2048,
+     * about 123 degrees of circles 10 to 12 cells across, first seen by 4a's census.
+     */
+    const val PEOPLES_BORDER_ARC = "a peoples' border follows a circular arc"
+
     /** A realm border turns square corners on the grid's axes. */
     const val REALM_BORDER_CORNERS = "a realm border turns square corners"
 
@@ -124,8 +138,11 @@ internal object GeometryFindings {
     const val ISOHYET_CREASE = "an isohyet creases between straight runs"
 
     /**
-     * The currents view's sea temperature anomaly runs straight along rows at 512, 189 to 217
-     * steps, and doubles back in straight hairpins; at 2048 it draws no line at its levels.
+     * The currents view's sea temperature anomaly ran straight along rows at 512, 189 to 217
+     * steps, and doubled back in straight hairpins; at 2048 it drew no line at its levels. Chunk
+     * 4a, which solved the currents on the ground and measured the anomaly from a band of latitude
+     * rather than one row, cleared every such clause on the four standard worlds; the finding stays
+     * mapped so that a return is named.
      */
     const val ANOMALY_ALONG_ROWS = "the sea temperature anomaly runs straight along rows"
 }

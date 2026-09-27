@@ -6,6 +6,7 @@ import com.cartogenesis.cartography.RenderOptions
 import com.cartogenesis.ui.MapImage
 import com.cartogenesis.worldgen.SharedWorlds
 import com.cartogenesis.worldgen.model.WorldGenConfig
+import com.cartogenesis.worldgen.pipeline.ClimateStage
 import java.io.File
 import kotlin.math.abs
 import kotlin.test.Test
@@ -54,6 +55,27 @@ class FlowLayerTest {
             eastward > winds.flow.size / 10 && eastward < winds.flow.size * 9 / 10,
             "wind arrows do not reverse across belts: $eastward of ${winds.flow.size} eastward"
         )
+
+        // Under the westerlies, 40 to 50 degrees in either hemisphere, the currents run east as the
+        // wind does: the wind-driven flow between the subtropical and subpolar gyres. Before the
+        // ocean's circulation was rebuilt every gyre turned against its wind and these arrows
+        // pointed west.
+        for (hemisphere in listOf(1f, -1f)) {
+            val westerlies = currents.flow.filter { arrow ->
+                val latitude = ClimateStage.latitudeOf(arrow.y.toInt(), world.height) * hemisphere
+                latitude in 40f..50f
+            }
+            val windArrows = winds.flow.filter { arrow ->
+                val latitude = ClimateStage.latitudeOf(arrow.y.toInt(), world.height) * hemisphere
+                latitude in 40f..50f
+            }
+            val currentEast = westerlies.sumOf { it.directionX.toDouble() } / westerlies.size
+            val windEast = windArrows.sumOf { it.directionX.toDouble() } / windArrows.size
+            println("FLOW 40-50 ${if (hemisphere > 0) "north" else "south"}: current arrows' mean eastward component %.3f, wind's %.3f over %d and %d arrows"
+                .format(currentEast, windEast, westerlies.size, windArrows.size))
+            assertTrue(windEast > 0.0 && currentEast > 0.0,
+                "under the westerlies the currents point ${"%.3f".format(currentEast)} east where the wind points ${"%.3f".format(windEast)}")
+        }
 
         val fastest = currents.flow.maxOf { it.strength }
         val moving = currents.flow.count { it.strength > 0.25f }

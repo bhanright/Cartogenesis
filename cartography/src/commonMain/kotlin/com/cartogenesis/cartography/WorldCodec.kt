@@ -130,6 +130,15 @@ object WorldCodec {
     /**
      * The only version this build reads or writes.
      *
+     * 15 because the ocean became physical. Its currents are meters a second where they were cells
+     * of an advection pass, so `ocean.velocityX` and `ocean.velocityY` changed meaning under the
+     * same names, and the settings lost the eight figures that counted the ocean in cells and
+     * passes: `ocean.forcing`, `ocean.solveResolution`, `ocean.overRelaxation`,
+     * `ocean.relaxationPasses`, `ocean.speedCellsPerPass`, `ocean.advectionPasses`,
+     * `ocean.advectionRate` and `ocean.relaxationRate`. A format-14 file's currents would open as
+     * meters a second that were never meters a second, on gyres turning against their wind, which
+     * is exactly the kind of silence refusing by version exists to prevent.
+     *
      * 14 because a save became a stream. The payload is cut into chunks, each compressed and
      * checksummed on its own, with every length counted in 64 bits, so a 4096 world — 2.45 GB of
      * arrays — saves and opens without any array its size existing in between. The lists moved out
@@ -230,7 +239,7 @@ object WorldCodec {
      * every cell-valued name took a `Cells` suffix. 3 was the container below with none of that, 2
      * the JSON text that preceded it; none of them opens.
      */
-    const val FORMAT_VERSION = 14
+    const val FORMAT_VERSION = 15
 
     private val MAGIC = byteArrayOf('C'.code.toByte(), 'G'.code.toByte(), 'W'.code.toByte(), 'D'.code.toByte())
 

@@ -72,7 +72,9 @@ import kotlin.math.sqrt
  * **Its zonal mean.** The forcing has no row mean. With a drag that depends only on the row, nor
  * would the answer, since the operator's zonal mean would then be an equation in the row mean alone
  * with nothing to drive it; with land's drag differing from the sea's it is not zero by
- * construction, and what it comes to is measured (`PressureResponseTest`).
+ * construction. It comes to about a hundredth of the largest departure, a few hundredths of a
+ * hectopascal, and it is taken out after the solve ([withoutRowMeans]): the belts are the zonal
+ * mean of the wind, and a departure with a zonal mean of its own would count part of it twice.
  */
 internal object PressureResponse {
 
@@ -88,13 +90,21 @@ internal object PressureResponse {
 
     /**
      * α, how fast the layer's thickness relaxes to what its surface's temperature would hold, per
-     * second: the energy balance's own surface exchange over its marine air column's heat capacity,
-     * 25 / 1.04e7, a time of 4.8 days, one ruler with the climate. Held and Suarez's (1994, *Bull.
-     * Amer. Meteor. Soc.* 75, 1825-1830) Newtonian relaxation at the surface, four days, is the same
-     * order.
+     * second: the energy balance's own surface exchange over the heat capacity of the layer whose
+     * warming makes the pressure, 2.4 days, one ruler with the climate.
+     *
+     * The layer is [PressureWind.HPA_PER_KELVIN]'s, from the surface to the level of non-divergence,
+     * so it holds the share `1 - 500 / 1013.25` of the air column's mass. The energy balance's
+     * marine air, 1.04e7 J/m²/K, is the whole column (1004 J/kg/K times 101,325 Pa over 9.81 m/s²),
+     * and the layer's share of it is 5.3e6. The air above the level of non-divergence warms with the
+     * column but does not move the surface pressure in this model, so it is not what the pressure
+     * relaxes with. Held and Suarez's (1994, *Bull. Amer. Meteor. Soc.* 75, 1825-1830) Newtonian
+     * relaxation at the surface, four days, is the same order.
      */
     val THERMAL_RELAXATION_PER_S: Double =
-        EnergyBalance.SURFACE_EXCHANGE_W_PER_M2_C / EnergyBalance.MARINE_AIR_HEAT_CAPACITY_J_PER_M2_C
+        EnergyBalance.SURFACE_EXCHANGE_W_PER_M2_C /
+            (EnergyBalance.MARINE_AIR_HEAT_CAPACITY_J_PER_M2_C *
+                (1.0 - PressureWind.NON_DIVERGENT_LEVEL_HPA / PressureWind.SEA_LEVEL_PRESSURE_HPA))
 
     /** ε over the sea, per second: the drag [PressureWind] turns the surface wind by, 5.8 hours. */
     val SEA_DRAG_PER_S: Double = PressureWind.surfaceDrag(PressureWind.CROSS_ISOBAR_SEA_DEGREES).toDouble()
@@ -127,6 +137,9 @@ internal object PressureResponse {
     /** The Coriolis parameter at [latitudeDegrees], per second. */
     fun coriolisPerS(latitudeDegrees: Double): Double =
         2.0 * WorldScale.ROTATION_RATE_PER_S * sin(latitudeDegrees * DEGREES_TO_RADIANS)
+
+    /** `f` at a share of a whole map's height from its top edge, the north pole. */
+    fun coriolisFromPoleToPole(shareOfHeightFromTop: Double): Double = coriolisPerS(90.0 - 180.0 * shareOfHeightFromTop)
 
     /** `a = ε / (ε² + f²)`, in seconds: the share of a pressure gradient the wind runs down. */
     fun downGradientSeconds(dragPerS: Double, coriolisPerS: Double): Double =
@@ -175,7 +188,7 @@ internal object PressureResponse {
     /**
      * The problem's shortest length, meters: the shorter reach of [reachesMeters] at whichever
      * latitude and over whichever surface makes it least. On this generator's world, the western
-     * reach over the sea at the equator, where the drift runs east fastest, about 600 km; it reads
+     * reach over the sea at the equator, where the drift runs east fastest, about 580 km; it reads
      * the radius through β, so a planet of another size has its own.
      */
     fun shortestLengthMeters(scale: WorldScale): Double {
@@ -207,7 +220,8 @@ internal object PressureResponse {
      * The problem on one grid. [landShare] is each cell's share of land, which sets its drag as the
      * area-weighted mean of the two; [equilibriumM2PerS2] is `Φ_eq` per cell, or null for a coarse
      * grid of the cycle that solves for a correction. Every cell is active: there is no coast for
-     * the air.
+     * the air. [coriolisAt] is `f` per second at a share of the grid's height from its top edge,
+     * the world's own from pole to pole unless a guard asks for a β-plane.
      */
     fun stencil(
         cellsAcross: Int,
@@ -215,13 +229,14 @@ internal object PressureResponse {
         cellWidthMeters: Double,
         cellHeightMeters: Double,
         landShare: FloatArray,
-        equilibriumM2PerS2: DoubleArray?
+        equilibriumM2PerS2: DoubleArray?,
+        coriolisAt: (shareOfHeightFromTop: Double) -> Double = ::coriolisFromPoleToPole
     ): OceanStencil {
         val cells = cellsAcross * cellsDown
         val speedSquared = GRAVITY_WAVE_SPEED_MPS * GRAVITY_WAVE_SPEED_MPS
         val drag = DoubleArray(cells) { SEA_DRAG_PER_S + (LAND_DRAG_PER_S - SEA_DRAG_PER_S) * landShare[it] }
-        val coriolisOfRow = DoubleArray(cellsDown) { coriolisPerS(ClimateStage.latitudeOf(it, cellsDown).toDouble()) }
-        val coriolisOfBoundary = DoubleArray(cellsDown + 1) { coriolisPerS(90.0 - 180.0 * it / cellsDown) }
+        val coriolisOfRow = DoubleArray(cellsDown) { coriolisAt((it + 0.5) / cellsDown) }
+        val coriolisOfBoundary = DoubleArray(cellsDown + 1) { coriolisAt(it.toDouble() / cellsDown) }
 
         // ψ = -c² b at the corners: corner (boundary, column) is the one at the north-west of cell
         // (boundary, column). Inside, the mean of the four cells around it; on a pole, one value
@@ -312,7 +327,12 @@ internal object PressureResponse {
         val landShare: FloatArray,
         val equilibriumM2PerS2: DoubleArray,
         val geopotentialM2PerS2: FloatArray,
-        val solution: OceanCirculation.Solution
+        val solution: OceanCirculation.Solution,
+        /**
+         * The largest row mean of the field as solved, over its largest value: what a drag that
+         * differs between land and sea leaves in the zonal mean, taken out of [geopotentialM2PerS2].
+         */
+        val solvedRowMeanShare: Double
     ) {
         /** The response as a surface pressure departure, hectopascals, per solve cell. */
         fun pressureHpa(): FloatArray = FloatArray(geopotentialM2PerS2.size) {
@@ -338,7 +358,7 @@ internal object PressureResponse {
         val landOnMap = FloatArray(config.width * config.height) { if (sea.isLand[it]) 1f else 0f }
         val landShare = areaMean(landOnMap, config.width, config.height, across, down)
         val equilibrium = areaMean(equilibriumOnMap(config, columnTemperatureC), config.width, config.height, across, down)
-        return solveOn(across, down, widthMeters, heightMeters, landShare, DoubleArray(equilibrium.size) { equilibrium[it].toDouble() }, relax)
+        return solveOn(across, down, widthMeters, heightMeters, landShare, DoubleArray(equilibrium.size) { equilibrium[it].toDouble() }, relax = relax)
     }
 
     /** The response on a grid already given its land share and its `Φ_eq`: what the synthetic guards solve. */
@@ -349,16 +369,18 @@ internal object PressureResponse {
         heightMeters: Double,
         landShare: FloatArray,
         equilibriumM2PerS2: DoubleArray,
+        noinline coriolisAt: (shareOfHeightFromTop: Double) -> Double = ::coriolisFromPoleToPole,
+        removeRowMeans: Boolean = true,
         relax: (OceanStencil, FloatArray, Int) -> FloatArray
     ): Response {
-        val finest = stencil(across, down, widthMeters, heightMeters, landShare, equilibriumM2PerS2)
+        val finest = stencil(across, down, widthMeters, heightMeters, landShare, equilibriumM2PerS2, coriolisAt)
         val levels = OceanCirculation.levels(finest, widthMeters, heightMeters, everyCellWater = true) { coarseAcross, coarseDown, _ ->
             val coarseLand = OceanCirculation.restrict(
                 DoubleArray(landShare.size) { landShare[it].toDouble() }, across, down, coarseAcross, coarseDown
             )
             stencil(
                 coarseAcross, coarseDown, widthMeters * across / coarseAcross, heightMeters * down / coarseDown,
-                FloatArray(coarseLand.size) { coarseLand[it].toFloat() }, null
+                FloatArray(coarseLand.size) { coarseLand[it].toFloat() }, null, coriolisAt
             )
         }
         val solution = OceanCirculation.requireSolved(
@@ -369,7 +391,42 @@ internal object PressureResponse {
             ),
             OceanCirculation.RESIDUAL_TOLERANCE
         )
-        return Response(across, down, widthMeters, heightMeters, landShare, equilibriumM2PerS2, solution.values, solution)
+        return withoutRowMeans(across, down, widthMeters, heightMeters, landShare, equilibriumM2PerS2, solution, removeRowMeans)
+    }
+
+    /**
+     * The solved field with each row's mean taken out, so the departure carries no zonal mean and
+     * the belts stay the whole of the zonal-mean wind; with [removeRowMeans] off, as solved, for the
+     * guard that shows what the removal is for. What was taken out is kept on the [Response].
+     */
+    fun withoutRowMeans(
+        across: Int,
+        down: Int,
+        widthMeters: Double,
+        heightMeters: Double,
+        landShare: FloatArray,
+        equilibriumM2PerS2: DoubleArray,
+        solution: OceanCirculation.Solution,
+        removeRowMeans: Boolean
+    ): Response {
+        val solved = solution.values
+        val field = solved.copyOf()
+        var largestRowMean = 0.0
+        var largest = 0.0
+        for (row in 0 until down) {
+            var sum = 0.0
+            for (cell in row * across until (row + 1) * across) sum += solved[cell]
+            val rowMean = sum / across
+            largestRowMean = maxOf(largestRowMean, kotlin.math.abs(rowMean))
+            if (removeRowMeans) {
+                for (cell in row * across until (row + 1) * across) field[cell] = (solved[cell] - rowMean).toFloat()
+            }
+        }
+        for (value in solved) largest = maxOf(largest, kotlin.math.abs(value.toDouble()))
+        return Response(
+            across, down, widthMeters, heightMeters, landShare, equilibriumM2PerS2, field, solution,
+            if (largest > 0.0) largestRowMean / largest else 0.0
+        )
     }
 
     /**

@@ -246,14 +246,31 @@ object OceanStage {
         fillBaseTemperature(config, sea, zonal, temperature)
         if (!config.ocean.enabled) return OceanResult(velocityX, velocityY, temperature, anomaly)
 
-        val solved = circulate(config, sea, zonal, relax)
-        carryToMap(config, sea, solved, velocityX, velocityY, temperature)
-        val profileC = FloatArray(cellsDown) { row -> zonal.waterC(ClimateStage.latitudeOf(row, cellsDown), Season.ANNUAL) }
-        buildAnomaly(config, sea, temperature, profileC, anomaly)
-        return OceanResult(velocityX, velocityY, temperature, anomaly)
+        return onTheMap(config, sea, zonal, circulate(config, sea, zonal, relax), temperature)
     }
 
-    /** The circulation and its heat on the solve grid. See [Circulation]. */
+    /**
+     * [solved] carried to the map's cells, over [baseTemperature], the bare latitude profile on the
+     * water, with its anomaly built from it: the stage's result.
+     */
+    internal fun onTheMap(
+        config: WorldGenConfig,
+        sea: SeaLevelResult,
+        zonal: ZonalClimate,
+        solved: Circulation,
+        baseTemperature: FloatField
+    ): OceanResult {
+        val cellsDown = config.height
+        val velocityX = FloatField(config.width, cellsDown)
+        val velocityY = FloatField(config.width, cellsDown)
+        val anomaly = FloatField(config.width, cellsDown)
+        carryToMap(config, sea, solved, velocityX, velocityY, baseTemperature)
+        val profileC = FloatArray(cellsDown) { row -> zonal.waterC(ClimateStage.latitudeOf(row, cellsDown), Season.ANNUAL) }
+        buildAnomaly(config, sea, baseTemperature, profileC, anomaly)
+        return OceanResult(velocityX, velocityY, baseTemperature, anomaly)
+    }
+
+    /** The circulation and its heat on the solve grid, under the year's mean stress. See [Circulation]. */
     internal inline fun circulate(
         config: WorldGenConfig,
         sea: SeaLevelResult,
@@ -261,10 +278,24 @@ object OceanStage {
         relax: (OceanStencil, FloatArray, Int) -> FloatArray
     ): Circulation {
         val (across, down) = solveGrid(config.scale)
+        return circulateUnder(config, sea, zonal, meanStress(config, sea, zonal, across, down, relax), relax)
+    }
+
+    /**
+     * The circulation and its heat on the solve grid under a given [stress] on that grid, the
+     * year's mean in [circulate] and whatever a guard asks for elsewhere.
+     */
+    internal inline fun circulateUnder(
+        config: WorldGenConfig,
+        sea: SeaLevelResult,
+        zonal: ZonalClimate,
+        stress: Stress,
+        relax: (OceanStencil, FloatArray, Int) -> FloatArray
+    ): Circulation {
+        val (across, down) = solveGrid(config.scale)
         val widthMeters = config.scale.worldWidthKm * METERS_PER_KM / across
         val heightMeters = worldHeightMeters(config.scale) / down
         val isWater = waterOn(config, sea, across, down)
-        val stress = meanStress(config, sea, zonal, across, down, relax)
 
         val flowLevels = OceanCirculation.levels(
             circulationStencil(config, curlForcing(stress, across, down, widthMeters, heightMeters), isWater, across, down),
@@ -765,7 +796,7 @@ object OceanStage {
      * Fills [temperature] with the bare latitude profile over water, in degrees Celsius, leaving
      * land untouched.
      */
-    private fun fillBaseTemperature(
+    internal fun fillBaseTemperature(
         config: WorldGenConfig,
         sea: SeaLevelResult,
         zonal: ZonalClimate,

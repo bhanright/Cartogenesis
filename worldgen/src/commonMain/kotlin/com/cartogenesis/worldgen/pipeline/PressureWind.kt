@@ -100,7 +100,7 @@ internal object PressureWind {
     const val BELT_SPEED_MPS = 7.5f
 
     /** The standard atmosphere at sea level, in hectopascals. */
-    private const val SEA_LEVEL_PRESSURE_HPA = 1013.25
+    internal const val SEA_LEVEL_PRESSURE_HPA = 1013.25
 
     /**
      * The level of non-divergence, in hectopascals: the height at which the outflow aloft from a
@@ -109,7 +109,7 @@ internal object PressureWind {
      *
      * Its ratio to the surface, `ln(1013.25 / 500)`, is a factor of [HPA_PER_KELVIN].
      */
-    private const val NON_DIVERGENT_LEVEL_HPA = 500.0
+    internal const val NON_DIVERGENT_LEVEL_HPA = 500.0
 
     /** The standard atmosphere's mean surface temperature, in kelvin: 15 degrees Celsius. */
     private const val REFERENCE_COLUMN_K = 288.15
@@ -187,9 +187,11 @@ internal object PressureWind {
      * Zero is not a pressure but the mean of the cell's own row: only the *departure* from the
      * zonal mean can drive a wind that the belts do not already carry, and the belts are the zonal
      * mean by construction. Warm against its row means low, cold against its row means high, which
-     * puts the thermal low over the summer continent, the thermal high over the winter one, and a
-     * ridge over whichever ocean a cold current has chilled — the subtropical high on the eastern
-     * side of an ocean basin, where Earth keeps it.
+     * puts the thermal low over the summer continent and the thermal high over the winter one. It
+     * puts no ridge over a sea a cold current has chilled: the temperature it is given carries no
+     * current anomaly over water on either path: the climate stage's maritime influence adds the
+     * anomaly to land cells only, and the provisional climates have none. The sea's own wind is
+     * solved separately, by [PressureResponse].
      */
     fun pressureAnomalyHpa(config: WorldGenConfig, seasonTemperatureC: FloatField): FloatField {
         val cellsAcross = config.width

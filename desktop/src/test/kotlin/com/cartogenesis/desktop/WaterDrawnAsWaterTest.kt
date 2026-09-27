@@ -154,14 +154,14 @@ class WaterDrawnAsWaterTest {
      *
      * A cell is inked over when every one of its sheet pixels moved more than [INKED_DELTA_E]
      * CIEDE2000 between the Natural map drawn without its coast and with it, rivers off in both so
-     * only the coast differs. A mouth is a narrow cell touching open sea, where the coast crosses
-     * the channel by design.
+     * only the coast differs. A mouth is a narrow cell within [MOUTH_CELLS] of open sea, where the
+     * coast crosses the channel by design.
      */
     private fun swallowedNarrowSea(world: WorldMap, window: SiteImagery.Window?): Swallowed {
         val sheet = SheetGeometry.of(world)
         val cellsAcross = world.width
         val isLand = world.sea.isLand
-        val narrow = NarrowSea.mask(isLand, cellsAcross)
+        val narrow = NarrowSea.of(world)
         val options = RenderOptions(style = MapStyle.NATURAL, showRivers = false)
         val inked = MapImage.toBitmap(world, options)
         val bare = MapImage.toBitmap(world, options.copy(showCoastline = false))
@@ -179,7 +179,7 @@ class WaterDrawnAsWaterTest {
             return intoWindow < window.width && top >= window.y && top < window.y + window.height
         }
         fun atMouth(column: Int, row: Int): Boolean {
-            for (dy in -1..1) for (dx in -1..1) {
+            for (dy in -MOUTH_CELLS..MOUTH_CELLS) for (dx in -MOUTH_CELLS..MOUTH_CELLS) {
                 val neighbourRow = row + dy
                 if (neighbourRow < 0 || neighbourRow >= world.height) continue
                 val neighbour = neighbourRow * cellsAcross + ((column + dx) % cellsAcross + cellsAcross) % cellsAcross
@@ -238,6 +238,14 @@ class WaterDrawnAsWaterTest {
          * CIEDE2000, where two colours part at a glance (`ColorVision.deltaE2000`).
          */
         const val INKED_DELTA_E = 5.0
+
+        /**
+         * How far from open sea a channel's mouth reaches, in cells: two. The coast crosses a mouth
+         * on the traced line, which cuts a corner diagonally, and the antialiased edge of a stroke
+         * laid on a diagonal falls on the second cell in: on seed 1 at 2048, cell 1938,888, one
+         * row below the mouth cell, takes 5 to 6 CIEDE2000 of the line's fringe.
+         */
+        const val MOUTH_CELLS = 2
 
         /** Farther than any river's cap could reach at the sizes measured: a stroke is ten pixels at most. */
         const val SEARCH_PIXELS = 12

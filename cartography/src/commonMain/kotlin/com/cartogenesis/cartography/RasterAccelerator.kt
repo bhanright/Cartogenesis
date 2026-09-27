@@ -345,7 +345,7 @@ class RasterRecipe(
 
             val land = ByteArray(cellCount)
             val isLand = world.sea.isLand
-            val narrow = NarrowSea.mask(isLand, cellsAcross)
+            val narrow = NarrowSea.of(world)
             for (cell in 0 until cellCount) {
                 land[cell] = when {
                     isLand[cell] -> LAND

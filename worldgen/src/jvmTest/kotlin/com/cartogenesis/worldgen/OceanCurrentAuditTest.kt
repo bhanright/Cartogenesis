@@ -3,6 +3,7 @@ package com.cartogenesis.worldgen
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.ClimateStage
+import com.cartogenesis.worldgen.pipeline.OceanHeat
 import com.cartogenesis.worldgen.pipeline.OceanStage
 import kotlin.math.abs
 import kotlin.test.Test
@@ -22,18 +23,22 @@ class OceanCurrentAuditTest {
         val WORLD: WorldMap by lazy { WorldGenerationEngine.generateBlocking(CONFIG) }
 
         /**
-         * Where Earth's coldest west-coast water lies, in degrees from the equator: about 15 to 35,
-         * where the Canary, California, Humboldt and Benguela currents run (Chavez and Messié, *A
-         * comparison of Eastern Boundary Upwelling Ecosystems*, Progress in Oceanography 83, 2009,
-         * compare the four by their ten-degree bands of most active upwelling). An approximate band:
-         * its edges are good to a few degrees, not to one. Searched for over `MoistureBudgetTest`'s
-         * subtropical coast, 12 to 42 degrees, so that the band asked for is narrower than the one
-         * searched.
+         * Where Earth's coldest west-coast water lies, in degrees from the equator: 10.15 to 42.31,
+         * the four eastern-boundary upwelling systems' zones together as Abrahams, Schlegel and Smit
+         * (2021, *Front. Mar. Sci.* 8, 626411) take them from the studies before them: the
+         * California Current's 33.88 to 42.31 N, the Canary's 18.89 to 32.63 N, the Humboldt's
+         * 10.15 to 37.62 S and the Benguela's 16.39 to 30.13 S. The 15 to 35 this held before was
+         * attributed to a comparison that was never read, and leaves out most of the California
+         * Current. Searched for from twice the equatorial deformation radius, where the equatorial
+         * closure's cold tongue stops, to 50 degrees, so the band asked for is narrower than the one
+         * searched and the tongue is not taken for a coast's upwelling (`ColdWaterPlacementTest`
+         * asks the same of the standard worlds, and says why).
          */
-        const val COLD_COAST_EQUATORWARD_DEGREES = 15f
-        const val COLD_COAST_POLEWARD_DEGREES = 35f
-        const val SEARCH_EQUATORWARD_DEGREES = 12f
-        const val SEARCH_POLEWARD_DEGREES = 42f
+        const val COLD_COAST_EQUATORWARD_DEGREES = 10.15f
+        const val COLD_COAST_POLEWARD_DEGREES = 42.31f
+        val SEARCH_EQUATORWARD_DEGREES: Float = (2.0 * OceanHeat.deformationRadiusMeters(0.0, CONFIG.scale.radiusMeters) /
+            CONFIG.scale.metersPerDegreeLatitude).toFloat()
+        const val SEARCH_POLEWARD_DEGREES = 50f
 
         /**
          * Where "high latitude" starts for the warm water, in degrees: poleward of the westerlies'
@@ -53,8 +58,9 @@ class OceanCurrentAuditTest {
     }
 
     /**
-     * The coldest subtropical west-coast water lies at 15 to 35 degrees, and the warmest water
-     * poleward of 45 lies in the eastern half of its basin, as Earth's do: the Norwegian Sea's,
+     * The coldest subtropical west-coast water lies within the upwelling systems' 10.15 to 42.31
+     * degrees, and the warmest water poleward of 45 lies in the eastern half of its basin, as
+     * Earth's do: the Norwegian Sea's,
      * where the North Atlantic Current ends.
      * The anomaly's range is printed beside them.
      */

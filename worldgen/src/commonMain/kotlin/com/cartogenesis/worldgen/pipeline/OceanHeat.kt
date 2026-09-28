@@ -12,16 +12,19 @@ import kotlin.math.sqrt
 /**
  * The sea-surface temperature the currents carry: the steady state of
  *
- * `u·∇T - K ∇²T + (T - T_latitude) / τ = 0`
+ * `u·∇T - K ∇²T + (T - T_latitude) / τ + (w/h) (T - T_sub) = 0`
  *
  * solved on the circulation's own grid by the same multigrid ([OceanCirculation.solve]).
  *
- * Three processes, each with an Earth figure behind it. The current carries the water's heat at its
+ * Four processes, each with an Earth figure behind it. The current carries the water's heat at its
  * own speed. Mesoscale eddies mix it sideways, at the eddy diffusivity `K` ([diffusivity]); without
  * them a front between two gyres is as sharp as the grid and runs straight along a line of latitude
  * for as far as the gyres do, which is not what any ocean looks like. And the surface exchanges heat
  * with the air above it, relaxing toward its latitude's own temperature over τ
- * ([OceanStage.RELAXATION_SECONDS]).
+ * ([OceanStage.RELAXATION_SECONDS]). Where the wind's Ekman transport diverges, water rises into the
+ * mixed layer of depth `h` at `w` meters a second and replaces it with water at `T_sub`
+ * ([OceanStage.upwellingMps], [OceanStage.subsurfaceTemperatureC]); where it converges, water
+ * leaves downward at the layer's own temperature and changes nothing, so `w` counts only rising.
  *
  * **The discretization** is finite volume on the grid's cells, in the advective form `u·∇T`.
  * Across each face the flux is exponentially fitted (Scharfetter and Gummel 1969, *IEEE Trans.
@@ -29,9 +32,11 @@ import kotlin.math.sqrt
  * Péclet number `P = u Δ / K`, the neighbor's weight is `K B(P) / Δ²` with `B(x) = x / (e^x - 1)`.
  * That is the central difference where the eddies dominate and the upwind difference where the
  * current does, exact at the nodes for the one-dimensional balance of the two, and never negative.
- * In the advective form the center weight is the neighbors' sum plus `1/τ` for any velocity field,
- * so the operator is strictly diagonally dominant with a margin of `1/τ`: monotone, and its solution
- * cannot be further from the converged one than τ times the largest residual.
+ * In the advective form the center weight is the neighbors' sum plus `1/τ + w/h` for any velocity
+ * field, so the operator is strictly diagonally dominant with a margin of at least `1/τ`: monotone,
+ * and its solution cannot be further from the converged one than τ times the largest residual. The
+ * rising water is a reaction in the center weight and a source in the balance, so the stencil keeps
+ * its form and crosses [OceanAccelerator] unchanged.
  *
  * **The velocity through a face** is taken from ψ at the face's two corners, so the flux through a
  * cell's four faces sums to zero whatever the corners hold: `(ψ_NE - ψ_SE) - (ψ_NW - ψ_SW) - (ψ_NE -
@@ -139,7 +144,9 @@ object OceanHeat {
      * τ. With [withTarget] off the right-hand side is zero, for a coarse grid of the cycle that
      * solves for a correction. Rows are latitude bands pole to pole, as the map's. [diffusivityAt] is
      * [diffusivity] on the world's radius, except where a guard holds it constant to compare
-     * directions.
+     * directions. [entrainmentPerS] is `w/h` per cell, the rate rising water renews the mixed layer,
+     * per second, and [subsurfaceC] the temperature it rises at, degrees Celsius; both null for no
+     * upwelling, and [subsurfaceC] null on a coarse grid, whose right-hand side is zero.
      */
     fun stencil(
         cellsAcross: Int,
@@ -151,7 +158,9 @@ object OceanHeat {
         targetC: FloatArray,
         relaxationSeconds: Double,
         withTarget: Boolean,
-        diffusivityAt: (latitudeDegrees: Double) -> Double
+        diffusivityAt: (latitudeDegrees: Double) -> Double,
+        entrainmentPerS: FloatArray? = null,
+        subsurfaceC: FloatArray? = null
     ): OceanStencil {
         val cells = cellsAcross * cellsDown
         val east = FloatArray(cells)
@@ -194,14 +203,17 @@ object OceanHeat {
                 val southWeight = if (row + 1 < cellsDown && isWater[cell + cellsAcross]) {
                     faceWeight(acrossBoundary[row + 1], outSouth, cellHeightMeters)
                 } else 0.0
-                val centreWeight = eastWeight + westWeight + northWeight + southWeight + relaxationRate
+                val entrainment = entrainmentPerS?.get(cell)?.toDouble() ?: 0.0
+                val centreWeight = eastWeight + westWeight + northWeight + southWeight + relaxationRate + entrainment
                 east[cell] = (eastWeight / centreWeight).toFloat()
                 west[cell] = (westWeight / centreWeight).toFloat()
                 north[cell] = (northWeight / centreWeight).toFloat()
                 south[cell] = (southWeight / centreWeight).toFloat()
                 centre[cell] = centreWeight
-                // The balance `Σ a T_neighbor - a_center T = -T_target / τ`.
-                if (withTarget) balance[cell] = -targetC[cell] * relaxationRate
+                // The balance `Σ a T_neighbor - a_center T = -T_target / τ - (w/h) T_sub`.
+                if (withTarget) {
+                    balance[cell] = -targetC[cell] * relaxationRate - entrainment * (subsurfaceC?.get(cell)?.toDouble() ?: 0.0)
+                }
             }
         }
         return OceanCirculation.withBalance(

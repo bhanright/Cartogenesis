@@ -40,8 +40,27 @@ class ZonalClimate internal constructor(
      * How far the last simulated year's global mean moved from the year before it, in degrees
      * Celsius: the residual drift left in the spin-up, reported by the guards rather than acted on.
      */
-    val spinUpResidualC: Float
+    val spinUpResidualC: Float,
+    /**
+     * Per band, the share of the year the sea surface is open water: the share of the last year's
+     * time steps on which the mixed layer sat above [EnergyBalance.SEA_FREEZING_C], the same test
+     * the climate stage's sea-ice masks make of a season. 1 where the sea never freezes, 0 where it
+     * never thaws.
+     */
+    internal val waterOpenShare: FloatArray,
+    /**
+     * Per band, the mean sea-surface temperature over the open-water steps alone, degrees Celsius:
+     * the mixed layer's temperature in the months it is open to the air. The freezing point where
+     * the sea never thaws, the limit the mean approaches as the open season shrinks to nothing.
+     */
+    internal val waterOpenC: FloatArray
 ) {
+
+    /** The share of the year the sea at [latitudeDegrees] is open water, interpolated between band centres. */
+    internal fun openWaterShare(latitudeDegrees: Float): Float = interpolate(waterOpenShare, latitudeDegrees)
+
+    /** The sea surface's mean over its open-water steps at [latitudeDegrees], degrees Celsius; see [waterOpenC]. */
+    internal fun openWaterC(latitudeDegrees: Float): Float = interpolate(waterOpenC, latitudeDegrees)
 
     /** The land air temperature at [latitudeDegrees], interpolated between band centres. */
     fun landC(latitudeDegrees: Float, season: Season): Float =
@@ -488,6 +507,12 @@ object EnergyBalance {
      */
     private const val LAND_HEAT_CAPACITY_J_PER_M2_C = 1.7e7
 
+    /** The mixed layer's depth, in meters: see [MIXED_LAYER_HEAT_CAPACITY_J_PER_M2_C]. */
+    internal const val MIXED_LAYER_DEPTH_M = 50.0
+
+    /** Sea water's heat capacity per cubic meter per degree, in joules. */
+    private const val SEAWATER_HEAT_CAPACITY_J_PER_M3_C = 4.0e6
+
     /**
      * Heat stored per square metre of the ocean's **mixed layer** for each degree it warms, in
      * joules: a 50 m slab of sea water at 4.0 MJ per cubic metre per degree.
@@ -499,7 +524,7 @@ object EnergyBalance {
      * The air that sits on it is [MARINE_AIR_HEAT_CAPACITY_J_PER_M2_C] and is a separate reservoir,
      * which is the whole point: twenty times less memory, so it swings while the water does not.
      */
-    internal const val MIXED_LAYER_HEAT_CAPACITY_J_PER_M2_C = 50.0 * 4.0e6
+    internal const val MIXED_LAYER_HEAT_CAPACITY_J_PER_M2_C = MIXED_LAYER_DEPTH_M * SEAWATER_HEAT_CAPACITY_J_PER_M3_C
 
     /**
      * Heat stored per square metre of **marine air** for each degree it warms, in joules: the
@@ -549,7 +574,7 @@ object EnergyBalance {
      * uses — and that dependence is not modelled here; 25 is the mid-latitude figure, which is
      * where the coasts this matters for are.
      *
-     * It sets how fast the air forgets the water: `C_air / 25` is six days, so marine air tracks
+     * It sets how fast the air forgets the water: `C_air / 25` is 4.8 days, so marine air tracks
      * the sea surface closely and departs from it only as far as the land beside it and the heat
      * arriving from other latitudes push it.
      */
@@ -765,13 +790,40 @@ object EnergyBalance {
             lastYearMeanC = globalMean(geometry, landFraction, landAnnualC, seaAirAnnualC)
         }
 
+        val waterOpenShare = FloatArray(BANDS)
+        val waterOpenC = FloatArray(BANDS)
+        openWater(lastYearWater, waterOpenShare, waterOpenC)
         return ZonalClimate(
             land = splitIntoSeasons(lastYearLand),
             sea = splitIntoSeasons(lastYearSeaAir),
             water = splitIntoSeasons(lastYearWater),
             globalMeanC = lastYearMeanC.toFloat(),
-            spinUpResidualC = (lastYearMeanC - previousYearMeanC).toFloat()
+            spinUpResidualC = (lastYearMeanC - previousYearMeanC).toFloat(),
+            waterOpenShare = waterOpenShare,
+            waterOpenC = waterOpenC
         )
+    }
+
+    /**
+     * Fills [share] with the share of the recorded [year]'s steps each band's water is above
+     * [SEA_FREEZING_C], and [meanC] with its mean over those steps, the freezing point where there
+     * are none. The steps are summed in the same order [splitIntoSeasons] sums the year, so a band
+     * that never freezes has an open-water mean equal to its annual mean to the bit.
+     */
+    private fun openWater(year: DoubleArray, share: FloatArray, meanC: FloatArray) {
+        for (band in 0 until BANDS) {
+            var openSteps = 0
+            var openTotal = 0.0
+            for (step in 0 until STEPS_PER_YEAR) {
+                val water = year[step * BANDS + band]
+                if (water > SEA_FREEZING_C) {
+                    openSteps++
+                    openTotal += water
+                }
+            }
+            share[band] = openSteps.toFloat() / STEPS_PER_YEAR
+            meanC[band] = if (openSteps == 0) SEA_FREEZING_C else (openTotal / openSteps).toFloat()
+        }
     }
 
     /**
@@ -1133,7 +1185,7 @@ object EnergyBalance {
             // year the flux integrates to nothing, so ordering it here is what makes the two
             // columns' annual means identical rather than a few tenths apart — which matters,
             // because one of them is compared against a marine-air climatology and the other
-            // against a sea-surface one. Implicit in the pair, because six days of air memory
+            // against a sea-surface one. Implicit in the pair, because 4.8 days of air memory
             // against a step of one day is close enough to stiff to matter.
             val water = waterC[band]
             val waterHeat = geometry.mixedLayerHeatCapacity[band]

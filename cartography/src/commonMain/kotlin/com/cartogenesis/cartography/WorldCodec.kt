@@ -130,6 +130,12 @@ object WorldCodec {
     /**
      * The only version this build reads or writes.
      *
+     * 16 because the sea's wind became the belts' vector and its upwelling a setting.
+     * `climate.meridionalWind`, a slant in rows per cell, became `climate.meridionalWindShare`, the
+     * same slope as a share of the zonal speed on the ground, and `ocean.upwelling` arrived; a
+     * format-15 file would open with this build's defaults for both, and its ocean was solved under a
+     * stress this build no longer makes.
+     *
      * 15 because the ocean became physical. Its currents are meters a second where they were cells
      * of an advection pass, so `ocean.velocityX` and `ocean.velocityY` changed meaning under the
      * same names, and the settings lost the eight figures that counted the ocean in cells and
@@ -239,7 +245,7 @@ object WorldCodec {
      * every cell-valued name took a `Cells` suffix. 3 was the container below with none of that, 2
      * the JSON text that preceded it; none of them opens.
      */
-    const val FORMAT_VERSION = 15
+    const val FORMAT_VERSION = 16
 
     private val MAGIC = byteArrayOf('C'.code.toByte(), 'G'.code.toByte(), 'W'.code.toByte(), 'D'.code.toByte())
 

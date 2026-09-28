@@ -61,9 +61,10 @@ class MoistureBudgetTest : BorrowsSharedWorlds() {
          * under the capped incision's terrain (Fix 3); it came inside the band on the implicit
          * update and reads 0.295 with the uplift re-derived on it, a few thousandths under, 0.296
          * once a lake falls with its outlet, 0.298 on the sea temperature the solved currents
-         * carry (4a), and 0.299 once that heat is conserved at the coast. No operator of the
-         * moisture march changed; the terrain it marches over did, and at 4a the sea it draws from
-         * (docs/DESIGN_LEDGER.md, Fix 2, Fix 3, Fix 3b and 4a).
+         * carry (4a), 0.299 once that heat is conserved at the coast, and 0.299 still with the
+         * water the wind raises (4b-1). No operator of the
+         * moisture march changed; the terrain it marches over did, and at 4a and 4b-1 the sea it
+         * draws from (docs/DESIGN_LEDGER.md, Fix 2, Fix 3, Fix 3b, 4a and 4b-1).
          */
         const val RECYCLING_UNDER_THE_BAND =
             "the climate: on the continents the ground's ruler draws, four worlds recycle under Earth's continental band"

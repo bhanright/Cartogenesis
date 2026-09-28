@@ -33,15 +33,6 @@ class CurrentFeedsRainTest : BorrowsSharedWorlds() {
     private companion object {
         const val SEED = 7L
 
-        /**
-         * The sample's cold coast is short of its floor of ten cells: on seed 7 the Stommel
-         * circulation's equatorward drift cools only nine cells of that west coast by 0.8 degrees.
-         * Earth's cold coasts owe most of their cold to the upwelling beside them, which chunk 4b
-         * builds; until then the rainfall comparison runs on the cells there are.
-         */
-        const val COLD_COAST_SHORT =
-            "the currents: a subtropical west coast is cold on too few cells without upwelling"
-
         // The cold-current stretch: bounds wide enough to catch a whole subtropical coastal run,
         // narrow enough that it does not wander into a different current regime.
         const val COLD_LAT_LO = -33f
@@ -55,6 +46,16 @@ class CurrentFeedsRainTest : BorrowsSharedWorlds() {
         const val WARM_LAT_LO = 27f
         const val WARM_LAT_HI = 33f
         const val WARM_ANOMALY_MIN = 0.15f
+
+        /**
+         * How much of each coast the sample asks for, kilometers of coast: the ten and five cells
+         * of the 512 grid it asked for when it counted cells, at that grid's 11.72 km a row, so a
+         * finer grid or square cells ask for the same length of coast rather than more of it. The
+         * water a coast cell is read against is its neighbor offshore, the coast's own water at
+         * any cell size.
+         */
+        const val COLD_COAST_FLOOR_KM = 117.2
+        const val WARM_COAST_FLOOR_KM = 58.6
     }
 
     /**
@@ -156,17 +157,20 @@ class CurrentFeedsRainTest : BorrowsSharedWorlds() {
                 "and an east coast on every row of 27-33 N (${eastFacingRows.size} of $warmBandRows): choose the seed again"
         )
 
-        KnownFailures.expect(COLD_COAST_SHORT, "9 cells") {
-            if (coldCoast.size < 10) {
-                throw RecordedViolation(
-                    "only ${coldCoast.size} cells of seed $SEED's west coast at 27-33 S sit 0.8 C under their " +
-                        "latitude's mean, where the sample asks ten",
-                    "${coldCoast.size} cells"
-                )
-            }
-        }
+        // Each coast cell found stands for one row of coast, a cell's height of it on the ground.
+        val coastKmPerCell = on.config.scale.cellHeightKm(h)
+        val coldCoastKm = coldCoast.size * coastKmPerCell
+        val warmCoastKm = warmCoast.size * coastKmPerCell
+        // Armed by chunk 4b-1: until the upwelling, the Stommel circulation's equatorward drift alone
+        // cooled only nine cells of this coast by 0.8 degrees (docs/DESIGN_LEDGER.md, 4a and 4b-1).
+        println("H4 seed $SEED coast lengths: cold %.0f km, warm %.0f km".format(coldCoastKm, warmCoastKm))
+        assertTrue(
+            coldCoastKm >= COLD_COAST_FLOOR_KM,
+            "only %.0f km of seed $SEED's west coast at 27-33 S sits 0.8 C under its latitude's mean, where the sample asks %.0f"
+                .format(coldCoastKm, COLD_COAST_FLOOR_KM)
+        )
         assertTrue(coldCoast.isNotEmpty(), "no cold-coast cells found")
-        assertTrue(warmCoast.size >= 5, "too few warm-coast cells found: ${warmCoast.size}")
+        assertTrue(warmCoastKm >= WARM_COAST_FLOOR_KM, "too little warm coast found: %.0f km".format(warmCoastKm))
 
         fun meanMm(cells: List<Coast>, world: com.cartogenesis.worldgen.model.WorldMap): Double =
             cells.map { world.climate.precipitationMm.data[it.y * w + it.x].toDouble() }.average()

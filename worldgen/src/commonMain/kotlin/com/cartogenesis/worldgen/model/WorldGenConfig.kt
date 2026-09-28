@@ -1724,20 +1724,25 @@ data class ClimateConfig(
      */
     val seasons: Boolean = true,
     /**
-     * How far the wind slants across the latitude lines, in rows per cell of eastward travel.
+     * How far the belts' wind slants across the latitude lines: its meridional speed as a share
+     * of its zonal speed, on the ground.
      *
      * The three-cell circulation is not purely zonal: the trades spiral in toward the thermal
      * equator, the westerlies carry poleward, and the polar easterlies run back down. Giving the
      * march that component is what turns a row-by-row scan into a diagonal one, and with the belts
      * migrating over the year it is the whole of the monsoon — in summer the thermal equator
      * crosses over a tropical coast, the trades there reverse, and air that spent the winter
-     * blowing out to sea spends the summer coming in off it.
+     * blowing out to sea spends the summer coming in off it. The ocean's stress reads the same
+     * slope as the belts' meridional wind ([com.cartogenesis.worldgen.pipeline.SurfaceBelts]).
      *
-     * Zero is exactly the zonal march this generator used before, arithmetic for arithmetic. At
-     * 0.3 the air crosses a row every three or four cells, so it traverses ten degrees of latitude
-     * over a continent's width — about what it takes for a coast to feel a sea it does not face.
+     * A slope on the ground and not a count of rows, so it means one direction on any grid; the
+     * march spends it as `share × cellWidth / cellHeight` rows a cell, 0.3 on an N by N grid, the
+     * figure this setting held when it was counted in rows. Zero is exactly the zonal march this
+     * generator used before, arithmetic for arithmetic. At 0.15 the air crosses ten degrees of
+     * latitude over a continent's width, about what it takes for a coast to feel a sea it does
+     * not face.
      */
-    val meridionalWind: Float = 0.3f,
+    val meridionalWindShare: Float = 0.15f,
     /**
      * Whether the wind carries the regional departure the pressure field drives, on top of the
      * zonal-mean belts.
@@ -1929,7 +1934,17 @@ data class OceanConfig(
      * mild west coast at high latitude and an arid one beside a cold current.
      */
     val coastalReachCells: Int = 10,
-    val coastalInfluence: Float = 0.85f
+    val coastalInfluence: Float = 0.85f,
+    /**
+     * Whether the water the wind's Ekman transport draws up cools the mixed layer.
+     *
+     * On, wherever the surface layer's transport diverges, along a coast the wind blows offshore,
+     * under a cyclonic curl or on the equator under the trades, the water that rises replaces the
+     * mixed layer's at its own temperature (see
+     * [com.cartogenesis.worldgen.pipeline.OceanStage.upwellingMps]). Off, the sea's heat has no
+     * vertical exchange at all, which is the ocean before it and the control its guards fail on.
+     */
+    val upwelling: Boolean = true
 )
 
 /**

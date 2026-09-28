@@ -369,14 +369,11 @@ object ClimateStage {
     private const val MARINE_REACH_KM = 350f
 
     /**
-     * Where the trade-wind belt gives way to the westerlies, in degrees from the thermal equator —
-     * the edge of the Hadley cell's surface leg. [OceanStage] reads its wind stress off the same
-     * boundary, because it is the same circulation.
+     * The belts' edges, in degrees from the thermal equator: one copy, [SurfaceBelts]', which the
+     * ocean's stress reads too, because it is the same circulation.
      */
-    private const val TRADE_BELT_EDGE_DEGREES = 30f
-
-    /** Where the westerlies give way to the polar easterlies: the edge of the Ferrel cell. */
-    private const val WESTERLY_BELT_EDGE_DEGREES = 60f
+    private const val TRADE_BELT_EDGE_DEGREES = SurfaceBelts.TRADE_BELT_EDGE_DEGREES
+    private const val WESTERLY_BELT_EDGE_DEGREES = SurfaceBelts.WESTERLY_BELT_EDGE_DEGREES
 
     // The four bumps of [latitudeBandAt]'s rain-rate profile, each placed where the atmosphere
     // actually puts it and each as wide as that feature really is. Read from the *thermal*
@@ -816,7 +813,7 @@ object ClimateStage {
         // The stored wind is the annual one, unshifted: it is what the rest of the pipeline and
         // the wind view mean by "the prevailing wind". Each season marches along its own belts,
         // which live only as long as the march does.
-        val slantRowsPerCell = climateConfig.meridionalWind
+        val slantRowsPerCell = slantRowsPerCell(config)
         val wind = withPressureDeparture(
             config, sea,
             buildWind(cellsAcross, cellsDown, tiltDegrees = 0f, warm = true, slantRowsPerCell),
@@ -1358,6 +1355,16 @@ object ClimateStage {
     )
 
     /**
+     * The belts' slope, `ClimateConfig.meridionalWindShare`, as the march spends it: rows per cell
+     * of zonal travel, `share × cellWidth / cellHeight`. Computed in double and rounded once, so on
+     * an N by N grid, whose cells are exactly twice as wide as they are tall, 0.15 is the float 0.3
+     * the setting held when it was counted in rows.
+     */
+    private fun slantRowsPerCell(config: WorldGenConfig): Float =
+        (config.climate.meridionalWindShare.toDouble() *
+            (config.scale.cellWidthKm(config.width) / config.scale.cellHeightKm(config.height))).toFloat()
+
+    /**
      * The most a wind may slant, in rows per cell of zonal travel.
      *
      * A cap on the **length of the march's step**, and that is the only thing it can honestly be.
@@ -1569,7 +1576,7 @@ object ClimateStage {
         val tiltDegrees = if (climateConfig.seasons) climateConfig.seasonalTiltDegrees else 0f
         val warm = season == Season.WARM_HALF || season == Season.SUMMER
         val belts = buildWind(
-            config.width, config.height, tiltDegrees, warm, climateConfig.meridionalWind
+            config.width, config.height, tiltDegrees, warm, slantRowsPerCell(config)
         )
         val pressureHpa = if (climateConfig.pressureWinds) {
             PressureWind.pressureAnomalyHpa(
@@ -1667,7 +1674,7 @@ object ClimateStage {
      * chunk of rows per core did — but the whole stage is a couple of passes over the grid against
      * erosion's eighty, and correctness here is worth more than the cores.
      *
-     * At `meridionalWind = 0` every row's blend weight is zero, the branch below is not taken, and
+     * At `meridionalWindShare = 0` every row's blend weight is zero, the branch below is not taken, and
      * what remains is the old scan, arithmetic for arithmetic, in the same order per row.
      */
     private fun buildPrecipitation(

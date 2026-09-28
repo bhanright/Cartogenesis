@@ -187,9 +187,12 @@ internal object PressureWind {
      * Zero is not a pressure but the mean of the cell's own row: only the *departure* from the
      * zonal mean can drive a wind that the belts do not already carry, and the belts are the zonal
      * mean by construction. Warm against its row means low, cold against its row means high, which
-     * puts the thermal low over the summer continent, the thermal high over the winter one, and a
-     * ridge over whichever ocean a cold current has chilled — the subtropical high on the eastern
-     * side of an ocean basin, where Earth keeps it.
+     * puts the thermal low over the summer continent and the thermal high over the winter one. It
+     * puts no ridge over a sea a cold current has chilled: the temperature it is given carries no
+     * current anomaly over water on either path, since the climate stage's maritime influence adds
+     * the anomaly to land cells only and the ocean's own stress reads the temperature before there
+     * is an anomaly at all. Earth's subtropical highs are not thermal lows' mirror images either;
+     * they wait on an atmosphere that is solved (docs/TODO.md, "Build the atmosphere").
      */
     fun pressureAnomalyHpa(config: WorldGenConfig, seasonTemperatureC: FloatField): FloatField {
         val cellsAcross = config.width

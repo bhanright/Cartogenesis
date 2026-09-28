@@ -52,7 +52,7 @@ class GpuOceanTest {
     fun `a batch of passes agrees with the processor's at both aspects`(): Unit = runBlocking {
         val gpu = deviceOrSkip()
         for (aspect in listOf(1.0, 0.5)) {
-            for ((name, stencil) in listOf("circulation" to circulationStencil(aspect), "heat" to heatStencil(aspect))) {
+            for ((name, stencil) in listOf("circulation" to circulationStencil(aspect), "heat with upwelling" to heatStencil(aspect, withUpwelling = true), "heat" to heatStencil(aspect))) {
                 val start = FloatArray(stencil.forcing.size) { if (stencil.isWater[it]) 1f else 0f }
                 val onCpu = start.copyOf().also { OceanCirculation.relax(stencil, it, BATCH_PASSES) }
                 val onGpu = assertNotNull(gpu.solve(stencil, start, BATCH_PASSES), "the device declined a $name stencil")
@@ -158,8 +158,13 @@ class GpuOceanTest {
         return OceanCirculation.stencil(across, down, dx, dy, isWater, DoubleArray(down) { 6.61e-11 }, OceanStage.BOTTOM_DRAG_PER_S, forcing)
     }
 
-    /** A heat stencil on a gyre-shaped current in the same basin, warm to the south. */
-    private fun heatStencil(aspect: Double): OceanStencil {
+    /**
+     * A heat stencil on a gyre-shaped current in the same basin, warm to the south; with
+     * [withUpwelling], water rising along the eastern shore and weakly over the southern half, at
+     * a temperature five degrees under the latitude's, which puts the entrainment's reaction in the
+     * center weight and its source in the balance, the two places the upwelling enters the stencil.
+     */
+    private fun heatStencil(aspect: Double, withUpwelling: Boolean = false): OceanStencil {
         val across = 512
         val down = (256 / aspect).toInt()
         val dx = 6_250.0
@@ -171,9 +176,19 @@ class GpuOceanTest {
             (2e4 * sin(Math.PI * column / across) * sin(Math.PI * (row + 0.5) / down)).toFloat()
         }
         val target = FloatArray(across * down) { cell -> if (isWater[cell]) 5f + 20f * (cell / across) / down else 0f }
+        val entrainment = if (withUpwelling) FloatArray(across * down) { cell ->
+            val rising = when {
+                cell % across == across - 2 -> COASTAL_RISE_MPS
+                cell / across >= down / 2 -> OPEN_OCEAN_RISE_MPS
+                else -> 0.0
+            }
+            (rising / MIXED_LAYER_DEPTH_M).toFloat()
+        } else null
         return OceanHeat.stencil(
             across, down, dx, dy, isWater, stream, target, OceanStage.RELAXATION_SECONDS, withTarget = true,
-            diffusivityAt = { OceanHeat.diffusivity(it, WorldGenConfig().scale.radiusMeters) }
+            diffusivityAt = { OceanHeat.diffusivity(it, WorldGenConfig().scale.radiusMeters) },
+            entrainmentPerS = entrainment,
+            subsurfaceC = if (withUpwelling) FloatArray(across * down) { target[it] - 5f } else null
         )
     }
 
@@ -293,6 +308,15 @@ class GpuOceanTest {
 
         /** The share of the batch the stopped control runs: a tenth. */
         const val UNCONVERGED_SHARE_OF_BATCH = 10
+
+        /** A coastal upwelling's rise in one cell beside the shore, meters a second: about 10 m a day. */
+        const val COASTAL_RISE_MPS = 1.2e-4
+
+        /** An open ocean's Ekman suction, meters a second: about 0.1 m a day. */
+        const val OPEN_OCEAN_RISE_MPS = 1.2e-6
+
+        /** The mixed layer the rise renews, meters: the energy balance's fifty-meter slab. */
+        const val MIXED_LAYER_DEPTH_M = 50.0
 
         /** The one probe of this machine that every test in the class shares. */
         val probed: GpuOcean.Result by lazy { GpuOcean.createOrNull() }

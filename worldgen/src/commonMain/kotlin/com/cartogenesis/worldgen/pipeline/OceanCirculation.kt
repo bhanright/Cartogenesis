@@ -279,17 +279,35 @@ object OceanCirculation {
      * The balance's right-hand side less what the values make of it, `F - Lx`, with the operator
      * `Lx = (e x_east + w x_west + n x_north + s x_south - x) × center`: the sign a correction
      * solving `L δ = F - Lx` must be added with.
+     *
+     * Computed in double precision from the single-precision values, so it is the residual of the
+     * values themselves and not of the values plus the rounding of the arithmetic that measures
+     * them. Summed in single precision, the four products and the forcing each round at a part in
+     * seventeen million of ψ, and where ψ is large beside the forcing, as in the wide southern oceans
+     * of seeds 42 and 99 under a weak curl, that rounding alone stood at 1.05e-3 of the largest
+     * balance, above the solve's tolerance, and no number of cycles could get under it
+     * (docs/DESIGN_LEDGER.md, 4b-1). The relaxation itself stays in single precision, the arithmetic
+     * both devices share.
      */
     fun residual(stencil: OceanStencil, values: FloatArray): DoubleArray {
         val across = stencil.cellsAcross
-        val mismatch = DoubleArray(across * stencil.cellsDown)
-        parallelChunks(0, stencil.cellsDown) { startRow, endRow ->
+        val down = stencil.cellsDown
+        val mismatch = DoubleArray(across * down)
+        parallelChunks(0, down) { startRow, endRow ->
             for (row in startRow until endRow) {
                 for (column in 0 until across) {
                     val cell = row * across + column
                     if (!stencil.isWater[cell]) continue
-                    mismatch[cell] = (values[cell] - updated(stencil, values, row, column)).toDouble() *
-                        stencil.centreWeight[cell]
+                    val columnEast = if (column + 1 == across) 0 else column + 1
+                    val columnWest = if (column == 0) across - 1 else column - 1
+                    val valueNorth = if (row > 0) values[cell - across].toDouble() else 0.0
+                    val valueSouth = if (row + 1 < down) values[cell + across].toDouble() else 0.0
+                    val balanced = stencil.eastWeight[cell].toDouble() * values[row * across + columnEast] +
+                        stencil.westWeight[cell].toDouble() * values[row * across + columnWest] +
+                        stencil.northWeight[cell].toDouble() * valueNorth +
+                        stencil.southWeight[cell].toDouble() * valueSouth -
+                        stencil.forcing[cell].toDouble()
+                    mismatch[cell] = (values[cell] - balanced) * stencil.centreWeight[cell]
                 }
             }
         }
@@ -642,8 +660,8 @@ object OceanCirculation {
      * Shifts each body of water by the uniform amount that zeroes its summed residual.
      *
      * For an operator in which every row's weights fall short of one by its own margin (the heat's,
-     * whose margin is `1/τ`), a uniform shift δ of one body changes each of its cells' residual by
-     * exactly the margin times δ, whatever the currents and eddies do inside it. So the shift that
+     * whose margin is `1/τ` and the rising water's `w/h`, or the pressure's α), a uniform shift δ
+     * of one body changes each of its cells' residual by exactly the margin times δ, whatever the currents and eddies do inside it. So the shift that
      * zeroes the body's summed residual is minus the sum of its residuals over the sum of its margins,
      * and it is the correction a coarse grid cannot give: a coarse cell that straddles a strip of
      * land joins two bodies the fine grid keeps apart, and a small sea cut off from the ocean would

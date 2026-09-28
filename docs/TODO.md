@@ -1215,12 +1215,12 @@
   in the classes whose shared worlds name it, while another had finished every such class of its
   own by the 14th. `GlaciationTest` alone is 21.6 minutes, fourteen worlds of 1,024 rows, and
   `ScaleFreeTest` (6 minutes) and `DeltaMouthTest` (5) drew the same worker. The classes add up to
-  138 minutes, 34.5 a worker. Candidates,
-  none of them tried: `GlaciationTest`'s three cases as three classes, which moves no figure and
-  lets the workers share its fourteen worlds; `IncrementalReuseTest`'s equality at 128 rows, a
-  quarter of its cells again, if seed 99 still has lakes, rivers, realms and landmarks there; and
-  a store the workers share, so that the 1,024-row worlds, 21 distinct worlds made 30 times, are
-  made once a tier. 2026-09-28, Q2b.
+  138 minutes, 34.5 a worker. Done at Q2b: `GlaciationTest`'s three cases are three classes
+  (`GlaciationTest`, `GlaciationLatticeTest`, `GlaciationCombTest`, 9.4, 4.9 and 8.6 minutes run
+  side by side), and `IncrementalReuseTest`'s equality and identity cases run at 128 rows (the
+  class 4.8 minutes from 7.9). Not measured on a whole tier yet. Left: a store the workers
+  share, so that the 1,024-row worlds, 21 distinct worlds made 30 times, are made once a tier.
+  2026-09-28, Q2b.
 
 
 - **M1's coastline box count reads structure far below its own smallest box.** It counts the boxes

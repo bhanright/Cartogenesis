@@ -369,7 +369,7 @@ class LittoralCoastTest {
      * grading and only on the basins the percentile drowned, and `ErosionConfig.outletIncision` ran
      * two stages earlier, so a bay the grading sealed would be a lake below sea level for good — and
      * a finer grid, which resolves more two-cell bay mouths, would seal more of them, which is how
-     * this was found: it took `GlaciationTest`'s resolution contract from 1.91 to 2.37 against a bar
+     * this was found: it took `GlaciationLatticeTest`'s resolution contract from 1.91 to 2.37 against a bar
      * of 2.20. `WaterTopology.severs` makes it impossible rather than unlikely, and this counts
      * the bodies to prove it.
      */

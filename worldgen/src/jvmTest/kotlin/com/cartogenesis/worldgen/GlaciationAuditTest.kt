@@ -115,7 +115,7 @@ class GlaciationAuditTest {
     /**
      * The same world at three grids carries the same lake country, not four times as much of it.
      *
-     * The resolution contract of `flat frozen country…` (in [GlaciationTest]) extended to the size
+     * The resolution contract of `flat frozen country…` (in [GlaciationLatticeTest]) extended to the size
      * the author actually exports at, on his own settings, and the reason the three lake knobs are
      * map fractions rather than counts of cells. Reported at each grid so the shape of the
      * distribution can be compared as well as its total.

@@ -272,8 +272,9 @@ the slowest classes. The ledger's T5 row has the measurements.
 Q2's square cells gave every standard world twice the cells and took `:worldgen`'s run to between
 52 and 71 minutes. Q2b builds the worlds whose figures do not depend on the grid's detail at 256
 rows (`SharedWorlds.COARSE_ROWS`), which took 23 minutes out of the classes and almost none out
-of the wall: the run lasts as long as the worker that draws `GlaciationTest`. The ledger's Q2b row
-has the measurements, and `docs/TODO.md` the candidates for the rest.
+of the wall: the run lasted as long as the worker that drew `GlaciationTest`, 21.6 minutes on its
+own, which is now three classes so that its worlds can fall to three workers. The ledger's Q2b row
+has the measurements, and `docs/TODO.md` what is left.
 
 To re-measure the stage profile alone, on a 2048 world among others:
 

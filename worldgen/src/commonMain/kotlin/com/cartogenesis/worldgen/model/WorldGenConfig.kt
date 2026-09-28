@@ -1503,7 +1503,7 @@ data class SeaConfig(
      * sea into land, which hands one seed a lake four times the Caspian, turns a segmented rift's
      * gulfs into lakes so the rift reads as one body again, dries the interiors that were drinking
      * from the water it removed, and ponds the channels crossing a drowned tract into exactly the
-     * thin grid-bearing bars `GlaciationTest` exists to catch. With the cap the river mouths this
+     * thin grid-bearing bars `GlaciationCombTest` exists to catch. With the cap the river mouths this
      * rule was written for are still rescued — the pockets a river ends in are a handful of cells,
      * not an inland sea — and none of that follows. See docs/DESIGN_LEDGER.md, H5, for the figures.
      *

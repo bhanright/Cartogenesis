@@ -1719,7 +1719,8 @@ object GlaciationStage {
      *
      * Four rather than eight, because a bearing and its opposite are one line. These are the only
      * directions a square grid offers, so they are the only directions an artefact of one can lie
-     * along, and every shape test in this file and in `GlaciationTest` is asked of all four.
+     * along, and every shape test in this file, in `GlaciationCombTest` and in
+     * `GlaciationLatticeTest` is asked of all four.
      */
     internal const val BEARINGS = 4
 

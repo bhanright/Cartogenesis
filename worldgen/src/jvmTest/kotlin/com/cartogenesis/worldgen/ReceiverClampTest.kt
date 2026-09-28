@@ -20,7 +20,7 @@ import kotlin.test.assertTrue
  * the same catchment down a steeper reach — so the round ends with a hole in the river's bed. The
  * next round's priority flood has to raise that hole to route through it, which makes it standing
  * water, and along a channel the holes line up into a rank of thin bars lying at a grid bearing.
- * That is exactly the shape `GlaciationTest`'s comb measurement exists to catch the ice making, and
+ * That is exactly the shape `GlaciationCombTest`'s comb measurement exists to catch the ice making, and
  * it is what took the comb bar from 3.5% to 5% at H5: the lowstand grades the lower valleys to a
  * sea a stand below today's, cutting the near-coastal channels deeper and leaving more such holes.
  *

@@ -33,15 +33,6 @@ class CurrentFeedsRainTest : BorrowsSharedWorlds() {
     private companion object {
         const val SEED = 7L
 
-        /**
-         * The sample's cold coast is short of its floor of ten cells: on seed 7 the Stommel
-         * circulation's equatorward drift cools only nine cells of that west coast by 0.8 degrees.
-         * Earth's cold coasts owe most of their cold to the upwelling beside them, which chunk 4b
-         * builds; until then the rainfall comparison runs on the cells there are.
-         */
-        const val COLD_COAST_SHORT =
-            "the currents: a subtropical west coast is cold on too few cells without upwelling"
-
         // The cold-current stretch: bounds wide enough to catch a whole subtropical coastal run,
         // narrow enough that it does not wander into a different current regime.
         const val COLD_LAT_LO = -33f
@@ -170,15 +161,14 @@ class CurrentFeedsRainTest : BorrowsSharedWorlds() {
         val coastKmPerCell = on.config.scale.cellHeightKm(h)
         val coldCoastKm = coldCoast.size * coastKmPerCell
         val warmCoastKm = warmCoast.size * coastKmPerCell
-        KnownFailures.expect(COLD_COAST_SHORT, "105 km") {
-            if (coldCoastKm < COLD_COAST_FLOOR_KM) {
-                throw RecordedViolation(
-                    "only %.0f km of seed $SEED's west coast at 27-33 S sits 0.8 C under its latitude's mean, where the sample asks %.0f"
-                        .format(coldCoastKm, COLD_COAST_FLOOR_KM),
-                    "%.0f km".format(coldCoastKm)
-                )
-            }
-        }
+        // Armed by chunk 4b-1: until the upwelling, the Stommel circulation's equatorward drift alone
+        // cooled only nine cells of this coast by 0.8 degrees (docs/DESIGN_LEDGER.md, 4a and 4b-1).
+        println("H4 seed $SEED coast lengths: cold %.0f km, warm %.0f km".format(coldCoastKm, warmCoastKm))
+        assertTrue(
+            coldCoastKm >= COLD_COAST_FLOOR_KM,
+            "only %.0f km of seed $SEED's west coast at 27-33 S sits 0.8 C under its latitude's mean, where the sample asks %.0f"
+                .format(coldCoastKm, COLD_COAST_FLOOR_KM)
+        )
         assertTrue(coldCoast.isNotEmpty(), "no cold-coast cells found")
         assertTrue(warmCoastKm >= WARM_COAST_FLOOR_KM, "too little warm coast found: %.0f km".format(warmCoastKm))
 

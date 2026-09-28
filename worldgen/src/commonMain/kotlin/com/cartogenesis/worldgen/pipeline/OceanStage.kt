@@ -639,8 +639,9 @@ object OceanStage {
         zonal.waterC(outcropLatitude(latitude), Season.WINTER)
 
     /**
-     * Where the isopycnal through [UPWELLING_SOURCE_DEPTH_M] beneath [latitude] meets the surface,
-     * in degrees, same hemisphere: Luyten, Pedlosky and Stommel's eastern-boundary geometry.
+     * Where the isopycnal through [depthMeters] beneath [latitude] meets the surface, in degrees,
+     * same hemisphere: Luyten, Pedlosky and Stommel's eastern-boundary geometry. The depth is the
+     * upwelling's source depth, [UPWELLING_SOURCE_DEPTH_M], unless another is asked for.
      *
      * In their ventilated zone potential vorticity `f/h` is kept along each subducted layer's path
      * and the total depth of the moving layers is kept along it too, so the interface under a layer
@@ -657,11 +658,11 @@ object OceanStage {
      * geometry has no equatorial thermocline, and the equator takes the second closure of
      * [subsurfaceTemperatures] instead.
      */
-    internal fun outcropLatitude(latitude: Float): Float {
+    internal fun outcropLatitude(latitude: Float, depthMeters: Double = UPWELLING_SOURCE_DEPTH_M): Float {
         val fromEquator = abs(latitude)
         val gyreEdge = SurfaceBelts.WESTERLY_BELT_CENTRE_DEGREES
         if (fromEquator >= gyreEdge) return latitude
-        val outcropSine = sin(fromEquator * PI / 180.0) / (1.0 - UPWELLING_SOURCE_DEPTH_M / WIND_DRIVEN_LAYER_DEPTH_M)
+        val outcropSine = sin(fromEquator * PI / 180.0) / (1.0 - depthMeters / WIND_DRIVEN_LAYER_DEPTH_M)
         val outcrop = if (outcropSine >= sin(gyreEdge * PI / 180.0)) gyreEdge.toDouble() else asin(outcropSine) * 180.0 / PI
         return (if (latitude < 0f) -outcrop else outcrop).toFloat()
     }
@@ -779,12 +780,23 @@ object OceanStage {
 
     /**
      * The temperature of the water beneath the equatorial thermocline, degrees Celsius: subtropical
-     * water the subtropical cells carried there, the winter mixed layer where its isopycnal
-     * outcrops ([outcropLatitude]) beneath the latitude where the trades' own Ekman pumping into the
-     * thermocline is strongest, [TRADE_SUBDUCTION_DEGREES].
+     * water the subtropical cells carried there (McCreary and Lu 1994), the winter mixed layer
+     * where its isopycnal outcrops.
+     *
+     * A closure. The isopycnal is the one at the thermocline's base,
+     * [EQUATORIAL_THERMOCLINE_BASE_M], the water that feeds the Equatorial Undercurrent and lies
+     * beneath the whole of the transition the upwelling draws across; the subtropical cells take it
+     * from beneath the latitude where the trades' own Ekman pumping into the thermocline is
+     * strongest, [TRADE_SUBDUCTION_DEGREES]. Mapped through the ventilated thermocline's
+     * eastern-boundary geometry ([outcropLatitude]; Luyten, Pedlosky and Stommel 1983), 200 m
+     * beneath 15 degrees under a 500 m thermocline outcropped where `sin φ_o = sin 15° / 0.6`, at
+     * 25.5 degrees, and the water arrives at that latitude's winter temperature. The isopycnal at
+     * the source depth instead, 100 m beneath 15, outcropped at 18.9, too near the equator to be
+     * the undercurrent's water: on Earth the water beneath the eastern thermocline lies some ten
+     * degrees under the surface above it.
      */
     internal fun subtropicalCellC(zonal: ZonalClimate): Float =
-        zonal.waterC(outcropLatitude(TRADE_SUBDUCTION_DEGREES), Season.WINTER)
+        zonal.waterC(outcropLatitude(TRADE_SUBDUCTION_DEGREES, EQUATORIAL_THERMOCLINE_BASE_M), Season.WINTER)
 
     /**
      * Where the subtropical cells subduct, in degrees: where the trades' Ekman pumping is strongest,
@@ -817,6 +829,12 @@ object OceanStage {
      * thickness; it smooths the blend and sets how sharply the tongue's western edge falls off.
      */
     internal const val THERMOCLINE_HALF_THICKNESS_M = 25.0
+
+    /**
+     * The equatorial thermocline's base, meters: its mean depth [EQUATORIAL_THERMOCLINE_DEPTH_M]
+     * and the whole transition beneath it, two of [THERMOCLINE_HALF_THICKNESS_M], 200.
+     */
+    internal const val EQUATORIAL_THERMOCLINE_BASE_M = EQUATORIAL_THERMOCLINE_DEPTH_M + 2 * THERMOCLINE_HALF_THICKNESS_M
 
     /** A field on one grid read bilinearly at every cell center of another covering the same map. */
     private fun resample(field: FloatArray, fromAcross: Int, fromDown: Int, toAcross: Int, toDown: Int): FloatArray {

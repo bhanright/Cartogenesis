@@ -174,8 +174,8 @@ class WorldLinksTest {
         val notice = assertNotNull(opened.notice)
         val reason = assertNotNull(WorldCeilings.whyOutOfReach(4096, WorldCeilings.BROWSER_TAB))
         assertTrue(reason in notice && "4096" in notice && "2048" in notice, notice)
-        // Brought down with atResolution, as the panel's chips do, so the cell-measured widths
-        // follow the grid rather than being left at the 512 values.
+        // Brought down with atResolution, as the panel's chips do, and the tectonics are the
+        // same kilometers at every size.
         assertEquals(starting.atResolution(2048, 2048).tectonics, opened.config.tectonics)
     }
 

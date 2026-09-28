@@ -437,11 +437,9 @@ class DebugMapDump {
      * A single seamount is only a handful of cells across, which is invisible at whole-world
      * scale and exactly where a rasterized-circle artefact would live if there were one. Seed
      * 718106 carries a chain, with the author's settings (sea level 0.62, 14 plates, 12 realms
-     * are all defaults). 1024 and 2048 are reached via [WorldGenConfig.atResolution] from the 512
-     * base, exactly as the app does, so [TectonicsConfig.hotspotRadiusCells] and friends scale up with
-     * the grid rather than staying pinned to their 512 cell count -- a plain `WorldGenConfig(width
-     * = 2048, ...)` would not rescale them and the cone would come out the same handful of cells
-     * across at every resolution instead of genuinely finer or coarser. The vent is located fresh
+     * are all defaults). [TectonicsConfig.hotspotRadiusKm] and friends are lengths on the ground,
+     * so at 1024 and 2048 the cone is more cells across and genuinely finer rather than the same
+     * handful of cells at every resolution. The vent is located fresh
      * at each resolution from the with/without-chains plate height difference, rather than scaled
      * from a lower-resolution position, because the plate RNG is not a simple rescaling between
      * resolutions.
@@ -549,7 +547,7 @@ class DebugMapDump {
             val changed = BooleanArray(size * size) { i ->
                 !worlds[0].sea.isLand[i] && worlds[1].sea.isLand[i] &&
                     worlds[1].plates.nearestBoundaryClass[i] == rift &&
-                    worlds[1].plates.boundaryDistance.data[i] <= base.tectonics.riftShoulderOffsetCells
+                    worlds[1].plates.boundaryDistance.data[i] <= base.cellsFor(base.tectonics.riftShoulderOffsetKm)
             }
             val span = (size / 4).coerceAtLeast(64)
             val seen = BooleanArray(size * size)
@@ -606,7 +604,7 @@ class DebugMapDump {
                 var flooded = 0
                 for (i in 0 until size * size) {
                     if (world.plates.nearestBoundaryClass[i] != rift) continue
-                    if (world.plates.boundaryDistance.data[i] > base.tectonics.riftWidthCells) continue
+                    if (world.plates.boundaryDistance.data[i] > base.cellsFor(base.tectonics.riftWidthKm)) continue
                     cells++
                     if (!world.sea.isLand[i]) flooded++
                 }
@@ -772,7 +770,7 @@ class DebugMapDump {
      * Both crops are located from the world itself rather than from remembered coordinates, on a
      * 64-cell lattice so the window cannot slide about between two runs of a slightly different
      * generator: the plateau window holds the most cells sitting on a collision plateau's *outer
-     * rim* (boundary distance within a fifth of `collisionWidthCells` of it), and the shelf window the
+     * rim* (boundary distance within a fifth of `collisionWidthKm` of it), and the shelf window the
      * most ocean cells on the continental *slope* — distance to land between one and two
      * `shelfWidthKm` on the ground, the band `SeaLevelStage` smoothsteps back down to the natural sea floor.
      * Those two bands are the iso-contours of the distance field, which is what this is looking
@@ -863,7 +861,7 @@ class DebugMapDump {
             return bestX to bestY
         }
 
-        val rim = config.tectonics.collisionWidthCells
+        val rim = config.cellsFor(config.tectonics.collisionWidthKm)
         val (px, py) = bestWindow { i ->
             world.sea.isLand[i] && world.plates.nearestBoundaryClass[i] == plateau &&
                 abs(world.plates.boundaryDistance.data[i] - rim) < rim * 0.2f

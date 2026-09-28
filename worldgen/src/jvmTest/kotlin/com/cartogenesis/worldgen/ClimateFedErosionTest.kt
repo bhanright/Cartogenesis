@@ -631,7 +631,7 @@ class ClimateFedErosionTest {
         val cellsDown = config.height
         val distance = ground.plates.boundaryDistance.data
         val boundaryClass = ground.plates.nearestBoundaryClass
-        val falloff = config.tectonics.boundaryFalloffCells
+        val falloff = config.cellsFor(config.tectonics.boundaryFalloffKm)
         val relative = ground.bareCut.relativeElevation.data
         val land = ground.bareCut.isLand
 

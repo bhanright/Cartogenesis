@@ -917,8 +917,8 @@ internal fun reportBudget(config: WorldGenConfig, world: WorldMap) {
 internal fun inRiftTrough(world: WorldMap, cell: Int): Boolean {
     val rift = com.cartogenesis.worldgen.pipeline.BoundaryClass.CONTINENTAL_RIFT.ordinal
     if (world.plates.nearestBoundaryClass[cell] != rift) return false
-    // Out to the shoulder crests, in the cell terms `atResolution` scales them by.
-    val reach = WorldGenConfig().tectonics.riftShoulderOffsetCells * (world.width / 512f)
+    // Out to the shoulder crests, in cell widths of this grid.
+    val reach = world.config.cellsFor(world.config.tectonics.riftShoulderOffsetKm)
     return world.plates.boundaryDistance.data[cell] <= reach
 }
 

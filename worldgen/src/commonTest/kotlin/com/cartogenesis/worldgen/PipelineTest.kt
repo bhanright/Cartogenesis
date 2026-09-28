@@ -406,7 +406,7 @@ class PipelineTest {
             com.cartogenesis.worldgen.pipeline.BoundaryClass.COLLISION_PLATEAU.ordinal,
             com.cartogenesis.worldgen.pipeline.BoundaryClass.ISLAND_ARC.ordinal
         )
-        val reach = world.config.tectonics.boundaryFalloffCells
+        val reach = world.config.cellsFor(world.config.tectonics.boundaryFalloffKm)
         val high = world.config.scale.reliefShareOfMetres(1_000f)
         var count = 0
         for (i in 0 until world.width * world.height) {

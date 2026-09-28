@@ -611,7 +611,7 @@ class CoastalSpacingAuditTest {
      * 512 the comb sits at two to four cells, the grid's own limit, where nothing could be seen to
      * track anything. The relief wavelength is `TerrainConfig.reliefCornerKm`, which
      * `TerrainStage.ReliefBand` turns into the scale the base relief is loudest at; the belt's
-     * half-width is `TectonicsConfig.andeanWidthCells` for a coastal range and `collisionWidthCells`
+     * half-width is `TectonicsConfig.andeanWidthKm` for a coastal range and `collisionWidthKm`
      * for a plateau, moved together so a world's belts are all narrower or all broader rather than
      * one kind of them. A halving and a doubling of each, a full octave either side of the stock
      * figure: enough that a spacing which tracked either setting could not be mistaken for noise,
@@ -649,8 +649,8 @@ class CoastalSpacingAuditTest {
             runs["belt half-width x$factor"] = reportsOf(seed, side, edit = { config ->
                 config.copy(
                     tectonics = config.tectonics.copy(
-                        andeanWidthCells = (config.tectonics.andeanWidthCells * factor).toFloat(),
-                        collisionWidthCells = (config.tectonics.collisionWidthCells * factor).toFloat()
+                        andeanWidthKm = config.tectonics.andeanWidthKm * factor,
+                        collisionWidthKm = config.tectonics.collisionWidthKm * factor
                     )
                 )
             })

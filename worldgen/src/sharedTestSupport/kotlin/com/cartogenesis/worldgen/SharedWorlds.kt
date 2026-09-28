@@ -409,21 +409,9 @@ class WorldLender(
 }
 
 /**
- * The grid a test states its worlds at before scaling them: every per-merge class writes a world as
- * `WorldGenConfig(seed, 512, 512)`, and a larger one as that `.atResolution(side, side)`, which
- * carries the tectonics' widths across the change of grid.
+ * Whether [config] is a seed at its default settings on its own grid rather than a variant with a
+ * setting moved. A world re-targeted to its grid by `atResolution` is the same config, since that
+ * moves nothing but the width and the height.
  */
-private const val PREVIEW_CELLS_ACROSS = 512
-
-/**
- * Whether [config] is a seed at its default settings — at its own grid, or at the preview grid scaled
- * to its grid — rather than a variant with a setting moved.
- */
-private fun isPlainWorld(config: WorldGenConfig): Boolean {
-    val atItsGrid = WorldGenConfig(seed = config.seed, width = config.width, height = config.height)
-    if (config == atItsGrid) return true
-    val scaledFromPreview = WorldGenConfig(
-        seed = config.seed, width = PREVIEW_CELLS_ACROSS, height = PREVIEW_CELLS_ACROSS
-    ).atResolution(config.width, config.height)
-    return config == scaledFromPreview
-}
+private fun isPlainWorld(config: WorldGenConfig): Boolean =
+    config == WorldGenConfig(seed = config.seed, width = config.width, height = config.height)

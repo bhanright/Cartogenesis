@@ -433,7 +433,7 @@ class GroundTextureTest : BorrowsSharedWorlds() {
         val isLand = world.sea.isLand
         val distance = world.plates.boundaryDistance.data
         val boundaryClass = world.plates.nearestBoundaryClass
-        val falloff = world.config.tectonics.boundaryFalloffCells
+        val falloff = world.config.cellsFor(world.config.tectonics.boundaryFalloffKm)
         val metres = FloatArray(cellsAcross * cellsDown) {
             if (isLand[it]) scale.metresAboveShoreline(world.sea.relativeElevation.data[it]) else 0f
         }

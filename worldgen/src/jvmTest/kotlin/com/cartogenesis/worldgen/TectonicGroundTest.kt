@@ -1,6 +1,7 @@
 package com.cartogenesis.worldgen
 
 import com.cartogenesis.worldgen.model.FloatField
+import com.cartogenesis.worldgen.model.TectonicsConfig
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.pipeline.Plate
 import com.cartogenesis.worldgen.pipeline.PlateStage
@@ -29,7 +30,8 @@ import kotlin.test.assertTrue
  *
  * Two cases go the other way, from one grid to another rather than from one bearing to another:
  * a world of square cells made by [WorldGenConfig.forRows] raises its belts as wide on the ground as
- * the 512 by 512 world, and a control built directly at 1,024 by 512 does not (Q1's row).
+ * the 512 by 512 world, and a control whose lengths are the 512 grid's counts on half-width cells
+ * does not (Q1's and Q2's rows).
  */
 class TectonicGroundTest {
 
@@ -138,7 +140,7 @@ class TectonicGroundTest {
      */
     @Test
     fun `a plate drifts as far on the ground whichever way it goes`() {
-        val distance = config.tectonics.epochDriftCells
+        val distance = config.cellsFor(config.tectonics.epochDriftKm)
         val travelled = DRIFT_BEARINGS_DEGREES.associateWith { degrees ->
             val angle = degrees * PI / 180.0
             val plate = Plate(0, cellsAcross / 2, cellsDown / 2, cos(angle).toFloat(), sin(angle).toFloat(), PlateType.OCEANIC)
@@ -255,9 +257,9 @@ class TectonicGroundTest {
     /**
      * A world of square cells raises its belts as wide on the ground as the 512 by 512 world does.
      *
-     * The widths are still counts of cell widths, carried to another grid by
-     * [WorldGenConfig.atResolution], which [WorldGenConfig.forRows] goes through; this is the
-     * guard that the square grid's 1,024 columns are given twice the cells a belt had across 512.
+     * The widths are lengths in kilometers, converted to cell widths of whichever grid the world is
+     * built on; this is the guard that the square grid's 1,024 columns give a belt twice the cells it
+     * had across 512.
      */
     @Test
     fun `a world of square cells raises its belts as wide on the ground as the 512 by 512 world`() {
@@ -268,20 +270,40 @@ class TectonicGroundTest {
     }
 
     /**
-     * The control: a 1,024 by 512 world built directly rather than through
-     * [WorldGenConfig.atResolution] keeps the 512 grid's counts of cells on cells half as wide, so
-     * every belt is half as wide on the ground. That is what every world built directly at any grid
-     * but 512 by 512 does today, and what stating the widths in kilometers will end.
+     * The control: the square world with every tectonic length halved, which is the 512 grid's
+     * counts of cells spent on cells half as wide. That is what a world built directly at 1,024 by
+     * 512 did while the widths were counts (Q1's control, and this one is that world to the bit),
+     * so every belt is half as wide on the ground.
      */
     @Test
     fun `the comparison sees widths counted on a grid they were not set on`() {
+        val square = WorldGenConfig.forRows(CONTROL_SEED, 512)
         val misses = beltMisses(
             CONTROL_SEED,
             WorldGenConfig(seed = CONTROL_SEED, width = 512, height = 512),
-            WorldGenConfig(seed = CONTROL_SEED, width = 1024, height = 512)
+            square.copy(tectonics = lengthsScaled(square.tectonics, 0.5))
         )
         assertTrue(misses.size == 2, "belts half as wide on the ground were not seen: $misses")
     }
+
+    /** Every tectonic length in [tectonics] times [factor]: the widths, offsets, drift, blur and trails. */
+    private fun lengthsScaled(tectonics: TectonicsConfig, factor: Double): TectonicsConfig = tectonics.copy(
+        boundaryFalloffKm = tectonics.boundaryFalloffKm * factor,
+        andeanWidthKm = tectonics.andeanWidthKm * factor,
+        arcOffsetKm = tectonics.arcOffsetKm * factor,
+        arcWidthKm = tectonics.arcWidthKm * factor,
+        collisionWidthKm = tectonics.collisionWidthKm * factor,
+        islandArcOffsetKm = tectonics.islandArcOffsetKm * factor,
+        islandArcWidthKm = tectonics.islandArcWidthKm * factor,
+        riftWidthKm = tectonics.riftWidthKm * factor,
+        riftShoulderOffsetKm = tectonics.riftShoulderOffsetKm * factor,
+        riftShoulderWidthKm = tectonics.riftShoulderWidthKm * factor,
+        epochDriftKm = tectonics.epochDriftKm * factor,
+        beltAgeBlurKm = tectonics.beltAgeBlurKm * factor,
+        hotspotChainLengthKm = tectonics.hotspotChainLengthKm * factor,
+        hotspotSpacingKm = tectonics.hotspotSpacingKm * factor,
+        hotspotRadiusKm = tectonics.hotspotRadiusKm * factor
+    )
 
     /** The length on the ground of a step of [columns] and [rows], in cell widths. */
     private fun groundCellWidths(columns: Int, rows: Int): Double {

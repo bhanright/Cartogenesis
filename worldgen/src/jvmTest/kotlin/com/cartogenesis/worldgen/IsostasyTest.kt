@@ -685,7 +685,7 @@ class IsostasyTest : BorrowsSharedWorlds() {
     /** Metres of rock the rounds took off the present belts, as a rate over the time they stand for. */
     private fun beltDenudationMmPerYear(world: WorldMap): Double {
         val scale = world.config.scale
-        val falloff = world.config.tectonics.boundaryFalloffCells
+        val falloff = world.config.cellsFor(world.config.tectonics.boundaryFalloffKm)
         var sum = 0.0
         var cells = 0
         for (cell in world.sea.isLand.indices) {
@@ -1126,7 +1126,7 @@ class IsostasyTest : BorrowsSharedWorlds() {
          * The first bin clear of the belt itself, and the least the ground must rise again beyond
          * the moat for the trough to be a trough.
          *
-         * The belt's own half-width is `boundaryFalloffCells`, 26 at 512, so three bins of eight
+         * The belt's own half-width is `boundaryFalloffKm`, 26 cells at 512, so three bins of eight
          * cells is the first ground that is foreland rather than range. The forebulge floor is a
          * tenth of the moat's, because a forebulge is a tenth of a moat: Turcotte and Schubert's
          * solution puts the peripheral swell at about four per cent of the deflection under the

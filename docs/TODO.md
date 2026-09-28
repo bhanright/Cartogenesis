@@ -1140,22 +1140,15 @@
   rift lakes are held to `RiftDepthTest`'s and `OutletIncisionTest`'s bars and deepening a trough
   round by round is exactly what E7 measured and refused when it was done by the stamp. Whoever
   takes it should read E7 and E8's notes below first. 2026-09-13, S2.
-- **The tectonics' belt widths are still counts of cells.** S1 left the widths and the heights
-  together because neither could carry a unit while the field was normalised; S2 gave the heights
-  one — every belt height is a share of `TectonicsConfig.beltReliefMetres` — and left the widths
-  where they were, because `WorldGenConfig.atResolution` already carries them across a change of
-  grid and writing them in kilometres would do the same arithmetic in a different place. It would
-  read better all the same, and it would empty `atResolution` of everything but the moisture
-  march's own knob. A rename with no physics under it. 2026-09-13, S2.
-
-  **Not only a rename.** `atResolution` carries the widths only for a world made through it. A world
-  built directly at any grid other than 512 by 512 keeps the 512 grid's counts on its own cells. At
-  128 by 128, which is the fingerprint world, 26 cells is 2,437 km where it is 609 at 512. On a
-  1,024 by 512 grid of square cells built directly, every belt is half as wide on the ground
-  (`TectonicGroundTest`'s control reads 222 km against 393 on seed 42). `WorldGenConfig.forRows`
-  goes through `atResolution` and is right. Stating the widths in kilometers moves every world a
-  test builds directly at another grid. So it is the square-grid switch's Q2, which moves those
-  worlds anyway, and not Q1, which moves no bit. 2026-09-28, Q1.
+- **An old belt's rounding is not the same spread in kilometers at every grid.**
+  `PlateStage.roundWithAge` rounds a past epoch's uplift by a Gaussian of spread
+  `sqrt(2 r (r + 1) / 3)` cell widths, with `r` the setting `TectonicsConfig.beltAgeBlurKm` read in
+  cell widths: the spread two box passes of that radius had. The formula is not proportional to
+  `r`, so the same 70 km radius spreads 0.94 of itself at 23.4 km cells and 0.85 at 5.9 km cells
+  (2.83 and 10.2 cell widths of spread for 3 and 12 cell widths of radius at one epoch). The
+  physical statement is a spread in kilometers, `sqrt(2/3)` of the radius, which is what the
+  formula tends to on a fine grid; Q2 kept the formula because restating it would move every world
+  at every grid, and a chunk that changes the tectonics should take it. 2026-09-28, Q2.
 
 - **A world of square cells carries more ice at 60 to 90 degrees than a change of grid gives.**
   `GridShapeTest` compares the same seed at 512 by 512 and at `forRows(512)`, band by band. Its

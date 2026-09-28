@@ -162,7 +162,7 @@ class PanelKnobsTest {
         assertEquals(base.copy(seed = 7L), Knobs.withSeed(base, 7L))
         assertEquals(listOf(512, 1024, 2048, 4096), Knobs.RESOLUTIONS)
         Knobs.RESOLUTIONS.forEach { size ->
-            // `atResolution`, not a raw copy: it rescales everything measured in cells.
+            // Through `atResolution`, the one place a size change is made.
             assertEquals(base.atResolution(size, size), Knobs.atResolution(base, size))
             assertEquals(size, Knobs.atResolution(base, size).width)
         }

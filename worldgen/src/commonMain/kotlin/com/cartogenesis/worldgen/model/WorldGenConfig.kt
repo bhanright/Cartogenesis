@@ -439,11 +439,16 @@ data class TectonicsConfig(
     /** Depth of oceanic trenches at subduction boundaries, on the same scale. */
     val trenchDepth: Float = 0.3f,
     /**
-     * How far boundary effects reach inland, in cell widths of ground: the same kilometres from a
-     * boundary running north-south as from one running east-west. Every belt half-width and offset
-     * below is a count of cell widths on the same terms.
+     * How far boundary effects reach inland, in kilometers: the same from a boundary running
+     * north-south as from one running east-west. Every belt half-width and offset below is a length
+     * on the ground on the same terms, converted to cell widths by [WorldScale] where `PlateStage`
+     * reads it.
+     *
+     * 609.375 km, which is the 26 cell widths of 23.4375 km it was set as on the 512 grid; every
+     * width below is likewise that grid's count restated, so a world on any grid carries the belts
+     * it carried there. The history of the counts is in docs/DESIGN_LEDGER.md, Q2.
      */
-    val boundaryFalloffCells: Float = 26f,
+    val boundaryFalloffKm: Double = 609.375,
     /**
      * How wide the band is over which one crust becomes the other, in kilometres — a continental
      * margin, measured from where the crust starts to thin to where it is ocean floor.
@@ -456,7 +461,7 @@ data class TectonicsConfig(
      * made the band 389 km wide east-west and 195 km north-south.
      *
      * Implicit before it was a setting: the plate base was blurred by a third of
-     * [boundaryFalloffCells], which comes to about 200 km on the default grid and was never a
+     * [boundaryFalloffKm], which comes to about 200 km, and was never a
      * length anybody had chosen. Since isostasy puts 4,500 m between the two crusts, the width of
      * this band *is* the gradient the continental slope stands at — 300 km is 350 m in every cell
      * of a 512 grid, 600 km is 175 — so it wanted a figure of its own and a reason for it.
@@ -729,37 +734,38 @@ data class TectonicsConfig(
      * On it, the three convergent pairs build three different things: oceanic under continental a
      * narrow coastal range with a volcanic arc behind it, continental against continental a broad
      * flat-topped plateau, oceanic under oceanic an island arc. Off, every convergent boundary
-     * gets the single [mountainHeight]-at-[boundaryFalloffCells] belt the generator used before, which
+     * gets the single [mountainHeight]-at-[boundaryFalloffKm] belt the generator used before, which
      * is what `BoundaryPairTest` turns off to show its measurement has teeth — with one profile
      * the Andes and Tibet are the same shape and the width-to-height ratios coincide.
      */
     val crustPairProfiles: Boolean = true,
     /**
-     * Half-width, in cell widths, of the coastal range on the continental side of an oceanic–continental
-     * margin. Deliberately far narrower than [collisionWidthCells]: the Andes are a few hundred
-     * kilometres across where Tibet is well over a thousand, and that contrast is the whole point
-     * of distinguishing the pairs. [WorldGenConfig.atResolution] rescales it with the grid.
+     * Half-width, in kilometers, of the coastal range on the continental side of an
+     * oceanic–continental margin. Deliberately far narrower than [collisionWidthKm]: the Andes are
+     * a few hundred kilometers across where Tibet is well over a thousand, and that contrast is the
+     * whole point of distinguishing the pairs. 328.125 km, the 512 grid's 14 cell widths.
      */
-    val andeanWidthCells: Float = 14f,
+    val andeanWidthKm: Double = 328.125,
     /** Crest height of that coastal range, in normalized elevation units. Narrow but tall. */
     val andeanHeight: Float = 0.52f,
     /**
-     * How far inland of the suture the volcanic arc stands, in cell widths.
+     * How far inland of the suture the volcanic arc stands, in kilometers.
      *
      * A subducting slab does not melt at the trench; it melts once it is deep enough, which puts
      * the volcanoes a fixed distance behind the margin rather than on it. That offset is what
-     * makes the margin asymmetric in a way a symmetric falloff cannot express.
+     * makes the margin asymmetric in a way a symmetric falloff cannot express. 304.6875 km, the
+     * 512 grid's 13 cell widths.
      */
-    val arcOffsetCells: Float = 13f,
-    /** Half-width of the volcanic arc ridge about its own axis, in cell widths. */
-    val arcWidthCells: Float = 5f,
+    val arcOffsetKm: Double = 304.6875,
+    /** Half-width of the volcanic arc ridge about its own axis, in kilometers: the 512 grid's 5 cell widths. */
+    val arcWidthKm: Double = 117.1875,
     /** Height of the volcanic arc above the range it rides on, in normalized elevation units. */
     val arcHeight: Float = 0.20f,
     /**
-     * Half-width, in cell widths, of a continental collision plateau. Broad — see [andeanWidthCells].
-     * [WorldGenConfig.atResolution] rescales it with the grid.
+     * Half-width, in kilometers, of a continental collision plateau. Broad — see [andeanWidthKm].
+     * 609.375 km, the 512 grid's 26 cell widths.
      */
-    val collisionWidthCells: Float = 26f,
+    val collisionWidthKm: Double = 609.375,
     /**
      * Height of the plateau, in normalized elevation units.
      *
@@ -805,12 +811,12 @@ data class TectonicsConfig(
      */
     val plateauAlongVariation: Float = 0.50f,
     /**
-     * How far from the suture the island arc stands, on the overriding plate, in cell widths.
-     * [WorldGenConfig.atResolution] rescales it with the grid.
+     * How far from the suture the island arc stands, on the overriding plate, in kilometers:
+     * 187.5 km, the 512 grid's 8 cell widths.
      */
-    val islandArcOffsetCells: Float = 8f,
-    /** Half-width of the island-arc ridge about its own axis, in cell widths. */
-    val islandArcWidthCells: Float = 7f,
+    val islandArcOffsetKm: Double = 187.5,
+    /** Half-width of the island-arc ridge about its own axis, in kilometers: the 512 grid's 7 cell widths. */
+    val islandArcWidthKm: Double = 164.0625,
     /**
      * Crest height of an island arc, in normalized elevation units.
      *
@@ -840,8 +846,13 @@ data class TectonicsConfig(
      * docs/DESIGN_LEDGER.md, E7, for the figures.
      */
     val riftDepth: Float = 0.25f,
-    /** Half-width of the rift trough, in cell widths. */
-    val riftWidthCells: Float = 7f,
+    /**
+     * Half-width of the rift trough, in kilometers: 164.0625 km, the 512 grid's 7 cell widths.
+     *
+     * Wider than a real rift, whose trough is 40 to 80 km across, because it was sized to be
+     * drawable on 23 km cells; see docs/DESIGN_LEDGER.md, Q2.
+     */
+    val riftWidthKm: Double = 164.0625,
     /**
      * Share of the trough's half-width that is flat floor before the ground starts climbing.
      *
@@ -851,10 +862,10 @@ data class TectonicsConfig(
      * `ValleyIncisionTest` reads as incision. Dimensionless, so it needs no rescaling.
      */
     val riftFloorShare: Float = 0.55f,
-    /** How far from the rift axis its raised shoulders crest, in cell widths. */
-    val riftShoulderOffsetCells: Float = 11f,
-    /** Half-width of each shoulder about its own crest, in cell widths. */
-    val riftShoulderWidthCells: Float = 7f,
+    /** How far from the rift axis its raised shoulders crest, in kilometers: the 512 grid's 11 cell widths. */
+    val riftShoulderOffsetKm: Double = 257.8125,
+    /** Half-width of each shoulder about its own crest, in kilometers: the 512 grid's 7 cell widths. */
+    val riftShoulderWidthKm: Double = 164.0625,
     /**
      * Height of the rift shoulders, in normalized elevation units.
      *
@@ -883,7 +894,7 @@ data class TectonicsConfig(
      * Shortest and longest half-graben segment, as a fraction of the map's width.
      *
      * A map fraction rather than a count of cells, so a rift breaks into the same segments at 512
-     * and at 2048 — which is also why [WorldGenConfig.atResolution] leaves both alone.
+     * and at 2048.
      *
      * Real half-grabens run 50 to 150 km. On the 12,000 km world this generator's other knobs are
      * calibrated against, that is two to six cells at 512, which is below the size at which a grid
@@ -930,10 +941,10 @@ data class TectonicsConfig(
      * that opened, failed and filled with sediment.
      *
      * So the stage runs itself [historyEpochs] times. Each past epoch displaces every plate seed
-     * back along minus its own drift (see [epochDriftCells]), classifies the boundaries of *that*
+     * back along minus its own drift (see [epochDriftKm]), classifies the boundaries of *that*
      * configuration by the same crust pairs, stamps the same profiles, and then ages what it
      * stamped: lower (by the time since it stopped rising — see [epochLengthYears] and
-     * [orogenDecayTimeYears]), broader ([beltAgeWidening]), rounder ([beltAgeBlurCells]). The
+     * [orogenDecayTimeYears]), broader ([beltAgeWidening]), rounder ([beltAgeBlurKm]). The
      * present epoch stamps last and sharpest, and its boundaries, distances and classes are the
      * ones the rest of the pipeline sees, unchanged.
      *
@@ -943,17 +954,17 @@ data class TectonicsConfig(
      */
     val historyEpochs: Int = 3,
     /**
-     * How far a plate travels between one epoch and the next, in cell widths of ground, whichever
-     * way it drifts.
+     * How far a plate travels between one epoch and the next, in kilometers, whichever way it
+     * drifts.
      *
      * A plate boundary only moves if the plates either side of it move relative to one another, so
      * this is what decides how far an old belt ends up from a present one. At the default a
-     * two-epochs-ago boundary sits some 90 cells from where its plates are now, against a plate
-     * radius of about 137 cells on a 14-plate 512 world — far enough that an old belt lands well
-     * inside a plate interior rather than merging with the modern edge beside it, which is the
-     * whole point. [WorldGenConfig.atResolution] rescales it with the grid.
+     * two-epochs-ago boundary sits some 2,100 km from where its plates are now, against a plate
+     * radius of about 3,200 km on a 14-plate world — far enough that an old belt lands well inside
+     * a plate interior rather than merging with the modern edge beside it, which is the whole
+     * point. 1,054.6875 km, the 512 grid's 45 cell widths.
      */
-    val epochDriftCells: Float = 45f,
+    val epochDriftKm: Double = 1_054.6875,
     /**
      * How long one tectonic epoch lasts, in years, and how long a dead orogen takes to fall to
      * `1/e` of its height once its uplift has stopped.
@@ -1074,14 +1085,19 @@ data class TectonicsConfig(
      */
     val beltAgeWidening: Float = 1.45f,
     /**
-     * Radius, in cell widths, of the rounding blur applied per epoch of age.
+     * Radius, in kilometers, of the rounding blur applied per epoch of age.
      *
      * Applied as a Gaussian round on the ground with the spread two box passes of this radius have
-     * east-west, `sqrt(2 r (r + 1) / 3)`; it was those two box passes, square in cells. Two rather
-     * than three because an old belt should read as rounded, not as a stain. The
-     * blur is what turns a stamped profile with a crest and a toe into the smooth swell of a worn
-     * range, and it is applied to the epoch's own uplift field alone, so it never touches the
-     * present epoch's edges. [WorldGenConfig.atResolution] rescales it with the grid.
+     * east-west, `sqrt(2 r (r + 1) / 3)` with `r` in cell widths; it was those two box passes,
+     * square in cells. Two rather than three because an old belt should read as rounded, not as a
+     * stain. The blur is what turns a stamped profile with a crest and a toe into the smooth swell
+     * of a worn range, and it is applied to the epoch's own uplift field alone, so it never touches
+     * the present epoch's edges.
+     *
+     * 70.3125 km, the 512 grid's 3 cell widths. The spread is kept as the box passes' formula of
+     * the radius in cell widths, which is not proportional to the radius: a Gaussian of a fixed
+     * spread in kilometers would be the physical statement, and it would move every world, so it
+     * is in `TODO.md` rather than here.
      *
      * Held at three cells rather than the six first tried, for a reason about the *length* of a
      * belt rather than its cross-section. A blur is isotropic: at six cells and two passes its
@@ -1093,7 +1109,7 @@ data class TectonicsConfig(
      * land against `CultureRealmTest`'s 45% ceiling, because a continuous upland is a corridor.
      * At three cells the saddles survive and the same seed reads 33%.
      */
-    val beltAgeBlurCells: Float = 3f,
+    val beltAgeBlurKm: Double = 70.3125,
     /**
      * How much of a failed rift's trough survives as a trough, the rest having filled with
      * sediment.
@@ -1125,12 +1141,15 @@ data class TectonicsConfig(
      * rather than volcanic fields inland.
      */
     val hotspotPlateFraction: Float = 0.35f,
-    /** How long a hotspot trail runs before it has subsided to nothing, in cell widths of ground. */
-    val hotspotChainLengthCells: Float = 110f,
-    /** Distance between successive seamounts along a trail, in cell widths of ground. */
-    val hotspotSpacingCells: Float = 15f,
-    /** Radius of a single seamount, in cell widths: round on the ground, so twice as many rows. */
-    val hotspotRadiusCells: Float = 5f,
+    /**
+     * How long a hotspot trail runs before it has subsided to nothing, in kilometers: 2,578.125 km,
+     * the 512 grid's 110 cell widths.
+     */
+    val hotspotChainLengthKm: Double = 2_578.125,
+    /** Distance between successive seamounts along a trail, in kilometers: the 512 grid's 15 cell widths. */
+    val hotspotSpacingKm: Double = 351.5625,
+    /** Radius of a single seamount, in kilometers, round on the ground: the 512 grid's 5 cell widths. */
+    val hotspotRadiusKm: Double = 117.1875,
     /** Height of the youngest seamount in a chain, in normalized elevation units. */
     val hotspotHeight: Float = 0.17f,
     /**
@@ -3130,111 +3149,32 @@ data class WorldGenConfig(
     /**
      * Re-targets the same world at a different grid size — used by HD export.
      *
-     * There used to be a great deal here. Every reach, radius, depth and rate in the pipeline was
-     * a count of cells or a fraction of an assumed range, and this function carried each of them
-     * across a change of grid by hand; the class of bug that produced was fixed three times in the
-     * month before it was written down. They are now lengths in kilometres, depths in metres and
-     * rates in years, converted to the grid by [WorldScale] where each stage reads them, so the
-     * scaling is arithmetic rather than a contract and there is nothing left here to carry.
-     *
-     * What is left is the tectonics' *widths*, and they are left deliberately. Since S2 a belt's
-     * height does carry a metre value — every one of them is a share of
-     * [TectonicsConfig.beltReliefMetres], so none of them appears below — but a belt's half-width
-     * is still written as a count of cells, and carrying that count across a change of grid is
-     * what this function is for. Writing the widths in kilometres instead would do exactly the
-     * same arithmetic in a different place; it is a rename with no physics under it, and it is in
-     * `TODO.md` rather than here. See docs/DESIGN_LEDGER.md, S1 and S2.
-     *
-     *  - [TectonicsConfig.boundaryFalloffCells] is the width of a mountain belt and of the blur
-     *    that softens the plate base. Left alone, a 4x larger grid makes both four times narrower
-     *    in map terms, so plate edges surface as straight cliffs and coastlines turn angular.
-     *  - Every crust-pair width and offset ([TectonicsConfig.andeanWidthCells],
-     *    [TectonicsConfig.arcOffsetCells], [TectonicsConfig.arcWidthCells],
-     *    [TectonicsConfig.collisionWidthCells], [TectonicsConfig.islandArcOffsetCells],
-     *    [TectonicsConfig.islandArcWidthCells], [TectonicsConfig.riftWidthCells],
-     *    [TectonicsConfig.riftShoulderOffsetCells], [TectonicsConfig.riftShoulderWidthCells]) is
-     *    measured in cells for the same reason, and so is the geometry of a hotspot trail
-     *    ([TectonicsConfig.hotspotChainLengthCells], [TectonicsConfig.hotspotSpacingCells],
-     *    [TectonicsConfig.hotspotRadiusCells]). Left alone, a larger grid would narrow Tibet to the
-     *    width of the Andes and the distinction between the crust pairs would quietly disappear at
-     *    export resolution. The rift's *segmentation* knobs ([TectonicsConfig.riftSegmentMin],
-     *    [TectonicsConfig.riftSegmentMax], [TectonicsConfig.riftAccommodation]) are the exception:
-     *    they are map fractions already, so a rift breaks into the same half-grabens at every
-     *    resolution and they are not touched.
-     *  - A displacement and a blur radius are both lengths on the ground, so
-     *    [TectonicsConfig.epochDriftCells] and [TectonicsConfig.beltAgeBlurCells] are more cells on
-     *    a finer grid; `historyEpochs` and the three dimensionless ageing factors are not.
-     *
-     * The climate used to need a line here too, and no longer does. Its three moisture rates were
-     * charged per cell of wind travel, so a 4x wider grid depleted a parcel four times over the
-     * same journey; one of the three was divided by the scale factor here and the other two were
-     * not, so a finer grid re-saturated its oceans and re-moistened its interiors four times as
-     * fast per kilometre as a coarse one. All three are lengths in kilometres now
-     * ([ClimateConfig.depletionLengthKm], [ClimateConfig.oceanEvaporationLengthKm],
-     * [ClimateConfig.evapotranspirationLengthKm]) and are converted where the march reads them,
-     * so none of them is a function of the grid. [ClimateConfig.orographicStrength] stays a bare
-     * ratio because it already is one: it multiplies a rise per cell of travel, and the rise a
-     * range presents to the wind is the same total however many cells the climb is cut into.
+     * A copy with the new width and height and nothing else changed, and that is the whole of the
+     * contract. There used to be a great deal here. Every reach, radius, depth and rate in the
+     * pipeline was a count of cells or a fraction of an assumed range, and this function carried
+     * each of them across a change of grid by hand; the class of bug that produced was fixed three
+     * times in the month before it was written down. They are lengths in kilometers, depths in
+     * meters and rates in years now, converted to the grid by [WorldScale] where each stage reads
+     * them, so a world built directly at a grid and one re-targeted to it are the same world. The
+     * tectonics' belt widths were the last to go; see docs/DESIGN_LEDGER.md, S1, S2 and Q2.
      *
      * [scale] is not touched at all, and that is the point of it: how many cells a world is cut
      * into says nothing about how wide the world is, how high its land stands or how long a round
      * of erosion lasts.
-     *
-     * Two limits, both lifted when the widths and the rest are stated in kilometers. The widths are
-     * carried only for a world made through here: one built directly at another grid keeps the
-     * 512 grid's counts on its own cells. And a few stage figures are still counts of cells that
-     * nothing carries, so on a grid of another width they reach another distance. The coast's
-     * reach into the land (`OceanConfig.coastalReachCells`) is the one a reader sees; the Q1 row
-     * of docs/DESIGN_LEDGER.md lists them all. [forRows] goes through here.
      */
-    fun atResolution(newWidth: Int, newHeight: Int): WorldGenConfig {
-        val scale = newWidth.toFloat() / width
-        return copy(
-            width = newWidth,
-            height = newHeight,
-            tectonics = tectonics.copy(
-                boundaryFalloffCells = tectonics.boundaryFalloffCells * scale,
-                andeanWidthCells = tectonics.andeanWidthCells * scale,
-                arcOffsetCells = tectonics.arcOffsetCells * scale,
-                arcWidthCells = tectonics.arcWidthCells * scale,
-                collisionWidthCells = tectonics.collisionWidthCells * scale,
-                islandArcOffsetCells = tectonics.islandArcOffsetCells * scale,
-                islandArcWidthCells = tectonics.islandArcWidthCells * scale,
-                riftWidthCells = tectonics.riftWidthCells * scale,
-                riftShoulderOffsetCells = tectonics.riftShoulderOffsetCells * scale,
-                riftShoulderWidthCells = tectonics.riftShoulderWidthCells * scale,
-                epochDriftCells = tectonics.epochDriftCells * scale,
-                beltAgeBlurCells = tectonics.beltAgeBlurCells * scale,
-                hotspotChainLengthCells = tectonics.hotspotChainLengthCells * scale,
-                hotspotSpacingCells = tectonics.hotspotSpacingCells * scale,
-                hotspotRadiusCells = tectonics.hotspotRadiusCells * scale
-            )
-        )
-    }
+    fun atResolution(newWidth: Int, newHeight: Int): WorldGenConfig =
+        copy(width = newWidth, height = newHeight)
 
     companion object {
         fun isPowerOfTwo(n: Int): Boolean = n > 0 && (n and (n - 1)) == 0
 
         /**
-         * The grid every setting still counted in cells was set on: 512 by 512, whose cell is
-         * 23.4 km across and 11.7 km down on the 12,000 km world. [forRows] starts from it so that
-         * [atResolution] carries those counts to the new grid as the same ground.
-         */
-        const val CALIBRATED_GRID_CELLS = 512
-
-        /**
          * A world of [rows] rows and twice as many columns, whose cells are square on the ground:
          * the map covers 360 degrees of longitude against 180 of latitude, so `2 × rows` columns
-         * make a cell as wide as it is tall, `6,000 / rows` km on the default world.
-         *
-         * Made from the [CALIBRATED_GRID_CELLS] grid through [atResolution], which is what keeps
-         * it the same world on the ground as the 512 by 512 one: the tectonics' widths are still
-         * counts of cells and are carried by the width's ratio, so a belt is as many kilometers
-         * wide here as there. [rows] must be a power of two, as every grid side must.
-         * See docs/DESIGN_LEDGER.md, Q1, for what is still counted in cells and not carried.
+         * make a cell as wide as it is tall, `6,000 / rows` km on the default world. [rows] must be
+         * a power of two, as every grid side must.
          */
         fun forRows(seed: Long, rows: Int): WorldGenConfig =
-            WorldGenConfig(seed = seed, width = CALIBRATED_GRID_CELLS, height = CALIBRATED_GRID_CELLS)
-                .atResolution(2 * rows, rows)
+            WorldGenConfig(seed = seed, width = 2 * rows, height = rows)
     }
 }

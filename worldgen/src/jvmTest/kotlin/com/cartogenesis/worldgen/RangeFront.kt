@@ -188,13 +188,12 @@ internal object RangeFront {
      * The shortest chord that counts as a front, in kilometres.
      *
      * Derived from the belt this generator builds and from Hovius's ratio. The stock coastal range
-     * is `TectonicsConfig.andeanWidthCells` = 14 cells of half-width on the 512 grid, and
-     * `PlateStage` counts that distance in cells without converting it, so in kilometres it is 14
-     * cell heights, 164 km, across a front running east-west and 14 cell widths, 328 km, across
-     * one running north-south. At a ratio of 2.1 those space their outlets 78 and 156 km apart.
-     * Three outlets is the fewest that makes a spacing more than a single number, so the shortest
-     * useful front on the broader of the two is two of those spacings, 313 km, rounded down to 300;
-     * the narrower fits four outlets in the same chord.
+     * is `TectonicsConfig.andeanWidthKm`, 328 km of half-width on the ground whichever way it runs,
+     * and at a ratio of 2.1 that spaces its outlets 156 km apart. Three outlets is the fewest that
+     * makes a spacing more than a single number, so the shortest useful front is two of those
+     * spacings, 313 km, rounded down to 300. (Before Fix 2 the belt was counted in plain cells and
+     * stood half as wide across a front running east-west, which fitted four outlets in the same
+     * chord.)
      */
     const val SHORTEST_FRONT_KM = 300.0
 
@@ -1453,15 +1452,15 @@ internal object RangeFront {
     /**
      * The stamped half-width of the belt kind a front sits on, in kilometres across that front.
      *
-     * `TectonicsConfig.andeanWidthCells` for an Andean margin and `collisionWidthCells` for a
+     * `TectonicsConfig.andeanWidthKm` for an Andean margin and `collisionWidthKm` for a
      * plateau, each converted along the front's own normal by [Front.kilometresOfCellsAcross]; null
      * for any other kind or where the kind is unknown. Nominal: the stamp swells and pinches this
      * by `PlateStage`'s along-strike width noise.
      */
     fun stampedHalfWidthKm(config: WorldGenConfig, measured: Measured): Double? {
         val cells = when (measured.boundaryClass) {
-            BoundaryClass.ANDEAN_MARGIN -> config.tectonics.andeanWidthCells.toDouble()
-            BoundaryClass.COLLISION_PLATEAU -> config.tectonics.collisionWidthCells.toDouble()
+            BoundaryClass.ANDEAN_MARGIN -> config.cellsFor(config.tectonics.andeanWidthKm).toDouble()
+            BoundaryClass.COLLISION_PLATEAU -> config.cellsFor(config.tectonics.collisionWidthKm).toDouble()
             else -> return null
         }
         return measured.front.kilometresOfCellsAcross(cells, config.cellWidthKm, config.cellHeightKm)

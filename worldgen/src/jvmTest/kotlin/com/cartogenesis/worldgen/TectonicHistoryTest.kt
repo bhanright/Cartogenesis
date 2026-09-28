@@ -49,13 +49,13 @@ class TectonicHistoryTest {
         seed: Long,
         epochs: Int,
         flatten: Boolean = true,
-        driftCells: Float? = null
+        driftKm: Double? = null
     ): PlateResult {
         val base = WorldGenConfig(seed = seed, width = 512, height = 512)
         val config = base.copy(
             tectonics = base.tectonics.copy(
                 historyEpochs = epochs,
-                epochDriftCells = driftCells ?: base.tectonics.epochDriftCells
+                epochDriftKm = driftKm ?: base.tectonics.epochDriftKm
             ),
             // Flattening the plate interiors is switching isostasy off since S2, where before it
             // was setting the step between them to zero: either way what is left is one level for
@@ -145,13 +145,13 @@ class TectonicHistoryTest {
      * own message describes: every past epoch's boundaries lie where today's do, so its belts are
      * the modern belts again, lower and wider, and "an old belt that never leaves a modern plate
      * edge is not a scar, it is the same range twice". Three epochs, as the shipped world has, with
-     * `epochDriftCells` at zero and nothing else changed, measured against the same one-epoch world
+     * `epochDriftKm` at zero and nothing else changed, measured against the same one-epoch world
      * the guard above differences against.
      */
     @Test
     fun `the guard finds nothing inland when the plates never moved`() {
         seeds.forEach { seed ->
-            val inland = inlandRelief(seed, DEFAULT_EPOCHS, driftCells = 0f)
+            val inland = inlandRelief(seed, DEFAULT_EPOCHS, driftKm = 0.0)
             println(
                 "HISTORY control seed %d, three epochs that never moved: tallest inland relief %+.6f (bar %.4f)"
                     .format(seed, inland.relief, MIN_BELT_PEAK)
@@ -264,8 +264,8 @@ class TectonicHistoryTest {
      * epoch's belts at a single age rather than two ages averaged; three against one, for the
      * inland guard, so it measures the world the app ships.
      */
-    private fun oldRelief(seed: Long, epochs: Int, driftCells: Float? = null): FloatArray {
-        val history = platesOf(seed, epochs, driftCells = driftCells)
+    private fun oldRelief(seed: Long, epochs: Int, driftKm: Double? = null): FloatArray {
+        val history = platesOf(seed, epochs, driftKm = driftKm)
         val one = platesOf(seed, 1).height.data
         val many = history.height.data
 
@@ -313,8 +313,8 @@ class TectonicHistoryTest {
      * The tallest thing the history built anywhere further than [MIN_INLAND_CELLS] from a present
      * boundary — a belt whose plate edge is gone, which is the whole claim of this chunk.
      */
-    private fun inlandRelief(seed: Long, epochs: Int, driftCells: Float? = null): Inland {
-        val relief = oldRelief(seed, epochs, driftCells)
+    private fun inlandRelief(seed: Long, epochs: Int, driftKm: Double? = null): Inland {
+        val relief = oldRelief(seed, epochs, driftKm)
         val present = platesOf(seed, 1)
         var best = 0f
         var at = 0f
@@ -388,7 +388,7 @@ class TectonicHistoryTest {
          * How far from a present boundary an old belt's crest has to stand to count as a scar
          * rather than as the modern belt beside it.
          *
-         * Stated as twice `boundaryFalloffCells` (26 cell widths at 512), which is where the present
+         * Stated as twice `boundaryFalloffKm` (26 cell widths at 512), which is where the present
          * epoch's own uplift has fallen to nothing on every profile the stage builds — so a crest
          * beyond it cannot be a present belt under another name. On a 12,000 km world at 512 that is
          * about 1,200 km; the Appalachian front stands some 2,000 km from the Mid-Atlantic ridge.

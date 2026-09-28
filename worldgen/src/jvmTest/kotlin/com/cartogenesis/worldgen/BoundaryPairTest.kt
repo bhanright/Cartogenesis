@@ -203,7 +203,7 @@ class BoundaryPairTest {
         println("PAIRS seed $arcSeed ${rift.describe("CONTINENTAL_RIFT")}")
         println("PAIRS seed $arcSeed ${ridge.describe("OCEAN_RIDGE")}")
 
-        val cfg = world.first().first.tectonics
+        val cfg = PlateStage.BeltCellWidths.of(world.first().first)
 
         // A rift is a trough with raised shoulders, so its profile has to go down on the axis and
         // come back up at the shoulder distance. Nothing else this stage builds has that shape.
@@ -273,7 +273,7 @@ class BoundaryPairTest {
      *
      * Three bars, each the claim in the name or in the stage's own KDoc. Something is raised on
      * every seed. Pooled over the three, more of what is raised stands clear of every belt —
-     * further from every boundary than a belt reaches, `boundaryFalloffCells` — than of the ocean
+     * further from every boundary than a belt reaches, `boundaryFalloffKm` — than of the ocean
      * floor at large does: a chain is rooted at its plate's own seed point, which is where
      * "somewhere other than a plate boundary" puts it, so it has to sit further from the boundaries
      * than cones dropped anywhere on the floor would. Pooled, because a trail runs a hundred and ten
@@ -314,7 +314,7 @@ class BoundaryPairTest {
         }
         val control = hotspotReach(
             WorldGenConfig(seed = 7L, width = 512, height = 512).let {
-                it.copy(tectonics = it.tectonics.copy(hotspotRadiusCells = it.tectonics.hotspotRadiusCells * 8f))
+                it.copy(tectonics = it.tectonics.copy(hotspotRadiusKm = it.tectonics.hotspotRadiusKm * 8.0))
             },
             "control, cones eight times as wide"
         )
@@ -361,13 +361,13 @@ class BoundaryPairTest {
         for (i in withChains.height.data.indices) {
             if (withChains.continentalShare.data[i] < 0.5f) {
                 oceanFloor++
-                if (withChains.boundaryDistance.data[i] > base.tectonics.boundaryFalloffCells) oceanFloorClear++
+                if (withChains.boundaryDistance.data[i] > base.cellsFor(base.tectonics.boundaryFalloffKm)) oceanFloorClear++
             }
             val delta = (withChains.height.data[i] - flat.height.data[i] - offset).toFloat()
             if (delta <= 0.01f) continue
             raised++
             if (delta > worst) worst = delta
-            if (withChains.boundaryDistance.data[i] > base.tectonics.boundaryFalloffCells) {
+            if (withChains.boundaryDistance.data[i] > base.cellsFor(base.tectonics.boundaryFalloffKm)) {
                 farFromBoundary++
             }
         }
@@ -438,7 +438,7 @@ class BoundaryPairTest {
         cls: BoundaryClass,
         crust: Crust
     ): Profile {
-        val cfg = worlds.first().first.tectonics
+        val cfg = PlateStage.BeltCellWidths.of(worlds.first().first)
         val bins = 160
         val total = DoubleArray(bins)
         val count = IntArray(bins)
@@ -531,8 +531,8 @@ class BoundaryPairTest {
      * and 9x9 all read back the identical 0.053 relative amplitude at that size — proof the ceiling
      * is the grid, not the formula, since a real improvement to the stored values would have moved
      * a measurement this coarse by more than floating-point noise. Measured on the same seed's
-     * chain at 2048 — the resolution [TectonicsConfig.hotspotRadiusCells] and friends scale to via
-     * [WorldGenConfig.atResolution], and the one the spec calls out as where a real chain is
+     * chain at 2048 — the resolution at which [TectonicsConfig.hotspotRadiusKm] and friends are
+     * most cells, and the one the spec calls out as where a real chain is
      * visible — the half-height contour is a well-resolved ~10 cells and the unmodified stamp
      * already reads a relative eight-fold amplitude of essentially zero (order 1e-15, i.e. exactly
      * round to floating-point precision). There is nothing to fix in the falloff; the fix applied

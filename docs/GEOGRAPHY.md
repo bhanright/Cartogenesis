@@ -1752,7 +1752,7 @@ brought into one frame on the cells no epoch touched, and measures it by the sam
 `BoundaryPairTest` uses — against that epoch's own boundaries, since the boundary that built it has
 since moved. Pooled over the three seeds an old belt stands 2.2 times below a present one and is
 1.5 times broader at half height, and the tallest ground the history builds more than 52 cells from
-any present boundary (twice `boundaryFalloffCells`, about 1,200 km) stands 0.08–0.14 in normalized
+any present boundary (twice `boundaryFalloffKm`, about 1,200 km) stands 0.08–0.14 in normalized
 elevation. With the history switched off that difference field is identically zero and the guard
 finds nothing at all.
 

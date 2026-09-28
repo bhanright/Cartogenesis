@@ -130,6 +130,13 @@ object WorldCodec {
     /**
      * The only version this build reads or writes.
      *
+     * 17 because the tectonics' fifteen lengths became kilometers. Every belt half-width and offset,
+     * the drift between epochs, the ageing blur's radius and the hotspot trails' length, spacing
+     * and radius were counts of cells named `...Cells` and are lengths named `...Km`, from
+     * `tectonics.boundaryFalloffKm` to `tectonics.hotspotRadiusKm`; a format-16 file would open
+     * with this build's defaults for all fifteen, which on any grid but the one it was made at is
+     * a different world.
+     *
      * 16 because the sea's wind became the belts' vector and its upwelling a setting.
      * `climate.meridionalWind`, a slant in rows per cell, became `climate.meridionalWindShare`, the
      * same slope as a share of the zonal speed on the ground, and `ocean.upwelling` arrived; a
@@ -245,7 +252,7 @@ object WorldCodec {
      * every cell-valued name took a `Cells` suffix. 3 was the container below with none of that, 2
      * the JSON text that preceded it; none of them opens.
      */
-    const val FORMAT_VERSION = 16
+    const val FORMAT_VERSION = 17
 
     private val MAGIC = byteArrayOf('C'.code.toByte(), 'G'.code.toByte(), 'W'.code.toByte(), 'D'.code.toByte())
 

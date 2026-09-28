@@ -103,9 +103,8 @@ class RiverSelectionTest : BorrowsSharedWorlds() {
     /**
      * One seed at one grid, the way the application reaches a grid above 512.
      *
-     * Through [WorldGenConfig.atResolution], which carries the tectonic widths measured in cells;
-     * constructing the config at 1024 outright would leave a 512-calibrated belt half as wide and
-     * the two grids would not be the same world.
+     * Through [WorldGenConfig.atResolution], as the application does; since every setting is a
+     * length on the ground, the config built at 1024 outright is the same world.
      */
     private fun world(seed: Long, side: Int = SIDE): WorldMap =
         SharedWorlds.world(

@@ -249,9 +249,9 @@ internal object Knobs {
     fun withSeed(config: WorldGenConfig, seed: Long): WorldGenConfig = config.copy(seed = seed)
 
     /**
-     * `atResolution`, never a raw copy: settings measured in cells have to be rescaled with the
-     * grid or the world changes character instead of gaining detail. A raw copy leaves mountain
-     * belts a fraction of their proper width, which surfaces plate edges as straight cliffs.
+     * The same world at [size] by [size] cells, through `WorldGenConfig.atResolution`: the one
+     * place a size change is made, so there is one to move when sizes are named by rows. Every
+     * setting is a length on the ground, so the world gains detail rather than changing character.
      */
     fun atResolution(config: WorldGenConfig, size: Int): WorldGenConfig =
         config.atResolution(size, size)

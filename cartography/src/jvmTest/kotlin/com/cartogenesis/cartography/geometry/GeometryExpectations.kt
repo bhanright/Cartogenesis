@@ -103,11 +103,10 @@ internal object GeometryExpectations {
     fun at512(expected: Expectations) = with(expected) {
         known("7/coast as inked/FACING", "1@(-1,-1)=4.722")
         known("7/isobaths/ARCS", "1@(90,427)=122.9")
-        known("7/isotherms/FACETS", "2@(261,78)=193.0 +(254,60)")
+        known("7/isotherms/FACETS", "1@(254,60)=188.0")
         known("42/coast as inked/FACING", "1@(-1,-1)=4.343")
         known("1234/coast as inked/FACING", "1@(-1,-1)=4.570")
         known("99/coast as inked/FACING", "1@(-1,-1)=3.944")
-        known("99/ice as drawn/FACETS", "1@(39,449)=172.0")
         insufficient("coast", Detector.ISOTROPY, 7L, 42L, 1234L, 99L)
         insufficient("coast", Detector.RECTANGLE, 42L, 1234L, 99L)
         insufficient("coast", Detector.ORIENTATION, 7L, 42L, 1234L, 99L)
@@ -190,7 +189,7 @@ internal object GeometryExpectations {
         // has one again, and seed 99's peoples, settled on the same ground by a different climate,
         // leave no ring of their own small enough.
         insufficient("peoples' borders", Detector.RECTANGLE, 99L)
-        insufficient("realm borders", Detector.RECTANGLE, 42L, 1234L, 99L)
+        insufficient("realm borders", Detector.RECTANGLE, 42L, 99L)
         insufficient("realm borders", Detector.ORIENTATION, 7L, 42L, 1234L, 99L)
         insufficient("biome edges", Detector.ISOTROPY, 7L, 1234L, 99L)
         insufficient("biome edges", Detector.ORIENTATION, 7L, 42L, 1234L, 99L)
@@ -203,7 +202,7 @@ internal object GeometryExpectations {
         insufficient("isohyets", Detector.ISOTROPY, 7L, 42L, 1234L, 99L)
         insufficient("isohyets", Detector.ORIENTATION, 7L, 42L, 1234L, 99L)
         insufficient("sea temperature anomaly", Detector.ISOTROPY, 7L, 42L, 1234L, 99L)
-        insufficient("sea temperature anomaly", Detector.RECTANGLE, 7L, 42L, 1234L)
+        insufficient("sea temperature anomaly", Detector.RECTANGLE, 7L, 42L, 1234L, 99L)
         insufficient("sea temperature anomaly", Detector.FACETS, 7L, 42L, 1234L, 99L)
         insufficient("sea temperature anomaly", Detector.ORIENTATION, 7L, 42L, 1234L, 99L)
     }

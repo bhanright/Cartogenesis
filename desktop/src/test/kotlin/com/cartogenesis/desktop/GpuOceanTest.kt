@@ -182,7 +182,7 @@ class GpuOceanTest {
                 cell / across >= down / 2 -> OPEN_OCEAN_RISE_MPS
                 else -> 0.0
             }
-            (rising / OceanStage.MIXED_LAYER_DEPTH_M).toFloat()
+            (rising / MIXED_LAYER_DEPTH_M).toFloat()
         } else null
         return OceanHeat.stencil(
             across, down, dx, dy, isWater, stream, target, OceanStage.RELAXATION_SECONDS, withTarget = true,
@@ -314,6 +314,9 @@ class GpuOceanTest {
 
         /** An open ocean's Ekman suction, meters a second: about 0.1 m a day. */
         const val OPEN_OCEAN_RISE_MPS = 1.2e-6
+
+        /** The mixed layer the rise renews, meters: the energy balance's fifty-meter slab. */
+        const val MIXED_LAYER_DEPTH_M = 50.0
 
         /** The one probe of this machine that every test in the class shares. */
         val probed: GpuOcean.Result by lazy { GpuOcean.createOrNull() }

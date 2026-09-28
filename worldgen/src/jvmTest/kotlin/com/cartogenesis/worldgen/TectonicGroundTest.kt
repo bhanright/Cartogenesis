@@ -5,6 +5,7 @@ import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.pipeline.Plate
 import com.cartogenesis.worldgen.pipeline.PlateStage
 import com.cartogenesis.worldgen.pipeline.PlateType
+import com.cartogenesis.worldgen.pipeline.TerrainStage
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.atan
@@ -25,6 +26,10 @@ import kotlin.test.assertTrue
  * bearings on the ground — a boundary, a crust edge, two seeds, a drift, a rift, an old belt — hands
  * it to the operator the stage itself runs, and reads the answer back in kilometres. Audit III's
  * A-D2, D7 and R13-6 are the findings; `docs/DESIGN_LEDGER.md` has the row.
+ *
+ * Two cases go the other way, from one grid to another rather than from one bearing to another:
+ * a world of square cells made by [WorldGenConfig.forRows] raises its belts as wide on the ground as
+ * the 512 by 512 world, and a control built directly at 1,024 by 512 does not (Q1's row).
  */
 class TectonicGroundTest {
 
@@ -206,6 +211,78 @@ class TectonicGroundTest {
         )
     }
 
+    /**
+     * How much of a world the present epoch's belts cover, and how far from their boundaries they
+     * reach on the ground.
+     *
+     * [shareOfMap] is the share of the map's cells whose rock is still rising, which on an
+     * equal-area-per-cell grid is the share of the map's area. [reachKm] is the 90th percentile of
+     * those cells' distance from the nearest boundary in kilometers, which is where the widest
+     * belts end: the Andean and Tibetan half-widths and the arcs' offsets.
+     */
+    private class Belts(val shareOfMap: Double, val reachKm: Double)
+
+    private fun belts(world: WorldGenConfig): Belts {
+        val plates = PlateStage.generate(world, TerrainStage.generate(world))
+        val rising = plates.upliftRateMmPerYear.data.indices.filter { plates.upliftRateMmPerYear.data[it] > 0f }
+        val distancesKm = rising.map { plates.boundaryDistance.data[it] * world.cellWidthKm }.sorted()
+        return Belts(
+            shareOfMap = rising.size.toDouble() / plates.upliftRateMmPerYear.data.size,
+            reachKm = distancesKm[((distancesKm.size - 1) * BELT_REACH_PERCENTILE).toInt()]
+        )
+    }
+
+    /** Where [square] parts from [reference] by more than a change of grid parts them, one line a miss. */
+    private fun beltMisses(seed: Long, reference: WorldGenConfig, square: WorldGenConfig): List<String> {
+        val was = belts(reference)
+        val now = belts(square)
+        println(
+            "TECTONIC belts, seed %d: %.4f of the map rising out to %.0f km at %dx%d, %.4f out to %.0f km at %dx%d".format(
+                seed, was.shareOfMap, was.reachKm, reference.width, reference.height,
+                now.shareOfMap, now.reachKm, square.width, square.height
+            )
+        )
+        val misses = ArrayList<String>()
+        if (abs(now.shareOfMap / was.shareOfMap - 1.0) > BELT_SHARE_SPREAD) {
+            misses += "seed $seed: the belts cover %.4f of the map against %.4f".format(now.shareOfMap, was.shareOfMap)
+        }
+        if (abs(now.reachKm / was.reachKm - 1.0) > BELT_REACH_SPREAD) {
+            misses += "seed $seed: the belts reach %.0f km from their boundaries against %.0f".format(now.reachKm, was.reachKm)
+        }
+        return misses
+    }
+
+    /**
+     * A world of square cells raises its belts as wide on the ground as the 512 by 512 world does.
+     *
+     * The widths are still counts of cell widths, carried to another grid by
+     * [WorldGenConfig.atResolution], which [WorldGenConfig.forRows] goes through; this is the
+     * guard that the square grid's 1,024 columns are given twice the cells a belt had across 512.
+     */
+    @Test
+    fun `a world of square cells raises its belts as wide on the ground as the 512 by 512 world`() {
+        val misses = BELT_SEEDS.flatMap { seed ->
+            beltMisses(seed, WorldGenConfig(seed = seed, width = 512, height = 512), WorldGenConfig.forRows(seed, 512))
+        }
+        assertTrue(misses.isEmpty(), "the square grid's belts are not the 512 by 512 world's: $misses")
+    }
+
+    /**
+     * The control: a 1,024 by 512 world built directly rather than through
+     * [WorldGenConfig.atResolution] keeps the 512 grid's counts of cells on cells half as wide, so
+     * every belt is half as wide on the ground. That is what every world built directly at any grid
+     * but 512 by 512 does today, and what stating the widths in kilometers will end.
+     */
+    @Test
+    fun `the comparison sees widths counted on a grid they were not set on`() {
+        val misses = beltMisses(
+            CONTROL_SEED,
+            WorldGenConfig(seed = CONTROL_SEED, width = 512, height = 512),
+            WorldGenConfig(seed = CONTROL_SEED, width = 1024, height = 512)
+        )
+        assertTrue(misses.size == 2, "belts half as wide on the ground were not seen: $misses")
+    }
+
     /** The length on the ground of a step of [columns] and [rows], in cell widths. */
     private fun groundCellWidths(columns: Int, rows: Int): Double {
         val down = rows * rowScale
@@ -332,5 +409,29 @@ class TectonicGroundTest {
 
         /** How far the two spreads of an old belt's rounding may differ: a twentieth. */
         const val SPREAD_TOLERANCE = 0.05
+
+        /** The four standard seeds. */
+        val BELT_SEEDS = listOf(7L, 42L, 1234L, 99L)
+
+        /** The seed the belts' control is taken on. */
+        const val CONTROL_SEED = 42L
+
+        /** The percentile of the rising cells' distance from a boundary read as the belts' reach. */
+        const val BELT_REACH_PERCENTILE = 0.9
+
+        /**
+         * How far the share of the map the belts cover may move between two grids: the largest
+         * relative difference the four standard seeds show between 512 by 512 and 1,024 by 1,024,
+         * 1.72% on seed 99 (0.2264 against 0.2303), rounded up at the second figure. A change of
+         * grid moves it that much and a square grid may move it no more. See
+         * docs/DESIGN_LEDGER.md, Q1.
+         */
+        const val BELT_SHARE_SPREAD = 0.018
+
+        /**
+         * The same for the belts' reach: 2.73% on seed 99 (388 against 399 km), rounded up at the
+         * second figure.
+         */
+        const val BELT_REACH_SPREAD = 0.028
     }
 }

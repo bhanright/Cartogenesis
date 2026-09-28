@@ -1174,6 +1174,22 @@
   window, the discs and the square windows. They are the first suspects, and Q2 re-measures them.
   2026-09-28, Q1.
 
+  **Q2 re-measured it** with the coast's reach in kilometers (234 km on square cells too, where it
+  was 117): seed 99 at 75 to 60 degrees moved to +0.021, the other two figures held. The
+  glaciation's cell-space operators were not isolated. 2026-09-28, Q2.
+- **Square cells tip four clauses the 512 by 512 grid passed, each running as a known failure, none
+  of them isolated (Q2).** The ocean is still solved on its own grid of cells twice as wide as tall,
+  which is the switch's next chunk, and is the first suspect for the first two.
+  - `ColdWaterPlacementTest`: seed 42's coldest northern eastern-boundary water, -2.22 C, lies at
+    7.9 degrees, in the equatorial tongue, where on the 512 by 512 grid it lay at 26.5.
+  - `PressureWindTest`: the cold half blows onto the subtropical continents' equatorward and eastern
+    coasts at +0.31 m/s pooled, where it blew off them at -0.17; seeds 42, 1234 and 99 onshore.
+  - `SeaLevelHistoryTest`: the lowstand's pooled gain in estuary mouths is 1.47 against the 1.5 read
+    off the 512 by 512 grid's worlds (1.60 there); every seed still gains.
+  - `IceSheetTest`: no audited sheet fills a third of its dome's 500 km disc, so the flow clause reads
+    nothing; the sheets near their domes cover about a third less ground than on the 512 by 512 grid.
+  2026-09-28, Q2.
+
 
 - **M1's coastline box count reads structure far below its own smallest box.** It counts the boxes
   of four, eight and sixteen cells holding both land and water, and a box is mixed by a *single*

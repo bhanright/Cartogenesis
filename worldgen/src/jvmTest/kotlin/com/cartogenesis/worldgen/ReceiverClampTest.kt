@@ -82,7 +82,8 @@ class ReceiverClampTest {
     /**
      * The author's own world and the two the plan names, at [SharedWorlds.COARSE_ROWS]: whether a
      * cell is left below its receiver is an invariant that holds or fails cell by cell on any grid,
-     * and the control that shows it biting is run on the same worlds.
+     * and the control that shows it biting is run on the same worlds: without the rule the
+     * incision leaves 5, 48 and 64 channel cells below their receivers there, measured at Q2b.
      */
     private val seeds = listOf(718106L, 42L, 7L)
 

@@ -32,6 +32,10 @@ import kotlin.test.assertTrue
  * to.
  *
  * Both are shown failing with `outletIncision = false`, which reproduces the pre-E1 world.
+ *
+ * At [SharedWorlds.DETAIL_ROWS]: a lake's share of the land grows with a finer grid, and the fill's
+ * depth over the land with it, so the Caspian's bar and the notch's are read on the grid they were
+ * recorded on.
  */
 class OutletIncisionTest : BorrowsSharedWorlds() {
 
@@ -150,7 +154,7 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
         val depthShares = ArrayList<Double>()
         val perSeedDepth = ArrayList<String>()
         seeds.forEach { seed ->
-            val config = WorldGenConfig.forRows(seed, 512)
+            val config = WorldGenConfig.forRows(seed, SharedWorlds.DETAIL_ROWS)
                 .let { it.copy(tectonics = it.tectonics.copy(historyEpochs = 1)) }
             val on = roundsOf(config)
             val off = roundsOf(config.copy(erosion = config.erosion.copy(outletIncision = false)))
@@ -401,7 +405,7 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
         val overSizedDrowned = ArrayList<String>()
         val drownedShares = ArrayList<Double>()
         seeds.forEach { seed ->
-            val config = WorldGenConfig.forRows(seed, 512)
+            val config = WorldGenConfig.forRows(seed, SharedWorlds.DETAIL_ROWS)
             val before = SharedWorlds.world(
                 config.copy(erosion = config.erosion.copy(outletIncision = false))
             )
@@ -564,7 +568,7 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
         val after = ArrayList<Double>()
         val perSeed = ArrayList<String>()
         SILL_SEEDS.forEach { seed ->
-            val base = WorldGenConfig.forRows(seed, 512)
+            val base = WorldGenConfig.forRows(seed, SharedWorlds.DETAIL_ROWS)
             val without = SharedWorlds.world(
                 base.copy(erosion = base.erosion.copy(outletFallToTheWater = false))
             )

@@ -19,6 +19,9 @@ import kotlin.test.assertTrue
  * has thought of yet, counting a row as a column, shows first. Before the ruler was mended every
  * standard world's coastline ran about twice as far east-west as north-south on the ground
  * (`docs/GEOGRAPHY.md`, the land's outlines), which is what land isotropic in cells gives.
+ *
+ * At [SharedWorlds.DETAIL_ROWS]: a coast's length by bearing and a slope's steepness by aspect are
+ * read off the outline and the ground cell by cell, and move with the cell.
  */
 class GroundIsotropyTest : BorrowsSharedWorlds() {
 
@@ -50,7 +53,7 @@ class GroundIsotropyTest : BorrowsSharedWorlds() {
     @Test
     fun `the coastline runs as far north-south as east-west on the ground`() {
         val ratios = seeds.map { seed ->
-            val world = SharedWorlds.world(WorldGenConfig.forRows(seed, 512))
+            val world = SharedWorlds.world(WorldGenConfig.forRows(seed, SharedWorlds.DETAIL_ROWS))
             val projection = coastProjection(world)
             println(
                 "ISOTROPY seed %d: %.0f km of coast, projecting %.0f km east-west and %.0f km north-south, ratio %.3f"
@@ -90,7 +93,7 @@ class GroundIsotropyTest : BorrowsSharedWorlds() {
     fun `slopes stand as steep facing one way as another on the ground`() {
         val steeper = ArrayList<String>()
         seeds.forEach { seed ->
-            val world = SharedWorlds.world(WorldGenConfig.forRows(seed, 512))
+            val world = SharedWorlds.world(WorldGenConfig.forRows(seed, SharedWorlds.DETAIL_ROWS))
             val falls = steepFalls(world)
             println(
                 "ISOTROPY seed %d: 95th percentile of land fall over a cell width of ground, %.1f m/km along a row and %.1f down a column"

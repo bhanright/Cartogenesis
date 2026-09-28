@@ -29,9 +29,13 @@ import org.junit.Test
  */
 class SnowBalanceTest : BorrowsSharedWorlds() {
 
-    private val seeds = listOf(7L, 42L, 1234L, 99L)
+    private val seeds = SharedWorlds.STANDARD_SEEDS
 
-    private fun config(seed: Long, size: Int = 512) =
+    /**
+     * At [SharedWorlds.COARSE_ROWS]: the snow's balance, the ice's share of the land and where it
+     * lies against the snowfall are budgets and shares on the ground, not the grid's detail.
+     */
+    private fun config(seed: Long, size: Int = SharedWorlds.COARSE_ROWS) =
         WorldGenConfig.forRows(seed, size)
 
     private fun WorldGenConfig.withoutBalance() =

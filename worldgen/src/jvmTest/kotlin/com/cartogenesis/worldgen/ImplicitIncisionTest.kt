@@ -282,8 +282,9 @@ class ImplicitIncisionTest {
      * No cell the pass moves ends below the level it grades to or above where it stood, no river
      * mouth ends below the shoreline, a cell at or below its base is left alone, every cell with
      * `F` over one loses more than half its drop, and a cell its receiver's cut left above it is
-     * cut. Over the twelve rounds of seed 42 at 512, through the watch, each report checked against
-     * the field the pass left.
+     * cut. Over the twelve rounds of seed 42 at [SharedWorlds.COARSE_ROWS], through the watch, each
+     * report checked against the field the pass left: the bounds hold or fail cell by cell on any
+     * grid, and every kind of cell the clauses ask for is still there on this one.
      *
      * The bounds alone pass on the capped explicit update and on a pass that cuts nothing, so the
      * case also asks for the part only the law gives: more than half the drop wherever `F` is over
@@ -292,12 +293,12 @@ class ImplicitIncisionTest {
      */
     @Test
     fun `the pass keeps its bounds and cuts past half the drop where F is over one`() {
-        val config = WorldGenConfig.forRows(42L, 512)
+        val config = WorldGenConfig.forRows(42L, SharedWorlds.COARSE_ROWS)
         val plates = PlateStage.generate(config, TerrainStage.generate(config))
         val bounds = Bounds(config.width * config.height, config.scale.reliefSpanMetres, HydraulicErosion.Rates(config).pondDepth)
         erodeBlockingWatchingIncision(config, plates.height, plates.upliftRateMmPerYear, bounds)
         println(
-            "IMPLICIT bounds seed 42@512 over the rounds: ${bounds.cuts} cuts, ${bounds.largeCourant} at F over one, " +
+            "IMPLICIT bounds seed 42@${config.height} rows over the rounds: ${bounds.cuts} cuts, ${bounds.largeCourant} at F over one, " +
                 "${bounds.mouths} mouths, ${bounds.leftAlone} left alone at or below their base, " +
                 "${bounds.receiversLowered} whose receiver the pass lowered and ${bounds.madeEligible} of them cut " +
                 "only because it was; ${bounds.tooCloseToJudge} at F over one too close to half their drop to judge; " +

@@ -32,6 +32,9 @@ import org.junit.Test
  *
  * The four worlds are `GlaciationTest`'s own, at 512, so the same ice is being measured here as
  * there rather than a set of worlds picked to suit these clauses.
+ *
+ * At [SharedWorlds.DETAIL_ROWS]: the dome the flow clause reads was scanned for on this grid, and a
+ * sheet's edge and its outlets' troughs are shapes a few cells across.
  */
 class IceSheetTest : BorrowsSharedWorlds() {
 
@@ -679,7 +682,7 @@ class IceSheetTest : BorrowsSharedWorlds() {
     )
 
     private fun measure(seed: Long): Measured =
-        measured.getOrPut(seed) { carve(WorldGenConfig.forRows(seed, 512)) }
+        measured.getOrPut(seed) { carve(WorldGenConfig.forRows(seed, SharedWorlds.DETAIL_ROWS)) }
 
     /** The reported world, at the grid it was reported at. See [REPORTED_SEED]. */
     private fun reported(): Measured =

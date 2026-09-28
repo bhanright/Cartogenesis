@@ -79,7 +79,11 @@ import kotlin.test.assertTrue
  */
 class ReceiverClampTest {
 
-    /** The author's own world and the two the plan names, at the grid the guards run at. */
+    /**
+     * The author's own world and the two the plan names, at [SharedWorlds.COARSE_ROWS]: whether a
+     * cell is left below its receiver is an invariant that holds or fails cell by cell on any grid,
+     * and the control that shows it biting is run on the same worlds.
+     */
     private val seeds = listOf(718106L, 42L, 7L)
 
     @Test
@@ -90,7 +94,7 @@ class ReceiverClampTest {
         var pondedWithout = 0
         var holesWithout = 0
         seeds.forEach { seed ->
-            val config = WorldGenConfig.forRows(seed, 512)
+            val config = WorldGenConfig.forRows(seed, SharedWorlds.COARSE_ROWS)
             val plates = PlateStage.generate(config, TerrainStage.generate(config))
 
             listOf(false to loose, true to tight).forEach { (clamp, into) ->

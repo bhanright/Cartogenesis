@@ -74,7 +74,9 @@ class DeltaMouthTest : BorrowsSharedWorlds() {
         var slabFlat = 0.0
         var lobeFlat = 0.0
         seeds.forEach { seed ->
-            val config = WorldGenConfig.forRows(seed, 512)
+            // At [SharedWorlds.DETAIL_ROWS]: a delta lobe is a few cells here, and a pocket of
+            // sea inside one or a slab of it at one level a few more.
+            val config = WorldGenConfig.forRows(seed, SharedWorlds.DETAIL_ROWS)
             val before = SharedWorlds.world(
                 config.copy(erosion = config.erosion.copy(deltaLobe = false))
             )

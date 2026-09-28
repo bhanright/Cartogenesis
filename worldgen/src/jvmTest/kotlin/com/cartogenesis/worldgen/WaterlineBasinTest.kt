@@ -47,6 +47,9 @@ import kotlin.test.assertTrue
  * act on — and it is also the population S2's rift subsidence will move, which is the chunk that
  * can actually reach the scene E8 was aimed at. Nothing here is asserted except that the census
  * found something to count.
+ *
+ * At [SharedWorlds.DETAIL_ROWS]: the basins the census counts are a few cells each, and their
+ * number moves with the cell.
  */
 class WaterlineBasinTest : BorrowsSharedWorlds() {
 
@@ -70,7 +73,7 @@ class WaterlineBasinTest : BorrowsSharedWorlds() {
         var found = 0
         var classified = 0
         seeds.forEach { seed ->
-            val config = WorldGenConfig.forRows(seed, 512)
+            val config = WorldGenConfig.forRows(seed, SharedWorlds.DETAIL_ROWS)
             val world = SharedWorlds.world(config)
             // The sea stage's own result as well as the finished field: glaciation runs inside this
             // step and gouging basins is the one thing it is for, so a cirque on low coastal ground

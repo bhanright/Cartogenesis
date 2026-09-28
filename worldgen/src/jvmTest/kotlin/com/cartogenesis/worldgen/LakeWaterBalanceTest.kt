@@ -99,7 +99,11 @@ class LakeWaterBalanceTest : BorrowsSharedWorlds() {
     private fun world(
         seed: Long,
         waterBalance: Boolean,
-        size: Int = 512,
+        /**
+         * [SharedWorlds.DETAIL_ROWS]: the two basins were found by scanning seeds on this grid,
+         * and a basin's outline and how much of it a catchment keeps wet move with the cell.
+         */
+        size: Int = SharedWorlds.DETAIL_ROWS,
         /**
          * One epoch — the pre-H1 terrain, bit for bit — for the two basin cases, and the shipped
          * default for the river case below.

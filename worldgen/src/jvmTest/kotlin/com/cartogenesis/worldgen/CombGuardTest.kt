@@ -214,8 +214,12 @@ class CombGuardTest : BorrowsSharedWorlds() {
 
         const val RECORDED = "seed 7 0.16 down a column and 0.15 along a row; seed 42 0.20 down a column and 0.18 along a row"
 
-        /** The grid the guard is taken on: square cells, 1,024 by 512, 11.7 km a side. */
-        const val STANDARD_ROWS = 512
+        /**
+         * The grid the guard is taken on, [SharedWorlds.DETAIL_ROWS]: square cells, 1,024 by 512,
+         * 11.7 km a side. A comb is a rank of gullies a cell apart, and its floor and its axis bar
+         * were taken from the control on this grid.
+         */
+        const val STANDARD_ROWS = SharedWorlds.DETAIL_ROWS
 
         /**
          * A straight reach's least length on the ground: 60 km, six cells on either axis at 512

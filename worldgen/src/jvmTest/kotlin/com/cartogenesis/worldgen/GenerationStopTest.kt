@@ -47,7 +47,7 @@ class GenerationStopTest {
      * than strict. At 512 a round is long enough to be a real bound and short enough that the test
      * runs in a minute.
      */
-    private val base = WorldGenConfig.forRows(99L, 512)
+    private val base = WorldGenConfig.forRows(99L, SharedWorlds.DETAIL_ROWS)
 
     @Test
     fun `a stop during erosion lands within one hydraulic round and costs the next world nothing`() {

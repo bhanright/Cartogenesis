@@ -6,6 +6,7 @@ import com.cartogenesis.worldgen.pipeline.Biome
 import com.cartogenesis.worldgen.pipeline.ClimateStage
 import java.util.Locale
 import kotlin.math.abs
+import kotlin.math.roundToInt
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -18,6 +19,9 @@ import kotlin.test.assertTrue
  * regardless of how arid its march actually was. `classify` now reads
  * [ClimateStage.MM_SCALE]-calibrated millimetres, so a genuinely arider seed produces genuinely
  * more desert and a genuinely wetter one produces genuinely less.
+ *
+ * At [SharedWorlds.COARSE_ROWS]: a rainfall in millimeters and a desert's share of the land are
+ * figures of the ground rather than of the grid's detail (docs/DESIGN_LEDGER.md, Q2b).
  */
 class AbsoluteRainfallTest : BorrowsSharedWorlds() {
 
@@ -29,9 +33,13 @@ class AbsoluteRainfallTest : BorrowsSharedWorlds() {
         const val MONSOON_RATIO = 3f
         const val MONSOON_REQUIRED_SHARE = 0.02
 
-        /** How far out to sea a coast may look, and how far the land must run behind it. */
-        const val SEA_REACH = 30
-        const val LAND_BEHIND = 8
+        /**
+         * How far out to sea a coast may look, and how far the land must run behind it, in
+         * kilometers: the 30 rows and 8 rows the mask was written with on the 512 by 512 grid,
+         * whose rows were 11.7 km tall, so the mask asks for the same coast at any grid.
+         */
+        const val SEA_REACH_KM = 351.5625
+        const val LAND_BEHIND_KM = 93.75
 
         /** The windward coast `ClimateStage.MM_SCALE` was calibrated to, Earth's wettest coasts. */
         const val CALIBRATED_COAST_MM = 3_000f
@@ -55,7 +63,7 @@ class AbsoluteRainfallTest : BorrowsSharedWorlds() {
         val misses = ArrayList<String>()
         seeds.forEach { seed ->
             val world = SharedWorlds.world(
-                WorldGenConfig.forRows(seed, 512)
+                WorldGenConfig.forRows(seed, SharedWorlds.COARSE_ROWS)
             )
             val w = world.width
             val h = world.height
@@ -106,8 +114,11 @@ class AbsoluteRainfallTest : BorrowsSharedWorlds() {
         // 3576 and 4042 mm; and at 4b-1, whose upwelling and belts moved it again: from 3560 and 4035,
         // and then from 3548 and 4042 by the second reading's five corrections to the rise, which moved
         // the sea's temperature near the coasts a little.
-        // Re-recorded on square cells at Q2 (docs/DESIGN_LEDGER.md, Q2).
-        KnownFailures.expect("D I-9: the rainfall calibration's figures predate W2 and W3", "seed 42's windward coast at 3644 mm, seed 99's windward coast at 4029 mm") {
+        // Re-recorded on square cells at Q2, and at 256 rows at Q2b, where the wettest half percent
+        // of the land is its windward slopes read on cells of four times the area, so the coast
+        // stands 200 to 240 mm lower: seed 42 from 3644 to 3407 mm, inside the bar, and seed 99
+        // from 4029 to 3826 (docs/DESIGN_LEDGER.md, Q2 and Q2b).
+        KnownFailures.expect("D I-9: the rainfall calibration's figures predate W2 and W3", "seed 99's windward coast at 3826 mm") {
             if (misses.isNotEmpty()) {
                 throw RecordedViolation(
                     "the calibration misses on ${misses.size} figures: ${misses.joinToString()}, against a windward " +
@@ -156,7 +167,7 @@ class AbsoluteRainfallTest : BorrowsSharedWorlds() {
     @Test
     fun `an arid config and a lush one classify identically under the old normalization, not under this one`() {
         val seed = 42L
-        val base = WorldGenConfig.forRows(seed, 512)
+        val base = WorldGenConfig.forRows(seed, SharedWorlds.COARSE_ROWS)
         val arid = base.copy(
             climate = base.climate.copy(depletionLengthKm = base.climate.depletionLengthKm / 0.3f)
         )
@@ -222,7 +233,7 @@ class AbsoluteRainfallTest : BorrowsSharedWorlds() {
     @Test
     fun `the monsoon claim, re-measured without the clamp`() {
         val seed = 26L
-        val base = WorldGenConfig.forRows(seed, 512)
+        val base = WorldGenConfig.forRows(seed, SharedWorlds.COARSE_ROWS)
         val world = SharedWorlds.world(base)
         val generated = ClimateStage.generateWithSeasonalMm(base, world.sea, world.ocean)
         val w = world.width
@@ -262,18 +273,20 @@ class AbsoluteRainfallTest : BorrowsSharedWorlds() {
         }
     }
 
-    /** Open water within [SEA_REACH] cells that way, and land for [LAND_BEHIND] cells the other. */
+    /** Open water within [SEA_REACH_KM] that way, and land for [LAND_BEHIND_KM] the other. */
     private fun facesSea(world: WorldMap, x: Int, y: Int, seaward: Int): Boolean {
         val w = world.width
         val h = world.height
         var found = false
-        for (step in 1..SEA_REACH) {
+        val seaReachRows = world.config.rowsFor(SEA_REACH_KM).roundToInt()
+        val landBehindRows = world.config.rowsFor(LAND_BEHIND_KM).roundToInt()
+        for (step in 1..seaReachRows) {
             val ny = y + seaward * step
             if (ny !in 0 until h) break
             if (!world.sea.isLand[ny * w + x]) { found = true; break }
         }
         if (!found) return false
-        for (step in 1..LAND_BEHIND) {
+        for (step in 1..landBehindRows) {
             val ny = y - seaward * step
             if (ny !in 0 until h || !world.sea.isLand[ny * w + x]) return false
         }
@@ -327,7 +340,7 @@ class AbsoluteRainfallTest : BorrowsSharedWorlds() {
     }
 
     private fun desertShare(seed: Long): Float =
-        desertShare(WorldGenConfig.forRows(seed, 512))
+        desertShare(WorldGenConfig.forRows(seed, SharedWorlds.COARSE_ROWS))
 
     private fun desertShare(config: WorldGenConfig): Float {
         val world = SharedWorlds.world(config)
@@ -342,7 +355,7 @@ class AbsoluteRainfallTest : BorrowsSharedWorlds() {
     }
 
     private fun oldNormalizedDesertShare(seed: Long): Float =
-        oldNormalizedDesertShare(WorldGenConfig.forRows(seed, 512))
+        oldNormalizedDesertShare(WorldGenConfig.forRows(seed, SharedWorlds.COARSE_ROWS))
 
     private fun oldNormalizedDesertShare(config: WorldGenConfig): Float {
         val world = SharedWorlds.world(config)

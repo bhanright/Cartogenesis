@@ -35,10 +35,12 @@ class OceanLeavesTheGroundTest : BorrowsSharedWorlds() {
      * by 512 (docs/DESIGN_LEDGER.md, 4a), and were re-taken at Q2, which moved the ground on purpose
      * and builds the world on square cells; an ocean change that leaks into the ground moves them.
      * A chunk meant to move the ground re-takes them here, as the render records are re-taken.
+     * At [SharedWorlds.DETAIL_ROWS], whose standard worlds the detail guards generate anyway, so
+     * the pin costs a digest and no generation.
      */
     @Test
     fun `seed 42's ground is the one the last chunk that moved it drew`() {
-        val world = SharedWorlds.world(WorldGenConfig.forRows(42L, 512))
+        val world = SharedWorlds.world(WorldGenConfig.forRows(42L, SharedWorlds.DETAIL_ROWS))
         val ground = ReachableState.digestsByBranch(world).filterKeys { branch ->
             GROUND_BRANCHES.any { branch.startsWith(it) }
         }

@@ -67,7 +67,7 @@ class ContinentalShelfTest : BorrowsSharedWorlds() {
     @Test
     fun `shallow water hugs the coast and the open ocean is deep`() {
         val measured = seeds.map { seed ->
-            val config = WorldGenConfig.forRows(seed, 512)
+            val config = WorldGenConfig.forRows(seed, SharedWorlds.DETAIL_ROWS)
             val shelfWidthCells = config.cellsFor(config.sea.shelfWidthKm)
             val world = SharedWorlds.world(config)
             val (near, far) = shallowShares(world, shelfWidthCells)
@@ -122,7 +122,7 @@ class ContinentalShelfTest : BorrowsSharedWorlds() {
     @Test
     fun `the shelf is as wide off a coast facing north as off one facing east`() {
         seeds.forEach { seed ->
-            val config = WorldGenConfig.forRows(seed, 512)
+            val config = WorldGenConfig.forRows(seed, SharedWorlds.DETAIL_ROWS)
             val world = SharedWorlds.world(config)
             val breakDepth = -config.scale.depthShareOfMetres(config.sea.shelfDepthMetres) - BREAK_ROUNDING
             val shelfWidthCells = config.cellsFor(config.sea.shelfWidthKm)
@@ -192,7 +192,7 @@ class ContinentalShelfTest : BorrowsSharedWorlds() {
     @Test
     fun `the near-coast share fails without the shelf`() {
         val defaultWidth = WorldGenConfig().let { it.cellsFor(it.sea.shelfWidthKm) }
-        val config = WorldGenConfig.forRows(42L, 512).let {
+        val config = WorldGenConfig.forRows(42L, SharedWorlds.DETAIL_ROWS).let {
             it.copy(sea = it.sea.copy(shelfWidthKm = 0.0))
         }
         val world = SharedWorlds.world(config)
@@ -224,8 +224,11 @@ class ContinentalShelfTest : BorrowsSharedWorlds() {
             // `FlowRouting.flowDirections`), and remapping the sea floor can therefore send a
             // trough down the next valley along. Measured with it on, that reached 130 of seed 7's
             // hundred thousand land cells. Real, and nothing to do with the invariant this case is
-            // about, which is that `SeaLevelStage`'s own remap touches only water.
-            val base = WorldGenConfig.forRows(seed, 512).let {
+            // about, which is that `SeaLevelStage`'s own remap touches only water. At
+            // [SharedWorlds.COARSE_ROWS], since an equality between two land masks holds or fails
+            // cell by cell on any grid; the shelf's own width, 75 km, is 3.2 of those cells, which
+            // is why the clauses above that read its band stay at [SharedWorlds.DETAIL_ROWS].
+            val base = WorldGenConfig.forRows(seed, SharedWorlds.COARSE_ROWS).let {
                 it.copy(glaciation = it.glaciation.copy(enabled = false))
             }
             val withShelf = SharedWorlds.world(base)

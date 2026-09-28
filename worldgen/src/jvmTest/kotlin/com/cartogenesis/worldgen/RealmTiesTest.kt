@@ -22,6 +22,9 @@ import kotlin.test.assertTrue
  * people.
  *
  * See docs/DESIGN_LEDGER.md, chunk 6.
+ *
+ * At [SharedWorlds.DETAIL_ROWS]: the ties it needs are equal counts of cells, which a coarser grid
+ * has fewer of.
  */
 class RealmTiesTest {
 
@@ -64,7 +67,7 @@ internal object DescribeSeed42 {
     fun main(arguments: Array<String>) {
         repeat(arguments[0].toInt()) { Any().hashCode() }
         Biome.entries.forEach { it.hashCode() }
-        val world = WorldGenerationEngine.generateBlocking(WorldGenConfig.forRows(42L, 512))
+        val world = WorldGenerationEngine.generateBlocking(WorldGenConfig.forRows(42L, SharedWorlds.DETAIL_ROWS))
         println("DIGEST " + sha256(world.nations.nations.toString()))
         println("DIGEST " + sha256(world.cultures.cultures.toString()))
     }

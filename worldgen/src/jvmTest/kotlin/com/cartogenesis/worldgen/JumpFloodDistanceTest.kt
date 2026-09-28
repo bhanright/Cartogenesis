@@ -38,6 +38,9 @@ import kotlin.test.assertTrue
  *     A round contour is flat across the bearings and an octagonal one is a cosine with eight
  *     lobes, so the eighth harmonic of that error is the facet, in the same units — a fraction of
  *     the radius — as the lone-source measurement above.
+ *
+ * Seed 42's shelf is read at [SharedWorlds.DETAIL_ROWS]: a facet in the distance field is a shape
+ * of the grid, and the shelf's 75 km is six cells here and three on the coarse grid.
  */
 class JumpFloodDistanceTest : BorrowsSharedWorlds() {
 
@@ -342,7 +345,7 @@ class JumpFloodDistanceTest : BorrowsSharedWorlds() {
      */
     @Test
     fun `seed 42's shelf break follows a round contour`() {
-        val config = WorldGenConfig.forRows(42L, 512)
+        val config = WorldGenConfig.forRows(42L, SharedWorlds.DETAIL_ROWS)
         val world = SharedWorlds.world(config)
         val w = world.width
         val h = world.height

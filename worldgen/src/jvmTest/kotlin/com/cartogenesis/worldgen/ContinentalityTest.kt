@@ -166,9 +166,13 @@ class ContinentalityTest : BorrowsSharedWorlds() {
         val interiorWithoutBlend: Double
     )
 
+    /**
+     * Seed 42 at [SharedWorlds.COARSE_ROWS]: a band's swing through the year is a mean of
+     * temperatures over the ground, not a figure of the grid's detail.
+     */
     private fun measure(): Measured {
         val world = SharedWorlds.world(
-            WorldGenConfig.forRows(42L, 512)
+            WorldGenConfig.forRows(42L, SharedWorlds.COARSE_ROWS)
         )
         val cellsAcross = world.width
         val cellsDown = world.height

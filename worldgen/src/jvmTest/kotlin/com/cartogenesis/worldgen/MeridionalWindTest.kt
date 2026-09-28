@@ -8,6 +8,7 @@ import com.cartogenesis.worldgen.pipeline.ClimateStage
 import com.cartogenesis.worldgen.pipeline.MoistureBudget
 import com.cartogenesis.worldgen.pipeline.Season
 import kotlin.math.abs
+import kotlin.math.roundToInt
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -42,7 +43,12 @@ import kotlin.test.assertTrue
 class MeridionalWindTest : BorrowsSharedWorlds() {
 
     private companion object {
-        const val SIZE = 512
+        /**
+         * The rows the orography and monsoon worlds are built at: [SharedWorlds.COARSE_ROWS],
+         * since both claims are about rainfall, a sign pooled over thousands of cells and a
+         * region's share of the land, which are the ground's figures and not the grid's detail.
+         */
+        const val SIZE = SharedWorlds.COARSE_ROWS
 
         /**
          * The seed the monsoon claim is stated on, found by scanning seeds 1 to 70 (see the
@@ -66,9 +72,13 @@ class MeridionalWindTest : BorrowsSharedWorlds() {
         const val RATIO = 3f
         const val WET_SEASON = 0.25f
 
-        /** How far out to sea a coast may look, and how far the land must run behind it. */
-        const val SEA_REACH = 30
-        const val LAND_BEHIND = 8
+        /**
+         * How far out to sea a coast may look, and how far the land must run behind it, in
+         * kilometers: the 30 rows and 8 rows the mask was written with on the 512 by 512 grid,
+         * whose rows were 11.7 km tall, so the mask asks for the same coast at any grid.
+         */
+        const val SEA_REACH_KM = 351.5625
+        const val LAND_BEHIND_KM = 93.75
 
         /** The share of land the contiguous region has to cover. */
         const val MIN_SHARE = 0.02
@@ -103,7 +113,7 @@ class MeridionalWindTest : BorrowsSharedWorlds() {
     @Test
     fun `a wind with no slant reproduces the old zonal march exactly`() {
         ZONAL_MARCH_SEEDS.forEach { seed ->
-            val base = WorldGenConfig.forRows(seed, 256)
+            val base = WorldGenConfig.forRows(seed, SharedWorlds.COARSE_ROWS)
             val world = SharedWorlds.world(
                 base.copy(
                     climate = base.climate.copy(
@@ -486,18 +496,20 @@ class MeridionalWindTest : BorrowsSharedWorlds() {
         return mask
     }
 
-    /** Open water within [SEA_REACH] cells that way, and land for [LAND_BEHIND] cells the other. */
+    /** Open water within [SEA_REACH_KM] that way, and land for [LAND_BEHIND_KM] the other. */
     private fun facesSea(world: WorldMap, x: Int, y: Int, seaward: Int): Boolean {
         val w = world.width
         val h = world.height
         var found = false
-        for (step in 1..SEA_REACH) {
+        val seaReachRows = world.config.rowsFor(SEA_REACH_KM).roundToInt()
+        val landBehindRows = world.config.rowsFor(LAND_BEHIND_KM).roundToInt()
+        for (step in 1..seaReachRows) {
             val ny = y + seaward * step
             if (ny !in 0 until h) break
             if (!world.sea.isLand[ny * w + x]) { found = true; break }
         }
         if (!found) return false
-        for (step in 1..LAND_BEHIND) {
+        for (step in 1..landBehindRows) {
             val ny = y - seaward * step
             if (ny !in 0 until h || !world.sea.isLand[ny * w + x]) return false
         }

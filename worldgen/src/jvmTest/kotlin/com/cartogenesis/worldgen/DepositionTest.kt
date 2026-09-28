@@ -41,7 +41,9 @@ class DepositionTest : BorrowsSharedWorlds() {
 
     @Test
     fun `every round conserves mass`() {
-        val config = WorldGenConfig.forRows(42L, 512)
+        // At [SharedWorlds.COARSE_ROWS]: a budget balances or does not on any grid. The mouths'
+        // new land below stays at [SharedWorlds.DETAIL_ROWS], because a delta is a few cells there.
+        val config = WorldGenConfig.forRows(42L, SharedWorlds.COARSE_ROWS)
         val plates = PlateStage.generate(config, TerrainStage.generate(config))
 
         val rounds = ArrayList<RoundMass>()
@@ -101,7 +103,7 @@ class DepositionTest : BorrowsSharedWorlds() {
      */
     @Test
     fun `river mouths gain land, and do not without deposition`() {
-        val base = WorldGenConfig.forRows(42L, 512)
+        val base = WorldGenConfig.forRows(42L, SharedWorlds.DETAIL_ROWS)
         val off = base.copy(erosion = base.erosion.copy(deposition = false))
         val without = SharedWorlds.world(off)
         val world = SharedWorlds.world(base)

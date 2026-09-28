@@ -28,7 +28,12 @@ class SeasonsTest : BorrowsSharedWorlds() {
 
     private companion object {
         val seeds = listOf(7L, 42L, 1234L)
-        const val size = 512
+
+        /**
+         * [SharedWorlds.COARSE_ROWS]: a band's swing through the year is a mean of temperatures,
+         * and a Mediterranean coast a climate on the ground, neither of them the grid's detail.
+         */
+        const val size = SharedWorlds.COARSE_ROWS
 
         /** The latitude the guard is stated at, and how wide a strip of rows counts as "at" it. */
         const val SAMPLE_LATITUDE = 35f
@@ -65,23 +70,25 @@ class SeasonsTest : BorrowsSharedWorlds() {
         const val LAND_TO_SEA_RATIO = 1.5
 
         /**
-         * How far inland of a west-facing shore a cell may sit and still be that coast's climate.
-         *
-         * At 512 wide this is a little over two degrees of longitude — a coastal strip, not a
-         * continent, so an interior basin that happens to be dry in summer cannot be counted as a
-         * Mediterranean coast.
+         * How far inland of a west-facing shore a cell may sit and still be that coast's climate,
+         * in kilometers: the twelve columns it was counted in at 512 rows, whose cells are 11.7 km
+         * across. A coastal strip, not a continent, so an interior basin that happens to be dry in
+         * summer cannot be counted as a Mediterranean coast.
          */
-        const val INLAND_REACH = 12
+        const val INLAND_REACH_KM = 140.625
 
         /**
-         * How many such cells make a band rather than a handful of strays.
+         * How much such coast makes a band rather than a handful of strays, in square kilometers:
+         * the forty cells it was counted in at 512 rows, of 137.3 km² each, and ten cells at 256.
          *
          * Set from what the three seeds actually produce (see the printed figures), well clear of
          * both zero and the counts observed, since the guard has to discriminate "there is a
          * Mediterranean coast on this map" from "there are four cells of it". A sample-size floor
-         * chosen off this tree's worlds, then, and not a figure of Earth's.
+         * chosen off this tree's worlds, then, and not a figure of Earth's. An area, so that the
+         * floor is the same coast on any grid: counted in cells it would ask four times the coast
+         * of a grid half as fine, and seed 7's 39 cells at 256 rows are 21,400 km².
          */
-        const val BAND_CELLS = 40
+        const val BAND_KM2 = 40 * 11.71875 * 11.71875
     }
 
     @Test
@@ -140,11 +147,12 @@ class SeasonsTest : BorrowsSharedWorlds() {
         val counts = seeds.map { seed -> seed to measure(seed, seasons = true) }
         counts.forEach { (seed, tally) -> println("SEASONS seed $seed with seasons: $tally") }
 
-        val withABand = counts.count { (_, tally) -> tally.westCoastMediterranean >= BAND_CELLS }
+        val bandCells = BAND_KM2 / WorldGenConfig.forRows(seeds.first(), size).squareKilometresPerCell
+        val withABand = counts.count { (_, tally) -> tally.westCoastMediterranean >= bandCells }
         assertTrue(
             withABand >= 2,
             "only $withABand of ${seeds.size} seeds grew a Mediterranean coast of at least " +
-                "$BAND_CELLS cells between 30 and 45 degrees: " +
+                "${"%.0f".format(BAND_KM2)} km², ${"%.1f".format(bandCells)} cells, between 30 and 45 degrees: " +
                 counts.joinToString { "${it.first}=${it.second.westCoastMediterranean}" }
         )
     }
@@ -215,10 +223,10 @@ class SeasonsTest : BorrowsSharedWorlds() {
         return Tally(land, mediterranean, monsoon, onWestCoast)
     }
 
-    /** Whether the sea lies within [INLAND_REACH] cells due west, with only land in between. */
+    /** Whether the sea lies within [INLAND_REACH_KM] due west, with only land in between. */
     private fun facesWest(world: WorldMap, x: Int, y: Int): Boolean {
         val w = world.width
-        for (step in 1..INLAND_REACH) {
+        for (step in 1..world.config.wholeCellsFor(INLAND_REACH_KM)) {
             val nx = ((x - step) % w + w) % w
             if (!world.sea.isLand[y * w + nx]) return true
         }

@@ -11,7 +11,11 @@ import kotlin.test.assertTrue
 
 /**
  * Where the rising water puts the sea's cold, against where Earth has it, on the four standard
- * worlds at 512.
+ * worlds at [SharedWorlds.DETAIL_ROWS]. Both figures move with the cell, measured at 256 rows at
+ * Q2b: an equatorial basin is a run of water within four degrees of the equator, and a strait a
+ * cell or two wide joins or parts two of them, so seed 7's basins' stress times length read -669
+ * N/m² km there against -323 here; and the equatorial tongue reaches seed 42's eastern shore on
+ * these cells and not on those (docs/DESIGN_LEDGER.md, Q2b).
  *
  * Two bars, each taken from Earth before any world was read:
  *  - **The coldest subtropical eastern-boundary water lies within Earth's upwelling systems'
@@ -93,14 +97,14 @@ class ColdWaterPlacementTest : BorrowsSharedWorlds() {
         /** The mean of Wyrtki and Meyers' 0.025 and 0.055 N/m², westward. */
         const val PACIFIC_EQUATORIAL_STRESS_N_PER_M2 = -0.040
         const val THIRDS_OF_AN_EVEN_FALL = 2.0 / 3.0
-        val SEEDS = listOf(7L, 42L, 1234L, 99L)
+        val SEEDS = SharedWorlds.STANDARD_SEEDS
     }
 
     @Test
     fun `the coldest subtropical eastern-boundary water lies within Earth's upwelling systems' latitudes`() {
         val failures = ArrayList<String>()
         for (seed in SEEDS) {
-            val world = SharedWorlds.world(WorldGenConfig.forRows(seed, 512))
+            val world = SharedWorlds.world(WorldGenConfig.forRows(seed, SharedWorlds.DETAIL_ROWS))
             for (hemisphere in listOf(1f, -1f)) {
                 val (coldestC, latitude) = coldestEasternBoundary(world, hemisphere) ?: continue
                 println("COLD WATER seed $seed ${if (hemisphere > 0) "north" else "south"}: coldest eastern-boundary water %.2f C at %.1f degrees".format(coldestC, latitude))
@@ -119,7 +123,7 @@ class ColdWaterPlacementTest : BorrowsSharedWorlds() {
         val failures = ArrayList<String>()
         val shortOf = ArrayList<String>()
         for (seed in SEEDS) {
-            val world = SharedWorlds.world(WorldGenConfig.forRows(seed, 512))
+            val world = SharedWorlds.world(WorldGenConfig.forRows(seed, SharedWorlds.DETAIL_ROWS))
             val thirds = equatorialThirds(world) ?: continue
             val marginC = THIRDS_OF_AN_EVEN_FALL * PACIFIC_ZONAL_CONTRAST_C * thirds.meanStressLength /
                 (PACIFIC_EQUATORIAL_STRESS_N_PER_M2 * PACIFIC_EQUATORIAL_WIDTH_KM)

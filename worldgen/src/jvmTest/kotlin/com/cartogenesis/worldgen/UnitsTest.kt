@@ -216,9 +216,11 @@ class UnitsTest : BorrowsSharedWorlds() {
     @Test
     fun `the declared ruler and the height field's own agree`() {
         val worst = ArrayList<Pair<Long, Double>>()
-        listOf(7L, 42L, 1234L, 99L).forEach { seed ->
+        // At [SharedWorlds.COARSE_ROWS]: where the sea-level cut lands is a share of the cells,
+        // and the ruler it is read against a figure in meters, neither of them the grid's detail.
+        SharedWorlds.STANDARD_SEEDS.forEach { seed ->
             val world = SharedWorlds.world(
-                WorldGenConfig.forRows(seed, 512)
+                WorldGenConfig.forRows(seed, SharedWorlds.COARSE_ROWS)
             )
             val scale = world.config.scale
             val shoreline = world.sea.shorelineHeight

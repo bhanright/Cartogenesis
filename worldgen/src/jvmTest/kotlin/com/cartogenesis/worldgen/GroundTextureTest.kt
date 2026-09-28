@@ -25,6 +25,9 @@ import org.junit.Assert.assertTrue
  * whenever a chunk genuinely moves the ground, and the constant they live at says what moved it
  * last. Three of them carry a control that shows the bar bite. The fourth's control could not bite
  * and has been taken out rather than printed; the clause says so where it stands.
+ *
+ * At [SharedWorlds.DETAIL_ROWS]: texture is the grid's detail itself, and every reference here was
+ * measured on this grid.
  */
 class GroundTextureTest : BorrowsSharedWorlds() {
 
@@ -46,7 +49,7 @@ class GroundTextureTest : BorrowsSharedWorlds() {
         val textures = ArrayList<Double>()
         val controls = ArrayList<Double>()
         SEEDS.forEach { seed ->
-            val config = WorldGenConfig.forRows(seed, 512)
+            val config = WorldGenConfig.forRows(seed, SharedWorlds.DETAIL_ROWS)
             val here = flankTexture(world(seed))
             val control = flankTexture(
                 SharedWorlds.world(
@@ -493,7 +496,7 @@ class GroundTextureTest : BorrowsSharedWorlds() {
         return out
     }
 
-    private fun standard(seed: Long) = WorldGenConfig.forRows(seed, 512)
+    private fun standard(seed: Long) = WorldGenConfig.forRows(seed, SharedWorlds.DETAIL_ROWS)
 
     /**
      * The five worlds on the defaults, borrowed from `SharedWorlds` by every clause that reads one

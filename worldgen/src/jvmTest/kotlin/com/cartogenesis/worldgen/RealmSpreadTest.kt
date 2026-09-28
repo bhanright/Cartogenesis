@@ -17,6 +17,9 @@ import kotlin.test.assertTrue
  * only ever border their neighbours on the same landmass — so the first version could not cross
  * water at all, and rendered an entire southern continent blank. Letting them cross for free then
  * produced the opposite: one realm island-hopped an archipelago and held most of the world.
+ *
+ * At [SharedWorlds.COARSE_ROWS]: a realm's share of the land and the realms' sizes against each
+ * other are set by areas on the ground, not by the grid's detail.
  */
 class RealmSpreadTest : BorrowsSharedWorlds() {
 
@@ -25,7 +28,7 @@ class RealmSpreadTest : BorrowsSharedWorlds() {
         val largestShares = ArrayList<Pair<Long, Double>>()
         listOf(42L, 7L, 1234L).forEach { seed ->
             val world = SharedWorlds.world(
-                WorldGenConfig.forRows(seed, 512)
+                WorldGenConfig.forRows(seed, SharedWorlds.COARSE_ROWS)
             )
             val land = world.sea.isLand.count { it }
             val realmArea = HashMap<Int, Int>()
@@ -74,7 +77,7 @@ class RealmSpreadTest : BorrowsSharedWorlds() {
     fun `realms are not riddled with enclaves`() {
         listOf(42L, 7L, 1234L).forEach { seed ->
             val world = SharedWorlds.world(
-                WorldGenConfig.forRows(seed, 512)
+                WorldGenConfig.forRows(seed, SharedWorlds.COARSE_ROWS)
             )
             val w = world.width
             val h = world.height
@@ -236,7 +239,7 @@ class RealmSpreadTest : BorrowsSharedWorlds() {
         var stranded = 0
         var landlocked = 0
         for (seed in listOf(7L, 42L, 1234L, 99L)) {
-            val world = SharedWorlds.world(WorldGenConfig.forRows(seed, 512))
+            val world = SharedWorlds.world(WorldGenConfig.forRows(seed, SharedWorlds.COARSE_ROWS))
             val pieces = RealmPieces(world.width, world.height, world.sea.isLand, world.nations.nationId, NationResult.UNCLAIMED)
             println("PIECES seed $seed: ${pieces.describe()}")
             stranded += pieces.stranded.size
@@ -249,7 +252,7 @@ class RealmSpreadTest : BorrowsSharedWorlds() {
     @Test
     fun `realms differ in size`() {
         val world = SharedWorlds.world(
-            WorldGenConfig.forRows(42L, 512)
+            WorldGenConfig.forRows(42L, SharedWorlds.COARSE_ROWS)
         )
         val sizes = world.nations.nations.map { it.cellCount }.sortedDescending()
         assertTrue(sizes.size >= 6, "only ${sizes.size} realms")

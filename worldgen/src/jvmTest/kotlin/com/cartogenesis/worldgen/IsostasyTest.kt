@@ -351,12 +351,11 @@ class IsostasyTest : BorrowsSharedWorlds() {
         )
 
         // The control: the aim told to draw far more continental crust than the slider's coverage
-        // needs. Nothing else changes but the grid — the same seeds, the same plates, the same
-        // erosion, at [CONTROL_ROWS], since where the cut lands is a question of shares — so what
-        // it isolates is the conversion itself, and the shoreline has to climb a long way to find
-        // 38% of a world that is nearly all continent.
+        // needs. Nothing else changes — the same seeds, the same plates, the same erosion, on the
+        // same grid — so what it isolates is the conversion itself, and the shoreline has to climb
+        // a long way to find 38% of a world that is nearly all continent.
         val control = SEEDS.map { seed ->
-            val base = WorldGenConfig.forRows(seed, CONTROL_ROWS)
+            val base = WorldGenConfig.forRows(seed, SharedWorlds.COARSE_ROWS)
             shorelineResidualMetres(
                 SharedWorlds.world(
                     base.copy(
@@ -389,8 +388,7 @@ class IsostasyTest : BorrowsSharedWorlds() {
         SEEDS.take(3).forEach { seed ->
             val world = worldAt(seed)
             val flat = SharedWorlds.world(
-                // At [CONTROL_ROWS]: a world with one crust has one mode however finely it is cut.
-                WorldGenConfig.forRows(seed, CONTROL_ROWS).let { it.copy(isostasy = it.isostasy.copy(enabled = false)) }
+                WorldGenConfig.forRows(seed, SharedWorlds.COARSE_ROWS).let { it.copy(isostasy = it.isostasy.copy(enabled = false)) }
             )
             listOf("isostatic" to world, "control" to flat).forEach { (label, measured) ->
                 val hypsometry = EarthLikeness.hypsometryOf(measured)
@@ -642,8 +640,11 @@ class IsostasyTest : BorrowsSharedWorlds() {
      */
     @Test
     fun `the collision rate is Earth's surface uplift plus this model's own denudation`() {
+        // At [SharedWorlds.DETAIL_ROWS]: the setting this holds was derived from the denudation
+        // the rounds make on this grid's cells, and a channel's slope, and so its cut, is steeper
+        // on a finer grid, so the rate is re-derived rather than read on another grid.
         val rates = SEEDS.map { seed ->
-            val base = WorldGenConfig.forRows(seed, 512)
+            val base = WorldGenConfig.forRows(seed, SharedWorlds.DETAIL_ROWS)
             val still = base.copy(
                 tectonics = base.tectonics.copy(
                     collisionUpliftMmPerYear = 0f,
@@ -788,9 +789,11 @@ class IsostasyTest : BorrowsSharedWorlds() {
         // Widening the window would be reading the far field [LAST_FORELAND_BIN] was set to keep
         // out; the plates' shape, queued as its own chunk, is where the collision's ground is decided.
         // Re-recorded at Q2 in kilometers, on square cells: the same bin, 1,125 to 1,313 km, 480 m.
+        // And at 256 rows at Q2b, the same bin again: the belt rebounds 603 m there against 412 at
+        // 512 rows, so its moat lies 721 m under it (docs/DESIGN_LEDGER.md, Q2b).
         KnownFailures.expect(
             FORELAND_AT_THE_EDGE_OF_THE_COLLISION,
-            "moat at 1125-1313 km, 480 m under the belt, rising 0 m beyond it"
+            "moat at 1125-1313 km, 721 m under the belt, rising 0 m beyond it"
         ) {
             if (beyondTheMoat - inTheForeland < MIN_FOREBULGE_METRES) {
                 throw RecordedViolation(
@@ -976,8 +979,13 @@ class IsostasyTest : BorrowsSharedWorlds() {
         return inside
     }
 
+    /**
+     * [seed] at [SharedWorlds.COARSE_ROWS]: where the sea-level cut lands, the hypsometry's two
+     * modes, the plate's bend and the ice's load are shares of area and figures in meters and
+     * kilometers on the ground, none of them the grid's detail.
+     */
     private fun worldAt(seed: Long): WorldMap = SharedWorlds.world(
-        WorldGenConfig.forRows(seed, 512)
+        WorldGenConfig.forRows(seed, SharedWorlds.COARSE_ROWS)
     )
 
     /** Where the sea-level cut landed, in metres above or below the isostatic datum. */
@@ -1025,13 +1033,6 @@ class IsostasyTest : BorrowsSharedWorlds() {
          */
         const val CONTROL_SUBMERGED_SHARE = 0.7f
 
-        /**
-         * The rows the two controls are made at: 256, square cells of 23.4 km, the cell width of the
-         * 512 by 512 grid, at half the cells of the standard 512 rows. Neither control's answer
-         * depends on how finely the world is cut: whether the crust's aim lands the sea-level cut
-         * near its datum is a matter of shares of area, and a world with one crust has one mode.
-         */
-        const val CONTROL_ROWS = 256
 
         /**
          * The surface uplift an active continental collision manages on Earth, in millimetres a

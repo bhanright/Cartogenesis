@@ -30,8 +30,13 @@ import kotlin.test.assertTrue
 class FlatCourseTest : BorrowsSharedWorlds() {
 
     private companion object {
-        val STANDARD_SEEDS = listOf(7L, 42L, 1234L, 99L)
-        const val STANDARD_SIDE = 512
+        val STANDARD_SEEDS = SharedWorlds.STANDARD_SEEDS
+
+        /**
+         * [SharedWorlds.DETAIL_ROWS]: a filled flat is a few cells here and fewer on a coarser
+         * grid, where the invariants below would be read on almost nothing.
+         */
+        const val STANDARD_SIDE = SharedWorlds.DETAIL_ROWS
 
         /**
          * The most routing passes one default generation makes, counted at the calls to

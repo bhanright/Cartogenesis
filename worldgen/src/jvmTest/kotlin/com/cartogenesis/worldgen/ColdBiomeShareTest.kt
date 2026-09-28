@@ -26,11 +26,11 @@ class ColdBiomeShareTest : BorrowsSharedWorlds() {
          *
          * Four, because one world's continents can sit anywhere: seed 7's land is polar-heavy and
          * seed 99's is not, and a share of land measured on either alone is a fact about that
-         * seed's plate motions. 512 is the per-merge grid, the same one `EarthLikenessTest` and
-         * `ColdCapReportTest` use.
+         * seed's plate motions. The grid is [SharedWorlds.COARSE_ROWS], because a biome's share of
+         * the land is a figure of the ground and not of the grid's detail.
          */
-        val SEEDS = listOf(7L, 42L, 1234L, 99L)
-        const val GRID = 512
+        val SEEDS = SharedWorlds.STANDARD_SEEDS
+        const val GRID = SharedWorlds.COARSE_ROWS
 
         /**
          * Earth's own shares of ice-free land, from Olson et al. (2001), *Terrestrial Ecoregions

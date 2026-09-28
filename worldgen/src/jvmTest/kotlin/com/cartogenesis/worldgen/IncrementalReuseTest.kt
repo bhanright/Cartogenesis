@@ -35,13 +35,14 @@ import kotlin.test.assertTrue
  * because no app ever passed a previous world — only `PipelineTest` did, and it checks that terrain
  * and plates *are* reused rather than that anything downstream is correctly discarded.
  *
- * So this compares the two routes for a change to every section in turn. They must agree exactly.
+ * So this compares the two routes for a change to every section in turn. They must agree exactly,
+ * which they do or do not on any grid, so the worlds are built at [SharedWorlds.COARSE_ROWS].
  */
 class IncrementalReuseTest {
 
     // Seed 99 rather than the usual 42, because 42 at this size has no lakes at all and the
     // lakes case then passes without ever exercising the setting it names.
-    private val base = WorldGenConfig.forRows(99L, 256)
+    private val base = WorldGenConfig.forRows(99L, SharedWorlds.COARSE_ROWS)
 
     @Test
     fun `reusing stages gives the same world as generating afresh`() {
@@ -370,9 +371,10 @@ class IncrementalReuseTest {
 
     @Test
     fun `reuse makes a late setting change much cheaper`() {
-        // Larger than the correctness case, because the point is the cost of erosion and that only
-        // dominates once the grid is big enough to be worth measuring.
-        val config = WorldGenConfig.forRows(99L, 512)
+        // At [SharedWorlds.COARSE_ROWS], as the correctness case: erosion is most of a generation's
+        // time at any grid the program makes, so what reuse saves is a share of the generation,
+        // and a quarter of the cells times it as well as the finer grid did.
+        val config = WorldGenConfig.forRows(99L, SharedWorlds.COARSE_ROWS)
         val previous = WorldGenerationEngine.generateBlocking(config)
         val toggled = config.copy(
             nations = config.nations.copy(wilderness = WildernessMode.LEAVE_WILDERNESS)

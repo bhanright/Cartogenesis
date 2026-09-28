@@ -27,6 +27,9 @@ import kotlin.test.assertTrue
  * to 33 S and land facing water to its east on every row from 27 to 33 N. That is seed 7. It used
  * to be the first seed counting up from 1 that met the guard's own floors, which chose the sample
  * by the result it was to test (seed 26, then seed 1; docs/DESIGN_LEDGER.md, Fix 2 and 4a).
+ *
+ * At [SharedWorlds.COARSE_ROWS]: a coast's rainfall against its water's temperature and a length
+ * of coast in kilometers are the ground's figures, not the grid's detail.
  */
 class CurrentFeedsRainTest : BorrowsSharedWorlds() {
 
@@ -110,7 +113,7 @@ class CurrentFeedsRainTest : BorrowsSharedWorlds() {
      */
     @Test
     fun `a cold-current coast dries out while a warm one does not`() {
-        val base = WorldGenConfig.forRows(SEED, 512)
+        val base = WorldGenConfig.forRows(SEED, SharedWorlds.COARSE_ROWS)
         val on = SharedWorlds.world(base)
         val off = SharedWorlds.world(
             base.copy(climate = base.climate.copy(currentMoisture = 0f))

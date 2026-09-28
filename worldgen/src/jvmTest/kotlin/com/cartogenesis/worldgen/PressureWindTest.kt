@@ -41,8 +41,22 @@ import kotlin.test.assertTrue
 class PressureWindTest : BorrowsSharedWorlds() {
 
     private companion object {
-        val seeds = listOf(7L, 42L, 1234L, 99L)
-        const val size = 512
+        val seeds = SharedWorlds.STANDARD_SEEDS
+
+        /**
+         * [SharedWorlds.COARSE_ROWS] for the interior, the ice edge and the control: a spread of
+         * rainfall over an interior, the latitude of an ice edge and a row that blows one way are
+         * the ground's figures, not the grid's detail.
+         */
+        const val size = SharedWorlds.COARSE_ROWS
+
+        /**
+         * [SharedWorlds.DETAIL_ROWS] for the monsoon, whose figure moves with the cell: at 256 rows
+         * at Q2b seed 99's largest subtropical continent was centered at 29.0 degrees, where it is
+         * 19.4 here, over 1.8 times the area, and the warm half blew +0.06 m/s onshore pooled
+         * against +0.29 here (docs/DESIGN_LEDGER.md, Q2b).
+         */
+        const val MONSOON_ROWS = SharedWorlds.DETAIL_ROWS
 
         /**
          * Failing on square cells since Q2. The cold half of the year blows onto the subtropical
@@ -266,12 +280,12 @@ class PressureWindTest : BorrowsSharedWorlds() {
         var coastCells = 0
         var continentsMeasured = 0
         seeds.forEach { seed ->
-            val world = generate(seed, pressureWinds = true)
+            val world = generate(seed, pressureWinds = true, rows = MONSOON_ROWS)
             val continent = largestSubtropicalContinent(world) ?: run {
                 println("MONSOON seed $seed: no large subtropical continent to measure")
                 return@forEach
             }
-            val control = generate(seed, pressureWinds = false)
+            val control = generate(seed, pressureWinds = false, rows = MONSOON_ROWS)
             val measured = onshoreFlow(world, continent)
             val controlMeasured = onshoreFlow(control, continent)
             continentsMeasured++
@@ -436,8 +450,8 @@ class PressureWindTest : BorrowsSharedWorlds() {
         }
     }
 
-    private fun generate(seed: Long, pressureWinds: Boolean): WorldMap {
-        val base = WorldGenConfig.forRows(seed, size)
+    private fun generate(seed: Long, pressureWinds: Boolean, rows: Int = size): WorldMap {
+        val base = WorldGenConfig.forRows(seed, rows)
         return SharedWorlds.world(
             base.copy(climate = base.climate.copy(pressureWinds = pressureWinds))
         )

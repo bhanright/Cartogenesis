@@ -33,6 +33,9 @@ import kotlin.test.assertTrue
  * mean: steeper where the uplift is faster, gentler on softer ground and gentler in the wet. These
  * worlds are four million years of rounds, not a steady state, so this reads how far along that
  * the rivers are rather than asserting where they should be.
+ *
+ * At [SharedWorlds.DETAIL_ROWS]: a long profile's concavity and steepness are statistics of the
+ * river network, which move with the cell.
  */
 class RiverProfileReportTest {
 
@@ -57,7 +60,7 @@ class RiverProfileReportTest {
         val allWhole = ArrayList<Double>()
         val allReach = ArrayList<Double>()
         for (seed in SEEDS) {
-            val world = SharedWorlds.world(WorldGenConfig.forRows(seed, 512))
+            val world = SharedWorlds.world(WorldGenConfig.forRows(seed, SharedWorlds.DETAIL_ROWS))
             val courses = readCourses(world)
             val whole = courses.mapNotNull { fitConcavity(it) }
             val reaches = courses.flatMap { homogeneousReaches(it) }.mapNotNull { fitConcavity(it) }

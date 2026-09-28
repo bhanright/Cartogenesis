@@ -32,9 +32,12 @@ import org.junit.Assert.assertTrue
 class ChannelGapTest : BorrowsSharedWorlds() {
 
     private companion object {
-        /** `EarthLikenessTest`'s seeds, at the size a preview is drawn at. */
-        val SEEDS = listOf(7L, 42L, 1234L, 99L)
-        const val SIDE = 512
+        /**
+         * `EarthLikenessTest`'s seeds, at [SharedWorlds.DETAIL_ROWS]: the channel mask starts at
+         * R1's channel heads, whose number and place move with the cell.
+         */
+        val SEEDS = SharedWorlds.STANDARD_SEEDS
+        const val SIDE = SharedWorlds.DETAIL_ROWS
     }
 
     @Test

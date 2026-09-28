@@ -36,6 +36,9 @@ import kotlin.test.assertTrue
  * mouth lies in water the ocean can reach, so a mouth that used to end in a pocket cannot be an
  * estuary until the pockets are gone. Both figures for both halves alone are printed by the third
  * case below, which asserts nothing and exists so a report can say which did what.
+ *
+ * At [SharedWorlds.DETAIL_ROWS]: an estuary is a mouth three cells inside an inlet, and a
+ * shoreline's length against a compact shape's is its roughness, both the grid's detail.
  */
 class SeaLevelHistoryTest : BorrowsSharedWorlds() {
 
@@ -90,7 +93,7 @@ class SeaLevelHistoryTest : BorrowsSharedWorlds() {
             //
             // The shipped world's own pair, both mechanisms running, is printed by
             // `report every corner of the pair` below.
-            val base = WorldGenConfig.forRows(seed, 512)
+            val base = WorldGenConfig.forRows(seed, SharedWorlds.DETAIL_ROWS)
                 .let { it.copy(sea = it.sea.copy(postCutOutlet = false)) }
             val today = Coast(
                 SharedWorlds.world(base.copy(sea = base.sea.copy(lowstandMetres = 0f))),
@@ -185,7 +188,7 @@ class SeaLevelHistoryTest : BorrowsSharedWorlds() {
         var controlPockets = 0
         var controlMouths = 0
         seeds.forEach { seed ->
-            val base = WorldGenConfig.forRows(seed, 512)
+            val base = WorldGenConfig.forRows(seed, SharedWorlds.DETAIL_ROWS)
             val loose = Coast(
                 SharedWorlds.world(
                     base.copy(sea = base.sea.copy(enclosedSeaIsLand = false))
@@ -236,7 +239,7 @@ class SeaLevelHistoryTest : BorrowsSharedWorlds() {
     @Test
     fun `report every corner of the pair`() {
         seeds.forEach { seed ->
-            val base = WorldGenConfig.forRows(seed, 512)
+            val base = WorldGenConfig.forRows(seed, SharedWorlds.DETAIL_ROWS)
             listOf(
                 "PRE-H5      " to base.sea.copy(
                     lowstandMetres = 0f, enclosedSeaIsLand = false, postCutOutlet = false

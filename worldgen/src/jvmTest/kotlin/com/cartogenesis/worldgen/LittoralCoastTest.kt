@@ -417,8 +417,12 @@ class LittoralCoastTest {
         /** The rulers the coast is walked with, in cell widths of ground. */
         val RULERS = listOf(1, 2, 4, 8, 16)
 
-        /** The rows of the square-celled grid the cuts are made on: the standard worlds' 512. */
-        const val STANDARD_ROWS = 512
+        /**
+         * The rows of the square-celled grid the cuts are made on, [SharedWorlds.DETAIL_ROWS]: a
+         * coastline's dimension is walked with rulers of one to sixteen cells, and the bars on it
+         * were set on this grid.
+         */
+        const val STANDARD_ROWS = SharedWorlds.DETAIL_ROWS
 
         /** [cutsAt]'s cuts, by grid, made the first time a guard asks. */
         val cutsByGrid = HashMap<Int, Map<Long, Cut>>()

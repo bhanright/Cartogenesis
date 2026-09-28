@@ -33,13 +33,40 @@ import org.junit.runners.model.Statement
  */
 object SharedWorlds {
 
+    /** The four seeds the guards read unless a guard's own subject asks for another. */
+    val STANDARD_SEEDS: List<Long> = listOf(7L, 42L, 1234L, 99L)
+
+    /**
+     * The rows of a world whose figure does not depend on the grid's detail: 256, a world 512 cells
+     * by 256 of square cells 23.4 km across, the width of the 512 by 512 grid's cells.
+     *
+     * A share of area, a band's mean, a budget that must balance, an equality between two routes,
+     * or a physical figure such as a temperature, a rainfall or a thickness reads the same world
+     * on the ground at any grid fine enough to hold its continents, and a quarter of the cells of
+     * [DETAIL_ROWS] costs about a quarter of the time. Where such a figure is recorded it is
+     * recorded at these rows.
+     */
+    const val COARSE_ROWS = 256
+
+    /**
+     * The rows of a world whose figure depends on the grid's detail or on its cell count: 512, a
+     * world 1,024 by 512 of square cells 11.7 km across.
+     *
+     * Texture, roughness, straight runs, channel heads, a river network's statistics, lakes and
+     * first-order streams, and a comparison between grids all change with the cell, so their bars
+     * were derived here and are read here.
+     */
+    const val DETAIL_ROWS = 512
+
     /**
      * The retained worlds' arrays, in bytes, before one goes.
      *
-     * A world of 512 rows, 1,024 by 512 square cells, holds 78 MB of arrays and one of 1,024 rows
-     * 312 MB, so this keeps the four standard worlds with one 1,024-row world beside them, or the
-     * four with four variants. It is what a worker can spare beside the largest thing it does, which
-     * since Q2 is generating a 1,024-row world of 2.1 million cells.
+     * A world of [DETAIL_ROWS], 1,024 by 512 square cells, holds 78 MB of arrays, one of
+     * [COARSE_ROWS] about 20 MB, and one of 1,024 rows 312 MB, so this keeps both sets of standard
+     * worlds, some 390 MB between them, with four variants of 512 rows or fifteen of 256 beside
+     * them. A 1,024-row world does not fit beside both sets and makes room by the order
+     * [WorldLender] gives, variants first. It is what a worker can spare beside the largest thing
+     * it does, which since Q2 is generating a 1,024-row world of 2.1 million cells.
      *
      * Measured, not derived: the 600 MB before Q2 kept sixteen of the 512 by 512 grid's worlds, and
      * keeping sixteen of 512 rows would take 1.25 GB, but at 1.25 GB a worker ran out of its 3.5 GB
@@ -317,14 +344,16 @@ class WorldLender(
 
     /**
      * One line per world lent, into the borrowing test's output: which world, whether it was made or
-     * reused, and what that cost. It is how a class's share of the cache is read after a run.
+     * reused, in which test worker, and what that cost. It is how a class's share of the cache is
+     * read after a run, and the worker is what tells a world made twice in one worker, which the
+     * cache could have kept, from one made once in each of two, which it cannot share.
      */
     private fun report(what: String, config: WorldGenConfig, borrower: String, startedNanos: Long) {
         val milliseconds = (System.nanoTime() - startedNanos) / 1_000_000
         println(
             "SHARED WORLD ${describe(config)} (settings ${config.toString().hashCode()}): $what " +
                 "for $borrower in $milliseconds ms; ${loans.size} retained, " +
-                "${retainedBytes / 1_000_000} MB"
+                "${retainedBytes / 1_000_000} MB, worker $WORKER_PROCESS_ID"
         )
     }
 
@@ -413,6 +442,9 @@ class WorldLender(
         return "seed ${config.seed} at ${config.width}x${config.height}, $kind"
     }
 }
+
+/** The process this lender runs in, which is one test worker's JVM. */
+private val WORKER_PROCESS_ID: Long = ProcessHandle.current().pid()
 
 /**
  * Whether [config] is a seed at its default settings on its own grid rather than a variant with a

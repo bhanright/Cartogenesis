@@ -40,8 +40,27 @@ class ZonalClimate internal constructor(
      * How far the last simulated year's global mean moved from the year before it, in degrees
      * Celsius: the residual drift left in the spin-up, reported by the guards rather than acted on.
      */
-    val spinUpResidualC: Float
+    val spinUpResidualC: Float,
+    /**
+     * Per band, the share of the year the sea surface is open water: the share of the last year's
+     * time steps on which the mixed layer sat above [EnergyBalance.SEA_FREEZING_C], the same test
+     * the climate stage's sea-ice masks make of a season. 1 where the sea never freezes, 0 where it
+     * never thaws.
+     */
+    internal val waterOpenShare: FloatArray,
+    /**
+     * Per band, the mean sea-surface temperature over the open-water steps alone, degrees Celsius:
+     * the mixed layer's temperature in the months it is open to the air. The freezing point where
+     * the sea never thaws, the limit the mean approaches as the open season shrinks to nothing.
+     */
+    internal val waterOpenC: FloatArray
 ) {
+
+    /** The share of the year the sea at [latitudeDegrees] is open water, interpolated between band centres. */
+    internal fun openWaterShare(latitudeDegrees: Float): Float = interpolate(waterOpenShare, latitudeDegrees)
+
+    /** The sea surface's mean over its open-water steps at [latitudeDegrees], degrees Celsius; see [waterOpenC]. */
+    internal fun openWaterC(latitudeDegrees: Float): Float = interpolate(waterOpenC, latitudeDegrees)
 
     /** The land air temperature at [latitudeDegrees], interpolated between band centres. */
     fun landC(latitudeDegrees: Float, season: Season): Float =
@@ -771,13 +790,40 @@ object EnergyBalance {
             lastYearMeanC = globalMean(geometry, landFraction, landAnnualC, seaAirAnnualC)
         }
 
+        val waterOpenShare = FloatArray(BANDS)
+        val waterOpenC = FloatArray(BANDS)
+        openWater(lastYearWater, waterOpenShare, waterOpenC)
         return ZonalClimate(
             land = splitIntoSeasons(lastYearLand),
             sea = splitIntoSeasons(lastYearSeaAir),
             water = splitIntoSeasons(lastYearWater),
             globalMeanC = lastYearMeanC.toFloat(),
-            spinUpResidualC = (lastYearMeanC - previousYearMeanC).toFloat()
+            spinUpResidualC = (lastYearMeanC - previousYearMeanC).toFloat(),
+            waterOpenShare = waterOpenShare,
+            waterOpenC = waterOpenC
         )
+    }
+
+    /**
+     * Fills [share] with the share of the recorded [year]'s steps each band's water is above
+     * [SEA_FREEZING_C], and [meanC] with its mean over those steps, the freezing point where there
+     * are none. The steps are summed in the same order [splitIntoSeasons] sums the year, so a band
+     * that never freezes has an open-water mean equal to its annual mean to the bit.
+     */
+    private fun openWater(year: DoubleArray, share: FloatArray, meanC: FloatArray) {
+        for (band in 0 until BANDS) {
+            var openSteps = 0
+            var openTotal = 0.0
+            for (step in 0 until STEPS_PER_YEAR) {
+                val water = year[step * BANDS + band]
+                if (water > SEA_FREEZING_C) {
+                    openSteps++
+                    openTotal += water
+                }
+            }
+            share[band] = openSteps.toFloat() / STEPS_PER_YEAR
+            meanC[band] = if (openSteps == 0) SEA_FREEZING_C else (openTotal / openSteps).toFloat()
+        }
     }
 
     /**

@@ -61,8 +61,8 @@ class MoistureBudgetTest : BorrowsSharedWorlds() {
          * under the capped incision's terrain (Fix 3); it came inside the band on the implicit
          * update and reads 0.295 with the uplift re-derived on it, a few thousandths under, 0.296
          * once a lake falls with its outlet, 0.298 on the sea temperature the solved currents
-         * carry (4a), 0.299 once that heat is conserved at the coast, and 0.300, still a few
-         * ten-thousandths under the band, with the water the wind raises (4b-1). No operator of the
+         * carry (4a), 0.299 once that heat is conserved at the coast, and 0.299 still with the
+         * water the wind raises (4b-1). No operator of the
          * moisture march changed; the terrain it marches over did, and at 4a and 4b-1 the sea it
          * draws from (docs/DESIGN_LEDGER.md, Fix 2, Fix 3, Fix 3b, 4a and 4b-1).
          */
@@ -213,7 +213,7 @@ class MoistureBudgetTest : BorrowsSharedWorlds() {
         // Under the band since the continents were redrawn on the ground's ruler, inside it on the
         // implicit update before the uplift was re-derived, and under it again after: see
         // [RECYCLING_UNDER_THE_BAND].
-        KnownFailures.expect(RECYCLING_UNDER_THE_BAND, "0.300") {
+        KnownFailures.expect(RECYCLING_UNDER_THE_BAND, "0.299") {
             if (!(ratio > EARTH_RECYCLING_LOW && ratio < EARTH_RECYCLING_HIGH)) {
                 throw RecordedViolation(
                     ("the continental recycling ratio is %.3f, outside Earth's %.2f to %.2f")
@@ -272,7 +272,7 @@ class MoistureBudgetTest : BorrowsSharedWorlds() {
                 )
         )
         // Recorded as the clause above.
-        KnownFailures.expect(RECYCLING_UNDER_THE_BAND, "0.300") {
+        KnownFailures.expect(RECYCLING_UNDER_THE_BAND, "0.299") {
             if (!(proxyRatio > EARTH_RECYCLING_LOW && proxyRatio < EARTH_RECYCLING_HIGH)) {
                 throw RecordedViolation(
                     ("the shipped ground return puts the recycling ratio at %.3f, outside Earth's " +

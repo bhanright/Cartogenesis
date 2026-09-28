@@ -457,14 +457,6 @@
   habitability gap (6.1% pooled, `OceanCurrentTest`). The site's data-view pictures (currents,
   temperature) also still show 4a's ocean and wait for the refresh after the square grid.
   2026-09-28, 4b-1.
-- **Upwelling draws from beneath the floor of shallow enclosed seas.** The closure takes the risen
-  water from a source depth of 100 m wherever the Ekman transport diverges, and a sea shallower
-  than that has no water there to give. On the standard seeds at 512, enclosed bodies of 23 to 641
-  cells averaging 27 to 85 m deep cool by 1.0 to 4.8 C against the upwelling off (seed 99's
-  127-cell sea at 84.6 N, 75 m deep, -5.63 C against -0.87; seed 7's at 43.6 S, 63 m, -1.51 against
-  +0.35). What the physics asks is a source depth no deeper than the floor, the water column's own water
-  where the floor is shallower, which the sea's depth in `SeaLevelResult` could supply. 2026-09-28,
-  4b-1.
 - **A planet's size and spin are not yet settings.** Everything the ocean solves reads the radius
   from `WorldScale.radiusMeters` and the spin from `WorldScale.ROTATION_RATE_PER_S`, and
   `OceanPlanetSizeTest` holds the laws at twice the radius, the eddy diffusivity's equatorial

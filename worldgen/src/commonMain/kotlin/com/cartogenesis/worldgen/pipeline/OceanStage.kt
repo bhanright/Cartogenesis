@@ -1,6 +1,7 @@
 package com.cartogenesis.worldgen.pipeline
 
 import com.cartogenesis.worldgen.concurrent.parallelChunks
+import com.cartogenesis.worldgen.math.JumpFloodDistance
 import com.cartogenesis.worldgen.model.Acceleration
 import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.WorldGenConfig
@@ -326,7 +327,9 @@ object OceanStage {
                 if (isWater[cell]) targetC[cell] = latitudeC
             }
         }
-        val subsurfaceC = subsurfaceTemperatures(config, zonal, stress, isWater, across, down, widthMeters)
+        val subsurfaceC = subsurfaceTemperatures(
+            config, zonal, stress, isWater, floorDepthOn(config, sea, across, down), across, down, widthMeters
+        )
         val upwelling = if (config.ocean.upwelling) {
             upwellingMps(stress, isWater, across, down, widthMeters, heightMeters)
         } else FloatArray(across * down)
@@ -634,9 +637,15 @@ object OceanStage {
      * path, so an isopycnal is an isotherm. On Earth salinity compensates part of the temperature on
      * many of these surfaces, so an isopycnal outcrops a little away from the isotherm's; the
      * closure's outcrop latitudes carry that error.
+     *
+     * [sourceDepthMeters] is the depth the water rises from, [UPWELLING_SOURCE_DEPTH_M] where the
+     * sea is that deep; see [subsurfaceTemperatures] for a sea whose floor is shallower.
      */
-    internal fun subsurfaceTemperatureC(zonal: ZonalClimate, latitude: Float): Float =
-        zonal.waterC(outcropLatitude(latitude), Season.WINTER)
+    internal fun subsurfaceTemperatureC(
+        zonal: ZonalClimate,
+        latitude: Float,
+        sourceDepthMeters: Double = UPWELLING_SOURCE_DEPTH_M
+    ): Float = zonal.waterC(outcropLatitude(latitude, sourceDepthMeters), Season.WINTER)
 
     /**
      * Where the isopycnal through [depthMeters] beneath [latitude] meets the surface, in degrees,
@@ -694,34 +703,112 @@ object OceanStage {
      * ([OceanHeat.deformationRadiusMeters] at the equator, 131 km at this generator's radius), so
      * the blend's weight falls off as a Gaussian of that width from the equator, and a planet of
      * another size has its own band.
+     *
+     * **The floor.** Upwelled water cannot come from below the sea floor ([floorDepthMeters], per
+     * cell, the deepest water within the upwelling's reach, [floorDepthOn]). Where that is shallower
+     * than [UPWELLING_SOURCE_DEPTH_M] the source depth is that depth, in the outcrop mapping and in the equatorial blend alike, and the share of the rising
+     * water that comes from beneath the mixed layer at all falls with it ([remoteShare]), the rest
+     * being the column's own water, the latitude's annual water the heat relaxes to. So a sea
+     * shallower than the mixed layer only renews its surface with water of its own column and adds no
+     * cold from elsewhere, and a sea deeper than the source depth draws all of it; between the two
+     * the change is continuous.
      */
     internal fun subsurfaceTemperatures(
         config: WorldGenConfig,
         zonal: ZonalClimate,
         stress: Stress,
         isWater: BooleanArray,
+        floorDepthMeters: FloatArray,
         across: Int,
         down: Int,
         widthMeters: Double
     ): FloatArray {
         val subsurfaceC = FloatArray(across * down)
-        val deepShare = equatorialDeepShare(stress, isWater, across, down, widthMeters)
+        val thermoclineDepth = equatorialThermoclineDepths(stress, isWater, across, down, widthMeters)
         val deepC = subtropicalCellC(zonal)
         val bandMeters = OceanHeat.deformationRadiusMeters(0.0, config.scale.radiusMeters)
         for (row in 0 until down) {
             val latitude = ClimateStage.latitudeOf(row, down)
-            val ventilatedC = subsurfaceTemperatureC(zonal, latitude)
+            val columnC = zonal.waterC(latitude, Season.ANNUAL)
             val fromEquatorMeters = latitude * config.scale.metersPerDegreeLatitude
             val equatorialWeight = exp(-0.5 * (fromEquatorMeters / bandMeters) * (fromEquatorMeters / bandMeters))
             for (column in 0 until across) {
                 val cell = row * across + column
                 if (!isWater[cell]) continue
-                val share = deepShare[column]
-                subsurfaceC[cell] = if (share.isNaN()) ventilatedC
-                else (ventilatedC + equatorialWeight * share * (deepC - ventilatedC)).toFloat()
+                val floorMeters = floorDepthMeters[cell].toDouble()
+                val sourceMeters = minOf(UPWELLING_SOURCE_DEPTH_M, floorMeters)
+                val ventilatedC = subsurfaceTemperatureC(zonal, latitude, sourceMeters).toDouble()
+                val thermocline = thermoclineDepth[column]
+                val remoteC = if (thermocline.isNaN()) ventilatedC
+                else ventilatedC + equatorialWeight * deepShareAt(thermocline.toDouble(), sourceMeters) * (deepC - ventilatedC)
+                subsurfaceC[cell] = (columnC + remoteShare(floorMeters) * (remoteC - columnC)).toFloat()
             }
         }
         return subsurfaceC
+    }
+
+    /**
+     * How much of the rising water can come from beneath the mixed layer, 0 to 1, over a floor
+     * [floorMeters] deep: none where the floor is within the mixed layer, whose rising water is its
+     * own; all of it where the floor lies at or below the source depth; and in proportion to how much
+     * of the layer between the mixed layer's base and the source depth lies above the floor between
+     * the two. Upwelled water cannot come from below the sea floor, and water from the column's own
+     * mixed layer adds no cold it did not have.
+     */
+    internal fun remoteShare(floorMeters: Double): Double =
+        ((floorMeters - MIXED_LAYER_DEPTH_M) / (UPWELLING_SOURCE_DEPTH_M - MIXED_LAYER_DEPTH_M)).coerceIn(0.0, 1.0)
+
+    /**
+     * The deepest water an upwelling can draw on at every cell of the solve grid, meters, capped at
+     * [UPWELLING_SOURCE_DEPTH_M]; zero on land.
+     *
+     * Upwelled water cannot come from below the sea floor, but over a shelf it does not come from
+     * beneath the shelf either: the wind's offshore transport at the surface is fed by an onshore
+     * flow along the bottom from the shelf's edge, and what surfaces at the coast is water that
+     * climbed the shelf (Lentz and Chapman 2004, *J. Phys. Oceanogr.* 34, 2444-2457). So within
+     * [SeaConfig.shelfWidthKm] of water at least the source depth deep, measured on the ground by
+     * jump flooding over the map, the water can rise from the whole source depth whatever the floor
+     * beneath the cell; farther than that, the reach falls off with the same length as an
+     * exponential, toward the cell's own floor. A sea that holds no deep water within a shelf's width
+     * of it, an inland sea or a shallow gulf, rises from no deeper than its own floor, and a basin
+     * whose floor is within the mixed layer brings up nothing but its own water ([remoteShare]).
+     * Read bilinearly over the map's water cells alone, so a coast does not make its water shallower.
+     */
+    internal fun floorDepthOn(config: WorldGenConfig, sea: SeaLevelResult, across: Int, down: Int): FloatArray {
+        val cellsAcross = config.width
+        val cellsDown = config.height
+        val mapWater = BooleanArray(sea.isLand.size) { !sea.isLand[it] }
+        val floorMeters = FloatArray(sea.isLand.size) { cell ->
+            if (sea.isLand[cell]) 0f else -config.scale.metresBelowShoreline(sea.relativeElevation.data[cell])
+        }
+        val distanceToDeep = FloatArray(floorMeters.size) { cell ->
+            if (mapWater[cell] && floorMeters[cell] >= UPWELLING_SOURCE_DEPTH_M) 0f else JumpFloodDistance.INFINITE
+        }
+        val nearestDeep = IntArray(floorMeters.size) { cell -> if (distanceToDeep[cell] == 0f) cell else -1 }
+        val cellWidthKm = config.scale.cellWidthKm(cellsAcross)
+        JumpFloodDistance.run(
+            cellsAcross, cellsDown, distanceToDeep, nearestDeep,
+            config.scale.cellHeightKm(cellsDown) / cellWidthKm
+        )
+        val reachKm = config.sea.shelfWidthKm
+        val accessibleMeters = FloatArray(floorMeters.size) { cell ->
+            if (!mapWater[cell]) 0f else {
+                val ownMeters = minOf(floorMeters[cell].toDouble(), UPWELLING_SOURCE_DEPTH_M)
+                val distanceKm = distanceToDeep[cell].toDouble() * cellWidthKm
+                val reach = if (distanceKm <= reachKm) 1.0 else exp(-(distanceKm - reachKm) / reachKm)
+                (ownMeters + (UPWELLING_SOURCE_DEPTH_M - ownMeters) * reach).toFloat()
+            }
+        }
+        val depth = FloatArray(across * down)
+        for (row in 0 until down) {
+            val mapRow = (row + 0.5f) * cellsDown / down - 0.5f
+            for (column in 0 until across) {
+                val mapColumn = (column + 0.5f) * cellsAcross / across - 0.5f
+                val read = sampleWater(accessibleMeters, mapWater, cellsAcross, cellsDown, mapColumn, mapRow)
+                depth[row * across + column] = if (read.isNaN()) 0f else read
+            }
+        }
+        return depth
     }
 
     /**
@@ -740,7 +827,15 @@ object OceanStage {
      * equator has no western shore and no tilt, and its thermocline is `H` all the way round.
      */
     internal fun equatorialDeepShare(stress: Stress, isWater: BooleanArray, across: Int, down: Int, widthMeters: Double): FloatArray {
-        val share = FloatArray(across) { Float.NaN }
+        val depths = equatorialThermoclineDepths(stress, isWater, across, down, widthMeters)
+        return FloatArray(across) { column ->
+            if (depths[column].isNaN()) Float.NaN else deepShareAt(depths[column].toDouble(), UPWELLING_SOURCE_DEPTH_M).toFloat()
+        }
+    }
+
+    /** The equatorial thermocline's depth `h` at each column, meters, or NaN where the equator is land; see [equatorialDeepShare]. */
+    internal fun equatorialThermoclineDepths(stress: Stress, isWater: BooleanArray, across: Int, down: Int, widthMeters: Double): FloatArray {
+        val thermoclineMeters = FloatArray(across) { Float.NaN }
         val northRow = down / 2 - 1
         val southRow = down / 2
         val onEquator = BooleanArray(across) { isWater[northRow * across + it] && isWater[southRow * across + it] }
@@ -748,8 +843,8 @@ object OceanStage {
         val perStressLength = 2.0 / (SEAWATER_DENSITY_KG_PER_M3 * EQUATORIAL_REDUCED_GRAVITY_M_PER_S2)
         val firstLand = (0 until across).firstOrNull { !onEquator[it] }
         if (firstLand == null) {
-            for (column in 0 until across) share[column] = deepShareAt(EQUATORIAL_THERMOCLINE_DEPTH_M)
-            return share
+            for (column in 0 until across) thermoclineMeters[column] = EQUATORIAL_THERMOCLINE_DEPTH_M.toFloat()
+            return thermoclineMeters
         }
         var offset = 1
         while (offset <= across) {
@@ -768,15 +863,19 @@ object OceanStage {
             for (k in 0 until length) {
                 val depthSquared = EQUATORIAL_THERMOCLINE_DEPTH_M * EQUATORIAL_THERMOCLINE_DEPTH_M +
                     perStressLength * (integral[k] - meanIntegral)
-                share[(firstLand + runStart + k) % across] = deepShareAt(sqrt(maxOf(depthSquared, 0.0)))
+                thermoclineMeters[(firstLand + runStart + k) % across] = sqrt(maxOf(depthSquared, 0.0)).toFloat()
             }
         }
-        return share
+        return thermoclineMeters
     }
 
-    /** The share of rising water from beneath a thermocline at [depthMeters]; see [equatorialDeepShare]. */
-    private fun deepShareAt(depthMeters: Double): Float =
-        ((1.0 + tanh((UPWELLING_SOURCE_DEPTH_M - depthMeters) / THERMOCLINE_HALF_THICKNESS_M)) / 2.0).toFloat()
+    /**
+     * The share of water rising from [sourceMeters] that comes from beneath a thermocline at
+     * [thermoclineMeters]; see [equatorialDeepShare]. A floor shallower than the source depth lifts
+     * the source with it, so over a floor above the thermocline little or nothing comes from beneath.
+     */
+    private fun deepShareAt(thermoclineMeters: Double, sourceMeters: Double): Double =
+        (1.0 + tanh((sourceMeters - thermoclineMeters) / THERMOCLINE_HALF_THICKNESS_M)) / 2.0
 
     /**
      * The temperature of the water beneath the equatorial thermocline, degrees Celsius: subtropical

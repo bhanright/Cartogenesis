@@ -135,6 +135,62 @@ class OceanUpwellingTest {
         assertTrue(tilted[0].isNaN(), "land on the equator was given a thermocline")
     }
 
+    /**
+     * Upwelled water cannot come from below the sea floor. A closed basin 40 m deep, shallower than
+     * the mixed layer and with no deeper water anywhere in it, under a wind that raises water along
+     * its eastern shore, at 30 and at 70 degrees: no cell of it settles colder than the coldest own
+     * water of the basin's rows, the latitude's annual water, since the column's own water is all
+     * there is to rise. Per cell a shallow basin can still sit a few hundredths below its own row's
+     * water, because the stronger renewal beside the shore pins the colder rows harder while the
+     * eddies mix them into the warmer; that is the basin's own water redistributed, which this bar
+     * allows, and not cold from elsewhere, which it does not. The same basin 1,000 m deep, the
+     * control, cools below it beside its shore, as a deep sea's upwelling should; and before the
+     * floor was read the shallow basin did too, its coldest cell 3.02 C under the basin's coldest own
+     * water at 30 N; now it stays 1.45 C above it at 30 N and 1.66 at 70.
+     */
+    @Test
+    fun `a sea shallower than the mixed layer raises no cold from below its floor`() {
+        for (latitude in listOf(30f, 70f)) {
+            val shallow = basinBelowOwnWater(latitude, floorMeters = 40.0)
+            val deep = basinBelowOwnWater(latitude, floorMeters = 1_000.0)
+            println("UPWELLING basin at %.0f N: its coldest cell under the basin's coldest own water by %.4f C at 40 m deep, %.4f C at 1,000 m".format(latitude, shallow, deep))
+            assertTrue(deep > FLOOR_TOLERANCE_C, "the deep basin's upwelling did not cool it: $deep")
+            assertTrue(shallow <= FLOOR_TOLERANCE_C, "a basin 40 m deep cooled $shallow C below its own water")
+        }
+    }
+
+    /**
+     * How far, in degrees, the coldest cell of a closed basin at [latitude], [floorMeters] deep and
+     * under an equatorward wind along its eastern shore, settles below the coldest of its rows'
+     * annual water; zero or less where none does.
+     */
+    private fun basinBelowOwnWater(latitude: Float, floorMeters: Double): Double {
+        val config = WorldGenConfig(seed = 42L, width = 256, height = 128)
+        val across = config.width
+        val down = config.height
+        val isLand = BooleanArray(across * down) { cell ->
+            val rowLatitude = ClimateStage.latitudeOf(cell / across, down)
+            val column = cell % across
+            abs(rowLatitude - latitude) > 8f || column !in across / 4 until across / 2
+        }
+        val relative = FloatField(across, down)
+        for (cell in isLand.indices) relative.data[cell] = if (isLand[cell]) 0.1f else config.scale.depthShareOfMetres((-floorMeters).toFloat())
+        val sea = SeaLevelResult(0.5f, isLand, relative, isLand.count { it })
+        val zonal = ClimateStage.zonalClimate(config, sea)
+        val (gridAcross, gridDown) = OceanStage.solveGrid(config.scale)
+        val stress = OceanStage.Stress(DoubleArray(gridAcross * gridDown), DoubleArray(gridAcross * gridDown) { -STRESS_N_PER_M2 })
+        val relax: (com.cartogenesis.worldgen.pipeline.OceanStencil, FloatArray, Int) -> FloatArray = { s, v, p -> OceanCirculation.relax(s, v, p); v }
+        val with = OceanStage.circulateUnder(config, sea, zonal, stress, relax)
+        var coldestOwnC = Double.POSITIVE_INFINITY
+        var coldestC = Double.POSITIVE_INFINITY
+        for (cell in with.isWater.indices) {
+            if (!with.isWater[cell]) continue
+            coldestOwnC = minOf(coldestOwnC, zonal.waterC(ClimateStage.latitudeOf(cell / gridAcross, gridDown), Season.ANNUAL).toDouble())
+            coldestC = minOf(coldestC, with.temperatureC[cell].toDouble())
+        }
+        return coldestOwnC - coldestC
+    }
+
     /** A poleward stress along the same coasts pushes the surface water onshore, and nothing rises. */
     @Test
     fun `a poleward wind along a coast raises nothing`() {
@@ -295,5 +351,8 @@ class OceanUpwellingTest {
         const val QUIET_EDDIES_M2_PER_S = 1.0
         const val SETTLING_PASSES = 50
         const val OUTCROP_TOLERANCE_DEGREES = 1e-3
+
+        /** The heat solve's own reach: its tolerance, a thousandth of the largest balance, is a few thousandths of a degree. */
+        const val FLOOR_TOLERANCE_C = 0.01
     }
 }

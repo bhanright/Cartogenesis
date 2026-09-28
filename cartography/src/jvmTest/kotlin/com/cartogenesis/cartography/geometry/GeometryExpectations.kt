@@ -189,7 +189,7 @@ internal object GeometryExpectations {
         // has one again, and seed 99's peoples, settled on the same ground by a different climate,
         // leave no ring of their own small enough.
         insufficient("peoples' borders", Detector.RECTANGLE, 99L)
-        insufficient("realm borders", Detector.RECTANGLE, 42L, 99L)
+        insufficient("realm borders", Detector.RECTANGLE, 99L)
         insufficient("realm borders", Detector.ORIENTATION, 7L, 42L, 1234L, 99L)
         insufficient("biome edges", Detector.ISOTROPY, 7L, 1234L, 99L)
         insufficient("biome edges", Detector.ORIENTATION, 7L, 42L, 1234L, 99L)

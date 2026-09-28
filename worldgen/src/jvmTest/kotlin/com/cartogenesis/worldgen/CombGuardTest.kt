@@ -1,7 +1,16 @@
 package com.cartogenesis.worldgen
 
+import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.WorldGenConfig
+import com.cartogenesis.worldgen.pipeline.FlowRouting
 import java.util.Locale
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.exp
+import kotlin.math.ln
+import kotlin.math.sin
+import kotlin.math.sqrt
+import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -30,9 +39,9 @@ import kotlin.test.assertTrue
  * fails the half-height cell at 6.8 and 6.6 (the second case).
  *
  * **Neither axis carries more comb than the router makes on its own.** The same control's parallel
- * reaches with a [RIDGE_METRES] ridge between them come to 0.007 to 0.020 km per 1,000 km², so
- * [COMB_FLOOR_KM_PER_1000_KM2] is the most either axis may carry. The worlds carry eight to ten times
- * it on both axes, a comb no longer one-sided but not gone, and that runs as a known failure,
+ * reaches with a [RIDGE_METRES] ridge between them come to 0.0068 to 0.0201 km per 1,000 km², so
+ * [COMB_FLOOR_KM_PER_1000_KM2] is the most either axis may carry. The worlds carry seven to ten
+ * times it on both axes, a comb no longer one-sided but not gone, and that runs as a known failure,
  * [SYMMETRIC_COMB], with the bearing census ([BearingCensus]) printed beside it as its second
  * instrument.
  *
@@ -112,6 +121,82 @@ class CombGuardTest : BorrowsSharedWorlds() {
         )
     }
 
+    /**
+     * The control for both clauses, the other way: isotropic ground routed by production's router
+     * passes the guard. An isotropic synthetic surface over each world's own land at 512 rows,
+     * every land cell a channel, is combed by the router alone; neither axis may carry more than
+     * [AXIS_FACTOR] times the other nor more than [COMB_FLOOR_KM_PER_1000_KM2], which is where
+     * both bars were taken from. A guard that failed here would be failing the router's own
+     * geometry and not a defect of the flanks.
+     */
+    @Test
+    fun `isotropic ground routed by the router passes the guard`() {
+        val controls = WORLD_SEEDS.map { seed ->
+            val config = WorldGenConfig.forRows(seed, STANDARD_ROWS)
+            val isLand = SharedWorlds.world(config).sea.isLand
+            val metres = isotropicMetres(config, seed)
+            val field = FloatField(
+                config.width, config.height,
+                FloatArray(metres.size) { (metres[it] / SYNTHETIC_FIELD_METRES + 0.5).toFloat() }
+            )
+            val filled = FlowRouting.fillDepressions(config.width, config.height, isLand, field)
+            val target = FlowRouting.flowDirections(
+                config.width, config.height, isLand, field, filled, config.seed,
+                config.cellHeightInCellWidths, FlowRouting.smoothFieldPeriodCells(config)
+            )
+            val census = CombCensus.of(
+                config, isLand, isLand, target, metres, SUSTAINED_KM, NEAREST_KM, FURTHEST_KM, RIDGE_METRES
+            )
+            val sustained = CombCensus.of(config, isLand, isLand, target, metres, SUSTAINED_KM, NEAREST_KM, FURTHEST_KM, 0.0)
+            println(
+                String.format(
+                    Locale.ROOT,
+                    "COMB CONTROL seed %d isotropic: parallel sustained %.4f down a column and %.4f along a row; combed %.4f and %.4f",
+                    seed, sustained.column.combedKmPer1000Km2, sustained.row.combedKmPer1000Km2,
+                    census.column.combedKmPer1000Km2, census.row.combedKmPer1000Km2
+                )
+            )
+            Seed(seed, census)
+        }
+        assertTrue(
+            controls.none { it.oneSided || it.combed },
+            "the guard fails isotropic ground the router routed: ${controls.joinToString("; ") { it.figure }}"
+        )
+    }
+
+    /**
+     * An isotropic surface on the ground, in metres: [SYNTHETIC_COMPONENTS] cosines at uniform
+     * bearings and wavelengths log-uniform over [SYNTHETIC_SHORTEST_KM] to [SYNTHETIC_LONGEST_KM],
+     * each as steep as the others, so the whole stands at an rms slope of [SYNTHETIC_RMS_SLOPE]
+     * whichever way it is crossed. Laid out in kilometers, so it is as isotropic on the ground as
+     * the cells' shape allows.
+     */
+    private fun isotropicMetres(config: WorldGenConfig, seed: Long): DoubleArray {
+        val random = Random(seed * 7919 + 13)
+        val w = config.width
+        val h = config.height
+        val out = DoubleArray(w * h)
+        // A component of slope amplitude s has rms slope s / sqrt(2); n of them, sqrt(n / 2) s.
+        val slopeAmplitude = SYNTHETIC_RMS_SLOPE / (2 * PI * sqrt(SYNTHETIC_COMPONENTS / 2.0))
+        repeat(SYNTHETIC_COMPONENTS) {
+            val bearing = random.nextDouble() * 2 * PI
+            val wavelengthKm = exp(
+                ln(SYNTHETIC_SHORTEST_KM) + random.nextDouble() * (ln(SYNTHETIC_LONGEST_KM) - ln(SYNTHETIC_SHORTEST_KM))
+            )
+            val phase = random.nextDouble() * 2 * PI
+            val kx = cos(bearing) * 2 * PI / wavelengthKm
+            val ky = sin(bearing) * 2 * PI / wavelengthKm
+            val amplitudeMetres = slopeAmplitude * wavelengthKm * 1000.0
+            for (row in 0 until h) {
+                val southKm = row * config.cellHeightKm
+                for (column in 0 until w) {
+                    out[row * w + column] += amplitudeMetres * cos(kx * column * config.cellWidthKm + ky * southKm + phase)
+                }
+            }
+        }
+        return out
+    }
+
     private companion object {
         /**
          * The known failure: what is left of the comb on square cells, the same on both axes.
@@ -125,7 +210,7 @@ class CombGuardTest : BorrowsSharedWorlds() {
          * reads 1.6 to 1.8 times as much. See docs/DESIGN_LEDGER.md, Q2.
          */
         const val SYMMETRIC_COMB =
-            "the square cell: the flanks carry a comb of straight parallel gullies on both axes alike, eight to ten times the router's own"
+            "the square cell: the flanks carry a comb of straight parallel gullies on both axes alike, seven to ten times the router's own"
 
         const val RECORDED = "seed 7 0.16 down a column and 0.15 along a row; seed 42 0.20 down a column and 0.18 along a row"
 
@@ -153,16 +238,36 @@ class CombGuardTest : BorrowsSharedWorlds() {
          * How much more comb one axis may carry than the other: the control's 1.30, the larger of its
          * two seeds' ratios of parallel sustained reaches, rounded up to the next half as the
          * half-height cell's 3.1 was to 3.5.
+         *
+         * Taken from the sustained reaches, the census with no ridge asked, and not from the comb
+         * the clause itself reads, which asks a [RIDGE_METRES] ridge. On the control the ridged comb
+         * is too small for a ratio to mean anything: 0.020 against 0.007 km per 1,000 km² on seed 7
+         * and 0.011 against 0.014 on seed 42, a few tens of kilometers of channel, whose ratio of 2.9
+         * is a count of a handful of reaches. Where either axis is that small the clause falls back
+         * to [COMB_FLOOR_KM_PER_1000_KM2] instead, which is what the floor in its comparison is for.
          */
         const val AXIS_FACTOR = 1.5
 
         /**
          * The comb an axis may carry, in km per 1,000 km² of land: the most the router's own parallel
          * reaches carry with a [RIDGE_METRES] ridge between them on the isotropic control over the
-         * same land at 512 rows, 0.020 on seed 7's columns (0.007 on its rows, 0.011 and 0.014 on
-         * seed 42's). From the control, not from any world under test.
+         * same land at 512 rows, 0.0201 on seed 7's columns (0.0068 on its rows, 0.0111 and 0.0137
+         * on seed 42's), rounded up at the second figure. From the control, not from any world under
+         * test, and the third case holds the control to it: at 0.02, rounded to the nearest, the
+         * guard failed its own control by the 0.0001 it had been rounded down.
          */
-        const val COMB_FLOOR_KM_PER_1000_KM2 = 0.02
+        const val COMB_FLOOR_KM_PER_1000_KM2 = 0.021
+
+        /**
+         * The isotropic control's surface: 400 cosines, 40 to 4,000 km long, standing at an rms
+         * slope of 20 m/km, the steep ground the comb is found on; written into a field of 20 km of
+         * relief about its middle so the router reads it at a float's full precision.
+         */
+        const val SYNTHETIC_COMPONENTS = 400
+        const val SYNTHETIC_SHORTEST_KM = 40.0
+        const val SYNTHETIC_LONGEST_KM = 4_000.0
+        const val SYNTHETIC_RMS_SLOPE = 0.020
+        const val SYNTHETIC_FIELD_METRES = 20_000.0
 
         /** How far the network may thin: `ScaleFreeTest`'s grid tolerance. */
         const val NETWORK_FACTOR = 1.35

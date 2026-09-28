@@ -1485,6 +1485,15 @@ object PlateStage {
                                         // signed across-strike coordinate saturates at the edge of
                                         // the flat floor, so the tilt is spent inside the trough
                                         // rather than out on the shoulder slope.
+                                        //
+                                        // Floored at one cell, and the floor stays a count of
+                                        // cells: it is the least floor the grid can draw, not a
+                                        // length on the ground. At the default widths the floor
+                                        // is 164.0625 x 0.55 = 90.2 km, so it binds only where a
+                                        // cell is wider than that: at 64 rows of square cells and
+                                        // fewer (93.75 km), and on the 128 by 128 fingerprint grid;
+                                        // from 128 rows up it is 1.9 cells or more and the floor
+                                        // does nothing (docs/DESIGN_LEDGER.md, Q2).
                                         val flatFloorHalfWidthCells =
                                             (cellWidths.riftWidthCells * tectonics.riftFloorShare)
                                                 .coerceAtLeast(1f)
@@ -2202,6 +2211,11 @@ object PlateStage {
         val collected = BooleanArray(cellsAcross * cellsDown)
         val queue = ArrayList<Int>()
 
+        // The segments and the accommodation zone are shares of the map's width, lengths on the
+        // ground; the floors of two cells and one are the least the grid can draw a segment and a
+        // taper over, and stay counts of cells. At the defaults (0.040 and 0.016 of the width) they
+        // bind only on a grid under 50 and 63 cells across, narrower than any this program makes:
+        // at 64 rows of square cells a segment is 5.1 cells and a zone 2.0 (docs/DESIGN_LEDGER.md, Q2).
         val minSegmentCells = (tectonics.riftSegmentMin * cellsAcross).coerceAtLeast(2f)
         val maxSegmentCells = (tectonics.riftSegmentMax * cellsAcross).coerceAtLeast(minSegmentCells)
         val accommodationCells = (tectonics.riftAccommodation * cellsAcross).coerceAtLeast(1f)

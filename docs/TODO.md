@@ -169,7 +169,7 @@
   1.10 and 1.09 times the smaller's comb on seeds 7 and 42, where the 512 by 512 grid's columns
   carry 6.8 and 6.6 times its rows', and `CombGuardTest` holds it two-sided. What is left runs as a
   known failure of its own: 0.16 and 0.15 km of comb per 1,000 km² on seed 7's two axes and 0.20
-  and 0.18 on seed 42's, eight to ten times the 0.02 the router makes on isotropic ground over the
+  and 0.18 on seed 42's, seven to ten times the 0.021 the router makes on isotropic ground over the
   same land. It is made in the hydraulic rounds (the same network on the ground the rounds were
   handed combs 0.000 to 0.001), and over the rounds the steep cells' steps turn from the diagonal to
   both axes alike (41.7 and 42.0% diagonal before, 32.2 and 33.0% after); whether that turn is the
@@ -1177,7 +1177,7 @@
   **Q2 re-measured it** with the coast's reach in kilometers (234 km on square cells too, where it
   was 117): seed 99 at 75 to 60 degrees moved to +0.021, the other two figures held. The
   glaciation's cell-space operators were not isolated. 2026-09-28, Q2.
-- **Square cells tip four clauses the 512 by 512 grid passed, each running as a known failure, none
+- **Square cells tip four clauses the 512 by 512 grid passed, three running as known failures, none
   of them isolated (Q2).** The ocean is still solved on its own grid of cells twice as wide as tall,
   which is the switch's next chunk, and is the first suspect for the first two.
   - `ColdWaterPlacementTest`: seed 42's coldest northern eastern-boundary water, -2.22 C, lies at
@@ -1186,8 +1186,10 @@
     coasts at +0.31 m/s pooled, where it blew off them at -0.17; seeds 42, 1234 and 99 onshore.
   - `SeaLevelHistoryTest`: the lowstand's pooled gain in estuary mouths is 1.47 against the 1.5 read
     off the 512 by 512 grid's worlds (1.60 there); every seed still gains.
-  - `IceSheetTest`: no audited sheet fills a third of its dome's 500 km disc, so the flow clause reads
-    nothing; the sheets near their domes cover about a third less ground than on the 512 by 512 grid.
+  - `IceSheetTest`: no audited sheet fills a third of its dome's 500 km disc; the sheets near their
+    domes cover about a third less ground than on the 512 by 512 grid. The flow clause reads seed 20
+    instead, scanned for a dome that qualifies, so it is not blind; the audited seeds' shrinking
+    domes are the finding left.
   2026-09-28, Q2.
 - **The shared worlds drop a class's own variants before a plain world nobody will ask for again.**
   `WorldLender.admit` makes room by dropping the least recently lent variant first, then a plain

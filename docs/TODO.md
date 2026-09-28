@@ -1189,6 +1189,16 @@
   - `IceSheetTest`: no audited sheet fills a third of its dome's 500 km disc, so the flow clause reads
     nothing; the sheets near their domes cover about a third less ground than on the 512 by 512 grid.
   2026-09-28, Q2.
+- **The shared worlds drop a class's own variants before a plain world nobody will ask for again.**
+  `WorldLender.admit` makes room by dropping the least recently lent variant first, then a plain
+  world only one class has asked for. A class that borrows the four standard worlds and a variant
+  of each, as `PressureWindTest` does in each of its tests, therefore drops its own variants to
+  admit the next one while a plain world another class finished with stays, and on square cells,
+  whose worlds hold 78 MB of arrays each against the 700 MB `SharedWorlds` keeps, it makes its four
+  variants three times over: eight extra generations, about 160 s of the tier. Raising the
+  retention is not the way: at 1.25 GB a worker ran out of its 3.5 GB heap. Preferring to drop what
+  the class now borrowing has not asked for is the candidate; `SharedWorldsGuardTest` holds the
+  order as it is. 2026-09-28, Q2.
 
 
 - **M1's coastline box count reads structure far below its own smallest box.** It counts the boxes

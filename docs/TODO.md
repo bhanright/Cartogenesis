@@ -1810,6 +1810,19 @@
   Dead Sea and the Qattara do. Wants measuring (the channel's length, width and count across the
   standard worlds) and a rule for how wide a drowned outlet opens. The ruled belts' repair may
   remove this one; others may remain. 2026-09-27, seen by the maintainer on the live site.
+- **The ocean's heat carries water colder than sea water can be.** On 969495 at 2048, a shelf
+  8 m deep at 46.8 N, open all year, whose latitude's annual water is 10.1 C, holds water at
+  -3.1 C (an anomaly of -12.3 C; -3.45 and -13.1 with upwelling off), carried there by 4a's
+  currents; the map's coldest anomaly, -13.6 C at 43.3 N with upwelling off, is the same patch. The
+  heat solve (`OceanHeat`) relaxes toward the energy balance's annual `water`, which under sea ice is
+  the ice's own surface (the frozen band's two meters of ice), far below the -1.8 C at which sea
+  water freezes (`EnergyBalance.SEA_FREEZING_C`), and it advects that value as if it were liquid
+  water. Beneath ice the liquid layer sits at its freezing point, and that is what a current can
+  carry away from the ice. The upwelling's risen water already respects the bound (4b-1); the
+  solve's own target and the water it transports do not. Wants the liquid water's temperature
+  separated from the frozen surface in the ocean's target, with the ice surface kept for the
+  climate's frozen marks, and a guard that no open-water cell's solved water falls below the
+  freezing point. 2026-09-28, found on the 4b-1 merge's 2048 audit.
 - **A rift that meets the coast should be drowned across its whole width.** A half-graben's floor is
   a wedge and the water in a coastal one stands at the waterline, so the hinge shelf is dry: the
   author's trough on 718106 at 2048 keeps 38% of its flat floor under water and shows the rest as a

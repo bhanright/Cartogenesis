@@ -28,7 +28,12 @@ class SeaIceTest : BorrowsSharedWorlds() {
 
     private companion object {
         val seeds = listOf(7L, 42L, 1234L)
-        const val size = 512
+
+        /**
+         * [SharedWorlds.COARSE_ROWS]: the latitude of an ice edge and the rain on frozen water are
+         * the ground's figures, not the grid's detail.
+         */
+        const val size = SharedWorlds.COARSE_ROWS
 
         /**
          * Where a cold-season ice edge belongs on the map, in degrees of latitude, and where

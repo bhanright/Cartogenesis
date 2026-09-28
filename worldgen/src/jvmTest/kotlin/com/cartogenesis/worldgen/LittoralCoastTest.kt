@@ -369,7 +369,7 @@ class LittoralCoastTest {
      * grading and only on the basins the percentile drowned, and `ErosionConfig.outletIncision` ran
      * two stages earlier, so a bay the grading sealed would be a lake below sea level for good — and
      * a finer grid, which resolves more two-cell bay mouths, would seal more of them, which is how
-     * this was found: it took `GlaciationTest`'s resolution contract from 1.91 to 2.37 against a bar
+     * this was found: it took `GlaciationLatticeTest`'s resolution contract from 1.91 to 2.37 against a bar
      * of 2.20. `WaterTopology.severs` makes it impossible rather than unlikely, and this counts
      * the bodies to prove it.
      */
@@ -417,8 +417,12 @@ class LittoralCoastTest {
         /** The rulers the coast is walked with, in cell widths of ground. */
         val RULERS = listOf(1, 2, 4, 8, 16)
 
-        /** The rows of the square-celled grid the cuts are made on: the standard worlds' 512. */
-        const val STANDARD_ROWS = 512
+        /**
+         * The rows of the square-celled grid the cuts are made on, [SharedWorlds.DETAIL_ROWS]: a
+         * coastline's dimension is walked with rulers of one to sixteen cells, and the bars on it
+         * were set on this grid.
+         */
+        const val STANDARD_ROWS = SharedWorlds.DETAIL_ROWS
 
         /** [cutsAt]'s cuts, by grid, made the first time a guard asks. */
         val cutsByGrid = HashMap<Int, Map<Long, Cut>>()

@@ -36,7 +36,11 @@ class ErosionUnitsTest {
 
     private companion object {
         const val SEED = 42L
-        const val SIDE = 512
+
+        /**
+         * [SharedWorlds.COARSE_ROWS]: a mouth is cut below the shoreline or it is not, on any grid.
+         */
+        const val SIDE = SharedWorlds.COARSE_ROWS
 
         /** Seed 42's rounds, watched once. */
         val watched: Watched by lazy {

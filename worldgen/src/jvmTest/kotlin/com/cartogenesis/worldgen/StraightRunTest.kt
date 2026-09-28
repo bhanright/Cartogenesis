@@ -32,9 +32,12 @@ class StraightRunTest : BorrowsSharedWorlds() {
         const val AUTHORS_SEED = 298405L
         const val AUTHORS_SIDE = 1024
 
-        /** Ground rule 1's seeds plus the audit's fourth, at the size a preview is drawn at. */
-        val STANDARD_SEEDS = listOf(7L, 42L, 1234L, 99L)
-        const val STANDARD_SIDE = 512
+        /**
+         * Ground rule 1's seeds plus the audit's fourth, at [SharedWorlds.DETAIL_ROWS]: a ruled
+         * line is a run along the grid's own bearings, whose step is a cell.
+         */
+        val STANDARD_SEEDS = SharedWorlds.STANDARD_SEEDS
+        const val STANDARD_SIDE = SharedWorlds.DETAIL_ROWS
 
         /**
          * The author's second world, at the one grid the ruled shores can be found on: 1,024 rows

@@ -35,6 +35,10 @@ import kotlin.test.assertTrue
  * Hovius, Stark and Allen, *Sediment flux from a mountain belt derived by landslide mapping*,
  * Geology 25, 1997). A wet flank is also a more finely divided one, because a channel needs less
  * ground behind it to start where more water falls on that ground.
+ *
+ * At [SharedWorlds.DETAIL_ROWS]: the cut is the stream-power law on the grid's own slopes and
+ * catchments, which steepen and gather differently on another grid, and the pins below were set on
+ * this one.
  */
 class ClimateFedErosionTest {
 
@@ -627,7 +631,7 @@ class ClimateFedErosionTest {
 
     /** One [Ground] per seed for the whole class: each is two full erosion runs. */
     private fun ground(seed: Long): Ground =
-        measured.getOrPut(seed) { Ground(WorldGenConfig.forRows(seed, 512)) }
+        measured.getOrPut(seed) { Ground(WorldGenConfig.forRows(seed, SharedWorlds.DETAIL_ROWS)) }
 
     /** The belt, and which of its cells the wind is climbing when it reaches them. */
     private fun beltFlanks(ground: Ground): Belt? {

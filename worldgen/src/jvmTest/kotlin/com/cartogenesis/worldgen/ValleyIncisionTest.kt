@@ -40,6 +40,9 @@ import kotlin.test.assertTrue
  * and a second clause holds the thing that actually matters — that the finished notch is at least
  * as deep as the pre-S2 tree cut. Whether the incision law is under-cutting on rougher ground is a
  * question for S3, and it is in `TODO.md`.
+ *
+ * At [SharedWorlds.DETAIL_ROWS]: a valley's banks are read a few cell widths across the flow, and a
+ * valley is a few cells wide.
  */
 class ValleyIncisionTest : BorrowsSharedWorlds() {
 
@@ -55,7 +58,7 @@ class ValleyIncisionTest : BorrowsSharedWorlds() {
             // left on it lands in the control as well as in the measurement and flatters the
             // control by more than it flatters the measurement. Measured with it on: 1.5x, against
             // 1.7x with it off, for no change in how much water moved.
-            val base = WorldGenConfig.forRows(seed, 512).let {
+            val base = WorldGenConfig.forRows(seed, SharedWorlds.DETAIL_ROWS).let {
                 it.copy(glaciation = it.glaciation.copy(enabled = false))
             }
             val pair = incision(base)

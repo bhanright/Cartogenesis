@@ -32,8 +32,12 @@ import kotlin.test.assertTrue
  * which is what gives it meaning.
  *
  * Measured on [PlateResult.height], the belt as tectonics built it, before erosion wears it and
- * before the sea-level percentile turns it into a coastline. Only terrain and plates are run, so
- * the whole file is a couple of seconds.
+ * before the sea-level percentile turns it into a coastline. Only terrain and plates are run.
+ *
+ * The belts are measured at [SharedWorlds.COARSE_ROWS], whose square cells are 23.4 km, the width
+ * the belts' widths were set in cells on: a width for a height is a ratio of lengths on the ground,
+ * and every belt is still many cells wide there. The hotspot cone's roundness is the one figure of
+ * the grid's own detail here, and it is asserted at 512 and 1,024 rows, as it was written.
  */
 class BoundaryPairTest {
 
@@ -98,7 +102,7 @@ class BoundaryPairTest {
      * elevation bias to zero, which was the step's own setting.
      */
     private fun platesOf(seed: Long, crustPairs: Boolean = true): Pair<WorldGenConfig, PlateResult> {
-        val config = WorldGenConfig.forRows(seed, 512).let {
+        val config = WorldGenConfig.forRows(seed, SharedWorlds.COARSE_ROWS).let {
             it.copy(
                 tectonics = it.tectonics.copy(crustPairProfiles = crustPairs),
                 isostasy = it.isostasy.copy(enabled = false)
@@ -109,7 +113,7 @@ class BoundaryPairTest {
 
     /** The shipped world, unflattened — used only for the pair-occurrence scan. */
     private fun defaultPlatesOf(seed: Long): PlateResult {
-        val config = WorldGenConfig.forRows(seed, 512)
+        val config = WorldGenConfig.forRows(seed, SharedWorlds.COARSE_ROWS)
         return PlateStage.generate(config, TerrainStage.generate(config))
     }
 
@@ -295,7 +299,7 @@ class BoundaryPairTest {
     @Test
     fun `hotspot chains raise seamounts away from every boundary`() {
         val measured = listOf(7L, 42L, 1234L).map { seed ->
-            hotspotReach(WorldGenConfig.forRows(seed, 512), "seed $seed")
+            hotspotReach(WorldGenConfig.forRows(seed, SharedWorlds.COARSE_ROWS), "seed $seed")
         }
         val pooled = HotspotReach(
             "pooled", measured.sumOf { it.raised }, measured.sumOf { it.farFromBoundary },
@@ -320,7 +324,7 @@ class BoundaryPairTest {
             )
         }
         val control = hotspotReach(
-            WorldGenConfig.forRows(7L, 512).let {
+            WorldGenConfig.forRows(7L, SharedWorlds.COARSE_ROWS).let {
                 it.copy(tectonics = it.tectonics.copy(hotspotRadiusKm = it.tectonics.hotspotRadiusKm * 8.0))
             },
             "control, cones eight times as wide"

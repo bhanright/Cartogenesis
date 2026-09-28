@@ -19,6 +19,8 @@ import kotlin.test.assertTrue
  * Measured as area-weighted shares rather than raw counts, because a realm clipping the corner of a
  * neighbouring culture by nine cells is not meaningfully two-cultured, and counting it as such would
  * let the layer pass while looking like a copy of the borders.
+ *
+ * At [SharedWorlds.COARSE_ROWS]: both are shares of area on the ground, not the grid's detail.
  */
 class CultureRealmTest : BorrowsSharedWorlds() {
 
@@ -27,7 +29,7 @@ class CultureRealmTest : BorrowsSharedWorlds() {
         val pooled = ArrayList<Double>()
         listOf(42L, 7L, 1234L).forEach { seed ->
             val world = SharedWorlds.world(
-                WorldGenConfig.forRows(seed, 512)
+                WorldGenConfig.forRows(seed, SharedWorlds.COARSE_ROWS)
             )
             val realmOf = world.nations.nationId
             val cultureOf = world.cultures.cultureId
@@ -156,7 +158,7 @@ class CultureRealmTest : BorrowsSharedWorlds() {
     fun `peoples cover the habitable world without one swallowing it`() {
         listOf(42L, 7L, 1234L).forEach { seed ->
             val world = SharedWorlds.world(
-                WorldGenConfig.forRows(seed, 512)
+                WorldGenConfig.forRows(seed, SharedWorlds.COARSE_ROWS)
             )
             val land = world.sea.isLand.count { it }
             // Measured against land people could actually live on, not all land. Seed 42 is a third

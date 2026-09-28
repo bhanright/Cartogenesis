@@ -40,6 +40,10 @@ import kotlin.test.assertTrue
  *
  * The "far" guard is shown failing on a history whose past boundaries lie where the present ones
  * do — see [`the guard finds nothing inland when the plates never moved`].
+ *
+ * At [SharedWorlds.DETAIL_ROWS]: the belts' age blur spreads a different share of its radius on
+ * each grid (docs/DESIGN_LEDGER.md, Q2), so an old belt's breadth is read on the grid its bars were
+ * set on.
  */
 class TectonicHistoryTest {
 
@@ -51,7 +55,7 @@ class TectonicHistoryTest {
         flatten: Boolean = true,
         driftKm: Double? = null
     ): PlateResult {
-        val base = WorldGenConfig.forRows(seed, 512)
+        val base = WorldGenConfig.forRows(seed, SharedWorlds.DETAIL_ROWS)
         val config = base.copy(
             tectonics = base.tectonics.copy(
                 historyEpochs = epochs,
@@ -82,7 +86,7 @@ class TectonicHistoryTest {
         val measured = LinkedHashMap<Pair<Long, Int>, Long>()
         seeds.forEach { seed ->
             listOf(0, 1, 2).forEach { epochs ->
-                val base = WorldGenConfig.forRows(seed, 512)
+                val base = WorldGenConfig.forRows(seed, SharedWorlds.DETAIL_ROWS)
                 val config = base.copy(tectonics = base.tectonics.copy(historyEpochs = epochs))
                 val plates = PlateStage.generate(config, TerrainStage.generate(config))
                 var checksum = 0L
@@ -238,7 +242,7 @@ class TectonicHistoryTest {
     }
 
     private fun configOf(seed: Long, epochs: Int): WorldGenConfig {
-        val base = WorldGenConfig.forRows(seed, 512)
+        val base = WorldGenConfig.forRows(seed, SharedWorlds.DETAIL_ROWS)
         return base.copy(
             tectonics = base.tectonics.copy(historyEpochs = epochs),
             isostasy = base.isostasy.copy(enabled = false)
@@ -316,7 +320,7 @@ class TectonicHistoryTest {
      */
     private fun inlandRelief(seed: Long, epochs: Int, driftKm: Double? = null): Inland {
         val relief = oldRelief(seed, epochs, driftKm)
-        val kmPerCellWidth = WorldGenConfig.forRows(seed, 512).cellWidthKm.toFloat()
+        val kmPerCellWidth = WorldGenConfig.forRows(seed, SharedWorlds.DETAIL_ROWS).cellWidthKm.toFloat()
         val present = platesOf(seed, 1)
         var best = 0f
         var at = 0f

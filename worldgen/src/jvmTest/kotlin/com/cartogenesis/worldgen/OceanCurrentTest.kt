@@ -14,8 +14,10 @@ import kotlin.test.assertTrue
  * Which way the solved gyres turn on the standard worlds, against the wind that drives them.
  *
  * Sign bars with no world-derived figure in them, each read off Stommel's solution for a basin under
- * this generator's own belts, and each held on the four standard seeds at 512 per merge
- * ([OceanCurrentAuditTest] holds the author's 2048 world). Earth's surface drifter climatology
+ * this generator's own belts, and each held on the four standard seeds per merge at
+ * [SharedWorlds.COARSE_ROWS], since a gyre's sense and a share of the energy balance's transport
+ * are the ground's figures and not the grid's detail ([OceanCurrentAuditTest] holds the author's
+ * 2048 world). Earth's surface drifter climatology
  * (Lumpkin and Johnson 2013, *J. Geophys. Res. Oceans* 118, 2992-3006) has the same signs: eastward
  * mean flow at 40 to 50 degrees and a poleward western boundary current in every subtropical basin.
  */
@@ -45,10 +47,10 @@ class OceanCurrentTest : BorrowsSharedWorlds() {
     @Test
     fun `the gyres turn with the wind on every standard world`() {
         val failures = ArrayList<String>()
-        for (seed in listOf(7L, 42L, 1234L, 99L)) {
-            val world = SharedWorlds.world(WorldGenConfig.forRows(seed, 512))
+        for (seed in SharedWorlds.STANDARD_SEEDS) {
+            val world = SharedWorlds.world(WorldGenConfig.forRows(seed, SharedWorlds.COARSE_ROWS))
             val beltsOnly = world.config.copy(climate = world.config.climate.copy(pressureWinds = false))
-            failures += OceanSense.check("seed $seed at 512", world.config, world.sea, world.ocean,
+            failures += OceanSense.check("seed $seed at ${SharedWorlds.COARSE_ROWS} rows", world.config, world.sea, world.ocean,
                 OceanStage.generate(beltsOnly, world.sea))
         }
         assertTrue(failures.isEmpty(), failures.joinToString("\n"))
@@ -111,8 +113,8 @@ class OceanCurrentTest : BorrowsSharedWorlds() {
     @Test
     fun `the anomaly's row means carry a small share of the energy balance's transport`() {
         val failures = ArrayList<String>()
-        for (seed in listOf(7L, 42L, 1234L, 99L)) {
-            val world = SharedWorlds.world(WorldGenConfig.forRows(seed, 512))
+        for (seed in SharedWorlds.STANDARD_SEEDS) {
+            val world = SharedWorlds.world(WorldGenConfig.forRows(seed, SharedWorlds.COARSE_ROWS))
             val across = world.width
             val down = world.height
             val radiusMeters = world.config.scale.radiusMeters
@@ -176,7 +178,7 @@ class OceanCurrentTest : BorrowsSharedWorlds() {
 
     /** The warm quartile's coastal habitability over the cold quartile's, as a ratio. */
     private fun checkCoasts(seed: Long): Double {
-        val config = WorldGenConfig.forRows(seed, 512)
+        val config = WorldGenConfig.forRows(seed, SharedWorlds.COARSE_ROWS)
         val world = SharedWorlds.world(config)
         val w = world.width
         val h = world.height

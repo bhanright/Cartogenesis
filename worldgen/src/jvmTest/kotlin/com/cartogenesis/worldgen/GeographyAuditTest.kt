@@ -15,10 +15,13 @@ import kotlin.test.assertTrue
  * cannot produce a river that splits), but "cannot happen by construction" is a claim worth
  * checking against actual output, and the numbers show which rules the pipeline honours by
  * accident rather than by design.
+ *
+ * At [SharedWorlds.COARSE_ROWS]: what it asserts is where the desert sits, a band's share of its
+ * own land, which is a figure of the ground and not of the grid's detail.
  */
 class GeographyAuditTest : BorrowsSharedWorlds() {
 
-    private val seeds = listOf(7L, 42L, 1234L, 99L)
+    private val seeds = SharedWorlds.STANDARD_SEEDS
 
     @Test
     fun `audit worlds against real-world geography`() {
@@ -28,7 +31,7 @@ class GeographyAuditTest : BorrowsSharedWorlds() {
         val bands = DesertBands()
         seeds.forEach { seed ->
             val world = SharedWorlds.world(
-                WorldGenConfig.forRows(seed, 512)
+                WorldGenConfig.forRows(seed, SharedWorlds.COARSE_ROWS)
             )
             val w = world.width
             val h = world.height
@@ -176,7 +179,7 @@ class GeographyAuditTest : BorrowsSharedWorlds() {
     fun `the band guard bites on a world whose land never re-moistens`() {
         val bands = DesertBands()
         seeds.forEach { seed ->
-            val base = WorldGenConfig.forRows(seed, 512)
+            val base = WorldGenConfig.forRows(seed, SharedWorlds.COARSE_ROWS)
             val world = SharedWorlds.world(
                 base.copy(climate = base.climate.copy(evapotranspirationLengthKm = 0f))
             )

@@ -35,13 +35,16 @@ import kotlin.test.assertTrue
  * because no app ever passed a previous world — only `PipelineTest` did, and it checks that terrain
  * and plates *are* reused rather than that anything downstream is correctly discarded.
  *
- * So this compares the two routes for a change to every section in turn. They must agree exactly.
+ * So this compares the two routes for a change to every section in turn. They must agree exactly,
+ * which they do or do not on any grid, so the equality and identity cases are built at
+ * [REUSE_ROWS], and each variant is held to moving something in the world: a setting that moved
+ * nothing would agree with a stale stage and prove nothing about its guard.
  */
 class IncrementalReuseTest {
 
     // Seed 99 rather than the usual 42, because 42 at this size has no lakes at all and the
     // lakes case then passes without ever exercising the setting it names.
-    private val base = WorldGenConfig.forRows(99L, 256)
+    private val base = WorldGenConfig.forRows(99L, REUSE_ROWS)
 
     @Test
     fun `reusing stages gives the same world as generating afresh`() {
@@ -191,20 +194,30 @@ class IncrementalReuseTest {
             "cultures" to base.copy(cultures = base.cultures.copy(cultureCount = base.cultures.cultureCount + 3))
         )
 
+        val baseWorld = worldBranches(previous)
         val disagreed = ArrayList<String>()
+        val inert = ArrayList<String>()
         variants.forEach { (name, config) ->
-            val fresh = fingerprint(WorldGenerationEngine.generateBlocking(config))
+            val freshWorld = WorldGenerationEngine.generateBlocking(config)
+            val fresh = fingerprint(freshWorld)
             val reused = fingerprint(WorldGenerationEngine.generateBlocking(config, previous = previous))
+            val moved = worldBranches(freshWorld).filter { (branch, digest) -> baseWorld[branch] != digest }.keys
+            if (moved.isEmpty()) inert.add(name)
+            val stages = moved.map { it.substringBefore('.') }.distinct()
             if (fresh != reused) {
                 disagreed.add(name)
                 println("REUSE $name DIFFERS\n  fresh  $fresh\n  reused $reused")
             } else {
-                println("REUSE $name agrees")
+                println("REUSE $name agrees, having moved ${moved.size} branches of $stages")
             }
         }
         assertEquals(
             emptyList(), disagreed,
             "reusing the previous world changed the result for: $disagreed"
+        )
+        assertEquals(
+            emptyList(), inert,
+            "these settings moved nothing in the world, so a stale stage would agree with a fresh one: $inert"
         )
     }
 
@@ -370,9 +383,11 @@ class IncrementalReuseTest {
 
     @Test
     fun `reuse makes a late setting change much cheaper`() {
-        // Larger than the correctness case, because the point is the cost of erosion and that only
-        // dominates once the grid is big enough to be worth measuring.
-        val config = WorldGenConfig.forRows(99L, 512)
+        // At [SharedWorlds.COARSE_ROWS]: erosion is most of a generation's time at any grid the
+        // program makes, so what reuse saves is a share of the generation, and a quarter of the
+        // cells of 512 rows times it as well as they did. Not at [REUSE_ROWS], where a whole
+        // generation is a second or two and the timing would be mostly the machine's.
+        val config = WorldGenConfig.forRows(99L, SharedWorlds.COARSE_ROWS)
         val previous = WorldGenerationEngine.generateBlocking(config)
         val toggled = config.copy(
             nations = config.nations.copy(wilderness = WildernessMode.LEAVE_WILDERNESS)
@@ -400,6 +415,10 @@ class IncrementalReuseTest {
         )
     }
 
+    /** Every branch of [world] but its settings, which differ between any two variants. */
+    private fun worldBranches(world: WorldMap): Map<String, Long> =
+        ReachableState.digestsByBranch(world).filterKeys { !it.startsWith("config") }
+
     /**
      * Every field reachable from the world, digested branch by branch, so a disagreement says which
      * stage's field went stale instead of merely that something did.
@@ -414,4 +433,15 @@ class IncrementalReuseTest {
         ReachableState.digestsByBranch(world).entries.joinToString("\n         ") { (branch, digest) ->
             "$branch=%016x".format(digest)
         }
+
+    private companion object {
+        /**
+         * The rows the equality and identity cases are built at: 128, a world 256 by 128 of cells
+         * 46.9 km across. Whether two routes agree, and whether a stage is reused, hold or fail on
+         * any grid, and every setting the equality case moves still moves this world, which the
+         * case asserts; seed 99 still carries the lakes, rivers, realms and landmarks it checks for.
+         * About eighty generations, so a sixteenth of the cells of 512 rows is most of its cost.
+         */
+        const val REUSE_ROWS = 128
+    }
 }

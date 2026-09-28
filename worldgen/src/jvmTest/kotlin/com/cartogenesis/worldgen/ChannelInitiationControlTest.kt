@@ -33,9 +33,13 @@ import kotlinx.coroutines.runBlocking
 class ChannelInitiationControlTest : BorrowsSharedWorlds() {
 
     private companion object {
-        /** `EarthLikenessTest`'s seeds, at the size a preview is drawn at. */
-        val SEEDS = listOf(7L, 42L, 1234L, 99L)
-        const val SIDE = 512
+        /**
+         * `EarthLikenessTest`'s seeds, at [SharedWorlds.DETAIL_ROWS]: the drainage-density
+         * clauses are Earth-likeness figures, which move with the cell, and their bars were set
+         * on this grid.
+         */
+        val SEEDS = SharedWorlds.STANDARD_SEEDS
+        const val SIDE = SharedWorlds.DETAIL_ROWS
     }
 
     @Test

@@ -25,6 +25,10 @@ import kotlinx.coroutines.runBlocking
  * So the guard is a density ratio between the two kinds of country on one map, which also makes it
  * immune to a world simply having more water in it: both zones are measured on the same world, and
  * the control world differs only by [com.cartogenesis.worldgen.model.GlaciationConfig.enabled].
+ *
+ * The ice's other two guards are classes of their own, [GlaciationLatticeTest] on flat frozen
+ * country and [GlaciationCombTest] on mountain flanks, so that the fourteen worlds of 1,024 rows
+ * the three make between them can fall to different test workers rather than all to one.
  */
 class GlaciationTest : BorrowsSharedWorlds() {
 
@@ -42,28 +46,12 @@ class GlaciationTest : BorrowsSharedWorlds() {
      * the map at all.
      *
      * So the guard is restated on the grid where it can discriminate rather than given a lower bar
-     * on the grid where it cannot: 1024 is the desktop's own default resolution, it is where the
-     * comb case below already measures this same seed, and both regimes — valley and sheet — are
+     * on the grid where it cannot: 1024 is the desktop's own default resolution, it is where
+     * [GlaciationCombTest] measures this same seed, and both regimes — valley and sheet — are
      * working there.
      */
     private val base = WorldGenConfig.forRows(42L, 512)
         .atResolution(2048, 1024)
-
-    /**
-     * Glaciated country: the ice and tundra the carving is bounded to, *and the taiga below it*.
-     *
-     * The third one is not a loosening, it is the whole point, and the measurement found it the
-     * hard way. A glacier's bed is not where the ice is thickest, it is the valley the ice runs
-     * down, and that valley is below the snowline by definition — an ablation zone is what a snout
-     * is. So the lakes this stage makes come out in the boreal valleys draining the frozen uplands,
-     * at one to five degrees, and the first version of this guard measured the bare plateau above
-     * them and found almost nothing. That is also where they are on Earth: Windermere, Como, the
-     * Finger Lakes and the whole of the Canadian Shield's two million lakes lie in country that is
-     * boreal now and was under ice twenty thousand years ago, not in country that is under ice
-     * today.
-     */
-    private fun glaciatedZone(biome: Biome) =
-        biome == Biome.ICE_SHEET || biome == Biome.TUNDRA || biome == Biome.TAIGA
 
     /**
      * The control: warm-temperate and dry-temperate country, which on Earth is the ground the ice
@@ -86,7 +74,7 @@ class GlaciationTest : BorrowsSharedWorlds() {
      * share over four seeds is 8.7% against Earth's 10.1% — but it leaves that one map with six
      * lakes on it in total, and the guard was reading two of them.
      *
-     * So the same three seeds the comb case below already runs at this grid are pooled, counts
+     * So the same three seeds [GlaciationCombTest] runs at this grid are pooled, counts
      * added before any ratio is taken. The bars are untouched; what changes is that they are now
      * asked of thirty-odd lakes over four hundred thousand cells of cold country instead of two
      * lakes over one hundred and fifty thousand.
@@ -190,507 +178,7 @@ class GlaciationTest : BorrowsSharedWorlds() {
         }
     }
 
-    /**
-     * The lattice guard: on flat frozen country, the ice must not behave like a valley glacier.
-     *
-     * What the author saw on seed 718106 was a cross-hatched mesh of straight one- and two-cell
-     * lines of water at 0, 45 and 90 degrees over the whole cold lowland — the eight directions of
-     * the D8 flow grid, showing through. The cause was that the stage ran the valley machinery
-     * everywhere the ice was: on a plain, every flow path was given a U-trough, a staircase of
-     * over-deepened basins and a recessional moraine bar at the end of every reach, and the flow
-     * paths on a plain are straight, parallel and meet at 45 degrees.
-     *
-     * So the two things measured here are the two machines that built the mesh, and both are
-     * measured on flat cold ground only, which is where sheet ice belongs:
-     *
-     *  - **the trough**: what share of that ground the ice excavates by a trough's depth. Sheet ice
-     *    planes a province and gouges basins in it; it does not cut a valley down every flow line.
-     *  - **the bar**: what share of it the ice lays till across. A recessional moraine is a dam
-     *    *across a valley*, and a plain has no valleys to dam — every one of those bars on a plain
-     *    was a straight line of the mesh.
-     *
-     * Both are measured from outside the stage, as the difference between the world with the ice
-     * and the same world without it, so the same measurement runs against any version of the code.
-     *
-     * Two worlds, at two sea levels and two grid sizes, because the defect scales with how much
-     * flat cold lowland there is and the sea-level slider is the one control the desktop app gives
-     * the author over that: the world he reported carried far more land than the default. The 1024
-     * case is the desktop's own default resolution, where every length in
-     * [com.cartogenesis.worldgen.model.GlaciationConfig] is doubled by `atResolution` and the mesh
-     * was at its worst.
-     *
-     * Measured, before the regime split and after, on seed 718106:
-     *
-     * | | 512 at sea 0.50 | 1024 at sea 0.70 |
-     * |---|---|---|
-     * | flat cold cells | 9036 | 52317 |
-     * | cut to trough depth | 23.3% -> 3.3% | 36.8% -> 2.9% |
-     * | till laid | 2.91% -> 0.03% | 3.05% -> 0.00% |
-     * | mean cut | 0.0118 -> 0.0072 | 0.0175 -> 0.0071 |
-     *
-     * The mean cut barely falls, and that is the point rather than a disappointment: sheet ice does
-     * remove a great deal of rock from a shield, it just removes it *broadly*. What changes is not
-     * how much comes off but whether it comes off in channels.
-     *
-     * What the shape of the water itself says is reported but *not* asserted, and the reason is
-     * worth recording for whoever measures this next. The obvious statistics — the share of lake
-     * cells lying in runs of six or more along a grid axis at a width of one or two, the bearing
-     * anisotropy of lake-cell pairs, the grid-alignment of the bearings between separate lakes,
-     * lake perimeter over area — all move far less than the eye does, and one of them moves the
-     * wrong way. The run statistic on the water the ice adds to flat cold ground goes 0.271 -> 0.109
-     * at 1024 but 0.111 -> 0.194 at 512, where after the fix there are only a couple of hundred
-     * such cells and a handful of scour basins decide the figure. The reason none of them
-     * discriminates is that the
-     * pre-fix carving was never a set of lines: it was a *blanket*, a quarter to a third of the cold
-     * lowland cut to trough depth, and the mesh the eye saw was the un-cut ridges left standing
-     * between overlapping troughs, with the till bars ponding water along them. So the guard
-     * measures the two machines rather than the pattern they left, and the pattern is checked by
-     * looking at the render, which is what found it in the first place.
-     */
-    @Test
-    fun `flat frozen country is scoured, not grooved along the flow grid`() {
-        // 1024 first, and deliberately: it is the resolution the desktop app opens at, it is where
-        // the author saw the mesh, and it is the case that discriminates. The 512 world at the same
-        // sea level is the one the crops in `DebugMapDump` have always shown — mild enough that the
-        // defect got through review there — and the low sea level is the flat-lowland case.
-        val results = LinkedHashMap<String, IceWork>()
-        listOf(
-            Triple(1024, 0.70f, "1024 at sea 0.70, the desktop default"),
-            Triple(512, 0.70f, "512 at sea 0.70"),
-            Triple(512, 0.50f, "512 at sea 0.50")
-        ).forEach { (size, level, label) ->
-            val config = WorldGenConfig.forRows(718106L, 512)
-                .copy(seaLevel = level)
-                .atResolution(2 * size, size)
-                // Same reason as the comb guard above: the resolution contract below is a
-                // comparison of lake share of land at two grids, and E1's notch drains basins
-                // unevenly between them — at sea 0.70 it takes seed 718106's 512 grid down to
-                // 0.04% of land, under this test's own floor for having any water to compare.
-                .let { it.copy(erosion = it.erosion.copy(outletIncision = false)) }
-            val iced = SharedWorlds.world(config)
-            val bare = SharedWorlds.world(
-                config.copy(glaciation = config.glaciation.copy(enabled = false))
-            )
-            val work = measureIceWork(bare, iced, config)
-            results[label] = work
-            println(
-                "FILAMENT seed 718106 $label: ${work.filaments} lakes lying entirely on one D8" +
-                    " line, of ${work.lakeCount} lakes in all"
-            )
-            println(
-                "LATTICE seed 718106 $label: coldFlat=${work.coldFlat}" +
-                    " deepCut=${"%.4f".format(work.deepCut)} till=${"%.4f".format(work.till)}" +
-                    " meanCut=${"%.5f".format(work.meanCut)}" +
-                    " lakeShareOfLand=${"%.4f".format(work.lakeShareOfLand)}" +
-                    " addedWater=${work.addedWater} of which in straight grid runs" +
-                    " ${"%.3f".format(work.addedAxial)}"
-            )
-        }
-
-        results.forEach { (label, work) ->
-            assertTrue("no flat cold country to measure on $label", work.coldFlat > 5000)
-            assertTrue(
-                "on $label the ice cut a trough's depth into" +
-                    " ${"%.1f".format(work.deepCut * 100)}% of the flat frozen country" +
-                    " (${work.coldFlat} cells, mean cut ${"%.5f".format(work.meanCut)}): flat" +
-                    " ground is under a sheet, and a sheet does not drive a valley down every" +
-                    " line of the flow grid",
-                work.deepCut < 0.15f
-            )
-            assertTrue(
-                "on $label the ice laid till on ${"%.2f".format(work.till * 100)}% of the flat" +
-                    " frozen country — a recessional moraine is a bar across a valley, and every" +
-                    " one of them on a plain is a straight line of the lattice",
-                work.till < 0.01f
-            )
-        }
-
-        // Resolution invariance, which is half the defect. Every length this stage uses is in cells
-        // and is doubled by `atResolution`, so a threshold expressed per *cell* admits four times as
-        // many parallel flow paths per unit of map at 1024 as at 512 while each trough stays as
-        // narrow a fraction of the map as before — which is exactly why the mesh appeared at the
-        // desktop's own default resolution and not in the 512 crops this stage was reviewed on. The
-        // contract, in the spirit of `ResolutionScalingTest`: the same world at twice the grid is
-        // the same world with more detail in it, so the water covers roughly the same share of the
-        // land. Before the regime split that share went 1.4% -> 3.8% from 512 to 1024, a factor of
-        // 2.8; after it, 1.5% -> 1.9%.
-        val fine = results.getValue("1024 at sea 0.70, the desktop default").lakeShareOfLand
-        val coarse = results.getValue("512 at sea 0.70").lakeShareOfLand
-        assertTrue("no water to compare across resolutions", coarse > 0.002f && fine > 0.002f)
-        val growth = fine / coarse
-        // The ice's *own* contribution at the two grids, per unit of map rather than per cell: the
-        // land count quadruples between them, so the like-for-like comparison of `addedWater` is a
-        // quarter of the 1024 figure against the 512 one. Reported rather than asserted because it
-        // is a handful of cells at 512 and one basin landing or not moves it by a tenth, but it is
-        // the quantity the sentence in the assertion below is actually about, and it is the one
-        // that shows the contract is being kept: 9 cells at 512 against 45 at 1024 is 1.25.
-        val coarseWork = results.getValue("512 at sea 0.70")
-        val fineWork = results.getValue("1024 at sea 0.70, the desktop default")
-        val coarseAdded = coarseWork.addedWater
-        val fineAdded = fineWork.addedWater
-        // The same share with the ice's own water taken out of it: the standing water the drainage
-        // put there, which is what every stage outside B4 controls. E6 measured the two apart
-        // because the total stopped keeping the contract while the drainage's half kept it — 2.38
-        // before E6's lacustrine fix and 2.00 after, against the drainage's own 1.91 — and the
-        // whole of the difference is `addedWater`, which is two cells at 512.
-        // A ratio built on two cells is not a measurement, which is exactly why the ice's own
-        // figure has always been printed here rather than asserted; what is asserted is the half
-        // that can be. The ice's own scaling is recorded in `TODO.md` for a B4 chunk.
-        val coarseDrainage =
-            (coarseWork.lakeShareOfLand * coarseWork.coldFlat - coarseAdded) / coarseWork.coldFlat
-        val fineDrainage =
-            (fineWork.lakeShareOfLand * fineWork.coldFlat - fineAdded) / fineWork.coldFlat
-        val drainageGrowth = fineDrainage / coarseDrainage
-        println(
-            "RESOLUTION the drainage's own standing water on cold flat ground:" +
-                " ${"%.4f".format(coarseDrainage)} at 512 against ${"%.4f".format(fineDrainage)}" +
-                " at 1024, which is ${"%.2f".format(drainageGrowth)}; the total including the" +
-                " ice's own is ${"%.2f".format(growth)}"
-        )
-        println(
-            "RESOLUTION the ice's own added water: $coarseAdded cells at 512 against" +
-                " $fineAdded at 1024, which is" +
-                " ${"%.2f".format(if (coarseAdded == 0) 0f else fineAdded / (4f * coarseAdded))}" +
-                " per unit of map"
-        )
-        // Reported, not asserted, and F22 is why. The figure is one seed at one pair of grids, and
-        // across seeds it does not hold still: standing water above the sea-level cut, as a share
-        // of land, grows by 2.29 on seed 42 between 512 and 1024, 2.32 on seed 7, 6.80 on 1234 and
-        // 0.41 on 99. A quantity with a sixteen-fold spread between worlds cannot be held to a bar
-        // of 2.0 on one of them — it says which world it was measured on, not whether features are
-        // being selected per cell. Seed 42 sat at 1.91 through E6 and at 1.95 here, a twentieth
-        // under the bar, and F22 moved it to 2.11 by draining the drowned basins whose sills had
-        // been reading as having no gradient at all. Those sills are more often a single cell at
-        // 512 than at 1024, so what it removed was mostly coarse-grid water, and the ratio rose
-        // although both figures fell: 0.0035 to 0.0030 at 512, 0.0068 to 0.0064 at 1024.
-        //
-        // What this clause was written to catch does not need the figure. The mesh measured 2.8
-        // here, and it also drove a trough's depth into a fifth of the flat frozen country and laid
-        // till in lines across it — which the two assertions above measure directly, on every
-        // configuration rather than on one, and which [combShare] and [IceWork.filaments] measure
-        // again by shape. A pooled, several-seed version of this figure belongs in
-        // `ResolutionScalingTest`, where the drainage's own scaling would be the subject rather
-        // than a passenger; `TODO.md` carries it.
-        println(
-            "RESOLUTION unasserted: the drainage's growth is ${"%.2f".format(drainageGrowth)}," +
-                " against a seed-to-seed spread of 0.41 to 6.80 on the same quantity"
-        )
-    }
-
-    private class IceWork(
-        val coldFlat: Int,
-        val deepCut: Float,
-        val till: Float,
-        val meanCut: Float,
-        val addedWater: Int,
-        val addedAxial: Float,
-        /** Standing fresh water as a share of all land: the resolution-invariant figure. */
-        val lakeShareOfLand: Float,
-        /** Lakes every cell of which lies on a single D8 line, one cell wide. */
-        val filaments: Int,
-        val lakeCount: Int
-    )
-
-    /**
-     * What the ice did to the flat cold country, as the difference between two worlds that differ
-     * only by [com.cartogenesis.worldgen.model.GlaciationConfig.enabled].
-     */
-    private fun measureIceWork(bare: WorldMap, iced: WorldMap, config: WorldGenConfig): IceWork {
-        val w = bare.width
-        val h = bare.height
-        // Flat is measured on the untouched world, at the scale of the trough the ice would cut
-        // there — two trough-widths, written out rather than read from
-        // [com.cartogenesis.worldgen.model.GlaciationConfig.reliefWindow], so that the region the
-        // guard looks at cannot be moved by the settings it is guarding.
-        val radius = (2f * GlaciationStage.Carving(config).valleyWidthCells).toInt()
-        val flat = flatGround(bare, radius, FLAT_RELIEF)
-        val before = bare.sea.relativeElevation.data
-        val after = iced.sea.relativeElevation.data
-
-        // The bed, not the surface: see [sheetThicknessMetres]. Where there is no sheet the
-        // thickness is zero and this is the field itself, so the arithmetic is unchanged
-        // everywhere the guard used to be measuring rock in the first place.
-        val ice = sheetThicknessMetres(config, iced)
-        val metresPerFieldUnit = config.scale.highestLandMetres
-
-        var coldFlat = 0
-        var deep = 0
-        var laid = 0
-        var sum = 0.0
-        val added = BooleanArray(w * h)
-        for (i in 0 until w * h) {
-            if (!flat[i] || !glaciatedZone(bare.climate.biome[i])) continue
-            coldFlat++
-            val cut = before[i] - (after[i] - ice[i] / metresPerFieldUnit)
-            sum += cut.toDouble()
-            if (cut >= TROUGH_DEPTH) deep++
-            if (cut <= -TILL) laid++
-            if (iced.rivers.lakes.lakeId[i] >= 0 && bare.rivers.lakes.lakeId[i] < 0) added[i] = true
-        }
-        val n = coldFlat.coerceAtLeast(1)
-        var lakeCells = 0
-        for (i in 0 until w * h) {
-            if (iced.rivers.lakes.lakeId[i] >= 0 && !inRiftTrough(iced, i) &&
-                !belowTheSeaLevelCut(iced, i)
-            ) lakeCells++
-        }
-        return IceWork(
-            coldFlat = coldFlat,
-            deepCut = deep.toFloat() / n,
-            till = laid.toFloat() / n,
-            meanCut = (sum / n).toFloat(),
-            addedWater = added.count { it },
-            addedAxial = axialRunShare(added, w, h),
-            lakeShareOfLand = lakeCells.toFloat() / iced.sea.landCellCount.coerceAtLeast(1),
-            filaments = countFilaments(iced),
-            lakeCount = iced.rivers.lakes.lakes.size
-        )
-    }
-
-    /**
-     * The comb guard: a mountain flank carries a few trunk glaciers, not one glacier per gully.
-     *
-     * The residual the sheet-versus-valley split left behind, and the reason for a second pass. With
-     * flat country handed to the ice sheet, the range fronts still showed the lattice at their own
-     * scale: groups of five to fifteen short bars of water, one cell wide, lying parallel at exactly
-     * 45 degrees down the flank of the central range on seed 718106 and in the cold uplands of seeds
-     * 7 and 42. A straight range front carries a rank of parallel gullies; the old selection asked
-     * only whether a path drained enough frozen ground against the *world's* total, and every gully
-     * in the rank passed at once, so every gully got a trough, a basin staircase and a moraine bar.
-     * Real ranges carry a handful of glaciers, in their trunk valleys, and no two trunk valleys are
-     * parallel straight lines a few cells apart.
-     *
-     * Two figures, both at 1024, which is the resolution the desktop opens at and the one the comb
-     * showed up in:
-     *
-     *  - **filaments**: lake bodies every cell of which lies on one D8 line, one cell wide, four
-     *    cells or longer. A body of water that is a line along a flow path is not a lake in a
-     *    valley.
-     *  - **parallel bars**: the share of lake water lying in a thin bar at a grid bearing that has
-     *    another such bar of the *same* bearing three to ten cells off to the side. That is the comb
-     *    itself: not one straight lake, which a trough may legitimately leave, but a rank of them.
-     *
-     * Measured on the code as it stood after the first pass, and after this one:
-     *
-     * | seed (1024) | filaments | parallel bars | lake cells |
-     * |---|---|---|---|
-     * | 718106 | 1 -> 0 | 4.1% -> 1.7% | 8404 -> 6632 |
-     * | 42 | 6 -> 0 | 7.1% -> 2.3% | 4797 -> 3436 |
-     * | 7 | 1 -> 0 | 3.0% -> 1.6% | 17500 -> 14946 |
-     */
-    @Test
-    fun `mountain flanks carry a few trunk glaciers, not a comb of them`() {
-        // 3.5% until H5, 5% after it, 4.5% after H5b, and the bar has only ever moved with a
-        // measurement beside it.
-        //
-        // H5's lowstand grades the lower valleys to a sea a stand below today's, which cuts the D8
-        // channels near the coast deeper than they were and leaves more of them for the fill to
-        // pond: measured at 1024 on 718106/42/7, the share went 2.5/2.8/1.7% before H5 to
-        // 2.3/4.5/2.6% after, and the bar went up to hold the worst of the three.
-        //
-        // H5b's receiver clamp is the repair for what that exposed — a channel cell cut below the
-        // cell it drains into is a hole the next fill has to pond, and the incision was making
-        // thousands of them a world (`ReceiverClampTest` has the census). With it the share reads
-        // 2.2/4.4/1.7%: seed 718106 and seed 7 are back below where they stood before H5, and the
-        // bar comes down to sit above the worst of the three again.
-        //
-        // It does not reach the 3.5% it was at, and the residual is measured rather than guessed.
-        // What is left on seed 42 is the *spoil*: with the incision clamped, the deposition laid at
-        // the end of the last round is what puts channel cells below their receivers — 420 of them
-        // over the rounds on that seed against 344 with the clamp off, because a less deeply
-        // incised channel leaves a floodplain standing relatively higher. That is an alluvial dam,
-        // which is a real landform, and the no-uphill rule that bounds it computes its margin in
-        // shoreline-relative units and spends it as a height-unit budget — so the margin is about
-        // four times what it means to be. Measured and handed on rather than fixed here: the
-        // deposition is E5's chunk and the erodibility that unit muddle calibrated is G1's.
-        // Back to 3.5%, where H5 left it before the alluvial dams pushed it up.
-        //
-        // E6 closed the unit muddle in `headroom` that let a dam stand `1 / landRange` times higher
-        // than the no-uphill rule allows — about four times — and put the lacustrine fan's floor on
-        // a fraction of its rim instead of a charge per cell. Both take spoil-made hollows out of
-        // the world, and the comb residual is mostly those: measured at 1024 with the notch and the
-        // history off, seeds 718106/42/7 read 1.2%, 2.5% and 1.5% where H5b left them at 2.2%, 4.4%
-        // and 1.7%. The bar goes back to the figure the guard was written with, with the worst seed
-        // now at two thirds of it.
-        // And then the 2.0.x line arrived, and the figure this bar is set on stopped being the
-        // ice's. Measured on the merged tree at 1024, in this case's own configuration, each seed
-        // beside the same world with `GlaciationConfig.enabled` off:
-        //
-        //   718106   1.34% with the ice (71 cells of 5264), 1.21% without (61 of 5043)
-        //   42       5.66% with the ice (121 of 2144),      6.03% without (124 of 2060)
-        //   7        1.74% with the ice (59 of 3406),       1.65% without (59 of 3582)
-        //
-        // Seed 42 is over the old bar and none of it is the ice's: switch the ice off and the comb
-        // is three cells *larger*. What moved is the drainage under it — the facet routing takes
-        // that seed's un-glaciated comb from 49 cells to 124 — and a bar on the total was reading
-        // the router through a glacial denominator, which is the same fault this case's other
-        // clause was demoted for.
-        //
-        // So the clause asks what it always meant to ask: how much comb the *ice* adds, against
-        // the un-glaciated world of the same seed. That is what `GlaciationAuditTest` already does
-        // with the bar count at 2048, and for the stated reason — "so the clause still says
-        // something about the ice and not about the terrain under it". The bound is that audit's
-        // own: a fiftieth of the world's standing water. The three seeds measure +0.18%, -0.13%
-        // and +0.01% of it, which is an order of magnitude inside the bound and leaves the guard
-        // room to catch the lattice it was written for, whose comb was the ice's entirely.
-        //
-        // The total is still printed. Seed 42's 5.7% is a real thing about the map and wants a
-        // guard of its own, on the drainage, where the ice is not in the way; `TODO.md` carries it.
-        val ICE_COMB_BAR = 0.02f
-        var worst = 0f
-        val over = ArrayList<String>()
-        listOf(718106L, 42L, 7L).forEach { seed ->
-            val config = WorldGenConfig.forRows(seed, 512)
-                .atResolution(2048, 1024)
-                // E1's outlet notch off, because both figures below are shares of the world's
-                // standing water and the notch removes two thirds of it for reasons that have
-                // nothing to do with ice: on seed 718106 at 1024 the lake cells go 6632 -> 2173
-                // while the comb itself holds 113 cells before and 128 after, so an unchanged comb
-                // reads as 1.7% one moment and 5.9% the next. What this guard is about is how much
-                // of the ice's work comes out as a rank of parallel gullies, and that is measured
-                // here against the water the ice had to work with.
-                .let { it.copy(erosion = it.erosion.copy(outletIncision = false)) }
-                // And H1's tectonic history off, for a reason of the same shape. Both figures are
-                // shares of the world's standing water, and the history changes how much of that
-                // there is and where: its worn old belts are broad, low-relief uplands, which is
-                // exactly the ground B4's two regimes divide between them, and a cold one sits
-                // near the boundary. On seed 42 the comb share reads 3.2% with the history off and
-                // 3.6% with it on, either side of a bar of 3.5% — a fortieth of the world's water
-                // moving between two categories, not a comb appearing. What the shipped world
-                // measures is asserted where it can be read against the un-glaciated world of the
-                // same seed: see `the author's 2048 world has no narrow straight water`.
-                .let { it.copy(tectonics = it.tectonics.copy(historyEpochs = 1)) }
-            val world = SharedWorlds.world(config)
-            val bare = SharedWorlds.world(
-                config.copy(glaciation = config.glaciation.copy(enabled = false))
-            )
-            val filaments = countFilaments(world)
-            val comb = combShare(world)
-            val lakeCells = world.rivers.lakes.lakeId.count { it >= 0 }
-            val bareLakeCells = bare.rivers.lakes.lakeId.count { it >= 0 }
-            // Cells rather than shares on both sides, because the two worlds do not hold the same
-            // amount of water and a difference of two shares would be a difference of denominators
-            // as much as of combs.
-            val addedByTheIce =
-                (comb * lakeCells - combShare(bare) * bareLakeCells) / lakeCells
-            println(
-                "COMB seed $seed at 1024: filaments=$filaments of ${world.rivers.lakes.lakes.size}" +
-                    " lakes, parallel bars ${"%.3f".format(comb)} of $lakeCells lake cells," +
-                    " ${"%.3f".format(combShare(bare))} of $bareLakeCells with the ice off," +
-                    " so the ice adds ${"%.4f".format(addedByTheIce)} of the world's water"
-            )
-            assertTrue(
-                "seed $seed at 1024 has $filaments lakes that are a straight one-cell line along a" +
-                    " D8 bearing — a trough is a valley the ice found, not a line drawn down a" +
-                    " flow path",
-                filaments == 0
-            )
-            worst = maxOf(worst, addedByTheIce)
-            if (addedByTheIce >= ICE_COMB_BAR) {
-                over.add("$seed at ${"%.2f".format(addedByTheIce * 100)}%")
-            }
-        }
-        // Collected and asserted once, rather than seed by seed, so a run reports all three figures
-        // instead of stopping at the first that is over. On the implicit update before the uplift
-        // was re-derived on it the ice added 5.00% and 3.18% on seeds 718106 and 7, a comb; with the
-        // re-derived uplift it was inside the bar again (docs/DESIGN_LEDGER.md, Fix 3b). Recorded
-        // since the lake falls with its outlet, and armed again on square cells at Q2, where the ice
-        // adds 1.64, 1.17 and 0.73% (docs/DESIGN_LEDGER.md, Q2).
-        assertTrue(
-            "the ice puts ${ICE_COMB_BAR * 100}% or more of these worlds' standing water into thin" +
-                " grid-bearing bars that run parallel to another such bar within ten cells — a" +
-                " comb of gullies, not a handful of trunk glaciers: $over" +
-                " (worst ${"%.2f".format(worst * 100)}%)",
-            over.isEmpty()
-        )
-    }
-
-    /** Land whose elevation range within [radius] cells is under [limit] of the land's range. */
-    private fun flatGround(world: WorldMap, radius: Int, limit: Float): BooleanArray {
-        val w = world.width
-        val h = world.height
-        val rel = world.sea.relativeElevation.data
-        val isLand = world.sea.isLand
-        val surface = FloatArray(w * h) { rel[it].coerceAtLeast(0f) }
-        val out = BooleanArray(w * h)
-        for (y in 0 until h) {
-            for (x in 0 until w) {
-                val i = y * w + x
-                if (!isLand[i]) continue
-                var lo = Float.MAX_VALUE
-                var hi = -Float.MAX_VALUE
-                for (dy in -radius..radius) {
-                    val ny = (y + dy).coerceIn(0, h - 1)
-                    for (dx in -radius..radius) {
-                        var nx = (x + dx) % w
-                        if (nx < 0) nx += w
-                        val v = surface[ny * w + nx]
-                        if (v < lo) lo = v
-                        if (v > hi) hi = v
-                    }
-                }
-                out[i] = hi - lo < limit
-            }
-        }
-        return out
-    }
-
-    /**
-     * The share of a water mask lying in a straight run of six or more cells along one of the four
-     * grid directions at a width of one or two — the shape the author described, reported rather
-     * than asserted for the reason given on the guard above.
-     */
-    private fun axialRunShare(water: BooleanArray, w: Int, h: Int): Float {
-        fun at(x: Int, y: Int): Boolean {
-            if (y < 0 || y >= h) return false
-            var nx = x % w
-            if (nx < 0) nx += w
-            return water[y * w + nx]
-        }
-        val axes = arrayOf(intArrayOf(1, 0), intArrayOf(1, 1), intArrayOf(0, 1), intArrayOf(1, -1))
-        var total = 0
-        var lines = 0
-        for (y in 0 until h) {
-            for (x in 0 until w) {
-                if (!at(x, y)) continue
-                total++
-                for (a in axes) {
-                    var run = 1
-                    var s = 1
-                    while (run < 64 && at(x + a[0] * s, y + a[1] * s)) { run++; s++ }
-                    s = 1
-                    while (run < 64 && at(x - a[0] * s, y - a[1] * s)) { run++; s++ }
-                    if (run < 6) continue
-                    var thick = 1
-                    s = 1
-                    while (thick <= 2 && at(x - a[1] * s, y + a[0] * s)) { thick++; s++ }
-                    s = 1
-                    while (thick <= 2 && at(x + a[1] * s, y - a[0] * s)) { thick++; s++ }
-                    if (thick <= 2) { lines++; break }
-                }
-            }
-        }
-        return if (total == 0) 0f else lines.toFloat() / total
-    }
-
     private companion object {
-        /**
-         * The elevation range, as a fraction of the land's own, under which ground counts as flat
-         * for this guard.
-         *
-         * Deliberately *tighter* than [com.cartogenesis.worldgen.model.GlaciationConfig.valleyRelief],
-         * so the ground measured is unambiguously flat rather than merely whatever the stage
-         * decided to call a sheet. A guard whose region is defined by the setting it is guarding
-         * moves with that setting and proves nothing.
-         */
-        const val FLAT_RELIEF = 0.25f
-
-        /** A trough's depth: what a full glacier cuts, over-deepening included. */
-        const val TROUGH_DEPTH = 0.02f
-
-        /** Enough till to be a bar rather than float rounding. */
-        const val TILL = 0.001f
-
         /**
          * How much denser with lakes glaciated country has to be than temperate country.
          *
@@ -711,25 +199,6 @@ class GlaciationTest : BorrowsSharedWorlds() {
          * measured here is a sheet basin. At 1024 the same seed has both regimes working.
          */
         const val COLD_LAKE_RATIO = 2.5f
-
-        /**
-         * How much the lake share of land was allowed to grow when the grid doubled, until F22.
-         *
-         * Kept as a note rather than a constant, because the assertion it served is now a report;
-         * see the block that prints it. The history is worth keeping. The defect this contract
-         * existed to catch measured **2.8** — the lattice, where troughs were admitted per cell so
-         * four times as many appeared per unit of map at twice the grid — and the three passes that
-         * fixed it measured 1.4, 1.41 and 1.3 against a bar of 1.7. H2 moved the bar to **2.0**,
-         * because the quantity is the whole world's standing water at each grid and most of it is
-         * not glacial, and because the frozen mask had become the zero contour of a snow balance
-         * rather than an isotherm, which genuinely does move by a cell here and there at a finer
-         * grid.
-         *
-         * F22 stopped asserting it at all, having measured the same quantity across seeds: 2.29,
-         * 2.32, 6.80, 0.41. One seed cannot carry a bar on a figure with that spread, and the mesh
-         * itself is caught by the trough-depth and till clauses in this same case, which measure it
-         * on every configuration and by shape.
-         */
     }
 
     private class Zones(
@@ -819,6 +288,22 @@ class GlaciationTest : BorrowsSharedWorlds() {
         return zones
     }
 }
+
+/**
+ * Glaciated country: the ice and tundra the carving is bounded to, *and the taiga below it*.
+ *
+ * The third one is not a loosening, it is the whole point, and the measurement found it the
+ * hard way. A glacier's bed is not where the ice is thickest, it is the valley the ice runs
+ * down, and that valley is below the snowline by definition — an ablation zone is what a snout
+ * is. So the lakes this stage makes come out in the boreal valleys draining the frozen uplands,
+ * at one to five degrees, and the first version of this guard measured the bare plateau above
+ * them and found almost nothing. That is also where they are on Earth: Windermere, Como, the
+ * Finger Lakes and the whole of the Canadian Shield's two million lakes lie in country that is
+ * boreal now and was under ice twenty thousand years ago, not in country that is under ice
+ * today. Top-level because the lake guard and [GlaciationLatticeTest] both read it.
+ */
+internal fun glaciatedZone(biome: Biome) =
+    biome == Biome.ICE_SHEET || biome == Biome.TUNDRA || biome == Biome.TAIGA
 
 /**
  * The stage's own tally, which is not required to balance but is required to be looked at.

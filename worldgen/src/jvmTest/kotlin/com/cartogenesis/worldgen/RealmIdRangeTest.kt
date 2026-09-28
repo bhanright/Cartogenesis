@@ -28,7 +28,10 @@ class RealmIdRangeTest : BorrowsSharedWorlds() {
 
     /**
      * Cheap cases, and deliberately varied: wilderness changes which steps run at all — it is what
-     * turns `leaveWilderness` on and `claimStragglers` off — so both modes are worth a pass.
+     * turns `leaveWilderness` on and `claimStragglers` off — so both modes are worth a pass. The
+     * seven are at [SharedWorlds.COARSE_ROWS], since an id is in range or not on any grid, and the
+     * author's world once more at 1,024 rows, the finest the per-merge tier builds, because the
+     * crash was found at 2048 and a grid's size is one of the things that varies a partition.
      */
     @Test
     fun `varied worlds number every cell inside their realm list`() {
@@ -53,7 +56,7 @@ class RealmIdRangeTest : BorrowsSharedWorlds() {
  * of being duplicated.
  */
 internal fun authorsConfig(seed: Long): WorldGenConfig {
-    val base = WorldGenConfig.forRows(seed, 512).copy(seaLevel = 0.62f)
+    val base = WorldGenConfig.forRows(seed, SharedWorlds.COARSE_ROWS).copy(seaLevel = 0.62f)
     return base.copy(
         tectonics = base.tectonics.copy(plateCount = 14),
         nations = base.nations.copy(nationCount = 12)

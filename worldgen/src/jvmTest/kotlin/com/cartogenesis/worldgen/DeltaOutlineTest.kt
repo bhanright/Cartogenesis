@@ -43,6 +43,8 @@ import kotlin.test.assertTrue
  *    cell the drainage order is standing on. It makes no squares and is not touched here.
  *
  * Each guard below is measured against `deltaOutline = false`, which is the code as E1 left it.
+ *
+ * At [SharedWorlds.DETAIL_ROWS]: a lobe's outline is a shape a few cells across.
  */
 class DeltaOutlineTest {
 
@@ -55,7 +57,7 @@ class DeltaOutlineTest {
      * against the cell.
      */
     private fun config(seed: Long, size: Int = 512): WorldGenConfig {
-        val base = WorldGenConfig.forRows(seed, 512).copy(seaLevel = 0.62f)
+        val base = WorldGenConfig.forRows(seed, SharedWorlds.DETAIL_ROWS).copy(seaLevel = 0.62f)
         val authored = base.copy(
             tectonics = base.tectonics.copy(plateCount = 14),
             nations = base.nations.copy(nationCount = 12)
@@ -545,7 +547,7 @@ class DeltaOutlineTest {
      */
     @Test
     fun `a lobe reaches as far north as east on the ground`() {
-        val config = WorldGenConfig.forRows(42L, 512)
+        val config = WorldGenConfig.forRows(42L, SharedWorlds.DETAIL_ROWS)
         val rowScale = config.cellHeightInCellWidths
         val w = 256
         val h = 256

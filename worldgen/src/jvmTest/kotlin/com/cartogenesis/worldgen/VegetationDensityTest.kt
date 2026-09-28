@@ -24,9 +24,12 @@ class VegetationDensityTest : BorrowsSharedWorlds() {
 
     private companion object {
 
-        /** The four standard seeds at the per-merge grid, as every other pooled climate guard. */
-        val SEEDS = listOf(7L, 42L, 1234L, 99L)
-        const val GRID = 512
+        /**
+         * The four standard seeds at [SharedWorlds.COARSE_ROWS], as every other pooled climate
+         * guard: a cover's share of the land is a figure of the ground, not of the grid's detail.
+         */
+        val SEEDS = SharedWorlds.STANDARD_SEEDS
+        const val GRID = SharedWorlds.COARSE_ROWS
 
         /**
          * The density below which a cell counts as barren or sparsely vegetated.

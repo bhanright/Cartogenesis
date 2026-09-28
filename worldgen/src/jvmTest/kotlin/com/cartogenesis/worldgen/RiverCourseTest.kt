@@ -28,9 +28,12 @@ import kotlin.test.assertTrue
 class RiverCourseTest : BorrowsSharedWorlds() {
 
     private companion object {
-        /** Ground rule 1's seeds plus the audit's fourth, at the size a preview is drawn at. */
-        val SEEDS = listOf(7L, 42L, 1234L, 99L)
-        const val SIDE = 512
+        /**
+         * Ground rule 1's seeds plus the audit's fourth, at [SharedWorlds.DETAIL_ROWS]: the cases
+         * are water one cell wide and a single cell of land above a mouth, the grid's own detail.
+         */
+        val SEEDS = SharedWorlds.STANDARD_SEEDS
+        const val SIDE = SharedWorlds.DETAIL_ROWS
 
         /**
          * How far short of its own longest watercourse one drawn course may fall, in kilometres.

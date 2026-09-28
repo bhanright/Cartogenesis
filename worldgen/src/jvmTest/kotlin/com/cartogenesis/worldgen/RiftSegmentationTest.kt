@@ -30,6 +30,9 @@ import kotlin.test.assertTrue
  * be green for a reason other than the segmentation. Two of the three numbers carry a threshold;
  * the count of sea bodies is printed by both tests and asserted by neither, for the reason set out
  * beside [minLandBridges].
+ *
+ * At [SharedWorlds.DETAIL_ROWS]: the seed was scanned for and the bar on the width's variation set
+ * on this grid, and a sill or a land bridge across a trough is a few cells.
  */
 class RiftSegmentationTest : BorrowsSharedWorlds() {
 
@@ -163,7 +166,7 @@ class RiftSegmentationTest : BorrowsSharedWorlds() {
     }
 
     private fun world(segmented: Boolean): WorldMap {
-        val base = WorldGenConfig.forRows(seed, 512)
+        val base = WorldGenConfig.forRows(seed, SharedWorlds.DETAIL_ROWS)
         return SharedWorlds.world(
             base.copy(tectonics = base.tectonics.copy(riftSegmentation = segmented))
         )

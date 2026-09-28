@@ -8,9 +8,10 @@ import kotlin.test.assertEquals
 import org.junit.Assert.assertTrue
 
 /**
- * The Earth-likeness yardstick at 512, on the four standard seeds: every metric of the plan's M1
- * table measured, printed with Earth's figure beside it, and asserted where Earth has a figure and
- * this generator already reaches it.
+ * The Earth-likeness yardstick at 512 rows, on the four standard seeds: every metric of the plan's
+ * M1 table measured, printed with Earth's figure beside it, and asserted where Earth has a figure
+ * and this generator already reaches it. At [SharedWorlds.DETAIL_ROWS] and not the coarse grid,
+ * because drainage density, lakes and first-order streams all move with the cell.
  *
  * Every number the later chunks are accepted against is printed here, whether or not it is
  * asserted, because a chunk that improves a metric has to be able to say what the metric was.
@@ -159,7 +160,7 @@ class EarthLikenessTest : BorrowsSharedWorlds() {
             val pool = EarthLikeness.Pool()
             val perSeed = seeds.map { seed ->
                 val world: WorldMap = SharedWorlds.world(
-                    WorldGenConfig.forRows(seed, 512)
+                    WorldGenConfig.forRows(seed, SharedWorlds.DETAIL_ROWS)
                 )
                 EarthLikeness.measure(world, seed.toString(), pool)
             }

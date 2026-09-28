@@ -24,6 +24,8 @@ import kotlin.test.assertTrue
  * is the property checked here, rather than "at least one hearth each", which this project's own
  * seed 7 already satisfied before the fix — the bug was never that a large landmass went hearth-
  * less, it was that it went under-provisioned relative to its size.
+ *
+ * At [SharedWorlds.COARSE_ROWS]: an allocation by shares of habitable area holds on any grid.
  */
 class CultureHearthLandmassTest : BorrowsSharedWorlds() {
 
@@ -31,7 +33,7 @@ class CultureHearthLandmassTest : BorrowsSharedWorlds() {
     fun `hearths are shared out between landmasses in proportion to habitable land`() {
         listOf(42L, 7L, 1234L).forEach { seed ->
             val world = SharedWorlds.world(
-                WorldGenConfig.forRows(seed, 512)
+                WorldGenConfig.forRows(seed, SharedWorlds.COARSE_ROWS)
             )
             val placement = CultureStage.placeHearths(world.config, world.sea, world.climate, world.rivers)
             checkNotNull(placement) { "seed $seed: no hearths were placed at all" }

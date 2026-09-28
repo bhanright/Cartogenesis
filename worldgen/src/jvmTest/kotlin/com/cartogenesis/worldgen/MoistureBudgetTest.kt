@@ -38,8 +38,21 @@ import kotlin.test.assertTrue
 class MoistureBudgetTest : BorrowsSharedWorlds() {
 
     private companion object {
-        val seeds = listOf(7L, 42L, 1234L, 99L)
-        const val size = 512
+        val seeds = SharedWorlds.STANDARD_SEEDS
+
+        /**
+         * [SharedWorlds.COARSE_ROWS] for the convergence and the inversion: a pooled interior's
+         * rainfall and a coast's share of its hinterland's rain are sums over the ground, and the
+         * ITCZ's centroid is a mean over the tropics, none of them the grid's detail.
+         */
+        const val size = SharedWorlds.COARSE_ROWS
+
+        /**
+         * [SharedWorlds.DETAIL_ROWS] for the recycling ratio, which moves with the cell and stands
+         * at the edge of Earth's band: 0.303 at 512 rows and 0.285 at 256 on the same tree,
+         * measured at Q2b (docs/DESIGN_LEDGER.md, Q2b). Its bar is Earth's and is not moved.
+         */
+        const val RECYCLING_ROWS = SharedWorlds.DETAIL_ROWS
 
         /**
          * Earth's continental precipitation recycling ratio: the share of rain over land whose
@@ -79,9 +92,9 @@ class MoistureBudgetTest : BorrowsSharedWorlds() {
          * How far the zonal-mean rainfall peak may move, in degrees of latitude, when the
          * convergence term is switched on.
          *
-         * One degree, which at 512 rows is under three rows: the term is built from the departure
-         * wind alone precisely so that the belts' own rising limb is untouched, and this is that
-         * claim as a number rather than as a comment.
+         * One degree, which at 256 rows is under a row and a half: the term is built from the
+         * departure wind alone precisely so that the belts' own rising limb is untouched, and this
+         * is that claim as a number rather than as a comment.
          */
         const val ITCZ_DRIFT_DEGREES = 1.0
 
@@ -152,8 +165,12 @@ class MoistureBudgetTest : BorrowsSharedWorlds() {
         const val MIN_COAST_CELLS = 5
     }
 
-    private fun generate(seed: Long, tune: (WorldGenConfig) -> WorldGenConfig): WorldMap {
-        val base = WorldGenConfig.forRows(seed, size)
+    private fun generate(
+        seed: Long,
+        rows: Int = size,
+        tune: (WorldGenConfig) -> WorldGenConfig
+    ): WorldMap {
+        val base = WorldGenConfig.forRows(seed, rows)
         return SharedWorlds.world(tune(base))
     }
 
@@ -164,11 +181,11 @@ class MoistureBudgetTest : BorrowsSharedWorlds() {
         var pooledRain = 0.0
         var pooledRecycled = 0.0
         seeds.forEach { seed ->
-            val world = generate(seed) { it }
+            val world = generate(seed, RECYCLING_ROWS) { it }
             val (rain, recycled) = continentalRain(world)
             pooledRain += rain
             pooledRecycled += recycled
-            val control = generate(seed) {
+            val control = generate(seed, RECYCLING_ROWS) {
                 it.copy(climate = it.climate.copy(evapotranspirationLengthKm = 0f))
             }
             val (controlRain, controlRecycled) = continentalRain(control)
@@ -225,9 +242,11 @@ class MoistureBudgetTest : BorrowsSharedWorlds() {
         var derivedRain = 0.0
         var derivedRecycled = 0.0
         seeds.forEach { seed ->
-            val proxy = continentalRain(generate(seed) { it })
+            val proxy = continentalRain(generate(seed, RECYCLING_ROWS) { it })
             val derived = continentalRain(
-                generate(seed) { it.copy(climate = it.climate.copy(vegetationRecycling = true)) }
+                generate(seed, RECYCLING_ROWS) {
+                    it.copy(climate = it.climate.copy(vegetationRecycling = true))
+                }
             )
             proxyRain += proxy.first
             proxyRecycled += proxy.second

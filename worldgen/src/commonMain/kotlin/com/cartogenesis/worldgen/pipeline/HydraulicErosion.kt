@@ -61,7 +61,7 @@ internal data class RoundMass(
      *
      * The pit census the receiver clamp was written from. A channel cell below its own receiver
      * is a hole in a river's bed: the next round's priority flood has to raise it, and along a
-     * channel those raised cells line up into the thin grid-bearing bars `GlaciationTest`'s comb
+     * channel those raised cells line up into the thin grid-bearing bars `GlaciationCombTest`'s comb
      * measurement catches. Measured per mechanism because the plan asks for exactly one clamp to
      * be added on evidence rather than four on suspicion. See docs/DESIGN_LEDGER.md, H5b, for the
      * counts.

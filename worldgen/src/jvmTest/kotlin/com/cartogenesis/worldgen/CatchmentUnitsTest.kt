@@ -269,12 +269,14 @@ class CatchmentUnitsTest : BorrowsSharedWorlds() {
 
     /**
      * The same three rules on the standard worlds, through both stages' own partitions: every
-     * land cell in one unit, no unit over its stage's size limit, and none on two landmasses.
+     * land cell in one unit, no unit over its stage's size limit, and none on two landmasses. At
+     * [SharedWorlds.COARSE_ROWS], since each is an invariant that holds or fails cell by cell on
+     * any grid.
      */
     @Test
     fun `the standard worlds' units are bounded and each on one landmass`() {
         for (seed in listOf(7L, 42L, 1234L)) {
-            val config = WorldGenConfig.forRows(seed, 512)
+            val config = WorldGenConfig.forRows(seed, SharedWorlds.COARSE_ROWS)
             val world = SharedWorlds.world(config)
             val landKm2 = world.sea.landCellCount * config.squareKilometresPerCell
             for ((stage, units, share) in listOf(

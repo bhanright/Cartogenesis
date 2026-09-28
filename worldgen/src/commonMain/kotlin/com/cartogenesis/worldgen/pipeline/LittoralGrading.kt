@@ -426,7 +426,7 @@ internal object LittoralGrading {
      *
      * **And never closing anything off**, which [WaterTopology.severs] enforces cell by cell, in
      * row-major order so that two cells across the mouth of a bay cannot both pass it. Without that
-     * rule the pass sealed them, and nothing downstream can reopen one: it took `GlaciationTest`'s
+     * rule the pass sealed them, and nothing downstream can reopen one: it took `GlaciationLatticeTest`'s
      * resolution contract from 1.91 to 2.37 against a bar of 2.20.
      */
     private fun majoritySweep(
@@ -473,7 +473,7 @@ internal object LittoralGrading {
      * coastal basin with no way out — nothing downstream cuts a plug laid after the sea-level cut,
      * since E1's notch runs inside the hydraulic rounds and [SeaLevelStage] drains only the basins
      * the enclosure rule made — and it did: on seed 718106 at sea 0.70 with the outlet notch off,
-     * which is the world `GlaciationTest` measures resolution invariance on, the standing water on
+     * which is the world `GlaciationLatticeTest` measures resolution invariance on, the standing water on
      * cold flat ground went from 0.0036 to 0.0040 at 512 and from 0.0069 to 0.0096 at 1024, taking
      * the growth between the two grids from 1.91 to 2.37 against a bar of 2.20. Holding every
      * built cell strictly below the lowest old land its own flat touches makes the ridge impossible

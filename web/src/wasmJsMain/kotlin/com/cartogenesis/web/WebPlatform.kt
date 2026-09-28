@@ -287,15 +287,18 @@ private object LocalStorageSettings : SettingsStore {
 }
 
 /**
- * The widest save a browser tab opens: the tab's own ceiling, [WorldCeilings.BROWSER_TAB].
+ * The largest save a browser tab opens: as many rows as the tab's own ceiling,
+ * [WorldCeilings.BROWSER_TAB].
  *
- * A save wider than it is refused from its header, before any array is allocated, by the browser's
- * storage, a folder library and an uploaded file alike. The alternative is not a slow open: a saved
- * 4096 world is 2.45 GB of arrays, more than the heap a tab died at while making one, so decoding it
- * is the dead tab the ceiling exists to prevent. The desktop opens it.
+ * A save with more rows is refused from its header, before any array is allocated, by the
+ * browser's storage, a folder library and an uploaded file alike. The alternative is not a slow
+ * open: a saved 4096 world is 2.45 GB of arrays, more than the heap a tab died at while making one,
+ * so decoding it is the dead tab the ceiling exists to prevent. The desktop opens it. Counted in
+ * rows, as a size is named: a world of square cells is twice as many cells across as down, and a
+ * limit on its larger side would refuse the size the ceiling names.
  */
 internal val BROWSER_OPENING_LIMIT = OpeningLimit(
-    largestSide = WorldCeilings.BROWSER_TAB,
-    because = "a browser tab cannot hold a world larger than ${WorldCeilings.BROWSER_TAB} by " +
-        "${WorldCeilings.BROWSER_TAB}; the desktop app opens it"
+    largestRows = WorldCeilings.BROWSER_TAB,
+    because = "a browser tab cannot hold a world of more than ${WorldCeilings.BROWSER_TAB} rows; " +
+        "the desktop app opens it"
 )

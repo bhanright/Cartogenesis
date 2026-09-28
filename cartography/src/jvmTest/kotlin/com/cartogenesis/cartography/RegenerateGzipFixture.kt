@@ -23,9 +23,7 @@ class RegenerateGzipFixture {
         val document = WorldDocument(
             id = "gzip-fixture",
             title = "Gzip fixture",
-            config = com.cartogenesis.worldgen.model.WorldGenConfig(
-                seed = 4096L, width = 32, height = 32
-            ),
+            config = com.cartogenesis.worldgen.model.WorldGenConfig.forRows(seed = 4096L, rows = 32),
             savedAt = 1_700_000_000_000L
         )
         val world = com.cartogenesis.worldgen.WorldGenerationEngine.generate(document.config)
@@ -37,9 +35,9 @@ class RegenerateGzipFixture {
         val source = """package com.cartogenesis.cartography
 
 /**
- * A 32x32 world, gzipped by the JVM's own gzip algorithm (see [GzipInteroperabilityTest]),
- * checked in as base64 chunks because a single Kotlin string literal this size trips the
- * JVM class file's 64KB-per-constant limit.
+ * A 64x32 world of square cells, gzipped by the JVM's own gzip algorithm (see
+ * [GzipInteroperabilityTest]), checked in as base64 chunks because a single Kotlin string literal
+ * this size trips the JVM class file's 64KB-per-constant limit.
  *
  * It is a whole save of the current format, so it goes stale whenever the format does:
  * a section added or renamed, or a bump of [WorldCodec.FORMAT_VERSION], and the reader

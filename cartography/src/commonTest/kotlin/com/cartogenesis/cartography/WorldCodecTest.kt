@@ -97,7 +97,7 @@ class WorldCodecTest {
 
     @Test
     fun `every per-cell array and every list comes back identical`() = runTest(timeout = 10.minutes) {
-        val world = GeneratedWorlds.at256()
+        val world = GeneratedWorlds.at128Rows()
         // A case can only mean anything if there was something to compare. An empty list is equal
         // to an empty list, and a world with no realms would pass this without looking at one.
         assertTrue(world.rivers.rivers.isNotEmpty(), "world has no rivers to compare")
@@ -123,7 +123,7 @@ class WorldCodecTest {
 
     @Test
     fun `a loaded save reuses every stage and generates nothing`() = runTest(timeout = 10.minutes) {
-        val world = GeneratedWorlds.at256()
+        val world = GeneratedWorlds.at128Rows()
         val loaded = WorldCodec.decode(WorldCodec.encode(document(world), world)).world
 
         // What the application does with an opened world when a setting is next edited: hand it
@@ -179,11 +179,11 @@ class WorldCodecTest {
 
     @Test
     fun `a save larger than one chunk is carried across its chunks`() = runTest {
-        // 512 by 512 is 38 MB of arrays: thirty-odd chunks, with records and values straddling
+        // 1024 by 512 is 77 MB of arrays: seventy-odd chunks, with records and values straddling
         // every boundary between them.
-        val world = SyntheticWorlds.of(WorldGenConfig(seed = 6L, width = 512, height = 512))
+        val world = SyntheticWorlds.of(WorldGenConfig.forRows(seed = 6L, rows = 512))
         val bytes = WorldCodec.encode(document(world), world)
-        assertTrue(bytes.size > 30 * WorldCodec.CHUNK_BYTES)
+        assertTrue(bytes.size > 70 * WorldCodec.CHUNK_BYTES)
         assertArraysIdentical(world, WorldCodec.decode(bytes).world)
     }
 
@@ -211,6 +211,61 @@ class WorldCodecTest {
         assertTrue(WorldSections.payloadBytes(directory) > Int.MAX_VALUE)
         assertEquals(directory.last().offset + WorldSections.RECORD_PREFIX_BYTES + directory.last().name.length +
             directory.last().bytes, WorldSections.payloadBytes(directory))
+    }
+
+    /**
+     * The top of the ladder saves and opens, and a grid past it is refused by both.
+     *
+     * 4096 rows of square cells is 8192 by 4096, 33,554,432 cells and 4.9 GB of arrays, which no
+     * test can hold, so each path is asked about the grid alone. [WorldCodec.write] refuses a world
+     * past the bound before it reads an array of it; a header claiming the top grid, with the
+     * directory this build lays out for that many cells, is read from the header alone; and one
+     * claiming either of the two grids just past it is refused before anything is allocated. A
+     * grid's sides are powers of two (`WorldGenConfig` refuses any other), so the grids just past
+     * the top are twice its cells: twice its columns, or as many rows as columns. The format's bound
+     * was 4096 by 4096 cells until the grid became square, which refused the top of the ladder.
+     */
+    @Test
+    fun `the top of the ladder saves and opens, and the grids just past it are refused`() = runTest {
+        val topRows = WorldCodec.LARGEST_LADDER_ROWS
+        val topColumns = WorldCodec.COLUMNS_PER_ROW * topRows
+        assertTrue(WorldCodec.holds(topColumns, topRows), "the top of the ladder does not fit a save")
+        assertTrue(!WorldCodec.holds(topColumns + 1, topRows), "a grid a cell past the top fits a save")
+        val pastTheTop = listOf(2 * topColumns to topRows, topColumns to topColumns)
+
+        // Written: a world past the top is refused by its grid, before any array is read, so a
+        // small world's arrays under the larger grid's settings are enough to ask.
+        for ((across, down) in pastTheTop) {
+            val past = synthetic.copy(config = synthetic.config.copy(width = across, height = down))
+            val refusedWrite = assertFailsWith<IllegalArgumentException> { WorldCodec.encode(document(past), past) }
+            assertTrue("larger than a save holds" in refusedWrite.message.orEmpty(), refusedWrite.message)
+        }
+
+        // Opened: a header with the top grid's settings and its directory is read.
+        val apart = TakenApart.of(rawSave())
+        fun claiming(width: Int, height: Int): ByteArray {
+            val config = apart.header.document.config.copy(width = width, height = height)
+            val directory = WorldSections.directory(width * height, apart.header.sections.first().count)
+            return apart.reassemble(
+                header = apart.header.copy(
+                    document = apart.header.document.copy(config = config),
+                    sections = directory,
+                    payloadBytes = WorldSections.payloadBytes(directory)
+                )
+            )
+        }
+        val top = WorldCodec.decodeHeader(claiming(topColumns, topRows))
+        assertEquals(topColumns, top.document.config.width)
+        assertEquals(topRows, top.document.config.height)
+        assertTrue(top.payloadBytes > 146L * topColumns * topRows, "the top's payload is not counted in 64 bits")
+
+        for ((across, down) in pastTheTop) {
+            val refusedOpen = assertFailsWith<WorldFormatException> {
+                WorldCodec.decodeHeader(claiming(across, down))
+            }
+            assertEquals(SaveProblem.TOO_LARGE, refusedOpen.problem)
+            assertTrue("$across by $down" in refusedOpen.detail, refusedOpen.detail)
+        }
     }
 
     // ---- What is not written ----
@@ -342,34 +397,39 @@ class WorldCodecTest {
     }
 
     /**
-     * A host's opening limit refuses a wider save from its header alone, and says the host's why.
+     * A host's opening limit refuses a save with more rows from its header alone, and says the
+     * host's why.
      *
-     * The case a browser tab is in with a 4096 save from the desktop, on a 64 world and a limit
-     * one cell narrower: refused as too large, with the grid and the host's own clause in the
-     * reason, and refused the same from the prefix and the header with no payload behind them —
-     * so nothing the size of the world is read, let alone allocated. At the world's own width it
-     * opens, and with no limit the format's own bound is the only one.
+     * The case a browser tab is in with a large save from the desktop, on a world of square cells
+     * 128 by 64 and a limit one row fewer: refused as too large, with the grid and the host's own
+     * clause in the reason, and refused the same from the prefix and the header with no payload
+     * behind them — so nothing the size of the world is read, let alone allocated. At the world's
+     * own rows it opens, though it is twice as many cells across as the limit: a size is named by
+     * its rows, and a limit on the larger side refused the very size it named. With no limit the
+     * format's own bound is the only one.
      */
     @Test
-    fun `a save wider than the host's opening limit is refused from its header`() = runTest {
+    fun `a save with more rows than the host's opening limit is refused from its header`() = runTest {
         val bytes = rawSave()
-        val side = synthetic.width
-        val narrower = OpeningLimit(largestSide = side - 1, because = "this host holds less")
+        val across = synthetic.width
+        val rows = synthetic.height
+        assertTrue(across > rows, "the synthetic world is not wider than it is tall, so rows and sides agree")
+        val fewer = OpeningLimit(largestRows = rows - 1, because = "this host holds less")
 
-        val refused = WorldCodec.open(ByteArraySource(bytes), limit = narrower) as? LoadOutcome.Refused
-            ?: throw AssertionError("a save wider than the host's limit opened")
+        val refused = WorldCodec.open(ByteArraySource(bytes), limit = fewer) as? LoadOutcome.Refused
+            ?: throw AssertionError("a save with more rows than the host's limit opened")
         assertEquals(SaveProblem.TOO_LARGE, refused.refusal.problem)
-        assertTrue("its grid is $side by $side" in refused.refusal.detail, refused.refusal.detail)
+        assertTrue("its grid is $across by $rows" in refused.refusal.detail, refused.refusal.detail)
         assertTrue("this host holds less" in refused.refusal.detail, refused.refusal.detail)
 
         val headerOnly = bytes.copyOf(WorldCodec.PREFIX_BYTES + getInt(bytes, WorldCodec.HEADER_LENGTH_OFFSET))
         assertTrue(headerOnly.size < bytes.size, "the save has no payload to leave out")
         assertEquals(
             SaveProblem.TOO_LARGE,
-            assertFailsWith<WorldFormatException> { WorldCodec.decodeHeader(headerOnly, narrower) }.problem
+            assertFailsWith<WorldFormatException> { WorldCodec.decodeHeader(headerOnly, fewer) }.problem
         )
 
-        assertTrue(WorldCodec.open(ByteArraySource(bytes), limit = OpeningLimit(side, "unused")) is LoadOutcome.Loaded)
+        assertTrue(WorldCodec.open(ByteArraySource(bytes), limit = OpeningLimit(rows, "unused")) is LoadOutcome.Loaded)
         assertTrue(WorldCodec.open(ByteArraySource(bytes)) is LoadOutcome.Loaded)
     }
 
@@ -475,7 +535,7 @@ class WorldCodecTest {
         // The same grid and layout at another seed: its header is whole and so are the other
         // save's chunks, and only the binding between them says they were never one file.
         val mine = rawSave()
-        val theirs = rawSave(SyntheticWorlds.of(WorldGenConfig(seed = 6L, width = 64, height = 64)))
+        val theirs = rawSave(SyntheticWorlds.of(WorldGenConfig.forRows(seed = 6L, rows = 64)))
         val headerEnd = WorldCodec.PREFIX_BYTES + getInt(theirs, WorldCodec.HEADER_LENGTH_OFFSET)
         assertEquals(headerEnd, WorldCodec.PREFIX_BYTES + getInt(mine, WorldCodec.HEADER_LENGTH_OFFSET))
         val spliced = theirs.copyOfRange(0, headerEnd) + mine.copyOfRange(headerEnd, mine.size)

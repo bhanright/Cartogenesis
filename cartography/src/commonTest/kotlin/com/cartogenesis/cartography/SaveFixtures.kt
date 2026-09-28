@@ -41,8 +41,11 @@ internal object SyntheticWorlds {
     /** Which cells of a field hold a value rather than zero. */
     private const val SPACING = 97
 
-    /** One lake, one realm, one people, one landmark, one river, one plate. */
-    fun of(config: WorldGenConfig = WorldGenConfig(seed = 5L, width = 64, height = 64)): WorldMap {
+    /**
+     * One lake, one realm, one people, one landmark, one river, one plate, on a grid of square cells
+     * 128 by 64 unless [config] says another.
+     */
+    fun of(config: WorldGenConfig = WorldGenConfig.forRows(seed = 5L, rows = 64)): WorldMap {
         val cells = config.width * config.height
         var ramp = 0
         fun field(): FloatField {
@@ -131,12 +134,15 @@ internal object SyntheticWorlds {
 
 /** A generated world, made once per test process and shared, for the cases that need real data. */
 internal object GeneratedWorlds {
-    private var world256: WorldMap? = null
+    private var world128Rows: WorldMap? = null
 
-    /** Small enough to run on every target, large enough to have rivers, realms and peoples. */
-    suspend fun at256(): WorldMap =
-        world256 ?: WorldGenerationEngine.generate(WorldGenConfig(seed = 99L, width = 256, height = 256))
-            .also { world256 = it }
+    /**
+     * Seed 99 at 128 rows of square cells, 256 by 128 with the 256 by 256 grid's cell width: small
+     * enough to run on every target, large enough to have rivers, lakes, realms and peoples.
+     */
+    suspend fun at128Rows(): WorldMap =
+        world128Rows ?: WorldGenerationEngine.generate(WorldGenConfig.forRows(seed = 99L, rows = 128))
+            .also { world128Rows = it }
 }
 
 /**

@@ -150,13 +150,21 @@ class SavesAndExportsTest {
         assertTrue("from the 1024 world on screen" in ExportSubjects.note(1024, Exports.SIZES))
     }
 
+    /**
+     * Asked of the codec itself, as the grid the panel makes today (as many cells down as across)
+     * and as the grid of square cells the size names by its rows (twice as many across), so that
+     * a bound written as a square of the side cannot pass for the codec's; and the largest size is
+     * the top of the codec's ladder, so raising either alone fails here.
+     */
     @Test
     fun `every working resolution the panel offers is one a save holds`() {
         val largest = Knobs.RESOLUTIONS.max()
+        assertTrue(WorldCodec.holds(largest, largest), "the panel offers $largest, which a save refuses as too large")
         assertTrue(
-            largest.toLong() * largest <= WorldCodec.LARGEST_GRID_CELLS,
-            "the panel offers $largest, which a save refuses as too large"
+            WorldCodec.holds(WorldCodec.COLUMNS_PER_ROW * largest, largest),
+            "the panel offers $largest rows, whose square cells a save refuses as too large"
         )
+        assertEquals(WorldCodec.LARGEST_LADDER_ROWS, largest, "the panel's largest size is not the top of the save's ladder")
     }
 
     @Test

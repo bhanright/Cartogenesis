@@ -130,6 +130,13 @@ object WorldCodec {
     /**
      * The only version this build reads or writes.
      *
+     * 19 because the grid became square on the ground. A world is two cells across for every cell
+     * down, the ladder is named by its rows, and the largest save is the top of that ladder,
+     * [LARGEST_GRID_CELLS]. The codec reads any grid, so a format-18 file would still parse, and it
+     * would open as a world whose cells are twice as wide as they are tall at a width no size of this
+     * build names: made again at an export's size or followed by a link, it would come back as
+     * another world. A data export's files are named by rows at the same version.
+     *
      * 18 because the coast's reach into the land became kilometers: `ocean.coastalReachCells`, a
      * count of cells, is `ocean.coastalReachKm`, and a format-17 file would open with this build's
      * 234 km on a grid where its own count meant another distance.
@@ -256,7 +263,7 @@ object WorldCodec {
      * every cell-valued name took a `Cells` suffix. 3 was the container below with none of that, 2
      * the JSON text that preceded it; none of them opens.
      */
-    const val FORMAT_VERSION = 18
+    const val FORMAT_VERSION = 19
 
     private val MAGIC = byteArrayOf('C'.code.toByte(), 'G'.code.toByte(), 'W'.code.toByte(), 'D'.code.toByte())
 
@@ -285,13 +292,31 @@ object WorldCodec {
     const val CHUNK_BYTES = 1 shl 20
 
     /**
-     * The most cells a save may have: 4096 by 4096, the largest working resolution the interface
-     * offers (`Knobs.RESOLUTIONS` in `:ui`, whose test holds it to this).
-     *
-     * A file claiming more is refused before anything is allocated for it. The 8192 export is
-     * made and drawn without ever being saved, so it does not need this raised.
+     * The rows of the largest working size the interface offers (`Knobs.RESOLUTIONS` in `:ui`,
+     * whose test holds its largest to this).
      */
-    const val LARGEST_GRID_CELLS = 4096 * 4096
+    const val LARGEST_LADDER_ROWS = 4096
+
+    /**
+     * Columns for each row of a grid whose cells are square on the ground: the world covers 360
+     * degrees of longitude against 180 of latitude (`WorldGenConfig.forRows`).
+     */
+    const val COLUMNS_PER_ROW = 2
+
+    /**
+     * The most cells a save may have: the top of the ladder, 4096 rows of square cells, which is
+     * 8192 by 4096, [LARGEST_LADDER_ROWS] rows and [COLUMNS_PER_ROW] columns for each of them.
+     *
+     * A count of cells rather than a side, because the grid is twice as wide as it is tall and what
+     * a save costs is its cells: 146 bytes a cell of arrays, about 4.9 GB at the top. A file
+     * claiming more is refused before anything is allocated for it. The 8192-row export is made and
+     * drawn without ever being saved, so it does not need this raised.
+     */
+    const val LARGEST_GRID_CELLS = COLUMNS_PER_ROW * LARGEST_LADDER_ROWS * LARGEST_LADDER_ROWS
+
+    /** Whether a grid [width] by [height] cells fits in a save: [LARGEST_GRID_CELLS] or fewer. */
+    fun holds(width: Int, height: Int): Boolean =
+        width > 0 && height > 0 && width.toLong() * height <= LARGEST_GRID_CELLS
 
     /**
      * The longest header this reads, in bytes: sixteen mebibytes.
@@ -342,7 +367,9 @@ object WorldCodec {
         }
         require(WorldDocument.isValidId(document.id)) { "'${document.id}' is not a save id" }
         val cells = world.width.toLong() * world.height
-        require(cells <= LARGEST_GRID_CELLS) { "a ${world.width} by ${world.height} world is larger than a save holds" }
+        require(holds(world.width, world.height)) {
+            "a ${world.width} by ${world.height} world is larger than a save holds"
+        }
 
         val listsJson = json.encodeToString(WorldLists.of(world)).encodeToByteArray()
         require(listsJson.size <= LARGEST_LISTS_BYTES) {
@@ -541,10 +568,10 @@ object WorldCodec {
         val config = document.config
         val cells = config.width.toLong() * config.height
         if (config.width <= 0 || config.height <= 0) damaged("its grid is ${config.width} by ${config.height}")
-        if (cells > LARGEST_GRID_CELLS) {
+        if (!holds(config.width, config.height)) {
             throw WorldFormatException(SaveProblem.TOO_LARGE, "its grid is ${config.width} by ${config.height}")
         }
-        if (limit != null && maxOf(config.width, config.height) > limit.largestSide) {
+        if (limit != null && config.height > limit.largestRows) {
             throw WorldFormatException(
                 SaveProblem.TOO_LARGE,
                 "its grid is ${config.width} by ${config.height}; ${limit.because}"
@@ -581,17 +608,20 @@ object WorldCodec {
 }
 
 /**
- * The widest grid a host will open, below the format's own [WorldCodec.LARGEST_GRID_CELLS], and
- * what it tells a reader whose save is wider.
+ * The largest grid a host will open, below the format's own [WorldCodec.LARGEST_GRID_CELLS], and
+ * what it tells a reader whose save is larger.
  *
  * The format's bound is what any build can read; this is what one host can *hold*. A browser tab
- * that cannot make a 4096 world cannot hold the 2.45 GB of arrays a saved one opens into either, so
- * it refuses the file from its header, with [because] saying where it can be opened, rather than
+ * that cannot make a world of a size cannot hold the arrays a saved one opens into either, so it
+ * refuses the file from its header, with [because] saying where it can be opened, rather than
  * decoding it into a tab that dies.
+ *
+ * Counted in rows, because a size is named by its rows: a world of square cells is twice as many
+ * cells across as down, and a limit on the larger side would turn away the size it names.
  */
 data class OpeningLimit(
-    /** The most cells across or down a save may have to be opened here. */
-    val largestSide: Int,
+    /** The most rows a save may have to be opened here. */
+    val largestRows: Int,
     /** The clause that follows the save's own grid in the refusal: why, and where else. */
     val because: String
 )

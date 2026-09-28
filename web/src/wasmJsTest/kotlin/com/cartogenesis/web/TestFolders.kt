@@ -322,10 +322,13 @@ internal fun assertSameBytes(expected: ByteArray, actual: ByteArray, message: St
     )
 }
 
-/** A 32 world, made once for every test that needs one: it is the same world each time. */
+/**
+ * A world of 32 rows of square cells, 64 by 32, made once for every test that needs one: it is the
+ * same world each time.
+ */
 internal object TestWorlds {
     private var small: WorldMap? = null
 
     suspend fun small(): WorldMap =
-        small ?: WorldGenerationEngine.generate(WorldGenConfig(seed = 31L, width = 32, height = 32)).also { small = it }
+        small ?: WorldGenerationEngine.generate(WorldGenConfig.forRows(seed = 31L, rows = 32)).also { small = it }
 }

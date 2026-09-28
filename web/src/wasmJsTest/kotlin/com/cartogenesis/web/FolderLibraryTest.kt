@@ -586,13 +586,13 @@ private class OnChunk(private val chunk: Int, private val action: suspend () -> 
 }
 
 /**
- * Four kibibytes a part for the tests that stop a save partway: a 32 world's payload is a single
+ * Four kibibytes a part for the tests that stop a save partway: a 32-row world's payload is a single
  * codec chunk, so the stand-in compressors above act on the first one, and parts this small mean
  * the header ahead of it has already gone into the stream when they do.
  */
 private const val SMALL_PARTS = 1 shl 12
 
-/** Which part the cancel lands at: the third, well inside a 32 world's forty or so at [SMALL_PARTS]. */
+/** Which part the cancel lands at: the third, well inside a 32-row world's eighty or so at [SMALL_PARTS]. */
 private const val CANCELLED_AT_PART = 2
 
 private fun ByteArray.indexOfSequence(sequence: ByteArray): Int =

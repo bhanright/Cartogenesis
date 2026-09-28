@@ -12,7 +12,7 @@ import kotlinx.coroutines.test.runTest
  * browser's `CompressionStream` — so without this nothing proves the two agree on what "gzip"
  * means rather than each merely reading its own writing back.
  *
- * [GZIP_FIXTURE_BASE64] is a small world (32x32) written once by the JVM's own gzip algorithm and
+ * [GZIP_FIXTURE_BASE64] is a small world (64x32, square cells) written once by the JVM's own gzip algorithm and
  * checked in as bytes, precisely so this does not depend on a JVM being present to write one at
  * test time. This class runs in both `jvmTest` and `wasmJsNodeTest` and decodes the same fixture
  * in both, so a platform whose "gzip" silently drifted from RFC 1952 — a wrong header, a missing
@@ -37,11 +37,11 @@ class GzipInteroperabilityTest {
         val save = WorldCodec.decode(bytes, PlatformGzipCompressor)
         val world = save.world
 
-        assertEquals(32, save.document.config.width)
+        assertEquals(64, save.document.config.width)
         assertEquals(32, save.document.config.height)
         assertEquals(4096L, save.document.config.seed)
         assertTrue(world.terrain.height.data.isNotEmpty())
-        assertEquals(32 * 32, world.terrain.height.data.size)
+        assertEquals(64 * 32, world.terrain.height.data.size)
         // Round-tripping it again through this platform's own compressor proves the read path is
         // not merely tolerant of the fixture by accident - re-encoding and decoding it again has
         // to come back exactly the same world.

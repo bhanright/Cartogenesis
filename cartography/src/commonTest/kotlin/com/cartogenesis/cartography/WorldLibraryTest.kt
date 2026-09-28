@@ -66,10 +66,10 @@ class WorldLibraryTest {
         WorldDocument(id = id, title = title, config = world.config, savedAt = savedAt)
 
     @Test
-    fun `listing a 1024 save reads only its header`() = runTest(timeout = 15.minutes) {
-        val config = WorldGenConfig(seed = 5150L, width = 1024, height = 1024)
+    fun `listing a large save reads only its header`() = runTest(timeout = 15.minutes) {
+        val config = WorldGenConfig.forRows(seed = 5150L, rows = 512)
         val large = WorldGenerationEngine.generate(config)
-        val doc = WorldDocument(id = "large-world", title = "A 1024 world", config = config, savedAt = 1_700_000_000_000L)
+        val doc = WorldDocument(id = "large-world", title = "A 512-row world", config = config, savedAt = 1_700_000_000_000L)
 
         val library = FakeByteWorldLibrary()
         library.save(doc, large)
@@ -82,7 +82,7 @@ class WorldLibraryTest {
 
         assertEquals(0, library.fullReadCount, "listing a save should never read its full payload")
         val entry = assertNotNull(listed.singleOrNull { it.key == "large-world.cgw" })
-        assertEquals("A 1024 world", entry.document?.title)
+        assertEquals("A 512-row world", entry.document?.title)
         assertEquals(1_700_000_000_000L, entry.document?.savedAt)
         assertNull(entry.refusal, "a save this build just wrote should open")
     }

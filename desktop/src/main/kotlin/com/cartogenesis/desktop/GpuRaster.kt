@@ -232,6 +232,11 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
             GL43C.glUniform1f(uniform("uHorizonStride[$sample]"), horizon.strides[sample])
         }
         GL43C.glUniform1f(uniform("uOrdinaryGround"), recipe.ordinaryGround)
+        GL43C.glUniform1f(uniform("uSkyShare"), recipe.skyDiffuseShare)
+        for (bearing in recipe.skyBrightness.indices) {
+            GL43C.glUniform1f(uniform("uSkyBrightness[$bearing]"), recipe.skyBrightness[bearing])
+        }
+        GL43C.glUniform1f(uniform("uSkyBrightnessTotal"), recipe.skyBrightnessTotal)
         GL43C.glUniform1f(uniform("uBiomeWash"), recipe.biomeWash)
         GL43C.glUniform1f(uniform("uBiomeMuting"), recipe.biomeMuting)
         GL43C.glUniform1f(uniform("uClimateTint"), recipe.climateTint)
@@ -524,14 +529,16 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
              * four lamps and a sky. The same numbers on both sides — the two are one model in two
              * languages and have to be changed together, which GpuRasterTest is what catches.
              *
-             * One figure is deliberately *not* copied, and the reason is worth reading before
+             * Two things are deliberately *not* copied, and the reason is worth reading before
              * copying the next one. The median illumination over ordinary country is a measurement
              * rather than a model constant: it is re-derived whenever the ground moves, and it has
              * moved five times. Written down twice, it was twice left behind — at I1 the Kotlin
              * went 0.9582 to 0.9421 and then to 0.9473 while this file kept 0.9582, and a third of
              * every map came out two or three levels dark. It is `uOrdinaryGround` now, handed in
-             * with the recipe from the one constant that holds it. Anything else here that starts
-             * being re-measured should follow it out.
+             * with the recipe from the one constant that holds it. The sky followed it out when the
+             * haze it is drawn at was re-derived on square cells: its diffuse share and its
+             * brightness by bearing are `uSkyShare` and `uSkyBrightness`, the processor's own
+             * figures. Anything else here that starts being re-measured should follow them.
              */
             const float LAMP_EAST = -0.6;
             const float LAMP_SOUTH = -0.6;
@@ -540,12 +547,12 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
             const float LAMP_SWING = 0.55;
             const float LAMP_REACH = 0.848;
             const float ROOT_HALF = 0.70710678;
-            // The sky at ReliefShading.HAZE, which is 0.10: a diffuse share of
-            // 0.15 + 0.85 * haze, and a brightness per bearing of
-            // evenness + (1 - evenness) * toward, with evenness 0.1 + 0.9 * haze. Copied out of
-            // the Kotlin's own arithmetic rather than recomputed here, so the two agree to the bit.
-            const float SKY_BRIGHTNESS_TOTAL = 4.76000016;
-            const float SKY_SHARE = 0.23500001;
+            // The sky at ReliefShading.HAZE: its diffuse share, its brightness along each of the
+            // eight bearings below and their total, handed in from the processor's own figures so
+            // the two agree to the bit whatever the haze. See RasterRecipe.skyBrightness.
+            uniform float uSkyShare;
+            uniform float uSkyBrightness[8];
+            uniform float uSkyBrightnessTotal;
             // Not a constant here: the median illumination over ordinary country is a
             // measurement that moves whenever the ground does, so it is handed in with the recipe
             // rather than written down a second time. See RasterRecipe.ordinaryGround.
@@ -559,17 +566,13 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
             // one vertical exaggeration, ReliefShading.verticalExaggeration.
             const float CENTRAL_DIFFERENCE_SPAN_CELL_WIDTHS = 2.0;
 
-            // The eight compass bearings of the ground, as unit vectors for the lamps, with the
-            // brightness of the sky along each: east, south-east, south, south-west, west,
+            // The eight compass bearings of the ground, as unit vectors for the lamps, in the
+            // order the sky's brightness comes in: east, south-east, south, south-west, west,
             // north-west, north, north-east.
             const float BEARING_UNIT_EAST[8] =
                 float[8](1.0, ROOT_HALF, 0.0, -ROOT_HALF, -1.0, -ROOT_HALF, 0.0, ROOT_HALF);
             const float BEARING_UNIT_SOUTH[8] =
                 float[8](0.0, ROOT_HALF, 1.0, ROOT_HALF, 0.0, -ROOT_HALF, -1.0, -ROOT_HALF);
-            const float SKY_BRIGHTNESS[8] = float[8](
-                0.30862176, 0.19, 0.30862176, 0.59500003,
-                0.88137829, 1.0, 0.88137829, 0.59500003
-            );
 
             /* And from ClimateTint.kt and Isobaths.kt, on the same terms. */
             const float ARID_RAMP_FLOOR = 0.42857143;
@@ -669,9 +672,9 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
                     // Weighted by how bright that quarter of the sky is, so a ridge standing
                     // between the ground and the sun costs it more light than one behind it.
                     blocked +=
-                        SKY_BRIGHTNESS[bearing] * (steepest / sqrt(steepest * steepest + 1.0));
+                        uSkyBrightness[bearing] * (steepest / sqrt(steepest * steepest + 1.0));
                 }
-                return 1.0 - blocked / SKY_BRIGHTNESS_TOTAL;
+                return 1.0 - blocked / uSkyBrightnessTotal;
             }
 
             /* ReliefShading.at: the single lamp, or four lamps weighted by aspect plus the sky. */
@@ -700,13 +703,13 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
                         -eastward * bearingEast * LAMP_REACH -
                         southward * bearingSouth * LAMP_REACH + LAMP_HEIGHT
                     ) / normalLength;
-                    if (lambert > 0.0) direct += SKY_BRIGHTNESS[bearing] * lambert;
+                    if (lambert > 0.0) direct += uSkyBrightness[bearing] * lambert;
                 }
-                direct /= SKY_BRIGHTNESS_TOTAL;
+                direct /= uSkyBrightnessTotal;
 
                 precise float sky = openness(x, y);
                 precise float illumination =
-                    SKY_SHARE * sky + (1.0 - SKY_SHARE) * (direct / LAMP_HEIGHT);
+                    uSkyShare * sky + (1.0 - uSkyShare) * (direct / LAMP_HEIGHT);
                 return clamp(illumination / uOrdinaryGround, DARKEST, BRIGHTEST);
             }
 

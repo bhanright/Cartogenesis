@@ -292,7 +292,7 @@ object MapRasterizer {
         val relief = if (reliefDrawn && !style.lineArt) {
             ReliefShading.of(
                 world.sea.relativeElevation, world.sea.isLand, options.singleLamp,
-                world.config.cellHeightInCellWidths
+                world.config.cellWidthKm, world.config.cellHeightInCellWidths
             )
         } else null
 
@@ -321,7 +321,7 @@ object MapRasterizer {
             if (contoured) Isobaths.interval(world.config.scale) else 0f
         val flattestSlope =
             if (contoured) Isobaths.flattestSlope(world.config, cellsAcross, cellsDown) else 0f
-        val isobathStencil = Isobaths.slopeStencil(cellsAcross)
+        val isobathStencil = Isobaths.slopeStencil(world.config.cellWidthKm)
 
         for (cell in 0 until cellCount) {
             val column = cell % cellsAcross
@@ -703,16 +703,29 @@ object MapRasterizer {
      * How heavily the traced coast is stroked, in sheet pixels, on a sheet [sheetWidthPixels]
      * wide.
      *
-     * Two pixels on a 2048 world's 4096-pixel sheet, which is the raster's one inked cell where
-     * the coast runs north-south, so that turning the stroke on sharpens the coast rather than
-     * doubling it. Held as a share of the sheet from there — the reasoning [RiverPen] gives for the
-     * river pen — so a plate twice as large carries a coast twice as heavy, with a floor of one
-     * whole pixel because below that a line is a grey suggestion rather than a coast.
+     * The raster's one inked cell of coast on the sheet the stroke was matched on, so that
+     * turning the stroke on sharpens the coast rather than doubling it; held as a share of the
+     * sheet from there — the reasoning [RiverPen] gives for the river pen — so a plate twice as
+     * large carries a coast twice as heavy, with a floor of one whole pixel because below that a
+     * line is a grey suggestion rather than a coast. See [COAST_SHARE_OF_MAP_WIDTH].
      */
     internal fun coastPenPixels(sheetWidthPixels: Int): Float =
         (sheetWidthPixels * COAST_SHARE_OF_MAP_WIDTH).coerceAtLeast(1f)
 
-    private const val COAST_SHARE_OF_MAP_WIDTH = 0.0005f
+    /** See [COAST_SHARE_OF_MAP_WIDTH]. */
+    private const val COAST_MATCHED_SHEET_PIXELS = 2048
+
+    /**
+     * One pixel of a sheet [COAST_MATCHED_SHEET_PIXELS] wide: the sheet the pen was matched on
+     * (docs/DESIGN_LEDGER.md, F14), where a cell was one pixel and the pen one cell.
+     *
+     * That sheet was the 2048-column world's, cells 5.9 km wide drawn a cell to a pixel. On square
+     * cells a cell is one pixel of the sheet at every size and the same sheet is the 1024-row
+     * world's, 2048 by 1024 cells of 5.9 km, so the match holds there to the pixel; on the 4096
+     * pixels of a 2048-row world the pen is two pixels over a one-pixel coast, as a plate twice as
+     * large carries it.
+     */
+    private const val COAST_SHARE_OF_MAP_WIDTH = 1f / COAST_MATCHED_SHEET_PIXELS
 
     /**
      * Half a cell, in cell coordinates: the offset from a cell's index to its centre.

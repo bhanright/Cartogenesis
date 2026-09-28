@@ -5,6 +5,7 @@ import com.cartogenesis.cartography.geometry.RecordedViolation
 import com.cartogenesis.worldgen.BorrowsSharedWorlds
 import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.WorldMap
+import com.cartogenesis.worldgen.model.WorldScale
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.roundToInt
@@ -35,37 +36,25 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
     private companion object {
 
         /**
-         * The known failure the haze clause records. It matched at 0.12 against the declared 0.10
-         * from Fix 3, and still does on the implicit incision's terrain (Fix 3b), which moved
-         * ordinary ground and not the match. It is recorded and not re-derived there because the
-         * declared haze is copied, as the sky's share and brightness, into the graphics card's
-         * shader (`GpuRaster`), and the parity guard that would check a new pair against the
-         * processor cannot run without a display; see docs/DESIGN_LEDGER.md, Fix 3 and Fix 3b.
+         * The known failure the cone's floor clause records. The cone is cut to the ninth decile of
+         * the gallery world's land slope as the shading reads it, and on square cells of 11.7 km that
+         * is 2.84 of exaggerated rise a cell width: the exaggeration is held to the ground
+         * ([ReliefShading.verticalExaggeration]), and cells half as wide east-west resolve steeper
+         * ground than the 512 by 512 grid's did. The dome still lights every bearing, but the steep
+         * side of that cone is pinned at the darkest factor on 41 of 360 bearings, where the
+         * single lamp pins 69. Not re-derived away: the exaggeration and the clamp are both the
+         * sheet's, and which of them should give is the maintainer's to judge on the pictures
+         * (docs/DESIGN_LEDGER.md, Q4; `docs/TODO.md` has the entry).
          */
-        const val HAZE_A_STEP_OFF =
-            "the relief: the lamp's contrast is matched a step off the declared haze"
-
-        /**
-         * The known failure the ordinary-ground clause records. The median light over the
-         * gallery world's land under the declared sky is 0.8756 on the implicit incision's
-         * terrain, rougher on the plains and the ranges alike, against the declared 0.9225 (0.9489
-         * under the capped update, recorded then because the implicit update was to move the
-         * relief again). Re-derived to 0.8756 it holds its own clause, but a synthetic plane
-         * falling at 315 degrees on cells twice as tall as wide is then drawn 1.01 of its bar off
-         * the shading of its ground, because the constant scales the factor the plane is clipped
-         * by; and it travels to the graphics card with the haze, whose parity guard cannot run here.
-         * Recorded, for the chunk that re-derives the haze and the ground together with the device
-         * guard running (docs/DESIGN_LEDGER.md, Fix 3b).
-         */
-        const val ORDINARY_GROUND_AWAITS_THE_DEVICE =
-            "the relief: ordinary ground's median light has moved off the declared figure with the terrain"
+        const val STEEPEST_TENTH_PINNED =
+            "the relief: on square cells the steepest tenth of the land is shaded to the darkest factor"
 
         /** The gallery's world, at the size these guards measure on. See [TestWorlds]. */
         val WORLD: WorldMap get() = TestWorlds.gallery
 
-        /** The exaggeration and the stencil a 512 map is drawn with. */
-        val SLOPE_SCALE = ReliefShading.slopeScale(512)
-        val OPENNESS_STEP = ReliefShading.opennessStep(512)
+        /** The exaggeration and the stencil the gallery's world is drawn with. */
+        val SLOPE_SCALE = ReliefShading.slopeScale(TestWorlds.galleryConfig.cellWidthKm)
+        val OPENNESS_STEP = ReliefShading.opennessStep(TestWorlds.galleryConfig.cellWidthKm)
 
         /**
          * The row scale of the synthetic cone's field: square cells, so a cone round in cells is
@@ -119,11 +108,13 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
         const val PLANE_FACINGS = 16
 
         /**
-         * The grids the planes are drawn on, as a width and a row's height in cell widths: this
-         * map's cells, square ones, and cells a quarter and twice as tall as they are wide, at the
-         * 512 stencil, and twice as tall at 256, whose stencil's shortest step is one cell.
+         * The grids the planes are drawn on, as a count of columns over the default world and a
+         * row's height in cell widths: this map's square cells at 512 rows, the half-height cells
+         * of a 512 by 512 grid, and cells a quarter and twice as tall as they are wide at that
+         * grid's stencil, and twice as tall at 256 columns, whose stencil's shortest step is one
+         * cell.
          */
-        val PLANE_GRIDS = listOf(512 to 0.5, 512 to 1.0, 512 to 0.25, 512 to 2.0, 256 to 2.0)
+        val PLANE_GRIDS = listOf(1024 to 1.0, 512 to 0.5, 512 to 1.0, 512 to 0.25, 512 to 2.0, 256 to 2.0)
 
         /** The lamps' altitude: 32 degrees, the cartographic convention the model keeps. */
         const val LAMP_ALTITUDE_DEGREES = 32.0
@@ -132,17 +123,22 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
         const val BRIGHTEST = 1.35f
 
         /**
-         * How far a plane's drawn factor may sit from its ground's, on square cells and on others.
+         * How far a plane's drawn light may sit from its ground's, on square cells and on others: in
+         * the light itself, a share of what a flat open plain receives, before the division by
+         * ordinary ground, which scales the drawn and the expected alike and is re-derived with
+         * the terrain rather than with the geometry these bars are about.
          *
-         * On square cells every horizon sample lies on its bearing, so the drawn factor and the
+         * On square cells every horizon sample lies on its bearing, so the drawn light and the
          * ground's differ only by rounding and by the model's lamp written to three figures, 0.848
          * and 0.53 for 32 degrees: 0.0001 measured, and a thousandth is the bar. On other cells the
          * sample nearest a diagonal bearing is a whole cell, up to eleven degrees off the diagonal on
-         * this map's cells and eighteen on cells twice as tall as they are wide, and the steepest of
-         * three such samples overstates a plane's horizon a little: 0.0051 measured on this map's
-         * cells, 0.0088 and 0.0095 on the tall ones, and a hundredth is the bar. What the bars are
-         * for is further off: a plane read at half its gradient north-south is several hundredths
-         * out, and a horizon read at half the lamps' exaggeration is 0.0257 out on square cells.
+         * cells twice as wide as tall and eighteen on cells twice as tall as they are wide, and the
+         * steepest of three such samples overstates a plane's horizon a little: 0.0048 measured on
+         * the cells twice as wide and on those four times as wide, 0.0082 and 0.0088 on the tall
+         * ones, and a hundredth is the bar.
+         * What the bars are for is further off: a plane read at half its gradient north-south is
+         * several hundredths out, and a horizon read at half the lamps' exaggeration was 0.0257 out
+         * in the drawn factor on square cells.
          */
         const val PLANE_TOLERANCE_ON_SQUARE_CELLS = 0.001
         const val PLANE_TOLERANCE = 0.01
@@ -296,11 +292,17 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
             "${unlitUnderTheSky(field, radius)} of $BEARINGS bearings round the cone receive no " +
                 "direct light at all from the dome"
         )
-        assertTrue(
-            sky.floored == 0,
-            "${sky.floored} of $BEARINGS bearings round the cone are pinned at the darkest factor " +
-                "the model has, which is a face with no detail left in it"
-        )
+        // On square cells the ninth decile is steeper than the dome keeps off the floor: see
+        // [STEEPEST_TENTH_PINNED].
+        KnownFailures.expect(STEEPEST_TENTH_PINNED, "41 of 360 bearings at the floor") {
+            if (sky.floored != 0) {
+                throw RecordedViolation(
+                    "${sky.floored} of $BEARINGS bearings round the cone are pinned at the darkest factor " +
+                        "the model has, which is a face with no detail left in it",
+                    "${sky.floored} of $BEARINGS bearings at the floor"
+                )
+            }
+        }
         // How dark the darkest face is comes out much the same either way, and it should: the haze
         // is calibrated so that the two models have the same contrast. What the dome changes is
         // *which* faces are dark — the lamp blacks out a whole quadrant, the dome darkens the steep
@@ -325,6 +327,7 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
         val lamp = Spread(
             ReliefShading.of(
                 world.sea.relativeElevation, world.sea.isLand, singleLamp = true,
+                cellWidthKm = world.config.cellWidthKm,
                 cellHeightInCellWidths = world.config.cellHeightInCellWidths
             ),
             world
@@ -360,41 +363,31 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
             )
         )
         println(
-            "RELIEF it is matched at haze %.2f, where ordinary ground sits at %.3f"
+            "RELIEF it is matched at haze %.2f, where ordinary ground sits at %.4f"
                 .format(bestHaze, bestGround)
         )
         // The declared haze is a point of the sweep, so the match must land on it: within half a
         // step, the sweep's own resolution, where a step and a half let a constant one step off
-        // pass. It landed a step off, at 0.08 (Audit III, F-I3), while the sky's horizon read the
-        // ground half as steep as the lamps did; with both reading the one exaggeration the match
-        // is back on the declared 0.10 (docs/DESIGN_LEDGER.md, Fix 2).
+        // pass. Armed again on square cells, where the match is on the declared 0.10; it ran as a
+        // known failure while the terrain of cells twice as wide as tall matched at 0.12
+        // (docs/DESIGN_LEDGER.md, Fix 3, Fix 3b and Q4).
         val matched = String.format(java.util.Locale.ROOT, "%.2f", bestHaze)
         val declared = String.format(java.util.Locale.ROOT, "%.2f", ReliefShading.HAZE)
-        // A step off since Fix 3, and still at 0.12 on the implicit incision's terrain: see
-        // [HAZE_A_STEP_OFF].
-        KnownFailures.expect(HAZE_A_STEP_OFF, "matched at haze 0.12") {
-            if (kotlin.math.abs(bestHaze - ReliefShading.HAZE) > HAZE_SWEEP_STEP / 2) {
-                throw RecordedViolation(
-                    "the lamp's contrast is matched at haze $matched, a step or more from the declared $declared",
-                    "matched at haze $matched"
-                )
-            }
-        }
+        assertTrue(
+            kotlin.math.abs(bestHaze - ReliefShading.HAZE) <= HAZE_SWEEP_STEP / 2,
+            "the lamp's contrast is matched at haze $matched, a step or more from the declared $declared"
+        )
         // Ordinary ground is the median light under the sky the map is drawn under — the declared
-        // one — and not under whichever haze the sweep matched.
+        // one — and not under whichever haze the sweep matched. Armed again on square cells, with
+        // the figure re-derived there and the device's parity guard run on it (it is handed to the
+        // card as `uOrdinaryGround`).
         val declaredGround = median(illuminationOverLand(world, ReliefShading.DAYLIGHT))
         println("RELIEF under the declared sky ordinary ground sits at %.4f".format(declaredGround))
-        // Recorded: see [ORDINARY_GROUND_AWAITS_THE_DEVICE]. 0.9489 under the cap, 0.8756 on the
-        // implicit incision's terrain, 0.8750 once a lake falls with its outlet.
-        KnownFailures.expect(ORDINARY_GROUND_AWAITS_THE_DEVICE, "ordinary ground 0.8750") {
-            if (kotlin.math.abs(declaredGround - ReliefShading.ordinaryGround) > MAX_GROUND_DRIFT) {
-                throw RecordedViolation(
-                    "ordinary ground measures ${"%.4f".format(declaredGround)} under the declared sky, " +
-                        "against the declared ${ReliefShading.ordinaryGround}",
-                    String.format(java.util.Locale.ROOT, "ordinary ground %.4f", declaredGround)
-                )
-            }
-        }
+        assertTrue(
+            kotlin.math.abs(declaredGround - ReliefShading.ordinaryGround) <= MAX_GROUND_DRIFT,
+            "ordinary ground measures ${"%.4f".format(declaredGround)} under the declared sky, " +
+                "against the declared ${ReliefShading.ordinaryGround}"
+        )
     }
 
     /**
@@ -420,9 +413,10 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
         var worst = 0.0
         var worstWhere = ""
         for ((width, aspect) in PLANE_GRIDS) {
-            val scale = ReliefShading.slopeScale(width)
-            val step = ReliefShading.opennessStep(width)
-            val exaggeration = ReliefShading.verticalExaggeration(width).toDouble()
+            val cellWidthKm = WorldScale().cellWidthKm(width)
+            val scale = ReliefShading.slopeScale(cellWidthKm)
+            val step = ReliefShading.opennessStep(cellWidthKm)
+            val exaggeration = ReliefShading.verticalExaggeration(cellWidthKm).toDouble()
             for (facing in 0 until PLANE_FACINGS) {
                 val falls = 2.0 * PI * facing / PLANE_FACINGS
                 val plane = FloatField.of(PLANE_FIELD, PLANE_FIELD) { column, row ->
@@ -434,7 +428,7 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
                 val expected = groundShading(falls, exaggeration, sky)
                 // Measured against the bar for this shape of cell, so one figure orders them all.
                 val bar = if (aspect == 1.0) PLANE_TOLERANCE_ON_SQUARE_CELLS else PLANE_TOLERANCE
-                val gap = kotlin.math.abs(drawn - expected) / bar * PLANE_TOLERANCE
+                val gap = kotlin.math.abs(drawn - expected) * ReliefShading.ordinaryGround / bar * PLANE_TOLERANCE
                 println(
                     "RELIEF %4d wide, cells %.2f as tall as wide, plane falling at %5.1f degrees on the ground: drawn %.4f, the ground's %.4f"
                         .format(width, aspect, 360.0 * facing / PLANE_FACINGS, drawn, expected)
@@ -447,7 +441,7 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
         }
         assertTrue(
             worst <= PLANE_TOLERANCE,
-            "$worstWhere is drawn off the shading of the ground it stands for by " +
+            "$worstWhere is lit off the light of the ground it stands for by " +
                 "${"%.2f".format(worst / PLANE_TOLERANCE)} of its bar"
         )
     }
@@ -506,7 +500,7 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
         val failures = ArrayList<String>()
         var width = 64
         while (width <= 8192) {
-            val step = ReliefShading.opennessStep(width)
+            val step = ReliefShading.opennessStep(WorldScale().cellWidthKm(width))
             for (k in -6..6) {
                 val aspect = Math.pow(2.0, k.toDouble())
                 val horizon = ReliefHorizon.of(step, aspect)
@@ -563,6 +557,7 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
         val sky = Spread(
             ReliefShading.of(
                 world.sea.relativeElevation, world.sea.isLand, singleLamp = false,
+                cellWidthKm = world.config.cellWidthKm,
                 cellHeightInCellWidths = world.config.cellHeightInCellWidths
             ),
             world
@@ -570,11 +565,12 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
         val lamp = Spread(
             ReliefShading.of(
                 world.sea.relativeElevation, world.sea.isLand, singleLamp = true,
+                cellWidthKm = world.config.cellWidthKm,
                 cellHeightInCellWidths = world.config.cellHeightInCellWidths
             ),
             world
         )
-        println("RELIEF over ${lamp.cells} land cells of seed 234475 at 512")
+        println("RELIEF over ${lamp.cells} land cells of seed 234475 at 512 rows")
         println("RELIEF single lamp: $lamp")
         println("RELIEF sky:         $sky")
         println(

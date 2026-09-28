@@ -277,6 +277,7 @@ class PenAndInkTest : BorrowsSharedWorlds() {
          * degrees from the aspect on average over the windows the clause reads, past its 30; the
          * comb it replaced is still further off. Whether the stroke's reach or the terrain's
          * shorter slopes carry the two degrees is not diagnosed (docs/DESIGN_LEDGER.md, Fix 3b).
+         * On square cells it runs 30.2 degrees off, still past the bar (docs/DESIGN_LEDGER.md, Q4).
          */
         const val INK_OFF_THE_FALL_LINE_ON_THE_LAWS_TERRAIN =
             "the ink: on the law's terrain the engraved stroke runs further off the fall line than its bar"
@@ -579,7 +580,7 @@ class PenAndInkTest : BorrowsSharedWorlds() {
         val height = world.height
         val elevation = world.sea.relativeElevation
         val style = MapStyle.PEN_AND_INK
-        val slopeScale = ReliefShading.slopeScale(width)
+        val slopeScale = ReliefShading.slopeScale(world.config.cellWidthKm)
         val pixels = IntArray(width * height) { style.paper }
         for (row in 0 until height) {
             for (column in 0 until width) {
@@ -703,7 +704,7 @@ class PenAndInkTest : BorrowsSharedWorlds() {
         val seventyFifth = hundredths(percentile(slopes, 0.75))
         val widest = hundredths(EngravingPlan.SLOPE_FLOOR + 1f / MapStyle.PEN_AND_INK.inkGain)
         println("PENINK the seventy-fifth percentile of the land slope rounds to $seventyFifth; the widest stroke is at $widest")
-        KnownFailures.expect(INK_GAIN_STALE, "the seventy-fifth percentile rounds to 0.53, the widest stroke is at 0.41") {
+        KnownFailures.expect(INK_GAIN_STALE, "the seventy-fifth percentile rounds to 0.52, the widest stroke is at 0.41") {
             if (seventyFifth != widest) {
                 throw RecordedViolation(
                     "the seventy-fifth percentile of seed 234475's land slope is ${percentile(slopes, 0.75)}; " +

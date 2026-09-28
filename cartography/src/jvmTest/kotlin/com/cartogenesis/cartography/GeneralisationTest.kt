@@ -44,7 +44,14 @@ import kotlin.test.assertTrue
 class GeneralisationTest : BorrowsSharedWorlds() {
 
     private companion object {
-        const val SIDE = 512
+        /** The worlds' rows: 512 rows of square cells, 1024 by 512, a cell to a pixel of the sheet. */
+        const val ROWS = 512
+
+        /**
+         * The true-shape sheets the graticule is asked about, by their width in pixels: the sheets
+         * of the sizes 512 to 4096 by rows, each twice as wide as it is tall whatever the grid.
+         */
+        val SHEET_WIDTHS = listOf(1024, 2048, 4096, 8192)
 
         /**
          * The two scales the generalisation is asked about, in screen pixels to a pixel of the
@@ -78,7 +85,7 @@ class GeneralisationTest : BorrowsSharedWorlds() {
     }
 
     private fun world(seed: Long): WorldMap = SharedWorlds.world(
-        WorldGenConfig(seed = seed, width = SIDE, height = SIDE)
+        WorldGenConfig.forRows(seed = seed, rows = ROWS)
     )
 
     // ---- the coast ---------------------------------------------------------------------------
@@ -113,7 +120,7 @@ class GeneralisationTest : BorrowsSharedWorlds() {
         }
 
         println(
-            "SCALE coast at $SIDE: ${traced.size} lines, $full vertices traced in $traceMs ms, " +
+            "SCALE coast at $ROWS rows: ${traced.size} lines, $full vertices traced in $traceMs ms, " +
                 "$kept kept at a tolerance of $tolerance sheet pixels; " +
                 "Douglas-Peucker strays ${worst.round()} pixels, decimation to the same count " +
                 "strays ${worstDecimated.round()}"
@@ -189,7 +196,7 @@ class GeneralisationTest : BorrowsSharedWorlds() {
         }
         val bare = FACINGS.indices.filter { bareByFacing[it] > 0 }
         println(
-            "SCALE checked $checked coast vertices at $SIDE; the land cell left uninked by the raster, " +
+            "SCALE checked $checked coast vertices at $ROWS rows; the land cell left uninked by the raster, " +
                 "by the water's side: " + FACINGS.indices.joinToString { "${FACINGS[it]} ${bareByFacing[it]}" }
         )
         KnownFailures.expect(COAST_INKED_EAST_AND_SOUTH, "uninked where the water lies west and north") {
@@ -304,15 +311,16 @@ class GeneralisationTest : BorrowsSharedWorlds() {
     @Test
     fun `the scale bar measures what the world's own arithmetic says`() {
         val scale = WorldGenConfig().scale
-        val cellsAcross = 2048
-        val geometry = SheetGeometry.of(scale, cellsAcross, cellsAcross)
+        val cellsDown = 2048
+        val cellsAcross = 2 * cellsDown
+        val geometry = SheetGeometry.of(scale, cellsAcross, cellsDown)
         val perPixel = MapScale.kilometresPerPixel(geometry, 1f)
 
-        // The true-shape sheet is twice the grid's width, so its pixel is half a cell's width of
-        // ground east-west and one row's height north-south: the same ground both ways.
+        // A grid of square cells is drawn a cell to a pixel, so the sheet's pixel is a cell's width
+        // of ground east-west and a row's height north-south: the same ground both ways.
         assertEquals(scale.worldWidthKm / geometry.widthPixels, perPixel, 1e-9)
         assertEquals(scale.cellWidthKm(cellsAcross) / geometry.pixelsPerCellAcross, perPixel, 1e-9)
-        assertEquals(scale.cellHeightKm(cellsAcross) / geometry.pixelsPerCellDown, perPixel, 1e-9)
+        assertEquals(scale.cellHeightKm(cellsDown) / geometry.pixelsPerCellDown, perPixel, 1e-9)
 
         val frame = geometry.widthPixels.toFloat()
         val bar = MapScale.longestBarThatFits(perPixel, frame)
@@ -357,15 +365,24 @@ class GeneralisationTest : BorrowsSharedWorlds() {
      * The printed sheet's own bar, placed by the renderer, is measured against the sheet's pixel
      * width and not the grid's.
      *
-     * On a 2048 world's sheet a pixel is 12,000 / 4096 = 2.9297 km, so a 500 km bar is 170.7
-     * pixels long. The control is the arithmetic of the squeezed sheet this replaced — a cell's
-     * width of ground to the pixel — which draws the same bar at 85.3 pixels, half the length it
-     * should be on the true-shape sheet.
+     * On a 2048-row world's sheet a pixel is 12,000 / 4096 = 2.9297 km, so a 500 km bar is 170.7
+     * pixels long. On square cells the sheet's pixel and a cell's width are one length, so the
+     * clause is read as well on the 2048 by 2048 grid, whose cells are two pixels across: its
+     * sheet is the same 4096 pixels, and the control, the arithmetic of the squeezed sheet this
+     * replaced — a cell's width of ground to the pixel — draws the same bar at 85.3 pixels there,
+     * half the length it should be on the true-shape sheet.
      */
     @Test
     fun `the printed bar is as long on the sheet as the distance it names`() {
         val scale = WorldGenConfig().scale
-        val geometry = SheetGeometry.of(scale, 2048, 2048)
+        for (geometry in listOf(SheetGeometry.of(scale, 4096, 2048), SheetGeometry.of(scale, 2048, 2048))) {
+            printedBarOn(geometry)
+        }
+    }
+
+    /** The clause above on one sheet. */
+    private fun printedBarOn(geometry: SheetGeometry) {
+        val scale = WorldGenConfig().scale
         val kilometresPerPixel = scale.worldWidthKm / geometry.widthPixels
         assertEquals(2.9296875, kilometresPerPixel, 1e-12)
 
@@ -384,22 +401,24 @@ class GeneralisationTest : BorrowsSharedWorlds() {
             MapScale.longestBarThatFits(MapScale.kilometresPerPixel(geometry, 1f), 900f)
         assertEquals(500.0, fiveHundred.kilometres)
         assertEquals(500.0 / 2.9296875, fiveHundred.lengthPixels.toDouble(), 1e-3)
-        val squeezedPixels = 500.0 / scale.cellWidthKm(2048)
+        val squeezedPixels = 500.0 / scale.cellWidthKm(geometry.cellsAcross)
         println(
-            "SCALE the printed bar on a 2048 world's sheet: ${placed.bar.label} over " +
-                "${placed.bar.lengthPixels} px; 500 km is ${fiveHundred.lengthPixels} px, and was " +
-                "$squeezedPixels px on the squeezed sheet"
+            "SCALE the printed bar on the ${geometry.cellsAcross} by ${geometry.cellsDown} grid's sheet: " +
+                "${placed.bar.label} over ${placed.bar.lengthPixels} px; 500 km is " +
+                "${fiveHundred.lengthPixels} px, and $squeezedPixels px a cell to the pixel"
         )
-        assertTrue(
-            abs(squeezedPixels - fiveHundred.lengthPixels) > 1.0,
-            "the squeezed sheet's arithmetic draws 500 km the same length, so the guard cannot " +
-                "tell them apart"
-        )
+        if (!geometry.isCellForPixel) {
+            assertTrue(
+                abs(squeezedPixels - fiveHundred.lengthPixels) > 1.0,
+                "the squeezed sheet's arithmetic draws 500 km the same length, so the guard cannot " +
+                    "tell them apart"
+            )
+        }
     }
 
     @Test
     fun `the bar shortens as the reader zooms in, and stays a round number`() {
-        val geometry = SheetGeometry.of(WorldGenConfig().scale, 2048, 2048)
+        val geometry = SheetGeometry.of(WorldGenConfig().scale, 4096, 2048)
         val quoted = listOf(0.125f, 0.25f, 0.5f, 1f, 4f, 16f).map { pixelsPerSheetPixel ->
             val bar = MapScale.longestBarThatFits(
                 MapScale.kilometresPerPixel(geometry, pixelsPerSheetPixel),
@@ -419,10 +438,10 @@ class GeneralisationTest : BorrowsSharedWorlds() {
 
     @Test
     fun `the graticule's spacing is exact in sheet pixels`() {
-        listOf(512, 1024, 2048, 4096).forEach { side ->
-            val graticule = Graticule.of(side, side)
+        SHEET_WIDTHS.forEach { side ->
+            val graticule = Graticule.of(side, side / 2)
             val meridianSpacing = side / 36f
-            val parallelSpacing = side / 18f
+            val parallelSpacing = side / 2 / 18f
 
             assertEquals(meridianSpacing, graticule.meridianSpacingPixels, 0f)
             assertEquals(parallelSpacing, graticule.parallelSpacingPixels, 0f)
@@ -441,9 +460,10 @@ class GeneralisationTest : BorrowsSharedWorlds() {
             // The prime meridian and the equator fall on the middle of the sheet, to a thousandth
             // of a cell — the rest is float multiplication and not a decision. Rounding the spacing
             // to whole cells, which is the shortcut this guard exists to refuse, moves them by
-            // whole cells: at 512 the prime meridian lands four cells west of the middle.
+            // whole cells: on the 1024-pixel sheet the prime meridian lands eight pixels west of
+            // the middle.
             assertEquals(side / 2f, meridians[18], 1e-3f)
-            assertEquals(side / 2f, parallels[9], 1e-3f)
+            assertEquals(side / 4f, parallels[9], 1e-3f)
             val ifRounded = abs(18 * meridianSpacing.roundToInt() - side / 2f)
             assertTrue(
                 ifRounded > 0.4f,
@@ -452,20 +472,20 @@ class GeneralisationTest : BorrowsSharedWorlds() {
             )
         }
         println(
-            "SCALE graticule spacing at 512/1024/2048/4096: " +
-                listOf(512, 1024, 2048, 4096).map { Graticule.of(it, it).meridianSpacingPixels }
+            "SCALE graticule spacing on the sheets ${SHEET_WIDTHS.joinToString("/")} pixels wide: " +
+                SHEET_WIDTHS.map { Graticule.of(it, it / 2).meridianSpacingPixels }
         )
     }
 
     @Test
     fun `the graticule figures name the lines they sit on`() {
-        val graticule = Graticule.of(2048, 2048)
+        val graticule = Graticule.of(4096, 2048)
         val texts = graticule.labels.map { it.text }.distinct()
         assertTrue("0°" in texts, "the equator and the prime meridian are unlabelled")
         assertTrue("90°E" in texts && "90°W" in texts)
         assertTrue("60°N" in texts && "60°S" in texts)
         assertTrue("180°" !in texts, "the antimeridian is labelled half off the paper")
-        println("SCALE graticule figures at 2048: ${graticule.labels.size} of them, ${texts.size} distinct")
+        println("SCALE graticule figures on the 4096-pixel sheet: ${graticule.labels.size} of them, ${texts.size} distinct")
     }
 
     /**
@@ -478,8 +498,8 @@ class GeneralisationTest : BorrowsSharedWorlds() {
      */
     @Test
     fun `no two graticule figures collide, at any size`() {
-        listOf(512, 1024, 2048, 4096).forEach { side ->
-            val graticule = Graticule.of(side, side)
+        SHEET_WIDTHS.forEach { side ->
+            val graticule = Graticule.of(side, side / 2)
             val figured = graticule.labels.size
             graticule.labels.forEach { label ->
                 val right = label.leftX + Numerals.widthOf(label.text, label.heightPixels)

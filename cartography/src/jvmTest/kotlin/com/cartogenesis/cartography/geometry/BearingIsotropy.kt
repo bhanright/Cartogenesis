@@ -48,10 +48,17 @@ internal object BearingIsotropy {
     /**
      * Half the width of each bearing bin, in degrees on the ground.
      *
-     * A grid bearing's bin and its two neighbours span six half-widths, and the closest two grid
-     * bearings on this map (east-west and the diagonal) lie 26.565 degrees apart, so the three
-     * bins round one bearing stay clear of the three round the next only below 4.43 degrees.
-     * Four leaves the gap.
+     * A grid bearing's bin and its two neighbours span six half-widths, so the three bins round one
+     * bearing stay clear of the three round the next only below a sixth of the closest two grid
+     * bearings' gap. On square cells that gap is 45 degrees, east-west to the diagonal, and the
+     * bound 7.5; on cells twice as wide as tall it was 26.565 and the bound 4.43, which is where
+     * four came from. Four is kept under the wider bound, because the half-width is also what
+     * [EFFECT_RATIO] and [chordKm] are derived at: a bin of seven would need an effect ratio of 2.86
+     * to flag only preferences narrower than the 8.6 degrees 1.5 does at four (the Gaussian's
+     * central seven degrees against its flanks from 7 to 21), and a layer would then need 12.6% of
+     * its length on a grid bearing to be flagged where at four it needs 2.2% (the central bin's
+     * excess `1 + p · 180 / (2 · half · (1 - p))` over a uniform remainder). Four leaves the gap on
+     * either shape of cell.
      */
     const val BIN_HALF_WIDTH_DEGREES = 4.0
 
@@ -63,7 +70,7 @@ internal object BearingIsotropy {
      * centred exactly on the grid's bearing — puts 1.35 times its neighbours' length in the
      * central bin at these bin widths (the Gaussian's mean over the central 8 degrees against its
      * mean over the flanks from 4 to 12; 1.58 at a standard deviation of 8 and 1.24 at 12). A ratio
-     * of 1.5 needs a preference narrower than a standard deviation of about 8.7 degrees, which no
+     * of 1.5 needs a preference narrower than a standard deviation of about 8.6 degrees, which no
      * geography gives a whole layer save one that follows the latitude, and that one is held to the
      * zonal control's ratio times this; what is that narrow otherwise is the grid.
      */

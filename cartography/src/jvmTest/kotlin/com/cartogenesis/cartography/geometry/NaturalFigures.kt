@@ -216,9 +216,11 @@ internal class NaturalTails private constructor(
                 // and judging it against whole windows' tails is the stricter reading.
                 val whole = all.filter { it.lengthKm >= halfWindowKm }
                 val partRings = ComponentShapes.rings(outlines, canvas).filter { it.measured }
-                val partArcs = Arcs.perLine(Arcs.measure(outlines, canvas), outlines.size).sum()
-                summaries.add("%s: %d lines, %d windows, %d measured rings, %d arcs; aligned %s; run %s; crease %s".format(
-                    name, outlines.size, whole.size, partRings.size, partArcs,
+                val found = Arcs.measure(outlines, canvas)
+                val partArcs = Arcs.perLine(found, outlines.size).sum()
+                val radii = found.arcs.joinToString(", ", prefix = " (radii ", postfix = " cells)") { "%.1f".format(it.radiusCells) }
+                summaries.add("%s: %d lines, %d windows, %d measured rings, %d arcs%s; aligned %s; run %s; crease %s".format(
+                    name, outlines.size, whole.size, partRings.size, partArcs, if (found.arcs.isEmpty()) "" else radii,
                     Tail(whole.map { it.alignedSteps }), Tail(whole.map { it.runCellWidths }),
                     Tail(whole.filter { it.creaseJunctions > 0 }.map { it.creaseStrength })))
                 allWindows.addAll(all)

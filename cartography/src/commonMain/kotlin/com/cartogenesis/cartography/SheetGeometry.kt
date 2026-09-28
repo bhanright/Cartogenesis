@@ -55,6 +55,9 @@ class SheetGeometry(
     /** Pixels in the whole sheet. */
     val pixelCount: Int get() = widthPixels * heightPixels
 
+    /** How wide a cell is on the ground, in kilometres: its pixels across at the sheet's one scale. */
+    val cellWidthKm: Double get() = kilometresPerPixel * pixelsPerCellAcross
+
     /** Whether a cell is one pixel of the sheet, so the raster is already the sheet. */
     val isCellForPixel: Boolean get() = pixelsPerCellAcross == 1 && pixelsPerCellDown == 1
 

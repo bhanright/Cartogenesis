@@ -287,7 +287,19 @@ class RasterRecipe(
     val ordinaryGround: Float,
     val showLakes: Boolean,
     val showCoastline: Boolean,
-    val showBorders: Boolean
+    val showBorders: Boolean,
+    /**
+     * The sky the relief is lit under: how much of its light is diffuse, and how bright it is
+     * along each of the eight bearings of the ground, east first and round through south.
+     *
+     * Carried for the reason [ordinaryGround] is: both come from `ReliefShading.HAZE`, which is
+     * re-derived whenever the ground's contrast moves, and a shader that held its own copy would be
+     * left behind by the first re-derivation. The processor's own figures, so the two agree to the
+     * bit; [skyBrightnessTotal] is their sum as the processor takes it.
+     */
+    val skyDiffuseShare: Float = ReliefShading.DAYLIGHT.diffuseShare,
+    val skyBrightness: FloatArray = ReliefShading.DAYLIGHT.brightness,
+    val skyBrightnessTotal: Float = ReliefShading.DAYLIGHT.brightnessTotal
 ) {
 
     init {
@@ -322,12 +334,18 @@ class RasterRecipe(
         val ORDINARY_GROUND: Float get() = ReliefShading.ordinaryGround
 
         /**
-         * The relief's horizon for a grid [cellsAcross] wide whose rows are [cellHeightInCellWidths]
-         * as tall as its columns are wide, for a caller that builds a recipe by hand, on the terms
-         * [ORDINARY_GROUND] is offered.
+         * The relief's horizon for a grid whose cells are [cellWidthKm] wide and whose rows are
+         * [cellHeightInCellWidths] as tall as its columns are wide, for a caller that builds a
+         * recipe by hand, on the terms [ORDINARY_GROUND] is offered.
          */
-        fun reliefHorizon(cellsAcross: Int, cellHeightInCellWidths: Double): ReliefHorizon =
-            ReliefHorizon.of(ReliefShading.opennessStep(cellsAcross), cellHeightInCellWidths)
+        fun reliefHorizon(cellWidthKm: Double, cellHeightInCellWidths: Double): ReliefHorizon =
+            ReliefHorizon.of(ReliefShading.opennessStep(cellWidthKm), cellHeightInCellWidths)
+
+        /**
+         * The relief's exaggeration over a central difference on cells [cellWidthKm] wide, for a
+         * caller that builds a recipe by hand, on the same terms.
+         */
+        fun slopeScale(cellWidthKm: Double): Float = ReliefShading.slopeScale(cellWidthKm)
 
         /**
          * Describes what [MapRasterizer.rasterize] would draw, or null if this world and these
@@ -511,7 +529,7 @@ class RasterRecipe(
                 isobathInterval = Isobaths.interval(world.config.scale),
                 isobathFlattestSlope =
                     Isobaths.flattestSlope(world.config, cellsAcross, cellsDown),
-                isobathSlopeStencil = Isobaths.slopeStencil(cellsAcross),
+                isobathSlopeStencil = Isobaths.slopeStencil(world.config.cellWidthKm),
                 lake = style.lake,
                 lakeDeep = style.lakeDeep,
                 coastline = style.coastline,
@@ -537,9 +555,9 @@ class RasterRecipe(
                 anomalyCold = MapPalette.ANOMALY_COLD,
                 hillshade = options.showHillshade && view != MapView.NORMALS,
                 singleLamp = options.singleLamp,
-                slopeScale = ReliefShading.slopeScale(cellsAcross),
+                slopeScale = ReliefShading.slopeScale(world.config.cellWidthKm),
                 reliefHorizon = ReliefHorizon.of(
-                    ReliefShading.opennessStep(cellsAcross), world.config.cellHeightInCellWidths
+                    ReliefShading.opennessStep(world.config.cellWidthKm), world.config.cellHeightInCellWidths
                 ),
                 cellHeightInCellWidths = world.config.cellHeightInCellWidths.toFloat(),
                 ordinaryGround = ReliefShading.ordinaryGround,

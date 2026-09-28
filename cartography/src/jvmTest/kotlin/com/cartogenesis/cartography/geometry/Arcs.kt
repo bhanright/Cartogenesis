@@ -42,13 +42,16 @@ internal object Arcs {
     /**
      * The smallest radius judged, in cells (of the cell's larger side on the ground frame).
      *
-     * From the control ensemble: `GeometryControlTest` fits circles to every stretch of hundreds
-     * of natural islands, and below this they fit — a natural blob a few cells across is a circle
-     * to within a quarter of a cell once rasterised, as round as a stamped disc (0.11 cells at a
-     * radius of 4, 0.22 at 7, 0.27 at 9, and none past 9). Under it a stamped disc cannot be told
-     * from a lake by its outline alone, and the guard does not pretend to.
+     * From the natural controls: `GeometryControlTest` fits circles to every stretch of hundreds
+     * of natural islands, rough level lines and meandering courses, and below this they fit — a
+     * natural line a few cells round is a circle to within a quarter of a cell once rasterised, as
+     * round as a stamped disc. On square cells the rough level lines fit arcs of 11.5 cells and the
+     * courses of 10.5, and none past 11.5, so twelve; on cells twice as wide as tall, whose rows
+     * resolve a curve twice as finely, the islands fitted none past 9 and the floor was ten. Under
+     * it a stamped disc cannot be told from a lake by its outline alone, and the guard does not
+     * pretend to.
      */
-    const val MINIMUM_RADIUS_CELLS = 10.0
+    const val MINIMUM_RADIUS_CELLS = 12.0
 
     /**
      * The largest root-mean-square distance from the circle, in cells along the radius.

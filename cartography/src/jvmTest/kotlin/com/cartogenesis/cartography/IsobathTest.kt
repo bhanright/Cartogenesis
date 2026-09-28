@@ -31,16 +31,21 @@ class IsobathTest : BorrowsSharedWorlds() {
 
     private companion object {
 
-        /** Side of the made floor, and where the slope gives way to the plain. */
-        const val SIDE = 512
-        const val SLOPE_COLUMNS = SIDE / 2
+        /**
+         * The made floor's grid, 512 rows of square cells over the default world, and where the
+         * slope gives way to the plain: half way across, 6,000 km of each.
+         */
+        const val DOWN = 512
+        const val ACROSS = 2 * DOWN
+        const val SLOPE_COLUMNS = ACROSS / 2
 
         /**
-         * Pixels of the true-shape sheet one cell of the made floor spans east-west: the made floor
-         * is a square grid over [CONFIG]'s world, whose sheet is twice the grid's width.
+         * Pixels of the true-shape sheet one cell of the made floor spans east-west: one, since its
+         * cells are square on the ground. Read off the sheet rather than written down, so a grid
+         * whose cells are not square would be drawn and measured as the raster draws it.
          */
         val PIXELS_PER_CELL_ACROSS: Int
-            get() = SheetGeometry.of(CONFIG.scale, SIDE, SIDE).pixelsPerCellAcross
+            get() = SheetGeometry.of(CONFIG.scale, ACROSS, DOWN).pixelsPerCellAcross
 
         /**
          * The plain's depth, and how far its floor rises toward the margins of the basin.
@@ -87,20 +92,21 @@ class IsobathTest : BorrowsSharedWorlds() {
          * And how much of the slope must keep it, so the rule cannot pass by drawing nothing.
          *
          * The slope falls through 0.8 of the sea's ruler, sixteen contours at the interval's 500 m
-         * of its 10,000 m, and sixteen lines a pixel and a half wide across 256 columns are about
-         * 9% of that half. The bar is a third of that, so the crowding fade may take the most
-         * tightly packed of them and the clause still fails on a rule that took the drawing whole.
+         * of its 10,000 m, and sixteen lines a pixel and a half wide across the 512 one-pixel
+         * columns of the slope are 4.7% of that half. The bar is a third of that, rounded down, so
+         * the crowding fade may take the most tightly packed of them and the clause still fails on
+         * a rule that took the drawing whole.
          */
-        const val MIN_SLOPE_INKED = 0.03
+        const val MIN_SLOPE_INKED = 0.015
 
         /** The world these figures are read against: the generator's own defaults. */
-        val CONFIG = WorldGenConfig(seed = 1L, width = SIDE, height = SIDE)
+        val CONFIG = WorldGenConfig.forRows(seed = 1L, rows = DOWN)
 
         /**
          * A generated world at the same grid, where the raster's own contour arithmetic is read:
          * the default settings, as the gallery and the census use them.
          */
-        val WORLD_CONFIG = WorldGenConfig(seed = 42L, width = SIDE, height = SIDE)
+        val WORLD_CONFIG = WorldGenConfig.forRows(seed = 42L, rows = DOWN)
 
         /**
          * Contour ink a reader sees, on [Isobaths.ink]'s 0-to-1 scale: a tenth of a line's full
@@ -128,17 +134,17 @@ class IsobathTest : BorrowsSharedWorlds() {
      * floor the field can hold.
      */
     private fun madeFloor(): FloatArray {
-        val depth = FloatArray(SIDE * SIDE)
-        for (row in 0 until SIDE) {
-            for (column in 0 until SIDE) {
-                depth[row * SIDE + column] = if (column < SLOPE_COLUMNS) {
+        val depth = FloatArray(ACROSS * DOWN)
+        for (row in 0 until DOWN) {
+            for (column in 0 until ACROSS) {
+                depth[row * ACROSS + column] = if (column < SLOPE_COLUMNS) {
                     SLOPE_FROM + (SLOPE_TO - SLOPE_FROM) * column / SLOPE_COLUMNS
                 } else {
                     // The floor of a filled basin: level in the middle, turning up at the margins,
                     // with a fine roughness over all of it. See [PLAIN_ROUGHNESS].
                     val acrossPlain =
-                        (column - (SLOPE_COLUMNS + SIDE) / 2f) / ((SIDE - SLOPE_COLUMNS) / 2f)
-                    val downPlain = (row - SIDE / 2f) / (SIDE / 2f)
+                        (column - (SLOPE_COLUMNS + ACROSS) / 2f) / ((ACROSS - SLOPE_COLUMNS) / 2f)
+                    val downPlain = (row - DOWN / 2f) / (DOWN / 2f)
                     val fromMiddle = maxOf(kotlin.math.abs(acrossPlain), kotlin.math.abs(downPlain))
                     // To the fourth power: dead level in the centre, turning up at the edges.
                     val margin = fromMiddle * fromMiddle * fromMiddle * fromMiddle
@@ -169,14 +175,14 @@ class IsobathTest : BorrowsSharedWorlds() {
      */
     private fun contourInk(depth: FloatArray, flatnessRule: Boolean): FloatArray {
         val interval = Isobaths.interval(CONFIG.scale)
-        val flattest = if (flatnessRule) Isobaths.flattestSlope(CONFIG, SIDE, SIDE) else 0f
-        val reach = Isobaths.slopeStencil(SIDE)
+        val flattest = if (flatnessRule) Isobaths.flattestSlope(CONFIG, ACROSS, DOWN) else 0f
+        val reach = Isobaths.slopeStencil(CONFIG.cellWidthKm)
         val span = 1f / (2f * reach)
         val rowScale = CONFIG.cellHeightInCellWidths.toFloat()
         val ink = FloatArray(depth.size)
-        for (row in 0 until SIDE) {
-            for (column in 0 until SIDE) {
-                val cell = row * SIDE + column
+        for (row in 0 until DOWN) {
+            for (column in 0 until ACROSS) {
+                val cell = row * ACROSS + column
                 val eastward =
                     (sample(depth, column + reach, row) -
                         sample(depth, column - reach, row)) * span
@@ -194,7 +200,7 @@ class IsobathTest : BorrowsSharedWorlds() {
 
     /** Clamped north and south, wrapped east and west, exactly as the raster samples a field. */
     private fun sample(depth: FloatArray, column: Int, row: Int): Float =
-        depth[row.coerceIn(0, SIDE - 1) * SIDE + ((column % SIDE) + SIDE) % SIDE]
+        depth[row.coerceIn(0, DOWN - 1) * ACROSS + ((column % ACROSS) + ACROSS) % ACROSS]
 
     /**
      * How much of one half of the floor took ink, and the largest connected patch of it.
@@ -203,9 +209,9 @@ class IsobathTest : BorrowsSharedWorlds() {
      * whole point is that one of them should be drawn on and the other should not.
      */
     private class Patch(ink: FloatArray, val from: Int, val until: Int) {
-        val cells = (until - from) * SIDE
-        val inked = (0 until SIDE).sumOf { row ->
-            (from until until).count { column -> ink[row * SIDE + column] >= INKED }
+        val cells = (until - from) * DOWN
+        val inked = (0 until DOWN).sumOf { row ->
+            (from until until).count { column -> ink[row * ACROSS + column] >= INKED }
         }
         val largest: Int
 
@@ -221,13 +227,13 @@ class IsobathTest : BorrowsSharedWorlds() {
                 while (stack.isNotEmpty()) {
                     val cell = stack.removeLast()
                     size++
-                    val column = cell % SIDE
-                    val row = cell / SIDE
+                    val column = cell % ACROSS
+                    val row = cell / ACROSS
                     val neighbours = intArrayOf(
-                        row * SIDE + (column + 1) % SIDE,
-                        row * SIDE + (column + SIDE - 1) % SIDE,
-                        if (row + 1 < SIDE) (row + 1) * SIDE + column else cell,
-                        if (row > 0) (row - 1) * SIDE + column else cell
+                        row * ACROSS + (column + 1) % ACROSS,
+                        row * ACROSS + (column + ACROSS - 1) % ACROSS,
+                        if (row + 1 < DOWN) (row + 1) * ACROSS + column else cell,
+                        if (row > 0) (row - 1) * ACROSS + column else cell
                     )
                     for (next in neighbours) {
                         if (next == cell || seen[next] || ink[next] < INKED) continue
@@ -251,8 +257,8 @@ class IsobathTest : BorrowsSharedWorlds() {
         val floor = madeFloor()
         val withRule = contourInk(floor, flatnessRule = true)
         val without = contourInk(floor, flatnessRule = false)
-        val plain = Patch(withRule, SLOPE_COLUMNS, SIDE)
-        val plainBefore = Patch(without, SLOPE_COLUMNS, SIDE)
+        val plain = Patch(withRule, SLOPE_COLUMNS, ACROSS)
+        val plainBefore = Patch(without, SLOPE_COLUMNS, ACROSS)
         val slope = Patch(withRule, 0, SLOPE_COLUMNS)
         val slopeBefore = Patch(without, 0, SLOPE_COLUMNS)
 
@@ -262,7 +268,7 @@ class IsobathTest : BorrowsSharedWorlds() {
             "ISOBATH a plain is flatter than 1:%.0f, which on this grid is %.5f of the field a pixel"
                 .format(
                     1.0 / Isobaths.ABYSSAL_PLAIN_GRADIENT,
-                    Isobaths.flattestSlope(CONFIG, SIDE, SIDE)
+                    Isobaths.flattestSlope(CONFIG, ACROSS, DOWN)
                 )
         )
 
@@ -289,8 +295,10 @@ class IsobathTest : BorrowsSharedWorlds() {
      * `Isobaths.ABYSSAL_PLAIN_GRADIENT` is a metre of fall a kilometre, and a floor falling that
      * gently is a plain whether it falls north or east. A raster that measured the fall per pixel
      * and converted the rule with one cell side for both axes read a floor falling north at 0.71 of
-     * its gradient and one falling east at 1.41 on this map's cells (Audit III's F-R5), so the same
-     * ground was a plain one way and a slope the other.
+     * its gradient and one falling east at 1.41 on cells twice as wide as tall (Audit III's F-R5),
+     * so the same ground was a plain one way and a slope the other. On square cells the two readings
+     * agree, so the planes are drawn on both: this map's square cells and the half-height cells of
+     * a grid as many cells tall as wide, where the clause has its teeth.
      *
      * Planes at four bearings on the ground, each through a contour at its middle: at under half
      * the plain's gradient the rule leaves no ink at all, and at a tenth over it the rule leaves the
@@ -298,46 +306,56 @@ class IsobathTest : BorrowsSharedWorlds() {
      */
     @Test
     fun `the plain is a gradient on the ground whichever way the floor falls`() {
-        val rowScale = CONFIG.cellHeightInCellWidths
-        val interval = Isobaths.interval(CONFIG.scale)
-        val flattest = Isobaths.flattestSlope(CONFIG, SIDE, SIDE)
-        val stencil = Isobaths.slopeStencil(SIDE)
-        val plainPerCellWidth = CONFIG.scale.depthShareOfMetres(
-            (Isobaths.ABYSSAL_PLAIN_GRADIENT * CONFIG.cellWidthKm * 1000.0).toFloat()
-        )
         val failures = ArrayList<String>()
+        for (config in listOf(CONFIG, WorldGenConfig(seed = 1L, width = DOWN, height = DOWN))) {
+            planesOnTheGround(config, failures)
+        }
+        assertTrue(failures.isEmpty(), "the plain rule reads the same ground differently by bearing: $failures")
+    }
+
+    /** The planes of the clause above on [config]'s grid, a window of its middle read. */
+    private fun planesOnTheGround(config: WorldGenConfig, failures: MutableList<String>) {
+        val across = config.width
+        val down = config.height
+        val rowScale = config.cellHeightInCellWidths
+        val pixelsPerCellAcross = SheetGeometry.of(config).pixelsPerCellAcross
+        val interval = Isobaths.interval(config.scale)
+        val flattest = Isobaths.flattestSlope(config, across, down)
+        val stencil = Isobaths.slopeStencil(config.cellWidthKm)
+        val plainPerCellWidth = config.scale.depthShareOfMetres(
+            (Isobaths.ABYSSAL_PLAIN_GRADIENT * config.cellWidthKm * 1000.0).toFloat()
+        )
         for (degrees in listOf(0.0, 90.0, 45.0, 135.0)) {
             val falls = degrees * kotlin.math.PI / 180.0
             for (share in listOf(UNDER_THE_PLAIN, OVER_THE_PLAIN)) {
-                val depth = FloatArray(SIDE * SIDE) { cell ->
-                    val column = cell % SIDE - SIDE / 2
-                    val row = cell / SIDE - SIDE / 2
+                val depth = FloatArray(across * down) { cell ->
+                    val column = cell % across - across / 2
+                    val row = cell / across - down / 2
                     (PLAIN_DEPTH + share * plainPerCellWidth *
                         (column * kotlin.math.cos(falls) + row * rowScale * kotlin.math.sin(falls))).toFloat()
                 }
-                val floor = com.cartogenesis.worldgen.model.FloatField(SIDE, SIDE, FloatArray(depth.size) { -depth[it] })
+                val floor = com.cartogenesis.worldgen.model.FloatField(across, down, FloatArray(depth.size) { -depth[it] })
                 var inkedWithRule = 0
                 var differing = 0
-                for (row in SIDE / 4 until SIDE * 3 / 4) {
-                    for (column in SIDE / 4 until SIDE * 3 / 4) {
-                        val cell = row * SIDE + column
-                        val withRule = MapRasterizer.seaContour(floor, rowScale, PIXELS_PER_CELL_ACROSS, cell, depth[cell], interval, flattest, stencil)
-                        val without = MapRasterizer.seaContour(floor, rowScale, PIXELS_PER_CELL_ACROSS, cell, depth[cell], interval, 0f, stencil)
+                for (row in down / 4 until down * 3 / 4) {
+                    for (column in across / 4 until across * 3 / 4) {
+                        val cell = row * across + column
+                        val withRule = MapRasterizer.seaContour(floor, rowScale, pixelsPerCellAcross, cell, depth[cell], interval, flattest, stencil)
+                        val without = MapRasterizer.seaContour(floor, rowScale, pixelsPerCellAcross, cell, depth[cell], interval, 0f, stencil)
                         if (withRule >= VISIBLE_INK) inkedWithRule++
                         if (withRule != without) differing++
                     }
                 }
                 val verdict = if (share == UNDER_THE_PLAIN) inkedWithRule == 0 else differing == 0
                 println(
-                    "ISOBATH a floor falling at %5.1f degrees on the ground at %.2f of the plain's gradient: %d cells inked, %d drawn otherwise than without the rule"
+                    "ISOBATH ${across}x$down, a floor falling at %5.1f degrees on the ground at %.2f of the plain's gradient: %d cells inked, %d drawn otherwise than without the rule"
                         .format(degrees, share, inkedWithRule, differing)
                 )
                 if (!verdict) {
-                    failures += "falling at $degrees degrees, ${share}x the plain's gradient: $inkedWithRule inked, $differing changed by the rule"
+                    failures += "${across}x$down, falling at $degrees degrees, ${share}x the plain's gradient: $inkedWithRule inked, $differing changed by the rule"
                 }
             }
         }
-        assertTrue(failures.isEmpty(), "the plain rule reads the same ground differently by bearing: $failures")
     }
 
     /**
@@ -348,13 +366,14 @@ class IsobathTest : BorrowsSharedWorlds() {
     @Test
     fun `the made floor is measured the way the raster measures a world`() {
         val world = SharedWorlds.world(WORLD_CONFIG)
-        assertEquals(SIDE, world.width)
+        assertEquals(ACROSS, world.width)
+        assertEquals(DOWN, world.height)
         val relative = world.sea.relativeElevation.data
         val depth = FloatArray(relative.size) { -relative[it] }
         val copied = contourInk(depth, flatnessRule = true)
         val interval = Isobaths.interval(world.config.scale)
         val flattest = Isobaths.flattestSlope(world.config, world.width, world.height)
-        val stencil = Isobaths.slopeStencil(world.width)
+        val stencil = Isobaths.slopeStencil(world.config.cellWidthKm)
         var compared = 0
         var inked = 0
         for (cell in relative.indices) {
@@ -385,7 +404,7 @@ class IsobathTest : BorrowsSharedWorlds() {
         val relative = world.sea.relativeElevation.data
         val interval = Isobaths.interval(world.config.scale)
         val flattest = Isobaths.flattestSlope(world.config, world.width, world.height)
-        val stencil = Isobaths.slopeStencil(world.width)
+        val stencil = Isobaths.slopeStencil(world.config.cellWidthKm)
         val width = world.width
         val land = world.sea.isLand
         fun besideLand(cell: Int): Boolean {
@@ -431,7 +450,7 @@ class IsobathTest : BorrowsSharedWorlds() {
         var lines = 0
         var inside = false
         for (column in 0 until SLOPE_COLUMNS) {
-            val wet = ink[(SIDE / 2) * SIDE + column] >= INKED
+            val wet = ink[(DOWN / 2) * ACROSS + column] >= INKED
             if (wet && !inside) lines++
             inside = wet
         }

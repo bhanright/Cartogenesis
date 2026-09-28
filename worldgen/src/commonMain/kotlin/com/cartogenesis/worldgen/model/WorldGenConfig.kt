@@ -3179,6 +3179,13 @@ data class WorldGenConfig(
      * [scale] is not touched at all, and that is the point of it: how many cells a world is cut
      * into says nothing about how wide the world is, how high its land stands or how long a round
      * of erosion lasts.
+     *
+     * Two limits, both lifted when the widths and the rest are stated in kilometres. The widths are
+     * carried only for a world made through here: one built directly at another grid keeps the
+     * 512 grid's counts on its own cells. And a few stage figures are still counts of cells that
+     * nothing carries, so on a grid of another width they reach another distance. The coast's
+     * reach into the land (`OceanConfig.coastalReachCells`) is the one a reader sees; the Q1 row
+     * of docs/DESIGN_LEDGER.md lists them all. [forRows] goes through here.
      */
     fun atResolution(newWidth: Int, newHeight: Int): WorldGenConfig {
         val scale = newWidth.toFloat() / width

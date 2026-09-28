@@ -1148,6 +1148,24 @@
   read better all the same, and it would empty `atResolution` of everything but the moisture
   march's own knob. A rename with no physics under it. 2026-09-13, S2.
 
+  **Not only a rename.** `atResolution` carries the widths only for a world made through it. A world
+  built directly at any grid other than 512 by 512 keeps the 512 grid's counts on its own cells. At
+  128 by 128, which is the fingerprint world, 26 cells is 2,437 km where it is 609 at 512. On a
+  1,024 by 512 grid of square cells built directly, every belt is half as wide on the ground
+  (`TectonicGroundTest`'s control reads 222 km against 393 on seed 42). `WorldGenConfig.forRows`
+  goes through `atResolution` and is right. Stating the widths in kilometres moves every world a
+  test builds directly at another grid. So it is the square-grid switch's Q2, which moves those
+  worlds anyway, and not Q1, which moves no bit. 2026-09-28, Q1.
+
+- **A world of square cells carries more ice at 60 to 90 degrees than a change of grid gives.**
+  `GridShapeTest` compares the same seed at 512 by 512 and at `forRows(512)`, band by band. Its
+  ice clause runs as a known failure. Seed 1234 at -75 to -90 degrees carries +0.017 of the band as
+  ice. Seed 99 carries +0.022 at 75 to 60 degrees and +0.022 at -60 to -75. 512 by 512 against
+  1,024 by 1,024 moves no band more than 0.016. The deserts, the land's rain and the warmth hold.
+  Glaciation's cell-space operators reach twice as far north-south on square cells: the relief
+  window, the discs and the square windows. They are the first suspects, and Q2 re-measures them.
+  2026-09-28, Q1.
+
 
 - **M1's coastline box count reads structure far below its own smallest box.** It counts the boxes
   of four, eight and sixteen cells holding both land and water, and a box is mixed by a *single*

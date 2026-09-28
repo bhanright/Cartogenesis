@@ -97,6 +97,44 @@ class OceanUpwellingTest {
         assertTrue(OceanStage.outcropLatitude(0f) == 0f, "the equator's water outcropped off the equator")
     }
 
+    /**
+     * The trades tilt the equatorial thermocline, and the east's rising water comes from beneath it:
+     * along an equatorial basin under a uniform easterly stress `τ`, the thermocline's depth is the
+     * analytic `h² = H² + (2τ / ρg') (x - x_w - L/2)`, shoaling eastward, and the share of rising
+     * water drawn from beneath it, `(1 + tanh((D - h)/δ))/2`, follows it to 1e-4. With no stress the
+     * thermocline is flat and the east draws no more than the west, which is the control.
+     */
+    @Test
+    fun `the trades tilt the equatorial thermocline and the east draws from beneath it`() {
+        val across = 960
+        val down = 480
+        val widthMeters = 12_000_000.0 / across
+        val westShore = 200
+        val eastShore = 700
+        val isWater = BooleanArray(across * down) { cell -> (cell % across) in westShore until eastShore }
+        fun sharesUnder(stressEast: Double): FloatArray = OceanStage.equatorialDeepShare(
+            OceanStage.Stress(DoubleArray(across * down) { stressEast }, DoubleArray(across * down)), isWater, across, down, widthMeters
+        )
+        val tilted = sharesUnder(-STRESS_N_PER_M2)
+        val flat = sharesUnder(0.0)
+        val lengthMeters = (eastShore - westShore) * widthMeters
+        var worst = 0.0
+        for (column in westShore until eastShore) {
+            val x = (column - westShore + 0.5) * widthMeters
+            val depthSquared = OceanStage.EQUATORIAL_THERMOCLINE_DEPTH_M * OceanStage.EQUATORIAL_THERMOCLINE_DEPTH_M +
+                2 * -STRESS_N_PER_M2 / (seawaterDensity * OceanStage.EQUATORIAL_REDUCED_GRAVITY_M_PER_S2) * (x - lengthMeters / 2)
+            val depth = kotlin.math.sqrt(maxOf(depthSquared, 0.0))
+            val expected = (1 + kotlin.math.tanh((OceanStage.UPWELLING_SOURCE_DEPTH_M - depth) / OceanStage.THERMOCLINE_HALF_THICKNESS_M)) / 2
+            worst = maxOf(worst, abs(tilted[column] - expected))
+        }
+        println("UPWELLING equatorial thermocline over a %.0f km basin: the western end draws %.3f from beneath, the eastern %.3f; worst against the analytic %.1e; with no stress %.3f and %.3f"
+            .format(lengthMeters / 1000, tilted[westShore], tilted[eastShore - 1], worst, flat[westShore], flat[eastShore - 1]))
+        assertTrue(!(flat[eastShore - 1] > flat[westShore]), "a flat thermocline drew more from beneath in the east")
+        assertTrue(tilted[eastShore - 1] > tilted[westShore], "the east did not draw more from beneath than the west")
+        assertTrue(worst < 1e-4, "the share departs from the analytic tilt by $worst")
+        assertTrue(tilted[0].isNaN(), "land on the equator was given a thermocline")
+    }
+
     /** A poleward stress along the same coasts pushes the surface water onshore, and nothing rises. */
     @Test
     fun `a poleward wind along a coast raises nothing`() {

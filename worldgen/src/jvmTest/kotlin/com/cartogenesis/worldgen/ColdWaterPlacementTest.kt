@@ -12,33 +12,45 @@ import kotlin.test.assertTrue
  * worlds at 512.
  *
  * Two bars, each taken from Earth before any world was read:
- *  - **The coldest subtropical eastern-boundary water lies at 15 to 35 degrees**, in each
- *    hemisphere that has a basin there: where the Canary, California, Humboldt and Benguela
- *    systems have their bands of most active upwelling (Chavez and Messié 2009, *Prog. Oceanogr.*
- *    83, 80-96), searched for over 12 to 42 degrees, so the band asked for is narrower than the one
- *    searched, as `OceanCurrentAuditTest` asks it of the author's world at 2048.
- *  - **An equatorial basin is colder on its eastern side than its western**, as the Pacific's and
- *    the Atlantic's cold tongues are: the mean anomaly of the eastern thirds of every east-west run
- *    of water within 4 degrees of the equator is below the western thirds'. A sign bar, since the
- *    tongue's depth on Earth, several degrees, comes of a zonally tilted equatorial thermocline this
- *    model does not have.
+ *  - **The coldest subtropical eastern-boundary water lies within Earth's upwelling systems'
+ *    latitudes**, in each hemisphere that has a basin there. The four systems' upwelling zones as
+ *    Abrahams, Schlegel and Smit (2021, *Front. Mar. Sci.* 8, 626411) take them from the studies
+ *    before them: the California Current's 33.88 to 42.31 N, the Canary's 18.89 to 32.63 N, the
+ *    Humboldt's 10.15 to 37.62 S and the Benguela's 16.39 to 30.13 S, together 10.15 to 42.31
+ *    degrees from the equator. Searched for over 5 to 50 degrees, so the band asked for is
+ *    narrower than the one searched.
+ *  - **An equatorial basin is colder in its east than its west, by a share of Earth's contrast
+ *    set by its length.** The equatorial Pacific's warm pool is near 29 C and its cold tongue near
+ *    25 C in the annual mean, a zonal difference of about 4 C across the basin (Karnauskas, Seager,
+ *    Kaplan, Kushnir and Cane 2009, *J. Climate* 22, 4316-4321). For a temperature that falls
+ *    evenly across a basin the eastern third's mean stands two thirds of that below the western
+ *    third's; and the thermocline's tilt that makes the contrast is the trades' stress integrated
+ *    across the basin, in proportion to its length, so a basin of length `L` is asked for
+ *    `(2/3) × 4 C × L / 17,800 km`, the Pacific's equatorial width from 120 E to 80 W. Taken over
+ *    the runs of water within 4 degrees of the equator, their lengths averaged. The scaling is by
+ *    length alone: the depth of the thermocline and the strength of the trades are held at the
+ *    Pacific's, and a one-layer ocean is asked for no less than that.
  *
- * Shown failing on 3875e7a's ocean, which had no rising water: seed 42's northern coldest coast lay
- * at 36.4 degrees and seed 7's equator was warmer in its east than its west.
+ * Shown failing on 3875e7a's ocean, which had no rising water (the equator's eastern thirds warmer
+ * than its western on seed 7, and colder by 0.1 to 0.6 C on the other three, under any margin the
+ * Pacific scales to), and on this branch's first closure, which had no equatorial thermocline.
  */
 class ColdWaterPlacementTest : BorrowsSharedWorlds() {
 
     private companion object {
-        const val COLD_COAST_EQUATORWARD_DEGREES = 15f
-        const val COLD_COAST_POLEWARD_DEGREES = 35f
-        const val SEARCH_EQUATORWARD_DEGREES = 12f
-        const val SEARCH_POLEWARD_DEGREES = 42f
+        const val COLD_COAST_EQUATORWARD_DEGREES = 10.15f
+        const val COLD_COAST_POLEWARD_DEGREES = 42.31f
+        const val SEARCH_EQUATORWARD_DEGREES = 5f
+        const val SEARCH_POLEWARD_DEGREES = 50f
         const val EQUATORIAL_BAND_DEGREES = 4f
+        const val PACIFIC_ZONAL_CONTRAST_C = 4.0
+        const val PACIFIC_EQUATORIAL_WIDTH_KM = 17_800.0
+        const val THIRDS_OF_AN_EVEN_FALL = 2.0 / 3.0
         val SEEDS = listOf(7L, 42L, 1234L, 99L)
     }
 
     @Test
-    fun `the coldest subtropical eastern-boundary water lies at 15 to 35 degrees`() {
+    fun `the coldest subtropical eastern-boundary water lies within Earth's upwelling systems' latitudes`() {
         val failures = ArrayList<String>()
         for (seed in SEEDS) {
             val world = SharedWorlds.world(WorldGenConfig(seed = seed, width = 512, height = 512))
@@ -54,18 +66,21 @@ class ColdWaterPlacementTest : BorrowsSharedWorlds() {
     }
 
     @Test
-    fun `an equatorial basin is colder in its east than its west`() {
+    fun `an equatorial basin is colder in its east than its west by its share of the Pacific's contrast`() {
         val failures = ArrayList<String>()
         for (seed in SEEDS) {
             val world = SharedWorlds.world(WorldGenConfig(seed = seed, width = 512, height = 512))
-            val (eastC, westC) = equatorialThirds(world) ?: continue
-            println("COLD WATER seed $seed equator: eastern thirds %+.2f C, western thirds %+.2f C".format(eastC, westC))
-            if (!(eastC < westC)) failures += "seed $seed: the equator's eastern thirds %+.2f C against its western %+.2f".format(eastC, westC)
+            val thirds = equatorialThirds(world) ?: continue
+            val marginC = THIRDS_OF_AN_EVEN_FALL * PACIFIC_ZONAL_CONTRAST_C * thirds.meanLengthKm / PACIFIC_EQUATORIAL_WIDTH_KM
+            val contrastC = thirds.westC - thirds.eastC
+            println("COLD WATER seed $seed equator: eastern thirds %+.2f C, western thirds %+.2f C, colder by %.2f C against %.2f for basins %.0f km long"
+                .format(thirds.eastC, thirds.westC, contrastC, marginC, thirds.meanLengthKm))
+            if (!(contrastC >= marginC)) failures += "seed $seed: the equator's east is colder than its west by %.2f C, under the %.2f its basins' length asks".format(contrastC, marginC)
         }
         assertTrue(failures.isEmpty(), failures.joinToString("\n"))
     }
 
-    /** The coldest anomaly at the eastern end of a basin-long run of water at 12 to 42 degrees in one hemisphere, and its latitude; null with no such run. */
+    /** The coldest anomaly at the eastern end of a basin-long run of water between the search latitudes in one hemisphere, and its latitude; null with no such run. */
     private fun coldestEasternBoundary(world: WorldMap, hemisphere: Float): Pair<Float, Float>? {
         val across = world.width
         val down = world.height
@@ -82,15 +97,22 @@ class ColdWaterPlacementTest : BorrowsSharedWorlds() {
         return if (at.isNaN()) null else coldest to at
     }
 
-    /** The equatorial runs' eastern and western thirds' mean anomaly; null with no equatorial basin. */
-    private fun equatorialThirds(world: WorldMap): Pair<Double, Double>? {
+    /** The equatorial runs' eastern and western thirds' mean anomaly, degrees Celsius, and the runs' mean length in kilometers. */
+    private class Thirds(val eastC: Double, val westC: Double, val meanLengthKm: Double)
+
+    /** [Thirds] over every basin-long run of water within [EQUATORIAL_BAND_DEGREES] of the equator; null with none. */
+    private fun equatorialThirds(world: WorldMap): Thirds? {
         val across = world.width
         var east = 0.0
         var west = 0.0
         var count = 0
+        var lengthSum = 0.0
+        var runs = 0
         for (row in 0 until world.height) {
             if (abs(ClimateStage.latitudeOf(row, world.height)) > EQUATORIAL_BAND_DEGREES) continue
             for ((start, length) in basinRuns(world, row)) {
+                lengthSum += length * world.config.scale.cellWidthKm(across)
+                runs++
                 for (k in 0 until length / 3) {
                     west += world.ocean.anomaly.data[row * across + (start + k) % across]
                     east += world.ocean.anomaly.data[row * across + (start + length - 1 - k) % across]
@@ -98,7 +120,7 @@ class ColdWaterPlacementTest : BorrowsSharedWorlds() {
                 }
             }
         }
-        return if (count == 0) null else east / count to west / count
+        return if (count == 0) null else Thirds(east / count, west / count, lengthSum / runs)
     }
 
     /** A row's runs of water between two shores at least [OceanSense.SHORTEST_BASIN_KM] long: start column and length. */

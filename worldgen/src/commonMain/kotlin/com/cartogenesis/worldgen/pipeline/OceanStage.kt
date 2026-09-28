@@ -15,6 +15,7 @@ import kotlin.math.floor
 import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.math.sqrt
+import kotlin.math.tanh
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 
@@ -319,18 +320,13 @@ object OceanStage {
         OceanCirculation.velocities(flowLevels.first(), stream, widthMeters, heightMeters, eastward, northward)
 
         val targetC = FloatArray(across * down)
-        val subsurfaceC = FloatArray(across * down)
         for (row in 0 until down) {
-            val latitude = ClimateStage.latitudeOf(row, down)
-            val latitudeC = zonal.waterC(latitude, Season.ANNUAL)
-            val risingC = subsurfaceTemperatureC(zonal, latitude)
+            val latitudeC = zonal.waterC(ClimateStage.latitudeOf(row, down), Season.ANNUAL)
             for (cell in row * across until (row + 1) * across) {
-                if (isWater[cell]) {
-                    targetC[cell] = latitudeC
-                    subsurfaceC[cell] = risingC
-                }
+                if (isWater[cell]) targetC[cell] = latitudeC
             }
         }
+        val subsurfaceC = subsurfaceTemperatures(config, zonal, stress, isWater, across, down, widthMeters)
         val upwelling = if (config.ocean.upwelling) {
             upwellingMps(stress, isWater, across, down, widthMeters, heightMeters)
         } else FloatArray(across * down)
@@ -657,8 +653,9 @@ object OceanStage {
      * where the belts' Ekman pumping changes sign, [SurfaceBelts.WESTERLY_BELT_CENTRE_DEGREES]; water
      * whose isopycnal would outcrop beyond it is the edge's own winter water, and poleward of that
      * edge, in the subpolar gyre, upwelled water is the latitude's own winter water. The mapping is
-     * continuous there. Toward the equator `f` vanishes and so does the mapping's reach: the closure
-     * has no equatorial thermocline, and water rising on the equator is the equator's own.
+     * continuous there. Toward the equator `f` vanishes and so does the mapping's reach: this
+     * geometry has no equatorial thermocline, and the equator takes the second closure of
+     * [subsurfaceTemperatures] instead.
      */
     internal fun outcropLatitude(latitude: Float): Float {
         val fromEquator = abs(latitude)
@@ -677,6 +674,149 @@ object OceanStage {
      * One depth for every upwelling: the model has no stratification to vary it with.
      */
     internal const val UPWELLING_SOURCE_DEPTH_M = 100.0
+
+    /**
+     * `T_sub` for every cell of the solve grid, degrees Celsius, zero on land: the ventilated
+     * thermocline's water ([subsurfaceTemperatureC]) everywhere, and on the equator the water under
+     * a thermocline the trades tilt ([equatorialDeepShare]).
+     *
+     * **The equator, a second closure.** The eastern-boundary geometry has no equator: there `f`
+     * vanishes and the water at the source depth is the equator's own. Earth's cold tongue is two
+     * things together. The trades push the warm upper layer west, so the thermocline is deep in the
+     * west and shallow in the east, and the east's upwelling reaches through it; and the water
+     * beneath it is subtropical water the subtropical cells carried there, subducted in the trades
+     * and fed to the equatorial thermocline (McCreary and Lu 1994, *J. Phys. Oceanogr.* 24,
+     * 466-497). So on the equator the risen water is the warm layer's, the closure's own value
+     * there, where the source depth lies inside the layer, and the subducted water's
+     * ([subtropicalCellC]) where it lies beneath, blended by [equatorialDeepShare]. The equatorial
+     * dynamics hold within the equatorial deformation radius `sqrt(c/2β)`, 4a's own
+     * ([OceanHeat.deformationRadiusMeters] at the equator, 131 km at this generator's radius), so
+     * the blend's weight falls off as a Gaussian of that width from the equator, and a planet of
+     * another size has its own band.
+     */
+    internal fun subsurfaceTemperatures(
+        config: WorldGenConfig,
+        zonal: ZonalClimate,
+        stress: Stress,
+        isWater: BooleanArray,
+        across: Int,
+        down: Int,
+        widthMeters: Double
+    ): FloatArray {
+        val subsurfaceC = FloatArray(across * down)
+        val deepShare = equatorialDeepShare(stress, isWater, across, down, widthMeters)
+        val deepC = subtropicalCellC(zonal)
+        val bandMeters = OceanHeat.deformationRadiusMeters(0.0, config.scale.radiusMeters)
+        for (row in 0 until down) {
+            val latitude = ClimateStage.latitudeOf(row, down)
+            val ventilatedC = subsurfaceTemperatureC(zonal, latitude)
+            val fromEquatorMeters = latitude * config.scale.metersPerDegreeLatitude
+            val equatorialWeight = exp(-0.5 * (fromEquatorMeters / bandMeters) * (fromEquatorMeters / bandMeters))
+            for (column in 0 until across) {
+                val cell = row * across + column
+                if (!isWater[cell]) continue
+                val share = deepShare[column]
+                subsurfaceC[cell] = if (share.isNaN()) ventilatedC
+                else (ventilatedC + equatorialWeight * share * (deepC - ventilatedC)).toFloat()
+            }
+        }
+        return subsurfaceC
+    }
+
+    /**
+     * How much of the water rising at each column of the equator comes from beneath the
+     * thermocline, 0 to 1, or NaN where the equator is land.
+     *
+     * The thermocline's depth `h` follows the trades' stress along each equatorial basin, from the
+     * reduced-gravity balance `g' ∂h/∂x = τ_x / (ρ h)`: integrated from the basin's western shore,
+     * `h² = H² + (2 / (ρ g')) (I(x) - Ī)`, with `I` the stress integrated eastward and `Ī` its
+     * mean over the basin, so the basin's mean `h²` is [EQUATORIAL_THERMOCLINE_DEPTH_M]'s square.
+     * An easterly stress makes `I` fall eastward, and the thermocline shoals toward the east; where
+     * `h²` would fall below zero the layer has surfaced, and `h` is zero there. The share drawn from
+     * beneath is `(1 + tanh((D - h) / δ)) / 2`, with `D` [UPWELLING_SOURCE_DEPTH_M] and `δ`
+     * [THERMOCLINE_HALF_THICKNESS_M]: a thermocline of finite thickness rather than a step, so the
+     * cold tongue has no edge the grid could put there. A sea that runs round the world on the
+     * equator has no western shore and no tilt, and its thermocline is `H` all the way round.
+     */
+    internal fun equatorialDeepShare(stress: Stress, isWater: BooleanArray, across: Int, down: Int, widthMeters: Double): FloatArray {
+        val share = FloatArray(across) { Float.NaN }
+        val northRow = down / 2 - 1
+        val southRow = down / 2
+        val onEquator = BooleanArray(across) { isWater[northRow * across + it] && isWater[southRow * across + it] }
+        val stressEast = DoubleArray(across) { (stress.eastward[northRow * across + it] + stress.eastward[southRow * across + it]) / 2.0 }
+        val perStressLength = 2.0 / (SEAWATER_DENSITY_KG_PER_M3 * EQUATORIAL_REDUCED_GRAVITY_M_PER_S2)
+        val firstLand = (0 until across).firstOrNull { !onEquator[it] }
+        if (firstLand == null) {
+            for (column in 0 until across) share[column] = deepShareAt(EQUATORIAL_THERMOCLINE_DEPTH_M)
+            return share
+        }
+        var offset = 1
+        while (offset <= across) {
+            if (!onEquator[(firstLand + offset) % across]) { offset++; continue }
+            val runStart = offset
+            while (offset <= across && onEquator[(firstLand + offset) % across]) offset++
+            val length = offset - runStart
+            val integral = DoubleArray(length)
+            var running = 0.0
+            for (k in 0 until length) {
+                val stressHere = stressEast[(firstLand + runStart + k) % across]
+                integral[k] = running + stressHere * widthMeters / 2.0
+                running += stressHere * widthMeters
+            }
+            val meanIntegral = integral.average()
+            for (k in 0 until length) {
+                val depthSquared = EQUATORIAL_THERMOCLINE_DEPTH_M * EQUATORIAL_THERMOCLINE_DEPTH_M +
+                    perStressLength * (integral[k] - meanIntegral)
+                share[(firstLand + runStart + k) % across] = deepShareAt(sqrt(maxOf(depthSquared, 0.0)))
+            }
+        }
+        return share
+    }
+
+    /** The share of rising water from beneath a thermocline at [depthMeters]; see [equatorialDeepShare]. */
+    private fun deepShareAt(depthMeters: Double): Float =
+        ((1.0 + tanh((UPWELLING_SOURCE_DEPTH_M - depthMeters) / THERMOCLINE_HALF_THICKNESS_M)) / 2.0).toFloat()
+
+    /**
+     * The temperature of the water beneath the equatorial thermocline, degrees Celsius: subtropical
+     * water the subtropical cells carried there, the winter mixed layer where its isopycnal
+     * outcrops ([outcropLatitude]) beneath the latitude where the trades' own Ekman pumping into the
+     * thermocline is strongest, [TRADE_SUBDUCTION_DEGREES].
+     */
+    internal fun subtropicalCellC(zonal: ZonalClimate): Float =
+        zonal.waterC(outcropLatitude(TRADE_SUBDUCTION_DEGREES), Season.WINTER)
+
+    /**
+     * Where the subtropical cells subduct, in degrees: where the trades' Ekman pumping is strongest,
+     * half-way across the trade belt, 15. The belts' trade stress goes as `-cos²(3φ)`, whose
+     * derivative, and so whose curl, is greatest in magnitude at `6φ = 90` degrees.
+     */
+    internal const val TRADE_SUBDUCTION_DEGREES = SurfaceBelts.TRADE_BELT_EDGE_DEGREES / 2f
+
+    /**
+     * The equatorial thermocline's mean depth, meters: 150, the mean depth of Zebiak and Cane's
+     * (1987, *Mon. Wea. Rev.* 115, 2262-2278) reduced-gravity upper layer of the tropical Pacific.
+     * A closure for a basin mean, which the trades then tilt.
+     */
+    internal const val EQUATORIAL_THERMOCLINE_DEPTH_M = 150.0
+
+    /**
+     * `g'`, the reduced gravity across the equatorial thermocline, meters a second squared: `c²/H`,
+     * 4a's first baroclinic wave speed ([OceanHeat.BAROCLINIC_WAVE_SPEED_M_PER_S], 2.64 m/s from
+     * Chelton's equatorial deformation radius) over [EQUATORIAL_THERMOCLINE_DEPTH_M], 0.046. It is
+     * the density contrast across the thermocline, 4.8 kg/m³ of sea water's 1,025, in the form a
+     * one-layer model holds it; taken from the wave speed so the layer's waves and its tilt agree.
+     */
+    internal const val EQUATORIAL_REDUCED_GRAVITY_M_PER_S2: Double =
+        OceanHeat.BAROCLINIC_WAVE_SPEED_M_PER_S * OceanHeat.BAROCLINIC_WAVE_SPEED_M_PER_S / EQUATORIAL_THERMOCLINE_DEPTH_M
+
+    /**
+     * Half the thermocline's thickness, meters: the `δ` of [equatorialDeepShare]'s `tanh`, 25, so
+     * the transition from the warm layer's water to the subducted water spans about 50 m of source
+     * depth. A stated transition, a third of [EQUATORIAL_THERMOCLINE_DEPTH_M], not a measured
+     * thickness; it smooths the blend and sets how sharply the tongue's western edge falls off.
+     */
+    internal const val THERMOCLINE_HALF_THICKNESS_M = 25.0
 
     /** A field on one grid read bilinearly at every cell center of another covering the same map. */
     private fun resample(field: FloatArray, fromAcross: Int, fromDown: Int, toAcross: Int, toDown: Int): FloatArray {

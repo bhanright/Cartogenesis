@@ -51,8 +51,11 @@ import kotlin.test.assertTrue
  *    tongue its trades cannot tilt. It can still fail: a basin under strong trades with no tongue
  *    fails it, and a westerly basin whose east is warmer passes only as far as its stress says.
  *
- *    **It fails today and is recorded** ([EQUATORIAL_TONGUE_SHALLOW]): seeds 7, 42 and 99 give 2.19,
- *    2.28 and 1.98 C against 2.84, 3.22 and 3.37, 60 to 78% of their margins, up from 1.17, 1.31
+ *    **It fails today and is recorded** ([EQUATORIAL_TONGUE_SHALLOW]): seeds 7, 42 and 99 give 1.77,
+ *    2.01 and 1.72 C against 2.84, 3.21 and 3.38, 51 to 63% of their margins. They stood at 2.19,
+ *    2.28 and 1.98 until the tilt was made to keep the warm layer's volume, its mean depth rather
+ *    than the mean of its square, which deepens the thermocline and draws less from beneath it; the
+ *    trades' leg turning through zero at the equator moved them by 0.02 C at most. And 1.17, 1.31
  *    and 1.14 before the water beneath the thermocline was taken from its base. The one-layer
  *    closure's water beneath the thermocline is still warmer than Earth's, and the regional wind's
  *    equatorial gales inflate `τ L` in some basins (docs/TODO.md).
@@ -115,7 +118,7 @@ class ColdWaterPlacementTest : BorrowsSharedWorlds() {
                 shortOf += "seed $seed %.2f of %.2f C".format(contrastC, marginC)
             }
         }
-        KnownFailures.expect(EQUATORIAL_TONGUE_SHALLOW, "seed 7 2.19 of 2.84 C; seed 42 2.28 of 3.22 C; seed 99 1.98 of 3.37 C") {
+        KnownFailures.expect(EQUATORIAL_TONGUE_SHALLOW, "seed 7 1.77 of 2.84 C; seed 42 2.01 of 3.21 C; seed 99 1.72 of 3.38 C") {
             if (failures.isNotEmpty()) throw RecordedViolation(failures.joinToString("\n"), shortOf.joinToString("; "))
         }
     }

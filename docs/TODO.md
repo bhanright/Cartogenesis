@@ -446,10 +446,21 @@
   and the pressure it is given carries the highlands' lapse, so near the equator a steep departure
   becomes a gale: the ocean's annual stress along the equator reads 1.3 N/m² in seed 42's basin at
   map columns 0 to 17 and 1.8 in seed 1234's at columns 15 to 27, at 512, where the belts' trades
-  give 0.083. Chunk 4b-1's upwelling responds to it: the equatorial rise goes as the stress, 15.9
-  m/day under the trades and some 250 to 345 m/day under those stresses, so those basins' upwelling
+  give 0.083. Chunk 4b-1's upwelling responds to it: the equatorial rise goes as the stress, 15.4
+  m/day on the grid's rows beside the equator under the belts' trades (15.9 analytic) and some 250
+  to 345 m/day under those stresses, so those basins' upwelling
   is too strong until the wind is fixed. **Owned by "Build the atmosphere, so the subtropical highs
   are real"** above, whose solved response replaces this wind. 2026-09-28, 4b-1.
+- **A world with no seasons has its trades' leg reverse on the equator.** `SurfaceBelts.hadleyLegNorth`
+  takes the Hadley leg's direction as its year's mean under the ITCZ's migration, `-(2/π) asin(φ/T)`,
+  which passes through zero on the equator for any tilt `T` above zero. With seasons off, or a
+  tilt of zero, the ITCZ does not migrate, the mean is the instantaneous leg, and it reverses
+  between the two rows either side of the equator, where its down-wind Ekman transport converges
+  and sinks the water the easterlies raise, as every world's did before the leg was fixed (13 m/day
+  down where the easterlies raise 16). Earth's surface meridional wind passes through zero across
+  the ITCZ's own width even at an instant: the Hadley cell's surface branch carries no mass at its
+  rising edge. Deriving that profile, rather than fitting a width, would close it for every tilt.
+  2026-09-28, 4b-1.
 - **The fishery reads a cold anomaly over a shelf as upwelling.** `NationStage`'s fishery rule
   (around its line 654) calls any negative anomaly over a shelf an upwelling. Since 4b-1 the ocean
   solves the upwelling itself (`OceanStage.upwellingMps`), and the rule could read the rate of rising

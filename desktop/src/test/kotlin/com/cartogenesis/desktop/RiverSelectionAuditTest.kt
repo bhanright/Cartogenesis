@@ -78,21 +78,17 @@ class RiverSelectionAuditTest {
 
     private val outputDir = File("build/x1c-renders")
 
-    private fun paneSheet(cellsAcross: Int): MapSheet =
-        MapSheet.onScreen(PANE_PIXELS_ACROSS / SheetGeometry.of(WorldScale(), cellsAcross, cellsAcross).widthPixels)
+    /** The sheet a whole world of [rows] rows of square cells is shown on in the pane. */
+    private fun paneSheet(rows: Int): MapSheet =
+        MapSheet.onScreen(PANE_PIXELS_ACROSS / SheetGeometry.of(WorldScale(), 2 * rows, rows).widthPixels)
 
     /**
-     * One seed at one grid, the way the application reaches a grid above 512.
-     *
-     * Through [WorldGenConfig.atResolution] from the 512 settings, which is what the interface does
-     * when the reader asks for a bigger world and is how the author generated the world he
-     * reported: the tectonic widths are in cells and have to be carried, and constructing the
-     * config at 2048 outright would leave a 512-calibrated belt four times too narrow.
+     * One seed at [rows] rows of square cells, twice as many across: the sizes here are named by
+     * their rows, and each one's sheet is the sheet the same name had on a grid as many cells tall
+     * as wide.
      */
-    private fun world(seed: Long, side: Int): WorldMap =
-        WorldGenerationEngine.generateBlocking(
-            WorldGenConfig(seed = seed, width = 512, height = 512).atResolution(side, side)
-        )
+    private fun world(seed: Long, rows: Int): WorldMap =
+        WorldGenerationEngine.generateBlocking(WorldGenConfig.forRows(seed = seed, rows = rows))
 
     /**
      * One pane, three grids: the figure the whole chunk turns on.

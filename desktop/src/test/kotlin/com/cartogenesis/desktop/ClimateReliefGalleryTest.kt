@@ -111,7 +111,7 @@ class ClimateReliefGalleryTest {
         val height = world.height
         val elevation = world.sea.relativeElevation
         val interval = Isobaths.interval(world.config.scale)
-        val reach = Isobaths.slopeStencil(width)
+        val reach = Isobaths.slopeStencil(world.config.cellWidthKm)
         val span = 1f / (2f * reach)
         val inked = BooleanArray(width * height)
         for (y in 0 until height) {
@@ -251,7 +251,7 @@ class ClimateReliefGalleryTest {
             val x = cell % width
             val y = cell / width
             val elevation = world.sea.relativeElevation
-            val reach = Isobaths.slopeStencil(width)
+            val reach = Isobaths.slopeStencil(world.config.cellWidthKm)
             val span = 1f / (2f * reach)
             val eastward = (elevation.sample(x + reach, y) - elevation.sample(x - reach, y)) * span
             val southward =

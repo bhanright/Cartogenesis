@@ -27,14 +27,17 @@ import org.junit.jupiter.api.extension.ExtendWith
  *
  *  - **A disc of land a fixed number of kilometres across**, laid on a generated world's grid in
  *    place of its own land, comes out as wide as it is tall on the sheet, at three sizes of world
- *    and in every style. The world's grid is as many cells tall as wide over ground twice as wide as
- *    tall, so a disc on the ground covers twice as many rows as columns; drawn a cell to a square
- *    pixel it comes out twice as tall as wide, which is the sheet this replaced.
+ *    of square cells and on a grid as many cells tall as wide, in every style. On square cells a
+ *    cell is a pixel, and the disc covers as many rows as columns. On the grid as many cells tall
+ *    as wide a disc on the ground covers twice as many rows as columns, and drawn a cell to a
+ *    square pixel it would come out twice as tall as wide, which is the sheet Fix A replaced: that
+ *    grid is kept here so the branch of the sheet that draws a cell two pixels across stays held.
  *  - **Two rivers at the full pen**, one running east-west and one north-south, are measured across
- *    their strokes: the same number of pixels, and the same kilometres of ground. A sheet drawn a
- *    cell to a square pixel passes the first and fails the second — its pixel is twice as far
- *    across east-west as north-south — and a finished bitmap stretched to the true shape fails the
- *    first, its north-south stroke doubled.
+ *    their strokes: the same number of pixels, and the same kilometres of ground. On a grid as many
+ *    cells tall as wide a sheet drawn a cell to a square pixel passes the first and fails the
+ *    second — its pixel is twice as far across east-west as north-south — and a finished bitmap
+ *    stretched to the true shape fails the first, its north-south stroke doubled; on square cells
+ *    the two are one drawing and both clauses hold.
  *
  * The drawing reaches no API newer than the bitmap, so the same file measures the sheet this
  * replaced; see docs/DESIGN_LEDGER.md, Fix A, for what it found there.
@@ -45,7 +48,7 @@ class TrueShapeSheetTest {
     @Test
     fun `a round feature on the ground is round on the sheet, at every size and in every style`() {
         SIZES.forEach { size ->
-            val base = world(size)
+            val base = SharedWorlds.world(size)
             val sea = withDisc(base, 0.0)
             val disc = withDisc(base, DISC_RADIUS_KM)
             MapStyle.entries.forEach { style ->
@@ -74,7 +77,7 @@ class TrueShapeSheetTest {
                 // the same small number both ways: a sheet that drew nothing would read as round.
                 assertTrue(
                     right >= left && bottom >= top,
-                    "a disc $DISC_RADIUS_KM km in radius changed no pixel at $size in ${style.label}"
+                    "a disc $DISC_RADIUS_KM km in radius changed no pixel at ${size.width}x${size.height} in ${style.label}"
                 )
                 val across = right - left + 1
                 val down = bottom - top + 1
@@ -89,18 +92,18 @@ class TrueShapeSheetTest {
                 val diameterPixels =
                     (2 * DISC_RADIUS_KM / (base.config.scale.worldWidthKm / sheetWidth)).toInt()
                 println(
-                    "TRUESHAPE disc at $size, ${style.label}: $across x $down pixels on a " +
+                    "TRUESHAPE disc at ${size.width}x${size.height}, ${style.label}: $across x $down pixels on a " +
                         "${sheetWidth}x$sheetHeight sheet, the disc $diameterPixels across"
                 )
                 assertTrue(
                     across >= diameterPixels - tolerance && down >= diameterPixels - tolerance,
-                    "a disc $DISC_RADIUS_KM km in radius is drawn $across by $down pixels at $size " +
+                    "a disc $DISC_RADIUS_KM km in radius is drawn $across by $down pixels at ${size.width}x${size.height} " +
                         "in ${style.label}, under its own $diameterPixels pixels across"
                 )
                 assertTrue(
                     abs(across - down) <= tolerance,
                     "a disc $DISC_RADIUS_KM km in radius is drawn $across pixels across and $down " +
-                        "down at $size in ${style.label}: it is not round on the sheet"
+                        "down at ${size.width}x${size.height} in ${style.label}: it is not round on the sheet"
                 )
             }
         }
@@ -110,7 +113,7 @@ class TrueShapeSheetTest {
     fun `a line of ink is the same width east-west and north-south, in pixels and on the ground`() {
         // The largest of the three, so the full pen is several pixels wide and has a core of solid
         // ink the stroke's antialiased edge can be measured against.
-        val base = world(SIZES.last())
+        val base = SharedWorlds.world(PEN_WORLD)
         val land = withDisc(base, WHOLE_WORLD_KM)
         val rivers = withCrossedRivers(land)
         val options = RenderOptions(
@@ -169,9 +172,6 @@ class TrueShapeSheetTest {
 
     // ---- the worlds --------------------------------------------------------------------------
 
-    private fun world(size: Int): WorldMap = SharedWorlds.world(
-        WorldGenConfig(seed = SEED, width = 512, height = 512).atResolution(size, size)
-    )
 
     /**
      * [base] with its land replaced: land wherever the ground is within [radiusKm] of the centre of
@@ -250,8 +250,20 @@ class TrueShapeSheetTest {
         /** The gallery's seed, whose worlds the rest of the suite already borrows. */
         const val SEED = 234475L
 
-        /** Three sizes of world; the sheet's arithmetic is the same at every one. */
-        val SIZES = listOf(256, 512, 1024)
+        /**
+         * Three sizes of world of square cells, 256, 512 and 1024 rows, whose sheets are 512, 1024
+         * and 2048 pixels across, and the 256 by 256 grid, whose cells are two pixels across: the
+         * sheet's arithmetic is the same at every one. Not smaller: on a sheet 256 pixels across
+         * Pen and ink's sea lines, forty pixels out from the shore, reach the sheet's own edges.
+         */
+        val SIZES: List<WorldGenConfig> = listOf(256, 512, 1024).map { WorldGenConfig.forRows(seed = SEED, rows = it) } +
+            WorldGenConfig(seed = SEED, width = 256, height = 256)
+
+        /**
+         * The world the pen is measured on: 1024 rows, whose sheet is 2048 pixels across, so the
+         * full pen is several pixels wide and has a core of solid ink.
+         */
+        val PEN_WORLD: WorldGenConfig = WorldGenConfig.forRows(seed = SEED, rows = 1024)
 
         /** A continent's radius: a sixth of the way round the equator of a 12,000 km world across. */
         const val DISC_RADIUS_KM = 1_500.0
@@ -270,13 +282,15 @@ class TrueShapeSheetTest {
 
         /**
          * How far across and down may differ and the disc still be round: two cells of the widest
-         * a cell is drawn, which is four pixels, or three per cent of the disc, whichever is more.
+         * a cell is drawn, two pixels on the grid as many cells tall as wide, which is four pixels,
+         * or three per cent of the disc, whichever is more.
          */
         const val ROUNDNESS_SLACK_PIXELS = 4
         const val ROUNDNESS_SHARE = 0.03f
 
         /**
-         * How far the two widths may differ: a pixel, against a full pen of about five at 1024.
+         * How far the two widths may differ: a pixel, against a full pen of about five on the
+         * 2048-pixel sheet.
          * The widths are coverage-weighted, so where each stroke's edge falls on the pixel grid
          * moves them by a fraction of a pixel and no more.
          */

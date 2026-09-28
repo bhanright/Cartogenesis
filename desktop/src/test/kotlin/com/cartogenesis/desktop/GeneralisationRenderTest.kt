@@ -5,6 +5,7 @@ import com.cartogenesis.cartography.MapSheet
 import com.cartogenesis.cartography.MapStyle
 import com.cartogenesis.cartography.MapView
 import com.cartogenesis.cartography.RenderOptions
+import com.cartogenesis.cartography.SheetGeometry
 import com.cartogenesis.cartography.Shoreline
 import com.cartogenesis.ui.MapImage
 import com.cartogenesis.worldgen.WorldGenerationEngine
@@ -40,7 +41,9 @@ import org.jetbrains.skia.ImageInfo
 class GeneralisationRenderTest {
 
     private companion object {
-        const val SIZE = 2048
+        /** The worlds' rows, 2048 of square cells, and their columns: a cell to a pixel of the sheet. */
+        const val ROWS = 2048
+        const val COLUMNS = 2 * ROWS
 
         /** A 1:1 window big enough to show a coast and a river system, and no bigger. */
         const val CROP = 640
@@ -48,20 +51,20 @@ class GeneralisationRenderTest {
         /**
          * The pane the sheet is scaled into for the "as seen" pair, in pixels.
          *
-         * A whole divisor of [SIZE], so the box filter that shrinks it averages whole blocks and
-         * the two pictures differ by what was drawn rather than by how it was resampled. 512 into
-         * 2048 is four cells to the pixel, which is a hair coarser than the 0.44 a laptop's pane
-         * gives and is the same story told slightly louder.
+         * A whole divisor of the sheet's [COLUMNS] pixels, so the box filter that shrinks it
+         * averages whole blocks and the two pictures differ by what was drawn rather than by how it
+         * was resampled. 512 into 4096 is eight pixels of the sheet to one of the pane, a hair
+         * coarser than the 0.22 a laptop's pane gives and the same story told slightly louder.
          */
         const val PANE = 512
 
         /**
          * The zooms the crops are drawn for, in screen pixels to a pixel of the whole sheet.
          *
-         * A 2048 world's 4096-pixel true-shape sheet fitted into a 900-pixel pane is at 0.22;
+         * A 2048-row world's 4096-pixel true-shape sheet fitted into a 900-pixel pane is at 0.22;
          * four times zoom is 0.88. [MapSheet.onScreen] quantises them to 0.25 and 1.
          */
-        const val AT_FIT = 900f / (2 * SIZE)
+        const val AT_FIT = 900f / COLUMNS
         const val AT_FOUR_TIMES = 4f * AT_FIT
     }
 
@@ -69,8 +72,8 @@ class GeneralisationRenderTest {
     private val worlds = listOf(
         "718106" to WorldGenConfig(
             seed = SiteImagery.SEED,
-            width = SIZE,
-            height = SIZE,
+            width = COLUMNS,
+            height = ROWS,
             seaLevel = SiteImagery.SEA_LEVEL
         ).let { base ->
             base.copy(
@@ -78,11 +81,11 @@ class GeneralisationRenderTest {
                 nations = base.nations.copy(nationCount = SiteImagery.REALMS)
             )
         },
-        "59758" to WorldGenConfig(seed = 59758L, width = SIZE, height = SIZE)
+        "59758" to WorldGenConfig.forRows(seed = 59758L, rows = ROWS)
     )
 
     @Test
-    fun `both worlds at 2048, at fit and at four times, with the graticule on and off`() {
+    fun `both worlds at 2048 rows, at fit and at four times, with the graticule on and off`() {
         val dir = File("build/f14-crops").apply { mkdirs() }
         val written = ArrayList<String>()
 
@@ -92,7 +95,7 @@ class GeneralisationRenderTest {
                 world = WorldGenerationEngine.generateBlocking(config)
             }
             val map = world!!
-            println("GENERALISATION seed $name at $SIZE generated in $generateMs ms")
+            println("GENERALISATION seed $name at $ROWS rows generated in $generateMs ms")
 
             val plain = RenderOptions(view = MapView.FANTASY, style = MapStyle.ATLAS)
             val figured = plain.copy(showGraticule = true)
@@ -104,9 +107,10 @@ class GeneralisationRenderTest {
             val groundFigured = MapRasterizer.rasterize(map, figured)
 
             // The same window for all four sheets, chosen where there is most to look at: the
-            // middle of a 2048 world is as likely to be open ocean as anything, and a crop of open
-            // ocean says nothing about either the coast or the rivers.
+            // middle of a 2048-row world is as likely to be open ocean as anything, and a crop of
+            // open ocean says nothing about either the coast or the rivers.
             val window = busiestWindow(map, plain)
+            val geometry = SheetGeometry.of(map)
 
             listOf(
                 "fit" to MapSheet.onScreen(AT_FIT),
@@ -120,7 +124,7 @@ class GeneralisationRenderTest {
                         written += write(
                             dir,
                             "$name-$zoom-$grid-crop.png",
-                            crop(bitmap, window.first * 2, window.second)
+                            crop(bitmap, window.first * geometry.pixelsPerCellAcross, window.second * geometry.pixelsPerCellDown)
                         )
                         bitmap.close()
                     }
@@ -144,7 +148,7 @@ class GeneralisationRenderTest {
             written += write(
                 dir,
                 "$name-printed-corner.png",
-                crop(printed, 0, SIZE - CROP)
+                crop(printed, 0, printed.height - CROP)
             )
             written += write(dir, "$name-printed-topright.png", crop(printed, printed.width - CROP, 0))
             printed.close()
@@ -152,7 +156,7 @@ class GeneralisationRenderTest {
             val atFit = MapRasterizer.overlay(map, plain, MapSheet.onScreen(AT_FIT))
             val zoomedIn = MapRasterizer.overlay(map, plain, MapSheet.onScreen(AT_FOUR_TIMES))
             println(
-                "GENERALISATION seed $name at $SIZE: ${atFit.riversDrawn} rivers and " +
+                "GENERALISATION seed $name at $ROWS rows: ${atFit.riversDrawn} rivers and " +
                     "${atFit.coastline.sumOf { it.size / 2 }} coast vertices at fit, " +
                     "${zoomedIn.riversDrawn} rivers and " +
                     "${zoomedIn.coastline.sumOf { it.size / 2 }} at 4x, " +
@@ -165,7 +169,7 @@ class GeneralisationRenderTest {
     }
 
     /**
-     * What the shoreline trace costs against the raster it is drawn over, at 2048.
+     * What the shoreline trace costs against the raster it is drawn over, at 2048 rows.
      *
      * Rule 8: the trace is a pass over every cell, so it states its figure. The raster it is
      * compared against is the same world's own — the processor path, which is what a machine with
@@ -204,7 +208,7 @@ class GeneralisationRenderTest {
         wholeOverlayMs /= 3
 
         println(
-            "GENERALISATION at $SIZE: raster $rasterMs ms, trace $traceMs ms for $vertices " +
+            "GENERALISATION at $ROWS rows: raster $rasterMs ms, trace $traceMs ms for $vertices " +
                 "vertices, whole overlay (trace, simplify, rivers) $wholeOverlayMs ms"
         )
         assertTrue(
@@ -224,11 +228,11 @@ class GeneralisationRenderTest {
     private fun busiestWindow(map: WorldMap, options: RenderOptions): Pair<Int, Int> {
         val rivers = MapRasterizer.overlay(map, options, MapSheet.UNGENERALISED).rivers
         var best = 0
-        var at = (SIZE - CROP) / 2 to (SIZE - CROP) / 2
+        var at = (map.width - CROP) / 2 to (map.height - CROP) / 2
         var top = 0
-        while (top <= SIZE - CROP) {
+        while (top <= map.height - CROP) {
             var left = 0
-            while (left <= SIZE - CROP) {
+            while (left <= map.width - CROP) {
                 val inside = rivers.count { segment ->
                     segment.fromX >= left && segment.fromX < left + CROP &&
                         segment.fromY >= top && segment.fromY < top + CROP

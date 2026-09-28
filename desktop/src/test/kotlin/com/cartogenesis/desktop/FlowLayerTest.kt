@@ -31,9 +31,7 @@ class FlowLayerTest {
     @Test
     fun `flow layers render and point the right ways`() {
         outputDir.mkdirs()
-        val world = SharedWorlds.world(
-            WorldGenConfig(seed = 42L, width = 512, height = 512)
-        )
+        val world = SharedWorlds.world(WorldGenConfig.forRows(seed = 42L, rows = 512))
 
         val currents = MapRasterizer.overlay(world, RenderOptions(view = MapView.CURRENTS))
         val winds = MapRasterizer.overlay(world, RenderOptions(view = MapView.WIND))

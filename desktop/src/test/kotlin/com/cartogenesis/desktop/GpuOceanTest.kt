@@ -87,16 +87,18 @@ class GpuOceanTest {
     }
 
     /**
-     * Whole oceans on the standard seeds at 512 and on seed 42 at 2048, built as the app builds
-     * worlds: the card's against the processor's, currents and anomaly, to the tolerance both solves
-     * stop at.
+     * Whole oceans on the standard seeds at 512 rows of square cells and on seed 42 at 1024 rows,
+     * 2048 by 1024: the card's against the processor's, currents and anomaly, to the tolerance both
+     * solves stop at. The solve grid is the planet's and not the map's, square on the ground at
+     * every size, so what the map's shape moves is only the resampling onto it.
      */
     @Test
     fun `whole oceans agree with the processor's on the standard seeds`(): Unit = runBlocking {
         val gpu = deviceOrSkip()
-        val cases = listOf(42L to 512, 718106L to 512, 59758L to 512, 42L to 2048)
-        for ((seed, side) in cases) {
-            val config = WorldGenConfig(seed = seed, width = 512, height = 512).let { if (side == 512) it else it.atResolution(side, side) }
+        val cases = listOf(42L to 512, 718106L to 512, 59758L to 512, 42L to 1024)
+        for ((seed, rows) in cases) {
+            val side = "$rows rows"
+            val config = WorldGenConfig.forRows(seed = seed, rows = rows)
             val sea = seaFor(config)
             var onCpu: OceanResult? = null
             var onGpu: OceanResult? = null
@@ -119,7 +121,7 @@ class GpuOceanTest {
     @Test
     fun `an accelerated ocean is saved and reopens unchanged`(): Unit = runBlocking {
         val gpu = deviceOrSkip()
-        val config = onGpuConfig(WorldGenConfig(seed = 42L, width = 64, height = 64))
+        val config = onGpuConfig(WorldGenConfig.forRows(seed = 42L, rows = 32))
         val world = WorldGenerationEngine.generate(config, oceanAccelerator = gpu)
         val document = WorldDocument(id = "gpu-ocean", title = "Currents", config = config, savedAt = 0L)
         val restored = assertNotNull(WorldCodec.decode(WorldCodec.encode(document, world)).world)

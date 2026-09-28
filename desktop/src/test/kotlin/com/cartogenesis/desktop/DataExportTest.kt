@@ -647,8 +647,13 @@ class DataExportTest {
          * measured drifts, which is the only place a bar whose whole meaning is that one passes
          * and the other does not can honestly sit; the relation against WebP below is the half of
          * this guard that survives the picture changing, and it did not move.
+         *
+         * Re-derived a fourth time on square cells (Q4): the sheet is the grid a cell to a pixel,
+         * so every mark the raster makes has single-pixel edges both ways, and every figure rose
+         * together: WebP 45, JPEG at quality 90 **46**, at quality 30 **63**. Halfway, rounded down,
+         * is **54**; the relation against WebP holds as it did, 46 against 45 and five of room.
          */
-        const val MAX_JPEG_DRIFT = 45
+        const val MAX_JPEG_DRIFT = 54
 
         /** And the same bound as a relation, measured against WebP in the same run. */
         const val OVER_WEBP = 5

@@ -1,5 +1,6 @@
 package com.cartogenesis.desktop
 
+import com.cartogenesis.cartography.Isobaths
 import com.cartogenesis.cartography.MapRasterizer
 import com.cartogenesis.cartography.MapStyle
 import com.cartogenesis.cartography.MapView
@@ -10,6 +11,7 @@ import com.cartogenesis.worldgen.WorldGenerationEngine
 import com.cartogenesis.worldgen.generateBlocking
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
+import com.cartogenesis.worldgen.model.WorldScale
 import kotlin.math.abs
 import kotlin.system.measureTimeMillis
 import kotlin.test.Test
@@ -44,8 +46,8 @@ class GpuRasterTest {
         /**
          * How far a colour channel may drift, at the 99.9th percentile and at worst.
          *
-         * The percentile is the measured figure: on seed 42 at 1024 over all fifteen views in all
-         * twelve styles it is 0 everywhere, so one is a bar a wrong ramp, a wrong style lever or
+         * The percentile is the measured figure: on seed 42 at 512 rows over all fifteen views in
+         * all twelve styles it is 0 everywhere, so one is a bar a wrong ramp, a wrong style lever or
          * a missing pass cannot pass, since any of those moves whole regions by tens.
          *
          * The worst single channel is bounded by the recipe rather than by a measurement. Both
@@ -64,10 +66,20 @@ class GpuRasterTest {
         const val TRUNCATIONS_A_CHANNEL_PASSES = 5
         const val MAX_WORST_DRIFT = TRUNCATIONS_A_CHANNEL_PASSES
 
-        /** Seed 42 at 1024, the world the export guards already use. Generated once for them all. */
-        val CONFIG = WorldGenConfig(seed = 42L, width = 1024, height = 1024)
+        /**
+         * Seed 42 at 512 rows of square cells, 1024 by 512, a cell to a pixel of the sheet as every
+         * grid of square cells is drawn. Generated once for them all.
+         */
+        val CONFIG = WorldGenConfig.forRows(seed = 42L, rows = 512)
 
-        /** The made-up world's row scale: a square grid of this 2:1 world's own cells. */
+        /**
+         * The same seed on a grid as many cells tall as wide, whose cells are two pixels of the
+         * sheet across: the branch of the drawing a grid of square cells never takes, kept for
+         * synthetic grids and held to the processor here so it does not go unguarded.
+         */
+        val HALF_HEIGHT_CONFIG = WorldGenConfig(seed = 42L, width = 256, height = 256)
+
+        /** The made-up world's row scale: square cells, as this world's own are. */
         val ROW_SCALE = CONFIG.cellHeightInCellWidths
 
         /** Any ramp will do for a recipe made up by hand; only its length reaches the arithmetic. */
@@ -76,6 +88,27 @@ class GpuRasterTest {
             0xFFC8B072.toInt(), 0xFFEDEDE8.toInt()
         )
         val WORLD: WorldMap by lazy { WorldGenerationEngine.generateBlocking(CONFIG) }
+    }
+
+    /**
+     * The two-pixel branch: on cells two pixels of the sheet wide, every pattern the raster asks the
+     * sheet about (the engraving's strokes, stipple and rulings, the dotted borders) is asked at
+     * the cell's left-hand pixel, and the device must ask at the same one.
+     */
+    @Test
+    fun `cells two pixels wide still match the cpu raster`() {
+        val found = GpuRaster.createOrNull()
+        val gpu = found.accelerator ?: skipWithoutDevice(found.unavailableBecause)
+        val world = WorldGenerationEngine.generateBlocking(HALF_HEIGHT_CONFIG)
+        listOf(MapStyle.PEN_AND_INK, MapStyle.ATLAS, MapStyle.VELLUM).forEach { style ->
+            val options = RenderOptions(view = MapView.FANTASY, style = style, showBorders = true)
+            val difference = compare(world, options, gpu)
+            println("RASTER two pixels a cell, ${style.label}: $difference")
+            assertTrue(
+                difference.percentile999 <= MAX_PERCENTILE_DRIFT && difference.worst <= MAX_WORST_DRIFT,
+                "cells two pixels wide in ${style.label}: $difference"
+            )
+        }
     }
 
     @Test
@@ -200,56 +233,58 @@ class GpuRasterTest {
         val cpuMs = measureTimeMillis { MapRasterizer.rasterize(world, options) }
         val gpuMs = measureTimeMillis { runBlocking { gpu.rasterize(recipe) } }
         println(
-            "RASTER 1024x1024: CPU ${cpuMs}ms, GPU ${gpuMs}ms " +
+            "RASTER ${world.width}x${world.height}: CPU ${cpuMs}ms, GPU ${gpuMs}ms " +
                 "(%.1fx)".format(cpuMs.toDouble() / gpuMs.coerceAtLeast(1))
         )
     }
 
     /**
-     * An 8192-square raster, on fields invented for the purpose.
+     * An 8192 by 4096 raster, the top of the ladder in square cells, on fields invented for the
+     * purpose.
      *
-     * An 8192 *export* cannot be reached at all: generating a world that size wants more heap than
-     * the app has, and `GpuExportBenchmarkTest` records how far it gets. That says nothing about
-     * whether the drawing scales, which is what this chunk changed and what this checks — sixteen
-     * tiles, 67.1 million pixels, and half a gigabyte of fields sitting on the device while they
-     * are drawn, with no world in memory to pay for.
+     * A world that size is not generated here: it wants more heap than a test has, and
+     * `GpuExportBenchmarkTest` records how far a generation gets. That says nothing about whether
+     * the drawing scales, which is what this checks — eight tiles, 33.6 million pixels, and a
+     * quarter of a gigabyte of fields sitting on the device while they are drawn, with no world in
+     * memory to pay for.
      */
     @Test
-    fun `an 8192 raster, on fields made up for the purpose`() {
+    fun `an 8192 by 4096 raster, on fields made up for the purpose`() {
         val found = GpuRaster.createOrNull()
         val gpu = found.accelerator ?: skipWithoutDevice(found.unavailableBecause)
 
-        val side = 8192
-        val cells = side * side
+        val across = 8192
+        val down = 4096
+        val cells = across * down
         val elevation = FloatArray(cells)
         val land = ByteArray(cells)
         for (i in 0 until cells) {
             // A ridged diagonal, so the relief has something to shade and the coast pass has an
             // edge to find rather than a flat field the compiler could see through.
-            val x = i % side
-            val y = i / side
+            val x = i % across
+            val y = i / across
             val value = (((x * 7 + y * 13) % 512) / 512f) - 0.35f
             elevation[i] = value
             if (value > 0f) land[i] = 1
         }
 
-        val recipe = syntheticRecipe(side, elevation, land)
+        val recipe = syntheticRecipe(across, down, elevation, land)
         val first = requireNotNull(runBlocking { gpu.rasterize(recipe) }) {
-            "the accelerator declined an 8192 raster"
+            "the accelerator declined an 8192 by 4096 raster"
         }
         val millis = measureTimeMillis { runBlocking { gpu.rasterize(recipe) } }
         val second = requireNotNull(runBlocking { gpu.rasterize(recipe) })
 
-        println("RASTER 8192 in sixteen tiles: %.2f s for 67.1 million pixels".format(millis / 1000.0))
-        assertTrue(first.contentEquals(second), "the 8192 raster changed between runs")
-        assertTrue(first.all { (it ushr 24) == 0xFF }, "the 8192 raster left pixels transparent")
+        println("RASTER 8192 by 4096 in eight tiles: %.2f s for 33.6 million pixels".format(millis / 1000.0))
+        assertTrue(first.contentEquals(second), "the 8192 by 4096 raster changed between runs")
+        assertTrue(first.all { (it ushr 24) == 0xFF }, "the 8192 by 4096 raster left pixels transparent")
     }
 
     /** An elevation view in a plain style: the fewest fields that still put the relief and the
      * coastline through their paces at this size. */
-    private fun syntheticRecipe(side: Int, elevation: FloatArray, land: ByteArray) = RasterRecipe(
-        width = side,
-        height = side,
+    private fun syntheticRecipe(across: Int, down: Int, elevation: FloatArray, land: ByteArray) = RasterRecipe(
+        width = across,
+        height = down,
         // A picture with no world behind it, laid a cell to a sheet pixel: this view draws no
         // pattern that asks where on the sheet it is.
         pixelsPerCellAcross = 1,
@@ -282,7 +317,7 @@ class GpuRasterTest {
         isobathInk = 0f,
         isobathInterval = 1f / 12f,
         isobathFlattestSlope = 0f,
-        isobathSlopeStencil = 2 * side / 512,
+        isobathSlopeStencil = Isobaths.slopeStencil(WorldScale().cellWidthKm(across)),
         lake = 0xFF4E92B4.toInt(),
         lakeDeep = 0xFF2F6B8C.toInt(),
         coastline = 0xFF3E4A52.toInt(),
@@ -302,8 +337,8 @@ class GpuRasterTest {
         anomalyCold = 0xFF3E86C4.toInt(),
         hillshade = true,
         singleLamp = false,
-        slopeScale = 12f * (side / 512f),
-        reliefHorizon = RasterRecipe.reliefHorizon(side, ROW_SCALE),
+        slopeScale = RasterRecipe.slopeScale(WorldScale().cellWidthKm(across)),
+        reliefHorizon = RasterRecipe.reliefHorizon(WorldScale().cellWidthKm(across), ROW_SCALE),
         cellHeightInCellWidths = ROW_SCALE.toFloat(),
         ordinaryGround = RasterRecipe.ORDINARY_GROUND,
         showLakes = false,

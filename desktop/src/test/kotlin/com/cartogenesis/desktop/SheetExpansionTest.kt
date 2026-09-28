@@ -30,18 +30,25 @@ import org.junit.jupiter.api.extension.ExtendWith
  * the same raster brought to the sheet by linear interpolation, which is what stretching a picture
  * does; it puts colours on the sheet that no cell has.
  *
- * And a grid whose cells are square on the ground is drawn a cell to a pixel by the same code: the
- * later grid of that shape needs nothing here to change.
+ * A world of square cells is drawn a cell to a pixel, where the expansion is the raster itself and
+ * interpolation has nothing between two pixels to invent. So the world's own sheet is held to its
+ * palette, and the same raster is copied onto a sheet whose cells are two pixels across, the branch
+ * of [SheetGeometry] a grid as many cells tall as wide takes, and held there too: the control has
+ * its teeth on that sheet.
  */
 @ExtendWith(SharedWorldsCheck::class)
 class SheetExpansionTest {
 
-    private val world get() = SharedWorlds.world(WorldGenConfig(seed = 234475L, width = 512, height = 512))
+    private val world get() = SharedWorlds.world(WorldGenConfig.forRows(seed = 234475L, rows = 512))
 
     @Test
     fun `a categorical map carries no colour that is not in its palette after expansion`() {
         val map = world
-        val geometry = SheetGeometry.of(map)
+        val ownSheet = SheetGeometry.of(map)
+        assertTrue(ownSheet.isCellForPixel, "a world of square cells is not drawn a cell to a pixel")
+        // The same cells, two pixels across and one down: the branch a grid as many cells tall as
+        // wide takes, on the same raster.
+        val twoPixelSheet = SheetGeometry(map.width, map.height, 2, 1, ownSheet.kilometresPerPixel / 2)
         val palette = Biome.entries.map { MapPalette.biome(it) and RGB }.toSet()
         val bare = RenderOptions(
             showRivers = false, showCoastline = false, showHillshade = false, showLakes = false,
@@ -50,32 +57,52 @@ class SheetExpansionTest {
 
         val biomes = bare.copy(view = MapView.BIOMES)
         val biomeRaster = MapRasterizer.rasterize(map, biomes)
-        val biomeSheet = pixels(MapImage.toBitmap(map, biomes, biomeRaster, MapSheet.UNGENERALISED))
-        assertEquals(geometry.pixelCount, biomeSheet.size)
-        val strays = biomeSheet.filter { it !in palette }.toSet()
-        println("EXPANSION biome sheet ${geometry.widthPixels}x${geometry.heightPixels}: ${palette.size} palette colours, ${strays.size} others")
-        assertTrue(strays.isEmpty(), "the biome sheet carries ${strays.size} colours no biome has")
-
         val political = bare.copy(view = MapView.POLITICAL)
         val politicalRaster = MapRasterizer.rasterize(map, political)
-        val politicalSheet = pixels(MapImage.toBitmap(map, political, politicalRaster, MapSheet.UNGENERALISED))
-        var wrong = 0
-        for (sheetRow in 0 until geometry.heightPixels) {
-            for (sheetColumn in 0 until geometry.widthPixels) {
-                val cell = geometry.cellAt(sheetColumn + HALF, sheetRow + HALF)
-                val expected = politicalRaster[cell] and RGB
-                if (politicalSheet[sheetRow * geometry.widthPixels + sheetColumn] != expected) wrong++
-            }
-        }
-        println("EXPANSION political sheet: $wrong of ${geometry.pixelCount} pixels are not their cell's colour")
-        assertEquals(0, wrong, "the political sheet is not its raster copied out cell for cell")
+        for ((name, geometry, biomeSheet, politicalSheet) in listOf(
+            Sheets(
+                "the world's own", ownSheet,
+                pixels(MapImage.toBitmap(map, biomes, biomeRaster, MapSheet.UNGENERALISED)),
+                pixels(MapImage.toBitmap(map, political, politicalRaster, MapSheet.UNGENERALISED))
+            ),
+            Sheets(
+                "two pixels a cell", twoPixelSheet,
+                pixels(MapImage.sheetBitmap(twoPixelSheet, biomeRaster)),
+                pixels(MapImage.sheetBitmap(twoPixelSheet, politicalRaster))
+            )
+        )) {
+            assertEquals(geometry.pixelCount, biomeSheet.size)
+            val strays = biomeSheet.filter { it !in palette }.toSet()
+            println("EXPANSION $name biome sheet ${geometry.widthPixels}x${geometry.heightPixels}: ${palette.size} palette colours, ${strays.size} others")
+            assertTrue(strays.isEmpty(), "$name biome sheet carries ${strays.size} colours no biome has")
 
-        // The control: the biome raster brought to the sheet by interpolation along each row.
-        val interpolated = linearlyStretched(biomeRaster.map { it and RGB }.toIntArray(), geometry)
+            var wrong = 0
+            for (sheetRow in 0 until geometry.heightPixels) {
+                for (sheetColumn in 0 until geometry.widthPixels) {
+                    val cell = geometry.cellAt(sheetColumn + HALF, sheetRow + HALF)
+                    val expected = politicalRaster[cell] and RGB
+                    if (politicalSheet[sheetRow * geometry.widthPixels + sheetColumn] != expected) wrong++
+                }
+            }
+            println("EXPANSION $name political sheet: $wrong of ${geometry.pixelCount} pixels are not their cell's colour")
+            assertEquals(0, wrong, "$name political sheet is not its raster copied out cell for cell")
+        }
+
+        // The control: the biome raster brought to the two-pixel sheet by interpolation along each
+        // row. On the world's own sheet a cell is one pixel and there is nothing to interpolate.
+        val interpolated = linearlyStretched(biomeRaster.map { it and RGB }.toIntArray(), twoPixelSheet)
         val invented = interpolated.filter { it !in palette }.toSet()
         println("EXPANSION CONTROL interpolated biome sheet: ${invented.size} colours no biome has")
         assertTrue(invented.isNotEmpty(), "interpolation invented no colour, so the guard cannot tell it from duplication")
     }
+
+    /** One sheet's name, its geometry and the two views' pixels drawn on it. */
+    private data class Sheets(
+        val name: String,
+        val geometry: SheetGeometry,
+        val biomes: IntArray,
+        val political: IntArray
+    )
 
     @Test
     fun `a grid whose cells are square on the ground is drawn a cell to a pixel`() {
@@ -90,19 +117,25 @@ class SheetExpansionTest {
         assertEquals(raster.size, sheet.size)
         assertTrue(raster.indices.all { sheet[it] == raster[it] and RGB }, "a square cell was not one pixel")
 
-        // And the geometry every size of the square grids the application offers gets: two pixels
-        // across and one down, one scale both ways.
-        listOf(512, 1024, 2048, 4096, 8192).forEach { side ->
-            val grid = SheetGeometry.of(WorldScale(), side, side)
-            assertEquals(2, grid.pixelsPerCellAcross)
+        // And the geometry every size of the ladder by rows gets, 256 to 8192 rows: a cell to a
+        // pixel, one scale both ways; and a grid as many cells tall as wide, which the sheet still
+        // draws, two pixels across and one down.
+        listOf(256, 512, 1024, 2048, 4096, 8192).forEach { rows ->
+            val grid = SheetGeometry.of(WorldScale(), 2 * rows, rows)
+            assertEquals(1, grid.pixelsPerCellAcross)
             assertEquals(1, grid.pixelsPerCellDown)
+            assertEquals(grid.kilometresPerPixel, WorldScale().cellWidthKm(2 * rows), 1e-9)
+            assertEquals(grid.kilometresPerPixel, WorldScale().cellHeightKm(rows), 1e-9)
+            val halfHeight = SheetGeometry.of(WorldScale(), rows, rows)
+            assertEquals(2, halfHeight.pixelsPerCellAcross)
+            assertEquals(1, halfHeight.pixelsPerCellDown)
             assertEquals(
-                grid.kilometresPerPixel * grid.pixelsPerCellAcross,
-                WorldScale().cellWidthKm(side), 1e-9
+                halfHeight.kilometresPerPixel * halfHeight.pixelsPerCellAcross,
+                WorldScale().cellWidthKm(rows), 1e-9
             )
             assertEquals(
-                grid.kilometresPerPixel * grid.pixelsPerCellDown,
-                WorldScale().cellHeightKm(side), 1e-9
+                halfHeight.kilometresPerPixel * halfHeight.pixelsPerCellDown,
+                WorldScale().cellHeightKm(rows), 1e-9
             )
         }
     }

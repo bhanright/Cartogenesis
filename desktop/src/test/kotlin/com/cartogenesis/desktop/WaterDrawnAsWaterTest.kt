@@ -29,7 +29,7 @@ class WaterDrawnAsWaterTest {
 
     /**
      * No river-coloured pixel inside a lake's open water farther than [RIVER_REACH_INTO_LAKE_PIXELS]
-     * from its shore, on the gallery's world at 512.
+     * from its shore, on the gallery's world at 512 rows.
      *
      * A lake's area here is its open water (`LakeResult.openWater`), the part at least two cells
      * across. A strip of lake one cell wide is the river's own reach and carries its line by
@@ -40,7 +40,7 @@ class WaterDrawnAsWaterTest {
      */
     @Test
     fun `a river's line stops at a lake's shore`() {
-        val world = SharedWorlds.world(WorldGenConfig(seed = GALLERY_SEED, width = 512, height = 512))
+        val world = SharedWorlds.world(WorldGenConfig.forRows(seed = GALLERY_SEED, rows = 512))
         val reach = riverReachIntoOpenLakes(world)
         println(
             "WATER river pixels inside open lake water: ${reach.pixelsInside} of ${reach.riverPixels}; " +
@@ -55,14 +55,14 @@ class WaterDrawnAsWaterTest {
     }
 
     /**
-     * Every narrow sea cell of the gallery's world at 512 keeps some of its water, away from the
+     * Every narrow sea cell of the gallery's world at 512 rows keeps some of its water, away from the
      * mouths where the coast crosses a channel.
      */
     @Test
     fun `a sea channel too narrow for two shores is drawn as water`() {
-        val world = SharedWorlds.world(WorldGenConfig(seed = GALLERY_SEED, width = 512, height = 512))
+        val world = SharedWorlds.world(WorldGenConfig.forRows(seed = GALLERY_SEED, rows = 512))
         val swallowed = swallowedNarrowSea(world, window = null)
-        println("WATER narrow sea at 512: ${swallowed.swallowed} of ${swallowed.checked} cells inked over")
+        println("WATER narrow sea at 512 rows: ${swallowed.swallowed} of ${swallowed.checked} cells inked over")
         assertTrue(swallowed.checked > 0, "this world has no narrow sea to measure")
         assertTrue(
             swallowed.swallowed == 0,

@@ -471,10 +471,11 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
         // worlds keeping more than half their water. Re-recorded on merging chunk 6, whose closed
         // basins take the rain leaving them at every exit: seed 7's water went from 1.1530% to
         // 0.8764%, then to 0.8455%, and at 4a, the ground unchanged and its lakes balanced against
-        // the climate the solved currents moved, to 0.8475%.
+        // the climate the solved currents moved, to 0.8475%, and at 4b-1, the ground unchanged
+        // again and the climate moved by the water the wind raises, to 0.8445%.
         KnownFailures.expect(
             NOTCH_SHORT_ON_THE_LAWS_TERRAIN,
-            "seed 718106's water 0.7704% to 0.5995%; seed 7's water 1.1550% to 0.8475%"
+            "seed 718106's water 0.7704% to 0.5995%; seed 7's water 1.1550% to 0.8445%"
         ) {
             if (overCaspian.isNotEmpty() || notHalved.isNotEmpty()) {
                 val found = (overCaspian + notHalved).joinToString("; ")

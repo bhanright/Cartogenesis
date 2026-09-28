@@ -3,6 +3,7 @@ package com.cartogenesis.worldgen
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.ClimateStage
+import com.cartogenesis.worldgen.pipeline.OceanHeat
 import com.cartogenesis.worldgen.pipeline.OceanStage
 import kotlin.math.abs
 import kotlin.test.Test
@@ -28,12 +29,15 @@ class OceanCurrentAuditTest {
          * California Current's 33.88 to 42.31 N, the Canary's 18.89 to 32.63 N, the Humboldt's
          * 10.15 to 37.62 S and the Benguela's 16.39 to 30.13 S. The 15 to 35 this held before was
          * attributed to a comparison that was never read, and leaves out most of the California
-         * Current. Searched for over 5 to 50 degrees, so the band asked for is narrower than the one
-         * searched (`ColdWaterPlacementTest` asks the same of the standard worlds).
+         * Current. Searched for from twice the equatorial deformation radius, where the equatorial
+         * closure's cold tongue stops, to 50 degrees, so the band asked for is narrower than the one
+         * searched and the tongue is not taken for a coast's upwelling (`ColdWaterPlacementTest`
+         * asks the same of the standard worlds, and says why).
          */
         const val COLD_COAST_EQUATORWARD_DEGREES = 10.15f
         const val COLD_COAST_POLEWARD_DEGREES = 42.31f
-        const val SEARCH_EQUATORWARD_DEGREES = 5f
+        val SEARCH_EQUATORWARD_DEGREES: Float = (2.0 * OceanHeat.deformationRadiusMeters(0.0, CONFIG.scale.radiusMeters) /
+            CONFIG.scale.metersPerDegreeLatitude).toFloat()
         const val SEARCH_POLEWARD_DEGREES = 50f
 
         /**

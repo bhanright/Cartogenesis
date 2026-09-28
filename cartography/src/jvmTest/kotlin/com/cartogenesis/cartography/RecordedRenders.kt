@@ -17,19 +17,19 @@ package com.cartogenesis.cartography
  */
 internal object RecordedRenders {
 
-    /** Every style's 512 fantasy render of `PenAndInkTest.WORLD`, hashed. */
+    /** Every style's fantasy render of `PenAndInkTest.WORLD`, the gallery's world at 512 rows, hashed. */
     val STYLES_AT_512: Map<MapStyle, Int> = mapOf(
-        MapStyle.ATLAS to 1145686521,
-        MapStyle.VELLUM to 1769450635,
-        MapStyle.INK_WASH to -483177253,
-        MapStyle.NAUTICAL to 489741640,
-        MapStyle.MIDNIGHT to 2142448016,
-        MapStyle.SCHOOLROOM to 932080919,
-        MapStyle.VERDANT to -1010584984,
-        MapStyle.SCROLL to -259308450,
-        MapStyle.PEN_AND_INK to 141566381,
-        MapStyle.MARS to -1346786309,
-        MapStyle.NATURAL to 865122170,
-        MapStyle.CLEAR to -1912425907
+        MapStyle.ATLAS to -1144371450,
+        MapStyle.VELLUM to 972086519,
+        MapStyle.INK_WASH to 1428940199,
+        MapStyle.NAUTICAL to -1827818460,
+        MapStyle.MIDNIGHT to 1401345466,
+        MapStyle.SCHOOLROOM to 1270010971,
+        MapStyle.VERDANT to -252019677,
+        MapStyle.SCROLL to 93537312,
+        MapStyle.PEN_AND_INK to 1844803263,
+        MapStyle.MARS to -726908694,
+        MapStyle.NATURAL to 1727630859,
+        MapStyle.CLEAR to 903387312
     )
 }

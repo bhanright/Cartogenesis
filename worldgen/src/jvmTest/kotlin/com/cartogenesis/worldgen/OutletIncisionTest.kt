@@ -319,7 +319,8 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
             val field = FloatField(SHELF_GRID, SHELF_GRID, relative.copyOf())
             val filled = FlowRouting.fillDepressions(SHELF_GRID, SHELF_GRID, isLand, field)
             val flow = FlowRouting.flowDirections(
-                SHELF_GRID, SHELF_GRID, isLand, field, filled, config.seed, config.cellHeightInCellWidths
+                SHELF_GRID, SHELF_GRID, isLand, field, filled, config.seed, config.cellHeightInCellWidths,
+                FlowRouting.smoothFieldPeriodCells(config)
             )
             val area = FlowRouting.accumulate(SHELF_GRID, SHELF_GRID, isLand, filled, flow, landCells.toInt()) { 1f }
             return Routed(relative.copyOf(), filled.data, flow, area.data)

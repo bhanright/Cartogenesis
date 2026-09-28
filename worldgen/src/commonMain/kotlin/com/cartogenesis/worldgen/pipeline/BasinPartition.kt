@@ -444,6 +444,7 @@ internal object BasinPartition {
         val bankOf = IntArray(units.unitOf.size) { NO_BANK }
         val onTrunk = BooleanArray(units.unitOf.size)
         var splitAny = false
+        val minTrunkCells = config.wholeCellsFor(MIN_TRUNK_KM)
 
         for (unit in 0 until units.unitCount) {
             val mouth = outlet[unit]
@@ -461,7 +462,7 @@ internal object BasinPartition {
                 if (accumulation[next] < minTrunkFlow * TRUNK_HEADWATER_SHARE) break
                 cursor = next
             }
-            if (trunk.size < MIN_TRUNK_CELLS) continue
+            if (trunk.size < minTrunkCells) continue
 
             // Which way the trunk runs at each of its cells, for the cross product below.
             val trunkStepAcross = HashMap<Int, Int>()
@@ -551,10 +552,13 @@ internal object BasinPartition {
     private const val TRUNK_HEADWATER_SHARE = 0.15f
 
     /**
-     * Shortest trunk worth cutting a catchment along, in cells. Below this the two banks are not
-     * two pieces of country, they are one piece with a stream in it.
+     * Shortest trunk worth cutting a catchment along, in kilometers. Below this the two banks are
+     * not two pieces of country, they are one piece with a stream in it.
+     *
+     * 187.5 km, the 8 cell widths it was set as on the 512 grid; read as a whole count of cells of
+     * the trunk, as it always was. docs/DESIGN_LEDGER.md, Q2.
      */
-    private const val MIN_TRUNK_CELLS = 8
+    private const val MIN_TRUNK_KM = 187.5
 
     /** Column difference on a cylinder, where a step across the seam is still one cell. */
     private fun wrapDelta(delta: Int, width: Int): Int = when {

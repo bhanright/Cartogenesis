@@ -2482,7 +2482,13 @@ object PlateStage {
      * How long a stretch of a run [arcAlongRun] draws its centreline through, in cell widths: four,
      * several cells long so that its mean lies on the run's axis whatever staircase the cells make,
      * and short against the segments whose ends it places, which are `TectonicsConfig.riftSegmentMin`
-     * to `riftSegmentMax` of the map's width, twenty to fifty cell widths at any grid.
+     * to `riftSegmentMax` of the map's width, twenty to fifty cell widths on the 512 grid and more
+     * on a finer one.
+     *
+     * In cell widths on purpose, and kept so when the tectonics' lengths became kilometers: what
+     * it averages away is the staircase, whose step is a cell, while the bends it must follow are
+     * the boundary warp's, a sixth of the map, far longer than four cells on any grid.
+     * docs/DESIGN_LEDGER.md, Q2.
      */
     private const val CENTRELINE_STEP_CELL_WIDTHS = 4.0
 

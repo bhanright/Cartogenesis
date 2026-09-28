@@ -129,6 +129,7 @@ class WaterlineBasinTest : BorrowsSharedWorlds() {
         val flow =
             FlowRouting.flowDirections(
                 w, h, sea.isLand, sea.relativeElevation, filled, config.seed, config.cellHeightInCellWidths,
+                FlowRouting.smoothFieldPeriodCells(config),
                 config.facetRouting, config.flatPotential
             )
         val notch = FlowRouting.spillways(

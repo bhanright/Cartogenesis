@@ -220,6 +220,7 @@ object RiverStage {
         val filled = fillDepressions(cellsAcross, cellsDown, sea)
         val flowTarget = computeFlowDirections(
             cellsAcross, cellsDown, sea, filled, config.seed, config.cellHeightInCellWidths,
+            FlowRouting.smoothFieldPeriodCells(config),
             config.facetRouting, config.flatPotential
         )
         val catchmentRainMm = if (config.lakes.enabled && config.lakes.waterBalance) {
@@ -518,7 +519,8 @@ object RiverStage {
             for (cell in cells) pending[cell] = true
             LakeWaterBalance.routeIntoWater(
                 cellsAcross, cellsDown, ground, pending, waterCells, cells.size, flowTarget,
-                settled, basinMark++, pathKey, config.seed, config.cellHeightInCellWidths
+                settled, basinMark++, pathKey, config.seed, config.cellHeightInCellWidths,
+                FlowRouting.smoothFieldPeriodCells(config)
             )
         }
 
@@ -742,10 +744,12 @@ object RiverStage {
         filled: FloatField,
         seed: Long,
         cellHeightInCellWidths: Double,
+        smoothFieldPeriodCells: Int,
         byFacet: Boolean,
         overPotential: Boolean
     ): IntArray = FlowRouting.flowDirections(
         width, height, sea.isLand, sea.relativeElevation, filled, seed, cellHeightInCellWidths,
+        smoothFieldPeriodCells,
         byFacet, overPotential
     )
 

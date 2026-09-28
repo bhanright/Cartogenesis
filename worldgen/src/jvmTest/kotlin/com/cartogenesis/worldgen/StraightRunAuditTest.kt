@@ -227,7 +227,8 @@ class StraightRunAuditTest {
         val seed = world.config.seed
 
         fun route(byFacet: Boolean) = FlowRouting.flowDirections(
-            cellsAcross, cellsDown, isLand, ground, filled, seed, world.config.cellHeightInCellWidths, byFacet
+            cellsAcross, cellsDown, isLand, ground, filled, seed, world.config.cellHeightInCellWidths,
+            FlowRouting.smoothFieldPeriodCells(world.config), byFacet
         )
 
         // Once each to let the just-in-time compiler see them, then measured.

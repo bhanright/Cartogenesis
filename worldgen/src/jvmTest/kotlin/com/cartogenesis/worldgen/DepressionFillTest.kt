@@ -38,7 +38,8 @@ class DepressionFillTest {
         val filled = FlowRouting.fillDepressions(SIDE, SIDE, grid.isLand, grid.elevation)
         val target = FlowRouting.flowDirections(
             SIDE, SIDE, grid.isLand, grid.elevation, filled, seed = 1L,
-            cellHeightInCellWidths = WorldGenConfig().cellHeightInCellWidths
+            cellHeightInCellWidths = WorldGenConfig().cellHeightInCellWidths,
+            smoothFieldPeriodCells = FlowRouting.smoothFieldPeriodCells(WorldGenConfig())
         )
 
         var landCells = 0

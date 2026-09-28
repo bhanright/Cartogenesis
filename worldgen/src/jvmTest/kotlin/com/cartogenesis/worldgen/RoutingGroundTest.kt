@@ -41,7 +41,7 @@ class RoutingGroundTest {
                 (0.5 - PLANE_FALL_PER_CELL_WIDTH * (column * cos(fall) + row * rowScale * sin(fall))).toFloat()
             }
             val receiver = FlowRouting.flowDirections(
-                SIDE, SIDE, BooleanArray(SIDE * SIDE) { true }, plane, plane, config.seed, rowScale,
+                SIDE, SIDE, BooleanArray(SIDE * SIDE) { true }, plane, plane, config.seed, rowScale, RAIN_PERIOD_CELLS,
                 byFacet = true, overPotential = false
             )
             var eastCellWidths = 0.0
@@ -108,7 +108,8 @@ class RoutingGroundTest {
                     (0.5 - PLANE_FALL_PER_CELL_WIDTH * (column * cos(fall) + row * rowScale * sin(fall))).toFloat()
                 }
                 val receiver = FlowRouting.flowDirections(
-                    SHARE_SIDE, SHARE_SIDE, BooleanArray(SHARE_SIDE * SHARE_SIDE) { true }, plane, plane, seed, rowScale
+                    SHARE_SIDE, SHARE_SIDE, BooleanArray(SHARE_SIDE * SHARE_SIDE) { true }, plane, plane, seed, rowScale,
+                    RAIN_PERIOD_CELLS
                 )
                 val (share, diagonalIsColumnwise) = facetShare(fall)
                 var east = 0.0
@@ -239,7 +240,7 @@ class RoutingGroundTest {
             }
             val surface = FlatRouting.surfaceOf(
                 columns, rows, isLand, FloatField(columns, rows, ground), FloatField(columns, rows, filled),
-                config.seed, aspect
+                config.seed, aspect, RAIN_PERIOD_CELLS
             )
             if (surface.flats != 1 || surface.flatsKept != 0) {
                 println("ROUTING flat potential on cells $aspect as tall as wide: not laid, ${surface.flats} flats, ${surface.flatsKept} kept")
@@ -371,5 +372,12 @@ class RoutingGroundTest {
          * east-west and draws level lines twice as long that way as the other.
          */
         const val POTENTIAL_TOLERANCE = 0.10
+
+        /**
+         * The period the flats' rain varies over on these synthetic grids, in cells: eight, the
+         * period `FlowRouting.SMOOTH_FIELD_PERIOD_KM` comes to on the 512 grid, where this case's
+         * figures were taken. The grids here are cells and not a world, so the period is theirs.
+         */
+        const val RAIN_PERIOD_CELLS = 8
     }
 }

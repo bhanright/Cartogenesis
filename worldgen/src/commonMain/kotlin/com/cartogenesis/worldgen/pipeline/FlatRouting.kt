@@ -62,7 +62,8 @@ internal object FlatRouting {
         elevation: FloatField,
         filled: FloatField,
         seed: Long,
-        cellHeightInCellWidths: Double
+        cellHeightInCellWidths: Double,
+        smoothFieldPeriodCells: Int
     ): Surface {
         val cellCount = width * height
         val ground = elevation.data
@@ -113,7 +114,8 @@ internal object FlatRouting {
             val entryLevel = lowestLevel.toDouble()
             val entryHeight = highestEntryOf(width, height, members, memberCount, localIndex, surface, entryLevel)
             val potential = solvePotential(
-                width, height, members, memberCount, localIndex, surface, entryLevel, seed, cellHeightInCellWidths
+                width, height, members, memberCount, localIndex, surface, entryLevel, seed, cellHeightInCellWidths,
+                smoothFieldPeriodCells
             )
 
             if (potential != null &&
@@ -219,7 +221,8 @@ internal object FlatRouting {
         surface: DoubleArray,
         entryLevel: Double,
         seed: Long,
-        cellHeightInCellWidths: Double
+        cellHeightInCellWidths: Double,
+        smoothFieldPeriodCells: Int
     ): DoubleArray? {
         val stencil = stencil(cellHeightInCellWidths)
         val diagonal = stencil.diagonal
@@ -286,7 +289,9 @@ internal object FlatRouting {
         val x = DoubleArray(memberCount)
         val residual = DoubleArray(memberCount) {
             val cell = members[it]
-            1.0 + RAIN_RELIEF * FlowRouting.smoothSeededField(width, cell % width, cell / width, seed xor RAIN_RELIEF_SALT)
+            1.0 + RAIN_RELIEF * FlowRouting.smoothSeededField(
+                width, smoothFieldPeriodCells, cell % width, cell / width, seed xor RAIN_RELIEF_SALT
+            )
         }
         val runs = ColumnRuns(width, members, memberCount, localIndex, degree, northSouth)
         val preconditioned = DoubleArray(memberCount)
@@ -495,8 +500,8 @@ internal object FlatRouting {
     /**
      * How far the rain over a flat departs from even, as a share of the unit: half, so the driest
      * patch takes half the wettest's and the source never reaches zero. The field is
-     * [FlowRouting.smoothSeededField], eight cells to a period, salted so the flats' rain and the
-     * routing's sub-grid draw are independent of each other.
+     * [FlowRouting.smoothSeededField], [FlowRouting.SMOOTH_FIELD_PERIOD_KM] to a period, salted so
+     * the flats' rain and the routing's sub-grid draw are independent of each other.
      */
     private const val RAIN_RELIEF = 0.5
     private const val RAIN_RELIEF_SALT = 0x3c6ef372_fe94f82bL

@@ -1949,10 +1949,14 @@ enum class WildernessMode(val label: String) {
 data class OceanConfig(
     val enabled: Boolean = true,
     /**
-     * How far inland a coast feels its water, in cells, and how strongly. This is what makes a
+     * How far inland a coast feels its water, in kilometers, and how strongly. This is what makes a
      * mild west coast at high latitude and an arid one beside a cold current.
+     *
+     * 234.375 km, the 10 cell widths it was set as on the 512 grid; spent as the radius of a box
+     * blur in whole cells, so on cells half as tall as wide it reaches half as far north-south, and
+     * on square cells as far both ways. docs/DESIGN_LEDGER.md, Q2.
      */
-    val coastalReachCells: Int = 10,
+    val coastalReachKm: Double = 234.375,
     val coastalInfluence: Float = 0.85f,
     /**
      * Whether the water the wind's Ekman transport draws up cools the mixed layer.

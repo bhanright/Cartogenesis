@@ -17,11 +17,10 @@ internal object Atlas {
      * maritime one where it has coast, a marcher one where it has many neighbours, an imperial one
      * where it is large.
      *
-     * [coastalShare] is the share of the realm's cells that touch water and [cellCount] its area
-     * in cells; [neighbours] is how many realms it borders. See [IMPERIAL_CELLS] on the one thing
-     * here that does not travel between resolutions.
+     * [coastalShare] is the share of the realm's cells that touch water and [areaKm2] its area
+     * in square kilometers; [neighbours] is how many realms it borders.
      */
-    fun government(random: Random, coastalShare: Float, cellCount: Int, neighbours: Int): String {
+    fun government(random: Random, coastalShare: Float, areaKm2: Double, neighbours: Int): String {
         val options = buildList {
             add("Kingdom")
             add("Duchy")
@@ -29,8 +28,8 @@ internal object Atlas {
                 add("Merchant Republic"); add("Maritime League")
             }
             if (neighbours >= MANY_NEIGHBOURS) { add("Confederacy"); add("Marcher Lordship") }
-            if (cellCount > IMPERIAL_CELLS) { add("Empire"); add("High Kingdom") }
-            if (cellCount < CITY_STATE_CELLS) { add("Free City"); add("Principality") }
+            if (areaKm2 > IMPERIAL_KM2) { add("Empire"); add("High Kingdom") }
+            if (areaKm2 < CITY_STATE_KM2) { add("Free City"); add("Principality") }
             add("Theocracy")
             add("Elective Monarchy")
             add("Council of Elders")
@@ -45,16 +44,15 @@ internal object Atlas {
     private const val MANY_NEIGHBOURS = 3
 
     /**
-     * Area, in cells, above which a realm may call itself an empire and below which it may call
-     * itself a free city.
+     * Area, in square kilometers, above which a realm may call itself an empire and below which it
+     * may call itself a free city.
      *
-     * In cells rather than in square kilometres, which means the same world exported at a finer
-     * grid promotes every realm: at 512 a typical realm already clears the imperial bar. Left as
-     * it stands because changing it moves every world's prose; recorded here because it is a
-     * difference and not a design.
+     * The 6,000 and 1,500 cells they were set as on the 512 grid, whose cell holds 274.658 km²:
+     * 1,647,949 km² is about Iran's area and 411,987 km² about Paraguay's. They were counts of cells
+     * until Q2, so a finer grid promoted every realm; see docs/DESIGN_LEDGER.md, Q2.
      */
-    private const val IMPERIAL_CELLS = 6000
-    private const val CITY_STATE_CELLS = 1500
+    private const val IMPERIAL_KM2 = 1_647_949.21875
+    private const val CITY_STATE_KM2 = 411_987.3046875
 
     /**
      * What the land produces in surplus: at most four goods, drawn from the realm's largest

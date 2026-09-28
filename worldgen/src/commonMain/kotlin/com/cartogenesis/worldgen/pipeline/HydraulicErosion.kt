@@ -877,7 +877,8 @@ internal object HydraulicErosion {
             )
             val directions = FlowRouting.flowDirections(
                 cellsAcross, cellsDown, sea.isLand, sea.relativeElevation, filled,
-                config.seed, config.cellHeightInCellWidths, config.facetRouting, config.flatPotential
+                config.seed, config.cellHeightInCellWidths, FlowRouting.smoothFieldPeriodCells(config),
+                config.facetRouting, config.flatPotential
             )
             // Discharge and not catchment: each cell hands on what falls on it, so what arrives
             // at a channel is `Q = P * A` and the accumulation is a rainfall-weighted cell count
@@ -1369,7 +1370,8 @@ internal object HydraulicErosion {
                     val spoilFlow =
                         FlowRouting.flowDirections(
                             cellsAcross, cellsDown, after.isLand, spoilGround, spoilFilled,
-                            config.seed, config.cellHeightInCellWidths, config.facetRouting,
+                            config.seed, config.cellHeightInCellWidths, FlowRouting.smoothFieldPeriodCells(config),
+                            config.facetRouting,
                             config.flatPotential
                         )
                     // The closing breach cuts the sill a fresh delta laid across a drainage, and
@@ -1409,7 +1411,8 @@ internal object HydraulicErosion {
             if (closing && erosion.deltaLobe && spoil != null) {
                 val opened = openMouths(
                     cellsAcross, cellsDown, working, provisionalSeaLevel, config.scale, spoil,
-                    rates.pondDepth, config.seed, config.cellHeightInCellWidths, config.facetRouting,
+                    rates.pondDepth, config.seed, config.cellHeightInCellWidths,
+                    FlowRouting.smoothFieldPeriodCells(config), config.facetRouting,
                     config.flatPotential,
                     rainfallMm, weightSums
                 )
@@ -1561,22 +1564,24 @@ internal object HydraulicErosion {
     private const val LOBE_WOBBLE = 0.18f
 
     /**
-     * How far a distributary falls per cell, as a share of the freeboard its lobe stands at.
+     * How far a distributary's bed falls per kilometer of its course, as a share of the pond depth's
+     * step in the land's field: a gradient on the ground, spent over each step's own length.
      *
      * Enough that the D8 step across a lobe has one answer rather than the fill's epsilon and a
-     * coin toss — two orders of magnitude more than that epsilon — and little enough that a channel
-     * ten cells long is a groove across the delta rather than a canyon through it.
+     * coin toss, and little enough that a channel ten cells long is a groove across the delta
+     * rather than a canyon through it. It was 0.15 of the step per cell of the 512 grid, 23.4375
+     * km, held against the map by the grid's width, so a step down a column fell as far as a step
+     * along a row on half the ground and a diagonal step as far on more; a gradient is a fall per
+     * length, so it is spent over the length the step runs. docs/DESIGN_LEDGER.md, Q2.
      */
-    private const val DISTRIBUTARY_FALL = 0.15f
+    private const val DISTRIBUTARY_FALL_PER_KM = 0.15f / 23.4375f
 
     /**
-     * The grid every figure in this file that is written per cell was measured at.
-     *
-     * Only two are, and both are gradients: dividing by the grid in use and multiplying by this
-     * keeps them fixed against the map rather than against the cell, which is the difference
-     * between a world with more detail in it and a different world.
+     * The least a distributary step falls, in the land's field: a tenth of the fill's own 1e-6
+     * nudge, which is what the step's fall was floored at before it was a gradient, so a groove on
+     * a grid fine enough to make the gradient's step vanishingly small still descends.
      */
-    private const val REFERENCE_GRID = 512f
+    private const val MIN_DISTRIBUTARY_FALL = 1e-7f
 
     /**
      * How much of the land's water a watercourse must carry before this stage treats it as a river.
@@ -1753,6 +1758,7 @@ internal object HydraulicErosion {
         pondDepth: Float,
         seed: Long,
         cellHeightInCellWidths: Double,
+        smoothFieldPeriodCells: Int,
         byFacet: Boolean,
         overPotential: Boolean,
         /** The march's rainfall in millimetres, floored; this pass normalises it for itself. */
@@ -1770,15 +1776,17 @@ internal object HydraulicErosion {
         // may change a world with deposition switched off, and this pass runs either way; reading
         // `deltaFreeboard` here let the fiddled-knobs case move the terrain. It caught that too.
         val step = pondDepth * landRange
-        // Per cell, from a gradient held against the map, so a groove of a given length on the
-        // ground is the same groove however fine the grid that cuts it.
-        val fall = (step * DISTRIBUTARY_FALL * REFERENCE_GRID / cellsAcross).coerceAtLeast(1e-7f)
+        // A gradient on the ground, so a groove of a given length on the ground is the same groove
+        // however fine the grid that cuts it and whichever way it runs.
+        val fallPerCellWidth = step * DISTRIBUTARY_FALL_PER_KM * scale.cellWidthKm(cellsAcross).toFloat()
+        val steps = GroundSteps(cellHeightInCellWidths)
         val floor = sea.shorelineHeight + step * LOBE_RIM
 
         val filled =
             FlowRouting.fillDepressions(cellsAcross, cellsDown, isLand, sea.relativeElevation)
         val flow = FlowRouting.flowDirections(
             cellsAcross, cellsDown, isLand, sea.relativeElevation, filled, seed, cellHeightInCellWidths,
+            smoothFieldPeriodCells,
             byFacet, overPotential
         )
         // Weighted as the rounds weighted it, so a groove is cut where a river's water is and not
@@ -1818,6 +1826,8 @@ internal object HydraulicErosion {
             val receiver = flow[cell]
             if (receiver < 0) continue
             val below = if (isLand[receiver]) surfaceOf[receiver] else sea.shorelineHeight
+            val fall = (fallPerCellWidth * steps.between(cell, receiver, cellsAcross))
+                .coerceAtLeast(MIN_DISTRIBUTARY_FALL)
             val want = minOf(surfaceOf[cell], below + fall).coerceAtLeast(floor)
             if (surfaceOf[cell] > want) {
                 removed += -raise(surfaceOf, cell, (want - surfaceOf[cell]).toDouble())

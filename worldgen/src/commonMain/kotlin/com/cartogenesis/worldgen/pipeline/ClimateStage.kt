@@ -987,7 +987,7 @@ object ClimateStage {
 
     /**
      * How much nearby water a land cell can feel: 1 in the open sea, fading to 0 over
-     * `OceanConfig.coastalReachCells` cells inland.
+     * `OceanConfig.coastalReachKm` inland.
      *
      * A blur of the land/sea mask rather than a distance transform — cheap, and it does what
      * [applyMaritimeInfluence] needs: land within reach of the coast reads high, land well beyond
@@ -997,7 +997,7 @@ object ClimateStage {
     internal fun waterExposure(config: WorldGenConfig, sea: SeaLevelResult): FloatField {
         val cellsAcross = config.width
         val cellsDown = config.height
-        val radiusCells = config.ocean.coastalReachCells.coerceAtLeast(1)
+        val radiusCells = config.wholeCellsFor(config.ocean.coastalReachKm)
 
         val exposure = FloatField(cellsAcross, cellsDown)
         for (cell in 0 until cellsAcross * cellsDown) {
@@ -1019,7 +1019,7 @@ object ClimateStage {
      *
      * [marineAirFraction] reads this rather than the blurred water exposure above, because "how
      * exposed to water" and "how close to water" are not the same question at this radius: two
-     * box-blur passes leave a cell right at the edge of `coastalReachCells` reading roughly 0.2
+     * box-blur passes leave a cell right at the edge of `coastalReachKm` reading roughly 0.2
      * exposure, which would make a coast three quarters of the way to fully continental. An honest
      * distance says a shoreline cell is half a cell from water and one at 350 km is exactly that,
      * which is what a decay length measured in kilometres needs.
@@ -1116,7 +1116,7 @@ object ClimateStage {
         ocean.anomaly.data.copyInto(spreadAnomaly.data)
         BoxBlur.apply(
             spreadAnomaly,
-            radius = oceanConfig.coastalReachCells.coerceAtLeast(1),
+            radius = config.wholeCellsFor(oceanConfig.coastalReachKm),
             passes = BLUR_PASSES
         )
 

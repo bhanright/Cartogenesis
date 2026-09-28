@@ -172,7 +172,7 @@ class ContinentalityTest : BorrowsSharedWorlds() {
         )
         val cellsAcross = world.width
         val cellsDown = world.height
-        val reach = world.config.ocean.coastalReachCells
+        val reach = world.config.wholeCellsFor(world.config.ocean.coastalReachKm)
         // The same two fields production read, not re-derivations of them.
         val distance = ClimateStage.waterDistance(world.config, world.sea)
         val marine = ClimateStage.marineAirFraction(world.config, world.sea)

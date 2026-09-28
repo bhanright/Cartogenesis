@@ -367,6 +367,7 @@ object GlaciationStage {
             filled,
             config.seed,
             config.cellHeightInCellWidths,
+            FlowRouting.smoothFieldPeriodCells(config),
             config.facetRouting,
             config.flatPotential
         )
@@ -391,7 +392,8 @@ object GlaciationStage {
         // its own depth, so a coast standing over deep ocean does not read as relief it does not
         // have, while a headland standing over the sea does.
         stopIfAsked()
-        val reliefRadius = (glaciation.reliefWindow * carving.valleyWidthCells).toInt().coerceIn(2, 64)
+        val reliefRadius = (glaciation.reliefWindow * carving.valleyWidthCells).toInt()
+            .coerceIn(2, config.wholeCellsFor(RELIEF_RADIUS_CEILING_KM))
         val relief =
             localRelief(cellsAcross, cellsDown, relative, reliefRadius, glaciation.reliefWindowOctagon)
         // Straight, with nothing between the share and the field. `relative` is a cell's altitude
@@ -1153,6 +1155,21 @@ object GlaciationStage {
      * valley it found. The same function sets both so the two cannot drift apart.
      */
     private const val OUTLET_WIDTH_STRENGTH = 0.25f
+
+    /**
+     * The widest the relief window and the scour's hollowness window may reach, in kilometers.
+     *
+     * Ceilings on how far a window may reach when the trough width is set wide, five and seven
+     * times the stock windows (a 305 km relief radius and a 76 km hollowness radius), so neither
+     * binds on the stock settings on any grid. 1,500 and 562.5 km are the 64 and 24 cell widths they
+     * were set as on the 512 grid, stated on the ground: counted in cells they cut both stock
+     * windows short at 4,096 cells across, where the relief window wants 104 cells and the
+     * hollowness window 26. The relief window costs a constant per cell whatever its radius (see
+     * [localRelief]); the hollowness window is a square sum and costs the square of its radius.
+     * docs/DESIGN_LEDGER.md, Q2.
+     */
+    private const val RELIEF_RADIUS_CEILING_KM = 1_500.0
+    private const val HOLLOWNESS_RADIUS_CEILING_KM = 562.5
 
     /** What the scour did, for the tally. */
     private class ScourTally(val cells: Int, val basins: Int)
@@ -2329,7 +2346,8 @@ object GlaciationStage {
         // How hollow each cell is against the ground around it, and the scale of that hollowness
         // over the whole province, so the concavity term can be weighed against a 0..1 noise
         // without a constant nobody could justify.
-        val meanRadius = (carving.valleyWidthCells * 0.5f).toInt().coerceIn(2, 24)
+        val meanRadius = (carving.valleyWidthCells * 0.5f).toInt()
+            .coerceIn(2, config.wholeCellsFor(HOLLOWNESS_RADIUS_CEILING_KM))
         val concavity = FloatArray(cellCount)
         var concavityScale = 0.0
         for (cell in 0 until cellCount) {

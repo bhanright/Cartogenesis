@@ -507,6 +507,7 @@ object SeaLevelStage {
                 filled,
                 config.seed,
                 config.cellHeightInCellWidths,
+                FlowRouting.smoothFieldPeriodCells(config),
                 config.facetRouting,
                 config.flatPotential
             )

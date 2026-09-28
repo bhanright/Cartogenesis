@@ -719,7 +719,7 @@ class DeltaOutlineTest {
         val flow =
             FlowRouting.flowDirections(
                 w, h, sea.isLand, sea.relativeElevation, filled, run.seed,
-                run.config.cellHeightInCellWidths
+                run.config.cellHeightInCellWidths, FlowRouting.smoothFieldPeriodCells(run.config)
             )
         val area = FlowRouting.accumulate(w, h, sea.isLand, filled, flow, sea.landCellCount) { 1f }
         val land = sea.landCellCount.toFloat()

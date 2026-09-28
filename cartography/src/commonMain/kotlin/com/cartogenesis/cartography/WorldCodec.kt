@@ -130,6 +130,10 @@ object WorldCodec {
     /**
      * The only version this build reads or writes.
      *
+     * 18 because the coast's reach into the land became kilometers: `ocean.coastalReachCells`, a
+     * count of cells, is `ocean.coastalReachKm`, and a format-17 file would open with this build's
+     * 234 km on a grid where its own count meant another distance.
+     *
      * 17 because the tectonics' fifteen lengths became kilometers. Every belt half-width and offset,
      * the drift between epochs, the ageing blur's radius and the hotspot trails' length, spacing
      * and radius were counts of cells named `...Cells` and are lengths named `...Km`, from
@@ -252,7 +256,7 @@ object WorldCodec {
      * every cell-valued name took a `Cells` suffix. 3 was the container below with none of that, 2
      * the JSON text that preceded it; none of them opens.
      */
-    const val FORMAT_VERSION = 17
+    const val FORMAT_VERSION = 18
 
     private val MAGIC = byteArrayOf('C'.code.toByte(), 'G'.code.toByte(), 'W'.code.toByte(), 'D'.code.toByte())
 

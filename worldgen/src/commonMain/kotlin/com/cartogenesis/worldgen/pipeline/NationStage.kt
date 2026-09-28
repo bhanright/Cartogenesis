@@ -864,7 +864,7 @@ object NationStage {
             val mountainShare = highGround[id] / realmCells
             val landlocked = coastal[id] == 0
 
-            val government = Atlas.government(random, coastalShare, counts[id], neighbours[id].size)
+            val government = Atlas.government(random, coastalShare, counts[id] * squareKmPerCell, neighbours[id].size)
             // Production follows people, not acreage — a realm whose bulk is polar waste still
             // makes its living off the temperate ground its farmers actually work.
             val settledShares = heartlandBiome[id].entries

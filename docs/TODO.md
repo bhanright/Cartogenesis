@@ -494,13 +494,14 @@
 - **Six operators still count a row as a column, each outside Fix 2's list.** Found by reading the
   code, not by a guard: the climate stage's rainfall blur (a square box of cells, sized by
   `RAIN_BLUR_REFERENCE_WIDTH`) and its two coastal-reach blurs, the water exposure and the offshore
-  anomaly's spread, whose radius is `OceanConfig.coastalReachCells` (chunk 4b, the coastal
-  climate); the realms' two blurs (`NationStage`); the seeded field that jitters flat routing and
-  the lake balance, a
-  lattice of eight cells each way (`FlowRouting.smoothSeededField`); the thermal sweeps' count,
+  anomaly's spread, whose radius is `OceanConfig.coastalReachKm` read as whole cells (chunk 4b,
+  the coastal climate); the realms' two blurs (`NationStage`); the seeded field that jitters flat
+  routing and the lake balance, a lattice of `FlowRouting.SMOOTH_FIELD_PERIOD_KM` read as whole
+  cells each way (`FlowRouting.smoothSeededField`); the thermal sweeps' count,
   which spends `debrisTravelKm` as sweeps of one cell, a row down a column
   (`ErosionStage.sweepsFor`); and the glaciation's two distance fields (the `JumpFloodDistance`
-  entry below). 2026-09-24, Fix 2.
+  entry below). On square cells, the grid the switch of Q1 to Q6 moves the application to, each of
+  them reaches as far one way as the other. 2026-09-24, Fix 2; 2026-09-28, Q2.
 - **Fix 2 redrew every continent, and twenty clauses its new worlds tipped run as known failures,
   each named for where it is next taken up.** The plate partition moved from a chamfer on square
   cells to Euclid on the ground, so every seed's continents are new, and a clause that reads one

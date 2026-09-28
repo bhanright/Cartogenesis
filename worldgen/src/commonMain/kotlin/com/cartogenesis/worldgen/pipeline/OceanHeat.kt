@@ -227,7 +227,7 @@ object OceanHeat {
      * [outwardMps] the velocity leaving through the face. Water leaving toward the neighbor gives it
      * little say over this cell's temperature, and water arriving from it gives it most.
      */
-    internal fun faceWeight(diffusivityM2PerS: Double, outwardMps: Double, spacingMeters: Double): Double {
+    private fun faceWeight(diffusivityM2PerS: Double, outwardMps: Double, spacingMeters: Double): Double {
         val peclet = outwardMps * spacingMeters / diffusivityM2PerS
         return diffusivityM2PerS / (spacingMeters * spacingMeters) * bernoulli(peclet)
     }

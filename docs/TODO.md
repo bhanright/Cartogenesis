@@ -399,11 +399,48 @@
   latitude alone, so where the regional wind is weak the curl changes sign along a row and the
   boundary between a subtropical and a subpolar gyre, and the warm band beside it, runs straight
   across a basin: on 969495 at 2048 at about 41 to 45 S and 43 N, softened by the eddies to a
-  gradient about 100 km wide but straight. Earth's are bent by the continents' own winds and by
-  the separated boundary currents' paths (the Gulf Stream's and the Kuroshio's extensions), which
-  Stommel's balance with no inertia does not make. **Chunk 4b owns it**, by the maintainer's
-  decision: it adds pressure cells over the oceans, so the wind's stress varies along a latitude
-  and the curl's zero line bends with it. 4a merges with the fronts recorded here. 2026-09-26, 4a.
+  gradient about 100 km wide but straight. Earth's are bent by the pressure cells over the oceans
+  and by the separated boundary currents' paths (the Gulf Stream's and the Kuroshio's extensions),
+  which Stommel's balance with no inertia does not make. Chunk 4b-1 tried the cells and found them
+  out of this model's reach: a thermally forced linear layer gave an annual pressure near zero and,
+  under surface drag, a smooth response of 3 to 8 hPa per half-year that left the curl's zero line
+  straighter than the regional wind already on main does. Measured as the zero line's range of
+  latitude over a basin's interior, in kilometers, over the basin's width: 0.006 to 0.045 on the
+  four standard seeds' northern basins at 512 with main's wind, and 0.000 to 0.006 with the solved
+  pressure over belts left unmigrated; with the belts migrated by the seasons it read up to 0.086,
+  from the extra zero lines the migration put in the curl, not from any bending
+  (docs/DESIGN_LEDGER.md, 4b-1).
+  **Owned by "Build the atmosphere, so the subtropical highs are real"** below; 4b-1 leaves the
+  ocean on main's regional wind. The measure wants Earth's figure from a scatterometer stress
+  climatology (Risien and Chelton 2008) before it becomes a bar; Gray et al. (2020, *Geophys. Res.
+  Lett.*) describe the North Pacific's line as nearly zonal near 40 N, so the bar will be small.
+  2026-09-26, 4a; 2026-09-28, 4b-1.
+- **Build the atmosphere, so the subtropical highs are real.** An action item, owned by a chunk of
+  its own. **What it is:** a stationary-wave model of the troposphere with at least two layers, or
+  explicit vertical modes, forced by the latent heating of the model's own rainfall (the monsoon's
+  Rossby response that puts a subtropical high west of a heated continent: Rodwell and Hoskins 2001,
+  *J. Climate* 14, 3192-3211), by the land-sea contrast and by the Hadley cell's descent; with
+  multi-day damping for the free atmosphere and the boundary layer's drag kept separate; every
+  scale derived from the planet's radius and spin (`WorldScale`); and a graphics-card path behind
+  the accelerator seam. **What it unlocks:** pressure cells over the oceans, so the gyres' fronts
+  bend (the entry above); the wind 4b-2's march reads; and the rain and the deserts that follow a
+  real circulation. **Where to start:** the solved, linear, damped single-layer response 4b-1 built
+  and then took off the branch, `PressureResponse` in commit b50119c on `chunk/4b1-sea-wind`
+  (`PressureResponseTest` beside it). It solves `αΦ - ∇·(c²a∇Φ) + c²(∂b/∂y ∂Φ/∂x - ∂b/∂x ∂Φ/∂y)
+  = αΦ_eq` with land's and sea's drags, `a = ε/(ε²+f²)`, `b = f/(ε²+f²)`, as an advection-diffusion
+  problem on the ocean's multigrid, and it is verified: a forced strip's reaches at 30 degrees read
+  1,579 and 859 km against the analytic 1,580 and 851, and a cooled disc's centroid moved 562 km
+  west against the analytic drift over α of 566, halving to 284 against 285 at twice the radius,
+  at aspects 1.0 and 0.5. **What 4b-1 learned:** a layer forced by the thermal contrast alone has
+  an annual mean near zero, because the energy balance gives land and sea nearly the same annual
+  temperature, so the linear response to the year is nothing and only the seasons have cells; and a
+  surface drag of 3 to 6 hours in the layer's momentum spreads the response over 900 to 2,100 km
+  and cuts it to a quarter or a third of its forcing, while damping it at the layer's own rate
+  (Gill's ε = α) lets the long Rossby wave carry it 2,700 km west at 30 degrees and 22,600 at 10.
+  **The scale warning:** this world's β is 3.3 times Earth's, so its westward drift is 3.3 times
+  faster and its equatorial radius √3.3 times shorter, and a response reaches a far larger share of
+  a small planet than of Earth. Eastern-basin highs are plausible from such a model but not
+  guaranteed; a second reader's view, recorded with the maintainer's decision of 2026-09-28.
 - **A planet's size and spin are not yet settings.** Everything the ocean solves reads the radius
   from `WorldScale.radiusMeters` and the spin from `WorldScale.ROTATION_RATE_PER_S`, and
   `OceanPlanetSizeTest` holds the laws at twice the radius, the eddy diffusivity's equatorial

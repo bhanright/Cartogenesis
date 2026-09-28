@@ -7,11 +7,11 @@ import com.cartogenesis.worldgen.pipeline.ClimateStage
 import com.cartogenesis.worldgen.pipeline.OceanCirculation
 import com.cartogenesis.worldgen.pipeline.OceanHeat
 import com.cartogenesis.worldgen.pipeline.OceanStage
-import com.cartogenesis.worldgen.pipeline.PressureResponse
 import com.cartogenesis.worldgen.pipeline.SeaLevelResult
 import com.cartogenesis.worldgen.pipeline.Season
 import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.asin
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.tan
@@ -29,7 +29,7 @@ class OceanUpwellingTest {
 
     /** The offshore transport under an alongshore stress [stress] at [latitude], square meters a second. */
     private fun offshoreTransport(stress: Double, latitude: Double): Double {
-        val f = PressureResponse.coriolisPerS(latitude)
+        val f = (2.0 * com.cartogenesis.worldgen.model.WorldScale.ROTATION_RATE_PER_S * sin(latitude * PI / 180.0))
         val r = OceanStage.SURFACE_LAYER_FRICTION_PER_S
         return stress * abs(f) / (seawaterDensity * (r * r + f * f))
     }
@@ -67,7 +67,34 @@ class OceanUpwellingTest {
                 }
             }
         }
+        // The control: a coast that passes the transport through it, as an ocean with no faces
+        // shut at the land would, raises nothing beside it.
+        val (throughCoast, expected, _) = coastalRise(12_000.0, 1.0, 0.0, 1.0, equatorward = true, coastShut = false)
+        println("UPWELLING control, the transport let through the coast: %.4f m2/s per meter of coast against %.4f".format(throughCoast, expected))
+        assertTrue(abs(throughCoast / expected - 1) > COAST_TOLERANCE, "a coast that passes the transport passed the bar")
         assertTrue(failures.isEmpty(), failures.joinToString("\n"))
+    }
+
+    /**
+     * The risen water outcropped where Luyten, Pedlosky and Stommel's eastern-boundary geometry
+     * puts its isopycnal: `sin φ_o = sin φ / (1 - D/H)`, 38.7 degrees beneath 30 for 100 m under a
+     * 500 m thermocline, no further poleward than the subtropical gyre's edge at 45, the latitude's
+     * own poleward of that edge, continuous across it, and the mirror image in the south. The
+     * mixed layer's own latitude, the proxy the closure replaced, fails the first clause.
+     */
+    @Test
+    fun `the risen water outcropped where the ventilated thermocline puts it`() {
+        val expected = asin(sin(30.0 * PI / 180) / (1 - OceanStage.UPWELLING_SOURCE_DEPTH_M / 500.0)) * 180 / PI
+        val measured = OceanStage.outcropLatitude(30f).toDouble()
+        println("UPWELLING outcrop beneath 30 degrees: %.3f against %.3f; beneath -30 %.3f; beneath 44.9 %.3f, 45 %.3f, 60 %.3f, 0 %.3f"
+            .format(measured, expected, OceanStage.outcropLatitude(-30f), OceanStage.outcropLatitude(44.9f), OceanStage.outcropLatitude(45f),
+                OceanStage.outcropLatitude(60f), OceanStage.outcropLatitude(0f)))
+        assertTrue(abs(30.0 - expected) > OUTCROP_TOLERANCE_DEGREES, "the mixed layer's own latitude passed the first clause")
+        assertTrue(abs(measured - expected) < OUTCROP_TOLERANCE_DEGREES, "beneath 30 degrees the water outcropped at $measured, not $expected")
+        assertTrue(abs(OceanStage.outcropLatitude(-30f) + measured) < OUTCROP_TOLERANCE_DEGREES, "the south is not the north's mirror image")
+        assertTrue(abs(OceanStage.outcropLatitude(44.9f) - 45f) < OUTCROP_TOLERANCE_DEGREES, "the water beneath 44.9 degrees outcropped beyond the gyre")
+        assertTrue(OceanStage.outcropLatitude(60f) == 60f, "the subpolar gyre's water is not its own latitude's")
+        assertTrue(OceanStage.outcropLatitude(0f) == 0f, "the equator's water outcropped off the equator")
     }
 
     /** A poleward stress along the same coasts pushes the surface water onshore, and nothing rises. */
@@ -86,7 +113,7 @@ class OceanUpwellingTest {
      * The rise beside the coast over the band from 20 to 40 degrees in one hemisphere, net of the
      * open ocean's in each row, per meter of coast, and the analytic transport averaged the same way.
      */
-    private fun coastalRise(widthKm: Double, aspect: Double, bearingDegrees: Double, hemisphere: Double, equatorward: Boolean): Triple<Double, Double, Double> {
+    private fun coastalRise(widthKm: Double, aspect: Double, bearingDegrees: Double, hemisphere: Double, equatorward: Boolean, coastShut: Boolean = true): Triple<Double, Double, Double> {
         val scale = WorldScale(worldWidthKm = widthKm)
         val cellKm = 20.0 * widthKm / 12_000.0
         val across = (widthKm / cellKm).toInt()
@@ -110,7 +137,8 @@ class OceanUpwellingTest {
         val alongNorth = cos(bearing) * towardEquator * (if (equatorward) 1.0 else -1.0)
         val stressEast = DoubleArray(across * down) { STRESS_N_PER_M2 * alongEast }
         val stressNorth = DoubleArray(across * down) { STRESS_N_PER_M2 * alongNorth }
-        val upward = OceanStage.upwellingMps(OceanStage.Stress(stressEast, stressNorth), isWater, across, down, widthMeters, heightMeters)
+        val faces = if (coastShut) isWater else BooleanArray(across * down) { true }
+        val upward = OceanStage.upwellingMps(OceanStage.Stress(stressEast, stressNorth), faces, across, down, widthMeters, heightMeters)
         var risenPerSecond = 0.0
         var coastMeters = 0.0
         var expectedPerSecond = 0.0
@@ -152,7 +180,7 @@ class OceanUpwellingTest {
         val r = OceanStage.SURFACE_LAYER_FRICTION_PER_S
         for (row in listOf(down / 2 - 1, down / 2)) {
             val latitude = ClimateStage.latitudeOf(row, down).toDouble()
-            val f = PressureResponse.coriolisPerS(latitude)
+            val f = (2.0 * com.cartogenesis.worldgen.model.WorldScale.ROTATION_RATE_PER_S * sin(latitude * PI / 180.0))
             val expected = beta * STRESS_N_PER_M2 * (r * r - f * f) / (seawaterDensity * (r * r + f * f) * (r * r + f * f))
             val measured = upward[row * across].toDouble()
             println("UPWELLING equator, row at %.3f degrees: %.3e m/s (%.2f m/day) against %.3e".format(latitude, measured, measured * 86_400, expected))
@@ -196,9 +224,9 @@ class OceanUpwellingTest {
     }
 
     /**
-     * The risen water's temperature, the coldest month's mixed layer, is never warmer than the
-     * annual water it replaces, at any latitude of a real world, so the term can only cool. The
-     * warmest month read in its place fails.
+     * The risen water's temperature, the winter mixed layer where its isopycnal outcrops, is never
+     * warmer than the annual water it replaces, at any latitude of a real world, so the term can only
+     * cool. The warmest month read in its place fails.
      */
     @Test
     fun `the risen water is never warmer than the water it replaces`() {
@@ -228,5 +256,6 @@ class OceanUpwellingTest {
         const val PATCH_TOLERANCE_C = 1e-3
         const val QUIET_EDDIES_M2_PER_S = 1.0
         const val SETTLING_PASSES = 50
+        const val OUTCROP_TOLERANCE_DEGREES = 1e-3
     }
 }

@@ -100,7 +100,7 @@ internal object PressureWind {
     const val BELT_SPEED_MPS = 7.5f
 
     /** The standard atmosphere at sea level, in hectopascals. */
-    internal const val SEA_LEVEL_PRESSURE_HPA = 1013.25
+    private const val SEA_LEVEL_PRESSURE_HPA = 1013.25
 
     /**
      * The level of non-divergence, in hectopascals: the height at which the outflow aloft from a
@@ -109,7 +109,7 @@ internal object PressureWind {
      *
      * Its ratio to the surface, `ln(1013.25 / 500)`, is a factor of [HPA_PER_KELVIN].
      */
-    internal const val NON_DIVERGENT_LEVEL_HPA = 500.0
+    private const val NON_DIVERGENT_LEVEL_HPA = 500.0
 
     /** The standard atmosphere's mean surface temperature, in kelvin: 15 degrees Celsius. */
     private const val REFERENCE_COLUMN_K = 288.15
@@ -122,8 +122,8 @@ internal object PressureWind {
      * depth of the troposphere in metres: the two figures the Rossby radius is built from. Both
      * are textbook standards — a stratification of `1.0e-2` and a tropopause at 10 km.
      */
-    internal const val BUOYANCY_FREQUENCY_PER_S = 1.0e-2
-    internal const val TROPOPAUSE_DEPTH_M = 10_000.0
+    private const val BUOYANCY_FREQUENCY_PER_S = 1.0e-2
+    private const val TROPOPAUSE_DEPTH_M = 10_000.0
 
     /** Where the Rossby radius is evaluated: the middle of the mid-latitudes. */
     private const val ROSSBY_REFERENCE_LATITUDE_DEGREES = 45.0
@@ -189,9 +189,10 @@ internal object PressureWind {
      * mean by construction. Warm against its row means low, cold against its row means high, which
      * puts the thermal low over the summer continent and the thermal high over the winter one. It
      * puts no ridge over a sea a cold current has chilled: the temperature it is given carries no
-     * current anomaly over water on either path: the climate stage's maritime influence adds the
-     * anomaly to land cells only, and the provisional climates have none. The sea's own wind is
-     * solved separately, by [PressureResponse].
+     * current anomaly over water on either path, since the climate stage's maritime influence adds
+     * the anomaly to land cells only and the ocean's own stress reads the temperature before there
+     * is an anomaly at all. Earth's subtropical highs are not thermal lows' mirror images either;
+     * they wait on an atmosphere that is solved (docs/TODO.md, "Build the atmosphere").
      */
     fun pressureAnomalyHpa(config: WorldGenConfig, seasonTemperatureC: FloatField): FloatField {
         val cellsAcross = config.width

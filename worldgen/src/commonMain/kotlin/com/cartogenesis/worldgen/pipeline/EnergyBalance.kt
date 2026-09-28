@@ -537,7 +537,7 @@ object EnergyBalance {
      * inertia the air can only hand the water about half its amplitude, and Earth's air-sea
      * difference over the open ocean is nearer a degree all year. See TODO.md.
      */
-    internal const val MARINE_AIR_HEAT_CAPACITY_J_PER_M2_C = 1.04e7
+    private const val MARINE_AIR_HEAT_CAPACITY_J_PER_M2_C = 1.04e7
 
     /**
      * How fast the sea surface and the air above it trade heat, in watts per square metre per

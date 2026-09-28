@@ -7,11 +7,13 @@ import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldScale
 import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.asin
 import kotlin.math.ceil
 import kotlin.math.cos
 import kotlin.math.exp
 import kotlin.math.floor
 import kotlin.math.roundToInt
+import kotlin.math.sin
 import kotlin.math.sqrt
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -270,7 +272,7 @@ object OceanStage {
         return OceanResult(velocityX, velocityY, baseTemperature, anomaly)
     }
 
-    /** The circulation and its heat on the solve grid, under the year's mean stress. See [Circulation]. */
+    /** The circulation and its heat on the solve grid, under the year's stress. See [Circulation]. */
     internal inline fun circulate(
         config: WorldGenConfig,
         sea: SeaLevelResult,
@@ -278,7 +280,7 @@ object OceanStage {
         relax: (OceanStencil, FloatArray, Int) -> FloatArray
     ): Circulation {
         val (across, down) = solveGrid(config.scale)
-        return circulateUnder(config, sea, zonal, meanStress(config, sea, zonal, across, down, relax), relax)
+        return circulateUnder(config, sea, zonal, annualStress(config, sea, across, down), relax)
     }
 
     /**
@@ -385,7 +387,7 @@ object OceanStage {
      * V-cycle reaches a grid small enough to relax to convergence. Up, so the spacing is never
      * coarser than the one asked for; by at most one part in sixteen.
      */
-    internal fun rowsForCycle(rows: Int): Int {
+    private fun rowsForCycle(rows: Int): Int {
         var step = 1
         while ((rows + step - 1) / step > OceanCirculation.COARSEST_ROWS * 2) step *= 2
         return (rows + step - 1) / step * step
@@ -459,99 +461,49 @@ object OceanStage {
     internal class Stress(val eastward: DoubleArray, val northward: DoubleArray)
 
     /**
-     * The year's mean wind stress on the sea, on the solve grid: the mean of the two half-years'
-     * stresses, each `ρ_air C_D |W| W` of that half-year's wind, the belts ([SurfaceBelts]) and, with
-     * `ClimateConfig.pressureWinds` on, the departure the season's solved pressure drives
-     * ([PressureResponse]).
+     * The year's wind stress on the sea, on the solve grid, `ρ_air C_D |W| W`: the belts' annual
+     * wind ([SurfaceBelts] with no migration), its meridional leg included, and with
+     * `ClimateConfig.pressureWinds` on the regional wind of the annual pressure ([PressureWind]),
+     * read bilinearly from the map.
      *
-     * The mean of the stresses and not the stress of the mean wind: the stress is quadratic in the
-     * wind, and a gyre that turns over in years integrates the stress. The pressure is read off the
-     * air column's own temperature ([ClimateStage.columnTemperature]), which leaves out the current
-     * anomaly this stage has not computed and could not have, since the currents cannot be forced by
-     * a wind their warmth forced. The departure is taken with the sea's drag over every cell, land
-     * included, so a coast puts no step of its own into the curl.
+     * One annual pattern and not the mean of two half-years' stresses. The belts' zonal profile is
+     * already the annual mean's shape, so migrating it by the tilt and averaging the two halves
+     * would smooth it a second time: done, it left the westerlies' mean stress with two humps and
+     * three zeros of its curl, and the westerlies' band flowing west on two standard seeds
+     * (docs/DESIGN_LEDGER.md, 4b-1). The temperature the pressure is read off leaves out the
+     * current anomaly, which this stage has not computed and could not have: the currents cannot
+     * be forced by a wind their own warmth forced.
      */
-    internal inline fun meanStress(
-        config: WorldGenConfig,
-        sea: SeaLevelResult,
-        zonal: ZonalClimate,
-        across: Int,
-        down: Int,
-        relax: (OceanStencil, FloatArray, Int) -> FloatArray
-    ): Stress {
-        val climate = config.climate
-        val tiltDegrees = if (climate.seasons) climate.seasonalTiltDegrees else 0f
-        val marineFraction = if (climate.pressureWinds) ClimateStage.marineAirFraction(config, sea) else null
+    internal fun annualStress(config: WorldGenConfig, sea: SeaLevelResult, across: Int, down: Int): Stress {
+        val cellsAcross = config.width
+        val cellsDown = config.height
+        val wind = if (config.climate.pressureWinds) {
+            PressureWind.surfaceWind(config, sea, PressureWind.pressureAnomalyHpa(config, ClimateStage.buildTemperature(config, sea)))
+        } else null
         val eastward = DoubleArray(across * down)
         val northward = DoubleArray(across * down)
-        for (warm in booleanArrayOf(true, false)) {
-            val response = if (marineFraction != null) {
-                val season = if (warm) Season.WARM_HALF else Season.COLD_HALF
-                PressureResponse.solve(config, sea, ClimateStage.columnTemperature(config, zonal, marineFraction, season), relax)
-            } else null
-            addHalfYearStress(config, response, tiltDegrees, warm, across, down, eastward, northward)
-        }
-        return Stress(eastward, northward)
-    }
-
-    /** Adds one half-year's share of [meanStress] to [eastward] and [northward]. */
-    internal fun addHalfYearStress(
-        config: WorldGenConfig,
-        response: PressureResponse.Response?,
-        tiltDegrees: Float,
-        warm: Boolean,
-        across: Int,
-        down: Int,
-        eastward: DoubleArray,
-        northward: DoubleArray
-    ) {
-        val gradient = response?.let { PressureResponse.gradient(it) }
         parallelChunks(0, down) { startRow, endRow ->
             for (row in startRow until endRow) {
                 val latitude = ClimateStage.latitudeOf(row, down)
-                val belts = SurfaceBelts.windMps(latitude, tiltDegrees, warm, config.climate.meridionalWindShare)
+                val belts = SurfaceBelts.windMps(latitude, config.climate.meridionalWindShare)
+                val mapRow = (row + 0.5f) * cellsDown / down - 0.5f
                 for (column in 0 until across) {
                     var east = belts.eastwardMps.toDouble()
                     var north = belts.northwardMps.toDouble()
-                    if (response != null && gradient != null) {
-                        val departure = departureAt(response, gradient, latitude, row, column, across, down)
-                        east += departure.eastwardMps
-                        north += departure.northwardMps
+                    if (wind != null) {
+                        val mapColumn = (column + 0.5f) * cellsAcross / across - 0.5f
+                        east += sample(wind.eastwardMps, cellsAcross, cellsDown, mapColumn, mapRow)
+                        north -= sample(wind.southwardMps, cellsAcross, cellsDown, mapColumn, mapRow)
                     }
                     val dragPerMeter = PressureWind.AIR_DENSITY_KG_PER_M3 * DRAG_COEFFICIENT * sqrt(east * east + north * north)
                     val cell = row * across + column
-                    eastward[cell] += HALF_YEAR_SHARE * dragPerMeter * east
-                    northward[cell] += HALF_YEAR_SHARE * dragPerMeter * north
+                    eastward[cell] = dragPerMeter * east
+                    northward[cell] = dragPerMeter * north
                 }
             }
         }
+        return Stress(eastward, northward)
     }
-
-    /**
-     * The wind [response] drives at the center of cell ([row], [column]) of a grid [across] by
-     * [down] covering the map, meters a second, with the sea's drag: its gradient read smoothly
-     * ([PressureResponse.smoothSample]) and balanced as it was solved.
-     */
-    internal fun departureAt(
-        response: PressureResponse.Response,
-        gradient: PressureResponse.Gradient,
-        latitude: Float,
-        row: Int,
-        column: Int,
-        across: Int,
-        down: Int
-    ): SurfaceBelts.Wind {
-        val responseRow = (row + 0.5) * response.cellsDown / down - 0.5
-        val responseColumn = (column + 0.5) * response.cellsAcross / across - 0.5
-        return PressureResponse.windMps(
-            latitude.toDouble(), PressureResponse.SEA_DRAG_PER_S,
-            PressureResponse.smoothSample(gradient.eastward, response.cellsAcross, response.cellsDown, responseColumn, responseRow),
-            PressureResponse.smoothSample(gradient.northward, response.cellsAcross, response.cellsDown, responseColumn, responseRow)
-        )
-    }
-
-    /** Each half-year's share of the year. */
-    private const val HALF_YEAR_SHARE = 0.5
 
     /**
      * The circulation's right-hand side per cell, `curl_z τ / (ρ H)`, per second squared: the
@@ -600,7 +552,7 @@ object OceanStage {
      * down the wind at `τ/(ρr)`.
      */
     internal fun ekmanTransport(stressEast: Double, stressNorth: Double, latitudeDegrees: Double): Pair<Double, Double> {
-        val coriolis = PressureResponse.coriolisPerS(latitudeDegrees)
+        val coriolis = 2.0 * WorldScale.ROTATION_RATE_PER_S * sin(latitudeDegrees * PI / 180.0)
         val friction = SURFACE_LAYER_FRICTION_PER_S
         val perDensity = 1.0 / (SEAWATER_DENSITY_KG_PER_M3 * (friction * friction + coriolis * coriolis))
         return (friction * stressEast + coriolis * stressNorth) * perDensity to
@@ -670,18 +622,61 @@ object OceanStage {
 
     /**
      * `T_sub`, the temperature of the water an upwelling brings up, degrees Celsius, at [latitude]:
-     * the latitude's coldest-month mixed layer from the energy balance.
+     * the winter mixed layer's temperature at the latitude where that water's isopycnal outcrops
+     * ([outcropLatitude]), from the energy balance's coldest month.
      *
-     * A stated proxy, not a derived thermocline. The water under a summer mixed layer is what the
-     * winter before left there, sealed off as the layer shoaled and brought back by whatever lifts
-     * it (Stommel 1979, *PNAS* 76, 3051-3055, the mixed layer's "demon"), and the energy balance
-     * knows that water's temperature and no other. Earth's upwelled water rises from the upper
-     * thermocline, below the deepest winter layer, and is colder still, so this undershoots the cold
-     * of a real upwelling coast. `OceanUpwellingTest` holds it no warmer than the annual water it
-     * replaces, so the term can only cool.
+     * **A closure, not a solved thermocline.** This generator's ocean has one layer and no vertical
+     * structure, so the water beneath the mixed layer is not computed; what is prescribed is where it
+     * came from. The ventilated thermocline (Luyten, Pedlosky and Stommel 1983, *J. Phys. Oceanogr.*
+     * 13, 292-309) fills the subtropical gyre's upper thermocline with water that left the surface in
+     * winter, poleward, at the latitude where its isopycnal meets the surface, and carried the winter
+     * mixed layer's temperature down its pathway with it (Stommel 1979, *PNAS* 76, 3051-3055, the
+     * mixed layer's "demon", is why it is the winter layer's). Mixing along the way is not modeled,
+     * so the water arrives at its outcrop's temperature.
+     *
+     * **Density is temperature's alone**: salinity is taken to be uniform along each isopycnal's
+     * path, so an isopycnal is an isotherm. On Earth salinity compensates part of the temperature on
+     * many of these surfaces, so an isopycnal outcrops a little away from the isotherm's; the
+     * closure's outcrop latitudes carry that error.
      */
     internal fun subsurfaceTemperatureC(zonal: ZonalClimate, latitude: Float): Float =
-        zonal.waterC(latitude, Season.WINTER)
+        zonal.waterC(outcropLatitude(latitude), Season.WINTER)
+
+    /**
+     * Where the isopycnal through [UPWELLING_SOURCE_DEPTH_M] beneath [latitude] meets the surface,
+     * in degrees, same hemisphere: Luyten, Pedlosky and Stommel's eastern-boundary geometry.
+     *
+     * In their ventilated zone potential vorticity `f/h` is kept along each subducted layer's path
+     * and the total depth of the moving layers is kept along it too, so the interface under a layer
+     * that outcropped at `f_o` lies at depth `(1 - f/f_o) H` wherever `f` is, with `H` the moving
+     * layers' depth at the eastern boundary, taken as this ocean's [WIND_DRIVEN_LAYER_DEPTH_M].
+     * Water found at depth `D` therefore outcropped where `f_o = f / (1 - D/H)`: at 100 m under a
+     * 500 m thermocline, 38.7 degrees beneath 30.
+     *
+     * The subtropical gyre's isopycnals outcrop no further poleward than the gyre does, which is
+     * where the belts' Ekman pumping changes sign, [SurfaceBelts.WESTERLY_BELT_CENTRE_DEGREES]; water
+     * whose isopycnal would outcrop beyond it is the edge's own winter water, and poleward of that
+     * edge, in the subpolar gyre, upwelled water is the latitude's own winter water. The mapping is
+     * continuous there. Toward the equator `f` vanishes and so does the mapping's reach: the closure
+     * has no equatorial thermocline, and water rising on the equator is the equator's own.
+     */
+    internal fun outcropLatitude(latitude: Float): Float {
+        val fromEquator = abs(latitude)
+        val gyreEdge = SurfaceBelts.WESTERLY_BELT_CENTRE_DEGREES
+        if (fromEquator >= gyreEdge) return latitude
+        val outcropSine = sin(fromEquator * PI / 180.0) / (1.0 - UPWELLING_SOURCE_DEPTH_M / WIND_DRIVEN_LAYER_DEPTH_M)
+        val outcrop = if (outcropSine >= sin(gyreEdge * PI / 180.0)) gyreEdge.toDouble() else asin(outcropSine) * 180.0 / PI
+        return (if (latitude < 0f) -outcrop else outcrop).toFloat()
+    }
+
+    /**
+     * `D`, the depth the water a coastal or open-ocean upwelling brings up comes from, meters: 100,
+     * near the middle of the 41 to 182 m Weeks, Losch and Tziperman's (2023, arXiv 2312.04706)
+     * experiments span from weak wind and strong stratification to strong wind and weak
+     * stratification, the dependence He and Mahadevan (2021, *J. Geophys. Res. Oceans* 126) scale.
+     * One depth for every upwelling: the model has no stratification to vary it with.
+     */
+    internal const val UPWELLING_SOURCE_DEPTH_M = 100.0
 
     /** A field on one grid read bilinearly at every cell center of another covering the same map. */
     private fun resample(field: FloatArray, fromAcross: Int, fromDown: Int, toAcross: Int, toDown: Int): FloatArray {

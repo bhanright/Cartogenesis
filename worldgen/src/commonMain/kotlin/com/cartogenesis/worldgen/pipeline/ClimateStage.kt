@@ -1236,39 +1236,6 @@ object ClimateStage {
             config, sea, zonalClimate(config, sea), marineAirFraction(config, sea)
         )
 
-    /**
-     * The air column's temperature in one [season], in degrees Celsius, one value per cell: the
-     * band's maritime and continental columns blended by [marineFraction], and nothing else.
-     *
-     * What the pressure responds to ([PressureResponse]), and so not the map's temperature. The
-     * altitude's lapse is left out, which is the lapse added back at the climate's own rate: a
-     * plateau's surface is colder than the lowland beside it by its height, and its column between
-     * two pressure levels is not, so it is no high for its altitude. The weather noise is left out,
-     * because it is texture on the map and no column. And the current anomaly is left out, because
-     * the sea's currents cannot be forced by a wind their own warmth forced.
-     */
-    internal fun columnTemperature(
-        config: WorldGenConfig,
-        zonal: ZonalClimate,
-        marineFraction: FloatField,
-        season: Season
-    ): FloatField {
-        val cellsAcross = config.width
-        val cellsDown = config.height
-        val field = FloatField(cellsAcross, cellsDown)
-        parallelChunks(0, cellsDown) { startRow, endRow ->
-            for (row in startRow until endRow) {
-                val latitude = latitudeOf(row, cellsDown)
-                val landColumnC = zonal.landC(latitude, season)
-                val seaColumnC = zonal.seaC(latitude, season)
-                for (cell in row * cellsAcross until (row + 1) * cellsAcross) {
-                    field.data[cell] = blendedC(marineFraction.data[cell], seaColumnC, landColumnC)
-                }
-            }
-        }
-        return field
-    }
-
     /** See [buildTemperature]; this is the same field with the shared work already done. */
     private fun annualTemperature(
         config: WorldGenConfig,

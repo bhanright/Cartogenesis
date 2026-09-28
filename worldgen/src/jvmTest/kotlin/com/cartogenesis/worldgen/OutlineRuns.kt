@@ -114,7 +114,9 @@ internal object OutlineRuns {
      * 2048 map measures across that is a radius of 17.3 cells against a straight run of 17, which
      * is 2.05 times the 8.3 cells its own circle would have run. So Earth's straightest big lake
      * shore is about twice as straight as a circle, and it lies along a fault, which has no reason
-     * to fall on one of a grid's three bearings. Three leaves that a margin.
+     * to fall on one of a grid's three bearings. Three leaves that a margin. The 2048 grid's cell is
+     * the square cell of 1,024 rows, where the tests draw these bodies since Q2, so both figures
+     * stand; and the bar stays in cells, since a staircase's run is the grid's figure.
      *
      * The derivation is a lake's throughout — Tanganyika is a lake and the curvature argument is
      * about a shoreline — so F30's bar for a lake shore and I2's for a basin floor's rim are the

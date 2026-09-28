@@ -36,27 +36,25 @@ object SharedWorlds {
     /**
      * The retained worlds' arrays, in bytes, before one goes.
      *
-     * Sixteen worlds of 512 rows: the four standard worlds and a dozen variants, the same count the
-     * 600 MB before Q2 kept of the 512 by 512 grid's worlds, at the 78 MB of arrays a world of 1,024
-     * by 512 square cells holds, twice the 39 of a 512 by 512 one. Kept at 700 MB, a class that
-     * borrows the four standard worlds and a variant of each regenerated its variants three times
-     * over (`PressureWindTest`, 2026-09-28). It is also four worlds of 1,024 rows, 312 MB each.
+     * A world of 512 rows, 1,024 by 512 square cells, holds 78 MB of arrays and one of 1,024 rows
+     * 312 MB, so this keeps the four standard worlds with one 1,024-row world beside them, or the
+     * four with four variants. It is what a worker can spare beside the largest thing it does, which
+     * since Q2 is generating a 1,024-row world of 2.1 million cells.
      *
-     * The heap it stands in: the largest thing a `:worldgen` worker does is now generating a world of
-     * 2.1 million cells (1,024 rows), where before Q2 it was a 2,048 by 2,048 world of 4.2 million,
-     * beside which 600 MB retained left the worker at 2.8 GB after a collection in the 3.5 GB the root
-     * build script gives it. That puts the larger generation's own share at about 2.2 GB, and half
-     * the cells about 1.1 GB, so 1.25 GB retained beside it comes to about 2.35 GB, under the 2.8 GB
-     * the worker already stood at.
+     * Measured, not derived: the 600 MB before Q2 kept sixteen of the 512 by 512 grid's worlds, and
+     * keeping sixteen of 512 rows would take 1.25 GB, but at 1.25 GB a worker ran out of its 3.5 GB
+     * heap generating a world for `LakeWaterBalanceTest`, while at 700 MB the whole tier passed. The cost of the smaller figure is a class that borrows the four standard worlds and a
+     * variant of each, `PressureWindTest`, making its four variants three times over, about 160
+     * seconds of the tier (docs/DESIGN_LEDGER.md, Q2).
      */
-    private const val RETAINED_ARRAY_BYTES = 1_250_000_000L
+    private const val RETAINED_ARRAY_BYTES = 700_000_000L
 
     /**
      * The largest world kept once its borrower is done with it, in cells: a world of 1,024 rows.
      *
      * Several classes ask for the same 1,024-row worlds, and at 77 to 92 seconds each they are the
      * dearest thing the tier makes twice. Larger worlds are generated for the test that asks and not
-     * retained: a world of 2,048 rows is 8.4 million cells and 1.25 GB of arrays, the whole of
+     * retained: a world of 2,048 rows is 8.4 million cells, 1.25 GB of arrays, more than the whole of
      * [RETAINED_ARRAY_BYTES].
      */
     private const val LARGEST_RETAINED_CELLS = 2048 * 1024

@@ -3207,5 +3207,27 @@ data class WorldGenConfig(
 
     companion object {
         fun isPowerOfTwo(n: Int): Boolean = n > 0 && (n and (n - 1)) == 0
+
+        /**
+         * The grid every setting still counted in cells was set on: 512 by 512, whose cell is
+         * 23.4 km across and 11.7 km down on the 12,000 km world. [forRows] starts from it so that
+         * [atResolution] carries those counts to the new grid as the same ground.
+         */
+        const val CALIBRATED_GRID_CELLS = 512
+
+        /**
+         * A world of [rows] rows and twice as many columns, whose cells are square on the ground:
+         * the map covers 360 degrees of longitude against 180 of latitude, so `2 × rows` columns
+         * make a cell as wide as it is tall, `6,000 / rows` km on the default world.
+         *
+         * Made from the [CALIBRATED_GRID_CELLS] grid through [atResolution], which is what keeps
+         * it the same world on the ground as the 512 by 512 one: the tectonics' widths are still
+         * counts of cells and are carried by the width's ratio, so a belt is as many kilometres
+         * wide here as there. [rows] must be a power of two, as every grid side must.
+         * See docs/DESIGN_LEDGER.md, Q1, for what is still counted in cells and not carried.
+         */
+        fun forRows(seed: Long, rows: Int): WorldGenConfig =
+            WorldGenConfig(seed = seed, width = CALIBRATED_GRID_CELLS, height = CALIBRATED_GRID_CELLS)
+                .atResolution(2 * rows, rows)
     }
 }

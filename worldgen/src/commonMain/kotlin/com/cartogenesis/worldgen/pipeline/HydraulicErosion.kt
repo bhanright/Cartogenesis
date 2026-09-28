@@ -261,8 +261,11 @@ internal object HydraulicErosion {
          * `incisionCoefficient / landHalfOfField * cellsAcross * sqrt(share) * erodibility /
          * stepCellWidths` times the drop in the height field's own unit. The factor before
          * `sqrt(share)` is this. At the stock world it is `relativeIncisionCoefficient *
-         * cellsAcross`, 0.1467 times the grid's width, which over `sqrt` of the land's cell count
-         * makes `F` about `0.24 sqrt(cells of catchment)` along a row at every grid.
+         * cellsAcross`, 0.1467 times the grid's width, which over `sqrt` of the land's cell count,
+         * about 38% of `cellsAcross * cellsDown`, makes `F` about
+         * `0.24 sqrt(cellsAcross / cellsDown) sqrt(cells of catchment)` along a row: 0.24 on a grid
+         * as many cells tall as wide and 0.34 on a grid of square cells, twice as wide as it is
+         * tall. At the same catchment on the ground `F` follows the cell width alone.
          *
          * `F` is what decides whether an explicit step is bounded: past one it asks for more than
          * the drop. The implicit update the rounds spend it through is bounded at every `F`; see
@@ -2186,7 +2189,8 @@ internal object HydraulicErosion {
      * [Rates.courantCoefficient] times `sqrt(share) * erodibility / stepCellWidths`: [discharge] over
      * [landCells] is the share, [erodibility] the cover's factor and the step the one to the
      * receiver on the ground. The explicit update, `z' = z - F (z - z_r)`, is bounded only while
-     * `F` is under one, and on this map `F` is about `0.24 sqrt(cells of catchment)`: two where a
+     * `F` is under one, and on this map `F` is about `0.34 sqrt(cells of catchment)` on square
+     * cells (`0.24` on the 512 by 512 grid; see [Rates.courantCoefficient]): a few where a
      * drawn river starts and tens on a trunk. So it needed a cap, and the cap set every drawn
      * channel's cut (docs/DESIGN_LEDGER.md, Fix 3).
      *

@@ -42,11 +42,16 @@ data class WorldScale(
     /**
      * The altitude of the highest land, in metres: the top of the land's half of the ruler.
      *
-     * A cell mean and not a summit. A cell of the default 512 grid is 23 km by 12 km, and no cell
-     * that size holds Everest's 8,849 m — a summit is a point. The highest ground a cell this
-     * coarse can hold is a plateau: Tibet's interior averages 5,023 m (Fielding, Isacks, Barazangi
-     * & Duncan, *How flat is Tibet?*, Geology 22, 1994) and the Karakoram-Himalaya cells above it
-     * a little more, so 6,000 m is where a 23 km cell tops out.
+     * A mean over ground and not a summit, and the world's ruler rather than a property of any one
+     * grid. It was set as the mean of a cell of the 512 by 512 grid, 23 km by 12 km, which no cell
+     * holding Everest's 8,849 m reaches, since a summit is a point: the highest ground a cell that
+     * coarse holds is a plateau, and Tibet's interior averages 5,023 m (Fielding, Isacks, Barazangi
+     * & Duncan, *How flat is Tibet?*, Geology 22, 1994), the Karakoram-Himalaya cells above it a
+     * little more. A finer cell resolves higher ground, and on the square grid's 11.7 km cells a
+     * few cells of a range could stand higher than a 23 km cell's mean; the figure is kept all the
+     * same, because every stage from the belts' ceiling to the lapse rate and the erosion's clock is
+     * calibrated through it, and re-deriving it would move every altitude on every map for a
+     * statement about the highest cells alone (docs/DESIGN_LEDGER.md, Q2).
      *
      * This is the figure the climate has always used for the lapse rate, and choosing it as the one
      * ruler is why every temperature on the map is where it was. The 8 km the sea-level and erosion

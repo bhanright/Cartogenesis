@@ -41,14 +41,11 @@ class GroundIsotropyTest : BorrowsSharedWorlds() {
      * times that. Each world is held to three of its own spreads, and the four together to three of
      * theirs. A world isotropic in cells reads 2.
      *
-     * It fails today and runs as a known failure. Through Fix 3 the cause was the incision's cap
-     * per step (Audit III's B-D1): the cut was capped at half the drop to a cell's receiver, a drop
-     * is in proportion to the step, and a step down a column is half as long on the ground, so a
-     * channel running north-south was cut half as deep a round. The implicit update removed that
-     * cap, and the notches and a knickpoint's retreat now read the same by bearing
-     * (`ValleyIncisionTest`, `ImplicitIncisionTest`); the ratio did not follow them to 1, and what
-     * holds it there is not isolated. See [COAST_RUNS_EAST_WEST] and docs/DESIGN_LEDGER.md, Fix 2,
-     * Fix 3 and Fix 3b, for the figures.
+     * It ran as a known failure on the 512 by 512 grid, at 1.13 pooled. Through Fix 3 the cause was
+     * the incision's cap per step (Audit III's B-D1); the implicit update removed that cap and the
+     * ratio did not follow the notches to 1. On square cells, where every operator that counts a
+     * row as a column reaches as far both ways, it reads 1.02 pooled and is armed. See
+     * docs/DESIGN_LEDGER.md, Fix 2, Fix 3, Fix 3b and Q2, for the figures.
      */
     @Test
     fun `the coastline runs as far north-south as east-west on the ground`() {
@@ -64,20 +61,15 @@ class GroundIsotropyTest : BorrowsSharedWorlds() {
         val pooled = ratios.sumOf { it.eastWestKm } / ratios.sumOf { it.northSouthKm }
         val pooledBar = SPREADS * ratioSpread(ratios.sumOf { it.lengthKm })
         println("ISOTROPY the four worlds together: ratio %.3f, the log of which may stand %.3f from nothing".format(pooled, pooledBar))
-        KnownFailures.expect(
-            COAST_RUNS_EAST_WEST,
-            "seed 42 1.15, seed 1234 1.14, seed 99 1.17, together 1.13"
-        ) {
-            val past = ratios.indices.filter { abs(ln(ratios[it].ratio)) > SPREADS * ratioSpread(ratios[it].lengthKm) }
-            if (past.isNotEmpty() || abs(ln(pooled)) > pooledBar) {
-                val found = past.joinToString { String.format(java.util.Locale.ROOT, "seed %d %.2f", seeds[it], ratios[it].ratio) } +
-                    String.format(java.util.Locale.ROOT, ", together %.2f", pooled)
-                throw RecordedViolation(
-                    "the coasts project more east-west than north-south on the ground, past what their length allows: $found",
-                    found
-                )
-            }
-        }
+        // Armed on square cells at Q2, where the four worlds read 0.96 to 1.06 and 1.02 together;
+        // on the 512 by 512 grid it ran as a known failure at 1.13 (docs/DESIGN_LEDGER.md, Q2).
+        val past = ratios.indices.filter { abs(ln(ratios[it].ratio)) > SPREADS * ratioSpread(ratios[it].lengthKm) }
+        val found = past.joinToString { String.format(java.util.Locale.ROOT, "seed %d %.2f", seeds[it], ratios[it].ratio) } +
+            String.format(java.util.Locale.ROOT, ", together %.2f", pooled)
+        assertTrue(
+            past.isEmpty() && abs(ln(pooled)) <= pooledBar,
+            "the coasts project more east-west than north-south on the ground, past what their length allows: $found"
+        )
     }
 
     /**
@@ -188,18 +180,6 @@ class GroundIsotropyTest : BorrowsSharedWorlds() {
 
         /** How many of its own spreads a coast's ratio may stand from 1. */
         const val SPREADS = 3.0
-
-        /**
-         * The known failure the coastline clause records since Fix 3b. It was Audit III's B-D1, the
-         * incision's cap per step, until the implicit update took the cap away; the ratio fell from
-         * 1.39 pooled at Fix 2 to 1.12 at Fix 3 and reads 1.12 now, with the incision's own
-         * notches the same depth by bearing. What holds it over 1 is not isolated: candidates are
-         * the operators `TODO.md` lists as still counting a row as a column (the thermal sweeps'
-         * count among them) and D8 routing's own bearings.
-         */
-        const val COAST_RUNS_EAST_WEST =
-            "the ground: the coast still runs further east-west than north-south once the incision's per-step cap is gone, the cause not isolated"
-
 
         /** The steep ground the slope case reads. */
         const val STEEP_PERCENTILE = 0.95

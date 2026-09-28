@@ -20,31 +20,36 @@ import org.junit.Assert.assertTrue
  *
  * Measured on two synthetic crusts, one whose edge runs east-west and one whose edge runs
  * north-south, at the cell that stands 398.4 km inside the crust in each — 34 rows one way, 17
- * columns the other, which are the same distance on the ground to the metre.
+ * columns the other on the 512 by 512 grid, 34 each way on square cells, which are the same
+ * distance on the ground to the metre.
  */
 class CratonReachTest {
 
     @Test
-    fun `the craton profile is the same walking inland in either direction`() {
-        val config = WorldGenConfig.forRows(1L, 512)
-        val kilometresDown = ROWS_INLAND * config.cellHeightKm
-        val kilometresAcross = COLUMNS_INLAND * config.cellWidthKm
+    fun `the craton profile is the same walking inland in either direction`() = listOf(
+        WorldGenConfig(seed = 1L, width = 512, height = 512),
+        WorldGenConfig.forRows(1L, 512)
+    ).forEach { config ->
+        val rowsInland = kotlin.math.round(config.rowsFor(INLAND_KM)).toInt()
+        val columnsInland = kotlin.math.round(config.cellsFor(INLAND_KM)).toInt()
+        val kilometresDown = rowsInland * config.cellHeightKm
+        val kilometresAcross = columnsInland * config.cellWidthKm
 
         // The last oceanic cell is the row or column before the edge, so a point that stands n
         // cells from the crust's own edge is n - 1 cells inside the first continental one.
         val acrossTheEdge = PlateStage.cratonInteriorShare(config, crustBelowRow(config))[
-            (EDGE_ROW + ROWS_INLAND - 1) * config.width + config.width / 2
+            (EDGE_ROW + rowsInland - 1) * config.width + config.width / 2
         ]
         val downTheEdge = PlateStage.cratonInteriorShare(config, crustRightOfColumn(config))[
-            config.height / 2 * config.width + EDGE_COLUMN + COLUMNS_INLAND - 1
+            config.height / 2 * config.width + EDGE_COLUMN + columnsInland - 1
         ]
         val gap = abs(acrossTheEdge - downTheEdge).toDouble()
         println(
             ("CRATON %d rows inland (%.1f km) the interior share is %.4f; %d columns inland" +
                 " (%.1f km) it is %.4f; they differ by %.4f")
                 .format(
-                    ROWS_INLAND, kilometresDown, acrossTheEdge,
-                    COLUMNS_INLAND, kilometresAcross, downTheEdge, gap
+                    rowsInland, kilometresDown, acrossTheEdge,
+                    columnsInland, kilometresAcross, downTheEdge, gap
                 )
         )
 
@@ -91,16 +96,16 @@ class CratonReachTest {
          * Where each synthetic crust starts, and how far inland the profile is read.
          *
          * A quarter of the way in, so neither edge is near a pole or near the far side of its own
-         * crust. Thirty-four rows and seventeen columns because they are the same ground: at 512 on
-         * a 12,000 by 6,000 km world a row is 11.71875 km and a column 23.4375, so both come to
+         * crust. 398.4375 km because it is a whole number of rows and of columns: at 512 by 512 on
+         * a 12,000 by 6,000 km world a row is 11.71875 km and a column 23.4375, so 34 rows and 17
+         * columns, and on the square cells of 1,024 by 512 thirty-four of each, all come to
          * 398.4375 km — a whisker inside the 400 km `cratonReachKm` asks for, and near enough the
          * knee of `1 - exp(-distance / reach)` that the two orientations are as far apart there as
          * they ever get.
          */
         const val EDGE_ROW = 128
         const val EDGE_COLUMN = 128
-        const val ROWS_INLAND = 34
-        const val COLUMNS_INLAND = 17
+        const val INLAND_KM = 398.4375
 
         /**
          * How far apart the two readings' own distances from the edge may be, in kilometres.

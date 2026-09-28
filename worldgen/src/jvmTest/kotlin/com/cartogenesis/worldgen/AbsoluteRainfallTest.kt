@@ -106,7 +106,8 @@ class AbsoluteRainfallTest : BorrowsSharedWorlds() {
         // 3576 and 4042 mm; and at 4b-1, whose upwelling and belts moved it again: from 3560 and 4035,
         // and then from 3548 and 4042 by the second reading's five corrections to the rise, which moved
         // the sea's temperature near the coasts a little.
-        KnownFailures.expect("D I-9: the rainfall calibration's figures predate W2 and W3", "seed 42's windward coast at 3547 mm, seed 99's windward coast at 4039 mm") {
+        // Re-recorded on square cells at Q2 (docs/DESIGN_LEDGER.md, Q2).
+        KnownFailures.expect("D I-9: the rainfall calibration's figures predate W2 and W3", "seed 42's windward coast at 3644 mm, seed 99's windward coast at 4029 mm") {
             if (misses.isNotEmpty()) {
                 throw RecordedViolation(
                     "the calibration misses on ${misses.size} figures: ${misses.joinToString()}, against a windward " +

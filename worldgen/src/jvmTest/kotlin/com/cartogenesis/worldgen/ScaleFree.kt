@@ -322,18 +322,20 @@ internal object ScaleFree {
             name = "maritime 50",
             expectedFor = { 1.0 },
             factor = 1.25,
-            asserted = false,
-            why = "the coast's reach is still a box counted in cells, OceanConfig.coastalReachCells, so" +
-                " it reaches half as far on the ground at twice the grid; its repair is the coastal" +
-                " climate's chunk. Held at the 512 grid's 234 km the term reads x0.96 and x0.94 at" +
-                " 1024 and 2048 on seed 42"
+            asserted = true,
+            why = "the coast's reach is a length since Q2, OceanConfig.coastalReachKm, spent as a box of" +
+                " whole cells, so it reaches the same ground at every grid; the relief's factor." +
+                " Measured x0.97, x0.88, x0.85 and x0.83 from 512 rows to 1,024 on seeds 7, 42, 1234" +
+                " and 99. Unasserted while the reach was a count of cells, which halved it at twice the grid"
         ),
         Tolerance(
             name = "maritime 150",
             expectedFor = { 1.0 },
             factor = 1.25,
             asserted = false,
-            why = "as the 50 km band: the box's reach in cells, at 150 km past its edge on a 1024 grid"
+            why = "as the 50 km band, but read 150 km in, on the flank of the two box passes, where the" +
+                " grid still moves it: x0.82, x0.88, x0.77 and x0.86 from 512" +
+                " rows to 1,024. Not isolated"
         )
     )
 

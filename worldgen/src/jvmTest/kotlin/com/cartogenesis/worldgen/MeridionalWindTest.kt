@@ -271,6 +271,9 @@ class MeridionalWindTest : BorrowsSharedWorlds() {
         val w = world.width
         val h = world.height
         var checked = 0
+        // The belts' slope on the ground, as rows a cell of eastward travel on this grid's cells.
+        val slantRowsPerCell = world.config.climate.meridionalWindShare *
+            (world.config.cellWidthKm / world.config.cellHeightKm).toFloat()
         for (y in 0 until h) {
             val lat = ClimateStage.latitudeOf(y, h)
             val belt = abs(lat)
@@ -285,7 +288,7 @@ class MeridionalWindTest : BorrowsSharedWorlds() {
                 else -> equatorward         // polar easterlies, back down toward it
             }
             assertEquals(
-                expected * 0.3f, drift, 1e-6f,
+                expected * slantRowsPerCell, drift, 1e-6f,
                 "the wind at ${"%.1f".format(lat)} degrees drifts the wrong way"
             )
             checked++

@@ -131,9 +131,11 @@ class GridShapeTest : BorrowsSharedWorlds() {
         assertTrue(misses.desert.isEmpty(), "the deserts part by more than a change of grid: ${misses.desert}")
         assertTrue(misses.rain.isEmpty(), "the land's rain parts by more than a change of grid: ${misses.rain}")
         assertTrue(misses.temperature.isEmpty(), "the warmth parts by more than a change of grid: ${misses.temperature}")
+        // Re-recorded at Q2, whose coast reaches its 234 km on square cells: seed 99 at 75 to 60 degrees
+        // moved from +0.022 (docs/DESIGN_LEDGER.md, Q2).
         KnownFailures.expect(
             "Q1: a square cell's world carries more ice at 60 to 90 degrees than a change of grid gives",
-            "seed 1234 -75 to -90 degrees ice +0.017, seed 99 75 to 60 degrees ice +0.022, " +
+            "seed 1234 -75 to -90 degrees ice +0.017, seed 99 75 to 60 degrees ice +0.021, " +
                 "seed 99 -60 to -75 degrees ice +0.022"
         ) {
             if (misses.ice.isNotEmpty()) {

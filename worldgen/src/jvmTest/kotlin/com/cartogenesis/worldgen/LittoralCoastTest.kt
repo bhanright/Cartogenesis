@@ -191,7 +191,8 @@ class LittoralCoastTest {
      * smoothing at all fails the table row.
      *
      * **Two instruments, and they part company here, which is a finding rather than a nuisance.**
-     * M1 counts the boxes of four, eight and sixteen cells that hold both land and water. A box is
+     * M1 counts the boxes of four, eight and sixteen cells of the 512 by 512 grid, 94 to 375 km and
+     * stated so since Q2, that hold both land and water. A box is
      * mixed by a *single* cell of the other kind, so a tooth one cell deep makes a four-cell box
      * mixed and rarely makes a sixteen-cell box mixed — which means the slope over 4 to 16 is read
      * partly off structure far below four cells. That is why 2.0.2 scored 1.207 with a tooth on
@@ -218,8 +219,8 @@ class LittoralCoastTest {
         val smoothSeeds = ArrayList<String>()
         cuts.forEach { (seed, cut) ->
             val rowHeight = cut.config.cellHeightInCellWidths
-            val gradedBoxes = CoastRoughness.coastlineBoxCount(cut.graded.isLand, cut.config.width, cut.config.height, rowHeight)
-            val ungradedBoxes = CoastRoughness.coastlineBoxCount(cut.control.isLand, cut.config.width, cut.config.height, rowHeight)
+            val gradedBoxes = CoastRoughness.coastlineBoxCount(cut.graded.isLand, cut.config.width, cut.config.height, rowHeight, CoastRoughness.pooledBoxSizes(cut.config))
+            val ungradedBoxes = CoastRoughness.coastlineBoxCount(cut.control.isLand, cut.config.width, cut.config.height, rowHeight, CoastRoughness.pooledBoxSizes(cut.config))
             val gradedRuler = Rulers(cut.graded.isLand, cut.config.width, cut.config.height, cut.config.cellHeightInCellWidths).overTheCoarse
             val ungradedRuler = Rulers(cut.control.isLand, cut.config.width, cut.config.height, cut.config.cellHeightInCellWidths).overTheCoarse
             println(
@@ -250,18 +251,11 @@ class LittoralCoastTest {
         CoastRoughness.dimensionComplaint("pooled by ruler", pooledRuler)?.let { complaints.add(it) }
         CoastRoughness.dimensionComplaint("pooled by M1's box count", boxes!!.dimension)
             ?.let { complaints.add(it) }
-        // Recorded since Fix 3 (by box 1.028 under the cap), and re-recorded at Fix 3b: the law's
-        // terrain takes the box count to 1.082, still under Mandelbrot's band, with the ruler's
-        // 1.187 inside it, and 1.084 and 1.182 once a lake falls with its outlet. See
-        // [LAW_SETS_EVERY_CUT].
-        KnownFailures.expect(LAW_SETS_EVERY_CUT, "pooled by ruler 1.182, by box 1.084") {
-            if (complaints.isNotEmpty()) {
-                throw RecordedViolation(
-                    complaints.joinToString("; "),
-                    String.format(Locale.ROOT, "pooled by ruler %.3f, by box %.3f", pooledRuler, boxes!!.dimension)
-                )
-            }
-        }
+        // Recorded from Fix 3 (by box 1.028 under the cap) through Fix 3b (1.084 by box, 1.182 by
+        // ruler), and armed at Q2: on square cells with M1's boxes stated in kilometers the pooled
+        // coast reads 1.155 by box and 1.150 by ruler, inside Mandelbrot's band (docs/DESIGN_LEDGER.md,
+        // Q2).
+        assertTrue(complaints.isEmpty(), complaints.joinToString("; "))
         // Seed 298405's coast read under the floor by ruler from Fix 2 to Fix 3 (1.092) and is
         // inside it again on Fix 3's ground, so the clause is armed (docs/DESIGN_LEDGER.md, Fix 3).
         assertTrue(smoothSeeds.isEmpty(), "a seed's coast by ruler is under Richardson's floor: ${smoothSeeds.joinToString()}")
@@ -420,15 +414,6 @@ class LittoralCoastTest {
     }
 
     private companion object {
-        /**
-         * The known failure the clauses Fix 3b moved record. The implicit update lets the
-         * stream-power law set every cut, where the explicit update's cap at half the drop set the
-         * drawn network's, so the land is cut as the law asks; this clause's figure was recorded on
-         * the capped terrain. See docs/DESIGN_LEDGER.md, Fix 3b, for the figures.
-         */
-        const val LAW_SETS_EVERY_CUT =
-            "the erosion: since the implicit update the stream-power law sets every cut, and this clause's figure was recorded on the capped terrain"
-
         /** The rulers the coast is walked with, in cell widths of ground. */
         val RULERS = listOf(1, 2, 4, 8, 16)
 

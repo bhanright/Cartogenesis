@@ -434,9 +434,10 @@ class ClimateFedErosionTest {
         // less its uplift, the uplift is heaviest where the rain is, and its flat-rain control
         // ranks against the rain, so neither figure says what the rain cut (docs/DESIGN_LEDGER.md,
         // Fix 2). Taking the erosion itself, the uplift added back, is the re-derivation B-I2 asks.
+        // Re-recorded on square cells at Q2 (docs/DESIGN_LEDGER.md, Q2).
         KnownFailures.expect(
             "B-I2: the rain-dissection pin was set on rounds without the uplift",
-            "seed 7 at 0.035, seed 42 at 0.176, seed 1234 at 0.181, seed 99 at 0.148; seed 7's flat-rain control at -0.119, seed 99's flat-rain control at -0.078"
+            "seed 7 at 0.006, seed 42 at 0.123, seed 1234 at 0.160, seed 99 at 0.130; seed 7's flat-rain control at -0.137, seed 99's flat-rain control at -0.087"
         ) {
             if (underThePin.isNotEmpty() || uncontrolled.isNotEmpty()) {
                 val found = underThePin.joinToString { (seed, fed) -> String.format(Locale.ROOT, "seed %d at %.3f", seed, fed) } +
@@ -481,6 +482,7 @@ class ClimateFedErosionTest {
      */
     @Test
     fun `cover on the ground holds the incision back`() {
+        var smallCheckedOverSeeds = 0
         for (seed in SEEDS) {
             val ground = ground(seed)
             // Both from the stage, on the same terrain, with one switch between them: the second
@@ -562,13 +564,16 @@ class ClimateFedErosionTest {
                 "seed $seed: the factor never departs from 1 by more than ${"%.3f".format(control)}, so a stage " +
                     "with no shielding at all would pass the clause above and this measurement proves nothing"
             )
-            assertTrue(smallChecked > 0, "seed $seed: no cell under F $SMALL_COURANT to read the realised cut on")
+            smallCheckedOverSeeds += smallChecked
             assertTrue(
                 smallWorst <= OBSERVED_TOLERANCE,
                 "seed $seed: where F is under $SMALL_COURANT the realised share moved by up to " +
                     "${"%.2e".format(smallWorst)} off e(1+F)/(1+eF)"
             )
         }
+        // Over the seeds together: at 512 rows seed 1234's flanks hold no cell under the bound,
+        // and the share is arithmetic, not a seed's geography (docs/DESIGN_LEDGER.md, Q2).
+        assertTrue(smallCheckedOverSeeds > 0, "no seed has a cell under F $SMALL_COURANT to read the realised cut on")
     }
 
     /**
@@ -837,7 +842,10 @@ class ClimateFedErosionTest {
 
         /**
          * Below this `F` the realised cut is read: a tenth, where `e (1 + F) / (1 + e F)` is within
-         * a tenth of `e |1 - e|` of the factor, the proportional law's own reading.
+         * a tenth of `e |1 - e|` of the factor, the proportional law's own reading. At 512 rows seed
+         * 1234 holds no such cell where seeds 7 and 42 hold 9,470 and 6,591, so the count is asked
+         * of the seeds together; at a quarter seed 1234's realised share stood 1.03e-3 off, past the
+         * float's own tolerance, which is why the bound is not raised to reach it.
          */
         const val SMALL_COURANT = 0.1
 

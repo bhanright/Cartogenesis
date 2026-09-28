@@ -165,6 +165,20 @@
   The fix is cells square on the ground, twice as many across as down, so a column and a row are
   the same step. `CombGuardTest` is its acceptance test. 2026-09-26, Fix 3b.
 
+  **What square cells did (Q2).** The one-sided comb is gone: at 512 rows the larger axis carries
+  1.10 and 1.09 times the smaller's comb on seeds 7 and 42, where the 512 by 512 grid's columns
+  carry 6.8 and 6.6 times its rows', and `CombGuardTest` holds it two-sided. What is left runs as a
+  known failure of its own: 0.16 and 0.15 km of comb per 1,000 km² on seed 7's two axes and 0.20
+  and 0.18 on seed 42's, eight to ten times the 0.02 the router makes on isotropic ground over the
+  same land. It is made in the hydraulic rounds (the same network on the ground the rounds were
+  handed combs 0.000 to 0.001), and over the rounds the steep cells' steps turn from the diagonal to
+  both axes alike (41.7 and 42.0% diagonal before, 32.2 and 33.0% after); whether that turn is the
+  cause is not isolated, and the figure is the census's as much as the ground's, 1.6 to 1.8 times as
+  large with a sustained reach of 5 cells as with the 6 that 60 km takes. The bearing census
+  (`BearingCensus`) reads the channels at the two axes 2.2 to 2.6 times as often as the fall line
+  and at the diagonal 1.4 to 1.6 times. A transport length in kilometers, above, is still the
+  candidate. 2026-09-28, Q2.
+
 - **The sea-level percentile hands the sea's highest cell to the land where the sea fills its rank
   exactly.** `SeaLevelStage.thresholdAtRank` finds the bin where the cells counted so far reach the
   target rank, `>=`, and when the target is the bin's last cell the index is clamped to it and the

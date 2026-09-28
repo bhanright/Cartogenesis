@@ -351,11 +351,12 @@ class IsostasyTest : BorrowsSharedWorlds() {
         )
 
         // The control: the aim told to draw far more continental crust than the slider's coverage
-        // needs. Nothing else changes — the same seeds, the same plates, the same erosion — so what
+        // needs. Nothing else changes but the grid — the same seeds, the same plates, the same
+        // erosion, at [CONTROL_ROWS], since where the cut lands is a question of shares — so what
         // it isolates is the conversion itself, and the shoreline has to climb a long way to find
         // 38% of a world that is nearly all continent.
         val control = SEEDS.map { seed ->
-            val base = WorldGenConfig.forRows(seed, 512)
+            val base = WorldGenConfig.forRows(seed, CONTROL_ROWS)
             shorelineResidualMetres(
                 SharedWorlds.world(
                     base.copy(
@@ -388,7 +389,8 @@ class IsostasyTest : BorrowsSharedWorlds() {
         SEEDS.take(3).forEach { seed ->
             val world = worldAt(seed)
             val flat = SharedWorlds.world(
-                world.config.copy(isostasy = world.config.isostasy.copy(enabled = false))
+                // At [CONTROL_ROWS]: a world with one crust has one mode however finely it is cut.
+                WorldGenConfig.forRows(seed, CONTROL_ROWS).let { it.copy(isostasy = it.isostasy.copy(enabled = false)) }
             )
             listOf("isostatic" to world, "control" to flat).forEach { (label, measured) ->
                 val hypsometry = EarthLikeness.hypsometryOf(measured)
@@ -718,11 +720,12 @@ class IsostasyTest : BorrowsSharedWorlds() {
         val distance = world.plates.boundaryDistance.data
         val boundaryClass = world.plates.nearestBoundaryClass
 
+        val binsPerCellWidth = world.config.cellWidthKm / FLEXURE_BIN_KM
         val bins = DoubleArray(FLEXURE_BINS)
         val counts = IntArray(FLEXURE_BINS)
         for (cell in 0 until cellCount) {
             if (boundaryClass[cell] != BoundaryClass.COLLISION_PLATEAU.ordinal) continue
-            val bin = (distance[cell] / FLEXURE_BIN_CELLS).toInt()
+            val bin = (distance[cell] * binsPerCellWidth).toInt()
             if (bin >= FLEXURE_BINS) continue
             bins[bin] += (
                 scale.altitudeAtField(world.erosion.height.data[cell]) -
@@ -736,8 +739,8 @@ class IsostasyTest : BorrowsSharedWorlds() {
         println(
             "ISOSTASY foreland seed $seed, metres the flexure moved the ground, by distance from" +
                 " the collision: " + profile.mapIndexed { bin, metres ->
-                "%d-%d cells %+.0f".format(
-                    bin * FLEXURE_BIN_CELLS, (bin + 1) * FLEXURE_BIN_CELLS, metres
+                "%.0f-%.0f km %+.0f".format(
+                    bin * FLEXURE_BIN_KM, (bin + 1) * FLEXURE_BIN_KM, metres
                 )
             }.joinToString(", ")
         )
@@ -759,12 +762,10 @@ class IsostasyTest : BorrowsSharedWorlds() {
             .filter { counts[it] > 0 }.maxOfOrNull { profile[it] } ?: inTheForeland
         println(
             ("ISOSTASY foreland seed %d: the belt stands %+.0f m higher, the moat is %.0f m below" +
-                " it at %d-%d cells (%.0f-%.0f km) from the suture, and the ground rises %.0f m" +
+                " it at %.0f-%.0f km from the suture, and the ground rises %.0f m" +
                 " again beyond it").format(
-                seed, overTheBelt, overTheBelt - inTheForeland, moatBin * FLEXURE_BIN_CELLS,
-                (moatBin + 1) * FLEXURE_BIN_CELLS,
-                moatBin * FLEXURE_BIN_CELLS * world.config.cellWidthKm,
-                (moatBin + 1) * FLEXURE_BIN_CELLS * world.config.cellWidthKm,
+                seed, overTheBelt, overTheBelt - inTheForeland, moatBin * FLEXURE_BIN_KM,
+                (moatBin + 1) * FLEXURE_BIN_KM,
                 beyondTheMoat - inTheForeland
             )
         )
@@ -786,9 +787,10 @@ class IsostasyTest : BorrowsSharedWorlds() {
         // bin, so the moat is found at the edge of the window with nothing beyond it to rise.
         // Widening the window would be reading the far field [LAST_FORELAND_BIN] was set to keep
         // out; the plates' shape, queued as its own chunk, is where the collision's ground is decided.
+        // Re-recorded at Q2 in kilometers, on square cells: the same bin, 1,125 to 1,313 km, 480 m.
         KnownFailures.expect(
             FORELAND_AT_THE_EDGE_OF_THE_COLLISION,
-            "moat at 48-56 cell widths, 586 m under the belt, rising 0 m beyond it"
+            "moat at 1125-1313 km, 480 m under the belt, rising 0 m beyond it"
         ) {
             if (beyondTheMoat - inTheForeland < MIN_FOREBULGE_METRES) {
                 throw RecordedViolation(
@@ -796,8 +798,8 @@ class IsostasyTest : BorrowsSharedWorlds() {
                         " away from the belt and not a trough — and a trough with a rise beyond it is the" +
                         " one thing no uniform bend can make",
                     String.format(
-                        java.util.Locale.ROOT, "moat at %d-%d cell widths, %.0f m under the belt, rising %.0f m beyond it",
-                        moatBin * FLEXURE_BIN_CELLS, (moatBin + 1) * FLEXURE_BIN_CELLS,
+                        java.util.Locale.ROOT, "moat at %.0f-%.0f km, %.0f m under the belt, rising %.0f m beyond it",
+                        moatBin * FLEXURE_BIN_KM, (moatBin + 1) * FLEXURE_BIN_KM,
                         overTheBelt - inTheForeland, beyondTheMoat - inTheForeland
                     )
                 )
@@ -1024,6 +1026,14 @@ class IsostasyTest : BorrowsSharedWorlds() {
         const val CONTROL_SUBMERGED_SHARE = 0.7f
 
         /**
+         * The rows the two controls are made at: 256, square cells of 23.4 km, the cell width of the
+         * 512 by 512 grid, at half the cells of the standard 512 rows. Neither control's answer
+         * depends on how finely the world is cut: whether the crust's aim lands the sea-level cut
+         * near its datum is a matter of shares of area, and a world with one crust has one mode.
+         */
+        const val CONTROL_ROWS = 256
+
+        /**
          * The surface uplift an active continental collision manages on Earth, in millimetres a
          * year.
          *
@@ -1078,7 +1088,6 @@ class IsostasyTest : BorrowsSharedWorlds() {
          */
         const val STREAM_POWER_EXPONENT_TOLERANCE = 0.25
 
-        /** Cells per bin, and how many bins, in the profile away from a collision suture. */
         /** A kilometre of rock, the same load the two-limits clause above uses. */
         const val POLAR_STRIPE_METRES = 1_000f
 
@@ -1108,7 +1117,12 @@ class IsostasyTest : BorrowsSharedWorlds() {
          */
         const val FAR_POLE_SHARE_OF_NEAR_ROW = 1e-6
 
-        const val FLEXURE_BIN_CELLS = 8
+        /**
+         * How wide a bin of the profile away from a collision suture is, in kilometers, and how many
+         * bins: the 8 cell widths it was set as on the 512 by 512 grid, stated on the ground since
+         * Q2 so a bin is the same ground on every grid.
+         */
+        const val FLEXURE_BIN_KM = 187.5
         const val FLEXURE_BINS = 10
 
         /**

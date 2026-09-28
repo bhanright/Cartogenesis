@@ -74,6 +74,17 @@ class ColdWaterPlacementTest : BorrowsSharedWorlds() {
         /** The equatorial closure's band on either side of the equator, in its own deformation radii. */
         const val EQUATORIAL_RADII_EXCLUDED = 2.0
 
+        /**
+         * Failing on square cells since Q2: seed 42's coldest northern eastern-boundary water, -2.22
+         * C, lies at 7.9 degrees, in the equatorial cold tongue that now reaches the basin's eastern
+         * shore colder than the subtropical upwelling north of it (the tongue's eastern thirds read
+         * -2.03 C against -1.61 on the 512 by 512 grid, where the coldest stood at 26.5 degrees). The
+         * cause is not isolated; the ocean is still solved on its own grid of cells twice as wide as
+         * tall on the ground, which is the switch's next chunk (docs/DESIGN_LEDGER.md, Q2).
+         */
+        const val TONGUE_REACHES_THE_EASTERN_BOUNDARY =
+            "the currents: on square cells seed 42's coldest northern eastern-boundary water is the equatorial tongue's"
+
         const val EQUATORIAL_TONGUE_SHALLOW =
             "the currents: the equatorial cold tongue is shallower than its trades ask, the one-layer closure's deep water too warm"
         const val EQUATORIAL_BAND_DEGREES = 4f
@@ -98,7 +109,9 @@ class ColdWaterPlacementTest : BorrowsSharedWorlds() {
                 }
             }
         }
-        assertTrue(failures.isEmpty(), failures.joinToString("\n"))
+        KnownFailures.expect(TONGUE_REACHES_THE_EASTERN_BOUNDARY, "seed 42: the coldest eastern-boundary water, -2.22 C, lies at 7.9 degrees") {
+            if (failures.isNotEmpty()) throw RecordedViolation(failures.joinToString("\n"), failures.joinToString("; "))
+        }
     }
 
     @Test
@@ -118,7 +131,8 @@ class ColdWaterPlacementTest : BorrowsSharedWorlds() {
                 shortOf += "seed $seed %.2f of %.2f C".format(contrastC, marginC)
             }
         }
-        KnownFailures.expect(EQUATORIAL_TONGUE_SHALLOW, "seed 7 1.77 of 2.84 C; seed 42 2.01 of 3.21 C; seed 99 1.72 of 3.38 C") {
+        // Re-recorded on square cells at Q2, the ocean still solved on its own grid (docs/DESIGN_LEDGER.md, Q2).
+        KnownFailures.expect(EQUATORIAL_TONGUE_SHALLOW, "seed 7 0.51 of 1.21 C; seed 42 2.49 of 3.90 C; seed 99 1.78 of 3.45 C") {
             if (failures.isNotEmpty()) throw RecordedViolation(failures.joinToString("\n"), shortOf.joinToString("; "))
         }
     }

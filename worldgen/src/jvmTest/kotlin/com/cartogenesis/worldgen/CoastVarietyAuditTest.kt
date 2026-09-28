@@ -274,7 +274,9 @@ class CoastVarietyAuditTest {
         pooledSpread: MutableMap<String, CoastRoughness.Spread>
     ) {
         val octaves = CoastRoughness.boundaryBoxCount(isLand, 2 * rows, rows)
-        val three = CoastRoughness.coastlineBoxCount(isLand, 2 * rows, rows, rowHeightOf(rows))
+        val three = CoastRoughness.coastlineBoxCount(
+            isLand, 2 * rows, rows, rowHeightOf(rows), CoastRoughness.pooledBoxSizes(WorldGenConfig.forRows(0L, rows))
+        )
         val spread = CoastRoughness.spreadOfCoast(isLand, 2 * rows, rows)
         val edges = CoastRoughness.shorelineEdges(isLand, 2 * rows, rows)
         println(

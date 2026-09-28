@@ -1,4 +1,5 @@
 # Cartogenesis
+<img width="1280" height="640" alt="cartogenesis-github-preview" src="https://github.com/user-attachments/assets/f223d5c3-4c9e-44cd-ab14-8bcc000af028" />
 
 [![CI](https://github.com/bhanright/Cartogenesis/actions/workflows/ci.yml/badge.svg)](https://github.com/bhanright/Cartogenesis/actions/workflows/ci.yml)
 [![Nightly audit](https://github.com/bhanright/Cartogenesis/actions/workflows/nightly.yml/badge.svg)](https://github.com/bhanright/Cartogenesis/actions/workflows/nightly.yml)

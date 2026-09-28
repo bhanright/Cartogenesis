@@ -191,6 +191,24 @@ world above 512 built as the app builds it. The whole ocean stage, with the heat
 | Before 4a, one thread | 0.45 s | 1.24 s | — |
 | Before 4a, Wasm | 0.88 s | 2.83 s | — |
 
+Re-measured 2026-09-28 on seed 42 after chunk 4b-1 (the belts' meridional leg, Ekman upwelling in
+the heat, the circulation's residual taken in double precision), by that chunk's probes and
+`GpuOceanTest`, same machine, a test worker holding two threads:
+
+| Path | 512 | 1024 | 2048 |
+|---|---|---|---|
+| Processor, two threads | 1.0 to 1.9 s | 1.6 s | 1.7 to 1.9 s |
+| Processor, one thread | 1.9 to 2.9 s | 2.1 to 2.8 s | — |
+| Wasm in Node, one thread | 4.8 s | — | — |
+| OpenGL device, desktop | 3.1 to 3.3 s | — | 3.0 to 3.5 s |
+
+The stage got faster rather than slower: the heat's Krylov solve now converges in two to four
+iterations where 4a's took fourteen, and the circulation's multigrid in seven to nine V-cycles. The
+rising water adds `w/h` to each rising cell's margin, which may be why; that is measured, not
+analyzed. The Ekman divergence and the equatorial
+thermocline are a pass or two over the solve grid, too small to read in these figures. The device is
+still slower than the processor for the reason below.
+
 **The cost hardly moves with the map, because the solve grid does not.** The circulation and the
 heat are solved on a grid sized by the planet's physics, `4πΩ/r` rows rounded to 960 by 1,920,
 which holds Stommel's boundary layer across two cells at its narrowest and is the same for every

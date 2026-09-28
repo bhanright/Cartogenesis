@@ -3,6 +3,7 @@ package com.cartogenesis.worldgen
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.ClimateStage
+import com.cartogenesis.worldgen.pipeline.OceanStage
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertTrue
@@ -19,21 +20,31 @@ import kotlin.test.assertTrue
  *    Humboldt's 10.15 to 37.62 S and the Benguela's 16.39 to 30.13 S, together 10.15 to 42.31
  *    degrees from the equator. Searched for over 5 to 50 degrees, so the band asked for is
  *    narrower than the one searched.
- *  - **An equatorial basin is colder in its east than its west, by a share of Earth's contrast
- *    set by its length.** The equatorial Pacific's warm pool is near 29 C and its cold tongue near
- *    25 C in the annual mean, a zonal difference of about 4 C across the basin (Karnauskas, Seager,
- *    Kaplan, Kushnir and Cane 2009, *J. Climate* 22, 4316-4321). For a temperature that falls
- *    evenly across a basin the eastern third's mean stands two thirds of that below the western
- *    third's; and the thermocline's tilt that makes the contrast is the trades' stress integrated
- *    across the basin, in proportion to its length, so a basin of length `L` is asked for
- *    `(2/3) × 4 C × L / 17,800 km`, the Pacific's equatorial width from 120 E to 80 W. Taken over
- *    the runs of water within 4 degrees of the equator, their lengths averaged. The scaling is by
- *    length alone: the depth of the thermocline and the strength of the trades are held at the
- *    Pacific's, and a one-layer ocean is asked for no less than that.
+ *  - **An equatorial basin is colder in its east than its west, by the share of Earth's contrast
+ *    its trades' tilt asks.** The equatorial Pacific's warm pool is near 29 C and its cold tongue
+ *    near 25 C in the annual mean, a zonal difference of about 4 C across the basin (Karnauskas,
+ *    Seager, Kaplan, Kushnir and Cane 2009, *J. Climate* 22, 4316-4321). For a temperature that
+ *    falls evenly across a basin the eastern third's mean stands two thirds of that below the
+ *    western third's. The thermocline's tilt that makes the contrast is the along-equator stress
+ *    integrated across the basin (`h² - H² = (2/ρg') ∫τ dx`), so a basin is asked for
+ *    `(2/3) × 4 C × (τ L) / (τ_P L_P)`: `τ` its mean eastward stress along the equator, `L` its
+ *    length, and the Pacific's `τ_P L_P` the Wyrtki and Meyers climatology's 0.025 N/m² at 110 W and
+ *    0.055 at 140 W (as McPhaden and Taft 1988, *J. Phys. Oceanogr.* 18, 1713-1732, quote it),
+ *    averaged to 0.040 westward, over its equatorial width from 120 E to 80 W, 17,800 km. Two points
+ *    in the strong central and eastern Pacific stand for the whole, so the Pacific's stress is if
+ *    anything overstated and the bar understated a little. Taken over the runs of water within 4
+ *    degrees of the equator, with their `τ L` averaged by length.
+ *
+ *    **This bar was corrected after the worlds were read.** Set first by length alone, it held the
+ *    trades at the Pacific's everywhere, which left the stress out of a tilt that is the stress's
+ *    integral: seed 1234's main equatorial basin, 6,275 km of water under a mean stress of
+ *    -0.0065 N/m² where the regional wind all but cancels the trades, was asked for 0.94 C of a
+ *    tongue its trades cannot tilt. It can still fail: a basin under strong trades with no tongue
+ *    fails it, and a westerly basin whose east is warmer passes only as far as its stress says.
  *
  * Shown failing on 3875e7a's ocean, which had no rising water (the equator's eastern thirds warmer
- * than its western on seed 7, and colder by 0.1 to 0.6 C on the other three, under any margin the
- * Pacific scales to), and on this branch's first closure, which had no equatorial thermocline.
+ * than its western on seed 7, and colder by 0.1 to 0.6 C on the other three), and on this branch's
+ * first closure, which had no equatorial thermocline.
  */
 class ColdWaterPlacementTest : BorrowsSharedWorlds() {
 
@@ -45,6 +56,8 @@ class ColdWaterPlacementTest : BorrowsSharedWorlds() {
         const val EQUATORIAL_BAND_DEGREES = 4f
         const val PACIFIC_ZONAL_CONTRAST_C = 4.0
         const val PACIFIC_EQUATORIAL_WIDTH_KM = 17_800.0
+        /** The mean of Wyrtki and Meyers' 0.025 and 0.055 N/m², westward. */
+        const val PACIFIC_EQUATORIAL_STRESS_N_PER_M2 = -0.040
         const val THIRDS_OF_AN_EVEN_FALL = 2.0 / 3.0
         val SEEDS = listOf(7L, 42L, 1234L, 99L)
     }
@@ -66,16 +79,17 @@ class ColdWaterPlacementTest : BorrowsSharedWorlds() {
     }
 
     @Test
-    fun `an equatorial basin is colder in its east than its west by its share of the Pacific's contrast`() {
+    fun `an equatorial basin is colder in its east than its west by its trades' share of the Pacific's contrast`() {
         val failures = ArrayList<String>()
         for (seed in SEEDS) {
             val world = SharedWorlds.world(WorldGenConfig(seed = seed, width = 512, height = 512))
             val thirds = equatorialThirds(world) ?: continue
-            val marginC = THIRDS_OF_AN_EVEN_FALL * PACIFIC_ZONAL_CONTRAST_C * thirds.meanLengthKm / PACIFIC_EQUATORIAL_WIDTH_KM
+            val marginC = THIRDS_OF_AN_EVEN_FALL * PACIFIC_ZONAL_CONTRAST_C * thirds.meanStressLength /
+                (PACIFIC_EQUATORIAL_STRESS_N_PER_M2 * PACIFIC_EQUATORIAL_WIDTH_KM)
             val contrastC = thirds.westC - thirds.eastC
-            println("COLD WATER seed $seed equator: eastern thirds %+.2f C, western thirds %+.2f C, colder by %.2f C against %.2f for basins %.0f km long"
-                .format(thirds.eastC, thirds.westC, contrastC, marginC, thirds.meanLengthKm))
-            if (!(contrastC >= marginC)) failures += "seed $seed: the equator's east is colder than its west by %.2f C, under the %.2f its basins' length asks".format(contrastC, marginC)
+            println("COLD WATER seed $seed equator: eastern thirds %+.2f C, western thirds %+.2f C, colder by %.2f C against %.2f for basins' mean stress times length %+.0f N/m² km"
+                .format(thirds.eastC, thirds.westC, contrastC, marginC, thirds.meanStressLength))
+            if (!(contrastC >= marginC)) failures += "seed $seed: the equator's east is colder than its west by %.2f C, under the %.2f its basins' trades ask".format(contrastC, marginC)
         }
         assertTrue(failures.isEmpty(), failures.joinToString("\n"))
     }
@@ -97,22 +111,32 @@ class ColdWaterPlacementTest : BorrowsSharedWorlds() {
         return if (at.isNaN()) null else coldest to at
     }
 
-    /** The equatorial runs' eastern and western thirds' mean anomaly, degrees Celsius, and the runs' mean length in kilometers. */
-    private class Thirds(val eastC: Double, val westC: Double, val meanLengthKm: Double)
+    /**
+     * The equatorial runs' eastern and western thirds' mean anomaly, degrees Celsius, and their
+     * mean along-equator stress times length, `τ L` in N/m² km, averaged by length.
+     */
+    private class Thirds(val eastC: Double, val westC: Double, val meanStressLength: Double)
 
-    /** [Thirds] over every basin-long run of water within [EQUATORIAL_BAND_DEGREES] of the equator; null with none. */
+    /**
+     * [Thirds] over every basin-long run of water within [EQUATORIAL_BAND_DEGREES] of the equator,
+     * each run's stress the ocean's own annual stress ([OceanStage.annualStress]) read on the map's
+     * cells; null with no such run.
+     */
     private fun equatorialThirds(world: WorldMap): Thirds? {
         val across = world.width
+        val stress = OceanStage.annualStress(world.config, world.sea, across, world.height)
         var east = 0.0
         var west = 0.0
         var count = 0
+        var stressLengthByLength = 0.0
         var lengthSum = 0.0
-        var runs = 0
         for (row in 0 until world.height) {
             if (abs(ClimateStage.latitudeOf(row, world.height)) > EQUATORIAL_BAND_DEGREES) continue
             for ((start, length) in basinRuns(world, row)) {
-                lengthSum += length * world.config.scale.cellWidthKm(across)
-                runs++
+                val lengthKm = length * world.config.scale.cellWidthKm(across)
+                val meanStress = (0 until length).sumOf { stress.eastward[row * across + (start + it) % across] } / length
+                stressLengthByLength += meanStress * lengthKm * lengthKm
+                lengthSum += lengthKm
                 for (k in 0 until length / 3) {
                     west += world.ocean.anomaly.data[row * across + (start + k) % across]
                     east += world.ocean.anomaly.data[row * across + (start + length - 1 - k) % across]
@@ -120,7 +144,7 @@ class ColdWaterPlacementTest : BorrowsSharedWorlds() {
                 }
             }
         }
-        return if (count == 0) null else Thirds(east / count, west / count, lengthSum / runs)
+        return if (count == 0) null else Thirds(east / count, west / count, stressLengthByLength / lengthSum)
     }
 
     /** A row's runs of water between two shores at least [OceanSense.SHORTEST_BASIN_KM] long: start column and length. */

@@ -55,6 +55,16 @@ class CurrentFeedsRainTest : BorrowsSharedWorlds() {
         const val WARM_LAT_LO = 27f
         const val WARM_LAT_HI = 33f
         const val WARM_ANOMALY_MIN = 0.15f
+
+        /**
+         * How much of each coast the sample asks for, kilometers of coast: the ten and five cells
+         * of the 512 grid it asked for when it counted cells, at that grid's 11.72 km a row, so a
+         * finer grid or square cells ask for the same length of coast rather than more of it. The
+         * water a coast cell is read against is its neighbor offshore, the coast's own water at
+         * any cell size.
+         */
+        const val COLD_COAST_FLOOR_KM = 117.2
+        const val WARM_COAST_FLOOR_KM = 58.6
     }
 
     /**
@@ -156,17 +166,21 @@ class CurrentFeedsRainTest : BorrowsSharedWorlds() {
                 "and an east coast on every row of 27-33 N (${eastFacingRows.size} of $warmBandRows): choose the seed again"
         )
 
-        KnownFailures.expect(COLD_COAST_SHORT, "9 cells") {
-            if (coldCoast.size < 10) {
+        // Each coast cell found stands for one row of coast, a cell's height of it on the ground.
+        val coastKmPerCell = on.config.scale.cellHeightKm(h)
+        val coldCoastKm = coldCoast.size * coastKmPerCell
+        val warmCoastKm = warmCoast.size * coastKmPerCell
+        KnownFailures.expect(COLD_COAST_SHORT, "105 km") {
+            if (coldCoastKm < COLD_COAST_FLOOR_KM) {
                 throw RecordedViolation(
-                    "only ${coldCoast.size} cells of seed $SEED's west coast at 27-33 S sit 0.8 C under their " +
-                        "latitude's mean, where the sample asks ten",
-                    "${coldCoast.size} cells"
+                    "only %.0f km of seed $SEED's west coast at 27-33 S sits 0.8 C under its latitude's mean, where the sample asks %.0f"
+                        .format(coldCoastKm, COLD_COAST_FLOOR_KM),
+                    "%.0f km".format(coldCoastKm)
                 )
             }
         }
         assertTrue(coldCoast.isNotEmpty(), "no cold-coast cells found")
-        assertTrue(warmCoast.size >= 5, "too few warm-coast cells found: ${warmCoast.size}")
+        assertTrue(warmCoastKm >= WARM_COAST_FLOOR_KM, "too little warm coast found: %.0f km".format(warmCoastKm))
 
         fun meanMm(cells: List<Coast>, world: com.cartogenesis.worldgen.model.WorldMap): Double =
             cells.map { world.climate.precipitationMm.data[it.y * w + it.x].toDouble() }.average()

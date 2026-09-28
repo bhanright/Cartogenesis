@@ -441,6 +441,15 @@
   faster and its equatorial radius √3.3 times shorter, and a response reaches a far larger share of
   a small planet than of Earth. Eastern-basin highs are plausible from such a model but not
   guaranteed; a second reader's view, recorded with the maintainer's decision of 2026-09-28.
+- **The regional wind blows 30 to 35 m/s in some equatorial basins.** `PressureWind.surfaceWind`'s
+  down-gradient limit divides the pressure gradient by the surface drag alone where `f` vanishes,
+  and the pressure it is given carries the highlands' lapse, so near the equator a steep departure
+  becomes a gale: the ocean's annual stress along the equator reads 1.3 N/m² in seed 42's basin at
+  map columns 0 to 17 and 1.8 in seed 1234's at columns 15 to 27, at 512, where the belts' trades
+  give 0.083. Chunk 4b-1's upwelling responds to it: the equatorial rise goes as the stress, 15.9
+  m/day under the trades and some 250 to 345 m/day under those stresses, so those basins' upwelling
+  is too strong until the wind is fixed. **Owned by "Build the atmosphere, so the subtropical highs
+  are real"** above, whose solved response replaces this wind. 2026-09-28, 4b-1.
 - **A planet's size and spin are not yet settings.** Everything the ocean solves reads the radius
   from `WorldScale.radiusMeters` and the spin from `WorldScale.ROTATION_RATE_PER_S`, and
   `OceanPlanetSizeTest` holds the laws at twice the radius, the eddy diffusivity's equatorial
@@ -464,11 +473,6 @@
   11 cells across, 0.22 cells rms, `REALM_BORDER_ARC`: base 3a66025 clean, 4a's head 127.5.
   Realms follow habitability too, so this is 4a's climate moving a border onto a round path, as
   with the peoples' arcs above. 2026-09-26, 4a.
-- **`CurrentFeedsRainTest` counts its coasts in cells.** Its floors, ten cells of cold coast and
-  five of warm, and the one-cell step it takes offshore to read the water are counts of cells, so
-  on a square-cell grid, or at another resolution, they ask for a different length of coast. They
-  want restating as lengths of coast on the ground, in kilometers, when the grid changes.
-  2026-09-26, 4a.
 - **Six operators still count a row as a column, each outside Fix 2's list.** Found by reading the
   code, not by a guard: the climate stage's rainfall blur (a square box of cells, sized by
   `RAIN_BLUR_REFERENCE_WIDTH`) and its two coastal-reach blurs, the water exposure and the offshore

@@ -1,7 +1,7 @@
 package com.cartogenesis.worldgen.pipeline
 
 import com.cartogenesis.worldgen.concurrent.parallelChunks
-import com.cartogenesis.worldgen.math.JumpFloodDistance
+import com.cartogenesis.worldgen.math.FastMarchingDistance
 import com.cartogenesis.worldgen.model.Acceleration
 import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.WorldGenConfig
@@ -327,18 +327,18 @@ object OceanStage {
                 if (isWater[cell]) targetC[cell] = latitudeC
             }
         }
-        val subsurfaceC = subsurfaceTemperatures(
-            config, zonal, stress, isWater, floorDepthOn(config, sea, across, down), across, down, widthMeters
-        )
+        val floorMeters = floorDepthOn(config, sea, across, down)
+        val risenC = subsurfaceTemperatures(config, zonal, stress, isWater, floorMeters, across, down, widthMeters)
         val upwelling = if (config.ocean.upwelling) {
             upwellingMps(stress, isWater, across, down, widthMeters, heightMeters)
         } else FloatArray(across * down)
-        val entrainment = entrainmentPerS(upwelling)
+        val renewal = renewal(zonal, upwelling, floorMeters, risenC, isWater, across, down)
+        val entrainment = renewal.ratePerS
         val heatLevels = OceanCirculation.levels(
             OceanHeat.stencil(
                 across, down, widthMeters, heightMeters, isWater, stream, targetC, RELAXATION_SECONDS, withTarget = true,
                 diffusivityAt = { OceanHeat.diffusivity(it, config.scale.radiusMeters) },
-                entrainmentPerS = entrainment, subsurfaceC = subsurfaceC
+                entrainmentPerS = entrainment, subsurfaceC = renewal.towardC
             ),
             widthMeters, heightMeters, everyCellWater = false
         ) { coarseAcross, coarseDown, coarseWater ->
@@ -461,7 +461,8 @@ object OceanStage {
 
     /**
      * The year's wind stress on the sea, on the solve grid, `ρ_air C_D |W| W`: the belts' annual
-     * wind ([SurfaceBelts] with no migration), its meridional leg included, and with
+     * wind ([SurfaceBelts], its zonal profile not migrated), its meridional leg included, turning
+     * through zero at the equator as the year's mean under the ITCZ's migration, and with
      * `ClimateConfig.pressureWinds` on the regional wind of the annual pressure ([PressureWind]),
      * read bilinearly from the map.
      *
@@ -481,10 +482,11 @@ object OceanStage {
         } else null
         val eastward = DoubleArray(across * down)
         val northward = DoubleArray(across * down)
+        val migrationDegrees = if (config.climate.seasons) config.climate.seasonalTiltDegrees else 0f
         parallelChunks(0, down) { startRow, endRow ->
             for (row in startRow until endRow) {
                 val latitude = ClimateStage.latitudeOf(row, down)
-                val belts = SurfaceBelts.windMps(latitude, config.climate.meridionalWindShare)
+                val belts = SurfaceBelts.windMps(latitude, config.climate.meridionalWindShare, migrationDegrees)
                 val mapRow = (row + 0.5f) * cellsDown / down - 0.5f
                 for (column in 0 until across) {
                     var east = belts.eastwardMps.toDouble()
@@ -602,12 +604,74 @@ object OceanStage {
     }
 
     /**
-     * The rate the rising water renews the mixed layer, per second: `w/h` where the layer's base
-     * rises, and nothing where it sinks, since water leaving the layer downward leaves at the
-     * layer's own temperature and changes nothing.
+     * What the rising water does to the year's mean sea surface, per cell of the solve grid: the
+     * rate it renews it, per second, [ratePerS], and the temperature it renews it toward, degrees
+     * Celsius, [towardC], the heat equation's `R (T - T_toward)`; see [renewal].
      */
-    internal fun entrainmentPerS(upwellingMps: FloatArray): FloatArray =
-        FloatArray(upwellingMps.size) { cell -> (maxOf(upwellingMps[cell].toDouble(), 0.0) / MIXED_LAYER_DEPTH_M).toFloat() }
+    internal class Renewal(val ratePerS: FloatArray, val towardC: FloatArray)
+
+    /**
+     * How the rising water renews the year's mean sea surface at each cell of the solve grid.
+     *
+     * **Only water from beneath counts.** Of the water rising into the mixed layer at `w⁺/h`, a
+     * share `s` ([remoteShare] of the cell's accessible depth, [floorMeters]) comes from beneath it
+     * at [risenC], and the rest is the column's own mixed layer, which renews the layer with itself
+     * and changes nothing. So the renewal is `s w⁺/h` toward the risen water, and a sea whose floor
+     * lies within the mixed layer has no term at all: a warm current's anomaly there is left as the
+     * current made it. Water sinking out of the layer leaves at the layer's own temperature and
+     * changes nothing either, so `w⁺` counts only rising.
+     *
+     * **Only the open months count; a closure.** The renewed water is the liquid mixed layer, and
+     * where the sea freezes for part of the year it is open to the air only for the rest, the share
+     * `o` of the year the energy balance's water is above the freezing point
+     * ([ZonalClimate.openWaterShare]). In those months the layer relaxes toward its own open-month
+     * water `T_open` ([ZonalClimate.openWaterC]) at `1/τ` and is renewed toward the risen water at
+     * `e = s w⁺/h`, so it settles `eτ/(1 + eτ)` of the way from `T_open` to the risen water; the
+     * ice months, whose surface is the ice's, are left as they were. The year's mean therefore
+     * moves by `o eτ/(1 + eτ) (T_risen - T_open)`, and this is what the annual heat equation is
+     * made to give: its renewal acts at the open share of the year's rate, `R = o e`, toward
+     * `T_annual + (T_risen - T_open)(1 + oeτ)/(1 + eτ)`, whose steady state `Rτ/(1 + Rτ)` of the
+     * way there is exactly that shift. So a year-round anomaly is damped only while the sea is
+     * open, a sea frozen all year has no term, a sea never frozen has `R = e` toward the risen water
+     * itself, and no sea is driven past what its open months allow: renewing the annual mean with
+     * water at the freezing point at the year's full rate would warm a sea whose ice months sit
+     * below it, and renewing it with the coldest month's water, the ice's surface, would cool it
+     * through its ice.
+     *
+     * The closure assumes the open months relax at the same `τ` as the year and that the currents
+     * carry the same anomaly all year, as the climate stage reads it; the seasons themselves are not
+     * solved here.
+     */
+    internal fun renewal(
+        zonal: ZonalClimate,
+        upwellingMps: FloatArray,
+        floorMeters: FloatArray,
+        risenC: FloatArray,
+        isWater: BooleanArray,
+        across: Int,
+        down: Int
+    ): Renewal {
+        val ratePerS = FloatArray(across * down)
+        val towardC = FloatArray(across * down)
+        for (row in 0 until down) {
+            val latitude = ClimateStage.latitudeOf(row, down)
+            val annualC = zonal.waterC(latitude, Season.ANNUAL).toDouble()
+            val openShare = zonal.openWaterShare(latitude).toDouble()
+            val openC = zonal.openWaterC(latitude).toDouble()
+            for (cell in row * across until (row + 1) * across) {
+                if (!isWater[cell]) continue
+                val fromBeneathPerS = remoteShare(floorMeters[cell].toDouble()) *
+                    maxOf(upwellingMps[cell].toDouble(), 0.0) / MIXED_LAYER_DEPTH_M
+                val renewedInOpenMonths = fromBeneathPerS * RELAXATION_SECONDS
+                ratePerS[cell] = (openShare * fromBeneathPerS).toFloat()
+                // Written from the risen water so a sea that never freezes, whose open-month water
+                // is its annual water to the bit, is renewed toward the risen water exactly.
+                towardC[cell] = (risenC[cell] + (annualC - openC) +
+                    (risenC[cell] - openC) * ((1.0 + openShare * renewedInOpenMonths) / (1.0 + renewedInOpenMonths) - 1.0)).toFloat()
+            }
+        }
+        return Renewal(ratePerS, towardC)
+    }
 
     /**
      * A rate per unit area on a coarse grid of the cycle: the mean of the fine cells each covers, as
@@ -706,12 +770,15 @@ object OceanStage {
      *
      * **The floor.** Upwelled water cannot come from below the sea floor ([floorDepthMeters], per
      * cell, the deepest water within the upwelling's reach, [floorDepthOn]). Where that is shallower
-     * than [UPWELLING_SOURCE_DEPTH_M] the source depth is that depth, in the outcrop mapping and in the equatorial blend alike, and the share of the rising
-     * water that comes from beneath the mixed layer at all falls with it ([remoteShare]), the rest
-     * being the column's own water, the latitude's annual water the heat relaxes to. So a sea
-     * shallower than the mixed layer only renews its surface with water of its own column and adds no
-     * cold from elsewhere, and a sea deeper than the source depth draws all of it; between the two
-     * the change is continuous.
+     * than [UPWELLING_SOURCE_DEPTH_M] the source depth is that depth, in the outcrop mapping and in
+     * the equatorial blend alike; how much of the rising water comes from beneath the mixed layer at
+     * all is the renewal's business ([renewal], [remoteShare]).
+     *
+     * **Liquid water.** The energy balance's coldest month is its sea surface, and where the sea
+     * freezes that surface is the ice's, whose two meters' capacity lets it fall far below the
+     * freezing point of sea water. The water beneath ice sits at that freezing point
+     * ([EnergyBalance.SEA_FREEZING_C]), so no risen water is colder: a physical bound on liquid sea
+     * water, which the outcrop's winter reaches only where the sea there freezes.
      */
     internal fun subsurfaceTemperatures(
         config: WorldGenConfig,
@@ -729,7 +796,6 @@ object OceanStage {
         val bandMeters = OceanHeat.deformationRadiusMeters(0.0, config.scale.radiusMeters)
         for (row in 0 until down) {
             val latitude = ClimateStage.latitudeOf(row, down)
-            val columnC = zonal.waterC(latitude, Season.ANNUAL)
             val fromEquatorMeters = latitude * config.scale.metersPerDegreeLatitude
             val equatorialWeight = exp(-0.5 * (fromEquatorMeters / bandMeters) * (fromEquatorMeters / bandMeters))
             for (column in 0 until across) {
@@ -741,7 +807,7 @@ object OceanStage {
                 val thermocline = thermoclineDepth[column]
                 val remoteC = if (thermocline.isNaN()) ventilatedC
                 else ventilatedC + equatorialWeight * deepShareAt(thermocline.toDouble(), sourceMeters) * (deepC - ventilatedC)
-                subsurfaceC[cell] = (columnC + remoteShare(floorMeters) * (remoteC - columnC)).toFloat()
+                subsurfaceC[cell] = maxOf(remoteC.toFloat(), EnergyBalance.SEA_FREEZING_C)
             }
         }
         return subsurfaceC
@@ -753,7 +819,7 @@ object OceanStage {
      * own; all of it where the floor lies at or below the source depth; and in proportion to how much
      * of the layer between the mixed layer's base and the source depth lies above the floor between
      * the two. Upwelled water cannot come from below the sea floor, and water from the column's own
-     * mixed layer adds no cold it did not have.
+     * mixed layer renews the layer with itself ([renewal]).
      */
     internal fun remoteShare(floorMeters: Double): Double =
         ((floorMeters - MIXED_LAYER_DEPTH_M) / (UPWELLING_SOURCE_DEPTH_M - MIXED_LAYER_DEPTH_M)).coerceIn(0.0, 1.0)
@@ -766,13 +832,16 @@ object OceanStage {
      * beneath the shelf either: the wind's offshore transport at the surface is fed by an onshore
      * flow along the bottom from the shelf's edge, and what surfaces at the coast is water that
      * climbed the shelf (Lentz and Chapman 2004, *J. Phys. Oceanogr.* 34, 2444-2457). So within
-     * [SeaConfig.shelfWidthKm] of water at least the source depth deep, measured on the ground by
-     * jump flooding over the map, the water can rise from the whole source depth whatever the floor
-     * beneath the cell; farther than that, the reach falls off with the same length as an
-     * exponential, toward the cell's own floor. A sea that holds no deep water within a shelf's width
-     * of it, an inland sea or a shallow gulf, rises from no deeper than its own floor, and a basin
-     * whose floor is within the mixed layer brings up nothing but its own water ([remoteShare]).
-     * Read bilinearly over the map's water cells alone, so a coast does not make its water shallower.
+     * [SeaConfig.shelfWidthKm] of water at least the source depth deep, the water can rise from the
+     * whole source depth whatever the floor beneath the cell; farther than that, the reach falls off
+     * with the same length as an exponential, toward the cell's own floor. The bottom flow that
+     * feeds the rise comes through connected water, so the distance is measured through the map's
+     * water alone, in kilometers on the ground ([FastMarchingDistance]): a sea behind an isthmus
+     * however narrow is as far from the deep water as the way round it by sea. A sea that holds no
+     * deep water within a shelf's width of it by water, an inland sea or a shallow gulf, rises from
+     * no deeper than its own floor, and a basin whose floor is within the mixed layer brings up
+     * nothing but its own water ([remoteShare]). Read bilinearly over the map's water cells alone,
+     * so a coast does not make its water shallower.
      */
     internal fun floorDepthOn(config: WorldGenConfig, sea: SeaLevelResult, across: Int, down: Int): FloatArray {
         val cellsAcross = config.width
@@ -781,20 +850,18 @@ object OceanStage {
         val floorMeters = FloatArray(sea.isLand.size) { cell ->
             if (sea.isLand[cell]) 0f else -config.scale.metresBelowShoreline(sea.relativeElevation.data[cell])
         }
-        val distanceToDeep = FloatArray(floorMeters.size) { cell ->
-            if (mapWater[cell] && floorMeters[cell] >= UPWELLING_SOURCE_DEPTH_M) 0f else JumpFloodDistance.INFINITE
+        val distanceToDeepKm = FloatArray(floorMeters.size) { cell ->
+            if (mapWater[cell] && floorMeters[cell] >= UPWELLING_SOURCE_DEPTH_M) 0f else FastMarchingDistance.UNREACHED
         }
-        val nearestDeep = IntArray(floorMeters.size) { cell -> if (distanceToDeep[cell] == 0f) cell else -1 }
-        val cellWidthKm = config.scale.cellWidthKm(cellsAcross)
-        JumpFloodDistance.run(
-            cellsAcross, cellsDown, distanceToDeep, nearestDeep,
-            config.scale.cellHeightKm(cellsDown) / cellWidthKm
+        FastMarchingDistance.run(
+            cellsAcross, cellsDown, distanceToDeepKm, mapWater,
+            config.scale.cellWidthKm(cellsAcross), config.scale.cellHeightKm(cellsDown)
         )
         val reachKm = config.sea.shelfWidthKm
         val accessibleMeters = FloatArray(floorMeters.size) { cell ->
             if (!mapWater[cell]) 0f else {
                 val ownMeters = minOf(floorMeters[cell].toDouble(), UPWELLING_SOURCE_DEPTH_M)
-                val distanceKm = distanceToDeep[cell].toDouble() * cellWidthKm
+                val distanceKm = distanceToDeepKm[cell].toDouble()
                 val reach = if (distanceKm <= reachKm) 1.0 else exp(-(distanceKm - reachKm) / reachKm)
                 (ownMeters + (UPWELLING_SOURCE_DEPTH_M - ownMeters) * reach).toFloat()
             }
@@ -817,10 +884,12 @@ object OceanStage {
      *
      * The thermocline's depth `h` follows the trades' stress along each equatorial basin, from the
      * reduced-gravity balance `g' ∂h/∂x = τ_x / (ρ h)`: integrated from the basin's western shore,
-     * `h² = H² + (2 / (ρ g')) (I(x) - Ī)`, with `I` the stress integrated eastward and `Ī` its
-     * mean over the basin, so the basin's mean `h²` is [EQUATORIAL_THERMOCLINE_DEPTH_M]'s square.
-     * An easterly stress makes `I` fall eastward, and the thermocline shoals toward the east; where
-     * `h²` would fall below zero the layer has surfaced, and `h` is zero there. The share drawn from
+     * `h² = H² + (2 / (ρ g')) (I(x) - I₀)`, with `I` the stress integrated eastward and `I₀` the
+     * level set so the basin's warm layer keeps its volume, its mean `h` along the run being
+     * [EQUATORIAL_THERMOCLINE_DEPTH_M], `H`. An easterly stress makes `I` fall eastward, and the
+     * thermocline shoals toward the east; where `h²` would fall below zero the layer has surfaced,
+     * and `h` is zero there, which the level is found with, so a surfaced end does not take volume
+     * from the rest. The share drawn from
      * beneath is `(1 + tanh((D - h) / δ)) / 2`, with `D` [UPWELLING_SOURCE_DEPTH_M] and `δ`
      * [THERMOCLINE_HALF_THICKNESS_M]: a thermocline of finite thickness rather than a step, so the
      * cold tongue has no edge the grid could put there. A sea that runs round the world on the
@@ -859,15 +928,29 @@ object OceanStage {
                 integral[k] = running + stressHere * widthMeters / 2.0
                 running += stressHere * widthMeters
             }
-            val meanIntegral = integral.average()
-            for (k in 0 until length) {
-                val depthSquared = EQUATORIAL_THERMOCLINE_DEPTH_M * EQUATORIAL_THERMOCLINE_DEPTH_M +
-                    perStressLength * (integral[k] - meanIntegral)
-                thermoclineMeters[(firstLand + runStart + k) % across] = sqrt(maxOf(depthSquared, 0.0)).toFloat()
+            val meanDepthSquared = EQUATORIAL_THERMOCLINE_DEPTH_M * EQUATORIAL_THERMOCLINE_DEPTH_M
+            fun depthAt(k: Int, level: Double): Double = sqrt(maxOf(meanDepthSquared + perStressLength * (integral[k] - level), 0.0))
+            // The level of `I` at which `h` is `H`, set so the run's mean `h` is `H`: raising it
+            // lowers every `h`, so the mean falls monotonically from at least `H` at the least `I`
+            // to at most `H` at the greatest, and halving that bracket finds it.
+            var low = integral.min()
+            var high = integral.max()
+            repeat(LEVEL_HALVINGS) {
+                val level = (low + high) / 2
+                if ((0 until length).sumOf { depthAt(it, level) } / length > EQUATORIAL_THERMOCLINE_DEPTH_M) low = level else high = level
             }
+            val level = (low + high) / 2
+            for (k in 0 until length) thermoclineMeters[(firstLand + runStart + k) % across] = depthAt(k, level).toFloat()
         }
         return thermoclineMeters
     }
+
+    /**
+     * Halvings of the bracket [equatorialThermoclineDepths] searches for its level: 64 shrink it by
+     * 2⁶⁴, past the 2⁵² a double resolves across its own width, so the level is found to a double's
+     * precision and no halving is left to spare.
+     */
+    private const val LEVEL_HALVINGS = 64
 
     /**
      * The share of water rising from [sourceMeters] that comes from beneath a thermocline at
@@ -907,7 +990,8 @@ object OceanStage {
     /**
      * The equatorial thermocline's mean depth, meters: 150, the mean depth of Zebiak and Cane's
      * (1987, *Mon. Wea. Rev.* 115, 2262-2278) reduced-gravity upper layer of the tropical Pacific.
-     * A closure for a basin mean, which the trades then tilt.
+     * A closure for a basin mean, which the trades then tilt: the warm layer's volume per meter of
+     * the equator, which a tilt moves from east to west and does not change.
      */
     internal const val EQUATORIAL_THERMOCLINE_DEPTH_M = 150.0
 

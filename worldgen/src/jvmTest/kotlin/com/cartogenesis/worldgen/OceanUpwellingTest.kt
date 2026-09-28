@@ -4,6 +4,7 @@ import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldScale
 import com.cartogenesis.worldgen.pipeline.ClimateStage
+import com.cartogenesis.worldgen.pipeline.EnergyBalance
 import com.cartogenesis.worldgen.pipeline.OceanCirculation
 import com.cartogenesis.worldgen.pipeline.OceanHeat
 import com.cartogenesis.worldgen.pipeline.OceanStage
@@ -112,28 +113,286 @@ class OceanUpwellingTest {
         val westShore = 200
         val eastShore = 700
         val isWater = BooleanArray(across * down) { cell -> (cell % across) in westShore until eastShore }
-        fun sharesUnder(stressEast: Double): FloatArray = OceanStage.equatorialDeepShare(
-            OceanStage.Stress(DoubleArray(across * down) { stressEast }, DoubleArray(across * down)), isWater, across, down, widthMeters
-        )
-        val tilted = sharesUnder(-STRESS_N_PER_M2)
+        fun stressOf(stressEast: Double) = OceanStage.Stress(DoubleArray(across * down) { stressEast }, DoubleArray(across * down))
+        fun sharesUnder(stressEast: Double): FloatArray = OceanStage.equatorialDeepShare(stressOf(stressEast), isWater, across, down, widthMeters)
         val flat = sharesUnder(0.0)
         val lengthMeters = (eastShore - westShore) * widthMeters
-        var worst = 0.0
-        for (column in westShore until eastShore) {
-            val x = (column - westShore + 0.5) * widthMeters
-            val depthSquared = OceanStage.EQUATORIAL_THERMOCLINE_DEPTH_M * OceanStage.EQUATORIAL_THERMOCLINE_DEPTH_M +
-                2 * -STRESS_N_PER_M2 / (seawaterDensity * OceanStage.EQUATORIAL_REDUCED_GRAVITY_M_PER_S2) * (x - lengthMeters / 2)
-            val depth = kotlin.math.sqrt(maxOf(depthSquared, 0.0))
-            val expected = (1 + kotlin.math.tanh((OceanStage.UPWELLING_SOURCE_DEPTH_M - depth) / OceanStage.THERMOCLINE_HALF_THICKNESS_M)) / 2
-            worst = maxOf(worst, abs(tilted[column] - expected))
+        val meanDepth = OceanStage.EQUATORIAL_THERMOCLINE_DEPTH_M
+        // A stress whose tilt stays inside the layer, and one three times as strong, whose eastern
+        // end surfaces and is clipped.
+        for (stress in listOf(STRESS_N_PER_M2, 3 * STRESS_N_PER_M2)) {
+            val tilted = sharesUnder(-stress)
+            val depths = OceanStage.equatorialThermoclineDepths(stressOf(-stress), isWater, across, down, widthMeters)
+            val slope = 2 * -stress / (seawaterDensity * OceanStage.EQUATORIAL_REDUCED_GRAVITY_M_PER_S2)
+            fun analyticDepth(column: Int, shoalsAtMeters: Double): Double {
+                val x = (column - westShore + 0.5) * widthMeters
+                return kotlin.math.sqrt(maxOf(meanDepth * meanDepth + slope * (x - shoalsAtMeters), 0.0))
+            }
+            // Where along the basin the analytic `h` is `H`, found so the basin's mean `h` is `H`.
+            var low = -lengthMeters
+            var high = 2 * lengthMeters
+            repeat(200) {
+                val middle = (low + high) / 2
+                val mean = (westShore until eastShore).sumOf { analyticDepth(it, middle) } / (eastShore - westShore)
+                if (mean < meanDepth) low = middle else high = middle
+            }
+            var worst = 0.0
+            var clipped = 0
+            for (column in westShore until eastShore) {
+                val depth = analyticDepth(column, (low + high) / 2)
+                if (depth == 0.0) clipped++
+                val expected = (1 + kotlin.math.tanh((OceanStage.UPWELLING_SOURCE_DEPTH_M - depth) / OceanStage.THERMOCLINE_HALF_THICKNESS_M)) / 2
+                worst = maxOf(worst, abs(tilted[column] - expected))
+            }
+            val meanMeters = (westShore until eastShore).sumOf { depths[it].toDouble() } / (eastShore - westShore)
+            println("UPWELLING equatorial thermocline under %.3f N/m2 over a %.0f km basin: %d columns surfaced; mean depth %.4f m against %.1f; the western end draws %.3f from beneath, the eastern %.3f; worst against the analytic %.1e; with no stress %.3f and %.3f"
+                .format(stress, lengthMeters / 1000, clipped, meanMeters, meanDepth, tilted[westShore], tilted[eastShore - 1], worst, flat[westShore], flat[eastShore - 1]))
+            assertTrue(abs(meanMeters - meanDepth) < MEAN_DEPTH_TOLERANCE_M, "the basin's mean thermocline depth is $meanMeters m, not $meanDepth")
+            assertTrue(tilted[eastShore - 1] > tilted[westShore], "the east did not draw more from beneath than the west")
+            assertTrue(worst < 1e-4, "the share departs from the analytic tilt by $worst")
+            assertTrue(tilted[0].isNaN(), "land on the equator was given a thermocline")
         }
-        println("UPWELLING equatorial thermocline over a %.0f km basin: the western end draws %.3f from beneath, the eastern %.3f; worst against the analytic %.1e; with no stress %.3f and %.3f"
-            .format(lengthMeters / 1000, tilted[westShore], tilted[eastShore - 1], worst, flat[westShore], flat[eastShore - 1]))
         assertTrue(!(flat[eastShore - 1] > flat[westShore]), "a flat thermocline drew more from beneath in the east")
-        assertTrue(tilted[eastShore - 1] > tilted[westShore], "the east did not draw more from beneath than the west")
-        assertTrue(worst < 1e-4, "the share departs from the analytic tilt by $worst")
-        assertTrue(tilted[0].isNaN(), "land on the equator was given a thermocline")
     }
+
+    /**
+     * The belts' own annual stress, with no regional wind, raises water in the two rows beside the
+     * equator at the damped Ekman divergence of its easterly `β τ_x / (ρ r²)`: its meridional leg
+     * must pass through zero at the equator rather than reverse between the two rows, or the leg's
+     * down-wind transport `τ_y / (ρ r)`, several times the easterly's there, converges on the
+     * equator and sinks the water instead.
+     *
+     * The bar is the two departures the analytic figure leaves out, each computed from the
+     * constants, and half a percent for the rest (the easterly's own curvature over two rows, and
+     * the leg's share of the wind's speed in the drag): the leg's own convergence where it turns,
+     * `(2/π) s r / (β T)` of the easterly's term with `s` the leg's share and `T` the belts'
+     * migration in meters, and the damping's `f²` across the first cell, `1.75 (β Δ / r)²`.
+     */
+    @Test
+    fun `the trades raise water in the rows beside the equator`() {
+        val base = WorldGenConfig(seed = 42L, width = 256, height = 128)
+        val config = base.copy(climate = base.climate.copy(pressureWinds = false))
+        val (across, down) = OceanStage.solveGrid(config.scale)
+        val sea = SeaLevelResult(0.5f, BooleanArray(256 * 128), FloatField(256, 128), 0)
+        val stress = OceanStage.annualStress(config, sea, across, down)
+        val widthMeters = config.scale.worldWidthKm * 1000 / across
+        val heightMeters = config.scale.worldWidthKm * WorldScale.WORLD_HEIGHT_AS_SHARE_OF_WIDTH * 1000 / down
+        val upward = OceanStage.upwellingMps(stress, BooleanArray(across * down) { true }, across, down, widthMeters, heightMeters)
+        val beta = config.scale.planetaryVorticityGradientPerMeterSecond(0.0)
+        val r = OceanStage.SURFACE_LAYER_FRICTION_PER_S
+        val migrationMeters = config.climate.seasonalTiltDegrees * config.scale.metersPerDegreeLatitude
+        val legShare = 2 / PI * config.climate.meridionalWindShare * r / (beta * migrationMeters)
+        val dampingShare = 1.75 * (beta * heightMeters / r) * (beta * heightMeters / r)
+        val bar = legShare + dampingShare + EQUATOR_REST_SHARE
+        for (row in listOf(down / 2 - 1, down / 2)) {
+            val expected = -beta * stress.eastward[row * across] / (seawaterDensity * r * r)
+            val measured = upward[row * across].toDouble()
+            println("UPWELLING equator under the belts, row at %.3f degrees: %.3e m/s (%.2f m/day) against %.3e (%.2f m/day), off by %.2f%% against a bar of %.2f%% (the leg %.2f%%, the damping %.2f%%)"
+                .format(ClimateStage.latitudeOf(row, down), measured, measured * 86_400, expected, expected * 86_400,
+                    abs(measured / expected - 1) * 100, bar * 100, legShare * 100, dampingShare * 100))
+            assertTrue(measured > 0.0, "the row at ${ClimateStage.latitudeOf(row, down)} degrees sinks at $measured m/s")
+            assertTrue(abs(measured / expected - 1) < bar, "the row at ${ClimateStage.latitudeOf(row, down)} degrees rises at $measured m/s against $expected")
+        }
+    }
+
+    /**
+     * The shelf's reach runs through water. A sea 60 m deep, closed but for a strip of land two
+     * cells wide (23 km) between it and an ocean 1,000 m deep, lies within a shelf's width of the
+     * deep water as the crow flies and not at all by water, so nothing reaches it from the deep
+     * side and every cell of it draws on no deeper than its own floor. The control opens the strip
+     * to the same shallow water: the deep water's reach then crosses into the sea as a shelf's does.
+     */
+    @Test
+    fun `a shallow sea behind an isthmus draws only its own floor`() {
+        val config = WorldGenConfig(seed = 42L, width = 1024, height = 1024)
+        val (gridAcross, gridDown) = OceanStage.solveGrid(config.scale)
+        val closed = shelteredSeaFloor(config, gridAcross, gridDown, isthmus = true)
+        val open = shelteredSeaFloor(config, gridAcross, gridDown, isthmus = false)
+        println("UPWELLING sheltered sea %.0f m deep: the deepest source any cell of it draws on is %.2f m behind the isthmus, %.2f m with the strip opened"
+            .format(SHELTERED_SEA_M, closed, open))
+        assertTrue(open > SHELTERED_SEA_M + 1.0, "the opened sea drew on nothing deeper than its own floor")
+        assertTrue(closed <= SHELTERED_SEA_M + 0.01, "the sea behind the isthmus drew on $closed m through the land")
+    }
+
+    /**
+     * The deepest source [OceanStage.floorDepthOn] gives any solve cell lying wholly over the
+     * sheltered sea: deep ocean over map columns 100 to 399, the strip at 400 and 401 (land, or with
+     * [isthmus] off the sea's own depth), the sea from 402 to 419, land beyond and outside rows 20
+     * to 40 degrees north.
+     */
+    private fun shelteredSeaFloor(config: WorldGenConfig, gridAcross: Int, gridDown: Int, isthmus: Boolean): Double {
+        val across = config.width
+        val down = config.height
+        val isLand = BooleanArray(across * down)
+        val relative = FloatField(across, down)
+        for (cell in isLand.indices) {
+            val latitude = ClimateStage.latitudeOf(cell / across, down)
+            val column = cell % across
+            val depthMeters = when {
+                latitude < 20f || latitude > 40f -> null
+                column in 100 until 400 -> 1_000.0
+                column in 400 until 402 -> if (isthmus) null else SHELTERED_SEA_M
+                column in 402 until 420 -> SHELTERED_SEA_M
+                else -> null
+            }
+            isLand[cell] = depthMeters == null
+            relative.data[cell] = if (depthMeters == null) 0.1f else config.scale.depthShareOfMetres((-depthMeters).toFloat())
+        }
+        val floor = OceanStage.floorDepthOn(config, SeaLevelResult(0.5f, isLand, relative, isLand.count { it }), gridAcross, gridDown)
+        var deepest = 0.0
+        for (row in 0 until gridDown) {
+            val mapRow = (row + 0.5) * down / gridDown - 0.5
+            val latitude = ClimateStage.latitudeOf(row, gridDown)
+            if (latitude < 21f || latitude > 39f) continue
+            for (column in 0 until gridAcross) {
+                val mapColumn = (column + 0.5) * across / gridAcross - 0.5
+                if (mapColumn < 402.0 || mapColumn > 418.0 || mapRow < 0) continue
+                deepest = maxOf(deepest, floor[row * gridAcross + column].toDouble())
+            }
+        }
+        return deepest
+    }
+
+    /**
+     * Renewal with the column's own water changes nothing. A closed basin 40 m deep, shallower
+     * than the mixed layer and with no deeper water in reach, under a wind whose curl turns a gyre
+     * in it and whose Ekman transport raises water along its shores: the gyre carries a warm
+     * anomaly, and with the upwelling on every cell settles where it settles with it off, to the
+     * heat solve's own reach. On the closure that renewed the layer with the latitude's annual
+     * water, the rise relaxed the anomaly away beside the shores.
+     */
+    @Test
+    fun `a shallow sea's own water leaves a current's anomaly as it found it`() {
+        val (config, sea) = basin(latitude = 35f, halfSpanDegrees = 15f, floorMeters = 40.0)
+        val zonal = ClimateStage.zonalClimate(config, sea)
+        val (gridAcross, gridDown) = OceanStage.solveGrid(config.scale)
+        val east = DoubleArray(gridAcross * gridDown)
+        val north = DoubleArray(gridAcross * gridDown)
+        for (cell in east.indices) {
+            val latitude = ClimateStage.latitudeOf(cell / gridAcross, gridDown).toDouble()
+            // Easterlies in the south and westerlies in the north: a subtropical gyre, with a warm
+            // current up its western side; and a wind toward the equator besides.
+            east[cell] = -GYRE_STRESS_N_PER_M2 * kotlin.math.cos(PI * (latitude - 20.0) / 30.0)
+            north[cell] = -STRESS_N_PER_M2
+        }
+        val stress = OceanStage.Stress(east, north)
+        val on = OceanStage.circulateUnder(config, sea, zonal, stress, relax)
+        val off = OceanStage.circulateUnder(config.copy(ocean = config.ocean.copy(upwelling = false)), sea, zonal, stress, relax)
+        var warmest = 0.0
+        var worst = 0.0
+        var rising = 0
+        for (cell in on.isWater.indices) {
+            if (!on.isWater[cell]) continue
+            val latitudeC = zonal.waterC(ClimateStage.latitudeOf(cell / gridAcross, gridDown), Season.ANNUAL)
+            warmest = maxOf(warmest, (off.temperatureC[cell] - latitudeC).toDouble())
+            worst = maxOf(worst, abs(on.temperatureC[cell] - off.temperatureC[cell]).toDouble())
+            if (on.upwellingMps[cell] > 0f) rising++
+        }
+        println("UPWELLING shallow gyre: warmest anomaly %.3f C, %d cells rising; the upwelling moves the water by at most %.4f C".format(warmest, rising, worst))
+        assertTrue(warmest > WARM_ANOMALY_C, "the gyre carried no warm anomaly: $warmest C")
+        assertTrue(rising > 0, "nothing rose in the basin")
+        assertTrue(worst <= FLOOR_TOLERANCE_C, "the basin's own water moved its temperature by $worst C")
+    }
+
+    /**
+     * Upwelled water cannot be colder than sea water can be: over a world with water at every
+     * latitude, deep enough for every source, no cell's risen water is below the freezing point of
+     * sea water. The energy balance's own coldest month, which is the ice's surface where the sea
+     * freezes, goes far below it, and is what the risen water must not be taken for.
+     */
+    @Test
+    fun `no risen water is colder than sea water can be`() {
+        val config = WorldGenConfig(seed = 42L, width = 128, height = 128)
+        val isLand = BooleanArray(128 * 128) { (it % 128) in 30 until 70 && (it / 128) in 20 until 100 }
+        val relative = FloatField(128, 128)
+        for (cell in isLand.indices) relative.data[cell] = if (isLand[cell]) 0.1f else config.scale.depthShareOfMetres(-1_000f)
+        val sea = SeaLevelResult(0.5f, isLand, relative, isLand.count { it })
+        val zonal = ClimateStage.zonalClimate(config, sea)
+        val (across, down) = OceanStage.solveGrid(config.scale)
+        val isWater = OceanStage.waterOn(config, sea, across, down)
+        val floor = OceanStage.floorDepthOn(config, sea, across, down)
+        val still = OceanStage.Stress(DoubleArray(across * down), DoubleArray(across * down))
+        val risen = OceanStage.subsurfaceTemperatures(config, zonal, still, isWater, floor, across, down, config.scale.worldWidthKm * 1000 / across)
+        var coldest = Double.POSITIVE_INFINITY
+        var coldestAt = 0f
+        for (cell in risen.indices) {
+            if (!isWater[cell] || risen[cell] >= coldest) continue
+            coldest = risen[cell].toDouble()
+            coldestAt = ClimateStage.latitudeOf(cell / across, down)
+        }
+        val coldestWinter = (0 until down).minOf { zonal.waterC(ClimateStage.latitudeOf(it, down), Season.WINTER) }
+        println("UPWELLING the coldest risen water: %.3f C at %.1f degrees, against sea water's freezing point %.1f C; the balance's coldest month %.2f C"
+            .format(coldest, coldestAt, EnergyBalance.SEA_FREEZING_C, coldestWinter))
+        assertTrue(coldestWinter < EnergyBalance.SEA_FREEZING_C, "no month of this world is below freezing, so the guard tests nothing")
+        assertTrue(coldest >= EnergyBalance.SEA_FREEZING_C, "risen water at $coldest C, below sea water's freezing point, at $coldestAt degrees")
+    }
+
+    /**
+     * Entrained water acts on the liquid mixed layer, open to the air only in the months the sea is
+     * not frozen. A closed basin 1,000 m deep from 55 to 85 degrees north, where the balance's sea
+     * freezes for part of the year, under a wind raising water along its eastern shore: the most
+     * the rise can do is bring the open months' water to the risen water's temperature and leave the
+     * ice months as they were, so no cell may settle colder than the coldest of the basin's rows'
+     * annual water moved by its open share times the risen water less the open months' water, nor
+     * warmer than the warmest row's annual water moved the same way. Renewing the annual mean with
+     * the coldest month's water, which under ice is the ice's surface, drives the basin below that
+     * range, and renewing it with water at the freezing point at the year's full rate warms the
+     * rows whose ice months sit below freezing above it.
+     */
+    @Test
+    fun `a seasonally frozen sea is driven no further than its open months allow`() {
+        val (config, sea) = basin(latitude = 70f, halfSpanDegrees = 15f, floorMeters = 1_000.0)
+        val zonal = ClimateStage.zonalClimate(config, sea)
+        val (gridAcross, gridDown) = OceanStage.solveGrid(config.scale)
+        val stress = OceanStage.Stress(DoubleArray(gridAcross * gridDown), DoubleArray(gridAcross * gridDown) { -STRESS_N_PER_M2 })
+        val solved = OceanStage.circulateUnder(config, sea, zonal, stress, relax)
+        var lowest = Double.POSITIVE_INFINITY
+        var highest = Double.NEGATIVE_INFINITY
+        var coldest = Double.POSITIVE_INFINITY
+        var warmest = Double.NEGATIVE_INFINITY
+        var seasonalRows = 0
+        for (row in 0 until gridDown) {
+            val cells = (row * gridAcross until (row + 1) * gridAcross).filter { solved.isWater[it] }
+            if (cells.isEmpty()) continue
+            val latitude = ClimateStage.latitudeOf(row, gridDown)
+            val annualC = zonal.waterC(latitude, Season.ANNUAL).toDouble()
+            val openShare = zonal.openWaterShare(latitude).toDouble()
+            if (openShare > 0.05 && openShare < 0.95) seasonalRows++
+            val risenC = maxOf(OceanStage.subsurfaceTemperatureC(zonal, latitude), EnergyBalance.SEA_FREEZING_C).toDouble()
+            val shiftC = openShare * (risenC - zonal.openWaterC(latitude))
+            lowest = minOf(lowest, annualC + minOf(shiftC, 0.0))
+            highest = maxOf(highest, annualC + maxOf(shiftC, 0.0))
+            for (cell in cells) {
+                coldest = minOf(coldest, solved.temperatureC[cell].toDouble())
+                warmest = maxOf(warmest, solved.temperatureC[cell].toDouble())
+            }
+        }
+        println("UPWELLING seasonally frozen basin: %d rows freeze for part of the year; the water spans %.3f to %.3f C, the open months allow %.3f to %.3f C"
+            .format(seasonalRows, coldest, warmest, lowest, highest))
+        assertTrue(seasonalRows > 0, "no row of the basin freezes for part of the year, so the guard tests nothing")
+        assertTrue(coldest >= lowest - FLOOR_TOLERANCE_C, "the basin settled at $coldest C, below the $lowest its open months allow")
+        assertTrue(warmest <= highest + FLOOR_TOLERANCE_C, "the basin settled at $warmest C, above the $highest its open months allow")
+    }
+
+    /**
+     * A world of land with one closed basin [floorMeters] deep between [halfSpanDegrees] either side
+     * of [latitude] north, over a quarter of the columns.
+     */
+    private fun basin(latitude: Float, halfSpanDegrees: Float, floorMeters: Double): Pair<WorldGenConfig, SeaLevelResult> {
+        val config = WorldGenConfig(seed = 42L, width = 256, height = 128)
+        val across = config.width
+        val down = config.height
+        val isLand = BooleanArray(across * down) { cell ->
+            val rowLatitude = ClimateStage.latitudeOf(cell / across, down)
+            val column = cell % across
+            abs(rowLatitude - latitude) > halfSpanDegrees || column !in across / 4 until across / 2
+        }
+        val relative = FloatField(across, down)
+        for (cell in isLand.indices) relative.data[cell] = if (isLand[cell]) 0.1f else config.scale.depthShareOfMetres((-floorMeters).toFloat())
+        return config to SeaLevelResult(0.5f, isLand, relative, isLand.count { it })
+    }
+
+    private val relax: (com.cartogenesis.worldgen.pipeline.OceanStencil, FloatArray, Int) -> FloatArray = { s, v, p -> OceanCirculation.relax(s, v, p); v }
 
     /**
      * Upwelled water cannot come from below the sea floor. A closed basin 40 m deep, shallower than
@@ -143,18 +402,22 @@ class OceanUpwellingTest {
      * there is to rise. Per cell a shallow basin can still sit a few hundredths below its own row's
      * water, because the stronger renewal beside the shore pins the colder rows harder while the
      * eddies mix them into the warmer; that is the basin's own water redistributed, which this bar
-     * allows, and not cold from elsewhere, which it does not. The same basin 1,000 m deep, the
-     * control, cools below it beside its shore, as a deep sea's upwelling should; and before the
-     * floor was read the shallow basin did too, its coldest cell 3.02 C under the basin's coldest own
-     * water at 30 N; now it stays 1.45 C above it at 30 N and 1.66 at 70.
+     * allows, and not cold from elsewhere, which it does not. The same basin 1,000 m deep at 30 N,
+     * the control, cools below it beside its shore, as a deep sea's upwelling should (at 70 N the
+     * deep basin's risen water is at the freezing point and acts only in its open months, which
+     * `a seasonally frozen sea is driven no further than its open months allow` holds). Before the
+     * floor was read the shallow basin cooled too, its coldest cell 3.02 C under the basin's
+     * coldest own water at 30 N; now, with no term at all where the floor is within the mixed
+     * layer, it stays 2.25 C above it at 30 N and 2.46 at 70.
      */
     @Test
     fun `a sea shallower than the mixed layer raises no cold from below its floor`() {
+        val deep = basinBelowOwnWater(30f, floorMeters = 1_000.0)
+        println("UPWELLING basin at 30 N, 1,000 m deep: its coldest cell under the basin's coldest own water by %.4f C".format(deep))
+        assertTrue(deep > FLOOR_TOLERANCE_C, "the deep basin's upwelling did not cool it: $deep")
         for (latitude in listOf(30f, 70f)) {
             val shallow = basinBelowOwnWater(latitude, floorMeters = 40.0)
-            val deep = basinBelowOwnWater(latitude, floorMeters = 1_000.0)
-            println("UPWELLING basin at %.0f N: its coldest cell under the basin's coldest own water by %.4f C at 40 m deep, %.4f C at 1,000 m".format(latitude, shallow, deep))
-            assertTrue(deep > FLOOR_TOLERANCE_C, "the deep basin's upwelling did not cool it: $deep")
+            println("UPWELLING basin at %.0f N, 40 m deep: its coldest cell under the basin's coldest own water by %.4f C".format(latitude, shallow))
             assertTrue(shallow <= FLOOR_TOLERANCE_C, "a basin 40 m deep cooled $shallow C below its own water")
         }
     }
@@ -318,8 +581,9 @@ class OceanUpwellingTest {
     }
 
     /**
-     * The risen water's temperature, the winter mixed layer where its isopycnal outcrops, is never
-     * warmer than the annual water it replaces, at any latitude of a real world, so the term can only
+     * The risen water's temperature, the winter mixed layer where its isopycnal outcrops and never
+     * below the freezing point of sea water, is never warmer than the open months' water it
+     * replaces, at any latitude of a real world where the sea is open at all, so the term can only
      * cool. The warmest month read in its place fails.
      */
     @Test
@@ -332,12 +596,15 @@ class OceanUpwellingTest {
         var controlWarmest = Double.NEGATIVE_INFINITY
         var latitude = -89.5f
         while (latitude <= 89.5f) {
-            val annual = zonal.waterC(latitude, Season.ANNUAL)
-            warmest = maxOf(warmest, (OceanStage.subsurfaceTemperatureC(zonal, latitude) - annual).toDouble())
-            controlWarmest = maxOf(controlWarmest, (zonal.waterC(latitude, Season.SUMMER) - annual).toDouble())
+            if (zonal.openWaterShare(latitude) > 0f) {
+                val open = zonal.openWaterC(latitude)
+                val risen = maxOf(OceanStage.subsurfaceTemperatureC(zonal, latitude), EnergyBalance.SEA_FREEZING_C)
+                warmest = maxOf(warmest, (risen - open).toDouble())
+                controlWarmest = maxOf(controlWarmest, (zonal.waterC(latitude, Season.SUMMER) - open).toDouble())
+            }
             latitude += 0.5f
         }
-        println("UPWELLING risen water less the annual water: at most %+.3f C; the warmest month read instead, at most %+.3f C".format(warmest, controlWarmest))
+        println("UPWELLING risen water less the open months' water: at most %+.3f C; the warmest month read instead, at most %+.3f C".format(warmest, controlWarmest))
         assertTrue(controlWarmest > 0.0, "the warmest month was no warmer than the year")
         assertTrue(warmest <= 0.0, "the risen water is ${warmest} C warmer than the water it replaces somewhere")
     }
@@ -354,5 +621,20 @@ class OceanUpwellingTest {
 
         /** The heat solve's own reach: its tolerance, a thousandth of the largest balance, is a few thousandths of a degree. */
         const val FLOOR_TOLERANCE_C = 0.01
+
+        /** A millimeter: the thermocline's depths are held in single precision, good to a few hundredths of one at 150 m. */
+        const val MEAN_DEPTH_TOLERANCE_M = 1e-3
+
+        /** The share of the equatorial rise the easterly's curvature and the leg's share of the drag may move, besides the two stated departures. */
+        const val EQUATOR_REST_SHARE = 0.005
+
+        /** The sheltered sea's depth, meters: between the mixed layer and the source depth, so its own floor is a source of its own. */
+        const val SHELTERED_SEA_M = 60.0
+
+        /** The shallow gyre's westerly and easterly stress, newtons a square meter. */
+        const val GYRE_STRESS_N_PER_M2 = 0.1
+
+        /** The least warm anomaly the shallow gyre must carry for its guard to test anything, degrees. */
+        const val WARM_ANOMALY_C = 0.5
     }
 }

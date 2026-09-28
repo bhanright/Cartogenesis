@@ -67,7 +67,8 @@ internal object ReliefShading {
      * width in the height field's own units: a cell half as wide covers half the ground, and the
      * relief would otherwise render twice as flat. So the exaggeration is held to the ground,
      * [VERTICAL_EXAGGERATION_ON_REFERENCE_CELL] on a cell [REFERENCE_CELL_WIDTH_KM] wide and in
-     * proportion to the cell's width everywhere else, whatever the grid and whatever the planet.
+     * inverse proportion to the cell's width everywhere else, whatever the grid and whatever the
+     * planet: a rise per cell width is a slope times the width, so a slope drawn the same wants it.
      */
     fun verticalExaggeration(cellWidthKm: Double): Float =
         (VERTICAL_EXAGGERATION_ON_REFERENCE_CELL * (REFERENCE_CELL_WIDTH_KM / cellWidthKm)).toFloat()

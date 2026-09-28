@@ -331,13 +331,16 @@
   wide and one tall with its colour copied exactly and the ink laid over it at its own width; the
   cartouche quotes the sheet's one scale. The other half of the answer, grids twice as many cells
   across as down so a cell is square on the ground, is still open and reuses the same geometry.
-- **On the true-shape sheet a cell is two pixels wide, so what the raster decides a cell at a time
-  is two pixels wide where it runs north-south and one tall where it runs east-west.** The raster's
-  own ink — its coast and border cells, a hachure, an isobath, the stipple — keeps its bearing and
-  pitch on the sheet, because every pattern is asked at the cell's own pixel of it, but a mark along
-  a column cannot be narrower than a cell. The vector ink laid over it (the traced coast, rivers,
-  graticule, glyphs, lettering) is not affected. What removes it is a grid whose cells are square on
-  the ground; per-pixel kernels were declined for it. 2026-09-24, Fix A.
+- ~~**On the true-shape sheet a cell is two pixels wide, so what the raster decides a cell at a time
+  is two pixels wide where it runs north-south and one tall where it runs east-west.**~~ Answered on
+  square cells, 2026-09-28, Q4: a grid twice as many cells across as down is drawn a cell to a pixel,
+  and `RasterMarkWidthTest` holds the raster's coast, read off the drawn sheet, to the same thinnest
+  and commonest run either way. On the gallery's world at 512 rows both are one pixel (mean 1.32
+  along the rows, 1.34 down the columns); the same seed on the 512 by 512 grid, the clause's control,
+  reads two pixels along the rows and one down the columns. The applications still ask for grids as
+  many cells tall as wide until the ladder moves to rows (Q5), and the guard that every size on the
+  ladder draws cell for pixel moves with it; the two-pixel branch of the sheet stays for such grids
+  and is held by `SheetExpansionTest`'s and `GpuRasterTest`'s cases on them. 2026-09-24, Fix A.
 - **A 4096 world cannot be made in a browser tab, so its 8192 by 4096 sheet has never been drawn
   there.** Tried on 2026-09-25 in Edge 153 on an RTX 3070 Ti (WebGL through ANGLE on Direct3D 11,
   `MAX_TEXTURE_SIZE` 16,384): the tab's JavaScript heap stood at 1.4 GB five minutes into the
@@ -1165,6 +1168,20 @@
   formula tends to on a fine grid; Q2 kept the formula because restating it would move every world
   at every grid, and a chunk that changes the tectonics should take it. 2026-09-28, Q2.
 
+- **One sea cell of seed 42 at 512 rows stands above the shoreline the sea stage cut.** At column 33,
+  row 414, beside the land, 9.0e-5 of the field (about half a meter) over the line; the same seed on
+  the 512 by 512 grid has none. `DataExportTest`'s open-sea clause, which the heightmap draws
+  faithfully, runs as a known failure on it. Which of the sea stage's rules leaves water over the
+  cut (the drowned valleys, the littoral grading, the enclosed-sea repair) is not traced.
+  2026-09-28, Q4.
+- **On square cells the relief's steepest tenth is shaded to its darkest factor.** The exaggeration
+  is held to the ground (`ReliefShading.verticalExaggeration`, 24 on a cell 23.4 km wide and in
+  inverse proportion to the cell's width elsewhere), and cells of 11.7 km resolve steeper ground
+  than the 512 by 512 grid's did east-west: the gallery world's ninth decile of land slope as the
+  shading reads it is 2.84 of exaggerated rise a cell width, and a cone that steep is pinned at
+  `DARKEST` on 41 of 360 bearings under the sky (69 under the single lamp). `ReliefShadingTest` runs
+  the clause as a known failure. Whether the exaggeration should be re-set for the sheet a size is
+  drawn on, or the clamp moved, is for the pictures to decide. 2026-09-28, Q4.
 - **A world of square cells carries more ice at 60 to 90 degrees than a change of grid gives.**
   `GridShapeTest` compares the same seed at 512 by 512 and at `forRows(512)`, band by band. Its
   ice clause runs as a known failure. Seed 1234 at -75 to -90 degrees carries +0.017 of the band as

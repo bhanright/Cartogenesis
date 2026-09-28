@@ -7,6 +7,9 @@ package com.cartogenesis.cartography.geometry
  * [KnownFailures.expect] under its violation's signature ([GeometryExpectations]), so that the fix
  * which clears it arms its guard. The census's printout gives every figure and place, and
  * `build/geometry-census` a picture of each; the figures here are the census's at the grid named.
+ * Since Q4 the censuses read square cells, 512 rows (1024 by 512) and 2048 columns (2048 by 1024);
+ * a figure "at 2048" before that is the 2048 by 2048 grid's, whose cells were twice as wide as tall
+ * and whose natural controls set looser bars (docs/DESIGN_LEDGER.md, Q4).
  */
 internal object GeometryFindings {
 
@@ -16,6 +19,7 @@ internal object GeometryFindings {
      * ones 35 to 50% and west-facing a fifth to three tenths: the most-drawn facing 3.4 to 4.7
      * times the least on every world at both grids, since the narrow sea became a bank
      * (`NarrowSea`) and the east- and south-facing shores beside it stopped counting as undrawn.
+     * On square cells 3.0 to 3.5 times at 512 rows and 2.7 to 3.5 at 2048 columns.
      */
     const val COAST_INK = "the raster coast inks east- and south-facing shores only"
 
@@ -41,13 +45,22 @@ internal object GeometryFindings {
      * 1234, 99 and 59758 before Q2; since, 1234's and 99's cut and ground are clear of it and the
      * arcs stand on 42's cut, 123 degrees of a circle 11.9 cells in radius at (235, 1254), and on
      * 969495's surface, 123 degrees at (925, 1328), where Q2's smooth field moved the ground.
+     *
+     * On square cells at 2048 columns (Q4) the arcs on 42's cut and on 969495's, 1234's and 59758's
+     * surfaces are gone; the radius floor there is twelve cells, as the natural controls on square
+     * cells set it, and 42's, 11.9, falls under it. One stands: 99's surface, 183 degrees at
+     * (1587, 38).
      */
     const val ICE_ARCS = "the ice's surface and cut follow circular arcs"
 
     /** A valley glacier's outline doubles back in a long straight hairpin (969495, near the south pole). */
     const val VALLEY_GLACIER_HAIRPIN = "a valley glacier doubles back in a straight hairpin"
 
-    /** Delta lobes are half-discs, round to a quarter of a cell, and the coast carries their rims. */
+    /**
+     * Delta lobes are half-discs, round to a quarter of a cell, and the coast carries their rims.
+     * None counted on square cells at 2048 columns (Q4), where 969495's stood before; the radius
+     * floor is twelve cells there, and whether it fell under it or off the ground is not separated.
+     */
     const val DELTA_LOBES_ROUND = "delta lobes are round half-discs"
 
     /**
@@ -57,6 +70,10 @@ internal object GeometryFindings {
      * about (1816, 684)), stands on ground no delta built, not a lobe cell within 12 cells of
      * either. It is the land's own level line at the sea, rounded: the class of [TERRAIN_ARC], which
      * the same world's contours carried before Q2 (docs/DESIGN_LEDGER.md, Q2's 2048 census).
+     *
+     * On square cells at 2048 columns (Q4) 1234's two, 10.9 cells in radius, fall under the floor of
+     * twelve the natural controls there set, and two drawn coasts carry one each: 99's, 160 degrees
+     * at (2000, 489), and 969495's, 137 degrees at (251, 1000).
      */
     const val COAST_ARC = "a coast follows a circular arc"
 
@@ -69,10 +86,24 @@ internal object GeometryFindings {
      */
     const val LAKE_SHORE_ARC = "a lake's shore follows a circular arc"
 
-    /** A river course follows a circular arc to within a quarter of a cell. */
+    /**
+     * A lake's shore turns sharply between two long straight runs: 7's at (1366, 429) at 2048
+     * columns, a turn of 7.4 against the natural controls' 6.3, first seen once the census read
+     * square cells, whose natural lines crease far less than those of cells twice as wide as tall.
+     */
+    const val LAKE_SHORE_CREASE = "a lake's shore creases between straight runs"
+
+    /**
+     * A river course follows a circular arc to within a quarter of a cell. None counted on square
+     * cells at 2048 columns (Q4), where 1234's two stood before; the radius floor is twelve cells
+     * there, and whether they fell under it or off the ground is not separated.
+     */
     const val RIVER_ARC = "a river course follows a circular arc"
 
-    /** A river course jogs through two square corners a few cells apart (1234 and 59758 at 2048). */
+    /**
+     * A river course jogs through two square corners a few cells apart (1234 and 59758 at 2048). On
+     * square cells at 2048 columns (Q4) both are gone, and 718106's at (1045, 377) stands.
+     */
     const val RIVER_SQUARE_CORNERS = "a river course jogs through square corners"
 
     /**
@@ -87,6 +118,9 @@ internal object GeometryFindings {
      * seventeen cells along a row or a column and turning square onto the other, at the head or
      * the side of an inlet; two are at the mouths of the straight drowned gullies of the far south's
      * combed flanks (docs/DESIGN_LEDGER.md, Q2's 2048 census).
+     *
+     * On square cells at 2048 columns (Q4) seed 7's seven are gone, and 59758's drawn coast turns
+     * 0.430 square corners per thousand cell widths.
      */
     const val COAST_SQUARE_NOTCH = "a coast turns a square notch"
 
@@ -145,6 +179,9 @@ internal object GeometryFindings {
     /**
      * Realm borders run ruler-straight for 380 to 500 km at 2048. Since Q2 moved 59758's ground, one
      * runs 64 steps north-south down the axis of a rift lake at (1689, 1776), against a bar of 63.9.
+     *
+     * On square cells at 2048 columns (Q4) no realm border is past its bars, 59758's run included;
+     * the finding stays mapped so that a return is named.
      */
     const val REALM_BORDERS_STRAIGHT = "realm borders run ruler-straight"
 
@@ -152,6 +189,10 @@ internal object GeometryFindings {
      * Plate boundaries run ruler-straight: 470 to 600 km at 2048 on every world while the partition
      * was square in cells; since it is Euclidean on the ground (Fix 2), 370 to 460 km on four worlds
      * of seven, and on five a run of 64 to 87 steps along a grid bearing.
+     *
+     * On square cells at 2048 columns (Q4) the runs along a grid bearing are 39 and 42 steps, on 42
+     * and 1234, where 7's, 99's and 969495's are gone; straight runs past the facet bar stand on every
+     * world, 56 to 87 cell widths.
      */
     const val PLATE_BOUNDARIES_STRAIGHT = "plate boundaries run ruler-straight"
 
@@ -161,6 +202,9 @@ internal object GeometryFindings {
     /**
      * The mean-annual isotherms prefer the east-west bearing 1.8 to 2.1 times their neighbours at
      * 2048 against an Earth-like zonal field's 1.0, and run ruler-straight for 1,200 to 2,300 km.
+     *
+     * On square cells at 2048 columns (Q4) the preference is 1.74 to 1.86 times, and the longest runs
+     * 215 to 371 cell widths.
      */
     const val ISOTHERMS_ALONG_ROWS = "isotherms run straight along rows"
 

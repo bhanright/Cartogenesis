@@ -1201,6 +1201,26 @@
   retention is not the way: at 1.25 GB a worker ran out of its 3.5 GB heap. Preferring to drop what
   the class now borrowing has not asked for is the candidate; `SharedWorldsGuardTest` holds the
   order as it is. 2026-09-28, Q2.
+  - At Q2b `PressureWindTest` no longer does it: its variants are 20 MB at 256 rows and its
+    monsoon's four at 512 are each made once. What is left is the 1,024-row worlds, 312 MB each,
+    pushing the standard worlds out as they pass through: fifteen worlds made again in the worker
+    that had made them, 525 s of the tier. Six were in the worker that drew `GlaciationTest`,
+    where the standard seed 99 at 512 rows was made four times, and four were 1,024-row worlds
+    one class had made and the next to ask found gone: seeds 42 and 7 from `GlaciationTest` for
+    `ScaleFreeTest`, 7 from `GlacialBasinShapeTest` for `RibbonLandTest`, and 718106 from
+    `LakeWaterBalanceTest` for `RealmIdRangeTest`. 2026-09-28, Q2b.
+- **The per-merge tier is as long as the worker that draws `GlaciationTest`.** Gradle deals the
+  classes to its four workers without looking at what they cost. At Q2b the worker that drew
+  `GlaciationTest` ran from the tier's first minute to its last, the 52.9th, 43.0 minutes of it
+  in the classes whose shared worlds name it, while another had finished every such class of its
+  own by the 14th. `GlaciationTest` alone is 21.6 minutes, fourteen worlds of 1,024 rows, and
+  `ScaleFreeTest` (6 minutes) and `DeltaMouthTest` (5) drew the same worker. The classes add up to
+  138 minutes, 34.5 a worker. Candidates,
+  none of them tried: `GlaciationTest`'s three cases as three classes, which moves no figure and
+  lets the workers share its fourteen worlds; `IncrementalReuseTest`'s equality at 128 rows, a
+  quarter of its cells again, if seed 99 still has lakes, rivers, realms and landmarks there; and
+  a store the workers share, so that the 1,024-row worlds, 21 distinct worlds made 30 times, are
+  made once a tier. 2026-09-28, Q2b.
 
 
 - **M1's coastline box count reads structure far below its own smallest box.** It counts the boxes

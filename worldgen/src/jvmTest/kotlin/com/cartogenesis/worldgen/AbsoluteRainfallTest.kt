@@ -114,10 +114,10 @@ class AbsoluteRainfallTest : BorrowsSharedWorlds() {
         // 3576 and 4042 mm; and at 4b-1, whose upwelling and belts moved it again: from 3560 and 4035,
         // and then from 3548 and 4042 by the second reading's five corrections to the rise, which moved
         // the sea's temperature near the coasts a little.
-        // Re-recorded on square cells at Q2, and at 256 rows at Q2b, where the wettest half percent
-        // of the land is its windward slopes read on cells of four times the area, so the coast
-        // stands 200 to 240 mm lower: seed 42 from 3644 to 3407 mm, inside the bar, and seed 99
-        // from 4029 to 3826 (docs/DESIGN_LEDGER.md, Q2 and Q2b).
+        // Re-recorded on square cells at Q2, and at 256 rows at Q2b, where the 99.5th percentile
+        // of the land's rain is read on cells of four times the area: seed 42's coast from 3644 to
+        // 3407 mm, inside the bar, and seed 99's from 4029 to 3826 (docs/DESIGN_LEDGER.md, Q2 and
+        // Q2b).
         KnownFailures.expect("D I-9: the rainfall calibration's figures predate W2 and W3", "seed 99's windward coast at 3826 mm") {
             if (misses.isNotEmpty()) {
                 throw RecordedViolation(

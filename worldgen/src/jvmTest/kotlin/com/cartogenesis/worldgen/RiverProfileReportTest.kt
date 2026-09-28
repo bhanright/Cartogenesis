@@ -35,9 +35,11 @@ import kotlin.test.assertTrue
  * the rivers are rather than asserting where they should be.
  *
  * At [SharedWorlds.DETAIL_ROWS]: a long profile's concavity and steepness are statistics of the
- * river network, which move with the cell.
+ * river network, which move with the cell. It borrows the standard worlds the detail guards make,
+ * which needs the check [BorrowsSharedWorlds] declares: without it [SharedWorlds] generates a world
+ * for its caller alone and keeps none.
  */
-class RiverProfileReportTest {
+class RiverProfileReportTest : BorrowsSharedWorlds() {
 
     private companion object {
         val SEEDS = listOf(7L, 42L, 1234L, 99L, 718106L)

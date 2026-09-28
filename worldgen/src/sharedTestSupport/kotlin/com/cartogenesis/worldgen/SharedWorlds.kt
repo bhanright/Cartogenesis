@@ -70,9 +70,10 @@ object SharedWorlds {
      *
      * Measured, not derived: the 600 MB before Q2 kept sixteen of the 512 by 512 grid's worlds, and
      * keeping sixteen of 512 rows would take 1.25 GB, but at 1.25 GB a worker ran out of its 3.5 GB
-     * heap generating a world for `LakeWaterBalanceTest`, while at 700 MB the whole tier passed. The cost of the smaller figure is a class that borrows the four standard worlds and a
-     * variant of each, `PressureWindTest`, making its four variants three times over, about 160
-     * seconds of the tier (docs/DESIGN_LEDGER.md, Q2).
+     * heap generating a world for `LakeWaterBalanceTest`, while at 700 MB the whole tier passed.
+     * What the smaller figure costs is worlds made again in the worker they were made in, most of
+     * them where 1,024-row worlds pass through and push the standard worlds out: fifteen in the
+     * tier at Q2b, about nine minutes of generation (docs/DESIGN_LEDGER.md, Q2 and Q2b).
      */
     private const val RETAINED_ARRAY_BYTES = 700_000_000L
 

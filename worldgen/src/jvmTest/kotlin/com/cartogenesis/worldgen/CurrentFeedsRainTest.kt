@@ -110,7 +110,7 @@ class CurrentFeedsRainTest : BorrowsSharedWorlds() {
      */
     @Test
     fun `a cold-current coast dries out while a warm one does not`() {
-        val base = WorldGenConfig(seed = SEED, width = 512, height = 512)
+        val base = WorldGenConfig.forRows(SEED, 512)
         val on = SharedWorlds.world(base)
         val off = SharedWorlds.world(
             base.copy(climate = base.climate.copy(currentMoisture = 0f))

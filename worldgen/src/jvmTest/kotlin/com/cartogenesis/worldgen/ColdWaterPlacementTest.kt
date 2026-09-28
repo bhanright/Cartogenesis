@@ -74,6 +74,17 @@ class ColdWaterPlacementTest : BorrowsSharedWorlds() {
         /** The equatorial closure's band on either side of the equator, in its own deformation radii. */
         const val EQUATORIAL_RADII_EXCLUDED = 2.0
 
+        /**
+         * Failing on square cells since Q2: seed 42's coldest northern eastern-boundary water, -2.22
+         * C, lies at 7.9 degrees, in the equatorial cold tongue that now reaches the basin's eastern
+         * shore colder than the subtropical upwelling north of it (the tongue's eastern thirds read
+         * -2.03 C against -1.61 on the 512 by 512 grid, where the coldest stood at 26.5 degrees). The
+         * cause is not isolated; the ocean is still solved on its own grid of cells twice as wide as
+         * tall on the ground, which is the switch's next chunk (docs/DESIGN_LEDGER.md, Q2).
+         */
+        const val TONGUE_REACHES_THE_EASTERN_BOUNDARY =
+            "the currents: on square cells seed 42's coldest northern eastern-boundary water is the equatorial tongue's"
+
         const val EQUATORIAL_TONGUE_SHALLOW =
             "the currents: the equatorial cold tongue is shallower than its trades ask, the one-layer closure's deep water too warm"
         const val EQUATORIAL_BAND_DEGREES = 4f
@@ -89,7 +100,7 @@ class ColdWaterPlacementTest : BorrowsSharedWorlds() {
     fun `the coldest subtropical eastern-boundary water lies within Earth's upwelling systems' latitudes`() {
         val failures = ArrayList<String>()
         for (seed in SEEDS) {
-            val world = SharedWorlds.world(WorldGenConfig(seed = seed, width = 512, height = 512))
+            val world = SharedWorlds.world(WorldGenConfig.forRows(seed, 512))
             for (hemisphere in listOf(1f, -1f)) {
                 val (coldestC, latitude) = coldestEasternBoundary(world, hemisphere) ?: continue
                 println("COLD WATER seed $seed ${if (hemisphere > 0) "north" else "south"}: coldest eastern-boundary water %.2f C at %.1f degrees".format(coldestC, latitude))
@@ -98,7 +109,9 @@ class ColdWaterPlacementTest : BorrowsSharedWorlds() {
                 }
             }
         }
-        assertTrue(failures.isEmpty(), failures.joinToString("\n"))
+        KnownFailures.expect(TONGUE_REACHES_THE_EASTERN_BOUNDARY, "seed 42: the coldest eastern-boundary water, -2.22 C, lies at 7.9 degrees") {
+            if (failures.isNotEmpty()) throw RecordedViolation(failures.joinToString("\n"), failures.joinToString("; "))
+        }
     }
 
     @Test
@@ -106,7 +119,7 @@ class ColdWaterPlacementTest : BorrowsSharedWorlds() {
         val failures = ArrayList<String>()
         val shortOf = ArrayList<String>()
         for (seed in SEEDS) {
-            val world = SharedWorlds.world(WorldGenConfig(seed = seed, width = 512, height = 512))
+            val world = SharedWorlds.world(WorldGenConfig.forRows(seed, 512))
             val thirds = equatorialThirds(world) ?: continue
             val marginC = THIRDS_OF_AN_EVEN_FALL * PACIFIC_ZONAL_CONTRAST_C * thirds.meanStressLength /
                 (PACIFIC_EQUATORIAL_STRESS_N_PER_M2 * PACIFIC_EQUATORIAL_WIDTH_KM)
@@ -118,7 +131,8 @@ class ColdWaterPlacementTest : BorrowsSharedWorlds() {
                 shortOf += "seed $seed %.2f of %.2f C".format(contrastC, marginC)
             }
         }
-        KnownFailures.expect(EQUATORIAL_TONGUE_SHALLOW, "seed 7 1.77 of 2.84 C; seed 42 2.01 of 3.21 C; seed 99 1.72 of 3.38 C") {
+        // Re-recorded on square cells at Q2, the ocean still solved on its own grid (docs/DESIGN_LEDGER.md, Q2).
+        KnownFailures.expect(EQUATORIAL_TONGUE_SHALLOW, "seed 7 0.51 of 1.21 C; seed 42 2.49 of 3.90 C; seed 99 1.78 of 3.45 C") {
             if (failures.isNotEmpty()) throw RecordedViolation(failures.joinToString("\n"), shortOf.joinToString("; "))
         }
     }

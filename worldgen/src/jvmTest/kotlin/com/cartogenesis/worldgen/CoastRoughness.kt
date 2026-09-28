@@ -65,15 +65,13 @@ internal object CoastRoughness {
     const val EARTH_DEPOSITIONAL_SHARE = 0.31
 
     /**
-     * Box sizes the pooled dimension is fitted over, in cells: three octaves.
-     *
-     * Copied from `EarthLikeness.COASTLINE_BOX_SIZES` on `main`, where M1 measured the generator's
-     * 1.20 pooled, so this chunk's figure and M1's are the same figure. Not starting at one cell,
-     * where every box holding coast is its own box and the count is the coast's length rather than
-     * a measure of it, and not going past a sixteenth of the grid, where a whole continent fits in
-     * one box.
+     * Box sizes the pooled dimension is fitted over on [config]'s grid: three octaves, the
+     * kilometers of `EarthLikeness.COASTLINE_BOX_KM`, so this figure and M1's are the same figure.
+     * They were the 4, 8 and 16 cells M1 set on the 512 by 512 grid, and are the same ground since
+     * Q2 on every grid.
      */
-    val POOLED_BOX_SIZES = intArrayOf(4, 8, 16)
+    fun pooledBoxSizes(config: com.cartogenesis.worldgen.model.WorldGenConfig): IntArray =
+        EarthLikeness.coastlineBoxSizes(config)
 
     /**
      * Box sizes the octave table walks, in cells.
@@ -137,7 +135,7 @@ internal object CoastRoughness {
         cellsDown: Int,
         /** `cellHeightKm / cellWidthKm`, so a box can be as tall on the ground as it is wide. */
         cellHeightInCellWidths: Double,
-        boxSizes: IntArray = POOLED_BOX_SIZES
+        boxSizes: IntArray
     ): BoxCount {
         val boxes = LongArray(boxSizes.size)
         boxSizes.forEachIndexed { sizeIndex, size ->

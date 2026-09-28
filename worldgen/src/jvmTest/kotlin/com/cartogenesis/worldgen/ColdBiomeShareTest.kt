@@ -105,7 +105,7 @@ class ColdBiomeShareTest : BorrowsSharedWorlds() {
         var pooled = Shares(0, 0, 0)
         SEEDS.forEach { seed ->
             val world = SharedWorlds.world(
-                WorldGenConfig(seed = seed, width = GRID, height = GRID)
+                WorldGenConfig.forRows(seed, GRID)
             )
             val shares = sharesOf(world)
             pooled += shares

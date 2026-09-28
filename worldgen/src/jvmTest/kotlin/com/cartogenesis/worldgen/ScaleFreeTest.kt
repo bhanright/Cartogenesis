@@ -25,21 +25,43 @@ import org.junit.Assert.assertTrue
  */
 class ScaleFreeTest : BorrowsSharedWorlds() {
 
+    /** What the two world cases read off one seed at 512 rows and at 1,024. */
+    private class SeedPair(
+        val verdict: ScaleFree.Verdict,
+        val groundComplaints: List<String>,
+        val coarseDensityKmPerKm2: Double,
+        val fineDensityKmPerKm2: Double
+    )
+
+    /**
+     * One seed's pair of worlds measured once for both cases, and kept as figures rather than as
+     * worlds: a world of 1,024 rows is two million cells and fifty seconds, and the four of them are
+     * too large to stay lent between the two cases.
+     */
+    private fun pairOf(seed: Long): SeedPair = measuredPairs.getOrPut(seed) {
+        val coarseWorld = worldAt(seed, 512)
+        val fineWorld = worldAt(seed, 1024)
+        val coarse = ScaleFree.measure(coarseWorld, "seed $seed")
+        val fine = ScaleFree.measure(fineWorld, "seed $seed")
+        ScaleFree.print(coarse)
+        ScaleFree.print(fine)
+        SeedPair(
+            ScaleFree.compare(coarse, fine),
+            standOnTheSameGround(seed, coarseWorld, fineWorld),
+            channelDensityKmPerKm2(coarseWorld),
+            channelDensityKmPerKm2(fineWorld)
+        )
+    }
+
     @Test
     fun `the same world at 512 and 1024 measures the same and stands on the same ground`() {
         val complaints = ArrayList<String>()
         val findings = ArrayList<String>()
         SEEDS.forEach { seed ->
-            val coarseWorld = worldAt(seed, 512)
-            val fineWorld = worldAt(seed, 1024)
-            val coarse = ScaleFree.measure(coarseWorld, "seed $seed")
-            val fine = ScaleFree.measure(fineWorld, "seed $seed")
-            ScaleFree.print(coarse)
-            ScaleFree.print(fine)
-            val verdict = ScaleFree.compare(coarse, fine)
-            complaints += verdict.complaints
-            findings += verdict.findings
-            complaints += standOnTheSameGround(seed, coarseWorld, fineWorld)
+            val pair = pairOf(seed)
+            complaints += pair.verdict.complaints
+            findings += pair.verdict.findings
+            complaints += pair.groundComplaints
         }
         findings.forEachIndexed { rank, finding ->
             println("SCALEFREE FINDING ${rank + 1}. $finding")
@@ -111,10 +133,9 @@ class ScaleFreeTest : BorrowsSharedWorlds() {
     fun `the channel-head threshold is an area of ground and does not move with the grid`() {
         val complaints = ArrayList<String>()
         SEEDS.forEach { seed ->
-            val coarse512 = worldAt(seed, 512)
-            val fine1024 = worldAt(seed, 1024)
-            val coarseDensity = channelDensityKmPerKm2(coarse512)
-            val fineDensity = channelDensityKmPerKm2(fine1024)
+            val pair = pairOf(seed)
+            val coarseDensity = pair.coarseDensityKmPerKm2
+            val fineDensity = pair.fineDensityKmPerKm2
             val ratio = fineDensity / coarseDensity
             println(
                 ("SCALEFREE channel head seed %d  the initiated network is %.4f km/km2 at 512 and" +
@@ -129,17 +150,13 @@ class ScaleFreeTest : BorrowsSharedWorlds() {
                 )
             }
         }
-        // Recorded since Fix 3b: see [IMPLICIT_CUT_MOVES_WITH_THE_GRID].
-        KnownFailures.expect(IMPLICIT_CUT_MOVES_WITH_THE_GRID, "seeds 7, 42, 1234 and 99 over 1.35") {
-            if (complaints.isNotEmpty()) {
-                throw RecordedViolation(
-                    "the channel-head criterion is not the same criterion at two grids: ${complaints.joinToString("; ")}",
-                    "seeds " + complaints.map { it.substringAfter("seed ").substringBefore(":") }.let {
-                        if (it.size == 1) it.single() else it.dropLast(1).joinToString(", ") + " and " + it.last()
-                    } + " over $CHANNEL_DENSITY_FACTOR"
-                )
-            }
-        }
+        // Recorded from Fix 3b to Q2 (1.54, 1.51, 1.43 and 1.45 between the 512 and 1024 grids as
+        // many cells tall as wide) and armed on square cells, where the network grows by 1.32, 1.33,
+        // 1.33 and 1.31 from 512 rows to 1,024 (docs/DESIGN_LEDGER.md, Fix 3b and Q2).
+        assertTrue(
+            "the channel-head criterion is not the same criterion at two grids: ${complaints.joinToString("; ")}",
+            complaints.isEmpty()
+        )
     }
 
     /**
@@ -220,20 +237,8 @@ class ScaleFreeTest : BorrowsSharedWorlds() {
     }
 
     internal companion object {
-        /**
-         * The known failure the channel-head clause records since Fix 3b. From 512 to 1024 the
-         * criterion's network grows by 1.48, 1.44, 1.38 and 1.43 on seeds 7, 42, 1234 and 99,
-         * where on the capped explicit update it grew by 1.16, 1.18, 1.15 and 1.23, and at 512 it
-         * is half as dense again (0.028 to 0.037 km/km2 against 0.017 to 0.025). Once a lake falls
-         * with its outlet it grows by 1.54, 1.51, 1.42 and 1.45. It is not the round's length: at
-         * 1024 with twenty-four rounds of half the years the network is 1.004, 1.019, 1.000 and
-         * 0.999 times the stock 1024's, so the time step has converged and the growth is the
-         * grid's. Which part of the grid (the criterion's slope over a shorter step, `F` doubling
-         * at a fixed catchment when the cell halves, or the routing) is not isolated; see
-         * docs/DESIGN_LEDGER.md, Fix 3b and its review round.
-         */
-        const val IMPLICIT_CUT_MOVES_WITH_THE_GRID =
-            "the erosion: the channel network the implicit update leaves grows denser on a finer grid, and the round's length is not why"
+        /** Each seed's pair, once measured: see [pairOf]. */
+        private val measuredPairs = HashMap<Long, SeedPair>()
 
         /** The standard seeds, which are `GeographyAuditTest`'s and `EarthLikenessTest`'s. */
         val SEEDS = listOf(7L, 42L, 1234L, 99L)
@@ -276,8 +281,8 @@ class ScaleFreeTest : BorrowsSharedWorlds() {
         const val CHANNEL_DENSITY_FACTOR = 1.35
 
         fun configAt(seed: Long, size: Int): WorldGenConfig {
-            val base = WorldGenConfig(seed = seed, width = 512, height = 512)
-            return if (size == 512) base else base.atResolution(size, size)
+            val base = WorldGenConfig.forRows(seed, 512)
+            return if (size == 512) base else base.atResolution(2 * size, size)
         }
 
         fun worldAt(seed: Long, size: Int): WorldMap =

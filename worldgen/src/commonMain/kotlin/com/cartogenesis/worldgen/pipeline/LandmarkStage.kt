@@ -73,8 +73,12 @@ object LandmarkStage {
      */
     private const val HIGH_GROUND_ELEVATION = 0.45f
 
-    /** Cells from a plate boundary within which a site counts as volcanic country. */
-    private const val VOLCANIC_REACH_CELLS = 6f
+    /**
+     * How far from a plate boundary a site counts as volcanic country, in kilometers: 140.625 km,
+     * the 6 cell widths it was set as on the 512 grid, measured on the ground as the boundary
+     * distance is. docs/DESIGN_LEDGER.md, Q2.
+     */
+    private const val VOLCANIC_REACH_KM = 140.625
 
     /** Mean annual temperature, in degrees Celsius, below which a site counts as cold country. */
     private const val COLD_COUNTRY_C = 0f
@@ -145,8 +149,9 @@ object LandmarkStage {
             if (clear) chosen.add(cell)
         }
 
+        val volcanicReachCells = config.cellsFor(VOLCANIC_REACH_KM)
         val landmarks = chosen.mapIndexed { index, cell ->
-            val kind = pickKind(random, cell, sea, climate, plates)
+            val kind = pickKind(random, cell, sea, climate, plates, volcanicReachCells)
             val detail = detailFor(random, kind, cell, sea, climate)
             Landmark(
                 id = index,
@@ -165,11 +170,12 @@ object LandmarkStage {
         cell: Int,
         sea: SeaLevelResult,
         climate: ClimateResult,
-        plates: PlateResult
+        plates: PlateResult,
+        volcanicReachCells: Float
     ): LandmarkKind {
         val elevation = sea.relativeElevation.data[cell]
         val biome = climate.biome[cell]
-        val volcanic = plates.boundaryDistance.data[cell] < VOLCANIC_REACH_CELLS
+        val volcanic = plates.boundaryDistance.data[cell] < volcanicReachCells
 
         // Weights per kind, nudged by what the ground is actually like. A `mutableMapOf` because
         // it iterates in insertion order on every platform, and the roll below walks it — a

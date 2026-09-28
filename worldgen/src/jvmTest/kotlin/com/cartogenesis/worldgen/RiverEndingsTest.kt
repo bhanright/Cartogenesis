@@ -16,7 +16,7 @@ class RiverEndingsTest {
     @Test
     fun `mark land-ending river mouths`() {
         val world = WorldGenerationEngine.generateBlocking(
-            WorldGenConfig(seed = 42L, width = 1024, height = 1024)
+            WorldGenConfig.forRows(42L, 1024)
         )
         val w = world.width
         val h = world.height
@@ -88,7 +88,7 @@ class RiverEndingsTest {
     fun `report how rivers end`() {
         listOf(7L, 42L, 1234L).forEach { seed ->
             val world = WorldGenerationEngine.generateBlocking(
-                WorldGenConfig(seed = seed, width = 512, height = 512)
+                WorldGenConfig.forRows(seed, 512)
             )
             val w = world.width
             val h = world.height

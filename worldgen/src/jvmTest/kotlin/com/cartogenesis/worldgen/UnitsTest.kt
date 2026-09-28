@@ -30,7 +30,7 @@ import org.junit.Assert.assertTrue
  */
 class UnitsTest : BorrowsSharedWorlds() {
 
-    private val stock = WorldGenConfig(seed = 42L, width = 512, height = 512)
+    private val stock = WorldGenConfig.forRows(42L, 512)
 
     /**
      * Every constant charged against the land's relief, read at the stock ruler and at one twice
@@ -143,7 +143,7 @@ class UnitsTest : BorrowsSharedWorlds() {
 
         // And with the world's width held and the grid quadrupled, every one of them is four times
         // the cells: the same length on the ground, drawn finer.
-        val finer = reaches(stock.atResolution(2048, 2048))
+        val finer = reaches(stock.atResolution(4096, 2048))
         here.forEach { (name, cells) ->
             assertEquals(
                 "$name does not scale with the grid",
@@ -218,7 +218,7 @@ class UnitsTest : BorrowsSharedWorlds() {
         val worst = ArrayList<Pair<Long, Double>>()
         listOf(7L, 42L, 1234L, 99L).forEach { seed ->
             val world = SharedWorlds.world(
-                WorldGenConfig(seed = seed, width = 512, height = 512)
+                WorldGenConfig.forRows(seed, 512)
             )
             val scale = world.config.scale
             val shoreline = world.sea.shorelineHeight

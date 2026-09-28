@@ -19,14 +19,19 @@ import kotlin.test.assertTrue
  * every array, every list, every number, walked by reflection so that a field added to a result
  * later is covered without anyone remembering to add it here.
  *
- * Seed 7 at 512 because it carries all of what the capture reports — sea lobes, lake fans, a sheet
- * and valley glaciers — so the capture is exercised on every path it has, not merely allocated.
+ * Seed 7 because it carries all of what the capture reports — sea lobes, lake fans, a sheet and
+ * valley glaciers — so the capture is exercised on every path it has, not merely allocated.
+ *
+ * At 256 rows, the 512 by 256 world of square cells as wide as the 512 by 512 grid's: whether a
+ * sink moves a bit does not depend on how many cells there are, so the guard is held on the
+ * cheaper world, and the assertions below still see every path taken there (docs/DESIGN_LEDGER.md,
+ * Q2).
  */
 class LayerCaptureTest {
 
     @Test
     fun `a world generated with the capture is the world generated without it, to the bit`() {
-        val config = WorldGenConfig(seed = 7L, width = 512, height = 512)
+        val config = WorldGenConfig.forRows(7L, 256)
         val plain = WorldGenerationEngine.generateBlocking(config)
         val capture = LayerCapture()
         val watched = WorldGenerationEngine.generateBlocking(config, capture = capture)

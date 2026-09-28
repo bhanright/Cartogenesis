@@ -55,12 +55,12 @@ class DeltaOutlineTest {
      * against the cell.
      */
     private fun config(seed: Long, size: Int = 512): WorldGenConfig {
-        val base = WorldGenConfig(seed = seed, width = 512, height = 512, seaLevel = 0.62f)
+        val base = WorldGenConfig.forRows(seed, 512).copy(seaLevel = 0.62f)
         val authored = base.copy(
             tectonics = base.tectonics.copy(plateCount = 14),
             nations = base.nations.copy(nationCount = 12)
         )
-        return if (size == 512) authored else authored.atResolution(size, size)
+        return if (size == 512) authored else authored.atResolution(2 * size, size)
     }
 
     private class Run(val config: WorldGenConfig) {
@@ -545,7 +545,7 @@ class DeltaOutlineTest {
      */
     @Test
     fun `a lobe reaches as far north as east on the ground`() {
-        val config = WorldGenConfig(seed = 42L, width = 512, height = 512)
+        val config = WorldGenConfig.forRows(42L, 512)
         val rowScale = config.cellHeightInCellWidths
         val w = 256
         val h = 256
@@ -719,7 +719,7 @@ class DeltaOutlineTest {
         val flow =
             FlowRouting.flowDirections(
                 w, h, sea.isLand, sea.relativeElevation, filled, run.seed,
-                run.config.cellHeightInCellWidths
+                run.config.cellHeightInCellWidths, FlowRouting.smoothFieldPeriodCells(run.config)
             )
         val area = FlowRouting.accumulate(w, h, sea.isLand, filled, flow, sea.landCellCount) { 1f }
         val land = sea.landCellCount.toFloat()

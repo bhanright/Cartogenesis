@@ -183,16 +183,16 @@ internal object LakeWaterBalance {
      * is to give the flat a *gradient* to follow. White noise would make each cell pick
      * an unrelated direction and the path would stagger; a smooth field gives it a slope that turns
      * gently, so the path meanders the way water on a floodplain does. The field itself is
-     * [FlowRouting.smoothSeededField], shared with the routing's own sub-grid draw so that the two
-     * decisions a coarse grid leaves open are made off one surface rather than two.
+     * [FlowRouting.smoothSeededField] at [periodCells], [FlowRouting.smoothFieldPeriodCells] of the
+     * world's grid, the field the flats' rain in [FlatRouting] also reads under a salt of its own.
      *
      * The amplitude is chosen, not tuned: ten times the 1e-6 the depression fill nudges a flat cell
      * by, so it decides wherever the fill's own staircase would have, and a hundredth of the
      * smallest real cell-to-cell drop the routing has to respect — a basin floor measured at 2048
      * falls by 3e-3 to 1.3e-2 per cell — so nowhere with genuine relief in it is moved at all.
      */
-    fun jitter(width: Int, x: Int, y: Int, seed: Long): Float =
-        FlowRouting.smoothSeededField(width, x, y, seed) * JITTER_AMPLITUDE
+    fun jitter(width: Int, periodCells: Int, x: Int, y: Int, seed: Long): Float =
+        FlowRouting.smoothSeededField(width, periodCells, x, y, seed) * JITTER_AMPLITUDE
 
     private const val JITTER_AMPLITUDE = 1e-5f
 
@@ -237,6 +237,8 @@ internal object LakeWaterBalance {
      * @param seed the world's seed, so the [jitter] is this world's and not every world's.
      * @param cellHeightInCellWidths how tall a row is against a column's width, so the descent is
      *   steepest on the ground and not on a square of cells.
+     * @param smoothFieldPeriodCells [FlowRouting.smoothFieldPeriodCells] of the world's grid, the
+     *   period the [jitter] varies over.
      * @param flowTarget modified in place.
      */
     fun routeIntoWater(
@@ -251,11 +253,12 @@ internal object LakeWaterBalance {
         mark: Int,
         pathKey: FloatArray,
         seed: Long,
-        cellHeightInCellWidths: Double
+        cellHeightInCellWidths: Double,
+        smoothFieldPeriodCells: Int
     ) {
         val steps = GroundSteps(cellHeightInCellWidths)
         fun surfaceAt(cell: Int): Float =
-            ground.data[cell] + jitter(width, cell % width, cell / width, seed)
+            ground.data[cell] + jitter(width, smoothFieldPeriodCells, cell % width, cell / width, seed)
 
         val frontier = LongMinHeap(cellCount.coerceAtLeast(MIN_HEAP_CAPACITY))
         for (cell in water) {

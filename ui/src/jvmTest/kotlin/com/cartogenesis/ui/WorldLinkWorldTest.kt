@@ -39,9 +39,8 @@ class WorldLinkWorldTest {
         val link = WorldLinks.linkTo(WorldLinks.PUBLIC_APP_ADDRESS, original, RenderOptions())
         println("WORLD LINK fingerprinted world: $link")
 
-        // What a window at another seed and size makes of the link. Built at 1024 directly, so its
-        // cell-measured widths are still the 512 values: nothing but the seed, the size and where
-        // the work runs may pass from the window into the world the link makes.
+        // What a window at another seed and size makes of the link: nothing but the seed, the size
+        // and where the work runs may pass from the window into the world the link makes.
         val elsewhere = WorldGenConfig(seed = 1L, width = 1024, height = 1024)
         val opened = WorldLinks.read(link, elsewhere, RenderOptions(), WorldCeilings.BROWSER_TAB).config
 

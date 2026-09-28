@@ -1,5 +1,6 @@
 package com.cartogenesis.worldgen
 
+import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.Biome
 import com.cartogenesis.worldgen.pipeline.ChannelInitiation
@@ -169,15 +170,21 @@ internal object EarthLikeness {
     const val BANDS_EITHER_SIDE_OF_A_MODE = 1
 
     /**
-     * Box sizes the coastline is counted over, in cell widths of ground: three octaves.
+     * Box sizes the coastline is counted over, in kilometers: three octaves, 94 to 375 km.
      *
-     * Not starting at one cell, where every box holding coast is its own box and the count is the
-     * coast's length in cells rather than a measure of it, and not going past a sixteenth of the
-     * grid, where a whole continent fits in one box. The same three at every resolution, so the
-     * number answers "how crinkled is this line on its own grid" and can be compared between them.
-     * A box is square on the ground, as many rows tall as make its width: see [coastlineBoxCount].
+     * The 4, 8 and 16 cell widths M1 set on the 512 by 512 grid, stated on the ground since Q2, so
+     * the count asks how crinkled a coast is over the same ground whatever grid draws it: on square
+     * cells half as wide, the same kilometers are twice the cells. Not starting at one cell of the
+     * 512 grid, where every box holding coast is its own box and the count is the coast's length in
+     * cells rather than a measure of it, and not going past a sixteenth of the 512 grid, where a
+     * whole continent fits in one box. A box is square on the ground, as many rows tall as make its
+     * width: see [coastlineBoxCount].
      */
-    val COASTLINE_BOX_SIZES = intArrayOf(4, 8, 16)
+    val COASTLINE_BOX_KM = doubleArrayOf(93.75, 187.5, 375.0)
+
+    /** [COASTLINE_BOX_KM] as whole cell widths of [config]'s grid. */
+    fun coastlineBoxSizes(config: WorldGenConfig): IntArray =
+        IntArray(COASTLINE_BOX_KM.size) { config.wholeCellsFor(COASTLINE_BOX_KM[it]) }
 
     /**
      * The smallest island the fit takes, in cells.
@@ -284,7 +291,8 @@ internal object EarthLikeness {
 
         val hypsometry = hypsometryOf(world)
         val coastline = coastlineBoxCount(
-            world.sea.isLand, cellsAcross, cellsDown, world.config.cellHeightInCellWidths
+            world.sea.isLand, cellsAcross, cellsDown, world.config.cellHeightInCellWidths,
+            coastlineBoxSizes(world.config)
         )
 
         // The drainage area of every cell, in cells: the engine's own accumulation over the
@@ -586,7 +594,7 @@ internal object EarthLikeness {
         cellsDown: Int,
         /** `cellHeightKm / cellWidthKm`, so a box can be as tall on the ground as it is wide. */
         cellHeightInCellWidths: Double,
-        boxSizes: IntArray = COASTLINE_BOX_SIZES
+        boxSizes: IntArray
     ): BoxCount {
         val boxes = LongArray(boxSizes.size)
         boxSizes.forEachIndexed { sizeIndex, size ->
@@ -1358,7 +1366,7 @@ internal object EarthLikeness {
                 deepestMetres = Double.NaN,
                 cellsByBand = bands
             ),
-            coastline = coastline ?: BoxCount(COASTLINE_BOX_SIZES, LongArray(COASTLINE_BOX_SIZES.size)),
+            coastline = coastline ?: BoxCount(IntArray(COASTLINE_BOX_KM.size), LongArray(COASTLINE_BOX_KM.size)),
             hack = fitLine(hackPoints.map { it.first }, hackPoints.map { it.second }),
             hackFullNetwork = hackFullNetwork.fit(),
             hackDrawnCourse =

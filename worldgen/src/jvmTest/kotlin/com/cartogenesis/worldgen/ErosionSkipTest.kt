@@ -17,12 +17,16 @@ import kotlin.test.assertTrue
  * neighbour holds material above the critical slope, and material travels one cell per sweep, so
  * dilating the tiles that still hold excess covers everything that can change. If that argument is
  * wrong the output differs, so the test is exact equality — not "close enough".
+ *
+ * The equality is held at 256 rows: the argument is cell by cell and tile by tile, so it is as true
+ * on few cells as on many, and the cheaper world tests it as well (docs/DESIGN_LEDGER.md, Q2). The
+ * saving, a figure of the machine and the grid, is still reported at 1,024 rows.
  */
 class ErosionSkipTest {
 
     @Test
     fun `skipping settled ground gives bit-identical terrain`() {
-        val config = WorldGenConfig(seed = 234475L, width = 512, height = 512)
+        val config = WorldGenConfig.forRows(234475L, 256)
         val uplift = PlateStage.generate(config, TerrainStage.generate(config)).height
 
         val skipped = thermalSweepBlocking(config, uplift, skipSettled = true).height.data
@@ -46,7 +50,7 @@ class ErosionSkipTest {
 
     @Test
     fun `report what skipping settled ground saves`() {
-        val config = WorldGenConfig(seed = 42L, width = 1024, height = 1024)
+        val config = WorldGenConfig.forRows(42L, 1024)
         val uplift = PlateStage.generate(config, TerrainStage.generate(config)).height
 
         // Warm the JIT, or the first measurement pays for compiling the inner loop.

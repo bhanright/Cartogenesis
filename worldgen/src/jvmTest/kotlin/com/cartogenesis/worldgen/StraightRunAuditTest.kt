@@ -59,8 +59,8 @@ class StraightRunAuditTest {
 
     private fun world(seed: Long, side: Int, byFacet: Boolean): WorldMap =
         WorldGenerationEngine.generateBlocking(
-            WorldGenConfig(seed = seed, width = 512, height = 512)
-                .atResolution(side, side)
+            WorldGenConfig.forRows(seed, 512)
+                .atResolution(2 * side, side)
                 .copy(facetRouting = byFacet)
         )
 
@@ -173,7 +173,7 @@ class StraightRunAuditTest {
         (SEEDS.map { it to SIDE } + (AUTHORS_SEED to AUTHORS_SIDE)).forEach { (seed, side) ->
             val plain = EarthLikeness.drawnChannelMask(world(seed, side, byFacet = false))
             val facet = EarthLikeness.drawnChannelMask(world(seed, side, byFacet = true))
-            val awayFromThePlainNetwork = chebyshevDistanceFrom(plain, side, side)
+            val awayFromThePlainNetwork = chebyshevDistanceFrom(plain, 2 * side, side)
             var drawnByBoth = 0
             var drawnByFacetOnly = 0
             var drawnByPlainOnly = 0
@@ -227,7 +227,8 @@ class StraightRunAuditTest {
         val seed = world.config.seed
 
         fun route(byFacet: Boolean) = FlowRouting.flowDirections(
-            cellsAcross, cellsDown, isLand, ground, filled, seed, world.config.cellHeightInCellWidths, byFacet
+            cellsAcross, cellsDown, isLand, ground, filled, seed, world.config.cellHeightInCellWidths,
+            FlowRouting.smoothFieldPeriodCells(world.config), byFacet
         )
 
         // Once each to let the just-in-time compiler see them, then measured.

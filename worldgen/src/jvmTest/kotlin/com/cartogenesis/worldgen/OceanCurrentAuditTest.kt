@@ -17,7 +17,7 @@ import kotlin.test.assertTrue
 class OceanCurrentAuditTest {
 
     private companion object {
-        val CONFIG = WorldGenConfig(seed = 969495L, width = 512, height = 512).atResolution(2048, 2048)
+        val CONFIG = WorldGenConfig.forRows(969495L, 512).atResolution(4096, 2048)
 
         /** Generated once for both clauses, since it is the cost of the class. */
         val WORLD: WorldMap by lazy { WorldGenerationEngine.generateBlocking(CONFIG) }

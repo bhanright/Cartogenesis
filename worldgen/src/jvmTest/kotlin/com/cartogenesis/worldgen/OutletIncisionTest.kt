@@ -150,7 +150,7 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
         val depthShares = ArrayList<Double>()
         val perSeedDepth = ArrayList<String>()
         seeds.forEach { seed ->
-            val config = WorldGenConfig(seed = seed, width = 512, height = 512)
+            val config = WorldGenConfig.forRows(seed, 512)
                 .let { it.copy(tectonics = it.tectonics.copy(historyEpochs = 1)) }
             val on = roundsOf(config)
             val off = roundsOf(config.copy(erosion = config.erosion.copy(outletIncision = false)))
@@ -257,7 +257,8 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
         )
         val pooledDepth = depthShares.average()
         // Recorded since Fix 3b: see [NOTCH_SHORT_ON_THE_LAWS_TERRAIN].
-        KnownFailures.expect(NOTCH_SHORT_ON_THE_LAWS_TERRAIN, "82.5% as deep as the control's") {
+        // Re-recorded on square cells at Q2 (docs/DESIGN_LEDGER.md, Q2).
+        KnownFailures.expect(NOTCH_SHORT_ON_THE_LAWS_TERRAIN, "88.7% as deep as the control's") {
             if (pooledDepth >= 0.5) {
                 throw RecordedViolation(
                     "the fill still stands ${"%.1f".format(pooledDepth * 100)}% as deep over the land as the " +
@@ -319,7 +320,8 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
             val field = FloatField(SHELF_GRID, SHELF_GRID, relative.copyOf())
             val filled = FlowRouting.fillDepressions(SHELF_GRID, SHELF_GRID, isLand, field)
             val flow = FlowRouting.flowDirections(
-                SHELF_GRID, SHELF_GRID, isLand, field, filled, config.seed, config.cellHeightInCellWidths
+                SHELF_GRID, SHELF_GRID, isLand, field, filled, config.seed, config.cellHeightInCellWidths,
+                FlowRouting.smoothFieldPeriodCells(config)
             )
             val area = FlowRouting.accumulate(SHELF_GRID, SHELF_GRID, isLand, filled, flow, landCells.toInt()) { 1f }
             return Routed(relative.copyOf(), filled.data, flow, area.data)
@@ -399,7 +401,7 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
         val overSizedDrowned = ArrayList<String>()
         val drownedShares = ArrayList<Double>()
         seeds.forEach { seed ->
-            val config = WorldGenConfig(seed = seed, width = 512, height = 512)
+            val config = WorldGenConfig.forRows(seed, 512)
             val before = SharedWorlds.world(
                 config.copy(erosion = config.erosion.copy(outletIncision = false))
             )
@@ -472,10 +474,13 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
         // basins take the rain leaving them at every exit: seed 7's water went from 1.1530% to
         // 0.8764%, then to 0.8455%, and at 4a, the ground unchanged and its lakes balanced against
         // the climate the solved currents moved, to 0.8475%, and at 4b-1, the ground unchanged
-        // again and the climate moved by the water the wind raises, to 0.8445%.
+        // again and the climate moved by the water the wind raises, to 0.8445%. Re-recorded on square
+        // cells at Q2, where seeds 718106 and 42 keep more than half their water and a lake over the
+        // Caspian's share each (docs/DESIGN_LEDGER.md, Q2).
         KnownFailures.expect(
             NOTCH_SHORT_ON_THE_LAWS_TERRAIN,
-            "seed 718106's water 0.7704% to 0.5995%; seed 7's water 1.1550% to 0.8445%"
+            "seed 718106's largest lake 1.77x the Caspian; seed 42's largest lake 1.96x the Caspian; " +
+                "seed 718106's water 1.2402% to 0.7046%; seed 42's water 1.7988% to 1.3140%"
         ) {
             if (overCaspian.isNotEmpty() || notHalved.isNotEmpty()) {
                 val found = (overCaspian + notHalved).joinToString("; ")
@@ -559,7 +564,7 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
         val after = ArrayList<Double>()
         val perSeed = ArrayList<String>()
         SILL_SEEDS.forEach { seed ->
-            val base = WorldGenConfig(seed = seed, width = 512, height = 512)
+            val base = WorldGenConfig.forRows(seed, 512)
             val without = SharedWorlds.world(
                 base.copy(erosion = base.erosion.copy(outletFallToTheWater = false))
             )

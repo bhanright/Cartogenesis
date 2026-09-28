@@ -47,7 +47,7 @@ class GenerationStopTest {
      * than strict. At 512 a round is long enough to be a real bound and short enough that the test
      * runs in a minute.
      */
-    private val base = WorldGenConfig(seed = 99L, width = 512, height = 512)
+    private val base = WorldGenConfig.forRows(99L, 512)
 
     @Test
     fun `a stop during erosion lands within one hydraulic round and costs the next world nothing`() {
@@ -139,7 +139,7 @@ class GenerationStopTest {
      */
     @Test
     fun `a stopped generation leaves the last completed world as the one to reuse`() {
-        val small = WorldGenConfig(seed = 99L, width = 256, height = 256)
+        val small = WorldGenConfig.forRows(99L, 256)
         val onScreen = WorldGenerationEngine.generateBlocking(small)
         val changed = small.copy(
             erosion = small.erosion.copy(

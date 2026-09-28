@@ -29,11 +29,11 @@ class SnowBalanceAuditTest {
     fun `report the cost of the balance and of the provisional climate`() {
         // Warm the JIT so the first size measured is not paying for compilation.
         WorldGenerationEngine.generateBlocking(
-            WorldGenConfig(seed = 1L, width = 256, height = 256)
+            WorldGenConfig.forRows(1L, 256)
         )
 
         listOf(512, 1024, 2048).forEach { size ->
-            val cfg = WorldGenConfig(seed = 42L, width = 128, height = 128).atResolution(size, size)
+            val cfg = WorldGenConfig.forRows(42L, 128).atResolution(2 * size, size)
             val terrain = TerrainStage.generate(cfg)
             val plates = PlateStage.generate(cfg, terrain)
             val erosion = erodeBlocking(cfg, plates.height, upliftRateMmPerYear = plates.upliftRateMmPerYear)

@@ -148,7 +148,8 @@ class FlatCourseTest : BorrowsSharedWorlds() {
         )
         val filled = FlowRouting.fillDepressions(cellsAcross, cellsDown, isLand, ground)
         val surface = FlatRouting.surfaceOf(
-            cellsAcross, cellsDown, isLand, ground, filled, config.seed, config.cellHeightInCellWidths
+            cellsAcross, cellsDown, isLand, ground, filled, config.seed, config.cellHeightInCellWidths,
+            FlowRouting.smoothFieldPeriodCells(config)
         )
         println(
             "F30B trench: %d flats over %d raised cells, %d kept the staircase; the flat's first cell stands %.3g above its entry"
@@ -182,10 +183,11 @@ class FlatCourseTest : BorrowsSharedWorlds() {
         // it, and put the share over the line it is meant to sit well under.
         var surfaceMs = Double.MAX_VALUE
         val rowScale = world.config.cellHeightInCellWidths
-        var surface = FlatRouting.surfaceOf(world.width, world.height, sea.isLand, sea.relativeElevation, filled, seed, rowScale)
+        val period = FlowRouting.smoothFieldPeriodCells(world.config)
+        var surface = FlatRouting.surfaceOf(world.width, world.height, sea.isLand, sea.relativeElevation, filled, seed, rowScale, period)
         repeat(3) {
             val surfaceStarted = System.nanoTime()
-            surface = FlatRouting.surfaceOf(world.width, world.height, sea.isLand, sea.relativeElevation, filled, seed, rowScale)
+            surface = FlatRouting.surfaceOf(world.width, world.height, sea.isLand, sea.relativeElevation, filled, seed, rowScale, period)
             surfaceMs = minOf(surfaceMs, (System.nanoTime() - surfaceStarted) / 1_000_000.0)
         }
         val passes = routingPassesPerGeneration(world.config)
@@ -214,8 +216,8 @@ internal object FlatCourse {
         SharedWorlds.world(config(seed, side, overPotential))
 
     fun config(seed: Long, side: Int, overPotential: Boolean): WorldGenConfig =
-        WorldGenConfig(seed = seed, width = 512, height = 512)
-            .atResolution(side, side)
+        WorldGenConfig.forRows(seed, 512)
+            .atResolution(2 * side, side)
             .copy(flatPotential = overPotential)
 
     /** Cells the fill raised, by any amount at all: where the routing surface is not the ground. */
@@ -284,7 +286,8 @@ internal object FlatCourse {
         val filled = world.rivers.filledElevation
         val flow = FlowRouting.flowDirections(
             world.width, world.height, sea.isLand, sea.relativeElevation, filled,
-            world.config.seed, world.config.cellHeightInCellWidths, world.config.facetRouting,
+            world.config.seed, world.config.cellHeightInCellWidths, FlowRouting.smoothFieldPeriodCells(world.config),
+            world.config.facetRouting,
             world.config.flatPotential
         )
         val cellCount = world.width * world.height

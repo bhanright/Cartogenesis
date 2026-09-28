@@ -28,16 +28,6 @@ import kotlin.test.assertTrue
 class StraightRunTest : BorrowsSharedWorlds() {
 
     private companion object {
-        /**
-         * The known failure the census records since the implicit pass lets a lake fall with its
-         * outlet (docs/DESIGN_LEDGER.md, Fix 3b's review round): seed 42 at 512 holds one ruled
-         * bar, 27 cells at (202,43), 0.96 cells off a line it runs 24.1 cells along, where with the
-         * lake held at its filled level the census read 0 / 0 / 0 / 0 / 0. `GlaciationTest` records
-         * the same finding on the comb.
-         */
-        const val LAKE_FALLS_INTO_BARS =
-            "the water: once a lake falls with its outlet, more of the standing water lies in thin grid-bearing bars"
-
         /** The author's own world, at the size he looks at it, where the bar was found. */
         const val AUTHORS_SEED = 298405L
         const val AUTHORS_SIDE = 1024
@@ -47,7 +37,8 @@ class StraightRunTest : BorrowsSharedWorlds() {
         const val STANDARD_SIDE = 512
 
         /**
-         * The author's second world, at the one grid the ruled shores can be found on.
+         * The author's second world, at the one grid the ruled shores can be found on: 1,024 rows
+         * since Q2, whose square cells are the 5.9 km a cell of the 2048 by 2048 grid measured across.
          *
          * A 2048 world is the better part of two minutes and it is not optional, for the reason
          * `GlacialBasinShapeTest` keeps one: the bodies the notch opened are three and seven
@@ -56,13 +47,13 @@ class StraightRunTest : BorrowsSharedWorlds() {
          * world it drowns is a question about how finely the coast is resolved.
          */
         const val SHORE_SEED = 364673L
-        const val SHORE_SIDE = 2048
+        const val SHORE_SIDE = 1024
     }
 
     private fun world(seed: Long, side: Int, byFacet: Boolean = true): WorldMap =
         SharedWorlds.world(
-            WorldGenConfig(seed = seed, width = 512, height = 512)
-                .atResolution(side, side)
+            WorldGenConfig.forRows(seed, 512)
+                .atResolution(2 * side, side)
                 .copy(facetRouting = byFacet)
         )
 
@@ -116,15 +107,10 @@ class StraightRunTest : BorrowsSharedWorlds() {
             assertDrainageIsAForest(world, "$seed@$side")
         }
         println("F18 census with the facet rule: ${counted.joinToString(" ")}")
-        // Recorded since the lake falls with its outlet: see [LAKE_FALLS_INTO_BARS].
-        KnownFailures.expect(LAKE_FALLS_INTO_BARS, "42@512=1") {
-            if (total != 0) {
-                throw RecordedViolation(
-                    "standing water still runs in ruled lines: ${counted.joinToString(" ")}",
-                    counted.filterNot { it.endsWith("=0") }.joinToString(" ")
-                )
-            }
-        }
+        // Recorded from Fix 3b's review round, when the lake came to fall with its outlet (seed 42
+        // at 512 by 512 held one bar, 27 cells), and armed on square cells at Q2, where the census
+        // reads nought on every seed (docs/DESIGN_LEDGER.md, Q2).
+        assertTrue(total == 0, "standing water still runs in ruled lines: ${counted.joinToString(" ")}")
     }
 
     /**
@@ -414,7 +400,8 @@ class StraightRunTest : BorrowsSharedWorlds() {
             FlowRouting.fillDepressions(cellsAcross, cellsDown, world.sea.isLand, ground)
         val routed = FlowRouting.flowDirections(
             cellsAcross, cellsDown, world.sea.isLand, ground, filledField, world.config.seed,
-            world.config.cellHeightInCellWidths, world.config.facetRouting, world.config.flatPotential
+            world.config.cellHeightInCellWidths, FlowRouting.smoothFieldPeriodCells(world.config),
+            world.config.facetRouting, world.config.flatPotential
         )
         val filled = filledField.data
         val trueGround = ground.data
@@ -426,7 +413,7 @@ class StraightRunTest : BorrowsSharedWorlds() {
             if (world.config.flatPotential) {
                 FlatRouting.surfaceOf(
                     cellsAcross, cellsDown, world.sea.isLand, ground, filledField, world.config.seed,
-                    world.config.cellHeightInCellWidths
+                    world.config.cellHeightInCellWidths, FlowRouting.smoothFieldPeriodCells(world.config)
                 ).heights
             } else {
                 DoubleArray(filled.size) {

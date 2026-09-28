@@ -28,7 +28,7 @@ class WorldFingerprintTest {
 
     @Test
     fun `two generations of one seed are the same world in every field`() {
-        val config = WorldGenConfig(seed = 42L, width = 128, height = 128)
+        val config = WorldGenConfig.forRows(42L, 128)
         val first = ReachableState.digestsByBranch(generate(config))
         val second = ReachableState.digestsByBranch(generate(config))
         assertTrue(first.size > 20, "the walk found only ${first.size} branches of the world, so it compared almost nothing")
@@ -43,7 +43,7 @@ class WorldFingerprintTest {
      */
     @Test
     fun `the fingerprint sees one bit of one cell`() {
-        val world = generate(WorldGenConfig(seed = 42L, width = 128, height = 128))
+        val world = generate(WorldGenConfig.forRows(42L, 128))
         val copy = ReachableState.deepCopy(world)
         val before = ReachableState.digestsByBranch(world)
         assertEquals(before, ReachableState.digestsByBranch(copy), "a deep copy is not the same world")
@@ -62,7 +62,7 @@ class WorldFingerprintTest {
      */
     @Test
     fun `print the standard world's digests`() {
-        val digests = ReachableState.digestsByBranch(generate(WorldGenConfig(seed = 42L, width = 512, height = 512)))
+        val digests = ReachableState.digestsByBranch(generate(WorldGenConfig.forRows(42L, 512)))
         digests.forEach { (branch, digest) -> println("WORLD DIGEST %-40s %016x".format(branch, digest)) }
         assertTrue(digests.size > 20, "the walk found only ${digests.size} branches")
     }

@@ -30,14 +30,18 @@ import kotlinx.coroutines.runBlocking
 class ThermalAspectTest {
 
     @Test
-    fun `a settled slope stands at the critical gradient whichever way it faces`() {
-        val config = WorldGenConfig(seed = 1L, width = SIDE, height = SIDE)
+    fun `a settled slope stands at the critical gradient whichever way it faces`() = listOf(
+        WorldGenConfig(seed = 1L, width = SIDE, height = SIDE),
+        WorldGenConfig(seed = 1L, width = 2 * SIDE, height = SIDE)
+    ).forEach { config ->
+        val cellsAcross = config.width
+        val cellsDown = config.height
         val span = config.scale.reliefSpanMetres
         val cellWidthKm = config.cellWidthKm
         val cellHeightKm = config.cellHeightKm
-        val mesa = FloatField.of(SIDE, SIDE) { column, row ->
-            val eastKm = (column - SIDE / 2) * cellWidthKm
-            val southKm = (row - SIDE / 2) * cellHeightKm
+        val mesa = FloatField.of(cellsAcross, cellsDown) { column, row ->
+            val eastKm = (column - cellsAcross / 2) * cellWidthKm
+            val southKm = (row - cellsDown / 2) * cellHeightKm
             val onTop = sqrt(eastKm * eastKm + southKm * southKm) < MESA_RADIUS_KM
             (BASE_METRES + if (onTop) MESA_METRES else 0.0).toFloat() / span
         }
@@ -49,8 +53,8 @@ class ThermalAspectTest {
         var northSouth = 0.0
         var diagonal = 0.0
         val diagonalKm = sqrt(cellWidthKm * cellWidthKm + cellHeightKm * cellHeightKm)
-        for (row in 1 until SIDE - 1) {
-            for (column in 1 until SIDE - 1) {
+        for (row in 1 until cellsDown - 1) {
+            for (column in 1 until cellsAcross - 1) {
                 val here = settled[column, row].toDouble() * span
                 eastWest = maxOf(eastWest, abs(settled[column + 1, row] * span - here) / cellWidthKm)
                 northSouth = maxOf(northSouth, abs(settled[column, row + 1] * span - here) / cellHeightKm)
@@ -59,13 +63,13 @@ class ThermalAspectTest {
         }
         val critical = config.erosion.criticalFallMetresPerKm.toDouble()
         println(
-            "THERMAL after $SWEEPS sweeps the steepest fall left is %.1f m/km along a row, %.1f down a column and %.1f on a diagonal, against %.0f critical"
-                .format(eastWest, northSouth, diagonal, critical)
+            "THERMAL cells %.1f by %.1f km, after $SWEEPS sweeps the steepest fall left is %.1f m/km along a row, %.1f down a column and %.1f on a diagonal, against %.0f critical"
+                .format(cellWidthKm, cellHeightKm, eastWest, northSouth, diagonal, critical)
         )
         listOf("along a row" to eastWest, "down a column" to northSouth, "on a diagonal" to diagonal).forEach { (step, fall) ->
             assertTrue(
                 fall <= critical * (1.0 + SETTLED_EXCESS) && fall >= critical * SETTLED_AGAINST_THE_LIMIT,
-                "the steepest settled fall $step is ${"%.1f".format(fall)} m/km against the critical ${critical.toInt()}"
+                "on cells $cellWidthKm by $cellHeightKm km the steepest settled fall $step is ${"%.1f".format(fall)} m/km against the critical ${critical.toInt()}"
             )
         }
     }
@@ -73,7 +77,8 @@ class ThermalAspectTest {
     private companion object {
         /**
          * A 256 grid: cells 46.9 km across and 23.4 km down, so the critical slope allows a drop of
-         * 2,812 m to a neighbour east or west and 1,406 m to one north or south.
+         * 2,812 m to a neighbor east or west and 1,406 m to one north or south; and twice as many
+         * columns, whose square cells allow 1,406 m both ways.
          */
         const val SIDE = 256
 

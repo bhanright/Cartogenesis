@@ -64,7 +64,7 @@ internal object DescribeSeed42 {
     fun main(arguments: Array<String>) {
         repeat(arguments[0].toInt()) { Any().hashCode() }
         Biome.entries.forEach { it.hashCode() }
-        val world = WorldGenerationEngine.generateBlocking(WorldGenConfig(seed = 42L, width = 512, height = 512))
+        val world = WorldGenerationEngine.generateBlocking(WorldGenConfig.forRows(42L, 512))
         println("DIGEST " + sha256(world.nations.nations.toString()))
         println("DIGEST " + sha256(world.cultures.cultures.toString()))
     }

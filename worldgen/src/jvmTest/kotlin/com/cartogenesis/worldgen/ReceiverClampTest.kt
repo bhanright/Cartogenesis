@@ -90,7 +90,7 @@ class ReceiverClampTest {
         var pondedWithout = 0
         var holesWithout = 0
         seeds.forEach { seed ->
-            val config = WorldGenConfig(seed = seed, width = 512, height = 512)
+            val config = WorldGenConfig.forRows(seed, 512)
             val plates = PlateStage.generate(config, TerrainStage.generate(config))
 
             listOf(false to loose, true to tight).forEach { (clamp, into) ->
@@ -165,7 +165,8 @@ class ReceiverClampTest {
         val filled = FlowRouting.fillDepressions(w, h, sea.isLand, sea.relativeElevation)
         val flow =
             FlowRouting.flowDirections(
-                w, h, sea.isLand, sea.relativeElevation, filled, config.seed, config.cellHeightInCellWidths
+                w, h, sea.isLand, sea.relativeElevation, filled, config.seed, config.cellHeightInCellWidths,
+                FlowRouting.smoothFieldPeriodCells(config)
             )
         val area = FlowRouting.accumulate(w, h, sea.isLand, filled, flow, sea.landCellCount) { 1f }
         val land = sea.landCellCount.toFloat()

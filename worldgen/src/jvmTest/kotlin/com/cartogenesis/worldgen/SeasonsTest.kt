@@ -87,7 +87,7 @@ class SeasonsTest : BorrowsSharedWorlds() {
     @Test
     fun `at 35 degrees the land swings through the year and the open sea does not`() {
         val world = SharedWorlds.world(
-            WorldGenConfig(seed = 42L, width = size, height = size)
+            WorldGenConfig.forRows(42L, size)
         )
         val w = world.width
         val h = world.height
@@ -183,7 +183,7 @@ class SeasonsTest : BorrowsSharedWorlds() {
     }
 
     private fun measure(seed: Long, seasons: Boolean): Tally {
-        val base = WorldGenConfig(seed = seed, width = size, height = size)
+        val base = WorldGenConfig.forRows(seed, size)
         val world = SharedWorlds.world(
             base.copy(climate = base.climate.copy(seasons = seasons))
         )

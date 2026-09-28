@@ -42,7 +42,7 @@ class ChannelInitiationControlTest : BorrowsSharedWorlds() {
     fun `without the cover term the drainage-density clauses fail`() {
         val pool = EarthLikeness.Pool()
         val bare = SEEDS.map { seed ->
-            val config = WorldGenConfig(seed = seed, width = SIDE, height = SIDE)
+            val config = WorldGenConfig.forRows(seed, SIDE)
             val withCover: WorldMap = SharedWorlds.world(config)
             val withoutCover = runBlocking {
                 WorldGenerationEngine.generate(
@@ -86,7 +86,7 @@ class ChannelInitiationControlTest : BorrowsSharedWorlds() {
      */
     @Test
     fun `the frozen-ground rule does not follow the lake's evaporation scale`() {
-        val config = WorldGenConfig(seed = 42L, width = SIDE, height = SIDE)
+        val config = WorldGenConfig.forRows(42L, SIDE)
         val world: WorldMap = SharedWorlds.world(config)
         val noLakeEvaporation = runBlocking {
             WorldGenerationEngine.generate(

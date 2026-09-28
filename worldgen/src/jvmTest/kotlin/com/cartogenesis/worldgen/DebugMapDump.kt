@@ -35,7 +35,7 @@ class DebugMapDump {
 
         listOf(7L, 42L, 1234L).forEach { seed ->
             val world = WorldGenerationEngine.generateBlocking(
-                WorldGenConfig(seed = seed, width = 512, height = 512)
+                WorldGenConfig.forRows(seed, 512)
             )
             write(render(world, Mode.FANTASY), "seed$seed-fantasy.png")
             // Seasons are invisible in the annual maps by construction, so every seed gets the
@@ -58,7 +58,7 @@ class DebugMapDump {
         }
 
         // One world in every view, to check each stage independently.
-        val world = WorldGenerationEngine.generateBlocking(WorldGenConfig(seed = 42L, width = 512, height = 512))
+        val world = WorldGenerationEngine.generateBlocking(WorldGenConfig.forRows(42L, 512))
         write(render(world, Mode.ELEVATION), "seed42-elevation.png")
         write(render(world, Mode.PLATES), "seed42-plates.png")
         write(render(world, Mode.BIOME), "seed42-biome.png")
@@ -114,7 +114,7 @@ class DebugMapDump {
     fun `dump the H2 ice before and after`() {
         outputDir.mkdirs()
         listOf(7L, 42L, 1234L).forEach { seed ->
-            val base = WorldGenConfig(seed = seed, width = 512, height = 512)
+            val base = WorldGenConfig.forRows(seed, 512)
             val after = WorldGenerationEngine.generateBlocking(base)
             val before = WorldGenerationEngine.generateBlocking(
                 base.copy(climate = base.climate.copy(snowBalance = false))
@@ -151,7 +151,7 @@ class DebugMapDump {
     fun `dump the H4 current-coupled coast before and after`() {
         outputDir.mkdirs()
         val seed = 26L
-        val base = WorldGenConfig(seed = seed, width = 512, height = 512)
+        val base = WorldGenConfig.forRows(seed, 512)
         val after = WorldGenerationEngine.generateBlocking(base)
         val before = WorldGenerationEngine.generateBlocking(
             base.copy(climate = base.climate.copy(currentMoisture = 0f))
@@ -178,7 +178,7 @@ class DebugMapDump {
 
         listOf(7L, 42L, 1234L).forEach { seed ->
             listOf(true, false).forEach { pairs ->
-                val base = WorldGenConfig(seed = seed, width = 512, height = 512)
+                val base = WorldGenConfig.forRows(seed, 512)
                 val config = base.copy(
                     tectonics = base.tectonics.copy(crustPairProfiles = pairs)
                 )
@@ -226,7 +226,7 @@ class DebugMapDump {
     fun `sweep the meridional wind`() {
         outputDir.mkdirs()
         listOf(7L, 42L, 1234L).forEach { seed ->
-            val base = WorldGenConfig(seed = seed, width = 512, height = 512)
+            val base = WorldGenConfig.forRows(seed, 512)
             listOf(0f, 0.15f).forEach { slant ->
                 val world = WorldGenerationEngine.generateBlocking(
                     base.copy(climate = base.climate.copy(meridionalWindShare = slant))
@@ -248,7 +248,7 @@ class DebugMapDump {
     @Test
     fun `sweep terrain roughness against tectonic influence`() {
         outputDir.mkdirs()
-        val base = WorldGenConfig(seed = 42L, width = 512, height = 512)
+        val base = WorldGenConfig.forRows(42L, 512)
 
         // The weight the tectonics carry against the base noise used to be one blend factor; since
         // S2 it is the relief that noise carries in metres against the four kilometres isostasy
@@ -273,7 +273,7 @@ class DebugMapDump {
     @Test
     fun `sweep wilderness mode`() {
         outputDir.mkdirs()
-        val base = WorldGenConfig(seed = 42L, width = 512, height = 512)
+        val base = WorldGenConfig.forRows(42L, 512)
         WildernessMode.entries.forEach { mode ->
             val world = WorldGenerationEngine.generateBlocking(
                 base.copy(nations = base.nations.copy(wilderness = mode))
@@ -292,7 +292,7 @@ class DebugMapDump {
     fun `report resolution consistency metrics`() {
         listOf(128, 256, 512).forEach { size ->
             val world = WorldGenerationEngine.generateBlocking(
-                WorldGenConfig(seed = 42L, width = 128, height = 128).atResolution(size, size)
+                WorldGenConfig.forRows(42L, 128).atResolution(2 * size, size)
             )
             val e = world.sea.relativeElevation
             var nearTotal = 0.0; var nearCount = 0
@@ -360,7 +360,7 @@ class DebugMapDump {
     fun `dump the glaciated coasts`() {
         outputDir.mkdirs()
         listOf(7L, 42L, 1234L, 718106L).forEach { seed ->
-            val config = WorldGenConfig(seed = seed, width = 512, height = 512)
+            val config = WorldGenConfig.forRows(seed, 512)
             val world = WorldGenerationEngine.generateBlocking(config)
             val bare = WorldGenerationEngine.generateBlocking(
                 config.copy(glaciation = config.glaciation.copy(enabled = false))
@@ -386,9 +386,9 @@ class DebugMapDump {
                 // lakes and short streaks, and at 1024 — the resolution the desktop app actually
                 // opens at — it is a cross-hatched mesh over every cold region. Same world, same
                 // config path the app uses, twice the grid.
-                val fine = WorldGenerationEngine.generateBlocking(config.atResolution(1024, 1024))
+                val fine = WorldGenerationEngine.generateBlocking(config.atResolution(2048, 1024))
                 val bareFine = WorldGenerationEngine.generateBlocking(
-                    config.atResolution(1024, 1024)
+                    config.atResolution(2048, 1024)
                         .let { it.copy(glaciation = it.glaciation.copy(enabled = false)) }
                 )
                 write(
@@ -437,11 +437,9 @@ class DebugMapDump {
      * A single seamount is only a handful of cells across, which is invisible at whole-world
      * scale and exactly where a rasterized-circle artefact would live if there were one. Seed
      * 718106 carries a chain, with the author's settings (sea level 0.62, 14 plates, 12 realms
-     * are all defaults). 1024 and 2048 are reached via [WorldGenConfig.atResolution] from the 512
-     * base, exactly as the app does, so [TectonicsConfig.hotspotRadiusCells] and friends scale up with
-     * the grid rather than staying pinned to their 512 cell count -- a plain `WorldGenConfig(width
-     * = 2048, ...)` would not rescale them and the cone would come out the same handful of cells
-     * across at every resolution instead of genuinely finer or coarser. The vent is located fresh
+     * are all defaults). [TectonicsConfig.hotspotRadiusKm] and friends are lengths on the ground,
+     * so at 1024 and 2048 the cone is more cells across and genuinely finer rather than the same
+     * handful of cells at every resolution. The vent is located fresh
      * at each resolution from the with/without-chains plate height difference, rather than scaled
      * from a lower-resolution position, because the plate RNG is not a simple rescaling between
      * resolutions.
@@ -450,10 +448,10 @@ class DebugMapDump {
     fun `dump the hotspot cone`() {
         outputDir.mkdirs()
         val seed = 718106L
-        val base512 = WorldGenConfig(seed = seed, width = 512, height = 512)
+        val base512 = WorldGenConfig.forRows(seed, 512)
 
         listOf(512, 1024, 2048).forEach { size ->
-            val base = if (size == 512) base512 else base512.atResolution(size, size)
+            val base = if (size == 512) base512 else base512.atResolution(2 * size, size)
             val radiusScale = size / 512
 
             listOf(false to "before", true to "after").forEach { (detail, tag) ->
@@ -535,8 +533,8 @@ class DebugMapDump {
         val rift = com.cartogenesis.worldgen.pipeline.BoundaryClass.CONTINENTAL_RIFT.ordinal
 
         listOf(512, 1024).forEach { size ->
-            val base = WorldGenConfig(seed = seed, width = 512, height = 512)
-                .let { if (size == 512) it else it.atResolution(size, size) }
+            val base = WorldGenConfig.forRows(seed, 512)
+                .let { if (size == 512) it else it.atResolution(2 * size, size) }
             val worlds = listOf(false, true).map { segmented ->
                 WorldGenerationEngine.generateBlocking(
                     base.copy(tectonics = base.tectonics.copy(riftSegmentation = segmented))
@@ -546,17 +544,17 @@ class DebugMapDump {
             // Ground inside the rift trough that the segmentation lifted out of the water: the
             // sills, and the shoulders the half-grabens raised. The largest connected cluster of
             // it is the window both crops use, so the two pictures frame the same ground.
-            val changed = BooleanArray(size * size) { i ->
+            val changed = BooleanArray(base.width * base.height) { i ->
                 !worlds[0].sea.isLand[i] && worlds[1].sea.isLand[i] &&
                     worlds[1].plates.nearestBoundaryClass[i] == rift &&
-                    worlds[1].plates.boundaryDistance.data[i] <= base.tectonics.riftShoulderOffsetCells
+                    worlds[1].plates.boundaryDistance.data[i] <= base.cellsFor(base.tectonics.riftShoulderOffsetKm)
             }
             val span = (size / 4).coerceAtLeast(64)
-            val seen = BooleanArray(size * size)
+            val seen = BooleanArray(base.width * base.height)
             var best = 0
             var cx = 0
             var cy = 0
-            for (start in 0 until size * size) {
+            for (start in 0 until base.width * base.height) {
                 if (!changed[start] || seen[start]) continue
                 var count = 0
                 var sumX = 0L
@@ -567,23 +565,23 @@ class DebugMapDump {
                 while (stack.isNotEmpty()) {
                     val i = stack.removeLast()
                     count++
-                    sumX += (i % size).toLong()
-                    sumY += (i / size).toLong()
-                    val x = i % size
-                    val y = i / size
+                    sumX += (i % base.width).toLong()
+                    sumY += (i / base.width).toLong()
+                    val x = i % base.width
+                    val y = i / base.width
                     for (dy in -2..2) {
                         val ny = y + dy
-                        if (ny < 0 || ny >= size) continue
+                        if (ny < 0 || ny >= base.height) continue
                         for (dx in -2..2) {
-                            val n = ny * size + ((x + dx + size) % size)
+                            val n = ny * base.width + ((x + dx + base.width) % base.width)
                             if (changed[n] && !seen[n]) { seen[n] = true; stack.add(n) }
                         }
                     }
                 }
                 if (count > best) {
                     best = count
-                    cx = ((sumX / count).toInt() - span / 2).coerceIn(0, size - span)
-                    cy = ((sumY / count).toInt() - span / 2).coerceIn(0, size - span)
+                    cx = ((sumX / count).toInt() - span / 2).coerceIn(0, base.width - span)
+                    cy = ((sumY / count).toInt() - span / 2).coerceIn(0, base.height - span)
                 }
             }
 
@@ -604,9 +602,9 @@ class DebugMapDump {
 
                 var cells = 0
                 var flooded = 0
-                for (i in 0 until size * size) {
+                for (i in 0 until base.width * base.height) {
                     if (world.plates.nearestBoundaryClass[i] != rift) continue
-                    if (world.plates.boundaryDistance.data[i] > base.tectonics.riftWidthCells) continue
+                    if (world.plates.boundaryDistance.data[i] > base.cellsFor(base.tectonics.riftWidthKm)) continue
                     cells++
                     if (!world.sea.isLand[i]) flooded++
                 }
@@ -637,7 +635,7 @@ class DebugMapDump {
         outputDir.mkdirs()
 
         fun pair(seed: Long, size: Int): Pair<WorldMap, WorldMap> {
-            val base = WorldGenConfig(seed = seed, width = size, height = size)
+            val base = WorldGenConfig.forRows(seed, size)
             val off = WorldGenerationEngine.generateBlocking(
                 base.copy(lakes = base.lakes.copy(waterBalance = false))
             )
@@ -724,8 +722,8 @@ class DebugMapDump {
 
         listOf(59758L, 718106L).forEach { seed ->
             val world = WorldGenerationEngine.generateBlocking(
-                WorldGenConfig(seed = seed, width = 512, height = 512, seaLevel = 0.62f)
-                    .atResolution(1024, 1024)
+                WorldGenConfig.forRows(seed, 512).copy(seaLevel = 0.62f)
+                    .atResolution(2048, 1024)
             )
             val lakes = world.rivers.lakes
             var crossings = 0
@@ -772,7 +770,7 @@ class DebugMapDump {
      * Both crops are located from the world itself rather than from remembered coordinates, on a
      * 64-cell lattice so the window cannot slide about between two runs of a slightly different
      * generator: the plateau window holds the most cells sitting on a collision plateau's *outer
-     * rim* (boundary distance within a fifth of `collisionWidthCells` of it), and the shelf window the
+     * rim* (boundary distance within a fifth of `collisionWidthKm` of it), and the shelf window the
      * most ocean cells on the continental *slope* — distance to land between one and two
      * `shelfWidthKm` on the ground, the band `SeaLevelStage` smoothsteps back down to the natural sea floor.
      * Those two bands are the iso-contours of the distance field, which is what this is looking
@@ -792,8 +790,8 @@ class DebugMapDump {
     fun `dump the tectonic history`() {
         outputDir.mkdirs()
         listOf(7L, 42L, 1234L).forEach { seed ->
-            val base = WorldGenConfig(seed = seed, width = 512, height = 512)
-                .atResolution(1024, 1024)
+            val base = WorldGenConfig.forRows(seed, 512)
+                .atResolution(2048, 1024)
             listOf(1 to "before", base.tectonics.historyEpochs to "after").forEach { (epochs, tag) ->
                 val config = base.copy(tectonics = base.tectonics.copy(historyEpochs = epochs))
                 val world = WorldGenerationEngine.generateBlocking(config)
@@ -833,7 +831,9 @@ class DebugMapDump {
     fun `dump the distance field edges`() {
         outputDir.mkdirs()
         val size = 1024
-        val config = WorldGenConfig(seed = 42L, width = 512, height = 512).atResolution(size, size)
+        val config = WorldGenConfig.forRows(42L, size)
+        val across = config.width
+        val down = config.height
         val world = WorldGenerationEngine.generateBlocking(config)
         val image = render(world, Mode.ELEVATION)
         write(image, "distfield-seed42-$size-elevation.png")
@@ -846,13 +846,13 @@ class DebugMapDump {
             var bestY = 0
             var best = -1
             var y = 0
-            while (y + span <= size) {
+            while (y + span <= down) {
                 var x = 0
-                while (x + span <= size) {
+                while (x + span <= across) {
                     var count = 0
                     for (yy in y until y + span step 2) {
                         for (xx in x until x + span step 2) {
-                            if (interesting(yy * size + xx)) count++
+                            if (interesting(yy * across + xx)) count++
                         }
                     }
                     if (count > best) { best = count; bestX = x; bestY = y }
@@ -863,7 +863,7 @@ class DebugMapDump {
             return bestX to bestY
         }
 
-        val rim = config.tectonics.collisionWidthCells
+        val rim = config.cellsFor(config.tectonics.collisionWidthKm)
         val (px, py) = bestWindow { i ->
             world.sea.isLand[i] && world.plates.nearestBoundaryClass[i] == plateau &&
                 abs(world.plates.boundaryDistance.data[i] - rim) < rim * 0.2f
@@ -871,12 +871,12 @@ class DebugMapDump {
 
         // Distance to land, the field the shelf remap is keyed on, by the transform the pipeline
         // itself uses.
-        val toLand = FloatArray(size * size) { JumpFloodDistance.INFINITE }
-        val label = IntArray(size * size) { -1 }
-        for (i in 0 until size * size) {
+        val toLand = FloatArray(across * down) { JumpFloodDistance.INFINITE }
+        val label = IntArray(across * down) { -1 }
+        for (i in 0 until across * down) {
             if (world.sea.isLand[i]) { toLand[i] = 0f; label[i] = i }
         }
-        JumpFloodDistance.run(size, size, toLand, label)
+        JumpFloodDistance.run(across, down, toLand, label)
         val shelf = config.cellsFor(config.sea.shelfWidthKm)
         val (sx, sy) = bestWindow { i ->
             !world.sea.isLand[i] && toLand[i] > shelf && toLand[i] <= 2f * shelf
@@ -892,24 +892,24 @@ class DebugMapDump {
         // their shape from, drawn so a facet is a straight run of band edge rather than something
         // to be inferred from a shaded slope.
         write(
-            crop(bands(world.plates.boundaryDistance.data, size, size), px, py, span, span, 4),
+            crop(bands(world.plates.boundaryDistance.data, across, down), px, py, span, span, 4),
             "distfield-seed42-$size-plateau-contours.png"
         )
         write(
-            crop(bands(toLand, size, size), sx, sy, span, span, 4),
+            crop(bands(toLand, across, down), sx, sy, span, span, 4),
             "distfield-seed42-$size-shelf-contours.png"
         )
         // The same window, same seeds, by the chamfer transform: the octagonal contours the shelf
         // used to be cut from, drawn in whichever run this is so the pair can be compared without
         // reverting anything.
-        val chamfer = FloatArray(size * size) { DistanceTransform.INFINITE }
-        val chamferLabel = IntArray(size * size) { -1 }
-        for (i in 0 until size * size) {
+        val chamfer = FloatArray(across * down) { DistanceTransform.INFINITE }
+        val chamferLabel = IntArray(across * down) { -1 }
+        for (i in 0 until across * down) {
             if (world.sea.isLand[i]) { chamfer[i] = 0f; chamferLabel[i] = i }
         }
-        DistanceTransform.run(size, size, chamfer, chamferLabel)
+        DistanceTransform.run(across, down, chamfer, chamferLabel)
         write(
-            crop(bands(chamfer, size, size), sx, sy, span, span, 4),
+            crop(bands(chamfer, across, down), sx, sy, span, span, 4),
             "distfield-seed42-$size-shelf-contours-chamfer.png"
         )
         println(

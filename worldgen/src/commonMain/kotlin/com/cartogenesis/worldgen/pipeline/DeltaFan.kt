@@ -151,6 +151,12 @@ internal object DeltaFan {
      * wide to exist at all, and four grooves across a four-cell fan is one groove. Below this the
      * lobe keeps its apex-to-rim slope and the trunk's own path, which is what carries the river
      * across it; above it, the same delta reads as a bird's foot.
+     *
+     * Counted in cells on purpose, and kept so when the grid's other lengths became kilometers: it
+     * is how many cells a fan needs for its grooves to be told apart, which is a property of the
+     * grid that draws them and not of the delta. In kilometers it would withhold the grooves from a
+     * fine grid that can draw them and hand them to a coarse one that merges them into one.
+     * docs/DESIGN_LEDGER.md, Q2.
      */
     private const val GROOVE_MIN_REACH_CELLS = 4
 

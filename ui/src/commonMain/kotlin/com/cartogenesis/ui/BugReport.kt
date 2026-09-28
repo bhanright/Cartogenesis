@@ -202,8 +202,8 @@ internal object BugReport {
      *
      * The defaults are read from a fresh [WorldGenConfig] and [RenderOptions] rather than listed
      * here, so a default that moves in the generator moves here with it. Resolution is not
-     * consulted: `atResolution` scales the settings measured in cells, and no knob reads one of
-     * those, so a world at 2048 and the same world at 512 report the same list.
+     * consulted: every setting is a length, a depth or a rate on the ground, which a change of
+     * grid leaves alone, so a world at 2048 and the same world at 512 report the same list.
      *
      * Graphics acceleration is a knob like the others and is deliberately not in this list: it has
      * a line of its own, with the device beside it, and a report that named it twice would be

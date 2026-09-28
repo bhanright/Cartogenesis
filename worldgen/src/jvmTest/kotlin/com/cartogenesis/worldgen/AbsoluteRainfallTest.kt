@@ -55,7 +55,7 @@ class AbsoluteRainfallTest : BorrowsSharedWorlds() {
         val misses = ArrayList<String>()
         seeds.forEach { seed ->
             val world = SharedWorlds.world(
-                WorldGenConfig(seed = seed, width = 512, height = 512)
+                WorldGenConfig.forRows(seed, 512)
             )
             val w = world.width
             val h = world.height
@@ -106,7 +106,8 @@ class AbsoluteRainfallTest : BorrowsSharedWorlds() {
         // 3576 and 4042 mm; and at 4b-1, whose upwelling and belts moved it again: from 3560 and 4035,
         // and then from 3548 and 4042 by the second reading's five corrections to the rise, which moved
         // the sea's temperature near the coasts a little.
-        KnownFailures.expect("D I-9: the rainfall calibration's figures predate W2 and W3", "seed 42's windward coast at 3547 mm, seed 99's windward coast at 4039 mm") {
+        // Re-recorded on square cells at Q2 (docs/DESIGN_LEDGER.md, Q2).
+        KnownFailures.expect("D I-9: the rainfall calibration's figures predate W2 and W3", "seed 42's windward coast at 3644 mm, seed 99's windward coast at 4029 mm") {
             if (misses.isNotEmpty()) {
                 throw RecordedViolation(
                     "the calibration misses on ${misses.size} figures: ${misses.joinToString()}, against a windward " +
@@ -155,7 +156,7 @@ class AbsoluteRainfallTest : BorrowsSharedWorlds() {
     @Test
     fun `an arid config and a lush one classify identically under the old normalization, not under this one`() {
         val seed = 42L
-        val base = WorldGenConfig(seed = seed, width = 512, height = 512)
+        val base = WorldGenConfig.forRows(seed, 512)
         val arid = base.copy(
             climate = base.climate.copy(depletionLengthKm = base.climate.depletionLengthKm / 0.3f)
         )
@@ -221,7 +222,7 @@ class AbsoluteRainfallTest : BorrowsSharedWorlds() {
     @Test
     fun `the monsoon claim, re-measured without the clamp`() {
         val seed = 26L
-        val base = WorldGenConfig(seed = seed, width = 512, height = 512)
+        val base = WorldGenConfig.forRows(seed, 512)
         val world = SharedWorlds.world(base)
         val generated = ClimateStage.generateWithSeasonalMm(base, world.sea, world.ocean)
         val w = world.width
@@ -326,7 +327,7 @@ class AbsoluteRainfallTest : BorrowsSharedWorlds() {
     }
 
     private fun desertShare(seed: Long): Float =
-        desertShare(WorldGenConfig(seed = seed, width = 512, height = 512))
+        desertShare(WorldGenConfig.forRows(seed, 512))
 
     private fun desertShare(config: WorldGenConfig): Float {
         val world = SharedWorlds.world(config)
@@ -341,7 +342,7 @@ class AbsoluteRainfallTest : BorrowsSharedWorlds() {
     }
 
     private fun oldNormalizedDesertShare(seed: Long): Float =
-        oldNormalizedDesertShare(WorldGenConfig(seed = seed, width = 512, height = 512))
+        oldNormalizedDesertShare(WorldGenConfig.forRows(seed, 512))
 
     private fun oldNormalizedDesertShare(config: WorldGenConfig): Float {
         val world = SharedWorlds.world(config)

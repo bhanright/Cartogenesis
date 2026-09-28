@@ -65,6 +65,6 @@ class EarthLikenessAuditTest {
          * writes it: built at 512 and re-targeted, so every length measured in cells is scaled.
          */
         fun authorConfig(seed: Long): WorldGenConfig =
-            WorldGenConfig(seed = seed, width = 512, height = 512).atResolution(2048, 2048)
+            WorldGenConfig.forRows(seed, 512).atResolution(4096, 2048)
     }
 }

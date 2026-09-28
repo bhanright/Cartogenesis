@@ -42,12 +42,12 @@ class BayHeadDeltaTest {
     private val seeds = listOf(718106L, 59758L)
 
     private fun config(seed: Long, size: Int): WorldGenConfig {
-        val base = WorldGenConfig(seed = seed, width = 512, height = 512, seaLevel = 0.62f)
+        val base = WorldGenConfig.forRows(seed, 512).copy(seaLevel = 0.62f)
         val authored = base.copy(
             tectonics = base.tectonics.copy(plateCount = 14),
             nations = base.nations.copy(nationCount = 12)
         )
-        return if (size == 512) authored else authored.atResolution(size, size)
+        return if (size == 512) authored else authored.atResolution(2 * size, size)
     }
 
     /**

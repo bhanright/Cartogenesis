@@ -131,11 +131,11 @@ class VegetationDensityTest : BorrowsSharedWorlds() {
          * than kept here, so that each is generated once and checked after every clause.
          */
         fun world(seed: Long): WorldMap =
-            SharedWorlds.world(WorldGenConfig(seed = seed, width = GRID, height = GRID))
+            SharedWorlds.world(WorldGenConfig.forRows(seed, GRID))
 
         /** The same world with the field switched off, for the control clauses. */
         fun withoutVegetation(seed: Long): WorldMap {
-            val base = WorldGenConfig(seed = seed, width = GRID, height = GRID)
+            val base = WorldGenConfig.forRows(seed, GRID)
             return SharedWorlds.world(base.copy(vegetation = base.vegetation.copy(enabled = false)))
         }
     }

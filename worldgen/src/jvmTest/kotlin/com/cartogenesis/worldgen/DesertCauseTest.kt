@@ -25,7 +25,7 @@ class DesertCauseTest {
     fun `report what the misplaced deserts have in common`() {
         listOf(7L, 42L, 1234L, 99L).forEach { seed ->
             val world = WorldGenerationEngine.generateBlocking(
-                WorldGenConfig(seed = seed, width = 512, height = 512)
+                WorldGenConfig.forRows(seed, 512)
             )
             val w = world.width
             val h = world.height

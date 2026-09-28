@@ -53,12 +53,12 @@ class RiftDepthTest {
     private val seeds = listOf(7L, 42L, 1234L, 718106L, 59758L)
 
     private fun config(seed: Long, size: Int = 512): WorldGenConfig {
-        val base = WorldGenConfig(seed = seed, width = 512, height = 512, seaLevel = 0.62f)
+        val base = WorldGenConfig.forRows(seed, 512).copy(seaLevel = 0.62f)
         val authored = base.copy(
             tectonics = base.tectonics.copy(plateCount = 14),
             nations = base.nations.copy(nationCount = 12)
         )
-        return if (size == 512) authored else authored.atResolution(size, size)
+        return if (size == 512) authored else authored.atResolution(2 * size, size)
     }
 
     /**
@@ -163,9 +163,10 @@ class RiftDepthTest {
         val cut = sorted[(sorted.size * config.seaLevel).toInt().coerceIn(0, sorted.size - 1)]
         val relief = (sorted.last() - cut).coerceAtLeast(1e-6f)
 
-        val floorReach = config.tectonics.riftWidthCells * config.tectonics.riftFloorShare
-        val crestLo = config.tectonics.riftShoulderOffsetCells - config.tectonics.riftShoulderWidthCells * 0.3f
-        val crestHi = config.tectonics.riftShoulderOffsetCells + config.tectonics.riftShoulderWidthCells * 0.3f
+        val widths = PlateStage.BeltCellWidths.of(config)
+        val floorReach = widths.riftWidthCells * config.tectonics.riftFloorShare
+        val crestLo = widths.riftShoulderOffsetCells - widths.riftShoulderWidthCells * 0.3f
+        val crestHi = widths.riftShoulderOffsetCells + widths.riftShoulderWidthCells * 0.3f
         val floors = ArrayList<Float>()
         val crests = ArrayList<Float>()
         for (i in 0 until w * h) {
@@ -217,7 +218,8 @@ class RiftDepthTest {
         val height = plates.height.data
         val classes = plates.nearestBoundaryClass
         val distance = plates.boundaryDistance.data
-        val floorReach = cfg.riftWidthCells * cfg.riftFloorShare
+        val widths = PlateStage.BeltCellWidths.of(config)
+        val floorReach = widths.riftWidthCells * cfg.riftFloorShare
         val inFloor = BooleanArray(w * h) { classes[it] == rift && distance[it] <= floorReach }
         var floorCells = 0
         for (i in 0 until w * h) if (inFloor[i]) floorCells++
@@ -226,8 +228,8 @@ class RiftDepthTest {
             return 0f
         }
 
-        val crestLo = cfg.riftShoulderOffsetCells - cfg.riftShoulderWidthCells * 0.3f
-        val crestHi = cfg.riftShoulderOffsetCells + cfg.riftShoulderWidthCells * 0.3f
+        val crestLo = widths.riftShoulderOffsetCells - widths.riftShoulderWidthCells * 0.3f
+        val crestHi = widths.riftShoulderOffsetCells + widths.riftShoulderWidthCells * 0.3f
         val floors = ArrayList<Float>()
         val crests = ArrayList<Float>()
         for (i in 0 until w * h) {

@@ -52,8 +52,8 @@ class RibbonLandTest : BorrowsSharedWorlds() {
         // with the same measure, ten leave strips before erosion and seed 7 the most of them, four
         // holding 0.324% of its land; 5, 8, 11, 13, 14, 17, 18, 20 and 21 leave one each, seed
         // 20's the largest at 0.487%.
-        val base = WorldGenConfig(seed = 7L, width = 512, height = 512)
-            .atResolution(1024, 1024)
+        val base = WorldGenConfig.forRows(7L, 512)
+            .atResolution(2048, 1024)
             .let { it.copy(tectonics = it.tectonics.copy(historyEpochs = 1)) }
         listOf(
             "no erosion" to base.copy(erosion = base.erosion.copy(enabled = false)),

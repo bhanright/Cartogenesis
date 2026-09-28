@@ -46,8 +46,8 @@ class GlaciationTest : BorrowsSharedWorlds() {
      * comb case below already measures this same seed, and both regimes — valley and sheet — are
      * working there.
      */
-    private val base = WorldGenConfig(seed = 42L, width = 512, height = 512)
-        .atResolution(1024, 1024)
+    private val base = WorldGenConfig.forRows(42L, 512)
+        .atResolution(2048, 1024)
 
     /**
      * Glaciated country: the ice and tundra the carving is bounded to, *and the taiga below it*.
@@ -166,10 +166,11 @@ class GlaciationTest : BorrowsSharedWorlds() {
         // a change upstream of it brings them back, and says to arm them. Recorded on the implicit
         // update's terrain. On the capped update's the ratio was 1.08, and chunk 6's lake balance
         // (the inflow counts every exit of a basin and none of a closed basin above it) took that
-        // to 1.02; on the implicit terrain the same balance leaves it at 0.86.
+        // to 1.02; on the implicit terrain the same balance leaves it at 0.86, and on square cells
+        // at Q2 0.83, re-recorded (docs/DESIGN_LEDGER.md, Q2).
         KnownFailures.expect(
             "C I4: glaciated country holds no more lakes than the ice's absence leaves",
-            "cold-country lakes 0.20 to 0.36 per 10k cells, iced zone ratio 0.86"
+            "cold-country lakes 0.09 to 0.17 per 10k cells, iced zone ratio 0.83"
         ) {
             val tripled = with.coldLakes.toLong() * without.coldLand >= 3L * without.coldLakes * with.coldLand
             val contrasted = with.ratio >= COLD_LAKE_RATIO
@@ -258,9 +259,9 @@ class GlaciationTest : BorrowsSharedWorlds() {
             Triple(512, 0.70f, "512 at sea 0.70"),
             Triple(512, 0.50f, "512 at sea 0.50")
         ).forEach { (size, level, label) ->
-            val config = WorldGenConfig(seed = 718106L, width = 512, height = 512)
+            val config = WorldGenConfig.forRows(718106L, 512)
                 .copy(seaLevel = level)
-                .atResolution(size, size)
+                .atResolution(2 * size, size)
                 // Same reason as the comb guard above: the resolution contract below is a
                 // comparison of lake share of land at two grids, and E1's notch drains basins
                 // unevenly between them — at sea 0.70 it takes seed 718106's 512 grid down to
@@ -539,8 +540,8 @@ class GlaciationTest : BorrowsSharedWorlds() {
         var worst = 0f
         val over = ArrayList<String>()
         listOf(718106L, 42L, 7L).forEach { seed ->
-            val config = WorldGenConfig(seed = seed, width = 512, height = 512)
-                .atResolution(1024, 1024)
+            val config = WorldGenConfig.forRows(seed, 512)
+                .atResolution(2048, 1024)
                 // E1's outlet notch off, because both figures below are shares of the world's
                 // standing water and the notch removes two thirds of it for reasons that have
                 // nothing to do with ice: on seed 718106 at 1024 the lake cells go 6632 -> 2173
@@ -593,19 +594,15 @@ class GlaciationTest : BorrowsSharedWorlds() {
         // instead of stopping at the first that is over. On the implicit update before the uplift
         // was re-derived on it the ice added 5.00% and 3.18% on seeds 718106 and 7, a comb; with the
         // re-derived uplift it was inside the bar again (docs/DESIGN_LEDGER.md, Fix 3b). Recorded
-        // since the lake falls with its outlet: see [LAKE_FALLS_INTO_BARS]. Re-recorded from 2.48% on
-        // merging chunk 6, whose water balance moves which basins stand full.
-        KnownFailures.expect(LAKE_FALLS_INTO_BARS, "42 at 2.50%") {
-            if (over.isNotEmpty()) {
-                throw RecordedViolation(
-                    "the ice puts ${ICE_COMB_BAR * 100}% or more of these worlds' standing water into thin" +
-                        " grid-bearing bars that run parallel to another such bar within ten cells — a" +
-                        " comb of gullies, not a handful of trunk glaciers: $over" +
-                        " (worst ${"%.2f".format(worst * 100)}%)",
-                    over.joinToString("; ")
-                )
-            }
-        }
+        // since the lake falls with its outlet, and armed again on square cells at Q2, where the ice
+        // adds 1.64, 1.17 and 0.73% (docs/DESIGN_LEDGER.md, Q2).
+        assertTrue(
+            "the ice puts ${ICE_COMB_BAR * 100}% or more of these worlds' standing water into thin" +
+                " grid-bearing bars that run parallel to another such bar within ten cells — a" +
+                " comb of gullies, not a handful of trunk glaciers: $over" +
+                " (worst ${"%.2f".format(worst * 100)}%)",
+            over.isEmpty()
+        )
     }
 
     /** Land whose elevation range within [radius] cells is under [limit] of the land's range. */
@@ -677,20 +674,6 @@ class GlaciationTest : BorrowsSharedWorlds() {
     }
 
     private companion object {
-        /**
-         * The known failure the comb clause records since the implicit pass lets a lake fall with
-         * its outlet (docs/DESIGN_LEDGER.md, Fix 3b's review round). With the notch off at 1024 the
-         * thin parallel bars hold 0.163, 0.137 and 0.159 of the standing water on seeds 42, 7 and
-         * 718106, and 0.168, 0.153 and 0.167 with the ice off, where with the lake held at its
-         * filled level they held 0.085, 0.108 and 0.098 (0.078, 0.120 and 0.108 with the ice off).
-         * The ice's own share is no higher than the bare world's on any of the three; seed 42's
-         * glaciated world holds 8,778 lake cells against the bare world's 7,224, and the clause's
-         * count of cells is over its bar on that difference. The bars are the drainage's, a rule 13
-         * finding in `TODO.md`.
-         */
-        const val LAKE_FALLS_INTO_BARS =
-            "the water: once a lake falls with its outlet, more of the standing water lies in thin grid-bearing bars"
-
         /**
          * The elevation range, as a fraction of the land's own, under which ground counts as flat
          * for this guard.
@@ -917,8 +900,8 @@ internal fun reportBudget(config: WorldGenConfig, world: WorldMap) {
 internal fun inRiftTrough(world: WorldMap, cell: Int): Boolean {
     val rift = com.cartogenesis.worldgen.pipeline.BoundaryClass.CONTINENTAL_RIFT.ordinal
     if (world.plates.nearestBoundaryClass[cell] != rift) return false
-    // Out to the shoulder crests, in the cell terms `atResolution` scales them by.
-    val reach = WorldGenConfig().tectonics.riftShoulderOffsetCells * (world.width / 512f)
+    // Out to the shoulder crests, in cell widths of this grid.
+    val reach = world.config.cellsFor(world.config.tectonics.riftShoulderOffsetKm)
     return world.plates.boundaryDistance.data[cell] <= reach
 }
 

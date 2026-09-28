@@ -245,7 +245,7 @@ internal object SettingsEffects {
     /**
      * The config the application opens with.
      *
-     * `atResolution` rather than a copy, for the reason [Knobs.atResolution] gives, and the
+     * `atResolution`, the one place a size change is made (see [Knobs.atResolution]), and the
      * acceleration preference is written through [Knobs.graphicsAcceleration] rather than by
      * reaching into the erosion config here — one writer per setting, so the switch in the header and the
      * preference in the dialog cannot come to disagree about what "on" means.

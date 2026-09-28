@@ -165,6 +165,20 @@
   The fix is cells square on the ground, twice as many across as down, so a column and a row are
   the same step. `CombGuardTest` is its acceptance test. 2026-09-26, Fix 3b.
 
+  **What square cells did (Q2).** The one-sided comb is gone: at 512 rows the larger axis carries
+  1.10 and 1.09 times the smaller's comb on seeds 7 and 42, where the 512 by 512 grid's columns
+  carry 6.8 and 6.6 times its rows', and `CombGuardTest` holds it two-sided. What is left runs as a
+  known failure of its own: 0.16 and 0.15 km of comb per 1,000 km² on seed 7's two axes and 0.20
+  and 0.18 on seed 42's, seven to ten times the 0.021 the router makes on isotropic ground over the
+  same land. It is made in the hydraulic rounds (the same network on the ground the rounds were
+  handed combs 0.000 to 0.001), and over the rounds the steep cells' steps turn from the diagonal to
+  both axes alike (41.7 and 42.0% diagonal before, 32.2 and 33.0% after); whether that turn is the
+  cause is not isolated, and the figure is the census's as much as the ground's, 1.6 to 1.8 times as
+  large with a sustained reach of 5 cells as with the 6 that 60 km takes. The bearing census
+  (`BearingCensus`) reads the channels at the two axes 2.2 to 2.6 times as often as the fall line
+  and at the diagonal 1.4 to 1.6 times. A transport length in kilometers, above, is still the
+  candidate. 2026-09-28, Q2.
+
 - **The sea-level percentile hands the sea's highest cell to the land where the sea fills its rank
   exactly.** `SeaLevelStage.thresholdAtRank` finds the bin where the cells counted so far reach the
   target rank, `>=`, and when the target is the bin's last cell the index is clamped to it and the
@@ -494,13 +508,14 @@
 - **Six operators still count a row as a column, each outside Fix 2's list.** Found by reading the
   code, not by a guard: the climate stage's rainfall blur (a square box of cells, sized by
   `RAIN_BLUR_REFERENCE_WIDTH`) and its two coastal-reach blurs, the water exposure and the offshore
-  anomaly's spread, whose radius is `OceanConfig.coastalReachCells` (chunk 4b, the coastal
-  climate); the realms' two blurs (`NationStage`); the seeded field that jitters flat routing and
-  the lake balance, a
-  lattice of eight cells each way (`FlowRouting.smoothSeededField`); the thermal sweeps' count,
+  anomaly's spread, whose radius is `OceanConfig.coastalReachKm` read as whole cells (chunk 4b,
+  the coastal climate); the realms' two blurs (`NationStage`); the seeded field that jitters flat
+  routing and the lake balance, a lattice of `FlowRouting.SMOOTH_FIELD_PERIOD_KM` read as whole
+  cells each way (`FlowRouting.smoothSeededField`); the thermal sweeps' count,
   which spends `debrisTravelKm` as sweeps of one cell, a row down a column
   (`ErosionStage.sweepsFor`); and the glaciation's two distance fields (the `JumpFloodDistance`
-  entry below). 2026-09-24, Fix 2.
+  entry below). On square cells, the grid the switch of Q1 to Q6 moves the application to, each of
+  them reaches as far one way as the other. 2026-09-24, Fix 2; 2026-09-28, Q2.
 - **Fix 2 redrew every continent, and twenty clauses its new worlds tipped run as known failures,
   each named for where it is next taken up.** The plate partition moved from a chamfer on square
   cells to Euclid on the ground, so every seed's continents are new, and a clause that reads one
@@ -1140,22 +1155,15 @@
   rift lakes are held to `RiftDepthTest`'s and `OutletIncisionTest`'s bars and deepening a trough
   round by round is exactly what E7 measured and refused when it was done by the stamp. Whoever
   takes it should read E7 and E8's notes below first. 2026-09-13, S2.
-- **The tectonics' belt widths are still counts of cells.** S1 left the widths and the heights
-  together because neither could carry a unit while the field was normalised; S2 gave the heights
-  one — every belt height is a share of `TectonicsConfig.beltReliefMetres` — and left the widths
-  where they were, because `WorldGenConfig.atResolution` already carries them across a change of
-  grid and writing them in kilometres would do the same arithmetic in a different place. It would
-  read better all the same, and it would empty `atResolution` of everything but the moisture
-  march's own knob. A rename with no physics under it. 2026-09-13, S2.
-
-  **Not only a rename.** `atResolution` carries the widths only for a world made through it. A world
-  built directly at any grid other than 512 by 512 keeps the 512 grid's counts on its own cells. At
-  128 by 128, which is the fingerprint world, 26 cells is 2,437 km where it is 609 at 512. On a
-  1,024 by 512 grid of square cells built directly, every belt is half as wide on the ground
-  (`TectonicGroundTest`'s control reads 222 km against 393 on seed 42). `WorldGenConfig.forRows`
-  goes through `atResolution` and is right. Stating the widths in kilometers moves every world a
-  test builds directly at another grid. So it is the square-grid switch's Q2, which moves those
-  worlds anyway, and not Q1, which moves no bit. 2026-09-28, Q1.
+- **An old belt's rounding is not the same spread in kilometers at every grid.**
+  `PlateStage.roundWithAge` rounds a past epoch's uplift by a Gaussian of spread
+  `sqrt(2 r (r + 1) / 3)` cell widths, with `r` the setting `TectonicsConfig.beltAgeBlurKm` read in
+  cell widths: the spread two box passes of that radius had. The formula is not proportional to
+  `r`, so the same 70 km radius spreads 0.94 of itself at 23.4 km cells and 0.85 at 5.9 km cells
+  (2.83 and 10.2 cell widths of spread for 3 and 12 cell widths of radius at one epoch). The
+  physical statement is a spread in kilometers, `sqrt(2/3)` of the radius, which is what the
+  formula tends to on a fine grid; Q2 kept the formula because restating it would move every world
+  at every grid, and a chunk that changes the tectonics should take it. 2026-09-28, Q2.
 
 - **A world of square cells carries more ice at 60 to 90 degrees than a change of grid gives.**
   `GridShapeTest` compares the same seed at 512 by 512 and at `forRows(512)`, band by band. Its
@@ -1165,6 +1173,34 @@
   Glaciation's cell-space operators reach twice as far north-south on square cells: the relief
   window, the discs and the square windows. They are the first suspects, and Q2 re-measures them.
   2026-09-28, Q1.
+
+  **Q2 re-measured it** with the coast's reach in kilometers (234 km on square cells too, where it
+  was 117): seed 99 at 75 to 60 degrees moved to +0.021, the other two figures held. The
+  glaciation's cell-space operators were not isolated. 2026-09-28, Q2.
+- **Square cells tip four clauses the 512 by 512 grid passed, three running as known failures, none
+  of them isolated (Q2).** The ocean is still solved on its own grid of cells twice as wide as tall,
+  which is the switch's next chunk, and is the first suspect for the first two.
+  - `ColdWaterPlacementTest`: seed 42's coldest northern eastern-boundary water, -2.22 C, lies at
+    7.9 degrees, in the equatorial tongue, where on the 512 by 512 grid it lay at 26.5.
+  - `PressureWindTest`: the cold half blows onto the subtropical continents' equatorward and eastern
+    coasts at +0.31 m/s pooled, where it blew off them at -0.17; seeds 42, 1234 and 99 onshore.
+  - `SeaLevelHistoryTest`: the lowstand's pooled gain in estuary mouths is 1.47 against the 1.5 read
+    off the 512 by 512 grid's worlds (1.60 there); every seed still gains.
+  - `IceSheetTest`: no audited sheet fills a third of its dome's 500 km disc; the sheets near their
+    domes cover about a third less ground than on the 512 by 512 grid. The flow clause reads seed 20
+    instead, scanned for a dome that qualifies, so it is not blind; the audited seeds' shrinking
+    domes are the finding left.
+  2026-09-28, Q2.
+- **The shared worlds drop a class's own variants before a plain world nobody will ask for again.**
+  `WorldLender.admit` makes room by dropping the least recently lent variant first, then a plain
+  world only one class has asked for. A class that borrows the four standard worlds and a variant
+  of each, as `PressureWindTest` does in each of its tests, therefore drops its own variants to
+  admit the next one while a plain world another class finished with stays, and on square cells,
+  whose worlds hold 78 MB of arrays each against the 700 MB `SharedWorlds` keeps, it makes its four
+  variants three times over: eight extra generations, about 160 s of the tier. Raising the
+  retention is not the way: at 1.25 GB a worker ran out of its 3.5 GB heap. Preferring to drop what
+  the class now borrowing has not asked for is the candidate; `SharedWorldsGuardTest` holds the
+  order as it is. 2026-09-28, Q2.
 
 
 - **M1's coastline box count reads structure far below its own smallest box.** It counts the boxes

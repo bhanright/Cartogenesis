@@ -42,10 +42,14 @@ internal object RuledLines {
     /**
      * The shortest run that reads as ruled rather than as a lake that happens to be narrow.
      *
-     * Twenty cells is F15's census bar, and on this map it is a real distance: a cell is 23 km at
-     * 512 down to 6 km at 2048, so twenty of them is 120 to 470 km of water in a line straight to
-     * within a cell. Earth has nothing of the sort outside a rift, and a rift lake is neither
-     * straight to a cell nor uniform in width.
+     * Twenty cells is F15's census bar, and on this map it is a real distance: a cell is 23 km on
+     * the 512 by 512 grid, 11.7 km at 512 rows of square cells and 5.9 km at 1,024 rows, so twenty
+     * of them is 120 to 470 km of water in a line straight to within a cell. Earth has nothing of
+     * the sort outside a rift, and a rift lake is neither straight to a cell nor uniform in width.
+     *
+     * In cells, and kept so when the tests moved to square cells (Q2): the bar and the offset above
+     * ask whether water lies along the grid's own bearings to within its staircase, whose step is a
+     * cell, so they are the grid's figures and not lengths on the ground.
      */
     const val MIN_BAR_CELLS = 20
 
@@ -81,10 +85,11 @@ internal object RuledLines {
      * happened to pond.
      *
      * Seven is where a run stops being something country does and starts being something a grid
-     * does. A real river holds a bearing for a few cells at a time — over a cell of 6 to 23 km,
-     * seven steps is 40 to 160 km of watercourse without a bend, which the Rhine and the Mississippi
-     * manage only where they are confined. Counted over the drawn courses alone, since those are
-     * what a reader sees, and only where both ends of a step are drawn channel rather than lake.
+     * does. A real river holds a bearing for a few cells at a time — over a cell of 6 to 23 km, the
+     * range the tests' grids span on square cells too, seven steps is 40 to 160 km of watercourse
+     * without a bend, which the Rhine and the Mississippi manage only where they are confined.
+     * Counted over the drawn courses alone, since those are what a reader sees, and only where both
+     * ends of a step are drawn channel rather than lake.
      */
     fun ruledRunsOf(
         world: WorldMap,

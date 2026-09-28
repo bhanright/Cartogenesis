@@ -25,7 +25,7 @@ class CrossPlatformFingerprintTest {
     @Test
     fun `print a cross-platform fingerprint`() = runTest(timeout = 10.minutes) {
         val world = WorldGenerationEngine.generate(
-            WorldGenConfig(seed = 42L, width = 128, height = 128)
+            WorldGenConfig.forRows(42L, 128)
         )
 
         // Mixing raw bits rather than the float values, so the checksum is sensitive to a

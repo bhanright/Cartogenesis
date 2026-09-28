@@ -15,6 +15,6 @@ class RealmIdRangeAuditTest {
     /** The world the crash was reported on, at the size it was reported at. */
     @Test
     fun `the author's world at 2048 numbers every cell inside its realm list`() {
-        assertRealmIdsInRange(authorsConfig(718106L).atResolution(2048, 2048))
+        assertRealmIdsInRange(authorsConfig(718106L).atResolution(4096, 2048))
     }
 }

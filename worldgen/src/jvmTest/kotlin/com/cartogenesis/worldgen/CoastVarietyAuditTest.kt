@@ -32,15 +32,14 @@ class CoastVarietyAuditTest {
 
     private val seeds = listOf(7L, 42L, 1234L, 99L, 298405L)
 
-    /** The shipped defaults at [cellsAcross], which is 62% ocean and fourteen plates. */
-    private fun baseConfig(seed: Long, cellsAcross: Int) =
-        WorldGenConfig(seed = seed, width = 512, height = 512)
-            .atResolution(cellsAcross, cellsAcross)
+    /** The shipped defaults at [rows], which is 62% ocean and fourteen plates. */
+    private fun baseConfig(seed: Long, rows: Int) =
+        WorldGenConfig.forRows(seed, rows)
 
     @Test
     fun `report the coast's roughness by octave, and which rule puts it there`() {
-        val cellsAcross = 512
-        println("F17 diagnosis: coastline roughness by octave, $cellsAcross x $cellsAcross")
+        val rows = 512
+        println("F17 diagnosis: coastline roughness by octave, ${2 * rows} x $rows")
         println(
             "variant | seed | edges | N1 | N2 | N4 | N8 | N16 | d(1-2) | d(2-4) | d(4-8) | " +
                 "d(8-16) | pooled(4,8,16) | smooth share | sd"
@@ -51,7 +50,7 @@ class CoastVarietyAuditTest {
         val pooledSpread = LinkedHashMap<String, CoastRoughness.Spread>()
 
         seeds.forEach { seed ->
-            val shipped = baseConfig(seed, cellsAcross)
+            val shipped = baseConfig(seed, rows)
             val terrain = TerrainStage.generate(shipped)
             val plates = PlateStage.generate(shipped, terrain)
             val eroded = erodeBlocking(shipped, plates.height, upliftRateMmPerYear = plates.upliftRateMmPerYear)
@@ -66,7 +65,7 @@ class CoastVarietyAuditTest {
                 "post-cut outlet off" to shipped.copy(sea = shipped.sea.copy(postCutOutlet = false))
             )
             sameField.forEach { (name, config) ->
-                report(name, seed, SeaLevelStage.apply(eroded.height, config).isLand, cellsAcross,
+                report(name, seed, SeaLevelStage.apply(eroded.height, config).isLand, rows,
                     pooled, pooledOctaves, pooledSpread)
             }
 
@@ -74,19 +73,19 @@ class CoastVarietyAuditTest {
             val lowstandOff = shipped.copy(sea = shipped.sea.copy(lowstandMetres = 0f))
             val lowstandOffField = erodeBlocking(lowstandOff, plates.height, upliftRateMmPerYear = plates.upliftRateMmPerYear)
             report("lowstand off", seed, SeaLevelStage.apply(lowstandOffField.height, lowstandOff).isLand,
-                cellsAcross, pooled, pooledOctaves, pooledSpread)
+                rows, pooled, pooledOctaves, pooledSpread)
 
             val erosionOff = shipped.copy(erosion = shipped.erosion.copy(enabled = false))
             val erosionOffField = erodeBlocking(erosionOff, plates.height, upliftRateMmPerYear = plates.upliftRateMmPerYear)
             report("erosion off", seed, SeaLevelStage.apply(erosionOffField.height, erosionOff).isLand,
-                cellsAcross, pooled, pooledOctaves, pooledSpread)
+                rows, pooled, pooledOctaves, pooledSpread)
 
             val detailOff = shipped.copy(tectonics = shipped.tectonics.copy(detailAmplitude = 0f))
             val detailOffPlates = PlateStage.generate(detailOff, terrain)
             val detailOffField = erodeBlocking(detailOff, detailOffPlates.height, upliftRateMmPerYear = detailOffPlates.upliftRateMmPerYear)
             report("plate detail noise off", seed,
                 SeaLevelStage.apply(detailOffField.height, detailOff).isLand,
-                cellsAcross, pooled, pooledOctaves, pooledSpread)
+                rows, pooled, pooledOctaves, pooledSpread)
         }
 
         println()
@@ -126,8 +125,8 @@ class CoastVarietyAuditTest {
      */
     @Test
     fun `report what the littoral pass costs at 2048`() {
-        val cellsAcross = 2048
-        val config = baseConfig(718106L, cellsAcross)
+        val rows = 2048
+        val config = baseConfig(718106L, rows)
         val terrain = TerrainStage.generate(config)
         val plates = PlateStage.generate(config, terrain)
         val eroded = erodeBlocking(config, plates.height, upliftRateMmPerYear = plates.upliftRateMmPerYear)
@@ -163,7 +162,7 @@ class CoastVarietyAuditTest {
             )
         }
         println(
-            "F17 cost at $cellsAcross on seed 718106: the drowned-valley fill is $valleys ms and " +
+            "F17 cost at $rows on seed 718106: the drowned-valley fill is $valleys ms and " +
                 "the littoral pass is $littoral ms"
         )
     }
@@ -179,12 +178,12 @@ class CoastVarietyAuditTest {
      */
     @Test
     fun `report the coastline's length by ruler, and the excess at the cell`() {
-        val cellsAcross = 512
-        println("F17 Richardson lengths, $cellsAcross x $cellsAcross")
+        val rows = 512
+        println("F17 Richardson lengths, ${2 * rows} x $rows")
         println("variant | seed | L1 | L2 | L4 | L8 | L16 | D(1-2) | D(2-4) | D(4-8) | D(8-16) | D(4-16) | excess")
 
         seeds.forEach { seed ->
-            val shipped = baseConfig(seed, cellsAcross)
+            val shipped = baseConfig(seed, rows)
             val terrain = TerrainStage.generate(shipped)
             val plates = PlateStage.generate(shipped, terrain)
             val eroded = erodeBlocking(shipped, plates.height, upliftRateMmPerYear = plates.upliftRateMmPerYear)
@@ -197,14 +196,14 @@ class CoastVarietyAuditTest {
                 "valley fill only" to shipped.copy(sea = shipped.sea.copy(littoralGrading = false))
             )
             variants.forEach { (name, config) ->
-                reportRulers(name, seed, SeaLevelStage.apply(eroded.height, config).isLand, cellsAcross)
+                reportRulers(name, seed, SeaLevelStage.apply(eroded.height, config).isLand, rows)
             }
 
             val lowstandOff = shipped.copy(sea = shipped.sea.copy(lowstandMetres = 0f))
             val lowstandOffField = erodeBlocking(lowstandOff, plates.height, upliftRateMmPerYear = plates.upliftRateMmPerYear)
             reportRulers(
                 "lowstand off", seed,
-                SeaLevelStage.apply(lowstandOffField.height, lowstandOff).isLand, cellsAcross
+                SeaLevelStage.apply(lowstandOffField.height, lowstandOff).isLand, rows
             )
 
             // Every drowned notch filled, whatever it drains: the ceiling on what filling notches
@@ -212,7 +211,7 @@ class CoastVarietyAuditTest {
             val everyNotch = SeaLevelStage.applyWithValleyBar(
                 eroded.height, shipped, resolvedShareOfCell = 1000f
             )
-            reportRulers("every notch filled", seed, everyNotch.isLand, cellsAcross)
+            reportRulers("every notch filled", seed, everyNotch.isLand, rows)
 
             // The floor this instrument has on this grid. A percentile cut through the integrated
             // noise with no erosion in it is the smoothest coast the generator can draw, and
@@ -223,33 +222,34 @@ class CoastVarietyAuditTest {
             val erosionOffField = erodeBlocking(erosionOff, plates.height, upliftRateMmPerYear = plates.upliftRateMmPerYear)
             reportRulers(
                 "erosion off (the floor)", seed,
-                SeaLevelStage.apply(erosionOffField.height, erosionOff).isLand, cellsAcross
+                SeaLevelStage.apply(erosionOffField.height, erosionOff).isLand, rows
             )
         }
 
         // And the same on a shape with no texture at all, so the floor is not itself a property of
         // one seed's noise: a disc a quarter of the map across, which is analytically smooth.
-        val disc = BooleanArray(cellsAcross * cellsAcross)
-        val centre = cellsAcross / 2
-        val radius = cellsAcross / 4
-        for (row in 0 until cellsAcross) {
-            for (column in 0 until cellsAcross) {
-                val dy = (row - centre).toDouble()
-                val dx = (column - centre).toDouble()
-                disc[row * cellsAcross + column] = dx * dx + dy * dy <= radius.toDouble() * radius
+        val disc = BooleanArray(2 * rows * rows)
+        val centreColumn = rows
+        val centreRow = rows / 2
+        val radius = rows / 4
+        for (row in 0 until rows) {
+            for (column in 0 until 2 * rows) {
+                val dy = (row - centreRow).toDouble()
+                val dx = (column - centreColumn).toDouble()
+                disc[row * 2 * rows + column] = dx * dx + dy * dy <= radius.toDouble() * radius
             }
         }
-        reportRulers("a plain disc", 0L, disc, cellsAcross)
+        reportRulers("a plain disc", 0L, disc, rows)
     }
 
     /** How tall a row is in cell widths on the square grids this audit draws its worlds at. */
-    private fun rowHeightOf(cellsAcross: Int): Double =
-        WorldGenConfig(width = cellsAcross, height = cellsAcross).cellHeightInCellWidths
+    private fun rowHeightOf(rows: Int): Double =
+        WorldGenConfig.forRows(0L, rows).cellHeightInCellWidths
 
-    private fun reportRulers(name: String, seed: Long, isLand: BooleanArray, cellsAcross: Int) {
+    private fun reportRulers(name: String, seed: Long, isLand: BooleanArray, rows: Int) {
         val rulers = listOf(1, 2, 4, 8, 16)
         val lengths = rulers.map {
-            CoastRoughness.richardsonLength(isLand, cellsAcross, cellsAcross, it, rowHeightOf(cellsAcross))
+            CoastRoughness.richardsonLength(isLand, 2 * rows, rows, it, rowHeightOf(rows))
         }
         val octaves = (0 until 4).map {
             CoastRoughness.richardsonDimension(lengths[it], lengths[it + 1])
@@ -268,15 +268,17 @@ class CoastVarietyAuditTest {
         name: String,
         seed: Long,
         isLand: BooleanArray,
-        cellsAcross: Int,
+        rows: Int,
         pooled: MutableMap<String, MutableList<CoastRoughness.BoxCount>>,
         pooledOctaves: MutableMap<String, MutableList<CoastRoughness.BoxCount>>,
         pooledSpread: MutableMap<String, CoastRoughness.Spread>
     ) {
-        val octaves = CoastRoughness.boundaryBoxCount(isLand, cellsAcross, cellsAcross)
-        val three = CoastRoughness.coastlineBoxCount(isLand, cellsAcross, cellsAcross, rowHeightOf(cellsAcross))
-        val spread = CoastRoughness.spreadOfCoast(isLand, cellsAcross, cellsAcross)
-        val edges = CoastRoughness.shorelineEdges(isLand, cellsAcross, cellsAcross)
+        val octaves = CoastRoughness.boundaryBoxCount(isLand, 2 * rows, rows)
+        val three = CoastRoughness.coastlineBoxCount(
+            isLand, 2 * rows, rows, rowHeightOf(rows), CoastRoughness.pooledBoxSizes(WorldGenConfig.forRows(0L, rows))
+        )
+        val spread = CoastRoughness.spreadOfCoast(isLand, 2 * rows, rows)
+        val edges = CoastRoughness.shorelineEdges(isLand, 2 * rows, rows)
         println(
             "$name | $seed | $edges | ${octaves.boxes.joinToString(" | ")} | " +
                 (0 until 4).joinToString(" | ") { format(octaves.dimensionAcrossOctave(it)) } +

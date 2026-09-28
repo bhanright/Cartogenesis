@@ -58,12 +58,11 @@ class LittoralCoastTest {
      * Made once for the class and kept: every guard below reads the same cuts, none writes to
      * them, and making them is five erosions a grid, which six guards used to pay for six times.
      */
-    private fun cutsAt(cellsAcross: Int): Map<Long, Cut> =
-        cutsByGrid.getOrPut(cellsAcross) { makeCutsAt(cellsAcross) }
+    private fun cutsAt(rows: Int): Map<Long, Cut> =
+        cutsByGrid.getOrPut(rows) { makeCutsAt(rows) }
 
-    private fun makeCutsAt(cellsAcross: Int): Map<Long, Cut> = seeds.associateWith { seed ->
-        val config = WorldGenConfig(seed = seed, width = 512, height = 512)
-            .atResolution(cellsAcross, cellsAcross)
+    private fun makeCutsAt(rows: Int): Map<Long, Cut> = seeds.associateWith { seed ->
+        val config = WorldGenConfig.forRows(seed, rows)
         val terrain = TerrainStage.generate(config)
         val plates = PlateStage.generate(config, terrain)
         val eroded = erodeBlocking(config, plates.height, upliftRateMmPerYear = plates.upliftRateMmPerYear)
@@ -80,9 +79,9 @@ class LittoralCoastTest {
     }
 
     /** One stretch of the ruler table: the coast measured at one cell and over four to sixteen. */
-    private class Rulers(isLand: BooleanArray, cellsAcross: Int, cellHeightInCellWidths: Double) {
+    private class Rulers(isLand: BooleanArray, cellsAcross: Int, cellsDown: Int, cellHeightInCellWidths: Double) {
         val lengths = RULERS.map {
-            CoastRoughness.richardsonLength(isLand, cellsAcross, cellsAcross, it, cellHeightInCellWidths)
+            CoastRoughness.richardsonLength(isLand, cellsAcross, cellsDown, it, cellHeightInCellWidths)
         }
         val atTheCell = CoastRoughness.richardsonDimension(lengths[0], lengths[1])
         val overTheCoarse =
@@ -119,16 +118,16 @@ class LittoralCoastTest {
      */
     @Test
     fun `the coast is the same shape at the cell as it is four cells up`() {
-        val cellsAcross = 512
-        val cuts = cutsAt(cellsAcross)
+        val rows = STANDARD_ROWS
+        val cuts = cutsAt(rows)
         val graded = ArrayList<Rulers>()
         val control = ArrayList<Rulers>()
         val ceiling = ArrayList<Rulers>()
         cuts.forEach { (seed, cut) ->
             val rowHeight = cut.config.cellHeightInCellWidths
-            val gradedSeed = Rulers(cut.graded.isLand, cellsAcross, rowHeight)
-            val controlSeed = Rulers(cut.control.isLand, cellsAcross, rowHeight)
-            val ceilingSeed = Rulers(cut.everyNotchFilled.isLand, cellsAcross, rowHeight)
+            val gradedSeed = Rulers(cut.graded.isLand, cut.config.width, cut.config.height, rowHeight)
+            val controlSeed = Rulers(cut.control.isLand, cut.config.width, cut.config.height, rowHeight)
+            val ceilingSeed = Rulers(cut.everyNotchFilled.isLand, cut.config.width, cut.config.height, rowHeight)
             println(
                 ("COAST seed %d: at the cell %.3f against %.3f over four to sixteen, excess %.3f; " +
                     "2.0.2 %.3f against %.3f, excess %.3f; every notch filled, excess %.3f")
@@ -192,7 +191,8 @@ class LittoralCoastTest {
      * smoothing at all fails the table row.
      *
      * **Two instruments, and they part company here, which is a finding rather than a nuisance.**
-     * M1 counts the boxes of four, eight and sixteen cells that hold both land and water. A box is
+     * M1 counts the boxes of four, eight and sixteen cells of the 512 by 512 grid, 94 to 375 km and
+     * stated so since Q2, that hold both land and water. A box is
      * mixed by a *single* cell of the other kind, so a tooth one cell deep makes a four-cell box
      * mixed and rarely makes a sixteen-cell box mixed — which means the slope over 4 to 16 is read
      * partly off structure far below four cells. That is why 2.0.2 scored 1.207 with a tooth on
@@ -209,8 +209,8 @@ class LittoralCoastTest {
      */
     @Test
     fun `the coastline's dimension stays where Richardson's coasts put it`() {
-        val cellsAcross = 512
-        val cuts = cutsAt(cellsAcross)
+        val rows = STANDARD_ROWS
+        val cuts = cutsAt(rows)
         var boxes: CoastRoughness.BoxCount? = null
         var controlBoxes: CoastRoughness.BoxCount? = null
         val coarse = ArrayList<Double>()
@@ -219,10 +219,10 @@ class LittoralCoastTest {
         val smoothSeeds = ArrayList<String>()
         cuts.forEach { (seed, cut) ->
             val rowHeight = cut.config.cellHeightInCellWidths
-            val gradedBoxes = CoastRoughness.coastlineBoxCount(cut.graded.isLand, cellsAcross, cellsAcross, rowHeight)
-            val ungradedBoxes = CoastRoughness.coastlineBoxCount(cut.control.isLand, cellsAcross, cellsAcross, rowHeight)
-            val gradedRuler = Rulers(cut.graded.isLand, cellsAcross, cut.config.cellHeightInCellWidths).overTheCoarse
-            val ungradedRuler = Rulers(cut.control.isLand, cellsAcross, cut.config.cellHeightInCellWidths).overTheCoarse
+            val gradedBoxes = CoastRoughness.coastlineBoxCount(cut.graded.isLand, cut.config.width, cut.config.height, rowHeight, CoastRoughness.pooledBoxSizes(cut.config))
+            val ungradedBoxes = CoastRoughness.coastlineBoxCount(cut.control.isLand, cut.config.width, cut.config.height, rowHeight, CoastRoughness.pooledBoxSizes(cut.config))
+            val gradedRuler = Rulers(cut.graded.isLand, cut.config.width, cut.config.height, cut.config.cellHeightInCellWidths).overTheCoarse
+            val ungradedRuler = Rulers(cut.control.isLand, cut.config.width, cut.config.height, cut.config.cellHeightInCellWidths).overTheCoarse
             println(
                 ("COAST seed %d: over four to sixteen cells, by ruler %.3f graded against %.3f " +
                     "for 2.0.2; by M1's box count %.3f against %.3f")
@@ -251,18 +251,11 @@ class LittoralCoastTest {
         CoastRoughness.dimensionComplaint("pooled by ruler", pooledRuler)?.let { complaints.add(it) }
         CoastRoughness.dimensionComplaint("pooled by M1's box count", boxes!!.dimension)
             ?.let { complaints.add(it) }
-        // Recorded since Fix 3 (by box 1.028 under the cap), and re-recorded at Fix 3b: the law's
-        // terrain takes the box count to 1.082, still under Mandelbrot's band, with the ruler's
-        // 1.187 inside it, and 1.084 and 1.182 once a lake falls with its outlet. See
-        // [LAW_SETS_EVERY_CUT].
-        KnownFailures.expect(LAW_SETS_EVERY_CUT, "pooled by ruler 1.182, by box 1.084") {
-            if (complaints.isNotEmpty()) {
-                throw RecordedViolation(
-                    complaints.joinToString("; "),
-                    String.format(Locale.ROOT, "pooled by ruler %.3f, by box %.3f", pooledRuler, boxes!!.dimension)
-                )
-            }
-        }
+        // Recorded from Fix 3 (by box 1.028 under the cap) through Fix 3b (1.084 by box, 1.182 by
+        // ruler), and armed at Q2: on square cells with M1's boxes stated in kilometers the pooled
+        // coast reads 1.155 by box and 1.150 by ruler, inside Mandelbrot's band (docs/DESIGN_LEDGER.md,
+        // Q2).
+        assertTrue(complaints.isEmpty(), complaints.joinToString("; "))
         // Seed 298405's coast read under the floor by ruler from Fix 2 to Fix 3 (1.092) and is
         // inside it again on Fix 3's ground, so the clause is armed (docs/DESIGN_LEDGER.md, Fix 3).
         assertTrue(smoothSeeds.isEmpty(), "a seed's coast by ruler is under Richardson's floor: ${smoothSeeds.joinToString()}")
@@ -283,9 +276,9 @@ class LittoralCoastTest {
      */
     @Test
     fun `the criterion hands the pass the configured third of the shoreline`() {
-        val cellsAcross = 512
+        val rows = STANDARD_ROWS
         var pooled = 0.0
-        cutsAt(cellsAcross).forEach { (seed, cut) ->
+        cutsAt(rows).forEach { (seed, cut) ->
             val share = LittoralGrading.depositionalShareOfShoreline(cut.control, cut.config)
             println("COAST seed $seed: %.3f of the shoreline is depositional".format(share))
             pooled += share / seeds.size
@@ -321,19 +314,19 @@ class LittoralCoastTest {
      */
     @Test
     fun `the graded coast reads smoother than the coast it replaced`() {
-        val cellsAcross = 512
+        val rows = STANDARD_ROWS
         var graded: CoastRoughness.Spread? = null
         var control: CoastRoughness.Spread? = null
         var shortGraded: CoastRoughness.Spread? = null
         var shortControl: CoastRoughness.Spread? = null
         val half = CoastRoughness.SEGMENT_WINDOW_CELLS / 2
-        cutsAt(cellsAcross).forEach { (seed, cut) ->
-            val gradedSeed = CoastRoughness.spreadOfCoast(cut.graded.isLand, cellsAcross, cellsAcross)
-            val controlSeed = CoastRoughness.spreadOfCoast(cut.control.isLand, cellsAcross, cellsAcross)
+        cutsAt(rows).forEach { (seed, cut) ->
+            val gradedSeed = CoastRoughness.spreadOfCoast(cut.graded.isLand, cut.config.width, cut.config.height)
+            val controlSeed = CoastRoughness.spreadOfCoast(cut.control.isLand, cut.config.width, cut.config.height)
             val gradedShort =
-                CoastRoughness.spreadOfCoast(cut.graded.isLand, cellsAcross, cellsAcross, half)
+                CoastRoughness.spreadOfCoast(cut.graded.isLand, cut.config.width, cut.config.height, half)
             val controlShort =
-                CoastRoughness.spreadOfCoast(cut.control.isLand, cellsAcross, cellsAcross, half)
+                CoastRoughness.spreadOfCoast(cut.control.isLand, cut.config.width, cut.config.height, half)
             println(
                 ("COAST seed $seed: smooth share %.3f graded, %.3f ungraded (%.3f and %.3f over " +
                     "$half-cell stretches); per-stretch sd %.3f and %.3f; mean dimension %.3f and %.3f")
@@ -382,10 +375,10 @@ class LittoralCoastTest {
      */
     @Test
     fun `the grading encloses no water the cut had not already enclosed`() {
-        val cellsAcross = 512
-        cutsAt(cellsAcross).forEach { (seed, cut) ->
-            val graded = CoastRoughness.waterBodyCells(cut.graded.isLand, cellsAcross, cellsAcross)
-            val control = CoastRoughness.waterBodyCells(cut.control.isLand, cellsAcross, cellsAcross)
+        val rows = STANDARD_ROWS
+        cutsAt(rows).forEach { (seed, cut) ->
+            val graded = CoastRoughness.waterBodyCells(cut.graded.isLand, cut.config.width, cut.config.height)
+            val control = CoastRoughness.waterBodyCells(cut.control.isLand, cut.config.width, cut.config.height)
             println(
                 "COAST seed $seed: ${graded.size} bodies of water graded against ${control.size} " +
                     "ungraded, ${graded.size - 1} of them outside the ocean"
@@ -400,19 +393,19 @@ class LittoralCoastTest {
     /** What the grading costs the world in land, in islands and in shoreline. */
     @Test
     fun `report what the grading moved`() {
-        val cellsAcross = 512
-        cutsAt(cellsAcross).forEach { (seed, cut) ->
-            val cells = cellsAcross * cellsAcross
-            val gradedBodies = CoastRoughness.landBodyCells(cut.graded.isLand, cellsAcross, cellsAcross)
-            val controlBodies = CoastRoughness.landBodyCells(cut.control.isLand, cellsAcross, cellsAcross)
+        val rows = STANDARD_ROWS
+        cutsAt(rows).forEach { (seed, cut) ->
+            val cells = cut.config.width * cut.config.height
+            val gradedBodies = CoastRoughness.landBodyCells(cut.graded.isLand, cut.config.width, cut.config.height)
+            val controlBodies = CoastRoughness.landBodyCells(cut.control.isLand, cut.config.width, cut.config.height)
             println(
                 ("COAST seed $seed: land %.4f against %.4f; shoreline %d against %d cells; " +
                     "bodies %d against %d, under 8 cells %d against %d")
                     .format(
                         cut.graded.landCellCount.toDouble() / cells,
                         cut.control.landCellCount.toDouble() / cells,
-                        CoastRoughness.shorelineCellCount(cut.graded.isLand, cellsAcross, cellsAcross),
-                        CoastRoughness.shorelineCellCount(cut.control.isLand, cellsAcross, cellsAcross),
+                        CoastRoughness.shorelineCellCount(cut.graded.isLand, cut.config.width, cut.config.height),
+                        CoastRoughness.shorelineCellCount(cut.control.isLand, cut.config.width, cut.config.height),
                         gradedBodies.size, controlBodies.size,
                         gradedBodies.count { it < 8 }, controlBodies.count { it < 8 }
                     )
@@ -421,17 +414,11 @@ class LittoralCoastTest {
     }
 
     private companion object {
-        /**
-         * The known failure the clauses Fix 3b moved record. The implicit update lets the
-         * stream-power law set every cut, where the explicit update's cap at half the drop set the
-         * drawn network's, so the land is cut as the law asks; this clause's figure was recorded on
-         * the capped terrain. See docs/DESIGN_LEDGER.md, Fix 3b, for the figures.
-         */
-        const val LAW_SETS_EVERY_CUT =
-            "the erosion: since the implicit update the stream-power law sets every cut, and this clause's figure was recorded on the capped terrain"
-
         /** The rulers the coast is walked with, in cell widths of ground. */
         val RULERS = listOf(1, 2, 4, 8, 16)
+
+        /** The rows of the square-celled grid the cuts are made on: the standard worlds' 512. */
+        const val STANDARD_ROWS = 512
 
         /** [cutsAt]'s cuts, by grid, made the first time a guard asks. */
         val cutsByGrid = HashMap<Int, Map<Long, Cut>>()

@@ -191,7 +191,7 @@ class S3RenderDump {
         val scale = world.config.scale
         val distance = world.plates.boundaryDistance.data
         val boundaryClass = world.plates.nearestBoundaryClass
-        val falloff = world.config.tectonics.boundaryFalloffCells
+        val falloff = world.config.cellsFor(world.config.tectonics.boundaryFalloffKm)
 
         val inBelt = BooleanArray(side * side) { cell ->
             land[cell] && distance[cell] <= falloff &&

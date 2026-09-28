@@ -31,7 +31,7 @@ class CultureHearthLandmassTest : BorrowsSharedWorlds() {
     fun `hearths are shared out between landmasses in proportion to habitable land`() {
         listOf(42L, 7L, 1234L).forEach { seed ->
             val world = SharedWorlds.world(
-                WorldGenConfig(seed = seed, width = 512, height = 512)
+                WorldGenConfig.forRows(seed, 512)
             )
             val placement = CultureStage.placeHearths(world.config, world.sea, world.climate, world.rivers)
             checkNotNull(placement) { "seed $seed: no hearths were placed at all" }

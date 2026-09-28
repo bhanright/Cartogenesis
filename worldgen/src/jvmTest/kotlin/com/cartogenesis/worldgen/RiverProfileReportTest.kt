@@ -57,7 +57,7 @@ class RiverProfileReportTest {
         val allWhole = ArrayList<Double>()
         val allReach = ArrayList<Double>()
         for (seed in SEEDS) {
-            val world = SharedWorlds.world(WorldGenConfig(seed = seed, width = 512, height = 512))
+            val world = SharedWorlds.world(WorldGenConfig.forRows(seed, 512))
             val courses = readCourses(world)
             val whole = courses.mapNotNull { fitConcavity(it) }
             val reaches = courses.flatMap { homogeneousReaches(it) }.mapNotNull { fitConcavity(it) }

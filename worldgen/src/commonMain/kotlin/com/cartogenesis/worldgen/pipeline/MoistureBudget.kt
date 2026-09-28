@@ -139,6 +139,12 @@ object MoistureBudget {
      * A quarter. The convergence term below is the linearisation "what flows in, rains out", and a
      * cell that gathered more than a quarter of its own column in one step is past where that
      * linearisation means anything — it would be a squall line, not a season's mean.
+     *
+     * Per cell of travel on purpose, and kept so when the grid's other lengths became kilometers:
+     * it bounds one step of the march, where the linearised update is taken, and the fraction a
+     * step may take is the step's question, not the ground's. Stated per kilometer it would tighten
+     * the bound on a fine grid, whose shorter steps are the ones the linearisation serves best.
+     * docs/DESIGN_LEDGER.md, Q2, for how often it binds.
      */
     const val MAX_CONVERGENCE_PER_CELL = 0.25f
 

@@ -42,7 +42,7 @@ class ChannelGapTest : BorrowsSharedWorlds() {
         val complaints = ArrayList<String>()
         SEEDS.forEach { seed ->
             val world: WorldMap = SharedWorlds.world(
-                WorldGenConfig(seed = seed, width = SIDE, height = SIDE)
+                WorldGenConfig.forRows(seed, SIDE)
             )
             val channel = ChannelInitiation.channelMaskOf(world)
             val gradient = ChannelInitiation.gradientToReceiver(

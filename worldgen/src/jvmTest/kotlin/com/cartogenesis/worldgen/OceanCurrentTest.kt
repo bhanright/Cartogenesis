@@ -46,7 +46,7 @@ class OceanCurrentTest : BorrowsSharedWorlds() {
     fun `the gyres turn with the wind on every standard world`() {
         val failures = ArrayList<String>()
         for (seed in listOf(7L, 42L, 1234L, 99L)) {
-            val world = SharedWorlds.world(WorldGenConfig(seed = seed, width = 512, height = 512))
+            val world = SharedWorlds.world(WorldGenConfig.forRows(seed, 512))
             val beltsOnly = world.config.copy(climate = world.config.climate.copy(pressureWinds = false))
             failures += OceanSense.check("seed $seed at 512", world.config, world.sea, world.ocean,
                 OceanStage.generate(beltsOnly, world.sea))
@@ -112,7 +112,7 @@ class OceanCurrentTest : BorrowsSharedWorlds() {
     fun `the anomaly's row means carry a small share of the energy balance's transport`() {
         val failures = ArrayList<String>()
         for (seed in listOf(7L, 42L, 1234L, 99L)) {
-            val world = SharedWorlds.world(WorldGenConfig(seed = seed, width = 512, height = 512))
+            val world = SharedWorlds.world(WorldGenConfig.forRows(seed, 512))
             val across = world.width
             val down = world.height
             val radiusMeters = world.config.scale.radiusMeters
@@ -176,7 +176,7 @@ class OceanCurrentTest : BorrowsSharedWorlds() {
 
     /** The warm quartile's coastal habitability over the cold quartile's, as a ratio. */
     private fun checkCoasts(seed: Long): Double {
-        val config = WorldGenConfig(seed = seed, width = 512, height = 512)
+        val config = WorldGenConfig.forRows(seed, 512)
         val world = SharedWorlds.world(config)
         val w = world.width
         val h = world.height

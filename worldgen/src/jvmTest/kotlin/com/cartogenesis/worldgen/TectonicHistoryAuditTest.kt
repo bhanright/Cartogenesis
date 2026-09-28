@@ -29,12 +29,12 @@ class TectonicHistoryAuditTest {
     @Test
     fun `report the cost of a history`() {
         // Warm the JIT, so the first size measured is not paying for compilation.
-        val warm = WorldGenConfig(seed = 1L, width = 512, height = 512)
+        val warm = WorldGenConfig.forRows(1L, 512)
         PlateStage.generate(warm, TerrainStage.generate(warm))
 
         listOf(1024, 2048).forEach { size ->
-            val base = WorldGenConfig(seed = 42L, width = 512, height = 512)
-                .atResolution(size, size)
+            val base = WorldGenConfig.forRows(42L, 512)
+                .atResolution(2 * size, size)
             val terrain = TerrainStage.generate(base)
             // Best of three, because a single run of a stage this size is at the mercy of a
             // garbage collection and the numbers are being used to decide something.

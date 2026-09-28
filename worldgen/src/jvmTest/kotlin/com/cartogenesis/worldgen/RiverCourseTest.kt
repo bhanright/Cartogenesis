@@ -51,7 +51,7 @@ class RiverCourseTest : BorrowsSharedWorlds() {
 
     private fun world(seed: Long, side: Int = SIDE): WorldMap =
         SharedWorlds.world(
-            WorldGenConfig(seed = seed, width = 512, height = 512).atResolution(side, side)
+            WorldGenConfig.forRows(seed, 512).atResolution(2 * side, side)
         )
 
     /**

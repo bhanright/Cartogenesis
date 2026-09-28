@@ -3,6 +3,7 @@ package com.cartogenesis.worldgen.pipeline
 import com.cartogenesis.worldgen.math.GroundSteps
 import com.cartogenesis.worldgen.math.LongMinHeap
 import com.cartogenesis.worldgen.model.FloatField
+import com.cartogenesis.worldgen.model.WorldGenConfig
 import kotlin.math.sqrt
 
 /**
@@ -145,9 +146,10 @@ internal object FlowRouting {
      * channel always does, the answer collapses to the steepest neighbour exactly.
      *
      * The draw is a per-cell hash of the world's seed, and it shares that hash with
-     * [LakeWaterBalance.jitter] and nothing else. The jitter's own field is smoothed over eight
-     * cells, deliberately, because its job is to give ground with *no* gradient one to follow and a
-     * value that changed from cell to cell would leave the path staggering on the spot. Reading the
+     * [LakeWaterBalance.jitter] and nothing else. The jitter's own field is smoothed over
+     * [SMOOTH_FIELD_PERIOD_KM], deliberately, because its job is to give ground with *no* gradient
+     * one to follow and a value that changed from cell to cell would leave the path staggering on
+     * the spot. Reading the
      * draw off that same smooth field was tried here and does nothing at all: a reach twenty cells
      * long sits inside one period, draws one value, and rounds every one of its bearings the same
      * way, which is the ruled line again — measured on seed 42 at 512, 39 ruled runs against the
@@ -170,6 +172,8 @@ internal object FlowRouting {
      * @param overPotential false to route the fill's flats over its own staircase rather than over
      *   the potential [FlatRouting] lays, the control the ruled-run census over raised ground is
      *   measured against. See [com.cartogenesis.worldgen.model.WorldGenConfig.flatPotential].
+     * @param smoothFieldPeriodCells [smoothFieldPeriodCells] of the world's grid: the period the
+     *   flats' rain varies over in [FlatRouting].
      */
     fun flowDirections(
         width: Int,
@@ -179,6 +183,7 @@ internal object FlowRouting {
         filled: FloatField,
         seed: Long,
         cellHeightInCellWidths: Double,
+        smoothFieldPeriodCells: Int,
         byFacet: Boolean = true,
         overPotential: Boolean = true
     ): IntArray {
@@ -186,8 +191,13 @@ internal object FlowRouting {
         // The filled field, except across the flats the fill raised, where it is the potential
         // [FlatRouting] lays: see there for why a staircase cannot be routed across without a ruler.
         val routingSurface =
-            if (overPotential) FlatRouting.surfaceOf(width, height, isLand, elevation, filled, seed, cellHeightInCellWidths).heights
-            else DoubleArray(width * height) { (if (isLand[it]) filled.data[it] else elevation.data[it]).toDouble() }
+            if (overPotential) {
+                FlatRouting.surfaceOf(
+                    width, height, isLand, elevation, filled, seed, cellHeightInCellWidths, smoothFieldPeriodCells
+                ).heights
+            } else {
+                DoubleArray(width * height) { (if (isLand[it]) filled.data[it] else elevation.data[it]).toDouble() }
+            }
         val trueGround = elevation.data
         val steps = GroundSteps(cellHeightInCellWidths)
         for (row in 0 until height) {
@@ -333,20 +343,19 @@ internal object FlowRouting {
     private const val SUB_GRID_DRAW_SALT = 0x5f3a91c7_2b64d8e3L
 
     /**
-     * Value noise in -1..1 on a lattice of [SMOOTH_FIELD_PERIOD_CELLS] cells, smoothstepped between the
-     * corners so the field has no creases on the lattice lines for a path to follow.
+     * Value noise in -1..1 on a lattice of [periodCells] cells each way, smoothstepped between the
+     * corners so the field has no creases on the lattice lines for a path to follow. [periodCells]
+     * is [smoothFieldPeriodCells] of the world's grid.
      *
-     * Shared: [LakeWaterBalance.jitter] scales it to nudge exactly-flat ground, and [subGridDraw]
-     * reads it as a quantile. Integer mixing at the corners, so every platform agrees.
+     * Shared: [LakeWaterBalance.jitter] scales it to nudge exactly-flat ground, and the flats'
+     * rain in [FlatRouting] varies by it. Integer mixing at the corners, so every platform agrees.
      */
-    fun smoothSeededField(width: Int, column: Int, row: Int, seed: Long): Float {
-        val latticeColumns = (width / SMOOTH_FIELD_PERIOD_CELLS).coerceAtLeast(1)
-        val cornerColumn = column / SMOOTH_FIELD_PERIOD_CELLS
-        val cornerRow = row / SMOOTH_FIELD_PERIOD_CELLS
-        val alongColumn =
-            (column - cornerColumn * SMOOTH_FIELD_PERIOD_CELLS).toFloat() / SMOOTH_FIELD_PERIOD_CELLS
-        val alongRow =
-            (row - cornerRow * SMOOTH_FIELD_PERIOD_CELLS).toFloat() / SMOOTH_FIELD_PERIOD_CELLS
+    fun smoothSeededField(width: Int, periodCells: Int, column: Int, row: Int, seed: Long): Float {
+        val latticeColumns = (width / periodCells).coerceAtLeast(1)
+        val cornerColumn = column / periodCells
+        val cornerRow = row / periodCells
+        val alongColumn = (column - cornerColumn * periodCells).toFloat() / periodCells
+        val alongRow = (row - cornerRow * periodCells).toFloat() / periodCells
         val easedAlongColumn = alongColumn * alongColumn * (3f - 2f * alongColumn)
         val easedAlongRow = alongRow * alongRow * (3f - 2f * alongRow)
         val west = cornerColumn % latticeColumns
@@ -364,9 +373,16 @@ internal object FlowRouting {
 
     private fun lerp(from: Float, to: Float, at: Float): Float = from + (to - from) * at
 
-    /** Cells across one period of [smoothSeededField]: short enough to bend a course inside one
-     * reach. */
-    private const val SMOOTH_FIELD_PERIOD_CELLS = 8
+    /**
+     * One period of [smoothSeededField] on the ground, in kilometers: short enough to bend a course
+     * inside one reach. 187.5 km, the 8 cell widths it was set as on the 512 grid, so a flat's
+     * course bends at the same spacing on the ground at every grid rather than at every eighth
+     * cell. docs/DESIGN_LEDGER.md, Q2.
+     */
+    const val SMOOTH_FIELD_PERIOD_KM = 187.5
+
+    /** [SMOOTH_FIELD_PERIOD_KM] as a whole number of [config]'s cells, the period the field is read at. */
+    fun smoothFieldPeriodCells(config: WorldGenConfig): Int = config.wholeCellsFor(SMOOTH_FIELD_PERIOD_KM)
 
     /**
      * One lattice point's value in -1..1.

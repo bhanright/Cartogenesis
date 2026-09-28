@@ -32,7 +32,7 @@ class SnowBalanceTest : BorrowsSharedWorlds() {
     private val seeds = listOf(7L, 42L, 1234L, 99L)
 
     private fun config(seed: Long, size: Int = 512) =
-        WorldGenConfig(seed = seed, width = size, height = size)
+        WorldGenConfig.forRows(seed, size)
 
     private fun WorldGenConfig.withoutBalance() =
         copy(climate = climate.copy(snowBalance = false))
@@ -691,7 +691,7 @@ class SnowBalanceTest : BorrowsSharedWorlds() {
     /** Land far from any water, bitterly cold in winter, dry — and thawing in summer. */
     private fun coldDryInterior(config: WorldGenConfig, world: WorldMap): List<Int> {
         val distance = ClimateStage.waterDistance(config, world.sea)
-        val continental = 3f * config.ocean.coastalReachCells.coerceAtLeast(1)
+        val continental = 3f * config.wholeCellsFor(config.ocean.coastalReachKm)
         return (0 until config.width * config.height).filter { i ->
             world.sea.isLand[i] &&
                 world.climate.winterTemperature.data[i] < -20f &&

@@ -62,11 +62,11 @@ class RiftDepthAuditTest {
     private val deepestRiftLakeMaxMetres = 1_642.0
 
     private fun config(): WorldGenConfig {
-        val base = WorldGenConfig(seed = 718106L, width = 512, height = 512, seaLevel = 0.62f)
+        val base = WorldGenConfig.forRows(718106L, 512).copy(seaLevel = 0.62f)
         return base.copy(
             tectonics = base.tectonics.copy(plateCount = 14),
             nations = base.nations.copy(nationCount = 12)
-        ).atResolution(2048, 2048)
+        ).atResolution(4096, 2048)
     }
 
     @Test
@@ -116,7 +116,7 @@ class RiftDepthAuditTest {
     /**
      * The flat floor of the author's trough, and how much of it is under water.
      *
-     * The floor is the flat bottom of the half-graben — `riftWidthCells * riftFloorShare` either side of
+     * The floor is the flat bottom of the half-graben — `riftWidthKm * riftFloorShare` either side of
      * the axis, which is E4's own definition of it — inside the window, and not the whole corridor
      * out to the shoulder crests: the flanks climbing to the shoulders are a slope and stand above
      * the water for an honest reason. Under water counts the sea as well as a lake, because after
@@ -125,8 +125,8 @@ class RiftDepthAuditTest {
      */
     private fun troughFloor(world: WorldMap) {
         val w = world.width
-        val cfg = WorldGenConfig().tectonics
-        val reach = cfg.riftWidthCells * cfg.riftFloorShare * (w / 512f)
+        val cfg = world.config.tectonics
+        val reach = world.config.cellsFor(cfg.riftWidthKm) * cfg.riftFloorShare
         val rift = BoundaryClass.CONTINENTAL_RIFT.ordinal
         var cells = 0
         var wet = 0

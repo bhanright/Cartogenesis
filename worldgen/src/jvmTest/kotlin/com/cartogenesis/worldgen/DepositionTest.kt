@@ -41,7 +41,7 @@ class DepositionTest : BorrowsSharedWorlds() {
 
     @Test
     fun `every round conserves mass`() {
-        val config = WorldGenConfig(seed = 42L, width = 512, height = 512)
+        val config = WorldGenConfig.forRows(42L, 512)
         val plates = PlateStage.generate(config, TerrainStage.generate(config))
 
         val rounds = ArrayList<RoundMass>()
@@ -101,7 +101,7 @@ class DepositionTest : BorrowsSharedWorlds() {
      */
     @Test
     fun `river mouths gain land, and do not without deposition`() {
-        val base = WorldGenConfig(seed = 42L, width = 512, height = 512)
+        val base = WorldGenConfig.forRows(42L, 512)
         val off = base.copy(erosion = base.erosion.copy(deposition = false))
         val without = SharedWorlds.world(off)
         val world = SharedWorlds.world(base)
@@ -160,7 +160,7 @@ class DepositionTest : BorrowsSharedWorlds() {
 
     @Test
     fun `deposition off is deposition absent, and its knobs cannot leak`() {
-        val off = WorldGenConfig(seed = 42L, width = 128, height = 128).let {
+        val off = WorldGenConfig.forRows(42L, 128).let {
             it.copy(erosion = it.erosion.copy(deposition = false))
         }
         val world = SharedWorlds.world(off)
@@ -170,7 +170,7 @@ class DepositionTest : BorrowsSharedWorlds() {
         )
 
         val on = SharedWorlds.world(
-            WorldGenConfig(seed = 42L, width = 128, height = 128)
+            WorldGenConfig.forRows(42L, 128)
         )
         println(
             "DEPOSITION on:  elevation=${checksum(on)} land=${on.sea.landCellCount} " +
@@ -199,7 +199,7 @@ class DepositionTest : BorrowsSharedWorlds() {
         // machinery switched off. Sediment is carried as its own layer and never fed back into the
         // routing surface, so the water cuts the same valleys in the same places it always did;
         // what deposition changes is only the spoil lying on top of them.
-        val silent = WorldGenConfig(seed = 42L, width = 128, height = 128).let {
+        val silent = WorldGenConfig.forRows(42L, 128).let {
             it.copy(
                 erosion = it.erosion.copy(deltaShare = 0f, depositionRate = 0f, lakeShare = 0f)
             )
@@ -221,7 +221,7 @@ class DepositionTest : BorrowsSharedWorlds() {
     fun `render the coast around the largest river mouths`() {
         val dir = java.io.File("build/maps").apply { mkdirs() }
         listOf(7L, 42L, 1234L).forEach { seed ->
-            val base = WorldGenConfig(seed = seed, width = 512, height = 512)
+            val base = WorldGenConfig.forRows(seed, 512)
             val without = SharedWorlds.world(
                 base.copy(erosion = base.erosion.copy(deposition = false))
             )

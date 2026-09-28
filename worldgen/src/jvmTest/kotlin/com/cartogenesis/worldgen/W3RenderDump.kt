@@ -35,7 +35,7 @@ class W3RenderDump {
         listOf(718106L, 59758L).forEach { seed ->
             val started = System.currentTimeMillis()
             val world = WorldGenerationEngine.generateBlocking(
-                authorsConfig(seed).atResolution(2048, 2048)
+                authorsConfig(seed).atResolution(4096, 2048)
             )
             println(
                 "W3 RENDER $label seed $seed at 2048 in ${(System.currentTimeMillis() - started) / 1000}s"

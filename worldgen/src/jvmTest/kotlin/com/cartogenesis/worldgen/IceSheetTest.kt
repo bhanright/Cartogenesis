@@ -70,10 +70,10 @@ class IceSheetTest : BorrowsSharedWorlds() {
         // chunk's: the collision plateaus are as wide north-south as east-west now, the sheets grow
         // on them, and a sheet as wide as Greenland's stands on a bed near 3 km high on average,
         // up to 5 km under its middle, so the profile its lower margins raise barely clears the
-        // ground it covers. See docs/DESIGN_LEDGER.md, Fix 2.
+        // ground it covers. See docs/DESIGN_LEDGER.md, Fix 2; re-recorded on square cells at Q2.
         KnownFailures.expect(
             THIN_SHEETS_ON_HIGH_GROUND,
-            "seed 718106 at 1670 m over 407 km, seed 59758 at 1696 m over 574 km, seed 7 at 1386 m over 556 km"
+            "seed 718106 at 1826 m over 487 km, seed 59758 at 1828 m over 609 km, seed 7 at 1646 m over 564 km"
         ) {
             if (thin.isNotEmpty()) {
                 throw RecordedViolation(
@@ -168,99 +168,140 @@ class IceSheetTest : BorrowsSharedWorlds() {
     fun `the ice flows out from its dome and its scour follows`() {
         val failures = ArrayList<String>()
         var domesRead = 0
-        // The reported world beside the four, and it is not a seed picked to suit the clause: it
-        // is here because I3 brought it into the class, and it is the only one of the five at
-        // 1024. A disc of [NEAR_THE_DOME_KM] holds four times as many cells at that grid, so a
-        // sheet that fills a third of it there has been measured over four times the sample.
-        // I3 is why it was needed: the mask lost the ground that carried no balance at all
-        // ([com.cartogenesis.worldgen.pipeline.SnowBalance.isGlaciated]), which is a fifth of it
-        // on this world, and two of the four 512 seeds fell under the gate with it.
-        (seeds.map { it to measure(it) } + listOf(REPORTED_SEED to reported())).forEach { (seed, measured) ->
-            val config = measured.config
-            val mass = measured.mass
-            val thickness = mass.iceThicknessMetres
-            val sheet = mass.onTheSheet
-            val flow = mass.sheetFlowReceiver
-            // The dome is the highest *surface*, which is what the ice runs down, and not the
-            // thickest ice, which is wherever the bed happens to be deepest. Reading the bearing
-            // about the thickest ice measures the bed.
-            val surface = measured.carved.relativeElevation.data
-            var dome = -1
-            for (cell in thickness.indices) {
-                if (!sheet[cell]) continue
-                if (dome < 0 || surface[cell] > surface[dome]) dome = cell
-            }
-            if (dome < 0) return@forEach
-            val nearDomeCells = config.cellsFor(NEAR_THE_DOME_KM)
-            var outward = 0
-            var near = 0
-            var meanAngle = 0.0
-            for (cell in thickness.indices) {
-                if (!sheet[cell] || flow[cell] < 0) continue
-                val awayX = acrossOf(cell, dome, config.width).toDouble()
-                val awayY = (cell / config.width - dome / config.width).toDouble() *
-                    config.cellHeightInCellWidths
-                val fromDome = sqrt(awayX * awayX + awayY * awayY)
-                if (fromDome <= 0.0 || fromDome > nearDomeCells) continue
-                near++
-                val stepX = acrossOf(flow[cell], cell, config.width).toDouble()
-                val stepY = (flow[cell] / config.width - cell / config.width).toDouble() *
-                    config.cellHeightInCellWidths
-                val step = sqrt(stepX * stepX + stepY * stepY)
-                val alignment = (awayX * stepX + awayY * stepY) / (fromDome * step)
-                meanAngle += Math.toDegrees(kotlin.math.acos(alignment.coerceIn(-1.0, 1.0)))
-                if (alignment > 0.0) outward++
-            }
-            val outwardShare = if (near == 0) 0f else outward.toFloat() / near
+        // The audited seeds, the reported world beside them (the only one at 1,024 rows, a disc of
+        // four times the cells), and [DOME_SEED], which is here so that the clause reads a dome
+        // whatever the audited seeds grow: on square cells none of them fills a third of its disc.
+        val worlds = seeds.map { it to measure(it) } +
+            listOf(REPORTED_SEED to reported(), DOME_SEED to measure(DOME_SEED))
+        worlds.forEach { (seed, measured) ->
+            val reading = readFlow(measured, measured.mass.sheetFlowReceiver) ?: return@forEach
             val lineation = lineationAgainstFlow(measured)
             println(
                 ("I1 FLOW seed %d: of %d sheet cells within %.0f km of the dome, %.1f%% flow" +
                     " outward at a mean bearing %.1f degrees off radial; the scour's gradient" +
                     " stands at |cos| %.3f to the flow against an isotropic field's %.3f")
                     .format(
-                        seed, near, NEAR_THE_DOME_KM, outwardShare * 100,
-                        if (near == 0) 0.0 else meanAngle / near, lineation, 2.0 / PI
+                        seed, reading.near, NEAR_THE_DOME_KM, reading.outwardShare * 100,
+                        reading.meanOffRadial, lineation, 2.0 / PI
                     )
             )
-            val disc = discCells(config)
-            if (near < disc * DOME_SHARE_OF_ITS_DISC) {
+            if (!reading.isNeighbourhood) {
                 println(
                     ("I1 FLOW FINDING seed %d: %d sheet cells near the dome against the %.0f a" +
                         " full disc holds, under the %.0f%% that makes a neighbourhood rather" +
                         " than an arc, so the clause is not read on this seed - see W3")
-                        .format(seed, near, disc, DOME_SHARE_OF_ITS_DISC * 100)
+                        .format(seed, reading.near, reading.disc, DOME_SHARE_OF_ITS_DISC * 100)
                 )
                 return@forEach
             }
             domesRead++
-            val meanOffRadial = meanAngle / near
-            if (outwardShare < RADIAL_SHARE || meanOffRadial > INDIFFERENT_BEARING_DEGREES * RADIAL_ANGLE_SHARE) {
-                failures += "seed $seed: ${"%.1f".format(outwardShare * 100)}% of the ice near the" +
-                    " dome flows outward at a mean ${"%.1f".format(meanOffRadial)} degrees off" +
-                    " radial, which is not the ${"%.0f".format(RADIAL_SHARE * 100)}% and" +
-                    " ${"%.1f".format(INDIFFERENT_BEARING_DEGREES * RADIAL_ANGLE_SHARE)} degrees" +
-                    " a flow that knows where its dome is owes against an indifferent bearing's" +
-                    " 50% and ${"%.0f".format(INDIFFERENT_BEARING_DEGREES)}"
-            }
+            if (!reading.knowsItsDome) failures += "seed $seed: ${reading.describe()}"
         }
-        // Recorded since Fix 3b: see [FLOW_OFF_RADIAL].
-        KnownFailures.expect(
-            FLOW_OFF_RADIAL,
-            "seed 59758: 44.7% of the ice near the dome flows outward at a mean 95.7 degrees off radial; seed 7: 64.4% of the ice near the dome flows outward at a mean 75.5 degrees off radial"
-        ) {
-            if (failures.isNotEmpty()) {
-                throw RecordedViolation(
-                    "the sheet is not flowing down its own surface:\n" + failures.joinToString("\n"),
-                    failures.joinToString("; ") { it.substringBefore(", which is not") }
-                )
-            }
-        }
-        // What stops the clause passing because every seed's dome had shrunk out of reach.
         assertTrue(
-            "only $domesRead of the audited seeds still grow a sheet whose dome fills a third of" +
-                " its own disc, so this clause is asserting nothing; the moisture supply is what" +
-                " brings them back",
+            "only $domesRead seeds grow a sheet whose dome fills a third of its own disc, under" +
+                " $LEAST_SEEDS_WITH_A_DOME, so the flow clause is asserting nothing",
             domesRead >= LEAST_SEEDS_WITH_A_DOME
+        )
+        // Recorded from Fix 3b to Q2 on seeds 59758 and 7 on the 512 by 512 grid, and armed on
+        // square cells, where neither is read and [DOME_SEED]'s sheet knows its dome
+        // (docs/DESIGN_LEDGER.md, Q2).
+        assertTrue(
+            "the sheet is not flowing down its own surface:\n" + failures.joinToString("\n"),
+            failures.isEmpty()
+        )
+    }
+
+    /**
+     * The control for the flow clause: [DOME_SEED]'s own sheet, with every cell's flow turned a
+     * quarter from the bearing the ice took, fails it.
+     *
+     * A quarter turn on square cells keeps every step a step to a neighbor and the neighborhood
+     * the same cells, and takes from the flow only its knowledge of where the dome is, which is
+     * what the clause exists to see. Probed before it was written: 50.1% outward at 93.2 degrees
+     * off radial, an indifferent bearing's own numbers, where the flow the stage drew reads 90.1%
+     * at 49.3.
+     */
+    @Test
+    fun `the flow clause fails a flow turned a quarter from the ice's own`() {
+        val measured = measure(DOME_SEED)
+        val config = measured.config
+        val flow = measured.mass.sheetFlowReceiver
+        val w = config.width
+        val turned = IntArray(flow.size) { cell ->
+            val receiver = flow[cell]
+            if (receiver < 0) return@IntArray -1
+            val east = acrossOf(receiver, cell, w)
+            val south = receiver / w - cell / w
+            // (east, south) turned a quarter is (-south, east): east becomes south and south west.
+            val row = cell / w + east
+            if (row < 0 || row >= config.height) -1 else row * w + Math.floorMod(cell % w - south, w)
+        }
+        val own = readFlow(measured, flow)!!
+        val control = readFlow(measured, turned)!!
+        println(
+            "I1 FLOW CONTROL seed $DOME_SEED: the stage's flow: ${own.describe()}; " +
+                "turned a quarter: ${control.describe()}"
+        )
+        assertTrue("the control's neighborhood is not a dome's: ${control.near} cells", control.isNeighbourhood)
+        assertTrue("the clause passes a flow turned a quarter from the ice's: ${control.describe()}", !control.knowsItsDome)
+    }
+
+    /** What the flow clause reads near one sheet's dome. */
+    private class FlowReading(val near: Int, val disc: Double, val outwardShare: Float, val meanOffRadial: Double) {
+        /** Whether the sheet fills enough of its disc to be read: see [DOME_SHARE_OF_ITS_DISC]. */
+        val isNeighbourhood: Boolean get() = near >= disc * DOME_SHARE_OF_ITS_DISC
+
+        /** The clause: see [RADIAL_SHARE]. */
+        val knowsItsDome: Boolean
+            get() = outwardShare >= RADIAL_SHARE &&
+                meanOffRadial <= INDIFFERENT_BEARING_DEGREES * RADIAL_ANGLE_SHARE
+
+        fun describe(): String =
+            "${"%.1f".format(outwardShare * 100)}% of the ice near the dome flows outward at a mean" +
+                " ${"%.1f".format(meanOffRadial)} degrees off radial, where a flow that knows its dome" +
+                " owes ${"%.0f".format(RADIAL_SHARE * 100)}% and" +
+                " ${"%.1f".format(INDIFFERENT_BEARING_DEGREES * RADIAL_ANGLE_SHARE)} degrees against an" +
+                " indifferent bearing's 50% and ${"%.0f".format(INDIFFERENT_BEARING_DEGREES)}"
+    }
+
+    /**
+     * The flow within [NEAR_THE_DOME_KM] of [measured]'s dome, read off [flow]; null if there is no
+     * sheet. The dome is the highest *surface*, which is what the ice runs down, and not the
+     * thickest ice, which is wherever the bed happens to be deepest: reading the bearing about the
+     * thickest ice measures the bed.
+     */
+    private fun readFlow(measured: Measured, flow: IntArray): FlowReading? {
+        val config = measured.config
+        val sheet = measured.mass.onTheSheet
+        val surface = measured.carved.relativeElevation.data
+        var dome = -1
+        for (cell in sheet.indices) {
+            if (!sheet[cell]) continue
+            if (dome < 0 || surface[cell] > surface[dome]) dome = cell
+        }
+        if (dome < 0) return null
+        val nearDomeCells = config.cellsFor(NEAR_THE_DOME_KM)
+        var outward = 0
+        var near = 0
+        var angles = 0.0
+        for (cell in sheet.indices) {
+            if (!sheet[cell] || flow[cell] < 0) continue
+            val awayX = acrossOf(cell, dome, config.width).toDouble()
+            val awayY = (cell / config.width - dome / config.width).toDouble() * config.cellHeightInCellWidths
+            val fromDome = sqrt(awayX * awayX + awayY * awayY)
+            if (fromDome <= 0.0 || fromDome > nearDomeCells) continue
+            near++
+            val stepX = acrossOf(flow[cell], cell, config.width).toDouble()
+            val stepY = (flow[cell] / config.width - cell / config.width).toDouble() * config.cellHeightInCellWidths
+            val step = sqrt(stepX * stepX + stepY * stepY)
+            val alignment = (awayX * stepX + awayY * stepY) / (fromDome * step)
+            angles += Math.toDegrees(kotlin.math.acos(alignment.coerceIn(-1.0, 1.0)))
+            if (alignment > 0.0) outward++
+        }
+        return FlowReading(
+            near, discCells(config),
+            if (near == 0) 0f else outward.toFloat() / near,
+            if (near == 0) 0.0 else angles / near
         )
     }
 
@@ -638,14 +679,14 @@ class IceSheetTest : BorrowsSharedWorlds() {
     )
 
     private fun measure(seed: Long): Measured =
-        measured.getOrPut(seed) { carve(WorldGenConfig(seed = seed, width = 512, height = 512)) }
+        measured.getOrPut(seed) { carve(WorldGenConfig.forRows(seed, 512)) }
 
     /** The reported world, at the grid it was reported at. See [REPORTED_SEED]. */
     private fun reported(): Measured =
         measured.getOrPut(REPORTED_SEED) {
             carve(
-                WorldGenConfig(seed = REPORTED_SEED, width = 512, height = 512)
-                    .atResolution(REPORTED_SIDE, REPORTED_SIDE)
+                WorldGenConfig.forRows(REPORTED_SEED, 512)
+                    .atResolution(2 * REPORTED_SIDE, REPORTED_SIDE)
             )
         }
 
@@ -673,16 +714,19 @@ class IceSheetTest : BorrowsSharedWorlds() {
 
     private companion object {
         /**
-         * The known failure the flow clause records since Fix 3b: on the terrain the implicit
-         * update cuts, with the uplift re-derived on it, the sheets near their domes on the
-         * reported world and on seed 7 flow outward on 56.4% and 62.7% of their cells at a mean
-         * 84.0 and 77.1 degrees off radial, and 44.7% and 64.4% at 95.7 and 75.5 once a lake falls
-         * with its outlet, where the clause asks 67% and 67.5; on the capped explicit update the
-         * reported world read 87.5% at 49.6. The ice's to settle (chunk 5);
-         * see docs/DESIGN_LEDGER.md, Fix 3b.
+         * The seed the flow clause reads a dome on, whatever the audited seeds grow.
+         *
+         * Scanned, and said so: of seeds 1 to 25 (bar 7) at 512 rows, two grow a sheet whose dome
+         * fills a third of its 500 km disc, seed 5 at 34.1% and this one at 44.2%, the larger and
+         * the only one well clear of the gate, so what the clause reads here is a dome's
+         * neighborhood and not the edge of one. It is representative of the sheets the clause
+         * exists to read, those large enough to have a dome, and not of the seeds: the audited
+         * four fill 25 to 29% of theirs on square cells, and the scan's smaller sheets read 38 to
+         * 84% outward, which on an arc is a question the clause cannot ask. Its reading: 90.1%
+         * outward at 49.3 degrees off radial; seed 5's, 70.5% at 64.8. About 35 seconds of the
+         * tier. See docs/DESIGN_LEDGER.md, Q2.
          */
-        const val FLOW_OFF_RADIAL =
-            "the ice: on the terrain the stream-power law cuts, sheets flow further off radial than their domes allow"
+        const val DOME_SEED = 20L
 
         /** The known failure the thickness clause records, the ice's to settle. */
         const val THIN_SHEETS_ON_HIGH_GROUND =
@@ -770,7 +814,8 @@ class IceSheetTest : BorrowsSharedWorlds() {
          * cells being 26.9% of the 11,440 that grid's disc holds. So the gate is refusing a
          * neighbourhood that is plainly a neighbourhood, which is a fault in the gate and not in
          * the worlds; docs/TODO.md carries it. Until it is settled, one seed asserting is the
-         * honest floor, and seed 718106 asserts at 89.8% and 44.2 degrees.
+         * honest floor. On square cells no audited seed is read, and the one that asserts is
+         * [DOME_SEED], brought in for that (docs/DESIGN_LEDGER.md, Q2).
          */
         const val LEAST_SEEDS_WITH_A_DOME = 1
 

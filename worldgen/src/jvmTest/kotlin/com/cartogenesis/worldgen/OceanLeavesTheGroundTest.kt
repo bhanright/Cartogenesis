@@ -19,7 +19,7 @@ class OceanLeavesTheGroundTest : BorrowsSharedWorlds() {
 
     @Test
     fun `the ground is the same with the currents and without them`() {
-        val config = WorldGenConfig(seed = 42L, width = 128, height = 128)
+        val config = WorldGenConfig.forRows(42L, 128)
         val withCurrents = WorldGenerationEngine.generateBlocking(config)
         val without = WorldGenerationEngine.generateBlocking(config.copy(ocean = config.ocean.copy(enabled = false)))
         assertContentEquals(without.sea.relativeElevation.data, withCurrents.sea.relativeElevation.data, "the currents moved the ground")
@@ -27,47 +27,47 @@ class OceanLeavesTheGroundTest : BorrowsSharedWorlds() {
     }
 
     /**
-     * The ground seed 42 stands on at 512, pinned: every field of the terrain, the plates, the
+     * The ground seed 42 stands on at 512 rows, pinned: every field of the terrain, the plates, the
      * erosion and the sea, digested branch by branch as `ReachableState` digests a world.
      *
      * The case above compares the currents on and off inside one tree, and cannot see a change
-     * that moves both alike. These are the digests the tree before chunk 4a drew (3a66025), measured
-     * identical on the branch for seeds 7, 42, 1234 and 99 at 512 and 969495 at 2048
-     * (docs/DESIGN_LEDGER.md, 4a); an ocean change that leaks into the ground moves them. A chunk
-     * meant to move the ground re-takes them here, as the render records are re-taken.
+     * that moves both alike. The digests were first the tree before chunk 4a drew (3a66025), at 512
+     * by 512 (docs/DESIGN_LEDGER.md, 4a), and were re-taken at Q2, which moved the ground on purpose
+     * and builds the world on square cells; an ocean change that leaks into the ground moves them.
+     * A chunk meant to move the ground re-takes them here, as the render records are re-taken.
      */
     @Test
-    fun `seed 42's ground is the one the tree before the ocean chunk drew`() {
-        val world = SharedWorlds.world(WorldGenConfig(seed = 42L, width = 512, height = 512))
+    fun `seed 42's ground is the one the last chunk that moved it drew`() {
+        val world = SharedWorlds.world(WorldGenConfig.forRows(42L, 512))
         val ground = ReachableState.digestsByBranch(world).filterKeys { branch ->
             GROUND_BRANCHES.any { branch.startsWith(it) }
         }
-        assertEquals(GROUND_AT_512, ground, "seed 42's ground moved")
+        assertEquals(GROUND_AT_512_ROWS, ground, "seed 42's ground moved")
     }
 
     private companion object {
         val GROUND_BRANCHES = listOf("terrain.", "plates.", "erosion.", "sea.")
 
-        val GROUND_AT_512: Map<String, Long> = mapOf(
-            "terrain.normals" to -3957635811720869786L,
-            "terrain.height" to -7794187521108087658L,
-            "plates.plates" to -3453775354215011380L,
-            "plates.plateId" to -960170144707551208L,
-            "plates.boundaryDistance" to 2999928083810557773L,
-            "plates.nearestBoundaryType" to -1609309034894245319L,
-            "plates.nearestBoundaryClass" to 2920887103839809940L,
-            "plates.height" to -3922716849206942368L,
-            "plates.seafloorAgeMyr" to 2114563380794089770L,
-            "plates.seafloorHalfSpreadingRateKmPerMyr" to -3927593839454705991L,
-            "plates.continentalShare" to -4440896453843652197L,
-            "plates.upliftRateMmPerYear" to -2287229503424040108L,
-            "plates.crustAge" to 777488221023972833L,
-            "erosion.height" to -9066333811287384399L,
+        val GROUND_AT_512_ROWS: Map<String, Long> = mapOf(
+            "terrain.normals" to -5249155343601744929L,
+            "terrain.height" to -3894689728446501406L,
+            "plates.plates" to -986469721537853709L,
+            "plates.plateId" to -7728668575489595548L,
+            "plates.boundaryDistance" to -825292753321544589L,
+            "plates.nearestBoundaryType" to 4665505714802344748L,
+            "plates.nearestBoundaryClass" to 2457436364073694675L,
+            "plates.height" to -9041961791220024892L,
+            "plates.seafloorAgeMyr" to -8620603663144917145L,
+            "plates.seafloorHalfSpreadingRateKmPerMyr" to 5508627893530768010L,
+            "plates.continentalShare" to 711069935001870004L,
+            "plates.upliftRateMmPerYear" to 3049563129622159122L,
+            "plates.crustAge" to -2408528362292396853L,
+            "erosion.height" to 3908231553243824835L,
             "erosion.sweptOnDevice" to -358906410940142731L,
-            "sea.shorelineHeight" to 8640021679815207680L,
-            "sea.isLand" to 539254778493484283L,
-            "sea.relativeElevation" to -6837861070948377844L,
-            "sea.landCellCount" to -926338647955881927L
+            "sea.shorelineHeight" to 3760365049450966050L,
+            "sea.isLand" to 2274450064364913821L,
+            "sea.relativeElevation" to -1790368389096739738L,
+            "sea.landCellCount" to -1961725115242250090L
         )
     }
 }

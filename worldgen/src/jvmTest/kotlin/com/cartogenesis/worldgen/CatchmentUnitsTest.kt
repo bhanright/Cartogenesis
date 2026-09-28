@@ -274,7 +274,7 @@ class CatchmentUnitsTest : BorrowsSharedWorlds() {
     @Test
     fun `the standard worlds' units are bounded and each on one landmass`() {
         for (seed in listOf(7L, 42L, 1234L)) {
-            val config = WorldGenConfig(seed = seed, width = 512, height = 512)
+            val config = WorldGenConfig.forRows(seed, 512)
             val world = SharedWorlds.world(config)
             val landKm2 = world.sea.landCellCount * config.squareKilometresPerCell
             for ((stage, units, share) in listOf(

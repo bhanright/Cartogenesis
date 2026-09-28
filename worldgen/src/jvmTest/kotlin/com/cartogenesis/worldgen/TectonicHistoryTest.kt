@@ -49,13 +49,13 @@ class TectonicHistoryTest {
         seed: Long,
         epochs: Int,
         flatten: Boolean = true,
-        driftCells: Float? = null
+        driftKm: Double? = null
     ): PlateResult {
-        val base = WorldGenConfig(seed = seed, width = 512, height = 512)
+        val base = WorldGenConfig.forRows(seed, 512)
         val config = base.copy(
             tectonics = base.tectonics.copy(
                 historyEpochs = epochs,
-                epochDriftCells = driftCells ?: base.tectonics.epochDriftCells
+                epochDriftKm = driftKm ?: base.tectonics.epochDriftKm
             ),
             // Flattening the plate interiors is switching isostasy off since S2, where before it
             // was setting the step between them to zero: either way what is left is one level for
@@ -82,7 +82,7 @@ class TectonicHistoryTest {
         val measured = LinkedHashMap<Pair<Long, Int>, Long>()
         seeds.forEach { seed ->
             listOf(0, 1, 2).forEach { epochs ->
-                val base = WorldGenConfig(seed = seed, width = 512, height = 512)
+                val base = WorldGenConfig.forRows(seed, 512)
                 val config = base.copy(tectonics = base.tectonics.copy(historyEpochs = epochs))
                 val plates = PlateStage.generate(config, TerrainStage.generate(config))
                 var checksum = 0L
@@ -116,22 +116,23 @@ class TectonicHistoryTest {
         seeds.forEach { seed ->
             val inland = inlandRelief(seed, DEFAULT_EPOCHS)
             println(
-                ("HISTORY seed %d: the tallest ground the history built beyond %.0f cell widths of " +
-                    "every present boundary stands %+.4f, at %.0f cell widths out")
-                    .format(seed, MIN_INLAND_CELLS, inland.relief, inland.distance)
+                ("HISTORY seed %d: the tallest ground the history built beyond %.0f km of " +
+                    "every present boundary stands %+.4f, at %.0f km out")
+                    .format(seed, MIN_INLAND_KM, inland.relief, inland.distance)
             )
             if (inland.relief < MIN_BELT_PEAK) short += seed to inland.relief
         }
         // Seed 42 has not met this since the distance was measured on the ground (see the KDoc
-        // on [MIN_INLAND_CELLS]), and it runs as a known failure rather than at a nearer distance:
+        // on [MIN_INLAND_KM]), and it runs as a known failure rather than at a nearer distance:
         // its history's belts stand 39 to 52 cell widths from a present boundary, 0.050 of the
         // field tall beyond 39, but the control whose plates never moved reads 0.033 there on
         // seed 1234, over the bar, so 39 cannot tell a scar from the present belts stamped again.
-        KnownFailures.expect(OLD_BELTS_NEAR_PRESENT_EDGES, "seed 42 at 0.0035") {
+        // Re-recorded at Q2 in kilometers, on square cells: 0.0036 where it read 0.0035.
+        KnownFailures.expect(OLD_BELTS_NEAR_PRESENT_EDGES, "seed 42 at 0.0036") {
             if (short.isNotEmpty()) {
                 val found = short.joinToString { (seed, relief) -> String.format(Locale.ROOT, "seed %d at %.4f", seed, relief) }
                 throw RecordedViolation(
-                    "the history's tallest ground more than $MIN_INLAND_CELLS cell widths from any present " +
+                    "the history's tallest ground more than $MIN_INLAND_KM km from any present " +
                         "boundary is under $MIN_BELT_PEAK on $found — an old belt that never leaves a modern " +
                         "plate edge is not a scar, it is the same range twice",
                     found
@@ -145,13 +146,13 @@ class TectonicHistoryTest {
      * own message describes: every past epoch's boundaries lie where today's do, so its belts are
      * the modern belts again, lower and wider, and "an old belt that never leaves a modern plate
      * edge is not a scar, it is the same range twice". Three epochs, as the shipped world has, with
-     * `epochDriftCells` at zero and nothing else changed, measured against the same one-epoch world
+     * `epochDriftKm` at zero and nothing else changed, measured against the same one-epoch world
      * the guard above differences against.
      */
     @Test
     fun `the guard finds nothing inland when the plates never moved`() {
         seeds.forEach { seed ->
-            val inland = inlandRelief(seed, DEFAULT_EPOCHS, driftCells = 0f)
+            val inland = inlandRelief(seed, DEFAULT_EPOCHS, driftKm = 0.0)
             println(
                 "HISTORY control seed %d, three epochs that never moved: tallest inland relief %+.6f (bar %.4f)"
                     .format(seed, inland.relief, MIN_BELT_PEAK)
@@ -159,7 +160,7 @@ class TectonicHistoryTest {
             assertTrue(
                 inland.relief < MIN_BELT_PEAK,
                 "seed $seed: a history whose plates never moved still reads ${inland.relief} of " +
-                    "relief more than $MIN_INLAND_CELLS cells from every present boundary, so the " +
+                    "relief more than $MIN_INLAND_KM km from every present boundary, so the " +
                     "guard above cannot tell a scar from the modern belt stamped twice"
             )
         }
@@ -237,7 +238,7 @@ class TectonicHistoryTest {
     }
 
     private fun configOf(seed: Long, epochs: Int): WorldGenConfig {
-        val base = WorldGenConfig(seed = seed, width = 512, height = 512)
+        val base = WorldGenConfig.forRows(seed, 512)
         return base.copy(
             tectonics = base.tectonics.copy(historyEpochs = epochs),
             isostasy = base.isostasy.copy(enabled = false)
@@ -264,8 +265,8 @@ class TectonicHistoryTest {
      * epoch's belts at a single age rather than two ages averaged; three against one, for the
      * inland guard, so it measures the world the app ships.
      */
-    private fun oldRelief(seed: Long, epochs: Int, driftCells: Float? = null): FloatArray {
-        val history = platesOf(seed, epochs, driftCells = driftCells)
+    private fun oldRelief(seed: Long, epochs: Int, driftKm: Double? = null): FloatArray {
+        val history = platesOf(seed, epochs, driftKm = driftKm)
         val one = platesOf(seed, 1).height.data
         val many = history.height.data
 
@@ -310,17 +311,18 @@ class TectonicHistoryTest {
     private class Inland(val relief: Float, val distance: Float)
 
     /**
-     * The tallest thing the history built anywhere further than [MIN_INLAND_CELLS] from a present
+     * The tallest thing the history built anywhere further than [MIN_INLAND_KM] from a present
      * boundary — a belt whose plate edge is gone, which is the whole claim of this chunk.
      */
-    private fun inlandRelief(seed: Long, epochs: Int, driftCells: Float? = null): Inland {
-        val relief = oldRelief(seed, epochs, driftCells)
+    private fun inlandRelief(seed: Long, epochs: Int, driftKm: Double? = null): Inland {
+        val relief = oldRelief(seed, epochs, driftKm)
+        val kmPerCellWidth = WorldGenConfig.forRows(seed, 512).cellWidthKm.toFloat()
         val present = platesOf(seed, 1)
         var best = 0f
         var at = 0f
         for (i in relief.indices) {
-            val d = present.boundaryDistance.data[i]
-            if (d <= MIN_INLAND_CELLS) continue
+            val d = present.boundaryDistance.data[i] * kmPerCellWidth
+            if (d <= MIN_INLAND_KM) continue
             if (relief[i] > best) { best = relief[i]; at = d }
         }
         return Inland(best, at)
@@ -388,22 +390,25 @@ class TectonicHistoryTest {
          * How far from a present boundary an old belt's crest has to stand to count as a scar
          * rather than as the modern belt beside it.
          *
-         * Stated as twice `boundaryFalloffCells` (26 cell widths at 512), which is where the present
+         * Stated as twice `boundaryFalloffKm` (26 cell widths at 512), which is where the present
          * epoch's own uplift has fallen to nothing on every profile the stage builds — so a crest
          * beyond it cannot be a present belt under another name. On a 12,000 km world at 512 that is
          * about 1,200 km; the Appalachian front stands some 2,000 km from the Mid-Atlantic ridge.
          *
-         * Cell widths of ground, in every direction, since the boundary distance was measured on
-         * the ground; until then a crest 52 rows north of a boundary counted as 52 when it stood
-         * 26 cell widths off. The control below is what says the figure is still the right one:
-         * three epochs that never moved read 0.0036, 0.0011 and 0.0060 of the field beyond 52 on
-         * the three seeds, under the bar, and 0.016, 0.015 and 0.033 beyond 39, the last over it.
+         * In kilometers since Q2, 1,218.75, the 52 cell widths it was stated as on the 512 by 512
+         * grid; a count of cells would have halved it on square cells, where the control below then
+         * reads 0.10 on seed 7. On the ground in every direction since the boundary distance was
+         * measured on the ground; until then a crest 52 rows north of a boundary counted as 52 when
+         * it stood 26 cell widths off. The control below is what says the figure is still the right
+         * one: at 512 by 512 three epochs that never moved read 0.0036, 0.0011 and 0.0060 of the
+         * field beyond it on the three seeds, under the bar, and 0.016, 0.015 and 0.033 beyond 914
+         * km, the last over it.
          */
-        const val MIN_INLAND_CELLS = 52f
+        const val MIN_INLAND_KM = 1_218.75f
 
         /** The known failure the inland clause records. */
         const val OLD_BELTS_NEAR_PRESENT_EDGES =
-            "the plates: on the ground's ruler seed 42's old belts stand within 52 cell widths of a present boundary"
+            "the plates: on the ground's ruler seed 42's old belts stand within 1,219 km of a present boundary"
 
         /** The Appalachians against the Alps: roughly 2,000 m against 4,500. */
         const val MIN_LOWER = 1.8f

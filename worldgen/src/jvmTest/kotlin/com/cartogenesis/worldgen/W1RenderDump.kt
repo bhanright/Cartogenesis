@@ -32,7 +32,7 @@ class W1RenderDump {
         listOf(718106L, 59758L).forEach { seed ->
             val started = System.currentTimeMillis()
             val world = WorldGenerationEngine.generateBlocking(
-                authorsConfig(seed).atResolution(2048, 2048)
+                authorsConfig(seed).atResolution(4096, 2048)
             )
             println(
                 "W1 RENDER seed $seed at 2048 in ${(System.currentTimeMillis() - started) / 1000}s, " +

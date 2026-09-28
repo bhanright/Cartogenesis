@@ -54,19 +54,21 @@ class HeightIntegrationTest {
             (-ky * sin(kx * x) * sin(ky * y)).toFloat()
         }
 
-        // On this project's own cells, a row half a cell width tall: a field that is a gradient comes
-        // back exactly whatever the ground's shape, and this is the shape the terrain is integrated on.
-        val recovered = TerrainStage.integrate(NormalField(gx, gy), WorldGenConfig().cellHeightInCellWidths)
+        // On cells half as tall as they are wide and on square ones: a field that is a gradient comes
+        // back exactly whatever the ground's shape, and these are the shapes the terrain is integrated on.
+        for (grid in listOf(WorldGenConfig(), WorldGenConfig.forRows(1L, 512))) {
+            val recovered = TerrainStage.integrate(NormalField(gx, gy), grid.cellHeightInCellWidths)
 
-        val expectedMean = expected.data.average()
-        val recoveredMean = recovered.data.average()
-        var maxError = 0.0
-        for (i in expected.data.indices) {
-            val e = expected.data[i] - expectedMean
-            val r = recovered.data[i] - recoveredMean
-            maxError = maxOf(maxError, abs(e - r))
+            val expectedMean = expected.data.average()
+            val recoveredMean = recovered.data.average()
+            var maxError = 0.0
+            for (i in expected.data.indices) {
+                val e = expected.data[i] - expectedMean
+                val r = recovered.data[i] - recoveredMean
+                maxError = maxOf(maxError, abs(e - r))
+            }
+            assertTrue(maxError < 1e-4, "max reconstruction error was $maxError on cells ${grid.cellHeightInCellWidths} as tall as wide")
         }
-        assertTrue(maxError < 1e-4, "max reconstruction error was $maxError")
     }
 
     @Test

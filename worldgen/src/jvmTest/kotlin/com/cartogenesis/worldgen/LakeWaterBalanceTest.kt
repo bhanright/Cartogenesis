@@ -119,7 +119,7 @@ class LakeWaterBalanceTest : BorrowsSharedWorlds() {
          */
         historyEpochs: Int = 1
     ): WorldMap {
-        val base = WorldGenConfig(seed = seed, width = size, height = size)
+        val base = WorldGenConfig.forRows(seed, size)
         return SharedWorlds.world(
             base.copy(
                 lakes = base.lakes.copy(waterBalance = waterBalance),
@@ -439,7 +439,7 @@ class LakeWaterBalanceTest : BorrowsSharedWorlds() {
     fun `no drawn river runs across a lake`() {
         listOf(7L to 512, 42L to 512, 1234L to 512, 59758L to 512, 718106L to 1024).forEach { (seed, size) ->
             val world = SharedWorlds.world(
-                WorldGenConfig(seed = seed, width = size, height = size, seaLevel = 0.62f)
+                WorldGenConfig.forRows(seed, size).copy(seaLevel = 0.62f)
             )
             val lakes = world.rivers.lakes
             var onOpenWater = 0
@@ -505,7 +505,8 @@ class LakeWaterBalanceTest : BorrowsSharedWorlds() {
         com.cartogenesis.worldgen.pipeline.LakeWaterBalance.routeIntoWater(
             w, h, ground, pending, water.toIntArray(), w * h, flowTarget,
             IntArray(w * h) { -1 }, 0, FloatArray(w * h), seed = 59758L,
-            cellHeightInCellWidths = WorldGenConfig().cellHeightInCellWidths
+            cellHeightInCellWidths = WorldGenConfig().cellHeightInCellWidths,
+            smoothFieldPeriodCells = com.cartogenesis.worldgen.pipeline.FlowRouting.smoothFieldPeriodCells(WorldGenConfig())
         )
 
         val straight = Straightness()

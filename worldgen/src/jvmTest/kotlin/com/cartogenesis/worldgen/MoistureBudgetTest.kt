@@ -5,7 +5,6 @@ import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.Biome
 import com.cartogenesis.worldgen.pipeline.ClimateStage
 import com.cartogenesis.worldgen.pipeline.MoistureBudget
-import java.util.Locale
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertTrue
@@ -54,20 +53,6 @@ class MoistureBudgetTest : BorrowsSharedWorlds() {
         const val EARTH_RECYCLING_LOW = 0.30
 
         const val EARTH_RECYCLING_HIGH = 0.45
-
-        /**
-         * The known failure both recycling clauses record. The ratio pooled over the four seeds
-         * stood at 0.331, read 0.292 on the continents the ground's ruler drew (Fix 2) and 0.279
-         * under the capped incision's terrain (Fix 3); it came inside the band on the implicit
-         * update and reads 0.295 with the uplift re-derived on it, a few thousandths under, 0.296
-         * once a lake falls with its outlet, 0.298 on the sea temperature the solved currents
-         * carry (4a), 0.299 once that heat is conserved at the coast, and 0.299 still with the
-         * water the wind raises (4b-1). No operator of the
-         * moisture march changed; the terrain it marches over did, and at 4a and 4b-1 the sea it
-         * draws from (docs/DESIGN_LEDGER.md, Fix 2, Fix 3, Fix 3b, 4a and 4b-1).
-         */
-        const val RECYCLING_UNDER_THE_BAND =
-            "the climate: on the continents the ground's ruler draws, four worlds recycle under Earth's continental band"
 
         /** How far inland "the interior" starts, in kilometres: `PressureWindTest`'s own figure. */
         const val INTERIOR_REACH_KM = 500.0
@@ -168,7 +153,7 @@ class MoistureBudgetTest : BorrowsSharedWorlds() {
     }
 
     private fun generate(seed: Long, tune: (WorldGenConfig) -> WorldGenConfig): WorldMap {
-        val base = WorldGenConfig(seed = seed, width = size, height = size)
+        val base = WorldGenConfig.forRows(seed, size)
         return SharedWorlds.world(tune(base))
     }
 
@@ -210,18 +195,14 @@ class MoistureBudgetTest : BorrowsSharedWorlds() {
                     seeds.size, ratio * 100, EARTH_RECYCLING_LOW * 100, EARTH_RECYCLING_HIGH * 100
                 )
         )
-        // Under the band since the continents were redrawn on the ground's ruler, inside it on the
-        // implicit update before the uplift was re-derived, and under it again after: see
-        // [RECYCLING_UNDER_THE_BAND].
-        KnownFailures.expect(RECYCLING_UNDER_THE_BAND, "0.299") {
-            if (!(ratio > EARTH_RECYCLING_LOW && ratio < EARTH_RECYCLING_HIGH)) {
-                throw RecordedViolation(
-                    ("the continental recycling ratio is %.3f, outside Earth's %.2f to %.2f")
-                        .format(ratio, EARTH_RECYCLING_LOW, EARTH_RECYCLING_HIGH),
-                    String.format(Locale.ROOT, "%.3f", ratio)
-                )
-            }
-        }
+        // Under the band from the continents the ground's ruler drew to 4b-1 (0.299 there), and
+        // inside it again on square cells at Q2, 0.303, where it is armed: see docs/DESIGN_LEDGER.md,
+        // Fix 2 to Q2.
+        assertTrue(
+            ratio > EARTH_RECYCLING_LOW && ratio < EARTH_RECYCLING_HIGH,
+            ("the continental recycling ratio is %.3f, outside Earth's %.2f to %.2f")
+                .format(ratio, EARTH_RECYCLING_LOW, EARTH_RECYCLING_HIGH)
+        )
     }
 
     @Test
@@ -271,17 +252,13 @@ class MoistureBudgetTest : BorrowsSharedWorlds() {
                     EARTH_RECYCLING_LOW * 100, EARTH_RECYCLING_HIGH * 100
                 )
         )
-        // Recorded as the clause above.
-        KnownFailures.expect(RECYCLING_UNDER_THE_BAND, "0.299") {
-            if (!(proxyRatio > EARTH_RECYCLING_LOW && proxyRatio < EARTH_RECYCLING_HIGH)) {
-                throw RecordedViolation(
-                    ("the shipped ground return puts the recycling ratio at %.3f, outside Earth's " +
-                        "%.2f to %.2f")
-                        .format(proxyRatio, EARTH_RECYCLING_LOW, EARTH_RECYCLING_HIGH),
-                    String.format(Locale.ROOT, "%.3f", proxyRatio)
-                )
-            }
-        }
+        // Armed as the clause above.
+        assertTrue(
+            proxyRatio > EARTH_RECYCLING_LOW && proxyRatio < EARTH_RECYCLING_HIGH,
+            ("the shipped ground return puts the recycling ratio at %.3f, outside Earth's " +
+                "%.2f to %.2f")
+                .format(proxyRatio, EARTH_RECYCLING_LOW, EARTH_RECYCLING_HIGH)
+        )
         assertTrue(
             derivedRatio < proxyRatio,
             ("the vegetation field now returns *more* water than the proxy (%.3f against %.3f), " +

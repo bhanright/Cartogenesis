@@ -22,11 +22,11 @@ class GenerationSpeedTest {
     @Test
     fun `report generation time`() = runTest(timeout = 10.minutes) {
         // Warm whatever compiler is underneath before the measurement that counts.
-        WorldGenerationEngine.generate(WorldGenConfig(seed = 1L, width = 128, height = 128))
+        WorldGenerationEngine.generate(WorldGenConfig.forRows(1L, 128))
 
         listOf(256, 512).forEach { size ->
-            val config = WorldGenConfig(seed = 234475L, width = 128, height = 128)
-                .atResolution(size, size)
+            val config = WorldGenConfig.forRows(234475L, 128)
+                .atResolution(2 * size, size)
             val elapsed = measureTime { WorldGenerationEngine.generate(config) }
             println(
                 "SPEED ${size}x$size in ${elapsed.inWholeMilliseconds} ms " +

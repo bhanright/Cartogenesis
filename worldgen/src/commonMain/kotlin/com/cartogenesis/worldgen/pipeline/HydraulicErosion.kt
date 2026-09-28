@@ -261,8 +261,11 @@ internal object HydraulicErosion {
          * `incisionCoefficient / landHalfOfField * cellsAcross * sqrt(share) * erodibility /
          * stepCellWidths` times the drop in the height field's own unit. The factor before
          * `sqrt(share)` is this. At the stock world it is `relativeIncisionCoefficient *
-         * cellsAcross`, 0.1467 times the grid's width, which over `sqrt` of the land's cell count
-         * makes `F` about `0.24 sqrt(cells of catchment)` along a row at every grid.
+         * cellsAcross`, 0.1467 times the grid's width, which over `sqrt` of the land's cell count,
+         * about 38% of `cellsAcross * cellsDown`, makes `F` about
+         * `0.24 sqrt(cellsAcross / cellsDown) sqrt(cells of catchment)` along a row: 0.24 on a grid
+         * as many cells tall as wide and 0.34 on a grid of square cells, twice as wide as it is
+         * tall. At the same catchment on the ground `F` follows the cell width alone.
          *
          * `F` is what decides whether an explicit step is bounded: past one it asks for more than
          * the drop. The implicit update the rounds spend it through is bounded at every `F`; see
@@ -877,7 +880,8 @@ internal object HydraulicErosion {
             )
             val directions = FlowRouting.flowDirections(
                 cellsAcross, cellsDown, sea.isLand, sea.relativeElevation, filled,
-                config.seed, config.cellHeightInCellWidths, config.facetRouting, config.flatPotential
+                config.seed, config.cellHeightInCellWidths, FlowRouting.smoothFieldPeriodCells(config),
+                config.facetRouting, config.flatPotential
             )
             // Discharge and not catchment: each cell hands on what falls on it, so what arrives
             // at a channel is `Q = P * A` and the accumulation is a rainfall-weighted cell count
@@ -1369,7 +1373,8 @@ internal object HydraulicErosion {
                     val spoilFlow =
                         FlowRouting.flowDirections(
                             cellsAcross, cellsDown, after.isLand, spoilGround, spoilFilled,
-                            config.seed, config.cellHeightInCellWidths, config.facetRouting,
+                            config.seed, config.cellHeightInCellWidths, FlowRouting.smoothFieldPeriodCells(config),
+                            config.facetRouting,
                             config.flatPotential
                         )
                     // The closing breach cuts the sill a fresh delta laid across a drainage, and
@@ -1409,7 +1414,8 @@ internal object HydraulicErosion {
             if (closing && erosion.deltaLobe && spoil != null) {
                 val opened = openMouths(
                     cellsAcross, cellsDown, working, provisionalSeaLevel, config.scale, spoil,
-                    rates.pondDepth, config.seed, config.cellHeightInCellWidths, config.facetRouting,
+                    rates.pondDepth, config.seed, config.cellHeightInCellWidths,
+                    FlowRouting.smoothFieldPeriodCells(config), config.facetRouting,
                     config.flatPotential,
                     rainfallMm, weightSums
                 )
@@ -1561,22 +1567,24 @@ internal object HydraulicErosion {
     private const val LOBE_WOBBLE = 0.18f
 
     /**
-     * How far a distributary falls per cell, as a share of the freeboard its lobe stands at.
+     * How far a distributary's bed falls per kilometer of its course, as a share of the pond depth's
+     * step in the land's field: a gradient on the ground, spent over each step's own length.
      *
      * Enough that the D8 step across a lobe has one answer rather than the fill's epsilon and a
-     * coin toss — two orders of magnitude more than that epsilon — and little enough that a channel
-     * ten cells long is a groove across the delta rather than a canyon through it.
+     * coin toss, and little enough that a channel ten cells long is a groove across the delta
+     * rather than a canyon through it. It was 0.15 of the step per cell of the 512 grid, 23.4375
+     * km, held against the map by the grid's width, so a step down a column fell as far as a step
+     * along a row on half the ground and a diagonal step as far on more; a gradient is a fall per
+     * length, so it is spent over the length the step runs. docs/DESIGN_LEDGER.md, Q2.
      */
-    private const val DISTRIBUTARY_FALL = 0.15f
+    private const val DISTRIBUTARY_FALL_PER_KM = 0.15f / 23.4375f
 
     /**
-     * The grid every figure in this file that is written per cell was measured at.
-     *
-     * Only two are, and both are gradients: dividing by the grid in use and multiplying by this
-     * keeps them fixed against the map rather than against the cell, which is the difference
-     * between a world with more detail in it and a different world.
+     * The least a distributary step falls, in the land's field: a tenth of the fill's own 1e-6
+     * nudge, which is what the step's fall was floored at before it was a gradient, so a groove on
+     * a grid fine enough to make the gradient's step vanishingly small still descends.
      */
-    private const val REFERENCE_GRID = 512f
+    private const val MIN_DISTRIBUTARY_FALL = 1e-7f
 
     /**
      * How much of the land's water a watercourse must carry before this stage treats it as a river.
@@ -1753,6 +1761,7 @@ internal object HydraulicErosion {
         pondDepth: Float,
         seed: Long,
         cellHeightInCellWidths: Double,
+        smoothFieldPeriodCells: Int,
         byFacet: Boolean,
         overPotential: Boolean,
         /** The march's rainfall in millimetres, floored; this pass normalises it for itself. */
@@ -1770,15 +1779,17 @@ internal object HydraulicErosion {
         // may change a world with deposition switched off, and this pass runs either way; reading
         // `deltaFreeboard` here let the fiddled-knobs case move the terrain. It caught that too.
         val step = pondDepth * landRange
-        // Per cell, from a gradient held against the map, so a groove of a given length on the
-        // ground is the same groove however fine the grid that cuts it.
-        val fall = (step * DISTRIBUTARY_FALL * REFERENCE_GRID / cellsAcross).coerceAtLeast(1e-7f)
+        // A gradient on the ground, so a groove of a given length on the ground is the same groove
+        // however fine the grid that cuts it and whichever way it runs.
+        val fallPerCellWidth = step * DISTRIBUTARY_FALL_PER_KM * scale.cellWidthKm(cellsAcross).toFloat()
+        val steps = GroundSteps(cellHeightInCellWidths)
         val floor = sea.shorelineHeight + step * LOBE_RIM
 
         val filled =
             FlowRouting.fillDepressions(cellsAcross, cellsDown, isLand, sea.relativeElevation)
         val flow = FlowRouting.flowDirections(
             cellsAcross, cellsDown, isLand, sea.relativeElevation, filled, seed, cellHeightInCellWidths,
+            smoothFieldPeriodCells,
             byFacet, overPotential
         )
         // Weighted as the rounds weighted it, so a groove is cut where a river's water is and not
@@ -1818,6 +1829,8 @@ internal object HydraulicErosion {
             val receiver = flow[cell]
             if (receiver < 0) continue
             val below = if (isLand[receiver]) surfaceOf[receiver] else sea.shorelineHeight
+            val fall = (fallPerCellWidth * steps.between(cell, receiver, cellsAcross))
+                .coerceAtLeast(MIN_DISTRIBUTARY_FALL)
             val want = minOf(surfaceOf[cell], below + fall).coerceAtLeast(floor)
             if (surfaceOf[cell] > want) {
                 removed += -raise(surfaceOf, cell, (want - surfaceOf[cell]).toDouble())
@@ -2176,7 +2189,8 @@ internal object HydraulicErosion {
      * [Rates.courantCoefficient] times `sqrt(share) * erodibility / stepCellWidths`: [discharge] over
      * [landCells] is the share, [erodibility] the cover's factor and the step the one to the
      * receiver on the ground. The explicit update, `z' = z - F (z - z_r)`, is bounded only while
-     * `F` is under one, and on this map `F` is about `0.24 sqrt(cells of catchment)`: two where a
+     * `F` is under one, and on this map `F` is about `0.34 sqrt(cells of catchment)` on square
+     * cells (`0.24` on the 512 by 512 grid; see [Rates.courantCoefficient]): a few where a
      * drawn river starts and tens on a trunk. So it needed a cap, and the cap set every drawn
      * channel's cut (docs/DESIGN_LEDGER.md, Fix 3).
      *

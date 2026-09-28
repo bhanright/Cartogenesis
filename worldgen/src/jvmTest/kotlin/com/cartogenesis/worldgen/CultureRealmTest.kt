@@ -27,7 +27,7 @@ class CultureRealmTest : BorrowsSharedWorlds() {
         val pooled = ArrayList<Double>()
         listOf(42L, 7L, 1234L).forEach { seed ->
             val world = SharedWorlds.world(
-                WorldGenConfig(seed = seed, width = 512, height = 512)
+                WorldGenConfig.forRows(seed, 512)
             )
             val realmOf = world.nations.nationId
             val cultureOf = world.cultures.cultureId
@@ -156,7 +156,7 @@ class CultureRealmTest : BorrowsSharedWorlds() {
     fun `peoples cover the habitable world without one swallowing it`() {
         listOf(42L, 7L, 1234L).forEach { seed ->
             val world = SharedWorlds.world(
-                WorldGenConfig(seed = seed, width = 512, height = 512)
+                WorldGenConfig.forRows(seed, 512)
             )
             val land = world.sea.isLand.count { it }
             // Measured against land people could actually live on, not all land. Seed 42 is a third

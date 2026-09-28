@@ -90,7 +90,7 @@ class SeaLevelHistoryTest : BorrowsSharedWorlds() {
             //
             // The shipped world's own pair, both mechanisms running, is printed by
             // `report every corner of the pair` below.
-            val base = WorldGenConfig(seed = seed, width = 512, height = 512)
+            val base = WorldGenConfig.forRows(seed, 512)
                 .let { it.copy(sea = it.sea.copy(postCutOutlet = false)) }
             val today = Coast(
                 SharedWorlds.world(base.copy(sea = base.sea.copy(lowstandMetres = 0f))),
@@ -180,7 +180,7 @@ class SeaLevelHistoryTest : BorrowsSharedWorlds() {
         var controlPockets = 0
         var controlMouths = 0
         seeds.forEach { seed ->
-            val base = WorldGenConfig(seed = seed, width = 512, height = 512)
+            val base = WorldGenConfig.forRows(seed, 512)
             val loose = Coast(
                 SharedWorlds.world(
                     base.copy(sea = base.sea.copy(enclosedSeaIsLand = false))
@@ -231,7 +231,7 @@ class SeaLevelHistoryTest : BorrowsSharedWorlds() {
     @Test
     fun `report every corner of the pair`() {
         seeds.forEach { seed ->
-            val base = WorldGenConfig(seed = seed, width = 512, height = 512)
+            val base = WorldGenConfig.forRows(seed, 512)
             listOf(
                 "PRE-H5      " to base.sea.copy(
                     lowstandMetres = 0f, enclosedSeaIsLand = false, postCutOutlet = false
@@ -255,7 +255,7 @@ class SeaLevelHistoryTest : BorrowsSharedWorlds() {
         // the author's own setting in between.
         listOf(0.3f, 0.62f, 0.8f).forEach { level ->
             listOf(128, 512).forEach { size ->
-                val base = WorldGenConfig(seed = 42L, width = size, height = size)
+                val base = WorldGenConfig.forRows(42L, size)
                     .copy(seaLevel = level)
                 val off = SharedWorlds.world(
                     base.copy(sea = base.sea.copy(enclosedSeaIsLand = false, lowstandMetres = 0f))

@@ -89,7 +89,7 @@ class ColdWaterPlacementTest : BorrowsSharedWorlds() {
     fun `the coldest subtropical eastern-boundary water lies within Earth's upwelling systems' latitudes`() {
         val failures = ArrayList<String>()
         for (seed in SEEDS) {
-            val world = SharedWorlds.world(WorldGenConfig(seed = seed, width = 512, height = 512))
+            val world = SharedWorlds.world(WorldGenConfig.forRows(seed, 512))
             for (hemisphere in listOf(1f, -1f)) {
                 val (coldestC, latitude) = coldestEasternBoundary(world, hemisphere) ?: continue
                 println("COLD WATER seed $seed ${if (hemisphere > 0) "north" else "south"}: coldest eastern-boundary water %.2f C at %.1f degrees".format(coldestC, latitude))
@@ -106,7 +106,7 @@ class ColdWaterPlacementTest : BorrowsSharedWorlds() {
         val failures = ArrayList<String>()
         val shortOf = ArrayList<String>()
         for (seed in SEEDS) {
-            val world = SharedWorlds.world(WorldGenConfig(seed = seed, width = 512, height = 512))
+            val world = SharedWorlds.world(WorldGenConfig.forRows(seed, 512))
             val thirds = equatorialThirds(world) ?: continue
             val marginC = THIRDS_OF_AN_EVEN_FALL * PACIFIC_ZONAL_CONTRAST_C * thirds.meanStressLength /
                 (PACIFIC_EQUATORIAL_STRESS_N_PER_M2 * PACIFIC_EQUATORIAL_WIDTH_KM)

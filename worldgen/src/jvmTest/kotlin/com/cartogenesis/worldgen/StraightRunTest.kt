@@ -47,7 +47,8 @@ class StraightRunTest : BorrowsSharedWorlds() {
         const val STANDARD_SIDE = 512
 
         /**
-         * The author's second world, at the one grid the ruled shores can be found on.
+         * The author's second world, at the one grid the ruled shores can be found on: 1,024 rows
+         * since Q2, whose square cells are the 5.9 km a cell of the 2048 by 2048 grid measured across.
          *
          * A 2048 world is the better part of two minutes and it is not optional, for the reason
          * `GlacialBasinShapeTest` keeps one: the bodies the notch opened are three and seven
@@ -56,13 +57,13 @@ class StraightRunTest : BorrowsSharedWorlds() {
          * world it drowns is a question about how finely the coast is resolved.
          */
         const val SHORE_SEED = 364673L
-        const val SHORE_SIDE = 2048
+        const val SHORE_SIDE = 1024
     }
 
     private fun world(seed: Long, side: Int, byFacet: Boolean = true): WorldMap =
         SharedWorlds.world(
-            WorldGenConfig(seed = seed, width = 512, height = 512)
-                .atResolution(side, side)
+            WorldGenConfig.forRows(seed, 512)
+                .atResolution(2 * side, side)
                 .copy(facetRouting = byFacet)
         )
 

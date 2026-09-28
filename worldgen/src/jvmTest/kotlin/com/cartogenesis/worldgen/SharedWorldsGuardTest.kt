@@ -205,7 +205,7 @@ class SharedWorldsGuardTest {
 
     private companion object {
         /** Small enough to generate in a second, and every stage still runs on it. */
-        val config = WorldGenConfig(seed = 42L, width = 128, height = 128)
+        val config = WorldGenConfig.forRows(42L, 128)
 
         val original: WorldMap by lazy { WorldGenerationEngine.generateBlocking(config) }
     }

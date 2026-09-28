@@ -150,7 +150,7 @@ class RiftSegmentationTest : BorrowsSharedWorlds() {
     }
 
     private fun world(segmented: Boolean): WorldMap {
-        val base = WorldGenConfig(seed = seed, width = 512, height = 512)
+        val base = WorldGenConfig.forRows(seed, 512)
         return SharedWorlds.world(
             base.copy(tectonics = base.tectonics.copy(riftSegmentation = segmented))
         )

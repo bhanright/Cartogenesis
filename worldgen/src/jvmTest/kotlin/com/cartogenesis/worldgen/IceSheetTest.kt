@@ -638,14 +638,14 @@ class IceSheetTest : BorrowsSharedWorlds() {
     )
 
     private fun measure(seed: Long): Measured =
-        measured.getOrPut(seed) { carve(WorldGenConfig(seed = seed, width = 512, height = 512)) }
+        measured.getOrPut(seed) { carve(WorldGenConfig.forRows(seed, 512)) }
 
     /** The reported world, at the grid it was reported at. See [REPORTED_SEED]. */
     private fun reported(): Measured =
         measured.getOrPut(REPORTED_SEED) {
             carve(
-                WorldGenConfig(seed = REPORTED_SEED, width = 512, height = 512)
-                    .atResolution(REPORTED_SIDE, REPORTED_SIDE)
+                WorldGenConfig.forRows(REPORTED_SEED, 512)
+                    .atResolution(2 * REPORTED_SIDE, REPORTED_SIDE)
             )
         }
 

@@ -28,7 +28,7 @@ class GeographyAuditTest : BorrowsSharedWorlds() {
         val bands = DesertBands()
         seeds.forEach { seed ->
             val world = SharedWorlds.world(
-                WorldGenConfig(seed = seed, width = 512, height = 512)
+                WorldGenConfig.forRows(seed, 512)
             )
             val w = world.width
             val h = world.height
@@ -176,7 +176,7 @@ class GeographyAuditTest : BorrowsSharedWorlds() {
     fun `the band guard bites on a world whose land never re-moistens`() {
         val bands = DesertBands()
         seeds.forEach { seed ->
-            val base = WorldGenConfig(seed = seed, width = 512, height = 512)
+            val base = WorldGenConfig.forRows(seed, 512)
             val world = SharedWorlds.world(
                 base.copy(climate = base.climate.copy(evapotranspirationLengthKm = 0f))
             )

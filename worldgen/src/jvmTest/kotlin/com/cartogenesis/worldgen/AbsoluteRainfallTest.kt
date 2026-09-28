@@ -55,7 +55,7 @@ class AbsoluteRainfallTest : BorrowsSharedWorlds() {
         val misses = ArrayList<String>()
         seeds.forEach { seed ->
             val world = SharedWorlds.world(
-                WorldGenConfig(seed = seed, width = 512, height = 512)
+                WorldGenConfig.forRows(seed, 512)
             )
             val w = world.width
             val h = world.height
@@ -155,7 +155,7 @@ class AbsoluteRainfallTest : BorrowsSharedWorlds() {
     @Test
     fun `an arid config and a lush one classify identically under the old normalization, not under this one`() {
         val seed = 42L
-        val base = WorldGenConfig(seed = seed, width = 512, height = 512)
+        val base = WorldGenConfig.forRows(seed, 512)
         val arid = base.copy(
             climate = base.climate.copy(depletionLengthKm = base.climate.depletionLengthKm / 0.3f)
         )
@@ -221,7 +221,7 @@ class AbsoluteRainfallTest : BorrowsSharedWorlds() {
     @Test
     fun `the monsoon claim, re-measured without the clamp`() {
         val seed = 26L
-        val base = WorldGenConfig(seed = seed, width = 512, height = 512)
+        val base = WorldGenConfig.forRows(seed, 512)
         val world = SharedWorlds.world(base)
         val generated = ClimateStage.generateWithSeasonalMm(base, world.sea, world.ocean)
         val w = world.width
@@ -326,7 +326,7 @@ class AbsoluteRainfallTest : BorrowsSharedWorlds() {
     }
 
     private fun desertShare(seed: Long): Float =
-        desertShare(WorldGenConfig(seed = seed, width = 512, height = 512))
+        desertShare(WorldGenConfig.forRows(seed, 512))
 
     private fun desertShare(config: WorldGenConfig): Float {
         val world = SharedWorlds.world(config)
@@ -341,7 +341,7 @@ class AbsoluteRainfallTest : BorrowsSharedWorlds() {
     }
 
     private fun oldNormalizedDesertShare(seed: Long): Float =
-        oldNormalizedDesertShare(WorldGenConfig(seed = seed, width = 512, height = 512))
+        oldNormalizedDesertShare(WorldGenConfig.forRows(seed, 512))
 
     private fun oldNormalizedDesertShare(config: WorldGenConfig): Float {
         val world = SharedWorlds.world(config)

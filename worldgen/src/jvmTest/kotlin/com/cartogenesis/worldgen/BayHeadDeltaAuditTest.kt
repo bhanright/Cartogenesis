@@ -48,11 +48,11 @@ import kotlin.test.assertTrue
 class BayHeadDeltaAuditTest {
 
     private fun config(graded: Boolean): WorldGenConfig {
-        val base = WorldGenConfig(seed = 718106L, width = 512, height = 512, seaLevel = 0.62f)
+        val base = WorldGenConfig.forRows(718106L, 512).copy(seaLevel = 0.62f)
         val authored = base.copy(
             tectonics = base.tectonics.copy(plateCount = 14),
             nations = base.nations.copy(nationCount = 12)
-        ).atResolution(2048, 2048)
+        ).atResolution(4096, 2048)
         return authored.copy(erosion = authored.erosion.copy(gradedAggradation = graded))
     }
 

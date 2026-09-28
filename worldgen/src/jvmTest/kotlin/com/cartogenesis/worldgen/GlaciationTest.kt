@@ -46,8 +46,8 @@ class GlaciationTest : BorrowsSharedWorlds() {
      * comb case below already measures this same seed, and both regimes — valley and sheet — are
      * working there.
      */
-    private val base = WorldGenConfig(seed = 42L, width = 512, height = 512)
-        .atResolution(1024, 1024)
+    private val base = WorldGenConfig.forRows(42L, 512)
+        .atResolution(2048, 1024)
 
     /**
      * Glaciated country: the ice and tundra the carving is bounded to, *and the taiga below it*.
@@ -258,9 +258,9 @@ class GlaciationTest : BorrowsSharedWorlds() {
             Triple(512, 0.70f, "512 at sea 0.70"),
             Triple(512, 0.50f, "512 at sea 0.50")
         ).forEach { (size, level, label) ->
-            val config = WorldGenConfig(seed = 718106L, width = 512, height = 512)
+            val config = WorldGenConfig.forRows(718106L, 512)
                 .copy(seaLevel = level)
-                .atResolution(size, size)
+                .atResolution(2 * size, size)
                 // Same reason as the comb guard above: the resolution contract below is a
                 // comparison of lake share of land at two grids, and E1's notch drains basins
                 // unevenly between them — at sea 0.70 it takes seed 718106's 512 grid down to
@@ -539,8 +539,8 @@ class GlaciationTest : BorrowsSharedWorlds() {
         var worst = 0f
         val over = ArrayList<String>()
         listOf(718106L, 42L, 7L).forEach { seed ->
-            val config = WorldGenConfig(seed = seed, width = 512, height = 512)
-                .atResolution(1024, 1024)
+            val config = WorldGenConfig.forRows(seed, 512)
+                .atResolution(2048, 1024)
                 // E1's outlet notch off, because both figures below are shares of the world's
                 // standing water and the notch removes two thirds of it for reasons that have
                 // nothing to do with ice: on seed 718106 at 1024 the lake cells go 6632 -> 2173

@@ -73,6 +73,13 @@ class BoundaryPairTest {
     private val ROUND_ON_THE_GROUND = 0.10
 
     /**
+     * The rows the hotspot cone is asserted at: 1,024, whose square cells are 5.9 km, the width a
+     * cell had across the 2048 by 2048 grid the case was written at, so the cone is as many cell
+     * widths across as it was when its bars were set, at half the cells.
+     */
+    private val FINE_ROWS = 1024
+
+    /**
      * The world with the plate-base step flattened, which is what makes the belts measurable.
      *
      * `PlateStage` builds elevation out of two quite separate things: a blurred step between plate
@@ -91,7 +98,7 @@ class BoundaryPairTest {
      * elevation bias to zero, which was the step's own setting.
      */
     private fun platesOf(seed: Long, crustPairs: Boolean = true): Pair<WorldGenConfig, PlateResult> {
-        val config = WorldGenConfig(seed = seed, width = 512, height = 512).let {
+        val config = WorldGenConfig.forRows(seed, 512).let {
             it.copy(
                 tectonics = it.tectonics.copy(crustPairProfiles = crustPairs),
                 isostasy = it.isostasy.copy(enabled = false)
@@ -102,7 +109,7 @@ class BoundaryPairTest {
 
     /** The shipped world, unflattened — used only for the pair-occurrence scan. */
     private fun defaultPlatesOf(seed: Long): PlateResult {
-        val config = WorldGenConfig(seed = seed, width = 512, height = 512)
+        val config = WorldGenConfig.forRows(seed, 512)
         return PlateStage.generate(config, TerrainStage.generate(config))
     }
 
@@ -288,7 +295,7 @@ class BoundaryPairTest {
     @Test
     fun `hotspot chains raise seamounts away from every boundary`() {
         val measured = listOf(7L, 42L, 1234L).map { seed ->
-            hotspotReach(WorldGenConfig(seed = seed, width = 512, height = 512), "seed $seed")
+            hotspotReach(WorldGenConfig.forRows(seed, 512), "seed $seed")
         }
         val pooled = HotspotReach(
             "pooled", measured.sumOf { it.raised }, measured.sumOf { it.farFromBoundary },
@@ -313,7 +320,7 @@ class BoundaryPairTest {
             )
         }
         val control = hotspotReach(
-            WorldGenConfig(seed = 7L, width = 512, height = 512).let {
+            WorldGenConfig.forRows(7L, 512).let {
                 it.copy(tectonics = it.tectonics.copy(hotspotRadiusKm = it.tectonics.hotspotRadiusKm * 8.0))
             },
             "control, cones eight times as wide"
@@ -548,8 +555,8 @@ class BoundaryPairTest {
         }
         val (mean512Before, amp512Before, _) = measure(512, detail = false)
         val (mean512After, amp512After, _) = measure(512, detail = true)
-        val (mean2048Before, amp2048Before, twoFold2048Before) = shape(2048, detail = false)
-        val (mean2048After, amp2048After, twoFold2048After) = shape(2048, detail = true)
+        val (mean2048Before, amp2048Before, twoFold2048Before) = shape(FINE_ROWS, detail = false)
+        val (mean2048After, amp2048After, twoFold2048After) = shape(FINE_ROWS, detail = true)
         reportAndAssert(
             mean512Before, amp512Before, mean512After, amp512After,
             mean2048Before, amp2048Before, mean2048After, amp2048After, twoFold2048Before, twoFold2048After
@@ -562,16 +569,17 @@ class BoundaryPairTest {
      * is about) and of its second (an ellipse, which is what a cone round in cells is on cells half
      * as tall as they are wide).
      */
-    private fun shape(width: Int, detail: Boolean): Triple<Double, Double, Double> {
-        val base = WorldGenConfig(seed = 718106L, width = 512, height = 512)
-        val config = (if (width == 512) base else base.atResolution(width, width)).let {
+    private fun shape(rows: Int, detail: Boolean): Triple<Double, Double, Double> {
+        val config = WorldGenConfig.forRows(718106L, rows).let {
             it.copy(tectonics = it.tectonics.copy(hotspotConeDetail = detail))
         }
+        val width = config.width
+        val height = config.height
         val withChains = PlateStage.generate(config, TerrainStage.generate(config))
         val without = config.copy(tectonics = config.tectonics.copy(hotspotPlateFraction = 0f))
         val flat = PlateStage.generate(without, TerrainStage.generate(without))
 
-        val delta = FloatArray(width * width)
+        val delta = FloatArray(width * height)
         var peakI = -1
         var peakV = 0f
         for (i in delta.indices) {
@@ -585,7 +593,7 @@ class BoundaryPairTest {
 
         fun nearest(x: Float, y: Float): Float {
             val xi = x.toInt().coerceIn(0, width - 1)
-            val yi = y.toInt().coerceIn(0, width - 1)
+            val yi = y.toInt().coerceIn(0, height - 1)
             return delta[yi * width + xi]
         }
 
@@ -598,7 +606,7 @@ class BoundaryPairTest {
             val dx = cos(theta).toFloat()
             val dy = sin(theta).toFloat() / rowScale
             var r = 0f
-            while (r < width / 4f) {
+            while (r < height / 4f) {
                 if (nearest(cx + dx * r, cy + dy * r) < half) break
                 r += 0.1f
             }
@@ -613,19 +621,19 @@ class BoundaryPairTest {
         twoFold2048Before: Double, twoFold2048After: Double
     ) {
         println(
-            "E3 seed 718106 @512  before: mean radius %.2f cells, relative 8-fold amplitude %.4f"
+            "E3 seed 718106 @512 rows  before: mean radius %.2f cells, relative 8-fold amplitude %.4f"
                 .format(mean512Before, amp512Before)
         )
         println(
-            "E3 seed 718106 @512  after:  mean radius %.2f cells, relative 8-fold amplitude %.4f"
+            "E3 seed 718106 @512 rows  after:  mean radius %.2f cells, relative 8-fold amplitude %.4f"
                 .format(mean512After, amp512After)
         )
         println(
-            "E3 seed 718106 @2048 before: mean radius %.2f cells, relative 8-fold amplitude %.4f"
+            "E3 seed 718106 @1024 rows before: mean radius %.2f cells, relative 8-fold amplitude %.4f"
                 .format(mean2048Before, amp2048Before)
         )
         println(
-            "E3 seed 718106 @2048 after:  mean radius %.2f cells, relative 8-fold amplitude %.4f"
+            "E3 seed 718106 @1024 rows after:  mean radius %.2f cells, relative 8-fold amplitude %.4f"
                 .format(mean2048After, amp2048After)
         )
 
@@ -636,7 +644,7 @@ class BoundaryPairTest {
         // defect fixed in this chunk.
         assertTrue(
             amp2048After < 0.05,
-            "seed 718106's hotspot cone at 2048 has a relative eight-fold amplitude of " +
+            "seed 718106's hotspot cone at 1024 rows has a relative eight-fold amplitude of " +
                 "$amp2048After, wanted under 0.05"
         )
 
@@ -647,12 +655,12 @@ class BoundaryPairTest {
         // is a tenth: above the rim's own wobble and the grid's reading of it, and a third of the
         // ellipse.
         println(
-            "E3 seed 718106 @2048 second harmonic on the ground: before %.4f, after %.4f"
+            "E3 seed 718106 @1024 rows second harmonic on the ground: before %.4f, after %.4f"
                 .format(twoFold2048Before, twoFold2048After)
         )
         assertTrue(
             twoFold2048Before < ROUND_ON_THE_GROUND && twoFold2048After < ROUND_ON_THE_GROUND,
-            "seed 718106's hotspot cone at 2048 is an ellipse on the ground: second harmonic " +
+            "seed 718106's hotspot cone at 1024 rows is an ellipse on the ground: second harmonic " +
                 "$twoFold2048Before without the rim detail and $twoFold2048After with it, wanted under $ROUND_ON_THE_GROUND"
         )
 

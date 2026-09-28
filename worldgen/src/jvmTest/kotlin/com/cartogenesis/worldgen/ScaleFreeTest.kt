@@ -276,8 +276,8 @@ class ScaleFreeTest : BorrowsSharedWorlds() {
         const val CHANNEL_DENSITY_FACTOR = 1.35
 
         fun configAt(seed: Long, size: Int): WorldGenConfig {
-            val base = WorldGenConfig(seed = seed, width = 512, height = 512)
-            return if (size == 512) base else base.atResolution(size, size)
+            val base = WorldGenConfig.forRows(seed, 512)
+            return if (size == 512) base else base.atResolution(2 * size, size)
         }
 
         fun worldAt(seed: Long, size: Int): WorldMap =

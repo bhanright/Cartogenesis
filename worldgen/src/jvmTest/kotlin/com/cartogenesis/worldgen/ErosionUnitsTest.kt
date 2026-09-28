@@ -40,7 +40,7 @@ class ErosionUnitsTest {
 
         /** Seed 42's rounds, watched once. */
         val watched: Watched by lazy {
-            val config = WorldGenConfig(seed = SEED, width = SIDE, height = SIDE)
+            val config = WorldGenConfig.forRows(SEED, SIDE)
             val plates = PlateStage.generate(config, TerrainStage.generate(config))
             val watch = Watched(config)
             erodeBlockingWatchingIncision(config, plates.height, plates.upliftRateMmPerYear, watch)

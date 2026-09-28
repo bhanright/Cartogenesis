@@ -342,7 +342,7 @@ class JumpFloodDistanceTest : BorrowsSharedWorlds() {
      */
     @Test
     fun `seed 42's shelf break follows a round contour`() {
-        val config = WorldGenConfig(seed = 42L, width = 512, height = 512)
+        val config = WorldGenConfig.forRows(42L, 512)
         val world = SharedWorlds.world(config)
         val w = world.width
         val h = world.height

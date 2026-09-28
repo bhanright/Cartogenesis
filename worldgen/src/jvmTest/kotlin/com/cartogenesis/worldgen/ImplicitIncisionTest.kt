@@ -292,7 +292,7 @@ class ImplicitIncisionTest {
      */
     @Test
     fun `the pass keeps its bounds and cuts past half the drop where F is over one`() {
-        val config = WorldGenConfig(seed = 42L, width = 512, height = 512)
+        val config = WorldGenConfig.forRows(42L, 512)
         val plates = PlateStage.generate(config, TerrainStage.generate(config))
         val bounds = Bounds(config.width * config.height, config.scale.reliefSpanMetres, HydraulicErosion.Rates(config).pondDepth)
         erodeBlockingWatchingIncision(config, plates.height, plates.upliftRateMmPerYear, bounds)

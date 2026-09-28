@@ -41,7 +41,7 @@ class RealmIdRangeTest : BorrowsSharedWorlds() {
                 config.copy(nations = config.nations.copy(wilderness = WildernessMode.LEAVE_WILDERNESS))
             )
         }
-        assertRealmIdsInRange(authorsConfig(718106L).atResolution(1024, 1024))
+        assertRealmIdsInRange(authorsConfig(718106L).atResolution(2048, 1024))
     }
 }
 
@@ -53,7 +53,7 @@ class RealmIdRangeTest : BorrowsSharedWorlds() {
  * of being duplicated.
  */
 internal fun authorsConfig(seed: Long): WorldGenConfig {
-    val base = WorldGenConfig(seed = seed, width = 512, height = 512, seaLevel = 0.62f)
+    val base = WorldGenConfig.forRows(seed, 512).copy(seaLevel = 0.62f)
     return base.copy(
         tectonics = base.tectonics.copy(plateCount = 14),
         nations = base.nations.copy(nationCount = 12)

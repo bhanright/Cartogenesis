@@ -40,7 +40,7 @@ class ColdCapReportTest {
 
         for (seed in seeds) {
             val world = WorldGenerationEngine.generateBlocking(
-                WorldGenConfig(seed = seed, width = 512, height = 512)
+                WorldGenConfig.forRows(seed, 512)
             )
             val w = world.width
             val h = world.height

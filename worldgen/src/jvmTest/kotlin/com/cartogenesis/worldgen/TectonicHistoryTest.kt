@@ -51,7 +51,7 @@ class TectonicHistoryTest {
         flatten: Boolean = true,
         driftKm: Double? = null
     ): PlateResult {
-        val base = WorldGenConfig(seed = seed, width = 512, height = 512)
+        val base = WorldGenConfig.forRows(seed, 512)
         val config = base.copy(
             tectonics = base.tectonics.copy(
                 historyEpochs = epochs,
@@ -82,7 +82,7 @@ class TectonicHistoryTest {
         val measured = LinkedHashMap<Pair<Long, Int>, Long>()
         seeds.forEach { seed ->
             listOf(0, 1, 2).forEach { epochs ->
-                val base = WorldGenConfig(seed = seed, width = 512, height = 512)
+                val base = WorldGenConfig.forRows(seed, 512)
                 val config = base.copy(tectonics = base.tectonics.copy(historyEpochs = epochs))
                 val plates = PlateStage.generate(config, TerrainStage.generate(config))
                 var checksum = 0L
@@ -237,7 +237,7 @@ class TectonicHistoryTest {
     }
 
     private fun configOf(seed: Long, epochs: Int): WorldGenConfig {
-        val base = WorldGenConfig(seed = seed, width = 512, height = 512)
+        val base = WorldGenConfig.forRows(seed, 512)
         return base.copy(
             tectonics = base.tectonics.copy(historyEpochs = epochs),
             isostasy = base.isostasy.copy(enabled = false)

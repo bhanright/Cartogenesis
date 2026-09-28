@@ -121,7 +121,7 @@ class ContinentalityTest : BorrowsSharedWorlds() {
      */
     @Test
     fun `sea air reaches as far inland from a coast facing north as from one facing east`() {
-        val config = WorldGenConfig(seed = 42L, width = 512, height = 512)
+        val config = WorldGenConfig.forRows(42L, 512)
         val cellsAcross = config.width
         val cellsDown = config.height
         val edge = cellsDown / 4
@@ -168,7 +168,7 @@ class ContinentalityTest : BorrowsSharedWorlds() {
 
     private fun measure(): Measured {
         val world = SharedWorlds.world(
-            WorldGenConfig(seed = 42L, width = 512, height = 512)
+            WorldGenConfig.forRows(42L, 512)
         )
         val cellsAcross = world.width
         val cellsDown = world.height

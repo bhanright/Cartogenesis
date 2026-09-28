@@ -26,7 +26,8 @@ import kotlin.test.assertTrue
  * the grid's axes into whatever it shapes. Each case here lays a synthetic feature at several
  * bearings on the ground — a boundary, a crust edge, two seeds, a drift, a rift, an old belt — hands
  * it to the operator the stage itself runs, and reads the answer back in kilometres. Audit III's
- * A-D2, D7 and R13-6 are the findings; `docs/DESIGN_LEDGER.md` has the row.
+ * A-D2, D7 and R13-6 are the findings; `docs/DESIGN_LEDGER.md` has the row. Each case is read on
+ * those cells and on square ones, which is the grid the generator is moving to (Q2).
  *
  * Two cases go the other way, from one grid to another rather than from one bearing to another:
  * a world of square cells made by [WorldGenConfig.forRows] raises its belts as wide on the ground as
@@ -35,37 +36,51 @@ import kotlin.test.assertTrue
  */
 class TectonicGroundTest {
 
-    private val config = WorldGenConfig(seed = 1L, width = 512, height = 512)
-    private val cellsAcross = config.width
-    private val cellsDown = config.height
-    private val rowScale = config.cellHeightInCellWidths
+    /** One synthetic grid the operators are read on, and the figures of its cells. */
+    private class Grid(val config: WorldGenConfig) {
+        val cellsAcross = config.width
+        val cellsDown = config.height
+        val rowScale = config.cellHeightInCellWidths
+    }
+
+    /**
+     * Cells half as tall as they are wide, at 512 by 512, and square, at 1,024 by 512: each case
+     * below is read on both.
+     */
+    private val grids = listOf(
+        Grid(WorldGenConfig(seed = 1L, width = 512, height = 512)),
+        Grid(WorldGenConfig.forRows(1L, 512))
+    )
 
     /**
      * A belt's distance from its boundary is a length on the ground, not a count of cells.
      *
-     * Two boundaries, one along a row and one along a column, and the cell that stands 398 km off
-     * each: 34 rows one way, 17 columns the other. The distance the stage hands every belt profile
-     * must be the same 17 cell widths for both.
+     * Two boundaries, one along a row and one along a column, and the cell that stands [OFFSET_KM]
+     * off each: 34 rows one way and 17 columns the other on the 512 by 512 grid, 34 each way on
+     * square cells. The distance the stage hands every belt profile must be the same cell widths
+     * for both.
      */
     @Test
-    fun `a boundary's distance is the same length on the ground whichever way it runs`() {
+    fun `a boundary's distance is the same length on the ground whichever way it runs`() = grids.forEach { grid -> with(grid) {
+        val rowsOff = kotlin.math.round(config.rowsFor(OFFSET_KM)).toInt()
+        val columnsOff = kotlin.math.round(config.cellsFor(OFFSET_KM)).toInt()
         val alongARow = (0 until cellsAcross).map { EDGE * cellsAcross + it }
         val alongAColumn = (0 until cellsDown).map { it * cellsAcross + EDGE }
         val southOfTheRow = PlateStage.boundaryDistance(config, alongARow)
-            .distanceCellWidths[(EDGE + ROWS_OFF) * cellsAcross + cellsAcross / 2]
+            .distanceCellWidths[(EDGE + rowsOff) * cellsAcross + cellsAcross / 2]
         val eastOfTheColumn = PlateStage.boundaryDistance(config, alongAColumn)
-            .distanceCellWidths[cellsDown / 2 * cellsAcross + EDGE + COLUMNS_OFF]
+            .distanceCellWidths[cellsDown / 2 * cellsAcross + EDGE + columnsOff]
         println(
-            "TECTONIC boundary distance %d rows south of a boundary along a row: %.3f cell widths; %d columns east of one along a column: %.3f"
-                .format(ROWS_OFF, southOfTheRow, COLUMNS_OFF, eastOfTheColumn)
+            "TECTONIC %dx%d boundary distance %d rows south of a boundary along a row: %.3f cell widths; %d columns east of one along a column: %.3f"
+                .format(cellsAcross, cellsDown, rowsOff, southOfTheRow, columnsOff, eastOfTheColumn)
         )
-        val onTheGround = COLUMNS_OFF.toFloat()
+        val onTheGround = columnsOff.toFloat()
         assertTrue(
             abs(southOfTheRow - onTheGround) < DISTANCE_ROUNDING && abs(eastOfTheColumn - onTheGround) < DISTANCE_ROUNDING,
-            "both cells stand $onTheGround cell widths from their boundary on the ground; the stage reads " +
-                "$southOfTheRow south of the row and $eastOfTheColumn east of the column"
+            "on ${cellsAcross}x$cellsDown both cells stand $onTheGround cell widths from their boundary on the ground; " +
+                "the stage reads $southOfTheRow south of the row and $eastOfTheColumn east of the column"
         )
-    }
+    } }
 
     /**
      * The continental margin runs from one crust to the other over the same width on the ground at
@@ -76,7 +91,7 @@ class TectonicGroundTest {
      * distance between where it passes a tenth and where it passes nine tenths.
      */
     @Test
-    fun `the continental margin is as wide as the setting says at every bearing`() {
+    fun `the continental margin is as wide as the setting says at every bearing`() = grids.forEach { grid -> with(grid) {
         val widths = MARGIN_BEARINGS_DEGREES.associateWith { degrees ->
             val normal = degrees * PI / 180.0
             val crust = straightEdge(normal)
@@ -85,7 +100,7 @@ class TectonicGroundTest {
         }
         val declared = config.tectonics.crustMarginKm
         widths.forEach { (degrees, km) ->
-            println("TECTONIC margin with its normal at %5.1f degrees on the ground: 10-90%% width %.1f km against %.0f km declared".format(degrees, km, declared))
+            println("TECTONIC ${cellsAcross}x$cellsDown margin with its normal at %5.1f degrees on the ground: 10-90%% width %.1f km against %.0f km declared".format(degrees, km, declared))
         }
         val widest = widths.values.max()
         val narrowest = widths.values.min()
@@ -98,7 +113,7 @@ class TectonicGroundTest {
             widest / narrowest <= 1.0 + MARGIN_TOLERANCE,
             "the margin is ${"%.2f".format(widest / narrowest)} times as wide at one bearing as at another"
         )
-    }
+    } }
 
     /**
      * A plate owns the cells nearer its seed than any other seed's, on the ground: the partition's
@@ -109,7 +124,7 @@ class TectonicGroundTest {
      * a tie, where the grid itself cannot say.
      */
     @Test
-    fun `plates are divided by distance on the ground`() {
+    fun `plates are divided by distance on the ground`() = grids.forEach { grid -> with(grid) {
         val seeds = listOf(200 to 200, 240 to 240, 300 to 180, 190 to 300)
         val plates = seeds.mapIndexed { id, (x, y) -> Plate(id, x, y, 1f, 0f, PlateType.OCEANIC) }
         val labels = PlateStage.nearestSeedPartition(config, plates)
@@ -129,17 +144,17 @@ class TectonicGroundTest {
                 }
             }
         }
-        println("TECTONIC partition: $wrong of $checked cells clear of a tie belong to a seed that is not the nearest on the ground; $firstWrong")
+        println("TECTONIC ${cellsAcross}x$cellsDown partition: $wrong of $checked cells clear of a tie belong to a seed that is not the nearest on the ground; $firstWrong")
         assertTrue(checked > 10_000, "only $checked cells were clear of a tie")
         assertTrue(wrong == 0, "$wrong of $checked cells belong to a seed that is not the nearest on the ground, first $firstWrong")
-    }
+    } }
 
     /**
      * A plate carried back along its drift travels the same distance on the ground whichever way it
      * drifts.
      */
     @Test
-    fun `a plate drifts as far on the ground whichever way it goes`() {
+    fun `a plate drifts as far on the ground whichever way it goes`() = grids.forEach { grid -> with(grid) {
         val distance = config.cellsFor(config.tectonics.epochDriftKm)
         val travelled = DRIFT_BEARINGS_DEGREES.associateWith { degrees ->
             val angle = degrees * PI / 180.0
@@ -148,21 +163,21 @@ class TectonicGroundTest {
             groundCellWidths(moved.seedX - plate.seedX, moved.seedY - plate.seedY)
         }
         travelled.forEach { (degrees, cellWidths) ->
-            println("TECTONIC drift at %5.1f degrees: %.2f cell widths on the ground against %.1f asked".format(degrees, cellWidths, distance))
+            println("TECTONIC ${cellsAcross}x$cellsDown drift at %5.1f degrees: %.2f cell widths on the ground against %.1f asked".format(degrees, cellWidths, distance))
         }
         assertTrue(
             travelled.values.all { abs(it - distance) <= DRIFT_ROUNDING },
             "a drift of $distance cell widths moves a seed ${travelled.values.map { "%.1f".format(it) }} cell widths on the " +
                 "ground at bearings $DRIFT_BEARINGS_DEGREES"
         )
-    }
+    } }
 
     /**
      * A rift's length along its own course is the length of the ground it crosses, whichever way
      * it runs, so its half-grabens are cut to the same lengths in kilometres at every bearing.
      */
     @Test
-    fun `a rift is measured along its course on the ground`() {
+    fun `a rift is measured along its course on the ground`() = grids.forEach { grid -> with(grid) {
         val measured = RIFT_BEARINGS_DEGREES.associateWith { degrees ->
             val angle = degrees * PI / 180.0
             val run = straightRun(angle, RIFT_LENGTH_CELL_WIDTHS)
@@ -172,21 +187,21 @@ class TectonicGroundTest {
             PlateStage.arcAlongRun(config, run.toIntArray()).lengthCellWidths / trueLength
         }
         measured.forEach { (degrees, ratio) ->
-            println("TECTONIC rift at %5.1f degrees: arc length %.3f of its length on the ground".format(degrees, ratio))
+            println("TECTONIC ${cellsAcross}x$cellsDown rift at %5.1f degrees: arc length %.3f of its length on the ground".format(degrees, ratio))
         }
         assertTrue(
             measured.values.all { abs(it - 1.0) <= RIFT_TOLERANCE },
             "a straight rift's measured arc length is ${measured.values.map { "%.2f".format(it) }} of its length on the " +
                 "ground at bearings $RIFT_BEARINGS_DEGREES"
         )
-    }
+    } }
 
     /**
      * An old belt rounds as far north-south as east-west on the ground: the kernel that ages it is
      * round in kilometres.
      */
     @Test
-    fun `an old belt rounds as far one way as the other`() {
+    fun `an old belt rounds as far one way as the other`() = grids.forEach { grid -> with(grid) {
         val impulse = FloatField(cellsAcross, cellsDown)
         impulse[cellsAcross / 2, cellsDown / 2] = 1f
         PlateStage.roundWithAge(config, impulse, epochsAgo = 2)
@@ -206,12 +221,12 @@ class TectonicGroundTest {
         }
         val spreadEastWestKm = sqrt(eastWest / total)
         val spreadNorthSouthKm = sqrt(northSouth / total)
-        println("TECTONIC age rounding of a point, two epochs old: spread %.1f km east-west, %.1f km north-south".format(spreadEastWestKm, spreadNorthSouthKm))
+        println("TECTONIC ${cellsAcross}x$cellsDown age rounding of a point, two epochs old: spread %.1f km east-west, %.1f km north-south".format(spreadEastWestKm, spreadNorthSouthKm))
         assertTrue(
             abs(spreadEastWestKm / spreadNorthSouthKm - 1.0) <= SPREAD_TOLERANCE,
             "an old belt rounds over ${"%.0f".format(spreadEastWestKm)} km east-west and ${"%.0f".format(spreadNorthSouthKm)} km north-south"
         )
-    }
+    } }
 
     /**
      * How much of a world the present epoch's belts cover, and how far from their boundaries they
@@ -306,7 +321,7 @@ class TectonicGroundTest {
     )
 
     /** The length on the ground of a step of [columns] and [rows], in cell widths. */
-    private fun groundCellWidths(columns: Int, rows: Int): Double {
+    private fun Grid.groundCellWidths(columns: Int, rows: Int): Double {
         val down = rows * rowScale
         return sqrt(columns.toDouble() * columns + down * down)
     }
@@ -315,11 +330,11 @@ class TectonicGroundTest {
      * Continental crust on the far side of a straight edge through the middle of the map whose
      * normal points [normalRadians] from east toward south on the ground; oceanic on the near side.
      */
-    private fun straightEdge(normalRadians: Double): FloatField = FloatField.of(cellsAcross, cellsDown) { column, row ->
+    private fun Grid.straightEdge(normalRadians: Double): FloatField = FloatField.of(cellsAcross, cellsDown) { column, row ->
         if (signedKmFromEdge(column, row, normalRadians) > 0.0) 1f else 0f
     }
 
-    private fun signedKmFromEdge(column: Int, row: Int, normalRadians: Double): Double {
+    private fun Grid.signedKmFromEdge(column: Int, row: Int, normalRadians: Double): Double {
         val eastKm = (column - cellsAcross / 2 + 0.5) * config.cellWidthKm
         val southKm = (row - cellsDown / 2 + 0.5) * config.cellHeightKm
         return eastKm * cos(normalRadians) + southKm * sin(normalRadians)
@@ -329,7 +344,7 @@ class TectonicGroundTest {
      * Where the blurred share crosses a tenth and nine tenths across the edge, from the cells of the
      * middle of the map averaged in bins of distance, and the distance between the two in km.
      */
-    private fun tenToNinetyKm(share: FloatField, normalRadians: Double): Double {
+    private fun Grid.tenToNinetyKm(share: FloatField, normalRadians: Double): Double {
         val binKm = 2.0
         val reachKm = 1_200.0
         val bins = (2 * reachKm / binKm).toInt()
@@ -363,7 +378,7 @@ class TectonicGroundTest {
     }
 
     /** The cells of a straight line [lengthCellWidths] long on the ground at [angle], eight-connected. */
-    private fun straightRun(angle: Double, lengthCellWidths: Double): List<Int> {
+    private fun Grid.straightRun(angle: Double, lengthCellWidths: Double): List<Int> {
         val cells = LinkedHashSet<Int>()
         val stepsAlong = (lengthCellWidths * 8).toInt()
         for (step in 0..stepsAlong) {
@@ -380,11 +395,11 @@ class TectonicGroundTest {
         const val EDGE = 128
 
         /**
-         * How far off each boundary the distance is read: 34 rows and 17 columns, which are the
-         * same 398.4 km on the ground at 512 on a 12,000 by 6,000 km world.
+         * How far off each boundary the distance is read, in kilometers: 398.4375, which is 34
+         * rows and 17 columns on the 512 by 512 grid of a 12,000 by 6,000 km world and a whole
+         * number of rows and of columns on every grid of these cases.
          */
-        const val ROWS_OFF = 34
-        const val COLUMNS_OFF = 17
+        const val OFFSET_KM = 398.4375
 
         /** A distance field read back through a float: a few steps of its last place. */
         const val DISTANCE_ROUNDING = 1e-3f

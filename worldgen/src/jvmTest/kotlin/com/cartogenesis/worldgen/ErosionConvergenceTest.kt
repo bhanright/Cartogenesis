@@ -29,7 +29,7 @@ class ErosionConvergenceTest {
 
     @Test
     fun `report convergence against sweep count`() {
-        val config = WorldGenConfig(seed = 234475L, width = 1024, height = 1024)
+        val config = WorldGenConfig.forRows(234475L, 1024)
             .let { it.copy(erosion = it.erosion.copy(debrisTravelKm = 0.0)) }
         val uplift = PlateStage.generate(config, TerrainStage.generate(config)).height
 

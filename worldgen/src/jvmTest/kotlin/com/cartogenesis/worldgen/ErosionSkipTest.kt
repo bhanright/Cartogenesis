@@ -22,7 +22,7 @@ class ErosionSkipTest {
 
     @Test
     fun `skipping settled ground gives bit-identical terrain`() {
-        val config = WorldGenConfig(seed = 234475L, width = 512, height = 512)
+        val config = WorldGenConfig.forRows(234475L, 512)
         val uplift = PlateStage.generate(config, TerrainStage.generate(config)).height
 
         val skipped = thermalSweepBlocking(config, uplift, skipSettled = true).height.data
@@ -46,7 +46,7 @@ class ErosionSkipTest {
 
     @Test
     fun `report what skipping settled ground saves`() {
-        val config = WorldGenConfig(seed = 42L, width = 1024, height = 1024)
+        val config = WorldGenConfig.forRows(42L, 1024)
         val uplift = PlateStage.generate(config, TerrainStage.generate(config)).height
 
         // Warm the JIT, or the first measurement pays for compiling the inner loop.

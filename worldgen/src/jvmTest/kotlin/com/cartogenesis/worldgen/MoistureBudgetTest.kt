@@ -168,7 +168,7 @@ class MoistureBudgetTest : BorrowsSharedWorlds() {
     }
 
     private fun generate(seed: Long, tune: (WorldGenConfig) -> WorldGenConfig): WorldMap {
-        val base = WorldGenConfig(seed = seed, width = size, height = size)
+        val base = WorldGenConfig.forRows(seed, size)
         return SharedWorlds.world(tune(base))
     }
 

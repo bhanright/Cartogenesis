@@ -14,7 +14,7 @@ import kotlin.test.Test
 class PipelineTest {
 
     private fun config(seed: Long = 42L, size: Int = 128) =
-        WorldGenConfig(seed = seed, width = size, height = size)
+        WorldGenConfig.forRows(seed, size)
 
     /**
      * Two generations of one seed in one process are the same world, on every target this suite
@@ -298,13 +298,14 @@ class PipelineTest {
 
     /**
      * Export re-runs generation at the target size, so a bigger grid has to mean more detail in
-     * the same world — not a different one. The settings still measured in cells, the tectonics'
-     * widths, skew the world's character if [WorldGenConfig.atResolution] does not rescale them.
+     * the same world — not a different one. Every setting is a length on the ground, so
+     * [WorldGenConfig.atResolution] moves the grid and nothing else; this holds the finished world
+     * to it.
      */
     @Test
     fun `world keeps its character when regenerated at a larger resolution`() = runTest(timeout = 10.minutes) {
         val preview = WorldGenerationEngine.generate(config())
-        val exported = WorldGenerationEngine.generate(config().atResolution(512, 512))
+        val exported = WorldGenerationEngine.generate(config().atResolution(1024, 512))
 
         val landDelta = kotlin.math.abs(preview.landFraction() - exported.landFraction())
         assertTrue(

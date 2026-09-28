@@ -265,7 +265,7 @@ class IsostasyTest : BorrowsSharedWorlds() {
      */
     @Test
     fun `a load on one pole does not bend the other`() {
-        val config = WorldGenConfig(seed = 1L, width = 512, height = 512)
+        val config = WorldGenConfig.forRows(1L, 512)
         val flexure = Isostasy.Flexure(config)
         val isostasy = config.isostasy
         val alphaKm = flexure.flexuralParameterMetres / 1_000.0
@@ -355,7 +355,7 @@ class IsostasyTest : BorrowsSharedWorlds() {
         // it isolates is the conversion itself, and the shoreline has to climb a long way to find
         // 38% of a world that is nearly all continent.
         val control = SEEDS.map { seed ->
-            val base = WorldGenConfig(seed = seed, width = 512, height = 512)
+            val base = WorldGenConfig.forRows(seed, 512)
             shorelineResidualMetres(
                 SharedWorlds.world(
                     base.copy(
@@ -641,7 +641,7 @@ class IsostasyTest : BorrowsSharedWorlds() {
     @Test
     fun `the collision rate is Earth's surface uplift plus this model's own denudation`() {
         val rates = SEEDS.map { seed ->
-            val base = WorldGenConfig(seed = seed, width = 512, height = 512)
+            val base = WorldGenConfig.forRows(seed, 512)
             val still = base.copy(
                 tectonics = base.tectonics.copy(
                     collisionUpliftMmPerYear = 0f,
@@ -975,7 +975,7 @@ class IsostasyTest : BorrowsSharedWorlds() {
     }
 
     private fun worldAt(seed: Long): WorldMap = SharedWorlds.world(
-        WorldGenConfig(seed = seed, width = 512, height = 512)
+        WorldGenConfig.forRows(seed, 512)
     )
 
     /** Where the sea-level cut landed, in metres above or below the isostatic datum. */

@@ -126,7 +126,7 @@ class CoastalSpacingAuditTest {
     }
 
     private fun config(seed: Long, side: Int, edit: (WorldGenConfig) -> WorldGenConfig = { it }) =
-        edit(WorldGenConfig(seed = seed, width = 512, height = 512).atResolution(side, side))
+        edit(WorldGenConfig.forRows(seed, 512).atResolution(2 * side, side))
 
     /**
      * Generates one world, hands it to [use], and lets it go before anything else is generated:

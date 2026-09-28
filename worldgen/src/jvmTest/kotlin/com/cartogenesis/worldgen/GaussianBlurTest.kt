@@ -18,10 +18,11 @@ import kotlin.test.assertTrue
  */
 class GaussianBlurTest {
 
-    private val config = WorldGenConfig(width = 512, height = 512)
+    /** Cells half as tall as they are wide, and square ones: a 512 by 512 grid and a 512 by 256. */
+    private val grids = listOf(WorldGenConfig(width = 512, height = 512), WorldGenConfig(width = 512, height = 256))
 
     @Test
-    fun `a point spreads as far on the ground whichever way it goes`() {
+    fun `a point spreads as far on the ground whichever way it goes`() = grids.forEach { config ->
         val cellsAcross = config.width
         val cellsDown = config.height
         val field = FloatField(cellsAcross, cellsDown)
@@ -46,7 +47,7 @@ class GaussianBlurTest {
         val spreadNorthSouth = sqrt(northSouth / total)
         val correlation = across / sqrt(eastWest * northSouth)
         println(
-            "GAUSSIAN a point blurred by $SPREAD_KM km: %.4f of it kept, spread %.2f km east-west and %.2f north-south, correlation %.5f"
+            "GAUSSIAN cells ${config.cellWidthKm} by ${config.cellHeightKm} km, a point blurred by $SPREAD_KM km: %.4f of it kept, spread %.2f km east-west and %.2f north-south, correlation %.5f"
                 .format(total, spreadEastWest, spreadNorthSouth, correlation)
         )
         assertTrue(abs(total - 1.0) < MASS_ROUNDING, "the blur kept $total of the point")
@@ -66,7 +67,7 @@ class GaussianBlurTest {
     }
 
     private companion object {
-        /** The spread, in kilometres: four cells across and eight rows down at 512. */
+        /** The spread, in kilometers: four cells across and eight rows down at 512 by 512, and four each way at 512 by 256. */
         const val SPREAD_KM = 93.75
 
         /** A float's rounding of each tap, summed over a few hundred of them. */

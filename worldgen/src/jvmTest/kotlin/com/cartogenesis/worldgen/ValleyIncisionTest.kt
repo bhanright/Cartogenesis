@@ -55,7 +55,7 @@ class ValleyIncisionTest : BorrowsSharedWorlds() {
             // left on it lands in the control as well as in the measurement and flatters the
             // control by more than it flatters the measurement. Measured with it on: 1.5x, against
             // 1.7x with it off, for no change in how much water moved.
-            val base = WorldGenConfig(seed = seed, width = 512, height = 512).let {
+            val base = WorldGenConfig.forRows(seed, 512).let {
                 it.copy(glaciation = it.glaciation.copy(enabled = false))
             }
             val pair = incision(base)

@@ -191,7 +191,7 @@ class SeaIceTest : BorrowsSharedWorlds() {
     }
 
     private fun generate(seed: Long, seaIce: Boolean): WorldMap {
-        val base = WorldGenConfig(seed = seed, width = size, height = size)
+        val base = WorldGenConfig.forRows(seed, size)
         return SharedWorlds.world(
             base.copy(climate = base.climate.copy(seaIce = seaIce))
         )

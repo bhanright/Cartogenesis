@@ -257,7 +257,7 @@ class GlacialBasinShapeTest : BorrowsSharedWorlds() {
      * same one, so the work is done once per seed for the class rather than once per case.
      */
     private fun measure(seed: Long, side: Int): Measurement = measured.getOrPut(seed) {
-        val config = WorldGenConfig(seed = seed, width = 512, height = 512).atResolution(side, side)
+        val config = WorldGenConfig.forRows(seed, 512).atResolution(2 * side, side)
         val world = SharedWorlds.world(config)
         val sea = SeaLevelStage.apply(world.erosion.height, config)
         val balance = if (config.climate.snowBalance) {
@@ -398,8 +398,9 @@ class GlacialBasinShapeTest : BorrowsSharedWorlds() {
          * The worlds the shapes are pooled over, each at the grid it is worth measuring on.
          *
          * The three `GlaciationTest` already pools its lake densities over, at the 1024 that case
-         * moved to because both ice regimes are working there. And 364673 at 2048: the author's own
-         * seed, the one the slab was found on, and the one grid it can be found at.
+         * moved to because both ice regimes are working there. And 364673, the author's own
+         * seed, the one the slab was found on, at 1,024 rows since Q2: its square cells are the
+         * 5.9 km a cell of the 2048 by 2048 grid measured across, the one grid it could be found at.
          *
          * That 2048 world costs this case the better part of two minutes and it is not optional.
          * The defect is *finer* than a 1024 grid can see, which is the whole reason it survived
@@ -411,7 +412,7 @@ class GlacialBasinShapeTest : BorrowsSharedWorlds() {
          * are half the size, and the same slab comes out as one surface of ten thousand square
          * kilometres. Measured on main: 2,403 km2 at 1024 against 10,120 km2 at 2048.
          */
-        val seeds = listOf(42L to 1024, 7L to 1024, 718106L to 1024, 364673L to 2048)
+        val seeds = listOf(42L to 1024, 7L to 1024, 718106L to 1024, 364673L to 1024)
 
         /** Salar de Uyuni, the flattest large surface on Earth, in square kilometres. */
         const val UYUNI_SQUARE_KILOMETRES = 10_582.0

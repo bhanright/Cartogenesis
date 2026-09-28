@@ -33,7 +33,7 @@ class S2bRenderDump {
         listOf(718106L, 59758L).forEach { seed ->
             val started = System.currentTimeMillis()
             val world = WorldGenerationEngine.generateBlocking(
-                authorsConfig(seed).atResolution(SIDE, SIDE)
+                authorsConfig(seed).atResolution(2 * SIDE, SIDE)
             )
             println(
                 "S2B RENDER seed $seed at $SIDE in ${(System.currentTimeMillis() - started) / 1000}s," +

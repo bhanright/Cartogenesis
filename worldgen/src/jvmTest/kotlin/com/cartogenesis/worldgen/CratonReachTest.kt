@@ -26,7 +26,7 @@ class CratonReachTest {
 
     @Test
     fun `the craton profile is the same walking inland in either direction`() {
-        val config = WorldGenConfig(seed = 1L, width = 512, height = 512)
+        val config = WorldGenConfig.forRows(1L, 512)
         val kilometresDown = ROWS_INLAND * config.cellHeightKm
         val kilometresAcross = COLUMNS_INLAND * config.cellWidthKm
 

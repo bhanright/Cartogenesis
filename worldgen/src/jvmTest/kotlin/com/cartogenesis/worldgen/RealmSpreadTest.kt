@@ -25,7 +25,7 @@ class RealmSpreadTest : BorrowsSharedWorlds() {
         val largestShares = ArrayList<Pair<Long, Double>>()
         listOf(42L, 7L, 1234L).forEach { seed ->
             val world = SharedWorlds.world(
-                WorldGenConfig(seed = seed, width = 512, height = 512)
+                WorldGenConfig.forRows(seed, 512)
             )
             val land = world.sea.isLand.count { it }
             val realmArea = HashMap<Int, Int>()
@@ -74,7 +74,7 @@ class RealmSpreadTest : BorrowsSharedWorlds() {
     fun `realms are not riddled with enclaves`() {
         listOf(42L, 7L, 1234L).forEach { seed ->
             val world = SharedWorlds.world(
-                WorldGenConfig(seed = seed, width = 512, height = 512)
+                WorldGenConfig.forRows(seed, 512)
             )
             val w = world.width
             val h = world.height
@@ -236,7 +236,7 @@ class RealmSpreadTest : BorrowsSharedWorlds() {
         var stranded = 0
         var landlocked = 0
         for (seed in listOf(7L, 42L, 1234L, 99L)) {
-            val world = SharedWorlds.world(WorldGenConfig(seed = seed, width = 512, height = 512))
+            val world = SharedWorlds.world(WorldGenConfig.forRows(seed, 512))
             val pieces = RealmPieces(world.width, world.height, world.sea.isLand, world.nations.nationId, NationResult.UNCLAIMED)
             println("PIECES seed $seed: ${pieces.describe()}")
             stranded += pieces.stranded.size
@@ -249,7 +249,7 @@ class RealmSpreadTest : BorrowsSharedWorlds() {
     @Test
     fun `realms differ in size`() {
         val world = SharedWorlds.world(
-            WorldGenConfig(seed = 42L, width = 512, height = 512)
+            WorldGenConfig.forRows(42L, 512)
         )
         val sizes = world.nations.nations.map { it.cellCount }.sortedDescending()
         assertTrue(sizes.size >= 6, "only ${sizes.size} realms")

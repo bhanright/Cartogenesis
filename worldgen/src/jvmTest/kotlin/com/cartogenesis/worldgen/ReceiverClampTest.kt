@@ -90,7 +90,7 @@ class ReceiverClampTest {
         var pondedWithout = 0
         var holesWithout = 0
         seeds.forEach { seed ->
-            val config = WorldGenConfig(seed = seed, width = 512, height = 512)
+            val config = WorldGenConfig.forRows(seed, 512)
             val plates = PlateStage.generate(config, TerrainStage.generate(config))
 
             listOf(false to loose, true to tight).forEach { (clamp, into) ->

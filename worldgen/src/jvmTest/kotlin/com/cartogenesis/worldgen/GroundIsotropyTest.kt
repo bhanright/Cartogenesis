@@ -53,7 +53,7 @@ class GroundIsotropyTest : BorrowsSharedWorlds() {
     @Test
     fun `the coastline runs as far north-south as east-west on the ground`() {
         val ratios = seeds.map { seed ->
-            val world = SharedWorlds.world(WorldGenConfig(seed = seed, width = 512, height = 512))
+            val world = SharedWorlds.world(WorldGenConfig.forRows(seed, 512))
             val projection = coastProjection(world)
             println(
                 "ISOTROPY seed %d: %.0f km of coast, projecting %.0f km east-west and %.0f km north-south, ratio %.3f"
@@ -98,7 +98,7 @@ class GroundIsotropyTest : BorrowsSharedWorlds() {
     fun `slopes stand as steep facing one way as another on the ground`() {
         val steeper = ArrayList<String>()
         seeds.forEach { seed ->
-            val world = SharedWorlds.world(WorldGenConfig(seed = seed, width = 512, height = 512))
+            val world = SharedWorlds.world(WorldGenConfig.forRows(seed, 512))
             val falls = steepFalls(world)
             println(
                 "ISOTROPY seed %d: 95th percentile of land fall over a cell width of ground, %.1f m/km along a row and %.1f down a column"

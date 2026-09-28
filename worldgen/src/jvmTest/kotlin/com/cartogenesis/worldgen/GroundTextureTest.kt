@@ -4,7 +4,6 @@ import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.BoundaryClass
 import kotlin.math.abs
-import kotlin.math.roundToInt
 import kotlin.math.sqrt
 import java.util.Locale
 import kotlin.test.Test
@@ -47,7 +46,7 @@ class GroundTextureTest : BorrowsSharedWorlds() {
         val textures = ArrayList<Double>()
         val controls = ArrayList<Double>()
         SEEDS.forEach { seed ->
-            val config = WorldGenConfig(seed = seed, width = 512, height = 512)
+            val config = WorldGenConfig.forRows(seed, 512)
             val here = flankTexture(world(seed))
             val control = flankTexture(
                 SharedWorlds.world(
@@ -330,7 +329,7 @@ class GroundTextureTest : BorrowsSharedWorlds() {
             } else 0f
         }
         val landWeight = FloatArray(cellsAcross * cellsDown) { if (isLand[it]) 1f else 0f }
-        val radius = (FLANK_WINDOW_CELLS * cellsAcross / 512f).roundToInt().coerceAtLeast(1)
+        val radius = world.config.wholeCellsFor(FLANK_WINDOW_KM)
         val smoothed = boxMean(cellsAcross, cellsDown, metres, radius)
         val cover = boxMean(cellsAcross, cellsDown, landWeight, radius)
         val land = ArrayList<Int>()
@@ -438,7 +437,7 @@ class GroundTextureTest : BorrowsSharedWorlds() {
             if (isLand[it]) scale.metresAboveShoreline(world.sea.relativeElevation.data[it]) else 0f
         }
         val landWeight = FloatArray(cellsAcross * cellsDown) { if (isLand[it]) 1f else 0f }
-        val radius = (FLANK_WINDOW_CELLS * cellsAcross / 512f).roundToInt().coerceAtLeast(1)
+        val radius = world.config.wholeCellsFor(FLANK_WINDOW_KM)
         val smoothed = boxMean(cellsAcross, cellsDown, metres, radius)
         val cover = boxMean(cellsAcross, cellsDown, landWeight, radius)
         val residuals = ArrayList<Double>()
@@ -493,7 +492,7 @@ class GroundTextureTest : BorrowsSharedWorlds() {
         return out
     }
 
-    private fun standard(seed: Long) = WorldGenConfig(seed = seed, width = 512, height = 512)
+    private fun standard(seed: Long) = WorldGenConfig.forRows(seed, 512)
 
     /**
      * The five worlds on the defaults, borrowed from `SharedWorlds` by every clause that reads one
@@ -597,8 +596,12 @@ class GroundTextureTest : BorrowsSharedWorlds() {
         /** A corner of zero leaves the base relief stationary, which is the texture rule's control. */
         const val TEXTURE_OFF = 0.0
 
-        /** The window the flank's roughness is measured in, in cells of a 512 grid. */
-        const val FLANK_WINDOW_CELLS = 4f
+        /**
+         * The half-width of the box the ground's departure is read from, in kilometers: the 4 cells
+         * of the 512 by 512 grid it was set in, stated on the ground since Q2. On that grid the box
+         * reached half as far north-south; on square cells it reaches 94 km both ways.
+         */
+        const val FLANK_WINDOW_KM = 93.75
 
         /** The band of altitude a belt's flank occupies, in metres. */
         const val FLANK_FLOOR_METRES = 1_000f

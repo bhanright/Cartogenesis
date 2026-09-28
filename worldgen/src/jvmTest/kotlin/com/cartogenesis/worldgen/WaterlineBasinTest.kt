@@ -70,7 +70,7 @@ class WaterlineBasinTest : BorrowsSharedWorlds() {
         var found = 0
         var classified = 0
         seeds.forEach { seed ->
-            val config = WorldGenConfig(seed = seed, width = 512, height = 512)
+            val config = WorldGenConfig.forRows(seed, 512)
             val world = SharedWorlds.world(config)
             // The sea stage's own result as well as the finished field: glaciation runs inside this
             // step and gouging basins is the one thing it is for, so a cirque on low coastal ground

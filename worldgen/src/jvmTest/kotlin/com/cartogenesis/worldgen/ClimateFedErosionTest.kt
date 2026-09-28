@@ -589,7 +589,7 @@ class ClimateFedErosionTest {
      */
     @Test
     fun `every routing pass weights its water against its own land`() {
-        val config = WorldGenConfig(seed = 42L, width = 256, height = 256)
+        val config = WorldGenConfig.forRows(42L, 256)
         val plates = PlateStage.generate(config, TerrainStage.generate(config))
         val passes = mutableListOf<Triple<String, Double, Int>>()
         erodeBlockingObservingCover(config, plates.height, plates.upliftRateMmPerYear, weightSums = { name, summed, landCells ->
@@ -622,7 +622,7 @@ class ClimateFedErosionTest {
 
     /** One [Ground] per seed for the whole class: each is two full erosion runs. */
     private fun ground(seed: Long): Ground =
-        measured.getOrPut(seed) { Ground(WorldGenConfig(seed = seed, width = 512, height = 512)) }
+        measured.getOrPut(seed) { Ground(WorldGenConfig.forRows(seed, 512)) }
 
     /** The belt, and which of its cells the wind is climbing when it reaches them. */
     private fun beltFlanks(ground: Ground): Belt? {

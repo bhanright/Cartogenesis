@@ -103,7 +103,7 @@ class MeridionalWindTest : BorrowsSharedWorlds() {
     @Test
     fun `a wind with no slant reproduces the old zonal march exactly`() {
         ZONAL_MARCH_SEEDS.forEach { seed ->
-            val base = WorldGenConfig(seed = seed, width = 256, height = 256)
+            val base = WorldGenConfig.forRows(seed, 256)
             val world = SharedWorlds.world(
                 base.copy(
                     climate = base.climate.copy(
@@ -264,7 +264,7 @@ class MeridionalWindTest : BorrowsSharedWorlds() {
     @Test
     fun `the belts slant toward the thermal equator and away from it, in both hemispheres`() {
         val world = SharedWorlds.world(
-            WorldGenConfig(seed = 42L, width = 128, height = 128).let {
+            WorldGenConfig.forRows(42L, 128).let {
                 it.copy(climate = it.climate.copy(pressureWinds = false))
             }
         )
@@ -293,7 +293,7 @@ class MeridionalWindTest : BorrowsSharedWorlds() {
         assertTrue(checked > h / 2, "only $checked rows were checked")
 
         val flat = SharedWorlds.world(
-            WorldGenConfig(seed = 42L, width = 128, height = 128).let {
+            WorldGenConfig.forRows(42L, 128).let {
                 it.copy(
                     climate = it.climate.copy(meridionalWindShare = 0f, pressureWinds = false)
                 )
@@ -314,7 +314,7 @@ class MeridionalWindTest : BorrowsSharedWorlds() {
         var pooledClimb = 0.0; var pooledClimbCells = 0
         var pooledDescend = 0.0; var pooledDescendCells = 0
         listOf(7L, 42L, 1234L).forEach { seed ->
-            val base = WorldGenConfig(seed = seed, width = SIZE, height = SIZE)
+            val base = WorldGenConfig.forRows(seed, SIZE)
             val zonal = SharedWorlds.world(
                 base.copy(
                     climate = base.climate.copy(
@@ -423,7 +423,7 @@ class MeridionalWindTest : BorrowsSharedWorlds() {
      */
     @Test
     fun `a tropical coast has a wet season and a dry one`() {
-        val base = WorldGenConfig(seed = MONSOON_SEED, width = SIZE, height = SIZE)
+        val base = WorldGenConfig.forRows(MONSOON_SEED, SIZE)
         val figures = listOf(0f, 0.15f).map { slant ->
             // With the pressure departure off, as the class holds every world it builds: left on,
             // the "zonal" world carried the pressure wind's meridional component, and the two

@@ -45,11 +45,11 @@ class ClimateFedErosionMeasurementTest {
     @Test
     fun `report how far the rainfall drifts across the rounds`() {
         for (seed in longArrayOf(7L, 42L, 1234L)) {
-            drift(WorldGenConfig(seed = seed, width = 512, height = 512))
+            drift(WorldGenConfig.forRows(seed, 512))
         }
         // And once at an export grid, because the march's answer is a field over a grid and the
         // question is whether the drift is a property of the world or of the resolution.
-        drift(WorldGenConfig(seed = 42L, width = 512, height = 512).atResolution(2048, 2048))
+        drift(WorldGenConfig.forRows(42L, 512).atResolution(4096, 2048))
     }
 
     private fun drift(config: WorldGenConfig) {
@@ -129,7 +129,7 @@ class ClimateFedErosionMeasurementTest {
      */
     @Test
     fun `report what the still ocean costs the provisional rainfall`() {
-        val config = WorldGenConfig(seed = 42L, width = 512, height = 512)
+        val config = WorldGenConfig.forRows(42L, 512)
         val plates = PlateStage.generate(config, TerrainStage.generate(config))
         val uplift = plates.height
         val weathered = thermalSweepBlocking(config, uplift, skipSettled = true).height
@@ -174,7 +174,7 @@ class ClimateFedErosionMeasurementTest {
     @Test
     fun `report the provisional climate's share of a generation`() {
         for (cells in intArrayOf(512, 1024)) {
-            val config = WorldGenConfig(seed = 42L, width = cells, height = cells)
+            val config = WorldGenConfig.forRows(42L, cells)
             val uplift = PlateStage.generate(config, TerrainStage.generate(config)).height
             val weathered = thermalSweepBlocking(config, uplift, skipSettled = true).height
 

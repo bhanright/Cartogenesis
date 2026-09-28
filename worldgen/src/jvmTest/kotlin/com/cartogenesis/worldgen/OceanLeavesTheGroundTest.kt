@@ -19,7 +19,7 @@ class OceanLeavesTheGroundTest : BorrowsSharedWorlds() {
 
     @Test
     fun `the ground is the same with the currents and without them`() {
-        val config = WorldGenConfig(seed = 42L, width = 128, height = 128)
+        val config = WorldGenConfig.forRows(42L, 128)
         val withCurrents = WorldGenerationEngine.generateBlocking(config)
         val without = WorldGenerationEngine.generateBlocking(config.copy(ocean = config.ocean.copy(enabled = false)))
         assertContentEquals(without.sea.relativeElevation.data, withCurrents.sea.relativeElevation.data, "the currents moved the ground")
@@ -38,7 +38,7 @@ class OceanLeavesTheGroundTest : BorrowsSharedWorlds() {
      */
     @Test
     fun `seed 42's ground is the one the tree before the ocean chunk drew`() {
-        val world = SharedWorlds.world(WorldGenConfig(seed = 42L, width = 512, height = 512))
+        val world = SharedWorlds.world(WorldGenConfig.forRows(42L, 512))
         val ground = ReachableState.digestsByBranch(world).filterKeys { branch ->
             GROUND_BRANCHES.any { branch.startsWith(it) }
         }

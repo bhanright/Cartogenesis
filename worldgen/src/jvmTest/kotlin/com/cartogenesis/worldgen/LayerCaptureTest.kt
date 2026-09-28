@@ -26,7 +26,7 @@ class LayerCaptureTest {
 
     @Test
     fun `a world generated with the capture is the world generated without it, to the bit`() {
-        val config = WorldGenConfig(seed = 7L, width = 512, height = 512)
+        val config = WorldGenConfig.forRows(7L, 512)
         val plain = WorldGenerationEngine.generateBlocking(config)
         val capture = LayerCapture()
         val watched = WorldGenerationEngine.generateBlocking(config, capture = capture)

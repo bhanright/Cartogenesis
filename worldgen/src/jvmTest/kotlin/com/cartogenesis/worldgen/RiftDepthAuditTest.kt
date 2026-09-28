@@ -62,11 +62,11 @@ class RiftDepthAuditTest {
     private val deepestRiftLakeMaxMetres = 1_642.0
 
     private fun config(): WorldGenConfig {
-        val base = WorldGenConfig(seed = 718106L, width = 512, height = 512, seaLevel = 0.62f)
+        val base = WorldGenConfig.forRows(718106L, 512).copy(seaLevel = 0.62f)
         return base.copy(
             tectonics = base.tectonics.copy(plateCount = 14),
             nations = base.nations.copy(nationCount = 12)
-        ).atResolution(2048, 2048)
+        ).atResolution(4096, 2048)
     }
 
     @Test

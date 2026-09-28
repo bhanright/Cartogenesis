@@ -149,7 +149,7 @@ class IceAcceleratorSwitchTest {
          */
         const val SEED = 7L
 
-        val config = WorldGenConfig(seed = SEED, width = 128, height = 128)
+        val config = WorldGenConfig.forRows(SEED, 128)
 
         val acceleratedConfig =
             config.copy(erosion = config.erosion.copy(acceleration = Acceleration.GPU))

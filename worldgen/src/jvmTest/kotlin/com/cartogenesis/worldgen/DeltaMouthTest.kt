@@ -74,7 +74,7 @@ class DeltaMouthTest : BorrowsSharedWorlds() {
         var slabFlat = 0.0
         var lobeFlat = 0.0
         seeds.forEach { seed ->
-            val config = WorldGenConfig(seed = seed, width = 512, height = 512)
+            val config = WorldGenConfig.forRows(seed, 512)
             val before = SharedWorlds.world(
                 config.copy(erosion = config.erosion.copy(deltaLobe = false))
             )

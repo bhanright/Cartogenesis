@@ -22,7 +22,7 @@ class BorderRealismTest {
     fun `report how closely borders follow rivers and ridges`() {
         listOf(7L, 42L, 1234L, 99L).forEach { seed ->
             val world = WorldGenerationEngine.generateBlocking(
-                WorldGenConfig(seed = seed, width = 512, height = 512)
+                WorldGenConfig.forRows(seed, 512)
             )
             val w = world.width
             val h = world.height

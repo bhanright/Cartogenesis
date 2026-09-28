@@ -24,11 +24,11 @@ class StageProfileTest {
     @Test
     fun `report per-stage timings`() {
         // Warm the JIT so the first size measured is not paying for compilation.
-        WorldGenerationEngine.generateBlocking(WorldGenConfig(seed = 1L, width = 256, height = 256))
+        WorldGenerationEngine.generateBlocking(WorldGenConfig.forRows(1L, 256))
 
         listOf(512, 1024, 2048).forEach { size ->
-            val config = WorldGenConfig(seed = 42L, width = 128, height = 128)
-                .atResolution(size, size)
+            val config = WorldGenConfig.forRows(42L, 128)
+                .atResolution(2 * size, size)
 
             val started = LinkedHashMap<GenerationStage, Long>()
             val begun = System.nanoTime()

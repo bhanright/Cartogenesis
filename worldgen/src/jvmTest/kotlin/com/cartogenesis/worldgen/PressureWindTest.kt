@@ -420,7 +420,7 @@ class PressureWindTest : BorrowsSharedWorlds() {
     }
 
     private fun generate(seed: Long, pressureWinds: Boolean): WorldMap {
-        val base = WorldGenConfig(seed = seed, width = size, height = size)
+        val base = WorldGenConfig.forRows(seed, size)
         return SharedWorlds.world(
             base.copy(climate = base.climate.copy(pressureWinds = pressureWinds))
         )

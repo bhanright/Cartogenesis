@@ -154,7 +154,7 @@ class EarthLikenessTest : BorrowsSharedWorlds() {
             val pool = EarthLikeness.Pool()
             val perSeed = seeds.map { seed ->
                 val world: WorldMap = SharedWorlds.world(
-                    WorldGenConfig(seed = seed, width = 512, height = 512)
+                    WorldGenConfig.forRows(seed, 512)
                 )
                 EarthLikeness.measure(world, seed.toString(), pool)
             }

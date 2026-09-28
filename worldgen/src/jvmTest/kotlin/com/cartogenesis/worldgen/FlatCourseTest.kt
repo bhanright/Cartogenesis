@@ -216,8 +216,8 @@ internal object FlatCourse {
         SharedWorlds.world(config(seed, side, overPotential))
 
     fun config(seed: Long, side: Int, overPotential: Boolean): WorldGenConfig =
-        WorldGenConfig(seed = seed, width = 512, height = 512)
-            .atResolution(side, side)
+        WorldGenConfig.forRows(seed, 512)
+            .atResolution(2 * side, side)
             .copy(flatPotential = overPotential)
 
     /** Cells the fill raised, by any amount at all: where the routing surface is not the ground. */

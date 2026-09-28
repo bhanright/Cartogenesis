@@ -23,7 +23,7 @@ internal object GenerationTime {
     /** Seconds to generate the default world at [side] cells square, measured the first time. */
     @Synchronized
     fun secondsAt(side: Int): Double = measured.getOrPut(side) {
-        val config = WorldGenConfig(seed = 7L, width = 512, height = 512).atResolution(side, side)
+        val config = WorldGenConfig.forRows(7L, 512).atResolution(2 * side, side)
         val started = System.nanoTime()
         WorldGenerationEngine.generateBlocking(config)
         val seconds = (System.nanoTime() - started) / 1e9

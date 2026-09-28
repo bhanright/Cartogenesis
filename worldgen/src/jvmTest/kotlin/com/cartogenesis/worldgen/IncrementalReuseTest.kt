@@ -41,7 +41,7 @@ class IncrementalReuseTest {
 
     // Seed 99 rather than the usual 42, because 42 at this size has no lakes at all and the
     // lakes case then passes without ever exercising the setting it names.
-    private val base = WorldGenConfig(seed = 99L, width = 256, height = 256)
+    private val base = WorldGenConfig.forRows(99L, 256)
 
     @Test
     fun `reusing stages gives the same world as generating afresh`() {
@@ -372,7 +372,7 @@ class IncrementalReuseTest {
     fun `reuse makes a late setting change much cheaper`() {
         // Larger than the correctness case, because the point is the cost of erosion and that only
         // dominates once the grid is big enough to be worth measuring.
-        val config = WorldGenConfig(seed = 99L, width = 512, height = 512)
+        val config = WorldGenConfig.forRows(99L, 512)
         val previous = WorldGenerationEngine.generateBlocking(config)
         val toggled = config.copy(
             nations = config.nations.copy(wilderness = WildernessMode.LEAVE_WILDERNESS)

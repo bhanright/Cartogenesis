@@ -32,7 +32,7 @@ class SnowBalanceTest : BorrowsSharedWorlds() {
     private val seeds = listOf(7L, 42L, 1234L, 99L)
 
     private fun config(seed: Long, size: Int = 512) =
-        WorldGenConfig(seed = seed, width = size, height = size)
+        WorldGenConfig.forRows(seed, size)
 
     private fun WorldGenConfig.withoutBalance() =
         copy(climate = climate.copy(snowBalance = false))

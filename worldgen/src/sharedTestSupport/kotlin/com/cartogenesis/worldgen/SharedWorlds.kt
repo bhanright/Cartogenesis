@@ -36,22 +36,24 @@ object SharedWorlds {
     /**
      * The retained worlds' arrays, in bytes, before one goes.
      *
-     * A 512 world holds 39 MB of arrays and a 1024 one four times that, so this keeps the four
-     * standard worlds with room for a dozen variants or three 1024 worlds. It is what a worker can
-     * spare beside the largest thing it does, which is generating a 2048 world: with twice this
-     * retained, the worker that did so stood at 3.7 GB after a collection in a 4 GB heap; with this,
-     * at 2.8 GB in the 3.5 GB the root build script gives a `:worldgen` worker.
+     * A world of 512 rows, 1,024 by 512 square cells, holds about 78 MB of arrays and one of 1,024
+     * rows four times that, so this keeps the four standard worlds with one 1,024-row world beside
+     * them or a handful of variants. It is what a worker can spare beside the largest thing it
+     * does, which since Q2 is generating a 1,024-row world of 2.1 million cells; before, a 2048 by
+     * 2048 world of 4.2 million, beside which 600 MB left the worker at 2.8 GB after a collection in
+     * the 3.5 GB the root build script gives a `:worldgen` worker.
      */
-    private const val RETAINED_ARRAY_BYTES = 600_000_000L
+    private const val RETAINED_ARRAY_BYTES = 700_000_000L
 
     /**
-     * The largest world kept once its borrower is done with it, in cells.
+     * The largest world kept once its borrower is done with it, in cells: a world of 1,024 rows.
      *
-     * Larger worlds are generated for the test that asks and not retained: a 2048 world is sixteen
-     * times a 512 one, about 620 MB of arrays, more than the whole of [RETAINED_ARRAY_BYTES], and
-     * holding one past the class that made it would take that from every class after it.
+     * Several classes ask for the same 1,024-row worlds, and at about 50 seconds each they are the
+     * dearest thing the tier makes twice. Larger worlds are generated for the test that asks and not
+     * retained: a world of 2,048 rows is 8.4 million cells and more than the whole of
+     * [RETAINED_ARRAY_BYTES].
      */
-    private const val LARGEST_RETAINED_CELLS = 1024 * 1024
+    private const val LARGEST_RETAINED_CELLS = 2048 * 1024
 
     internal val lender = WorldLender(
         generate = { config -> WorldGenerationEngine.generateBlocking(config) },

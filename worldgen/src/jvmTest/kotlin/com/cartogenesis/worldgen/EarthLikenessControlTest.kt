@@ -124,7 +124,8 @@ class EarthLikenessControlTest {
         }
         val boxes = EarthLikeness.coastlineBoxCount(
             isLand, cellsAcross, cellsDown,
-            com.cartogenesis.worldgen.model.WorldGenConfig(width = cellsAcross, height = cellsDown).cellHeightInCellWidths
+            com.cartogenesis.worldgen.model.WorldGenConfig(width = cellsAcross, height = cellsDown).cellHeightInCellWidths,
+            EarthLikeness.coastlineBoxSizes(com.cartogenesis.worldgen.model.WorldGenConfig(width = cellsAcross, height = cellsDown))
         )
         val complaint = EarthLikeness.coastlineComplaint("RECTANGLE", boxes)
         println(

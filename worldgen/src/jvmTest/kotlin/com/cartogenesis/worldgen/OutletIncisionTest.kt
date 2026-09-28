@@ -150,7 +150,7 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
         val depthShares = ArrayList<Double>()
         val perSeedDepth = ArrayList<String>()
         seeds.forEach { seed ->
-            val config = WorldGenConfig(seed = seed, width = 512, height = 512)
+            val config = WorldGenConfig.forRows(seed, 512)
                 .let { it.copy(tectonics = it.tectonics.copy(historyEpochs = 1)) }
             val on = roundsOf(config)
             val off = roundsOf(config.copy(erosion = config.erosion.copy(outletIncision = false)))
@@ -400,7 +400,7 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
         val overSizedDrowned = ArrayList<String>()
         val drownedShares = ArrayList<Double>()
         seeds.forEach { seed ->
-            val config = WorldGenConfig(seed = seed, width = 512, height = 512)
+            val config = WorldGenConfig.forRows(seed, 512)
             val before = SharedWorlds.world(
                 config.copy(erosion = config.erosion.copy(outletIncision = false))
             )
@@ -560,7 +560,7 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
         val after = ArrayList<Double>()
         val perSeed = ArrayList<String>()
         SILL_SEEDS.forEach { seed ->
-            val base = WorldGenConfig(seed = seed, width = 512, height = 512)
+            val base = WorldGenConfig.forRows(seed, 512)
             val without = SharedWorlds.world(
                 base.copy(erosion = base.erosion.copy(outletFallToTheWater = false))
             )

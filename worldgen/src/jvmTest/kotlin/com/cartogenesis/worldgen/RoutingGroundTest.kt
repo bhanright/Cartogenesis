@@ -26,14 +26,26 @@ import kotlin.test.assertTrue
 class RoutingGroundTest {
 
     private val config = WorldGenConfig(seed = 7L, width = SIDE, height = SIDE)
-    private val rowScale = config.cellHeightInCellWidths
 
     /**
      * On a plane, the mean step the router takes points down the plane, on the ground, at every
      * bearing: along an axis, on the ground's diagonals, on the grid's own diagonal and between.
+     * On cells half as tall as they are wide and on square ones, [PLANE_ASPECTS].
      */
     @Test
     fun `water on a plane runs down it at every bearing`() {
+        val worstByAspect = PLANE_ASPECTS.map { rowScale -> rowScale to worstPlaneError(rowScale) }
+        worstByAspect.forEach { (rowScale, worst) ->
+            assertTrue(
+                abs(worst.value) <= BEARING_TOLERANCE_DEGREES,
+                "on cells $rowScale as tall as wide, a plane falling at ${worst.key} degrees on the ground is " +
+                    "routed ${"%.1f".format(worst.value)} degrees off it"
+            )
+        }
+    }
+
+    /** The worst of the planes' routed bearings against their own, on cells [rowScale] as tall as wide. */
+    private fun worstPlaneError(rowScale: Double): Map.Entry<Double, Double> {
         val errors = PLANE_BEARINGS_DEGREES.associateWith { degrees ->
             val fall = degrees * PI / 180.0
             val plane = FloatField.of(SIDE, SIDE) { column, row ->
@@ -58,14 +70,13 @@ class RoutingGroundTest {
             var error = routed - degrees
             while (error > 180.0) error -= 360.0
             while (error < -180.0) error += 360.0
-            println("ROUTING plane falling at %6.1f degrees on the ground: routed at %6.1f".format(degrees, routed))
+            println(
+                "ROUTING cells %.1f as tall as wide, plane falling at %6.1f degrees on the ground: routed at %6.1f"
+                    .format(rowScale, degrees, routed)
+            )
             error
         }
-        val worst = errors.maxBy { abs(it.value) }
-        assertTrue(
-            abs(worst.value) <= BEARING_TOLERANCE_DEGREES,
-            "a plane falling at ${worst.key} degrees on the ground is routed ${"%.1f".format(worst.value)} degrees off it"
-        )
+        return errors.maxBy { abs(it.value) }
     }
 
     /**
@@ -80,7 +91,8 @@ class RoutingGroundTest {
      * Averaged over [SHARE_BEARINGS] bearings on this map's cells, half as tall as wide, that is
      * 44.87% down a column, 15.31% along a row and 39.82% on a diagonal. The nearest of the eight
      * bearings would give 35.2, 14.8 and 50.0: the rule is not that, and the column's share over
-     * it is the rule's, not a defect.
+     * it is the rule's, not a defect. On square cells the same geometry gives 27.94% each way along
+     * the two axes and `(2/pi) ln 2`, 44.13%, on a diagonal, and the case is read on both shapes.
      *
      * Read on production's [FlowRouting.flowDirections] over [SHARE_SEEDS], interior cells only.
      * Each share is held to four of its standard errors, from the draws, which are the only thing
@@ -92,6 +104,12 @@ class RoutingGroundTest {
      */
     @Test
     fun `the facet rule takes each bearing as often as its geometry says`() {
+        val complaints = PLANE_ASPECTS.flatMap { shareComplaints(it) }
+        assertTrue(complaints.isEmpty(), "the router's step shares are not its geometry's: $complaints")
+    }
+
+    /** What the share case finds wrong on cells [rowScale] as tall as they are wide, one line a miss. */
+    private fun shareComplaints(rowScale: Double): List<String> {
         var cellsRead = 0L
         val taken = DoubleArray(3)
         val expected = DoubleArray(3)
@@ -111,7 +129,7 @@ class RoutingGroundTest {
                     SHARE_SIDE, SHARE_SIDE, BooleanArray(SHARE_SIDE * SHARE_SIDE) { true }, plane, plane, seed, rowScale,
                     RAIN_PERIOD_CELLS
                 )
-                val (share, diagonalIsColumnwise) = facetShare(fall)
+                val (share, diagonalIsColumnwise) = facetShare(fall, rowScale)
                 var east = 0.0
                 var south = 0.0
                 var eastSquares = 0.0
@@ -168,19 +186,22 @@ class RoutingGroundTest {
             }
             val sigma = sqrt(sumSquares)
             println(
-                "ROUTING shares %s: %.3f%% taken, %.3f%% the rule's geometry, %.2f standard errors apart"
-                    .format(names[k], 100.0 * taken[k] / cellsRead, 100.0 * expected[k] / cellsRead, abs(taken[k] - expected[k]) / sigma)
+                "ROUTING cells %.1f as tall as wide, shares %s: %.3f%% taken, %.3f%% the rule's geometry, %.2f standard errors apart"
+                    .format(rowScale, names[k], 100.0 * taken[k] / cellsRead, 100.0 * expected[k] / cellsRead, abs(taken[k] - expected[k]) / sigma)
             )
             if (abs(taken[k] - expected[k]) > SHARE_SIGMAS * sigma) {
-                complaints += "%s %.3f%% against %.3f%%".format(names[k], 100.0 * taken[k] / cellsRead, 100.0 * expected[k] / cellsRead)
+                complaints += "cells %.1f as tall as wide: %s %.3f%% against %.3f%%".format(rowScale, names[k], 100.0 * taken[k] / cellsRead, 100.0 * expected[k] / cellsRead)
             }
         }
-        println("ROUTING the worst plane's mean step: %.3f degrees off at %.1f, %.2f standard errors".format(worstBearingDegrees, worstAt, worstBearingSigmas))
-        assertTrue(complaints.isEmpty(), "the router's step shares are not its geometry's: $complaints")
-        assertTrue(
-            worstBearingSigmas <= WORST_PLANE_SIGMAS,
-            "the mean step on the plane at $worstAt degrees points $worstBearingDegrees degrees off it, $worstBearingSigmas standard errors"
+        println(
+            "ROUTING cells %.1f as tall as wide, the worst plane's mean step: %.3f degrees off at %.1f, %.2f standard errors"
+                .format(rowScale, worstBearingDegrees, worstAt, worstBearingSigmas)
         )
+        if (worstBearingSigmas > WORST_PLANE_SIGMAS) {
+            complaints += "cells $rowScale as tall as wide: the mean step on the plane at $worstAt degrees points " +
+                "$worstBearingDegrees degrees off it, $worstBearingSigmas standard errors"
+        }
+        return complaints
     }
 
     /**
@@ -188,7 +209,7 @@ class RoutingGroundTest {
      * [fall] (from east toward south, on the ground), and whether that facet's cardinal is a column
      * step. The facet is the one the descent lies in; see the case above.
      */
-    private fun facetShare(fall: Double): Pair<Double, Boolean> {
+    private fun facetShare(fall: Double, rowScale: Double): Pair<Double, Boolean> {
         val x = cos(fall)
         val y = sin(fall)
         // The bearing of the diagonal's step on the ground, off the east-west axis.
@@ -312,6 +333,12 @@ class RoutingGroundTest {
 
     private companion object {
         const val SIDE = 256
+
+        /**
+         * The cell shapes the planes are laid on, as a row's height in cell widths: the half of the
+         * 512 by 512 grid and the square cells of a grid twice as wide as it is tall.
+         */
+        val PLANE_ASPECTS = listOf(0.5, 1.0)
 
         /** The planes' bearings on the ground, measured from east toward south. */
         val PLANE_BEARINGS_DEGREES = listOf(0.0, 10.0, 26.565, 30.0, 45.0, 60.0, 75.0, 90.0, 120.0, 135.0, 200.0, 300.0)

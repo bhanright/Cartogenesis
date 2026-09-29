@@ -199,7 +199,7 @@ class ScaleFreeTest : BorrowsSharedWorlds() {
             if (largestSpread > LAKE_AREA_FACTOR) over += "seed $seed's largest"
             figures += "seed $seed x%.2f and x%.2f".format(shareSpread, largestSpread)
         }
-        KnownFailures.expect(LAKE_AREA_FOLLOWS_THE_GRID, over.joinToString(", ")) {
+        KnownFailures.expect(LAKE_AREA_FOLLOWS_THE_GRID, LAKE_AREA_RECORDED) {
             if (over.isNotEmpty()) {
                 throw RecordedViolation(
                     "standing water differs across 256, 512 and 1,024 rows by more than x$LAKE_AREA_FACTOR: $figures",
@@ -385,6 +385,13 @@ class ScaleFreeTest : BorrowsSharedWorlds() {
 
         const val LAKE_AREA_FOLLOWS_THE_GRID =
             "L1: a seed's standing water still follows the grid, pending the post-cut outlet (L2)"
+
+        /**
+         * Which seeds' figures are over the bar. On the tree before L1 it read every seed's largest
+         * lake and every share but seed 7's: x1.28 and x1.67, x2.87 and x4.73, x1.79 and x2.83,
+         * x3.21 and x8.08 on seeds 7, 42, 1234 and 99 (docs/DESIGN_LEDGER.md, L1).
+         */
+        const val LAKE_AREA_RECORDED = "TO BE RECORDED"
 
         fun configAt(seed: Long, size: Int): WorldGenConfig {
             val base = WorldGenConfig.forRows(seed, 512)

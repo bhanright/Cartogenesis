@@ -130,6 +130,12 @@ object WorldCodec {
     /**
      * The only version this build reads or writes.
      *
+     * 20 because a rift's half-grabens became Earth's lengths in kilometers:
+     * `tectonics.riftSegmentMin`, `riftSegmentMax` and `riftAccommodation`, shares of the map's
+     * width, became `riftSegmentMinKm`, `riftSegmentMaxKm` and `riftAccommodationKm`. A format-19
+     * file would open with this build's defaults for all three, which is a different set of rifts
+     * from the one it was saved with.
+     *
      * 19 because the grid became square on the ground. A world is two cells across for every cell
      * down, the ladder is named by its rows, and the largest save is the top of that ladder,
      * [LARGEST_GRID_CELLS]. The codec reads any grid, so a format-18 file would still parse, and it
@@ -263,7 +269,7 @@ object WorldCodec {
      * every cell-valued name took a `Cells` suffix. 3 was the container below with none of that, 2
      * the JSON text that preceded it; none of them opens.
      */
-    const val FORMAT_VERSION = 19
+    const val FORMAT_VERSION = 20
 
     private val MAGIC = byteArrayOf('C'.code.toByte(), 'G'.code.toByte(), 'W'.code.toByte(), 'D'.code.toByte())
 

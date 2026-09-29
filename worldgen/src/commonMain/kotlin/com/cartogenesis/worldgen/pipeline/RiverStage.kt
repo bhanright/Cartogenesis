@@ -40,15 +40,23 @@ data class Lake(
      * below it where evaporation holds the water down — see [endorheic].
      */
     val surfaceElevation: Float,
-    /** Where the lake overflows toward the sea, or would if it reached the brim. */
+    /**
+     * Where the lake overflows, or would if it reached its brim: toward the sea, or, for a pocket of
+     * a closed basin, over the saddle into the pocket beside it.
+     */
     val outletCell: Int,
     /**
      * True when the lake has no outlet: its catchment's runoff cannot fill the basin to the brim
      * against evaporation, so the surface stands below [spillElevation], rivers end here and
-     * nothing leaves. The Caspian and the Great Salt Lake, rather than Lake Erie.
+     * nothing leaves. The Caspian and the Great Salt Lake, rather than Lake Erie. A pocket of a
+     * closed basin that is full to its saddle and spills into the next pocket is not endorheic:
+     * Utah Lake, draining into Great Salt Lake.
      */
     val endorheic: Boolean = false,
-    /** The brim — where the surface would sit if the basin were full. */
+    /**
+     * The brim: where the surface would sit if the basin were full, or, for a pocket of a closed
+     * basin, the saddle it spills over.
+     */
     val spillElevation: Float = 0f
 )
 
@@ -305,11 +313,14 @@ object RiverStage {
      * flag half a continent. `LakesConfig.minDepthMetres` has to clear that accumulated noise.
      *
      * That gives the basin's footprint *at its spill level*, which is where the lake sits only if
-     * the catchment can keep it there. [LakeWaterBalance] decides that, and this is where a basin
-     * that cannot becomes endorheic: the lake shrinks to the level its inflow can sustain against
-     * evaporation (or disappears entirely, leaving a playa), the basin's flow targets are re-pointed
-     * at the water rather than at the rim, and the water that runs in stops running out — which is
-     * why [flowTarget] is taken by this function and modified, rather than being read.
+     * the catchment can keep it there. [LakePockets] decides that, hollow by hollow, and this is
+     * where a basin that cannot becomes endorheic: each of its pockets holds the water its own
+     * catchment can sustain against evaporation off its own surface, or a playa where it holds none,
+     * a pocket full to its saddle spills its surplus into the next, and two become one lake only
+     * where both reach their saddle. The basin's flow targets are re-pointed at its terminal waters
+     * rather than at the rim, and the water that runs in stops running out — which is why
+     * [flowTarget] is taken by this function and modified, rather than being read. A lake is
+     * numbered basin by basin in cell-index order, and within a basin by its lowest cell.
      *
      * **Upstream basins first, and a closed one takes its rain with it.** [catchmentRainMm] is
      * accumulated once, over the routing as the fill left it, when every basin still spills; so at
@@ -320,8 +331,7 @@ object RiverStage {
      * basin to the basin its exits' water reaches next on the routing the fill left; a group of
      * basins that feed each other is solved together, to a fixed point. See
      * [basinGroupsUpstreamFirst]. Solved in cell-index order with the field left
-     * as it was, a playa upstream of a lake fed the lake rain it had already evaporated. The lakes
-     * are still numbered in cell-index order, as they always were.
+     * as it was, a playa upstream of a lake fed the lake rain it had already evaporated.
      *
      * [solved], where given, receives each basin as the balance was handed it; see [solvedBasins].
      */

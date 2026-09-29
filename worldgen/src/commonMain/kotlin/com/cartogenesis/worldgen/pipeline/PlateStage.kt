@@ -2178,6 +2178,10 @@ object PlateStage {
         }
     }
 
+    /** Each plate's crust in [config]'s world, by plate id, without stamping anything. */
+    internal fun presentPlateTypes(config: WorldGenConfig): List<PlateType> =
+        drawPlates(config).plates.map { it.type }
+
     /** [RiftSegmentReport] for [config]'s present epoch, without stamping anything. */
     internal fun presentRiftSegments(config: WorldGenConfig): RiftSegmentReport {
         val drawn = drawPlates(config)

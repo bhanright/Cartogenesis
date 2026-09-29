@@ -20,9 +20,12 @@ import kotlin.test.assertTrue
  * row crosses a mark running north-south, and a run down a column one running east-west, so the
  * thinnest run each way is the mark's width each way, and the commonest run is its usual width.
  *
- * On the gallery's world at 512 rows both agree, one pixel each way. The control is the same seed
- * on the 512 by 512 grid, whose sheet is the same 1024 pixels across: there no run along a row is
- * shorter than two pixels, and the clause fails on it.
+ * On the gallery's world at 512 rows both are one pixel each way, which is what a cell to a pixel
+ * draws and what the clause asks: the same width both ways, and that width one pixel. Two
+ * controls fail it. The same seed on the 512 by 512 grid, whose sheet is the same 1024 pixels
+ * across: no run along a row is shorter than two pixels, so the two ways disagree. And the square
+ * world's own coast thickened to two pixels both ways, each inked pixel inking the one east of it
+ * and the one south: the two ways agree, and the width is two.
  */
 class RasterMarkWidthTest : BorrowsSharedWorlds() {
 
@@ -37,6 +40,10 @@ class RasterMarkWidthTest : BorrowsSharedWorlds() {
         val agree: Boolean
             get() = thinnestAcross == thinnestDown && commonestAcross == commonestDown
 
+        /** Whether the mark is [MARK_PIXELS] wide both ways, at its thinnest and as it usually is. */
+        val onePixelBothWays: Boolean
+            get() = agree && thinnestAcross == MARK_PIXELS && commonestAcross == MARK_PIXELS
+
         override fun toString(): String =
             "%d runs along the rows, thinnest %d px, commonest %d px, mean %.2f; %d down the columns, thinnest %d px, commonest %d px, mean %.2f"
                 .format(
@@ -48,15 +55,40 @@ class RasterMarkWidthTest : BorrowsSharedWorlds() {
             runs.toList().groupingBy { it }.eachCount().maxByOrNull { it.value }?.key ?: 0
     }
 
-    /** The raster coast of [world] as its sheet draws it, measured into runs. */
-    private fun coastRuns(world: WorldMap): InkRuns {
+    /** The raster coast of [world] as its sheet draws it, as [INK] and [PAPER] a pixel, and the sheet. */
+    private fun coastOnTheSheet(world: WorldMap): Pair<IntArray, SheetGeometry> {
         val withCoast = MapRasterizer.rasterize(world, RenderOptions(view = MapView.FANTASY, showCoastline = true))
         val without = MapRasterizer.rasterize(world, RenderOptions(view = MapView.FANTASY, showCoastline = false))
         val inkedCells = IntArray(withCoast.size) { if (withCoast[it] != without[it]) INK else PAPER }
         val sheet = SheetGeometry.of(world)
-        val onTheSheet = sheet.expand(inkedCells)
+        return sheet.expand(inkedCells) to sheet
+    }
+
+    /** The raster coast of [world] as its sheet draws it, measured into runs. */
+    private fun coastRuns(world: WorldMap): InkRuns {
+        val (onTheSheet, sheet) = coastOnTheSheet(world)
+        return runsOf(onTheSheet, sheet.widthPixels, sheet.heightPixels)
+    }
+
+    /**
+     * The same coast drawn two pixels wide both ways, the control a thickened mark is: every
+     * inked pixel of [world]'s sheet also inks the one east of it and the one south.
+     */
+    private fun thickenedCoastRuns(world: WorldMap): InkRuns {
+        val (onTheSheet, sheet) = coastOnTheSheet(world)
         val across = sheet.widthPixels
         val down = sheet.heightPixels
+        val thick = onTheSheet.copyOf()
+        for (y in 0 until down) for (x in 0 until across) {
+            if (onTheSheet[y * across + x] != INK) continue
+            thick[y * across + (x + 1) % across] = INK
+            if (y + 1 < down) thick[(y + 1) * across + x] = INK
+        }
+        return runsOf(thick, across, down)
+    }
+
+    /** Every run of [INK] along the rows and down the columns of a sheet [across] by [down]. */
+    private fun runsOf(onTheSheet: IntArray, across: Int, down: Int): InkRuns {
         val alongRows = ArrayList<Int>()
         for (y in 0 until down) {
             var run = 0
@@ -82,6 +114,8 @@ class RasterMarkWidthTest : BorrowsSharedWorlds() {
         println("MARKS the gallery's world at 512 rows of square cells: $square")
         val halfHeight = coastRuns(SharedWorlds.world(HALF_HEIGHT_CONTROL))
         println("MARKS the same seed on the 512 by 512 grid: $halfHeight")
+        val thickened = thickenedCoastRuns(TestWorlds.gallery)
+        println("MARKS the same coast thickened to two pixels both ways: $thickened")
 
         assertTrue(square.alongRows.isNotEmpty() && square.downColumns.isNotEmpty(), "the raster inked no coast")
         assertTrue(
@@ -90,14 +124,22 @@ class RasterMarkWidthTest : BorrowsSharedWorlds() {
                 "clause cannot see a two-pixel mark: $halfHeight"
         )
         assertTrue(
-            square.agree,
-            "on square cells the raster's coast is drawn wider one way than the other: $square"
+            thickened.agree && !thickened.onePixelBothWays,
+            "the thickened control is not a mark as wide both ways and wider than a pixel, so the " +
+                "clause cannot see a mark too wide: $thickened"
+        )
+        assertTrue(
+            square.onePixelBothWays,
+            "on square cells the raster's coast is not one pixel wide both ways: $square"
         )
     }
 
     private companion object {
         const val INK = 1
         const val PAPER = 0
+
+        /** The width a cell's mark has on a sheet drawn a cell to a pixel: one pixel. */
+        const val MARK_PIXELS = 1
 
         /** The gallery's seed on a grid as many cells tall as wide: cells two pixels across. */
         val HALF_HEIGHT_CONTROL = WorldGenConfig(seed = 234475L, width = 512, height = 512)

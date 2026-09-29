@@ -658,7 +658,10 @@ class GeometryControlTest {
         expect("a pyramid's level lines, turned 17 deg", readLines(Layer("pyramid", pyramidLines), SQUARE),
             setOf(Detector.CREASES), setOf(Detector.FACETS, Detector.ALIGNED_SIDE, Detector.RECTANGLE, Detector.ISOTROPY, Detector.ORIENTATION) + corners)
         // An ice sheet's plastic profile over a natural island, the square root of the distance to
-        // its margin: its level lines are the margin's offsets, curved, and meet at the divide.
+        // its margin: its level lines are the margin's offsets, curved, and meet at the divide. It is
+        // what a natural ice surface is, read as the census reads the ice surface layer (a rough
+        // outline, neither smooth nor zonal, so under the same bars), and nothing may flag it: a
+        // flag here would be the detectors calling the ice's own physics a grid artifact.
         val sheetIsland = Controls.naturalIsland(SQUARE, 61L, 40 * SQUARE.cellWidthKm, cx, cy)
         val margin = (0 until SQUARE.cellCount).filter { cell ->
             !sheetIsland[cell] && listOf(-1, 1, -SQUARE.cellsAcross, SQUARE.cellsAcross).any { step ->
@@ -674,8 +677,7 @@ class GeometryControlTest {
         }
         val highest = profile.max()
         val profileLines = (1..6).flatMap { Contours.ofField(profile, highest * it / 7f, SQUARE) }
-        expect("a sheet's profile over a natural island (shown, nothing asserted)", readLines(Layer("sheet", profileLines), SQUARE),
-            emptySet(), Detector.entries.toSet())
+        expect("a sheet's profile over a natural island", readLines(Layer("sheet", profileLines), SQUARE), emptySet())
         lines.add("  its creases: " + readLines(Layer("sheet", profileLines), SQUARE).describe(Detector.CREASES))
 
         // Populations, for the one detector that reads a layer rather than a component.

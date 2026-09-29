@@ -33,7 +33,9 @@ class OceanLeavesTheGroundTest : BorrowsSharedWorlds() {
      * The case above compares the currents on and off inside one tree, and cannot see a change
      * that moves both alike. The digests were first the tree before chunk 4a drew (3a66025), at 512
      * by 512 (docs/DESIGN_LEDGER.md, 4a), and were re-taken at Q2, which moved the ground on purpose
-     * and builds the world on square cells; an ocean change that leaks into the ground moves them.
+     * and builds the world on square cells, and at L1, whose rifts are Earth's half-grabens: the
+ * plates' partition held and their height, uplift and age moved with everything built on them. An
+ * ocean change that leaks into the ground moves them.
      * A chunk meant to move the ground re-takes them here, as the render records are re-taken.
      * At [SharedWorlds.DETAIL_ROWS], whose standard worlds the detail guards generate anyway, so
      * the pin costs a digest and no generation.
@@ -58,18 +60,18 @@ class OceanLeavesTheGroundTest : BorrowsSharedWorlds() {
             "plates.boundaryDistance" to -825292753321544589L,
             "plates.nearestBoundaryType" to 4665505714802344748L,
             "plates.nearestBoundaryClass" to 2457436364073694675L,
-            "plates.height" to -9041961791220024892L,
+            "plates.height" to -5123758246479906654L,
             "plates.seafloorAgeMyr" to -8620603663144917145L,
             "plates.seafloorHalfSpreadingRateKmPerMyr" to 5508627893530768010L,
             "plates.continentalShare" to 711069935001870004L,
-            "plates.upliftRateMmPerYear" to 3049563129622159122L,
-            "plates.crustAge" to -2408528362292396853L,
-            "erosion.height" to 3908231553243824835L,
+            "plates.upliftRateMmPerYear" to 7710667993094369491L,
+            "plates.crustAge" to 8529523075786650796L,
+            "erosion.height" to 3825594112330176027L,
             "erosion.sweptOnDevice" to -358906410940142731L,
-            "sea.shorelineHeight" to 3760365049450966050L,
-            "sea.isLand" to 2274450064364913821L,
-            "sea.relativeElevation" to -1790368389096739738L,
-            "sea.landCellCount" to -1961725115242250090L
+            "sea.shorelineHeight" to -2096238051286461219L,
+            "sea.isLand" to 1280183224684450541L,
+            "sea.relativeElevation" to -5666580231172664018L,
+            "sea.landCellCount" to -178640372448496797L
         )
     }
 }

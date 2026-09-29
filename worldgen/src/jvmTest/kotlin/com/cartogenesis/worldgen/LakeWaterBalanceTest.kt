@@ -73,7 +73,14 @@ class LakeWaterBalanceTest : BorrowsSharedWorlds() {
     // and the balance empties two fifths of it, so it is a dry case in wet country again, and
     // seed 4's closes to 72% and turns endorheic. Of the sixteen other seeds with a basin over 200
     // cells, fifteen stay full and seed 6's keeps 29%. The dry case's seed 13 still holds.
-    private val drySeed = 13L
+    //
+    // Re-picked for the dry case at L1, whose rifts are Earth's half-grabens and whose closed basins
+    // hold a lake in each hollow: seed 13's largest dry basin is 283 cells now. The same scan over
+    // 1..48, largest spill-level basin per seed under 300 mm with the notch off and one epoch, the
+    // largest the balance empties: seed 16's, 2,602 cells at 74 mm, 5% of it still wet. Seed 36's
+    // is larger at 6,950 cells and 238 mm and keeps 59%, and seeds 3, 10 and 1 (1,853, 1,631 and
+    // 1,581 cells) keep 47%, 24% and 44%.
+    private val drySeed = 16L
     private val wetSeed = 37L
 
     /**

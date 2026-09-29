@@ -1011,6 +1011,17 @@ S1's business, and writing it down is what made the question underneath it visib
 so it is a seventh of the Caspian. Whether a world this size should cap at the share or at the lake
 is not a units question and is in `TODO.md`.
 
+**A lake's area still follows the grid, and no claim is made that it does not.** L1 made a rift the
+same rift at every grid and gave each hollow of a closed basin its own lake, and a seed's lake share
+of its land across 256, 512 and 1,024 rows still spreads by 1.5 to 2.1 times on the four standard
+seeds, its largest lake by 1.5 to 5.4 (`ScaleFreeTest`, a known failure against a provisional 1.35).
+Three things are left: the post-cut outlet, which is still cutting at its last pass; a rift chain
+below the sea, which the enclosure rule above keeps as sea where its sills leave it one body over
+the cap and makes land holding lakes where they part it, and the grid decides which; and chaos, a
+quarter of a seed's lake area between two runs that route a hair differently. Pooled over two seeds
+at the three grids the largest lake in the land is 1.23 times the Caspian's share of its land
+(`OutletResolutionTest`). See `TODO.md`, the lake-area entry.
+
 **Where a rift meets the coast, half its floor is dry.** A half-graben's floor is a wedge — deepest
 against the master fault and rising to about a fifth of that depth against the hinge — and where the
 rift reaches the sea the water in it stands at the waterline, because the post-cut outlet cuts the

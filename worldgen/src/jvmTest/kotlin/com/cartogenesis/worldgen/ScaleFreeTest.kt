@@ -30,8 +30,43 @@ class ScaleFreeTest : BorrowsSharedWorlds() {
         val verdict: ScaleFree.Verdict,
         val groundComplaints: List<String>,
         val coarseDensityKmPerKm2: Double,
-        val fineDensityKmPerKm2: Double
+        val fineDensityKmPerKm2: Double,
+        val coarseLakes: Lakes,
+        val fineLakes: Lakes
     )
+
+    /**
+     * A world's standing water: its share of the land, the largest body's area in km2, and the
+     * length of every lake's shore in km, cell edges between a lake and anything else.
+     */
+    private class Lakes(val shareOfLand: Double, val largestKm2: Double, val shoreKm: Double, val lakeKm2: Double) {
+        constructor(world: WorldMap) : this(
+            world.rivers.lakes.lakeId.count { it >= 0 }.toDouble() / world.sea.landCellCount.coerceAtLeast(1),
+            (world.rivers.lakes.lakes.maxOfOrNull { it.cellCount } ?: 0) * world.config.squareKilometresPerCell,
+            shoreKmOf(world),
+            world.rivers.lakes.lakeId.count { it >= 0 } * world.config.squareKilometresPerCell
+        )
+
+        companion object {
+            fun shoreKmOf(world: WorldMap): Double {
+                val lakeId = world.rivers.lakes.lakeId
+                val cellsAcross = world.width
+                var eastWestEdges = 0
+                var northSouthEdges = 0
+                for (cell in lakeId.indices) {
+                    val id = lakeId[cell]
+                    if (id < 0) continue
+                    val column = cell % cellsAcross
+                    val row = cell / cellsAcross
+                    if (lakeId[row * cellsAcross + (column + 1) % cellsAcross] != id) eastWestEdges++
+                    if (lakeId[row * cellsAcross + (column + cellsAcross - 1) % cellsAcross] != id) eastWestEdges++
+                    if (row == 0 || lakeId[cell - cellsAcross] != id) northSouthEdges++
+                    if (row == world.height - 1 || lakeId[cell + cellsAcross] != id) northSouthEdges++
+                }
+                return eastWestEdges * world.config.cellHeightKm + northSouthEdges * world.config.cellWidthKm
+            }
+        }
+    }
 
     /**
      * One seed's pair of worlds measured once for both cases, and kept as figures rather than as
@@ -49,7 +84,9 @@ class ScaleFreeTest : BorrowsSharedWorlds() {
             ScaleFree.compare(coarse, fine),
             standOnTheSameGround(seed, coarseWorld, fineWorld),
             channelDensityKmPerKm2(coarseWorld),
-            channelDensityKmPerKm2(fineWorld)
+            channelDensityKmPerKm2(fineWorld),
+            Lakes(coarseWorld),
+            Lakes(fineWorld)
         )
     }
 
@@ -110,6 +147,66 @@ class ScaleFreeTest : BorrowsSharedWorlds() {
                     " ") { "${it.key} moved by ${"%.1f".format(it.value)} coarse cells" }}",
             worst.isEmpty()
         )
+    }
+
+    /**
+     * A seed holds the same standing water at 256, 512 and 1,024 rows, as a share of its land and
+     * as its largest body, seed by seed so that one seed's excess cannot hide another's shortfall
+     * in a pooled figure.
+     *
+     * The bar, [LAKE_AREA_FACTOR], is a provisional regression bar and policy, not a derivation:
+     * the factor the drainage network is held to. It is not yet met, and runs as a known failure
+     * until the post-cut outlet is resolved (docs/TODO.md, the lake-area entry). What it has to
+     * hold against is chaos as well as the grid: re-drawing the routing's per-cell sub-grid draw at
+     * one grid moves a seed's lake area by up to a quarter and its largest lake by up to half
+     * (docs/DESIGN_LEDGER.md, L1), so a lake census is the noisiest figure this suite reads.
+     */
+    @Test
+    fun `a seed holds the same standing water at every grid`() {
+        val over = ArrayList<String>()
+        val figures = ArrayList<String>()
+        SEEDS.forEach { seed ->
+            val pair = pairOf(seed)
+            val atCoarsest = Lakes(worldAt(seed, 256))
+            val lakes = listOf(atCoarsest, pair.coarseLakes, pair.fineLakes)
+            val shareSpread = lakes.maxOf { it.shareOfLand } / lakes.minOf { it.shareOfLand }.coerceAtLeast(1e-12)
+            val largestSpread = lakes.maxOf { it.largestKm2 } / lakes.minOf { it.largestKm2 }.coerceAtLeast(1e-12)
+            println(
+                ("SCALEFREE lakes seed %d  share of land %.4f / %.4f / %.4f (x%.2f)  largest %,.0f / %,.0f / %,.0f km2 (x%.2f)" +
+                    "  at 256, 512 and 1024 rows").format(
+                    seed, lakes[0].shareOfLand, lakes[1].shareOfLand, lakes[2].shareOfLand, shareSpread,
+                    lakes[0].largestKm2, lakes[1].largestKm2, lakes[2].largestKm2, largestSpread
+                )
+            )
+            // The shore's length across grids, recorded without a bar: a natural outline measured
+            // with a ruler half as long grows by 2^(D - 1), and no fractal dimension for lake
+            // shores has been sourced independently of this generator to hold D to. What inflates it
+            // here is the comb of one-cell gullies the lakes stand up (CombGuardTest's
+            // SYMMETRIC_COMB), which a finer grid draws finer.
+            println(
+                ("SCALEFREE lake shores seed %d  %,.0f / %,.0f / %,.0f km at 256, 512 and 1024 rows; per lake area %.3f / %.3f / %.3f km per km2;" +
+                    " as an outline's dimension 1 + log2 of the growth, %.2f from 256 to 512 and %.2f from 512 to 1024 (recorded, no bar)")
+                    .format(
+                        seed, lakes[0].shoreKm, lakes[1].shoreKm, lakes[2].shoreKm,
+                        lakes[0].shoreKm / lakes[0].lakeKm2.coerceAtLeast(1.0),
+                        lakes[1].shoreKm / lakes[1].lakeKm2.coerceAtLeast(1.0),
+                        lakes[2].shoreKm / lakes[2].lakeKm2.coerceAtLeast(1.0),
+                        1 + kotlin.math.ln(lakes[1].shoreKm / lakes[0].shoreKm) / kotlin.math.ln(2.0),
+                        1 + kotlin.math.ln(lakes[2].shoreKm / lakes[1].shoreKm) / kotlin.math.ln(2.0)
+                    )
+            )
+            if (shareSpread > LAKE_AREA_FACTOR) over += "seed $seed's share"
+            if (largestSpread > LAKE_AREA_FACTOR) over += "seed $seed's largest"
+            figures += "seed $seed x%.2f and x%.2f".format(shareSpread, largestSpread)
+        }
+        KnownFailures.expect(LAKE_AREA_FOLLOWS_THE_GRID, over.joinToString(", ")) {
+            if (over.isNotEmpty()) {
+                throw RecordedViolation(
+                    "standing water differs across 256, 512 and 1,024 rows by more than x$LAKE_AREA_FACTOR: $figures",
+                    over.joinToString(", ")
+                )
+            }
+        }
     }
 
     /**
@@ -279,6 +376,15 @@ class ScaleFreeTest : BorrowsSharedWorlds() {
          * times the grid, which is a factor the measurement cannot survive.
          */
         const val CHANNEL_DENSITY_FACTOR = 1.35
+
+        /**
+         * How far a seed's lake share of land, or its largest lake, may move across 256, 512 and
+         * 1,024 rows: the drainage network's factor, as a provisional regression bar.
+         */
+        const val LAKE_AREA_FACTOR = 1.35
+
+        const val LAKE_AREA_FOLLOWS_THE_GRID =
+            "L1: a seed's standing water still follows the grid, pending the post-cut outlet (L2)"
 
         fun configAt(seed: Long, size: Int): WorldGenConfig {
             val base = WorldGenConfig.forRows(seed, 512)

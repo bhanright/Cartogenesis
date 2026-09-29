@@ -514,7 +514,8 @@ class RiverSelectionTest : BorrowsSharedWorlds() {
             if (quarterOfEarthKm >= tiny.budgetKilometres) idleFloor += "seed $seed"
             assertTrue(tiny.drawn[biggest], "seed $seed lost its largest river on a tiny sheet")
         }
-        KnownFailures.expect(FLOOR_IDLE_ON_SOME_SEEDS, "seed 7, seed 99") {
+        // Re-recorded at L1: seed 42's largest chain fits the quarter too on L1's worlds (docs/DESIGN_LEDGER.md, L1).
+        KnownFailures.expect(FLOOR_IDLE_ON_SOME_SEEDS, "seed 7, seed 42, seed 99") {
             if (idleFloor.isNotEmpty()) {
                 throw RecordedViolation(
                     "the largest river's chain fits a quarter of Earth's ink even on the tiny sheet, so it does not " +

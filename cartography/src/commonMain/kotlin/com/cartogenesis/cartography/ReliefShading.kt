@@ -447,10 +447,11 @@ internal object ReliefShading {
      * Fix 2). The implicit incision's terrain then measured 0.8750 on the 512 by 512 grid, which
      * was recorded rather than re-derived while the device's parity guard could not run with it;
      * on square cells, the same world's valleys resolved on cells of 11.7 km and drawn at the
-     * exaggeration re-derived there ([EXAGGERATION_TIMES_CELL_WIDTH_KM]), it is 0.8901, re-derived
-     * with that guard run (docs/DESIGN_LEDGER.md, Fix 3b and Q4).
+     * exaggeration re-derived there ([EXAGGERATION_TIMES_CELL_WIDTH_KM]), it was 0.8901, re-derived
+     * with that guard run (docs/DESIGN_LEDGER.md, Fix 3b and Q4), and L1's rifts, Earth's
+     * half-grabens, moved the gallery world's ground to 0.8897 (docs/DESIGN_LEDGER.md, L1).
      */
-    private const val ORDINARY_GROUND = 0.8901f
+    private const val ORDINARY_GROUND = 0.8897f
 
     /** Read by `ReliefShadingTest`, which is where the figure above comes from. */
     val ordinaryGround: Float get() = ORDINARY_GROUND

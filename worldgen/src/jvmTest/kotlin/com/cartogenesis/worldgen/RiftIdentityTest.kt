@@ -353,11 +353,11 @@ class RiftIdentityTest {
                     if (rowStep == 0 && columnStep == 0) continue
                     val atRow = row + rowStep
                     if (atRow < 0 || atRow >= grid.cellsDown) continue
-                    val neighbour = local[atRow * grid.cellsAcross + Math.floorMod(column + columnStep, grid.cellsAcross)] ?: continue
+                    val neighbor = local[atRow * grid.cellsAcross + Math.floorMod(column + columnStep, grid.cellsAcross)] ?: continue
                     val there = here + steps.of(columnStep, rowStep) * grid.cellWidthKm
-                    if (there < walked[neighbour]) {
-                        walked[neighbour] = there
-                        queue.add(there to neighbour)
+                    if (there < walked[neighbor]) {
+                        walked[neighbor] = there
+                        queue.add(there to neighbor)
                     }
                 }
             }

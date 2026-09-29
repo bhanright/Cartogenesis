@@ -244,7 +244,7 @@ internal class LakePockets private constructor(
             }
             val topPocketOfRoot = IntArray(count) { -1 }
             val pocketOfRank = IntArray(count)
-            val lowestNeighbourRank = IntArray(count) { -1 }
+            val lowestNeighborRank = IntArray(count) { -1 }
 
             val parent = ArrayList<Int>()
             val firstChild = ArrayList<Int>()
@@ -263,15 +263,15 @@ internal class LakePockets private constructor(
                 val cell = cellAtRank[rank]
                 touched.clear()
                 var lowest = -1
-                FlowRouting.forEachNeighbour(cellsAcross, cellsDown, cell % cellsAcross, cell / cellsAcross) { neighbour ->
-                    val neighbourRank = localIndex[neighbour]
-                    if (neighbourRank in 0 until rank) {
-                        if (lowest < 0 || neighbourRank < lowest) lowest = neighbourRank
-                        val root = findRoot(neighbourRank)
+                FlowRouting.forEachNeighbour(cellsAcross, cellsDown, cell % cellsAcross, cell / cellsAcross) { neighbor ->
+                    val neighborRank = localIndex[neighbor]
+                    if (neighborRank in 0 until rank) {
+                        if (lowest < 0 || neighborRank < lowest) lowest = neighborRank
+                        val root = findRoot(neighborRank)
                         if (root !in touched) touched.add(root)
                     }
                 }
-                lowestNeighbourRank[rank] = lowest
+                lowestNeighborRank[rank] = lowest
                 when (touched.size) {
                     0 -> {
                         pocketOfRank[rank] = newPocket(-1, -1, rank)
@@ -353,7 +353,7 @@ internal class LakePockets private constructor(
             // The leaf each cell's rain reaches, down its lowest neighbor below it.
             val leafOfRank = IntArray(count)
             for (rank in 0 until count) {
-                val below = lowestNeighbourRank[rank]
+                val below = lowestNeighborRank[rank]
                 leafOfRank[rank] = if (below < 0) pocketOfRank[rank] else leafOfRank[below]
             }
             val leafOfLaidOut = IntArray(count) { leafOfRank[laidOutRank[it]] }
@@ -373,14 +373,14 @@ internal class LakePockets private constructor(
                 saddleCell[pocket] = cell
                 var intoFirst = -1
                 var intoSecond = -1
-                FlowRouting.forEachNeighbour(cellsAcross, cellsDown, cell % cellsAcross, cell / cellsAcross) { neighbour ->
-                    val neighbourRank = localIndex[neighbour]
-                    if (neighbourRank !in 0 until rank) return@forEachNeighbour
-                    if (inPocketRegion(firstChild[pocket], neighbourRank) && (intoFirst < 0 || neighbourRank < intoFirst)) {
-                        intoFirst = neighbourRank
+                FlowRouting.forEachNeighbour(cellsAcross, cellsDown, cell % cellsAcross, cell / cellsAcross) { neighbor ->
+                    val neighborRank = localIndex[neighbor]
+                    if (neighborRank !in 0 until rank) return@forEachNeighbour
+                    if (inPocketRegion(firstChild[pocket], neighborRank) && (intoFirst < 0 || neighborRank < intoFirst)) {
+                        intoFirst = neighborRank
                     }
-                    if (inPocketRegion(secondChild[pocket], neighbourRank) && (intoSecond < 0 || neighbourRank < intoSecond)) {
-                        intoSecond = neighbourRank
+                    if (inPocketRegion(secondChild[pocket], neighborRank) && (intoSecond < 0 || neighborRank < intoSecond)) {
+                        intoSecond = neighborRank
                     }
                 }
                 entryOfFirst[pocket] = leafOfRank[intoFirst]

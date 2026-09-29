@@ -48,11 +48,11 @@ class LakeBodyTest : BorrowsSharedWorlds() {
                         if (rowStep == 0 && columnStep == 0) continue
                         val atRow = row + rowStep
                         if (atRow < 0 || atRow >= cellsDown) continue
-                        val neighbour = atRow * cellsAcross + (column + columnStep).mod(cellsAcross)
-                        val other = lakes.lakeId[neighbour]
-                        if (other == id && !seen[neighbour]) {
-                            seen[neighbour] = true
-                            stack.add(neighbour)
+                        val neighbor = atRow * cellsAcross + (column + columnStep).mod(cellsAcross)
+                        val other = lakes.lakeId[neighbor]
+                        if (other == id && !seen[neighbor]) {
+                            seen[neighbor] = true
+                            stack.add(neighbor)
                         } else if (other != LakeResult.NO_LAKE && other != id &&
                             lakes.lakes[other].surfaceElevation != lakes.lakes[id].surfaceElevation
                         ) {

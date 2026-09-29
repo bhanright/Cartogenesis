@@ -2211,7 +2211,7 @@ object PlateStage {
      *    not move with the grid: where the rift crosses the midpoint of its two plates' seeds, read
      *    off the bisector of those seeds through the same warp that drew the boundary, or the end of
      *    the rift nearer it when the rift does not cross it. The course is measured along a
-     *    centerline drawn through stretches [CENTRELINE_STEP_KM] long, so it follows the same bends
+     *    centerline drawn through stretches [CENTERLINE_STEP_KM] long, so it follows the same bends
      *    at every grid; see [arcAlongRun].
      *  - The joins fall at a sequence of lengths drawn one per half-graben from a stream keyed by
      *    the pair, the stretch and the half-graben's own place in the sequence, counted both ways
@@ -2531,14 +2531,14 @@ object PlateStage {
                 val column = cell % cellsAcross
                 val row = cell / cellsAcross
                 for (rowStep in -1..1) {
-                    val neighbourRow = row + rowStep
-                    if (neighbourRow < 0 || neighbourRow >= cellsDown) continue
+                    val neighborRow = row + rowStep
+                    if (neighborRow < 0 || neighborRow >= cellsDown) continue
                     for (columnStep in -1..1) {
                         if (columnStep == 0 && rowStep == 0) continue
-                        val neighbour = neighbourRow * cellsAcross + (column + columnStep).mod(cellsAcross)
-                        if (runOf[neighbour] != UNCLAIMED_RUN) continue
-                        runOf[neighbour] = run
-                        queue.add(neighbour)
+                        val neighbor = neighborRow * cellsAcross + (column + columnStep).mod(cellsAcross)
+                        if (runOf[neighbor] != UNCLAIMED_RUN) continue
+                        runOf[neighbor] = run
+                        queue.add(neighbor)
                     }
                 }
             }
@@ -2656,7 +2656,7 @@ object PlateStage {
      * not measure it, because a staircase of axis and diagonal steps overstates the line it
      * approximates, by up to eighteen percent on cells half as tall as they are wide. So the length
      * is the length of the run's centreline: the cells are gathered into stretches
-     * [CENTRELINE_STEP_KM] long by their walked distance, each stretch stands at the mean
+     * [CENTERLINE_STEP_KM] long by their walked distance, each stretch stands at the mean
      * of its cells on the ground, and the arc is measured along the line from one end through those
      * means to the other, each cell taking its place on it by its walked distance. A straight run
      * measures its own length to the width of its cells; a meander is followed at the scale of a
@@ -2666,7 +2666,7 @@ object PlateStage {
      * Internal so `TectonicGroundTest` can walk a straight run it lays at any bearing.
      */
     internal fun arcAlongRun(config: WorldGenConfig, runCells: IntArray): RunArc {
-        val stretchCellWidths = config.cellsFor(CENTRELINE_STEP_KM).toDouble()
+        val stretchCellWidths = config.cellsFor(CENTERLINE_STEP_KM).toDouble()
         val cellsAcross = config.width
         val cellsDown = config.height
         val steps = config.groundSteps
@@ -2811,7 +2811,7 @@ object PlateStage {
      * long for and followed them on a fine one, and the same rift measured 1.6% shorter at 256 rows
      * than at 1,024, which puts a far join a half-graben out (docs/DESIGN_LEDGER.md, L1).
      */
-    private const val CENTRELINE_STEP_KM = 93.75
+    private const val CENTERLINE_STEP_KM = 93.75
 
     /**
      * Projects the plates' relative motion onto the axis between their centres — the closest thing

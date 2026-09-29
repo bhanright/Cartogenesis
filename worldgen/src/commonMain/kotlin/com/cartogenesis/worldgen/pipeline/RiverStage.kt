@@ -518,11 +518,11 @@ object RiverStage {
             for (index in pockets.layout.indices) {
                 val cell = pockets.layout[index]
                 var arrivingMm = climate.precipitationMm.data[cell].toDouble()
-                FlowRouting.forEachNeighbour(cellsAcross, cellsDown, cell % cellsAcross, cell / cellsAcross) { neighbour ->
-                    val from = inBasin[neighbour]
-                    if (from == basin || !sea.isLand[neighbour] || routingBeforeClosing[neighbour] != cell) return@forEachNeighbour
+                FlowRouting.forEachNeighbour(cellsAcross, cellsDown, cell % cellsAcross, cell / cellsAcross) { neighbor ->
+                    val from = inBasin[neighbor]
+                    if (from == basin || !sea.isLand[neighbor] || routingBeforeClosing[neighbor] != cell) return@forEachNeighbour
                     if (from >= 0 && absorbing(from)) return@forEachNeighbour
-                    arrivingMm += (field[neighbour] - carriedOwnMm[neighbour]).coerceAtLeast(0.0)
+                    arrivingMm += (field[neighbor] - carriedOwnMm[neighbor]).coerceAtLeast(0.0)
                 }
                 supply[pockets.leafOfLaidOut[index]] += runoff * arrivingMm
             }

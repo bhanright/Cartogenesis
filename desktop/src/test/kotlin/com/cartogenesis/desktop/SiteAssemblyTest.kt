@@ -500,9 +500,8 @@ class SiteAssemblyTest {
                     .map { it.groupValues[1] to it.groupValues[2] }.toList()
             }.toList()
         assertEquals(2, pickers.size, "the slider has ${pickers.size} pickers, where it has a left and a right")
-        // By the application's own names, spelled as the page spells: the page is in American
-        // English and the application's labels are not all (Colour-blind).
-        val offered = styles.map { it.file.removePrefix("style-").removeSuffix(".webp") to it.style.label.replace("Colour", "Color") }
+        // By the application's own names, which are the page's: both are in American English.
+        val offered = styles.map { it.file.removePrefix("style-").removeSuffix(".webp") to it.style.label }
         pickers.forEach { assertEquals(offered, it, "a picker does not offer the twelve styles by their own names") }
 
         val loaded = Regex("""<img\s[^>]*src="([^"]+)"""").findAll(figure).map { it.groupValues[1] }.toList()

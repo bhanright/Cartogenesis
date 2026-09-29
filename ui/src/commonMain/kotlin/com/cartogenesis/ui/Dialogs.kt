@@ -323,7 +323,7 @@ internal fun AboutDialog(platform: Platform, onDismiss: () -> Unit) {
                 )
 
                 Text(
-                    LocalChromeDetail.current.heading("Licence"),
+                    LocalChromeDetail.current.heading("License"),
                     style = MaterialTheme.typography.titleSmall,
                     modifier = Modifier.padding(top = 16.dp)
                 )

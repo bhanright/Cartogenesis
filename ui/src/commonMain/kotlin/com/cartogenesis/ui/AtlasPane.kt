@@ -211,7 +211,7 @@ private fun AtlasSettings(
                 onOptions(landmarks.set(options, it))
             }
             OutlinedButton(onClick = onToggleLabels, enabled = !busy, contentPadding = TIGHT) {
-                Text(if (labelMode) "Done labelling" else "Place a label", maxLines = 1)
+                Text(if (labelMode) "Done labeling" else "Place a label", maxLines = 1)
             }
         }
     }

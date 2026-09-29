@@ -233,6 +233,6 @@ class SavesAndExportsTest {
         assertEquals(1, notices.size)
         assertTrue(notices.single().startsWith("Export failed") && "the disk is full" in notices.single())
         assertNull(runner.running)
-        assertEquals("Export cancelled", ExportRunner.notice(null))
+        assertEquals("Export canceled", ExportRunner.notice(null))
     }
 }

@@ -54,7 +54,7 @@ internal class ExportRunner(private val scope: CoroutineScope) {
     companion object {
         /** What a finished export says on the status line; null is the reader backing out. */
         fun notice(outcome: ExportOutcome?): String {
-            if (outcome == null) return "Export cancelled"
+            if (outcome == null) return "Export canceled"
             val saved = "Saved ${outcome.description} - ${outcome.bytes / 1024 / 1024} MB in ${outcome.millis / 1000}s"
             return when (outcome.source) {
                 ExportedWorld.OnScreen -> saved

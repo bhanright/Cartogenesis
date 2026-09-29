@@ -88,7 +88,7 @@ class StyleGalleryTest {
             clear.close()
         }
         println(
-            "STYLE wrote the Colour-blind fantasy and political views at 512 to ${dir.absolutePath}"
+            "STYLE wrote the Color-blind fantasy and political views at 512 to ${dir.absolutePath}"
         )
     }
 

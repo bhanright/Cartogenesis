@@ -730,7 +730,7 @@ internal object MapChrome {
     /** The one line of small print the toolbar carries: what this style is, or why it is unused. */
     fun note(options: RenderOptions): String =
         if (styleApplies(options.view)) options.style.detail
-        else "The ${options.view.label.lowercase()} view ignores the style: its colours mean something."
+        else "The ${options.view.label.lowercase()} view ignores the style: its colors mean something."
 }
 
 /**

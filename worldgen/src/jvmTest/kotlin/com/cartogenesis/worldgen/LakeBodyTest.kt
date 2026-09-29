@@ -2,6 +2,7 @@ package com.cartogenesis.worldgen
 
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.pipeline.LakeResult
+import com.cartogenesis.worldgen.pipeline.RiverStage
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -73,4 +74,47 @@ class LakeBodyTest : BorrowsSharedWorlds() {
         assertTrue(failures.isEmpty(), "a body of water holds more than one level: $failures")
     }
 
+    /**
+     * No rain is counted twice and none is lost: the rain a closed basin's pockets are handed,
+     * summed over all of them, is the rain that reaches the basin at all, the catchment at its exits
+     * on the routing the fill left.
+     *
+     * A pocket's catchment is read cell by cell where water enters the basin, and a path below a
+     * basin that turns back into it across a level rim carries the basin's own water back with it.
+     * Counted whole as an inflow, it handed pockets up to 5.69 times their basin's rain at 512 rows
+     * and seed 42's rift basin at 1,024 rows enough to fill it to the brim; left out whole, it lost
+     * the tributaries that join such a path, and one of seed 7's basins was handed 0.68 of its rain.
+     * The bar is the catchment itself, with a ten-thousandth either way for the order the two sums
+     * are taken in.
+     */
+    @Test
+    fun `a closed basin's pockets are handed exactly the rain that reaches the basin`() {
+        val failures = ArrayList<String>()
+        SharedWorlds.STANDARD_SEEDS.forEach { seed ->
+            val config = WorldGenConfig.forRows(seed, SharedWorlds.DETAIL_ROWS)
+            val world = SharedWorlds.world(config)
+            val solved = RiverStage.solvedBasins(config, world.sea, world.climate)
+            var most = 0.0
+            var least = Double.MAX_VALUE
+            solved.basins.forEach { basin ->
+                if (basin.catchmentRainMm <= 0f) return@forEach
+                val ratio = basin.pocketRainMm / basin.catchmentRainMm
+                most = maxOf(most, ratio)
+                least = minOf(least, ratio)
+                if (kotlin.math.abs(ratio - 1.0) > SUMMING_ORDER) {
+                    failures += "seed $seed: a basin of ${basin.cells.size} cells handed %.4f of its catchment".format(ratio)
+                }
+            }
+            println(
+                "LAKE RAIN seed %d at %d rows: %d closed basins, their pockets handed %.4f to %.4f of the rain reaching them"
+                    .format(seed, SharedWorlds.DETAIL_ROWS, solved.basins.size, least, most)
+            )
+        }
+        assertTrue(failures.isEmpty(), "rain counted twice or lost: $failures")
+    }
+
+    private companion object {
+        /** The two sums are taken in different orders, one in doubles and one in floats. */
+        const val SUMMING_ORDER = 1e-4
+    }
 }

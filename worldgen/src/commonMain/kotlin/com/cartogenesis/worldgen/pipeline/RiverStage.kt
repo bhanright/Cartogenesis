@@ -242,7 +242,12 @@ object RiverStage {
         val cells: IntArray,
         val exits: IntArray,
         val catchmentRainMm: Float,
-        val endorheic: Boolean
+        val endorheic: Boolean,
+        /**
+         * The rain the balance handed the basin's pockets, summed over all of them, in
+         * millimeter-cells: what their catchments send them, before the runoff share is taken.
+         */
+        val pocketRainMm: Double
     )
 
     /**
@@ -458,6 +463,10 @@ object RiverStage {
         var basinMark = 0
         // Scratch for [LakePockets.build], all -1 between basins.
         val localIndex = IntArray(cellCount) { -1 }
+        // Scratch for [leafSuppliesOf]: the basin's own water carried on each cell below it, all
+        // zero between calls, and the cells that call set.
+        val carriedOwnMm = DoubleArray(cellCount)
+        val carriedTouched = ArrayList<Int>()
 
         // A basin's pockets, built once however many times a group re-solves it. Sorted through the
         // elevation-keyed packing every other ordering in this pipeline uses, so equal heights fall
@@ -478,6 +487,22 @@ object RiverStage {
         // outside the basin at the cells its water enters by. A basin in [absorbing] keeps its
         // water, so what it would have sent is not counted.
         fun leafSuppliesOf(basin: Int, pockets: LakePockets, field: FloatArray, absorbing: (Int) -> Boolean): DoubleArray {
+            // The water below the basin on the routing the fill left that is the basin's own: a
+            // path that leaves the basin across a level rim can turn back into it further along, and
+            // what it carries back is an inflow only for what joined it on the way.
+            carriedTouched.clear()
+            for (cell in basins[basin]) {
+                val target = routingBeforeClosing[cell]
+                if (target < 0 || !sea.isLand[target] || inBasin[target] == basin) continue
+                val leavingMm = field[cell].toDouble()
+                var below = target
+                var steps = 0
+                while (below >= 0 && sea.isLand[below] && inBasin[below] != basin && steps++ < cellCount) {
+                    if (carriedOwnMm[below] == 0.0) carriedTouched.add(below)
+                    carriedOwnMm[below] += leavingMm
+                    below = routingBeforeClosing[below]
+                }
+            }
             val supply = DoubleArray(pockets.pocketCount)
             val runoff = lakesConfig.runoffFraction.toDouble()
             for (index in pockets.layout.indices) {
@@ -487,10 +512,11 @@ object RiverStage {
                     val from = inBasin[neighbour]
                     if (from == basin || !sea.isLand[neighbour] || routingBeforeClosing[neighbour] != cell) return@forEachNeighbour
                     if (from >= 0 && absorbing(from)) return@forEachNeighbour
-                    arrivingMm += field[neighbour]
+                    arrivingMm += (field[neighbour] - carriedOwnMm[neighbour]).coerceAtLeast(0.0)
                 }
                 supply[pockets.leafOfLaidOut[index]] += runoff * arrivingMm
             }
+            for (cell in carriedTouched) carriedOwnMm[cell] = 0.0
             return supply
         }
         fun inflowOf(basin: Int, field: FloatArray): Float {
@@ -512,7 +538,22 @@ object RiverStage {
                 val start = pockets.regionStart[pocket]
                 val above = pockets.parent[pocket]
                 val wouldSpillAt = if (above < 0) outletCell[basin] else pockets.saddleCell[above]
-                if (water.holdsItsOwnLevel(pockets, pocket)) {
+                if (water.holdsItsOwnLevel(pockets, pocket) && !pockets.isLeaf(pocket) &&
+                    water.ownCellsUnderWater[pocket] == 0
+                ) {
+                    // Both children stand exactly at their saddle and the saddle itself stays dry:
+                    // two lakes at one level, which meet only at the saddle, and each is its own
+                    // body of water.
+                    for (child in intArrayOf(pockets.firstChild[pocket], pockets.secondChild[pocket])) {
+                        val childCells = pockets.layout.copyOfRange(pockets.regionStart[child], pockets.regionEnd[child])
+                        val tooSmall = childCells.size < minLakeCells
+                        bodies += StandingWater(
+                            childCells, pockets.baseLevel(pocket), pockets.topLevel(pocket), wouldSpillAt,
+                            endorheic = true, playa = tooSmall
+                        )
+                        childCells.forEach { sinks += it }
+                    }
+                } else if (water.holdsItsOwnLevel(pockets, pocket)) {
                     val ownUnder = water.ownCellsUnderWater[pocket]
                     val end = pockets.ownStart[pocket] + ownUnder
                     if (end - start >= minLakeCells) {
@@ -580,9 +621,13 @@ object RiverStage {
                 // is the whole catchment — the basin plus every slope that feeds it, less every
                 // closed basin above it.
                 val catchmentMm = inflowOf(basin, catchmentRainMm.data)
-                val water = pockets.solve(leafSuppliesOf(basin, pockets, catchmentRainMm.data) { closed[it] })
+                val supplies = leafSuppliesOf(basin, pockets, catchmentRainMm.data) { closed[it] }
+                val water = pockets.solve(supplies)
                 solved?.basins?.add(
-                    SolvedBasin(basins[basin].copyOf(), exitsOf[basin].copyOf(), catchmentMm, endorheic = !water.rootFull)
+                    SolvedBasin(
+                        basins[basin].copyOf(), exitsOf[basin].copyOf(), catchmentMm, endorheic = !water.rootFull,
+                        pocketRainMm = supplies.sum() / lakesConfig.runoffFraction
+                    )
                 )
                 if (water.rootFull) continue
                 // The catchment stops at this basin, so nothing below its old spill receives it —
@@ -630,9 +675,13 @@ object RiverStage {
             for (member in group.indices) {
                 val basin = group[member]
                 val pockets = pocketsOf(basin)
-                val water = pockets.solve(leafSuppliesOf(basin, pockets, fields[member], keepsItsWater(member)))
+                val supplies = leafSuppliesOf(basin, pockets, fields[member], keepsItsWater(member))
+                val water = pockets.solve(supplies)
                 solved?.basins?.add(
-                    SolvedBasin(basins[basin].copyOf(), exitsOf[basin].copyOf(), inflowOf(basin, fields[member]), endorheic = !water.rootFull)
+                    SolvedBasin(
+                        basins[basin].copyOf(), exitsOf[basin].copyOf(), inflowOf(basin, fields[member]),
+                        endorheic = !water.rootFull, pocketRainMm = supplies.sum() / lakesConfig.runoffFraction
+                    )
                 )
                 if (!water.rootFull) close(basin, pockets, water)
             }

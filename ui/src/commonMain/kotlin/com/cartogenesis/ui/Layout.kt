@@ -47,9 +47,10 @@ internal object Layouts {
     /**
      * The working resolution a compact window starts at, whatever the preference says.
      *
-     * A phone browser is one thread and a few hundred megabytes; 512 takes a few seconds there and
-     * 1024 reads as a hang. A settings file carried over from a desktop can perfectly well say
-     * 2048, and honouring it on a phone would be honouring a preference into a crash.
+     * A phone browser is one thread; 512 takes about forty seconds in a desktop's tab and 1024
+     * about three minutes, which on a phone reads as a hang. A settings file carried over from a
+     * desktop can perfectly well say 2048, and honoring it on a phone would be honoring a
+     * preference into a crash.
      */
     const val COMPACT_RESOLUTION: Int = 512
 

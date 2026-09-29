@@ -6,6 +6,7 @@ import com.cartogenesis.cartography.MapStyle
 import com.cartogenesis.cartography.MapView
 import com.cartogenesis.cartography.RenderOptions
 import com.cartogenesis.cartography.RiverSelection
+import com.cartogenesis.cartography.WorldCodec
 import com.cartogenesis.worldgen.model.Acceleration
 import com.cartogenesis.worldgen.model.WildernessMode
 import com.cartogenesis.worldgen.model.WorldGenConfig
@@ -236,25 +237,45 @@ private const val DEFAULT_OROGRAPHIC_STRENGTH = 2.0f
  */
 internal object Knobs {
 
-    /** Powers of two, because the terrain integrator is FFT-based. */
+    /**
+     * The sizes a world can be made at, each named by its rows. Powers of two, because the terrain
+     * integrator is FFT-based. 256 rows is a grid the tests make and not a size offered here: at
+     * 23.4 km a cell it is coarser than any map this application draws.
+     */
     val RESOLUTIONS: List<Int> = listOf(512, 1024, 2048, 4096)
 
     /**
      * The working-resolution chips under [ceiling], each with the reason it is out of reach or
-     * none: every one of [RESOLUTIONS], so a browser shows the 4096 it cannot make, disabled,
-     * rather than a row that silently stops at 2048. See [Platform.generationCeiling].
+     * none: every one of [RESOLUTIONS], so a browser shows the 2048 it cannot make, disabled,
+     * rather than a row that silently stops at 1024. See [Platform.generationCeiling].
      */
     fun resolutionChoices(ceiling: Int): List<SizeChoice> = SizeChoice.row(RESOLUTIONS, ceiling)
 
     fun withSeed(config: WorldGenConfig, seed: Long): WorldGenConfig = config.copy(seed = seed)
 
     /**
-     * The same world at [size] by [size] cells, through `WorldGenConfig.atResolution`: the one
-     * place a size change is made, so there is one to move when sizes are named by rows. Every
-     * setting is a length on the ground, so the world gains detail rather than changing character.
+     * The same world at the size named [size], through `WorldGenConfig.atResolution`: [size] rows
+     * and [WorldCodec.COLUMNS_PER_ROW] columns for each, so a cell is as wide on the ground as it
+     * is tall and one pixel of the true-shape sheet either way. The one place a size change is
+     * made. Every setting is a length on the ground, so the world gains detail rather than
+     * changing character.
      */
     fun atResolution(config: WorldGenConfig, size: Int): WorldGenConfig =
-        config.atResolution(size, size)
+        config.atResolution(WorldCodec.COLUMNS_PER_ROW * size, size)
+
+    /**
+     * The size [config] is named by: its rows, as [atResolution] makes it and as every chip, link
+     * and setting says it. A world whose grid is not one [atResolution] makes, such as a save
+     * written before sizes were named by rows, is still named by its rows, and is then never the
+     * world a size asks for; see [makesAtSize].
+     */
+    fun sizeOf(config: WorldGenConfig): Int = config.height
+
+    /** Whether [config]'s grid is exactly the one [atResolution] makes for the size named [size]. */
+    fun makesAtSize(config: WorldGenConfig, size: Int): Boolean {
+        val asked = atResolution(config, size)
+        return config.width == asked.width && config.height == asked.height
+    }
 
     val oceanCoverage = Dial(
         section = PanelSection.WORLD,
@@ -576,9 +597,10 @@ internal object Knobs {
  * Declared here for the same reason the knobs are: the ceiling is a *rule*, and a rule drawn only
  * inside a composable can only be checked by looking at it. The rule is that no export ever runs
  * above [Platform.generationCeiling], because an export makes the world again at its size: 8192
- * exhausts a 10 GB heap inside the generator and never draws a pixel, and 4096 does the same to a
- * browser tab, so their chips are disabled where they cannot finish and any request for them,
- * including one restored from a preference written by an older build, comes back as the ceiling.
+ * rows is 134 million cells, twice the world that exhausted a 10 GB heap inside the generator
+ * before a pixel was drawn, and 2048 rows is more than a browser tab holds, so their chips are
+ * disabled where they cannot finish and any request for them, including one restored from a
+ * preference written by an older build, comes back as the ceiling.
  *
  * [clamp] is on the path every export takes rather than only on the button, because a disabled
  * control is a courtesy and not a guarantee: the size that reaches the platform is the one that
@@ -586,8 +608,13 @@ internal object Knobs {
  */
 internal object Exports {
 
-    /** The three the row offers. Powers of two, as the working resolutions are. */
-    val SIZES: List<Int> = listOf(2048, 4096, 8192)
+    /**
+     * The four the row offers, named by rows as the working resolutions are. 1024 is the largest
+     * world a browser tab makes, so without it a browser would have no size to export at, and it
+     * is the desktop's own starting size, where an export is the world on screen and nothing is
+     * made again.
+     */
+    val SIZES: List<Int> = listOf(1024, 2048, 4096, 8192)
 
     /** The picture formats, in the order the chips sit: lossless, small, compatible. */
     val PICTURES: List<ExportFormat> = ExportFormat.entries
@@ -601,7 +628,7 @@ internal object Exports {
      * The largest offered size this build can finish — what an unreachable request falls back to.
      *
      * A ceiling below the smallest offered size would leave nothing to fall back *to*, so that
-     * case returns the smallest rather than nothing: a build that cannot manage 2048 has a worse
+     * case returns the smallest rather than nothing: a build that cannot manage 1024 has a worse
      * problem than the export row.
      */
     fun clamp(size: Int, ceiling: Int): Int = when {

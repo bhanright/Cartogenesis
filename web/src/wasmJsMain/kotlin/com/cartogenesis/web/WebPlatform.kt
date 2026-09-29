@@ -42,8 +42,8 @@ class WebPlatform(
     override val iceAccelerator: IceSheetAccelerator? = null
 ) : Platform {
 
-    // One thread, and generating blocks the page while it runs. 512 takes a few seconds
-    // here; 1024 would take over a minute and read as a hang.
+    // One thread, and generating blocks the page while it runs. 512 rows takes about forty
+    // seconds in a desktop's tab; 1024 about three minutes, which reads as a hang.
     override val defaultResolution: Int = 512
 
     /**
@@ -72,12 +72,12 @@ class WebPlatform(
     override val acceleratedWork: String = "erosion, ocean currents and the ice sheet"
 
     /**
-     * 2048, phone or not, on screen and as an export alike.
+     * 1024 rows, phone or not, on screen and as an export alike.
      *
-     * Not the phone's figure borrowed: a 4096 world killed a desktop browser's tab, on a machine
-     * with a graphics card, before anything was drawn. See [WorldCeilings.BROWSER_TAB] for
-     * the measurement. The 4096 chips stay in their rows, disabled, saying why, as 8192 does
-     * everywhere, and a saved 4096 world is refused by [BROWSER_OPENING_LIMIT] rather than opened.
+     * Not the phone's figure borrowed: it was measured in a desktop's tab, and 2048 rows wants more
+     * than a tab's heap can address. See [WorldCeilings.BROWSER_TAB] for the measurement. The
+     * chips above it stay in their rows, disabled, saying why, and a saved world of more rows is
+     * refused by [BROWSER_OPENING_LIMIT] rather than opened.
      */
     override val generationCeiling: Int = WorldCeilings.BROWSER_TAB
 
@@ -190,8 +190,8 @@ class WebPlatform(
         // Drawn with exactly the preview's options: every mark the renderer makes is sized where it
         // is made, in output pixels or as a share of the sheet, so an export needs no scaling here.
         // A printed sheet, as on the desktop: nothing generalised away, and its own scale bar. The
-        // whole true-shape sheet, so a 4096 world is an 8192 by 4096 picture; immutable, so the
-        // encoder's Image shares its 128 MB of pixels rather than copying them.
+        // whole true-shape sheet, so a 1024 world is a 2048 by 1024 picture, a cell to a pixel;
+        // immutable, so the encoder's Image shares its 8 MB of pixels rather than copying them.
         val bitmap = MapImage.toBitmap(subject.world, options, MapSheet.PRINTED)
         bitmap.setImmutable()
         // Quality is ignored by the PNG encoder and lossless for WebP at 100; JPEG is the one
@@ -292,8 +292,9 @@ private object LocalStorageSettings : SettingsStore {
  *
  * A save with more rows is refused from its header, before any array is allocated, by the
  * browser's storage, a folder library and an uploaded file alike. The alternative is not a slow
- * open: a saved 4096 world is 2.45 GB of arrays, more than the heap a tab died at while making one,
- * so decoding it is the dead tab the ceiling exists to prevent. The desktop opens it. Counted in
+ * open: a saved world of 2048 rows is about 1.2 GB of arrays before a tab has drawn or held
+ * anything else of it, and it is a world a tab cannot make, so decoding it is the dead tab the
+ * ceiling exists to prevent. The desktop opens it. Counted in
  * rows, as a size is named: a world of square cells is twice as many cells across as down, and a
  * limit on its larger side would refuse the size the ceiling names.
  */

@@ -75,7 +75,7 @@ class PhoneAtlasTest {
             waitForIdle()
             onNodeWithText("Generate").performClick()
             waitUntil(timeoutMillis = GENERATION_TIMEOUT_MS) {
-                onAllNodesWithText("512 × 512", substring = true).fetchSemanticsNodes().isNotEmpty()
+                onAllNodesWithText("1024 × 512", substring = true).fetchSemanticsNodes().isNotEmpty()
             }
             waitForIdle()
             // Scrolled to first: the header is a scrolling column and a click on a node whose
@@ -300,7 +300,7 @@ class PhoneAtlasTest {
             waitForIdle()
             onNodeWithText("Generate").performClick()
             waitUntil(timeoutMillis = GENERATION_TIMEOUT_MS) {
-                onAllNodesWithText("512 × 512", substring = true).fetchSemanticsNodes().isNotEmpty()
+                onAllNodesWithText("1024 × 512", substring = true).fetchSemanticsNodes().isNotEmpty()
             }
             waitForIdle()
             theAtlasButton().performScrollTo().performClick()
@@ -345,7 +345,7 @@ class PhoneAtlasTest {
             waitForIdle()
             onNodeWithText("Generate").performClick()
             waitUntil(timeoutMillis = GENERATION_TIMEOUT_MS) {
-                onAllNodesWithText("512 × 512", substring = true).fetchSemanticsNodes().isNotEmpty()
+                onAllNodesWithText("1024 × 512", substring = true).fetchSemanticsNodes().isNotEmpty()
             }
             waitForIdle()
             onNodeWithText("Settings").performClick()

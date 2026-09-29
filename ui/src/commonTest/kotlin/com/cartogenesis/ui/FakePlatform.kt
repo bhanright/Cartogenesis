@@ -25,8 +25,8 @@ import com.cartogenesis.worldgen.pipeline.ThermalLimits
 internal open class FakePlatform(
     override val defaultResolution: Int = 512,
     override val accelerator: ErosionAccelerator? = null,
-    /** What [generationCeiling] answers: 4096, the desktop's, unless a test asks for a browser's. */
-    private val ceiling: Int = 4096,
+    /** What [generationCeiling] answers: the desktop's, unless a test asks for a browser's. */
+    private val ceiling: Int = WorldCeilings.DESKTOP,
     override val canQuit: Boolean = false,
     override val graphicsApiPresent: Boolean = true,
     override val coarsePointer: Boolean = false,

@@ -23,7 +23,7 @@ internal data class LinkOpening(
     /** True when the address named a world this build can read, which is then made without a press of Generate. */
     val generates: Boolean,
     /**
-     * The size, in cells across, the link asked for and this host can make — brought down to the
+     * The size, by its rows, the link asked for and this host can make — brought down to the
      * ceiling where it was above it — or null where the link named no size it could use. Read by
      * [LargeLinks] to decide whether to ask before making it.
      */
@@ -40,7 +40,8 @@ internal data class LinkOpening(
  * server, so nothing about a world a reader passes on reaches the host's logs: the format version,
  * the size, and every setting of the world and of the drawing that differs from its default,
  * written as `name=value` pairs in the order the panel draws them. For example
- * `https://cartogenesis.com/app/?seed=718106#v=1&size=1024&plates=18&style=vellum`.
+ * `https://cartogenesis.com/app/?seed=718106#v=2&size=1024&plates=18&style=vellum`, where the size
+ * is named by its rows as the panel's chips name it.
  *
  * What a link never carries is anything that is not the recipe for the world: no saved world's
  * data, no name the reader typed, no labels, no realm or landmark edits, nothing from the library.
@@ -60,13 +61,27 @@ internal data class LinkOpening(
 object WorldLinks {
 
     /**
-     * The link format this build writes and reads.
+     * The link format this build writes.
      *
      * Moves when a pair's name or the meaning of its value moves, exactly as `WorldCodec`'s format
      * version does for a save. A link names a style or a view by its enum constant's name, so
      * renaming one of those is such a move; `WorldLinksTest` holds the names as they are written.
+     * Format 2 names the size by its rows, where format 1 named it by the columns of a grid as many
+     * cells tall as wide; see [ROWS_SINCE_VERSION].
      */
-    const val FORMAT_VERSION: Int = 1
+    const val FORMAT_VERSION: Int = 2
+
+    /**
+     * The first format whose size counts rows. A link of an earlier format is still read, every
+     * pair as it was written, with its size read as rows too: that is the same chip and the same
+     * sheet, and the world it makes has square cells where the one it was copied from did not, so
+     * it differs from that world everywhere. The notice says so. No converter could do better,
+     * since no size of square cells makes the world the older link named.
+     */
+    internal const val ROWS_SINCE_VERSION: Int = 2
+
+    /** The formats this build reads: every one it has written. */
+    internal val READABLE_VERSIONS: IntRange = 1..FORMAT_VERSION
 
     /**
      * Where a link copied from a host that is not itself a page points: the browser application
@@ -144,7 +159,7 @@ object WorldLinks {
     fun linkTo(base: String, config: WorldGenConfig, options: RenderOptions): String {
         val plainConfig = WorldGenConfig()
         val plainOptions = RenderOptions()
-        val pairs = mutableListOf("$VERSION_KEY=$FORMAT_VERSION", "$SIZE_KEY=${config.width}")
+        val pairs = mutableListOf("$VERSION_KEY=$FORMAT_VERSION", "$SIZE_KEY=${Knobs.sizeOf(config)}")
         for ((key, knob) in KEYED) {
             val text = when (knob) {
                 is Dial -> knob.read(config)
@@ -226,8 +241,9 @@ object WorldLinks {
      * exactly one path.
      *
      * An address with no seed and nothing after `#` is no link at all. One whose format version is
-     * not [FORMAT_VERSION] is refused whole, and the window starts as it would have without it.
-     * Never throws: whatever the address holds, the window opens.
+     * not one of [READABLE_VERSIONS] is refused whole, and the window starts as it would have
+     * without it; one written before [ROWS_SINCE_VERSION] opens with a line saying its world is not
+     * the one it was copied from. Never throws: whatever the address holds, the window opens.
      */
     internal fun read(
         address: String?,
@@ -237,8 +253,9 @@ object WorldLinks {
     ): LinkOpening = read(address, starting, startingOptions, ceiling, sizeInstead = null)
 
     /**
-     * What [read] makes of [address], but with the world made [size] cells across whatever size
-     * the link names: the reader's answer to [LargeLinks]' question, "open it at the default size".
+     * What [read] makes of [address], but with the world made at the size named [size] whatever
+     * size the link names: the reader's answer to [LargeLinks]' question, "open it at the default
+     * size".
      *
      * Every other pair is read exactly as [read] reads it, in the link's own order, so the only
      * difference from the link's world is the size. The link's size is still checked, and a bad
@@ -270,13 +287,17 @@ object WorldLinks {
         val pairs = pairsOf(fragment)
         val setAside = mutableListOf<String>()
         var fragmentApplies = fragment.isNotEmpty()
+        var olderSizeNotice: String? = null
         if (fragmentApplies) {
             val version = pairs.lastOrNull { it.first == VERSION_KEY }?.second
+            val number = version?.toIntOrNull()
             if (version == null) {
                 setAside += "the part after # names no link format"
                 fragmentApplies = false
-            } else if (version.toIntOrNull() != FORMAT_VERSION) {
+            } else if (number == null || number !in READABLE_VERSIONS) {
                 return unchanged.copy(notice = refusal(version))
+            } else if (number < ROWS_SINCE_VERSION) {
+                olderSizeNotice = OLDER_SIZE_NOTICE
             }
         }
 
@@ -291,7 +312,7 @@ object WorldLinks {
         // than whatever else [starting] may hold: the link then names the whole world, and a
         // window that started from an odd config cannot leak it into the one the link makes.
         var config = Knobs.graphicsAcceleration.set(
-            Knobs.atResolution(WorldGenConfig(seed = seed), starting.width),
+            Knobs.atResolution(WorldGenConfig(seed = seed), Knobs.sizeOf(starting)),
             Knobs.graphicsAcceleration.read(starting)
         )
 
@@ -348,7 +369,7 @@ object WorldLinks {
         val setAsideLine = setAside.takeIf { it.isNotEmpty() }?.let {
             "Set aside from this link: ${it.joinToString("; ")}. The rest of it applies."
         }
-        val notice = listOfNotNull(setAsideLine, sizeNotice).joinToString(" ").ifEmpty { null }
+        val notice = listOfNotNull(olderSizeNotice, setAsideLine, sizeNotice).joinToString(" ").ifEmpty { null }
         return LinkOpening(config, options, notice, generates = true, linkedSize = linkedSize)
     }
 
@@ -382,6 +403,11 @@ object WorldLinks {
         is Latch, is Mark -> "is neither 1 nor 0"
         is Gauge -> "is not carried"
     }
+
+    /** What a link written before sizes were named by rows is told; see [ROWS_SINCE_VERSION]. */
+    internal const val OLDER_SIZE_NOTICE =
+        "This link was written before sizes were named by their rows, so the world it makes has " +
+            "square cells and differs from the one it was copied from."
 
     private fun refusal(version: String): String {
         val number = version.toIntOrNull()

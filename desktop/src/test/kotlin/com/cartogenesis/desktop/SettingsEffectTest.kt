@@ -54,9 +54,9 @@ class SettingsEffectTest {
 
     @Test
     fun `the stored working resolution is the grid the header opens on`() {
-        assertTrue(headerSays(AppSettings(workingResolution = 2048), "2048 px"))
+        assertTrue(headerSays(AppSettings(workingResolution = 2048), "2048 rows"))
         // And the default follows the platform, which this fake says is 512.
-        assertTrue(headerSays(AppSettings(), "512 px"))
+        assertTrue(headerSays(AppSettings(), "512 rows"))
     }
 
     @Test
@@ -189,7 +189,7 @@ class SettingsEffectTest {
             workingResolution = 2048,
             graphicsAccelerationAtLaunch = true,
             exportFormat = ExportFormat.WEBP,
-            exportSize = 4096,
+            exportSize = 2048,
             libraryFolder = "D:/atlas/worlds",
             interfaceScale = 1.3f,
             checkForUpdatesOnLaunch = true,

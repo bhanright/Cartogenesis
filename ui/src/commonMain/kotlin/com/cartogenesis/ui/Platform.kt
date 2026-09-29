@@ -82,7 +82,7 @@ class ExportOutcome(
 interface Platform {
 
     /**
-     * The working resolution to start at.
+     * The working resolution to start at, named by its rows as the chips name it.
      *
      * A platform decision rather than a preference. The JVM spreads generation across every core
      * and can reach for a GPU; a browser tab has one thread, and `Dispatchers.Default` there is
@@ -225,7 +225,8 @@ interface Platform {
     val coarsePointer: Boolean get() = false
 
     /**
-     * The largest world this host can make, in cells across: what the working resolution may be
+     * The largest world this host can make, as its size is named, by its rows (the grid is twice
+     * as many cells across): what the working resolution may be
      * set to and what an export may be asked for. One number rather than two, because an export
      * makes the world again at its own size, so the two could only disagree by offering a size
      * that ends the same way from either row.
@@ -239,8 +240,9 @@ interface Platform {
     val generationCeiling: Int get() = WorldCeilings.DESKTOP
 
     /**
-     * Draws [world] at [size] and puts the result wherever this platform puts finished files: a
-     * chosen path on the desktop, a download in a browser. Returns null if the user backed out.
+     * Draws [world] at the size named [size], by its rows, and puts the result wherever this
+     * platform puts finished files: a chosen path on the desktop, a download in a browser. Returns
+     * null if the user backed out.
      *
      * [world] is the world on screen. At its own size it is what is drawn; at any other size the
      * platform draws the world [ExportSubjects.at] makes from it, and says so in the outcome.
@@ -456,35 +458,40 @@ expect fun formatTimestamp(millis: Long): String
 
 /**
  * The two ceilings a host can have on the size of world it makes, and the sentence for a size above
- * one of them. See [Platform.generationCeiling].
+ * one of them. See [Platform.generationCeiling]. Sizes are named by their rows, the grid twice as
+ * many cells across. What each was measured at is in docs/DESIGN_LEDGER.md, Q5.
  *
  * Public because the web front end, which is a module of its own, declares the browser's.
  */
 object WorldCeilings {
 
     /**
-     * The largest world any build finishes: 4096 cells across.
+     * The largest world the desktop app offers: 2048 rows, a grid 4096 by 2048.
      *
-     * Not a taste. 8192 exhausts a 10 GB heap inside the generator after about nineteen minutes,
-     * before a single pixel of the map is drawn, so its export chip is offered disabled rather than
-     * removed. See docs/DESIGN_LEDGER.md, G2, for the measurement.
+     * Held to the heap the packaged app takes on a 16 GB machine, three quarters of its memory or
+     * 12 GB, because a size the app offers has to finish on an ordinary machine and not only on
+     * the one it was measured on. 2048 rows finished in three and a half minutes on the processor
+     * with 3.0 GB live at its fullest and 4.8 GB resident. 4096 rows finished too, generated, drawn
+     * and saved under a 12 GB heap, but with 10.3 GB of it live after a collection and 14.0 GB
+     * resident at its fullest, which leaves a 16 GB machine about 2 GB for everything else; so it
+     * is offered disabled, as 8192 rows is, which is twice its cells. See docs/DESIGN_LEDGER.md, Q5.
      */
-    const val DESKTOP: Int = 4096
+    const val DESKTOP: Int = 2048
 
     /**
-     * The largest world a browser tab finishes: 2048 cells across.
+     * The largest world a browser tab makes: 1024 rows, a grid 2048 by 1024.
      *
-     * A 4096 generation in Edge on an RTX 3070 Ti held a 2.7 GB heap seven minutes in, still
-     * eroding, and the tab then died before anything was drawn; a 2048 world in the same tab
-     * finished in about four minutes with its heap near 2.3 GB. A saved 4096 world is 2.45 GB of
-     * arrays before anything is drawn from it (see `WorldCodec.FORMAT_VERSION`), more than the heap
-     * that tab died at, so a tab cannot open one either. See docs/TODO.md, "A 4096 world cannot be
-     * made in a browser tab", for the measurement and for what making it fit is still owed.
+     * Measured in a tab of the production build on this project's desktop: 1024 rows generated
+     * and was drawn in 172 s with the tab's JavaScript heap sampled at 1.7 GB at its fullest. 2048
+     * rows is four times the cells, 8.4 million, twice the world as many cells tall as wide that
+     * finished in a tab near 2.3 GB, and half the one whose tab died past 2.7 GB; at that heap per
+     * cell it wants more than the 4 GB a Wasm heap can address, so a tab neither makes nor opens it.
+     * See docs/TODO.md, "A 4096 world cannot be made in a browser tab".
      */
-    const val BROWSER_TAB: Int = 2048
+    const val BROWSER_TAB: Int = 1024
 
     /**
-     * Why a world [size] cells across cannot be made under [ceiling], or null when it can.
+     * Why a world of the size named [size] cannot be made under [ceiling], or null when it can.
      *
      * A size the desktop reaches and this host does not can only be a browser's limit, because the
      * browser's is the only ceiling below the desktop's; a size above the desktop's waits for a

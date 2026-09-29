@@ -1335,31 +1335,31 @@
         <div class="plate"><img src="img/seed-42.webp" width="1024" height="512" loading="lazy" decoding="async"
              alt="A world whose one long continent crosses the map from the south-west to the east, pinched to a neck in the middle, with lakes over its western half."></div>
         <span class="reel-seed">Seed 42</span>
-        <a href="/app/?seed=42#v=1&amp;size=512&amp;style=natural">Open seed 42 in the app</a>
+        <a href="/app/?seed=42#v=2&amp;size=512&amp;style=natural">Open seed 42 in the app</a>
       </li>
       <li>
         <div class="plate"><img src="img/seed-1066.webp" width="1024" height="512" loading="lazy" decoding="async"
              alt="A world of a branching continent, its arms reaching north-west, north-east and south to a snow-capped tip, with more land at the map's edges."></div>
         <span class="reel-seed">Seed 1066</span>
-        <a href="/app/?seed=1066#v=1&amp;size=512&amp;style=natural">Open seed 1066 in the app</a>
+        <a href="/app/?seed=1066#v=2&amp;size=512&amp;style=natural">Open seed 1066 in the app</a>
       </li>
       <li>
         <div class="plate"><img src="img/seed-2024.webp" width="1024" height="512" loading="lazy" decoding="async"
              alt="A world round an inland sea: a northern land with a chain of lakes, islands strung across the water, and coasts to the south."></div>
         <span class="reel-seed">Seed 2024</span>
-        <a href="/app/?seed=2024#v=1&amp;size=512&amp;style=natural">Open seed 2024 in the app</a>
+        <a href="/app/?seed=2024#v=2&amp;size=512&amp;style=natural">Open seed 2024 in the app</a>
       </li>
       <li>
         <div class="plate"><img src="img/seed-777.webp" width="1024" height="512" loading="lazy" decoding="async"
              alt="A world of two lands across open sea: a green western land with lakes along its coast, and an eastern one whose snow-capped range runs south to a narrow neck."></div>
         <span class="reel-seed">Seed 777</span>
-        <a href="/app/?seed=777#v=1&amp;size=512&amp;style=natural">Open seed 777 in the app</a>
+        <a href="/app/?seed=777#v=2&amp;size=512&amp;style=natural">Open seed 777 in the app</a>
       </li>
       <li>
         <div class="plate"><img src="img/seed-7.webp" width="1024" height="512" loading="lazy" decoding="async"
              alt="A world of two lands facing each other across shallow bays: an island in the west with a snow-capped peak, and a larger land to the east cut by lakes and rivers."></div>
         <span class="reel-seed">Seed 7</span>
-        <a href="/app/?seed=7#v=1&amp;size=512&amp;style=natural">Open seed 7 in the app</a>
+        <a href="/app/?seed=7#v=2&amp;size=512&amp;style=natural">Open seed 7 in the app</a>
       </li>
     </ul>
   </section>
@@ -1376,7 +1376,7 @@
       <div><dt>Themes</dt><dd>Seventeen interface themes, including light, dark, high contrast and color-blind options.</dd></div>
       <div><dt>Editing</dt><dd>Rename realms, capitals and landmarks, edit their details and notes, and place your own labels. Future updates will add a full atlas system for editing borders, landmarks and labels in more depth.</dd></div>
       <div><dt>Saves</dt><dd>Save a world and reopen the same file in the browser or the desktop app.</dd></div>
-      <div><dt>Export</dt><dd>Export the map as a PNG, WebP or JPEG image. You can also export the data behind it for other tools: a 16-bit heightmap with its scale in meters, and biome and realm maps with their legends. The desktop app makes worlds up to 4096, whose map images are 8192 × 4096 pixels. The browser version, on a phone or a computer, goes up to 2048.</dd></div>
+      <div><dt>Export</dt><dd>Export the map as a PNG, WebP or JPEG image. You can also export the data behind it for other tools: a 16-bit heightmap with its scale in meters, and biome and realm maps with their legends. The desktop app makes worlds up to 2048, whose map images are 4096 × 2048 pixels. The browser version, on a phone or a computer, goes up to 1024.</dd></div>
       <div><dt>Resolution</dt><dd>Choose the world's resolution. Higher settings add detail and need more memory; the browser starts at 512, the desktop app at 1024.</dd></div>
       <div><dt>Acceleration</dt><dd>Optional graphics acceleration uses the graphics card to speed up erosion, ocean currents and ice sheets, through WebGPU in the browser and OpenGL on the desktop. The desktop app also draws exported maps on the graphics card.</dd></div>
     </dl>
@@ -1395,13 +1395,13 @@
              a visitor actually fetches to run the generator, measured off the assembled tree. The
              loading shell carries the same token and therefore the same figure. -->
         <p>Use a recent Chrome, Edge, Firefox or Safari. The first visit downloads the generator, about __BUNDLE_MB__&nbsp;MB, and caches it; nothing you make is uploaded anywhere.</p>
-        <p>Saved worlds stay in the browser's own storage, or, in Chrome and Edge, in a folder on your device that you choose in the Library. The desktop app opens worlds saved in the browser, and the browser opens desktop saves up to 2048.</p>
+        <p>Saved worlds stay in the browser's own storage, or, in Chrome and Edge, in a folder on your device that you choose in the Library. The desktop app opens worlds saved in the browser, and the browser opens desktop saves up to 1024.</p>
         <p>Optional graphics acceleration uses WebGPU where the browser offers it.</p>
       </div>
 
       <div class="panel">
         <h3>Sizes, formats and speed</h3>
-        <p>Exporting at a different size builds the world again at that size. The extra detail is newly generated, and small features can differ from the world on screen. Map images are twice as wide as they are tall, so a 2048 world exports as a 4096 × 2048 picture. Larger worlds take longer and use more memory. The browser version makes and exports worlds up to 2048. For larger worlds, use the desktop app.</p>
+        <p>Exporting at a different size builds the world again at that size. The extra detail is newly generated, and small features can differ from the world on screen. Map images are twice as wide as they are tall, so a 2048 world exports as a 4096 × 2048 picture. Larger worlds take longer and use more memory. The browser version makes and exports worlds up to 1024. For larger worlds, use the desktop app.</p>
         <p>PNG keeps every pixel. WebP is smaller and softens thin rivers and borders slightly.</p>
       </div>
 
@@ -1412,7 +1412,7 @@
 
       <a class="panel" href="/releases/latest" id="downloads" target="_blank" rel="noopener">
         <h3>Desktop version<span class="tag">Windows · Linux</span></h3>
-        <p>The desktop app makes larger worlds, up to 4096, and spreads the work across your processor's cores. See the download section below for each system's files and how to install them.</p>
+        <p>The desktop app makes larger worlds, up to 2048, and spreads the work across your processor's cores. See the download section below for each system's files and how to install them.</p>
         <span class="go" id="release-line">Get the latest release ↗</span>
       </a>
     </div>
@@ -1506,7 +1506,7 @@ sudo apt update &amp;&amp; sudo apt install cartogenesis</code></pre><button typ
             </span>
             <span>
               <span class="dl-name">Browser <span class="dl-tag" hidden>Your system</span></span>
-              <span class="dl-sum">Nothing to install · worlds up to 2048</span>
+              <span class="dl-sum">Nothing to install · worlds up to 1024</span>
             </span>
           </button>
           <div class="dl-body" id="dl-browser">
@@ -1516,8 +1516,8 @@ sudo apt update &amp;&amp; sudo apt install cartogenesis</code></pre><button typ
             </div>
             <p>Runs in a recent Chrome, Edge, Firefox or Safari. Nothing is installed, and nothing you make is uploaded. Your worlds are saved in a folder you choose, as the same file format the desktop app uses.</p>
             <ul class="dl-notes">
-              <li>Makes worlds up to 2048 in the browser; the desktop app goes to 4096.</li>
-              <li>On a phone, worlds generate at 512 by default, and 2048 works.</li>
+              <li>Makes worlds up to 1024 in the browser; the desktop app goes to 2048.</li>
+              <li>On a phone, worlds generate at 512 by default, and 1024 works.</li>
               <li>To host it yourself, serve the web zip's contents over HTTPS.</li>
             </ul>
           </div>

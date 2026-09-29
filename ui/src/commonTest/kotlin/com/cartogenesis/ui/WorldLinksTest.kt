@@ -28,7 +28,10 @@ class WorldLinksTest {
     private val base = WorldLinks.PUBLIC_APP_ADDRESS
 
     /** What a browser window would start with without a link: another seed, its own size. */
-    private val starting: WorldGenConfig = WorldGenConfig(seed = 5L, width = 512, height = 512)
+    private val starting: WorldGenConfig = Knobs.atResolution(WorldGenConfig(seed = 5L), 512)
+
+    /** The format this build writes, as a link's fragment begins. */
+    private val format = "v=${WorldLinks.FORMAT_VERSION}"
 
     /** A reader whose river density is not the default, so a link can be seen to leave it alone. */
     private val startingOptions = RenderOptions(riverInkStep = RiverSelection.EARTH_DENSITY_STEP + 1)
@@ -38,7 +41,7 @@ class WorldLinksTest {
 
     /** Every keyed knob away from its default, the style and the view too, at 2048. */
     private fun everythingChanged(): Pair<WorldGenConfig, RenderOptions> {
-        var config = WorldGenConfig(seed = 718106L).atResolution(2048, 2048)
+        var config = Knobs.atResolution(WorldGenConfig(seed = 718106L), 2048)
         config = Knobs.oceanCoverage.set(config, 0.4137f)
         config = Knobs.plates.set(config, 23)
         config = Knobs.mountainHeight.set(config, 0.7771f)
@@ -60,12 +63,14 @@ class WorldLinksTest {
 
     // ---- written and read back ---------------------------------------------------------------
 
+    /** The size is written by its rows: a world 1024 cells across and 512 down is the "512". */
     @Test
     fun `a default world's link reads back as the default world, and says nothing else`() {
-        val config = WorldGenConfig(seed = 718106L, width = 512, height = 512)
+        val config = Knobs.atResolution(WorldGenConfig(seed = 718106L), 512)
+        assertEquals(1024 to 512, config.width to config.height)
         val link = WorldLinks.linkTo(base, config, RenderOptions())
         println("WORLD LINK default world: $link")
-        assertEquals("${base}?seed=718106#v=1&size=512", link)
+        assertEquals("${base}?seed=718106#v=2&size=512", link)
 
         val opened = read(link)
         assertEquals(config, opened.config)
@@ -117,12 +122,12 @@ class WorldLinksTest {
 
     @Test
     fun `a link written by a later format is refused whole, and the window starts as it would have`() {
-        val later = read("${base}?seed=718106#v=2&plates=18")
+        val later = read("${base}?seed=718106#v=3&plates=18")
         assertEquals(starting, later.config, "a refused link still changed the settings")
         assertEquals(startingOptions, later.options)
         assertFalse(later.generates, "a refused link still started a world")
         val notice = assertNotNull(later.notice)
-        assertTrue("later version" in notice && "format 2" in notice, notice)
+        assertTrue("later version" in notice && "format 3" in notice, notice)
 
         val nonsense = read("${base}?seed=718106#v=one&plates=18")
         assertEquals(starting, nonsense.config)
@@ -134,7 +139,7 @@ class WorldLinksTest {
 
     @Test
     fun `a malformed seed, an unknown setting and an out-of-range value are set aside and the rest applies`() {
-        val opened = read("${base}?seed=12x#v=1&size=1024&plates=99&glaciers=1&tilt=-3&realms=7&style=sepia")
+        val opened = read("${base}?seed=12x#$format&size=1024&plates=99&glaciers=1&tilt=-3&realms=7&style=sepia")
         val notice = assertNotNull(opened.notice)
         println("WORLD LINK set aside: $notice")
         listOf("\"12x\"", "plates=99", "3 to 40", "\"glaciers\"", "tilt=-3", "style=sepia").forEach {
@@ -142,14 +147,14 @@ class WorldLinksTest {
         }
         // The seed the window already had, and every part of the link that could be read.
         assertEquals(starting.seed, opened.config.seed)
-        assertEquals(1024, opened.config.width)
+        assertEquals(1024, Knobs.sizeOf(opened.config))
         assertEquals(7, Knobs.realms.read(opened.config))
         assertEquals(Knobs.plates.read(starting), Knobs.plates.read(opened.config))
         assertEquals(Knobs.seasonalTiltDegrees.read(starting), Knobs.seasonalTiltDegrees.read(opened.config))
         assertTrue(opened.generates)
 
         // A switch is 1 or 0, a size is one the panel offers, a view is one the map has.
-        val more = read("${base}?seed=3#v=1&ice=yes&size=1000&view=satellite&ocean=0.5")
+        val more = read("${base}?seed=3#$format&ice=yes&size=1000&view=satellite&ocean=0.5")
         val moreNotice = assertNotNull(more.notice)
         listOf("ice=yes", "size=1000", "view=satellite").forEach {
             assertTrue(it in moreNotice, "the line does not name $it: $moreNotice")
@@ -168,15 +173,38 @@ class WorldLinksTest {
 
     @Test
     fun `a size above the host's ceiling is brought down to it, with the ceiling's reason`() {
-        val opened = read("${base}?seed=718106#v=1&size=4096", ceiling = WorldCeilings.BROWSER_TAB)
+        val opened = read("${base}?seed=718106#$format&size=2048", ceiling = WorldCeilings.BROWSER_TAB)
         assertEquals(2048, opened.config.width)
-        assertEquals(2048, opened.config.height)
+        assertEquals(1024, opened.config.height)
         val notice = assertNotNull(opened.notice)
-        val reason = assertNotNull(WorldCeilings.whyOutOfReach(4096, WorldCeilings.BROWSER_TAB))
-        assertTrue(reason in notice && "4096" in notice && "2048" in notice, notice)
+        val reason = assertNotNull(WorldCeilings.whyOutOfReach(2048, WorldCeilings.BROWSER_TAB))
+        assertTrue(reason in notice && "2048" in notice && "1024" in notice, notice)
         // Brought down with atResolution, as the panel's chips do, and the tectonics are the
         // same kilometers at every size.
-        assertEquals(starting.atResolution(2048, 2048).tectonics, opened.config.tectonics)
+        assertEquals(Knobs.atResolution(starting, 1024).tectonics, opened.config.tectonics)
+    }
+
+    /**
+     * A link written before sizes were named by rows is read, not refused: its size is read as
+     * rows, which is the same chip and the same sheet, every other pair applies as written, and
+     * the line says the world differs from the one the link was copied from, since that world's
+     * cells were twice as wide as tall and no size of square cells makes it. No converter.
+     */
+    @Test
+    fun `a link of the first format reads its size as rows and says its world differs`() {
+        val older = read("${base}?seed=718106#v=1&size=1024&plates=18&style=vellum")
+        assertTrue(older.generates, "a link of the first format was refused")
+        assertEquals(718106L, older.config.seed)
+        assertEquals(1024, Knobs.sizeOf(older.config))
+        assertEquals(2048, older.config.width, "the older link's size was read as columns")
+        assertEquals(18, Knobs.plates.read(older.config))
+        assertEquals(MapStyle.VELLUM, older.options.style)
+        val notice = assertNotNull(older.notice, "a link of the first format opened without a word")
+        assertTrue(WorldLinks.OLDER_SIZE_NOTICE in notice, notice)
+        // The same pairs under the format this build writes open the same settings, silently.
+        val current = read("${base}?seed=718106#$format&size=1024&plates=18&style=vellum")
+        assertEquals(current.config, older.config)
+        assertNull(current.notice)
     }
 
     @Test
@@ -231,7 +259,8 @@ class WorldLinksTest {
             ),
             MapView.entries.map { WorldLinks.wireName(it) }
         )
-        assertEquals(1, WorldLinks.FORMAT_VERSION)
+        // Format 2 moved only the size, to rows; the names are the first format's, unchanged.
+        assertEquals(2, WorldLinks.FORMAT_VERSION)
     }
 
     // ---- floats, to the last bit, on both platforms ------------------------------------------

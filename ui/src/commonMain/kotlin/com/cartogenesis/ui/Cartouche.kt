@@ -82,7 +82,11 @@ internal object Cartouches {
     private const val LANGUAGE_MULTIPLIER = 31L
     private const val LANGUAGE_OFFSET = 1_013L
 
-    /** `seed 59758 · 2048 × 2048`: which world, and how finely it was computed. */
+    /**
+     * `seed 59758 · 4096 × 2048`: which world, and how finely it was computed. The grid rather than
+     * the size's name, which the chips already say: a chart's small print states what the chart
+     * was computed on.
+     */
     fun facts(seed: Long, width: Int, height: Int): String = "seed $seed · $width × $height"
 
     /** `generated in 1.8 s`, or milliseconds for a world that took less than a second. */

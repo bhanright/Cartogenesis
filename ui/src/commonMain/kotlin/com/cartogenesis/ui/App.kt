@@ -564,11 +564,13 @@ private fun Application(
         val shown = world ?: return
         val choice = exportChoice
         val drawnOptions = options
-        val madeAgain = shown.width != size || shown.height != size
-        val grid = "${size}x$size"
-        // The picture is the true-shape sheet of that grid, which is not square: a 2048 world is a
-        // 4096 by 2048 picture. A data export is one sample a cell and keeps the grid's own size.
-        val sheet = SheetGeometry.of(shown.config.scale, size, size)
+        val madeAgain = !ExportSubjects.isOnScreen(shown.config, size)
+        val target = ExportSubjects.configAt(shown.config, size)
+        val grid = "${target.width}x${target.height}"
+        // The picture is the true-shape sheet of that grid: a 2048 world is 4096 by 2048 cells and
+        // as many pixels. Said as the sheet rather than as the grid again, so a grid whose cells
+        // were not square would show here as the picture it is.
+        val sheet = SheetGeometry.of(target)
         val picture = "${sheet.widthPixels}x${sheet.heightPixels}"
         // A data export renders no picture, so the progress line says what it is actually doing.
         val doing = when (choice) {
@@ -724,7 +726,7 @@ private fun Application(
         // Every way to a size above the ceiling is already closed — the chips, the stored settings
         // and the saves a browser refuses to open — so this is the guarantee rather than the rule:
         // a world the host cannot finish is refused in a sentence rather than begun.
-        WorldCeilings.whyOutOfReach(config.width, generationCeiling)?.let { reason ->
+        WorldCeilings.whyOutOfReach(Knobs.sizeOf(config), generationCeiling)?.let { reason ->
             status = "$reason."
             return@LaunchedEffect
         }
@@ -1219,7 +1221,7 @@ private fun Application(
             generating = generating != null,
             status = status,
             hasWorld = world != null,
-            worldSize = world?.width,
+            worldOnScreen = world?.config,
             exportChoice = exportChoice,
             generationCeiling = generationCeiling,
             exportSizes = reachable.exportSizes,
@@ -1503,8 +1505,8 @@ private fun ColumnScope.SettingsSheet(
 /**
  * The panel column in the wide arrangement.
  *
- * Wide enough for a slider with its label and value on the line above, and for "Working
- * resolution" beside "2048 px" without either being cut. See [Layouts.COMPACT_BELOW_DP], which is
+ * Wide enough for a slider with its label and value on the line above, and for "Generation
+ * resolution" beside "2048 rows" without either being cut. See [Layouts.COMPACT_BELOW_DP], which is
  * this plus its gutters plus the narrowest useful map.
  */
 private val PANEL_WIDTH = 320.dp
@@ -1933,8 +1935,8 @@ private fun PanelHeader(
     generating: Boolean,
     status: String,
     hasWorld: Boolean,
-    /** Cells across the world on screen, or null before there is one. */
-    worldSize: Int?,
+    /** The settings of the world on screen, or null before there is one. */
+    worldOnScreen: WorldGenConfig?,
     exportChoice: ExportChoice,
     /** The largest world this host makes; see [Platform.generationCeiling]. */
     generationCeiling: Int,
@@ -1986,24 +1988,41 @@ private fun PanelHeader(
     }
 
     val resolutions = Knobs.resolutionChoices(generationCeiling)
-    Labelled("Generation resolution", "${config.width} px") {
+    // Which chip the pointer is over, if it is one whose reason is not printed below; see there.
+    var reachingFor by remember { mutableStateOf<Int?>(null) }
+    // The size by its name, as the chips say it, and in rows, which is what the name counts: the
+    // grid itself, twice as many cells across, is the cartouche's to state.
+    Labelled("Generation resolution", "${Knobs.sizeOf(config)} rows") {
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             resolutions.forEach { choice ->
+                val hoverSource = remember { MutableInteractionSource() }
+                val hovered by hoverSource.collectIsHoveredAsState()
+                LaunchedEffect(hovered, choice.enabled) {
+                    if (!choice.enabled && hovered) reachingFor = choice.size
+                    else if (reachingFor == choice.size) reachingFor = null
+                }
                 FilterChip(
-                    selected = config.width == choice.size,
+                    selected = Knobs.sizeOf(config) == choice.size,
                     onClick = { onResolution(choice.size) },
                     label = { Text("${choice.size}", maxLines = 1) },
                     enabled = !busy && choice.enabled,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f).hoverable(hoverSource)
                 )
             }
         }
     }
 
-    // Why a chip above is greyed out, printed under the row rather than on hover: in a browser it
-    // is always true, and a phone has no pointer to hover with. Only where a chip is out of reach,
-    // so the desktop's header is as it was.
-    resolutions.mapNotNull { it.whyOutOfReach }.forEach { reason ->
+    // Why a chip above is greyed out. Printed under the row where the reason is a browser's, which
+    // in a browser is always true, and everywhere in the compact arrangement, since a phone has no
+    // pointer to hover with. A size no build makes explains itself when the pointer is on it, as
+    // 8192 does on the export row: in the wide arrangement the header has no room for a standing
+    // line about it, and printed it took the whole column in a 900 dp window and pushed every
+    // section below the fold.
+    val compact = LocalWindowShape.current == WindowShape.COMPACT
+    resolutions.filter { choice ->
+        choice.whyOutOfReach != null &&
+            (compact || choice.size <= WorldCeilings.DESKTOP || choice.size == reachingFor)
+    }.mapNotNull { it.whyOutOfReach }.forEach { reason ->
         Text(
             reason,
             style = MaterialTheme.typography.labelSmall,
@@ -2011,16 +2030,15 @@ private fun PanelHeader(
         )
     }
 
-    // What the two larger chips cost on the device this arrangement is drawn for, in seconds,
-    // measured on the author's phone rather than guessed: 18-23 s at 1024 and 92.7 s at 2048, on a
-    // 2026 Qualcomm handset with WebGPU on. The last clause is the honest part — a browser has one
-    // thread, so a long stage is a page that stops answering, and a reader owed no explanation of
-    // that concludes the tab has died. Compact only: a desktop is not what this is about, and the
-    // numbers are not its numbers.
+    // What the larger chips cost on the device this arrangement is drawn for, from the same table
+    // the large-link question quotes, and saying so where a figure is an estimate rather than a
+    // measurement. The last clause is the honest part — a browser has one thread, so a long stage
+    // is a page that stops answering, and a reader owed no explanation of that concludes the tab
+    // has died. Compact only: a desktop is not what this is about, and the numbers are not its
+    // numbers.
     if (LocalWindowShape.current == WindowShape.COMPACT) {
         Text(
-            "On a phone, 1024 takes about twenty seconds and 2048 about a minute and a half; " +
-                "the screen may pause while it works.",
+            LargeLinks.phoneCostLine(),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -2038,7 +2056,7 @@ private fun PanelHeader(
 
     // Export, which would otherwise want a 200 dp column of its own on the far side of the map.
     OutputOptions(
-        worldSize, exportChoice, generationCeiling, exportSizes,
+        worldOnScreen, exportChoice, generationCeiling, exportSizes,
         pictureFormats, dataLayers, onExportChoice, onExport
     )
 
@@ -2315,8 +2333,8 @@ private fun AcceleratorNote(platform: Platform, onGpu: Boolean) {
  */
 @Composable
 private fun OutputOptions(
-    /** Cells across the world on screen, or null before there is one to export. */
-    worldSize: Int?,
+    /** The settings of the world on screen, or null before there is one to export. */
+    worldOnScreen: WorldGenConfig?,
     exportChoice: ExportChoice,
     generationCeiling: Int,
     sizes: List<Int>,
@@ -2377,14 +2395,15 @@ private fun OutputOptions(
             // second export in the first one's place.
             Button(
                 onClick = { onExport(Exports.clamp(size, generationCeiling)) },
-                enabled = withinCeiling && worldSize != null,
+                enabled = withinCeiling && worldOnScreen != null,
                 contentPadding = TIGHT,
                 modifier = Modifier.weight(1f).hoverable(hoverSource)
             ) { Text("$size", maxLines = 1) }
         }
     }
     Text(
-        if (worldSize == null) "Generate a world to enable export." else ExportSubjects.note(worldSize, sizes),
+        if (worldOnScreen == null) "Generate a world to enable export."
+        else ExportSubjects.note(worldOnScreen, sizes),
         style = MaterialTheme.typography.labelSmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )

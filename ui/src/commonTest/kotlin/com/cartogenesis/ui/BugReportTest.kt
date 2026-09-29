@@ -20,7 +20,7 @@ class BugReportTest {
 
     /** A world with three knobs moved off their defaults, and nothing else touched. */
     private fun world(): WorldGenConfig = WorldGenConfig(seed = 718106L)
-        .atResolution(1024, 1024)
+        .let { Knobs.atResolution(it, 1024) }
         .let { Knobs.plates.set(it, 18) }
         .let { Knobs.seasonalTiltDegrees.set(it, 25f) }
         .let { Knobs.ice.set(it, false) }
@@ -67,7 +67,7 @@ class BugReportTest {
             "Platform: Desktop",
             "World: Ashenmoor",
             "Seed: 718106",
-            "Generation resolution: 1024 × 1024",
+            "Generation resolution: 2048 × 1024",
             "Ocean coverage: 62%",
             "Graphics acceleration: On, a fake graphics card"
         ).forEach { line ->
@@ -114,7 +114,7 @@ class BugReportTest {
         )
         assertEquals(BugReport.TEMPLATE, fields["template"], "the URL asks for the wrong form")
         assertEquals("718106", fields["seed"])
-        assertEquals("1024 × 1024", fields["resolution"])
+        assertEquals("2048 × 1024", fields["resolution"])
         assertEquals("Desktop", fields["platform"])
         assertEquals("3.0.1", fields["version"])
         assertEquals("62%", fields["ocean"])
@@ -123,6 +123,8 @@ class BugReportTest {
             fields.getValue("title").contains("718106"),
             "the issue's own title does not name the seed: ${fields["title"]}"
         )
+        // The title names the size as the chips do, by its rows; the grid is the field's.
+        assertEquals("Bug: seed 718106 at 1024", fields["title"])
         println("BUG REPORT URL (${report.url.length} characters): ${report.url}")
     }
 

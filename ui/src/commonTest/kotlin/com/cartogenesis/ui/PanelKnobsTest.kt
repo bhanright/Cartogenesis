@@ -7,6 +7,7 @@ import com.cartogenesis.cartography.MapStyle
 import com.cartogenesis.cartography.MapView
 import com.cartogenesis.cartography.RenderOptions
 import com.cartogenesis.cartography.RiverSelection
+import com.cartogenesis.cartography.SheetGeometry
 import com.cartogenesis.worldgen.model.Acceleration
 import com.cartogenesis.worldgen.model.WildernessMode
 import com.cartogenesis.worldgen.model.WorldGenConfig
@@ -28,7 +29,7 @@ import kotlin.test.assertTrue
  */
 class PanelKnobsTest {
 
-    private val base = WorldGenConfig(seed = 42L, width = 512, height = 512)
+    private val base = Knobs.atResolution(WorldGenConfig(seed = 42L), 512)
     private val view = RenderOptions()
 
     // ---- the sections, and their order -------------------------------------------------------
@@ -156,16 +157,61 @@ class PanelKnobsTest {
         }
     }
 
-    /** The header's two, which are not knobs but are still the panel's to set. */
+    /**
+     * The header's two, which are not knobs but are still the panel's to set. A size is named by
+     * its rows: the chip "1024" makes a grid 1024 rows tall and twice as wide, and the size read
+     * back off that grid is the chip's.
+     */
     @Test
-    fun `the header still sets the seed and the working resolution`() {
+    fun `the header still sets the seed and the working resolution, by rows`() {
         assertEquals(base.copy(seed = 7L), Knobs.withSeed(base, 7L))
         assertEquals(listOf(512, 1024, 2048, 4096), Knobs.RESOLUTIONS)
         Knobs.RESOLUTIONS.forEach { size ->
+            val made = Knobs.atResolution(base, size)
             // Through `atResolution`, the one place a size change is made.
-            assertEquals(base.atResolution(size, size), Knobs.atResolution(base, size))
-            assertEquals(size, Knobs.atResolution(base, size).width)
+            assertEquals(base.atResolution(2 * size, size), made)
+            assertEquals(size, made.height, "the size $size is not the grid's rows")
+            assertEquals(2 * size, made.width, "the size $size is not twice as many columns as rows")
+            assertEquals(size, Knobs.sizeOf(made), "the size read back off the $size grid is another chip's")
+            assertTrue(Knobs.makesAtSize(made, size))
+            assertFalse(Knobs.makesAtSize(made.atResolution(size, size), size), "a grid as tall as wide passes for the $size chip's")
         }
+    }
+
+    /**
+     * Every size the panel, the export row, the settings and a link can ask for draws a cell to a
+     * pixel of the true-shape sheet, both ways. On a grid as many cells tall as wide a cell is two
+     * pixels across, and the raster's own marks run two pixels wide down the columns and one along
+     * the rows (`RasterMarkWidthTest` in `:cartography` holds the marks on the drawn sheet); here is
+     * where every path to a grid is held to the shape that avoids it.
+     */
+    @Test
+    fun `every size on the ladder and on the export row draws a cell to a pixel`() {
+        val everySize = (Knobs.RESOLUTIONS + Exports.SIZES).distinct().sorted()
+        everySize.forEach { size ->
+            val paths = mapOf(
+                "the panel's chip" to Knobs.atResolution(base, size),
+                "an export" to ExportSubjects.configAt(base, size),
+                "the settings" to SettingsEffects.startingConfig(
+                    AppSettings(workingResolution = size),
+                    FakePlatform(ceiling = size),
+                    seed = 42L
+                ),
+                "a link" to WorldLinks.read(
+                    "${WorldLinks.PUBLIC_APP_ADDRESS}?seed=42#v=${WorldLinks.FORMAT_VERSION}&size=$size",
+                    base, view, ceiling = size
+                ).config
+            )
+            paths.forEach { (path, config) ->
+                val sheet = SheetGeometry.of(config)
+                assertTrue(
+                    sheet.isCellForPixel,
+                    "$path at $size makes a ${config.width} by ${config.height} grid, drawn " +
+                        "${sheet.pixelsPerCellAcross} by ${sheet.pixelsPerCellDown} pixels a cell"
+                )
+            }
+        }
+        println("PANEL every size (${everySize.joinToString()}) draws a cell to a pixel on every path")
     }
 
     /** Whether some knob, given some value, turns [base] into exactly [wanted]. */
@@ -409,45 +455,44 @@ class PanelKnobsTest {
     // ---- the export ceiling -------------------------------------------------------------------
 
     /**
-     * 8192 does not complete on this build: it exhausts a 10 GB heap inside the generator after
-     * about nineteen minutes, before a pixel of the map is drawn (docs/DESIGN_LEDGER.md, G2). So the size that
-     * reaches the platform can never be 8192 while the ceiling stands at 4096 — not from the
-     * button, which is disabled, and not from a preference written by an older build, which is why
-     * [Exports.clamp] and not the button is what this test asks.
+     * 8192 rows is 134 million cells, twice the world that exhausted a 10 GB heap inside the
+     * generator after about nineteen minutes, before a pixel of the map was drawn
+     * (docs/DESIGN_LEDGER.md, G2). So the size that reaches the platform is never above the
+     * ceiling — not from the button, which is disabled, and not from a preference written by an
+     * older build, which is why [Exports.clamp] and not the button is what this test asks.
      *
      * The ceiling is [Platform.generationCeiling] rather than a constant here, so the build that fixes
      * the memory raises one number on the platform and this test starts letting 8192 through.
      */
     @Test
-    fun `the export size can never be 8192 while the ceiling is 4096`() {
-        val ceiling = 4096
-        Exports.SIZES.forEach { offered ->
-            assertTrue(
-                Exports.clamp(offered, ceiling) != 8192,
-                "$offered reached the platform as 8192"
-            )
-            assertTrue(Exports.clamp(offered, ceiling) <= ceiling)
+    fun `the export size never reaches the platform above the ceiling`() {
+        listOf(WorldCeilings.BROWSER_TAB, WorldCeilings.DESKTOP).forEach { ceiling ->
+            (Exports.SIZES + 16384).forEach { offered ->
+                assertTrue(
+                    Exports.clamp(offered, ceiling) <= ceiling,
+                    "$offered reached a platform whose ceiling is $ceiling as ${Exports.clamp(offered, ceiling)}"
+                )
+            }
+            // What works is passed through untouched, and what does not falls back to the largest
+            // that does, including a size the row never offered.
+            Exports.SIZES.filter { it <= ceiling }.forEach { assertEquals(it, Exports.clamp(it, ceiling)) }
+            assertEquals(ceiling, Exports.clamp(8192, ceiling))
+            assertEquals(ceiling, Exports.clamp(16384, ceiling))
         }
-        // The two that do work are passed through untouched, and the one that does not falls back
-        // to the largest that does.
-        assertEquals(2048, Exports.clamp(2048, ceiling))
-        assertEquals(4096, Exports.clamp(4096, ceiling))
-        assertEquals(4096, Exports.clamp(8192, ceiling))
-        // Whatever an old preference held, including a size the row never offered.
-        assertEquals(4096, Exports.clamp(16384, ceiling))
+        assertTrue(WorldCeilings.DESKTOP < 8192, "the desktop's ceiling lets 8192 through")
     }
 
     @Test
-    fun `the row still offers three sizes, and says why one of them is out of reach`() {
-        assertEquals(listOf(2048, 4096, 8192), Exports.SIZES)
+    fun `the row offers four sizes, and says why one of them is out of reach`() {
+        assertEquals(listOf(1024, 2048, 4096, 8192), Exports.SIZES)
+        assertTrue(Exports.reachable(1024, 1024))
         assertTrue(Exports.reachable(2048, 4096))
-        assertTrue(Exports.reachable(4096, 4096))
         assertFalse(Exports.reachable(8192, 4096))
         // And that the note says the size is waiting rather than refused: the ceiling is this
         // build's memory, and a reader who is told only "no" has no idea whether to ask again.
         assertEquals(
             "8192 needs more memory than this build can hold; it waits for a later release",
-            WorldCeilings.whyOutOfReach(8192, 4096)
+            WorldCeilings.whyOutOfReach(8192, WorldCeilings.DESKTOP)
         )
     }
 
@@ -456,9 +501,11 @@ class PanelKnobsTest {
     fun `a build that can hold 8192 gets 8192`() {
         assertTrue(Exports.reachable(8192, 8192))
         assertEquals(8192, Exports.clamp(8192, 8192))
-        // And a build that could not even manage 4096 still has something to fall back to.
+        // And a build that could not manage 4096 still has something to fall back to, down to a
+        // ceiling under the smallest size the row offers, which gets that smallest one.
         assertEquals(2048, Exports.clamp(8192, 2048))
-        assertEquals(2048, Exports.clamp(4096, 1024))
+        assertEquals(1024, Exports.clamp(4096, 1024))
+        assertEquals(1024, Exports.clamp(4096, 512))
     }
 
     // ---- the camera, whose readout is the other half of the legend ---------------------------
@@ -550,7 +597,7 @@ class PanelKnobsTest {
         assertEquals(MapChrome.styles, compact.styles)
         // Every view, a menu in both.
         assertEquals(wide.views, compact.views)
-        // Three export sizes, whichever of them this build can finish.
+        // Four export sizes, whichever of them this build can finish.
         assertEquals(wide.exportSizes, compact.exportSizes)
         // Three picture formats and three data layers, both rows in the sheet as well as in the
         // column: the ceiling decides how large an export may be, not what kinds there are.
@@ -630,11 +677,11 @@ class PanelKnobsTest {
     /** The ceiling is about size and knows nothing about kind, so it applies to both alike. */
     @Test
     fun `the phone's export ceiling applies to the data layers too`() {
-        val phone = FakePlatform(ceiling = 2048, coarsePointer = true)
+        val phone = FakePlatform(ceiling = WorldCeilings.BROWSER_TAB, coarsePointer = true)
         val ceiling = phone.generationCeiling
-        assertEquals(2048, ceiling)
-        assertEquals(2048, Exports.clamp(4096, ceiling))
-        assertEquals(2048, Exports.clamp(8192, ceiling))
+        assertEquals(1024, ceiling)
+        assertEquals(1024, Exports.clamp(2048, ceiling))
+        assertEquals(1024, Exports.clamp(8192, ceiling))
         // Both rows are still offered at that ceiling: it caps the size, not the kind.
         val compact = Arrangements.of(WindowShape.COMPACT, phone)
         assertEquals(DataLayer.entries.toList(), compact.dataLayers)
@@ -700,43 +747,48 @@ class PanelKnobsTest {
     }
 
     /**
-     * A browser stops at 2048, and says so on the chips rather than leaving them out.
+     * A browser stops at 1024, and says so on the chips rather than leaving them out.
      *
-     * A 4096 generation killed a desktop browser's tab before anything was drawn, so under a
-     * browser's ceiling both 4096 chips — the working resolution's and the export's — are disabled,
-     * each with the sentence that says where 4096 can be had; 8192 keeps its own sentence, since
-     * no build makes it. Everything at or below the ceiling is pressable, and under the desktop's
-     * ceiling nothing but 8192 is disabled, which is the row as it was before the browser had a
-     * ceiling of its own.
+     * A 2048 world is more than a browser tab holds (see [WorldCeilings.BROWSER_TAB]), so under a
+     * browser's ceiling every chip above 1024 — the working resolution's and the export's — is
+     * disabled, each with the sentence that says where it can be had; a size above the desktop's
+     * ceiling keeps its own sentence, since no build makes it. Everything at or below the ceiling
+     * is pressable, and under the desktop's ceiling only what is above it is disabled.
      */
     @Test
-    fun `under a browser's ceiling the 4096 chips are disabled and say why`() {
+    fun `under a browser's ceiling the chips above 1024 are disabled and say why`() {
         val browser = FakePlatform(ceiling = WorldCeilings.BROWSER_TAB)
-        val tabReason = "A 4096 world needs more memory than a browser tab is given; the desktop app makes it"
+        assertEquals(1024, browser.generationCeiling)
+        fun tabReason(size: Int) = "A $size world needs more memory than a browser tab is given; the desktop app makes it"
+        val laterReason = { size: Int -> "$size needs more memory than this build can hold; it waits for a later release" }
+        fun reasonAbove(size: Int) = if (size <= WorldCeilings.DESKTOP) tabReason(size) else laterReason(size)
 
         val resolutions = Knobs.resolutionChoices(browser.generationCeiling)
         assertEquals(Knobs.RESOLUTIONS, resolutions.map { it.size }, "a resolution chip left the row")
-        assertEquals(listOf(512, 1024, 2048), resolutions.filter { it.enabled }.map { it.size })
-        assertEquals(tabReason, resolutions.single { it.size == 4096 }.whyOutOfReach)
+        assertEquals(listOf(512, 1024), resolutions.filter { it.enabled }.map { it.size })
+        assertEquals(tabReason(2048), resolutions.single { it.size == 2048 }.whyOutOfReach)
+        assertEquals(reasonAbove(4096), resolutions.single { it.size == 4096 }.whyOutOfReach)
 
         val exports = SizeChoice.row(Exports.SIZES, browser.generationCeiling)
         assertEquals(Exports.SIZES, exports.map { it.size }, "an export chip left the row")
-        assertEquals(listOf(2048), exports.filter { it.enabled }.map { it.size })
-        assertEquals(tabReason, exports.single { it.size == 4096 }.whyOutOfReach)
-        assertEquals(
-            "8192 needs more memory than this build can hold; it waits for a later release",
-            exports.single { it.size == 8192 }.whyOutOfReach
-        )
+        assertEquals(listOf(1024), exports.filter { it.enabled }.map { it.size })
+        assertEquals(tabReason(2048), exports.single { it.size == 2048 }.whyOutOfReach)
+        assertEquals(reasonAbove(4096), exports.single { it.size == 4096 }.whyOutOfReach)
+        assertEquals(laterReason(8192), exports.single { it.size == 8192 }.whyOutOfReach)
         // And the size an export is actually asked at, whatever the button or a preference said.
-        assertEquals(2048, Exports.clamp(4096, browser.generationCeiling))
-        assertEquals(2048, Exports.clamp(8192, browser.generationCeiling))
+        assertEquals(1024, Exports.clamp(2048, browser.generationCeiling))
+        assertEquals(1024, Exports.clamp(8192, browser.generationCeiling))
 
         val desktop = FakePlatform(ceiling = WorldCeilings.DESKTOP)
-        assertTrue(Knobs.resolutionChoices(desktop.generationCeiling).all { it.enabled })
         assertEquals(
-            listOf(2048, 4096),
+            Knobs.RESOLUTIONS.filter { it <= WorldCeilings.DESKTOP },
+            Knobs.resolutionChoices(desktop.generationCeiling).filter { it.enabled }.map { it.size }
+        )
+        assertEquals(
+            Exports.SIZES.filter { it <= WorldCeilings.DESKTOP },
             SizeChoice.row(Exports.SIZES, desktop.generationCeiling).filter { it.enabled }.map { it.size }
         )
+        assertTrue(WorldCeilings.DESKTOP >= 2048, "the desktop app does not make the 2048 it was measured at")
         assertEquals(WorldCeilings.DESKTOP, FakePlatform().generationCeiling)
     }
 
@@ -752,7 +804,7 @@ class PanelKnobsTest {
         assertEquals(512, SettingsEffects.resolution(AppSettings(), platform, compact = true))
         assertEquals(
             512,
-            SettingsEffects.startingConfig(big, platform, seed = 1L, compact = true).width
+            Knobs.sizeOf(SettingsEffects.startingConfig(big, platform, seed = 1L, compact = true))
         )
         // And it is a ceiling, not a setting: a preference already below it is left alone.
         val small = AppSettings(workingResolution = 512)

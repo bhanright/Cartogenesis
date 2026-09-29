@@ -182,7 +182,7 @@ fun LibraryPane(
                         }
                         Text(world.title, style = MaterialTheme.typography.titleSmall)
                         Text(
-                            "seed ${world.config.seed} · ${world.config.width}px · " +
+                            "seed ${world.config.seed} · ${Knobs.sizeOf(world.config)} rows · " +
                                 "${formatTimestamp(world.savedAt)} · ${entry.key}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant

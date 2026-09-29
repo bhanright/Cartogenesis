@@ -337,10 +337,22 @@
   and `RasterMarkWidthTest` holds the raster's coast, read off the drawn sheet, to the same thinnest
   and commonest run either way. On the gallery's world at 512 rows both are one pixel (mean 1.32
   along the rows, 1.34 down the columns); the same seed on the 512 by 512 grid, the clause's control,
-  reads two pixels along the rows and one down the columns. The applications still ask for grids as
-  many cells tall as wide until the ladder moves to rows (Q5), and the guard that every size on the
-  ladder draws cell for pixel moves with it; the two-pixel branch of the sheet stays for such grids
-  and is held by `SheetExpansionTest`'s and `GpuRasterTest`'s cases on them. 2026-09-24, Fix A.
+  reads two pixels along the rows and one down the columns. Since Q5 the applications name every
+  size by its rows and ask for grids twice as many cells across, and `PanelKnobsTest` holds every
+  size on the ladder and on the export row, through the chips, an export, the settings and a link,
+  to a cell a pixel (on the ladder as many cells tall as wide it fails: 512 drew two pixels a cell
+  across); the two-pixel branch of the sheet stays for such grids and is held by
+  `SheetExpansionTest`'s and `GpuRasterTest`'s cases on them. 2026-09-24, Fix A.
+- **How long a phone takes on square cells has not been measured.** The phone's figures were
+  measured on grids as many cells tall as wide (2026-09-12: about twenty seconds at 1024 and 92.7 s
+  at 2048 on a 2026 Qualcomm handset with WebGPU on), when the thermal sweeps the graphics device
+  runs were most of erosion. Since the implicit incision (Fix 3b), which has no graphics-card path,
+  most of a generation is on the processor on every host, and since Q5 a size is named by its rows
+  on a grid twice as wide. `LargeLinks.MEASURED` states the phone's 1024 rows as an estimate, about
+  four minutes, from the desktop tab's 171.6 s with a phone's core taken as up to half again slower,
+  and the compact arrangement's line under the size chips says "expected". What would settle it:
+  open `/app/?seed=42#v=2&size=512` and then `size=1024` on a phone, read the cartouche's "generated
+  in", and put the figures in `LargeLinks.MEASURED` as measured. 2026-09-28, Q5.
 - **A 4096 world cannot be made in a browser tab, so its 8192 by 4096 sheet has never been drawn
   there.** Tried on 2026-09-25 in Edge 153 on an RTX 3070 Ti (WebGL through ANGLE on Direct3D 11,
   `MAX_TEXTURE_SIZE` 16,384): the tab's JavaScript heap stood at 1.4 GB five minutes into the
@@ -358,6 +370,13 @@
   `OpeningLimit`). **Still open:** making a 4096 world fit a tab, and then drawing its sheet there,
   which is the Skia texture-limit question above. When it fits, `WorldCeilings.BROWSER_TAB` is the
   one number to raise; the browser's opening limit and every size row follow it.
+  **By rows** (2026-09-28, Q5): sizes are named by their rows on grids twice as wide, and the
+  browser stops at 1024 rows (2048 by 1024, 2.1 million cells). Measured in a tab of the production
+  build on the same machine, graphics acceleration off: 1024 rows generated and was drawn in 171.6 s
+  with the tab's JavaScript heap sampled at 1.7 GB at its fullest (512 rows: 36.2 and 39.7 s,
+  0.9 GB). 2048 rows (4096 by 2048, 8.4 million cells, the old 4096's sheet) was not tried in a
+  tab: at the measured heap per cell it wants about 6.8 GB, past the 4 GB a Wasm heap addresses,
+  and its sheet is the one whose drawing is the open question above.
 - **Four grid-shaped marks on seed 718106 at 2048, seen while cutting the site's card pictures.**
   Each breaks rule 13; whether the geometry guard's detectors see them has not been checked:
   - the ice caps end in an edge straight down a column, with a fan of rays off it (the ice's work;

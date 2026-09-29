@@ -53,8 +53,8 @@ class CartoucheTest {
 
     @Test
     fun `the facts read as a chart's small print`() {
-        assertEquals("seed 59758 · 2048 × 2048", Cartouches.facts(59758L, 2048, 2048))
-        assertEquals("seed 7 · 512 × 512", Cartouches.facts(7L, 512, 512))
+        assertEquals("seed 59758 · 4096 × 2048", Cartouches.facts(59758L, 4096, 2048))
+        assertEquals("seed 7 · 1024 × 512", Cartouches.facts(7L, 1024, 512))
     }
 
     @Test

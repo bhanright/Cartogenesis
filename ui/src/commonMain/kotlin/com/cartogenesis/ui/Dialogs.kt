@@ -55,7 +55,7 @@ internal fun SettingsDialog(
      */
     libraryLocation: String = SettingsEffects.libraryLocation(settings, platform)
 ) {
-    // 2048 in a browser and 4096 on the desktop, for the working resolution and the exports alike;
+    // 1024 in a browser and 2048 on the desktop, for the working resolution and the exports alike;
     // the chips above it stay in their rows, disabled, and each row's small print says why.
     val ceiling = platform.generationCeiling
     val resolutions = Knobs.resolutionChoices(ceiling)

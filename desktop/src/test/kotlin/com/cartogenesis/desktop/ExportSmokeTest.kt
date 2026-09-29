@@ -45,15 +45,15 @@ class ExportSmokeTest {
     /**
      * The sizes this test renders are the sizes the interface offers, and no more.
      *
-     * 8192 is offered as a disabled chip because it does not complete: it exhausts a
-     * 10 GB heap inside the generator after about nineteen minutes, before a pixel is drawn. The
-     * ceiling lives on the platform so that the build which fixes the memory raises it in one
-     * place — and this is the assertion that will fail, correctly, when it does, so that this test
-     * is extended to render the size it has started letting through.
+     * 4096 rows is offered as a disabled chip because it does not fit the packaged app's heap on
+     * a 16 GB machine with room to spare, and 8192 rows is twice its cells (see
+     * `WorldCeilings.DESKTOP`). The ceiling lives on the platform so that the build which fixes the
+     * memory raises it in one place — and this is the assertion that will fail, correctly, when it
+     * does, so that this test is extended to render the size it has started letting through.
      */
     @Test
-    fun `the desktop build's export ceiling is 4096`() {
-        assertEquals(4096, DesktopPlatform().generationCeiling)
+    fun `the desktop build's export ceiling is 2048 rows`() {
+        assertEquals(2048, DesktopPlatform().generationCeiling)
     }
 
     @Test

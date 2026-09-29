@@ -66,8 +66,8 @@ object Exporter {
 
         val pixels = MapRasterizer.rasterize(world, options, raster)
         // A printed sheet: the whole true-shape sheet, so nothing is generalised away, and carrying
-        // its own scale bar because there is no legend beside a PNG. See [MapSheet]. A world N
-        // cells square comes out 2N pixels wide and N tall, one pixel the same ground either way.
+        // its own scale bar because there is no legend beside a PNG. See [MapSheet]. A world of N
+        // rows is 2N cells across and comes out 2N pixels wide and N tall, a cell to a pixel.
         val bitmap = MapImage.toBitmap(world, options, pixels, MapSheet.PRINTED)
         // Immutable, so the encoder's Image shares the sheet's pixels rather than copying them.
         bitmap.setImmutable()

@@ -36,22 +36,26 @@ internal enum class GenerationHost(
 }
 
 /**
- * One measured generation: a world [sizeCells] across made on [host] took about [about], and
- * [source] is where and when that was measured. The source is not shown to the reader; it is here
- * so the figure can be checked, and re-measured when the generator moves.
+ * One timed generation: a world of the size named [sizeRows] made on [host] took about [about],
+ * and [source] is where and when it was timed. The source is not shown to the reader; it is here
+ * so the figure can be checked, and timed again when the generator moves.
+ *
+ * [estimated] is true where the figure was not timed on [host] at all but worked out from another
+ * host's timing, which [source] then states; the reader is told so in the same sentence.
  */
 internal class MeasuredGeneration(
-    val sizeCells: Int,
+    val sizeRows: Int,
     val host: GenerationHost,
     val about: String,
-    val source: String
+    val source: String,
+    val estimated: Boolean = false
 )
 
 /**
  * The question a window opened at a large link asks before it makes anything.
  *
- * A link carries its size, and a browser honours it up to its ceiling, so a 2048 link opened on a
- * phone would otherwise start a minute and a half of paused page the moment it arrived, with no
+ * A link carries its size, and a browser honours it up to its ceiling, so a 1024 link opened on a
+ * phone would otherwise start most of a minute of paused page the moment it arrived, with no
  * chance to say no. So a link naming a size above the one this host starts a fresh window at,
  * [Platform.defaultResolution], is asked about first: make it at the link's size, or open it at the
  * default size with every other setting the link carries. A link at or below the default, or naming
@@ -61,37 +65,29 @@ internal class MeasuredGeneration(
 internal object LargeLinks {
 
     /**
-     * How long a world of each size takes, where it has been measured, and nowhere else: the
-     * question gives a figure only from this table, never an estimate made on the spot, and says
-     * plainly when there is none. `docs/PERFORMANCE.md` holds the measurements; each row names its
-     * own. Only sizes above a host's default are listed, because only those are asked about.
+     * How long a world of each size takes, where it has been timed, and nowhere else: the question
+     * gives a figure only from this table, never an estimate made on the spot, and says plainly
+     * when there is none. Each row names its own timing. Only sizes above a host's default and
+     * within its ceiling are listed, because only those are asked about.
      */
     val MEASURED: List<MeasuredGeneration> = listOf(
         MeasuredGeneration(
-            2048, GenerationHost.DESKTOP_APP, "about a minute",
-            "60.5 s: StageProfileTest, seed 42, on the processor, Ryzen 7 5700X, 2026-09-15 " +
-                "(docs/PERFORMANCE.md, where generation time goes)"
+            2048, GenerationHost.DESKTOP_APP, "about three and a half minutes",
+            "210.8 s: seed 42 at 2048 rows, on the processor, Ryzen 7 5700X, 12 GB heap, " +
+                "2026-09-28 (docs/DESIGN_LEDGER.md, Q5)"
         ),
         MeasuredGeneration(
-            4096, GenerationHost.DESKTOP_APP, "about three minutes",
-            "173.8 s: ExportAuditTest, seed 42, on the processor, Ryzen 7 5700X, 2026-09-12 " +
-                "(docs/PERFORMANCE.md, what each export costs); taken when 2048 took 39.8 s, so " +
-                "it is likely longer now"
+            1024, GenerationHost.DESKTOP_BROWSER, "about three minutes",
+            "171.6 s, generated and drawn: seed 42 at 1024 rows, the production build in a " +
+                "Chrome 152 tab, graphics acceleration off, Ryzen 7 5700X, 2026-09-28 " +
+                "(docs/DESIGN_LEDGER.md, Q5)"
         ),
         MeasuredGeneration(
-            2048, GenerationHost.DESKTOP_BROWSER, "about four minutes",
-            "Edge 153 on an RTX 3070 Ti, 2026-09-25 (docs/TODO.md, a 4096 world cannot be made " +
-                "in a browser tab)"
-        ),
-        MeasuredGeneration(
-            1024, GenerationHost.PHONE_BROWSER, "about twenty seconds",
-            "18-23 s on a 2026 Qualcomm handset with WebGPU on (docs/PERFORMANCE.md, the " +
-                "browser's one thread)"
-        ),
-        MeasuredGeneration(
-            2048, GenerationHost.PHONE_BROWSER, "about a minute and a half",
-            "92.7 s on a 2026 Qualcomm handset with WebGPU on (docs/PERFORMANCE.md, the " +
-                "browser's one thread)"
+            1024, GenerationHost.PHONE_BROWSER, "about four minutes",
+            "estimated from the desktop tab's 171.6 s, a phone's core taken as up to half again " +
+                "slower; the stage that dominates, the incision, has no graphics-card path, so " +
+                "the phone's WebGPU does not shorten it. Not measured on a phone (docs/TODO.md)",
+            estimated = true
         )
     )
 
@@ -99,23 +95,44 @@ internal object LargeLinks {
     fun asks(opening: LinkOpening, defaultSize: Int): Boolean =
         opening.generates && (opening.linkedSize ?: 0) > defaultSize
 
-    /** The measured time for a world [size] cells across on [host], or null where none was measured. */
+    /** The timing for a world of the size named [size] on [host], or null where there is none. */
     fun measured(size: Int, host: GenerationHost): MeasuredGeneration? =
-        MEASURED.firstOrNull { it.sizeCells == size && it.host == host }
+        MEASURED.firstOrNull { it.sizeRows == size && it.host == host }
 
     /**
-     * The question's text for a link making a world [size] cells across where this host starts at
-     * [defaultSize]: the size, the measured time on the nearest kind of machine worded as a
-     * measurement made elsewhere, or a plain statement that there is none.
+     * The question's text for a link making a world of the size named [size] where this host
+     * starts at [defaultSize]: the size, the time on the nearest kind of machine worded as a
+     * measurement made elsewhere, or as an estimate where it is one, or a plain statement that
+     * there is none.
      */
     fun question(size: Int, defaultSize: Int, host: GenerationHost): String {
         val lead = "This link makes a $size world, larger than the $defaultSize this window starts at."
         val time = measured(size, host)?.let {
-            "In ${host.words} that took ${it.about} when it was measured; this one may be " +
-                "quicker or slower."
+            if (it.estimated) {
+                "In ${host.words} that is expected to take ${it.about}, an estimate that has not " +
+                    "been measured there; this one may be quicker or slower."
+            } else {
+                "In ${host.words} that took ${it.about} when it was measured; this one may be " +
+                    "quicker or slower."
+            }
         } ?: "How long that takes in ${host.words} has not been measured."
         val pause = if (host.pausesWhileWorking) " The page may pause while it works." else ""
         return "$lead $time$pause"
+    }
+
+    /**
+     * The phone's small print under the size chips: what each size above its starting one costs
+     * on a phone, from [MEASURED], each worded as timed or as estimated, and that the page may
+     * pause, since a browser works on its one thread.
+     */
+    fun phoneCostLine(): String {
+        val costs = MEASURED.filter { it.host == GenerationHost.PHONE_BROWSER }
+            .sortedBy { it.sizeRows }
+            .joinToString(" and ") {
+                if (it.estimated) "${it.sizeRows} is expected to take ${it.about}"
+                else "${it.sizeRows} takes ${it.about}"
+            }
+        return "On a phone, $costs; the screen may pause while it works."
     }
 
     /** The button that makes the world as the link names it. */

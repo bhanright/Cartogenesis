@@ -6,6 +6,7 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.DesktopComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
@@ -59,7 +60,9 @@ class SaveIdentityTest {
 
             // A resolution change starts a generation at once; Save while it runs files the world
             // still on screen, under that world's settings rather than the panel's new ones.
-            onNodeWithText("1024").performClick()
+            // The resolution chip, not the export button of the same size: the header draws the
+            // chips above the export row, so the chip is the first "1024" in the tree.
+            onAllNodesWithText("1024").onFirst().performClick()
             save(library, 2)
             val during = library.saves[1]
             assertEquals(during.world.config, during.document.config, "Save filed a world under settings it was not made with")

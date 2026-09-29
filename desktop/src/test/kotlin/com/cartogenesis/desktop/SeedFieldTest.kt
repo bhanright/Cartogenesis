@@ -116,7 +116,7 @@ class SeedFieldTest {
         const val WIDTH = 1440
         const val HEIGHT = 900
 
-        /** `seed 59758 · 512 × 512`, which is [com.cartogenesis.ui.Cartouches.facts]. */
+        /** `seed 59758 · 1024 × 512`, which is [com.cartogenesis.ui.Cartouches.facts]. */
         val CARTOUCHE_FACTS = Regex("""seed (-?\d+) · \d+ × \d+""")
 
         const val ABANDONED = 777_001L

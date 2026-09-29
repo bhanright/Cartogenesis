@@ -33,11 +33,16 @@ data class AppSettings(
     val theme: ThemeChoice = ThemeChoice.SYSTEM,
 
     /**
-     * The grid a new world is generated at, or 0 to take the platform's own answer.
+     * The size a new world is generated at, named by its rows as the chips name it, or 0 to take
+     * the platform's own answer.
      *
      * Zero rather than a number is the default on purpose: the desktop starts at 1024 and the web
      * at 512, for the reasons [Platform.defaultResolution] gives, and a settings file written on
      * one would otherwise impose its answer on the other the first time it was carried across.
+     *
+     * The number names a chip, and a chip names the same sheet it named when sizes counted the
+     * columns of a grid as many cells tall as wide, so a file written then is read as the same
+     * chip: the world is twice the cells, square on the ground, and the picture the same size.
      */
     @SerialName("workingResolution")
     val workingResolution: Int = FOLLOW_PLATFORM,
@@ -58,9 +63,16 @@ data class AppSettings(
     @SerialName("exportFormat")
     val exportFormat: ExportFormat = ExportFormat.PNG,
 
-    /** Held to [Platform.generationCeiling] on the way in and on the way out; see [SettingsEffects]. */
+    /**
+     * The size, by its rows, that File ▸ Export writes. Held to [Platform.generationCeiling] on
+     * the way in and on the way out; see [SettingsEffects].
+     *
+     * 1024 by default: the largest world a browser tab makes, so no host starts with a default it
+     * has to bring down and say so, and the desktop's own starting size, where the export is the
+     * world on screen and nothing is made again.
+     */
     @SerialName("exportSize")
-    val exportSize: Int = 2048,
+    val exportSize: Int = 1024,
 
     /** Empty means the platform's own library location. Only the desktop has anywhere else. */
     @SerialName("libraryFolder")
@@ -215,10 +227,10 @@ internal object SettingsEffects {
      * [settings] held to what a host whose [Platform.generationCeiling] is [ceiling] can make, with
      * the one line that says what moved and why, or a null line when nothing had to.
      *
-     * A settings document written before the browser stopped at 2048, or carried over from a
-     * session that asked for 4096, would otherwise start a world that ends in a dead tab. Clamped
+     * A settings document written before the browser stopped at 1024, or carried over from a
+     * session that asked for 2048, would otherwise start a world that ends in a dead tab. Clamped
      * rather than refused, because the rest of the document is still the reader's; said rather than
-     * done quietly, because a reader who chose 4096 and gets 2048 is owed the reason, and said once,
+     * done quietly, because a reader who chose 2048 and gets 1024 is owed the reason, and said once,
      * because the caller stores the clamped document so the next launch has nothing to say.
      */
     fun withinCeiling(settings: AppSettings, ceiling: Int): HeldSettings {
@@ -257,7 +269,7 @@ internal object SettingsEffects {
         compact: Boolean = false
     ): WorldGenConfig {
         val size = resolution(settings, platform, compact)
-        val base = WorldGenConfig(seed = seed, width = 512, height = 512).atResolution(size, size)
+        val base = Knobs.atResolution(WorldGenConfig(seed = seed), size)
         // A machine with no device gets the CPU whatever the preference says: a config claiming
         // GPU acceleration that silently ran on the CPU would be a lie told to the header switch.
         val accelerate = settings.graphicsAccelerationAtLaunch && platform.accelerator != null

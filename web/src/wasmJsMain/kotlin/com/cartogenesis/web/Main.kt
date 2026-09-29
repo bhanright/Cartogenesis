@@ -53,7 +53,8 @@ fun main() {
                 publishSelfTest(runSelfTest(gpu.accelerator))
             }
             if (saveTestRequested()) {
-                // ?savetest measures what saving and opening a 2048 world costs the tab; minutes.
+                // ?savetest measures what saving and opening a world at the ceiling costs the
+                // tab; minutes.
                 publishSelfTest(runSaveMemoryTest())
             }
             platform = WebPlatform(

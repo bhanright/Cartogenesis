@@ -49,7 +49,7 @@ class WorldLinkDesktopTest {
     private class Recording(
         override val openedAt: String? = null,
         /** Small enough that the window's generation is a moment; a link without a size keeps it. */
-        override val defaultResolution: Int = WINDOW_CELLS,
+        override val defaultResolution: Int = WINDOW_ROWS,
         private val desktop: Platform = DesktopPlatform()
     ) : Platform by desktop {
         val copied = mutableListOf<String>()
@@ -68,7 +68,7 @@ class WorldLinkDesktopTest {
     @Test
     fun `a link copied on the desktop begins with the published address`() {
         val platform = Recording()
-        val line = WorldLinks.copy(platform, WorldGenConfig(seed = 718106L).atResolution(1024, 1024), RenderOptions())
+        val line = WorldLinks.copy(platform, WorldGenConfig.forRows(seed = 718106L, rows = 1024), RenderOptions())
         val link = platform.copied.single()
         println("WORLD LINK copied on the desktop: $link")
         assertTrue(link.startsWith("https://cartogenesis.com/app/?seed=718106#"), link)
@@ -84,7 +84,7 @@ class WorldLinkDesktopTest {
     @OptIn(ExperimentalTestApi::class)
     @Test
     fun `a window opened at a link makes that world, says what it set aside, and copies it back`() {
-        val platform = Recording(openedAt = "${WorldLinks.PUBLIC_APP_ADDRESS}?seed=718106#v=1&plates=9&glaciers=1")
+        val platform = Recording(openedAt = "${WorldLinks.PUBLIC_APP_ADDRESS}?seed=718106#v=${WorldLinks.FORMAT_VERSION}&plates=9&glaciers=1")
         runDesktopComposeUiTest(width = 1440, height = 900) {
             setContent { CartogenesisTheme(dark = false) { CartogenesisApp(platform) } }
             // Nobody presses Generate: the link is the ask.
@@ -106,7 +106,7 @@ class WorldLinkDesktopTest {
         }
         val link = platform.copied.single()
         println("WORLD LINK copied from a window opened at a link: $link")
-        assertTrue(link.startsWith("https://cartogenesis.com/app/?seed=718106#v=1&size=$WINDOW_CELLS"), link)
+        assertTrue(link.startsWith("https://cartogenesis.com/app/?seed=718106#v=${WorldLinks.FORMAT_VERSION}&size=$WINDOW_ROWS"), link)
         assertTrue("&plates=9" in link, "the copied link lost the plate count the window was opened with: $link")
         assertTrue("glaciers" !in link, link)
     }
@@ -114,32 +114,32 @@ class WorldLinkDesktopTest {
     // ---- a link larger than the window starts at asks first ---------------------------------
 
     /**
-     * A link to a 512 world in a window that starts at 128: above the default, so the window asks
+     * A link to a 512 world in a window that starts at 128 rows: above the default, so the window asks
      * and makes nothing until answered. The smaller answer holds the focus, and Enter takes it —
      * the keyboard's way through — and the world it makes is at 128 with the link's plate count.
      */
     @OptIn(ExperimentalTestApi::class)
     @Test
     fun `a link above the default size asks first, and Enter opens it at the default with the link's settings`() {
-        val platform = Recording(openedAt = "${WorldLinks.PUBLIC_APP_ADDRESS}?seed=718106#v=1&size=512&plates=9")
+        val platform = Recording(openedAt = "${WorldLinks.PUBLIC_APP_ADDRESS}?seed=718106#v=${WorldLinks.FORMAT_VERSION}&size=512&plates=9")
         runDesktopComposeUiTest(width = 1440, height = 900) {
             setContent { CartogenesisTheme(dark = false) { CartogenesisApp(platform) } }
             awaitQuestionOrWorld()
             assertTrue(shown(QUESTION_TITLE), "the window made the link's world without asking")
             val question = textOf(QUESTION_LEAD)
             println("LARGE LINK asked on the desktop: $question")
-            assertTrue("This link makes a 512 world, larger than the $WINDOW_CELLS" in question, question)
+            assertTrue("This link makes a 512 world, larger than the $WINDOW_ROWS" in question, question)
             // Asked and not answered: nothing is made, however long the question stands.
             Thread.sleep(UNANSWERED_MS)
             waitForIdle()
             assertNull(worldOnTheMap(), "a world was made before the question was answered")
             assertTrue(!shown("Stop"), "a generation started before the question was answered")
 
-            onNodeWithText("Open at $WINDOW_CELLS").assertIsFocused()
-            onNodeWithText("Open at $WINDOW_CELLS").performKeyInput { pressKey(Key.Enter) }
+            onNodeWithText("Open at $WINDOW_ROWS").assertIsFocused()
+            onNodeWithText("Open at $WINDOW_ROWS").performKeyInput { pressKey(Key.Enter) }
             waitUntil(timeoutMillis = WAIT_MS) { worldOnTheMap() != null && !shown("Stop") }
             waitForIdle()
-            assertEquals(718106L to WINDOW_CELLS, worldOnTheMap())
+            assertEquals(718106L to WINDOW_ROWS, worldOnTheMap())
             assertTrue(!shown(QUESTION_TITLE), "the question is still up after it was answered")
 
             onNodeWithText("File").performClick()
@@ -148,14 +148,14 @@ class WorldLinkDesktopTest {
             waitForIdle()
         }
         val link = platform.copied.single()
-        assertTrue("&size=$WINDOW_CELLS" in link, link)
+        assertTrue("&size=$WINDOW_ROWS" in link, link)
         assertTrue("&plates=9" in link, "the default size lost the link's plate count: $link")
     }
 
     @OptIn(ExperimentalTestApi::class)
     @Test
     fun `make it makes the world at the link's size`() {
-        val platform = Recording(openedAt = "${WorldLinks.PUBLIC_APP_ADDRESS}?seed=718106#v=1&size=512&plates=9")
+        val platform = Recording(openedAt = "${WorldLinks.PUBLIC_APP_ADDRESS}?seed=718106#v=${WorldLinks.FORMAT_VERSION}&size=512&plates=9")
         runDesktopComposeUiTest(width = 1440, height = 900) {
             setContent { CartogenesisTheme(dark = false) { CartogenesisApp(platform) } }
             awaitQuestionOrWorld()
@@ -178,7 +178,7 @@ class WorldLinkDesktopTest {
     @Test
     fun `a link at the default size makes its world on arrival without asking`() {
         val platform = Recording(
-            openedAt = "${WorldLinks.PUBLIC_APP_ADDRESS}?seed=718106#v=1&size=512&plates=9",
+            openedAt = "${WorldLinks.PUBLIC_APP_ADDRESS}?seed=718106#v=${WorldLinks.FORMAT_VERSION}&size=512&plates=9",
             defaultResolution = 512
         )
         runDesktopComposeUiTest(width = 1440, height = 900) {
@@ -215,14 +215,20 @@ class WorldLinkDesktopTest {
     @OptIn(ExperimentalTestApi::class)
     private fun DesktopComposeUiTest.seedOnTheMap(): Long? = worldOnTheMap()?.first
 
-    /** The seed and the width on the cartouche, or null while no world is on the map. */
+    /**
+     * The seed and the size on the cartouche, or null while no world is on the map. The cartouche
+     * gives the grid, across by down, and a size is named by its rows, so the size is the second.
+     */
     @OptIn(ExperimentalTestApi::class)
     private fun DesktopComposeUiTest.worldOnTheMap(): Pair<Long, Int>? {
         var found: Pair<Long, Int>? = null
         fun walk(node: SemanticsNode) {
             node.config.getOrNull(SemanticsProperties.Text)?.forEach { text ->
-                Regex("""seed (-?\d+) · (\d+) × \d+""").find(text.text)?.let {
-                    found = it.groupValues[1].toLong() to it.groupValues[2].toInt()
+                Regex("""seed (-?\d+) · (\d+) × (\d+)""").find(text.text)?.let {
+                    val across = it.groupValues[2].toInt()
+                    val rows = it.groupValues[3].toInt()
+                    assertEquals(2 * rows, across, "the world on the map is not a size's grid: ${text.text}")
+                    found = it.groupValues[1].toLong() to rows
                 }
             }
             node.children.forEach(::walk)
@@ -238,15 +244,18 @@ class WorldLinkDesktopTest {
 
         /**
          * How long an unanswered question is left standing before the test looks for a world: a
-         * 128 world is made in well under this on the test machine, so a window that generated
-         * behind the question would have a world on its map by now.
+         * world of 128 rows is made in well under this on the test machine, so a window that
+         * generated behind the question would have a world on its map by now.
          */
         const val UNANSWERED_MS = 3_000L
 
-        /** No link names so small a world; the window starts at it only because this one names none. */
-        const val WINDOW_CELLS = 128
+        /**
+         * The window's size, by its rows, a grid 256 by 128. No link names so small a world; the
+         * window starts at it only because this one names none.
+         */
+        const val WINDOW_ROWS = 128
 
-        /** A 128 world is made in moments; this is room for a loaded machine. */
+        /** A world of 128 rows is made in moments; this is room for a loaded machine. */
         const val WAIT_MS = 120_000L
     }
 }

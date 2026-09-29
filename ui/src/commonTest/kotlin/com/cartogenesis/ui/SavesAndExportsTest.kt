@@ -11,6 +11,7 @@ import com.cartogenesis.worldgen.WorldGenerationEngine
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
 import kotlin.test.assertSame
@@ -117,19 +118,29 @@ class SavesAndExportsTest {
         assertNull(DocumentIdentity("doc-0", "doc-0.cgw", 1L).keyIn(folder), "a key with no library was trusted")
     }
 
+    /**
+     * A size is named by its rows, so the world on screen is the export at the size its rows name,
+     * and nothing is made again; at any other size it is made again on the grid that size names.
+     * A world as many cells tall as wide is no size's own grid, and is made again even at its rows.
+     */
     @Test
     fun `an export at the world's own size is the world on screen, and any other is made again`() = runTest {
-        val onScreen = WorldGenerationEngine.generate(WorldGenConfig(seed = 12L, width = 32, height = 32))
+        val onScreen = WorldGenerationEngine.generate(Knobs.atResolution(WorldGenConfig(seed = 12L), 32))
+        assertEquals(64 to 32, onScreen.width to onScreen.height)
         val same = ExportSubjects.at(onScreen, 32, null, null, null)
         assertSame(onScreen, same.world, "an export at the world's own size regenerated it")
         assertEquals(ExportedWorld.OnScreen, same.source)
 
         val larger = ExportSubjects.at(onScreen, 64, null, null, null)
-        assertEquals(64, larger.world.width)
-        assertEquals(onScreen.config.atResolution(64, 64), larger.world.config)
-        assertEquals(ExportedWorld.MadeAgain(32, 32), larger.source)
+        assertEquals(128 to 64, larger.world.width to larger.world.height)
+        assertEquals(Knobs.atResolution(onScreen.config, 64), larger.world.config)
+        assertEquals(ExportedWorld.MadeAgain(64, 32), larger.source)
         assertTrue("made again" in ExportRunner.notice(ExportOutcome("x.png", 1L, 1L, larger.source)))
         assertTrue("made again" !in ExportRunner.notice(ExportOutcome("x.png", 1L, 1L, same.source)))
+
+        val asTallAsWide = onScreen.config.atResolution(32, 32)
+        assertFalse(ExportSubjects.isOnScreen(asTallAsWide, 32), "a grid as tall as wide passes for the 32's own")
+        assertEquals(Knobs.atResolution(onScreen.config, 32), ExportSubjects.configAt(asTallAsWide, 32))
     }
 
     @Test
@@ -146,8 +157,13 @@ class SavesAndExportsTest {
 
     @Test
     fun `the export row says which size is the world on screen`() {
-        assertTrue("At 2048, the world's own size" in ExportSubjects.note(2048, Exports.SIZES))
-        assertTrue("from the 1024 world on screen" in ExportSubjects.note(1024, Exports.SIZES))
+        val at1024 = Knobs.atResolution(WorldGenConfig(seed = 3L), 1024)
+        val at512 = Knobs.atResolution(WorldGenConfig(seed = 3L), 512)
+        val note = ExportSubjects.note(at1024, Exports.SIZES)
+        println("EXPORT NOTE at 1024: $note")
+        assertTrue("At 1024, the world's own size" in note, note)
+        assertTrue("2N by N pixels" in note, note)
+        assertTrue("from the 512 world on screen" in ExportSubjects.note(at512, Exports.SIZES))
     }
 
     /**

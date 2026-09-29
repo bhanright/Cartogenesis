@@ -112,8 +112,11 @@ internal object BugReport {
                 appendLine("What happened:")
             }
 
-        /** What the issue is called before anybody has written a word of it. */
-        val title: String get() = "Bug: seed $seed at $cellsAcross"
+        /**
+         * What the issue is called before anybody has written a word of it: the seed and the size
+         * as the chips name it, by its rows. The grid itself is [resolution]'s to state.
+         */
+        val title: String get() = "Bug: seed $seed at $cellsDown"
 
         /**
          * The same facts as a new-issue URL, trimmed to [MAX_URL_CHARACTERS].

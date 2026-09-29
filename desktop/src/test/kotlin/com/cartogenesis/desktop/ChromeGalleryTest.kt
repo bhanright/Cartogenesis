@@ -812,11 +812,11 @@ class ChromeGalleryTest {
             }
             onNodeWithText("Generate").performClick()
             // The cartouche in the map's legend is written only once a world exists, and its
-            // "seed N · 512 × 512" is the only place the resolution appears written out that way —
+            // "seed N · 1024 × 512" is the only place the grid appears written out that way —
             // the panel's own chips say "512" alone. Waiting on anything vaguer than this
             // photographs a half-drawn world, which is what the first run of this test did.
             waitUntil(timeoutMillis = GENERATION_TIMEOUT_MS) {
-                onAllNodesWithText("512 × 512", substring = true)
+                onAllNodesWithText("1024 × 512", substring = true)
                     .fetchSemanticsNodes().isNotEmpty()
             }
             waitForIdle()
@@ -877,7 +877,7 @@ class ChromeGalleryTest {
             waitForIdle()
             onNodeWithText("Generate").performClick()
             waitUntil(timeoutMillis = GENERATION_TIMEOUT_MS) {
-                onAllNodesWithText("512 × 512", substring = true)
+                onAllNodesWithText("1024 × 512", substring = true)
                     .fetchSemanticsNodes().isNotEmpty()
             }
             waitForIdle()

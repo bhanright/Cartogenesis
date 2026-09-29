@@ -126,7 +126,10 @@ class SiteSourcesTest {
             ?: fail("the page has no Browser download card")
         val text = card.replace(Regex("""<[^>]+>"""), " ").replace(Regex("""\s+"""), " ")
         val clauses = text.split(Regex("""[.;·]""")).map { it.trim() }.filter { it.isNotEmpty() }
-        assertTrue(clauses.any { it.contains("2048") }, "the Browser card no longer says how large a world it makes")
+        assertTrue(
+            clauses.any { it.contains("${WorldCeilings.BROWSER_TAB}") },
+            "the Browser card no longer says how large a world it makes"
+        )
         return clauses.filterNot { it.contains("desktop", ignoreCase = true) }
     }
 

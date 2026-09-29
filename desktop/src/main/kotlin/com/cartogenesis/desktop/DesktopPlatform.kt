@@ -48,7 +48,8 @@ class DesktopPlatform(
     private val onQuit: () -> Unit = {}
 ) : Platform {
 
-    // Every core available and a 12GB heap, so there is no reason to start small.
+    // Every core and three quarters of the machine's memory: 1024 rows, a grid 2048 by 1024, is
+    // about fifty seconds on the processor. See docs/DESIGN_LEDGER.md, Q5.
     override val defaultResolution: Int = 1024
 
     /**

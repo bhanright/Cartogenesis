@@ -4,6 +4,7 @@ import com.cartogenesis.cartography.LoadOutcome
 import com.cartogenesis.cartography.NoCompression
 import com.cartogenesis.cartography.WorldComparison
 import com.cartogenesis.cartography.WorldDocument
+import com.cartogenesis.ui.WorldCeilings
 import com.cartogenesis.worldgen.WorldGenerationEngine
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import kotlin.time.measureTime
@@ -37,20 +38,23 @@ private external fun asNumber(value: JsHandle): Double
 private suspend fun measuredMemory(): Double = awaitPromise(measuredMemoryPromise())?.let(::asNumber) ?: -1.0
 
 /**
- * `?savetest`: what a 2048 world costs the tab to save to and open from the library.
+ * `?savetest`: what a world at the browser's ceiling costs the tab to save to and open from the
+ * library.
  *
- * Generates a 2048 world, measures the tab, saves it to the real IndexedDB library and opens it
+ * Generates a world of [WorldCeilings.BROWSER_TAB] rows, measures the tab, saves it to the real
+ * IndexedDB library and opens it
  * again, measuring the tab at every part as it goes in and comes out and — where the browser can
  * say, in a cross-origin isolated page — once more after a collection halfway through each, and
  * then compares every field of the opened world with the one saved. Not part of `?selftest`: a
- * 2048 world is minutes of generation in a tab.
+ * world at the ceiling is minutes of generation in a tab.
  */
 internal suspend fun runSaveMemoryTest(): String {
-    val config = WorldGenConfig(seed = 42L, width = 2048, height = 2048)
+    val rows = WorldCeilings.BROWSER_TAB
+    val config = WorldGenConfig.forRows(seed = 42L, rows = rows)
     val world = WorldGenerationEngine.generate(config)
     val compressor = if (compressionStreamsAvailable()) WebGzipCompressor else NoCompression
     val library = IndexedDbLibrary(compressor, "web-savetest")
-    val document = WorldDocument(id = "savetest-2048", title = "Save test 2048", config = config, savedAt = epochMillisNow())
+    val document = WorldDocument(id = "savetest-$rows", title = "Save test $rows", config = config, savedAt = epochMillisNow())
 
     val beforeSave = measuredMemory()
     val heapBeforeSave = heapInUse()
@@ -78,7 +82,7 @@ internal suspend fun runSaveMemoryTest(): String {
     val loaded = (opened as? LoadOutcome.Loaded)?.save?.world
     val difference = loaded?.let { WorldComparison.firstDifference(world, it) }
     library.delete(key)
-    return "SAVETEST 2048 parts=$parts saveMs=${saveTime.inWholeMilliseconds} openMs=${openTime.inWholeMilliseconds} " +
+    return "SAVETEST $rows rows parts=$parts saveMs=${saveTime.inWholeMilliseconds} openMs=${openTime.inWholeMilliseconds} " +
         "opened=${loaded != null} everyFieldIdentical=${loaded != null && difference == null}" +
         (difference?.let { " differs=\"$it\"" } ?: "") +
         " heapBeforeSaveMB=${mebibytes(heapBeforeSave)} heapPeakSavingMB=${mebibytes(heapSavePeak)} " +
@@ -88,5 +92,9 @@ internal suspend fun runSaveMemoryTest(): String {
 
 private fun mebibytes(bytes: Double): Long = if (bytes < 0) -1 else (bytes / (1 shl 20)).toLong()
 
-/** Which part the collected measurement is taken at: well inside a 2048 save's two hundred or so. */
-private const val MEASURED_PART = 100
+/**
+ * Which part the collected measurement is taken at: well inside the hundred or so of a save at
+ * the ceiling, which is half the cells of the world as many cells tall as wide whose save was about
+ * two hundred parts.
+ */
+private const val MEASURED_PART = 50

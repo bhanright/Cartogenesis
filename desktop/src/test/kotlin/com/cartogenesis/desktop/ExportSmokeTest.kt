@@ -42,20 +42,6 @@ class ExportSmokeTest {
     }
 
 
-    /**
-     * The sizes this test renders are the sizes the interface offers, and no more.
-     *
-     * 4096 rows is offered as a disabled chip because it does not fit the packaged app's heap on
-     * a 16 GB machine with room to spare, and 8192 rows is twice its cells (see
-     * `WorldCeilings.DESKTOP`). The ceiling lives on the platform so that the build which fixes the
-     * memory raises it in one place — and this is the assertion that will fail, correctly, when it
-     * does, so that this test is extended to render the size it has started letting through.
-     */
-    @Test
-    fun `the desktop build's export ceiling is 2048 rows`() {
-        assertEquals(2048, DesktopPlatform().generationCeiling)
-    }
-
     @Test
     fun `the three picture formats, their sizes, and what WebP costs in fidelity`() {
         val outputDir = File("build/exports").apply { mkdirs() }

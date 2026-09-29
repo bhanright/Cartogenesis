@@ -822,7 +822,12 @@ class SiteAssemblyTest {
                 "/app/", SiteImagery.reelConfig(figure.seed), figure.options
             )
             assertEquals(expected, link, "seed ${figure.seed}'s link is not the application's own link to the world pictured")
-            assertEquals(SiteImagery.REEL_GRID_CELLS, SiteImagery.reelConfig(figure.seed).width, "seed ${figure.seed} is not made at the reel's size")
+            val made = SiteImagery.reelConfig(figure.seed)
+            assertEquals(
+                com.cartogenesis.cartography.WorldCodec.COLUMNS_PER_ROW * SiteImagery.REEL_ROWS to SiteImagery.REEL_ROWS,
+                made.width to made.height,
+                "seed ${figure.seed} is not made at the reel's size, ${SiteImagery.REEL_ROWS} rows of square cells"
+            )
             assertTrue(item.contains("Seed ${figure.seed}<"), "seed ${figure.seed}'s picture is not captioned with its seed")
             println("SITE reel: ${figure.file} links to $link")
         }

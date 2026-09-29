@@ -118,8 +118,9 @@ class LargeLinksTest {
             GenerationHost.DESKTOP_BROWSER to browserDefault,
             GenerationHost.PHONE_BROWSER to browserDefault
         )
+        // The desktop's highest ceiling, a machine whose heap holds 4096 rows: the one it asks at.
         val ceilings = mapOf(
-            GenerationHost.DESKTOP_APP to WorldCeilings.DESKTOP,
+            GenerationHost.DESKTOP_APP to WorldCeilings.LARGEST_DESKTOP,
             GenerationHost.DESKTOP_BROWSER to WorldCeilings.BROWSER_TAB,
             GenerationHost.PHONE_BROWSER to WorldCeilings.BROWSER_TAB
         )

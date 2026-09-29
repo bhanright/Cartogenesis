@@ -58,8 +58,8 @@ internal fun SettingsDialog(
     // 1024 in a browser and 2048 on the desktop, for the working resolution and the exports alike;
     // the chips above it stay in their rows, disabled, and each row's small print says why.
     val ceiling = platform.generationCeiling
-    val resolutions = Knobs.resolutionChoices(ceiling)
-    val exportSizes = SizeChoice.row(Exports.SIZES, ceiling)
+    val resolutions = Knobs.resolutionChoices(ceiling, platform.heapBytes)
+    val exportSizes = SizeChoice.row(Exports.SIZES, ceiling, platform.heapBytes)
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Settings", style = MaterialTheme.typography.titleLarge) },

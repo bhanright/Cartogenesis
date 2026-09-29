@@ -222,7 +222,7 @@ object WorldLinks {
      * keyed ones, with where the work runs set aside since a link never carries it.
      */
     internal fun reproduces(config: WorldGenConfig, link: String): Boolean {
-        val opened = read(link, WorldGenConfig(), RenderOptions(), WorldCeilings.DESKTOP).config
+        val opened = read(link, WorldGenConfig(), RenderOptions(), WorldCeilings.LARGEST_DESKTOP).config
         return onProcessor(opened) == onProcessor(config)
     }
 

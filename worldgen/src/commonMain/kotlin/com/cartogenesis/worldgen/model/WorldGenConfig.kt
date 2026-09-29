@@ -910,6 +910,8 @@ data class TectonicsConfig(
      */
     val riftSegmentMin: Float = 0.040f,
     val riftSegmentMax: Float = 0.100f,
+    val riftSegmentMinKm: Double = 60.0,
+    val riftSegmentMaxKm: Double = 160.0,
     /**
      * Half-length of the accommodation zone at each join between segments, as a fraction of the
      * map's width. Through it the trough's depth tapers to nothing and its asymmetry to symmetry,

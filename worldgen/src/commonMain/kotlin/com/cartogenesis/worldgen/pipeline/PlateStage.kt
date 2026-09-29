@@ -178,7 +178,9 @@ object PlateStage {
          * along strike, and "which flank is the footwall" has to be said in terms that hold for
          * the whole pair; the lower id is the same total order [overridingId] uses.
          */
-        val lowId: Int
+        val lowId: Int,
+        /** The higher of the pair's two plate ids: with [lowId], the pair's name at every grid. */
+        val highId: Int
     )
 
     /**
@@ -2178,7 +2180,51 @@ object PlateStage {
      * breaks into the same segments at 512 and at 2048, and the same lengths on the ground at every
      * bearing.
      */
-    private fun segmentRifts(config: WorldGenConfig, boundaries: Map<Int, Boundary>) {
+    /**
+     * What [segmentRifts] made of the present epoch's rifts, one entry per rift boundary cell, for
+     * the guards that ask whether a rift is the same rift at every grid. Nothing in the stage reads
+     * it.
+     */
+    internal class RiftSegmentReport {
+        val cell = ArrayList<Int>()
+        /** The pair's two plate ids, lower first. */
+        val lowId = ArrayList<Int>()
+        val highId = ArrayList<Int>()
+        /** Which of the pair's separate rifts the cell lies on. */
+        val chain = ArrayList<Int>()
+        /** Which half-graben of that rift, counted along it. */
+        val ordinal = ArrayList<Int>()
+        val depthFactor = ArrayList<Float>()
+        val footwallOnLow = ArrayList<Boolean>()
+        /** How far along the rift the cell lies, in kilometers. */
+        val alongKm = ArrayList<Float>()
+        /** How far along the rift the nearer end of the cell's own half-graben lies, in kilometers. */
+        val toJoinKm = ArrayList<Float>()
+
+        fun add(
+            cell: Int, lowId: Int, highId: Int, chain: Int, ordinal: Int, depthFactor: Float,
+            footwallOnLow: Boolean, alongKm: Float, toJoinKm: Float
+        ) {
+            this.cell.add(cell); this.lowId.add(lowId); this.highId.add(highId); this.chain.add(chain)
+            this.ordinal.add(ordinal); this.depthFactor.add(depthFactor)
+            this.footwallOnLow.add(footwallOnLow); this.alongKm.add(alongKm); this.toJoinKm.add(toJoinKm)
+        }
+    }
+
+    /** [RiftSegmentReport] for [config]'s present epoch, without stamping anything. */
+    internal fun presentRiftSegments(config: WorldGenConfig): RiftSegmentReport {
+        val drawn = drawPlates(config)
+        val boundaries = classifyBoundaries(config, drawn.plateId, drawn.plates)
+        val report = RiftSegmentReport()
+        segmentRifts(config, boundaries, report)
+        return report
+    }
+
+    private fun segmentRifts(
+        config: WorldGenConfig,
+        boundaries: Map<Int, Boundary>,
+        report: RiftSegmentReport? = null
+    ) {
         val tectonics = config.tectonics
         if (!tectonics.riftSegmentation) return
         val cellsAcross = config.width
@@ -2312,6 +2358,11 @@ object PlateStage {
                     joins[segmentIndex + 1] - arcLengthCells
                 ).coerceAtLeast(0f)
                 val intoSegment = (toJoin / accommodationCells).coerceIn(0f, 1f)
+                report?.add(
+                    cell, pairs[pair].lowId, pairs[pair].highId, start, segmentIndex,
+                    segmentDepthFactors[segmentIndex], (segmentIndex % 2 == 0) == parity,
+                    (arcLengthCells * config.cellWidthKm).toFloat(), (toJoin * config.cellWidthKm).toFloat()
+                )
                 boundaries[cell]!!.segment = RiftSegment(
                     depthFactor = segmentDepthFactors[segmentIndex],
                     shoulderFactor = segmentShoulderFactors[segmentIndex],
@@ -2359,7 +2410,7 @@ object PlateStage {
      *
      * Internal so `TectonicGroundTest` can walk a straight run it lays at any bearing.
      */
-    internal fun arcAlongRun(config: WorldGenConfig, runCells: IntArray): RunArc {
+    internal fun arcAlongRun(config: WorldGenConfig, runCells: IntArray, stretchCellWidths: Double = CENTRELINE_STEP_CELL_WIDTHS): RunArc {
         val cellsAcross = config.width
         val cellsDown = config.height
         val steps = config.groundSteps
@@ -2429,13 +2480,13 @@ object PlateStage {
 
         // The stretches, by walked distance, and the mean of each on the ground.
         val lastWalked = walked[last].toDouble()
-        val stretches = (lastWalked / CENTRELINE_STEP_CELL_WIDTHS).toInt() + 1
+        val stretches = (lastWalked / stretchCellWidths).toInt() + 1
         val sumEast = DoubleArray(stretches)
         val sumSouth = DoubleArray(stretches)
         val sumWalked = DoubleArray(stretches)
         val members = IntArray(stretches)
         for (local in 0 until count) {
-            val stretch = (walked[local] / CENTRELINE_STEP_CELL_WIDTHS).toInt().coerceIn(0, stretches - 1)
+            val stretch = (walked[local] / stretchCellWidths).toInt().coerceIn(0, stretches - 1)
             sumEast[stretch] += eastOf(local)
             sumSouth[stretch] += southOf(local)
             sumWalked[stretch] += walked[local].toDouble()
@@ -2571,7 +2622,8 @@ object PlateStage {
             continentalCollision = bothContinental,
             pairClass = pairClass,
             overridingId = overridingId,
-            lowId = if (first.id < second.id) first.id else second.id
+            lowId = if (first.id < second.id) first.id else second.id,
+            highId = if (first.id < second.id) second.id else first.id
         )
     }
 

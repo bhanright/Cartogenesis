@@ -571,7 +571,7 @@ object WorldCodec {
         if (!holds(config.width, config.height)) {
             throw WorldFormatException(SaveProblem.TOO_LARGE, "its grid is ${config.width} by ${config.height}")
         }
-        if (limit != null && config.height > limit.largestRows) {
+        if (limit != null && (config.height > limit.largestRows || cells > limit.largestCells)) {
             throw WorldFormatException(
                 SaveProblem.TOO_LARGE,
                 "its grid is ${config.width} by ${config.height}; ${limit.because}"
@@ -617,11 +617,20 @@ object WorldCodec {
  * decoding it into a tab that dies.
  *
  * Counted in rows, because a size is named by its rows: a world of square cells is twice as many
- * cells across as down, and a limit on the larger side would turn away the size it names.
+ * cells across as down, and a limit on the larger side would turn away the size it names. And in
+ * cells as well, [largestCells], because the rows alone do not bound the arrays: a grid wider than
+ * its rows' square cells need would pass them with more cells than the host holds.
  */
 data class OpeningLimit(
     /** The most rows a save may have to be opened here. */
     val largestRows: Int,
     /** The clause that follows the save's own grid in the refusal: why, and where else. */
     val because: String
-)
+) {
+    /**
+     * The most cells a save may have to be opened here: the square cells of [largestRows] rows,
+     * [WorldCodec.COLUMNS_PER_ROW] columns for each row.
+     */
+    val largestCells: Long
+        get() = WorldCodec.COLUMNS_PER_ROW.toLong() * largestRows * largestRows
+}

@@ -11,6 +11,7 @@ import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.math.sqrt
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
@@ -70,6 +71,9 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
          * at the same central difference the shading itself reads.
          */
         const val CONE_FLANK_PERCENTILE = 0.9
+
+        /** The share of the land [EngravingPlan.SLOPE_FLOOR] leaves blank: a tenth, the deltas, basin floors and coastal plains. */
+        const val TENTH_PERCENTILE = 0.10
 
         /** How many bearings the flank is sampled at. One a degree. */
         const val BEARINGS = 360
@@ -637,6 +641,27 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
             kotlin.math.abs(contrast - target) / target <= MAX_CONTRAST_SHORTFALL,
             "the lamp's contrast at the declared exaggeration is %.4f, more than %.1f%% from the 512 by 512 grid's %.4f"
                 .format(contrast, MAX_CONTRAST_SHORTFALL * 100, target)
+        )
+    }
+
+    /**
+     * The floor below which a hachure leaves the ground blank is "the tenth percentile of the land
+     * slope of seed 234475 measured at this stencil" ([EngravingPlan.SLOPE_FLOOR]). Held here,
+     * beside the exaggeration, because the exaggeration sets the scale the slope is read at
+     * (`EngravingPlan.gradientScaleAcross` is [ReliefShading.slopeScale] over the stencil), so
+     * re-deriving the one moves the other. Held at the digit the floor is stated to: the tenth
+     * percentile of the gallery's world, which is that seed at 512 rows, read as a hachure reads it
+     * on the ground, rounds to the floor's hundredth: 0.064 at the exaggeration re-derived on
+     * square cells (docs/DESIGN_LEDGER.md, Q4).
+     */
+    @Test
+    fun `the slope floor is the tenth percentile of the land it was read off`() {
+        val slopes = LandSlopes.ascending(WORLD, EngravingPlan(SheetGeometry.of(WORLD)))
+        val tenth = LandSlopes.percentile(slopes, TENTH_PERCENTILE)
+        println("RELIEF the tenth percentile of the land slope is %.4f; the floor is %.2f".format(tenth, EngravingPlan.SLOPE_FLOOR))
+        assertEquals(
+            LandSlopes.hundredths(EngravingPlan.SLOPE_FLOOR), LandSlopes.hundredths(tenth),
+            "the tenth percentile of seed 234475's land slope at 512 rows is $tenth; the floor is ${EngravingPlan.SLOPE_FLOOR}"
         )
     }
 

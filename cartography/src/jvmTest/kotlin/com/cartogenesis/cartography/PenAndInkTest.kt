@@ -6,7 +6,6 @@ import com.cartogenesis.worldgen.BorrowsSharedWorlds
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.model.WorldScale
-import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -472,7 +471,7 @@ class PenAndInkTest : BorrowsSharedWorlds() {
                 val gradientY =
                     (elevation.sample(column, row + reachRows) -
                         elevation.sample(column, row - reachRows)) * plan.gradientScaleDown
-                val slope = groundSlope(gradientX, gradientY, world)
+                val slope = LandSlopes.groundSlope(gradientX, gradientY, world)
                 if (slope >= MEASURED_SLOPE_FLOOR &&
                     allLand(land, width, column, row, windowColumns, windowRows)
                 ) {
@@ -633,18 +632,9 @@ class PenAndInkTest : BorrowsSharedWorlds() {
             plan.gradientScaleAcross
         val gradientY = (elevation.sample(x, y + reachRows) - elevation.sample(x, y - reachRows)) *
             plan.gradientScaleDown
-        val slope = groundSlope(gradientX, gradientY, world)
+        val slope = LandSlopes.groundSlope(gradientX, gradientY, world)
         if (slope < MEASURED_SLOPE_FLOOR) return null
         return groundFallLine(gradientX, gradientY, world)
-    }
-
-    /**
-     * The ground's steepness from a hachure's two differences, as `Engraving.hachure` reads it: the
-     * difference down a column is over rows, a share of a cell width each.
-     */
-    private fun groundSlope(gradientX: Float, gradientY: Float, world: WorldMap): Float {
-        val southward = gradientY / world.config.cellHeightInCellWidths.toFloat()
-        return sqrt(gradientX * gradientX + southward * southward)
     }
 
     /**
@@ -657,27 +647,6 @@ class PenAndInkTest : BorrowsSharedWorlds() {
     }
 
     /**
-     * The floor below which the ground is left blank is "the tenth percentile of the land slope of
-     * seed 234475 measured at this stencil" ([EngravingPlan.SLOPE_FLOOR]). Held to it at the digit
-     * it is stated to: the percentile of the gallery world, which is that seed, rounds to the
-     * floor's hundredth. It ran as a known failure while the world stood moved from the floor
-     * (Audit III, F-I9), the percentile at 0.05, and is asserted again since the slope is read on
-     * the ground, where a hachure now reads it: the tenth percentile is 0.065 there
-     * (docs/DESIGN_LEDGER.md, Fix 2).
-     */
-    @Test
-    fun `the slope floor is the tenth percentile of the land it was read off`() {
-        val slopes = landSlopes(WORLD, EngravingPlan(SheetGeometry.of(WORLD)))
-        val tenth = hundredths(percentile(slopes, 0.10))
-        val floor = hundredths(EngravingPlan.SLOPE_FLOOR)
-        println("PENINK the tenth percentile of the land slope rounds to $tenth; the floor is $floor")
-        assertEquals(
-            floor, tenth,
-            "the tenth percentile of seed 234475's land slope is ${percentile(slopes, 0.10)}; the floor is ${EngravingPlan.SLOPE_FLOOR}"
-        )
-    }
-
-    /**
      * Pen and ink's gain puts a stroke at its widest at "a slope of 0.40, which is the
      * seventy-fifth percentile of this world's land" (the style's own comment): the floor plus one
      * over the gain. Held to it at the hundredth the 0.40 is stated to. Stale on the moved world
@@ -686,14 +655,14 @@ class PenAndInkTest : BorrowsSharedWorlds() {
      */
     @Test
     fun `the ink gain puts the widest stroke at the seventy-fifth percentile of the land`() {
-        val slopes = landSlopes(WORLD, EngravingPlan(SheetGeometry.of(WORLD)))
-        val seventyFifth = hundredths(percentile(slopes, 0.75))
-        val widest = hundredths(EngravingPlan.SLOPE_FLOOR + 1f / MapStyle.PEN_AND_INK.inkGain)
+        val slopes = LandSlopes.ascending(WORLD, EngravingPlan(SheetGeometry.of(WORLD)))
+        val seventyFifth = LandSlopes.hundredths(LandSlopes.percentile(slopes, 0.75))
+        val widest = LandSlopes.hundredths(EngravingPlan.SLOPE_FLOOR + 1f / MapStyle.PEN_AND_INK.inkGain)
         println("PENINK the seventy-fifth percentile of the land slope rounds to $seventyFifth; the widest stroke is at $widest")
         KnownFailures.expect(INK_GAIN_STALE, "the seventy-fifth percentile rounds to 0.42, the widest stroke is at 0.39") {
             if (seventyFifth != widest) {
                 throw RecordedViolation(
-                    "the seventy-fifth percentile of seed 234475's land slope is ${percentile(slopes, 0.75)}; " +
+                    "the seventy-fifth percentile of seed 234475's land slope is ${LandSlopes.percentile(slopes, 0.75)}; " +
                         "the widest stroke is at ${EngravingPlan.SLOPE_FLOOR + 1f / MapStyle.PEN_AND_INK.inkGain}",
                     "the seventy-fifth percentile rounds to $seventyFifth, the widest stroke is at $widest"
                 )
@@ -701,39 +670,10 @@ class PenAndInkTest : BorrowsSharedWorlds() {
         }
     }
 
-    /** [value] rounded to the hundredth and written out, for comparing figures at that digit. */
-    private fun hundredths(value: Float): String = String.format(Locale.ROOT, "%.2f", value)
-
-    /** The land slopes in ascending order, read the way the raster reads them for a hachure: on the ground. */
-    private fun landSlopes(world: WorldMap, plan: EngravingPlan): List<Float> {
-        val width = world.width
-        val elevation = world.sea.relativeElevation
-        val reachColumns = plan.gradientStencilColumns
-        val reachRows = plan.gradientStencilRows
-        val slopes = ArrayList<Float>()
-        for (cell in world.sea.isLand.indices) {
-            if (!world.sea.isLand[cell]) continue
-            val column = cell % width
-            val row = cell / width
-            val gradientX =
-                (elevation.sample(column + reachColumns, row) -
-                    elevation.sample(column - reachColumns, row)) * plan.gradientScaleAcross
-            val gradientY =
-                (elevation.sample(column, row + reachRows) -
-                    elevation.sample(column, row - reachRows)) * plan.gradientScaleDown
-            slopes.add(groundSlope(gradientX, gradientY, world))
-        }
-        slopes.sort()
-        return slopes
-    }
-
-    private fun percentile(sorted: List<Float>, fraction: Double): Float =
-        sorted[(sorted.size * fraction).toInt().coerceAtMost(sorted.size - 1)]
-
     /** Where the land's slopes actually sit, which is what the ink gain and the floor are set from. */
     private fun slopeReport(world: WorldMap, plan: EngravingPlan): String {
-        val slopes = landSlopes(world, plan)
-        fun at(fraction: Double) = percentile(slopes, fraction)
+        val slopes = LandSlopes.ascending(world, plan)
+        fun at(fraction: Double) = LandSlopes.percentile(slopes, fraction)
         val gain = MapStyle.PEN_AND_INK.inkGain
         return ("land slope over %d cells: 10th %.3f, median %.3f, 75th %.3f, 90th %.3f, 99th %.3f " +
             "(blank below %.2f, fully black at %.2f, widest stroke at %.2f)").format(

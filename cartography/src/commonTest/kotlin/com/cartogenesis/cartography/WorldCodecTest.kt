@@ -243,17 +243,7 @@ class WorldCodecTest {
 
         // Opened: a header with the top grid's settings and its directory is read.
         val apart = TakenApart.of(rawSave())
-        fun claiming(width: Int, height: Int): ByteArray {
-            val config = apart.header.document.config.copy(width = width, height = height)
-            val directory = WorldSections.directory(width * height, apart.header.sections.first().count)
-            return apart.reassemble(
-                header = apart.header.copy(
-                    document = apart.header.document.copy(config = config),
-                    sections = directory,
-                    payloadBytes = WorldSections.payloadBytes(directory)
-                )
-            )
-        }
+        fun claiming(width: Int, height: Int): ByteArray = claimingGrid(apart, width, height)
         val top = WorldCodec.decodeHeader(claiming(topColumns, topRows))
         assertEquals(topColumns, top.document.config.width)
         assertEquals(topRows, top.document.config.height)
@@ -431,6 +421,46 @@ class WorldCodecTest {
 
         assertTrue(WorldCodec.open(ByteArraySource(bytes), limit = OpeningLimit(rows, "unused")) is LoadOutcome.Loaded)
         assertTrue(WorldCodec.open(ByteArraySource(bytes)) is LoadOutcome.Loaded)
+    }
+
+    /**
+     * A grid wider than its rows' square cells need is held to the cells the host's rows allow, as
+     * well as to the rows.
+     *
+     * A limit on the rows alone let a grid twice as wide as square cells through with twice the
+     * cells: 8192 by 2048 under a browser's 2048 rows is the arrays of the 4096 by 2048 world the
+     * limit exists to allow, twice over. On the synthetic save's header, whose grid is claimed with
+     * this build's directory for it: under a limit of the world's own 64 rows, 128 by 64 opens and
+     * 256 by 64, twice the cells, is refused as too large with the host's clause.
+     */
+    @Test
+    fun `a grid wider than its rows allow is refused by the host's opening limit`() = runTest {
+        val apart = TakenApart.of(rawSave())
+        val rows = synthetic.height
+        val limit = OpeningLimit(largestRows = rows, because = "this host holds less")
+        val square = WorldCodec.decodeHeader(claimingGrid(apart, WorldCodec.COLUMNS_PER_ROW * rows, rows), limit)
+        assertEquals(WorldCodec.COLUMNS_PER_ROW * rows, square.document.config.width)
+
+        val wide = 2 * WorldCodec.COLUMNS_PER_ROW * rows
+        val refused = assertFailsWith<WorldFormatException> {
+            WorldCodec.decodeHeader(claimingGrid(apart, wide, rows), limit)
+        }
+        assertEquals(SaveProblem.TOO_LARGE, refused.problem)
+        assertTrue("its grid is $wide by $rows" in refused.detail, refused.detail)
+        assertTrue("this host holds less" in refused.detail, refused.detail)
+    }
+
+    /** [apart]'s save with its header claiming a grid [width] by [height], with this build's directory for it. */
+    private fun claimingGrid(apart: TakenApart, width: Int, height: Int): ByteArray {
+        val config = apart.header.document.config.copy(width = width, height = height)
+        val directory = WorldSections.directory(width * height, apart.header.sections.first().count)
+        return apart.reassemble(
+            header = apart.header.copy(
+                document = apart.header.document.copy(config = config),
+                sections = directory,
+                payloadBytes = WorldSections.payloadBytes(directory)
+            )
+        )
     }
 
     @Test

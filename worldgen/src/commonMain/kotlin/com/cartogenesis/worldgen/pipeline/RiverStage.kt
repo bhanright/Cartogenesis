@@ -443,11 +443,9 @@ object RiverStage {
         )
         solved?.routingBeforeClosing = routingBeforeClosing
 
-        // What the balance made of each basin: its water cells, or null where it overflows, and
-        // whether that water is a lake or a playa.
-        val waterOf = arrayOfNulls<IntArray>(basins.size)
-        val waterIsPlaya = BooleanArray(basins.size)
-        val surfaceOf = FloatArray(basins.size)
+        // What the balance made of each closed basin: its bodies of standing water and its playas,
+        // or null where the basin overflows at its brim.
+        val bodiesOf = arrayOfNulls<List<StandingWater>>(basins.size)
 
         // Reused across basins. [LakeWaterBalance.routeIntoWater] empties it as it goes, so it is
         // all-false again by the time the next basin fills it.
@@ -458,67 +456,103 @@ object RiverStage {
         val settled = IntArray(cellCount) { -1 }
         val pathKey = FloatArray(cellCount)
         var basinMark = 0
+        // Scratch for [LakePockets.build], all -1 between basins.
+        val localIndex = IntArray(cellCount) { -1 }
 
-        // A basin's hypsometry: its cells sorted by the ground beneath them, lowest first, which is
-        // the order the water covers them in, with running sums of rain and evaporation over them.
-        // Sorted through the elevation-keyed packing every other ordering in this pipeline uses, so
-        // equal heights fall to the lower cell index on every platform.
-        class Hypsometry(val byGround: LongArray, val sortedGround: FloatArray, val rainPrefixMm: FloatArray, val evaporationPrefixMm: FloatArray)
-        fun hypsometryOf(basin: Int): Hypsometry {
+        // A basin's pockets, built once however many times a group re-solves it. Sorted through the
+        // elevation-keyed packing every other ordering in this pipeline uses, so equal heights fall
+        // to the lower cell index on every platform.
+        val pocketsCache = arrayOfNulls<LakePockets>(basins.size)
+        fun pocketsOf(basin: Int): LakePockets = pocketsCache[basin] ?: run {
             val cells = basins[basin]
             val byGround = LongArray(cells.size) { FlowRouting.encode(ground.data[cells[it]], cells[it]) }
             byGround.sort()
-            val sortedGround = FloatArray(cells.size)
-            val rainPrefixMm = FloatArray(cells.size + 1)
-            val evaporationPrefixMm = FloatArray(cells.size + 1)
-            for (rank in cells.indices) {
-                val cell = FlowRouting.decodeIndex(byGround[rank])
-                sortedGround[rank] = ground.data[cell]
-                rainPrefixMm[rank + 1] = rainPrefixMm[rank] + climate.precipitationMm.data[cell]
-                evaporationPrefixMm[rank + 1] = evaporationPrefixMm[rank] + evaporationMm[cell]
-            }
-            return Hypsometry(byGround, sortedGround, rainPrefixMm, evaporationPrefixMm)
+            LakePockets.build(
+                cellsAcross, cellsDown, cells, byGround, ground.data, climate.precipitationMm.data,
+                evaporationMm, lakesConfig.runoffFraction, spillElevation[basin], localIndex
+            ).also { pocketsCache[basin] = it }
         }
-        fun balanceOf(basin: Int, shape: Hypsometry, catchmentMm: Float) = LakeWaterBalance.solve(
-            shape.sortedGround, shape.rainPrefixMm, shape.evaporationPrefixMm,
-            catchmentMm, spillElevation[basin], minDepth, lakesConfig.runoffFraction
-        )
+
+        // The runoff each of a basin's leaf pockets receives, in millimeter-cells: the share of the
+        // rain on every basin cell that drains to it, and of everything [field] carries in from
+        // outside the basin at the cells its water enters by. A basin in [absorbing] keeps its
+        // water, so what it would have sent is not counted.
+        fun leafSuppliesOf(basin: Int, pockets: LakePockets, field: FloatArray, absorbing: (Int) -> Boolean): DoubleArray {
+            val supply = DoubleArray(pockets.pocketCount)
+            val runoff = lakesConfig.runoffFraction.toDouble()
+            for (index in pockets.layout.indices) {
+                val cell = pockets.layout[index]
+                var arrivingMm = climate.precipitationMm.data[cell].toDouble()
+                FlowRouting.forEachNeighbour(cellsAcross, cellsDown, cell % cellsAcross, cell / cellsAcross) { neighbour ->
+                    val from = inBasin[neighbour]
+                    if (from == basin || !sea.isLand[neighbour] || routingBeforeClosing[neighbour] != cell) return@forEachNeighbour
+                    if (from >= 0 && absorbing(from)) return@forEachNeighbour
+                    arrivingMm += field[neighbour]
+                }
+                supply[pockets.leafOfLaidOut[index]] += runoff * arrivingMm
+            }
+            return supply
+        }
         fun inflowOf(basin: Int, field: FloatArray): Float {
             var catchmentMm = 0f
             for (exit in exitsOf[basin]) catchmentMm += field[exit]
             return catchmentMm
         }
 
-        // Endorheic. Take the water back to the balance level, hand the rest of the basin floor back
-        // to the land, and make the basin a sink: no outlet river, and the rivers that used to run
-        // below it were carrying water that never leaves.
+        // Endorheic: the brim is not reached. Take each pocket's water to its own level, hand the rest
+        // of the basin floor back to the land, and make the basin's terminal lakes and playas sinks:
+        // no outlet river, and the rivers that used to run below it were carrying water that never
+        // leaves. A pocket full to its saddle stays water and drains on over the saddle.
         val closed = BooleanArray(basins.size)
-        fun close(basin: Int, shape: Hypsometry, balance: LakeWaterBalance.Balance) {
+        fun close(basin: Int, pockets: LakePockets, water: LakePockets.Water) {
             val cells = basins[basin]
-            val waterCells: IntArray
-            if (balance.submergedCells >= minLakeCells) {
-                waterCells = IntArray(balance.submergedCells) { FlowRouting.decodeIndex(shape.byGround[it]) }
-                surfaceOf[basin] = balance.surface
-            } else {
-                // Not enough water to read as a lake. What is left is a playa: the flat floor of
-                // the basin, dry most of the year and briefly a sheet of water after rain. At
-                // least the ground within one minimum depth of the lowest cell, so a basin whose
-                // balance is zero still gets the flat it plainly has.
-                val floor = shape.sortedGround[0]
-                var flatCells = balance.submergedCells
-                while (flatCells < cells.size && shape.sortedGround[flatCells] <= floor + minDepth) {
-                    flatCells++
+            val bodies = ArrayList<StandingWater>()
+            val sinks = ArrayList<Int>()
+            for (pocket in 0 until pockets.pocketCount) {
+                val start = pockets.regionStart[pocket]
+                val above = pockets.parent[pocket]
+                val wouldSpillAt = if (above < 0) outletCell[basin] else pockets.saddleCell[above]
+                if (water.holdsItsOwnLevel(pockets, pocket)) {
+                    val ownUnder = water.ownCellsUnderWater[pocket]
+                    val end = pockets.ownStart[pocket] + ownUnder
+                    if (end - start >= minLakeCells) {
+                        val surface = if (ownUnder > 0) {
+                            (pockets.groundOfLaidOut(end - 1) + minDepth).coerceAtMost(pockets.topLevel(pocket))
+                        } else {
+                            pockets.baseLevel(pocket)
+                        }
+                        val waterCells = pockets.layout.copyOfRange(start, end)
+                        bodies += StandingWater(waterCells, surface, pockets.topLevel(pocket), wouldSpillAt, endorheic = true, playa = false)
+                        waterCells.forEach { sinks += it }
+                    } else {
+                        // Not enough water to read as a lake. What is left is a playa: the flat floor
+                        // of the pocket, dry most of the year and briefly a sheet of water after rain.
+                        // At least the ground within one minimum depth of the pocket's floor, so a
+                        // pocket whose balance is zero still gets the flat it plainly has.
+                        var flatEnd = maxOf(end, pockets.ownStart[pocket])
+                        val floor = pockets.baseLevel(pocket)
+                        while (flatEnd < pockets.regionEnd[pocket] && pockets.groundOfLaidOut(flatEnd) <= floor + minDepth) flatEnd++
+                        if (flatEnd == start) flatEnd = start + 1
+                        val flat = pockets.layout.copyOfRange(start, flatEnd)
+                        bodies += StandingWater(flat, floor, pockets.topLevel(pocket), wouldSpillAt, endorheic = true, playa = true)
+                        flat.forEach { sinks += it }
+                    }
+                } else if (water.full[pocket] && above >= 0 && !water.merged[above]) {
+                    // Full to its saddle and spilling into the pocket across it: a lake with an
+                    // outlet, whose water the routing carries on over the saddle.
+                    if (pockets.regionEnd[pocket] - start >= minLakeCells) {
+                        bodies += StandingWater(
+                            pockets.layout.copyOfRange(start, pockets.regionEnd[pocket]), pockets.topLevel(pocket),
+                            pockets.topLevel(pocket), wouldSpillAt, endorheic = false, playa = false
+                        )
+                    }
                 }
-                waterCells = IntArray(flatCells.coerceAtLeast(1)) {
-                    FlowRouting.decodeIndex(shape.byGround[it])
-                }
-                waterIsPlaya[basin] = true
             }
-            waterOf[basin] = waterCells
+            bodiesOf[basin] = bodies
             closed[basin] = true
             for (cell in cells) pending[cell] = true
             LakeWaterBalance.routeIntoWater(
-                cellsAcross, cellsDown, ground, pending, waterCells, cells.size, flowTarget,
+                cellsAcross, cellsDown, ground, pending, sinks.toIntArray(), cells.size, flowTarget,
                 settled, basinMark++, pathKey, config.seed, config.cellHeightInCellWidths,
                 FlowRouting.smoothFieldPeriodCells(config)
             )
@@ -541,16 +575,16 @@ object RiverStage {
         for (group in groupsUpstreamFirst) {
             if (group.size == 1) {
                 val basin = group[0]
-                val shape = hypsometryOf(basin)
+                val pockets = pocketsOf(basin)
                 // Every cell of the basin drains out through its exits, so the accumulation there
                 // is the whole catchment — the basin plus every slope that feeds it, less every
                 // closed basin above it.
                 val catchmentMm = inflowOf(basin, catchmentRainMm.data)
-                val balance = balanceOf(basin, shape, catchmentMm)
+                val water = pockets.solve(leafSuppliesOf(basin, pockets, catchmentRainMm.data) { closed[it] })
                 solved?.basins?.add(
-                    SolvedBasin(basins[basin].copyOf(), exitsOf[basin].copyOf(), catchmentMm, endorheic = !balance.atSpill)
+                    SolvedBasin(basins[basin].copyOf(), exitsOf[basin].copyOf(), catchmentMm, endorheic = !water.rootFull)
                 )
-                if (balance.atSpill) continue
+                if (water.rootFull) continue
                 // The catchment stops at this basin, so nothing below its old spill receives it —
                 // taken out along the path the water used to leave by, which is the routing before
                 // any basin was closed: a closed basin below has re-pointed its own cells at its
@@ -565,7 +599,7 @@ object RiverStage {
                         below = routingBeforeClosing[below]
                     }
                 }
-                close(basin, shape, balance)
+                close(basin, pockets, water)
                 continue
             }
 
@@ -579,54 +613,74 @@ object RiverStage {
             // the closed set only grows, and settles within as many passes as the group has
             // members. Each member is then solved on its inflow at the settled set.
             solved?.let { it.groupsSolvedTogether++ }
-            val shapes = group.map { hypsometryOf(it) }
             var closedInGroup = BooleanArray(group.size)
-            var inflows = FloatArray(group.size)
+            fun keepsItsWater(member: Int): (Int) -> Boolean = { basin ->
+                closed[basin] || (basin != group[member] && group.indexOf(basin).let { it >= 0 && closedInGroup[it] })
+            }
+            var fields: List<FloatArray> = emptyList()
             for (pass in 0..group.size) {
-                inflows = FloatArray(group.size) { member ->
-                    val field = rainWithSinks { basin ->
-                        closed[basin] || (basin != group[member] && group.indexOf(basin).let { it >= 0 && closedInGroup[it] })
-                    }
-                    inflowOf(group[member], field)
+                fields = List(group.size) { member -> rainWithSinks(keepsItsWater(member)) }
+                val next = BooleanArray(group.size) { member ->
+                    val pockets = pocketsOf(group[member])
+                    !pockets.solve(leafSuppliesOf(group[member], pockets, fields[member], keepsItsWater(member))).rootFull
                 }
-                val next = BooleanArray(group.size) { !balanceOf(group[it], shapes[it], inflows[it]).atSpill }
                 if (next.contentEquals(closedInGroup)) break
                 closedInGroup = next
             }
             for (member in group.indices) {
                 val basin = group[member]
-                val balance = balanceOf(basin, shapes[member], inflows[member])
+                val pockets = pocketsOf(basin)
+                val water = pockets.solve(leafSuppliesOf(basin, pockets, fields[member], keepsItsWater(member)))
                 solved?.basins?.add(
-                    SolvedBasin(basins[basin].copyOf(), exitsOf[basin].copyOf(), inflows[member], endorheic = !balance.atSpill)
+                    SolvedBasin(basins[basin].copyOf(), exitsOf[basin].copyOf(), inflowOf(basin, fields[member]), endorheic = !water.rootFull)
                 )
-                if (!balance.atSpill) close(basin, shapes[member], balance)
+                if (!water.rootFull) close(basin, pockets, water)
             }
             // Everything below the group sees its closures: the field re-taken whole, which the
             // single closures' subtractions would have arrived at one by one.
             rainWithSinks { closed[it] }.copyInto(catchmentRainMm.data)
         }
 
+        // Lakes numbered basin by basin in cell-index order, and within a basin by the lowest cell
+        // each body holds, so the numbering is the same on every platform.
         val lakes = ArrayList<Lake>()
         for (basin in basins.indices) {
-            val water = waterOf[basin]
-            when {
-                water == null ->
-                    fillToBrim(lakeId, lakes, basins[basin], spillElevation[basin], outletCell[basin])
-                waterIsPlaya[basin] -> for (cell in water) playa[cell] = true
-                else -> {
-                    val id = lakes.size
-                    for (cell in water) lakeId[cell] = id
-                    lakes.add(
-                        Lake(
-                            id, water.size, surfaceOf[basin], outletCell[basin],
-                            endorheic = true, spillElevation = spillElevation[basin]
-                        )
-                    )
+            val bodies = bodiesOf[basin]
+            if (bodies == null) {
+                fillToBrim(lakeId, lakes, basins[basin], spillElevation[basin], outletCell[basin])
+                continue
+            }
+            for (body in bodies.sortedBy { it.cells.min() }) {
+                if (body.playa) {
+                    for (cell in body.cells) playa[cell] = true
+                    continue
                 }
+                val id = lakes.size
+                for (cell in body.cells) lakeId[cell] = id
+                lakes.add(
+                    Lake(
+                        id, body.cells.size, body.surface, body.outletCell,
+                        endorheic = body.endorheic, spillElevation = body.spill
+                    )
+                )
             }
         }
         return LakeResult(lakeId, lakes, playa, cellsAcross)
     }
+
+    /**
+     * One body of water a closed basin's balance leaves: a pocket's lake at its own level, a pocket
+     * full to its saddle and spilling on, or a playa. [spill] is the level it would spill at and
+     * [outletCell] the cell it would spill over.
+     */
+    private class StandingWater(
+        val cells: IntArray,
+        val surface: Float,
+        val spill: Float,
+        val outletCell: Int,
+        val endorheic: Boolean,
+        val playa: Boolean
+    )
 
     /**
      * The basins in groups, each group before any group its water reaches: each exit's path is

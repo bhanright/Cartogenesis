@@ -1206,7 +1206,7 @@
   formula tends to on a fine grid; Q2 kept the formula because restating it would move every world
   at every grid, and a chunk that changes the tectonics should take it. 2026-09-28, Q2.
 
-- **One sea cell of seed 42 at 512 rows stands above the shoreline the sea stage cut.** At column 33,
+- **Closed 2026-09-29 by L1**, whose rifts moved seed 42's ground and took the cell with it; the cause was never traced, and `DataExportTest`'s clause is armed again. *One sea cell of seed 42 at 512 rows stands above the shoreline the sea stage cut.* At column 33,
   row 414, beside the land, 9.0e-5 of the field (about half a meter) over the line; the same seed on
   the 512 by 512 grid has none. `DataExportTest`'s open-sea clause, which the heightmap draws
   faithfully, runs as a known failure on it. Which of the sea stage's rules leaves water over the

@@ -22,12 +22,16 @@ import org.junit.jupiter.api.extension.ExtendWith
  * resolves finer and therefore steeper detail. The same class of defect as the glacier lattice, and
  * found the same way, by rendering the size the author actually uses.
  *
- * Since L1 the worlds are made by rows, as the applications make them: 512, 1,024 and 2,048 rows of
- * square cells. The figures quoted in this file before that were measured on grids as many cells
- * tall as wide (docs/DESIGN_LEDGER.md, L1).
+ * Since L1 the worlds are made by rows, as the applications make them: 256, 512 and 1,024 rows of
+ * square cells, cells 23.4, 11.7 and 5.9 km across, the widths the 512, 1024 and 2048 grids as many
+ * cells tall as wide had across. A world of 2,048 rows is 8.4 million cells and 3.0 GB live at its
+ * fullest (docs/DESIGN_LEDGER.md, Q5), which this module's per-merge worker, 3 GB, does not hold;
+ * asked for it, the suite ran out of heap. The figures quoted in this file before L1 were measured
+ * on grids as many cells tall as wide (docs/DESIGN_LEDGER.md, L1).
  *
- * This lives in `:desktop` rather than beside its sibling because a 2048 world needs more heap than
- * `:worldgen`'s test worker is given, and this module's already runs with ten gigabytes.
+ * It lives in `:desktop` rather than beside its sibling because it was written for 2048 by 2048
+ * worlds, which needed more heap than `:worldgen`'s test worker was given; since the budget moved
+ * to the root build script both workers are a few gigabytes, and this one is where it stayed.
  */
 @ExtendWith(SharedWorldsCheck::class)
 class OutletResolutionTest {
@@ -63,7 +67,7 @@ class OutletResolutionTest {
         val unmeasured = ArrayList<String>()
         listOf(59758L, 42L).forEach { seed ->
             // By rows, as the applications make a world: 2 x rows columns of square cells.
-            val shares = listOf(512, 1024, 2048).map { rows ->
+            val shares = listOf(256, 512, 1024).map { rows ->
                 val world = SharedWorlds.world(WorldGenConfig.forRows(seed, rows))
                 // Which lakes stand on ground below the sea-level cut, and so are none of the
                 // notch's business. Water the ocean cannot reach is marked land at the height it
@@ -159,7 +163,7 @@ class OutletResolutionTest {
 
             val growth = shares.max() / shares.min().coerceAtLeast(1e-12)
             println(
-                "OUTLET SCALE seed %d: standing water spreads %.2fx across 512, 1,024 and 2,048 rows"
+                "OUTLET SCALE seed %d: standing water spreads %.2fx across 256, 512 and 1,024 rows"
                     .format(seed, growth)
             )
             // A ratio wants something in its denominator. Seed 42 at 512 holds eight lakes over

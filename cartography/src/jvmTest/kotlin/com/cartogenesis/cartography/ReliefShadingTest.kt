@@ -3,6 +3,7 @@ package com.cartogenesis.cartography
 import com.cartogenesis.cartography.geometry.KnownFailures
 import com.cartogenesis.cartography.geometry.RecordedViolation
 import com.cartogenesis.worldgen.BorrowsSharedWorlds
+import com.cartogenesis.worldgen.SharedWorlds
 import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.model.WorldScale
@@ -37,13 +38,14 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
 
         /**
          * The known failure the cone's floor clause records. The cone is cut to the ninth decile of
-         * the gallery world's land slope as the shading reads it, and on square cells of 11.7 km that
-         * is 2.84 of exaggerated rise a cell width: the exaggeration is held to the ground
-         * ([ReliefShading.verticalExaggeration]), and cells half as wide east-west resolve steeper
-         * ground than the 512 by 512 grid's did. The dome still lights every bearing, but the steep
-         * side of that cone is pinned at the darkest factor on 41 of 360 bearings, where the
-         * single lamp pins 69. Not re-derived away: the exaggeration and the clamp are both the
-         * sheet's, and which of them should give is the maintainer's to judge on the pictures
+         * the gallery world's land slope as the shading reads it. At the exaggeration that keeps the
+         * single lamp's contrast of the 512 by 512 grid's maps (40.25 on the 11.7 km cells of 512
+         * rows; see `the exaggeration keeps ...`), that decile is 2.38 of exaggerated rise a cell
+         * width where it was 1.63 on the 512 by 512 grid at the same contrast: square cells of
+         * half the width resolve a steeper tail of the same ground. The steep side of that cone is
+         * pinned at the darkest factor on 35 of 360 bearings. Swept in quarters, the cone clears at
+         * 38.0 and below (lamp contrast 0.2090, 2% under the target 0.2133) and pins from 38.25;
+         * the contrast and the clause cannot both be kept, and which gives is the maintainer's
          * (docs/DESIGN_LEDGER.md, Q4; `docs/TODO.md` has the entry).
          */
         const val STEEPEST_TENTH_PINNED =
@@ -142,6 +144,17 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
          */
         const val PLANE_TOLERANCE_ON_SQUARE_CELLS = 0.001
         const val PLANE_TOLERANCE = 0.01
+
+        /** The gallery's seed on the 512 by 512 grid, the grid the maps were drawn on before. */
+        val HALF_HEIGHT_GALLERY = com.cartogenesis.worldgen.model.WorldGenConfig(seed = 234475L, width = 512, height = 512)
+
+        /** The exaggeration the maps were drawn at on that grid, set by eye: 24 on its cell. */
+        const val HALF_HEIGHT_EXAGGERATION = 24.0
+
+        /** The exaggeration's sweep on square cells: its range and its step. */
+        const val EXAGGERATION_SWEEP_FROM = 12.0
+        const val EXAGGERATION_SWEEP_TO = 60.0
+        const val EXAGGERATION_SWEEP_STEP = 0.25
 
         /** How far the declared ordinary ground may sit from the measured median. */
         const val MAX_GROUND_DRIFT = 0.004f
@@ -292,9 +305,9 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
             "${unlitUnderTheSky(field, radius)} of $BEARINGS bearings round the cone receive no " +
                 "direct light at all from the dome"
         )
-        // On square cells the ninth decile is steeper than the dome keeps off the floor: see
-        // [STEEPEST_TENTH_PINNED].
-        KnownFailures.expect(STEEPEST_TENTH_PINNED, "41 of 360 bearings at the floor") {
+        // On square cells the steepest tenth pins the cone at the contrast the maps are drawn at:
+        // see [STEEPEST_TENTH_PINNED].
+        KnownFailures.expect(STEEPEST_TENTH_PINNED, "35 of 360 bearings at the floor") {
             if (sky.floored != 0) {
                 throw RecordedViolation(
                     "${sky.floored} of $BEARINGS bearings round the cone are pinned at the darkest factor " +
@@ -586,6 +599,64 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
                 .format(sky.deviation, lamp.deviation, MAX_CONTRAST_DRIFT * 100)
         )
     }
+
+    /**
+     * That the exaggeration keeps the contrast the maps were drawn at before the grid was square.
+     *
+     * The exaggeration was set by eye on the 512 by 512 grid, 24 over a cell 23.4 km wide, and
+     * every calibration of the shading since, [ReliefShading.HAZE] and ordinary ground among them,
+     * is measured against the single lamp's picture at it. So its target on square cells is that
+     * picture's contrast: the single lamp's deviation over the gallery world's land on the 512 by
+     * 512 grid at 24, matched on the same seed at 512 rows by sweeping the exaggeration in steps of
+     * [EXAGGERATION_SWEEP_STEP]. The one a map of square cells is drawn at must be the match, to
+     * within half a step. Held to the ground at the match's cell width, the same slope on the
+     * ground is drawn the same on every grid of square cells.
+     */
+    @Test
+    fun `the exaggeration keeps the single lamp's contrast of the 512 by 512 grid's maps`() {
+        val reference = SharedWorlds.world(HALF_HEIGHT_GALLERY)
+        val target = lampSpread(reference, (HALF_HEIGHT_EXAGGERATION / 2).toFloat()).deviation
+        val world = WORLD
+        var bestExaggeration = 0.0
+        var bestGap = Double.MAX_VALUE
+        val readings = StringBuilder()
+        var exaggeration = EXAGGERATION_SWEEP_FROM
+        while (exaggeration <= EXAGGERATION_SWEEP_TO + 1e-9) {
+            val spread = lampSpread(world, (exaggeration / 2).toFloat())
+            if (kotlin.math.abs(exaggeration % 4.0) < 1e-9) readings.append(" %.0f→%.4f".format(exaggeration, spread.deviation))
+            val gap = kotlin.math.abs(spread.deviation - target)
+            if (gap < bestGap) {
+                bestGap = gap
+                bestExaggeration = exaggeration
+            }
+            exaggeration += EXAGGERATION_SWEEP_STEP
+        }
+        val declared = ReliefShading.verticalExaggeration(world.config.cellWidthKm).toDouble()
+        println(
+            "RELIEF the single lamp's contrast on the 512 by 512 grid at %.0f is %.4f; at 512 rows, exaggeration→deviation:%s"
+                .format(HALF_HEIGHT_EXAGGERATION, target, readings)
+        )
+        println(
+            "RELIEF it is matched at 512 rows at an exaggeration of %.2f, %.4f off it; the declared is %.4f, %.3f km a cell width"
+                .format(bestExaggeration, bestGap, declared, declared * world.config.cellWidthKm)
+        )
+        assertTrue(
+            kotlin.math.abs(declared - bestExaggeration) <= EXAGGERATION_SWEEP_STEP / 2,
+            "the lamp's contrast of the 512 by 512 grid's maps is matched at 512 rows at %.2f, not at the declared %.4f"
+                .format(bestExaggeration, declared)
+        )
+    }
+
+    /** The single lamp's shading over [world]'s land at a central difference's [scale], as spread. */
+    private fun lampSpread(world: WorldMap, scale: Float): Spread = Spread(
+        ReliefShading.of(
+            world.sea.relativeElevation, world.sea.isLand, singleLamp = true,
+            cellWidthKm = world.config.cellWidthKm,
+            cellHeightInCellWidths = world.config.cellHeightInCellWidths,
+            scale = scale
+        ),
+        world
+    )
 
     /** What the shading did to the land: how far it swings, and how much of it is pinned flat. */
     private class Spread(shade: FloatArray, world: WorldMap) {

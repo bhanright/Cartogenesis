@@ -201,10 +201,11 @@ class EngravingPlan(sheet: SheetGeometry) {
          * land — the deltas, the basin floors, the coastal plain — takes no ink at all. It was 0.07
          * until the incision became the stream-power law's implicit update, whose ground is rougher:
          * the tenth percentile reads 0.084 there (docs/DESIGN_LEDGER.md, Fix 3b). Read again on
-         * square cells, seed 234475 at 512 rows at the same eight-pixel stencil, it still rounds to
-         * 0.08 (docs/DESIGN_LEDGER.md, Q4).
+         * square cells, seed 234475 at 512 rows at the same eight-pixel stencil and at the
+         * exaggeration re-derived there to keep the maps' contrast, it reads 0.068
+         * (docs/DESIGN_LEDGER.md, Q4).
          */
-        const val SLOPE_FLOOR: Float = 0.08f
+        const val SLOPE_FLOOR: Float = 0.07f
 
         /**
          * The steepness at which a stroke is fully black, as a fraction of the way from

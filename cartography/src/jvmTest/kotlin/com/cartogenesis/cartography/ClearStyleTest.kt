@@ -303,7 +303,7 @@ class ClearStyleTest : BorrowsSharedWorlds() {
             }
         }
         println("CLEAR hatch as drawn: worst stroke-against-fill ${worst.rounded()} CIEDE2000 ($worstWhere), bar $MARGIN")
-        KnownFailures.expect(HATCH_SHADED_AWAY, "hatched realms under the margin: 12, 16") {
+        KnownFailures.expect(HATCH_SHADED_AWAY, "hatched realms under the margin: 9, 12, 16") {
             if (shortRealms.isNotEmpty()) {
                 throw RecordedViolation(
                     "the hatch comes within ${worst.rounded()} of its fill ($worstWhere), under $MARGIN",

@@ -1174,14 +1174,31 @@
   faithfully, runs as a known failure on it. Which of the sea stage's rules leaves water over the
   cut (the drowned valleys, the littoral grading, the enclosed-sea repair) is not traced.
   2026-09-28, Q4.
-- **On square cells the relief's steepest tenth is shaded to its darkest factor.** The exaggeration
-  is held to the ground (`ReliefShading.verticalExaggeration`, 24 on a cell 23.4 km wide and in
-  inverse proportion to the cell's width elsewhere), and cells of 11.7 km resolve steeper ground
-  than the 512 by 512 grid's did east-west: the gallery world's ninth decile of land slope as the
-  shading reads it is 2.84 of exaggerated rise a cell width, and a cone that steep is pinned at
-  `DARKEST` on 41 of 360 bearings under the sky (69 under the single lamp). `ReliefShadingTest` runs
-  the clause as a known failure. Whether the exaggeration should be re-set for the sheet a size is
-  drawn on, or the clamp moved, is for the pictures to decide. 2026-09-28, Q4.
+- **On square cells the relief's steepest tenth is shaded to its darkest factor at today's
+  contrast.** The exaggeration is re-derived on the gallery world at 512 rows to keep the single
+  lamp's contrast of the 512 by 512 grid's maps (a deviation of 0.2133): 40.25 on the 11.7 km cells,
+  471.68 km over a cell's width (`ReliefShading.EXAGGERATION_TIMES_CELL_WIDTH_KM`). There the
+  ninth decile of the drawn land slope is 2.38 of rise a cell width, against 1.63 on the 512 by 512
+  grid at the same contrast, and `ReliefShadingTest`'s cone cut to it is pinned at `DARKEST` on 35
+  of 360 bearings under the sky; the clause runs as a known failure. Swept in quarters, the cone
+  clears at 38.0 and below (lamp contrast 0.2090, sky 0.2076, ordinary ground 0.8901) and pins from
+  38.25 (9 bearings), 38.5 (23) and 40.0 (35). The two cannot both hold; the maintainer's to
+  choose between the contrast and the clause, or to move the clamp. 2026-09-28, Q4.
+- **A lake's area follows the cell count, and a lake with no outlet floods the one-cell gullies
+  around it.** Seed 42's lakes cover 646,820 km2 at 512 rows of square cells, against 331,238 on the
+  512 by 512 grid and 334,328 at 1,024 rows. Most of the excess is one endorheic lake, lake 1 at
+  512 rows: 2,051 cells, 281,662 km2, centred about (3,316 km, 1,625 km), where the 512 by 512 grid
+  has no lake and 1,024 rows has two endorheic lakes of 44,117 and 24,616 km2. Its surface floods
+  108 one-cell gullies, 47 running north-south and 61 east-west, every one lower than the ground on
+  both sides of it, with 185 one-cell tips and 72 cells joined to it only at a corner; 21% of its
+  cells are not open water. The drawing paints every lake cell, so the gullies show as fingers,
+  and the deep tint is faithful: water over the bed has a median of 206 m and a 90th percentile of
+  330 m, against a world median of 112 m on the 512 by 512 grid. Drawing only open water would hide
+  the defect rather than mend it. What to trace: the endorheic surface's balance
+  (`LakeWaterBalance`) and the fill in `RiverStage` that sets the lake's extent, for why 512 rows
+  settles at four times the area 1,024 rows does; the gullies are the symmetric comb residual the
+  hydraulic rounds leave (`CombGuardTest`'s known failure). A generator chunk of its own.
+  2026-09-28, Q4.
 - **A world of square cells carries more ice at 60 to 90 degrees than a change of grid gives.**
   `GridShapeTest` compares the same seed at 512 by 512 and at `forRows(512)`, band by band. Its
   ice clause runs as a known failure. Seed 1234 at -75 to -90 degrees carries +0.017 of the band as

@@ -22,10 +22,11 @@ import kotlin.math.sqrt
  * The pixels are the true-shape sheet's ([SheetGeometry]), where one covers the same ground both
  * ways, so a stroke, a dot or a ruling is laid out there at its true direction and length. The
  * raster still decides one colour a cell: each cell asks the pattern about the sheet pixel at its
- * own top-left corner ([sheetX], [sheetY]) and every pixel of the cell takes the answer. On a cell
- * two pixels wide a mark running north-south therefore comes out two pixels wide and one running
- * east-west one pixel tall; that is the most a cell can say, and the placing and the bearing of
- * every mark are still the sheet's.
+ * own top-left corner ([sheetX], [sheetY]) and every pixel of the cell takes the answer. On square
+ * cells a cell is one pixel and a mark is as fine one way as the other; on a cell two pixels wide,
+ * which a grid as many cells tall as wide has, a mark running north-south comes out two pixels
+ * wide and one running east-west one pixel tall. That is the most a cell can say, and the placing
+ * and the bearing of every mark are still the sheet's.
  *
  * Only three figures depend on the grid, and none of them is a mark: how many lattice columns fit
  * across the sheet, which is what lets the strokes meet at the date line; how many cells the
@@ -94,8 +95,9 @@ class EngravingPlan(sheet: SheetGeometry) {
      * One lattice pitch of the sheet, which is the physically right figure: a drawing whose strokes
      * are a pitch apart cannot express a change of direction finer than a pitch, and reading the
      * aspect off a single pair of neighbouring cells on eroded ground gives a direction that changes
-     * every cell. Counted in each axis's own cells, so the reach is the same ground both ways — on
-     * cells two pixels wide, four columns east and west and eight rows north and south.
+     * every cell. Counted in each axis's own cells, so the reach is the same ground both ways —
+     * eight cells each way on square cells, and on cells two pixels wide four columns east and west
+     * and eight rows north and south.
      */
     val gradientStencilColumns: Int =
         (HACHURE_LATTICE_PIXELS / sheet.pixelsPerCellAcross).coerceAtLeast(1)
@@ -112,9 +114,9 @@ class EngravingPlan(sheet: SheetGeometry) {
      * same hillside would read four times flatter on the larger plate and take four times less ink.
      */
     val gradientScaleAcross: Float =
-        ReliefShading.slopeScale(sheet.cellsAcross) / gradientStencilColumns
+        ReliefShading.slopeScale(sheet.cellWidthKm) / gradientStencilColumns
     val gradientScaleDown: Float =
-        ReliefShading.slopeScale(sheet.cellsAcross) / gradientStencilRows
+        ReliefShading.slopeScale(sheet.cellWidthKm) / gradientStencilRows
 
     /**
      * Where the first coastal line sits, in pixels from the shore.
@@ -198,9 +200,11 @@ class EngravingPlan(sheet: SheetGeometry) {
          * percentile of the land slope of seed 234475 measured at this stencil, so a tenth of the
          * land — the deltas, the basin floors, the coastal plain — takes no ink at all. It was 0.07
          * until the incision became the stream-power law's implicit update, whose ground is rougher:
-         * the tenth percentile reads 0.084 there (docs/DESIGN_LEDGER.md, Fix 3b).
+         * the tenth percentile reads 0.084 there (docs/DESIGN_LEDGER.md, Fix 3b). Read again on
+         * square cells, seed 234475 at 512 rows at the same eight-pixel stencil and at the
+         * exaggeration re-derived there (`ReliefShading`), it reads 0.064 (docs/DESIGN_LEDGER.md, Q4).
          */
-        const val SLOPE_FLOOR: Float = 0.08f
+        const val SLOPE_FLOOR: Float = 0.06f
 
         /**
          * The steepness at which a stroke is fully black, as a fraction of the way from

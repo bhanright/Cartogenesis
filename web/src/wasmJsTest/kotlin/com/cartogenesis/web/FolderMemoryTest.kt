@@ -72,7 +72,7 @@ class FolderMemoryTest {
     }
 
     private companion object {
-        /** Sixteen kibibytes: a 32 world's save, stored raw, is some ten of them. */
+        /** Sixteen kibibytes: a 32-row world's save, stored raw, is some twenty of them. */
         const val SMALL_PART_BYTES = 1 shl 14
 
         /** More parts than either bound allows, with room: a save this long cannot fit under one whole. */

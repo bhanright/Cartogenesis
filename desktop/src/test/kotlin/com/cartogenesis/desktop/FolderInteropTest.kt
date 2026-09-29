@@ -55,7 +55,7 @@ class FolderInteropTest {
 
         val opened = assertIs<LoadOutcome.Loaded>(store.load(entry.key)).save
         assertEquals("Written by the browser", opened.document.title)
-        assertEquals(32 * 32, opened.world.terrain.height.data.size)
+        assertEquals(64 * 32, opened.world.terrain.height.data.size)
 
         // And the desktop writes it back where the browser will look for it.
         store.save(opened.document.copy(title = "Written back by the desktop"), opened.world, entry.key)

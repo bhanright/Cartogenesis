@@ -12,11 +12,12 @@ import kotlin.math.hypot
  * how many kilometres each cell is wide and tall.
  *
  * Every bearing the guard reads is a bearing on the ground, `atan2(dy * cellHeightKm, dx *
- * cellWidthKm)`, with both spacings read from the world's own configuration. On this map a cell is
- * twice as wide as it is tall at every square grid (the world is an equirectangular projection
- * twice as wide as it is tall), so the grid's diagonals do not lie at 45 and 135 degrees on the
- * ground but at `atan(cellHeight / cellWidth)` — 26.565 degrees — and its mirror, 153.435. The
- * guard's tests read the ratio off the config at every grid rather than assume it.
+ * cellWidthKm)`, with both spacings read from the world's own configuration. The world is an
+ * equirectangular projection twice as wide as it is tall, so on a grid twice as many cells across
+ * as down a cell is square and the grid's diagonals lie at 45 and 135 degrees on the ground; on a
+ * grid as many cells tall as wide a cell is twice as wide as it is tall and they lie at
+ * `atan(cellHeight / cellWidth)`, 26.565 degrees, and its mirror, 153.435. The guard's tests read
+ * the ratio off the config at every grid rather than assume it.
  *
  * The grid wraps east to west and stops north and south. Bearings are undirected, 0 to 180
  * degrees, 0 east-west, increasing toward the south (rows count downward).
@@ -30,7 +31,7 @@ internal class GridFrame(
     val cellCount: Int get() = cellsAcross * cellsDown
     val worldWidthKm: Double get() = cellsAcross * cellWidthKm
 
-    /** The grid diagonal's bearing on the ground, in degrees: 26.565 on this map's cells. */
+    /** The grid diagonal's bearing on the ground, in degrees: 45 on square cells. */
     val diagonalDegrees: Double = Math.toDegrees(atan(cellHeightKm / cellWidthKm))
 
     /**
@@ -58,10 +59,11 @@ internal class GridFrame(
     /**
      * Which pairs of [gridBearings] meet at a right angle on the sheet.
      *
-     * The map is displayed one cell to a square pixel (the pane draws the raster with one scale for
-     * both axes), so a reader sees the grid's own frame: east-west meets north-south at 90 degrees
-     * there and on the ground, and the two diagonals, which meet at 126.87 degrees on the ground,
-     * meet at 90 degrees on the sheet. A corner is judged as the reader sees it.
+     * East-west meets north-south at 90 degrees on the ground and on the sheet, and the two
+     * diagonals meet at 90 degrees on the ground on square cells. On cells twice as wide as tall
+     * they meet at 126.87 degrees on the ground and at 90 on a raster drawn a cell to a square
+     * pixel, which is how the census read those grids; a corner there was judged as that reader
+     * saw it.
      */
     val perpendicularPairs: List<Pair<Int, Int>> = listOf(0 to 2, 1 to 3)
 

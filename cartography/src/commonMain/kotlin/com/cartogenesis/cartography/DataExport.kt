@@ -5,6 +5,7 @@ import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.Biome
 import com.cartogenesis.worldgen.pipeline.IceSheet
 import com.cartogenesis.worldgen.pipeline.NationResult
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /**
@@ -221,9 +222,12 @@ object DataExports {
     fun metresPerGreyLevelBelowSeaLevel(config: WorldGenConfig): Double =
         config.scale.deepestOceanMetres.toDouble() / LEVELS_PER_SIDE
 
-    /** What the file is called, before the extension. */
-    fun baseName(config: WorldGenConfig, size: Int, layer: DataLayer): String =
-        "cartogenesis-${config.seed}-$size-${layer.fileSuffix}"
+    /**
+     * What the file is called, before the extension: the seed, the size and the layer, where
+     * [sizeRows] is the size the way the interface names it, by its rows.
+     */
+    fun baseName(config: WorldGenConfig, sizeRows: Int, layer: DataLayer): String =
+        "cartogenesis-${config.seed}-$sizeRows-${layer.fileSuffix}"
 
     /**
      * Renders [layer] from [world] at whatever size [world] was generated at.
@@ -244,7 +248,9 @@ object DataExports {
         source: ExportedWorld = ExportedWorld.OnScreen
     ): DataFiles {
         val deflater = GzipRewrappingDeflater(compressor)
-        val base = baseName(world.config, world.width, layer)
+        // Named by rows, as a size is: a world of square cells is twice as many cells across,
+        // and its width would name the export twice the size it was asked for.
+        val base = baseName(world.config, world.height, layer)
         val image: ByteArray
         val sidecar: String
         when (layer) {
@@ -410,16 +416,31 @@ object DataExports {
     }
 
     /**
-     * The sidecar's one sentence on what a sample stands for, beside the figures that say it.
+     * The sidecar's one sentence on what a sample stands for, beside the figures that say it, for
+     * a grid whose cells are [cellWidthKm] by [cellHeightKm] on the ground.
      *
-     * A data export keeps the native grid rather than the picture's true-shape sheet: duplicating
-     * samples would add bytes and no information, and a program that reads a heightmap wants the
-     * spacing, which `cellWidthKm` and `cellHeightKm` give it.
+     * A data export keeps the native grid, one sample a cell, and a program that reads a heightmap
+     * wants the spacing, which `cellWidthKm` and `cellHeightKm` give it. On a grid of square cells
+     * the image is the picture's own shape, a pixel to a sample; on a grid as many cells tall as
+     * wide each cell is twice as wide as it is tall, and the note says how far to stretch it.
      */
-    private const val SAMPLE_SPACING_NOTE =
-        "one sample per grid cell: cellWidthKm apart east-west and cellHeightKm apart north-south, " +
-            "so drawn a pixel to a sample the image is narrower than the world; stretch it " +
-            "cellWidthKm / cellHeightKm times across to see the world's true shape"
+    internal fun sampleSpacingNote(cellWidthKm: Double, cellHeightKm: Double): String =
+        if (abs(cellWidthKm - cellHeightKm) <= SQUARE_CELL_TOLERANCE * cellWidthKm) {
+            "one sample per grid cell, cellWidthKm apart east-west and north-south alike: the " +
+                "cells are square on the ground, so drawn a pixel to a sample the image has the " +
+                "world's true shape, as the picture exports do"
+        } else {
+            "one sample per grid cell: cellWidthKm apart east-west and cellHeightKm apart " +
+                "north-south, so drawn a pixel to a sample the image is narrower than the world; " +
+                "stretch it cellWidthKm / cellHeightKm times across to see the world's true shape"
+        }
+
+    /**
+     * How far a cell's width and height may differ, as a share of its width, and the cell still be
+     * square: a millionth, the tolerance `SheetGeometry` takes a pixel count to a whole number by.
+     * On the grids this program makes the two are equal to the bit or a factor of two apart.
+     */
+    private const val SQUARE_CELL_TOLERANCE = 1e-6
 
     /** How many bits a sample of each of the two exports takes. See [PngWriter]. */
     private const val GREYSCALE_BITS_PER_SAMPLE = 16
@@ -451,13 +472,13 @@ object DataExports {
         json.number("seed", config.seed)
         json.number("widthPixels", world.width)
         json.number("heightPixels", world.height)
-        // The image is the grid, one sample a cell, and its cells are not square on the ground.
-        // Said plainly, because every other picture this program writes is the true-shape sheet
-        // and a reader holding both should not take the one for the other.
+        // The image is the grid, one sample a cell. Said plainly, with whether its cells are
+        // square on the ground, because every other picture this program writes is the true-shape
+        // sheet and a reader holding both should know whether the two have one shape.
         json.number("gridCellsAcross", world.width)
         json.number("gridCellsDown", world.height)
         json.number("samplesPerCell", 1)
-        json.text("sampleSpacing", SAMPLE_SPACING_NOTE)
+        json.text("sampleSpacing", sampleSpacingNote(scale.cellWidthKm(world.width), scale.cellHeightKm(world.height)))
         json.number("worldWidthKm", scale.worldWidthKm)
         json.number("cellWidthKm", scale.cellWidthKm(world.width))
         json.number("cellHeightKm", scale.cellHeightKm(world.height))

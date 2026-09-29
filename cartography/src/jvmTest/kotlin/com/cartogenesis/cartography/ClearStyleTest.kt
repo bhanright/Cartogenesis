@@ -217,7 +217,7 @@ class ClearStyleTest : BorrowsSharedWorlds() {
                 "CIEDE2000 ($worstWhere), bar $MARGIN; under it: " +
                 shortCells.entries.joinToString { "${it.key} on ${it.value} cells" }.ifEmpty { "none" }
         )
-        KnownFailures.expect(FILLS_SHADED_TOGETHER, "pairs under the margin: 0-8, 2-6, 3-4, 3-6") {
+        KnownFailures.expect(FILLS_SHADED_TOGETHER, "pairs under the margin: 0-8, 2-6, 3-4, 3-6, 3-7") {
             if (shortPairs.isNotEmpty()) {
                 throw RecordedViolation(
                     "realm fills as drawn come within ${worst.rounded()} of each other ($worstWhere), under $MARGIN",

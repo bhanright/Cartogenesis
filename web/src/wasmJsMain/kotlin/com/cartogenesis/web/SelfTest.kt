@@ -113,7 +113,7 @@ private suspend fun runOceanSelfTest(ocean: WebGpuOcean): String {
         for (cell in onCpu.indices) worst = maxOf(worst, abs(onCpu[cell] - onGpu[cell]))
         report.append(" ${name}WorstDelta=$worst")
     }
-    val config = WorldGenConfig(seed = 234475L, width = 128, height = 128)
+    val config = WorldGenConfig.forRows(seed = 234475L, rows = 64)
     val sea = WorldGenerationEngine.generate(config.copy(ocean = config.ocean.copy(enabled = false))).sea
     var onCpu: OceanResult? = null
     var onGpu: OceanResult? = null
@@ -135,8 +135,13 @@ private suspend fun runOceanSelfTest(ocean: WebGpuOcean): String {
 /** Passes in the ocean's batch comparison: the desktop parity test's own fifty. */
 private const val OCEAN_BATCH_PASSES = 50
 
+/**
+ * The erosion's kernel against the processor on the grid the desktop's `GpuErosionTest` holds its
+ * card to: the gallery's seed at 512 rows of square cells, where the east-west and north-south
+ * talus limits are one limit.
+ */
 private suspend fun runGpuSelfTest(accelerator: WebGpuErosion): String {
-    val config = WorldGenConfig(seed = 234475L, width = 512, height = 512)
+    val config = WorldGenConfig.forRows(seed = 234475L, rows = 512)
     val uplift = PlateStage.generate(config, TerrainStage.generate(config)).height
     val gpuConfig = config.copy(
         erosion = config.erosion.copy(acceleration = Acceleration.GPU)
@@ -190,7 +195,7 @@ private suspend fun runGpuSelfTest(accelerator: WebGpuErosion): String {
  * same thing a reload would have proven, reached a different way.
  */
 private suspend fun runStorageSelfTest(): String {
-    val config = WorldGenConfig(seed = 918273L, width = 128, height = 128)
+    val config = WorldGenConfig.forRows(seed = 918273L, rows = 64)
     val world = WorldGenerationEngine.generate(config)
     val document = WorldDocument(
         id = "selftest-storage-roundtrip",
@@ -236,11 +241,11 @@ private suspend fun runStorageSelfTest(): String {
  * `DataExportTest` reads them back on the JVM, but the browser is where they actually go, and this
  * proves the whole path runs here and reports what it costs.
  *
- * Small deliberately: 256 is a real world through the whole pipeline and takes about a second,
- * which is what a self-test that runs on page load can afford.
+ * Small deliberately: 128 rows of square cells, 256 by 128, is a real world through the whole
+ * pipeline in about a second, which is what a self-test that runs on page load can afford.
  */
 private suspend fun runExportSelfTest(): String {
-    val config = WorldGenConfig(seed = 402627L, width = 256, height = 256)
+    val config = WorldGenConfig.forRows(seed = 402627L, rows = 128)
     // Every encoder is asked for its best, so a null back is the encoder declining rather than
     // the quality being one this build happens not to support.
     val world = WorldGenerationEngine.generate(config)

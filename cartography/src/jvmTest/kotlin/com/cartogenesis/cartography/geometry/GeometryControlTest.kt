@@ -38,8 +38,11 @@ import kotlin.test.assertTrue
 class GeometryControlTest {
 
     private companion object {
-        /** The default world's grid at 512: 12,000 km by 6,000 km over 512 cells each way. */
-        val FRAME = GridFrame.of(WorldGenConfig(width = 512, height = 512))
+        /**
+         * The default world's grid at 512 rows: 12,000 km by 6,000 km over 1024 by 512 square
+         * cells of 11.7 km, the grid the per-merge census reads.
+         */
+        val FRAME = GridFrame.of(WorldGenConfig.forRows(seed = 0L, rows = 512))
 
         /**
          * The census the per-merge tier runs: four worlds, the layers `MapLayers` lists, and
@@ -82,14 +85,20 @@ class GeometryControlTest {
 
     @Test
     fun `the grid's bearings and lattice are read off the configuration at every grid`() {
-        listOf(512, 1024, 2048).forEach { side ->
-            val config = WorldGenConfig(width = 512, height = 512).atResolution(side, side)
-            val frame = GridFrame.of(config)
-            println("GEOMETRY FRAME $side: $frame")
-            assertEquals(0.5, frame.cellHeightKm / frame.cellWidthKm, 1e-12, "cell aspect at $side")
-            assertEquals(26.565, frame.diagonalDegrees, 1e-3, "diagonal bearing at $side")
-            assertEquals(153.435, frame.gridBearings[3], 1e-3)
+        listOf(256, 512, 1024).forEach { rows ->
+            val frame = GridFrame.of(WorldGenConfig.forRows(seed = 0L, rows = rows))
+            println("GEOMETRY FRAME $rows rows: $frame")
+            assertEquals(1.0, frame.cellHeightKm / frame.cellWidthKm, 1e-12, "cell aspect at $rows rows")
+            assertEquals(45.0, frame.diagonalDegrees, 1e-9, "diagonal bearing at $rows rows")
+            assertEquals(135.0, frame.gridBearings[3], 1e-9)
+            assertEquals(frame.latticeSpacingKm[0], frame.latticeSpacingKm[2], 1e-9, "the rows and the columns lie as far apart")
         }
+        // A grid as many cells tall as wide, which the frame reads as it is rather than assumes.
+        val halfHeight = GridFrame.of(WorldGenConfig(width = 512, height = 512))
+        println("GEOMETRY FRAME 512 by 512: $halfHeight")
+        assertEquals(0.5, halfHeight.cellHeightKm / halfHeight.cellWidthKm, 1e-12)
+        assertEquals(26.565, halfHeight.diagonalDegrees, 1e-3)
+        assertEquals(153.435, halfHeight.gridBearings[3], 1e-3)
     }
 
     @Test
@@ -217,16 +226,16 @@ class GeometryControlTest {
         val poleReading = read("pole", pole, SQUARE)
         if (flagged(poleReading).isNotEmpty()) failures.add("the island over the pole was flagged by ${flagged(poleReading)}")
 
-        // Grids: the same ground at 512, 1024 and 2048.
-        for (side in listOf(512, 1024, 2048)) {
-            val frame = GridFrame.of(WorldGenConfig(width = 512, height = 512).atResolution(side, side))
-            val canvas = GridFrame(side / 2, side / 2, frame.cellWidthKm, frame.cellHeightKm)
+        // Grids: the same ground, 6,000 by 3,000 km, at 256, 512 and 1024 rows of square cells.
+        for (rows in listOf(256, 512, 1024)) {
+            val frame = GridFrame.of(WorldGenConfig.forRows(seed = 0L, rows = rows))
+            val canvas = GridFrame(rows, rows / 2, frame.cellWidthKm, frame.cellHeightKm)
             // The same ground at large, and detail down to two cells of each grid, as the generator's own.
             val mask = Controls.naturalField(canvas, 303L, 0.35, 1500.0, finestWavelengthKm = 2 * frame.cellWidthKm)
-            val reading = read("natural at $side", mask, canvas)
-            lines.add("the same natural ground at %d: %s".format(side, reading.isotropy.joinToString("; ") { "%.1f deg %.2fx %s".format(it.gridBearingDegrees, it.ratio, it.outcome) }))
+            val reading = read("natural at $rows rows", mask, canvas)
+            lines.add("the same natural ground at %d rows: %s".format(rows, reading.isotropy.joinToString("; ") { "%.1f deg %.2fx %s".format(it.gridBearingDegrees, it.ratio, it.outcome) }))
             lines.add("  its arcs: " + reading.describe(Detector.ARCS))
-            if (flagged(reading).isNotEmpty()) failures.add("the natural ground at $side flagged by ${flagged(reading)}")
+            if (flagged(reading).isNotEmpty()) failures.add("the natural ground at $rows rows flagged by ${flagged(reading)}")
         }
 
         // A stamp turned off the grid: no longer aligned, so no longer rejected as a rectangle or for
@@ -610,11 +619,13 @@ class GeometryControlTest {
             setOf(Detector.COMBS), setOf(Detector.ALIGNED_SIDE, Detector.RECTANGLE, Detector.FACETS, Detector.ISOTROPY, Detector.CREASES) + corners)
         expect("ruled comb at 33 deg, 7 cells", read("comb turned", Controls.comb(SQUARE, 9, 7.0, 2.0, 60.0, centreColumn, centreRow, 33.0), SQUARE),
             setOf(Detector.COMBS), setOf(Detector.RECTANGLE, Detector.FACETS, Detector.CREASES))
-        // A Manhattan diamond is a square turned on the sheet, a rhombus on the ground: its sides lie
-        // along the grid's diagonals and meet square on the sheet, but on the ground it fills only
-        // 0.625 of its smallest rectangle, which is not along the grid.
+        // A Manhattan diamond is a square turned 45 degrees: on square cells its sides lie along the
+        // grid's diagonals and meet square on the ground as on the sheet, so it fills its smallest
+        // rectangle and that rectangle lies along the grid. (On cells twice as wide as tall it was
+        // a rhombus on the ground, filling 0.625 of a rectangle off the grid, and only its corners
+        // were caught.)
         expect("diamond (four-connected ring)", read("diamond", Controls.diamond(SQUARE, 40.0, centreColumn, centreRow), SQUARE),
-            setOf(Detector.RIGHT_ANGLES), setOf(Detector.ALIGNED_SIDE, Detector.FACETS, Detector.CREASES, Detector.CORNER_RATE))
+            setOf(Detector.RECTANGLE, Detector.RIGHT_ANGLES), setOf(Detector.ALIGNED_SIDE, Detector.FACETS, Detector.CREASES, Detector.CORNER_RATE))
         expect("square (eight-connected ring)", read("chebyshev", Controls.chebyshevSquare(SQUARE, 30.0, centreColumn, centreRow), SQUARE),
             setOf(Detector.RECTANGLE, Detector.RIGHT_ANGLES), setOf(Detector.ALIGNED_SIDE, Detector.FACETS, Detector.CREASES, Detector.CORNER_RATE))
         // G4's local subshape: a large natural island with one side cut along a row, and one cut along
@@ -696,8 +707,11 @@ class GeometryControlTest {
         expect("concentric terraces, as a smooth field", readLines(Layer("terraces", terraces, smoothField = true), SQUARE),
             setOf(Detector.ARCS), setOf(Detector.FACETS, Detector.CREASES))
 
-        // Lobes: the grid's eight steps against any bearing at all.
-        val lobeRadiusKm = 5.0 * BIG.cellWidthKm
+        // Lobes: the grid's eight steps against any bearing at all. Ten cells in radius, so a lobe
+        // is as many cells across its narrow side, whichever way it faces, as a ring must be to be
+        // measured ([ComponentShapes.MINIMUM_WIDTH_CELLS], nine); on cells twice as wide as tall
+        // five cell widths were ten rows, and only the lobes facing north or south were measured.
+        val lobeRadiusKm = 10.0 * BIG.cellWidthKm
         val gridSteps = doubleArrayOf(0.0, BIG.diagonalDegrees, 90.0, 180.0 - BIG.diagonalDegrees)
         expect("lobes facing the grid's eight steps", read("lobes", Controls.lobeField(BIG, 41L, 22, lobeRadiusKm) { random ->
             gridSteps[random.nextInt(4)] + if (random.nextBoolean()) 180.0 else 0.0

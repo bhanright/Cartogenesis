@@ -91,9 +91,10 @@ data class MapSheet(
      * say it in the whole sheet's pixels, which is where [Shoreline.of] measures a traced coast —
      * a pixel of the sheet being the same ground both ways, where a cell is not.
      *
-     * At fit for a 2048 world that is two pixels of the sheet, which is the stair-step a cell puts
-     * in the coast north-south and one cell east-west; zoomed past the whole sheet's own scale it
-     * falls below half a pixel and every bend the world has comes back.
+     * At fit for a 2048-row world's 4096-pixel sheet in a 900-pixel pane that is about two pixels
+     * of the sheet, two of its square cells either way (on a grid as many cells tall as wide, one
+     * cell east-west and two rows north-south); zoomed past the whole sheet's own scale it falls
+     * below half a pixel and every bend the world has comes back.
      */
     val simplifyTolerancePixels: Float get() = HALF_A_PIXEL / pixelsPerSheetPixel
 

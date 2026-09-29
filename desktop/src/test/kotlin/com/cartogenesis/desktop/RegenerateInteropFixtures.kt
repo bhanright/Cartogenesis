@@ -34,7 +34,7 @@ class RegenerateInteropFixtures {
     fun `write the saves each side's interoperability test reads`() = runBlocking {
         if (System.getenv("REGENERATE_INTEROP_FIXTURES") == null) return@runBlocking
 
-        val world = WorldGenerationEngine.generateBlocking(WorldGenConfig(seed = DESKTOP_SAVE_SEED, width = 32, height = 32))
+        val world = WorldGenerationEngine.generateBlocking(WorldGenConfig.forRows(seed = DESKTOP_SAVE_SEED, rows = 32))
         val document = WorldDocument(
             id = DESKTOP_SAVE_ID,
             title = "Written by the desktop",
@@ -51,7 +51,7 @@ class RegenerateInteropFixtures {
                 """package com.cartogenesis.web
 
 /**
- * `$key`, a 32 world saved into a folder by the desktop's own store, `DesktopWorldStore`, and
+ * `$key`, a world of 32 rows of square cells saved into a folder by the desktop's own store, `DesktopWorldStore`, and
  * checked in as base64 for `FolderInteropTest` to put in a browser folder and open with the
  * folder library. Written by the desktop's `RegenerateInteropFixtures`; it goes stale with the
  * save format, as the gzip fixture does, and is regenerated the same way. Chunked because one

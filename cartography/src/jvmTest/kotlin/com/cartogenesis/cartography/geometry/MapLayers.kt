@@ -251,7 +251,7 @@ internal object MapLayers {
         val config = world.config
         val interval = Isobaths.interval(config.scale)
         val flattest = Isobaths.flattestSlope(config, world.width, world.height)
-        val stencil = Isobaths.slopeStencil(world.width)
+        val stencil = Isobaths.slopeStencil(world.config.cellWidthKm)
         val elevation = world.sea.relativeElevation
         val perCell = 1f / (2f * stencil)
         val rowScale = config.cellHeightInCellWidths.toFloat()

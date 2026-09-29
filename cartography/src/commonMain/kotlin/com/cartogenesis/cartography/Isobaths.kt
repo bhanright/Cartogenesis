@@ -98,17 +98,23 @@ object Isobaths {
     private const val PLAIN_FADE_FROM = 0.5f
 
     /**
-     * How far the central difference that measures the floor's fall reaches, in cells, at a map
-     * [width].
+     * How far the central difference that measures the floor's fall reaches, in cells, on cells
+     * [cellWidthKm] wide: [SLOPE_STENCIL_KM] of ground, and never less than a cell.
      *
-     * Two cells at 512 and eight at 2048 — the same short distance of ground either way, and the
-     * same rule the sky's horizon stencil follows, for the same reason: this is a question about
-     * the sea floor rather than about the sheet. Between two neighbours the answer would be the
-     * floor's roughness at cell scale, which is what drew contours on an abyssal plain.
+     * The same short distance of ground on every grid, and the same rule the sky's horizon stencil
+     * follows, for the same reason: this is a question about the sea floor rather than about the
+     * sheet. Between two neighbors the answer would be the floor's roughness at cell scale, which
+     * is what drew contours on an abyssal plain.
      */
-    fun slopeStencil(width: Int): Int = (SLOPE_STENCIL_AT_512 * width / 512).coerceAtLeast(1)
+    fun slopeStencil(cellWidthKm: Double): Int =
+        (SLOPE_STENCIL_KM / cellWidthKm).toInt().coerceAtLeast(1)
 
-    private const val SLOPE_STENCIL_AT_512 = 2
+    /**
+     * The stencil's reach in km: two cells of the 512-column grid it was set on as two cells
+     * (12,000 km over 512 is 23.4375 km a cell), which is eight cells of a 2048-column grid and
+     * four of the square cells of a 512-row one.
+     */
+    private const val SLOPE_STENCIL_KM = 46.875
 
     private const val METRES_PER_KILOMETRE = 1000f
 

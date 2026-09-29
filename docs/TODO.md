@@ -331,13 +331,16 @@
   wide and one tall with its colour copied exactly and the ink laid over it at its own width; the
   cartouche quotes the sheet's one scale. The other half of the answer, grids twice as many cells
   across as down so a cell is square on the ground, is still open and reuses the same geometry.
-- **On the true-shape sheet a cell is two pixels wide, so what the raster decides a cell at a time
-  is two pixels wide where it runs north-south and one tall where it runs east-west.** The raster's
-  own ink — its coast and border cells, a hachure, an isobath, the stipple — keeps its bearing and
-  pitch on the sheet, because every pattern is asked at the cell's own pixel of it, but a mark along
-  a column cannot be narrower than a cell. The vector ink laid over it (the traced coast, rivers,
-  graticule, glyphs, lettering) is not affected. What removes it is a grid whose cells are square on
-  the ground; per-pixel kernels were declined for it. 2026-09-24, Fix A.
+- ~~**On the true-shape sheet a cell is two pixels wide, so what the raster decides a cell at a time
+  is two pixels wide where it runs north-south and one tall where it runs east-west.**~~ Answered on
+  square cells, 2026-09-28, Q4: a grid twice as many cells across as down is drawn a cell to a pixel,
+  and `RasterMarkWidthTest` holds the raster's coast, read off the drawn sheet, to the same thinnest
+  and commonest run either way. On the gallery's world at 512 rows both are one pixel (mean 1.32
+  along the rows, 1.34 down the columns); the same seed on the 512 by 512 grid, the clause's control,
+  reads two pixels along the rows and one down the columns. The applications still ask for grids as
+  many cells tall as wide until the ladder moves to rows (Q5), and the guard that every size on the
+  ladder draws cell for pixel moves with it; the two-pixel branch of the sheet stays for such grids
+  and is held by `SheetExpansionTest`'s and `GpuRasterTest`'s cases on them. 2026-09-24, Fix A.
 - **A 4096 world cannot be made in a browser tab, so its 8192 by 4096 sheet has never been drawn
   there.** Tried on 2026-09-25 in Edge 153 on an RTX 3070 Ti (WebGL through ANGLE on Direct3D 11,
   `MAX_TEXTURE_SIZE` 16,384): the tab's JavaScript heap stood at 1.4 GB five minutes into the
@@ -1165,6 +1168,27 @@
   formula tends to on a fine grid; Q2 kept the formula because restating it would move every world
   at every grid, and a chunk that changes the tectonics should take it. 2026-09-28, Q2.
 
+- **One sea cell of seed 42 at 512 rows stands above the shoreline the sea stage cut.** At column 33,
+  row 414, beside the land, 9.0e-5 of the field (about half a meter) over the line; the same seed on
+  the 512 by 512 grid has none. `DataExportTest`'s open-sea clause, which the heightmap draws
+  faithfully, runs as a known failure on it. Which of the sea stage's rules leaves water over the
+  cut (the drowned valleys, the littoral grading, the enclosed-sea repair) is not traced.
+  2026-09-28, Q4.
+- **A lake's area follows the cell count, and a lake with no outlet floods the one-cell gullies
+  around it.** Seed 42's lakes cover 646,820 km2 at 512 rows of square cells, against 331,238 on the
+  512 by 512 grid and 334,328 at 1,024 rows. Most of the excess is one endorheic lake, lake 1 at
+  512 rows: 2,051 cells, 281,662 km2, centered about (3,316 km, 1,625 km), where the 512 by 512 grid
+  has no lake and 1,024 rows has two endorheic lakes of 44,117 and 24,616 km2. Its surface floods
+  108 one-cell gullies, 47 running north-south and 61 east-west, every one lower than the ground on
+  both sides of it, with 185 one-cell tips and 72 cells joined to it only at a corner; 21% of its
+  cells are not open water. The drawing paints every lake cell, so the gullies show as fingers,
+  and the deep tint is faithful: water over the bed has a median of 206 m and a 90th percentile of
+  330 m, against a world median of 112 m on the 512 by 512 grid. Drawing only open water would hide
+  the defect rather than mend it. What to trace: the endorheic surface's balance
+  (`LakeWaterBalance`) and the fill in `RiverStage` that sets the lake's extent, for why 512 rows
+  settles at four times the area 1,024 rows does; the gullies are the symmetric comb residual the
+  hydraulic rounds leave (`CombGuardTest`'s known failure). A generator chunk of its own.
+  2026-09-28, Q4.
 - **A world of square cells carries more ice at 60 to 90 degrees than a change of grid gives.**
   `GridShapeTest` compares the same seed at 512 by 512 and at `forRows(512)`, band by band. Its
   ice clause runs as a known failure. Seed 1234 at -75 to -90 degrees carries +0.017 of the band as

@@ -16,14 +16,14 @@ import kotlin.random.Random
  * two devices' figures are comparable. Built from [kotlin.random.Random], whose generator is the
  * same on every platform, so the JVM and the browser build the same bed to the bit.
  *
- * [cellsAcross] by [cellsDown] cells, 256 each way, with the default settings: a bed of uniform
- * noise over the lower 40% of the ruler, frozen north of the first third and south of the second,
- * and one frozen cell in twenty left off the sheet so its margins are ragged.
+ * [cellsAcross] by [cellsDown] cells, 256 by 128 square ones, with the default settings: a bed of
+ * uniform noise over the lower 40% of the ruler, frozen north of the first third and south of the
+ * second, and one frozen cell in twenty left off the sheet so its margins are ragged. Square
+ * because the maps are: the row scale the device is handed is 1, as a world's is.
  */
 class IceSheetParity private constructor() {
 
-    private val config =
-        WorldGenConfig(seed = FIXTURE_SEED, width = SIDE_CELLS, height = SIDE_CELLS)
+    private val config = WorldGenConfig.forRows(seed = FIXTURE_SEED, rows = ROWS)
     val cellsAcross = config.width
     val cellsDown = config.height
     private val cellCount = cellsAcross * cellsDown
@@ -113,8 +113,11 @@ class IceSheetParity private constructor() {
          */
         private const val FIXTURE_SEED = 718106L
 
-        /** Big enough for sheets of real width, small enough for a page to run on load. */
-        private const val SIDE_CELLS = 256
+        /**
+         * Big enough for sheets of real width, small enough for a page to run on load: 128 rows of
+         * square cells, 256 across, the width in cells of the 256 by 256 grid it was before.
+         */
+        private const val ROWS = 128
 
         /** The bed's noise, a seed of its own so the grid's seed does not move it. */
         private const val NOISE_SEED = 4242

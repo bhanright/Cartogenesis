@@ -38,8 +38,7 @@ class GpuErosionTest {
         val gpu = result.accelerator ?: skipWithoutDevice(result.unavailableBecause)
         println("GPU device: ${gpu.name}")
 
-        val config = WorldGenConfig(seed = 234475L, width = 512, height = 512)
-            .atResolution(1024, 1024)
+        val config = SQUARE_CELLS
         val uplift = PlateStage.generate(config, TerrainStage.generate(config)).height
 
         val gpuConfig = config.copy(
@@ -181,8 +180,7 @@ class GpuErosionTest {
         val result = GpuErosion.createOrNull()
         val gpu = result.accelerator ?: skipWithoutDevice(result.unavailableBecause)
 
-        val config = WorldGenConfig(seed = 234475L, width = 512, height = 512)
-            .atResolution(1024, 1024)
+        val config = SQUARE_CELLS
         val uplift = PlateStage.generate(config, TerrainStage.generate(config)).height
         val gpuConfig = config.copy(
             erosion = config.erosion.copy(acceleration = Acceleration.GPU)
@@ -238,8 +236,7 @@ class GpuErosionTest {
         // depression filling walks a queue in elevation order — each can turn a difference far
         // below anything visible into a different decision. This measures whether it does, which
         // is what decides whether a GPU world can be saved as a seed or has to carry its terrain.
-        val config = WorldGenConfig(seed = 234475L, width = 512, height = 512)
-            .atResolution(1024, 1024)
+        val config = SQUARE_CELLS
         val onCpu = WorldGenerationEngine.generateBlocking(config)
         val onGpu = WorldGenerationEngine.generateBlocking(
             config.copy(erosion = config.erosion.copy(acceleration = Acceleration.GPU)),
@@ -271,6 +268,13 @@ class GpuErosionTest {
         (1..TIMED_RUNS).minOf { measureTimeMillis { body() } }
 
     private companion object {
+        /**
+         * The gallery's seed at 512 rows of square cells, 1024 by 512: the grid the kernel runs on
+         * from here on, where the east-west and the north-south talus limits it is handed are one
+         * limit, since a step along a row and one down a column are the same length on the ground.
+         */
+        val SQUARE_CELLS: WorldGenConfig = WorldGenConfig.forRows(seed = 234475L, rows = 512)
+
         /** How many times a measurement is repeated before its floor is taken. */
         const val TIMED_RUNS = 3
 

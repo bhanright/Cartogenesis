@@ -6,7 +6,6 @@ import com.cartogenesis.worldgen.BorrowsSharedWorlds
 import com.cartogenesis.worldgen.SharedWorlds
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
-import com.cartogenesis.worldgen.model.WorldScale
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -21,10 +20,10 @@ import kotlin.test.assertTrue
  * belongs to the sheet's scale rather than to the grid the world was generated on — which is the
  * one thing the radical law on the traced count cannot do, and is shown failing below.
  *
- * At 512, but for the one clause that cannot be: a rule that answers to the sheet rather than to
- * the grid can only be shown to by drawing two grids at one sheet, so the last case generates a
- * 1024 world as well. The same measurements at 2048, on the author's own world, are
- * `RiverSelectionAuditTest` in `:desktop`.
+ * At 512 rows of square cells, but for the one clause that cannot be: a rule that answers to the
+ * sheet rather than to the grid can only be shown to by drawing two grids at one sheet, so the
+ * last case generates a 1024-row world as well. The same measurements at 2048, on the author's own
+ * world, are `RiverSelectionAuditTest` in `:desktop`.
  */
 class RiverSelectionTest : BorrowsSharedWorlds() {
 
@@ -34,16 +33,17 @@ class RiverSelectionTest : BorrowsSharedWorlds() {
          * incision's terrain seed 42's largest river's chain fits a quarter of Earth's ink even on
          * the postage-stamp sheet, so that sheet no longer exercises the floor on that seed; the
          * clause's other seeds still do, and the largest river is still drawn on every sheet. Once
-         * the implicit pass lets a lake fall with its outlet, seed 99's chain fits it too. A
-         * smaller sheet or another seed would restore it, and is not chosen here
-         * (docs/DESIGN_LEDGER.md, Fix 3b).
+         * the implicit pass lets a lake fall with its outlet, seed 99's chain fits it too. On square
+         * cells the seeds are 7 and 99: seed 42's network there needs the floor again, and seed 7's
+         * chain fits the quarter. A smaller sheet or another seed would restore it, and is not
+         * chosen here (docs/DESIGN_LEDGER.md, Fix 3b and Q4).
          */
         const val FLOOR_IDLE_ON_SOME_SEEDS =
             "the rivers: on the law's terrain some seeds' largest chains fit the tiny sheet's quarter of Earth's ink"
 
-        /** The four standard seeds, at the grid every per-merge guard in this repository uses. */
+        /** The four standard seeds, at the rows the per-merge guards' detail worlds use. */
         val SEEDS = listOf(7L, 42L, 1234L, 99L)
-        const val SIDE = 512
+        const val ROWS = 512
 
         /**
          * A laptop's pane, across. The world is always drawn whole, so this over the true-shape
@@ -90,7 +90,7 @@ class RiverSelectionTest : BorrowsSharedWorlds() {
         const val ACROSS_RESOLUTIONS_BAND = 0.05
 
         /**
-         * A sheet drawn at a hundred-and-twenty-eighth of the whole sheet: a 512 world, whose
+         * A sheet drawn at a hundred-and-twenty-eighth of the whole sheet: a 512-row world, whose
          * true-shape sheet is 1024 pixels across, drawn eight pixels across.
          *
          * Nothing draws a map this small; it is here because the budget goes as the square root
@@ -100,20 +100,16 @@ class RiverSelectionTest : BorrowsSharedWorlds() {
         const val TINY_SHEET_PIXELS_PER_SHEET_PIXEL = 1f / 128f
     }
 
-    /**
-     * One seed at one grid, the way the application reaches a grid above 512.
-     *
-     * Through [WorldGenConfig.atResolution], as the application does; since every setting is a
-     * length on the ground, the config built at 1024 outright is the same world.
-     */
-    private fun world(seed: Long, side: Int = SIDE): WorldMap =
-        SharedWorlds.world(
-            WorldGenConfig(seed = seed, width = SIDE, height = SIDE).atResolution(side, side)
-        )
+    /** One seed at [rows] rows of square cells, twice as many across. */
+    private fun world(seed: Long, rows: Int = ROWS): WorldMap =
+        SharedWorlds.world(WorldGenConfig.forRows(seed = seed, rows = rows))
 
-    /** The sheet a whole world of [cellsAcross] cells is shown on in a [PANE_PIXELS_ACROSS] pane. */
-    private fun paneSheet(cellsAcross: Int): MapSheet =
-        MapSheet.onScreen(PANE_PIXELS_ACROSS / SheetGeometry.of(WorldScale(), cellsAcross, cellsAcross).widthPixels)
+    /**
+     * The sheet [map] is shown on whole in a [PANE_PIXELS_ACROSS] pane: read off the world's own
+     * sheet, so a grid of any shape is shown at the scale its sheet is.
+     */
+    private fun paneSheet(map: WorldMap): MapSheet =
+        MapSheet.onScreen(PANE_PIXELS_ACROSS / SheetGeometry.of(map).widthPixels)
 
     // ---- the Earth figure --------------------------------------------------------------------
 
@@ -149,13 +145,13 @@ class RiverSelectionTest : BorrowsSharedWorlds() {
             val map = world(seed)
             listOf(
                 "export" to MapSheet.UNGENERALISED,
-                "pane" to paneSheet(map.width)
+                "pane" to paneSheet(map)
             ).forEach { (where, sheet) ->
                 val chosen = RiverSelection.select(map, sheet)
                 val wanted = RiverSelection.drawnRiverKmPerSquareKm(chosen.denominator)
                 val drawn = chosen.drawnKmPerSquareKm
                 println(
-                    "X1C $seed at $SIDE, $where: 1:${(chosen.denominator / 1e6).oneDecimal()}M, " +
+                    "X1C $seed at $ROWS rows, $where: 1:${(chosen.denominator / 1e6).oneDecimal()}M, " +
                         "${chosen.drawnCount} of ${map.rivers.rivers.size} courses, " +
                         "${chosen.drawnKilometres.round()} of ${chosen.tracedKilometres.round()} km " +
                         "over ${(chosen.landAreaSquareKm / 1e6).oneDecimal()} M km2 land: " +
@@ -219,7 +215,7 @@ class RiverSelectionTest : BorrowsSharedWorlds() {
     fun `no drawn tributary hangs off a river that is not drawn`() {
         SEEDS.forEach { seed ->
             val map = world(seed)
-            listOf(MapSheet.UNGENERALISED, paneSheet(map.width)).forEach { sheet ->
+            listOf(MapSheet.UNGENERALISED, paneSheet(map)).forEach { sheet ->
                 val chosen = RiverSelection.select(map, sheet)
                 var tributaries = 0
                 chosen.drawn.indices.forEach { course ->
@@ -261,7 +257,7 @@ class RiverSelectionTest : BorrowsSharedWorlds() {
     @Test
     fun `one pane draws the same density from a 512 world and a 1024 world`() {
         val densities = HashMap<String, MutableMap<Int, Double>>()
-        listOf(SIDE, 2 * SIDE).forEach { side ->
+        listOf(ROWS, 2 * ROWS).forEach { side ->
             // One world alive at a time: reduced to the two figures each rule is read for before
             // the next is generated.
             val map = world(7L, side)
@@ -288,8 +284,8 @@ class RiverSelectionTest : BorrowsSharedWorlds() {
 
         val law = densities.getValue("radical law")
         val earth = densities.getValue("Earth's density")
-        val lawGap = disagreement(law.getValue(SIDE), law.getValue(2 * SIDE))
-        val earthGap = disagreement(earth.getValue(SIDE), earth.getValue(2 * SIDE))
+        val lawGap = disagreement(law.getValue(ROWS), law.getValue(2 * ROWS))
+        val earthGap = disagreement(earth.getValue(ROWS), earth.getValue(2 * ROWS))
         println(
             "X1C one pane, two grids: the radical law's densities disagree by " +
                 "${(lawGap * 100).oneDecimal()}%, Earth's density by ${(earthGap * 100).oneDecimal()}%"
@@ -377,7 +373,7 @@ class RiverSelectionTest : BorrowsSharedWorlds() {
     fun `the largest river on the map is always drawn`() {
         SEEDS.forEach { seed ->
             val map = world(seed)
-            listOf(MapSheet.UNGENERALISED, paneSheet(map.width)).forEach { sheet ->
+            listOf(MapSheet.UNGENERALISED, paneSheet(map)).forEach { sheet ->
                 val chosen = RiverSelection.select(map, sheet)
                 val biggest = map.rivers.rivers.indices
                     .maxByOrNull { RiverSelection.peakWidthRatio(map.rivers.rivers[it]) }!!
@@ -417,7 +413,7 @@ class RiverSelectionTest : BorrowsSharedWorlds() {
             ).riversDrawn
         }
         println(
-            "X1C the scale on seed 42 at $SIDE, courses drawn: " +
+            "X1C the scale on seed 42 at $ROWS rows, courses drawn: " +
                 drawn.joinToString(", ") { (step, count) -> "$step:$count" } +
                 " of ${map.rivers.rivers.size} traced"
         )
@@ -518,7 +514,7 @@ class RiverSelectionTest : BorrowsSharedWorlds() {
             if (quarterOfEarthKm >= tiny.budgetKilometres) idleFloor += "seed $seed"
             assertTrue(tiny.drawn[biggest], "seed $seed lost its largest river on a tiny sheet")
         }
-        KnownFailures.expect(FLOOR_IDLE_ON_SOME_SEEDS, "seed 42, seed 99") {
+        KnownFailures.expect(FLOOR_IDLE_ON_SOME_SEEDS, "seed 7, seed 99") {
             if (idleFloor.isNotEmpty()) {
                 throw RecordedViolation(
                     "the largest river's chain fits a quarter of Earth's ink even on the tiny sheet, so it does not " +

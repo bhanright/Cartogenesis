@@ -34,12 +34,13 @@ import kotlin.math.sqrt
  * The single lamp is kept, exactly as it was, because a reader may prefer it — see
  * [RenderOptions.singleLamp].
  *
- * **Drawn for the ground, not for the sheet.** A cell of this map is twice as wide as it is tall,
- * and the sheet draws it as a square pixel, so a slope can be read per pixel (the sheet's) or per
- * kilometre (the ground's), and the two disagree by a factor of two north-south. This reads the
- * ground: the difference down a column is divided by the row's height and the one along a row by
- * the column's width, and the horizon is sampled along the eight compass bearings of the ground at
- * three distances of ground. So a range lights the same whichever way it runs, and a slope facing
+ * **Drawn for the ground, not for the sheet.** A cell of a grid as many cells tall as wide is twice
+ * as wide as it is tall on the ground, and a raster read a cell to a square pixel can read a slope
+ * per pixel (the sheet's) or per kilometer (the ground's), which disagree by a factor of two
+ * north-south there; on a grid twice as many cells across as down the cells are square and the
+ * two agree. This reads the ground: the difference down a column is divided by the row's height
+ * and the one along a row by the column's width, and the horizon is sampled along the eight
+ * compass bearings of the ground at three distances of ground. So a range lights the same whichever way it runs, and a slope facing
  * north is shaded as steep as it stands. Read on the sheet, a north-facing slope was lit as half as
  * steep as the same slope facing east, and the sky's stencil reached twice as far east as north
  * (Audit III's F-R5; docs/DESIGN_LEDGER.md, Fix 2). On square cells the two readings of a slope
@@ -52,51 +53,60 @@ import kotlin.math.sqrt
 internal object ReliefShading {
 
     /**
-     * What a central difference is multiplied by to become the exaggerated gradient, at a map
-     * [width]: [verticalExaggeration] over the two cell widths the difference spans.
+     * What a central difference is multiplied by to become the exaggerated gradient, on cells
+     * [cellWidthKm] wide: [verticalExaggeration] over the two cell widths the difference spans.
      */
-    fun slopeScale(width: Int): Float = verticalExaggeration(width) / CENTRAL_DIFFERENCE_SPAN_CELL_WIDTHS
+    fun slopeScale(cellWidthKm: Double): Float =
+        verticalExaggeration(cellWidthKm) / CENTRAL_DIFFERENCE_SPAN_CELL_WIDTHS
 
     /**
-     * How many times steeper than the ground the relief is drawn, at a map [width]: the one
-     * exaggeration the lamps, the sky's horizon and the engraving's gradient all read.
+     * How many times steeper than the ground the relief is drawn, on cells [cellWidthKm] wide: the
+     * one exaggeration the lamps, the sky's horizon and the engraving's gradient all read.
      *
      * Gentle relief still has to read at map scale, and the gradient here is a rise over a cell
-     * width in the height field's own units: at four times the grid a cell covers a quarter of the
-     * ground, and the relief would otherwise render four times flatter.
+     * width in the height field's own units: a cell half as wide covers half the ground, and the
+     * relief would otherwise render twice as flat. So the exaggeration is held to the ground,
+     * [EXAGGERATION_TIMES_CELL_WIDTH_KM] over the cell's width in km, whatever the grid and
+     * whatever the planet: a rise per cell width is a slope times the width, so a slope drawn the
+     * same wants the exaggeration in inverse proportion to it.
      */
-    fun verticalExaggeration(width: Int): Float = VERTICAL_EXAGGERATION_AT_512 * (width / 512f)
+    fun verticalExaggeration(cellWidthKm: Double): Float =
+        (EXAGGERATION_TIMES_CELL_WIDTH_KM / cellWidthKm).toFloat()
 
     /**
-     * How far the openness stencil reaches on its shortest step, in cells, at a map [width].
+     * How far the openness stencil reaches on its shortest step, in cells, on cells [cellWidthKm]
+     * wide: [OPENNESS_STEP_KM] of ground, and never less than a cell.
      *
      * The stencil grows with the grid, unlike the engraving's marks, and for the opposite reason:
      * a hachure is a mark made by a pen and belongs to the sheet, but a valley is a piece of
      * country and belongs to the world. Held at the same three distances of *ground* whatever the
-     * resolution, the sky term describes the same valleys at 512 and at 4096; held at three
-     * distances of pixel it would describe a valley at 512 and a pothole at 4096. It costs nothing
-     * either way — the same twenty-four samples a pixel, further apart.
+     * resolution, the sky term describes the same valleys on a coarse grid and a fine one; held at
+     * three distances of pixel it would describe a valley on the one and a pothole on the other. It
+     * costs nothing either way — the same twenty-four samples a pixel, further apart.
      */
-    fun opennessStep(width: Int): Int =
-        (OPENNESS_STEP_AT_512 * width / 512).coerceAtLeast(1)
+    fun opennessStep(cellWidthKm: Double): Int =
+        (OPENNESS_STEP_KM / cellWidthKm).toInt().coerceAtLeast(1)
 
     /**
      * The lighting factor for every cell: 1 leaves a colour alone, below darkens, above lightens.
      *
      * The sea keeps a factor of 1: relief is only ever raked across the land, and shading the sea
-     * floor as well would be most of the work for none of the picture.
+     * floor as well would be most of the work for none of the picture. [scale] is [slopeScale]'s
+     * for the grid unless a caller asks for another exaggeration, which is how `ReliefShadingTest`
+     * sweeps it.
      */
     fun of(
         elevation: FloatField,
         isLand: BooleanArray,
         singleLamp: Boolean,
-        cellHeightInCellWidths: Double
+        cellWidthKm: Double,
+        cellHeightInCellWidths: Double,
+        scale: Float = slopeScale(cellWidthKm)
     ): FloatArray {
         val cellsAcross = elevation.width
         val cellsDown = elevation.height
         val shade = FloatArray(cellsAcross * cellsDown) { 1f }
-        val scale = slopeScale(cellsAcross)
-        val horizon = ReliefHorizon.of(opennessStep(cellsAcross), cellHeightInCellWidths)
+        val horizon = ReliefHorizon.of(opennessStep(cellWidthKm), cellHeightInCellWidths)
         val rowScale = cellHeightInCellWidths.toFloat()
         for (row in 0 until cellsDown) {
             val rowStart = row * cellsAcross
@@ -289,26 +299,36 @@ internal object ReliefShading {
     }
 
     /**
-     * The relief's vertical exaggeration at a 512 grid: the rise over a cell width of ground, in
-     * the height field's units, is drawn twenty-four times steeper.
+     * The relief's vertical exaggeration times the width of the cell it is drawn on, in km: a rise
+     * over a cell width of ground, in the height field's units, is drawn this over the width
+     * times steeper. 445.31 km, which is 38 on the 11.72 km square cells of a 512-row world.
      *
-     * Deliberate, and the one the maps have always been drawn at. The single lamp, which every
-     * render before the sky model used and which [RenderOptions.singleLamp] keeps exactly, read a
-     * central difference over two cell widths, un-halved, times twelve: the gradient twice over,
-     * times twelve. The sky model's eight lamps took that difference as it stood, the engraving's
-     * gradient is the same difference over its reach times the same twelve, and [HAZE] and
-     * [ORDINARY_GROUND] are measured against that picture. The sky's horizon alone read the rise
-     * over its run once, times twelve, so the lamps lit ground twice as steep as the horizon that
-     * shaded it; it reads the same twenty-four now, and the surface the direct light and the sky
-     * see is one surface (docs/DESIGN_LEDGER.md, Fix 2).
+     * The exaggeration was first set by eye on the 512 by 512 grid, 24 on its 23.4 km cells (a
+     * central difference over two cell widths, un-halved, times twelve), and every calibration of
+     * the shading since, [HAZE] and [ORDINARY_GROUND] among them, is measured against the single
+     * lamp's picture at it. On square cells the rule is the steepest exaggeration, swept in
+     * quarters on the gallery world at 512 rows, at which `ReliefShadingTest`'s cone, cut to the
+     * ninth decile of the land's drawn slope, pins no bearing at the darkest factor: 38.0. It lands
+     * 2% under the single lamp's contrast of the 512 by 512 grid's maps, a deviation of 0.2090
+     * against 0.2133, which no eye tells apart; the contrast matched exactly, at 40.25, pinned the
+     * cone on 35 bearings, and held at 24 on the ground (48 on these cells) the finer cells'
+     * steeper ground drew 0.2260 and pinned it on 41 (docs/DESIGN_LEDGER.md, Q4). The test holds
+     * both facts. Stated over the cell's width, the same slope on the ground is drawn the same on
+     * every grid. The lamps, the sky's horizon, the engraving's gradient and the shader all read
+     * the one figure (docs/DESIGN_LEDGER.md, Fix 2).
      */
-    private const val VERTICAL_EXAGGERATION_AT_512 = 24f
+    private const val EXAGGERATION_TIMES_CELL_WIDTH_KM = 38.0 * 11.71875
 
     /** How many cell widths a central difference spans: one either side of the cell. */
     private const val CENTRAL_DIFFERENCE_SPAN_CELL_WIDTHS = 2f
 
-    /** Shortest reach of the openness stencil at a 512 grid; the other two are twice and four times it. */
-    private const val OPENNESS_STEP_AT_512 = 2
+    /**
+     * Shortest reach of the openness stencil, in km of ground; the other two are twice and four
+     * times it. Two of the 23.4375 km cells of the 512 by 512 grid it was set on as two cells,
+     * which is four of the square cells of a 512-row world. A choice of how far a valley reaches,
+     * not a calibration of the picture's contrast, so the square grid keeps it on the ground.
+     */
+    private const val OPENNESS_STEP_KM = 46.875
 
     /** How many distances out each bearing looks. Three, at r, 2r and 4r. */
     const val HORIZON_STEPS = 3
@@ -365,9 +385,11 @@ internal object ReliefShading {
      * haze, and [skyShare] and [skyBrightness] interpolate the pair.
      *
      * The value is derived rather than chosen: it is the haze at which the shaded relief has the
-     * same contrast as the single lamp it replaces, over the land of seed 234475 at 512.
-     * `ReliefShadingTest` sweeps the haze, finds that value and asserts this constant is it — so
-     * the derivation is a guard rather than a note. Clearer than this and the shadows harden back
+     * same contrast as the single lamp it replaces, over the land of seed 234475 at 512 rows of
+     * square cells. `ReliefShadingTest` sweeps the haze, finds that value and asserts this constant
+     * is it — so the derivation is a guard rather than a note. Re-derived on square cells, where
+     * the lamp's contrast (a deviation of 0.2260) is matched at 0.10 again: the terrain of cells
+     * twice as wide as tall had matched it at 0.12 (docs/DESIGN_LEDGER.md, Q4). Clearer than this and the shadows harden back
      * toward the thing the model exists to stop doing; hazier and the drawing goes flat.
      */
     const val HAZE: Float = 0.10f
@@ -391,7 +413,7 @@ internal object ReliefShading {
      * the light the ground gets — but there is a question of what "unshaded" means, and flat open
      * ground is the wrong answer to it: almost no ground is flat, so measuring against a plain
      * would darken every map by the amount ordinary country is rougher than one. This is the median
-     * illumination over the land of seed 234475 at 512 under this day's [HAZE], which is what
+     * illumination over the land of seed 234475 at 512 rows under this day's [HAZE], which is what
      * ordinary country comes to; dividing by it leaves the sheet's overall tone where the single
      * lamp had it and lets only the relief move. `ReliefShadingTest` measures it at the haze it
      * derives and asserts this is that figure.
@@ -422,9 +444,13 @@ internal object ReliefShading {
      * ordinary country catches less light. And to 0.9225 when the sky's horizon was put on the
      * lamps' exaggeration, [VERTICAL_EXAGGERATION_AT_512], where it had read the ground half as
      * steep: ground walled in by country twice as steep sees less of the sky (docs/DESIGN_LEDGER.md,
-     * Fix 2).
+     * Fix 2). The implicit incision's terrain then measured 0.8750 on the 512 by 512 grid, which
+     * was recorded rather than re-derived while the device's parity guard could not run with it;
+     * on square cells, the same world's valleys resolved on cells of 11.7 km and drawn at the
+     * exaggeration re-derived there ([EXAGGERATION_TIMES_CELL_WIDTH_KM]), it is 0.8901, re-derived
+     * with that guard run (docs/DESIGN_LEDGER.md, Fix 3b and Q4).
      */
-    private const val ORDINARY_GROUND = 0.9225f
+    private const val ORDINARY_GROUND = 0.8901f
 
     /** Read by `ReliefShadingTest`, which is where the figure above comes from. */
     val ordinaryGround: Float get() = ORDINARY_GROUND

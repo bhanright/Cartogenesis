@@ -174,6 +174,7 @@ class I3RenderDump {
     private fun lightOf(world: WorldMap): BufferedImage {
         val light = ReliefShading.of(
             world.relativeElevation, world.sea.isLand, singleLamp = false,
+            cellWidthKm = world.config.cellWidthKm,
             cellHeightInCellWidths = world.config.cellHeightInCellWidths
         )
         val image = BufferedImage(world.width, world.height, BufferedImage.TYPE_INT_RGB)

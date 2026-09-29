@@ -41,14 +41,19 @@ class GpuIceSheetTest {
         val relative = gap.worstThicknessShare
         val disagreedShare = gap.receiversDifferingShare
         println(
-            ("I1 PARITY %d sheet cells: the thickness is at worst %.4f m apart, %.2e of the" +
+            ("I1 PARITY %d sheet cells on %dx%d square cells: the thickness is at worst %.4f m apart, %.2e of the" +
                 " thickest %.0f m; %d receivers differ, %.4f%% of them")
                 .format(
-                    sheetCells, worstThickness, relative, gap.thickestMetres,
+                    sheetCells, fixture.cellsAcross, fixture.cellsDown, worstThickness, relative, gap.thickestMetres,
                     gap.receiversDiffering, disagreedShare * 100
                 )
         )
         assertTrue(sheetCells > 0, "the synthetic mask left no sheet to measure")
+        // The row scale the card is handed (`uRowScale`) is a world's own: square cells, one.
+        assertTrue(
+            fixture.cellHeightInCellWidths == 1f,
+            "the fixture's rows are ${fixture.cellHeightInCellWidths} of a column's width, not the square cells a world has"
+        )
         assertTrue(
             relative <= THICKNESS_PARITY,
             "the card's thickness is ${"%.4f".format(worstThickness)} m off the processor's," +

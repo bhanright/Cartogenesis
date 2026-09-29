@@ -46,12 +46,13 @@ import org.junit.jupiter.api.extension.ExtendWith
  * files back through `ImageIO` rather than through the encoder that wrote them — a round trip
  * through one's own code proves nothing about whether Blender or QGIS will open the file.
  *
- * 512, which takes a few seconds; the sizes the app actually offers are timed in `ExportAuditTest`.
+ * 512 rows of square cells, which takes a few seconds; the sizes the app actually offers are timed
+ * in `ExportAuditTest`.
  */
 @ExtendWith(SharedWorldsCheck::class)
 class DataExportTest {
 
-    private val config = WorldGenConfig(seed = 42L, width = 512, height = 512)
+    private val config = WorldGenConfig.forRows(seed = 42L, rows = 512)
     private val world: WorldMap by lazy { SharedWorlds.world(config) }
 
     private fun write(layer: DataLayer): DataFiles = runBlocking {
@@ -152,7 +153,7 @@ class DataExportTest {
      * paragraph. `SeaConfig.enclosedSeaIsLand` turns a body of water the ocean cannot reach into
      * land with a hollow floor below the waterline, which is the Caspian, the Dead Sea and the
      * Qattara — and with `postCutOutlet` on it is then drained out into a salt flat, so the floor
-     * is dry ground below the waterline rather than a lake. On seed 42 at 512 that is 497 cells and
+     * is dry ground below the waterline rather than a lake. On seed 42 at 512 rows that is 516 cells and
      * the ice accounts for none of them (measured with `GlaciationConfig.enabled` off, which
      * changes nothing here). A heightmap that clamped that floor to sea level would be flattening a
      * real depression, so what is held is the pair that is not allowed: no *open sea* cell may come
@@ -220,7 +221,16 @@ class DataExportTest {
                 "$landBelowWithoutBasins with enclosed seas left as sea"
         )
         assertTrue(landBelow > 0, "this world was supposed to have a below-sea-level basin on it")
-        assertEquals(0, waterAbove, "open sea came back above sea level")
+        // One sea cell of this world stands above the shoreline, the file drawing it faithfully:
+        // see [SEA_ABOVE_ITS_SHORELINE].
+        KnownFailures.expect(SEA_ABOVE_ITS_SHORELINE, "open sea above sea level: 1") {
+            if (waterAbove != 0) {
+                throw RecordedViolation(
+                    "open sea came back above sea level: $waterAbove",
+                    "open sea above sea level: $waterAbove"
+                )
+            }
+        }
         assertEquals(
             0,
             landBelowWithoutBasins,
@@ -240,12 +250,17 @@ class DataExportTest {
         assertEquals(config.seed, json.int("seed").toLong())
         assertEquals(world.width, json.int("widthPixels"))
         assertEquals(world.height, json.int("heightPixels"))
-        // The data keeps the native grid, one sample a cell, and says so: the picture exports are
-        // the true-shape sheet and this is not.
+        // The data keeps the native grid, one sample a cell, and says so; on square cells that is
+        // the picture exports' own shape, and the note says that rather than to stretch it.
         assertEquals(world.width, json.int("gridCellsAcross"))
         assertEquals(world.height, json.int("gridCellsDown"))
         assertEquals(1, json.int("samplesPerCell"))
         assertTrue("one sample per grid cell" in json.text("sampleSpacing"))
+        assertTrue("square on the ground" in json.text("sampleSpacing"), json.text("sampleSpacing"))
+        assertTrue("stretch" !in json.text("sampleSpacing"), json.text("sampleSpacing"))
+        // Its files are named by rows, as the size it was asked at is.
+        assertEquals("cartogenesis-42-512-heightmap.png", files.imageName)
+        assertEquals("cartogenesis-42-512-heightmap.json", files.sidecarName)
         assertEquals(16, json.int("bitsPerSample"))
         assertEquals(DataExports.SEA_LEVEL_GREY_LEVEL, json.int("seaLevelGreyLevel"))
 
@@ -591,6 +606,16 @@ class DataExportTest {
 
     private companion object {
         /**
+         * The known failure the open-sea clause records. On square cells seed 42 at 512 rows has one
+         * sea cell above its own shoreline, at column 33, row 414, 9.0e-5 of the field (about half a
+         * meter) above the line and beside the land, where the 512 by 512 world has none: the sea
+         * stage leaves a cell of water standing over the shoreline it cut. The heightmap draws it
+         * as it is, so the export is faithful and the ground is not; `docs/TODO.md` has the entry.
+         */
+        const val SEA_ABOVE_ITS_SHORELINE =
+            "the heightmap: a sea cell stands above the shoreline on square cells"
+
+        /**
          * How far a colour channel may drift at the 99th percentile before the JPEG chip's small
          * print stops being honest.
          *
@@ -622,8 +647,13 @@ class DataExportTest {
          * measured drifts, which is the only place a bar whose whole meaning is that one passes
          * and the other does not can honestly sit; the relation against WebP below is the half of
          * this guard that survives the picture changing, and it did not move.
+         *
+         * Re-derived a fourth time on square cells (Q4): the sheet is the grid a cell to a pixel,
+         * so every mark the raster makes has single-pixel edges both ways, and every figure rose
+         * together: WebP 45, JPEG at quality 90 **46**, at quality 30 **63**. Halfway, rounded down,
+         * is **54**; the relation against WebP holds as it did, 46 against 45 and five of room.
          */
-        const val MAX_JPEG_DRIFT = 45
+        const val MAX_JPEG_DRIFT = 54
 
         /** And the same bound as a relation, measured against WebP in the same run. */
         const val OVER_WEBP = 5

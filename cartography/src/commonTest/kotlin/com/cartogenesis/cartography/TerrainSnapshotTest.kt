@@ -47,7 +47,7 @@ class TerrainSnapshotTest {
 
     @Test
     fun `a stored terrain rebuilds the same world`() = runTest(timeout = 10.minutes) {
-        val config = WorldGenConfig(seed = 234475L, width = 256, height = 256)
+        val config = WorldGenConfig.forRows(seed = 234475L, rows = 128)
             .let { it.copy(erosion = it.erosion.copy(acceleration = Acceleration.GPU)) }
 
         // No accelerator, so this falls back to the CPU — which is exactly the situation of a GPU

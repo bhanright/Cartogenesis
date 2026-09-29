@@ -243,7 +243,15 @@ class ImplicitIncisionTest {
                     receiversLowered++
                     if (before <= baseBeforeAt[cell]) {
                         madeEligible++
-                        if (after >= before) wrong("left standing after its receiver was cut below it")
+                        // The law cuts `F / (1 + F)` of the drop to the receiver's new height, and
+                        // where that is under one float step of the height the rounding leaves the
+                        // cell where it stood; such cells are counted and not judged, as the half-
+                        // drop clause's are (seed 42 at 256 rows has one since L1: a drop of 1 mm
+                        // at 11,292 m of the field, where a step is 0.95 mm).
+                        val courant = courantAt[cell].toDouble()
+                        val lawCut = courant / (1.0 + courant) * (before.toDouble() - base.toDouble())
+                        if (lawCut < Math.ulp(before)) tooCloseToJudge++
+                        else if (after >= before) wrong("left standing after its receiver was cut below it")
                     }
                 }
             }

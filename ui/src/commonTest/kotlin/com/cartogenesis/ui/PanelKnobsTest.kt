@@ -751,9 +751,10 @@ class PanelKnobsTest {
      *
      * A 2048 world is more than a browser tab holds (see [WorldCeilings.BROWSER_TAB]), so under a
      * browser's ceiling every chip above 1024 — the working resolution's and the export's — is
-     * disabled, each with the sentence that says where it can be had; a size above the desktop's
-     * ceiling keeps its own sentence, since no build makes it. Everything at or below the ceiling
-     * is pressable, and under the desktop's ceiling only what is above it is disabled.
+     * disabled, each with the sentence that says where it can be had: 2048 on every desktop, 4096
+     * on a desktop with the memory for it; a size above that keeps its own sentence, since no
+     * build makes it. Everything at or below the ceiling is pressable, and under the desktop's
+     * ceiling only what is above it is disabled.
      */
     @Test
     fun `under a browser's ceiling the chips above 1024 are disabled and say why`() {
@@ -761,7 +762,13 @@ class PanelKnobsTest {
         assertEquals(1024, browser.generationCeiling)
         fun tabReason(size: Int) = "A $size world needs more memory than a browser tab is given; the desktop app makes it"
         val laterReason = { size: Int -> "$size needs more memory than this build can hold; it waits for a later release" }
-        fun reasonAbove(size: Int) = if (size <= WorldCeilings.DESKTOP) tabReason(size) else laterReason(size)
+        fun withMemoryReason(size: Int) = "${tabReason(size)} on a machine with " +
+            "${WorldCeilings.MEMORY_FOR_LARGEST_DESKTOP_GIBIBYTES} GB of memory or more"
+        fun reasonAbove(size: Int) = when {
+            size <= WorldCeilings.DESKTOP -> tabReason(size)
+            size <= WorldCeilings.LARGEST_DESKTOP -> withMemoryReason(size)
+            else -> laterReason(size)
+        }
 
         val resolutions = Knobs.resolutionChoices(browser.generationCeiling)
         assertEquals(Knobs.RESOLUTIONS, resolutions.map { it.size }, "a resolution chip left the row")

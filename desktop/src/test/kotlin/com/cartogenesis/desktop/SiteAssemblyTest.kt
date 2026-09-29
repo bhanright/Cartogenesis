@@ -45,18 +45,20 @@ class SiteAssemblyTest {
         const val PREVIEW_TAKEOVER_MOST_MEAN_DIFFERENCE = 12.0
 
         /**
-         * The most the full band may weigh: 300 KiB, where it measured 277,620 bytes, 4096 by 800 at
-         * [SiteImagery.WORLD_BAND_QUALITY], on seed 1's rows 848 to 1,648, the band Site 5c moved to
-         * (105,912 on 718106's rows 896 to 1,696, which were two thirds sea, and 373,698 on the
-         * author's first rows). Heavier because the new rows are land for four tenths of their
-         * length, ranges and rivers the encoder keeps; every wide or dense screen fetches it as the
-         * page opens.
+         * The most the full band may weigh: 340 KiB, where it measured 318,106 bytes, 4096 by 800 at
+         * [SiteImagery.WORLD_BAND_QUALITY], on seed 1's rows 848 to 1,648 at 2048 rows of square
+         * cells (277,620 on the grid as many cells tall as wide, where the ceiling was 300 KiB;
+         * 105,912 on 718106's rows 896 to 1,696, which were two thirds sea, and 373,698 on the
+         * author's first rows). Heavier on square cells because each pixel is a cell of its own
+         * east-west where two pixels shared one, detail the encoder keeps; every wide or dense
+         * screen fetches it as the page opens.
          */
-        const val WORLD_BAND_MOST_BYTES = 307_200L
+        const val WORLD_BAND_MOST_BYTES = 348_160L
 
         /**
-         * The most the half band may weigh: 96 KiB, where it measured 85,432 bytes, 2048 by 400, on
-         * seed 1's rows (34,438 on 718106's rows 896 to 1,696).
+         * The most the half band may weigh: 96 KiB, where it measured 81,878 bytes, 2048 by 400, on
+         * seed 1's rows at 2048 rows of square cells (85,432 on the grid as many cells tall as wide,
+         * 34,438 on 718106's rows 896 to 1,696).
          */
         const val WORLD_BAND_HALF_MOST_BYTES = 98_304L
 
@@ -76,17 +78,18 @@ class SiteAssemblyTest {
 
         /**
          * What the page fetches only when a reader asks for it, by file, each with the most it may
-         * weigh: the lens's full-size world (639,082 bytes at 4096 by 2048 on the implicit
-         * erosion's terrain, 507,604 before it; fetched the first time the lens is used), each with
-         * 64 KiB for the picture moving when it is made again.
+         * weigh: the lens's full-size world (737,458 bytes at 4096 by 2048 on square cells, a cell
+         * to a pixel; 639,082 on the grid as many cells tall as wide, two pixels a cell, and 507,604
+         * before the implicit erosion; fetched the first time the lens is used), each with 64 KiB
+         * for the picture moving when it is made again.
          */
         val FETCHED_WHEN_USED: Map<String, Long> = mapOf(
-            "img/world-full.webp" to 639_082L + 65_536L
+            "img/world-full.webp" to 737_458L + 65_536L
         )
 
         /**
          * The ceiling on what the page fetches as it loads, by the kind of screen (see
-         * [fetchedAtLoad]): what the list sums to, 517,404 bytes narrow and 709,592 wide or dense,
+         * [fetchedAtLoad]): what the list sums to, 506,167 bytes narrow and 742,395 wide or dense,
          * each plus 64 KiB for the pictures and the page moving when they are made again.
          *
          * Measured once the page's faces were WOFF2 cut to its characters, which took 943,600
@@ -96,14 +99,16 @@ class SiteAssemblyTest {
          * more sea, and the page grew by 13,094 bytes for its review fixes; the band then moved to
          * seed 1's rows, four tenths land, which put 50,994 back on the half band's screens and
          * 171,708 on the full band's, the page having grown by another 4,993 for the round toggles,
-         * the copy review and the band's caption. No lazy picture is fetched
+         * the copy review and the band's caption. Square cells (Q6) took 11,237 off the narrow
+         * screens and put 32,803 on the wide, where 517,404 and 709,592 stood: the full band is
+         * 40,486 bytes heavier and the half band and the steps a little lighter. No lazy picture is fetched
          * as the page loads (docs/DESIGN_LEDGER.md, Site 5b), so the faces, the page and the
          * pictures above the fold are the whole of it, and a face grown back to TrueType would not
          * fit.
          */
         val LOAD_BYTES: Map<String, Long> = mapOf(
-            "narrow at one device pixel" to 517_404L + 65_536L,
-            "wide or dense" to 709_592L + 65_536L
+            "narrow at one device pixel" to 506_167L + 65_536L,
+            "wide or dense" to 742_395L + 65_536L
         )
 
         /**

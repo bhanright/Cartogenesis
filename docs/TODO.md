@@ -408,6 +408,13 @@
   least, and the opening's band off seed 718106 altogether (below); the six steps stayed. What the
   page still shows, because the figure cannot move off it: the lens's whole world carries every
   mark, and the reel's worlds at 512, whole, show small glacier flats of their own.
+  **On square cells** (2026-09-29, Q6) the site's world at 2048 rows, 4096 by 2048 square cells,
+  puts the south-western peninsula where it was, and every window was kept. The subduction coast
+  along its south-east shore is still straight on the diagonal for 687 km at 12 km (690 on the old
+  grid), in the styles, the relief and the data frame; the drowned valleys at the top of the
+  styles window, the data frame and the six steps are now a lake whose water stands up the gullies
+  round it (the lake-area entry below); the northern range's ice cap still ends in straight edges
+  on the lens's whole world.
 - **No strip of 800 rows round any world measured is free of long straight runs.** Site 5c traced
   every coast (as drawn, and smoothed to 12 km), shelf break, ice-sheet edge, ice-flat edge and
   land-biome belt edge on the 2048 sheet of 21 worlds (718106, and 1, 3, 7, 8, 12, 21, 42, 64, 99,
@@ -423,6 +430,15 @@
   edge of 434 km along a row near 1,375; its range's flanks also show the comb of gullies down
   the columns, plainest of the three offered. The full picture refresh after the square grid picks the
   band again, by the same measure. 2026-09-26, Site 5c.
+  **On square cells** (2026-09-29, Q6) seed 1 at 2048 rows makes the same country, and the
+  maintainer kept the window, from three offered. The same rows now hold five runs past the bar,
+  all within 61 km of it: the smoothed coast of 464 km at about (3080-3238, 1117-1130) and four
+  shelf breaks of 410 to 426 km, and one belt edge of 460 km. Three marks the rows cannot avoid
+  without losing the range: its small ice cap drawn gray and smooth with a straight top edge along
+  a row for about 200 km at about (269-479, 1043-1105), in the band and the link preview; a second
+  scarp straight on the diagonal at about (800-930, 1200-1390), in the band; and the lighter lake's
+  shore standing up the gullies round it at about (4380-4480, 1310-1360), in the preview (the
+  lake-area entry below). The measure, ported to square cells, reads the comb either way.
 - **The ocean's device path is slower than the processor.** Chunk 4a's circulation and heat are
   solved on the card behind `OceanAccelerator` and agree with the processor to the bit, but each
   batch of relaxation passes goes to the card and comes back, and the multigrid's restriction,
@@ -527,7 +543,8 @@
   11 cells across, 0.22 cells rms, `REALM_BORDER_ARC`: base 3a66025 clean, 4a's head 127.5.
   Realms follow habitability too, so this is 4a's climate moving a border onto a round path, as
   with the peoples' arcs above. 2026-09-26, 4a.
-- **Six operators still count a row as a column, each outside Fix 2's list.** Found by reading the
+- ~~**Six operators still count a row as a column, each outside Fix 2's list.**~~ Closed on every grid the application makes by the switch to square cells, 2026-09-29, Q6: since Q5 every size is a grid twice as many cells across as down, so a row and a column are the same length on the ground and each of the six reaches as far one way as the other. A grid of cells twice as wide as tall, which
+  only a test now builds, still has it. What follows is the entry as it stood. Found by reading the
   code, not by a guard: the climate stage's rainfall blur (a square box of cells, sized by
   `RAIN_BLUR_REFERENCE_WIDTH`) and its two coastal-reach blurs, the water exposure and the offshore
   anomaly's spread, whose radius is `OceanConfig.coastalReachKm` read as whole cells (chunk 4b,
@@ -1041,7 +1058,9 @@
   land in lakes against a bar of 2.22% — it passes by a factor of two and a half. The clause it
   stood in no longer claims to justify the sixth, so this entry is the only thing holding the
   question.*
-- **Two `JumpFloodDistance` callers still measure north-south distance with the cell's width.**
+- ~~**Two `JumpFloodDistance` callers still measure north-south distance with the cell's width.**~~
+  Closed on every grid the application makes by the switch to square cells, 2026-09-29, Q6: since Q5 every size is a grid twice as many cells across as down, so a row and a column are the same length on the ground and the cell's width is its height: the glaciation's two distances are
+  kilometers both ways. A test's grid of cells twice as wide as tall still has it. As it stood:
   S2b gave the flood a row scale and passed it from `PlateStage`'s craton reach and sea-floor age,
   and Fix 2 from `ClimateStage.waterDistance`, `SeaLevelStage`'s distance to land and
   `PlateStage.boundaryDistance`, with a guard apiece. What still counts cells and converts with
@@ -1207,7 +1226,10 @@
   (`LakeWaterBalance`) and the fill in `RiverStage` that sets the lake's extent, for why 512 rows
   settles at four times the area 1,024 rows does; the gullies are the symmetric comb residual the
   hydraulic rounds leave (`CombGuardTest`'s known failure). A generator chunk of its own.
-  2026-09-28, Q4.
+  2026-09-28, Q4. The site shows it (2026-09-29, Q6): on 718106 at 2048 rows the valleys that
+  branch in at the top of the styles window are a lake whose water stands up the one-cell gullies
+  round it as this one's does, though a river leaves it, on all twelve style cards, the data frame
+  and the six steps; on seed 1, the lighter of the two lakes in the opening band's first stretch.
 - **A world of square cells carries more ice at 60 to 90 degrees than a change of grid gives.**
   `GridShapeTest` compares the same seed at 512 by 512 and at `forRows(512)`, band by band. Its
   ice clause runs as a known failure. Seed 1234 at -75 to -90 degrees carries +0.017 of the band as
@@ -1492,7 +1514,9 @@
   below the waterline with a long tail down to a few trenches. Earth's floor is bimodal because two
   crusts of different density float at two levels, which is an isostatic fact and is S2's. The same
   cause puts the continental shelf at 1,000 m against Earth's 130. 2026-09-13, S1.
-- **A drowned valley's catchment is measured with square cells on a 2:1 world.**
+- ~~**A drowned valley's catchment is measured with square cells on a 2:1 world.**~~ Closed on every grid the application makes by the switch to square cells, 2026-09-29, Q6: since Q5 every size is a grid twice as many cells across as down, so a row and a column are the same length on the ground and a cell's width squared is its area, so the catchment's square kilometers are right and the bar
+  still asks for about 39 cells of it; how the coast answers the calibration on the ground, which
+  the entry asked for, is the drowned valleys' own chunk's if it is ever wanted. As it stood:
   `DrownedValleys` turns a cell count into square kilometres as the cell's *width* squared, and a
   cell of a square grid on a world twice as wide as it is tall is half that. The bar it feeds —
   `RESOLVED_SHARE_OF_A_CELL`, half a cell's width — is calibrated against that figure and comes out

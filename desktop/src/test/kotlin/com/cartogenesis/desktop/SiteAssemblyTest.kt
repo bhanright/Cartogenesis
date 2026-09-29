@@ -862,9 +862,11 @@ class SiteAssemblyTest {
      *
      * Every one of these is a number a reader plans around — how large an export they can ask for,
      * what a phone will do, what a fresh world starts at — and every one of them is a constant in
-     * the code that a later chunk can move. The desktop's are read off the platform itself; the
-     * browser's cannot be, because that class compiles to wasm and this test is a JVM one, so its
-     * source is read instead, exactly as `WebDeploymentContractTest` reads it.
+     * the code that a later chunk can move. The desktop's are read off the platform itself, handed
+     * the heap of a 16 GB machine (every desktop's ceiling) and of a 32 GB one (the larger ceiling a
+     * heap that holds it is offered, with the memory it takes); the browser's cannot be, because
+     * that class compiles to wasm and this test is a JVM one, so its source is read instead, exactly
+     * as `WebDeploymentContractTest` reads it.
      */
     @Test
     fun `the Features list quotes the sizes the code allows`() {
@@ -873,7 +875,9 @@ class SiteAssemblyTest {
             Regex("""<dt>$term</dt><dd>(.*?)</dd>""").find(page)?.groupValues?.get(1)
                 ?: fail("the Features list no longer has a $term row")
 
-        val desktop = DesktopPlatform()
+        val gibibyte = 1L shl 30
+        val desktop = DesktopPlatform(heapBytes = 12 * gibibyte)
+        val largest = DesktopPlatform(heapBytes = 24 * gibibyte).generationCeiling
         val web = File(repoRoot, "web/src/wasmJsMain/kotlin/com/cartogenesis/web/WebPlatform.kt")
             .readText()
         fun webNumber(property: String): Int =
@@ -890,8 +894,9 @@ class SiteAssemblyTest {
         }
 
         val exports = row("Export")
-        // A world's size is written as its cells across, "up to 4096", or as a square, "4096 × 4096".
-        fun quotesSize(text: String, size: Int) = text.contains("$size × $size") || Regex("""\bup to $size\b""").containsMatchIn(text)
+        // A world's size is written by its name, its rows, as the chips say it: "up to 2048". A grid
+        // written "2048 × 2048" is the old square size and says something else.
+        fun quotesSize(text: String, size: Int) = Regex("""\bup to $size\b""").containsMatchIn(text)
         assertTrue(
             Regex("""desktop app[^.]*""").findAll(exports).any { quotesSize(it.value, ceiling) },
             "the Export row does not quote the $ceiling this build can finish: \"$exports\""
@@ -900,10 +905,21 @@ class SiteAssemblyTest {
             Regex("""browser[^.]*""").findAll(exports).any { quotesSize(it.value, browserCeiling) },
             "the Export row does not quote the browser's ceiling of $browserCeiling: \"$exports\""
         )
-        // And what a world at the ceiling comes out as for a picture: its true-shape sheet, which
-        // is not the grid's own size.
+        // The larger ceiling, and the memory a machine needs for it, in the same sentence.
+        val memoryNeeded = com.cartogenesis.ui.WorldCeilings.MEMORY_FOR_LARGEST_DESKTOP_GIBIBYTES
+        assertTrue(
+            Regex("""desktop app[^.]*""").findAll(exports).any { sentence ->
+                quotesSize(sentence.value, largest) &&
+                    Regex("""(\d+) GB of memory or more""").find(sentence.value)
+                        ?.groupValues?.get(1)?.toLong()?.let { it >= memoryNeeded } == true
+            },
+            "the Export row does not say the desktop makes $largest on a machine with $memoryNeeded GB of memory or more: \"$exports\""
+        )
+        // And what a world at the ceiling comes out as for a picture: its true-shape sheet, a cell
+        // to a pixel on the grid of square cells the size names.
         val sheet = com.cartogenesis.cartography.SheetGeometry.of(
-            com.cartogenesis.worldgen.model.WorldScale(), ceiling, ceiling
+            com.cartogenesis.worldgen.model.WorldScale(),
+            com.cartogenesis.cartography.WorldCodec.COLUMNS_PER_ROW * ceiling, ceiling
         )
         assertTrue(
             exports.contains("${sheet.widthPixels} × ${sheet.heightPixels}"),
@@ -921,7 +937,7 @@ class SiteAssemblyTest {
             "the Resolution row does not say what the desktop starts at: \"$resolutions\""
         )
         println(
-            "SITE the Features list quotes $ceiling as the ceiling, $browserCeiling in the browser, " +
+            "SITE the Features list quotes $ceiling as the ceiling, $largest with the memory, $browserCeiling in the browser, " +
                 "and ${webNumber("override val defaultResolution")}/${desktop.defaultResolution} " +
                 "as the starting grids"
         )

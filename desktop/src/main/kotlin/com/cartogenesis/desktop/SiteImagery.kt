@@ -144,12 +144,15 @@ object SiteImagery {
      * and sea in one frame, which is what the page is about.
      *
      * Its rows matter most, since [WORLD_BAND] is these rows the whole way round the world: rows
-     * 848 to 1,648 hold no ice flat, no belt ruled along a row, and, of every run on a coast, a
+     * 848 to 1,648 hold no ice flat and no belt ruled along a row. Of every run on a coast, a
      * shelf break or an ice edge that stays within 12 km of its chord for more than 403 km (the
-     * Himalayan front's straightest stretch), two, of 427 and 473 km, where any other 800 rows of
-     * 21 worlds held more. It starts at column 3,264, so the preview's first 1,600 columns cross
-     * the sheet's seam, which the map does not have: the world wraps east and west. Drawn in
-     * `MapStyle.NATURAL`, for the colour.
+     * Himalayan front's straightest stretch), they held two when the window was chosen on cells
+     * twice as wide as tall, fewer than any other 800 rows of 21 worlds; on square cells they
+     * hold five, all within 61 km of the bar, and one belt edge. The same window was kept when the
+     * cells became square, by the maintainer's eye over two others (docs/DESIGN_LEDGER.md, Q6):
+     * the seed makes the same country there. It starts at column 3,264, so the preview's first
+     * 1,600 columns cross the sheet's seam, which the map does not have: the world wraps east and
+     * west. Drawn in `MapStyle.NATURAL`, for the color.
      */
     val BAND = Window(3264, 848, 1600, 800)
 
@@ -162,7 +165,10 @@ object SiteImagery {
      * which is what the twelve styles part company over. West of the drowned inlet whose straight
      * top docs/TODO.md lists. It moved here in Site 5c from the
      * south-eastern lobe, which on the implicit erosion's terrain carried a plain comb of gullies
-     * down the columns and a dry belt ruled along a row; this window holds neither.
+     * down the columns and a dry belt ruled along a row; this window holds neither. On square
+     * cells the peninsula is where it was and so is the window; the valleys branching in at the top
+     * are a lake there, whose water stands up every gully round it, the lake area docs/TODO.md
+     * holds for the generator.
      */
     val STYLES_WINDOW = Window(864, 880, 600, 400)
 

@@ -567,7 +567,7 @@ object WorldCeilings {
     }
 
     /** The least memory, in whole gibibytes, a machine needs for the packaged heap to reach [HEAP_FOR_LARGEST_DESKTOP_BYTES]. */
-    private val MEMORY_FOR_LARGEST_DESKTOP_GIBIBYTES: Long =
+    val MEMORY_FOR_LARGEST_DESKTOP_GIBIBYTES: Long =
         kotlin.math.ceil(HEAP_FOR_LARGEST_DESKTOP_BYTES / PACKAGED_HEAP_SHARE_OF_MEMORY / GIBIBYTE).toLong()
 
     /**

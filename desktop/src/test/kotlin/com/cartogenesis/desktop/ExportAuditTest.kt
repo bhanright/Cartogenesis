@@ -16,12 +16,14 @@ import kotlin.test.Test
 import kotlin.test.assertTrue
 
 /**
- * Every export the desktop offers, at the two sizes it offers them at.
+ * Every export the desktop offers, at the sizes every desktop offers them at: 1024 and 2048 rows,
+ * grids of square cells 2048 by 1024 and 4096 by 2048, exported at their own size as the app does.
  *
- * 4096 is the one that matters: it wants roughly 2GB, and generating a world at that size is
- * minutes of work before anything is drawn. Split out of `ExportSmokeTest` so the per-merge
- * suite keeps a fast 1024 export as its smoke check while this — the on-demand / nightly audit
- * tier — still proves the sizes the app actually ships.
+ * 2048 is the one that matters: generating it is three and a half minutes of work before anything
+ * is drawn. 4096 rows, offered only where the heap holds it (`WorldCeilings.forDesktopHeap`), holds
+ * 10.3 GB live, more than this tier's 10 GB heap, and was measured on its own (docs/DESIGN_LEDGER.md,
+ * Q5). Split out of `ExportSmokeTest` so the per-merge suite keeps a fast export as its smoke check
+ * while this — the on-demand / nightly audit tier — still proves the sizes the app actually ships.
  *
  * One world per size, and the six exports measured from it. Before the data exports existed
  * this ran the whole pipeline
@@ -37,20 +39,20 @@ class ExportAuditTest {
     @Test
     fun `every export at the sizes the desktop build exists for`() {
         val outputDir = File("build/exports").apply { mkdirs() }
-        val base = WorldGenConfig(seed = 42L, width = 1024, height = 1024)
-
-        listOf(2048, 4096).forEach { size ->
+        listOf(1024, 2048).forEach { size ->
             val startedGeneration = System.currentTimeMillis()
-            val world = WorldGenerationEngine.generateBlocking(base.atResolution(size, size))
+            val world = WorldGenerationEngine.generateBlocking(WorldGenConfig.forRows(seed = 42L, rows = size))
             val generationMillis = System.currentTimeMillis() - startedGeneration
-            println("EXPORT %d x %d generation %.1f s".format(size, size, generationMillis / 1000.0))
+            // Named as the application names a size, by its rows, with the grid beside it.
+            val grid = "$size rows (${world.width} x ${world.height})"
+            println("EXPORT %s generation %.1f s".format(grid, generationMillis / 1000.0))
 
             val startedRaster = System.currentTimeMillis()
             val pixels = MapRasterizer.rasterize(world, RenderOptions())
             val bitmap = MapImage.toBitmap(world, RenderOptions(), pixels)
             println(
-                "EXPORT %d x %d raster %.1f s".format(
-                    size, size, (System.currentTimeMillis() - startedRaster) / 1000.0
+                "EXPORT %s raster and sheet %.1f s".format(
+                    grid, (System.currentTimeMillis() - startedRaster) / 1000.0
                 )
             )
 
@@ -72,8 +74,8 @@ class ExportAuditTest {
                 }
                 destination.writeBytes(bytes)
                 println(
-                    "EXPORT %d x %d %s -> %.1f MB, encoded in %.1f s".format(
-                        size, size, format.label, bytes.size / 1024.0 / 1024.0,
+                    "EXPORT %s %s -> %.1f MB, encoded in %.1f s".format(
+                        grid, format.label, bytes.size / 1024.0 / 1024.0,
                         (System.currentTimeMillis() - started) / 1000.0
                     )
                 )
@@ -89,8 +91,8 @@ class ExportAuditTest {
                 File(outputDir, files.imageName).writeBytes(files.image)
                 File(outputDir, files.sidecarName).writeBytes(files.sidecar)
                 println(
-                    "EXPORT %d x %d %s -> %.1f MB image + %d B sidecar, written in %.1f s".format(
-                        size, size, layer.label, files.image.size / 1024.0 / 1024.0,
+                    "EXPORT %s %s -> %.1f MB image + %d B sidecar, written in %.1f s".format(
+                        grid, layer.label, files.image.size / 1024.0 / 1024.0,
                         files.sidecar.size, (System.currentTimeMillis() - started) / 1000.0
                     )
                 )
@@ -98,11 +100,12 @@ class ExportAuditTest {
                 assertTrue(files.sidecar.isNotEmpty(), "wrote no sidecar for ${layer.label} at $size")
             }
 
-            println("EXPORT   peak heap: ${peakHeapMb()} MB")
+            println("EXPORT $grid heap in use after the exports: ${heapInUseMb()} MB")
         }
     }
 
-    private fun peakHeapMb(): Long {
+    /** The heap in use when asked, garbage included: not a peak, which this does not sample. */
+    private fun heapInUseMb(): Long {
         val runtime = Runtime.getRuntime()
         return (runtime.totalMemory() - runtime.freeMemory()) / 1024 / 1024
     }

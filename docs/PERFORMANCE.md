@@ -14,18 +14,31 @@ Figures moved here from the README on 2026-09-15 keep whatever date they were re
 the README carried none, the row says so rather than inventing one; those are still this machine's
 numbers, but their date is unknown and they have not been re-measured.
 
-## Desktop export times
+## What each size costs on the desktop
 
-Machine as above. Date not recorded when measured; moved here from the README on 2026-09-15.
+Sizes are named by their rows, on a grid of square cells twice as many across: a 2048 world is
+4096 by 2048 cells, 2.9 km a side, and its picture 4096 by 2048 pixels. Machine as above, with the
+heap the packaged app takes on a 16 GB machine, 12 GB. Measured 2026-09-28 (the ledger's Q5 row),
+seed 42, one size a JVM, the app's work in its order: generate, draw the pane's sheet, export a PNG
+at the world's own size, save. Peak live is the largest heap a collection left; resident is the
+process's peak working set.
 
-| Export | Time | Peak heap |
-|---|---|---|
-| 2048 x 2048 | 26-35 s | 1.0 GB |
-| 4096 x 4096 | 154-182 s | 3.2-4.0 GB |
-| 8192 x 8192 | (does not complete) | exhausts a 10 GB heap after 19 min |
+| Size | Generation | Drawn | PNG export | Save | Peak live | Peak resident |
+|---|---|---|---|---|---|---|
+| 1024, processor | 50.3 s | 0.6 s | 1.4 s | 7.2 s, 137 MB | 1.1 GB | 3.7 GB |
+| 1024, acceleration on | 46.7 s | 0.6 s | 1.4 s | 7.2 s, 137 MB | 1.4 GB | 3.9 GB |
+| 2048, processor | 210.8 s | 1.8 s | 4.6 s | 27.7 s, 555 MB | 3.0 GB | 4.8 GB |
+| 4096, acceleration on | 994.6 s | 19.1 s | 29.8 s | 109.2 s, 2.25 GB | 10.3 GB | 14.0 GB |
+| 8192 | not offered | | | | | |
 
-4096 is the practical ceiling. 8192 is offered disabled rather than removed; see **Why 8192 does
-not complete** below.
+The drawing, export and save figures of the two 1024 runs are one measurement. Acceleration saves
+little because the implicit incision, most of erosion's time, has no graphics-card path yet.
+
+Every desktop offers 2048. 4096 finished under the 12 GB heap, but with 10.3 GB of it live and
+14.0 GB resident, which leaves a 16 GB machine about 2 GB for everything else, so a desktop offers
+it only where its heap is at least 17.1 GB: a machine of 23 GB or more under the packaged app's
+three quarters. `WorldCeilings.HEAP_FOR_LARGEST_DESKTOP_BYTES` derives the threshold from these
+figures, and `DesktopPlatform` reads the heap when it runs. See **Why 8192 is not offered** below.
 
 ## Picture formats: size against fidelity
 
@@ -53,54 +66,55 @@ softer file or a larger, sharper one, and not the ranking the format names sugge
 
 ## What each export costs
 
-Machine as above. Measured 2026-09-12 by `ExportAuditTest` on one world per size, seed 42, when a
-picture was drawn a cell to a pixel. Since Fix A a picture is the world's true-shape sheet, twice as
-many pixels (a 4096 world is 8192 by 4096), so the three picture rows below are the square sheet's
-and have not been re-measured; the raster and the data exports are one value a cell and unchanged.
+Machine as above. Measured 2026-09-29 by `ExportAuditTest` in the audit tier (a 10 GB heap, the
+pool at fifteen threads), one world per size, seed 42, on the processor. The raster is the
+processor's with the sheet it is laid on, a cell to a pixel; the picture formats are encoded from
+that sheet at the world's own size, and the data exports are one sample a cell.
 
-| Export | 2048 | 4096 |
+| Export | 1024 (2048 × 1024) | 2048 (4096 × 2048) |
 |---|---|---|
-| Generation (once, whatever comes out of it) | 39.8 s | 173.8 s |
-| Raster (once, for the three pictures) | 0.4 s | 1.0 s |
-| PNG | 4.6 MB, 3.7 s | 16.3 MB, 12.1 s |
-| WebP | 1.3 MB, 0.4 s | 4.4 MB, 1.9 s |
-| JPEG | 0.9 MB, 0.2 s | 3.0 MB, 0.5 s |
-| Heightmap | 5.0 MB + 606 B, 0.9 s | 18.1 MB + 605 B, 3.0 s |
-| Biomes | 0.1 MB + 1.7 KB, 0.1 s | 0.2 MB + 1.7 KB, 0.2 s |
-| Realms | 0.1 MB + 1.7 KB, 0.1 s | 0.1 MB + 2.0 KB, 0.3 s |
-| Peak heap | 1.2 GB | 4.1 GB |
+| Generation (once, whatever comes out of it) | 51.2 s | 211.4 s |
+| Raster and sheet (once, for the three pictures) | 0.6 s | 1.8 s |
+| PNG | 2.9 MB, 1.1 s | 10.2 MB, 3.6 s |
+| WebP | 0.8 MB, 0.2 s | 2.8 MB, 0.7 s |
+| JPEG | 0.5 MB, 0.1 s | 2.0 MB, 0.2 s |
+| Heightmap | 2.6 MB + 1.2 KB, 0.5 s | 8.8 MB + 1.2 KB, 1.3 s |
+| Biomes | 0.1 MB + 2.0 KB, 0.1 s | 0.2 MB + 2.0 KB, 0.2 s |
+| Realms | under 0.1 MB + 2.0 KB, under 0.1 s | 0.1 MB + 2.2 KB, 0.1 s |
+| Heap in use after the exports, garbage included | 1.1 GB | 4.1 GB |
 
-Generation is the whole of the wait, for a data export as much as for a picture: at 4096 a heightmap
-is three seconds of encoding behind three minutes of world.
+Generation is the whole of the wait, for a data export as much as for a picture: at 2048 a
+heightmap is a second of encoding behind three and a half minutes of world. 4096 rows was measured
+on its own (the table above): its world holds more than the audit tier's heap.
 
 The 16-bit heightmap PNG is the largest file the application writes after the lossless picture:
-18.1 MB from 33.5 MB of raw samples, so the filtering earns about half. The two index maps are
-almost free, because a biome map is large flat regions and that is what deflate is for.
+8.8 MB at 2048 from 16.8 MB of raw samples, so the filtering earns about half. The two index maps
+are almost free, because a biome map is large flat regions and that is what deflate is for.
 
-## Why 8192 does not complete
+## Why 8192 is not offered
 
-Machine as above. Date not recorded when measured; moved here from the README on 2026-09-15.
+The export row offers 1024, 2048, 4096 and 8192, and the 8192 chip is drawn disabled everywhere.
+8192 rows is 16,384 by 8,192 cells, 134 million, four times 4096's. 4096 held 10.3 GB live, so
+8192 would want about 41 GB at the same rate, past the 24 GB heap of a 32 GB machine; it has not
+been tried on square cells. On the grid as many cells tall as wide, 8192 by 8192, half its cells,
+exhausted a 10 GB heap inside the generator after about nineteen minutes, before a pixel was
+drawn (date not recorded; moved here from the README on 2026-09-15).
 
-The interface offers 2048, 4096 and 8192, and the 8192 chip is drawn disabled. It exhausted a 10 GB
-heap inside the generator after about nineteen minutes, before a single pixel was drawn: the fields
-for a world that size need roughly 9 GB before the FFT's and erosion's own transient buffers are
-added on top. The packaged application's heap is now three quarters of the machine's memory rather
-than a fixed 12 GB, so a 32 GB machine offers 24 GB to an export; whether 8192 completes inside
-that has not been measured.
+Rendering is not the constraint. The graphics device rasters 8192 by 4096 cells, the 4096 world,
+in eight tiles in half a second with no world in memory at all. Raising the ceiling therefore means
+generating in tiles or on disk, not building a bigger renderer.
 
-Rendering is not the constraint. The graphics device rasters 8192 in 1.4 seconds with no world in
-memory at all. Raising the ceiling therefore means generating in tiles or on disk, not building a
-bigger renderer.
-
-The limit lives in `Platform.generationCeiling` — 4096 on the desktop, 2048 in any browser, phone or
-not, for the working resolution and the exports alike — so a build that fixes the memory can raise
-it without the interface changing. The browser's figure is its own measurement, not the phone's
-borrowed: see `docs/TODO.md`, "A 4096 world cannot be made in a browser tab". The same chips cap the data exports as cap the pictures: the ceiling is a question of how
-big a world this build can finish, and knows nothing about what kind of file comes out of it.
+The limit lives in `Platform.generationCeiling`: 2048 on every desktop and 4096 where its heap
+holds it, 1024 in any browser, phone or not, for the working resolution and the exports alike. The
+browser's figure is its own measurement, not the phone's borrowed: see `docs/TODO.md`, "A 4096
+world cannot be made in a browser tab". The same chips cap the data exports as cap the pictures:
+the ceiling is a question of how big a world this build can finish, and knows nothing about what
+kind of file comes out of it.
 
 ## Drawing the map on the graphics device
 
-Machine as above. Date not recorded when measured; moved here from the README on 2026-09-15.
+Machine as above. Measured 2026-09-29 on seed 42 at 2048 rows, the best of three after a warm-up;
+the 4096 row on fields invented for the purpose, 2026-09-28 (`GpuRasterTest`, the ledger's Q4 row).
 
 Drawing runs on the graphics card unconditionally, not behind the acceleration toggle, because
 rasterising pixels makes no promise about reproducing a world from its seed the way erosion does.
@@ -111,48 +125,50 @@ tile (`GpuRaster`, behind the `RasterAccelerator` seam in `:cartography`):
 
 | Raster | Graphics device | Processor |
 |---|---|---|
-| 4096 | 0.43 s | 1.65 s |
-| 4096, single-lamp relief | — | 0.81 s |
-| 8192, in sixteen tiles | 0.84 s | — |
+| 2048 (4096 × 2048) | 0.30 s | 1.12 s |
+| 2048, single-lamp relief | 0.29 s | 0.57 s |
+| 4096 (8192 × 4096), in eight tiles | 0.47 s | — |
 
 The sky model is what widened the gap: it asks the terrain twenty-four more questions per land pixel
 than a single lamp does, which doubles the processor's raster and costs the device nothing it
 notices.
 
-The shader is handed a `RasterRecipe` — every colour already packed, and the two per-cell numbers
+The shader is handed a `RasterRecipe` — every color already packed, and the two per-cell numbers
 the climate has to say about the ground — so neither the palette nor the aridity index is computed
 twice. `GpuRasterTest` holds the two paths within one channel step of 255 at the 99.9th percentile,
 across all fifteen views and twelve styles.
 
-None of this is the bottleneck it looks like: a 4096 export spends over three minutes generating the
-world and under a second drawing it.
+None of this is the bottleneck it looks like: a 2048 export spends three and a half minutes
+generating the world and about a second drawing it.
 
 ## Where generation time goes, and why erosion has most of it
 
-Machine as above. Measured 2026-09-15 by `StageProfileTest`, seed 42.
+Machine as above. Measured 2026-09-29 by `StageProfileTest` in the audit tier, seed 42, on the
+processor with the pool at fifteen threads, a stage timed from its own start to the next one's.
 
-| Stage | 2048, time | 2048, share |
-|---|---|---|
-| terrain (noise + FFT) | 0.5 s | 0.9% |
-| tectonics | 3.7 s | 6.1% |
-| erosion | 42.9 s | 70.9% |
-| sea level | 9.0 s | 14.8% |
-| ocean currents | 0.6 s | 1.0% |
-| climate | 1.2 s | 2.0% |
-| rivers | 0.7 s | 1.1% |
-| realms | 1.3 s | 2.2% |
-| landmarks | 0.6 s | 1.0% |
-| total | 60.5 s | |
+| Stage | 512 | 1024 | 2048 | 2048, share |
+|---|---|---|---|---|
+| terrain (noise + FFT) | 0.1 s | 0.3 s | 0.9 s | 0.5% |
+| plate tectonics | 0.7 s | 2.3 s | 8.1 s | 4.1% |
+| erosion | 5.8 s | 25.4 s | 124.5 s | 63.8% |
+| sea level | 3.0 s | 10.2 s | 44.9 s | 23.0% |
+| ocean currents | 2.1 s | 1.8 s | 3.3 s | 1.7% |
+| climate | 0.3 s | 1.4 s | 6.0 s | 3.1% |
+| rivers | 0.2 s | 0.5 s | 2.2 s | 1.1% |
+| realms | 0.4 s | 0.8 s | 3.1 s | 1.6% |
+| peoples | 0.1 s | 0.3 s | 1.0 s | 0.5% |
+| landmarks | 0.1 s | 0.3 s | 1.3 s | 0.7% |
+| total | 12.9 s | 43.3 s | 195.2 s | |
 
-**Erosion takes 70.9% of a 2048 generation.** The README's earlier figure was 82%, measured before
-S2 added its isostasy rounds and before G3; the share fell because the stages around erosion grew,
-not because erosion got cheaper.
+**Erosion takes 63.8% of a 2048 generation.** The table this replaces, of 2026-09-15, measured 70.9%
+on 2048 by 2048 cells, before the implicit incision and square cells.
 
-Erosion is expensive because material moves one cell per sweep, so the cost of covering a given
-distance on the ground rises eightfold rather than fourfold each time the resolution doubles. Tiles
-that have gone quiet are skipped, and the skip is exact — `ErosionSkipTest` asserts bit-identical
-output — but it buys only around 1.3x, because roughness at cell scale rises with resolution and
-most of a fine grid is genuinely still moving.
+Each doubling of the rows is four times the cells, and erosion's time grew 4.3 times from 512 to
+1024 and 4.9 times from 1024 to 2048, more than the cells; what the rest is spent on is not measured
+here. Tiles of the thermal sweeps that have gone quiet
+are skipped, and the skip is exact — `ErosionSkipTest` asserts bit-identical output — but it buys
+only around 1.3x, because roughness at cell scale rises with resolution and most of a fine grid is
+genuinely still moving.
 
 ## What the accelerator buys
 
@@ -170,6 +186,11 @@ Realm expansion is a Dijkstra over a priority queue and would not suit a GPU reg
 | OpenGL compute, desktop | 22 ms | around 55x |
 | WGSL, browser | — | about 70x |
 
+Re-measured on square cells, 2026-09-28 (the ledger's Q4 row): on the gallery's world at 512 rows
+the desktop card ran the sweeps 9.9 times faster than the processor, the worst cell 1.5e-5 of the
+range from the processor's. The sweeps are now a small part of erosion, whose implicit incision has
+no card path, which is why a whole 1024 world is 46.7 s with acceleration against 50.3 s without.
+
 Both accelerated paths agree with the processor to about seven parts in a million. They are not
 bit-identical: graphics hardware fuses multiplies and adds in whatever order it likes, and "has not
 differed yet" is not a guarantee that it never will. So a world generated with acceleration stores
@@ -180,7 +201,8 @@ can be checked on any machine by loading the web build with `?selftest` in the U
 ## The ocean's circulation and its heat
 
 Machine as above. Measured 2026-09-26 on seed 42 by chunk 4a's probes and by `GpuOceanTest`; every
-world above 512 built as the app builds it. The whole ocean stage, with the heat carried to the map:
+world above 512 built as the app built it then, as many cells tall as wide, so a column's size is
+that grid's side. The whole ocean stage, with the heat carried to the map:
 
 | Path | 512 | 1024 | 2048 |
 |---|---|---|---|
@@ -209,6 +231,10 @@ through water by fast marching over the map (`FastMarchingDistance`), is 62 to 9
 72 ms at 1024 and 110 to 117 ms at 2048, 3.0 to 4.1% of the stage: one pass over the map, which
 stays on the processor.
 
+On square cells (2026-09-29, `StageProfileTest` above, fifteen threads) the stage read 2.1 s at
+512 rows, 1.8 s at 1024 and 3.3 s at 2048: still flat against the map, since the solve grid is the
+planet's.
+
 The stage got faster rather than slower: the heat's Krylov solve now converges in two to four
 iterations where 4a's took fourteen, and the circulation's multigrid in seven to nine V-cycles. The
 rising water adds `w/h` to each rising cell's margin, which may be why; that is measured, not
@@ -236,20 +262,22 @@ table above predates 4a: its ocean row, 0.6 s at 2048, is the Poisson solve 4a r
 
 ## The browser's one thread
 
-Machine as above for the desktop figures. Date not recorded when measured; moved here from the
-README on 2026-09-15.
+Machine as above. Measured 2026-09-28 (the ledger's Q5 row) in a tab of the production build, Chrome
+152, acceleration off, the JavaScript heap sampled every 250 ms.
 
 The browser starts at a generation resolution of 512 and the desktop at 1024. That is a platform
 decision rather than a preference: a tab has one thread, and `Dispatchers.Default` there is that
 same thread, so generating stops the page answering rather than merely taking longer.
 
-- 512 takes about 1.6 seconds of processor work in Wasm, against 1.4 on the JVM's fifteen threads.
-- 1024 in a tab would be over a minute, which reads as a hang.
-- With WebGPU on, the erosion part of a 512 generation drops to about 23 milliseconds.
+| Size | Generated | Generated and drawn | Tab heap at most |
+|---|---|---|---|
+| 512 (1024 × 512) | 36.2 s | 39.7 s | 0.9 GB |
+| 1024 (2048 × 1024) | — | 171.6 s | 1.7 GB |
 
-On a 2026 Qualcomm handset with WebGPU on, measured, a 1024 world generates in about twenty seconds
-and a 2048 world in about ninety, so both are worth offering there; the compact arrangement says so
-under the resolution chips.
+The browser stops at 1024: 2048 is four times its cells, and at the measured heap a cell it would
+want about 6.8 GB, past the 4 GB a Wasm heap can address. A phone has not been timed on square
+cells; `LargeLinks.MEASURED` states its 1024 as about four minutes, an estimate from the tab with a
+phone's core taken as up to half again slower, and `docs/TODO.md` asks for a phone's figure.
 
 Because the page's one thread is the generator's, the interface is handed a frame before the first
 stage starts and again at every stage boundary, so the ten stage names appear as work proceeds.

@@ -45,18 +45,20 @@ class SiteAssemblyTest {
         const val PREVIEW_TAKEOVER_MOST_MEAN_DIFFERENCE = 12.0
 
         /**
-         * The most the full band may weigh: 300 KiB, where it measured 277,620 bytes, 4096 by 800 at
-         * [SiteImagery.WORLD_BAND_QUALITY], on seed 1's rows 848 to 1,648, the band Site 5c moved to
-         * (105,912 on 718106's rows 896 to 1,696, which were two thirds sea, and 373,698 on the
-         * author's first rows). Heavier because the new rows are land for four tenths of their
-         * length, ranges and rivers the encoder keeps; every wide or dense screen fetches it as the
-         * page opens.
+         * The most the full band may weigh: 340 KiB, where it measured 318,106 bytes, 4096 by 800 at
+         * [SiteImagery.WORLD_BAND_QUALITY], on seed 1's rows 848 to 1,648 at 2048 rows of square
+         * cells (277,620 on the grid as many cells tall as wide, where the ceiling was 300 KiB;
+         * 105,912 on 718106's rows 896 to 1,696, which were two thirds sea, and 373,698 on the
+         * author's first rows). Heavier on square cells because each pixel is a cell of its own
+         * east-west where two pixels shared one, detail the encoder keeps; every wide or dense
+         * screen fetches it as the page opens.
          */
-        const val WORLD_BAND_MOST_BYTES = 307_200L
+        const val WORLD_BAND_MOST_BYTES = 348_160L
 
         /**
-         * The most the half band may weigh: 96 KiB, where it measured 85,432 bytes, 2048 by 400, on
-         * seed 1's rows (34,438 on 718106's rows 896 to 1,696).
+         * The most the half band may weigh: 96 KiB, where it measured 81,878 bytes, 2048 by 400, on
+         * seed 1's rows at 2048 rows of square cells (85,432 on the grid as many cells tall as wide,
+         * 34,438 on 718106's rows 896 to 1,696).
          */
         const val WORLD_BAND_HALF_MOST_BYTES = 98_304L
 
@@ -76,17 +78,18 @@ class SiteAssemblyTest {
 
         /**
          * What the page fetches only when a reader asks for it, by file, each with the most it may
-         * weigh: the lens's full-size world (639,082 bytes at 4096 by 2048 on the implicit
-         * erosion's terrain, 507,604 before it; fetched the first time the lens is used), each with
-         * 64 KiB for the picture moving when it is made again.
+         * weigh: the lens's full-size world (737,458 bytes at 4096 by 2048 on square cells, a cell
+         * to a pixel; 639,082 on the grid as many cells tall as wide, two pixels a cell, and 507,604
+         * before the implicit erosion; fetched the first time the lens is used), each with 64 KiB
+         * for the picture moving when it is made again.
          */
         val FETCHED_WHEN_USED: Map<String, Long> = mapOf(
-            "img/world-full.webp" to 639_082L + 65_536L
+            "img/world-full.webp" to 737_458L + 65_536L
         )
 
         /**
          * The ceiling on what the page fetches as it loads, by the kind of screen (see
-         * [fetchedAtLoad]): what the list sums to, 517,404 bytes narrow and 709,592 wide or dense,
+         * [fetchedAtLoad]): what the list sums to, 506,167 bytes narrow and 742,395 wide or dense,
          * each plus 64 KiB for the pictures and the page moving when they are made again.
          *
          * Measured once the page's faces were WOFF2 cut to its characters, which took 943,600
@@ -96,14 +99,16 @@ class SiteAssemblyTest {
          * more sea, and the page grew by 13,094 bytes for its review fixes; the band then moved to
          * seed 1's rows, four tenths land, which put 50,994 back on the half band's screens and
          * 171,708 on the full band's, the page having grown by another 4,993 for the round toggles,
-         * the copy review and the band's caption. No lazy picture is fetched
+         * the copy review and the band's caption. Square cells (Q6) took 11,237 off the narrow
+         * screens and put 32,803 on the wide, where 517,404 and 709,592 stood: the full band is
+         * 40,486 bytes heavier and the half band and the steps a little lighter. No lazy picture is fetched
          * as the page loads (docs/DESIGN_LEDGER.md, Site 5b), so the faces, the page and the
          * pictures above the fold are the whole of it, and a face grown back to TrueType would not
          * fit.
          */
         val LOAD_BYTES: Map<String, Long> = mapOf(
-            "narrow at one device pixel" to 517_404L + 65_536L,
-            "wide or dense" to 709_592L + 65_536L
+            "narrow at one device pixel" to 506_167L + 65_536L,
+            "wide or dense" to 742_395L + 65_536L
         )
 
         /**
@@ -500,9 +505,8 @@ class SiteAssemblyTest {
                     .map { it.groupValues[1] to it.groupValues[2] }.toList()
             }.toList()
         assertEquals(2, pickers.size, "the slider has ${pickers.size} pickers, where it has a left and a right")
-        // By the application's own names, spelled as the page spells: the page is in American
-        // English and the application's labels are not all (Colour-blind).
-        val offered = styles.map { it.file.removePrefix("style-").removeSuffix(".webp") to it.style.label.replace("Colour", "Color") }
+        // By the application's own names, which are the page's: both are in American English.
+        val offered = styles.map { it.file.removePrefix("style-").removeSuffix(".webp") to it.style.label }
         pickers.forEach { assertEquals(offered, it, "a picker does not offer the twelve styles by their own names") }
 
         val loaded = Regex("""<img\s[^>]*src="([^"]+)"""").findAll(figure).map { it.groupValues[1] }.toList()
@@ -822,7 +826,12 @@ class SiteAssemblyTest {
                 "/app/", SiteImagery.reelConfig(figure.seed), figure.options
             )
             assertEquals(expected, link, "seed ${figure.seed}'s link is not the application's own link to the world pictured")
-            assertEquals(SiteImagery.REEL_GRID_CELLS, SiteImagery.reelConfig(figure.seed).width, "seed ${figure.seed} is not made at the reel's size")
+            val made = SiteImagery.reelConfig(figure.seed)
+            assertEquals(
+                com.cartogenesis.cartography.WorldCodec.COLUMNS_PER_ROW * SiteImagery.REEL_ROWS to SiteImagery.REEL_ROWS,
+                made.width to made.height,
+                "seed ${figure.seed} is not made at the reel's size, ${SiteImagery.REEL_ROWS} rows of square cells"
+            )
             assertTrue(item.contains("Seed ${figure.seed}<"), "seed ${figure.seed}'s picture is not captioned with its seed")
             println("SITE reel: ${figure.file} links to $link")
         }
@@ -858,9 +867,11 @@ class SiteAssemblyTest {
      *
      * Every one of these is a number a reader plans around — how large an export they can ask for,
      * what a phone will do, what a fresh world starts at — and every one of them is a constant in
-     * the code that a later chunk can move. The desktop's are read off the platform itself; the
-     * browser's cannot be, because that class compiles to wasm and this test is a JVM one, so its
-     * source is read instead, exactly as `WebDeploymentContractTest` reads it.
+     * the code that a later chunk can move. The desktop's are read off the platform itself, handed
+     * the heap of a 16 GB machine (every desktop's ceiling) and of a 32 GB one (the larger ceiling a
+     * heap that holds it is offered, with the memory it takes); the browser's cannot be, because
+     * that class compiles to wasm and this test is a JVM one, so its source is read instead, exactly
+     * as `WebDeploymentContractTest` reads it.
      */
     @Test
     fun `the Features list quotes the sizes the code allows`() {
@@ -869,7 +880,9 @@ class SiteAssemblyTest {
             Regex("""<dt>$term</dt><dd>(.*?)</dd>""").find(page)?.groupValues?.get(1)
                 ?: fail("the Features list no longer has a $term row")
 
-        val desktop = DesktopPlatform()
+        val gibibyte = 1L shl 30
+        val desktop = DesktopPlatform(heapBytes = 12 * gibibyte)
+        val largest = DesktopPlatform(heapBytes = 24 * gibibyte).generationCeiling
         val web = File(repoRoot, "web/src/wasmJsMain/kotlin/com/cartogenesis/web/WebPlatform.kt")
             .readText()
         fun webNumber(property: String): Int =
@@ -886,8 +899,9 @@ class SiteAssemblyTest {
         }
 
         val exports = row("Export")
-        // A world's size is written as its cells across, "up to 4096", or as a square, "4096 × 4096".
-        fun quotesSize(text: String, size: Int) = text.contains("$size × $size") || Regex("""\bup to $size\b""").containsMatchIn(text)
+        // A world's size is written by its name, its rows, as the chips say it: "up to 2048". A grid
+        // written "2048 × 2048" is the old square size and says something else.
+        fun quotesSize(text: String, size: Int) = Regex("""\bup to $size\b""").containsMatchIn(text)
         assertTrue(
             Regex("""desktop app[^.]*""").findAll(exports).any { quotesSize(it.value, ceiling) },
             "the Export row does not quote the $ceiling this build can finish: \"$exports\""
@@ -896,10 +910,21 @@ class SiteAssemblyTest {
             Regex("""browser[^.]*""").findAll(exports).any { quotesSize(it.value, browserCeiling) },
             "the Export row does not quote the browser's ceiling of $browserCeiling: \"$exports\""
         )
-        // And what a world at the ceiling comes out as for a picture: its true-shape sheet, which
-        // is not the grid's own size.
+        // The larger ceiling, and the memory a machine needs for it, in the same sentence.
+        val memoryNeeded = com.cartogenesis.ui.WorldCeilings.MEMORY_FOR_LARGEST_DESKTOP_GIBIBYTES
+        assertTrue(
+            Regex("""desktop app[^.]*""").findAll(exports).any { sentence ->
+                quotesSize(sentence.value, largest) &&
+                    Regex("""(\d+) GB of memory or more""").find(sentence.value)
+                        ?.groupValues?.get(1)?.toLong()?.let { it >= memoryNeeded } == true
+            },
+            "the Export row does not say the desktop makes $largest on a machine with $memoryNeeded GB of memory or more: \"$exports\""
+        )
+        // And what a world at the ceiling comes out as for a picture: its true-shape sheet, a cell
+        // to a pixel on the grid of square cells the size names.
         val sheet = com.cartogenesis.cartography.SheetGeometry.of(
-            com.cartogenesis.worldgen.model.WorldScale(), ceiling, ceiling
+            com.cartogenesis.worldgen.model.WorldScale(),
+            com.cartogenesis.cartography.WorldCodec.COLUMNS_PER_ROW * ceiling, ceiling
         )
         assertTrue(
             exports.contains("${sheet.widthPixels} × ${sheet.heightPixels}"),
@@ -917,7 +942,7 @@ class SiteAssemblyTest {
             "the Resolution row does not say what the desktop starts at: \"$resolutions\""
         )
         println(
-            "SITE the Features list quotes $ceiling as the ceiling, $browserCeiling in the browser, " +
+            "SITE the Features list quotes $ceiling as the ceiling, $largest with the memory, $browserCeiling in the browser, " +
                 "and ${webNumber("override val defaultResolution")}/${desktop.defaultResolution} " +
                 "as the starting grids"
         )

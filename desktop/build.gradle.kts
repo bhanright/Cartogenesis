@@ -206,13 +206,14 @@ val siteImageryDir = rootProject.layout.projectDirectory.dir("web/build/site-ima
  */
 tasks.register<JavaExec>("renderSiteImagery") {
     group = "distribution"
-    description = "Renders cartogenesis.com's figures from seed 718106 at 2048 into " +
+    description = "Renders cartogenesis.com's figures from seed 718106 at 2048 rows into " +
         "web/build/site-imagery."
     mainClass = "com.cartogenesis.desktop.SiteImagery"
     classpath = sourceSets["main"].runtimeClasspath
-    // The world is 2048x2048 and every stage keeps float fields over it; 6g is comfortable, and
-    // well inside the memory a hosted runner has.
-    maxHeapSize = "6g"
+    // The two worlds are 2048 rows, 4096 by 2048 cells, and every stage keeps float fields over
+    // them: 3.0 GB live at the fullest (docs/DESIGN_LEDGER.md, Q5), with the sheets drawn from it
+    // on top. 8g leaves the collector room, and is well inside the 16 GB a hosted runner has.
+    maxHeapSize = "8g"
     systemProperty("java.awt.headless", "true")
     if (project.hasProperty("contact")) {
         systemProperty("cartogenesis.siteImagery.contact", "true")

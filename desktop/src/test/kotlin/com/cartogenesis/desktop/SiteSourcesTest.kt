@@ -1015,22 +1015,8 @@ class SiteSourcesTest {
         println("SITE a picked style crossfades by view transition or the page's own fade, and is made at once for less motion")
     }
 
-    /**
-     * Common British spellings, as whole words. The page is written in American English (the
-     * maintainer's choice of 2026-09-26), so none of these may appear anywhere a reader sees or
-     * hears the page. Code is not held to it: a custom property or an identifier may keep its
-     * spelling, since no reader meets it.
-     */
-    private val BRITISH_SPELLINGS = Regex(
-        """\b(colou(?:rs?|red|ring|rful)|grey(?:s|er|ish|scale)?|centre[ds]?|""" +
-            """(?:kilo|centi|milli)?metres?|licence[sd]?|organis(?:e|es|ed|ing|ation)|analys(?:e|es|ed|ing)|""" +
-            """(?:recogni|reali|customi|optimi|visuali|prioriti|minimi|maximi|generali|normali|emphasi|summari|""" +
-            """finali|initiali|locali|randomi|standardi|synchroni|utili|categori|characteri|symboli|speciali|""" +
-            """stabili|capitali|authori|memori)s(?:e|es|ed|ing|ation)|labell(?:ed|ing)|travell(?:ed|ing|er)|""" +
-            """modell(?:ed|ing)|cancell(?:ed|ing)|favour(?:s|ed|ite)?|behaviours?|neighbours?|""" +
-            """harbours?|honours?|catalogues?|programmes?|defence|whilst)\b""",
-        RegexOption.IGNORE_CASE
-    )
+    /** Common British spellings, as whole words; see [AmericanEnglish]. */
+    private val BRITISH_SPELLINGS = AmericanEnglish.BRITISH_SPELLINGS
 
     /**
      * That the page and its roadmap are in American English everywhere a reader meets them: the

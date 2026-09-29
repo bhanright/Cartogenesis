@@ -210,7 +210,7 @@ enum class MapStyle(
      */
     INK_WASH(
         label = "Ink wash",
-        detail = "Sumi-e: grey ink on pale paper",
+        detail = "Sumi-e: gray ink on pale paper",
         oceanRamp = intArrayOf(
             0xFF8C9AA3.toInt(), 0xFF9AA7AF.toInt(), 0xFFAAB6BC.toInt(),
             0xFFBAC4C9.toInt(), 0xFFCBD3D6.toInt()
@@ -619,7 +619,7 @@ enum class MapStyle(
      */
     NATURAL(
         label = "Natural",
-        detail = "Satellite colours",
+        detail = "Satellite colors",
         // Abyss first, and nine stops rather than the usual five, because of where this generator
         // actually asks to be painted. `relativeElevation` normalises the sea floor by its deepest
         // trench, so half of every ocean reads within a tenth of the surface: measured over the
@@ -770,7 +770,7 @@ enum class MapStyle(
      * things — a temperature, a biome, a plate — and a legend is what makes those readable.
      */
     CLEAR(
-        label = "Colour-blind",
+        label = "Color-blind",
         detail = "Ordered by lightness: safe under deuteranopia and protanopia",
         // One slate, five times over. A flat sea is a decision, not an omission: see the note.
         oceanRamp = intArrayOf(

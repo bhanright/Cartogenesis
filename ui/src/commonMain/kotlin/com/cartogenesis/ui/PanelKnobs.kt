@@ -249,7 +249,8 @@ internal object Knobs {
      * none: every one of [RESOLUTIONS], so a browser shows the 2048 it cannot make, disabled,
      * rather than a row that silently stops at 1024. See [Platform.generationCeiling].
      */
-    fun resolutionChoices(ceiling: Int): List<SizeChoice> = SizeChoice.row(RESOLUTIONS, ceiling)
+    fun resolutionChoices(ceiling: Int, heapBytes: Long? = null): List<SizeChoice> =
+        SizeChoice.row(RESOLUTIONS, ceiling, heapBytes)
 
     fun withSeed(config: WorldGenConfig, seed: Long): WorldGenConfig = config.copy(seed = seed)
 
@@ -648,12 +649,12 @@ internal data class SizeChoice(val size: Int, val whyOutOfReach: String?) {
 
     companion object {
         /**
-         * Every one of [sizes] under [ceiling], each with its reason or none. A size out of reach
-         * keeps its chip, so the reader can see where it is and the row does not change width
-         * when the ceiling moves.
+         * Every one of [sizes] under [ceiling], on a host whose largest heap is [heapBytes] where
+         * it can say, each with its reason or none. A size out of reach keeps its chip, so the
+         * reader can see where it is and the row does not change width when the ceiling moves.
          */
-        fun row(sizes: List<Int>, ceiling: Int): List<SizeChoice> =
-            sizes.map { SizeChoice(it, WorldCeilings.whyOutOfReach(it, ceiling)) }
+        fun row(sizes: List<Int>, ceiling: Int, heapBytes: Long? = null): List<SizeChoice> =
+            sizes.map { SizeChoice(it, WorldCeilings.whyOutOfReach(it, ceiling, heapBytes)) }
     }
 }
 
@@ -729,7 +730,7 @@ internal object MapChrome {
     /** The one line of small print the toolbar carries: what this style is, or why it is unused. */
     fun note(options: RenderOptions): String =
         if (styleApplies(options.view)) options.style.detail
-        else "The ${options.view.label.lowercase()} view ignores the style: its colours mean something."
+        else "The ${options.view.label.lowercase()} view ignores the style: its colors mean something."
 }
 
 /**

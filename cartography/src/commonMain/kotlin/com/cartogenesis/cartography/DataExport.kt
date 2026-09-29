@@ -27,7 +27,7 @@ enum class DataLayer(
     HEIGHTMAP(
         "Heightmap",
         "heightmap",
-        "16-bit greyscale, sea level at 32768, with the metre scale in the JSON beside it. " +
+        "16-bit grayscale, sea level at 32768, with the meter scale in the JSON beside it. " +
             "Where there is an ice sheet this is the top of the ice, not the bed under it."
     ),
     BIOMES(

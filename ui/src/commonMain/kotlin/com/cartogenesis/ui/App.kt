@@ -141,7 +141,7 @@ fun CartogenesisRoot(platform: Platform) {
         // A size this host cannot make, from an older build or another session, is brought down to
         // the ceiling and said once: the clamped document is written back, so the next launch has
         // nothing to say.
-        val held = SettingsEffects.withinCeiling(read, platform.generationCeiling)
+        val held = SettingsEffects.withinCeiling(read, platform.generationCeiling, platform.heapBytes)
         val stored = held.settings
         if (stored != read) unwritten.trySend(stored)
         val folder = stored.libraryFolder
@@ -726,7 +726,7 @@ private fun Application(
         // Every way to a size above the ceiling is already closed — the chips, the stored settings
         // and the saves a browser refuses to open — so this is the guarantee rather than the rule:
         // a world the host cannot finish is refused in a sentence rather than begun.
-        WorldCeilings.whyOutOfReach(Knobs.sizeOf(config), generationCeiling)?.let { reason ->
+        WorldCeilings.whyOutOfReach(Knobs.sizeOf(config), generationCeiling, platform.heapBytes)?.let { reason ->
             status = "$reason."
             return@LaunchedEffect
         }
@@ -1987,7 +1987,7 @@ private fun PanelHeader(
         ) { Text("Random world", maxLines = 1) }
     }
 
-    val resolutions = Knobs.resolutionChoices(generationCeiling)
+    val resolutions = Knobs.resolutionChoices(generationCeiling, platform.heapBytes)
     // Which chip the pointer is over, if it is one whose reason is not printed below; see there.
     var reachingFor by remember { mutableStateOf<Int?>(null) }
     // The size by its name, as the chips say it, and in rows, which is what the name counts: the
@@ -2056,7 +2056,7 @@ private fun PanelHeader(
 
     // Export, which would otherwise want a 200 dp column of its own on the far side of the map.
     OutputOptions(
-        worldOnScreen, exportChoice, generationCeiling, exportSizes,
+        worldOnScreen, exportChoice, generationCeiling, platform.heapBytes, exportSizes,
         pictureFormats, dataLayers, onExportChoice, onExport
     )
 
@@ -2337,6 +2337,8 @@ private fun OutputOptions(
     worldOnScreen: WorldGenConfig?,
     exportChoice: ExportChoice,
     generationCeiling: Int,
+    /** The host's largest heap where it can say; see [Platform.heapBytes]. */
+    heapBytes: Long?,
     sizes: List<Int>,
     pictureFormats: List<ExportFormat>,
     dataLayers: List<DataLayer>,
@@ -2369,7 +2371,7 @@ private fun OutputOptions(
     }
     // One line of small print, which the unreachable size borrows while the pointer is on it. In
     // the same slot rather than under the row, so nothing moves when it changes.
-    val choices = SizeChoice.row(sizes, generationCeiling)
+    val choices = SizeChoice.row(sizes, generationCeiling, heapBytes)
     val unreachable = choices.firstOrNull { it.size == reachingFor }?.whyOutOfReach
     Text(
         unreachable ?: exportChoice.detail,

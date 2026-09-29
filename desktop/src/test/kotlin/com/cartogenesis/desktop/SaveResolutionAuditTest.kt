@@ -39,41 +39,52 @@ import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
 
 /**
- * Every working resolution the panel offers saves and opens, and what each costs in memory.
+ * The two largest working resolutions the panel offers save and open, and what each costs in memory.
  *
- * Audit III's F-D3: a 4096 world could not be saved at all — the payload's size was summed in an
- * `Int`, which 2.45 GB of arrays wrapped negative — and a 2048 save was built as one 612 MB array
- * before its compressed copy was made beside it. The codec now streams a chunk at a time; this is
- * the proof at the two sizes where it mattered, through the real desktop library and the real gzip.
+ * Audit III's F-D3: the largest world could not be saved at all — the payload's size was summed in
+ * an `Int`, which 2.45 GB of arrays wrapped negative — and a large save was built as one 612 MB
+ * array before its compressed copy was made beside it. The codec now streams a chunk at a time;
+ * this is the proof at the two sizes where it matters, through the real desktop library and the
+ * real gzip. Sizes are named by their rows, on grids of square cells twice as many across.
  *
- * 2048 is a real world. 4096 is a synthetic one, every array its full size, because a generated
- * 4096 world is the better part of half an hour and a save does not care what the numbers in its
- * arrays are; the format's round trip on real data is `WorldCodecTest`'s, on every merge.
+ * 2048 rows (4096 by 2048) is a real world. 4096 rows (8192 by 4096, 146 bytes a cell, 4.9 GB of
+ * arrays) is a synthetic one, every array its full size, because a generated one is a quarter of
+ * an hour and a save does not care what the numbers in its arrays are; the format's round trip on
+ * real data is `WorldCodecTest`'s, on every merge.
  *
- * The audit tier's, and not the per-merge suite's, for the heap: two 4096 worlds are five
- * gigabytes between them, which the per-merge worker does not have.
+ * The saved world is let go before the save is opened and what comes back is checked against
+ * digests of its arrays, so only one world is held at a time: two 4096-row worlds would be 9.8 GB,
+ * more than this tier's 10 GB heap holds beside the codec's work. The audit tier's, and not the
+ * per-merge suite's, for the heap.
  */
 class SaveResolutionAuditTest {
 
     @Test
     fun `a 2048 world saves and opens whole`() {
-        measure(SharedWorlds.world(WorldGenConfig(seed = 42L, width = 2048, height = 2048)))
+        measure { SharedWorlds.world(WorldGenConfig.forRows(seed = 42L, rows = 2048)) }
     }
 
     @Test
     fun `a 4096 world saves and opens whole`() {
-        measure(synthetic(WorldGenConfig(seed = 4096L, width = 4096, height = 4096)))
+        measure { synthetic(WorldGenConfig.forRows(seed = 4096L, rows = 4096)) }
     }
 
-    private fun measure(world: WorldMap) {
+    /** What must come back: the arrays' digests and the settings, taken before the world is let go. */
+    private class Expected(val config: WorldGenConfig, val heights: String, val biomes: String, val lakes: String)
+
+    private fun measure(make: () -> WorldMap) {
         val folder = Files.createTempDirectory("cartogenesis-large-save").toFile()
         try {
             val store = DesktopWorldStore(folder, GzipCompressor, "an audit")
+            var world: WorldMap? = make()
+            val size = "${world!!.config.height} rows (${world.width}x${world.height})"
             val document = WorldDocument(id = "large", title = "Large", config = world.config, savedAt = 1L)
-            val size = "${world.width}x${world.height}"
 
             val beforeSave = settledHeap()
-            val saving = sampled { runBlocking { store.save(document, world) } }
+            val saving = sampled { runBlocking { store.save(document, world!!) } }
+            val expected = Expected(
+                world.config, digest(world.terrain.height.data), digest(world.climate.biome), digest(world.rivers.lakes.lakeId)
+            )
             val file = File(folder, "large.cgw")
             val front = file.inputStream().use { it.readNBytes(HEADER_READ_BYTES) }
             val header = WorldCodec.decodeHeader(front)
@@ -85,10 +96,15 @@ class SaveResolutionAuditTest {
             )
             println(
                 "SAVE $size: ${file.length() / MEBIBYTE} MB on disk in ${saving.millis / 1000.0} s; heap above the " +
-                    "world ${(saving.livePeak - beforeSave) / MEBIBYTE} MB at most after any of " +
-                    "${saving.collections} collections, ${(saving.sampledPeak - beforeSave) / MEBIBYTE} MB at the " +
+                    // With no collection during the save there is no live reading to give.
+                    "world " + (if (saving.collections == 0) "unread, no collection ran" else
+                        "${(saving.livePeak - beforeSave) / MEBIBYTE} MB at most after any of ${saving.collections} collections") +
+                    ", ${(saving.sampledPeak - beforeSave) / MEBIBYTE} MB at the " +
                     "sampled peak counting garbage, ${(settledHeap() - beforeSave) / MEBIBYTE} MB once settled"
             )
+            // Let the saved world go, so the one opened is the only one held. A shared world stays
+            // with its lender, which is a 2048-row world and fits beside its copy.
+            world = null
 
             val beforeOpen = settledHeap()
             var opened: LoadOutcome? = null
@@ -96,19 +112,40 @@ class SaveResolutionAuditTest {
             val loaded = assertIs<LoadOutcome.Loaded>(opened, "the $size save did not open").save.world
             val retained = settledHeap() - beforeOpen
             println(
-                "OPEN $size: ${opening.millis / 1000.0} s; heap above the first world " +
+                "OPEN $size: ${opening.millis / 1000.0} s; heap above what was held before " +
                     "${(opening.livePeak - beforeOpen) / MEBIBYTE} MB at most after any of ${opening.collections} " +
                     "collections, ${(opening.sampledPeak - beforeOpen) / MEBIBYTE} MB at the sampled peak counting " +
                     "garbage, ${retained / MEBIBYTE} MB once settled (the opened world itself)"
             )
 
-            assertTrue(loaded.terrain.height.data.contentEquals(world.terrain.height.data), "the heights did not come back")
-            assertTrue(loaded.climate.biome.contentEquals(world.climate.biome), "the biomes did not come back")
-            assertTrue(loaded.rivers.lakes.lakeId.contentEquals(world.rivers.lakes.lakeId), "the lakes did not come back")
-            assertEquals(world.config, loaded.config)
+            assertEquals(expected.heights, digest(loaded.terrain.height.data), "the heights did not come back")
+            assertEquals(expected.biomes, digest(loaded.climate.biome), "the biomes did not come back")
+            assertEquals(expected.lakes, digest(loaded.rivers.lakes.lakeId), "the lakes did not come back")
+            assertEquals(expected.config, loaded.config)
         } finally {
             folder.deleteRecursively()
         }
+    }
+
+    /** SHA-256 of [values]' bits, a mebibyte at a time. */
+    private fun digest(values: FloatArray): String = digestOf(values.size) { buffer, at -> buffer.putFloat(values[at]) }
+
+    private fun digest(values: IntArray): String = digestOf(values.size) { buffer, at -> buffer.putInt(values[at]) }
+
+    private fun digest(values: Array<Biome>): String = digestOf(values.size) { buffer, at -> buffer.putInt(values[at].ordinal) }
+
+    private fun digestOf(count: Int, put: (java.nio.ByteBuffer, Int) -> Unit): String {
+        val sha = java.security.MessageDigest.getInstance("SHA-256")
+        val buffer = java.nio.ByteBuffer.allocate(MEBIBYTE.toInt())
+        for (at in 0 until count) {
+            if (buffer.remaining() < Int.SIZE_BYTES) {
+                sha.update(buffer.array(), 0, buffer.position())
+                buffer.clear()
+            }
+            put(buffer, at)
+        }
+        sha.update(buffer.array(), 0, buffer.position())
+        return sha.digest().joinToString("") { "%02x".format(it) }
     }
 
     /** Heap in use once a collection has had its chance, which is as near the live set as a JVM says. */

@@ -109,7 +109,7 @@ internal object PngWriter {
             "${indices.size} indices for a ${widthPixels}x$heightPixels image"
         }
         require(palette.isNotEmpty() && palette.size <= LARGEST_PALETTE) {
-            "a PNG palette holds 1 to $LARGEST_PALETTE colours, not ${palette.size}"
+            "a PNG palette holds 1 to $LARGEST_PALETTE colors, not ${palette.size}"
         }
 
         // Unfiltered, which the PNG specification recommends for palette images: a filter subtracts

@@ -77,6 +77,12 @@ internal object LargeLinks {
                 "2026-09-28 (docs/DESIGN_LEDGER.md, Q5)"
         ),
         MeasuredGeneration(
+            4096, GenerationHost.DESKTOP_APP, "about seventeen minutes",
+            "994.6 s: seed 42 at 4096 rows, graphics acceleration on, Ryzen 7 5700X and " +
+                "GeForce RTX 3070 Ti, 12 GB heap, 2026-09-28 (docs/DESIGN_LEDGER.md, Q5); offered " +
+                "only on a desktop whose heap holds it (WorldCeilings.forDesktopHeap)"
+        ),
+        MeasuredGeneration(
             1024, GenerationHost.DESKTOP_BROWSER, "about three minutes",
             "171.6 s, generated and drawn: seed 42 at 1024 rows, the production build in a " +
                 "Chrome 152 tab, graphics acceleration off, Ryzen 7 5700X, 2026-09-28 " +

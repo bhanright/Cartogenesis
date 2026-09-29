@@ -231,13 +231,22 @@ interface Platform {
      * makes the world again at its own size, so the two could only disagree by offering a size
      * that ends the same way from either row.
      *
-     * [WorldCeilings.DESKTOP] by default and on the desktop, [WorldCeilings.BROWSER_TAB] in every
-     * browser, phone or not; each says what was measured to put it there. A value on the platform
-     * rather than a constant in the panel, so that the build which makes a larger world fit raises
-     * this and every row that offers a size follows: a size above it stays in its row, disabled,
-     * with [WorldCeilings.whyOutOfReach] saying why.
+     * [WorldCeilings.DESKTOP] by default, [WorldCeilings.forDesktopHeap] of [heapBytes] on the
+     * desktop, [WorldCeilings.BROWSER_TAB] in every browser, phone or not; each says what was
+     * measured to put it there. A value on the platform rather than a constant in the panel, so
+     * that the build which makes a larger world fit raises this and every row that offers a size
+     * follows: a size above it stays in its row, disabled, with [WorldCeilings.whyOutOfReach]
+     * saying why.
      */
     val generationCeiling: Int get() = WorldCeilings.DESKTOP
+
+    /**
+     * The most memory this host's runtime will hold, in bytes, where it can say: the desktop's
+     * largest heap, which decides whether it offers [WorldCeilings.LARGEST_DESKTOP] and lets a
+     * reason for a size out of reach say what the machine lacks. Null where the host cannot say,
+     * as a browser cannot.
+     */
+    val heapBytes: Long? get() = null
 
     /**
      * Draws [world] at the size named [size], by its rows, and puts the result wherever this
@@ -457,26 +466,109 @@ expect fun randomId(): String
 expect fun formatTimestamp(millis: Long): String
 
 /**
- * The two ceilings a host can have on the size of world it makes, and the sentence for a size above
+ * The ceilings a host can have on the size of world it makes, and the sentence for a size above
  * one of them. See [Platform.generationCeiling]. Sizes are named by their rows, the grid twice as
- * many cells across. What each was measured at is in docs/DESIGN_LEDGER.md, Q5.
+ * many cells across. What each was measured at is in docs/DESIGN_LEDGER.md, Q5 and Q6.
  *
  * Public because the web front end, which is a module of its own, declares the browser's.
  */
 object WorldCeilings {
 
     /**
-     * The largest world the desktop app offers: 2048 rows, a grid 4096 by 2048.
+     * The largest world every desktop offers: 2048 rows, a grid 4096 by 2048.
      *
      * Held to the heap the packaged app takes on a 16 GB machine, three quarters of its memory or
-     * 12 GB, because a size the app offers has to finish on an ordinary machine and not only on
-     * the one it was measured on. 2048 rows finished in three and a half minutes on the processor
-     * with 3.0 GB live at its fullest and 4.8 GB resident. 4096 rows finished too, generated, drawn
-     * and saved under a 12 GB heap, but with 10.3 GB of it live after a collection and 14.0 GB
-     * resident at its fullest, which leaves a 16 GB machine about 2 GB for everything else; so it
-     * is offered disabled, as 8192 rows is, which is twice its cells. See docs/DESIGN_LEDGER.md, Q5.
+     * 12 GB, because a size every desktop offers has to finish on an ordinary machine and not only
+     * on the one it was measured on. 2048 rows finished in three and a half minutes on the
+     * processor with 3.0 GB live at its fullest and 4.8 GB resident. A desktop whose heap holds
+     * more offers [LARGEST_DESKTOP] as well; see [forDesktopHeap].
      */
     const val DESKTOP: Int = 2048
+
+    /**
+     * The largest world a desktop offers where its heap can hold it: 4096 rows, a grid 8192 by
+     * 4096, offered where the heap is at least [HEAP_FOR_LARGEST_DESKTOP_BYTES].
+     */
+    const val LARGEST_DESKTOP: Int = 4096
+
+    /** A mebibyte, the unit the 4096 world's memory was measured in. */
+    private const val MEBIBYTE: Long = 1L shl 20
+
+    /** A gibibyte, the unit a machine's memory is sold in and a reason states it in. */
+    private const val GIBIBYTE: Long = 1L shl 30
+
+    /**
+     * The most of the heap the 4096 world held live at once, after a collection: 10,279 MiB, seed
+     * 42 with acceleration on, generated, drawn, exported and saved under a 12 GiB heap
+     * (docs/DESIGN_LEDGER.md, Q5).
+     */
+    private const val LIVE_AT_LARGEST_DESKTOP_BYTES: Long = 10_279 * MEBIBYTE
+
+    /**
+     * What the 4096 world held outside the heap: its peak working set, 14,037 MiB, less the
+     * 12,288 MiB heap, the most of it that could have been committed; at least 1,749 MiB of the
+     * graphics card's buffers, Skia's bitmaps and the runtime's own, none of which the heap's
+     * limit bounds (docs/DESIGN_LEDGER.md, Q5).
+     */
+    private const val OUTSIDE_HEAP_AT_LARGEST_DESKTOP_BYTES: Long = (14_037 - 12_288) * MEBIBYTE
+
+    /**
+     * Memory the system keeps for itself while the app runs: 4 GiB, Windows 11's stated minimum
+     * memory, which a machine that runs it has to leave the system to go on running.
+     */
+    private const val SYSTEM_RESERVE_BYTES: Long = 4 * GIBIBYTE
+
+    /**
+     * The share of a machine's memory the packaged desktop app takes as its heap: three quarters,
+     * `-XX:MaxRAMPercentage=75` in `desktop/build.gradle.kts` (`DesktopCeilingTest` holds the two
+     * together). The quarter left is where the system and everything the app holds outside its
+     * heap must fit.
+     */
+    const val PACKAGED_HEAP_SHARE_OF_MEMORY: Double = 0.75
+
+    /**
+     * The share of the heap the live set may fill at its fullest and still leave the collector room
+     * to work: two thirds. A choice, not a measurement: the one 4096 run filled 84% and finished,
+     * which bounds how little room works rather than saying how much is comfortable.
+     */
+    private const val LIVE_SHARE_OF_HEAP: Double = 2.0 / 3.0
+
+    /**
+     * The least heap on which a desktop offers [LARGEST_DESKTOP]: 17,535 MiB, 17.1 GiB, the larger
+     * of what two things ask.
+     *
+     * - The live set with room for the collector: 10,279 MiB over two thirds, 15,419 MiB.
+     * - The memory outside the heap: the app's own there (1,749 MiB) and the system's (4 GiB)
+     *   must fit in the quarter the packaged heap leaves, which is a third of the heap, so the
+     *   heap must be three times their sum, 17,535 MiB.
+     *
+     * The second binds, and would so long as less than 41% of the heap were asked to be free. A
+     * machine with three quarters of its memory at least this has 22.8 GiB: a 24 GB machine is
+     * offered 4096 and a 16 GB machine, whose 12 GiB heap is the one Q5 measured with 2 GB left
+     * for everything else, is not.
+     */
+    val HEAP_FOR_LARGEST_DESKTOP_BYTES: Long = maxOf(
+        (LIVE_AT_LARGEST_DESKTOP_BYTES / LIVE_SHARE_OF_HEAP).toLong(),
+        ((OUTSIDE_HEAP_AT_LARGEST_DESKTOP_BYTES + SYSTEM_RESERVE_BYTES) *
+            (PACKAGED_HEAP_SHARE_OF_MEMORY / (1 - PACKAGED_HEAP_SHARE_OF_MEMORY))).toLong()
+    )
+
+    /**
+     * The ceiling of a desktop whose largest heap is [heapBytes]: [LARGEST_DESKTOP] where the heap
+     * is at least [HEAP_FOR_LARGEST_DESKTOP_BYTES], [DESKTOP] below it.
+     */
+    fun forDesktopHeap(heapBytes: Long): Int =
+        if (heapBytes >= HEAP_FOR_LARGEST_DESKTOP_BYTES) LARGEST_DESKTOP else DESKTOP
+
+    /** [bytes] in gibibytes to a tenth, as a reason prints them. */
+    private fun gibibytes(bytes: Long): String {
+        val tenths = kotlin.math.round(bytes * 10.0 / GIBIBYTE).toLong()
+        return "${tenths / 10}.${tenths % 10}"
+    }
+
+    /** The least memory, in whole gibibytes, a machine needs for the packaged heap to reach [HEAP_FOR_LARGEST_DESKTOP_BYTES]. */
+    val MEMORY_FOR_LARGEST_DESKTOP_GIBIBYTES: Long =
+        kotlin.math.ceil(HEAP_FOR_LARGEST_DESKTOP_BYTES / PACKAGED_HEAP_SHARE_OF_MEMORY / GIBIBYTE).toLong()
 
     /**
      * The largest world a browser tab makes: 1024 rows, a grid 2048 by 1024.
@@ -491,16 +583,30 @@ object WorldCeilings {
     const val BROWSER_TAB: Int = 1024
 
     /**
-     * Why a world of the size named [size] cannot be made under [ceiling], or null when it can.
+     * Why a world of the size named [size] cannot be made under [ceiling], on a host whose largest
+     * heap is [heapBytes] where it can say ([Platform.heapBytes]), or null when it can.
      *
-     * A size the desktop reaches and this host does not can only be a browser's limit, because the
-     * browser's is the only ceiling below the desktop's; a size above the desktop's waits for a
-     * later release everywhere. Either way the sentence says where the size can be had, because a
-     * reader told only "no" has no idea whether to ask again.
+     * A size every desktop reaches and this host does not can only be a browser's limit, because
+     * the browser's is the only ceiling below [DESKTOP]. A size only a desktop with the memory
+     * reaches, [LARGEST_DESKTOP], is the machine's limit: the sentence says how much the app needs
+     * and, where the host can say, how much this machine gives it. A size above that waits for a
+     * later release everywhere. Each sentence says where the size can be had, because a reader told
+     * only "no" has no idea whether to ask again.
      */
-    fun whyOutOfReach(size: Int, ceiling: Int): String? = when {
-        size <= ceiling -> null
-        size <= DESKTOP -> "A $size world needs more memory than a browser tab is given; the desktop app makes it"
-        else -> "$size needs more memory than this build can hold; it waits for a later release"
+    fun whyOutOfReach(size: Int, ceiling: Int, heapBytes: Long? = null): String? {
+        val appNeeds = "${gibibytes(HEAP_FOR_LARGEST_DESKTOP_BYTES)} GB of memory for the app"
+        val machineWith = "a machine with $MEMORY_FOR_LARGEST_DESKTOP_GIBIBYTES GB of memory or more"
+        return when {
+            size <= ceiling -> null
+            size <= DESKTOP -> "A $size world needs more memory than a browser tab is given; the desktop app makes it"
+            size <= LARGEST_DESKTOP -> when {
+                ceiling < DESKTOP ->
+                    "A $size world needs more memory than a browser tab is given; the desktop app makes it on $machineWith"
+                heapBytes != null ->
+                    "A $size world needs $appNeeds and this machine gives it ${gibibytes(heapBytes)} GB; $machineWith makes it"
+                else -> "A $size world needs $appNeeds; $machineWith makes it"
+            }
+            else -> "$size needs more memory than this build can hold; it waits for a later release"
+        }
     }
 }

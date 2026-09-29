@@ -38,8 +38,8 @@ body:
     id: resolution
     attributes:
       label: Generation resolution
-      description: The grid the world was generated at, not the size of an export.
-      placeholder: 1024 × 1024
+      description: The grid the world was generated at, twice as many cells across as its size's rows (a 1024 world is 2048 × 1024), not the size of an export.
+      placeholder: 2048 × 1024
     validations:
       required: true
   - type: input

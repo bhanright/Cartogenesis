@@ -9,6 +9,7 @@ import com.cartogenesis.ui.ExportOutcome
 import com.cartogenesis.ui.ExportSubjects
 import com.cartogenesis.ui.Platform
 import com.cartogenesis.ui.SettingsStore
+import com.cartogenesis.ui.WorldCeilings
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.ErosionAccelerator
 import com.cartogenesis.worldgen.pipeline.IceSheetAccelerator
@@ -45,8 +46,17 @@ class DesktopPlatform(
      * Compose's own `exitApplication` (which lets the window close properly) while a test that
      * happens to construct a platform cannot bring the test JVM down by mistake.
      */
-    private val onQuit: () -> Unit = {}
+    private val onQuit: () -> Unit = {},
+    /**
+     * The largest heap this runtime will hold, in bytes: the JVM's own answer, which in the
+     * packaged app is three quarters of the machine's memory. Handed in so a test can ask what a
+     * machine of another size is offered.
+     */
+    override val heapBytes: Long = Runtime.getRuntime().maxMemory()
 ) : Platform {
+
+    /** 2048 rows on every desktop, 4096 where the heap holds it; see [WorldCeilings.forDesktopHeap]. */
+    override val generationCeiling: Int get() = WorldCeilings.forDesktopHeap(heapBytes)
 
     // Every core and three quarters of the machine's memory: 1024 rows, a grid 2048 by 1024, is
     // about fifty seconds on the processor. See docs/DESIGN_LEDGER.md, Q5.

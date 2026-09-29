@@ -225,7 +225,8 @@ internal object SettingsEffects {
 
     /**
      * [settings] held to what a host whose [Platform.generationCeiling] is [ceiling] can make, with
-     * the one line that says what moved and why, or a null line when nothing had to.
+     * the one line that says what moved and why, or a null line when nothing had to. [heapBytes] is
+     * the host's largest heap where it can say ([Platform.heapBytes]), for the reason's figures.
      *
      * A settings document written before the browser stopped at 1024, or carried over from a
      * session that asked for 2048, would otherwise start a world that ends in a dead tab. Clamped
@@ -233,7 +234,7 @@ internal object SettingsEffects {
      * done quietly, because a reader who chose 2048 and gets 1024 is owed the reason, and said once,
      * because the caller stores the clamped document so the next launch has nothing to say.
      */
-    fun withinCeiling(settings: AppSettings, ceiling: Int): HeldSettings {
+    fun withinCeiling(settings: AppSettings, ceiling: Int, heapBytes: Long? = null): HeldSettings {
         val resolution = settings.workingResolution
         val resolutionMoves = resolution != AppSettings.FOLLOW_PLATFORM && resolution > ceiling
         val exportMoves = settings.exportSize > ceiling
@@ -250,7 +251,7 @@ internal object SettingsEffects {
             else -> "Exports start"
         }
         val notice = "$what at $ceiling here rather than the $asked in your settings. " +
-            "${WorldCeilings.whyOutOfReach(asked, ceiling)}."
+            "${WorldCeilings.whyOutOfReach(asked, ceiling, heapBytes)}."
         return HeldSettings(held, notice)
     }
 

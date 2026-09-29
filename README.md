@@ -23,13 +23,14 @@ three apt commands and what to do about the unsigned installer's SmartScreen war
 - Fifteen map views: the fantasy map, political borders, peoples, elevation, biomes, seasonal
   temperature and rainfall, tectonic plates, ocean currents and winds.
 - Twelve map styles, from a modern atlas to parchment, ink, a nautical chart, Mars and a
-  satellite-colour Natural style, plus a colour-blind-safe palette.
+  satellite-color Natural style, plus a color-blind-safe palette.
 - Interface themes grouped into Standard, Accessible and Styled.
 - Editing of generated names and borders, kept with the world.
 - Save files containing the generated world and your edits, readable by both front ends.
-- Image exports as PNG, WebP or JPEG, drawn at the world's true shape — a picture of an N world is
-  2N × N, so a 4096 world is 8192 × 4096 — and data exports (heightmap, biome map, realm map), one
-  sample per cell with JSON sidecars.
+- Image exports as PNG, WebP or JPEG, drawn at the world's true shape a cell to a pixel — a size is
+  named by its rows, on a grid of square cells twice as many across, so a 2048 world is
+  4096 × 2048 — and data exports (heightmap, biome map, realm map), one sample per cell with JSON
+  sidecars.
 
 MIT licensed; see [LICENSE](LICENSE).
 
@@ -47,8 +48,8 @@ Run the browser build:
 ./gradlew :web:wasmJsBrowserProductionRun
 ```
 
-This serves the optimised bundle at http://localhost:8080. Use the production task for interactive
-testing; the development build (`wasmJsBrowserDevelopmentRun`) uses unoptimised WebAssembly and runs
+This serves the optimized bundle at http://localhost:8080. Use the production task for interactive
+testing; the development build (`wasmJsBrowserDevelopmentRun`) uses unoptimized WebAssembly and runs
 several times slower. `./gradlew :web:wasmJsBrowserDistribution` writes a static site to
 `web/build/dist/wasmJs/productionExecutable` instead of serving it. The build must be served over
 HTTP: Wasm does not load from `file://`, and WebGPU needs a secure context, which `localhost` is.
@@ -68,7 +69,7 @@ default grid is 23 km across, and no cell that size holds a summit. Every reach,
 the generator is written in those units and converted to whatever grid the world is generated at.
 
 1. **Terrain.** Seeded Perlin noise produces a gradient field, integrated into a height map by
-   Frankot–Chellappa least-squares integration (a 2D FFT). The terrain filter emphasises relief at
+   Frankot–Chellappa least-squares integration (a 2D FFT). The terrain filter emphasizes relief at
    roughly 400 km while keeping some variation across the whole map; these broad slopes are what let
    long river systems form. Below 200 km, roughness depends on the surrounding relief, so plains
    come out smooth and mountain ranges rough.
@@ -115,13 +116,13 @@ the generator is written in those units and converted to whatever grid the world
     and traced to the coast, and each basin's outlet incises its sill over time. A filled basin
     becomes a lake only as far as its water balance allows; where evaporation wins it sits below its
     rim as an endorheic lake or dries to a playa, and a basin that closes keeps its rain from the
-    basins below it. Discharge is the rain that falls, in millimetres, summed downstream. Rivers run
+    basins below it. Discharge is the rain that falls, in millimeters, summed downstream. Rivers run
     from their farthest headwater, are drawn at a width proportional to the square root of their
     discharge (Leopold and Maddock), and stop at the shoreline.
 11. **Realms.** Borders are assigned by whole drainage catchment, so frontiers fall on watersheds.
     Catchments are cut at their confluences to a bounded area of ground, a closed basin stays whole
-    with its lake, and a small one joins a neighbour on its own landmass. Large catchments are split
-    along their trunk river, enclaves dissolve into their surrounding neighbour, and no realm holds
+    with its lake, and a small one joins a neighbor on its own landmass. Large catchments are split
+    along their trunk river, enclaves dissolve into their surrounding neighbor, and no realm holds
     more than 30% of the world's land. Each realm's population, exports and
     imports derive from the land it holds.
 12. **Peoples.** A second, independent layer: cultures spread from seeded hearths at a cost set by
@@ -133,26 +134,26 @@ The derivation behind each stage, with the measurements that shaped it, is in
 [docs/DESIGN_LEDGER.md](docs/DESIGN_LEDGER.md); what the generator holds by construction, and where
 it still deviates from Earth, is in [docs/GEOGRAPHY.md](docs/GEOGRAPHY.md).
 
-## Map styles, views and colours
+## Map styles, views and colors
 
 The twelve styles are **Atlas** (elevation and climate tints), **Vellum** (aged parchment and
-sepia ink), **Ink wash** (sumi-e grey on pale paper), **Nautical** (an admiralty chart with
+sepia ink), **Ink wash** (sumi-e gray on pale paper), **Nautical** (an admiralty chart with
 depth-banded water), **Midnight** (moonlit, rivers left luminous), **Schoolroom** (a saturated
 classroom wall map, the land tinted by elevation alone), **Verdant** (illustrated fantasy: teal
 sea, cream land, deep woods), **Scroll** (painted parchment, jade sea, vermilion marks), **Pen and
 ink** (line art, relief hatched by slope), **Mars** (the same world as a dry planet), **Natural** (a palette sampled from a Blue
-Marble photograph of Earth) and **Colour-blind** (a cividis land ramp over one flat sea, so nothing
+Marble photograph of Earth) and **Color-blind** (a cividis land ramp over one flat sea, so nothing
 is told by hue alone).
 
 A style changes only appearance. The same seed gives the same world in every style, and the
-diagnostic views (elevation, biomes, climate and the rest) ignore styles, since their colours carry
+diagnostic views (elevation, biomes, climate and the rest) ignore styles, since their colors carry
 meaning. `StyleGalleryTest` renders all twelve and asserts that they differ from one another. Most
-of the difference between styles is four settings: how much vegetation colour shows through, how far
-biome colours are pulled toward the paper, how far the height ramp follows the climate, and how
+of the difference between styles is four settings: how much vegetation color shows through, how far
+biome colors are pulled toward the paper, how far the height ramp follows the climate, and how
 strongly the relief is shaded.
 
-**Climate colours.** An elevation-only palette can make a desert plain look as green as a wet one.
-Cartogenesis adjusts terrain colours using vegetation, aridity and ice cover, and each style controls
+**Climate colors.** An elevation-only palette can make a desert plain look as green as a wet one.
+Cartogenesis adjusts terrain colors using vegetation, aridity and ice cover, and each style controls
 how strongly those adjustments affect its palette. Aridity follows De Martonne's index.
 
 **Relief.** The default relief is lit from the whole sky rather than one north-west lamp, following
@@ -168,7 +169,7 @@ The derivations and measurements for the tints, the sky light and the contours a
 Maps include scale-dependent detail, an optional latitude–longitude grid, and a scale bar. These
 affect how the map is drawn without changing the generated world.
 
-- **Generalisation.** A sheet draws as much river line per square kilometre of land as a published
+- **Generalization.** A sheet draws as much river line per square kilometer of land as a published
   map at its own scale does — measured off Natural Earth's 1:50M and 1:10M river layers and carried
   between scales by Töpfer and Pillewizer's radical law — so the faintest rivers are dropped as you
   zoom out and return as you zoom in, and the same country looks the same whether the world behind
@@ -181,10 +182,11 @@ affect how the map is drawn without changing the generated world.
   the scale at the sheet's own size — one figure, since the map is drawn at the world's true shape
   and a pixel covers the same ground either way — quoted at the equator because east–west distance
   on an equirectangular map shrinks with latitude.
-- **True shape.** The world is twice as wide as it is tall on the ground, and its grid is square,
-  so a cell is twice as wide as it is tall. Every picture — on screen and exported — draws a cell
-  two pixels wide and one tall, copying its colour exactly, and lays the ink over it at its own
-  width; data exports keep the grid, one sample per cell.
+- **True shape.** The world is twice as wide as it is tall on the ground, and its grid is twice as
+  many cells across as down, so a cell is square: 5.9 km a side at 1024, 2.9 km at 2048. Every
+  picture — on screen and exported — draws a cell to a pixel, copying its color exactly, and lays
+  the ink over it at its own width; data exports keep the grid, one sample per cell, and so have
+  the picture's shape.
 
 All of these read the one declared width, `WorldScale.worldWidthKm`, and are drawn as geometry so
 they appear identically on screen and in a PNG. The measurements behind them are in
@@ -193,8 +195,10 @@ they appear identically on screen and in a PNG. The measurements behind them are
 ## Exports
 
 Export re-runs the whole pipeline at the target size rather than upscaling the preview, so a larger
-map is more detailed. `WorldGenConfig.atResolution` rescales every cell-based setting to make that
-true; a new cell-based setting must be added there or exports will drift from the preview.
+map is more detailed. Every setting of the generator is a length on the ground, a depth or a time,
+converted to cells where each stage reads it, so `WorldGenConfig.atResolution` only changes the
+grid and the same world gains detail; a new setting stated in cells would make exports drift from
+the preview. An export at the size on screen draws the world on screen and is not made again.
 
 **Pictures** are PNG, WebP or JPEG. PNG is lossless. WebP is smaller and loses a little detail in
 thin rivers and borders. JPEG is for tools that will not open WebP; it is smaller still and softer.
@@ -205,16 +209,16 @@ The measured trade-offs are in [docs/PERFORMANCE.md](docs/PERFORMANCE.md); `Expo
 
 | Data export | Image | Sidecar carries |
 |---|---|---|
-| Heightmap | 16-bit greyscale PNG, one cell per pixel | the metre scale, the sea-level grey value, the cell size |
-| Biomes | 8-bit palette PNG, one biome ordinal per pixel | index → biome name, colour and cell count |
-| Realms | 8-bit palette PNG, sea 0, unclaimed land 1, realms from 2 | index → realm name, colour and cell count |
+| Heightmap | 16-bit grayscale PNG, one cell per pixel | the meter scale, the sea-level gray value, the cell size |
+| Biomes | 8-bit palette PNG, one biome ordinal per pixel | index → biome name, color and cell count |
+| Realms | 8-bit palette PNG, sea 0, unclaimed land 1, realms from 2 | index → realm name, color and cell count |
 
 Each data export is a PNG and a JSON sidecar of the same name. The sidecar carries the seed, the
 pixel dimensions (the grid's, one sample per cell, unlike the picture exports), the world's width
-(12,000 km), the cell size east-west and north-south, the square kilometres per cell, the
-save format version and the build. **Sea level is grey level 32768 on every world**, fixed rather
+(12,000 km), the cell size east-west and north-south, the square kilometers per cell, the
+save format version and the build. **Sea level is gray level 32768 on every world**, fixed rather
 than derived per world, because its job is to be typed into somebody else's program. There are
-32767 levels either side of the waterline, and the sidecar states a metres-per-level figure for
+32767 levels either side of the waterline, and the sidecar states a meters-per-level figure for
 each half, because the vertical range is two numbers rather than one: at the defaults a level above
 the waterline is 0.1831 m and one below it 0.3052 m, so white is +6,000 m and black is -10,000 m.
 Land below the waterline is written as it is, not clamped — a basin the sea cannot reach drains out
@@ -225,29 +229,34 @@ files together and avoids browser restrictions on multiple downloads. Why the PN
 project's own encoder, and why the browser sends one archive rather than two files, are in
 [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
-Generation is most of an export's cost: at 4096, about three minutes of world against a few
-seconds of encoding.
+Generation is most of an export's cost: at 2048, about three and a half minutes of world against a
+few seconds of encoding.
 
 ## Resolution, limits and acceleration
 
-The interface offers generation resolutions of 512 to 4096 and exports of 2048, 4096 and 8192. The
-desktop goes to 4096; 8192 is shown disabled because the world's fields exhaust a 10 GB heap during
-generation, before anything is drawn. The browser goes to 2048, on a phone or a computer, for the
-world on screen and for exports: a 4096 generation killed a desktop browser's tab before anything
-was drawn, so the 4096 chips are shown disabled there, a stored 4096 preference is brought down to
-2048 with a line saying why, and a 4096 save from the desktop is refused from its header rather than
-opened into a tab that cannot hold its 2.45 GB of arrays. One ceiling covers both rows because an
-export makes the world again at its own size; it lives in `Platform.generationCeiling`, with the two
-values and their measurements in `WorldCeilings`. The browser starts at a generation resolution of
-512 and the desktop at 1024, because a browser tab has one thread and generation blocks the page
-while it runs.
+The interface offers generation resolutions of 512 to 4096 and exports of 1024 to 8192, each named
+by its rows on a grid of square cells twice as many across: a 1024 world is 2048 × 1024 cells, 5.9
+km a side. Every desktop goes to 2048, which generates in about three and a half minutes. A desktop
+whose heap is at least 17.1 GB, which the packaged app's three quarters of memory gives a machine
+of 23 GB or more, also goes to 4096, which generated in about seventeen minutes with 10.3 GB of its
+heap live; elsewhere the 4096 chip is shown disabled with what the machine lacks. 8192, twice 4096's
+cells, is shown disabled everywhere. The browser goes to 1024, on a phone or a computer, for the
+world on screen and for exports: 1024 generated in a tab in about three minutes with the tab's heap
+at 1.7 GB, and 2048 is four times its cells, more than a Wasm heap addresses at that rate. So the
+larger chips are shown disabled there, a stored larger preference is brought down to 1024 with a
+line saying why, and a larger save from the desktop is refused from its header rather than opened
+into a tab that cannot hold it. One ceiling covers both rows because an export makes the world
+again at its own size; it lives in `Platform.generationCeiling`, with the values, their
+measurements and the 4096 threshold's derivation in `WorldCeilings`. The browser starts at a
+generation resolution of 512 and the desktop at 1024, because a browser tab has one thread and
+generation blocks the page while it runs.
 
 **Graphics acceleration** is an opt-in toggle in the header and in Settings (as *Graphics
 acceleration at launch*). It runs the erosion sweeps, the ocean-current solve and the ice sheet's
 profile and flow on the graphics device on both platforms, and the export raster on the desktop as
 well (OpenGL compute on the desktop, WGSL in the browser); the panel says which through the
 `Platform` seam. Drawing the map
-runs on the graphics device unconditionally, outside this toggle, because rasterising pixels makes
+runs on the graphics device unconditionally, outside this toggle, because rasterizing pixels makes
 no promise about reproducing a world from its seed. The accelerated erosion agrees with the
 processor to about seven parts in a million but is not bit-identical, so a world generated with
 acceleration stores its terrain in the save (`TerrainSnapshot`) rather than relying on
@@ -377,7 +386,7 @@ A save is an uncompressed JSON header (format version, settings, overrides, labe
 front end wrote it, and a directory of the payload's sections) followed by the payload: the world's
 lists (rivers, lakes, realms, peoples, landmarks) as JSON, then one little-endian binary section per
 per-cell array, 146 bytes a cell in all. The payload is cut into one-mebibyte chunks, each gzipped
-and checksummed on its own, so a save is written and read a chunk at a time: a 4096 world, 2.45 GB
+and checksummed on its own, so a save is written and read a chunk at a time: a 4096 world, 4.9 GB
 of arrays, saves and opens without any array its size existing in between. The header is
 checksummed too, and each chunk's checksum is bound to the header and to the chunk's place, so an
 edited header, or a header put in front of another save's chunks, is found. The browser keeps its
@@ -462,7 +471,7 @@ binds the usual keystrokes (Ctrl+N, Ctrl+O, Ctrl+S, Ctrl+Shift+S, Ctrl+E, Ctrl+L
 Ctrl+Q) and the browser binds none, so it never steals Ctrl+S from the tab.
 
 **Copy link to this world** puts on the clipboard an address that makes the world on screen again
-in the browser: `https://cartogenesis.com/app/?seed=718106#v=1&size=1024&plates=18&style=vellum`.
+in the browser: `https://cartogenesis.com/app/?seed=718106#v=2&size=1024&plates=18&style=vellum`.
 The seed is in the query, so `/app/?seed=718106` typed by hand opens that seed at the size and
 settings a fresh window starts with; the rest follows `#`, which a browser never sends to the
 server: the link format's version, the size, and every setting of the world and of the drawing that
@@ -471,8 +480,10 @@ link carries no saved world, no name, no labels and no edits, and neither where 
 the river density, which belong to the machine and the reader. Opened, a part the application
 cannot use (a seed that is not a number, a setting it does not know, a value outside its control's
 range) is set aside with one line of status and the rest applies; a size above the browser's
-ceiling is brought down to it with the reason; and a link in a format this build does not write is
-refused whole rather than misread. A link naming a size larger than the one the window starts at
+ceiling is brought down to it with the reason; a link of the first format, whose size counted a grid
+as many cells tall as wide, opens with its size read as rows and a line saying its world differs
+from the one it was copied from; and a link in a format newer than this build's is refused whole
+rather than misread. A link naming a size larger than the one the window starts at
 (512 in a browser, 1024 on the desktop) makes nothing until the reader answers one question: make it
 at the link's size, or open it at the starting size with the link's other settings. The question
 quotes how long that size took where it has been measured on that kind of machine (`LargeLinks`
@@ -494,7 +505,7 @@ WCAG AA, and AAA for High contrast.
 **Check for updates** compares GitHub's `releases/latest` tag with the build's version (generated
 from `gradle.properties`). It is off by default and runs only from the menu, so launching the app
 never contacts GitHub uninvited. **Report a bug** copies a report with the seed, resolution and
-changed settings and opens a pre-filled issue. **About** lists the version, build date, licence and
+changed settings and opens a pre-filled issue. **About** lists the version, build date, license and
 third-party notices; a Gradle task generates the notices from the build's dependency graph so they
 match what is bundled.
 
@@ -533,7 +544,7 @@ stale caches, are in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 - [docs/TODO.md](docs/TODO.md): issues found but not yet scheduled.
 - [ROADMAP.md](ROADMAP.md): planned releases and what each brings.
 
-## Licence
+## License
 
 MIT; see [LICENSE](LICENSE). The bundled typefaces are under the SIL Open Font License; every other
-third-party component is listed with its licence in the About dialog.
+third-party component is listed with its license in the About dialog.

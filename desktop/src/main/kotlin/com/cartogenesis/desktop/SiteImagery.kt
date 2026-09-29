@@ -1,6 +1,7 @@
 package com.cartogenesis.desktop
 
 import com.cartogenesis.cartography.MapRasterizer
+import com.cartogenesis.cartography.WorldCodec
 import com.cartogenesis.cartography.MapStyle
 import com.cartogenesis.cartography.MapView
 import com.cartogenesis.cartography.RenderOptions
@@ -34,8 +35,8 @@ import java.io.File
  * page out of it, and the release that changes what a coastline looks like changes the coastline
  * the page shows.
  *
- * Generating [SEED] at [GRID_CELLS] is a minute of arithmetic and a figure is a window onto that
- * map's sheet, cropped at the sheet's own pixels. Cropping rather than scaling is the point: every
+ * Generating [SEED] at [GRID_ROWS] is a few minutes of arithmetic and a figure is a window onto
+ * that map's sheet, cropped at the sheet's own pixels. Cropping rather than scaling is the point: every
  * mark the renderer makes is sized in *output pixels*, so a 1:1 window shows the pen the renderer
  * actually draws with, while a downscaled whole map shows a thinner one that exists nowhere.
  *
@@ -69,14 +70,19 @@ object SiteImagery {
     const val REALMS = 12
 
     /**
-     * The world is generated on a grid 2048 cells square, drawn on its true-shape sheet — 4096
-     * pixels by 2048 ([com.cartogenesis.cartography.SheetGeometry]) — and the figures are cut out
-     * of that sheet at 1:1.
+     * The world is made at the size "2048", as the application names sizes: 2048 rows and twice as
+     * many columns ([WorldCodec.COLUMNS_PER_ROW]), 4096 by 2048 cells, square on the ground and
+     * 2.9 km a side. Its sheet ([com.cartogenesis.cartography.SheetGeometry]) is a cell to a
+     * pixel, 4096 by 2048, and the figures are cut out of that sheet at 1:1.
      *
-     * 2048 is the size the desktop build exports at by default and the resolution the page's claims
-     * are about. It is also what makes a 1600-wide crop possible without inventing pixels.
+     * 2048 is the largest size every desktop build makes and the resolution the page's claims are
+     * about. It is also what makes a 1600-wide crop possible without inventing pixels.
      */
-    const val GRID_CELLS = 2048
+    const val GRID_ROWS = 2048
+
+    /** [rows] rows and [WorldCodec.COLUMNS_PER_ROW] columns for each, as the application's size chips make a world. */
+    private fun WorldGenConfig.atRows(rows: Int): WorldGenConfig =
+        atResolution(WorldCodec.COLUMNS_PER_ROW * rows, rows)
 
     /**
      * How hard the WebP encoder is asked to work, where nothing says otherwise.
@@ -90,7 +96,8 @@ object SiteImagery {
     const val WEBP_QUALITY = 72
 
     /**
-     * A window onto the map, in the pixels of the 2048 world's 4096 by 2048 sheet.
+     * A window onto the map, in the pixels of the 2048 world's 4096 by 2048 sheet, which are its
+     * cells.
      *
      * The windows are written down rather than searched for. A "find the most interesting band"
      * heuristic would move the picture every time the generator changed, which is the one property
@@ -106,15 +113,16 @@ object SiteImagery {
      * which is the whole point of rendering the page from the engine — so every window is looked at
      * again before a release ships, and moved if it no longer shows what it was picked for. The
      * coordinates here were re-picked when the sheet took the world's true shape, from the contact
-     * sheet of that sheet.
+     * sheet of that sheet, and again when the cells became square on the ground, since a seed
+     * makes a different world on a different grid (docs/DESIGN_LEDGER.md, Q6).
      */
     data class Window(val x: Int, val y: Int, val width: Int, val height: Int)
 
     /**
      * The world the page's opening shows, and a link to the page previews: seed 1, made as the
      * application makes a world opened with only a seed and then taken to 2048 (the generator's
-     * defaults at 512, brought up to [GRID_CELLS] the way the panel's size chips take a world),
-     * so the page's link to it, `/app/?seed=1`, opens the same world at the reader's own size.
+     * defaults, brought to [GRID_ROWS] rows the way the panel's size chips take a world), so the
+     * page's link to it, `/app/?seed=1`, opens the same world at the reader's own size.
      *
      * Not [SEED], whose every band of 800 rows carries a grid-shaped mark the page's first picture
      * must not: its ice cap's straight edges, its dry belts ruled along rows, or its subduction
@@ -124,9 +132,8 @@ object SiteImagery {
      */
     const val BAND_SEED = 1L
 
-    /** The settings [BAND_SEED]'s world is made with: the defaults at 512, taken to [GRID_CELLS]. */
-    fun bandConfig(): WorldGenConfig =
-        WorldGenConfig(seed = BAND_SEED, width = 512, height = 512).atResolution(GRID_CELLS, GRID_CELLS)
+    /** The settings [BAND_SEED]'s world is made with: the defaults, taken to [GRID_ROWS] rows. */
+    fun bandConfig(): WorldGenConfig = WorldGenConfig(seed = BAND_SEED).atRows(GRID_ROWS)
 
     /**
      * The window the page's opening starts from, and the picture a link to the page previews, on
@@ -137,12 +144,15 @@ object SiteImagery {
      * and sea in one frame, which is what the page is about.
      *
      * Its rows matter most, since [WORLD_BAND] is these rows the whole way round the world: rows
-     * 848 to 1,648 hold no ice flat, no belt ruled along a row, and, of every run on a coast, a
+     * 848 to 1,648 hold no ice flat and no belt ruled along a row. Of every run on a coast, a
      * shelf break or an ice edge that stays within 12 km of its chord for more than 403 km (the
-     * Himalayan front's straightest stretch), two, of 427 and 473 km, where any other 800 rows of
-     * 21 worlds held more. It starts at column 3,264, so the preview's first 1,600 columns cross
-     * the sheet's seam, which the map does not have: the world wraps east and west. Drawn in
-     * `MapStyle.NATURAL`, for the colour.
+     * Himalayan front's straightest stretch), they held two when the window was chosen on cells
+     * twice as wide as tall, fewer than any other 800 rows of 21 worlds; on square cells they
+     * hold five, all within 61 km of the bar, and one belt edge. The same window was kept when the
+     * cells became square, by the maintainer's eye over two others (docs/DESIGN_LEDGER.md, Q6):
+     * the seed makes the same country there. It starts at column 3,264, so the preview's first
+     * 1,600 columns cross the sheet's seam, which the map does not have: the world wraps east and
+     * west. Drawn in `MapStyle.NATURAL`, for the color.
      */
     val BAND = Window(3264, 848, 1600, 800)
 
@@ -155,7 +165,10 @@ object SiteImagery {
      * which is what the twelve styles part company over. West of the drowned inlet whose straight
      * top docs/TODO.md lists. It moved here in Site 5c from the
      * south-eastern lobe, which on the implicit erosion's terrain carried a plain comb of gullies
-     * down the columns and a dry belt ruled along a row; this window holds neither.
+     * down the columns and a dry belt ruled along a row; this window holds neither. On square
+     * cells the peninsula is where it was and so is the window; the valleys branching in at the top
+     * are a lake there, whose water stands up every gully round it, the lake area docs/TODO.md
+     * holds for the generator.
      */
     val STYLES_WINDOW = Window(864, 880, 600, 400)
 
@@ -367,10 +380,10 @@ object SiteImagery {
     const val RELIEF_HEIGHTS_FILE = "relief-heights.png"
 
     /**
-     * Sheet pixels between neighbouring points of the relief's mesh, both ways: two, one cell
-     * across and two down, so the mesh follows the ground as finely as the grid across it. That is
-     * 321 by 201 points for the 640 by 400 patch, 64,521, under the 65,536 a 16-bit index reaches,
-     * which every WebGL has.
+     * Sheet pixels between neighboring points of the relief's mesh, both ways: two, which is two
+     * cells each way. One would follow every cell, but 641 by 401 points is past the 65,536 a
+     * 16-bit index reaches, which every WebGL has; two is 321 by 201 for the 640 by 400 patch,
+     * 64,521, under it.
      */
     const val RELIEF_POINT_SPACING_PIXELS = 2
 
@@ -400,15 +413,14 @@ object SiteImagery {
     val REEL_SEEDS: List<Long> = listOf(42L, 1066L, 2024L, 777L, 7L)
 
     /**
-     * The size the reel's worlds are made at: 512, where a browser window starts, so the pictures
-     * are the worlds the links open. It also keeps the site's build quick: a few seconds a world,
-     * where the author's world at 2048 is most of a minute.
+     * The size the reel's worlds are made at: 512 rows, 1024 by 512 cells, where a browser window
+     * starts, so the pictures are the worlds the links open. It also keeps the site's build quick:
+     * seconds a world, where the author's world at 2048 is minutes.
      */
-    const val REEL_GRID_CELLS = 512
+    const val REEL_ROWS = 512
 
-    /** A reel world's settings: the generator's defaults at [REEL_GRID_CELLS], as a link with only a seed makes. */
-    fun reelConfig(seed: Long): WorldGenConfig =
-        WorldGenConfig(seed = seed).atResolution(REEL_GRID_CELLS, REEL_GRID_CELLS)
+    /** A reel world's settings: the generator's defaults at [REEL_ROWS] rows, as a link with only a seed makes. */
+    fun reelConfig(seed: Long): WorldGenConfig = WorldGenConfig(seed = seed).atRows(REEL_ROWS)
 
     /**
      * Each reel world whole in the Natural style at its sheet's own pixels, 1024 by 512. The page
@@ -588,16 +600,16 @@ object SiteImagery {
         )
     }
 
-    /** [SEED] at [GRID_CELLS], with the settings the page names. */
+    /** [SEED] at [GRID_ROWS] rows, with the settings the page names. */
     fun generate(): WorldMap = WorldGenerationEngine.generateBlocking(config())
 
-    /** The settings [generate] runs: [SEED] at [GRID_CELLS] with the page's sea, plates and realms. */
+    /** The settings [generate] runs: [SEED] at [GRID_ROWS] rows with the page's sea, plates and realms. */
     fun config(): WorldGenConfig {
-        val base = WorldGenConfig(seed = SEED, width = 512, height = 512, seaLevel = SEA_LEVEL)
+        val base = WorldGenConfig(seed = SEED, seaLevel = SEA_LEVEL)
         return base.copy(
             tectonics = base.tectonics.copy(plateCount = PLATES),
             nations = base.nations.copy(nationCount = REALMS)
-        ).atResolution(GRID_CELLS, GRID_CELLS)
+        ).atRows(GRID_ROWS)
     }
 
     /**

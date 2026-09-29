@@ -358,8 +358,8 @@ class LittoralCoastTest {
         // at L1, whose rifts moved every coast they reach: 0.356 against 0.280, a gain
         // of 1.27, on seeds whose own gains run 1.15 to 1.34; which coasts lost it is not isolated
         // (docs/DESIGN_LEDGER.md, L1).
-        val gradedShare = graded!!.smoothShare
-        val controlShare = control!!.smoothShare
+        val gradedShare = graded.smoothShare
+        val controlShare = control.smoothShare
         KnownFailures.expect(GRADING_GAIN_UNDER_ITS_FLOOR, "0.356 against 0.280") {
             if (gradedShare < controlShare * SMOOTH_SHARE_GAIN) {
                 throw RecordedViolation(

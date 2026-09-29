@@ -235,15 +235,29 @@ class LakeWaterBalanceTest : BorrowsSharedWorlds() {
                 " wanted under ${"%.0f".format(DRY_BASIN_SHARE_OF_SPILL_AREA * 100)}%"
         )
 
-        val lake = basin.mapNotNull { cell ->
+        // Since L1 a closed basin holds a lake in each of its hollows, and a hollow full to its
+        // saddle spills into the next, so the basin can hold several: every one that keeps its water
+        // is marked endorheic and stands below the level it would spill at, and every one that
+        // spills stands exactly at it.
+        val lakes = basin.mapNotNull { cell ->
             val id = on.rivers.lakes.lakeId[cell]
             if (id >= 0) on.rivers.lakes.lakes[id] else null
-        }.firstOrNull()
-        assertTrue(lake == null || lake.endorheic, "the shrunken lake is not marked endorheic")
+        }.distinct()
+        println("BALANCE seed $drySeed dry basin: ${lakes.size} lakes, ${lakes.count { it.endorheic }} of them endorheic")
         assertTrue(
-            lake == null || lake.surfaceElevation < lake.spillElevation,
-            "an endorheic lake's surface should stand below its spill"
+            lakes.isEmpty() || lakes.any { it.endorheic },
+            "the dry basin keeps water and none of its lakes is marked endorheic"
         )
+        lakes.forEach { lake ->
+            if (lake.endorheic) {
+                assertTrue(
+                    lake.surfaceElevation < lake.spillElevation,
+                    "an endorheic lake's surface should stand below its spill"
+                )
+            } else {
+                assertEquals(lake.spillElevation, lake.surfaceElevation, 0f, "a lake that spills should stand at its spill")
+            }
+        }
     }
 
     @Test

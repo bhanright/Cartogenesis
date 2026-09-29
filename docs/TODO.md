@@ -1077,7 +1077,7 @@
   shoreline at 0.632, its floor is not flat, and the world built with the plain routing rule has no
   such basin at all. But an inland sea that shape is a claim about the map, and the only thing that
   can judge it is a render of the seed it is on, which nobody has taken. 2026-09-14, S2b.
-- **No seed left in the rift scan floods as three separate gulfs, so that bar is withdrawn.**
+- **Closed 2026-09-29 by L1.** *No seed left in the rift scan floods as three separate gulfs, so that bar is withdrawn.* With Earth's half-grabens (60 to 160 km, sills 50 km across) the scan over seeds 1 to 40 finds seeds 33 and 35 flooding as three and four bodies of sea against the control's one, and the clause is armed again on seed 35 (`RiftSegmentationTest`, docs/DESIGN_LEDGER.md, L1). What follows is the entry as it stood.
   `RiftSegmentationTest` held three figures against the unsegmented control: separate bodies of sea
   inside the rift, land bridges crossing it, and how much the flooded width varies along its length.
   On the ground S2b leaves, the same twelve-seed scan the class documents finds no seed that clears

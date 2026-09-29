@@ -84,7 +84,10 @@ class RiftIdentityTest {
      * The bar is policy, not derivation: 95% of the compared cells of every rift. What it refuses is
      * a rift drawn from a different stream at each grid, which agrees by chance on half its polarity
      * and on none of its depths; what it allows is a join a cell or two off where the arc along a
-     * meandering rift reads a little differently on a coarser grid.
+     * meandering rift reads a little differently on a coarser grid. With it, every half-graben is
+     * there at both grids under the same name over the stretch of rift both grids reach, which is the
+     * same count and the same breaks, and at each end the two may differ by the one half-graben a
+     * rift's end moving by a cell takes in or leaves out. How far apart the breaks stand is printed.
      */
     @Test
     fun `a rift breaks into the same half-grabens at every grid`() {
@@ -111,19 +114,48 @@ class RiftIdentityTest {
                 }
                 compared.keys.sorted().forEach { pair ->
                     val share = (agreed[pair] ?: 0).toDouble() / compared.getValue(pair)
-                    val coarseSegments = segmentsOf(coarse, pair)
-                    val fineSegments = segmentsOf(fine, pair)
+                    val coarseSegments = halfGrabens(coarse, pair)
+                    val fineSegments = halfGrabens(fine, pair)
+                    // Every course both grids draw, and within the stretch of it both reach, the same
+                    // half-grabens; at each end the two may differ by the one half-graben a rift's end
+                    // moving by a cell can take in or leave out.
+                    var breakOffsetKm = 0.0
+                    val mismatches = ArrayList<String>()
+                    (coarseSegments.keys + fineSegments.keys).sorted().forEach { course ->
+                        val atCoarse = coarseSegments[course].orEmpty()
+                        val atFine = fineSegments[course].orEmpty()
+                        if (atCoarse.isEmpty() || atFine.isEmpty()) {
+                            mismatches += "stretch $course drawn at one grid only"
+                            return@forEach
+                        }
+                        val low = maxOf(atCoarse.keys.min(), atFine.keys.min())
+                        val high = minOf(atCoarse.keys.max(), atFine.keys.max())
+                        if (abs(atCoarse.keys.min() - atFine.keys.min()) > 1 || abs(atCoarse.keys.max() - atFine.keys.max()) > 1) {
+                            mismatches += "stretch $course runs ${atCoarse.keys.min()}..${atCoarse.keys.max()} against " +
+                                "${atFine.keys.min()}..${atFine.keys.max()}"
+                        }
+                        for (ordinal in low..high) {
+                            val coarseStart = atCoarse[ordinal]
+                            val fineStart = atFine[ordinal]
+                            if (coarseStart == null || fineStart == null) {
+                                mismatches += "stretch $course half-graben $ordinal at one grid only"
+                            } else if (ordinal != low) {
+                                breakOffsetKm = maxOf(breakOffsetKm, abs(coarseStart - fineStart).toDouble())
+                            }
+                        }
+                    }
                     println(
-                        "RIFT IDENTITY seed %d rift %d-%d at %d rows against %d: %.3f of %d cells agree; %d half-grabens against %d"
+                        ("RIFT IDENTITY seed %d rift %d-%d at %d rows against %d: %.3f of %d cells agree; %d half-grabens " +
+                            "against %d, their breaks at most %.0f km apart")
                             .format(seed, pair / PAIR_STRIDE, pair % PAIR_STRIDE, rows, fineRows, share,
-                                compared.getValue(pair), coarseSegments, fineSegments)
+                                compared.getValue(pair), coarseSegments.values.sumOf { it.size },
+                                fineSegments.values.sumOf { it.size }, breakOffsetKm)
                     )
                     if (compared.getValue(pair) >= MIN_COMPARED_CELLS && share < MIN_AGREEING_SHARE) {
                         failures += "seed $seed rift ${pair / PAIR_STRIDE}-${pair % PAIR_STRIDE} at $rows rows: %.3f agree".format(share)
                     }
-                    if (abs(coarseSegments - fineSegments) > 1) {
-                        failures += "seed $seed rift ${pair / PAIR_STRIDE}-${pair % PAIR_STRIDE} at $rows rows: " +
-                            "$coarseSegments half-grabens against $fineSegments at $fineRows"
+                    if (mismatches.isNotEmpty()) {
+                        failures += "seed $seed rift ${pair / PAIR_STRIDE}-${pair % PAIR_STRIDE} at $rows rows: $mismatches"
                     }
                 }
             }
@@ -131,19 +163,20 @@ class RiftIdentityTest {
         assertTrue(failures.isEmpty(), "a rift is a different rift at another grid: $failures")
     }
 
-    /** Half-grabens of [pair] that are at least half the shortest one long along the rift. */
-    private fun segmentsOf(grid: Grid, pair: Int): Int {
-        val lowest = HashMap<Long, Float>()
-        val highest = HashMap<Long, Float>()
+    /**
+     * Every half-graben of [pair], by the stretch of rift it lies on and its place along it, with
+     * where along the rift it starts in kilometers.
+     */
+    private fun halfGrabens(grid: Grid, pair: Int): Map<Int, Map<Int, Float>> {
+        val starts = HashMap<Int, HashMap<Int, Float>>()
         grid.report.cell.indices.forEach { entry ->
             if (grid.pairOf(entry) != pair) return@forEach
-            val key = grid.report.chain[entry].toLong() * 1_000_003L + grid.report.ordinal[entry]
+            val ofCourse = starts.getOrPut(grid.report.chain[entry]) { HashMap() }
+            val ordinal = grid.report.ordinal[entry]
             val along = grid.report.alongKm[entry]
-            lowest[key] = minOf(lowest[key] ?: along, along)
-            highest[key] = maxOf(highest[key] ?: along, along)
+            ofCourse[ordinal] = minOf(ofCourse[ordinal] ?: along, along)
         }
-        val halfShortest = grid.config.tectonics.riftSegmentMinKm / 2
-        return lowest.keys.count { highest.getValue(it) - lowest.getValue(it) >= halfShortest }
+        return starts
     }
 
     /**
@@ -237,14 +270,16 @@ class RiftIdentityTest {
 
     /**
      * Every whole half-graben on the ground is one of Earth's lengths, at every grid and on a world
-     * of another size: `TectonicsConfig.riftSegmentMinKm` to `riftSegmentMaxKm`, measured as a walk
-     * over the rift's own cells between the half-graben's two ends.
+     * of another size: `TectonicsConfig.riftSegmentMinKm` to `riftSegmentMaxKm`.
      *
-     * The walk is an independent ruler, and its errors are known: each end is drawn to within a
-     * cell, and a walk of axis and diagonal steps along a line overstates it by at most
-     * `sqrt(4 - 2 sqrt 2)`, 1.082, at 22.5 degrees. So a segment passes between
-     * `min - a cell` and `(max + a cell) x 1.082`. The half-grabens at each end of a rift are cut
-     * short by where the rift ends, and are not measured.
+     * Two rulers, each honest on one side. A walk over the rift's own cells from one end of the
+     * half-graben to the other follows every bend of the drawn boundary, so it is never shorter than
+     * the course the joins were placed along; a straight line between the two ends is never longer.
+     * So the walk is held to the shortest length and the straight line to the longest. Both read
+     * from the middle of one end cell to the middle of the other, and each end cell lies within a
+     * cell of its join on the ground, along the rift or across its two-cell band, so each ruler is
+     * allowed two cells of slack. The half-grabens at each end of a rift are cut short by where the
+     * rift ends, and are not measured.
      */
     @Test
     fun `every half-graben is between Earth's shortest and longest at every grid and at another size`() {
@@ -255,26 +290,35 @@ class RiftIdentityTest {
         }
         cases.forEach { (seed, rows, worldWidthKm) ->
             val grid = grid(seed, rows, worldWidthKm)
-            val lengths = halfGrabenWalksKm(grid)
+            val measured = halfGrabenLengthsKm(grid)
             val tectonics = grid.config.tectonics
-            val lowestKm = tectonics.riftSegmentMinKm - grid.cellWidthKm
-            val highestKm = (tectonics.riftSegmentMaxKm + grid.cellWidthKm) * STAIRCASE_OVERSTATEMENT
-            val outside = lengths.filter { it < lowestKm || it > highestKm }
+            val lowestKm = tectonics.riftSegmentMinKm - 2 * grid.cellWidthKm
+            val highestKm = tectonics.riftSegmentMaxKm + 2 * grid.cellWidthKm
+            val walks = measured.map { it.first }.sorted()
+            val lines = measured.map { it.second }.sorted()
+            val tooShort = walks.filter { it < lowestKm }
+            val tooLong = lines.filter { it > highestKm }
             println(
-                "RIFT LENGTH seed %d at %d rows on a world %.0f km wide: %d whole half-grabens, %.0f to %.0f km, median %.0f; %d outside %.0f..%.0f"
-                    .format(seed, rows, grid.config.scale.worldWidthKm, lengths.size, lengths.minOrNull() ?: 0.0,
-                        lengths.maxOrNull() ?: 0.0, lengths.sorted().getOrElse(lengths.size / 2) { 0.0 }, outside.size, lowestKm, highestKm)
+                ("RIFT LENGTH seed %d at %d rows on a world %.0f km wide: %d whole half-grabens, walked %.0f to %.0f km " +
+                    "(median %.0f), straight %.0f to %.0f km (median %.0f); %d walked under %.0f, %d straight over %.0f")
+                    .format(seed, rows, grid.config.scale.worldWidthKm, measured.size, walks.firstOrNull() ?: 0.0,
+                        walks.lastOrNull() ?: 0.0, walks.getOrElse(walks.size / 2) { 0.0 }, lines.firstOrNull() ?: 0.0,
+                        lines.lastOrNull() ?: 0.0, lines.getOrElse(lines.size / 2) { 0.0 }, tooShort.size, lowestKm,
+                        tooLong.size, highestKm)
             )
-            if (outside.isNotEmpty()) {
+            if (tooShort.isNotEmpty() || tooLong.isNotEmpty()) {
                 failures += "seed $seed at $rows rows, world ${grid.config.scale.worldWidthKm} km: " +
-                    outside.take(6).joinToString { "%.0f".format(it) }
+                    (tooShort + tooLong).take(6).joinToString { "%.0f".format(it) }
             }
         }
         assertTrue(failures.isEmpty(), "half-grabens outside Earth's lengths: $failures")
     }
 
-    /** The walk over each whole half-graben's cells from one end to the other, in kilometers. */
-    private fun halfGrabenWalksKm(grid: Grid): List<Double> {
+    /**
+     * Each whole half-graben's length twice over, in kilometers: walked over its own cells from one
+     * end to the other, and in a straight line between the two ends.
+     */
+    private fun halfGrabenLengthsKm(grid: Grid): List<Pair<Double, Double>> {
         val report = grid.report
         val bySegment = HashMap<Triple<Int, Int, Int>, MutableList<Int>>()
         val chainEnds = HashMap<Pair<Int, Int>, Pair<Int, Int>>()
@@ -286,7 +330,7 @@ class RiftIdentityTest {
             chainEnds[chainKey] = minOf(low, ordinal) to maxOf(high, ordinal)
         }
         val steps = grid.config.groundSteps
-        val result = ArrayList<Double>()
+        val result = ArrayList<Pair<Double, Double>>()
         bySegment.forEach { (key, entries) ->
             val (low, high) = chainEnds.getValue(key.first to key.second)
             if (key.third == low || key.third == high) return@forEach
@@ -320,7 +364,15 @@ class RiftIdentityTest {
             val end = walked[local.getValue(report.cell[lastEnd])]
             // A cell is a cell width of rift, and the walk runs from the middle of one end cell to
             // the middle of the other.
-            if (end < Double.MAX_VALUE) result += end + grid.cellWidthKm
+            if (end == Double.MAX_VALUE) return@forEach
+            val first = report.cell[firstEnd]
+            val last = report.cell[lastEnd]
+            var acrossKm = (last % grid.cellsAcross - first % grid.cellsAcross) * grid.cellWidthKm
+            val worldKm = grid.cellsAcross * grid.cellWidthKm
+            if (acrossKm > worldKm / 2) acrossKm -= worldKm
+            if (acrossKm < -worldKm / 2) acrossKm += worldKm
+            val downKm = (last / grid.cellsAcross - first / grid.cellsAcross) * grid.cellHeightKm
+            result += end to sqrt(acrossKm * acrossKm + downKm * downKm)
         }
         return result
     }
@@ -331,8 +383,6 @@ class RiftIdentityTest {
         const val MIN_AGREEING_SHARE = 0.95
         /** A rift with fewer compared cells than this is a stub at the coarser grid. */
         const val MIN_COMPARED_CELLS = 8
-        /** The worst overstatement of a walk of axis and diagonal steps along a straight line. */
-        val STAIRCASE_OVERSTATEMENT = sqrt(4 - 2 * sqrt(2.0))
         /** A second world, five thirds as wide as the one the knobs are calibrated on. */
         const val SECOND_WORLD_WIDTH_KM = 20_000.0
     }

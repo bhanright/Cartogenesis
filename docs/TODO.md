@@ -1264,6 +1264,20 @@
   and 40). None of the five seeds L1 measured is affected, so it is not a cause of their lake
   spread, and it was left alone. What would settle it is the crusts chosen by area on the ground
   and adjacency by a length of shared boundary in kilometers. 2026-09-29, L1.
+- **A rift's sills cross its trough as straight rungs.** Since L1 a rift breaks every 60 to 160 km,
+  and each accommodation zone's taper is a function of the distance along the rift of a corridor
+  cell's nearest boundary cell, so the sill's crest runs straight across the trough, square to the
+  rift's axis. On seed 42's north-south trough at 512 and 1,024 rows the sills read as a ladder of
+  east-west bars, which is rule 13's straight run along a row wherever a rift runs along a column
+  (seen on L1's renders). Earth's accommodation zones generally trend oblique to the rift axis
+  (Rosendahl and others 1992, Tectonophysics 213, on Tanganyika, Malawi, Rukwa and Turkana). What would answer it is a sill whose crest is bent by the
+  belts' own noise, and the geometry guard over the rift corridors to see it; not measured yet.
+  2026-09-29, L1.
+- **Seed 5's ocean does not solve with the pressure departure off.** `OceanCirculation` stops at a
+  relative residual of 0.0017 to 0.0019 after its 200 iterations against a tolerance of 0.001, at 256
+  and 512 rows, with `climate.pressureWinds` false (the setting `MeridionalWindTest` builds its
+  worlds with), and solves with it on; the tree before L1 fails the same way, so L1 did not cause it.
+  Found by L1's monsoon scan, which skipped the seed. 2026-09-29, L1.
 - **A world of square cells carries more ice at 60 to 90 degrees than a change of grid gives.**
   `GridShapeTest` compares the same seed at 512 by 512 and at `forRows(512)`, band by band. Its
   ice clause runs as a known failure. Seed 1234 at -75 to -90 degrees carries +0.017 of the band as

@@ -202,10 +202,9 @@ class EngravingPlan(sheet: SheetGeometry) {
          * until the incision became the stream-power law's implicit update, whose ground is rougher:
          * the tenth percentile reads 0.084 there (docs/DESIGN_LEDGER.md, Fix 3b). Read again on
          * square cells, seed 234475 at 512 rows at the same eight-pixel stencil and at the
-         * exaggeration re-derived there to keep the maps' contrast, it reads 0.068
-         * (docs/DESIGN_LEDGER.md, Q4).
+         * exaggeration re-derived there (`ReliefShading`), it reads 0.064 (docs/DESIGN_LEDGER.md, Q4).
          */
-        const val SLOPE_FLOOR: Float = 0.07f
+        const val SLOPE_FLOOR: Float = 0.06f
 
         /**
          * The steepness at which a stroke is fully black, as a fraction of the way from

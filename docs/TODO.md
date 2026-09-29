@@ -1174,16 +1174,6 @@
   faithfully, runs as a known failure on it. Which of the sea stage's rules leaves water over the
   cut (the drowned valleys, the littoral grading, the enclosed-sea repair) is not traced.
   2026-09-28, Q4.
-- **On square cells the relief's steepest tenth is shaded to its darkest factor at today's
-  contrast.** The exaggeration is re-derived on the gallery world at 512 rows to keep the single
-  lamp's contrast of the 512 by 512 grid's maps (a deviation of 0.2133): 40.25 on the 11.7 km cells,
-  471.68 km over a cell's width (`ReliefShading.EXAGGERATION_TIMES_CELL_WIDTH_KM`). There the
-  ninth decile of the drawn land slope is 2.38 of rise a cell width, against 1.63 on the 512 by 512
-  grid at the same contrast, and `ReliefShadingTest`'s cone cut to it is pinned at `DARKEST` on 35
-  of 360 bearings under the sky; the clause runs as a known failure. Swept in quarters, the cone
-  clears at 38.0 and below (lamp contrast 0.2090, sky 0.2076, ordinary ground 0.8901) and pins from
-  38.25 (9 bearings), 38.5 (23) and 40.0 (35). The two cannot both hold; the maintainer's to
-  choose between the contrast and the clause, or to move the clamp. 2026-09-28, Q4.
 - **A lake's area follows the cell count, and a lake with no outlet floods the one-cell gullies
   around it.** Seed 42's lakes cover 646,820 km2 at 512 rows of square cells, against 331,238 on the
   512 by 512 grid and 334,328 at 1,024 rows. Most of the excess is one endorheic lake, lake 1 at

@@ -1,7 +1,5 @@
 package com.cartogenesis.cartography
 
-import com.cartogenesis.cartography.geometry.KnownFailures
-import com.cartogenesis.cartography.geometry.RecordedViolation
 import com.cartogenesis.worldgen.BorrowsSharedWorlds
 import com.cartogenesis.worldgen.SharedWorlds
 import com.cartogenesis.worldgen.model.FloatField
@@ -36,20 +34,6 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
 
     private companion object {
 
-        /**
-         * The known failure the cone's floor clause records. The cone is cut to the ninth decile of
-         * the gallery world's land slope as the shading reads it. At the exaggeration that keeps the
-         * single lamp's contrast of the 512 by 512 grid's maps (40.25 on the 11.7 km cells of 512
-         * rows; see `the exaggeration keeps ...`), that decile is 2.38 of exaggerated rise a cell
-         * width where it was 1.63 on the 512 by 512 grid at the same contrast: square cells of
-         * half the width resolve a steeper tail of the same ground. The steep side of that cone is
-         * pinned at the darkest factor on 35 of 360 bearings. Swept in quarters, the cone clears at
-         * 38.0 and below (lamp contrast 0.2090, 2% under the target 0.2133) and pins from 38.25;
-         * the contrast and the clause cannot both be kept, and which gives is the maintainer's
-         * (docs/DESIGN_LEDGER.md, Q4; `docs/TODO.md` has the entry).
-         */
-        const val STEEPEST_TENTH_PINNED =
-            "the relief: on square cells the steepest tenth of the land is shaded to the darkest factor"
 
         /** The gallery's world, at the size these guards measure on. See [TestWorlds]. */
         val WORLD: WorldMap get() = TestWorlds.gallery
@@ -151,10 +135,21 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
         /** The exaggeration the maps were drawn at on that grid, set by eye: 24 on its cell. */
         const val HALF_HEIGHT_EXAGGERATION = 24.0
 
-        /** The exaggeration's sweep on square cells: its range and its step. */
-        const val EXAGGERATION_SWEEP_FROM = 12.0
-        const val EXAGGERATION_SWEEP_TO = 60.0
+        /**
+         * The exaggeration's sweep on square cells: from 34, where the lamp's contrast is 6% under
+         * the 512 by 512 grid's and the cone well clear, up to the first step that pins it, in
+         * quarters, no further than 48, twice the 512 by 512 grid's 24 per cell width.
+         */
+        const val EXAGGERATION_SWEEP_FROM = 34.0
+        const val EXAGGERATION_SWEEP_TO = 48.0
         const val EXAGGERATION_SWEEP_STEP = 0.25
+
+        /**
+         * How far under the 512 by 512 grid's lamp contrast the exaggeration may land: 2.5%, over
+         * the 2.0% the steepest unpinned exaggeration measured, and within what an eye tells apart
+         * on a map drawn at the other.
+         */
+        const val MAX_CONTRAST_SHORTFALL = 0.025
 
         /** How far the declared ordinary ground may sit from the measured median. */
         const val MAX_GROUND_DRIFT = 0.004f
@@ -166,8 +161,8 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
      * The central difference the shading reads spans two cells, so a cone of radius R has a
      * gradient of `2 · scale / R`; inverting that gives the radius a chosen steepness wants.
      */
-    private fun cone(steepness: Float): Pair<FloatField, Float> {
-        val radius = 2f * SLOPE_SCALE / steepness
+    private fun cone(steepness: Float, scale: Float = SLOPE_SCALE): Pair<FloatField, Float> {
+        val radius = 2f * scale / steepness
         val field = FloatField.of(CONE_FIELD, CONE_FIELD) { x, y ->
             val fromCentreX = x - CONE_FIELD / 2f
             val fromCentreY = y - CONE_FIELD / 2f
@@ -178,7 +173,7 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
     }
 
     /** The [share]th quantile of the scaled land slope, in the units the shading reads. */
-    private fun landSlope(world: WorldMap, share: Double): Float {
+    private fun landSlope(world: WorldMap, share: Double, scale: Float = SLOPE_SCALE): Float {
         val elevation = world.sea.relativeElevation
         val land = world.sea.isLand
         val slopes = ArrayList<Float>()
@@ -187,10 +182,10 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
                 if (!land[row * world.width + column]) continue
                 val eastward =
                     (elevation.sample(column + 1, row) -
-                        elevation.sample(column - 1, row)) * SLOPE_SCALE
+                        elevation.sample(column - 1, row)) * scale
                 val southward =
                     (elevation.sample(column, row + 1) -
-                        elevation.sample(column, row - 1)) * SLOPE_SCALE
+                        elevation.sample(column, row - 1)) * scale
                 slopes.add(sqrt(eastward * eastward + southward * southward))
             }
         }
@@ -305,17 +300,11 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
             "${unlitUnderTheSky(field, radius)} of $BEARINGS bearings round the cone receive no " +
                 "direct light at all from the dome"
         )
-        // On square cells the steepest tenth pins the cone at the contrast the maps are drawn at:
-        // see [STEEPEST_TENTH_PINNED].
-        KnownFailures.expect(STEEPEST_TENTH_PINNED, "35 of 360 bearings at the floor") {
-            if (sky.floored != 0) {
-                throw RecordedViolation(
-                    "${sky.floored} of $BEARINGS bearings round the cone are pinned at the darkest factor " +
-                        "the model has, which is a face with no detail left in it",
-                    "${sky.floored} of $BEARINGS bearings at the floor"
-                )
-            }
-        }
+        assertTrue(
+            sky.floored == 0,
+            "${sky.floored} of $BEARINGS bearings round the cone are pinned at the darkest factor " +
+                "the model has, which is a face with no detail left in it"
+        )
         // How dark the darkest face is comes out much the same either way, and it should: the haze
         // is calibrated so that the two models have the same contrast. What the dome changes is
         // *which* faces are dark — the lamp blacks out a whole quadrant, the dome darkens the steep
@@ -601,50 +590,83 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
     }
 
     /**
-     * That the exaggeration keeps the contrast the maps were drawn at before the grid was square.
+     * That the exaggeration is the steepest at which no face of the cone is pinned, and that it
+     * keeps the contrast the maps were drawn at before the grid was square.
      *
      * The exaggeration was set by eye on the 512 by 512 grid, 24 over a cell 23.4 km wide, and
      * every calibration of the shading since, [ReliefShading.HAZE] and ordinary ground among them,
-     * is measured against the single lamp's picture at it. So its target on square cells is that
-     * picture's contrast: the single lamp's deviation over the gallery world's land on the 512 by
-     * 512 grid at 24, matched on the same seed at 512 rows by sweeping the exaggeration in steps of
-     * [EXAGGERATION_SWEEP_STEP]. The one a map of square cells is drawn at must be the match, to
-     * within half a step. Held to the ground at the match's cell width, the same slope on the
-     * ground is drawn the same on every grid of square cells.
+     * is measured against the single lamp's picture at it. On square cells the lamp's contrast of
+     * that picture, and the cone cut to the ninth decile of the land's slope staying off the
+     * darkest factor, cannot both be kept to the digit: the finer cells resolve a steeper tail of
+     * the same ground. So the rule is the steepest exaggeration, swept in steps of
+     * [EXAGGERATION_SWEEP_STEP] from [EXAGGERATION_SWEEP_FROM], at which the cone pins no bearing,
+     * each step lit under its own ordinary ground; and it must land within
+     * [MAX_CONTRAST_SHORTFALL] of the lamp's contrast on the 512 by 512 grid at 24.
      */
     @Test
-    fun `the exaggeration keeps the single lamp's contrast of the 512 by 512 grid's maps`() {
+    fun `the exaggeration is the steepest that pins no face of the cone, and keeps the maps' contrast`() {
         val reference = SharedWorlds.world(HALF_HEIGHT_GALLERY)
         val target = lampSpread(reference, (HALF_HEIGHT_EXAGGERATION / 2).toFloat()).deviation
         val world = WORLD
-        var bestExaggeration = 0.0
-        var bestGap = Double.MAX_VALUE
+        var steepestClear = Double.NaN
         val readings = StringBuilder()
         var exaggeration = EXAGGERATION_SWEEP_FROM
         while (exaggeration <= EXAGGERATION_SWEEP_TO + 1e-9) {
-            val spread = lampSpread(world, (exaggeration / 2).toFloat())
-            if (kotlin.math.abs(exaggeration % 4.0) < 1e-9) readings.append(" %.0f→%.4f".format(exaggeration, spread.deviation))
-            val gap = kotlin.math.abs(spread.deviation - target)
-            if (gap < bestGap) {
-                bestGap = gap
-                bestExaggeration = exaggeration
-            }
+            val pinned = conePinnedAt(world, exaggeration)
+            readings.append(" %.2f→%d".format(exaggeration, pinned))
+            if (pinned > 0) break
+            steepestClear = exaggeration
             exaggeration += EXAGGERATION_SWEEP_STEP
         }
         val declared = ReliefShading.verticalExaggeration(world.config.cellWidthKm).toDouble()
+        val contrast = lampSpread(world, (declared / 2).toFloat()).deviation
+        println("RELIEF the cone's pinned bearings by exaggeration at 512 rows:$readings")
         println(
-            "RELIEF the single lamp's contrast on the 512 by 512 grid at %.0f is %.4f; at 512 rows, exaggeration→deviation:%s"
-                .format(HALF_HEIGHT_EXAGGERATION, target, readings)
-        )
-        println(
-            "RELIEF it is matched at 512 rows at an exaggeration of %.2f, %.4f off it; the declared is %.4f, %.3f km a cell width"
-                .format(bestExaggeration, bestGap, declared, declared * world.config.cellWidthKm)
+            "RELIEF the steepest that pins none is %.2f; the declared is %.4f, %.4f km a cell width; the lamp's contrast there is %.4f against %.4f on the 512 by 512 grid at %.0f, %.1f%% under"
+                .format(
+                    steepestClear, declared, declared * world.config.cellWidthKm, contrast, target,
+                    HALF_HEIGHT_EXAGGERATION, (target - contrast) / target * 100
+                )
         )
         assertTrue(
-            kotlin.math.abs(declared - bestExaggeration) <= EXAGGERATION_SWEEP_STEP / 2,
-            "the lamp's contrast of the 512 by 512 grid's maps is matched at 512 rows at %.2f, not at the declared %.4f"
-                .format(bestExaggeration, declared)
+            kotlin.math.abs(declared - steepestClear) <= EXAGGERATION_SWEEP_STEP / 2,
+            "the steepest exaggeration that pins no face of the cone is %.2f, not the declared %.4f"
+                .format(steepestClear, declared)
         )
+        assertTrue(
+            kotlin.math.abs(contrast - target) / target <= MAX_CONTRAST_SHORTFALL,
+            "the lamp's contrast at the declared exaggeration is %.4f, more than %.1f%% from the 512 by 512 grid's %.4f"
+                .format(contrast, MAX_CONTRAST_SHORTFALL * 100, target)
+        )
+    }
+
+    /**
+     * How many bearings round the cone cut to the ninth decile of [world]'s land slope are pinned at
+     * the darkest factor, drawn at [exaggeration] under the ordinary ground measured at it.
+     */
+    private fun conePinnedAt(world: WorldMap, exaggeration: Double): Int {
+        val scale = (exaggeration / 2).toFloat()
+        val elevation = world.sea.relativeElevation
+        val land = world.sea.isLand
+        val aspect = world.config.cellHeightInCellWidths
+        val light = ArrayList<Float>()
+        for (row in 0 until world.height) {
+            for (column in 0 until world.width) {
+                if (!land[row * world.width + column]) continue
+                light.add(ReliefShading.illumination(column, row, elevation, scale, OPENNESS_STEP, aspect))
+            }
+        }
+        val ground = light.filter { it > 0f }.sorted().let { it[it.size / 2] }
+        val (field, radius) = cone(landSlope(world, CONE_FLANK_PERCENTILE, scale), scale)
+        var pinned = 0
+        for (step in 0 until BEARINGS) {
+            val shade = onFlank(field, radius, step) { x, y ->
+                (ReliefShading.illumination(x, y, field, scale, OPENNESS_STEP, SQUARE_CELLS) / ground)
+                    .coerceIn(DARKEST, BRIGHTEST)
+            }
+            if (shade <= DARKEST) pinned++
+        }
+        return pinned
     }
 
     /** The single lamp's shading over [world]'s land at a central difference's [scale], as spread. */

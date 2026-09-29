@@ -301,21 +301,23 @@ internal object ReliefShading {
     /**
      * The relief's vertical exaggeration times the width of the cell it is drawn on, in km: a rise
      * over a cell width of ground, in the height field's units, is drawn this over the width
-     * times steeper. 471.68 km, which is 40.25 on the 11.72 km square cells of a 512-row world.
+     * times steeper. 445.31 km, which is 38 on the 11.72 km square cells of a 512-row world.
      *
      * The exaggeration was first set by eye on the 512 by 512 grid, 24 on its 23.4 km cells (a
      * central difference over two cell widths, un-halved, times twelve), and every calibration of
      * the shading since, [HAZE] and [ORDINARY_GROUND] among them, is measured against the single
-     * lamp's picture at it. So on square cells it is re-derived to keep that picture: the single
-     * lamp's contrast over the gallery world's land, a deviation of 0.2133 on the 512 by 512 grid at
-     * 24, is matched on the same seed at 512 rows at 40.25, swept in quarters, and
-     * `ReliefShadingTest` holds the constant to the match. Held at 24 on the ground instead, which
-     * is 48 on those cells, the finer cells' steeper ground drew a contrast of 0.2260 and pinned
-     * the steepest tenth at the darkest factor (docs/DESIGN_LEDGER.md, Q4). The lamps, the sky's
-     * horizon, the engraving's gradient and the shader all read the one figure
-     * (docs/DESIGN_LEDGER.md, Fix 2).
+     * lamp's picture at it. On square cells the rule is the steepest exaggeration, swept in
+     * quarters on the gallery world at 512 rows, at which `ReliefShadingTest`'s cone, cut to the
+     * ninth decile of the land's drawn slope, pins no bearing at the darkest factor: 38.0. It lands
+     * 2% under the single lamp's contrast of the 512 by 512 grid's maps, a deviation of 0.2090
+     * against 0.2133, which no eye tells apart; the contrast matched exactly, at 40.25, pinned the
+     * cone on 35 bearings, and held at 24 on the ground (48 on these cells) the finer cells'
+     * steeper ground drew 0.2260 and pinned it on 41 (docs/DESIGN_LEDGER.md, Q4). The test holds
+     * both facts. Stated over the cell's width, the same slope on the ground is drawn the same on
+     * every grid. The lamps, the sky's horizon, the engraving's gradient and the shader all read
+     * the one figure (docs/DESIGN_LEDGER.md, Fix 2).
      */
-    private const val EXAGGERATION_TIMES_CELL_WIDTH_KM = 40.25 * 11.71875
+    private const val EXAGGERATION_TIMES_CELL_WIDTH_KM = 38.0 * 11.71875
 
     /** How many cell widths a central difference spans: one either side of the cell. */
     private const val CENTRAL_DIFFERENCE_SPAN_CELL_WIDTHS = 2f
@@ -445,10 +447,10 @@ internal object ReliefShading {
      * Fix 2). The implicit incision's terrain then measured 0.8750 on the 512 by 512 grid, which
      * was recorded rather than re-derived while the device's parity guard could not run with it;
      * on square cells, the same world's valleys resolved on cells of 11.7 km and drawn at the
-     * exaggeration re-derived there ([EXAGGERATION_TIMES_CELL_WIDTH_KM]), it is 0.8823, re-derived
+     * exaggeration re-derived there ([EXAGGERATION_TIMES_CELL_WIDTH_KM]), it is 0.8901, re-derived
      * with that guard run (docs/DESIGN_LEDGER.md, Fix 3b and Q4).
      */
-    private const val ORDINARY_GROUND = 0.8823f
+    private const val ORDINARY_GROUND = 0.8901f
 
     /** Read by `ReliefShadingTest`, which is where the figure above comes from. */
     val ordinaryGround: Float get() = ORDINARY_GROUND

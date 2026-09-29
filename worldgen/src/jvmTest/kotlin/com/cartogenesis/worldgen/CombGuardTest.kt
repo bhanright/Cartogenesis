@@ -212,7 +212,8 @@ class CombGuardTest : BorrowsSharedWorlds() {
         const val SYMMETRIC_COMB =
             "the square cell: the flanks carry a comb of straight parallel gullies on both axes alike, seven to ten times the router's own"
 
-        const val RECORDED = "seed 7 0.16 down a column and 0.15 along a row; seed 42 0.20 down a column and 0.18 along a row"
+        /** Re-recorded at L1, whose rifts are Earth's half-grabens and the same at every grid (docs/DESIGN_LEDGER.md, L1). */
+        const val RECORDED = "seed 7 0.14 down a column and 0.15 along a row; seed 42 0.22 down a column and 0.17 along a row"
 
         /**
          * The grid the guard is taken on, [SharedWorlds.DETAIL_ROWS]: square cells, 1,024 by 512,

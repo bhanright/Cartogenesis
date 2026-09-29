@@ -261,8 +261,8 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
         )
         val pooledDepth = depthShares.average()
         // Recorded since Fix 3b: see [NOTCH_SHORT_ON_THE_LAWS_TERRAIN].
-        // Re-recorded on square cells at Q2 (docs/DESIGN_LEDGER.md, Q2).
-        KnownFailures.expect(NOTCH_SHORT_ON_THE_LAWS_TERRAIN, "88.7% as deep as the control's") {
+        // Re-recorded on square cells at Q2 (docs/DESIGN_LEDGER.md, Q2). Re-recorded at L1, whose rifts are Earth's half-grabens and the same at every grid (docs/DESIGN_LEDGER.md, L1).
+        KnownFailures.expect(NOTCH_SHORT_ON_THE_LAWS_TERRAIN, "87.1% as deep as the control's") {
             if (pooledDepth >= 0.5) {
                 throw RecordedViolation(
                     "the fill still stands ${"%.1f".format(pooledDepth * 100)}% as deep over the land as the " +
@@ -480,11 +480,12 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
         // the climate the solved currents moved, to 0.8475%, and at 4b-1, the ground unchanged
         // again and the climate moved by the water the wind raises, to 0.8445%. Re-recorded on square
         // cells at Q2, where seeds 718106 and 42 keep more than half their water and a lake over the
-        // Caspian's share each (docs/DESIGN_LEDGER.md, Q2).
+        // Caspian's share each (docs/DESIGN_LEDGER.md, Q2). Re-recorded at L1, whose rifts and
+        // pockets leave seed 42 under the Caspian with its water halved, and seed 718106's water
+        // halved, its largest lake still 1.75 times the Caspian (docs/DESIGN_LEDGER.md, L1).
         KnownFailures.expect(
             NOTCH_SHORT_ON_THE_LAWS_TERRAIN,
-            "seed 718106's largest lake 1.77x the Caspian; seed 42's largest lake 1.96x the Caspian; " +
-                "seed 718106's water 1.2402% to 0.7046%; seed 42's water 1.7988% to 1.3140%"
+            "seed 718106's largest lake 1.75x the Caspian"
         ) {
             if (overCaspian.isNotEmpty() || notHalved.isNotEmpty()) {
                 val found = (overCaspian + notHalved).joinToString("; ")

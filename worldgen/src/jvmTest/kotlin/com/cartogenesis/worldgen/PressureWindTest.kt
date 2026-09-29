@@ -332,7 +332,8 @@ class PressureWindTest : BorrowsSharedWorlds() {
         // -0.04 m/s, seeds 42 and 1234 blowing onshore; with the re-derived uplift it cleared the bar
         // again (docs/DESIGN_LEDGER.md, Fix 3b), and on square cells it fails: see
         // [WINTER_ONSHORE_ON_SQUARE_CELLS].
-        KnownFailures.expect(WINTER_ONSHORE_ON_SQUARE_CELLS, "pooled +0.31 m/s") {
+        // Re-recorded at L1, whose rifts are Earth's half-grabens and the same at every grid (docs/DESIGN_LEDGER.md, L1).
+        KnownFailures.expect(WINTER_ONSHORE_ON_SQUARE_CELLS, "pooled +0.09 m/s") {
             if (!(winter < -ONSHORE_BAR_MPS)) {
                 throw RecordedViolation(
                     ("the cold half blows %+.2f m/s onto the same coasts, which is not offshore").format(winter),

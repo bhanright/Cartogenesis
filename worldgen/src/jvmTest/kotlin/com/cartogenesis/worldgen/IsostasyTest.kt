@@ -793,7 +793,8 @@ class IsostasyTest : BorrowsSharedWorlds() {
         // 512 rows, so its moat lies 721 m under it (docs/DESIGN_LEDGER.md, Q2b).
         KnownFailures.expect(
             FORELAND_AT_THE_EDGE_OF_THE_COLLISION,
-            "moat at 1125-1313 km, 721 m under the belt, rising 0 m beyond it"
+            // Re-recorded at L1, whose rifts are Earth's half-grabens and the same at every grid (docs/DESIGN_LEDGER.md, L1).
+            "moat at 1125-1313 km, 713 m under the belt, rising 0 m beyond it"
         ) {
             if (beyondTheMoat - inTheForeland < MIN_FOREBULGE_METRES) {
                 throw RecordedViolation(

@@ -155,10 +155,11 @@ class GlaciationTest : BorrowsSharedWorlds() {
         // update's terrain. On the capped update's the ratio was 1.08, and chunk 6's lake balance
         // (the inflow counts every exit of a basin and none of a closed basin above it) took that
         // to 1.02; on the implicit terrain the same balance leaves it at 0.86, and on square cells
-        // at Q2 0.83, re-recorded (docs/DESIGN_LEDGER.md, Q2).
+        // at Q2 0.83, re-recorded (docs/DESIGN_LEDGER.md, Q2); at L1, whose closed basins hold a lake
+        // in each hollow, 0.59 (docs/DESIGN_LEDGER.md, L1).
         KnownFailures.expect(
             "C I4: glaciated country holds no more lakes than the ice's absence leaves",
-            "cold-country lakes 0.09 to 0.17 per 10k cells, iced zone ratio 0.83"
+            "cold-country lakes 0.08 to 0.16 per 10k cells, iced zone ratio 0.59"
         ) {
             val tripled = with.coldLakes.toLong() * without.coldLand >= 3L * without.coldLakes * with.coldLand
             val contrasted = with.ratio >= COLD_LAKE_RATIO

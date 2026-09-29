@@ -117,8 +117,8 @@ class AbsoluteRainfallTest : BorrowsSharedWorlds() {
         // Re-recorded on square cells at Q2, and at 256 rows at Q2b, where the 99.5th percentile
         // of the land's rain is read on cells of four times the area: seed 42's coast from 3644 to
         // 3407 mm, inside the bar, and seed 99's from 4029 to 3826 (docs/DESIGN_LEDGER.md, Q2 and
-        // Q2b).
-        KnownFailures.expect("D I-9: the rainfall calibration's figures predate W2 and W3", "seed 99's windward coast at 3826 mm") {
+        // Q2b). Re-recorded at L1, whose rifts moved seed 99's coast to 3749 mm (docs/DESIGN_LEDGER.md, L1).
+        KnownFailures.expect("D I-9: the rainfall calibration's figures predate W2 and W3", "seed 99's windward coast at 3749 mm") {
             if (misses.isNotEmpty()) {
                 throw RecordedViolation(
                     "the calibration misses on ${misses.size} figures: ${misses.joinToString()}, against a windward " +

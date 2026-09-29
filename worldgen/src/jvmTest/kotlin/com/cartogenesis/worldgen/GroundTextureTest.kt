@@ -216,7 +216,8 @@ class GroundTextureTest : BorrowsSharedWorlds() {
         // Recorded since Fix 3b, whose law cuts the plains as well as the ranges: see
         // [LAW_SETS_EVERY_CUT]. The record is not re-taken on the world it would have to pass.
         // Re-recorded on square cells at Q2, the box 94 km both ways (docs/DESIGN_LEDGER.md, Q2).
-        KnownFailures.expect(LAW_SETS_EVERY_CUT, "lowest quarter 109.7 m") {
+        // Re-recorded at L1, whose rifts are Earth's half-grabens and the same at every grid (docs/DESIGN_LEDGER.md, L1).
+        KnownFailures.expect(LAW_SETS_EVERY_CUT, "lowest quarter 111.4 m") {
             if (pooledLowest > RECORDED_LOWEST_QUARTER_TEXTURE_METRES + RECORDED_TO_THE_TENTH_METRE) {
                 throw RecordedViolation(
                     "the lowest quarter of the land departs from its own smoothed self by" +

@@ -389,9 +389,11 @@ class ScaleFreeTest : BorrowsSharedWorlds() {
         /**
          * Which seeds' figures are over the bar. On the tree before L1 it read every seed's largest
          * lake and every share but seed 7's: x1.28 and x1.67, x2.87 and x4.73, x1.79 and x2.83,
-         * x3.21 and x8.08 on seeds 7, 42, 1234 and 99 (docs/DESIGN_LEDGER.md, L1).
+         * x3.21 and x8.08 on seeds 7, 42, 1234 and 99; after it, every one of them: x1.96 and x5.38,
+         * x1.49 and x1.46, x2.10 and x1.50, x1.59 and x3.48 (docs/DESIGN_LEDGER.md, L1).
          */
-        const val LAKE_AREA_RECORDED = "TO BE RECORDED"
+        const val LAKE_AREA_RECORDED = "seed 7's share, seed 7's largest, seed 42's share, seed 42's largest, " +
+            "seed 1234's share, seed 1234's largest, seed 99's share, seed 99's largest"
 
         fun configAt(seed: Long, size: Int): WorldGenConfig {
             val base = WorldGenConfig.forRows(seed, 512)

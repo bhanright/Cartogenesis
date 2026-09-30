@@ -15,10 +15,12 @@ import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.exp
+import kotlin.math.floor
 import kotlin.math.pow
 import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.math.sqrt
+import kotlin.math.tanh
 import kotlin.random.Random
 import kotlinx.serialization.Serializable
 
@@ -200,11 +202,13 @@ object PlateStage {
          */
         val footwallOnLow: Boolean,
         /**
-         * 0 at the join, 1 well inside the segment. The trough's depth and its asymmetry are both
-         * multiplied by it, so a half-graben dies out at each end into a symmetric sill rather than
-         * meeting its neighbor's opposite polarity at a step.
+         * 0 at the join, 1 at the segment's middle. The trough's depth below its saddle and its
+         * asymmetry are both multiplied by it, so a half-graben dies out at each end into a
+         * symmetric saddle rather than meeting its neighbor's opposite polarity at a step.
          */
-        val taper: Float
+        val taper: Float,
+        /** The half-graben's length where this cell reads it, between its two joins, km. */
+        val lengthKm: Double
     )
 
     private class Boundary(
@@ -218,16 +222,120 @@ object PlateStage {
     )
 
     /**
-     * Where along a segmented rift one boundary cell sits: its course's layout and its distance
-     * along it in km.
+     * Where along a segmented rift one boundary cell sits: its course's layout and centerline, and
+     * its distance along the course in km.
      *
      * Filled in by [segmentRifts] for the cells of a [BoundaryClass.CONTINENTAL_RIFT] boundary and
-     * null everywhere else. Every cell in the corridor either side of the rift reads its place off
-     * its *nearest* boundary cell — the label the distance transform already carries — and its
-     * half-graben from [riftSegmentAt], which moves each join with the cell's distance from the
-     * axis and its flank, so a join is a relay ramp across the trough and not a line square to it.
+     * null everywhere else. Every cell in the corridor either side of the rift finds its course from
+     * its *nearest* boundary cell — the label the distance transform already carries — and its own
+     * place on the course from the nearest point of the course's centerline. Read off the label
+     * alone, every cell of the strip a boundary cell owns would share one distance along the rift,
+     * and a join would follow the strip's edge: along a row wherever the rift runs down a column,
+     * which is a rung; and where the rift's cells step across a column, a boundary cell rows away
+     * owns cells far out on the shoulder, and the place jumps there by as many rows.
      */
-    private class RiftPlace(val layout: RiftLayout, val alongKm: Double)
+    private class RiftPlace(val layout: RiftLayout, val alongKm: Double, val centerline: RiftCenterline)
+
+    /**
+     * A course's centerline on the ground: the mean place of its cells in each stretch of
+     * [CENTERLINE_STEP_KM] along it, joined in order, each vertex at its cells' mean distance along,
+     * with a direction at each vertex from its two neighbors. The bins are lengths on the ground, so
+     * the line is the same line at every grid.
+     */
+    private class RiftCenterline(
+        private val eastKm: DoubleArray,
+        private val southKm: DoubleArray,
+        private val alongKm: DoubleArray,
+        private val worldWidthKm: Double
+    ) {
+        private val last = alongKm.size - 1
+        private val directionEast = DoubleArray(alongKm.size)
+        private val directionSouth = DoubleArray(alongKm.size)
+
+        init {
+            for (vertex in 0..last) {
+                val from = (vertex - 1).coerceAtLeast(0)
+                val to = (vertex + 1).coerceAtMost(last)
+                val stepEastKm = shortestEastKm(eastKm[to] - eastKm[from])
+                val stepSouthKm = southKm[to] - southKm[from]
+                val lengthKm = sqrt(stepEastKm * stepEastKm + stepSouthKm * stepSouthKm)
+                if (lengthKm > 0.0) {
+                    directionEast[vertex] = stepEastKm / lengthKm
+                    directionSouth[vertex] = stepSouthKm / lengthKm
+                }
+            }
+        }
+
+        /**
+         * The distance along the course of the ground point [pointEastKm], [pointSouthKm]: the
+         * place on the centerline whose square line across the rift runs through the point, the
+         * direction turning evenly from one vertex's to the next, so the lines across sweep without
+         * a gap or a jump where a nearest point would jump from one straight stretch to the next.
+         * Searched over the stretches within [reachKm] along of [nearAlongKm], and the nearest such
+         * place taken; past either end the end's own line runs on. [nearAlongKm] where the line
+         * has no stretch or no line across passes through the point.
+         */
+        fun alongKmAt(pointEastKm: Double, pointSouthKm: Double, nearAlongKm: Double, reachKm: Double): Double {
+            if (last < 1) return nearAlongKm
+            var bestKm2 = Double.MAX_VALUE
+            var bestAlongKm = nearAlongKm
+            for (stretch in 0 until last) {
+                if (alongKm[stretch + 1] < nearAlongKm - reachKm || alongKm[stretch] > nearAlongKm + reachKm) continue
+                val atStart = aheadKm(stretch, 0.0, pointEastKm, pointSouthKm)
+                val atEnd = aheadKm(stretch, 1.0, pointEastKm, pointSouthKm)
+                val share = when {
+                    // Before the first vertex, or past the last, the end's direction runs on.
+                    stretch == 0 && atStart < 0.0 -> atStart / stepKm(0)
+                    stretch == last - 1 && atEnd > 0.0 -> 1.0 + atEnd / stepKm(last - 1)
+                    atStart >= 0.0 && atEnd < 0.0 -> {
+                        var low = 0.0
+                        var high = 1.0
+                        repeat(CENTERLINE_BISECTIONS) {
+                            val middle = (low + high) / 2
+                            if (aheadKm(stretch, middle, pointEastKm, pointSouthKm) >= 0.0) low = middle else high = middle
+                        }
+                        (low + high) / 2
+                    }
+                    else -> continue
+                }
+                val km2 = awayKm2(stretch, share.coerceIn(0.0, 1.0), pointEastKm, pointSouthKm)
+                if (km2 < bestKm2) {
+                    bestKm2 = km2
+                    bestAlongKm = alongKm[stretch] + share * (alongKm[stretch + 1] - alongKm[stretch])
+                }
+            }
+            return bestAlongKm
+        }
+
+        /** How far ahead of the line across at [share] of [stretch] the point lies, along its direction. */
+        private fun aheadKm(stretch: Int, share: Double, pointEastKm: Double, pointSouthKm: Double): Double {
+            val offEastKm = shortestEastKm(pointEastKm - eastKm[stretch]) -
+                share * shortestEastKm(eastKm[stretch + 1] - eastKm[stretch])
+            val offSouthKm = pointSouthKm - southKm[stretch] - share * (southKm[stretch + 1] - southKm[stretch])
+            return offEastKm * ((1 - share) * directionEast[stretch] + share * directionEast[stretch + 1]) +
+                offSouthKm * ((1 - share) * directionSouth[stretch] + share * directionSouth[stretch + 1])
+        }
+
+        /** The square of the point's distance from the centerline at [share] of [stretch]. */
+        private fun awayKm2(stretch: Int, share: Double, pointEastKm: Double, pointSouthKm: Double): Double {
+            val offEastKm = shortestEastKm(pointEastKm - eastKm[stretch]) -
+                share * shortestEastKm(eastKm[stretch + 1] - eastKm[stretch])
+            val offSouthKm = pointSouthKm - southKm[stretch] - share * (southKm[stretch + 1] - southKm[stretch])
+            return offEastKm * offEastKm + offSouthKm * offSouthKm
+        }
+
+        private fun stepKm(stretch: Int): Double {
+            val stepEastKm = shortestEastKm(eastKm[stretch + 1] - eastKm[stretch])
+            val stepSouthKm = southKm[stretch + 1] - southKm[stretch]
+            return sqrt(stepEastKm * stepEastKm + stepSouthKm * stepSouthKm).coerceAtLeast(MIN_STEP_KM)
+        }
+
+        private fun shortestEastKm(km: Double): Double = when {
+            km > worldWidthKm / 2 -> km - worldWidthKm
+            km < -worldWidthKm / 2 -> km + worldWidthKm
+            else -> km
+        }
+    }
 
     /**
      * One stretch of rift's half-grabens: the joins between them in km along the course, the rift's
@@ -1513,7 +1621,14 @@ object PlateStage {
                                         // hinge side, which is the quieter of the two.
                                         val onLowIdPlate = plateId[cell] == interaction.lowId
                                         val segment = riftSegmentAt(
-                                            place, onLowIdPlate, distanceFromBoundary * config.cellWidthKm,
+                                            place.layout,
+                                            place.centerline.alongKmAt(
+                                                (column + 0.5) * config.cellWidthKm,
+                                                (row + 0.5) * config.cellHeightKm,
+                                                place.alongKm,
+                                                distanceFromBoundary * config.cellWidthKm + CENTERLINE_STEP_KM
+                                            ),
+                                            onLowIdPlate, distanceFromBoundary * config.cellWidthKm,
                                             noise.relay.fbm(
                                                 relayLattice.x(column), relayLattice.y(row), RELAY_CREST_OCTAVES,
                                                 relayLattice.period, relayLattice.period
@@ -1549,13 +1664,35 @@ object PlateStage {
                                         // segments of opposite polarity meet without a step.
                                         val tilt = 1f + (wedge - 1f) * segment.taper
 
+                                        // Across a relay the two faults hand the throw from one to
+                                        // the other, so the trough does not close at a join: its
+                                        // floor rises there by half its depth (JOIN_DEPTH_SHARE).
                                         val floor = -tectonics.riftDepth * segment.depthFactor *
-                                            segment.taper * tilt * strength *
+                                            (JOIN_DEPTH_SHARE + (1f - JOIN_DEPTH_SHARE) * segment.taper) * tilt * strength *
                                             plateauFalloff(
                                                 distanceFromBoundary,
                                                 cellWidths.riftWidthCells,
                                                 tectonics.riftFloorShare
                                             )
+
+                                        // What changes from one half-graben to the next dies away
+                                        // outside the trough. The flanks rise under loads that
+                                        // alternate along strike, footwall and hinge a half-graben
+                                        // each, and a flexed plate carries a load that varies along
+                                        // strike with wavelength L only as far as exp(-2 pi d / L)
+                                        // from it: the half-grabens alternate, so L is two of them,
+                                        // and the variation falls by e every half-graben's length
+                                        // over pi beyond the border fault at the trough's edge.
+                                        // Carried the whole 420 km of the shoulders instead, every
+                                        // join ran out across them as a whisker, and where the rift
+                                        // bends the joins crowd together on its inner side.
+                                        val beyondTroughKm =
+                                            ((distanceFromBoundary - cellWidths.riftWidthCells) * config.cellWidthKm)
+                                                .coerceAtLeast(0.0)
+                                        val alongStrikeShare = exp(-PI * beyondTroughKm / segment.lengthKm.coerceAtLeast(config.cellWidthKm)).toFloat()
+                                        val shoulderTaper = segment.taper * alongStrikeShare
+                                        val shoulderFactor = 1f + (segment.shoulderFactor - 1f) * alongStrikeShare
+                                        val shoulderWidthFactor = 1f + (segment.widthFactor - 1f) * alongStrikeShare
 
                                         // High footwall on one flank, low hinge on the other —
                                         // and both fade to their mean at the join, as the trough
@@ -1566,12 +1703,12 @@ object PlateStage {
                                             tectonics.riftHingeShoulderShare.coerceAtLeast(0f)
                                         }
                                         val shoulder = tectonics.riftShoulderHeight *
-                                            segment.shoulderFactor *
-                                            (1f + (flankShare - 1f) * segment.taper) * strength *
+                                            shoulderFactor *
+                                            (1f + (flankShare - 1f) * shoulderTaper) * strength *
                                             ridgeAt(
                                                 distanceFromBoundary,
                                                 cellWidths.riftShoulderOffsetCells,
-                                                cellWidths.riftShoulderWidthCells * segment.widthFactor
+                                                cellWidths.riftShoulderWidthCells * shoulderWidthFactor
                                             ) * roughness * alongRange
 
                                         // The accommodation zone itself: ground that rises between
@@ -1584,7 +1721,7 @@ object PlateStage {
                                         // twelve rounds of erosion leaves a lake the notch cannot
                                         // drain. See docs/DESIGN_LEDGER.md, E4, for what that measured.
                                         val sill = tectonics.riftSillHeight * strength *
-                                            (1f - segment.taper) *
+                                            (1f - segment.taper) * alongStrikeShare *
                                             beltFalloff(
                                                 distanceFromBoundary,
                                                 cellWidths.riftShoulderOffsetCells
@@ -2400,15 +2537,18 @@ object PlateStage {
                     },
                     relayBowKm = DoubleArray(joinsKm.size) { join ->
                         if (join == 0 || join == joinsKm.size - 1) 0.0
-                        else RELAY_BOW_SHARE_OF_OVERLAP * (RELAY_OVERLAP_MIN_KM / 2) *
+                        else (RELAY_OVERLAP_MIN_KM + (RELAY_OVERLAP_MAX_KM - RELAY_OVERLAP_MIN_KM) *
+                            draw(ordinals[join], SALT_RELAY_OVERLAP)) * RELAY_BOW_SHARE_OF_OVERLAP *
                             (2 * draw(ordinals[join], SALT_RELAY_BOW) - 1)
                     },
                     accommodationKm = accommodationKm
                 )
 
+                val centerline = centerlineOf(config, course)
+
                 course.cells.forEachIndexed { index, cell ->
                     val alongKm = course.alongKm[index]
-                    val place = RiftPlace(layout, alongKm)
+                    val place = RiftPlace(layout, alongKm, centerline)
                     boundaries.getValue(cell).segment = place
                     if (report != null) {
                         var segment = 0
@@ -2427,8 +2567,8 @@ object PlateStage {
     }
 
     /**
-     * The half-graben a cell of a rift's corridor stands in, at [acrossKm] from the axis on the
-     * pair's low-id plate or the other.
+     * The half-graben a cell of a rift's corridor stands in, [alongKm] along the rift and
+     * [acrossKm] from its axis on the pair's low-id plate or the other.
      *
      * A join between two half-grabens is not a line square to the rift: the two border faults
      * overlap along strike and hand the extension from one to the other across an oblique, curved
@@ -2437,27 +2577,42 @@ object PlateStage {
      * half-graben's fault runs on past the join, it lies further along; on the other flank, where
      * the next fault has already begun, it lies back; the swing runs from nothing at the axis to the
      * whole overlap over the ramp's width, along a smoothstep, bowed to one side halfway across, and
-     * roughened by a noise on the ground, so the crest is oblique, curved and ragged. Each join stays
-     * between the midpoints to its neighbors, so the half-grabens keep their order.
+     * set wandering by a noise on the ground, so the crest is oblique, curved and ragged. Each join stays
+     * short of its neighbors by the accommodation zone's half-length, so the half-grabens keep
+     * their order and none is squeezed to nothing.
      *
-     * Through the accommodation zone the half-graben's depth and shoulders blend half-way to its
-     * neighbor's at the join, where the taper reaches nothing, so neither the floor nor the shoulders
-     * step at a join. [crestNoise] is the relay noise at the cell, about -1..1.
+     * The taper runs from nothing at a join to one at the half-graben's middle, the border fault's
+     * throw falling from its middle to its tips; through it the half-graben's depth and shoulders
+     * blend half-way to its neighbor's at the join, so neither the floor nor the shoulders step
+     * there. [crestNoise] is the relay noise at the cell, about -1..1.
      */
-    private fun riftSegmentAt(place: RiftPlace, onLowIdPlate: Boolean, acrossKm: Double, crestNoise: Float): RiftSegment {
-        val layout = place.layout
+    private fun riftSegmentAt(
+        layout: RiftLayout,
+        alongKm: Double,
+        onLowIdPlate: Boolean,
+        acrossKm: Double,
+        crestNoise: Float
+    ): RiftSegment {
         val joins = layout.joinsKm
         val last = joins.size - 1
-        val alongKm = place.alongKm
         fun joinHere(join: Int): Double {
             if (join <= 0 || join >= last) return joins[join.coerceIn(0, last)]
             val swing = (acrossKm / layout.relayRampKm[join]).coerceIn(0.0, 1.0)
             val smooth = swing * swing * (3 - 2 * swing)
             val beforeFaultsHere = onLowIdPlate == layout.footwallOnLow[join - 1]
-            val shiftKm = (if (beforeFaultsHere) 1 else -1) * layout.relayOverlapHalfKm[join] * smooth +
-                layout.relayBowKm[join] * 4 * swing * (1 - swing) +
-                RELAY_CREST_ROUGHNESS_KM * crestNoise * swing
-            return (joins[join] + shiftKm).coerceIn((joins[join - 1] + joins[join]) / 2, (joins[join] + joins[join + 1]) / 2)
+            val leanKm = (if (beforeFaultsHere) 1 else -1) * layout.relayOverlapHalfKm[join] * smooth +
+                layout.relayBowKm[join] * 4 * swing * (1 - swing)
+            // Held softly short of the neighbors' joins by the accommodation zone's half-length, so
+            // no half-graben is squeezed to nothing where two relays lean toward each other: a hard
+            // stop there drew a corner, and a half-graben of no length a step. The lean has half
+            // the room and the wander the other half, added after the lean is held: a wander held
+            // with it went flat wherever the lean filled the room, and the crest ran straight.
+            val roomKm = (minOf(joins[join] - joins[join - 1], joins[join + 1] - joins[join]) / 2 -
+                layout.accommodationKm / 2).coerceAtLeast(0.0)
+            if (roomKm <= 0.0) return joins[join]
+            val leanRoomKm = roomKm / 2
+            val wanderKm = minOf(layout.accommodationKm * RELAY_CREST_SHARE_OF_ZONE, roomKm / 2) * crestNoise * swing
+            return joins[join] + leanRoomKm * tanh(leanKm / leanRoomKm) + wanderKm
         }
         var segment = 0
         while (segment < last - 1 && alongKm >= joins[segment + 1]) segment++
@@ -2466,7 +2621,13 @@ object PlateStage {
         val fromKm = joinHere(segment)
         val toKm = joinHere(segment + 1)
         val toJoinKm = minOf(alongKm - fromKm, toKm - alongKm).coerceAtLeast(0.0)
-        val intoSegment = (toJoinKm / layout.accommodationKm).coerceIn(0.0, 1.0).toFloat()
+        // A border fault's throw is greatest at its middle and falls to nothing at its tips (Walsh
+        // and Watterson 1987; Dawers and others 1993), so the half-graben deepens from each join all
+        // the way to its middle. Tapered over the accommodation zone alone, 25 km, a floor 3 km deep
+        // rose to the rim in two cells at 512 rows: a wall across the trough whose level lines ran
+        // across it and doubled back, which is a rung however obliquely it is drawn.
+        val taperKm = maxOf(layout.accommodationKm, (toKm - fromKm) * DISPLACEMENT_TAPER_SHARE)
+        val intoSegment = (toJoinKm / taperKm).coerceIn(0.0, 1.0).toFloat()
         val taper = intoSegment * intoSegment * (3f - 2f * intoSegment)
         // The neighbor across the nearer join, where there is one, and how much of it this cell takes.
         val nearerJoinIsBefore = alongKm - fromKm < toKm - alongKm
@@ -2483,9 +2644,62 @@ object PlateStage {
             shoulderFactor = shoulder,
             widthFactor = shoulder,
             footwallOnLow = layout.footwallOnLow[segment],
-            taper = taper
+            taper = taper,
+            lengthKm = toKm - fromKm
         )
     }
+
+    /**
+     * [course]'s centerline: its cells' mean place in each stretch of [CENTERLINE_STEP_KM] along it,
+     * in order, eastings taken the short way round from the first cell's.
+     */
+    private fun centerlineOf(config: WorldGenConfig, course: AnchoredCourse): RiftCenterline {
+        val worldWidthKm = config.width * config.cellWidthKm
+        val referenceEastKm = (course.cells[0] % config.width + 0.5) * config.cellWidthKm
+        val bins = HashMap<Long, DoubleArray>()
+        course.cells.forEachIndexed { index, cell ->
+            val sums = bins.getOrPut(floor(course.alongKm[index] / CENTERLINE_STEP_KM).toLong()) { DoubleArray(4) }
+            var eastKm = (cell % config.width + 0.5) * config.cellWidthKm - referenceEastKm
+            if (eastKm > worldWidthKm / 2) eastKm -= worldWidthKm
+            if (eastKm < -worldWidthKm / 2) eastKm += worldWidthKm
+            sums[0] += referenceEastKm + eastKm
+            sums[1] += (cell / config.width + 0.5) * config.cellHeightKm
+            sums[2] += course.alongKm[index]
+            sums[3] += 1.0
+        }
+        val means = bins.keys.sorted().map { bins.getValue(it) }
+        return RiftCenterline(
+            DoubleArray(means.size) { means[it][0] / means[it][3] },
+            DoubleArray(means.size) { means[it][1] / means[it][3] },
+            DoubleArray(means.size) { means[it][2] / means[it][3] },
+            worldWidthKm
+        )
+    }
+
+    /**
+     * [riftSegmentAt]: over what share of a half-graben's length its floor deepens from a join to
+     * full depth: half, from each tip to the middle, where the border fault's throw is greatest.
+     */
+    private const val DISPLACEMENT_TAPER_SHARE = 0.5
+
+    /**
+     * How much of a half-graben's depth its trough keeps at a join: half. Where two border faults
+     * overlap, the throw one loses toward its tip the other gains, so the extension, and the
+     * trough, carries on through the relay (Peacock and Sanderson 1991); what rises there is a
+     * saddle between two deeps, not a wall to the rim. Half is policy, not a measurement: the
+     * saddle stands midway, and the sill above it ([TectonicsConfig.riftSillHeight]) is what
+     * parts two gulfs where the sea comes in.
+     */
+    private const val JOIN_DEPTH_SHARE = 0.5f
+
+    /**
+     * [RiftCenterline.alongKmAt]: halvings of a stretch to find where a line across it passes
+     * through a point: twenty-four, a stretch of [CENTERLINE_STEP_KM] to under a centimeter.
+     */
+    private const val CENTERLINE_BISECTIONS = 24
+
+    /** [RiftCenterline]: the shortest stretch it divides by, so two vertices in one place never divide by nothing. */
+    private const val MIN_STEP_KM = 1e-9
 
     /**
      * [riftSegmentAt]: the two border faults' overlap along strike at a join, km, the least and the
@@ -2505,19 +2719,21 @@ object PlateStage {
 
     /**
      * [riftSegmentAt]: how far the crest bows off its swing halfway across, as a share of the
-     * shortest overlap's half, either way: a curve the eye reads as a curve, well inside the swing.
+     * relay's overlap, either way: a quarter, so the bow is half the swing and its steepest lean,
+     * four times the bow over the shortest ramp, stays near one in one; any steeper and the crest
+     * folds into a hook whose level lines double back.
      */
-    private const val RELAY_BOW_SHARE_OF_OVERLAP = 0.8
+    private const val RELAY_BOW_SHARE_OF_OVERLAP = 0.25
 
     /**
-     * [riftSegmentAt]: how far the crest wanders off its curve on the ground, km, and over what
-     * length: a few kilometers over a hundred, a third of a relay's own overlap at its shortest, so
-     * the crest is ragged at the scale of the zone and never loses its lean. Octaves of the noise:
-     * three, down to 25 km.
+     * [riftSegmentAt]'s crest noise: how far the crest wanders, as a share of the accommodation
+     * zone's half-length, 12.5 km either way; its longest wavelength, 100 km, and its octaves, two,
+     * down to 50 km. The wander's steepest lean is two pi times its reach over its wavelength,
+     * near one in one on the shorter octave: ragged on the ground, and never a hook.
      */
-    private const val RELAY_CREST_ROUGHNESS_KM = 8.0
-    private const val RELAY_CREST_WAVELENGTH_KM = 100.0
-    private const val RELAY_CREST_OCTAVES = 3
+    private const val RELAY_CREST_SHARE_OF_ZONE = 1.0
+    private const val RELAY_CREST_WAVELENGTH_KM = 200.0
+    private const val RELAY_CREST_OCTAVES = 2
 
     /** [segmentRifts]: the least a half-graben can be long on any grid, in cells. */
     private const val MIN_SEGMENT_CELLS = 2.0

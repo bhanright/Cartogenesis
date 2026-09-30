@@ -262,16 +262,15 @@ class ScaleFreeTest : BorrowsSharedWorlds() {
         }
         // Recorded from Fix 3b to Q2 (1.54, 1.51, 1.43 and 1.45 between the 512 and 1024 grids as
         // many cells tall as wide) and armed on square cells, where the network grows by 1.32, 1.33,
-        // 1.33 and 1.31 from 512 rows to 1,024 (docs/DESIGN_LEDGER.md, Fix 3b and Q2). Recorded again
-        // at L1: see [CHANNEL_NETWORK_GROWS_ON_SEED_7].
-        KnownFailures.expect(CHANNEL_NETWORK_GROWS_ON_SEED_7, "seed 7 at x1.38") {
-            if (complaints.isNotEmpty()) {
-                throw RecordedViolation(
-                    "the channel-head criterion is not the same criterion at two grids: ${complaints.joinToString("; ")}",
-                    complaints.joinToString("; ") { it.substringBefore(":") } + " at x" + ratios.joinToString("; ")
-                )
-            }
-        }
+        // 1.33 and 1.31 from 512 rows to 1,024 (docs/DESIGN_LEDGER.md, Fix 3b and Q2). L1's joins
+        // drawn square to each rift took seed 7 to 1.38 and the clause was recorded; with the joins
+        // as relay ramps it reads 1.31, 1.32, 1.32 and 1.28, and it is armed again
+        // (docs/DESIGN_LEDGER.md, L1).
+        assertTrue(
+            "the channel-head criterion is not the same criterion at two grids: ${complaints.joinToString("; ")} " +
+                "(x${ratios.joinToString("; x")})",
+            complaints.isEmpty()
+        )
     }
 
     /**
@@ -394,16 +393,6 @@ class ScaleFreeTest : BorrowsSharedWorlds() {
          * times the grid, which is a factor the measurement cannot survive.
          */
         const val CHANNEL_DENSITY_FACTOR = 1.35
-
-        /**
-         * L1 gave the rifts Earth's half-grabens, 60 to 160 km with sills 50 km across, which a grid
-         * of 1,024 rows draws in four to eight times the cells of the 512-row grid's; seed 7's
-         * initiated network then grows by 1.38 from 512 rows to 1,024 where it grew by 1.32, and the
-         * other three seeds by 1.33, 1.33 and 1.28. Whether the finer rifts are what the extra
-         * channels drain is not isolated (docs/DESIGN_LEDGER.md, L1; docs/TODO.md).
-         */
-        const val CHANNEL_NETWORK_GROWS_ON_SEED_7 =
-            "L1: seed 7's channel-head network grows past the drainage factor from 512 rows to 1,024"
 
         /**
          * How far a seed's lake share of land, or its largest lake, may move across 256, 512 and

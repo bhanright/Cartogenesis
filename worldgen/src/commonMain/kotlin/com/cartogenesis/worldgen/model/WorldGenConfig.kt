@@ -924,13 +924,20 @@ data class TectonicsConfig(
      * Half-length of the accommodation zone at each join between half-grabens, in kilometers: 25,
      * a zone 50 km across.
      *
-     * Through it the trough's depth tapers to nothing and its asymmetry to symmetry, so neighboring
+     * Through it the trough's depth tapers to its saddle and its asymmetry to symmetry, so neighboring
      * half-grabens of opposite polarity meet without a step. Earth's accommodation zones between
      * the East African half-grabens are tens of kilometers across (Rosendahl 1987; Ebinger 1989's
      * "high-strain accommodation zones" between its 100 km segments). Within that band the figure is
      * taken at 50 km across so the taper spans at least a cell at 256 rows (23.4 km); a floor of one
      * cell binds only below 240 rows. It was 0.016 of the map's width, 192 km, which is a half-length
      * too: 384 km across a join.
+     *
+     * The least length the taper runs over, not the whole of it: a half-graben deepens from each
+     * join to its middle, where its border fault's throw is greatest, so the taper runs over half
+     * the half-graben's own length where that is longer, 30 to 80 km on Earth's lengths; and the
+     * trough keeps half its depth through a join, where two faults hand the throw on, rather than
+     * closing to the rim (`PlateStage.riftSegmentAt`, L1's review round). It is also how far a
+     * relay's crest keeps from the next join, and twice the reach of its wander.
      */
     val riftAccommodationKm: Double = 25.0,
     /**

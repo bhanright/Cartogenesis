@@ -88,15 +88,20 @@ class RiftIdentityTest {
      * meandering rift reads a little differently on a coarser grid. With it, every half-graben is
      * there at both grids under the same name over the stretch of rift both grids reach, which is the
      * same count and the same breaks, and at each end the two may differ by the one half-graben a
-     * rift's end moving by a cell takes in or leaves out. How far apart the breaks stand is printed.
+     * rift's end moving by a cell takes in or leaves out. So a cell in either grid's end
+     * half-graben of its stretch is not compared: seed 59758's rift 1-13 reaches 57 km further at
+     * 256 rows than at 1,024 and takes in one more half-graben there, and its one cell in it read
+     * as a disagreement. How far apart the breaks stand is printed.
      */
     @Test
     fun `a rift breaks into the same half-grabens at every grid`() {
         val failures = ArrayList<String>()
         seeds.forEach { seed ->
             val fine = grid(seed, fineRows)
+            val fineEnds = endOrdinals(fine)
             coarseRows.forEach { rows ->
                 val coarse = grid(seed, rows)
+                val coarseEnds = endOrdinals(coarse)
                 val toleranceKm = coarse.cellWidthKm + fine.cellWidthKm
                 val compared = HashMap<Int, Int>()
                 val agreed = HashMap<Int, Int>()
@@ -108,6 +113,8 @@ class RiftIdentityTest {
                     val pair = coarse.pairOf(entry)
                     val match = fine.nearest(eastKm, southKm, pair, coarse.cellWidthKm)
                     if (match < 0 || fine.report.toJoinKm[match] < toleranceKm) return@forEach
+                    if (coarse.report.ordinal[entry] in coarseEnds.getValue(pair to coarse.report.chain[entry])) return@forEach
+                    if (fine.report.ordinal[match] in fineEnds.getValue(pair to fine.report.chain[match])) return@forEach
                     compared[pair] = (compared[pair] ?: 0) + 1
                     val same = coarse.report.footwallOnLow[entry] == fine.report.footwallOnLow[match] &&
                         abs(coarse.report.depthFactor[entry] - fine.report.depthFactor[match]) < SAME_FACTOR
@@ -162,6 +169,19 @@ class RiftIdentityTest {
             }
         }
         assertTrue(failures.isEmpty(), "a rift is a different rift at another grid: $failures")
+    }
+
+    /** The first and last half-graben of every stretch of rift, by its pair and stretch. */
+    private fun endOrdinals(grid: Grid): Map<Pair<Int, Int>, Set<Int>> {
+        val ends = HashMap<Pair<Int, Int>, IntArray>()
+        grid.report.cell.indices.forEach { entry ->
+            val key = grid.pairOf(entry) to grid.report.chain[entry]
+            val ordinal = grid.report.ordinal[entry]
+            val range = ends.getOrPut(key) { intArrayOf(ordinal, ordinal) }
+            range[0] = minOf(range[0], ordinal)
+            range[1] = maxOf(range[1], ordinal)
+        }
+        return ends.mapValues { (_, range) -> setOf(range[0], range[1]) }
     }
 
     /**

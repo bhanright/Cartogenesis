@@ -202,13 +202,11 @@ object PlateStage {
          */
         val footwallOnLow: Boolean,
         /**
-         * 0 at the join, 1 at the segment's middle. The trough's depth below its saddle and its
-         * asymmetry are both multiplied by it, so a half-graben dies out at each end into a
-         * symmetric saddle rather than meeting its neighbor's opposite polarity at a step.
+         * 0 at the join, 1 well inside the segment. The trough's depth and its asymmetry are both
+         * multiplied by it, so a half-graben dies out at each end into a symmetric sill rather than
+         * meeting its neighbor's opposite polarity at a step.
          */
-        val taper: Float,
-        /** The half-graben's length where this cell reads it, between its two joins, km. */
-        val lengthKm: Double
+        val taper: Float
     )
 
     private class Boundary(
@@ -1664,35 +1662,13 @@ object PlateStage {
                                         // segments of opposite polarity meet without a step.
                                         val tilt = 1f + (wedge - 1f) * segment.taper
 
-                                        // Across a relay the two faults hand the throw from one to
-                                        // the other, so the trough does not close at a join: its
-                                        // floor rises there by half its depth (JOIN_DEPTH_SHARE).
                                         val floor = -tectonics.riftDepth * segment.depthFactor *
-                                            (JOIN_DEPTH_SHARE + (1f - JOIN_DEPTH_SHARE) * segment.taper) * tilt * strength *
+                                            segment.taper * tilt * strength *
                                             plateauFalloff(
                                                 distanceFromBoundary,
                                                 cellWidths.riftWidthCells,
                                                 tectonics.riftFloorShare
                                             )
-
-                                        // What changes from one half-graben to the next dies away
-                                        // outside the trough. The flanks rise under loads that
-                                        // alternate along strike, footwall and hinge a half-graben
-                                        // each, and a flexed plate carries a load that varies along
-                                        // strike with wavelength L only as far as exp(-2 pi d / L)
-                                        // from it: the half-grabens alternate, so L is two of them,
-                                        // and the variation falls by e every half-graben's length
-                                        // over pi beyond the border fault at the trough's edge.
-                                        // Carried the whole 420 km of the shoulders instead, every
-                                        // join ran out across them as a whisker, and where the rift
-                                        // bends the joins crowd together on its inner side.
-                                        val beyondTroughKm =
-                                            ((distanceFromBoundary - cellWidths.riftWidthCells) * config.cellWidthKm)
-                                                .coerceAtLeast(0.0)
-                                        val alongStrikeShare = exp(-PI * beyondTroughKm / segment.lengthKm.coerceAtLeast(config.cellWidthKm)).toFloat()
-                                        val shoulderTaper = segment.taper * alongStrikeShare
-                                        val shoulderFactor = 1f + (segment.shoulderFactor - 1f) * alongStrikeShare
-                                        val shoulderWidthFactor = 1f + (segment.widthFactor - 1f) * alongStrikeShare
 
                                         // High footwall on one flank, low hinge on the other —
                                         // and both fade to their mean at the join, as the trough
@@ -1703,12 +1679,12 @@ object PlateStage {
                                             tectonics.riftHingeShoulderShare.coerceAtLeast(0f)
                                         }
                                         val shoulder = tectonics.riftShoulderHeight *
-                                            shoulderFactor *
-                                            (1f + (flankShare - 1f) * shoulderTaper) * strength *
+                                            segment.shoulderFactor *
+                                            (1f + (flankShare - 1f) * segment.taper) * strength *
                                             ridgeAt(
                                                 distanceFromBoundary,
                                                 cellWidths.riftShoulderOffsetCells,
-                                                cellWidths.riftShoulderWidthCells * shoulderWidthFactor
+                                                cellWidths.riftShoulderWidthCells * segment.widthFactor
                                             ) * roughness * alongRange
 
                                         // The accommodation zone itself: ground that rises between
@@ -1721,7 +1697,7 @@ object PlateStage {
                                         // twelve rounds of erosion leaves a lake the notch cannot
                                         // drain. See docs/DESIGN_LEDGER.md, E4, for what that measured.
                                         val sill = tectonics.riftSillHeight * strength *
-                                            (1f - segment.taper) * alongStrikeShare *
+                                            (1f - segment.taper) *
                                             beltFalloff(
                                                 distanceFromBoundary,
                                                 cellWidths.riftShoulderOffsetCells
@@ -2581,10 +2557,9 @@ object PlateStage {
      * short of its neighbors by the accommodation zone's half-length, so the half-grabens keep
      * their order and none is squeezed to nothing.
      *
-     * The taper runs from nothing at a join to one at the half-graben's middle, the border fault's
-     * throw falling from its middle to its tips; through it the half-graben's depth and shoulders
-     * blend half-way to its neighbor's at the join, so neither the floor nor the shoulders step
-     * there. [crestNoise] is the relay noise at the cell, about -1..1.
+     * Through the accommodation zone the half-graben's depth and shoulders blend half-way to its
+     * neighbor's at the join, where the taper reaches nothing, so neither the floor nor the
+     * shoulders step at a join. [crestNoise] is the relay noise at the cell, about -1..1.
      */
     private fun riftSegmentAt(
         layout: RiftLayout,
@@ -2621,13 +2596,7 @@ object PlateStage {
         val fromKm = joinHere(segment)
         val toKm = joinHere(segment + 1)
         val toJoinKm = minOf(alongKm - fromKm, toKm - alongKm).coerceAtLeast(0.0)
-        // A border fault's throw is greatest at its middle and falls to nothing at its tips (Walsh
-        // and Watterson 1987; Dawers and others 1993), so the half-graben deepens from each join all
-        // the way to its middle. Tapered over the accommodation zone alone, 25 km, a floor 3 km deep
-        // rose to the rim in two cells at 512 rows: a wall across the trough whose level lines ran
-        // across it and doubled back, which is a rung however obliquely it is drawn.
-        val taperKm = maxOf(layout.accommodationKm, (toKm - fromKm) * DISPLACEMENT_TAPER_SHARE)
-        val intoSegment = (toJoinKm / taperKm).coerceIn(0.0, 1.0).toFloat()
+        val intoSegment = (toJoinKm / layout.accommodationKm).coerceIn(0.0, 1.0).toFloat()
         val taper = intoSegment * intoSegment * (3f - 2f * intoSegment)
         // The neighbor across the nearer join, where there is one, and how much of it this cell takes.
         val nearerJoinIsBefore = alongKm - fromKm < toKm - alongKm
@@ -2644,8 +2613,7 @@ object PlateStage {
             shoulderFactor = shoulder,
             widthFactor = shoulder,
             footwallOnLow = layout.footwallOnLow[segment],
-            taper = taper,
-            lengthKm = toKm - fromKm
+            taper = taper
         )
     }
 
@@ -2675,22 +2643,6 @@ object PlateStage {
             worldWidthKm
         )
     }
-
-    /**
-     * [riftSegmentAt]: over what share of a half-graben's length its floor deepens from a join to
-     * full depth: half, from each tip to the middle, where the border fault's throw is greatest.
-     */
-    private const val DISPLACEMENT_TAPER_SHARE = 0.5
-
-    /**
-     * How much of a half-graben's depth its trough keeps at a join: half. Where two border faults
-     * overlap, the throw one loses toward its tip the other gains, so the extension, and the
-     * trough, carries on through the relay (Peacock and Sanderson 1991); what rises there is a
-     * saddle between two deeps, not a wall to the rim. Half is policy, not a measurement: the
-     * saddle stands midway, and the sill above it ([TectonicsConfig.riftSillHeight]) is what
-     * parts two gulfs where the sea comes in.
-     */
-    private const val JOIN_DEPTH_SHARE = 0.5f
 
     /**
      * [RiftCenterline.alongKmAt]: halvings of a stretch to find where a line across it passes

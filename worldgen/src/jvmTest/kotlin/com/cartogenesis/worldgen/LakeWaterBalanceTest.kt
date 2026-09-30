@@ -83,10 +83,11 @@ class LakeWaterBalanceTest : BorrowsSharedWorlds() {
     //
     // Re-picked for the dry case once more at L1's review, whose rifts join by relay ramps and draw
     // each half-graben by its place on the ground: seed 16's largest dry basin is 437 cells now.
-    // The same scan: seed 5's, 2,464 cells at 100 mm, 4% of it still wet, is the largest the
-    // balance empties. Seed 36's is larger at 7,167 cells and 221 mm and keeps 53%, and seeds 3, 1
-    // and 10 (1,850, 1,423 and 1,609 cells) keep 48%, 45% and 22%.
-    private val drySeed = 5L
+    // The same scan: seed 10's, 1,609 cells at 33 mm, 14% of it still wet, is the largest the
+    // balance empties. Seed 36's is larger at 7,057 cells and 239 mm and keeps 58%, seeds 3, 17
+    // and 1 (1,850, 1,845 and 1,423 cells) keep 48%, 89% and 45%, and seed 40's, 1,484 cells,
+    // keeps 21%.
+    private val drySeed = 10L
     private val wetSeed = 37L
 
     /**

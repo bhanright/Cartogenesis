@@ -56,14 +56,38 @@ internal object PinRecordRewriter {
                     continue
                 }
                 edits.add(edit)
-                changes.add("${file.name}:${source.lineOf(edit.start)}  [${record.old.ifEmpty { "-" }}] -> " +
-                    "[${if (record.operation == PinRecord.Operation.DELETE_LINE) "deleted" else record.new}]  " +
-                    "(${record.kind}, ${record.test})")
+                val new = if (record.operation == PinRecord.Operation.DELETE_LINE) "deleted" else record.new
+                val (oldShown, newShown) = changedParts(record.old.ifEmpty { "-" }, new)
+                changes.add("${file.name}:${source.lineOf(edit.start)}  [$oldShown] -> [$newShown]  (${record.kind}, ${record.test})")
             }
             if (write && edits.isNotEmpty()) file.writeText(source.applied(edits))
         }
         return Outcome(changes, refusals, notices)
     }
+
+    /**
+     * [old] and [new] as the review shows them: whole where they are short, and where they are
+     * long, only the part that differs with [CONTEXT_CHARACTERS] either side, so that one figure
+     * moved in a long signature is what the eye lands on.
+     */
+    fun changedParts(old: String, new: String): Pair<String, String> {
+        if (old.length <= SHOWN_WHOLE_CHARACTERS && new.length <= SHOWN_WHOLE_CHARACTERS) return old to new
+        val sharedStart = old.zip(new).takeWhile { (a, b) -> a == b }.size
+        val sharedEnd = old.reversed().zip(new.reversed()).takeWhile { (a, b) -> a == b }.size
+            .coerceAtMost(minOf(old.length, new.length) - sharedStart)
+        fun shown(value: String): String {
+            val from = (sharedStart - CONTEXT_CHARACTERS).coerceAtLeast(0)
+            val to = (value.length - sharedEnd + CONTEXT_CHARACTERS).coerceAtMost(value.length)
+            return (if (from > 0) "..." else "") + value.substring(from, to) + (if (to < value.length) "..." else "")
+        }
+        return shown(old) to shown(new)
+    }
+
+    /** A value up to this long is shown whole in the review. */
+    private const val SHOWN_WHOLE_CHARACTERS = 100
+
+    /** How much unchanged text is shown either side of a change in a long value. */
+    private const val CONTEXT_CHARACTERS = 24
 
     private fun where(record: PinRecord) = "${record.file.substringAfterLast('/').substringAfterLast('\\')}:${record.line}"
 
@@ -161,9 +185,36 @@ internal object PinRecordRewriter {
                 ?: throw Refused("no string literal reads [${record.old}]")
             val replacement = if (chain.size == 1) quoted(record.new) else {
                 val continuation = newline + indentation(lineOf(chain[1].start) - 1)
-                wrapped(record.new, chain.maxOf { it.value!!.length }).joinToString(" +$continuation") { quoted(it) }
+                rejoined(chain.map { it.value!! }, record.new).joinToString(" +$continuation") { quoted(it) }
             }
             return Edit(chain.first().start, chain.last().end, replacement, edits++)
+        }
+
+        /**
+         * [new] cut into pieces the way [oldPieces] cut the old value: every leading and trailing
+         * piece the change does not reach is kept as it was, so the diff shows only the lines the
+         * change moved, and what lies between is wrapped at the widest old piece's width.
+         */
+        private fun rejoined(oldPieces: List<String>, new: String): List<String> {
+            val old = oldPieces.joinToString("")
+            val sharedStart = old.zip(new).takeWhile { (a, b) -> a == b }.size
+            val sharedEnd = old.reversed().zip(new.reversed()).takeWhile { (a, b) -> a == b }.size
+                .coerceAtMost(minOf(old.length, new.length) - sharedStart)
+            val leading = ArrayList<String>()
+            var leadingLength = 0
+            for (piece in oldPieces) {
+                if (leadingLength + piece.length > sharedStart) break
+                leading.add(piece); leadingLength += piece.length
+            }
+            val trailing = ArrayList<String>()
+            var trailingLength = 0
+            for (piece in oldPieces.drop(leading.size).reversed()) {
+                if (trailingLength + piece.length > sharedEnd) break
+                trailing.add(0, piece); trailingLength += piece.length
+            }
+            val middle = new.substring(leadingLength, new.length - trailingLength)
+            val middlePieces = if (middle.isEmpty()) emptyList() else wrapped(middle, oldPieces.maxOf { it.length })
+            return (leading + middlePieces + trailing).ifEmpty { listOf("") }
         }
 
         private val literals: List<StringLiteral> by lazy { stringLiterals(text) }

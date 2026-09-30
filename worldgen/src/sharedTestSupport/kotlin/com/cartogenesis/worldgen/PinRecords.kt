@@ -152,12 +152,24 @@ internal object PinRecords {
         frame.className == type.name || frame.className.startsWith(type.name + "$")
 
     /**
-     * The test running on this thread, as `Class.method`: the outermost frame of this project's,
-     * which is the test method its runner called by reflection.
+     * The test running on this thread, as `Class.method`: the frame whose method carries a `@Test`
+     * annotation, JUnit 4's or JUnit 5's, and failing that the outermost frame of this project's.
+     * Not simply the outermost, because a rule wrapping the test (`SharedWorlds`) is outermost.
      */
     fun testName(): String {
-        val frame = Throwable().stackTrace.lastOrNull { it.className.startsWith(PROJECT_PACKAGE) } ?: return "unknown test"
+        val frames = Throwable().stackTrace.filter { it.className.startsWith(PROJECT_PACKAGE) }
+        val frame = frames.firstOrNull(::isTestMethod) ?: frames.lastOrNull() ?: return "unknown test"
         return frame.className.substringAfterLast('.').substringBefore('$') + "." + frame.methodName
+    }
+
+    private fun isTestMethod(frame: StackTraceElement): Boolean = try {
+        Class.forName(frame.className).declaredMethods.any { method ->
+            method.name == frame.methodName && method.annotations.any { it.annotationClass.simpleName == "Test" }
+        }
+    } catch (notLoadable: ReflectiveOperationException) {
+        false
+    } catch (notLinkable: LinkageError) {
+        false
     }
 
     /**

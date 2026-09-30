@@ -661,7 +661,7 @@ class PenAndInkTest : BorrowsSharedWorlds() {
         val widest = LandSlopes.hundredths(EngravingPlan.SLOPE_FLOOR + 1f / MapStyle.PEN_AND_INK.inkGain)
         println("PENINK the seventy-fifth percentile of the land slope rounds to $seventyFifth; the widest stroke is at $widest")
         // Re-recorded at L1, whose rifts moved the gallery world's slopes (docs/DESIGN_LEDGER.md, L1).
-        KnownFailures.expect(INK_GAIN_STALE, "the seventy-fifth percentile rounds to 0.41, the widest stroke is at 0.39") {
+        KnownFailures.expect(INK_GAIN_STALE, "the seventy-fifth percentile rounds to 0.38, the widest stroke is at 0.39") {
             if (seventyFifth != widest) {
                 throw RecordedViolation(
                     "the seventy-fifth percentile of seed 234475's land slope is ${LandSlopes.percentile(slopes, 0.75)}; " +

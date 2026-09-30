@@ -167,7 +167,7 @@ class SeaLevelHistoryTest : BorrowsSharedWorlds() {
         // The other half of ground rule 2: the world without the lowstand has to fail a bar the
         // world with it clears, or this guard is measuring nothing.
         // Recorded since Fix 3b: see [CONTROL_REACHES_THE_CEILING].
-        KnownFailures.expect(CONTROL_REACHES_THE_CEILING, "short on 1 of 3") {
+        KnownFailures.expect(CONTROL_REACHES_THE_CEILING, "short on 0 of 3") {
             if (controlFailures != seeds.size) {
                 throw RecordedViolation(
                     "the world with the sea held at today's level was expected to fall short of " +

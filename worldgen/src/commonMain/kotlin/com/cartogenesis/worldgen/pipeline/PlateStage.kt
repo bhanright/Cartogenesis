@@ -1642,12 +1642,13 @@ object PlateStage {
                                         //
                                         // Floored at one cell, and the floor stays a count of
                                         // cells: it is the least floor the grid can draw, not a
-                                        // length on the ground. At the default widths the floor
-                                        // is 164.0625 x 0.55 = 90.2 km, so it binds only where a
-                                        // cell is wider than that: at 64 rows of square cells and
-                                        // fewer (93.75 km), and on the 128 by 128 fingerprint grid;
-                                        // from 128 rows up it is 1.9 cells or more and the floor
-                                        // does nothing (docs/DESIGN_LEDGER.md, Q2).
+                                        // length on the ground. At Earth's valley width the floor
+                                        // is 27.5 x 0.55 = 15.1 km, so it binds where a cell is
+                                        // wider than that: at 256 rows of square cells (23.4 km)
+                                        // and fewer, where the floor is the rift's own cells and
+                                        // their neighbors; from 512 rows up it is 1.3 cells or
+                                        // more and the floor does nothing (docs/DESIGN_LEDGER.md,
+                                        // Q2 and L1).
                                         val flatFloorHalfWidthCells =
                                             (cellWidths.riftWidthCells * tectonics.riftFloorShare)
                                                 .coerceAtLeast(1f)
@@ -2355,12 +2356,15 @@ object PlateStage {
     /**
      * Breaks every continental rift into half-grabens along its own length.
      *
-     * A rift is not a canal. It is a chain of asymmetric basins, each hanging from a border fault on
-     * one flank and hinged on the other, with the polarity flipping from one to the next and an
-     * accommodation zone between them where the floor rises back toward the hinge. The sea then
-     * enters only the segments that have subsided below it, which is why the Red Sea is a string of
-     * deeps, why Tanganyika and Malawi are strings of deeps on land, and why no rift on Earth is one
-     * trough of constant depth for a thousand kilometers. How long a half-graben is and how long the
+     * A rift is not a trough of constant depth. It is a chain of half-grabens, each hanging from a
+     * border fault on one flank and hinged on the other, with the polarity flipping from one to the
+     * next and an accommodation zone between them where the floor rises back toward the hinge. The
+     * sea then enters only the segments that have subsided below it, which is why the Red Sea is a
+     * string of deeps and why no rift on Earth is one trough of constant depth for a thousand
+     * kilometers. Whether the chain holds closed basins or an axial river is an outcome, of the
+     * fill, the saddles' heights and the climate, and both happen on Earth: Tanganyika, Malawi,
+     * Turkana and the Dead Sea stay closed, while the Rhine runs through its graben, the Rio Grande
+     * down its rift and the Jordan into the Dead Sea. Nothing here shapes a rift to prevent either. How long a half-graben is and how long the
      * zone between two of them is are Earth's figures, in kilometers, in `TectonicsConfig`.
      *
      * **A rift is the same rift at every grid.** Everything that decides a half-graben is a

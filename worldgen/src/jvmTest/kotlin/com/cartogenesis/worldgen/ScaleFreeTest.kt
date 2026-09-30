@@ -264,7 +264,7 @@ class ScaleFreeTest : BorrowsSharedWorlds() {
         // many cells tall as wide) and armed on square cells, where the network grows by 1.32, 1.33,
         // 1.33 and 1.31 from 512 rows to 1,024 (docs/DESIGN_LEDGER.md, Fix 3b and Q2). Recorded again
         // at L1 and re-taken at its review round: see [CHANNEL_NETWORK_GROWS_ON_SEED_7].
-        KnownFailures.expect(CHANNEL_NETWORK_GROWS_ON_SEED_7, "seed 7 at x1.35") {
+        KnownFailures.expect(CHANNEL_NETWORK_GROWS_ON_SEED_7, "seed 1234 at x1.35") {
             if (complaints.isNotEmpty()) {
                 throw RecordedViolation(
                     "the channel-head criterion is not the same criterion at two grids: ${complaints.joinToString("; ")}",
@@ -399,9 +399,10 @@ class ScaleFreeTest : BorrowsSharedWorlds() {
          * L1 gave the rifts Earth's half-grabens, 60 to 160 km with sills 50 km across, which a grid
          * of 1,024 rows draws in four to eight times the cells of the 512-row grid's; seed 7's
          * initiated network then grew by 1.38 from 512 rows to 1,024 where it grew by 1.32. With the
-         * joins as relay ramps it grows by 1.35, a hair over, and the other three seeds by 1.31, 1.34
-         * and 1.32. Whether the finer rifts are what the extra channels drain is not isolated
-         * (docs/DESIGN_LEDGER.md, L1; docs/TODO.md).
+         * joins as relay ramps and the valleys Earth's width it is seed 1234's that grows by 1.35, a
+         * hair over, and seeds 7, 42 and 99's by 1.35, 1.31 and 1.28 under it. Whether the finer
+         * rifts are what the extra channels drain is not isolated (docs/DESIGN_LEDGER.md, L1;
+         * docs/TODO.md).
          */
         const val CHANNEL_NETWORK_GROWS_ON_SEED_7 =
             "L1: seed 7's channel-head network grows past the drainage factor from 512 rows to 1,024"
@@ -419,15 +420,15 @@ class ScaleFreeTest : BorrowsSharedWorlds() {
          * Each seed's spreads as recorded, its lake share of land and its largest lake, across 256,
          * 512 and 1,024 rows. On the tree before L1: x1.28 and x1.67, x2.87 and x4.73, x1.79 and
          * x2.83, x3.21 and x8.08 on seeds 7, 42, 1234 and 99; at L1, x1.96 and x5.38, x1.49 and
-         * x1.46, x2.10 and x1.50, x1.59 and x3.48; re-taken at its review round, whose joins are
-         * relay ramps, where seed 99's largest lake at 1,024 rows is 18,848 km2 against 254,883 at
-         * 256 (docs/DESIGN_LEDGER.md, L1).
+         * x1.46, x2.10 and x1.50, x1.59 and x3.48; at its review round, with the joins as relay ramps
+         * in a trough 328 km across, x4.53 and x13.52 on seed 99; re-taken once the valleys were
+         * Earth's width, 55 km across (docs/DESIGN_LEDGER.md, L1).
          */
         val LAKE_AREA_RECORD: Map<Long, Pair<Double, Double>> = mapOf(
-            7L to (1.36 to 2.30),
-            42L to (1.56 to 2.58),
-            1234L to (1.80 to 3.44),
-            99L to (4.53 to 13.52)
+            7L to (1.66 to 2.47),
+            42L to (1.23 to 1.31),
+            1234L to (2.21 to 2.56),
+            99L to (1.26 to 1.38)
         )
 
         /**

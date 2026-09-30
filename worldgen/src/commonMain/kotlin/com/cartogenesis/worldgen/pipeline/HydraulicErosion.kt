@@ -1745,7 +1745,7 @@ internal object HydraulicErosion {
      * every pocket of sea a river ended in, by cutting an inlet from it to the ocean, and the
      * measurements were good — the mouths ending in a pocket fell below the count in a world with
      * no deposition at all. It is reverted all the same: a small body of water the ocean cannot
-     * reach is not always an artefact. `RiftSegmentationTest` asks a flooded rift to be a chain of
+     * reach is not always an artifact. `RiftSegmentationTest` asked a flooded rift to be a chain of
      * gulfs with land bridges between them, and those gulfs are exactly such bodies; joining them
      * to the ocean turned the chain back into the channel that chunk existed to break up, and moved
      * enough coastline besides to unsettle the ocean-current and culture guards. Water the sea

@@ -134,7 +134,7 @@ class DeltaMouthTest : BorrowsSharedWorlds() {
             // not. Cutting an inlet from each such pocket to the ocean was written, measured
             // (59758: 40 stranded mouths to 15, and the pocket count below the no-deposition
             // floor) and reverted, because a small body of water the ocean cannot reach is
-            // sometimes a landform: `RiftSegmentationTest` asks a flooded rift to be a chain of
+            // sometimes a landform: `RiftSegmentationTest` then asked a flooded rift to be a chain of
             // gulfs with land bridges between them, and joining those gulfs to the ocean turned
             // the chain back into a channel. H5 put the fix where GEOGRAPHY.md said it belonged, in
             // the cut: water the ocean cannot reach is land, up to the size of the largest lake

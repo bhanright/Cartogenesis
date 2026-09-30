@@ -87,7 +87,12 @@ class LakeWaterBalanceTest : BorrowsSharedWorlds() {
     // balance empties. Seed 36's is larger at 7,057 cells and 239 mm and keeps 58%, seeds 3, 17
     // and 1 (1,850, 1,845 and 1,423 cells) keep 48%, 89% and 45%, and seed 40's, 1,484 cells,
     // keeps 21%.
-    private val drySeed = 10L
+    //
+    // And again once the rift valleys were narrowed to Earth's 55 km: seed 10's basin keeps 62%.
+    // The same scan: seed 27's, 1,723 cells at 40 mm, 22% of it still wet, is the largest the
+    // balance empties. Seed 36's is larger at 6,907 cells and 254 mm and keeps 64%, seed 23's at
+    // 3,697 cells keeps 98%, and seeds 3 and 1 (1,858 and 1,424 cells) keep 49% and 47%.
+    private val drySeed = 27L
     private val wetSeed = 37L
 
     /**

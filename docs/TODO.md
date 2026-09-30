@@ -1225,8 +1225,12 @@
   x5.38 (x1.28 and x1.67), seed 42 x1.49 and x1.46 (x2.87 and x4.73), seed 1234 x2.10 and x1.50
   (x1.79 and x2.83), seed 99 x1.59 and x3.48 (x3.21 and x8.08), against a provisional bar of 1.35
   run as a known failure. Re-taken at L1's review round, whose joins are relay ramps: x1.36 and
-  x2.30, x1.56 and x2.58, x1.80 and x3.44, x4.53 and x13.52; seed 99's largest lake is 254,883 km2
-  at 256 rows and 18,848 at 1,024, worse than the tree before L1, and what moved it is not isolated. On the five seeds of L1's diagnosis the whole lake area reads, at 256,
+  x2.30, x1.56 and x2.58, x1.80 and x3.44, x4.53 and x13.52: seed 99's largest lake 254,883 km2 at
+  256 rows and 18,848 at 1,024, a drowned trough basin held as land that the post-cut outlet
+  drained at one grid and not the other. With the valleys at Earth's width the basin is not made
+  and the spreads read x1.66 and x2.47, x1.23 and x1.31, x2.21 and x2.56, x1.26 and x1.38; with the
+  outlet off seed 99's largest lake is 488,342, 274,246 and 291,069 km2 at 256, 512 and 1,024 rows,
+  which is L2's to take (docs/DESIGN_LEDGER.md, L1). On the five seeds of L1's diagnosis the whole lake area reads, at 256,
   512 and 1,024 rows and on the 512 by 512 grid: 42 310,913 / 330,963 / 464,172 / 321,625 km2; 7
   340,027 / 229,202 / 173,653 / 213,135; 99 445,496 / 280,014 / 410,751 / 310,913; 718106
   134,583 / 178,116 / 199,677 / 162,048; 59758 244,446 / 330,276 / 343,117 / 409,515. Three
@@ -1266,27 +1270,17 @@
   and 40). None of the five seeds L1 measured is affected, so it is not a cause of their lake
   spread, and it was left alone. What would settle it is the crusts chosen by area on the ground
   and adjacency by a length of shared boundary in kilometers. 2026-09-29, L1.
-- **A rift's saddles fold the trough's level lines back past the natural bar.** L1's review
-  round made each join a relay ramp, oblique, curved and ragged, and read each corridor cell's place
-  along the rift off its course's centerline, so the sills are no longer rungs along a row
-  (`RiftSillGeometryTest`: the bearing count 1.19 where the rungs read 1.53, every grid-bearing
-  detector clean). Its crease detector still reads 9.38 against the natural 4.37 on seed 42's
-  north-south trough (the rungs read 9.98), recorded. The trough is 328 km across (`riftWidthKm`,
-  164 either side) against half-grabens 60 to 160 km long, where Earth's rift valleys are 40 to 70
-  km across: every saddle runs across the trough for two to five half-graben lengths, and a
-  half-graben closes to the rim over 25 km, so its flanks are long level lines that meet in
-  hairpins. Tried and taken back out: a taper over half each half-graben's length and a flexural
-  fade of the half-grabens' differences beyond the trough, which moved the climate (the ocean
-  stopped solving on two monsoon worlds), and a trough that keeps half its depth through a relay,
-  which softened the crease to 5.86 and spread seed 42's largest lake to x4.13 across grids. What would answer it is the trough's width on Earth's figure, a
-  decision about the rift's whole profile. Also open, on the shoulders, which reach 420 km: beyond
-  the relay's ramp a join runs on across them at a fixed offset, square to the rift, and each
-  shoulder switches between footwall and hinge height across it over the zone's 25 km, so on the
-  plate floor every join is a whisker across the shoulders (erosion softens them on the map; the
-  sill guard reads the trough only); and the place along a bending rift is read off lines square
-  to the centerline, which cross on the inner side of a bend beyond its radius. The flexural fade
-  above removed both and moved the climate.
-  2026-09-29, L1; 2026-09-30, its review round.
+- **The rifts may be too long and too common, and the sill guard cannot see a rung at Earth's
+  width.** Measured at 512 rows once the valleys were narrowed to Earth's 55 km: the standard seeds
+  carry 53 to 242 km of continental rift axis per million km2 of land, 134 on the mean, against
+  Earth's 85 (64 without the West Antarctic system); seed 1234 carries 6,640 km in two systems.
+  Reported, not asserted: what sets how many continental pairs pull apart is the plates' drift and
+  classification, not the rift's profile. Of the dry axis, 0 to 43% drains down the valley to the
+  sea for 160 km or more, the rest to closed basins or across the flank; both are Earth's and
+  neither is steered. `RiftSillGeometryTest` passes the relay ramps and would pass the rungs too at
+  this width (a join square to a 4.7-cell valley is too short a line for the census), so it guards
+  the valley and its shoulders and no longer the rungs; and the shoulders still switch at each join
+  square to the rift over their 105 km, faintly on the plate floor. 2026-09-30, L1's review round.
 - **At 256 rows a rift's anchor can sit two cells off.** `anchoredCourse` anchors a course at the
   first cell whose bisector coordinate reaches zero; on seed 59758's rifts 1-13 and 3-10 the 256-row
   course reads 54 and 41 km further along than the 1,024-row one at the same ground (the median over

@@ -840,9 +840,10 @@ data class TectonicsConfig(
      * the floor already stands 45-72% of the land's relief below its shoulder crest, against
      * Earth's 21-50% (Baikal 3.2-4.0 km of crest-to-floor against 8 km of relief, Tanganyika
      * 2.8-3.8, Malawi 1.7-2.7, the Dead Sea 1.7-1.9), and the deepest rift lake a finished world
-     * holds is 24.2% of the land's relief against Baikal's 20%. Deeper still turns the rift from a
-     * chain of basins into one continuous axis that drains along itself, which is the opposite of
-     * what the segmentation exists to produce.
+     * holds is 24.2% of the land's relief against Baikal's 20%. Whether a rift then holds a chain of
+     * closed basins or drains along its axis is an outcome of the fill, the saddles and the climate,
+     * and both are Earth's (Tanganyika and Malawi against the Rhine and the Rio Grande); the depth
+     * is not set to steer between them.
      *
      * Giving the floor relief *within* itself was likewise written, measured and reverted: the
      * floor is not the plane it looks like, and every amplitude tried put a closed sub-basin below
@@ -852,12 +853,26 @@ data class TectonicsConfig(
      */
     val riftDepth: Float = 0.25f,
     /**
-     * Half-width of the rift trough, in kilometers: 164.0625 km, the 512 grid's 7 cell widths.
+     * Half-width of the rift trough, from its axis to the top of its walls, in kilometers: 27.5, a
+     * valley 55 km across.
      *
-     * Wider than a real rift, whose trough is 40 to 80 km across, because it was sized to be
-     * drawable on 23 km cells; see docs/DESIGN_LEDGER.md, Q2.
+     * Earth's figure, the maintainer's decision at L1's review round. The valleys of the East
+     * African rift are 40 to 70 km across between their escarpments: Tanganyika about 50 km,
+     * Malawi 40 to 75 (Rosendahl 1987, *Architecture of continental rifts with special reference
+     * to East Africa*, Annual Review of Earth and Planetary Sciences 15; Ebinger 1989, *Tectonic
+     * development of the western branch of the East African rift system*, GSA Bulletin 101). 55 km
+     * is the middle of that band. Like the half-grabens' lengths ([riftSegmentMinKm]) it is set by
+     * the brittle crust the border faults cut, not by the planet, so it is not scaled by
+     * `WorldScale.worldWidthKm`: on the 12,000 km world the valley is 2.3 cells across at 256 rows,
+     * 4.7 at 512 and 9.4 at 1,024; on a 20,000 km world 1.4, 2.8 and 5.6.
+     *
+     * At 256 rows it is the rift's own cells and one cell either side of them, its flat floor held
+     * at the one cell `PlateStage` floors it to; guards on the trough's width and shape read 512 rows
+     * and finer (docs/DESIGN_LEDGER.md, L1). It was 164.0625 km, the 512 grid's 7 cell widths, a
+     * valley 328 km across sized to be drawable on 23 km cells (docs/DESIGN_LEDGER.md, Q2), which
+     * drew each saddle between two half-grabens across two to five of their lengths.
      */
-    val riftWidthKm: Double = 164.0625,
+    val riftWidthKm: Double = 27.5,
     /**
      * Share of the trough's half-width that is flat floor before the ground starts climbing.
      *
@@ -867,10 +882,27 @@ data class TectonicsConfig(
      * `ValleyIncisionTest` reads as incision. Dimensionless, so it needs no rescaling.
      */
     val riftFloorShare: Float = 0.55f,
-    /** How far from the rift axis its raised shoulders crest, in kilometers: the 512 grid's 11 cell widths. */
-    val riftShoulderOffsetKm: Double = 257.8125,
-    /** Half-width of each shoulder about its own crest, in kilometers: the 512 grid's 7 cell widths. */
-    val riftShoulderWidthKm: Double = 164.0625,
+    /**
+     * How far from the rift axis its raised shoulders crest, in kilometers: 45, 17.5 km back from
+     * the top of the valley's wall.
+     *
+     * A rift's flanks are the border faults' footwalls rebounding as the lithosphere is unloaded,
+     * and they crest close behind the escarpment and fall away over the flexural wavelength of the
+     * plate (Weissel and Karner 1989, *Flexural uplift of rift flanks due to mechanical unloading
+     * of the lithosphere during extension*, Journal of Geophysical Research 94). Earth's figure, not
+     * the planet's, as [riftWidthKm]. It was 257.8125 km, the 512 grid's 11 cell widths.
+     */
+    val riftShoulderOffsetKm: Double = 45.0,
+    /**
+     * Half-width of each shoulder about its own crest, in kilometers: 60, so a flank falls to the
+     * plain 105 km from the axis.
+     *
+     * The flexural half-wavelength of a plate 20 to 30 km thick elastically, as the rifted African
+     * plate is taken to be, is some 50 to 100 km (Weissel and Karner 1989); 60 km puts the flank's
+     * foot inside that, where the western branch's shoulders reach the plateau. It was 164.0625 km,
+     * the 512 grid's 7 cell widths.
+     */
+    val riftShoulderWidthKm: Double = 60.0,
     /**
      * Height of the rift shoulders, in normalized elevation units.
      *
@@ -1494,7 +1526,8 @@ data class SeaConfig(
      * an inlet from each of them out to the sea was tried in the hydraulic pass and reverted,
      * because a small body of water the ocean cannot reach is sometimes a landform rather than an
      * artefact: the gulfs of a flooded rift are exactly such bodies, and joining them to the ocean
-     * turns the chain back into the canal `RiftSegmentationTest` exists to break up.
+     * would draw a chain of gulfs parted by sills as one strait of constant width, the shape
+     * `RiftSegmentationTest` reads.
      *
      * Connectedness in the cut itself is the answer, and it is the only place that can tell the
      * two apart without guessing. A water region that does not touch the ocean's main body — by

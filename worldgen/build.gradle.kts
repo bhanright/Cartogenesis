@@ -250,3 +250,20 @@ tasks.register<Test>("audit") {
         isFailOnNoMatchingTests = true
     }
 }
+
+/*
+ * Record mode's second half: writes the replacements a `-Precord` test run left under every
+ * module's `build/pin-records` into the source files they name, and prints each change (file and
+ * line, old value, new value, and the test that measured it) for review. `-Preview` prints what it
+ * would change and writes nothing. The rewriter is `PinRecordRewriter` in the shared test support,
+ * run on this module's test classpath so that its own self-test exercises the same code.
+ */
+tasks.register<JavaExec>("applyPinRecords") {
+    group = "verification"
+    description = "Writes the pinned figures a -Precord test run recorded into the source, for review."
+    val jvmTestTask = tasks.named<Test>("jvmTest").get()
+    classpath = jvmTestTask.classpath
+    mainClass.set("com.cartogenesis.worldgen.PinRecordRewriterKt")
+    args(rootProject.projectDir.absolutePath)
+    if (providers.gradleProperty("review").isPresent) args("--review")
+}

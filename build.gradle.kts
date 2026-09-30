@@ -155,7 +155,25 @@ abstract class TestTimingReport : BuildService<BuildServiceParameters.None>, Aut
 val testTimingReport =
     gradle.sharedServices.registerIfAbsent("testTimingReport", TestTimingReport::class.java) {}
 
+/*
+ * Record mode for the suites' pinned figures (`PinRecords` in the shared test support): with
+ * `-Precord`, a known failure's signature, a geometry census entry or a render record that no
+ * longer holds is written to `build/pin-records/<task>` as its replacement instead of failing, and
+ * `:worldgen:applyPinRecords` writes the replacements into the source for review as a diff. The
+ * records are cleared before each task runs, so they are always one run's.
+ */
+val recordingPins = providers.gradleProperty("record").map { it != "false" }.getOrElse(false)
+
 subprojects {
+    if (recordingPins) {
+        tasks.withType<Test>().configureEach {
+            val records = layout.buildDirectory.dir("pin-records/$name").get().asFile
+            systemProperty("cartogenesis.record", "true")
+            systemProperty("cartogenesis.recordDirectory", records.absolutePath)
+            doFirst { records.deleteRecursively() }
+        }
+    }
+
     tasks.withType<Test>().matching { it.path in auditTasksInOrder }.configureEach {
         mustRunAfter(auditTasksInOrder.takeWhile { it != path })
         jvmArgs("-Djava.util.concurrent.ForkJoinPool.common.parallelism=$auditPoolThreads")

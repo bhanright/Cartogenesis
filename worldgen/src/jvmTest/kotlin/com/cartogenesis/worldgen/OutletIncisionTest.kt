@@ -109,18 +109,6 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
      */
     private val seeds = listOf(718106L, 7L, 42L, 1234L, 99L, 43L)
 
-    /**
-     * Since L1, whose rifts moved every basin and whose closed basins hold a lake in each hollow
-     * rather than one level over all of them, with the notch off only seed 718106's largest lake is
-     * over the Caspian's share of its land (0.978% against 0.249%), where on the tree before it two
-     * or more were; which of the two changes took the others under is not separated. The clause asks
-     * for two seeds that start over-large before the notch is judged on them; with one it still
-     * shows the notch taking 718106's to 0.437%. A seed scan that finds a second is the post-cut
-     * outlet chunk's (L2), which re-measures the notch (docs/DESIGN_LEDGER.md, L1).
-     */
-    private val CONTROL_OVER_LARGE_ON_ONE_SEED =
-        "L1: with the notch off only one seed of six starts with a lake over the Caspian's share"
-
     /** The seeds the sill case reads: the one that carries a level sill and the four standard. */
     private val SILL_SEEDS = listOf(718106L, 7L, 42L, 1234L, 99L)
 
@@ -274,7 +262,7 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
         val pooledDepth = depthShares.average()
         // Recorded since Fix 3b: see [NOTCH_SHORT_ON_THE_LAWS_TERRAIN].
         // Re-recorded on square cells at Q2 (docs/DESIGN_LEDGER.md, Q2). Re-recorded at L1, whose rifts are Earth's half-grabens and the same at every grid (docs/DESIGN_LEDGER.md, L1).
-        KnownFailures.expect(NOTCH_SHORT_ON_THE_LAWS_TERRAIN, "87.1% as deep as the control's") {
+        KnownFailures.expect(NOTCH_SHORT_ON_THE_LAWS_TERRAIN, "80.7% as deep as the control's") {
             if (pooledDepth >= 0.5) {
                 throw RecordedViolation(
                     "the fill still stands ${"%.1f".format(pooledDepth * 100)}% as deep over the land as the " +
@@ -494,10 +482,11 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
         // cells at Q2, where seeds 718106 and 42 keep more than half their water and a lake over the
         // Caspian's share each (docs/DESIGN_LEDGER.md, Q2). Re-recorded at L1, whose rifts and
         // pockets leave seed 42 under the Caspian with its water halved, and seed 718106's water
-        // halved, its largest lake still 1.75 times the Caspian (docs/DESIGN_LEDGER.md, L1).
+        // halved, its largest lake still 1.75 times the Caspian; at its review round 1.77, and seed
+        // 718106 and seed 43 each keep a little over half their water (docs/DESIGN_LEDGER.md, L1).
         KnownFailures.expect(
             NOTCH_SHORT_ON_THE_LAWS_TERRAIN,
-            "seed 718106's largest lake 1.75x the Caspian"
+            "seed 718106's largest lake 1.77x the Caspian; seed 718106's water 1.2115% to 0.6801%; seed 43's water 0.9092% to 0.5289%"
         ) {
             if (overCaspian.isNotEmpty() || notHalved.isNotEmpty()) {
                 val found = (overCaspian + notHalved).joinToString("; ")
@@ -508,15 +497,13 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
                 )
             }
         }
-        // Recorded at L1: see [CONTROL_OVER_LARGE_ON_ONE_SEED].
-        KnownFailures.expect(CONTROL_OVER_LARGE_ON_ONE_SEED, "1 of 6") {
-            if (overLarge < 2) {
-                throw RecordedViolation(
-                    "only $overLarge of ${seeds.size} seeds had an over-large lake to begin with, so this guard proves little",
-                    "$overLarge of ${seeds.size}"
-                )
-            }
-        }
+        // Recorded at L1, where only seed 718106 started over-large; armed again at its review round,
+        // whose rift joins are relay ramps: seed 43's largest lake starts at 0.392% of its land, over
+        // the Caspian's 0.249%, beside 718106's 0.975% (docs/DESIGN_LEDGER.md, L1).
+        assertTrue(
+            overLarge >= 2,
+            "only $overLarge of ${seeds.size} seeds had an over-large lake to begin with, so this guard proves little"
+        )
         // Collected over every seed rather than asserted inside the loop, so a run reports all six
         // figures. With `postCutOutlet = false` this reads
         // 718106 0.6244%, 99 0.6514%, 43 0.2568% — see the ledger row for H5b.

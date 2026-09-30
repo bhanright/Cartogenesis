@@ -128,20 +128,11 @@ class GridShapeTest : BorrowsSharedWorlds() {
                 misses
             )
         }
-        // Recorded at L1. The rifts are the same rifts on both grids since L1, but whether seed 42's
-        // trough, which crosses this band, stands as sea or as land holding lakes follows its sills,
-        // which each grid draws differently (docs/TODO.md, the lake-area entry), and the band's
-        // desert follows the water. The spread a change of grid alone gives is not what moved:
-        // re-measured on L1's worlds, 512 by 512 against 1,024 by 1,024, it is at most 0.025 (seed
-        // 42 at 30 to 15 degrees), under the 0.047 the bar was read off (docs/DESIGN_LEDGER.md, L1).
-        KnownFailures.expect(TROUGH_SEA_OR_LAND_MOVES_A_DESERT, "seed 42 30 to 15 degrees desert -0.050") {
-            if (misses.desert.isNotEmpty()) {
-                throw RecordedViolation(
-                    "the deserts part by more than a change of grid: ${misses.desert}",
-                    misses.desert.joinToString()
-                )
-            }
-        }
+        // Recorded at L1, where seed 42's trough, which crosses the 30 to 15 degree band, stood as
+        // sea on one grid and as land holding lakes on the other and the band's desert followed it
+        // (-0.050 against the 0.047 the bar was read off). Armed again at L1's review round, whose
+        // rift joins are relay ramps: 0.1011 against 0.0628 there (docs/DESIGN_LEDGER.md, L1).
+        assertTrue(misses.desert.isEmpty(), "the deserts part by more than a change of grid: ${misses.desert}")
         assertTrue(misses.rain.isEmpty(), "the land's rain parts by more than a change of grid: ${misses.rain}")
         assertTrue(misses.temperature.isEmpty(), "the warmth parts by more than a change of grid: ${misses.temperature}")
         // Re-recorded at Q2, whose coast reaches its 234 km on square cells: seed 99 at 75 to 60 degrees
@@ -149,7 +140,7 @@ class GridShapeTest : BorrowsSharedWorlds() {
         // world: seed 99's two bands came inside the spread, seed 1234's from +0.017 to +0.016.
         KnownFailures.expect(
             "Q1: a square cell's world carries more ice at 60 to 90 degrees than a change of grid gives",
-            "seed 1234 -75 to -90 degrees ice +0.016"
+            "seed 7 -60 to -75 degrees ice +0.021, seed 42 75 to 60 degrees ice -0.020"
         ) {
             if (misses.ice.isNotEmpty()) {
                 throw RecordedViolation(
@@ -188,9 +179,6 @@ class GridShapeTest : BorrowsSharedWorlds() {
     private companion object {
         /** The four standard seeds. */
         val SEEDS = listOf(7L, 42L, 1234L, 99L)
-
-        const val TROUGH_SEA_OR_LAND_MOVES_A_DESERT =
-            "L1: seed 42's rift trough is sea or lakes by its sills, and the band's desert follows it across the grids"
 
         /** The seed whose control moves both the deserts and the rain furthest. */
         const val CONTROL_SEED = 1234L

@@ -75,10 +75,11 @@ class EarthLikenessTest : BorrowsSharedWorlds() {
         // box count read 1.036; on the law's terrain they read 1.00 and 1.092, and once a lake falls
         // with its outlet seed 99's drylands pass and the box count reads 1.093. Re-recorded on square
         // cells at Q2, with the boxes stated in kilometers: the pooled coast passes and seed 99's
-        // humid country carries 1.04 times the semi-arid's channel (docs/DESIGN_LEDGER.md, Q2).
+        // humid country carries 1.04 times the semi-arid's channel (docs/DESIGN_LEDGER.md, Q2), and
+        // 1.05 at L1's review round, whose rift joins are relay ramps.
         KnownFailures.expect(
             LAW_SETS_EVERY_CUT,
-            "99: humid country carries 1.04 times the channel per unit of land that semi-arid country does, " +
+            "99: humid country carries 1.05 times the channel per unit of land that semi-arid country does, " +
                 "where Moglen, Eltahir & Bras (1998) have the density falling away on the wet side and so below one"
         ) {
             if (complaints.isNotEmpty()) {

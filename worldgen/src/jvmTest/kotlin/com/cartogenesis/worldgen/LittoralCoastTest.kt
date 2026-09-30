@@ -356,19 +356,15 @@ class LittoralCoastTest {
         // law's terrain), and armed at Fix 3b's review round: once a lake falls with its outlet it
         // reads 0.553 against 0.412, a gain of 1.34 (docs/DESIGN_LEDGER.md, Fix 3b). Recorded again
         // at L1, whose rifts moved every coast they reach: 0.356 against 0.280, a gain
-        // of 1.27, on seeds whose own gains run 1.15 to 1.34; which coasts lost it is not isolated
-        // (docs/DESIGN_LEDGER.md, L1).
+        // of 1.27, on seeds whose own gains run 1.15 to 1.34. Armed again at its review round, whose
+        // rift joins are relay ramps: 0.367 against 0.279, a gain of 1.32 (docs/DESIGN_LEDGER.md, L1).
         val gradedShare = graded.smoothShare
         val controlShare = control.smoothShare
-        KnownFailures.expect(GRADING_GAIN_UNDER_ITS_FLOOR, "0.356 against 0.280") {
-            if (gradedShare < controlShare * SMOOTH_SHARE_GAIN) {
-                throw RecordedViolation(
-                    ("the graded coast reads %.3f smooth against the ungraded coast's %.3f, which is not a " +
-                        "change worth the pass").format(gradedShare, controlShare),
-                    "%.3f against %.3f".format(gradedShare, controlShare)
-                )
-            }
-        }
+        assertTrue(
+            gradedShare >= controlShare * SMOOTH_SHARE_GAIN,
+            ("the graded coast reads %.3f smooth against the ungraded coast's %.3f, which is not a " +
+                "change worth the pass").format(gradedShare, controlShare)
+        )
     }
 
     /**
@@ -464,8 +460,5 @@ class LittoralCoastTest {
          * histogram's bins lose of it.
          */
         const val SMOOTH_SHARE_GAIN = 1.3
-
-        const val GRADING_GAIN_UNDER_ITS_FLOOR =
-            "L1: the graded coast reads smoother than the ungraded by less than the pass's floor on L1's coasts"
     }
 }

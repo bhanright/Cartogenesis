@@ -9,6 +9,7 @@ import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.sqrt
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
@@ -177,6 +178,56 @@ class RiftIdentityTest {
             ofCourse[ordinal] = minOf(ofCourse[ordinal] ?: along, along)
         }
         return starts
+    }
+
+    /**
+     * A stretch of rift keeps its half-grabens when another stretch of the same pair comes or goes.
+     *
+     * Seed 42's north-south rift is cut in two places, 250 km apart and more than the trough's
+     * half-width across, so it breaks into three stretches with a short one of 80 km in the middle;
+     * then the short one is taken away too. Which stretches a pair's boundary breaks into is a
+     * question of topology, a third plate pinching it here or a gap just over the joining
+     * threshold there, and it moves with the grid; so nothing about a stretch's half-grabens may
+     * hang on how many other stretches the pair has or where they rank. Every cell of the two outer
+     * stretches reads the same half-graben, depth, polarity and place along the rift either way.
+     */
+    @Test
+    fun `a stretch of rift keeps its half-grabens when another stretch of the pair comes or goes`() {
+        val config = WorldGenConfig.forRows(42L, 512)
+        val whole = PlateStage.presentRiftSegments(config)
+        val pair = 2 * PAIR_STRIDE + 7
+        val entries = whole.cell.indices.filter { whole.lowId[it] * PAIR_STRIDE + whole.highId[it] == pair }
+        val start = entries.minOf { whole.alongKm[it] } + CUT_FROM_THE_END_KM
+        fun cellsBetween(fromKm: Float, toKm: Float) =
+            entries.filter { whole.alongKm[it] in fromKm..toKm }.map { whole.cell[it] }.toSet()
+        val firstGap = cellsBetween(start, start + GAP_KM)
+        val short = cellsBetween(start + GAP_KM, start + GAP_KM + SHORT_STRETCH_KM)
+        val secondGap = cellsBetween(start + GAP_KM + SHORT_STRETCH_KM, start + 2 * GAP_KM + SHORT_STRETCH_KM)
+        val withShort = PlateStage.presentRiftSegmentsWithout(config, firstGap + secondGap)
+        val withoutShort = PlateStage.presentRiftSegmentsWithout(config, firstGap + short + secondGap)
+        fun byCell(report: PlateStage.RiftSegmentReport) =
+            report.cell.indices.filter { report.lowId[it] * PAIR_STRIDE + report.highId[it] == pair }
+                .associateBy { report.cell[it] }
+        val a = byCell(withShort)
+        val b = byCell(withoutShort)
+        val outer = entries.map { whole.cell[it] }.filter { it !in firstGap && it !in short && it !in secondGap }
+        val moved = outer.filter { cell ->
+            val x = a.getValue(cell)
+            val y = b.getValue(cell)
+            withShort.ordinal[x] != withoutShort.ordinal[y] ||
+                withShort.depthFactor[x] != withoutShort.depthFactor[y] ||
+                withShort.footwallOnLow[x] != withoutShort.footwallOnLow[y] ||
+                withShort.alongKm[x] != withoutShort.alongKm[y]
+        }
+        val stretches = listOf(withShort, withoutShort).map { report ->
+            report.cell.indices.filter { report.lowId[it] * PAIR_STRIDE + report.highId[it] == pair }.map { report.chain[it] }.toSet().size
+        }
+        println(
+            "RIFT STRETCHES seed 42 rift 2-7: %d and %d stretches with the short one and without; %d of %d outer cells read another half-graben"
+                .format(stretches[0], stretches[1], moved.size, outer.size)
+        )
+        assertEquals(listOf(3, 2), stretches, "the cuts did not make the stretches this case is about")
+        assertTrue(moved.isEmpty(), "${moved.size} of ${outer.size} cells of the other stretches read another half-graben")
     }
 
     /**
@@ -379,6 +430,13 @@ class RiftIdentityTest {
 
     private companion object {
         const val PAIR_STRIDE = 1000
+
+        /** Where the cuts begin along the rift, away from its end, and how long each gap is: more than `riftWidthKm`. */
+        const val CUT_FROM_THE_END_KM = 1_000f
+        const val GAP_KM = 250f
+
+        /** The short stretch left between the two gaps. */
+        const val SHORT_STRETCH_KM = 80f
         const val SAME_FACTOR = 1e-6f
         const val MIN_AGREEING_SHARE = 0.95
         /** A rift with fewer compared cells than this is a stub at the coarser grid. */

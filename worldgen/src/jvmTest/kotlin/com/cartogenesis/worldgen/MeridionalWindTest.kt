@@ -457,6 +457,14 @@ class MeridionalWindTest : BorrowsSharedWorlds() {
                     "%.2f%% of land with a zonal wind, %.2f%% with a slanted one"
                 ).format(RATIO, figures[0] * 100, figures[1] * 100)
         )
+        // The control: the zonal world's monsoon coast is under the bar on the same seed, so the
+        // clause is carried by the slant and not by the seed's geography (seed 9 at L1: 1.09%
+        // against 2.35%).
+        assertTrue(
+            figures[0] < MIN_SHARE,
+            "seed $MONSOON_SEED's monsoon coast covers ${"%.2f".format(figures[0] * 100)}% of land with a zonal " +
+                "wind too, so the slant is not what the clause measures"
+        )
         assertTrue(
             figures[1] >= MIN_SHARE,
             "seed $MONSOON_SEED's monsoon coast covers only ${"%.2f".format(figures[1] * 100)}% " +

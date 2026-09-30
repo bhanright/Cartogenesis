@@ -499,7 +499,9 @@ object RiverStage {
         fun leafSuppliesOf(basin: Int, pockets: LakePockets, field: FloatArray, absorbing: (Int) -> Boolean): DoubleArray {
             // The water below the basin on the routing the fill left that is the basin's own: a
             // path that leaves the basin across a level rim can turn back into it further along, and
-            // what it carries back is an inflow only for what joined it on the way.
+            // what it carries back is an inflow only for what joined it on the way. A basin in
+            // [absorbing] on that path keeps what reaches it, so the basin's own water goes no
+            // further than that basin.
             carriedTouched.clear()
             for (cell in basins[basin]) {
                 val target = routingBeforeClosing[cell]
@@ -508,6 +510,8 @@ object RiverStage {
                 var below = target
                 var steps = 0
                 while (below >= 0 && sea.isLand[below] && inBasin[below] != basin && steps++ < cellCount) {
+                    val throughBasin = inBasin[below]
+                    if (throughBasin >= 0 && absorbing(throughBasin)) break
                     if (carriedOwnMm[below] == 0.0) carriedTouched.add(below)
                     carriedOwnMm[below] += leavingMm
                     below = routingBeforeClosing[below]

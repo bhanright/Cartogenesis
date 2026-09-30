@@ -213,6 +213,60 @@ class WaterReceivedTest {
         assertEquals(1, solved.groupsSolvedTogether, "the two basins were not found feeding each other")
     }
 
+    /**
+     * A closed basin's pockets are handed the rain that reaches it, when its own water leaves it,
+     * runs into a basin that closes, and a tributary joins the path below that basin on its way
+     * back in.
+     *
+     * A: row 30, draining west off the world, but its eastern end leaves south down column 15 into
+     * B. B: row 35, both in hot desert, draining to its exit at (12,35), which runs north up column
+     * 12 back into A; a tributary along row 33 joins that path at (12,33) from the west. B is upstream of A in the
+     * basins' graph and closes first, so it keeps what A sends it, and what comes back up column 12
+     * is the column's own rain and the tributary's. A pocket's catchment takes off the basin's own
+     * water that a path carries back into it; followed on through B, which kept that water, it took
+     * A's eastern water off the tributary too, and A's pockets lost the tributary's rain.
+     */
+    @Test
+    fun `a basin's own water is not taken off a tributary below a basin that kept it`() {
+        val config = HandMadeWorlds.config()
+        fun cell(x: Int, y: Int) = HandMadeWorlds.cellAt(config, x, y)
+        val sea = HandMadeWorlds.sea(config, { x, _ -> x != 63 }) { x, _ -> if (x != 63) 0.1f else -0.1f }
+        val basinA = (10..16).map { cell(it, 30) }
+        val basinB = (10..16).map { cell(it, 35) }
+        val filled = FloatField(config.width, config.height)
+        for (index in filled.data.indices) filled.data[index] = sea.relativeElevation.data[index]
+        for (index in basinA + basinB) filled.data[index] += 0.1f
+        val receiver = IntArray(config.width * config.height) { -1 }
+        fun route(from: Int, to: Int) { receiver[from] = to }
+        // A: its west drains off the world at (10,30); its east, (15,30) and (16,30), leaves down
+        // column 15 into B.
+        for (x in 11..14) route(cell(x, 30), cell(x - 1, 30))
+        route(cell(16, 30), cell(15, 30))
+        route(cell(15, 30), cell(15, 31))
+        for (y in 31..34) route(cell(15, y), cell(15, y + 1))
+        // B drains west to (12,35), and from there north up column 12 into A at (12,30).
+        for (x in 13..16) route(cell(x, 35), cell(x - 1, 35))
+        route(cell(10, 35), cell(11, 35)); route(cell(11, 35), cell(12, 35))
+        route(cell(12, 35), cell(12, 34))
+        for (y in 34 downTo 31) route(cell(12, y), cell(12, y - 1))
+        // The tributary: row 33 from column 2 east into column 12.
+        for (x in 2..11) route(cell(x, 33), cell(x + 1, 33))
+        val climate = HandMadeWorlds.climate(config, rainMm = { _, _ -> 50f }, summerC = { _, _ -> 40f }, winterC = { _, _ -> 25f })
+
+        val solved = RiverStage.solvedBasinsOn(config, sea, climate, filled, receiver)
+        val a = solved.basins.single { cell(12, 30) in it.cells }
+        val b = solved.basins.single { cell(12, 35) in it.cells }
+        assertTrue(a.endorheic && b.endorheic, "both basins were meant to close")
+        assertTrue(solved.basins.indexOf(b) < solved.basins.indexOf(a), "B was meant to be solved and closed first")
+        val rain = climate.precipitationMm.data
+        val intoA = rainReaching(solved.routingAfterClosing, sea.isLand, rain, a.cells.toHashSet())
+        println(
+            "KEPT BELOW A's pockets handed %.0f mm-cells against %.0f reaching it once B has closed (its catchment at its exits %.0f)"
+                .format(a.pocketRainMm, intoA, a.catchmentRainMm)
+        )
+        assertEquals(intoA, a.pocketRainMm, 1e-3, "A's pockets were handed other than the rain that reaches A")
+    }
+
     /** Whether the water from [start] enters [cells] on [routing]. */
     private fun reaches(routing: IntArray, isLand: BooleanArray, start: Int, cells: Set<Int>): Boolean {
         var cell = routing[start]

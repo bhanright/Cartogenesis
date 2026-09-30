@@ -1,6 +1,7 @@
 package com.cartogenesis.worldgen
 
 import com.cartogenesis.worldgen.model.WorldGenConfig
+import com.cartogenesis.worldgen.pipeline.FlowRouting
 import com.cartogenesis.worldgen.pipeline.LakeResult
 import com.cartogenesis.worldgen.pipeline.RiverStage
 import kotlin.test.Test
@@ -75,9 +76,12 @@ class LakeBodyTest : BorrowsSharedWorlds() {
     }
 
     /**
-     * No rain is counted twice and none is lost: the rain a closed basin's pockets are handed,
-     * summed over all of them, is the rain that reaches the basin at all, the catchment at its exits
-     * on the routing the fill left.
+     * No rain is counted twice and none is lost: the rain a basin's pockets are handed, summed over
+     * all of them, is the rain that reaches the basin at all. For a basin that overflows that is its
+     * catchment at its exits on the routing the fill left; for one the balance closes it is the rain
+     * on every cell whose water ends in the basin's own sinks once every basin is closed, which is
+     * the answer where the basin's own water leaves it into a basin that keeps it and a tributary
+     * comes back (`WaterReceivedTest` lays that case out by hand).
      *
      * A pocket's catchment is read cell by cell where water enters the basin, and a path below a
      * basin that turns back into it across a level rim carries the basin's own water back with it.
@@ -94,11 +98,21 @@ class LakeBodyTest : BorrowsSharedWorlds() {
             val config = WorldGenConfig.forRows(seed, SharedWorlds.DETAIL_ROWS)
             val world = SharedWorlds.world(config)
             val solved = RiverStage.solvedBasins(config, world.sea, world.climate)
+            val rain = world.climate.precipitationMm.data
+            val reaching = FlowRouting.accumulate(
+                world.width, world.height, world.sea.isLand, world.rivers.filledElevation,
+                solved.routingAfterClosing, world.sea.landCellCount
+            ) { rain[it] }.data
             var most = 0.0
             var least = Double.MAX_VALUE
             solved.basins.forEach { basin ->
-                if (basin.catchmentRainMm <= 0f) return@forEach
-                val ratio = basin.pocketRainMm / basin.catchmentRainMm
+                val rainReaching = if (basin.endorheic) {
+                    basin.cells.filter { solved.routingAfterClosing[it] < 0 }.sumOf { reaching[it].toDouble() }
+                } else {
+                    basin.catchmentRainMm.toDouble()
+                }
+                if (rainReaching <= 0.0) return@forEach
+                val ratio = basin.pocketRainMm / rainReaching
                 most = maxOf(most, ratio)
                 least = minOf(least, ratio)
                 if (kotlin.math.abs(ratio - 1.0) > SUMMING_ORDER) {

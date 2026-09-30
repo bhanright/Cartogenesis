@@ -165,6 +165,7 @@ class ScaleFreeTest : BorrowsSharedWorlds() {
     fun `a seed holds the same standing water at every grid`() {
         val over = ArrayList<String>()
         val figures = ArrayList<String>()
+        val worse = ArrayList<String>()
         SEEDS.forEach { seed ->
             val pair = pairOf(seed)
             val atCoarsest = Lakes(worldAt(seed, 256))
@@ -198,12 +199,22 @@ class ScaleFreeTest : BorrowsSharedWorlds() {
             if (shareSpread > LAKE_AREA_FACTOR) over += "seed $seed's share"
             if (largestSpread > LAKE_AREA_FACTOR) over += "seed $seed's largest"
             figures += "seed $seed x%.2f and x%.2f".format(shareSpread, largestSpread)
+            // A worsening is a different failure from the one recorded: a spread past its record by
+            // more than the tolerance names itself in the signature, so the clause fails on it.
+            val (recordedShare, recordedLargest) = LAKE_AREA_RECORD.getValue(seed)
+            if (shareSpread > recordedShare * (1 + LAKE_AREA_RECORD_TOLERANCE)) {
+                worse += "seed $seed's share x%.2f past its record x%.2f".format(shareSpread, recordedShare)
+            }
+            if (largestSpread > recordedLargest * (1 + LAKE_AREA_RECORD_TOLERANCE)) {
+                worse += "seed $seed's largest x%.2f past its record x%.2f".format(largestSpread, recordedLargest)
+            }
         }
-        KnownFailures.expect(LAKE_AREA_FOLLOWS_THE_GRID, LAKE_AREA_RECORDED) {
+        KnownFailures.expect(LAKE_AREA_FOLLOWS_THE_GRID, LAKE_AREA_WITHIN_ITS_RECORD) {
             if (over.isNotEmpty()) {
                 throw RecordedViolation(
-                    "standing water differs across 256, 512 and 1,024 rows by more than x$LAKE_AREA_FACTOR: $figures",
-                    over.joinToString(", ")
+                    "standing water differs across 256, 512 and 1,024 rows by more than x$LAKE_AREA_FACTOR: $figures; " +
+                        "over the bar: $over",
+                    if (worse.isEmpty()) LAKE_AREA_WITHIN_ITS_RECORD else worse.joinToString("; ")
                 )
             }
         }
@@ -404,13 +415,26 @@ class ScaleFreeTest : BorrowsSharedWorlds() {
             "L1: a seed's standing water still follows the grid, pending the post-cut outlet (L2)"
 
         /**
-         * Which seeds' figures are over the bar. On the tree before L1 it read every seed's largest
-         * lake and every share but seed 7's: x1.28 and x1.67, x2.87 and x4.73, x1.79 and x2.83,
-         * x3.21 and x8.08 on seeds 7, 42, 1234 and 99; after it, every one of them: x1.96 and x5.38,
-         * x1.49 and x1.46, x2.10 and x1.50, x1.59 and x3.48 (docs/DESIGN_LEDGER.md, L1).
+         * Each seed's spreads as recorded, its lake share of land and its largest lake, across 256,
+         * 512 and 1,024 rows. On the tree before L1: x1.28 and x1.67, x2.87 and x4.73, x1.79 and
+         * x2.83, x3.21 and x8.08 on seeds 7, 42, 1234 and 99 (docs/DESIGN_LEDGER.md, L1).
          */
-        const val LAKE_AREA_RECORDED = "seed 7's share, seed 7's largest, seed 42's share, seed 42's largest, " +
-            "seed 1234's share, seed 1234's largest, seed 99's share, seed 99's largest"
+        val LAKE_AREA_RECORD: Map<Long, Pair<Double, Double>> = mapOf(
+            7L to (1.96 to 5.38),
+            42L to (1.49 to 1.46),
+            1234L to (2.10 to 1.50),
+            99L to (1.59 to 3.48)
+        )
+
+        /**
+         * How far past its record a spread may go before it is a worsening rather than the
+         * recorded failure: a twentieth, policy, over the second decimal the record is written to.
+         * A lake census moves by a quarter between two runs that route a hair differently
+         * (docs/TODO.md, the lake-area entry), so any change to the ground re-takes the record.
+         */
+        const val LAKE_AREA_RECORD_TOLERANCE = 0.05
+
+        const val LAKE_AREA_WITHIN_ITS_RECORD = "every spread within a twentieth of its record"
 
         fun configAt(seed: Long, size: Int): WorldGenConfig {
             val base = WorldGenConfig.forRows(seed, 512)

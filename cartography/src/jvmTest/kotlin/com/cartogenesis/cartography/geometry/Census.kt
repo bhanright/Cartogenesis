@@ -1,6 +1,9 @@
 package com.cartogenesis.cartography.geometry
 
 import com.cartogenesis.worldgen.LayerCapture
+import com.cartogenesis.worldgen.PinRecord
+import com.cartogenesis.worldgen.PinRecordRewriter
+import com.cartogenesis.worldgen.PinRecords
 import com.cartogenesis.worldgen.WorldGenerationEngine
 import com.cartogenesis.worldgen.generateBlocking
 import com.cartogenesis.worldgen.model.WorldGenConfig
@@ -21,16 +24,40 @@ internal class Expectations {
     val signatures = HashMap<String, Signature>()
     val insufficient = HashSet<String>()
 
+    /**
+     * Where each entry was written and how it reads, for record mode to rewrite it in place: a
+     * known failure by its key, a list of seeds too small to measure by its layer and detector.
+     */
+    val knownLines = HashMap<String, WrittenLine>()
+    val insufficientLines = HashMap<Pair<String, Detector>, MutableList<WrittenLine>>()
+
+    /** One entry as written: its file and line, its text trimmed, and the seeds it lists, if any. */
+    class WrittenLine(val site: PinRecords.SourceLine, val text: String, val seeds: List<Long> = emptyList())
+
     fun finding(layer: String, detector: Detector, name: String) {
         findings[layer to detector] = name
     }
 
     fun known(key: String, signature: String) {
         signatures[key] = Signature.parse(signature)
+        knownLines[key] = WrittenLine(PinRecords.sourceLineOutside(Expectations::class.java), knownLine(key, signature))
     }
 
     fun insufficient(layer: String, detector: Detector, vararg seeds: Long) {
         for (seed in seeds) insufficient.add(Census.key(seed, layer, detector))
+        insufficientLines.getOrPut(layer to detector) { ArrayList() }.add(
+            WrittenLine(PinRecords.sourceLineOutside(Expectations::class.java), insufficientLine(layer, detector, seeds.toList()), seeds.toList())
+        )
+    }
+
+    companion object {
+        /** A known failure's entry as [GeometryExpectations] writes it and the census prints it. */
+        fun knownLine(key: String, signature: String): String =
+            "known(${PinRecordRewriter.quoted(key)}, ${PinRecordRewriter.quoted(signature)})"
+
+        /** A list of seeds too small to measure, as [GeometryExpectations] writes it. */
+        fun insufficientLine(layer: String, detector: Detector, seeds: List<Long>): String =
+            "insufficient(${PinRecordRewriter.quoted(layer)}, Detector.${detector.name}, ${seeds.joinToString { "${it}L" }})"
     }
 }
 
@@ -154,6 +181,7 @@ internal class Census(val side: Int, worlds: Int) {
      * Every failure is collected and thrown together, so one run names all of them.
      */
     fun failures(expected: Expectations): List<String> {
+        if (PinRecords.recording) return recordedFailures(expected)
         val failed = ArrayList<String>()
         val made = HashSet<String>()
         for (world in worlds) for (reading in world.readings) {
@@ -196,11 +224,126 @@ internal class Census(val side: Int, worlds: Int) {
         return failed
     }
 
+    /**
+     * [failures] under record mode ([PinRecords]): what this census found, handed to [record] to
+     * rewrite [GeometryExpectations] with, and only what record mode will not decide returned as
+     * failures.
+     */
+    private fun recordedFailures(expected: Expectations): List<String> {
+        val failed = ArrayList<String>()
+        val found = Found(worlds.first().readings.map { it.layer })
+        for (world in worlds) for (reading in world.readings) {
+            if (reading.places > Judge.MOST_PLACES_PER_LAYER) {
+                failed.add("[${world.name} ${reading.layer}] ${reading.places} places, past the ${Judge.MOST_PLACES_PER_LAYER} the place family was sized for")
+            }
+            for (detector in Detector.entries) {
+                val key = key(world.seed, reading.layer, detector)
+                found.made.add(key)
+                val verdict = reading.verdict(detector)
+                when (verdict.outcome) {
+                    Outcome.VIOLATION -> found.violations[key] = Violation(reading.layer, detector, verdict.signature())
+                    Outcome.INSUFFICIENT -> found.unmeasured.getOrPut(reading.layer to detector) { ArrayList() }.add(world.seed)
+                    Outcome.CLEAN, Outcome.NOT_APPLICABLE -> Unit
+                }
+            }
+        }
+        return failed + record(expected, found, PinRecords.testName())
+    }
+
+    /**
+     * What one census found, for [record]: every clause it made in census order (world, then
+     * layer, then detector), each violation with its layer, and the seeds each layer and detector
+     * could not measure, in the order the census read them. [layers] is the census's layer order.
+     */
+    class Found(val layers: List<String>) {
+        val made = LinkedHashSet<String>()
+        val violations = LinkedHashMap<String, Violation>()
+        val unmeasured = LinkedHashMap<Pair<String, Detector>, MutableList<Long>>()
+    }
+
+    /** A violation the census found: its layer, its detector and its signature. */
+    class Violation(val layer: String, val detector: Detector, val signature: Signature)
+
     /** One comb at the finer grid, and what the coarser grid found where it lies. */
     class CombPairing(val comb: Int, val line: String, val groundFixed: Boolean)
 
     companion object {
         fun key(seed: Long, layer: String, detector: Detector): String = "$seed/$layer/${detector.name}"
+
+        /**
+         * Records, as changes to the lines [expected] was written on, what [found] says those lines
+         * should now read, and returns what record mode leaves to a person as failures.
+         *
+         * A known failure whose violation no longer matches its signature ([Signature.matches], so
+         * rounding in the record does not churn it) is re-taken; one whose clause is clean, or can
+         * no longer be measured, is taken off; a new violation is written after the known failure
+         * before it in census order. A list of seeds too small to measure is re-listed in census
+         * order where its seeds changed, taken off where none is left, and a new one is written
+         * after the list before it. What is not recorded: a violation on a layer and detector with
+         * no finding named, since naming a finding is a decision, and an entry naming a clause this
+         * census does not make, since which worlds a census reads is one too.
+         */
+        fun record(expected: Expectations, found: Found, test: String): List<String> {
+            val failed = ArrayList<String>()
+            fun write(operation: PinRecord.Operation, at: Expectations.WrittenLine, anchor: String, old: String, new: String) =
+                PinRecords.write(PinRecord("geometry census", operation, test, at.site.path, at.site.line, anchor, old, new))
+
+            for ((key, written) in expected.knownLines) {
+                if (key !in found.made) { failed.add("[$key] names no clause this census makes"); continue }
+                val violation = found.violations[key]
+                when {
+                    violation == null -> write(PinRecord.Operation.DELETE_LINE, written, "", written.text, "")
+                    !expected.signatures.getValue(key).matches(violation.signature) -> write(
+                        PinRecord.Operation.REPLACE_LINE, written, "", written.text,
+                        Expectations.knownLine(key, violation.signature.toString())
+                    )
+                }
+            }
+            val order = found.made.toList()
+            for ((key, violation) in found.violations) {
+                if (key in expected.knownLines) continue
+                if (expected.findings[violation.layer to violation.detector] == null) {
+                    failed.add("[$key] no finding named for ${violation.layer} and ${violation.detector.name}: name one, then record again")
+                    continue
+                }
+                val line = Expectations.knownLine(key, violation.signature.toString())
+                val place = order.indexOf(key)
+                val before = order.subList(0, place).lastOrNull { it in expected.knownLines }
+                val after = order.subList(place, order.size).firstOrNull { it in expected.knownLines }
+                when {
+                    before != null -> expected.knownLines.getValue(before).let { write(PinRecord.Operation.INSERT_AFTER, it, it.text, "", line) }
+                    after != null -> expected.knownLines.getValue(after).let { write(PinRecord.Operation.INSERT_BEFORE, it, it.text, "", line) }
+                    else -> failed.add("[$key] a new known failure and no known failure to write it beside: $line")
+                }
+            }
+
+            val pairs = found.layers.flatMap { layer -> Detector.entries.map { layer to it } }
+            for ((pair, writtenLines) in expected.insufficientLines) {
+                val written = writtenLines.singleOrNull()
+                if (written == null) { failed.add("[${pair.first}/${pair.second.name}] listed too small to measure on ${writtenLines.size} lines: re-list it by hand"); continue }
+                val strangers = written.seeds.map { key(it, pair.first, pair.second) }.filter { it !in found.made }
+                if (strangers.isNotEmpty()) { strangers.forEach { failed.add("[$it] names no clause this census makes") }; continue }
+                val seeds = found.unmeasured[pair].orEmpty()
+                when {
+                    seeds.toSet() == written.seeds.toSet() -> Unit
+                    seeds.isEmpty() -> write(PinRecord.Operation.DELETE_LINE, written, "", written.text, "")
+                    else -> write(PinRecord.Operation.REPLACE_LINE, written, "", written.text, Expectations.insufficientLine(pair.first, pair.second, seeds))
+                }
+            }
+            for ((pair, seeds) in found.unmeasured) {
+                if (pair in expected.insufficientLines) continue
+                val line = Expectations.insufficientLine(pair.first, pair.second, seeds)
+                val place = pairs.indexOf(pair)
+                val before = pairs.subList(0, place).lastOrNull { expected.insufficientLines[it]?.size == 1 }
+                val after = pairs.subList(place, pairs.size).firstOrNull { expected.insufficientLines[it]?.size == 1 }
+                when {
+                    before != null -> expected.insufficientLines.getValue(before).single().let { write(PinRecord.Operation.INSERT_AFTER, it, it.text, "", line) }
+                    after != null -> expected.insufficientLines.getValue(after).single().let { write(PinRecord.Operation.INSERT_BEFORE, it, it.text, "", line) }
+                    else -> failed.add("[${pair.first}/${pair.second.name}] newly too small to measure and no list to write it beside: $line")
+                }
+            }
+            return failed
+        }
 
         /** The layer-wide family a census of [worlds] worlds makes, over the layers [MapLayers] lists. */
         fun familySize(worlds: Int): Int = worlds * LAYERS * GeometryGuard.TESTS_PER_LAYER

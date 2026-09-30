@@ -572,7 +572,12 @@ object RiverStage {
                     val end = pockets.ownStart[pocket] + ownUnder
                     if (end - start >= minLakeCells) {
                         val surface = if (ownUnder > 0) {
-                            (pockets.groundOfLaidOut(end - 1) + minDepth).coerceAtMost(pockets.topLevel(pocket))
+                            // A minimum depth over its last wet cell, and never up to the brim: a lake
+                            // that stops short of its saddle stands below it, and within a minimum
+                            // depth of it the surface splits the difference. Held at the brim, seed
+                            // 10's dry basin drew an endorheic lake level with its own saddle.
+                            val lastWetGround = pockets.groundOfLaidOut(end - 1)
+                            minOf(lastWetGround + minDepth, (lastWetGround + pockets.topLevel(pocket)) / 2)
                         } else {
                             pockets.baseLevel(pocket)
                         }

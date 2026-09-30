@@ -352,7 +352,8 @@ class PenAndInkTest : BorrowsSharedWorlds() {
             "only ${engravedError.windows} windows qualified; the measurement says nothing"
         )
         // Armed again on square cells at the re-derived exaggeration; it ran as a known failure
-        // from Fix 3b, 31.8 to 31.9 degrees on the 512 by 512 grid (docs/DESIGN_LEDGER.md, Q4).
+        // from Fix 3b, 31.8 to 31.9 degrees on the 512 by 512 grid (docs/DESIGN_LEDGER.md, Q4). 29.6
+        // at L1, and 30.0 at its review round, where the exaggeration was re-derived to 37.25.
         assertTrue(
             engravedError.meanDegrees <= MAX_MEAN_ASPECT_ERROR_DEGREES,
             "the ink runs %.1f degrees from the aspect on average, past %.1f"

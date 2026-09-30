@@ -301,23 +301,24 @@ internal object ReliefShading {
     /**
      * The relief's vertical exaggeration times the width of the cell it is drawn on, in km: a rise
      * over a cell width of ground, in the height field's units, is drawn this over the width
-     * times steeper. 445.31 km, which is 38 on the 11.72 km square cells of a 512-row world.
+     * times steeper. 436.52 km, which is 37.25 on the 11.72 km square cells of a 512-row world.
      *
      * The exaggeration was first set by eye on the 512 by 512 grid, 24 on its 23.4 km cells (a
      * central difference over two cell widths, un-halved, times twelve), and every calibration of
      * the shading since, [HAZE] and [ORDINARY_GROUND] among them, is measured against the single
      * lamp's picture at it. On square cells the rule is the steepest exaggeration, swept in
      * quarters on the gallery world at 512 rows, at which `ReliefShadingTest`'s cone, cut to the
-     * ninth decile of the land's drawn slope, pins no bearing at the darkest factor: 38.0. It lands
-     * 2% under the single lamp's contrast of the 512 by 512 grid's maps, a deviation of 0.2090
-     * against 0.2133, which no eye tells apart; the contrast matched exactly, at 40.25, pinned the
+     * ninth decile of the land's drawn slope, pins no bearing at the darkest factor: 38.0 at Q4,
+     * 37.25 since L1's review round, whose rift joins are relay ramps (37.50 pins seven bearings).
+     * It lands 2.2% under the single lamp's contrast of the 512 by 512 grid's maps, a deviation of
+     * 0.2105 against 0.2152, which no eye tells apart; at Q4 the contrast matched exactly, at 40.25, pinned the
      * cone on 35 bearings, and held at 24 on the ground (48 on these cells) the finer cells'
      * steeper ground drew 0.2260 and pinned it on 41 (docs/DESIGN_LEDGER.md, Q4). The test holds
      * both facts. Stated over the cell's width, the same slope on the ground is drawn the same on
      * every grid. The lamps, the sky's horizon, the engraving's gradient and the shader all read
      * the one figure (docs/DESIGN_LEDGER.md, Fix 2).
      */
-    private const val EXAGGERATION_TIMES_CELL_WIDTH_KM = 38.0 * 11.71875
+    private const val EXAGGERATION_TIMES_CELL_WIDTH_KM = 37.25 * 11.71875
 
     /** How many cell widths a central difference spans: one either side of the cell. */
     private const val CENTRAL_DIFFERENCE_SPAN_CELL_WIDTHS = 2f

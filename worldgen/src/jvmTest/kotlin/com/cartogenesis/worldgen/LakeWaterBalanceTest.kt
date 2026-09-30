@@ -259,7 +259,8 @@ class LakeWaterBalanceTest : BorrowsSharedWorlds() {
             if (lake.endorheic) {
                 assertTrue(
                     lake.surfaceElevation < lake.spillElevation,
-                    "an endorheic lake's surface should stand below its spill"
+                    "an endorheic lake's surface should stand below its spill: lake ${lake.id} at " +
+                        "${lake.surfaceElevation} against ${lake.spillElevation}, ${lake.cellCount} cells"
                 )
             } else {
                 assertEquals(lake.spillElevation, lake.surfaceElevation, 0f, "a lake that spills should stand at its spill")

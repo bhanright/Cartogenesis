@@ -164,7 +164,36 @@ val testTimingReport =
  */
 val recordingPins = providers.gradleProperty("record").map { it != "false" }.getOrElse(false)
 
+/*
+ * The test tiers' world cache (`WorldDiskCache` in the shared test support): every world a test
+ * borrows from `SharedWorlds` is kept here once made, keyed by its settings and a hash of the
+ * generator's compiled classes, and read back by any later worker or run instead of being generated
+ * again. One directory for the three modules that generate worlds, since they ask for the same
+ * standard ones. Under `build/`, so it is never committed and a clean removes it.
+ *
+ * The cap is 12 GB unless `-PworldCacheGigabytes` says otherwise: the everyday tier's worlds take
+ * about 3 GB, and the rest is room for the deep tier's variants and 1,024-row worlds and a few of its
+ * 2,048-row ones (1.3 GB each) before the least recently used go. `-PworldCache=off` generates every
+ * world as before, for a run that should not trust the cache; `clearWorldCache` empties it.
+ */
+val worldCacheDirectory = layout.buildDirectory.dir("world-cache").get().asFile
+val worldCacheOn = providers.gradleProperty("worldCache").map { it != "off" }.getOrElse(true)
+val worldCacheBytes = providers.gradleProperty("worldCacheGigabytes").map { it.toLong() }.getOrElse(12L) * 1_000_000_000L
+
+tasks.register<Delete>("clearWorldCache") {
+    group = "verification"
+    description = "Deletes every world the test tiers have cached on disk."
+    delete(worldCacheDirectory)
+}
+
 subprojects {
+    if (worldCacheOn) {
+        tasks.withType<Test>().configureEach {
+            systemProperty("cartogenesis.worldCache.directory", worldCacheDirectory.absolutePath)
+            systemProperty("cartogenesis.worldCache.capacityBytes", worldCacheBytes.toString())
+        }
+    }
+
     if (recordingPins) {
         tasks.withType<Test>().configureEach {
             val records = layout.buildDirectory.dir("pin-records/$name").get().asFile

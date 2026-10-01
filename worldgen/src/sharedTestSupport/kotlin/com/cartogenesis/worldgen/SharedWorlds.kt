@@ -478,5 +478,5 @@ private val WORKER_PROCESS_ID: Long = ProcessHandle.current().pid()
  * setting moved. A world re-targeted to its grid by `atResolution` is the same config, since that
  * moves nothing but the width and the height.
  */
-private fun isPlainWorld(config: WorldGenConfig): Boolean =
+internal fun isPlainWorld(config: WorldGenConfig): Boolean =
     config == WorldGenConfig(seed = config.seed, width = config.width, height = config.height)

@@ -36,7 +36,11 @@ import kotlinx.serialization.json.Json
  * than handing it a different world. A file that cannot be read at all — cut short, or written by a
  * different layout — is deleted and the world generated again.
  *
- * The files together are held under [capacityBytes]; past it, the least recently used go first.
+ * The files together are held under [capacityBytes]. Past it the least recently used variant goes
+ * first — a seed with a setting moved, which one deep class asks for — and a standard world, a seed
+ * at its default settings that every everyday run reads, only when no variant is left: the deep tier
+ * makes far more worlds than the cache holds, and must not push out the ones the next everyday run
+ * needs.
  */
 class WorldDiskCache(
     private val directory: File,
@@ -69,7 +73,11 @@ class WorldDiskCache(
 
     /** The file [config]'s world is kept in. */
     fun fileFor(config: WorldGenConfig): File =
-        File(generatorDirectory, "seed${config.seed}-${config.width}x${config.height}-${settingsHash(config)}$SUFFIX")
+        File(
+            generatorDirectory,
+            "seed${config.seed}-${config.width}x${config.height}-" +
+                (if (isPlainWorld(config)) PLAIN else VARIANT) + "-${settingsHash(config)}$SUFFIX"
+        )
 
     private fun readIfPresent(file: File, config: WorldGenConfig): WorldMap? {
         if (!file.isFile) return null
@@ -146,7 +154,8 @@ class WorldDiskCache(
         val files = directory.walkTopDown().filter { it.isFile }.toList()
         files.filter { it.name.endsWith(TEMPORARY_SUFFIX) && now - it.lastModified() > ABANDONED_AFTER_MILLIS }
             .forEach { it.delete() }
-        val worlds = files.filter { it.name.endsWith(SUFFIX) && it.isFile }.sortedBy { it.lastModified() }
+        val worlds = files.filter { it.name.endsWith(SUFFIX) && it.isFile }
+            .sortedWith(compareBy<File>({ "-$PLAIN-" in it.name }, { it.lastModified() }))
         var total = worlds.sumOf { it.length() }
         for (oldest in worlds) {
             if (total <= capacityBytes) break
@@ -174,6 +183,8 @@ class WorldDiskCache(
         private const val LAYOUT_VERSION = 1
 
         private const val SUFFIX = ".world"
+        private const val PLAIN = "default"
+        private const val VARIANT = "variant"
         private const val LOCK_SUFFIX = ".lock"
         private const val TEMPORARY_SUFFIX = ".partial"
 

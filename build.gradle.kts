@@ -171,14 +171,15 @@ val recordingPins = providers.gradleProperty("record").map { it != "false" }.get
  * again. One directory for the three modules that generate worlds, since they ask for the same
  * standard ones. Under `build/`, so it is never committed and a clean removes it.
  *
- * The cap is 12 GB unless `-PworldCacheGigabytes` says otherwise: the everyday tier's worlds take
- * about 3 GB, and the rest is room for the deep tier's variants and 1,024-row worlds and a few of its
- * 2,048-row ones (1.3 GB each) before the least recently used go. `-PworldCache=off` generates every
+ * The cap is 20 GB unless `-PworldCacheGigabytes` says otherwise. Measured on the tiers at T1: the
+ * everyday tier's 13 standard worlds take 0.75 GB, and the deep tier's 194 more 16.2 GB, 6.8 GB of
+ * that its 21 worlds of 1,024 rows. Past the cap the least recently used variants go first and the
+ * standard worlds last, so a deep run never costs the next everyday run its worlds. `-PworldCache=off` generates every
  * world as before, for a run that should not trust the cache; `clearWorldCache` empties it.
  */
 val worldCacheDirectory = layout.buildDirectory.dir("world-cache").get().asFile
 val worldCacheOn = providers.gradleProperty("worldCache").map { it != "off" }.getOrElse(true)
-val worldCacheBytes = providers.gradleProperty("worldCacheGigabytes").map { it.toLong() }.getOrElse(12L) * 1_000_000_000L
+val worldCacheBytes = providers.gradleProperty("worldCacheGigabytes").map { it.toLong() }.getOrElse(20L) * 1_000_000_000L
 
 /*
  * The deep tier's stages, and what each one reaches downstream (docs/PIPELINE.md). The everyday tier

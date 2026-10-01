@@ -134,7 +134,8 @@ class WorldDiskCacheTest {
         val cache = cache()
 
         assertTrue(cache.fileFor(variant) != cache.fileFor(smallConfig))
-        assertTrue(cache.fileFor(smallConfig).name.startsWith("seed42-256x128-"), cache.fileFor(smallConfig).name)
+        assertTrue(cache.fileFor(variant).name.startsWith("seed42-256x128-variant-"), cache.fileFor(variant).name)
+        assertTrue(cache.fileFor(smallConfig).name.startsWith("seed42-256x128-default-"), cache.fileFor(smallConfig).name)
     }
 
     @Test
@@ -153,6 +154,24 @@ class WorldDiskCacheTest {
 
         val kept = seeds.filter { roomForTwo.fileFor(smallConfig.copy(seed = it)).isFile }
         assertEquals(listOf(2L, 3L), kept)
+    }
+
+    @Test
+    fun `past its capacity a variant goes before a standard world, however recently it was used`() {
+        val probe = cache().also { it.obtain(smallConfig) { ReachableState.deepCopy(small) } }.fileFor(smallConfig)
+        val oneWorld = probe.length()
+        probe.delete()
+        val roomForTwo = cache(capacity = oneWorld * 5 / 2)
+        val standard = smallConfig.copy(seed = 1L)
+        val variants = listOf(smallConfig.copy(seed = 2L, facetRouting = false), smallConfig.copy(seed = 3L, facetRouting = false))
+        for ((age, config) in (listOf(standard) + variants).withIndex()) {
+            roomForTwo.obtain(config) { ReachableState.deepCopy(small) }
+            roomForTwo.fileFor(config).setLastModified(System.currentTimeMillis() - (3 - age) * 60_000L)
+        }
+
+        assertTrue(roomForTwo.fileFor(standard).isFile, "the standard world, the oldest, was let go")
+        assertFalse(roomForTwo.fileFor(variants[0]).isFile, "the older variant was kept")
+        assertTrue(roomForTwo.fileFor(variants[1]).isFile, "the variant just stored was let go")
     }
 
     private fun cache(fingerprint: String = "generator-under-test", capacity: Long = Long.MAX_VALUE) =

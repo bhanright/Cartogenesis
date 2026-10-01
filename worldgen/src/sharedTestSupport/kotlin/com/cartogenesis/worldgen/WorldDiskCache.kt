@@ -79,6 +79,26 @@ class WorldDiskCache(
                 (if (isPlainWorld(config)) PLAIN else VARIANT) + "-${settingsHash(config)}$SUFFIX"
         )
 
+    /**
+     * The digests stored beside [config]'s world, taken from it fresh off the generator, or null if
+     * the cache holds no readable copy. Reads the header only.
+     */
+    fun storedDigests(config: WorldGenConfig): Map<String, Long>? {
+        val file = fileFor(config)
+        if (!file.isFile) return null
+        return try {
+            DataInputStream(BufferedInputStream(file.inputStream(), BUFFER_BYTES)).use { input ->
+                if (input.readLong() != MAGIC || input.readInt() != LAYOUT_VERSION) return null
+                input.skipNBytes(input.readInt().toLong())
+                LinkedHashMap<String, Long>().also { digests ->
+                    repeat(input.readInt()) { digests[input.readUTF()] = input.readLong() }
+                }
+            }
+        } catch (unreadable: IOException) {
+            null
+        }
+    }
+
     private fun readIfPresent(file: File, config: WorldGenConfig): WorldMap? {
         if (!file.isFile) return null
         val stored = try {

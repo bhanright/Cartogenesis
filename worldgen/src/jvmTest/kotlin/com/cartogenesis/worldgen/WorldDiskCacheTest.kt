@@ -62,6 +62,51 @@ class WorldDiskCacheTest {
         assertEquals(fresh.config, read.world.config)
     }
 
+    /**
+     * A cached world behaves as the fresh one does when the engine is handed it as `previous`: each
+     * stage it may reuse is reused or rebuilt alike, the world made from it is the same, and nothing
+     * the engine does writes into the world it was given. The engine decides reuse by identity
+     * between results and by equality between settings, so a copy that held its settings or its
+     * results in any other shape would show here; and a stage that wrote into a result it reuses
+     * would write into a lent world.
+     */
+    @Test
+    fun `the engine reuses a cached world as it reuses a fresh one, and writes into neither`() {
+        val fresh = WorldGenerationEngine.generateBlocking(smallConfig)
+        // The fresh world itself is stored, not a deep copy of it: the copy makes a fresh list of
+        // Kotlin's one empty list, which the file keeps as that one instance, and would show here.
+        cache().obtain(smallConfig) { fresh }
+        val cached = cache().obtain(smallConfig) { fail("the world was on disk and was generated instead") }.world
+        val freshBefore = ReachableState.digestsByBranch(fresh)
+        val cachedBefore = ReachableState.digestsByBranch(cached)
+        // One setting moved in each section a late stage reads, and one that every stage reads.
+        val variants = listOf(
+            smallConfig.copy(seaLevel = 0.55f),
+            smallConfig.copy(climate = smallConfig.climate.copy(pressureWinds = false)),
+            smallConfig.copy(rivers = smallConfig.rivers.copy(coverRaisesChannelHead = false)),
+            smallConfig.copy(lakes = smallConfig.lakes.copy(evaporationScale = 0.5f)),
+            smallConfig.copy(erosion = smallConfig.erosion.copy(deltaLobe = false))
+        )
+
+        for (variant in variants) {
+            val fromFresh = WorldGenerationEngine.generateBlocking(variant, previous = fresh)
+            val fromCached = WorldGenerationEngine.generateBlocking(variant, previous = cached)
+
+            assertEquals(
+                ReachableState.digestsByBranch(fromFresh), ReachableState.digestsByBranch(fromCached),
+                "the world made from the cached one differs from the one made from the fresh one"
+            )
+            val stagesShared = { made: WorldMap, from: WorldMap ->
+                listOf(made.terrain === from.terrain, made.plates === from.plates, made.erosion === from.erosion,
+                    made.sea === from.sea, made.ocean === from.ocean, made.climate === from.climate,
+                    made.rivers === from.rivers, made.nations === from.nations)
+            }
+            assertEquals(stagesShared(fromFresh, fresh), stagesShared(fromCached, cached), "reused differently")
+        }
+        assertEquals(freshBefore, ReachableState.digestsByBranch(fresh), "the engine wrote into the fresh world")
+        assertEquals(cachedBefore, ReachableState.digestsByBranch(cached), "the engine wrote into the cached world")
+    }
+
     @Test
     fun `a file whose contents changed on disk fails the read rather than lending a different world`() {
         val stored = cache().also { it.obtain(smallConfig) { ReachableState.deepCopy(small) } }.fileFor(smallConfig)

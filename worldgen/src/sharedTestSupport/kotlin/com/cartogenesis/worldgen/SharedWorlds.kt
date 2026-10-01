@@ -17,6 +17,10 @@ import org.junit.runners.model.Statement
  * function of its [WorldGenConfig] when it is generated fresh on the processor with nobody watching
  * its progress, so a test that asks for one of those can be handed the one already made.
  *
+ * Beneath the worlds a worker holds is [WorldDiskCache], which the build points at a directory under
+ * `build/`: a world not held here is read from there if any worker of this run or of an earlier one
+ * made it with the same generator, and stored there when it is made.
+ *
  * What is lent is only that: [world] takes a config and nothing else. A test whose subject is
  * generation itself — determinism, reuse through `previous`, an accelerator, stopping, progress,
  * timing — calls [WorldGenerationEngine] directly, because a cached answer would make its comparison
@@ -90,7 +94,8 @@ object SharedWorlds {
     internal val lender = WorldLender(
         generate = { config -> WorldGenerationEngine.generateBlocking(config) },
         retainedArrayBytes = RETAINED_ARRAY_BYTES,
-        largestRetainedCells = LARGEST_RETAINED_CELLS
+        largestRetainedCells = LARGEST_RETAINED_CELLS,
+        diskCache = WorldDiskCache.fromSystemProperties()
     )
 
     /**
@@ -220,7 +225,8 @@ private fun changedBranches(digests: Map<String, Long>, world: WorldMap): List<S
 class WorldLender(
     private val generate: (WorldGenConfig) -> WorldMap,
     private val retainedArrayBytes: Long,
-    private val largestRetainedCells: Int
+    private val largestRetainedCells: Int,
+    private val diskCache: WorldDiskCache? = null
 ) {
     private class Loan(val config: WorldGenConfig, val world: WorldMap) {
         val guard = WorldGuard(world)
@@ -250,6 +256,26 @@ class WorldLender(
     /** How many worlds this lender has generated, retained or not. */
     var generated = 0
         private set
+
+    /** How many worlds this lender has read from [diskCache] instead of generating them. */
+    var readFromDisk = 0
+        private set
+
+    /**
+     * The world [config] makes, from the disk cache when there is one and it holds the world, and
+     * what to call how it was made in the report: "generated" or "read from the disk cache".
+     */
+    private fun make(config: WorldGenConfig): Pair<WorldMap, String> {
+        val obtained = diskCache?.obtain(config, generate)
+            ?: WorldDiskCache.Obtained(generate(config), readFromDisk = false)
+        return if (obtained.readFromDisk) {
+            readFromDisk++
+            obtained.world to "read from the disk cache"
+        } else {
+            generated++
+            obtained.world to "generated"
+        }
+    }
 
     @Synchronized
     fun beginTest(testClass: String, borrower: String) {
@@ -308,18 +334,18 @@ class WorldLender(
         val started = System.nanoTime()
         val borrower = activeBorrower
         if (borrower == null) {
-            generated++
-            return generate(config).also {
-                report("generated, not shared: no SharedWorlds check was running", config, "caller", started)
-            }
+            val (world, how) = make(config)
+            report("$how, not shared: no SharedWorlds check was running", config, "caller", started)
+            return world
         }
         val testClass = activeClass!!
         if (config.width.toLong() * config.height > largestRetainedCells) {
             // The generation about to run is the largest thing a worker does, so the variants make
             // way for it first; the plain worlds stay for the classes that come after.
             loans.values.filter { !it.plain }.forEach { dropToMakeRoom(it, borrower) }
-            generated++
-            return generate(config).also { report("generated, too large to keep", config, borrower, started) }
+            val (world, how) = make(config)
+            report("$how, too large to keep", config, borrower, started)
+            return world
         }
         val existing = loans[config]
         val loan = if (existing != null) {
@@ -331,10 +357,10 @@ class WorldLender(
             report("checked and lent again", config, borrower, started)
             existing
         } else {
-            generated++
-            Loan(config, generate(config)).also {
+            val (world, how) = make(config)
+            Loan(config, world).also {
                 admit(it, borrower)
-                report("generated", config, borrower, started)
+                report(how, config, borrower, started)
             }
         }
         loan.lastBorrower = borrower
@@ -452,5 +478,5 @@ private val WORKER_PROCESS_ID: Long = ProcessHandle.current().pid()
  * setting moved. A world re-targeted to its grid by `atResolution` is the same config, since that
  * moves nothing but the width and the height.
  */
-private fun isPlainWorld(config: WorldGenConfig): Boolean =
+internal fun isPlainWorld(config: WorldGenConfig): Boolean =
     config == WorldGenConfig(seed = config.seed, width = config.width, height = config.height)

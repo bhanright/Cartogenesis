@@ -71,3 +71,37 @@ the render records (`RecordedRenders.kt`), the geometry census (`GeometryExpecta
 known failures' signatures. Run the affected tests with `-Precord`, then
 `./gradlew :worldgen:applyPinRecords`, and review the diff; see `PinRecords.kt` in
 `worldgen/src/sharedTestSupport`.
+
+## Which deep tests a change calls for
+
+Every run of `jvmTest` is the everyday tier: standard worlds only (default settings, 512 rows or
+fewer, one grid per seed). The deep tier — each class's own variants for an on/off control, grid
+comparisons, worlds of 1,024 rows or more — runs with `deepTest`, by stage:
+
+    ./gradlew :worldgen:deepTest :cartography:deepTest :desktop:deepTest -Pstages=<stages>
+
+`-Pstages` takes the stages below, and adds every stage each reaches by the table above and the
+loops (climate and ocean reach back to erosion and the sea level), with `engine` and `drawing`
+always. Without it, every deep class runs. What to name, by where the change is:
+
+| A change to | `-Pstages=` |
+|---|---|
+| `TerrainStage.kt`, `noise/`, `math/` (shared by most stages), `concurrent/` | `terrain` (reaches every stage) |
+| `PlateStage.kt`, `Isostasy.kt` (also solved in erosion and glaciation) | `plates` |
+| `ErosionStage.kt`, `HydraulicErosion.kt`, `DeltaFan.kt`, `GroundSteps.kt`, `Runoff.kt` | `erosion` |
+| Routing: `FlowRouting.kt`, `FlatRouting.kt`, `facetRouting`, `flatPotential` | `erosion` (reaches the sea level, the ice and the rivers) |
+| `SeaLevelStage.kt`, `LittoralGrading.kt`, `DrownedValleys.kt`, `WaterTopology.kt`, `GlaciationStage.kt`, `IceSheet.kt` | `sea` |
+| `OceanStage.kt`, `OceanCirculation.kt`, `OceanHeat.kt`, `SurfaceBelts.kt` | `ocean` (reaches back to erosion through the climate feed) |
+| `ClimateStage.kt`, `EnergyBalance.kt`, `PressureWind.kt`, `MoistureBudget.kt`, `SnowBalance.kt`, `VegetationDensity.kt` | `climate` (reaches back to erosion and the ice) |
+| `RiverStage.kt`, `ChannelInitiation.kt`, `LakeWaterBalance.kt`, `RiverWidth.kt` | `rivers` |
+| `NationStage.kt`, `BasinPartition.kt`, `BasinRealms.kt`, `Atlas.kt`, `NameForge.kt` | `realms` (`NameForge` is read by peoples and landmarks too: add `peoples`) |
+| `CultureStage.kt` | `peoples` |
+| `LandmarkStage.kt` | `landmarks` |
+| `WorldGenerationEngine.kt`, `PartialWorld.kt`, the stage guards | `engine` |
+| A default in `WorldGenConfig.kt` | the stage whose section it is: a default moves the standard worlds, so the everyday tier sees it too |
+| `:cartography`'s drawing, `:desktop`'s rendering and export | `drawing` |
+| `:desktop`'s erosion or ocean accelerator on the card | `erosion` or `ocean` (their deep classes skip without a card) |
+| The shared test support (`SharedWorlds`, `WorldFile`, `WorldDiskCache`) | none: `WorldDiskCacheTest` is everyday |
+
+Any change to the generator's code also empties the world cache for the next run (its key is a hash
+of the compiled classes), so the first everyday run after one generates its standard worlds afresh.

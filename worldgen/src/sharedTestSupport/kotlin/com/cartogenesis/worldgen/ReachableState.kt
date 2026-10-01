@@ -252,7 +252,7 @@ internal object ReachableState {
     }
 
     /** Values rather than containers: nothing a test can write to lives inside one. */
-    private fun isValue(value: Any): Boolean =
+    internal fun isValue(value: Any): Boolean =
         value is String || value is Number && value.javaClass.name.startsWith("java.lang.") ||
             value is Boolean || value is Char || value is Enum<*> || value is Unit || value is Class<*>
 
@@ -271,10 +271,10 @@ internal object ReachableState {
         else -> value.toString().hashCode().toLong()
     }
 
-    private fun isOwnOrKotlinClass(type: Class<*>): Boolean =
+    internal fun isOwnOrKotlinClass(type: Class<*>): Boolean =
         type.name.startsWith("com.cartogenesis.") || type.name.startsWith("kotlin.")
 
-    private fun requireReadable(type: Class<*>, path: String) {
+    internal fun requireReadable(type: Class<*>, path: String) {
         check(isOwnOrKotlinClass(type)) {
             "cannot read a ${type.name} at '$path': ReachableState reads this project's classes, " +
                 "Kotlin's, arrays, collections and values. Teach it this type on purpose rather " +
@@ -284,7 +284,7 @@ internal object ReachableState {
 
     private val fieldsByClass = java.util.concurrent.ConcurrentHashMap<Class<*>, List<Field>>()
 
-    private fun instanceFieldsOf(type: Class<*>): List<Field> = fieldsByClass.getOrPut(type) {
+    internal fun instanceFieldsOf(type: Class<*>): List<Field> = fieldsByClass.getOrPut(type) {
         generateSequence(type) { it.superclass }
             .takeWhile { it != Any::class.java }
             .flatMap { it.declaredFields.asSequence() }
@@ -299,7 +299,7 @@ internal object ReachableState {
         field.get(null) as sun.misc.Unsafe
     }
 
-    private fun allocateWithoutConstructor(type: Class<*>): Any = unsafe.allocateInstance(type)
+    internal fun allocateWithoutConstructor(type: Class<*>): Any = unsafe.allocateInstance(type)
 
     private fun step(digest: Long, bits: Long): Long {
         val mixed = (digest xor bits) * MULTIPLIER

@@ -104,7 +104,7 @@ val auditOnlyClasses = listOf(
  * project's Wasm tasks for the same project-lock reason `:worldgen`'s build script gives.
  */
 /*
- * T1 (test tiers): this module's deep tier, by the stage each entry guards; see the root build
+ * T1 (the world cache and the deep tier, 2026-10-01): this module's deep tier, by the stage each entry guards; see the root build
  * script for the tiers and `:worldgen`'s for how the entries are read. Each compares one seed on two
  * grids, one of them the old square grid or 1,024 rows; the comparison's other checks stay.
  */

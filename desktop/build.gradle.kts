@@ -155,7 +155,7 @@ val siteAssemblyClass = "com.cartogenesis.desktop.SiteAssemblyTest"
  * driving it at once from separate workers is a combination nothing has tested.
  */
 /*
- * T1 (test tiers): this module's deep tier, by the stage each entry guards; see the root build
+ * T1 (the world cache and the deep tier, 2026-10-01): this module's deep tier, by the stage each entry guards; see the root build
  * script for the tiers and `:worldgen`'s for how the entries are read. The graphics-card classes
  * compare a world made on the card with one made without it, a setting moved, and skip on a machine
  * with no card; the benchmarks skip unless asked for.

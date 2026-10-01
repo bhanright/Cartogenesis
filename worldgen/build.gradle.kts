@@ -206,7 +206,7 @@ val auditOnlyClasses = listOf(
 )
 
 /*
- * T1 (test tiers): the deep tier, by the stage each entry guards (see the root build script for what
+ * T1 (the world cache and the deep tier, 2026-10-01): the deep tier, by the stage each entry guards (see the root build script for what
  * the tiers are and how `-Pstages` selects). Every class here builds worlds the everyday tier does
  * not: its own variant with one setting moved, for the on/off control that shows a feature causes
  * its effect; the same seed on several grids; or a world of 1,024 rows or more. Each reads exactly

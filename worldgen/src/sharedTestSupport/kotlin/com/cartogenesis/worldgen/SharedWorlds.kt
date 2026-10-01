@@ -228,7 +228,7 @@ class WorldLender(
     private val largestRetainedCells: Int,
     private val diskCache: WorldDiskCache? = null
 ) {
-    private class Loan(val config: WorldGenConfig, val world: WorldMap) {
+    private class Loan(val config: WorldGenConfig, val world: WorldMap, val origin: String) {
         val guard = WorldGuard(world)
         val arrayBytes: Long = ReachableState.arrayBytes(world)
         val plain: Boolean = isPlainWorld(config)
@@ -358,7 +358,7 @@ class WorldLender(
             existing
         } else {
             val (world, how) = make(config)
-            Loan(config, world).also {
+            Loan(config, world, how).also {
                 admit(it, borrower)
                 report(how, config, borrower, started)
             }
@@ -435,7 +435,22 @@ class WorldLender(
         val changed = loan.guard.changedBranches()
         if (changed.isEmpty()) return
         forget(loan)
-        throw AssertionError("${message(changed)} (checked $`when`)")
+        throw AssertionError("${message(changed)} (checked $`when`; ${provenance(loan)})")
+    }
+
+    /**
+     * Where a world that changed came from, and what the disk cache holds for it, so that a write
+     * found by the guard says at once whether the cache could have had a hand in it: the world was
+     * generated in this worker or read from a file, and the file's digests, taken from the world
+     * fresh off the generator, agree with the world as it was lent or do not.
+     */
+    private fun provenance(loan: Loan): String {
+        val stored = diskCache?.storedDigests(loan.config)
+            ?: return "the world was ${loan.origin} in worker $WORKER_PROCESS_ID; the disk cache holds no copy"
+        val lentAsStored = stored == loan.guard.digests
+        return "the world was ${loan.origin} in worker $WORKER_PROCESS_ID; the disk cache's copy " +
+            (if (lentAsStored) "matches the world as it was lent" else "differs from the world as it was lent in " +
+                (stored.keys + loan.guard.digests.keys).filter { stored[it] != loan.guard.digests[it] }.joinToString())
     }
 
     /**

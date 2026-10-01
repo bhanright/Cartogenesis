@@ -103,10 +103,22 @@ val auditOnlyClasses = listOf(
  * The per-merge suite's heap and pool are the root build script's budget, and it waits for this
  * project's Wasm tasks for the same project-lock reason `:worldgen`'s build script gives.
  */
-tasks.named<Test>("jvmTest") {
-    filter {
-        auditOnlyClasses.forEach { excludeTestsMatching(it) }
-    }
+/*
+ * T1 (test tiers): this module's deep tier, by the stage each entry guards; see the root build
+ * script for the tiers and `:worldgen`'s for how the entries are read. Each compares one seed on two
+ * grids, one of them the old square grid or 1,024 rows; the comparison's other checks stay.
+ */
+val deepClassesByStage: Map<String, List<String>> = mapOf(
+    "drawing" to listOf(
+        "com.cartogenesis.cartography.RasterMarkWidthTest",
+        "com.cartogenesis.cartography.ReliefShadingTest.the exaggeration is the steepest that pins no face of the cone, and keeps the maps' contrast",
+        "com.cartogenesis.cartography.RiverSelectionTest.one pane draws the same density from a 512 world and a 1024 world"
+    )
+)
+val deepClasses = deepClassesByStage.values.flatten()
+
+/** The per-merge tier's share of the machine, which the deep tier takes too. */
+fun Test.withPerMergeBudget() {
     val budget = rootProject.extra
     maxHeapSize = budget["cartographyTestHeap"] as String
     val processors = budget["lightTestProcessors"] as Int
@@ -115,6 +127,32 @@ tasks.named<Test>("jvmTest") {
         "-Djava.util.concurrent.ForkJoinPool.common.parallelism=$processors"
     )
     mustRunAfter(tasks.matching { it.name.contains("WasmJs", ignoreCase = true) && !it.name.endsWith("Test") })
+}
+
+tasks.named<Test>("jvmTest") {
+    filter {
+        auditOnlyClasses.forEach { excludeTestsMatching(it) }
+        deepClasses.forEach { excludeTestsMatching(it) }
+    }
+    withPerMergeBudget()
+}
+
+tasks.register<Test>("deepTest") {
+    group = "verification"
+    description = "Runs this module's deep tier: the grid comparisons excluded from jvmTest."
+    val jvmTestTask = tasks.named<Test>("jvmTest").get()
+    testClassesDirs = jvmTestTask.testClassesDirs
+    classpath = jvmTestTask.classpath
+    @Suppress("UNCHECKED_CAST")
+    val stages = rootProject.extra["deepStages"] as Set<String>
+    filter {
+        val selected = deepClassesByStage.filterKeys { it in stages }.values.flatten()
+        // An empty include list would include everything.
+        selected.ifEmpty { listOf("com.cartogenesis.NoDeepClassInTheStagesAsked") }.forEach { includeTestsMatching(it) }
+        auditOnlyClasses.forEach { excludeTestsMatching(it) }
+        isFailOnNoMatchingTests = !(rootProject.extra["deepStagesLimited"] as Boolean)
+    }
+    withPerMergeBudget()
 }
 
 tasks.register<Test>("audit") {

@@ -180,6 +180,55 @@ val worldCacheDirectory = layout.buildDirectory.dir("world-cache").get().asFile
 val worldCacheOn = providers.gradleProperty("worldCache").map { it != "off" }.getOrElse(true)
 val worldCacheBytes = providers.gradleProperty("worldCacheGigabytes").map { it.toLong() }.getOrElse(12L) * 1_000_000_000L
 
+/*
+ * The deep tier's stages, and what each one reaches downstream (docs/PIPELINE.md). The everyday tier
+ * (`jvmTest`, and `:desktop:test`) reads only standard worlds: default settings, at 512 rows or
+ * fewer, one grid per seed. The deep tier (`deepTest` in `:worldgen`, `:cartography` and
+ * `:desktop`) holds the classes, and the methods of classes that mix the two, that build their own
+ * variants for an on/off control, compare grids, or build worlds of 1,024 rows or more; each
+ * module's build script lists them by the stage they guard.
+ *
+ * `-Pstages=climate,ocean` runs the deep classes of those stages and of every stage they reach, so
+ * a change is followed as far as it can move a world. The reach includes the pipeline's loops: the
+ * climate runs inside erosion (the climate feed, over a still ocean) and inside the sea level (the
+ * ice's snow balance), so a change to the climate or the ocean reaches back to erosion and on down.
+ * `engine` (reuse, stopping, the whole pipeline at several grids) and `drawing` read every stage's
+ * results, so every selection reaches them. Without `-Pstages`, every deep class runs.
+ */
+val pipelineReach: Map<String, List<String>> = mapOf(
+    "terrain" to listOf("plates"),
+    "plates" to listOf("erosion"),
+    "erosion" to listOf("sea"),
+    "sea" to listOf("ocean", "climate", "rivers"),
+    "ocean" to listOf("climate", "erosion"),
+    "climate" to listOf("rivers", "realms", "peoples", "landmarks", "erosion", "sea"),
+    "rivers" to listOf("realms", "peoples", "landmarks"),
+    "realms" to listOf("landmarks"),
+    "peoples" to emptyList(),
+    "landmarks" to emptyList(),
+    "engine" to emptyList(),
+    "drawing" to emptyList()
+)
+
+val deepStagesAsked: Set<String>? = providers.gradleProperty("stages").orNull?.let { asked ->
+    val named = asked.split(',').map { it.trim().lowercase() }.filter { it.isNotEmpty() }
+    val unknown = named.filter { it !in pipelineReach }
+    require(unknown.isEmpty()) {
+        "-Pstages names ${unknown.joinToString()}, which is no stage; the stages are ${pipelineReach.keys.joinToString()}"
+    }
+    val reached = LinkedHashSet<String>()
+    val waiting = ArrayDeque(named)
+    while (waiting.isNotEmpty()) {
+        val stage = waiting.removeFirst()
+        if (reached.add(stage)) waiting.addAll(pipelineReach.getValue(stage))
+    }
+    reached + setOf("engine", "drawing")
+}
+
+/** The stages whose deep classes this build runs: those `-Pstages` names and what they reach, or all. */
+extra["deepStages"] = deepStagesAsked ?: pipelineReach.keys
+extra["deepStagesLimited"] = deepStagesAsked != null
+
 tasks.register<Delete>("clearWorldCache") {
     group = "verification"
     description = "Deletes every world the test tiers have cached on disk."

@@ -206,6 +206,100 @@ val auditOnlyClasses = listOf(
 )
 
 /*
+ * T1 (test tiers): the deep tier, by the stage each entry guards (see the root build script for what
+ * the tiers are and how `-Pstages` selects). Every class here builds worlds the everyday tier does
+ * not: its own variant with one setting moved, for the on/off control that shows a feature causes
+ * its effect; the same seed on several grids; or a world of 1,024 rows or more. Each reads exactly
+ * the worlds it read in the per-merge tier before; only the task it runs in moved.
+ *
+ * A class name runs the whole class. A class name and a method name is a control inside a class
+ * whose other cases read standard worlds and stay in `jvmTest`: Gradle's filter matches it the same
+ * way on both sides, as the audit tier's method entries do.
+ */
+val deepClassesByStage: Map<String, List<String>> = mapOf(
+    "plates" to listOf(
+        "com.cartogenesis.worldgen.BoundaryPairTest",
+        "com.cartogenesis.worldgen.IsostasyTest",
+        "com.cartogenesis.worldgen.TectonicGroundTest",
+        "com.cartogenesis.worldgen.GroundTextureTest.a belt's flank is dissected, and is a plane at S1's critical slope",
+        "com.cartogenesis.worldgen.GroundTextureTest.the ground's texture follows its relief",
+        "com.cartogenesis.worldgen.GroundTextureTest.a continent drowns at its rim",
+        "com.cartogenesis.worldgen.RiftSegmentationTest.the unsegmented rift fails every one of those",
+        "com.cartogenesis.worldgen.TectonicHistoryTest.zero epochs is read as one, and a second epoch changes the ground",
+        "com.cartogenesis.worldgen.TectonicHistoryTest.an old belt stands far from any present boundary",
+        "com.cartogenesis.worldgen.TectonicHistoryTest.the guard finds nothing inland when the plates never moved",
+        "com.cartogenesis.worldgen.TectonicHistoryTest.an old belt is lower and broader than a present one"
+    ),
+    "erosion" to listOf(
+        "com.cartogenesis.worldgen.DeltaMouthTest",
+        "com.cartogenesis.worldgen.ReceiverClampTest",
+        "com.cartogenesis.worldgen.RibbonLandTest",
+        "com.cartogenesis.worldgen.ValleyIncisionTest",
+        "com.cartogenesis.worldgen.ClimateFedErosionTest.the wet flank of a range is cut harder than the dry one",
+        "com.cartogenesis.worldgen.ClimateFedErosionTest.report what the rain leaves on a range after twelve rounds",
+        "com.cartogenesis.worldgen.ClimateFedErosionTest.dissection follows the rainfall",
+        "com.cartogenesis.worldgen.ClimateFedErosionTest.cover on the ground holds the incision back",
+        "com.cartogenesis.worldgen.DeltaOutlineTest.which mechanism makes which shape",
+        "com.cartogenesis.worldgen.DeltaOutlineTest.lobe rims in a world",
+        "com.cartogenesis.worldgen.DepositionTest.river mouths gain land, and do not without deposition",
+        "com.cartogenesis.worldgen.DepositionTest.deposition off is deposition absent, and its knobs cannot leak",
+        "com.cartogenesis.worldgen.ErosionSkipTest.report what skipping settled ground saves"
+    ),
+    "sea" to listOf(
+        "com.cartogenesis.worldgen.GlacialBasinShapeTest",
+        "com.cartogenesis.worldgen.GlaciationCombTest",
+        "com.cartogenesis.worldgen.GlaciationLatticeTest",
+        "com.cartogenesis.worldgen.GlaciationTest",
+        "com.cartogenesis.worldgen.IceAcceleratorSwitchTest",
+        "com.cartogenesis.worldgen.SeaLevelHistoryTest",
+        "com.cartogenesis.worldgen.ContinentalShelfTest.the near-coast share fails without the shelf",
+        "com.cartogenesis.worldgen.ContinentalShelfTest.the shelf never touches land",
+        "com.cartogenesis.worldgen.IceSheetTest.the ice flows out from its dome and its scour follows",
+        "com.cartogenesis.worldgen.IceSheetTest.the sheet feeds its outlets, and what they cut is reported",
+        "com.cartogenesis.worldgen.IceSheetTest.the sheet mask's edge follows the ground",
+        "com.cartogenesis.worldgen.IceSheetTest.the sheet's surface is a dome and not a ruling of the grid"
+    ),
+    "ocean" to listOf(
+        "com.cartogenesis.worldgen.OceanLeavesTheGroundTest.the ground is the same with the currents and without them"
+    ),
+    "climate" to listOf(
+        "com.cartogenesis.worldgen.CurrentFeedsRainTest",
+        "com.cartogenesis.worldgen.GridShapeTest",
+        "com.cartogenesis.worldgen.MeridionalWindTest",
+        "com.cartogenesis.worldgen.MoistureBudgetTest",
+        "com.cartogenesis.worldgen.PressureWindTest",
+        "com.cartogenesis.worldgen.SnowBalanceTest",
+        "com.cartogenesis.worldgen.AbsoluteRainfallTest.an arid config and a lush one classify identically under the old normalization, not under this one",
+        "com.cartogenesis.worldgen.GeographyAuditTest.the band guard bites on a world whose land never re-moistens",
+        "com.cartogenesis.worldgen.SeaIceTest.the march takes no moisture from ice, and with the ice off it takes plenty",
+        "com.cartogenesis.worldgen.SeaIceTest.the biome draws the pack that survives the summer",
+        "com.cartogenesis.worldgen.SeasonsTest.without seasons there is no Mediterranean coast to find",
+        "com.cartogenesis.worldgen.VegetationDensityTest.with the field off the three land shares are outside Earth's bars"
+    ),
+    "rivers" to listOf(
+        "com.cartogenesis.worldgen.ChannelInitiationControlTest",
+        "com.cartogenesis.worldgen.LakeWaterBalanceTest",
+        "com.cartogenesis.worldgen.OutletIncisionTest",
+        "com.cartogenesis.worldgen.StraightRunTest",
+        "com.cartogenesis.worldgen.FlatCourseTest.the potential keeps every flat cell a way down and the network a forest"
+    ),
+    "realms" to listOf(
+        "com.cartogenesis.worldgen.RealmIdRangeTest"
+    ),
+    "engine" to listOf(
+        "com.cartogenesis.worldgen.GenerationStopTest",
+        "com.cartogenesis.worldgen.ScaleFreeTest",
+        "com.cartogenesis.worldgen.IncrementalReuseTest.reusing stages gives the same world as generating afresh",
+        "com.cartogenesis.worldgen.IncrementalReuseTest.reuse makes a late setting change much cheaper",
+        "com.cartogenesis.worldgen.PipelineTest.sea level slider controls the land fraction",
+        "com.cartogenesis.worldgen.PipelineTest.world keeps its character when regenerated at a larger resolution",
+        "com.cartogenesis.worldgen.PipelineTest.changing only sea level reuses the terrain and recomputes the plates and the sea"
+    )
+)
+val deepClasses = deepClassesByStage.values.flatten()
+val NO_DEEP_CLASS = "com.cartogenesis.NoDeepClassInTheStagesAsked"
+
+/*
  * T5: the per-merge tier in workers side by side, each with the heap and the share of the processor
  * the root build script's budget gives it (see there for why those add up as they do). The audit
  * task below keeps the eight gigabytes and the one worker above, which its 2048 and 4096 cases were
@@ -223,10 +317,8 @@ val auditOnlyClasses = listOf(
  * so the rest of the tier used to sit behind the whole of this suite. Ordered after them, the suite
  * starts a moment later and everything else runs beside it.
  */
-tasks.named<Test>("jvmTest") {
-    filter {
-        auditOnlyClasses.forEach { excludeTestsMatching(it) }
-    }
+/** The per-merge tier's share of the machine, which the deep tier takes too: it is the same work, split. */
+fun Test.withPerMergeBudget() {
     val budget = rootProject.extra
     maxParallelForks = budget["worldgenTestForks"] as Int
     maxHeapSize = budget["worldgenTestHeap"] as String
@@ -236,6 +328,38 @@ tasks.named<Test>("jvmTest") {
         "-Djava.util.concurrent.ForkJoinPool.common.parallelism=$processors"
     )
     mustRunAfter(tasks.matching { it.name.contains("WasmJs", ignoreCase = true) && !it.name.endsWith("Test") })
+}
+
+tasks.named<Test>("jvmTest") {
+    filter {
+        auditOnlyClasses.forEach { excludeTestsMatching(it) }
+        deepClasses.forEach { excludeTestsMatching(it) }
+    }
+    withPerMergeBudget()
+}
+
+/*
+ * The deep tier: run when its part of the pipeline changes, `-Pstages` naming the parts (see the
+ * root build script). The audit tier's entries inside deep classes stay the audit tier's.
+ */
+tasks.register<Test>("deepTest") {
+    group = "verification"
+    description = "Runs the deep tier: the on/off controls, grid comparisons and 1,024-row worlds " +
+        "excluded from jvmTest; -Pstages=climate,ocean limits it to those stages and what they reach."
+    val jvmTestTask = tasks.named<Test>("jvmTest").get()
+    testClassesDirs = jvmTestTask.testClassesDirs
+    classpath = jvmTestTask.classpath
+    @Suppress("UNCHECKED_CAST")
+    val stages = rootProject.extra["deepStages"] as Set<String>
+    filter {
+        val selected = deepClassesByStage.filterKeys { it in stages }.values.flatten()
+        // An empty include list would include everything, so a selection with nothing here
+        // includes a name that matches nothing instead.
+        selected.ifEmpty { listOf(NO_DEEP_CLASS) }.forEach { includeTestsMatching(it) }
+        auditOnlyClasses.forEach { excludeTestsMatching(it) }
+        isFailOnNoMatchingTests = !(rootProject.extra["deepStagesLimited"] as Boolean)
+    }
+    withPerMergeBudget()
 }
 
 tasks.register<Test>("audit") {

@@ -235,6 +235,7 @@ val deepClassesByStage: Map<String, List<String>> = mapOf(
         "com.cartogenesis.worldgen.ReceiverClampTest",
         "com.cartogenesis.worldgen.RibbonLandTest",
         "com.cartogenesis.worldgen.ValleyIncisionTest",
+        "com.cartogenesis.worldgen.CombGuardTest.the comparison sees the half-height cell's comb down the columns",
         "com.cartogenesis.worldgen.ClimateFedErosionTest.the wet flank of a range is cut harder than the dry one",
         "com.cartogenesis.worldgen.ClimateFedErosionTest.report what the rain leaves on a range after twelve rounds",
         "com.cartogenesis.worldgen.ClimateFedErosionTest.dissection follows the rainfall",

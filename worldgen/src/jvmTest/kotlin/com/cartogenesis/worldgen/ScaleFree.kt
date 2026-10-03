@@ -343,7 +343,11 @@ internal object ScaleFree {
      * What one pair of grids has to say: the complaints, which are the asserted metrics that
      * missed, and the findings, which are the rest.
      */
-    class Verdict(val complaints: List<String>, val findings: List<String>)
+    /**
+     * What a comparison found: [complaints] past their bars, [findings] departures inside them, and
+     * [measured] how many metrics had a figure at the coarse grid to compare at all.
+     */
+    class Verdict(val complaints: List<String>, val findings: List<String>, val measured: Int = 0)
 
     /**
      * Prints the table and splits what it says into complaints and findings.
@@ -410,7 +414,7 @@ internal object ScaleFree {
                         " with the grid, so what moves it is the moisture march"
             )
         }
-        return Verdict(complaints, findings.sortedByDescending { it.first }.map { it.second })
+        return Verdict(complaints, findings.sortedByDescending { it.first }.map { it.second }, values.count { it.first > 0.0 })
     }
 
     /**

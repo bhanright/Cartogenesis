@@ -464,15 +464,22 @@ class ErosionScaleTest {
         const val RAMP_UPLIFT_MM_PER_YEAR = 0.1f
 
         const val DENUDATION_FOLLOWS_THE_GRID = "E1a: the ground still lowers by more on a coarser grid"
-        const val DENUDATION_RECORD = "unrecorded"
-        const val HELD_OUT_RECORD = "unrecorded"
+        const val DENUDATION_RECORD =
+            "seed 7 at 12000 km x1.38; seed 42 at 12000 km x1.41; seed 99 at 12000 km x1.39; seed 1234 at 12000 km x1.34; " +
+                "seed 718106 at 12000 km x1.38; seed 7 at 20000 km x1.42; seed 42 at 20000 km x1.44"
+        const val HELD_OUT_RECORD = "seed 3 x1.40; seed 11 x1.30"
         const val BED_CUT_FOLLOWS_THE_GRID = "E1a: the trunk's implicit cut follows the cell through its F"
-        const val BED_CUT_RECORD = "unrecorded"
+        const val BED_CUT_RECORD =
+            "seed 7 2500-10000 km2 x1.20; seed 7 10000-100000 km2 x1.20; seed 42 2500-10000 km2 x1.29; " +
+                "seed 42 10000-100000 km2 x1.18; seed 99 2500-10000 km2 x1.22; seed 1234 2500-10000 km2 x1.19; " +
+                "seed 1234 100000+ km2 x1.15; seed 718106 2500-10000 km2 x1.20; seed 718106 10000-100000 km2 x1.11"
         const val LAKES_FOLLOW_THE_GRID = "E1a: the bed's standing water follows the grid"
-        const val LAKES_RECORD = "unrecorded"
+        const val LAKES_RECORD = "seed 7 x1.48; seed 1234 x1.49"
         const val HEADS_FOLLOW_THE_GRID = "E1a: the heads or the in-cell network follow the grid"
-        const val HEADS_RECORD = "unrecorded"
+        const val HEADS_RECORD =
+            "seed 7 heads x1.39; seed 7 density x1.46; seed 42 density x1.39; seed 99 heads x1.44; seed 99 density x1.52; " +
+                "seed 1234 heads x1.52; seed 1234 density x1.54; seed 718106 heads x1.37; seed 718106 density x1.47"
         const val DENUDATION_FOLLOWS_THE_STEP = "E1a: the ground's lowering follows the round's length"
-        const val STEP_RECORD = "unrecorded"
+        const val STEP_RECORD = "x1.18"
     }
 }

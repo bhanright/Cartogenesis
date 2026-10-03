@@ -36,7 +36,9 @@ class OceanLeavesTheGroundTest : BorrowsSharedWorlds() {
      * and builds the world on square cells, and at L1, whose rifts are Earth's half-grabens, and
      * again at its review round, whose joins are relay ramps and whose valleys are Earth's width,
      * 55 km across: the plates' partition held and their
-     * height, uplift and age moved with everything built on them. An ocean change that leaks into
+     * height, uplift and age moved with everything built on them. Re-taken at E1a, whose two heights
+     * moved the erosion and the sea and whose re-derived uplift moved the plates' rates, the plates'
+     * height held. An ocean change that leaks into
      * the ground moves them.
      * A chunk meant to move the ground re-takes them here, as the render records are re-taken.
      * At [SharedWorlds.DETAIL_ROWS], whose standard worlds the detail guards generate anyway, so
@@ -66,14 +68,14 @@ class OceanLeavesTheGroundTest : BorrowsSharedWorlds() {
             "plates.seafloorAgeMyr" to -8620603663144917145L,
             "plates.seafloorHalfSpreadingRateKmPerMyr" to 5508627893530768010L,
             "plates.continentalShare" to 711069935001870004L,
-            "plates.upliftRateMmPerYear" to -1456071571191777154L,
+            "plates.upliftRateMmPerYear" to -5671693104175984468L,
             "plates.crustAge" to 4850336704889317196L,
-            "erosion.height" to -445160826674577748L,
+            "erosion.height" to -3464322674259207421L,
             "erosion.sweptOnDevice" to -358906410940142731L,
-            "sea.shorelineHeight" to 8012490132785354773L,
-            "sea.isLand" to 1678313860798026421L,
-            "sea.relativeElevation" to -1604328241263658474L,
-            "sea.landCellCount" to -5138425422504148985L
+            "sea.shorelineHeight" to -1052027402221991168L,
+            "sea.isLand" to 7156300629036362970L,
+            "sea.relativeElevation" to -47087748711425215L,
+            "sea.landCellCount" to 7295456909385191317L
         )
     }
 }

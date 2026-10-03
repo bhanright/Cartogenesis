@@ -39,18 +39,6 @@ import kotlin.test.assertTrue
 class ClimateTintTest : BorrowsSharedWorlds() {
 
     private companion object {
-        /**
-         * The known failure the steppe clause records since Fix 3b. On the gallery world as the
-         * implicit incision cuts it, the Scroll style draws the steppe 80 to 81% of the way from
-         * its desert to its forest, past the 75% the clause allows; the other strongly tinted
-         * styles stay between. The steppe's colour is a mean over the grassland's rendered pixels,
-         * shading and all, and the grassland moved with the terrain; which of the two carries the
-         * figure is not diagnosed (docs/DESIGN_LEDGER.md, Fix 3b).
-         */
-        const val STEPPE_NEAR_THE_FOREST_ON_THE_LAWS_TERRAIN =
-            "the tint: on the law's terrain one style draws the steppe nearer the forest than the desert's band allows"
-
-
         /** The gallery's world, at the size these guards measure on. See [TestWorlds]. */
         val WORLD: WorldMap get() = TestWorlds.gallery
 
@@ -249,12 +237,10 @@ class ClimateTintTest : BorrowsSharedWorlds() {
                     "${(MIN_STEPPE_SHARE * 100).toInt()}-${((1 - MIN_STEPPE_SHARE) * 100).toInt()}%"
             }
         }
-        // Recorded since Fix 3b: see [STEPPE_NEAR_THE_FOREST_ON_THE_LAWS_TERRAIN].
-        KnownFailures.expect(STEPPE_NEAR_THE_FOREST_ON_THE_LAWS_TERRAIN, "Scroll outside") {
-            if (outside.isNotEmpty()) {
-                throw RecordedViolation(outside.joinToString("; "), outside.joinToString(", ") { it.substringBefore(":") } + " outside")
-            }
-        }
+        // Recorded from Fix 3b, when the Scroll style drew the steppe 80 to 81% of the way to its
+        // forest on the implicit incision's terrain, and armed at E1a, whose two heights' grassland
+        // falls between again (docs/DESIGN_LEDGER.md, Fix 3b and E1).
+        assertTrue(outside.isEmpty(), outside.joinToString("; "))
     }
 
     /**

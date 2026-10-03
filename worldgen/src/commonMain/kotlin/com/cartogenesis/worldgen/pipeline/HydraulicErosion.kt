@@ -129,8 +129,9 @@ internal interface GroundWatch {
 internal interface IncisionWatch {
 
     /**
-     * One land cell with a receiver, as the implicit pass met it, every height in the height
-     * field's own units.
+     * One land cell with a receiver that the implicit pass may cut, as it met it, every height in
+     * the height field's own units: since the two heights (E1), a cell carrying a channel, whose
+     * bed the law cuts; a cell below every head is lowered by its hillslope and is not reported.
      *
      * [courantNumber] is the round's `F` for the cell (see [HydraulicErosion.Rates.courantCoefficient]),
      * dimensionless. [before] is the cell's height as the pass found it and [after] as it left it.
@@ -2507,7 +2508,7 @@ internal object HydraulicErosion {
                 surfaceOf[cell] = after
                 if (incisedAt != null && after < height) incisedAt[cell] = height.toDouble() - after.toDouble()
             }
-            if (watch != null && asFound != null) {
+            if (watch != null && asFound != null && (cutsAt == null || cutsAt[cell])) {
                 // Before the pass the lake stood at its filled level.
                 val baseBefore = when {
                     !isLand[receiver] -> shorelineHeight

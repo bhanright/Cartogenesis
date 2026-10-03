@@ -53,6 +53,13 @@ internal object GeometryFindings {
      */
     const val ICE_ARCS = "the ice's surface and cut follow circular arcs"
 
+    /**
+     * A floodplain deposit's outline doubles back on itself in a crease: on 99 at 512 rows, 6.98
+     * against the rough natural bar of 6.14, at (184, 48), since the two heights (E1a) lay the
+     * spoil on the bed's hypsometry and the floodplains along a trunk follow its cells.
+     */
+    const val FLOODPLAIN_CREASE = "a floodplain deposit's outline creases"
+
     /** A valley glacier's outline doubles back in a long straight hairpin (969495, near the south pole). */
     const val VALLEY_GLACIER_HAIRPIN = "a valley glacier doubles back in a straight hairpin"
 

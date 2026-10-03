@@ -262,7 +262,7 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
         val pooledDepth = depthShares.average()
         // Recorded since Fix 3b: see [NOTCH_SHORT_ON_THE_LAWS_TERRAIN].
         // Re-recorded on square cells at Q2 (docs/DESIGN_LEDGER.md, Q2). Re-recorded at L1, whose rifts are Earth's half-grabens and the same at every grid (docs/DESIGN_LEDGER.md, L1).
-        KnownFailures.expect(NOTCH_SHORT_ON_THE_LAWS_TERRAIN, "81.1% as deep as the control's") {
+        KnownFailures.expect(NOTCH_SHORT_ON_THE_LAWS_TERRAIN, "95.9% as deep as the control's") {
             if (pooledDepth >= 0.5) {
                 throw RecordedViolation(
                     "the fill still stands ${"%.1f".format(pooledDepth * 100)}% as deep over the land as the " +
@@ -486,7 +486,7 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
         // 718106 and seed 43 each keep a little over half their water (docs/DESIGN_LEDGER.md, L1).
         KnownFailures.expect(
             NOTCH_SHORT_ON_THE_LAWS_TERRAIN,
-            "seed 7's largest lake 2.25x the Caspian; seed 7's largest lake 0.4331% to 0.5616%; seed 7's water 1.4692% to 1.2968%; seed 42's water 1.4487% to 0.9080%"
+            "seed 718106's largest lake 1.70x the Caspian; seed 7's largest lake 3.86x the Caspian; seed 42's largest lake 1.94x the Caspian; seed 43's largest lake 1.72x the Caspian; seed 718106's largest lake 0.3852% to 0.4247%; seed 718106's water 1.4069% to 1.3140%; seed 7's largest lake 0.9177% to 0.9611%; seed 7's water 2.1933% to 2.4783%; seed 42's largest lake 0.4605% to 0.4821%; seed 42's water 2.1817% to 2.1128%; seed 1234's water 1.1036% to 0.7735%; seed 43's largest lake 0.3115% to 0.4289%; seed 43's water 1.4913% to 1.4310%"
         ) {
             if (overCaspian.isNotEmpty() || notHalved.isNotEmpty()) {
                 val found = (overCaspian + notHalved).joinToString("; ")

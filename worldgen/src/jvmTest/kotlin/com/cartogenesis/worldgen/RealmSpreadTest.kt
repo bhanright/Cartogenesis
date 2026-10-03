@@ -246,17 +246,12 @@ class RealmSpreadTest : BorrowsSharedWorlds() {
             landlocked += pieces.enclosedRealms.count { !it.touchesTheSea }
         }
         assertEquals(0, stranded, "pieces stranded in other realms over the four standard seeds")
-        // Recorded at L1's review round, once the rift valleys were Earth's width: four realms
-        // landlocked inside one neighbour against three; which borders moved is not isolated
-        // (docs/DESIGN_LEDGER.md, L1).
-        KnownFailures.expect(ONE_MORE_LANDLOCKED, "4 against 3") {
-            if (landlocked > ORIGIN_LANDLOCKED_INSIDE_ONE) {
-                throw RecordedViolation(
-                    "$landlocked realms landlocked inside one neighbour, against origin/main's $ORIGIN_LANDLOCKED_INSIDE_ONE",
-                    "$landlocked against $ORIGIN_LANDLOCKED_INSIDE_ONE"
-                )
-            }
-        }
+        // Recorded at L1's review round (four against three) and armed again at E1a, whose ground
+        // moved the borders back under origin/main's count (docs/DESIGN_LEDGER.md, L1 and E1).
+        assertTrue(
+            landlocked <= ORIGIN_LANDLOCKED_INSIDE_ONE,
+            "$landlocked realms landlocked inside one neighbour, against origin/main's $ORIGIN_LANDLOCKED_INSIDE_ONE"
+        )
     }
 
     @Test
@@ -278,6 +273,5 @@ class RealmSpreadTest : BorrowsSharedWorlds() {
         /** origin/main's count over seeds 7, 42, 1234 and 99 at 512, taken at chunk 6. */
         const val ORIGIN_LANDLOCKED_INSIDE_ONE = 3
 
-        const val ONE_MORE_LANDLOCKED = "L1: one more realm is landlocked inside one neighbour on the rifts' worlds"
     }
 }

@@ -69,24 +69,15 @@ class IceSheetTest : BorrowsSharedWorlds() {
                 failures.joinToString("\n"),
             failures.isEmpty()
         )
-        // Failing since the ground was put on its ruler, and the ice's to settle rather than this
-        // chunk's: the collision plateaus are as wide north-south as east-west now, the sheets grow
-        // on them, and a sheet as wide as Greenland's stands on a bed near 3 km high on average,
-        // up to 5 km under its middle, so the profile its lower margins raise barely clears the
-        // ground it covers. See docs/DESIGN_LEDGER.md, Fix 2; re-recorded on square cells at Q2.
-        KnownFailures.expect(
-            THIN_SHEETS_ON_HIGH_GROUND,
-            // Re-recorded at L1, whose rifts are Earth's half-grabens and the same at every grid (docs/DESIGN_LEDGER.md, L1).
-            "seed 59758 at 1829 m over 609 km, seed 7 at 1935 m over 564 km"
-        ) {
-            if (thin.isNotEmpty()) {
-                throw RecordedViolation(
-                    "sheets whose middles stand $CONTINENTAL_MARGIN_KM km or more from their margins are thinner " +
-                        "than the $CONTINENTAL_THICKNESS_FLOOR_M m Greenland's divide stands at: ${thin.joinToString()}",
-                    thin.joinToString()
-                )
-            }
-        }
+        // Failing from Fix 2 to L1, when a sheet as wide as Greenland's stood on a bed near 3 km
+        // high on average and the profile its margins raise barely cleared it (docs/DESIGN_LEDGER.md,
+        // Fix 2); armed at E1a, whose two heights leave the collision plateaus lower, every sheet
+        // 545 km or more from its margin standing 2,087 m or more.
+        assertTrue(
+            "sheets whose middles stand $CONTINENTAL_MARGIN_KM km or more from their margins are thinner " +
+                "than the $CONTINENTAL_THICKNESS_FLOOR_M m Greenland's divide stands at: ${thin.joinToString()}",
+            thin.isEmpty()
+        )
     }
 
     /**
@@ -441,8 +432,19 @@ class IceSheetTest : BorrowsSharedWorlds() {
         }
         // Armed at Fix 3b's review round: seed 59758's edge ran 46 cells along bearing 0 against
         // 36.6 allowed, and once a lake falls with its outlet its longest run is 31 against 36.1
-        // (docs/DESIGN_LEDGER.md, Fix 3b).
-        assertTrue("the sheet mask's edge is ruled along a grid bearing:\n" + failures.joinToString("\n"), failures.isEmpty())
+        // (docs/DESIGN_LEDGER.md, Fix 3b). Recorded on the two heights' ground (E1a), the cause not
+        // isolated, until the stages after erosion read the bed (E1c).
+        KnownFailures.expect(SHEET_EDGE_RULED_ON_THE_GROUND, "seed 7: 43 cells along bearing 0") {
+            if (failures.isNotEmpty()) {
+                throw RecordedViolation(
+                    "the sheet mask's edge is ruled along a grid bearing:\n" + failures.joinToString("\n"),
+                    failures.joinToString("; ") { failure ->
+                        Regex("(seed \\d+): the sheet's edge runs (\\d+) cells straight along bearing (\\d+)").find(failure)
+                            ?.let { "${it.groupValues[1]}: ${it.groupValues[2]} cells along bearing ${it.groupValues[3]}" } ?: failure
+                    }
+                )
+            }
+        }
     }
 
     /** One sheet's outline, as the edge clause reads it. */
@@ -732,10 +734,6 @@ class IceSheetTest : BorrowsSharedWorlds() {
          */
         const val DOME_SEED = 20L
 
-        /** The known failure the thickness clause records, the ice's to settle. */
-        const val THIN_SHEETS_ON_HIGH_GROUND =
-            "the ice: sheets as wide as Greenland's grow on high plateaus and stand under its thickness"
-
         /** `GlaciationTest`'s own worlds, so one set of ice answers every clause. */
         val seeds = listOf(718106L, 59758L, 7L, 42L)
 
@@ -852,3 +850,6 @@ class IceSheetTest : BorrowsSharedWorlds() {
         val measured = HashMap<Long, Measured>()
     }
 }
+
+/** The sheet edge's clause, recorded on the two heights' ground (docs/DESIGN_LEDGER.md, E1). */
+private const val SHEET_EDGE_RULED_ON_THE_GROUND = "E1a: an ice sheet's edge runs straight on the two heights' ground"

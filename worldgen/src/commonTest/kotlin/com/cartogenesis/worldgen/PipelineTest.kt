@@ -206,13 +206,44 @@ class PipelineTest {
             if (t < 0) {
                 stranded++
                 report(i, "no receiver at all, away from the poles")
-            } else if (world.sea.isLand[t] && filled.data[t] >= filled.data[i]) {
+            } else if (world.sea.isLand[t] && filled.data[t] > filled.data[i]) {
                 stranded++
-                report(i, "its receiver stands no lower than it does on the filled surface")
+                report(i, "its receiver stands higher than it does on the filled surface")
+            } else if (world.sea.isLand[t] && filled.data[t] == filled.data[i] && !descendsAcrossTheFlat(world, i)) {
+                // Two cells the fill raised from the same neighbour stand level, and across a
+                // flat the routing follows the flat potential and not the fill (F30b), so a
+                // level receiver is a step along the flat. What would be wrong is a flat the
+                // flow never leaves.
+                stranded++
+                report(i, "its receiver stands level with it and the flow never leaves the flat")
             }
         }
         println("PIPELINE $insideBasins cells inside filled basins, $stranded stranded")
         assertEquals(0, stranded, "interior land cells with no downhill neighbour")
+    }
+
+    /**
+     * Whether the flow from [start], over cells standing level with it on the filled surface,
+     * reaches a cell lower on it, the sea, a lake, a playa or the edge.
+     */
+    private fun descendsAcrossTheFlat(
+        world: com.cartogenesis.worldgen.model.WorldMap,
+        start: Int
+    ): Boolean {
+        val filled = world.rivers.filledElevation.data
+        val level = filled[start]
+        var cell = start
+        var steps = 0
+        val limit = world.width * world.height
+        while (steps++ < limit) {
+            val next = world.rivers.flowTarget[cell]
+            if (next < 0 || !world.sea.isLand[next]) return true
+            if (world.rivers.lakes.isLake(next) || world.rivers.lakes.isPlaya(next)) return true
+            if (filled[next] < level) return true
+            if (filled[next] > level) return false
+            cell = next
+        }
+        return false
     }
 
     /** Whether following the flow from [start] arrives at the sea, a lake, a playa or the edge. */

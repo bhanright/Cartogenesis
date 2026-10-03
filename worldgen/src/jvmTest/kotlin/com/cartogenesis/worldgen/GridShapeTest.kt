@@ -134,15 +134,9 @@ class GridShapeTest : BorrowsSharedWorlds() {
         // rift joins are relay ramps: 0.1011 against 0.0628 there. Recorded again once the valleys
         // were narrowed to Earth's width, where it is seed 99's band at 45 to 30 degrees that parts
         // by more than the spread; which part of the narrower rifts moves it is not isolated
-        // (docs/DESIGN_LEDGER.md, L1).
-        KnownFailures.expect(A_BAND_DESERT_PARTS_WITH_THE_RIFTS, "seed 99 45 to 30 degrees desert -0.067") {
-            if (misses.desert.isNotEmpty()) {
-                throw RecordedViolation(
-                    "the deserts part by more than a change of grid: ${misses.desert}",
-                    misses.desert.joinToString()
-                )
-            }
-        }
+        // (docs/DESIGN_LEDGER.md, L1). Armed again at E1a, whose two heights moved every band
+        // (docs/DESIGN_LEDGER.md, E1).
+        assertTrue(misses.desert.isEmpty(), "the deserts part by more than a change of grid: ${misses.desert}")
         assertTrue(misses.rain.isEmpty(), "the land's rain parts by more than a change of grid: ${misses.rain}")
         // Recorded at L1's review round, once the rift valleys were Earth's width: seed 99's polar
         // band parts by more than the spread; not isolated (docs/DESIGN_LEDGER.md, L1).
@@ -201,9 +195,6 @@ class GridShapeTest : BorrowsSharedWorlds() {
 
         const val A_POLAR_BAND_WARMTH_PARTS =
             "L1: a polar band's warmth parts across the grids by more than a change of grid gives, on the rifts' worlds"
-
-        const val A_BAND_DESERT_PARTS_WITH_THE_RIFTS =
-            "L1: a band's desert parts across the grids by more than a change of grid gives, on the rifts' worlds"
 
         /** The seed whose control moves both the deserts and the rain furthest. */
         const val CONTROL_SEED = 1234L

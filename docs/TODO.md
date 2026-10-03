@@ -1321,13 +1321,55 @@
   degrees is 0.078), and its catchment of 1.88 million km2 overstates the outlet's stream power by
   up to the square root of the same factor. The metric half is `REALISM_AUDIT.md`'s P1. 2026-10-03, L2's
   diagnosis.
-- **A round's mass tally leaves out the incision when nothing is carried.** `RoundMass.incised` is
-  summed in the deposition walk, which skips every cell when `erosion.deposition` is false, so with
-  the spoil off the tally holds the outlet notch alone: on seed 99 at 256 rows it reads 1.8 m over
-  the land for the twelve rounds where the implicit pass took about 1,200 m. Nothing in the suite
-  reads the tally with deposition off (`DepositionTest` reads it with the spoil on), so no guard is
-  wrong today; a guard or probe that compares the stage with and without deposition would be.
-  2026-10-03, E1's diagnosis.
+- **The two heights' closure runs its transient faster than resolved ground, more so on a coarser
+  grid.** On the toy dome (8 km, the sea round it, 0.1 mm/yr of uplift, `A_c` 0.05 km2) a resolved
+  model at 50 m (stream power on every cell past the head, Roering transport on every cell short of
+  it, slopes past the critical gradient failing) and the reduced closure agree at steady state
+  within 4 to 8% (mean ground 316 m resolved; 328, 301, 292 and 295 m reduced at 2 km, 1 km, 500 m
+  and 250 m), and part company in the transient: at 4 Myr the ground has lowered 262 m resolved and
+  421, 361, 316 and 288 m reduced. The closure takes the in-cell network to stand at its steady
+  relief for the interfluves' current rate, where a resolved network's small channels take their
+  own time to cut down; a coarser cell holds more of its network in that term and so gets there
+  sooner. On the real worlds this is the bulk of the cross-grid spread the trunk does not explain
+  (seed 7, the plain variant with every cell a channel and the trunk sub-stepped eight times: 421,
+  384 and 346 m at 256, 512 and 1,024 rows, the trunk's cut per class within 1.08). What would
+  settle it is a network term that relaxes on the network's own response time rather than
+  instantly. 2026-10-03, E1a (the benchmark is described in the ledger row).
+- **The trunk's implicit cut is first-order in a round whose `F` follows the cell.** The update is
+  backward Euler with `F = K dt sqrt(A) / step`, so a coarser cell, whose `F` is smaller for the same
+  catchment, cuts closer to the exact decay than a finer one: the bed's cut by drainage-area class
+  on seed 7 differs by up to x1.25 across 256, 512 and 1,024 rows, and by x1.08 with eight sub-steps
+  a round. Halving the round moves seed 42's ground at 256 rows by x1.17 (`ErosionScaleTest`). The
+  design kept the update as it was; sub-stepping the trunk, or an update exact for a linear decay
+  over the round, is the candidate. 2026-10-03, E1a.
+- **Cells below every channel head are trapped there.** A hillslope cell lowers as a stretch of slope
+  running to the first channel downstream, which on gentle, wooded ground is tens of kilometres, so
+  its rate is a hundred-millionth of a metre a year and the head's support area reconstructed from it
+  stays larger than the cell: seed 7 holds 4,000, 40,000 and 294,000 such cells at 256, 512 and
+  1,024 rows (37% of its land at 1,024), which erode almost nothing. With the cover's factor off the
+  share falls to 2, 9 and 19%; with every cell a channel the cross-grid spread falls from x1.37 to
+  x1.27. R1's cover gain (a hypothesis stated as such) and the head rule are the design's; whether a
+  wooded lowland at 34 km2 a cell should carry no channel at all is the open question. 2026-10-03, E1a.
+- **The bed is held under the ground after the sweeps on about 2% of the land each round.** The
+  thermal sweeps move the ground alone; where they lower a cell's ground under its own trunk the
+  stage brings the bed down to it (`GroundCells.holdBedUnderGround`), which moves no material and is
+  counted in `RoundMass.bedsHeldUnderGround`: up to 4,295 of seed 42's 199,231 land cells at 512 rows
+  in a round. The design asked for that clamp to be redundant. The sweeps reading the in-cell
+  geometry (or acting on the interfluves only) would make it so. 2026-10-03, E1a.
+- **The stages after erosion read the ground, and route over it.** Until E1c the sea, the rivers
+  and the drawing take `ErosionResult.height`, the cell's mean ground, which carries each cell's own
+  relief above its bed and so is not monotone down a river: the river stage fills more of it, and
+  the drawn lakes rise from 1.0 to 1.5% of the land to 1.8 to 2.6% on seeds 7 and 42 at 512 and
+  1,024 rows. E1a's renders draw the probe's D, the bed under drawn rivers
+  and lakes, as a single-cell groove: the bed under a river is a line, and the valley its relief
+  stands in has no width on the map yet. Both are E1c's. 2026-10-03, E1a.
+- **The D8 octave, averaged over the grid's real configurations.** `GroundClosure.NETWORK_RELIEF_PER_OCTAVE`
+  is derived for a straight trunk crossing a 2-by-2 block, a half of `E / K'` an octave. A turning
+  trunk leaves one side cell (a quarter) and a source block three round an outlet (about 0.85), and
+  steady D8 beds on the toy dome add 0.36 to 0.45 an octave between 4 km and 250 m (each grid's steady beds solved directly).
+  Averaging over the configurations a D8 network actually holds is a derivation and not a fit, but
+  it was not made before the grids were compared, and the constant was not changed after. 2026-10-03,
+  E1a.
 - **Seed 5's ocean does not solve with the pressure departure off.** `OceanCirculation` stops at a
   relative residual of 0.0017 to 0.0019 after its 200 iterations against a tolerance of 0.001, at 256
   and 512 rows, with `climate.pressureWinds` false (the setting `MeridionalWindTest` builds its

@@ -85,7 +85,7 @@ class ErosionUnitsTest {
     private class Watched(private val config: WorldGenConfig) : IncisionWatch {
         /** Land cells draining straight into the sea that the pass cut. */
         var mouthsCut = 0
-        /** Every land cell draining into the sea that a round left below its shoreline, by any mechanism. */
+        /** Every land cell draining into the sea that the pass cut below its shoreline. */
         val mouthsBelowShoreline = ArrayList<String>()
 
         /** The cells the pass lowered this round, read back once the round has been cut. */
@@ -109,7 +109,11 @@ class ErosionUnitsTest {
                 val receiver = directions[cell]
                 if (!isLand[cell] || receiver < 0 || isLand[receiver]) continue
                 if (wasLowered) mouthsCut++
-                if (surface[cell] < shorelineHeight) {
+                // A land cell's bed may stand below the sea without anything having cut it there:
+                // the land is the ground's, and where the ground holds a coast over a drowned
+                // channel the bed under it runs below the waterline (two heights, E1). What the
+                // pass must not do is cut a mouth below it.
+                if (wasLowered && surface[cell] < shorelineHeight) {
                     mouthsBelowShoreline.add(
                         "round $round cell $cell %.2f m under".format((shorelineHeight - surface[cell]) * spanMetres)
                     )
@@ -122,10 +126,11 @@ class ErosionUnitsTest {
      * No land cell draining into the sea is cut below the sea in the round that cuts it.
      *
      * The shoreline is the base level every river grades to, so a river mouth's floor can reach it
-     * and not pass it. Every mouth is read, not only those the pass cut, so a notch run earlier in
-     * the round is held to the same base level. Shown failing on the tree before Fix 3, where the
-     * cap at the shoreline was a height above the sea in the land's unit spent on the field; the
-     * implicit update carries it as the mouth's boundary condition.
+     * and not pass it. The mouths the pass cut are read: since the two heights (E1) a mouth's bed
+     * may stand below the sea under a coast its ground still holds, which is a drowned channel and
+     * not a cut, and the notch's own base level is `OutletIncisionTest`'s. Shown failing on the
+     * tree before Fix 3, where the cap at the shoreline was a height above the sea in the land's
+     * unit spent on the field; the implicit update carries it as the mouth's boundary condition.
      */
     @Test
     fun `no river mouth is cut below the shoreline`() {

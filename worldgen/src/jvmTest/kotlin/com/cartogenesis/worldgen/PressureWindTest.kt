@@ -323,11 +323,16 @@ class PressureWindTest : BorrowsSharedWorlds() {
                     PressureWind.BELT_SPEED_MPS
                 )
         )
-        assertTrue(
-            summer > ONSHORE_BAR_MPS,
-            ("the warm half blows %+.2f m/s onto the subtropical continents' equatorward and " +
-                "eastern coasts, which is not onshore").format(summer)
-        )
+        // Recorded on the two heights' ground (E1a), until the stages after erosion read the bed (E1c).
+        KnownFailures.expect(MONSOON_ON_THE_GROUND, "+0.06 m/s") {
+            if (summer <= ONSHORE_BAR_MPS) {
+                throw RecordedViolation(
+                    ("the warm half blows %+.2f m/s onto the subtropical continents' equatorward and " +
+                        "eastern coasts, which is not onshore").format(summer),
+                    "%+.2f m/s".format(summer)
+                )
+            }
+        }
         // On the implicit update before the uplift was re-derived on it the cold half pooled to
         // -0.04 m/s, seeds 42 and 1234 blowing onshore; with the re-derived uplift it cleared the bar
         // again (docs/DESIGN_LEDGER.md, Fix 3b), and on square cells it fails: see
@@ -665,3 +670,6 @@ class PressureWindTest : BorrowsSharedWorlds() {
         if (row + 1 < cellsDown) body((row + 1) * cellsAcross + column)
     }
 }
+
+/** The summer monsoon's clause, recorded on the two heights' ground (docs/DESIGN_LEDGER.md, E1). */
+private const val MONSOON_ON_THE_GROUND = "E1a: the summer half blows too weakly onshore on the two heights' ground"

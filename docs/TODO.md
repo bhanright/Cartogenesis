@@ -1321,6 +1321,13 @@
   degrees is 0.078), and its catchment of 1.88 million km2 overstates the outlet's stream power by
   up to the square root of the same factor. The metric half is `REALISM_AUDIT.md`'s P1. 2026-10-03, L2's
   diagnosis.
+- **A round's mass tally leaves out the incision when nothing is carried.** `RoundMass.incised` is
+  summed in the deposition walk, which skips every cell when `erosion.deposition` is false, so with
+  the spoil off the tally holds the outlet notch alone: on seed 99 at 256 rows it reads 1.8 m over
+  the land for the twelve rounds where the implicit pass took about 1,200 m. Nothing in the suite
+  reads the tally with deposition off (`DepositionTest` reads it with the spoil on), so no guard is
+  wrong today; a guard or probe that compares the stage with and without deposition would be.
+  2026-10-03, E1's diagnosis.
 - **Seed 5's ocean does not solve with the pressure departure off.** `OceanCirculation` stops at a
   relative residual of 0.0017 to 0.0019 after its 200 iterations against a tolerance of 0.001, at 256
   and 512 rows, with `climate.pressureWinds` false (the setting `MeridionalWindTest` builds its

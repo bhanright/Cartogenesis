@@ -762,6 +762,6 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
  * close: the exaggeration goes 37.75 to 43.50, the haze matched there is 0.12 and ordinary ground
  * 0.9451, and at that sky the cone pins no bearing up to the sweep's 48. The drawing reads the bed
  * under rivers and lakes from E1c, which moves the surface again, so they are recorded here and
- * re-derived there (docs/DESIGN_LEDGER.md, E1; docs/TODO.md).
+ * re-derived there (docs/DESIGN_LEDGER.md, E1a; docs/TODO.md).
  */
 private const val CALIBRATED_ON_THE_ONE_HEIGHT = "E1a: the relief's calibrations were read off the one height"

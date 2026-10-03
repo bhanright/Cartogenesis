@@ -325,7 +325,7 @@ class PressureWindTest : BorrowsSharedWorlds() {
         // again (docs/DESIGN_LEDGER.md, Fix 3b), and on square cells it failed (+0.31 m/s pooled at Q2).
         // Re-recorded at L1, whose rifts are Earth's half-grabens and the same at every grid, and
         // armed at E1a, whose two heights' continents blow offshore in the cold half again
-        // (docs/DESIGN_LEDGER.md, L1 and E1).
+        // (docs/DESIGN_LEDGER.md, L1 and E1a).
         assertTrue(
             winter < -ONSHORE_BAR_MPS,
             ("the cold half blows %+.2f m/s onto the same coasts, which is not offshore").format(winter)
@@ -655,5 +655,5 @@ class PressureWindTest : BorrowsSharedWorlds() {
     }
 }
 
-/** The summer monsoon's clause, recorded on the two heights' ground (docs/DESIGN_LEDGER.md, E1). */
+/** The summer monsoon's clause, recorded on the two heights' ground (docs/DESIGN_LEDGER.md, E1a). */
 private const val MONSOON_ON_THE_GROUND = "E1a: the summer half blows too weakly onshore on the two heights' ground"

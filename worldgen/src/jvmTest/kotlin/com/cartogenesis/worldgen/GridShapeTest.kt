@@ -135,12 +135,12 @@ class GridShapeTest : BorrowsSharedWorlds() {
         // were narrowed to Earth's width, where it is seed 99's band at 45 to 30 degrees that parts
         // by more than the spread; which part of the narrower rifts moves it is not isolated
         // (docs/DESIGN_LEDGER.md, L1). Armed again at E1a, whose two heights moved every band
-        // (docs/DESIGN_LEDGER.md, E1).
+        // (docs/DESIGN_LEDGER.md, E1a).
         assertTrue(misses.desert.isEmpty(), "the deserts part by more than a change of grid: ${misses.desert}")
         assertTrue(misses.rain.isEmpty(), "the land's rain parts by more than a change of grid: ${misses.rain}")
         // Recorded at L1's review round, once the rift valleys were Earth's width (seed 99's polar
         // band, +0.49 C), and armed again at E1a, whose two heights moved every band
-        // (docs/DESIGN_LEDGER.md, L1 and E1).
+        // (docs/DESIGN_LEDGER.md, L1 and E1a).
         assertTrue(misses.temperature.isEmpty(), "the warmth parts by more than a change of grid: ${misses.temperature}")
         // Re-recorded at Q2, whose coast reaches its 234 km on square cells: seed 99 at 75 to 60 degrees
         // moved from +0.022 (docs/DESIGN_LEDGER.md, Q2). Re-recorded at L1, whose rifts moved every

@@ -170,7 +170,7 @@ class GlaciationCombTest : BorrowsSharedWorlds() {
         // adds 1.64, 1.17 and 0.73% (docs/DESIGN_LEDGER.md, Q2). Recorded at L1's review round,
         // once the rift valleys were Earth's width: seed 42's ice adds 2.23%, over the bar; which of
         // its valleys the narrower rifts moved is not isolated (docs/DESIGN_LEDGER.md, L1). Armed
-        // again at E1a, whose two heights moved the valleys the ice runs down (docs/DESIGN_LEDGER.md, E1).
+        // again at E1a, whose two heights moved the valleys the ice runs down (docs/DESIGN_LEDGER.md, E1a).
         assertTrue(
             "the ice puts ${ICE_COMB_BAR * 100}% or more of these worlds' standing water into thin" +
                 " grid-bearing bars that run parallel to another such bar within ten cells — a" +

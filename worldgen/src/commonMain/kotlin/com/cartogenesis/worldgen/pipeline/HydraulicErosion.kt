@@ -130,7 +130,7 @@ internal interface IncisionWatch {
 
     /**
      * One land cell with a receiver that the implicit pass may cut, as it met it, every height in
-     * the height field's own units: since the two heights (E1), a cell carrying a channel, whose
+     * the height field's own units: since the two heights (E1a), a cell carrying a channel, whose
      * bed the law cuts; a cell below every head is lowered by its hillslope and is not reported.
      *
      * [courantNumber] is the round's `F` for the cell (see [HydraulicErosion.Rates.courantCoefficient]),

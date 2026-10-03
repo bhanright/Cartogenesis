@@ -20,7 +20,7 @@ import kotlin.test.Test
 /**
  * The two heights on a standard world: the budget closes on the stored floats, the bed stays under
  * the ground, the trunk's profiles are concave as the law makes them, and the rates are Earth's
- * (docs/DESIGN_LEDGER.md, E1).
+ * (docs/DESIGN_LEDGER.md, E1a).
  *
  * One world, seed 42 at 512 rows with every default, run through the erosion stage once with the
  * stage's own observers and shared by every case. The everyday tier's; the grid comparisons are

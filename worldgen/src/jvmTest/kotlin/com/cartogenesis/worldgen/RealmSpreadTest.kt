@@ -247,7 +247,7 @@ class RealmSpreadTest : BorrowsSharedWorlds() {
         }
         assertEquals(0, stranded, "pieces stranded in other realms over the four standard seeds")
         // Recorded at L1's review round (four against three) and armed again at E1a, whose ground
-        // moved the borders back under origin/main's count (docs/DESIGN_LEDGER.md, L1 and E1).
+        // moved the borders back under origin/main's count (docs/DESIGN_LEDGER.md, L1 and E1a).
         assertTrue(
             landlocked <= ORIGIN_LANDLOCKED_INSIDE_ONE,
             "$landlocked realms landlocked inside one neighbour, against origin/main's $ORIGIN_LANDLOCKED_INSIDE_ONE"

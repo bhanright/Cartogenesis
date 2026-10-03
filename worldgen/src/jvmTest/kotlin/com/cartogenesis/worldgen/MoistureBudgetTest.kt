@@ -609,5 +609,5 @@ class MoistureBudgetTest : BorrowsSharedWorlds() {
     }
 }
 
-/** The recycling ratio's clauses, recorded on the two heights' ground (docs/DESIGN_LEDGER.md, E1). */
+/** The recycling ratio's clauses, recorded on the two heights' ground (docs/DESIGN_LEDGER.md, E1a). */
 private const val RECYCLING_ON_THE_GROUND = "E1a: the continents recycle under Earth's share on the two heights' ground"

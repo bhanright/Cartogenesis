@@ -428,7 +428,7 @@ internal class DesertBands {
         val complaints = report(seeds, "AUDIT BAND", everyBand = false)
         // Every clause asserted from Fix 3b; the pooled tropical one left its bar again on the two
         // heights' ground (E1a) and is recorded with its figure until the stages after erosion read
-        // the bed (docs/DESIGN_LEDGER.md, Fix 3b and E1).
+        // the bed (docs/DESIGN_LEDGER.md, Fix 3b and E1a).
         KnownFailures.expect(TROPICAL_DESERT_ON_THE_GROUND, "pooled tropics x0.58") {
             if (complaints.isNotEmpty()) {
                 throw RecordedViolation(
@@ -481,5 +481,5 @@ internal class DesertBands {
     private fun pct(v: Double) = "${"%.2f".format(v * 100)}%"
 }
 
-/** The pooled tropical desert clause, recorded on the two heights' ground (docs/DESIGN_LEDGER.md, E1). */
+/** The pooled tropical desert clause, recorded on the two heights' ground (docs/DESIGN_LEDGER.md, E1a). */
 private const val TROPICAL_DESERT_ON_THE_GROUND = "E1a: the tropics hold more desert on the two heights' ground"

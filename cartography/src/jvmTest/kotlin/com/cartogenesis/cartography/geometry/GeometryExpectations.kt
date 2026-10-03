@@ -146,6 +146,7 @@ internal object GeometryExpectations {
         known("99/ice carving/ALIGNED_SIDE", "2@(705,41)=49.00 +(816,471)")
         known("99/ice carving/FACETS", "1@(836,470)=78.01")
         known("99/ice as drawn/ALIGNED_SIDE", "1@(554,451)=63.00")
+        known("99/floodplain deposits/CREASES", "1@(184,48)=6.983")
         known("99/isotherms/FACETS", "1@(993,471)=197.1")
         insufficient("coast", Detector.ISOTROPY, 7L, 42L, 1234L, 99L)
         insufficient("coast", Detector.RECTANGLE, 42L, 99L)

@@ -530,7 +530,7 @@ class ImplicitIncisionTest {
         val cut = SeaLevelStage.percentileCut(ground, config.seaLevel, scale)
         val shorelineMetres = scale.altitudeAtField(cut.shorelineHeight).toDouble()
         val before = ground.data.copyOf()
-        // The law cuts the bed; since the two heights (E1) the stage hands on the ground, which
+        // The law cuts the bed; since the two heights (E1a) the stage hands on the ground, which
         // follows the bed only as fast as its hillslopes carry the relief down, so the bed is read.
         var finalBed = FloatArray(0)
         val bedWatch = object : GroundWatch {

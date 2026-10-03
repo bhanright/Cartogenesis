@@ -492,5 +492,5 @@ class LittoralCoastTest {
     }
 }
 
-/** The coast's shape clauses, recorded on the two heights' ground (docs/DESIGN_LEDGER.md, E1). */
+/** The coast's shape clauses, recorded on the two heights' ground (docs/DESIGN_LEDGER.md, E1a). */
 private const val COAST_SMOOTH_ON_THE_GROUND = "E1a: the coast is smoother on the two heights' ground"

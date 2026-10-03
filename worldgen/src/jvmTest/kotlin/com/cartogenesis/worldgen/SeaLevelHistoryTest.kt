@@ -174,7 +174,7 @@ class SeaLevelHistoryTest : BorrowsSharedWorlds() {
         // The other half of ground rule 2: the world without the lowstand has to fail a bar the
         // world with it clears, or this guard is measuring nothing.
         // Recorded from Fix 3b to L1, when the control reached the ceiling on one seed or more, and
-        // armed at E1a, whose control falls short on every seed (docs/DESIGN_LEDGER.md, Fix 3b and E1).
+        // armed at E1a, whose control falls short on every seed (docs/DESIGN_LEDGER.md, Fix 3b and E1a).
         assertTrue(
             controlFailures == seeds.size,
             "the world with the sea held at today's level was expected to fall short of " +
@@ -481,5 +481,5 @@ internal inline fun eightNeighbours(w: Int, h: Int, cell: Int, action: (Int) -> 
     }
 }
 
-/** The lowstand's estuary clauses, recorded on the two heights' ground (docs/DESIGN_LEDGER.md, E1). */
+/** The lowstand's estuary clauses, recorded on the two heights' ground (docs/DESIGN_LEDGER.md, E1a). */
 private const val LOWSTAND_ON_THE_GROUND = "E1a: the lowstand drowns fewer valleys on the two heights' ground"

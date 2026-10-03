@@ -17,7 +17,7 @@ package com.cartogenesis.worldgen.pipeline
  * each channel cell) is the next per-cell kernel and is to join it, held to the processor's answer
  * by its own equation's residual and by the cross-device difference, a fixed count of Newton steps
  * not being a guarantee of agreement; the head areas and the hillslope stretches walk the drainage
- * tree and stay on the processor (docs/DESIGN_LEDGER.md, E1).
+ * tree and stay on the processor (docs/DESIGN_LEDGER.md, E1a).
  */
 interface ErosionAccelerator {
 

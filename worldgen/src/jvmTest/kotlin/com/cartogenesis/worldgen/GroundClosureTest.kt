@@ -12,7 +12,7 @@ import org.junit.Assert.assertTrue
 
 /**
  * The two-height closure's arithmetic, held to the definitions it is written from, one cell at a
- * time and without a world (docs/DESIGN_LEDGER.md, E1).
+ * time and without a world (docs/DESIGN_LEDGER.md, E1a).
  *
  * Every clause compares a closed form or a solve against the quantity it stands for, computed the
  * long way: the steady Roering hillslope's mean height against a quadrature of its profile, the

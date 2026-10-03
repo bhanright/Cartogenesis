@@ -851,5 +851,5 @@ class IceSheetTest : BorrowsSharedWorlds() {
     }
 }
 
-/** The sheet edge's clause, recorded on the two heights' ground (docs/DESIGN_LEDGER.md, E1). */
+/** The sheet edge's clause, recorded on the two heights' ground (docs/DESIGN_LEDGER.md, E1a). */
 private const val SHEET_EDGE_RULED_ON_THE_GROUND = "E1a: an ice sheet's edge runs straight on the two heights' ground"

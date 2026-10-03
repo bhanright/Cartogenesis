@@ -239,7 +239,7 @@ class ClimateTintTest : BorrowsSharedWorlds() {
         }
         // Recorded from Fix 3b, when the Scroll style drew the steppe 80 to 81% of the way to its
         // forest on the implicit incision's terrain, and armed at E1a, whose two heights' grassland
-        // falls between again (docs/DESIGN_LEDGER.md, Fix 3b and E1).
+        // falls between again (docs/DESIGN_LEDGER.md, Fix 3b and E1a).
         assertTrue(outside.isEmpty(), outside.joinToString("; "))
     }
 

@@ -18,7 +18,7 @@ import org.junit.Assert.assertTrue
 
 /**
  * The erosion is the same erosion at every grid: what the two heights were built for
- * (docs/DESIGN_LEDGER.md, E1).
+ * (docs/DESIGN_LEDGER.md, E1a).
  *
  * Each seed's plates are eroded at 256, 512 and 1,024 rows, and what each grid's rounds took off
  * the ground is averaged over the 256-row grid's cells, so the three are compared over the same
@@ -467,7 +467,7 @@ class ErosionScaleTest {
         const val DENUDATION_RECORD =
             "seed 7 at 12000 km x1.38; seed 42 at 12000 km x1.41; seed 99 at 12000 km x1.39; seed 1234 at 12000 km x1.34; " +
                 "seed 718106 at 12000 km x1.38; seed 7 at 20000 km x1.42; seed 42 at 20000 km x1.44"
-        const val HELD_OUT_RECORD = "seed 3 x1.40; seed 11 x1.30"
+        const val HELD_OUT_RECORD = "seed 3 x1.40; seed 11 x1.29"
         const val BED_CUT_FOLLOWS_THE_GRID = "E1a: the trunk's implicit cut follows the cell through its F"
         const val BED_CUT_RECORD =
             "seed 7 2500-10000 km2 x1.20; seed 7 10000-100000 km2 x1.20; seed 42 2500-10000 km2 x1.29; " +

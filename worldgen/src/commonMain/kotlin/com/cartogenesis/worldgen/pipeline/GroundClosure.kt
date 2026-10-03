@@ -45,7 +45,7 @@ import kotlin.math.sqrt
  * cell at a time, which is the shape the graphics-card path behind [ErosionAccelerator] will take
  * (the device kernel is a later chunk's; this file is the processor's answer it is held to).
  *
- * See docs/DESIGN_LEDGER.md, E1, for the design, its review and the figures.
+ * See docs/DESIGN_LEDGER.md, E1a, for the design, its review and the figures.
  */
 internal object GroundClosure {
 

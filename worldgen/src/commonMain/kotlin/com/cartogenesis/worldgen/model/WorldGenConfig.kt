@@ -1103,7 +1103,7 @@ data class TectonicsConfig(
      * twelve rounds' four million years a belt's ground lowers by a quarter of what it did when
      * every point of a cell went down with its trunk (0.238 mm a year on Fix 3b's implicit
      * incision). A chunk that moves the denudation re-derives it; the history of its figures is in
-     * docs/DESIGN_LEDGER.md (S2, S3, Fix 2, Fix 3, Fix 3b and E1).
+     * docs/DESIGN_LEDGER.md (S2, S3, Fix 2, Fix 3, Fix 3b and E1a).
      *
      * Spent over [WorldScale.yearsPerHydraulicRound] per round. See `HydraulicErosion.apply`.
      */

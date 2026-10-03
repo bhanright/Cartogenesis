@@ -12,6 +12,7 @@ import com.cartogenesis.worldgen.pipeline.SeaLevelStage
 import com.cartogenesis.worldgen.pipeline.TerrainStage
 import com.cartogenesis.worldgen.pipeline.erodeBlockingWatchingIncision
 import kotlin.math.abs
+import kotlin.math.expm1
 import kotlin.math.ln
 import kotlin.math.sqrt
 import kotlin.test.Test
@@ -29,8 +30,9 @@ import kotlinx.coroutines.runBlocking
  *   a cell with `F` over one loses more than half its drop, and a cell below its receiver when the
  *   round opened is cut once its receiver has been cut below it;
  * - **the update is the law's**, on a plane whose every term is known, at small `F` and large: each
- *   cell keeps `1 / (1 + F)` of its height over its receiver's new one, and the heights come out
- *   where a recursion in metres, written here from `K`, the clock and the catchment, puts them;
+ *   step keeps `1 / (1 + f)` of a cell's height over its receiver's new one, and the heights come
+ *   out where a recursion in metres, written here from `K`, the clock and the catchment in the
+ *   stage's count of steps, puts them;
  * - **the steady state is the law's**, on synthetic landscapes run to balance under uniform uplift:
  *   the long profiles' concavity is `m / n = 0.5` and the channel steepness is `U / K`, across two
  *   rocks in one landscape, across two uplift rates, and across two rain zones, where the law puts
@@ -59,6 +61,16 @@ class ImplicitIncisionTest {
          */
         const val SMALL_COURANT = 0.1
         const val LARGE_COURANT = 10.0
+
+        /** The decay fixture's drop to the sea, in metres. */
+        const val DECAY_DROP_METRES = 100.0
+
+        /**
+         * What the field's floats can move the decay fixture's measured shortfall by: a float step
+         * near the shoreline is under a millimetre, a hundred-thousandth of the 100 m drop, and the
+         * smallest exact cut read is a tenth of that drop.
+         */
+        const val DECAY_FLOAT_SHARE = 1e-4
 
         /** The plane's fall, in metres per kilometre. */
         const val PLANE_SLOPE_METRES_PER_KM = 1.0
@@ -396,6 +408,61 @@ class ImplicitIncisionTest {
         )
     }
 
+    /**
+     * The stage's count of steps holds a round's cut to the exact decay's within
+     * [HydraulicErosion.MAX_ROUND_CUT_ERROR]: one cell draining to the sea from 100 m, whose exact
+     * decay over the round keeps `exp(-F)` of its drop, incised in the count
+     * [HydraulicErosion.incisionSubSteps] reads off it, at `F` from a tenth to three hundred. A
+     * single step, the update before the round was divided, is the control: it leaves the cell at
+     * `F` 1.6 a fifth short.
+     */
+    @Test
+    fun `the round's steps hold every cut to the exact decay`() {
+        val config = WorldGenConfig(seed = 1L, width = 16, height = 16)
+        val scale = config.scale
+        val rates = HydraulicErosion.Rates(config)
+        val cellCount = config.width * config.height
+        val shoreline = scale.fieldAtAltitude(0f)
+        val landRange = scale.landHalfOfField
+        val sea = 8 * config.width + 2
+        val cell = sea + 1
+        val isLand = BooleanArray(cellCount).also { it[cell] = true }
+        val directions = IntArray(cellCount) { -1 }.also { it[cell] = sea }
+        val erodibility = FloatArray(cellCount) { 1f }
+        fun shortfall(courant: Double, subSteps: Int?): Pair<Double, Int> {
+            val surface = FloatArray(cellCount) { scale.fieldAtAltitude(-SEA_SURFACE_DEPTH_METRES) }
+            surface[cell] = scale.fieldAtAltitude(DECAY_DROP_METRES.toFloat())
+            val relative = FloatArray(cellCount) { (surface[it] - shoreline) / landRange }
+            val discharge = FloatArray(cellCount)
+            discharge[cell] = (courant / rates.courantCoefficient).let { (it * it).toFloat() }
+            val order = intArrayOf(cell)
+            val steps = subSteps
+                ?: HydraulicErosion.incisionSubSteps(rates, config.width, order, directions, isLand, discharge, 1f, erodibility, null)
+            HydraulicErosion.incise(
+                rates, config.width, order, directions, isLand, relative, relative, discharge,
+                landCells = 1f, landRange = landRange, shorelineHeight = shoreline,
+                erodibility = erodibility, surfaceOf = surface, incisedAt = null, subSteps = steps
+            )
+            val cutMetres = DECAY_DROP_METRES - scale.altitudeAtField(surface[cell]).toDouble()
+            val exactMetres = DECAY_DROP_METRES * -expm1(-courant)
+            return (exactMetres - cutMetres) / exactMetres to steps
+        }
+        val readings = ArrayList<String>()
+        var worst = 0.0
+        for (courant in listOf(0.1, 0.5, 1.0, 1.6, 3.0, 10.0, 30.0, 300.0)) {
+            val (short, steps) = shortfall(courant, null)
+            worst = maxOf(worst, short)
+            readings += "F %.1f in %d steps %.4f short".format(courant, steps, short)
+        }
+        val (singleStep, _) = shortfall(1.6, 1)
+        println("IMPLICIT round's steps: ${readings.joinToString("; ")}; one step at F 1.6 %.3f short".format(singleStep))
+        assertTrue(
+            worst <= HydraulicErosion.MAX_ROUND_CUT_ERROR + DECAY_FLOAT_SHARE,
+            "a cut fell %.4f short of the exact decay: ${readings.joinToString("; ")}".format(worst)
+        )
+        assertTrue(singleStep > HydraulicErosion.MAX_ROUND_CUT_ERROR, "the control does not fail: one step is %.4f short".format(singleStep))
+    }
+
     /** Where the draining-lake fixture's three cells ended, in metres. */
     private class Drained(val outlet: Double, val bed: Double, val inflow: Double)
 
@@ -481,7 +548,8 @@ class ImplicitIncisionTest {
         val beforeMetres: DoubleArray,
         val afterMetres: DoubleArray,
         val predictedMetres: DoubleArray,
-        val baseAfterMetres: DoubleArray
+        val baseAfterMetres: DoubleArray,
+        val subSteps: Int
     )
 
     /**
@@ -494,7 +562,8 @@ class ImplicitIncisionTest {
      * The prediction is written here in metres from `K`, the clock, the catchment the stage
      * defines (the configured land's area over its count of cells) and the cell's width, and
      * owes nothing to the stage's coefficients: from the sea upward, each cell's new height is
-     * `(z + F z_r') / (1 + F)` with `F = K T sqrt(A) / L`.
+     * `(z + F z_r') / (1 + F)` with `F = K T sqrt(A) / L`, taken in the stage's count of steps
+     * of `F / n` each ([HydraulicErosion.subStepsFor], read on the plane's own `F`).
      */
     private fun planeRound(erodibilityPerYear: Float): PlaneRound {
         val cellsAcross = 128
@@ -556,7 +625,6 @@ class ImplicitIncisionTest {
         val afterMetres = DoubleArray(columns.count())
         val predicted = DoubleArray(columns.count())
         val baseAfter = DoubleArray(columns.count())
-        var receiverAfter = shorelineMetres
         for ((index, column) in columns.withIndex()) {
             val cell = row * cellsAcross + column
             val catchmentCells = if (column == crest) 1 else crest - column
@@ -564,27 +632,36 @@ class ImplicitIncisionTest {
             beforeMetres[index] = scale.altitudeAtField(before[cell]).toDouble()
             afterMetres[index] = scale.altitudeAtField(after.data[cell]).toDouble()
             // The crest's receiver is the sea to its east; every other cell's is the one to its west.
-            val grade = if (column == crest) shorelineMetres else receiverAfter
-            baseAfter[index] = if (column == crest) shorelineMetres else (if (index == 0) shorelineMetres else afterMetres[index - 1])
-            predicted[index] = (beforeMetres[index] + courant[index] * grade) / (1.0 + courant[index])
-            receiverAfter = predicted[index]
+            baseAfter[index] = if (column == crest || index == 0) shorelineMetres else afterMetres[index - 1]
+            predicted[index] = beforeMetres[index]
         }
-        return PlaneRound(courant, beforeMetres, afterMetres, predicted, baseAfter)
+        // The round in as many steps as the stage's criterion asks for this plane's `F`, each at
+        // `F / n`, from the sea upward.
+        val subSteps = HydraulicErosion.subStepsFor(courant.minOrNull()!!, courant.maxOrNull()!!)
+        repeat(subSteps) {
+            var receiverAfter = shorelineMetres
+            for ((index, column) in columns.withIndex()) {
+                val grade = if (column == crest) shorelineMetres else receiverAfter
+                val stepCourant = courant[index] / subSteps
+                predicted[index] = (predicted[index] + stepCourant * grade) / (1.0 + stepCourant)
+                receiverAfter = predicted[index]
+            }
+        }
+        return PlaneRound(courant, beforeMetres, afterMetres, predicted, baseAfter, subSteps)
     }
 
     /**
-     * One production round on the plane removes exactly `F / (1 + F)` of each cell's drop to its
-     * receiver's new height, and leaves every cell where a recursion written here in metres puts
-     * it, at small `F` (under [SMALL_COURANT]), at the stock erodibility and at large `F` (over
-     * [LARGE_COURANT]).
+     * One production round on the plane leaves every cell where a recursion written here in metres
+     * puts it: the implicit update `(z + f z_r') / (1 + f)` from the sea upward, in the stage's
+     * count of steps of `f = F / n`, at small `F` (under [SMALL_COURANT]), at the stock
+     * erodibility and at large `F` (over [LARGE_COURANT]).
      *
-     * Two readings, and the second does not use the first: the fraction of the realised drop the
-     * cell lost, read off the field the round left; and the heights themselves, against the
-     * recursion. A capped update fails both at large `F`, where it takes half the drop; the
-     * explicit law without a cap fails the second at every `F`, taking `F` times the drop.
+     * A capped update fails it at large `F`, where it takes half the drop; the explicit law without
+     * a cap fails it at every `F`, taking `F` times the drop; and a single step where the stage's
+     * criterion asks for several fails it wherever `F` is near one, where it cuts up to a fifth short.
      */
     @Test
-    fun `one round removes F over one plus F of the drop, at small F and at large`() {
+    fun `one round is the law's implicit update in the stage's steps, at small F and at large`() {
         val readings = ArrayList<String>()
         var smallSeen = 0
         var largeSeen = 0
@@ -595,18 +672,12 @@ class ImplicitIncisionTest {
                 val courant = round.courant[index]
                 if (courant < SMALL_COURANT) smallSeen++
                 if (courant > LARGE_COURANT) largeSeen++
-                val drop = round.beforeMetres[index] - round.baseAfterMetres[index]
-                val removed = round.beforeMetres[index] - round.afterMetres[index]
-                val lawRemoves = courant / (1.0 + courant) * drop
-                if (abs(removed - lawRemoves) > HEIGHT_TOLERANCE_METRES) {
-                    failures.add("K %.0e cell %d: removed %.3f m of a %.3f m drop, the law %.3f m at F %.3f".format(
-                        erodibility, index, removed, drop, lawRemoves, courant))
-                }
                 if (abs(round.afterMetres[index] - round.predictedMetres[index]) > HEIGHT_TOLERANCE_METRES) {
-                    failures.add("K %.0e cell %d: ended at %.3f m, the recursion %.3f m at F %.3f".format(
-                        erodibility, index, round.afterMetres[index], round.predictedMetres[index], courant))
+                    failures.add("K %.0e cell %d: ended at %.3f m, the recursion in %d steps %.3f m at F %.3f".format(
+                        erodibility, index, round.afterMetres[index], round.subSteps, round.predictedMetres[index], courant))
                 }
             }
+            readings.add("K %.0e in %d steps".format(erodibility, round.subSteps))
             val foot = 0
             val top = round.courant.size - 2
             readings.add(

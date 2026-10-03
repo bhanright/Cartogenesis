@@ -34,11 +34,23 @@ import kotlin.math.sqrt
  * and the ground follows it only as fast as its own hillslopes and channels can carry the relief
  * down, which is a property of the ground and not of the cell.
  *
- * **Transient as a relaxation.** The relief is taken to be the steady relief for the rate the
- * interfluves are lowering at now, and the rate is found by backward Euler: the relief at the end
- * of a round is the relief it opened with, plus what the bed was cut, less what the interfluves
- * lost, `R_ss(E) + E * dt = R + cut`. That is a quasi-steady closure, not a resolved hillslope
- * evolution; how far it departs from one is what the benchmark guard measures.
+ * **Transient as two relaxations in series.** The trunk's cut reaches the interfluves through the
+ * in-cell network, and the network's lowering reaches them through the hillslopes, so the relief
+ * is carried as its two pieces, each relaxing on its own response time toward the steady relief
+ * for the rate it is driven at. The network's relief `R_n` takes the trunk's cut and lowers at the
+ * rate `e_n` its steady law holds it at, `R_n = e_n N / K'`, whose time `N / K'` is the mean
+ * time a knickpoint takes to climb the in-cell tributaries ([networkResponseYears]); the
+ * hillslopes' relief `R_h` takes the network's lowering and lowers at the rate `e_h` their steady
+ * Roering profile holds them at. Both by backward Euler over a round:
+ *
+ *     R_n + cut = e_n (N / K' + dt)                 the network, closed form
+ *     R_h + e_n dt = S_c L_h h(beta(e_h)) + e_h dt  the hillslopes, solved for e_h
+ *
+ * and the interfluves lower by `e_h dt`. At steady state the trunk is cut at the uplift's rate,
+ * both rates equal it and the relief is `S_c L_h h(beta) + (E / K') N`, the same steady relief a
+ * single shared rate gives; in the transient the hillslopes feel a cut only once the network has
+ * carried it to them. That is a quasi-steady closure for each piece, not a resolved evolution; how
+ * far it departs from one is what `GroundClosureBenchmarkTest` measures.
  *
  * Everything here is in metres, square metres and years, and a cell's geometry arrives already
  * converted from `WorldScale` and the grid. Every function is a pure function of its arguments, one
@@ -238,44 +250,78 @@ internal object GroundClosure {
         hillslopeLengthMetres: Double,
         network: Double,
         erodibilityPerYear: Double
-    ): Double {
+    ): Double = steadyHillslopeReliefMetres(rateMetresPerYear, hillslopeLengthMetres) +
+        rateMetresPerYear * networkResponseYears(network, erodibilityPerYear)
+
+    /** The steady Roering hillslope's mean height above its foot, in metres: `S_c L h(beta)`. */
+    fun steadyHillslopeReliefMetres(rateMetresPerYear: Double, hillslopeLengthMetres: Double): Double {
         val beta = rateMetresPerYear * hillslopeLengthMetres /
             (HILLSLOPE_DIFFUSIVITY_M2_PER_YEAR * CRITICAL_HILLSLOPE_GRADIENT)
-        val hillslope = CRITICAL_HILLSLOPE_GRADIENT * hillslopeLengthMetres * meanHeightShare(beta)
-        val channels = if (network > 0.0 && erodibilityPerYear > 0.0) rateMetresPerYear / erodibilityPerYear * network else 0.0
-        return hillslope + channels
+        return CRITICAL_HILLSLOPE_GRADIENT * hillslopeLengthMetres * meanHeightShare(beta)
     }
 
     /**
-     * The rate a channel cell's interfluves lower at over a round of [years], in metres a year: the
-     * root of `R_ss(E) + E * years = targetMetres`, where [targetMetres] is the relief the round
-     * opened with plus what the bed was cut (see the class note), and zero where that is not
-     * positive.
+     * The in-cell network's response time, in years: the time its relief over the trunk takes to
+     * follow a change in the trunk's cut, `N / K'` for the network's [network] factor at an
+     * erodibility of [erodibilityPerYear], `K'`; zero where the cell holds no network.
+     *
+     * **Derived from the knickpoint's travel, on the geometry [NETWORK_RELIEF_PER_OCTAVE] is frozen
+     * on.** At `n = 1` a lowering of the trunk climbs a tributary as a knickpoint at the stream-power
+     * celerity `K' sqrt(A)`. On the octave geometry a tributary crosses one cell of side `h`, which
+     * drains its own `h^2`, in `h / (K' h) = 1 / K'`, whatever the octave: so a point that is a side
+     * cell at `k` of the `log2(r)` octaves between the trunk and the head is reached `k / K'` after
+     * the trunk is cut, and the head itself, integrating the celerity from the cell's area down to
+     * the head's, `log2(r) / K'` after. Half the cell's ground is a side cell at each octave, so the
+     * mean over the cell's ground of the time a cut takes to reach it is half the head's,
+     * `(1/2) log2(r) / K' = N / K'`.
+     *
+     * **Why the mean and not the head's time.** A point's relief over the trunk at steady state is
+     * the trunk's rate times the time a cut takes to reach it, so the network's mean relief is the
+     * rate times this mean, which is the frozen `(E / K') N`. A first-order relaxation stores its
+     * driving rate times its own time at steady state, so it holds that relief only if its time is
+     * this mean; and with it the network's lowering starts from nothing the instant its trunk is
+     * cut, as a network whose every point is still waiting for a knickpoint does. Relaxing on the
+     * head's time would hold twice the frozen relief, or, held to it, start the network lowering at
+     * half the trunk's rate before any knickpoint had reached it.
+     */
+    fun networkResponseYears(network: Double, erodibilityPerYear: Double): Double =
+        if (network > 0.0 && erodibilityPerYear > 0.0) network / erodibilityPerYear else 0.0
+
+    /**
+     * The rate the in-cell network lowers at over a round of [years], in metres a year: the network
+     * relaxes on its [responseYears] ([networkResponseYears]) toward the relief its steady law holds
+     * it at, by backward Euler, `R_n' = e_n * responseYears` with `R_n' = R_n + cut - e_n * years`,
+     * where [targetMetres] is the network's relief before the round, `R_n`, plus what the trunk was
+     * cut. With no network the hillslopes stand on the trunk, and this is the trunk's own rate.
+     */
+    fun networkRateMetresPerYear(targetMetres: Double, responseYears: Double, years: Double): Double =
+        if (targetMetres > 0.0) targetMetres / (responseYears + years) else 0.0
+
+    /**
+     * The rate a channel cell's hillslopes lower at over a round of [years], in metres a year: the
+     * root of `S_c L h(beta(E)) + E * years = targetMetres`, where [targetMetres] is the hillslopes'
+     * relief over the network the round opened with plus what the network lowered (see the class
+     * note), and zero where that is not positive.
      *
      * Newton's method from the linear-creep guess. The left side is increasing and concave in `E`
      * (the hillslope's mean height is concave in its rate), and the guess lies at or below the root
      * because `h(beta) <= beta / 3`, so every step lands at or below the root and the iterates rise
      * to it monotonically: no bracket can be left and no step can overshoot.
      */
-    fun channelRateMetresPerYear(
+    fun hillslopeRateMetresPerYear(
         targetMetres: Double,
         hillslopeLengthMetres: Double,
-        network: Double,
-        erodibilityPerYear: Double,
         years: Double
     ): Double {
         if (targetMetres <= 0.0) return 0.0
         val length = hillslopeLengthMetres
-        val channelPerRate = if (network > 0.0 && erodibilityPerYear > 0.0) network / erodibilityPerYear else 0.0
         val betaPerRate = length / (HILLSLOPE_DIFFUSIVITY_M2_PER_YEAR * CRITICAL_HILLSLOPE_GRADIENT)
         val linearPerRate = length * length / (3.0 * HILLSLOPE_DIFFUSIVITY_M2_PER_YEAR)
-        var rate = targetMetres / (linearPerRate + channelPerRate + years)
+        var rate = targetMetres / (linearPerRate + years)
         repeat(MAX_SOLVER_STEPS) {
             val beta = rate * betaPerRate
-            val residual = CRITICAL_HILLSLOPE_GRADIENT * length * meanHeightShare(beta) +
-                rate * (channelPerRate + years) - targetMetres
-            val slope = length * length * meanHeightShareSlope(beta) / HILLSLOPE_DIFFUSIVITY_M2_PER_YEAR +
-                channelPerRate + years
+            val residual = CRITICAL_HILLSLOPE_GRADIENT * length * meanHeightShare(beta) + rate * years - targetMetres
+            val slope = length * length * meanHeightShareSlope(beta) / HILLSLOPE_DIFFUSIVITY_M2_PER_YEAR + years
             val step = residual / slope
             rate -= step
             if (abs(step) <= SOLVER_RELATIVE_STEP * rate) return rate
@@ -284,17 +330,15 @@ internal object GroundClosure {
     }
 
     /**
-     * The residual of [channelRateMetresPerYear]'s equation at [rateMetresPerYear], in metres, for
-     * the guards that hold the solve to its own equation.
+     * The residual of [hillslopeRateMetresPerYear]'s equation at [rateMetresPerYear], in metres,
+     * for the guards that hold the solve to its own equation.
      */
-    fun channelResidualMetres(
+    fun hillslopeResidualMetres(
         rateMetresPerYear: Double,
         targetMetres: Double,
         hillslopeLengthMetres: Double,
-        network: Double,
-        erodibilityPerYear: Double,
         years: Double
-    ): Double = steadyReliefMetres(rateMetresPerYear, hillslopeLengthMetres, network, erodibilityPerYear) +
+    ): Double = steadyHillslopeReliefMetres(rateMetresPerYear, hillslopeLengthMetres) +
         rateMetresPerYear * years - targetMetres
 
     /**
@@ -377,7 +421,7 @@ internal object GroundClosure {
      * that foot as this round left it.
      *
      * Newton's method again, from the linear-creep guess, which lies at or below the root for the
-     * reason [channelRateMetresPerYear] gives (the gradient is at most its linear value, so the
+     * reason [hillslopeRateMetresPerYear] gives (the gradient is at most its linear value, so the
      * height is too); the derivative is a centred difference, these cells being few.
      */
     fun stretchRateMetresPerYear(
@@ -414,16 +458,20 @@ internal object GroundClosure {
      * mean (so the area is ground, and the runoff is already in the threshold).
      *
      * **The gradient is the head's own, reconstructed, and never a cell-to-cell slope alone.** A
-     * channel head stands on a hillslope, and a hillslope eroding at `E` stands at a gradient set by
-     * its rate and its length: the steady Roering gradient at the foot of a slope `sqrt(A)` long,
-     * `S_c u(E sqrt(A) / (D S_c))`. A slope read between cell centres is the regional tilt at the
-     * grid's own length, gentler on a coarser grid wherever the ground is rough, which would drift
-     * the head's area with the cell; the reconstructed gradient carries no length but the head's
-     * own. Where the ground has not begun to erode, as on a stamped plain in the first round, the
-     * regional gradient [resolvedGradient] is all the slope there is, so the head stands on the
-     * steeper of the two, and the area is the smaller of the two roots: `A S(A)^1.65` rises with
-     * `A` on each, so the steeper slope reaches the threshold first. Infinite where neither has any
-     * slope: no head forms on ground that neither falls nor wears.
+     * channel head stands at the foot of a hillslope, where the slope meets the channel it drains
+     * to, and that foot is where a lowering of the channel steepens the slope first: a slope whose
+     * base lowers at `E` is brought, from its foot up, to the gradient that carries `E` off it,
+     * which at the foot of a slope `sqrt(A)` long is the steady Roering gradient
+     * `S_c u(E sqrt(A) / (D S_c))`. So [rateMetresPerYear] is the rate the slope's base lowers at:
+     * the in-cell network's on a channel cell, the first channel's downstream on a cell below every
+     * head (see `GroundCells.baseLoweringMetresPerYear`). A slope read between cell centres is the
+     * regional tilt at the grid's own length, gentler on a coarser grid wherever the ground is
+     * rough, which would drift the head's area with the cell; the reconstructed gradient carries no
+     * length but the head's own. Where no base has begun to lower, as on a stamped plain in the
+     * first round, the regional gradient [resolvedGradient] is all the slope there is, so the head
+     * stands on the steeper of the two, and the area is the smaller of the two roots: `A S(A)^1.65`
+     * rises with `A` on each, so the steeper slope reaches the threshold first. Infinite where
+     * neither has any slope: no head forms on ground that neither falls nor wears.
      */
     fun headSupportAreaSquareMetres(
         thresholdSquareMetres: Double,

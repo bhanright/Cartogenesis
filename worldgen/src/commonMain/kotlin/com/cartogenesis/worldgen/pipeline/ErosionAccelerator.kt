@@ -13,8 +13,9 @@ package com.cartogenesis.worldgen.pipeline
  * may reorder a sum. That is the whole reason acceleration is opt-in and recorded in the save.
  *
  * Only the thermal sweeps cross this seam today. The two-height closure's per-cell solve
- * (`GroundCells.closeChannels`, the rate [GroundClosure.channelRateMetresPerYear] solves for on
- * each channel cell) is the next per-cell kernel and is to join it, held to the processor's answer
+ * (`GroundCells.closeChannels`: the network's relaxation, [GroundClosure.networkRateMetresPerYear],
+ * and the rate [GroundClosure.hillslopeRateMetresPerYear] solves for on each channel cell) is the
+ * next per-cell kernel and is to join it, held to the processor's answer
  * by its own equation's residual and by the cross-device difference, a fixed count of Newton steps
  * not being a guarantee of agreement; the head areas and the hillslope stretches walk the drainage
  * tree and stay on the processor (docs/DESIGN_LEDGER.md, E1a).

@@ -98,47 +98,117 @@ class GroundClosureTest {
         var stretchWorst = 0.0
         for (target in listOf(0.01, 1.0, 50.0, 400.0, 2_500.0)) {
             for (length in listOf(30.0, 200.0, 1_500.0, 12_000.0)) {
-                for (network in listOf(0.0, 0.7, 3.4)) {
-                    val rate = GroundClosure.channelRateMetresPerYear(target, length, network, ERODIBILITY, ROUND_YEARS)
-                    val residual = GroundClosure.channelResidualMetres(rate, target, length, network, ERODIBILITY, ROUND_YEARS)
-                    worst = maxOf(worst, abs(residual) / target)
-                }
+                val rate = GroundClosure.hillslopeRateMetresPerYear(target, length, ROUND_YEARS)
+                val residual = GroundClosure.hillslopeResidualMetres(rate, target, length, ROUND_YEARS)
+                worst = maxOf(worst, abs(residual) / target)
                 val stretchRate = GroundClosure.stretchRateMetresPerYear(target, length, 0.3, 0.6, ROUND_YEARS)
                 val stretchResidual =
                     GroundClosure.stretchMeanHeightMetres(stretchRate, length, 0.3, 0.6) + stretchRate * ROUND_YEARS - target
                 stretchWorst = maxOf(stretchWorst, abs(stretchResidual) / target)
             }
+            for (network in listOf(0.0, 0.7, 3.4)) {
+                val response = GroundClosure.networkResponseYears(network, ERODIBILITY)
+                val rate = GroundClosure.networkRateMetresPerYear(target, response, ROUND_YEARS)
+                // The network's relief after the round is what its steady law holds at its rate.
+                val after = target - rate * ROUND_YEARS
+                worst = maxOf(worst, abs(after - rate * response) / target)
+            }
         }
         println("CLOSURE solves: worst residual %.2e of the relief (channel), %.2e (stretch)".format(worst, stretchWorst))
         assertTrue("a channel cell's solve misses its equation by $worst of the relief", worst <= SOLVE_TOLERANCE)
         assertTrue("a hillslope cell's solve misses its equation by $stretchWorst", stretchWorst <= STRETCH_SOLVE_TOLERANCE)
-        assertEquals(0.0, GroundClosure.channelRateMetresPerYear(0.0, 200.0, 1.0, ERODIBILITY, ROUND_YEARS))
-        assertEquals(0.0, GroundClosure.channelRateMetresPerYear(-5.0, 200.0, 1.0, ERODIBILITY, ROUND_YEARS))
+        assertEquals(0.0, GroundClosure.hillslopeRateMetresPerYear(0.0, 200.0, ROUND_YEARS))
+        assertEquals(0.0, GroundClosure.hillslopeRateMetresPerYear(-5.0, 200.0, ROUND_YEARS))
+        assertEquals(0.0, GroundClosure.networkRateMetresPerYear(0.0, 1e6, ROUND_YEARS))
     }
 
     /**
      * A steady block: a channel cell whose bed is cut by the uplift each round, as a trunk at grade
-     * is, settles where its interfluves lower at the uplift's rate and stand at the steady relief for
-     * that rate. The closure is a relaxation toward that state, and this is its fixed point.
+     * is, settles where its network and its hillslopes both lower at the uplift's rate and its
+     * interfluves stand at the steady relief for that rate, the network's piece `(E / K') N` and the
+     * hillslopes' `S_c L h(beta)`. The two relaxations in series are the closure, and this is their
+     * fixed point: the same steady relief one rate shared by both gave.
      */
     @Test
     fun `a block under steady uplift settles at the uplift's rate and its steady relief`() {
         for (upliftMetresPerYear in listOf(2e-5, 1e-4, 5e-4)) {
             val length = 300.0
             val network = 2.0
-            var relief = 0.0
+            val response = GroundClosure.networkResponseYears(network, ERODIBILITY)
+            var networkRelief = 0.0
+            var hillslopeRelief = 0.0
             var rate = 0.0
             repeat(STEADY_ROUNDS) {
-                rate = GroundClosure.channelRateMetresPerYear(
-                    relief + upliftMetresPerYear * ROUND_YEARS, length, network, ERODIBILITY, ROUND_YEARS
+                val networkRate = GroundClosure.networkRateMetresPerYear(
+                    networkRelief + upliftMetresPerYear * ROUND_YEARS, response, ROUND_YEARS
                 )
-                relief = relief + upliftMetresPerYear * ROUND_YEARS - rate * ROUND_YEARS
+                networkRelief = networkRate * response
+                val hillslopeTarget = hillslopeRelief + networkRate * ROUND_YEARS
+                rate = GroundClosure.hillslopeRateMetresPerYear(hillslopeTarget, length, ROUND_YEARS)
+                hillslopeRelief = hillslopeTarget - rate * ROUND_YEARS
             }
+            val relief = networkRelief + hillslopeRelief
             val steady = GroundClosure.steadyReliefMetres(upliftMetresPerYear, length, network, ERODIBILITY)
             println("CLOSURE steady block U=%.1e m/yr: rate %.4e, relief %.2f m against %.2f".format(upliftMetresPerYear, rate, relief, steady))
             assertTrue("the block lowers at $rate against an uplift of $upliftMetresPerYear", abs(rate / upliftMetresPerYear - 1) <= STEADY_TOLERANCE)
             assertTrue("the block stands at $relief m against its steady $steady", abs(relief / steady - 1) <= STEADY_TOLERANCE)
         }
+    }
+
+    /**
+     * The network's response time is the mean, over the cell's ground, of the time a knickpoint
+     * takes to reach it, built here the long way on the octave geometry the renormalization is
+     * frozen on: half of each block's ground is a side cell that a knickpoint crosses in
+     * `h / (K' h)` at every octave, and a point's time is that times the octaves at which it was a
+     * side cell. Its mean is `N / K'`; the head's own time, the longest, is twice that, which is the
+     * control a relaxation on the head's time would be.
+     */
+    @Test
+    fun `the network's response time is the mean time a knickpoint takes to reach its ground`() {
+        for (octaves in 1..12) {
+            val reach = 2.0.pow(octaves)
+            var meanYears = 0.0
+            for (sideOctaves in 0..octaves) {
+                val share = binomial(octaves, sideOctaves) / 2.0.pow(octaves)
+                meanYears += share * sideOctaves / ERODIBILITY
+            }
+            val headYears = octaves / ERODIBILITY
+            val response = GroundClosure.networkResponseYears(GroundClosure.networkFactor(reach), ERODIBILITY)
+            assertEquals(meanYears, response, 1e-9 * meanYears, "at $octaves octaves")
+            assertTrue("the head's time is not twice the mean", abs(headYears / response - 2.0) < 1e-9)
+        }
+        assertEquals(0.0, GroundClosure.networkResponseYears(0.0, ERODIBILITY))
+    }
+
+    /**
+     * The network carries a cut to the hillslopes in its own time: in the round the trunk is first
+     * cut, the network lowers by the cut's share `dt / (N / K' + dt)` and the hillslopes by no more
+     * than that. One rate shared by both, the closure before the two were put in series, sends the
+     * interfluves down further in that round, which is the control.
+     */
+    @Test
+    fun `a cut reaches the interfluves through the network`() {
+        val length = 300.0
+        val network = 2.0
+        val cut = 50.0
+        val response = GroundClosure.networkResponseYears(network, ERODIBILITY)
+        val networkRate = GroundClosure.networkRateMetresPerYear(cut, response, ROUND_YEARS)
+        assertEquals(cut * ROUND_YEARS / (response + ROUND_YEARS), networkRate * ROUND_YEARS, 1e-9 * cut)
+        val hillslopeRate = GroundClosure.hillslopeRateMetresPerYear(networkRate * ROUND_YEARS, length, ROUND_YEARS)
+        assertTrue("the hillslopes outran their network", hillslopeRate <= networkRate)
+        // The shared rate: the root of R_ss(E) + E dt = cut, by bisection on the steady relief.
+        var low = 0.0
+        var high = cut / ROUND_YEARS
+        repeat(BISECTION_STEPS) {
+            val middle = (low + high) / 2
+            if (GroundClosure.steadyReliefMetres(middle, length, network, ERODIBILITY) + middle * ROUND_YEARS < cut) low = middle else high = middle
+        }
+        println(
+            "CLOSURE first cut of %.0f m: network %.2f m, hillslopes %.3f m; one shared rate %.3f m".format(
+                cut, networkRate * ROUND_YEARS, hillslopeRate * ROUND_YEARS, low * ROUND_YEARS
+            )
+        )
+        assertTrue("the control does not lower the interfluves further", low > hillslopeRate)
     }
 
     /**
@@ -275,6 +345,12 @@ class GroundClosureTest {
         return total
     }
 
+    private fun binomial(n: Int, k: Int): Double {
+        var result = 1.0
+        for (i in 1..k) result = result * (n - k + i) / i
+        return result
+    }
+
     private fun simpson(intervals: Int, f: (Double) -> Double): Double {
         val h = 1.0 / intervals
         var sum = f(0.0) + f(1.0)
@@ -314,6 +390,9 @@ class GroundClosureTest {
 
         /** Enough rounds for the slowest block here to settle to the steady tolerance. */
         const val STEADY_ROUNDS = 4_000
+
+        /** Bisection halvings for the control's rate: 2^-200 of its bracket. */
+        const val BISECTION_STEPS = 200
 
         const val ERODIBILITY = 1e-6
         const val ROUND_YEARS = 336_476.4

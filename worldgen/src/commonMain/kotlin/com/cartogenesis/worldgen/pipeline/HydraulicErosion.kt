@@ -6,6 +6,10 @@ import com.cartogenesis.worldgen.model.ErosionConfig
 import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldScale
+import kotlin.math.exp
+import kotlin.math.expm1
+import kotlin.math.ln
+import kotlin.math.ln1p
 import kotlin.math.sqrt
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -232,6 +236,23 @@ internal object HydraulicErosion {
      * river setting re-cut every valley.
      */
     internal const val POND_DEPTH_METRES = 24f
+
+    /**
+     * The most a round's implicit incision may leave any cell's cut short of the exact decay's, as a
+     * share of that cut: one per cent ([incisionSubSteps] sets the sub-steps that hold it).
+     *
+     * The implicit update is first-order in its step, and its shortfall is the one error of the
+     * trunk's cut that follows the grid, through `F`, which at the same catchment on the ground
+     * grows as the cell narrows: a single step leaves a cell at `F = 1.8` 23% short, and that cell
+     * is a larger river on a finer grid. One per cent is a tenth of the tenth the trunk's cut is held
+     * to across grids and a fifth of the twentieth the ground is, so the round's step is not what
+     * either bar measures. The worst shortfall of `n` steps is about `0.32 / n` (at `F` near 1.6),
+     * so this asks for about 32 steps a round wherever cells near that `F` cut.
+     */
+    internal const val MAX_ROUND_CUT_ERROR = 0.01
+
+    /** Golden-section steps for the worst shortfall's `F`: 0.618^80 of the span is far below any `F`'s digits. */
+    private const val GOLDEN_SECTION_STEPS = 80
 
     /**
      * Every rate, reach and depth this stage spends, converted out of [WorldScale] and the grid
@@ -719,6 +740,9 @@ internal object HydraulicErosion {
         val bedCut = DoubleArray(cellsAcross * cellsDown)
         val production = DoubleArray(cellsAcross * cellsDown)
         var bedsHeldUnderGround = 0
+        // The rock each cell gained this round, in metres: the rate a slope running to the sea
+        // sees its base fall at (see [GroundCells.closeHillslopes]).
+        val upliftThisRoundMetres = if (upliftRateMmPerYear != null) FloatArray(cellsAcross * cellsDown) else null
         // The closing breach and the post-cut outlet pass route over surfaces the rounds never
         // routed over, each with its own shoreline, so each takes its own normalisation.
         val spoilRunoff = FloatArray(cellsAcross * cellsDown)
@@ -861,9 +885,10 @@ internal object HydraulicErosion {
             // the weight; what is left over is the surface uplift, and in a belt at steady state
             // the rivers take that away too.
             var upliftedThisRound = 0.0
-            if (upliftRateMmPerYear != null) {
+            if (upliftRateMmPerYear != null && upliftThisRoundMetres != null) {
                 val rate = upliftRateMmPerYear.data
                 val surface = working.data
+                upliftThisRoundMetres.fill(0f)
                 for (cell in surface.indices) {
                     if (rate[cell] <= 0f) continue
                     val altitude = scale.altitudeAtField(surface[cell])
@@ -872,6 +897,7 @@ internal object HydraulicErosion {
                     if (metres <= 0f) continue
                     surface[cell] += metres / metresPerFieldUnit
                     cells.bed[cell] += metres / metresPerFieldUnit
+                    upliftThisRoundMetres[cell] = metres
                     if (upliftedMetres.isNotEmpty()) upliftedMetres[cell] += metres
                     upliftedThisRound += metres.toDouble()
                 }
@@ -1103,8 +1129,9 @@ internal object HydraulicErosion {
             }
 
             // The incision: Braun and Willett's implicit update, from the outlets upstream, on the
-            // beds of the cells that carry a channel. See [incise] for the update, its bounds and
-            // what it does and does not promise.
+            // beds of the cells that carry a channel, in as many sub-steps as hold every cell's cut
+            // to the exact decay's (see [incisionSubSteps]). See [incise] for the update, its bounds
+            // and what it does and does not promise.
             //
             // Then the ground follows: on a channel cell the interfluves lower by the closure, on a
             // cell below every head the whole cell lowers as a stretch of hillslope toward the
@@ -1118,12 +1145,15 @@ internal object HydraulicErosion {
                 onlyAboveBase = receiverClamp,
                 watch = incisionWatch,
                 round = round,
-                cutsAt = cells.isChannel
+                cutsAt = cells.isChannel,
+                subSteps = incisionSubSteps(
+                    rates, cellsAcross, order, directions, isLand, area.data, landCells, erodibility, cells.isChannel
+                )
             )
-            cells.closeChannels(groundOf, erodibility, runoff, ruler, production)
+            cells.closeChannels(groundOf, bedCut, erodibility, runoff, ruler, production)
             cells.closeHillslopes(
-                cellsAcross, isLand, filledBed, directions, order, cellsUpstream.data, groundOf,
-                sea.shorelineHeight, landRange, ruler, production
+                cellsAcross, isLand, filledBed, directions, order, cellsUpstream.data, groundOf, bedCut,
+                upliftThisRoundMetres, sea.shorelineHeight, landRange, ruler, production
             )
             for (cell in production.indices) incised += production[cell]
             if (carryingSediment) {
@@ -2436,11 +2466,14 @@ internal object HydraulicErosion {
      * **What it does not promise.** Stability is not accuracy. At [WorldScale.yearsPerHydraulicRound]
      * a round, a cell with a large `F` loses nearly its whole drop in one step, and the scheme
      * spreads a knickpoint over a few cells as any first-order upwind scheme does, a numerical
-     * diffusion that scales with the step; a shorter round would resolve a profile's shape more
-     * finely and would not change where it grades to. And the realised cut is not proportional to
-     * the law's rate: it is `F / (1 + F)` of the drop, so a factor that multiplies `F`, the cover's
-     * or the rain's, multiplies the cut fully where `F` is small and less and less as it grows.
-     * The law's rate is `F (z - z_r)` on the ground as the pass found it, which [watch] is handed.
+     * diffusion that scales with the step; a shorter step resolves a profile's shape more finely
+     * and does not change where it grades to. So the stage spends a round in [subSteps] steps, each
+     * the same update at `F / subSteps` with the routing held, as many as [incisionSubSteps] finds
+     * hold every cell's cut to the exact decay's within [MAX_ROUND_CUT_ERROR]. And the realised cut
+     * is not proportional to the law's rate: one step takes `F / (1 + F)` of the drop, so a factor
+     * that multiplies `F`, the cover's or the rain's, multiplies the cut fully where `F` is small
+     * and less and less as it grows. The law's rate is `F (z - z_r)` on the ground as the pass found
+     * it, which [watch] is handed once a cell's last step is taken, with the round's whole `F`.
      *
      * @param ground the depression-filled surface the round routed on, and [relative] the actual
      *   one, both shoreline-relative with the land's half of the field, [landRange], as their unit;
@@ -2471,54 +2504,148 @@ internal object HydraulicErosion {
          * channel. A cell below every head is lowered by its hillslope and not by the law, and is
          * left as it is here. Null cuts every land cell, as the one-height pass did.
          */
-        cutsAt: BooleanArray? = null
+        cutsAt: BooleanArray? = null,
+        /**
+         * How many implicit steps the round is spent in, each of `1 / subSteps` of its years and
+         * so of every cell's `F`, the routing held: [incisionSubSteps]'s count in the stage, one in
+         * the guards that hold a single step's algebra.
+         */
+        subSteps: Int = 1
     ) {
         val asFound = if (watch != null) surfaceOf.copyOf() else null
-        // The water's surface over each cell of a filled basin for this pass, NaN elsewhere: set
+        // The water's surface over each cell of a filled basin for this step, NaN elsewhere: set
         // receivers first, so the outlet's new height is known before the lake behind it.
-        val waterSurface = FloatArray(surfaceOf.size) { Float.NaN }
-        for (rank in order.indices.reversed()) {
-            val cell = order[rank]
-            val receiver = directions[cell]
-            val underStandingWater = ground[cell] - relative[cell] > rates.pondDepth
-            if (receiver < 0) {
-                if (underStandingWater) waterSurface[cell] = shorelineHeight + ground[cell] * landRange
-                continue
-            }
-            val baseAfter = baseLevel(receiver, surfaceOf, isLand, waterSurface, shorelineHeight)
-            if (underStandingWater) {
-                // The lake falls with its outlet: its surface is its filled level or the level its
-                // outlet now drains to, whichever is lower, and a cell behind another lake cell
-                // shares that cell's surface.
-                val filledLevel = shorelineHeight + ground[cell] * landRange
-                val downstream = if (isLand[receiver] && !waterSurface[receiver].isNaN()) waterSurface[receiver] else baseAfter
-                waterSurface[cell] = minOf(filledLevel, downstream)
-            }
-            val height = surfaceOf[cell]
-            val stepCellWidths = rates.groundSteps.between(cell, receiver, cellsAcross)
-            val courantNumber =
-                rates.courantCoefficient * sqrt(discharge[cell] / landCells) * erodibility[cell] / stepCellWidths
-            // Under the water as it now stands there is no channel to cut and nothing to raise; a
-            // cell the falling water has uncovered is graded like any other.
-            val submerged = underStandingWater && height <= waterSurface[cell]
-            val after =
-                if (submerged || (cutsAt != null && !cutsAt[cell]) || (height <= baseAfter && onlyAboveBase)) height
-                else (baseAfter + (height - baseAfter).toDouble() / (1.0 + courantNumber)).toFloat()
-            if (after != height) {
-                surfaceOf[cell] = after
-                if (incisedAt != null && after < height) incisedAt[cell] = height.toDouble() - after.toDouble()
-            }
-            if (watch != null && asFound != null && (cutsAt == null || cutsAt[cell])) {
-                // Before the pass the lake stood at its filled level.
-                val baseBefore = when {
-                    !isLand[receiver] -> shorelineHeight
-                    ground[receiver] - relative[receiver] > rates.pondDepth ->
-                        maxOf(asFound[receiver], shorelineHeight + ground[receiver] * landRange)
-                    else -> asFound[receiver]
+        val waterSurface = FloatArray(surfaceOf.size)
+        for (step in 0 until subSteps) {
+            waterSurface.fill(Float.NaN)
+            val lastStep = step == subSteps - 1
+            for (rank in order.indices.reversed()) {
+                val cell = order[rank]
+                val receiver = directions[cell]
+                val underStandingWater = ground[cell] - relative[cell] > rates.pondDepth
+                if (receiver < 0) {
+                    if (underStandingWater) waterSurface[cell] = shorelineHeight + ground[cell] * landRange
+                    continue
                 }
-                watch.cut(round, cell, receiver, courantNumber, height, baseBefore, baseAfter, after)
+                val baseAfter = baseLevel(receiver, surfaceOf, isLand, waterSurface, shorelineHeight)
+                if (underStandingWater) {
+                    // The lake falls with its outlet: its surface is its filled level or the level
+                    // its outlet now drains to, whichever is lower, and a cell behind another lake
+                    // cell shares that cell's surface.
+                    val filledLevel = shorelineHeight + ground[cell] * landRange
+                    val downstream = if (isLand[receiver] && !waterSurface[receiver].isNaN()) waterSurface[receiver] else baseAfter
+                    waterSurface[cell] = minOf(filledLevel, downstream)
+                }
+                val height = surfaceOf[cell]
+                val stepCellWidths = rates.groundSteps.between(cell, receiver, cellsAcross)
+                val courantNumber =
+                    rates.courantCoefficient * sqrt(discharge[cell] / landCells) * erodibility[cell] / stepCellWidths
+                val stepCourant = if (subSteps == 1) courantNumber else courantNumber / subSteps
+                // Under the water as it now stands there is no channel to cut and nothing to raise;
+                // a cell the falling water has uncovered is graded like any other.
+                val submerged = underStandingWater && height <= waterSurface[cell]
+                val after =
+                    if (submerged || (cutsAt != null && !cutsAt[cell]) || (height <= baseAfter && onlyAboveBase)) height
+                    else (baseAfter + (height - baseAfter).toDouble() / (1.0 + stepCourant)).toFloat()
+                if (after != height) {
+                    surfaceOf[cell] = after
+                    if (incisedAt != null && after < height) incisedAt[cell] += height.toDouble() - after.toDouble()
+                }
+                if (lastStep && watch != null && asFound != null && (cutsAt == null || cutsAt[cell])) {
+                    // Before the pass the lake stood at its filled level.
+                    val baseBefore = when {
+                        !isLand[receiver] -> shorelineHeight
+                        ground[receiver] - relative[receiver] > rates.pondDepth ->
+                            maxOf(asFound[receiver], shorelineHeight + ground[receiver] * landRange)
+                        else -> asFound[receiver]
+                    }
+                    watch.cut(round, cell, receiver, courantNumber, asFound[cell], baseBefore, baseAfter, after)
+                }
             }
         }
+    }
+
+    /**
+     * How many sub-steps a round's implicit incision is spent in: the fewest that hold every cell
+     * the pass may cut to within [MAX_ROUND_CUT_ERROR] of the cut the exact decay makes over the
+     * round ([roundCutError]). Reads each such cell's `F` as [incise] forms it: land cells with a
+     * receiver, those in [cutsAt] where it is given.
+     *
+     * The error peaks where `F` is near 1.6 and falls away on both sides, since a small `F` cuts
+     * little either way and a large one takes nearly the whole drop either way, so the count is
+     * set by the cells nearest that peak and not by the largest trunk's `F`: a count by the largest
+     * `F` would spend hundreds of passes on the few cells whose answer they barely move.
+     */
+    internal fun incisionSubSteps(
+        rates: Rates,
+        cellsAcross: Int,
+        order: IntArray,
+        directions: IntArray,
+        isLand: BooleanArray,
+        discharge: FloatArray,
+        landCells: Float,
+        erodibility: FloatArray,
+        cutsAt: BooleanArray?
+    ): Int {
+        var lowest = Double.POSITIVE_INFINITY
+        var highest = 0.0
+        for (cell in order) {
+            val receiver = directions[cell]
+            if (receiver < 0 || !isLand[cell] || (cutsAt != null && !cutsAt[cell])) continue
+            val stepCellWidths = rates.groundSteps.between(cell, receiver, cellsAcross)
+            val courant =
+                (rates.courantCoefficient * sqrt(discharge[cell] / landCells) * erodibility[cell] / stepCellWidths).toDouble()
+            if (courant <= 0.0) continue
+            if (courant < lowest) lowest = courant
+            if (courant > highest) highest = courant
+        }
+        return subStepsFor(lowest, highest)
+    }
+
+    /**
+     * The fewest sub-steps that hold every `F` from [lowestCourant] to [highestCourant] to within
+     * [MAX_ROUND_CUT_ERROR] of the exact decay's cut over a round; one where nothing is cut.
+     */
+    internal fun subStepsFor(lowestCourant: Double, highestCourant: Double): Int {
+        if (highestCourant <= 0.0 || lowestCourant > highestCourant) return 1
+        var subSteps = 1
+        while (worstRoundCutError(lowestCourant, highestCourant, subSteps) > MAX_ROUND_CUT_ERROR) subSteps++
+        return subSteps
+    }
+
+    /**
+     * How far short of the exact decay `subSteps` implicit steps leave a cell's cut over a round,
+     * as a share of the exact cut, for a cell whose receiver holds still: the exact decay keeps
+     * `exp(-F)` of the drop and the steps keep `(1 + F / subSteps)^-subSteps`, so the shortfall is
+     * `((1 + F / n)^-n - exp(-F)) / (1 - exp(-F))`. Written with `expm1` and `ln1p` so a small `F`
+     * keeps its digits.
+     */
+    internal fun roundCutError(courantNumber: Double, subSteps: Int): Double {
+        if (courantNumber <= 0.0) return 0.0
+        val logKept = -subSteps * ln1p(courantNumber / subSteps)
+        val shortfall = exp(-courantNumber) * expm1(courantNumber + logKept)
+        return shortfall / -expm1(-courantNumber)
+    }
+
+    /**
+     * The largest [roundCutError] over `F` in [lowest]..[highest], by golden-section search on
+     * `ln F`: the error rises from nothing at small `F`, peaks once and falls to nothing at large
+     * `F`, so a single peak is all there is to find.
+     */
+    private fun worstRoundCutError(lowest: Double, highest: Double, subSteps: Int): Double {
+        var low = ln(lowest)
+        var high = ln(highest)
+        val ratio = (sqrt(5.0) - 1.0) / 2.0
+        repeat(GOLDEN_SECTION_STEPS) {
+            val left = high - ratio * (high - low)
+            val right = low + ratio * (high - low)
+            if (roundCutError(exp(left), subSteps) < roundCutError(exp(right), subSteps)) low = left else high = right
+        }
+        return maxOf(
+            roundCutError(lowest, subSteps),
+            roundCutError(highest, subSteps),
+            roundCutError(exp((low + high) / 2.0), subSteps)
+        )
     }
 
     /**

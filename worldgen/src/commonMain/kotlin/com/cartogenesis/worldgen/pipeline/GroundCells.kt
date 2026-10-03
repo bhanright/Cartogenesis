@@ -30,10 +30,22 @@ internal class GroundCells(cellCount: Int, initialGround: FloatArray) {
     val bedShare: FloatArray = FloatArray(cellCount) { 1f }
 
     /**
-     * The rate each cell's interfluves lowered at in the last round it was closed, in metres a
-     * year: what [shape] reconstructs a channel head's gradient from. Zero before the first round.
+     * The rate the base of each cell's hillslopes lowered at in the last round, in metres a year
+     * against the rock: on a channel cell its in-cell network's (the trunk's, where it has no
+     * network), on a cell below every head the first channel's downstream, or the uplift's where
+     * the slope runs to the sea. What [shape] reconstructs a channel head's gradient from (see
+     * [GroundClosure.headSupportAreaSquareMetres]). Zero before the first round.
      */
-    val rateMetresPerYear: FloatArray = FloatArray(cellCount)
+    val baseLoweringMetresPerYear: FloatArray = FloatArray(cellCount)
+
+    /**
+     * The relief of each channel cell's in-cell network over its trunk, in metres: the mean height
+     * of the beds of the channels the cell holds and the grid does not, the piece of the
+     * interfluves' relief that follows the trunk on the network's own response time (see
+     * [GroundClosure]). Never more than the cell's whole relief; zero on a cell whose two heights
+     * are one.
+     */
+    val networkReliefMetres: FloatArray = FloatArray(cellCount)
 
     /** Whether each cell carries a channel this round: a head in or above it, or a channel above it. */
     val isChannel: BooleanArray = BooleanArray(cellCount)
@@ -174,7 +186,8 @@ internal class GroundCells(cellCount: Int, initialGround: FloatArray) {
      * A cell carries a channel where its catchment at the outlet, weighted by runoff against
      * Earth's mean, reaches the head's threshold `A_c S^1.65 = 0.011 km2 x cover`
      * ([ChannelInitiation]'s constants, unchanged), with the head's gradient reconstructed from
-     * the ground's own erosion ([GroundClosure.headSupportAreaSquareMetres]); and wherever a
+     * the rate the base of the cell's slopes lowered at last round ([baseLoweringMetresPerYear],
+     * [GroundClosure.headSupportAreaSquareMetres]); and wherever a
      * channel drains into it, because discharge only grows, so a channel crosses a flat the head
      * rule would not start one on. Under standing water a cell is neither, and passes the channel
      * on.
@@ -245,7 +258,7 @@ internal class GroundCells(cellCount: Int, initialGround: FloatArray) {
             val earthShare = Runoff.shareOfEarthMean(rainfallMm[cell]).toDouble()
             val cover = ChannelInitiation.coverFactor(vegetationDensity[cell]).toDouble()
             val headArea = GroundClosure.headSupportAreaSquareMetres(
-                thresholdSquareMetres * cover / earthShare, resolvedGradient, rateMetresPerYear[cell].toDouble()
+                thresholdSquareMetres * cover / earthShare, resolvedGradient, baseLoweringMetresPerYear[cell].toDouble()
             )
             headAreaSquareMetres[cell] = headArea.toFloat()
             val headWeighted = earthShare * headArea
@@ -255,6 +268,7 @@ internal class GroundCells(cellCount: Int, initialGround: FloatArray) {
             if (!channelEnters && outletWeighted < headWeighted) {
                 isHillslope[cell] = true
                 bedShare[cell] = 1f
+                networkReliefMetres[cell] = 0f
                 continue
             }
             isChannel[cell] = true
@@ -288,40 +302,51 @@ internal class GroundCells(cellCount: Int, initialGround: FloatArray) {
     }
 
     /**
-     * The ground of every channel cell after the round, its bed already cut: the interfluves lower
-     * at the rate [GroundClosure.channelRateMetresPerYear] solves for, and the ground is the bed's
-     * share at the new bed and the rest at the new interfluves. [production] is handed what each
-     * cell's ground lost, per unit of its area in the field's units, read back from the stored
-     * floats. [erodibility] and [runoff] are the round's relative cover factor and runoff weight.
+     * The ground of every channel cell after the round, its bed already cut by [bedCut] (per unit
+     * of the cell's area, in the field's units): the cut climbs the in-cell network, which lowers
+     * at the rate [GroundClosure.networkRateMetresPerYear] gives, and the network's lowering climbs
+     * the hillslopes, which lower at the rate [GroundClosure.hillslopeRateMetresPerYear] solves for;
+     * the ground is the bed's share at the new bed and the rest at the interfluves, lowered by the
+     * hillslopes' rate. [production] is handed what each cell's ground lost, per unit of its area in
+     * the field's units, read back from the stored floats. [erodibility] and [runoff] are the
+     * round's relative cover factor and runoff weight.
      */
     fun closeChannels(
         ground: FloatArray,
+        bedCut: DoubleArray,
         erodibility: FloatArray,
         runoff: FloatArray,
         ruler: Ruler,
         production: DoubleArray
     ) {
         val metres = ruler.metresPerFieldUnit
+        val years = ruler.years
         for (cell in ground.indices) {
             if (!isChannel[cell]) continue
             val share = bedShare[cell].toDouble()
             val bedNow = bed[cell].toDouble()
+            val cutMetres = bedCut[cell] * metres
             val newGround: Double
             if (share >= 1.0) {
                 newGround = bedNow
-                rateMetresPerYear[cell] = 0f
+                networkReliefMetres[cell] = 0f
+                baseLoweringMetresPerYear[cell] = (cutMetres / years).toFloat()
             } else {
                 val interfluveBefore = interfluve[cell].toDouble()
+                // The relief the round opened with, the trunk's cut taken back off what stands over
+                // the cut bed now; the network's share of it as last round left it, never more.
+                val reliefBefore = ((interfluveBefore - bedNow) * metres - cutMetres).coerceAtLeast(0.0)
+                val networkBefore = networkReliefMetres[cell].toDouble().coerceIn(0.0, reliefBefore)
+                val hillslopeBefore = reliefBefore - networkBefore
                 val erodibilityPrime = ruler.erodibilityPerYear * erodibility[cell] * sqrt(runoff[cell].toDouble())
-                val rate = GroundClosure.channelRateMetresPerYear(
-                    (interfluveBefore - bedNow) * metres,
-                    hillslopeLengthMetres[cell].toDouble(),
-                    networkFactor[cell].toDouble(),
-                    erodibilityPrime,
-                    ruler.years
+                val response = GroundClosure.networkResponseYears(networkFactor[cell].toDouble(), erodibilityPrime)
+                val networkRate = GroundClosure.networkRateMetresPerYear(networkBefore + cutMetres, response, years)
+                val hillslopeRate = GroundClosure.hillslopeRateMetresPerYear(
+                    hillslopeBefore + networkRate * years, hillslopeLengthMetres[cell].toDouble(), years
                 )
-                rateMetresPerYear[cell] = rate.toFloat()
-                val interfluveAfter = interfluveBefore - rate * ruler.years / metres
+                networkReliefMetres[cell] = (networkRate * response).toFloat()
+                baseLoweringMetresPerYear[cell] = networkRate.toFloat()
+                val interfluveAfter = interfluveBefore - hillslopeRate * years / metres
                 newGround = share * bedNow + (1.0 - share) * maxOf(interfluveAfter, bedNow)
             }
             val prior = ground[cell]
@@ -342,6 +367,14 @@ internal class GroundCells(cellCount: Int, initialGround: FloatArray) {
      * draining through it, itself included, which with the step gives its place on the slope; the
      * stretch it stands for runs from `(n - 1) l` to `n l` from the divide, on a slope that ends at
      * the foot `d` beyond its centre, `d` the distance along the flow to the foot.
+     *
+     * Each cell's [baseLoweringMetresPerYear] is set to the rate its foot lowered at against the
+     * rock this round, which is what the head rule reads next round: a channel foot's trunk cut
+     * ([bedCut], per unit of a cell's area in the field's units), the sea's as the rock rises past it
+     * ([upliftMetres], this round's uplift in metres, null where nothing rises), nothing at a lake's
+     * surface, which rises and falls with the ground that holds it. A slope creeps far too slowly at
+     * the grid's lengths to keep up with a foot that lowers, so the foot steepens it from the bottom
+     * up, and that is where a channel head forms.
      */
     fun closeHillslopes(
         cellsAcross: Int,
@@ -351,6 +384,8 @@ internal class GroundCells(cellCount: Int, initialGround: FloatArray) {
         order: IntArray,
         cellsUpstream: FloatArray,
         ground: FloatArray,
+        bedCut: DoubleArray,
+        upliftMetres: FloatArray?,
         shorelineHeight: Float,
         landHalfOfField: Float,
         ruler: Ruler,
@@ -361,6 +396,7 @@ internal class GroundCells(cellCount: Int, initialGround: FloatArray) {
             val cell = order[rank]
             if (!isHillslope[cell]) continue
             footLevel[cell] = Float.NaN
+            baseLoweringMetresPerYear[cell] = 0f
             bed[cell] = ground[cell]
             val receiver = directions[cell]
             if (receiver < 0) continue
@@ -368,12 +404,21 @@ internal class GroundCells(cellCount: Int, initialGround: FloatArray) {
             val foot: Float
             val distance: Double
             when {
-                !isLand[receiver] -> { foot = shorelineHeight; distance = stepMetres }
-                isChannel[receiver] -> { foot = bed[receiver]; distance = stepMetres }
+                !isLand[receiver] -> {
+                    foot = shorelineHeight
+                    distance = stepMetres
+                    if (upliftMetres != null) baseLoweringMetresPerYear[cell] = (upliftMetres[cell] / ruler.years).toFloat()
+                }
+                isChannel[receiver] -> {
+                    foot = bed[receiver]
+                    distance = stepMetres
+                    baseLoweringMetresPerYear[cell] = (bedCut[receiver] * metres / ruler.years).toFloat()
+                }
                 isHillslope[receiver] -> {
                     if (footLevel[receiver].isNaN()) continue
                     foot = footLevel[receiver]
                     distance = stepMetres + footDistanceMetres[receiver]
+                    baseLoweringMetresPerYear[cell] = baseLoweringMetresPerYear[receiver]
                 }
                 // Under standing water: the hillslope ends at the water's surface.
                 else -> { foot = shorelineHeight + filledBed[receiver] * landHalfOfField; distance = stepMetres }
@@ -386,7 +431,6 @@ internal class GroundCells(cellCount: Int, initialGround: FloatArray) {
             val toShare = (upstream * stepMetres / slopeLength).coerceAtMost(1.0)
             val target = (ground[cell] - foot).toDouble() * metres
             val rate = GroundClosure.stretchRateMetresPerYear(target, slopeLength, fromShare, toShare, ruler.years)
-            rateMetresPerYear[cell] = rate.toFloat()
             val prior = ground[cell]
             val lowered = (prior.toDouble() - rate * ruler.years / metres).toFloat()
             if (lowered < prior) {

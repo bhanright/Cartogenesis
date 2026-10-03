@@ -1288,6 +1288,39 @@
   share passes, leaving each stretch's end half-grabens out as its text allows. What would settle it
   is an anchor fitted over the course rather than read at one crossing. 2026-09-30, L1's review
   round.
+- **The erosion stage takes more off the land on a coarser grid.** Measured on seeds 99 and 7 at
+  256, 512 and 1,024 rows, the plates' field against the erosion stage's output, as altitudes: with
+  `isostasy.flexure` off, seed 99's land (the cells above the field's 62nd percentile) is lowered
+  on the mean by 408, 267 and 131 m; with it on, the whole world also sinks, the deep ocean's tenth
+  percentile by 247, 187 and 136 m on seed 99 and 311, 240 and 172 m on seed 7. The percentile
+  shoreline the sea stage cuts then stands at 25, 77 and 126 m of altitude on seed 99 and 395, 467
+  and 535 m on seed 7, where the plates' field puts it at 252, 250 and 246 m and 671, 669 and 666 m
+  at every grid; the thermal sweeps move it by under 50 m alike at all three. So every height the
+  later stages read against the shoreline carries a grid-dependent share of the rounds' denudation:
+  seed 99's polar drowned basin has its lip at 284, 411 and 475 m and its exit at 265, 322 and 354 m
+  of altitude. Not traced; the first candidate is the implicit incision's step, whose `F` grows as
+  the cell narrows at a fixed catchment on the ground while the round stays 336,476 years, so a
+  river reach on a coarse grid is solved with a different share of its drop per round. 2026-10-03,
+  L2's diagnosis.
+- **The rounds' outlet notch shares the post-cut pass's overshoot.** `HydraulicErosion.breach`
+  takes one explicit stream-power step a round, bounded by the basin's depth and the sea but not by
+  the fall to the outflow's own base, so where the step is larger than that fall it cuts the whole
+  path below the lip, the base cell with it, to a surface falling `NOTCH_FALL_METRES_PER_KM`, and
+  every later round measures that 2.5 mm/km as the outlet's slope and lowers the lip by the same
+  amount each time. Measured in the post-cut pass by L2's diagnosis; inside the rounds
+  the code is the same and nothing was measured, so how many of the ordinary lakes' outlets retreat
+  this way, and how much of the lake census's spread across grids it carries, is open. 2026-10-03,
+  L2's diagnosis.
+- **Water that reaches a pole leaves the map there, and a pole's lakes are counted at the
+  equator's area.** `FlowRouting.fillDepressions` seeds the top and bottom rows as outlets, so a
+  basin whose outflow runs to a pole drains to that pole cell's ground and not to the sea, though
+  on seed 99 the same polar row holds open sea at other longitudes; the polar row is one point on
+  the ground, and its lowest cell is the outflow's real base. And every census reads a cell as
+  `squareKilometresPerCell`, the equator's, so seed 99's polar drowned basin, its lip at 85.5 to 86
+  degrees and 352,000 to 523,000 km2 on the census, covers a small fraction of that (cos 85.5
+  degrees is 0.078), and its catchment of 1.88 million km2 overstates the outlet's stream power by
+  up to the square root of the same factor. The metric half is `REALISM_AUDIT.md`'s P1. 2026-10-03, L2's
+  diagnosis.
 - **Seed 5's ocean does not solve with the pressure departure off.** `OceanCirculation` stops at a
   relative residual of 0.0017 to 0.0019 after its 200 iterations against a tolerance of 0.001, at 256
   and 512 rows, with `climate.pressureWinds` false (the setting `MeridionalWindTest` builds its

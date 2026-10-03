@@ -82,7 +82,14 @@ internal data class RoundMass(
      * `min(bed, ground)` the closure should make redundant. Moving the bed down to the ground moves
      * no material, the ground being the mass, so the budget above is untouched by it.
      */
-    val bedsHeldUnderGround: Int = 0
+    val bedsHeldUnderGround: Int = 0,
+    /**
+     * [fieldDrop] taken before the round's thermal sweeps: what the round's own mechanisms moved,
+     * measured on the stored floats. The sweeps only move material between neighbours, but each of
+     * their float additions rounds, so the budget is held to its last bits on this figure and the
+     * sweeps' own rounding is read as the difference.
+     */
+    val fieldDropBeforeRelax: Double = 0.0
 )
 
 /**
@@ -1460,7 +1467,13 @@ internal object HydraulicErosion {
             } else {
                 null
             }
-            if (closing) settle()
+            if (closing) {
+                settle()
+                // What the ground's floats could not hold of the spoil was laid and then lost to
+                // rounding: the field kept that much less of the deposit, and it left the model.
+                deposited -= cells.layRounding
+                lost += cells.layRounding
+            }
 
             if (onRound != null) {
                 census(
@@ -1571,6 +1584,8 @@ internal object HydraulicErosion {
             // bed is then held under the ground, which moves nothing and is counted, since the
             // closure keeps it there on its own and a bed the sweeps leave above its ground is
             // the one place the two heights can disagree.
+            val dropBeforeRelax =
+                if (onRound != null) startingMass - totalMass(working.data) - totalMass(sediment) else 0.0
             working = relax(working)
             val heldThisRound = cells.holdBedUnderGround(working.data)
             bedsHeldUnderGround += heldThisRound
@@ -1605,7 +1620,8 @@ internal object HydraulicErosion {
                         deepestBasin = notch?.deepest ?: 0f,
                         fillDepthOverLandMetres = openingFillDepthMetres,
                         channelPits = pits.copyOf(),
-                        bedsHeldUnderGround = heldThisRound
+                        bedsHeldUnderGround = heldThisRound,
+                        fieldDropBeforeRelax = dropBeforeRelax
                     )
                 )
             }

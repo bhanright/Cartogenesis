@@ -104,17 +104,28 @@ internal class GroundCells(cellCount: Int, initialGround: FloatArray) {
     }
 
     /**
+     * What the last [lay] could not hold: the held volume less what the ground's floats took, per
+     * unit of a cell's area summed over the map. A float added to a float rounds, and the budget is
+     * counted on what the field holds; the caller accounts this as material that left.
+     */
+    var layRounding: Double = 0.0
+        private set
+
+    /**
      * Lays the held [fill] on both heights: the ground rises by the volume, the bed by the level
      * that volume reaches on the cell's hypsometry. Returns how many cells' beds had to be held
      * under their ground by rounding.
      */
     fun lay(fill: FloatArray, ground: FloatArray): Int {
         var clamped = 0
+        layRounding = 0.0
         for (cell in fill.indices) {
             val volume = fill[cell].toDouble()
             if (volume <= 0.0) continue
             val rise = bedRiseFor(cell, volume, ground)
+            val prior = ground[cell]
             ground[cell] = (ground[cell].toDouble() + volume).toFloat()
+            layRounding += volume - (ground[cell].toDouble() - prior.toDouble())
             bed[cell] = (bed[cell].toDouble() + rise).toFloat()
             if (bed[cell] > ground[cell]) {
                 bed[cell] = ground[cell]

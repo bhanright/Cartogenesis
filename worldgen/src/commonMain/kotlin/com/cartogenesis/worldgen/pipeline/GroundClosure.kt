@@ -133,10 +133,25 @@ internal object GroundClosure {
 
     /**
      * Below this `beta` the hillslope functions are read off their series rather than their closed
-     * forms, whose terms cancel there: at 1e-3 the series' first omitted term is 1e-21 of the
-     * first, and the closed form has lost five of its sixteen digits.
+     * forms, whose terms cancel there: the closed form for `h` subtracts terms of order `beta` to
+     * leave one of order `beta^3`, and at 1e-3 it has lost seven of its sixteen digits. The series
+     * (see [CATALAN]) converges for `beta < 1/2` at a ratio of `4 beta^2` a term, so at a tenth its
+     * [SERIES_TERMS] terms are exact to the double, where the closed form has lost two digits.
      */
-    private const val SERIES_BELOW_BETA = 1e-3
+    private const val SERIES_BELOW_BETA = 0.1
+
+    /** Terms of the series: `(4 * 0.1^2)^24` is 1e-19, below the double's last digit. */
+    private const val SERIES_TERMS = 24
+
+    /**
+     * The Catalan numbers, `C_k = (2k)! / ((k + 1)! k!)`. The steady gradient is their generating
+     * function: `u(s) = sum (-1)^k C_k s^(2k + 1)`, since `u` solves `s u^2 + u - s = 0`, which
+     * gives the hillslope's mean height and its cumulative gradient as series term by term.
+     */
+    private val CATALAN = DoubleArray(SERIES_TERMS).also { numbers ->
+        numbers[0] = 1.0
+        for (k in 1 until SERIES_TERMS) numbers[k] = numbers[k - 1] * 2.0 * (2 * k - 1) / (k + 1)
+    }
 
     /** Newton steps a solve may take; every solve here converges monotonically in under a dozen. */
     private const val MAX_SOLVER_STEPS = 60
@@ -167,8 +182,16 @@ internal object GroundClosure {
      */
     fun meanHeightShare(beta: Double): Double {
         if (beta < SERIES_BELOW_BETA) {
+            // integral_0^1 t u(beta t) dt = sum (-1)^k C_k beta^(2k + 1) / (2k + 3).
             val squared = beta * beta
-            return beta * (1.0 / 3.0 - squared / 5.0 + 2.0 * squared * squared / 7.0)
+            var power = beta
+            var sum = 0.0
+            for (k in 0 until SERIES_TERMS) {
+                val term = CATALAN[k] * power / (2 * k + 3)
+                sum += if (k % 2 == 0) term else -term
+                power *= squared
+            }
+            return sum
         }
         val root = sqrt(1.0 + 4.0 * beta * beta)
         val numerator = 0.5 * beta * root + 0.25 * asinh(2.0 * beta) - beta
@@ -179,7 +202,14 @@ internal object GroundClosure {
     fun meanHeightShareSlope(beta: Double): Double {
         if (beta < SERIES_BELOW_BETA) {
             val squared = beta * beta
-            return 1.0 / 3.0 - 3.0 * squared / 5.0 + 10.0 * squared * squared / 7.0
+            var power = 1.0
+            var sum = 0.0
+            for (k in 0 until SERIES_TERMS) {
+                val term = CATALAN[k] * (2 * k + 1) * power / (2 * k + 3)
+                sum += if (k % 2 == 0) term else -term
+                power *= squared
+            }
+            return sum
         }
         val root = sqrt(1.0 + 4.0 * beta * beta)
         return (root - 1.0) / (2.0 * beta * beta) - 2.0 * meanHeightShare(beta) / beta
@@ -276,8 +306,17 @@ internal object GroundClosure {
     private fun cumulativeGradientShare(beta: Double, share: Double): Double {
         val x = 2.0 * beta * share
         val g = if (x < 2.0 * SERIES_BELOW_BETA) {
-            val squared = x * x
-            squared / 4.0 - squared * squared / 32.0 + squared * squared * squared / 96.0
+            // G(x) = 2 integral_0^(x/2) u(s) ds = 2 sum (-1)^k C_k (x/2)^(2k + 2) / (2k + 2).
+            val half = 0.5 * x
+            val squared = half * half
+            var power = squared
+            var sum = 0.0
+            for (k in 0 until SERIES_TERMS) {
+                val term = CATALAN[k] * power / (k + 1)
+                sum += if (k % 2 == 0) term else -term
+                power *= squared
+            }
+            sum
         } else {
             val root = sqrt(1.0 + x * x)
             root - ln(0.5 * (1.0 + root)) - 1.0
@@ -286,11 +325,34 @@ internal object GroundClosure {
     }
 
     /**
+     * `I(x) = integral_0^x G(y) dy`, which is
+     * `x sqrt(1 + x^2) / 2 - asinh(x) / 2 - x ln((1 + sqrt(1 + x^2)) / 2)`, read off its series
+     * `4 sum (-1)^k C_k (x/2)^(2k + 3) / ((2k + 2)(2k + 3))` where the closed form cancels.
+     */
+    private fun integratedCumulative(x: Double): Double {
+        if (x < 2.0 * SERIES_BELOW_BETA) {
+            val half = 0.5 * x
+            val squared = half * half
+            var power = squared * half
+            var sum = 0.0
+            for (k in 0 until SERIES_TERMS) {
+                val term = CATALAN[k] * power / ((2 * k + 2) * (2 * k + 3))
+                sum += if (k % 2 == 0) term else -term
+                power *= squared
+            }
+            return 4.0 * sum
+        }
+        val root = sqrt(1.0 + x * x)
+        return 0.5 * x * root - 0.5 * asinh(x) - x * ln(0.5 * (1.0 + root))
+    }
+
+    /**
      * The mean height above its foot, in metres, of the stretch of a steady Roering hillslope
      * [slopeLengthMetres] long, eroding at [rateMetresPerYear], that lies between [fromShare] and
      * [toShare] of the way down from the divide: the height of a cell below every channel head,
      * whose ground is a stretch of the hillslope that runs from its divides to the first channel
-     * downstream. Four-point Gauss-Legendre over the stretch, of a function smooth to all orders.
+     * downstream. In closed form: the height at `xi` is `S_c L (C(1) - C(xi))`, and the mean of `C`
+     * over the stretch is `(I(2 beta b) - I(2 beta a)) / ((2 beta)^2 (b - a))`.
      */
     fun stretchMeanHeightMetres(
         rateMetresPerYear: Double,
@@ -300,14 +362,11 @@ internal object GroundClosure {
     ): Double {
         val beta = rateMetresPerYear * slopeLengthMetres /
             (HILLSLOPE_DIFFUSIVITY_M2_PER_YEAR * CRITICAL_HILLSLOPE_GRADIENT)
+        if (beta <= 0.0 || toShare <= fromShare) return 0.0
         val top = cumulativeGradientShare(beta, 1.0)
-        val middle = 0.5 * (fromShare + toShare)
-        val half = 0.5 * (toShare - fromShare)
-        var meanBelow = 0.0
-        for (node in GAUSS_NODES.indices) {
-            meanBelow += GAUSS_WEIGHTS[node] * cumulativeGradientShare(beta, middle + half * GAUSS_NODES[node])
-        }
-        meanBelow *= 0.5
+        val twiceBeta = 2.0 * beta
+        val meanBelow = (integratedCumulative(twiceBeta * toShare) - integratedCumulative(twiceBeta * fromShare)) /
+            (twiceBeta * twiceBeta * (toShare - fromShare))
         return CRITICAL_HILLSLOPE_GRADIENT * slopeLengthMetres * (top - meanBelow)
     }
 
@@ -451,7 +510,4 @@ internal object GroundClosure {
     /** The relative step of the centred difference in [stretchRateMetresPerYear], and its stopping rule. */
     private const val DIFFERENCE_STEP = 1e-7
 
-    /** Four-point Gauss-Legendre on [-1, 1]. */
-    private val GAUSS_NODES = doubleArrayOf(-0.8611363115940526, -0.3399810435848563, 0.3399810435848563, 0.8611363115940526)
-    private val GAUSS_WEIGHTS = doubleArrayOf(0.3478548451374538, 0.6521451548625461, 0.6521451548625461, 0.3478548451374538)
 }

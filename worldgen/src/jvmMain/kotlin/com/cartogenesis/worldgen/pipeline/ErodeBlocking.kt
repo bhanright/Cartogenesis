@@ -119,3 +119,17 @@ internal fun erodeBlockingWatchingIncision(
         incisionWatch = watch
     )
 }
+
+/**
+ * The whole stage, handing both heights and the round's closure to [watch] after every round, and
+ * the final bed and ground once it is done: what the two-height guards observe production through.
+ */
+internal fun erodeBlockingWatchingGround(
+    config: WorldGenConfig,
+    height: FloatField,
+    upliftRateMmPerYear: FloatField?,
+    watch: GroundWatch,
+    onRound: ((RoundMass) -> Unit)? = null
+): ErosionResult = runBlocking {
+    ErosionStage.apply(config, height, upliftRateMmPerYear, null, onRound, null, groundWatch = watch)
+}

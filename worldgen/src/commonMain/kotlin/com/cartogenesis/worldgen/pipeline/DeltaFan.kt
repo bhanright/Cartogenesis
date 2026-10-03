@@ -584,7 +584,14 @@ internal inline fun growFan(
     mark: Byte,
     accepts: (Int) -> Boolean,
     advance: (Int) -> Float,
-    levelOf: (Int, Float) -> Float
+    levelOf: (Int, Float) -> Float,
+    /**
+     * How high a cell stands for the fan, spoil already held there included: its bed, where the
+     * erosion keeps two heights, so a fan fills a channel before it fills the slopes beside it.
+     */
+    heightOf: (Int) -> Double = { cell -> surfaceOf[cell].toDouble() + sediment[cell].toDouble() },
+    /** The volume, per unit of the cell's area, that raises [heightOf] by a given amount. */
+    fillFor: (Int, Double) -> Double = { _, rise -> rise }
 ): Double {
     val apex = rim.apex
     if (budget <= 0.0 || !accepts(apex)) return 0.0
@@ -671,12 +678,13 @@ internal inline fun growFan(
         // to the water in one step, which is a delta front, and is what a delta actually has.
         val reachFraction = (distanceCells / rim.reachCells).coerceAtMost(1f)
 
-        val need = levelOf(cell, reachFraction).toDouble() -
-            surfaceOf[cell].toDouble() - sediment[cell].toDouble()
-        if (need <= 0.0) continue
+        val before = heightOf(cell)
+        val rise = levelOf(cell, reachFraction).toDouble() - before
+        if (rise <= 0.0) continue
+        val need = fillFor(cell, rise)
         if (wholeCells && need > remaining) break
         val moved = fanRaise(sediment, cell, if (need < remaining) need else remaining)
-        settled[cell] += (moved * toRelative).toFloat()
+        settled[cell] += ((heightOf(cell) - before) * toRelative).toFloat()
         remaining -= moved
         laid += moved
         log?.record(cell, mark, apex, moved)

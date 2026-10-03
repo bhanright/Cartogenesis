@@ -710,8 +710,9 @@ Earth's rivers deliver about a third of the rain that falls on land) of `precipi
 over the catchment, which is the flow accumulation at the basin's pour point; the loss is
 Thornthwaite (1948) potential evaporation read off the warm- and cold-season temperature fields,
 which puts a hot desert at 2270 mm a year and cool temperate country at 554 mm with none of its
-published constants touched. The area at a given level is the basin's own hypsometry, so the answer
-is found by bisecting over the basin's cells sorted by the ground beneath them. A basin whose
+published constants touched. The area at a given level is the hollow's own hypsometry, and the level
+is where a lake filling from empty first stops paying for itself, which on ground whose evaporation
+varies need not be the last such level (see the next paragraph). A basin whose
 balance reaches the brim overflows exactly as before — wet country is untouched, cell for cell —
 and one that cannot is endorheic: its water is re-routed inward to the lake it can sustain, no
 river leaves it, and the rivers that used to be drawn below its rim are gone because that water
@@ -721,6 +722,18 @@ in seeds 1-120 (seed 43, 1775 cells at 172 mm of rain against 577 mm of evaporat
 spill-level area holds water at balance, against 100% with the balance switched off. Across the
 author's world at 1024 the lake count falls 82 to 67 and the lake share of land 1.15% to 0.91%,
 with ten endorheic basins and 132 playa cells.
+
+**A closed basin's hollows keep their own levels.** A closed basin is rarely one bowl: its floor
+holds hollows separated by saddles lower than its brim, and each is a lake of its own until the
+water reaches the saddle. Bonneville at its highstand covered north-western Utah as one lake; today
+its floor holds Great Salt Lake, Utah Lake and Sevier Lake at three levels, Utah Lake still spilling
+into Great Salt Lake down the Jordan River. Since L1 each hollow balances its own catchment against
+evaporation off its own water, a hollow full to its saddle passes only its surplus to the hollow
+across it, and two become one surface only where both reach the saddle (`LakePockets`, over the
+basin's depression hierarchy, built once per basin). The rule it replaced flooded the lowest cells
+of the whole basin at one level, wherever they lay, and drew separate hollows as one lake: seed 42's
+largest lake at 512 rows was eight pieces, three of them of 983, 582 and 475 cells
+(`LakeBodyTest`). The pockets are handed exactly their basin's catchment, to a ten-thousandth.
 
 **A closed basin keeps its rain.** The catchment rainfall the balance reads is accumulated once, over
 the routing as the fill left it, when every basin still spills into the next; so a lake below a
@@ -997,6 +1010,17 @@ S1's business, and writing it down is what made the question underneath it visib
 0.073% — the Caspian's share of *Earth's* surface — carried onto a world a seventh of Earth's size,
 so it is a seventh of the Caspian. Whether a world this size should cap at the share or at the lake
 is not a units question and is in `TODO.md`.
+
+**A lake's area still follows the grid, and no claim is made that it does not.** L1 made a rift the
+same rift at every grid and gave each hollow of a closed basin its own lake, and a seed's lake share
+of its land across 256, 512 and 1,024 rows still spreads by 1.5 to 2.1 times on the four standard
+seeds, its largest lake by 1.5 to 5.4 (`ScaleFreeTest`, a known failure against a provisional 1.35).
+Three things are left: the post-cut outlet, which is still cutting at its last pass; a rift chain
+below the sea, which the enclosure rule above keeps as sea where its sills leave it one body over
+the cap and makes land holding lakes where they part it, and the grid decides which; and chaos, a
+quarter of a seed's lake area between two runs that route a hair differently. Pooled over two seeds
+at the three grids the largest lake in the land is 1.23 times the Caspian's share of its land
+(`OutletResolutionTest`). See `TODO.md`, the lake-area entry.
 
 **Where a rift meets the coast, half its floor is dry.** A half-graben's floor is a wedge — deepest
 against the master fault and rising to about a fifth of that depth against the hinge — and where the
@@ -1692,9 +1716,19 @@ why every range on its maps was the same range.
   accommodation zone between them where the floor rises to a sill. So the sea enters only the
   segments that have subsided below it, and what a drowned rift gives is a string of gulfs and
   lakes joined by sills and land bridges — the Red Sea, the Gulf of California, Baikal and
-  Tanganyika — rather than a canal. Each segment is a fraction of the map's width rather than a
-  count of cells, so the same rift breaks into the same basins at 512 and at 2048, and its
-  shoulders vary in height and width with the segment and with `rangeVariation` as ranges do.
+  Tanganyika — rather than a canal. The half-grabens are Earth's length, 60 to 160 km along the
+  rift (Tanganyika's units 80–160 km and Malawi's polarity intervals 60–100 km, Rosendahl and
+  others 1986–87; the western branch's border-fault segments about 100 km, Ebinger 1989), with
+  accommodation zones 50 km across between them, lengths set by the lithosphere and so the same on a
+  world of any size; they used to be 0.04 to 0.10 of the map's width, 480 to 1,200 km, the spacing
+  of the Red Sea's deeps rather than of a half-graben. **A rift is the same rift at every grid**
+  (L1): each half-graben is named by its two plates, its stretch of rift and its place along it, and
+  placed in kilometers along the rift's course from an anchor the grid does not move, so its depth,
+  its shoulders and the flank its fault stands on agree at 256, 512 and 1,024 rows on 98.5% or more
+  of every rift's compared length, the breaks within 22 km (`RiftIdentityTest`). Before, the draws
+  were seeded by a cell index and the same rift was a different chain at every grid: seed 42's
+  trough held its floor below the shoreline over 11.8%, 2.2% and 4.5% of it at 256, 512 and 1,024
+  rows. The shoulders vary in height and width with the segment and with `rangeVariation` as ranges do.
   The **depth** of that floor is Earth's, measured rather than assumed (E7). Stamped, it stands
   45–72% of the land's relief below its shoulder crest across five seeds at both 512 and 2048,
   against Earth's own 21–50% (Baikal 3.2–4.0 km of crest-to-floor against 8 km of relief, Tanganyika

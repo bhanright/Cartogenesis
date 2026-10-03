@@ -73,7 +73,26 @@ class LakeWaterBalanceTest : BorrowsSharedWorlds() {
     // and the balance empties two fifths of it, so it is a dry case in wet country again, and
     // seed 4's closes to 72% and turns endorheic. Of the sixteen other seeds with a basin over 200
     // cells, fifteen stay full and seed 6's keeps 29%. The dry case's seed 13 still holds.
-    private val drySeed = 13L
+    //
+    // Re-picked for the dry case at L1, whose rifts are Earth's half-grabens and whose closed basins
+    // hold a lake in each hollow: seed 13's largest dry basin is 283 cells now. The same scan over
+    // 1..48, largest spill-level basin per seed under 300 mm with the notch off and one epoch, the
+    // largest the balance empties: seed 16's, 2,602 cells at 74 mm, 5% of it still wet. Seed 36's
+    // is larger at 6,950 cells and 238 mm and keeps 59%, and seeds 3, 10 and 1 (1,853, 1,631 and
+    // 1,581 cells) keep 47%, 24% and 44%.
+    //
+    // Re-picked for the dry case once more at L1's review, whose rifts join by relay ramps and draw
+    // each half-graben by its place on the ground: seed 16's largest dry basin is 437 cells now.
+    // The same scan: seed 10's, 1,609 cells at 33 mm, 14% of it still wet, is the largest the
+    // balance empties. Seed 36's is larger at 7,057 cells and 239 mm and keeps 58%, seeds 3, 17
+    // and 1 (1,850, 1,845 and 1,423 cells) keep 48%, 89% and 45%, and seed 40's, 1,484 cells,
+    // keeps 21%.
+    //
+    // And again once the rift valleys were narrowed to Earth's 55 km: seed 10's basin keeps 62%.
+    // The same scan: seed 27's, 1,723 cells at 40 mm, 22% of it still wet, is the largest the
+    // balance empties. Seed 36's is larger at 6,907 cells and 254 mm and keeps 64%, seed 23's at
+    // 3,697 cells keeps 98%, and seeds 3 and 1 (1,858 and 1,424 cells) keep 49% and 47%.
+    private val drySeed = 27L
     private val wetSeed = 37L
 
     /**
@@ -228,15 +247,30 @@ class LakeWaterBalanceTest : BorrowsSharedWorlds() {
                 " wanted under ${"%.0f".format(DRY_BASIN_SHARE_OF_SPILL_AREA * 100)}%"
         )
 
-        val lake = basin.mapNotNull { cell ->
+        // Since L1 a closed basin holds a lake in each of its hollows, and a hollow full to its
+        // saddle spills into the next, so the basin can hold several: every one that keeps its water
+        // is marked endorheic and stands below the level it would spill at, and every one that
+        // spills stands exactly at it.
+        val lakes = basin.mapNotNull { cell ->
             val id = on.rivers.lakes.lakeId[cell]
             if (id >= 0) on.rivers.lakes.lakes[id] else null
-        }.firstOrNull()
-        assertTrue(lake == null || lake.endorheic, "the shrunken lake is not marked endorheic")
+        }.distinct()
+        println("BALANCE seed $drySeed dry basin: ${lakes.size} lakes, ${lakes.count { it.endorheic }} of them endorheic")
         assertTrue(
-            lake == null || lake.surfaceElevation < lake.spillElevation,
-            "an endorheic lake's surface should stand below its spill"
+            lakes.isEmpty() || lakes.any { it.endorheic },
+            "the dry basin keeps water and none of its lakes is marked endorheic"
         )
+        lakes.forEach { lake ->
+            if (lake.endorheic) {
+                assertTrue(
+                    lake.surfaceElevation < lake.spillElevation,
+                    "an endorheic lake's surface should stand below its spill: lake ${lake.id} at " +
+                        "${lake.surfaceElevation} against ${lake.spillElevation}, ${lake.cellCount} cells"
+                )
+            } else {
+                assertEquals(lake.spillElevation, lake.surfaceElevation, 0f, "a lake that spills should stand at its spill")
+            }
+        }
     }
 
     @Test

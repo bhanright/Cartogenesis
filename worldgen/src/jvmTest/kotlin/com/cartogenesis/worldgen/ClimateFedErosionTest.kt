@@ -438,10 +438,10 @@ class ClimateFedErosionTest {
         // less its uplift, the uplift is heaviest where the rain is, and its flat-rain control
         // ranks against the rain, so neither figure says what the rain cut (docs/DESIGN_LEDGER.md,
         // Fix 2). Taking the erosion itself, the uplift added back, is the re-derivation B-I2 asks.
-        // Re-recorded on square cells at Q2 (docs/DESIGN_LEDGER.md, Q2).
+        // Re-recorded on square cells at Q2 (docs/DESIGN_LEDGER.md, Q2). Re-recorded at L1, whose rifts are Earth's half-grabens and the same at every grid (docs/DESIGN_LEDGER.md, L1).
         KnownFailures.expect(
             "B-I2: the rain-dissection pin was set on rounds without the uplift",
-            "seed 7 at 0.006, seed 42 at 0.123, seed 1234 at 0.160, seed 99 at 0.130; seed 7's flat-rain control at -0.137, seed 99's flat-rain control at -0.087"
+            "seed 7 at -0.010, seed 42 at 0.127, seed 1234 at 0.160, seed 99 at 0.130; seed 7's flat-rain control at -0.151, seed 99's flat-rain control at -0.086"
         ) {
             if (underThePin.isNotEmpty() || uncontrolled.isNotEmpty()) {
                 val found = underThePin.joinToString { (seed, fed) -> String.format(Locale.ROOT, "seed %d at %.3f", seed, fed) } +

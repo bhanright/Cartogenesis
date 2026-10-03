@@ -71,7 +71,14 @@ class OceanCurrentTest : BorrowsSharedWorlds() {
         // currents actually run along. S2's fourth pass took seed 42 to 0.9% while seed 7 stayed
         // at 8.7%, which is a spread the pooled figure carries and a per-seed bar cannot. What no
         // world may do is settle its cold coasts *better*, and that is the floor.
-        val gaps = listOf(7L, 42L, 1234L).map { seed -> checkCoasts(seed) }
+        val seeds = listOf(7L, 42L, 1234L)
+        val gaps = seeds.map { seed -> checkCoasts(seed) }
+        // The floor, per seed. Seed 7's gap was 4.1% at L1 and -0.5% at its review round while the
+        // rift valleys were 328 km across, when it was recorded; with them at Earth's width it is
+        // back over the floor, and armed again (docs/DESIGN_LEDGER.md, L1).
+        val under = seeds.zip(gaps).filter { (_, gap) -> gap <= 1.0 }
+            .joinToString("; ") { (seed, gap) -> "seed $seed at %.1f%%".format((gap - 1) * 100) }
+        assertTrue(under.isEmpty(), "cold coasts settled no worse than warm ones: $under")
         val pooled = gaps.average()
         println(
             "OCEAN pooled coastal gap %.1f%% over %d seeds".format((pooled - 1) * 100, gaps.size)
@@ -232,11 +239,7 @@ class OceanCurrentTest : BorrowsSharedWorlds() {
         // Only a few percent, and deliberately so: the fishery bonus rewards the cold quartile at
         // the same time the harbour bonus rewards the warm one, so the two partly cancel. What
         // matters is that the gap exists at all — with the coastal term removed it sits at zero and
-        // tips slightly negative, which is what this catches.
-        assertTrue(
-            warm > cold,
-            "seed $seed: warm coasts ($warm) are no better settled than cold ones ($cold)"
-        )
+        // tips slightly negative, which is what the floor in the test above catches.
         return warm / cold
     }
 }

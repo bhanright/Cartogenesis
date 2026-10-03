@@ -22,8 +22,16 @@ import org.junit.jupiter.api.extension.ExtendWith
  * resolves finer and therefore steeper detail. The same class of defect as the glacier lattice, and
  * found the same way, by rendering the size the author actually uses.
  *
- * This lives in `:desktop` rather than beside its sibling because a 2048 world needs more heap than
- * `:worldgen`'s test worker is given, and this module's already runs with ten gigabytes.
+ * Since L1 the worlds are made by rows, as the applications make them: 256, 512 and 1,024 rows of
+ * square cells, cells 23.4, 11.7 and 5.9 km across, the widths the 512, 1024 and 2048 grids as many
+ * cells tall as wide had across. A world of 2,048 rows is 8.4 million cells and 3.0 GB live at its
+ * fullest (docs/DESIGN_LEDGER.md, Q5), which this module's per-merge worker, 3 GB, does not hold;
+ * asked for it, the suite ran out of heap. The figures quoted in this file before L1 were measured
+ * on grids as many cells tall as wide (docs/DESIGN_LEDGER.md, L1).
+ *
+ * It lives in `:desktop` rather than beside its sibling because it was written for 2048 by 2048
+ * worlds, which needed more heap than `:worldgen`'s test worker was given; since the budget moved
+ * to the root build script both workers are a few gigabytes, and this one is where it stayed.
  */
 @ExtendWith(SharedWorldsCheck::class)
 class OutletResolutionTest {
@@ -58,10 +66,9 @@ class OutletResolutionTest {
         val overLargeDrowned = ArrayList<String>()
         val unmeasured = ArrayList<String>()
         listOf(59758L, 42L).forEach { seed ->
-            val shares = listOf(512, 1024, 2048).map { size ->
-                val world = SharedWorlds.world(
-                    WorldGenConfig(seed = seed, width = 512, height = 512).atResolution(size, size)
-                )
+            // By rows, as the applications make a world: 2 x rows columns of square cells.
+            val shares = listOf(256, 512, 1024).map { rows ->
+                val world = SharedWorlds.world(WorldGenConfig.forRows(seed, rows))
                 // Which lakes stand on ground below the sea-level cut, and so are none of the
                 // notch's business. Water the ocean cannot reach is marked land at the height it
                 // already stands at, up to the size of the largest lake Earth has, and the river
@@ -85,13 +92,13 @@ class OutletResolutionTest {
                     .maxOfOrNull { it.cellCount } ?: 0
 
                 val largest = largestOf(false)
-                val share = largest.toDouble() / (size.toDouble() * size)
+                val share = largest.toDouble() / (world.width.toDouble() * world.height)
                 val drownedShare = largestOf(true).toDouble() / world.sea.landCellCount
                 println(
-                    ("OUTLET SCALE seed %d at %d: %d lakes, largest in the land %d cells " +
+                    ("OUTLET SCALE seed %d at %d rows: %d lakes, largest in the land %d cells " +
                         "(%.4f%% of the map, %.4f%% of the land), largest drowned basin %d cells " +
                         "(%.4f%% of the land, %.2fx the Caspian), water %.3f%% of land").format(
-                        seed, size, world.rivers.lakes.lakes.size, largest, share * 100,
+                        seed, rows, world.rivers.lakes.lakes.size, largest, share * 100,
                         largest * 100.0 / world.sea.landCellCount,
                         largestOf(true), drownedShare * 100, drownedShare / caspianShare,
                         world.rivers.lakes.lakeId.count { it >= 0 } * 100.0 /
@@ -100,11 +107,11 @@ class OutletResolutionTest {
                 )
                 assertTrue(
                     world.rivers.lakes.lakes.isNotEmpty(),
-                    "seed $seed at $size has no lakes at all"
+                    "seed $seed at $rows rows has no lakes at all"
                 )
                 val landLakeShare = largest.toDouble() / world.sea.landCellCount
                 largestLandLakeShares.add(landLakeShare)
-                overLarge.add("$seed at $size ${"%.2f".format(landLakeShare / caspianShare)}x")
+                overLarge.add("$seed at $rows rows ${"%.2f".format(landLakeShare / caspianShare)}x")
                 // The drowned basins are reported, not asserted, and W1 is why.
                 //
                 // H5b held them to the same bar as the rest, because `SeaConfig.postCutOutlet`
@@ -132,7 +139,7 @@ class OutletResolutionTest {
                 // lake *in the land* is still asserted against the same figure below, and it is
                 // the one a reader can see; a basin below the sea-level cut is a piece of ocean the
                 // percentile walled off, which `GEOGRAPHY.md` already carries as a deviation.
-                if (drownedShare >= caspianShare) overLargeDrowned.add("$seed at $size")
+                if (drownedShare >= caspianShare) overLargeDrowned.add("$seed at $rows rows")
                 // The world's standing water rather than its single largest lake, which is the
                 // same correction `OutletIncisionTest`'s own halving clause carries, and for the same
                 // reason: which basin ends up largest changes with every terrain change, so its own
@@ -156,7 +163,7 @@ class OutletResolutionTest {
 
             val growth = shares.max() / shares.min().coerceAtLeast(1e-12)
             println(
-                "OUTLET SCALE seed %d: standing water spreads %.2fx across 512, 1024 and 2048"
+                "OUTLET SCALE seed %d: standing water spreads %.2fx across 256, 512 and 1,024 rows"
                     .format(seed, growth)
             )
             // A ratio wants something in its denominator. Seed 42 at 512 holds eight lakes over

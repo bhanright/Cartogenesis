@@ -243,7 +243,7 @@ class RiftDepthTest {
         val depth = (crests[crests.size - 1 - crests.size / 10] - floors[floors.size / 10])
             .coerceAtLeast(1e-6f)
 
-        val radius = (cfg.riftSegmentMin * w / 2f).toInt().coerceAtLeast(2)
+        val radius = (config.cellsFor(cfg.riftSegmentMinKm) / 2f).toInt().coerceAtLeast(2)
         var total = 0.0
         var counted = 0
         for (y in 0 until h) {

@@ -1077,7 +1077,7 @@
   shoreline at 0.632, its floor is not flat, and the world built with the plain routing rule has no
   such basin at all. But an inland sea that shape is a claim about the map, and the only thing that
   can judge it is a render of the seed it is on, which nobody has taken. 2026-09-14, S2b.
-- **No seed left in the rift scan floods as three separate gulfs, so that bar is withdrawn.**
+- **Closed 2026-09-29 by L1.** *No seed left in the rift scan floods as three separate gulfs, so that bar is withdrawn.* With Earth's half-grabens (60 to 160 km, sills 50 km across) the scan over seeds 1 to 40 finds seeds 33 and 35 flooding as three and four bodies of sea against the control's one, and the clause is armed again on seed 35 (`RiftSegmentationTest`, docs/DESIGN_LEDGER.md, L1). What follows is the entry as it stood.
   `RiftSegmentationTest` held three figures against the unsegmented control: separate bodies of sea
   inside the rift, land bridges crossing it, and how much the flooded width varies along its length.
   On the ground S2b leaves, the same twelve-seed scan the class documents finds no seed that clears
@@ -1206,30 +1206,93 @@
   formula tends to on a fine grid; Q2 kept the formula because restating it would move every world
   at every grid, and a chunk that changes the tectonics should take it. 2026-09-28, Q2.
 
-- **One sea cell of seed 42 at 512 rows stands above the shoreline the sea stage cut.** At column 33,
+- **Reopened 2026-10-03 at L1's review round.** L1's first rifts moved seed 42's ground and took the cell with it, and the clause was armed (closed 2026-09-29); with the rift valleys at Earth's width one sea cell of seed 42 at 512 rows stands over its shoreline again, where is not located, and `DataExportTest`'s clause is recorded again as a known failure. The cause is still not traced. *One sea cell of seed 42 at 512 rows stands above the shoreline the sea stage cut.* At column 33,
   row 414, beside the land, 9.0e-5 of the field (about half a meter) over the line; the same seed on
   the 512 by 512 grid has none. `DataExportTest`'s open-sea clause, which the heightmap draws
   faithfully, runs as a known failure on it. Which of the sea stage's rules leaves water over the
   cut (the drowned valleys, the littoral grading, the enclosed-sea repair) is not traced.
   2026-09-28, Q4.
-- **A lake's area follows the cell count, and a lake with no outlet floods the one-cell gullies
-  around it.** Seed 42's lakes cover 646,820 km2 at 512 rows of square cells, against 331,238 on the
-  512 by 512 grid and 334,328 at 1,024 rows. Most of the excess is one endorheic lake, lake 1 at
-  512 rows: 2,051 cells, 281,662 km2, centered about (3,316 km, 1,625 km), where the 512 by 512 grid
-  has no lake and 1,024 rows has two endorheic lakes of 44,117 and 24,616 km2. Its surface floods
-  108 one-cell gullies, 47 running north-south and 61 east-west, every one lower than the ground on
-  both sides of it, with 185 one-cell tips and 72 cells joined to it only at a corner; 21% of its
-  cells are not open water. The drawing paints every lake cell, so the gullies show as fingers,
-  and the deep tint is faithful: water over the bed has a median of 206 m and a 90th percentile of
-  330 m, against a world median of 112 m on the 512 by 512 grid. Drawing only open water would hide
-  the defect rather than mend it. What to trace: the endorheic surface's balance
-  (`LakeWaterBalance`) and the fill in `RiverStage` that sets the lake's extent, for why 512 rows
-  settles at four times the area 1,024 rows does; the gullies are the symmetric comb residual the
-  hydraulic rounds leave (`CombGuardTest`'s known failure). A generator chunk of its own.
-  2026-09-28, Q4. The site shows it (2026-09-29, Q6): on 718106 at 2048 rows the valleys that
-  branch in at the top of the styles window are a lake whose water stands up the one-cell gullies
-  round it as this one's does, though a river leaves it, on all twelve style cards, the data frame
-  and the six steps; on seed 1, the lighter of the two lakes in the opening band's first stretch.
+- **A lake's area still follows the cell count after L1, and a lake still floods the one-cell
+  gullies around it.** Q4's entry, updated by L1 (docs/DESIGN_LEDGER.md, L1). What L1 found and
+  fixed: the rifts' half-grabens were drawn from a stream seeded by a cell index, so a rift was a
+  different chain at every grid, and seed 42's trough held a closed basin of 2,455,444 km2 of
+  catchment and a lake of 281,662 km2 at 512 rows alone; and a closed basin's water stood at one
+  level over the lowest cells of the whole basin, so its separate hollows were drawn as one lake
+  (seed 42's lake 1 at 512 rows was eight pieces). Both are fixed: a rift is the same rift at every
+  grid (`RiftIdentityTest`), and each hollow is its own lake (`LakePockets`, `LakeBodyTest`).
+  What remains, measured on `ScaleFreeTest`'s four seeds as a seed's lake share of land and its
+  largest lake across 256, 512 and 1,024 rows (the tree before L1 in brackets): seed 7 x1.96 and
+  x5.38 (x1.28 and x1.67), seed 42 x1.49 and x1.46 (x2.87 and x4.73), seed 1234 x2.10 and x1.50
+  (x1.79 and x2.83), seed 99 x1.59 and x3.48 (x3.21 and x8.08), against a provisional bar of 1.35
+  run as a known failure. Re-taken at L1's review round, whose joins are relay ramps: x1.36 and
+  x2.30, x1.56 and x2.58, x1.80 and x3.44, x4.53 and x13.52: seed 99's largest lake 254,883 km2 at
+  256 rows and 18,848 at 1,024, a drowned trough basin held as land that the post-cut outlet
+  drained at one grid and not the other. With the valleys at Earth's width the basin is not made
+  and the spreads read x1.66 and x2.47, x1.23 and x1.31, x2.21 and x2.56, x1.26 and x1.38; with the
+  outlet off seed 99's largest lake is 488,342, 274,246 and 291,069 km2 at 256, 512 and 1,024 rows,
+  which is L2's to take (docs/DESIGN_LEDGER.md, L1). On the five seeds of L1's diagnosis the whole lake area reads, at 256,
+  512 and 1,024 rows and on the 512 by 512 grid: 42 310,913 / 330,963 / 464,172 / 321,625 km2; 7
+  340,027 / 229,202 / 173,653 / 213,135; 99 445,496 / 280,014 / 410,751 / 310,913; 718106
+  134,583 / 178,116 / 199,677 / 162,048; 59758 244,446 / 330,276 / 343,117 / 409,515. Three
+  causes are left, each measured and none fixed here:
+  - **The post-cut outlet** (L2, next): it cuts 1.35 m a pass and is still cutting at its sixteen
+    passes, so a drowned basin's size is the pass count's. Seed 99's largest lake, 329,556 km2 at
+    1,024 rows against 94,757 at 512, is a basin whose floor stands 130 m below the sea.
+  - **Whether a rift trough is sea or land follows its sills.** With Earth's half-grabens the
+    trough is a chain of basins joined by sills 50 km across; on seed 42 the chain is one body of
+    enclosed water over `SeaConfig.enclosedSeaMaxKm2` at 256 and 512 rows, so it stays sea, and at
+    1,024 rows the sills part it into basins under the cap, which become land and hold a chain of
+    lakes, closed but for one (the world's closed water is 124,420 km2 there against 38,315 at 512
+    rows). Earth's rift chains are lakes where the
+    sea cannot reach them, which is the 1,024-row answer; the sea stage's enclosure rule and the
+    post-cut outlet between them decide it at each grid, which is L2's ground.
+  - **Chaos.** Re-drawing the routing's per-cell sub-grid draw (`FlowRouting.subGridDraw`'s salt)
+    at 512 rows moves the five seeds' lake area by -11%, +4%, -25%, +19% and -22% and the largest
+    lake by up to 44%; re-drawing the delta lobes' per-cell wobble (`HydraulicErosion.wobble`)
+    moves it by +23%, -10%, +1%, -2% and -7%, seed 42's largest lake doubling. Both draws are per
+    cell by design, standing for relief finer than a cell, so there is no key that makes them the
+    same draw at another grid; what they show is that a lake census cannot hold tighter than about
+    a quarter between any two runs that route differently, which is the floor any bar on it sits on.
+  The gullies are unchanged: the comb (`CombGuardTest`'s `SYMMETRIC_COMB`) still stands one-cell
+  gullies under the lakes' shores. Recorded without a bar in `ScaleFreeTest`, since no fractal
+  dimension for lake shores has been sourced independently: the lakes' shore per km2 of lake grows
+  from 0.073 to 0.156 to 0.269 km on seed 7 across 256, 512 and 1,024 rows, an outline dimension of
+  1.53 and 1.39 read as 1 + log2 of the growth, and 1.28 to 1.92 on the other seeds, where natural
+  coasts run 1.2 to 1.3. No claim of resolution independence is made for lakes until L2 lands.
+  2026-09-28, Q4; 2026-09-29, L1.
+- **Whether a plate is continental can change at 256 rows.** The crusts are handed out by
+  accumulated cell counts against a target share and by raster adjacency between plates
+  (`PlateStage.drawPlates`), and a plate near the target's edge, or two plates touching along a
+  cell or two, can come out differently on a coarse grid: over seeds 1 to 60, the crusts differ
+  between 256 rows and 512 or 1,024 on two seeds (seed 2's plate 10 is oceanic at 256 rows and
+  continental above; seed 54's plates 0 and 1 swap), and 512 and 1,024 rows agree on every seed.
+  The rift pairs differ on five, three of them a short rift 256 rows does not resolve (seeds 1, 22
+  and 40). None of the five seeds L1 measured is affected, so it is not a cause of their lake
+  spread, and it was left alone. What would settle it is the crusts chosen by area on the ground
+  and adjacency by a length of shared boundary in kilometers. 2026-09-29, L1.
+- **The rifts may be too long and too common, and the sill guard cannot see a rung at Earth's
+  width.** Measured at 512 rows once the valleys were narrowed to Earth's 55 km: the standard seeds
+  carry 53 to 242 km of continental rift axis per million km2 of land, 134 on the mean, against
+  Earth's 85 (64 without the West Antarctic system); seed 1234 carries 6,640 km in two systems.
+  Reported, not asserted: what sets how many continental pairs pull apart is the plates' drift and
+  classification, not the rift's profile. Of the dry axis, 0 to 43% drains down the valley to the
+  sea for 160 km or more, the rest to closed basins or across the flank; both are Earth's and
+  neither is steered. `RiftSillGeometryTest` passes the relay ramps and would pass the rungs too at
+  this width (a join square to a 4.7-cell valley is too short a line for the census), so it guards
+  the valley and its shoulders and no longer the rungs; and the shoulders still switch at each join
+  square to the rift over their 105 km, faintly on the plate floor. 2026-09-30, L1's review round.
+- **At 256 rows a rift's anchor can sit two cells off.** `anchoredCourse` anchors a course at the
+  first cell whose bisector coordinate reaches zero; on seed 59758's rifts 1-13 and 3-10 the 256-row
+  course reads 54 and 41 km further along than the 1,024-row one at the same ground (the median over
+  cells matched within a cell), where every rift at 512 rows is within 17 km. `RiftIdentityTest`'s
+  share passes, leaving each stretch's end half-grabens out as its text allows. What would settle it
+  is an anchor fitted over the course rather than read at one crossing. 2026-09-30, L1's review
+  round.
+- **Seed 5's ocean does not solve with the pressure departure off.** `OceanCirculation` stops at a
+  relative residual of 0.0017 to 0.0019 after its 200 iterations against a tolerance of 0.001, at 256
+  and 512 rows, with `climate.pressureWinds` false (the setting `MeridionalWindTest` builds its
+  worlds with), and solves with it on; the tree before L1 fails the same way, so L1 did not cause it.
+  Found by L1's monsoon scan, which skipped the seed. 2026-09-29, L1.
 - **A world of square cells carries more ice at 60 to 90 degrees than a change of grid gives.**
   `GridShapeTest` compares the same seed at 512 by 512 and at `forRows(512)`, band by band. Its
   ice clause runs as a known failure. Seed 1234 at -75 to -90 degrees carries +0.017 of the band as

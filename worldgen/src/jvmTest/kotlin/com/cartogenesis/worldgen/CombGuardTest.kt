@@ -212,7 +212,8 @@ class CombGuardTest : BorrowsSharedWorlds() {
         const val SYMMETRIC_COMB =
             "the square cell: the flanks carry a comb of straight parallel gullies on both axes alike, seven to ten times the router's own"
 
-        const val RECORDED = "seed 7 0.16 down a column and 0.15 along a row; seed 42 0.20 down a column and 0.18 along a row"
+        /** Re-recorded at L1, whose rifts are Earth's half-grabens and the same at every grid (docs/DESIGN_LEDGER.md, L1). */
+        const val RECORDED = "seed 7 0.19 down a column and 0.13 along a row; seed 42 0.22 down a column and 0.15 along a row"
 
         /**
          * The grid the guard is taken on, [SharedWorlds.DETAIL_ROWS]: square cells, 1,024 by 512,
@@ -255,12 +256,15 @@ class CombGuardTest : BorrowsSharedWorlds() {
         /**
          * The comb an axis may carry, in km per 1,000 km² of land: the most the router's own parallel
          * reaches carry with a [RIDGE_METRES] ridge between them on the isotropic control over the
-         * same land at 512 rows, 0.0201 on seed 7's columns (0.0068 on its rows, 0.0111 and 0.0137
-         * on seed 42's), rounded up at the second figure. From the control, not from any world under
-         * test, and the third case holds the control to it: at 0.02, rounded to the nearest, the
-         * guard failed its own control by the 0.0001 it had been rounded down.
+         * same land at 512 rows, rounded up at the second figure. From the control, not from any
+         * world under test, and the third case holds the control to it: at 0.02, rounded to the
+         * nearest, the guard failed its own control by the 0.0001 it had been rounded down. First
+         * 0.0201 on seed 7's columns (0.0068 on its rows, 0.0111 and 0.0137 on seed 42's), so 0.021;
+         * re-derived at L1's review round, whose rift joins are relay ramps and moved the land the
+         * control is laid over: 0.0229 on seed 42's rows (0.0076 on its columns, 0.0162 and 0.0085
+         * on seed 7's), so 0.023.
          */
-        const val COMB_FLOOR_KM_PER_1000_KM2 = 0.021
+        const val COMB_FLOOR_KM_PER_1000_KM2 = 0.023
 
         /**
          * The isotropic control's surface: 400 cosines, 40 to 4,000 km long, standing at an rms

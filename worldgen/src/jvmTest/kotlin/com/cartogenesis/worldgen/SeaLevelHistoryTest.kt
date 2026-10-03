@@ -4,7 +4,6 @@ import com.cartogenesis.worldgen.math.JumpFloodDistance
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import kotlin.math.sqrt
-import java.util.Locale
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -154,24 +153,21 @@ class SeaLevelHistoryTest : BorrowsSharedWorlds() {
             "SEA HISTORY pooled: %.2fx estuary mouths with the lowstand (%s)"
                 .format(meanGain, pooledEstuaries.joinToString { "%.2f".format(it) })
         )
-        // The direction per seed is armed; the size pooled was armed again at Fix 3b (under the
-        // capped explicit update seeds 7 and 1234 fell short; docs/DESIGN_LEDGER.md, Fix 3 and Fix
-        // 3b) and runs as a known failure on square cells: see [GAIN_UNDER_THE_BAR_ON_SQUARE_CELLS].
+        // The direction per seed is armed, and the size pooled: armed at Fix 3b (under the capped
+        // explicit update seeds 7 and 1234 fell short; docs/DESIGN_LEDGER.md, Fix 3 and Fix 3b),
+        // run as a known failure on square cells from Q2 at 1.47, and armed again at L1, whose
+        // rifts took it to 1.58 (2.07, 1.46 and 1.22 on seeds 7, 42 and 1234).
         assertTrue(shortfalls.isEmpty(), shortfalls.joinToString("; ") + "; " + figures.joinToString("; "))
-        KnownFailures.expect(GAIN_UNDER_THE_BAR_ON_SQUARE_CELLS, "pooled 1.47x") {
-            if (!(pooledEstuaries.size == seeds.size && meanGain >= estuaryGain)) {
-                throw RecordedViolation(
-                    "pooled over ${pooledEstuaries.size} seeds the lowstand leaves ${meanGain}x the " +
-                        "estuary mouths, not the ${estuaryGain}x a drowned valley owes",
-                    String.format(Locale.ROOT, "pooled %.2fx", meanGain)
-                )
-            }
-        }
+        assertTrue(
+            pooledEstuaries.size == seeds.size && meanGain >= estuaryGain,
+            "pooled over ${pooledEstuaries.size} seeds the lowstand leaves ${meanGain}x the estuary mouths, " +
+                "not the ${estuaryGain}x a drowned valley owes"
+        )
 
         // The other half of ground rule 2: the world without the lowstand has to fail a bar the
         // world with it clears, or this guard is measuring nothing.
         // Recorded since Fix 3b: see [CONTROL_REACHES_THE_CEILING].
-        KnownFailures.expect(CONTROL_REACHES_THE_CEILING, "short on 1 of 3") {
+        KnownFailures.expect(CONTROL_REACHES_THE_CEILING, "short on 0 of 3") {
             if (controlFailures != seeds.size) {
                 throw RecordedViolation(
                     "the world with the sea held at today's level was expected to fall short of " +
@@ -291,18 +287,6 @@ class SeaLevelHistoryTest : BorrowsSharedWorlds() {
          */
         const val CONTROL_REACHES_THE_CEILING =
             "the erosion: on the law's terrain the sea held at today's level already drowns enough valleys to reach the estuary ceiling on one seed"
-
-        /**
-         * Failing on square cells since Q2. The lowstand still leaves more estuary mouths on every
-         * seed (96 against 52, 34 against 27, 75 against 58 on seeds 7, 42 and 1234), but pooled
-         * 1.47 times the control's (1.85, 1.26 and 1.29) against the 1.5 read off the 512 by 512
-         * grid's worlds, where it was 1.60: the control's counts rose from 28, 18 and 48, by more in
-         * proportion than the lowstand's on seeds 7 and 42. The cause is not isolated; the bar was
-         * read off the measurement at 512 by 512 and is not re-set to fit (docs/DESIGN_LEDGER.md,
-         * Q2).
-         */
-        const val GAIN_UNDER_THE_BAR_ON_SQUARE_CELLS =
-            "the sea: on square cells the lowstand's pooled gain in estuary mouths falls under the bar read off the half-height cell"
     }
 }
 

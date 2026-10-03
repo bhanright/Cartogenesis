@@ -27,6 +27,11 @@ import kotlin.math.pow
  * Above the spill there is nothing to solve. The lake overflows, the surplus runs to the sea, and
  * the surface is the spill level exactly as before this existed — which is why wet country comes
  * out of this file bit for bit unchanged.
+ *
+ * A closed basin's floor is several hollows, and each is balanced on its own catchment and its own
+ * water, spilling into the next and joining it only at their saddle: [LakePockets] holds the
+ * hierarchy and the solve. This file keeps the terms of the balance and the re-routing of a closed
+ * basin at its water.
  */
 internal object LakeWaterBalance {
 
@@ -98,73 +103,6 @@ internal object LakeWaterBalance {
      * heat index under a large exponent — cannot return infinity.
      */
     private const val MAX_MONTHLY_PET = 500.0
-
-    /** Where the water stands in one basin, and how much of the basin it covers. */
-    class Balance(
-        /** How many of the basin's cells hold water, lowest ground first. */
-        val submergedCells: Int,
-        /** Water surface, in the same units as the relative elevation. */
-        val surface: Float,
-        /** True when the balance reaches the brim and the basin overflows as it always has. */
-        val atSpill: Boolean
-    )
-
-    /**
-     * Solves one basin by bisection over its own cells.
-     *
-     * The basin's cells sorted by the ground beneath them *are* its hypsometry: flooding the lowest
-     * k of them is the area at the level that just covers the k-th, so the unknown is an integer
-     * between none of them and all of them and the search is a plain bisection on that integer. The
-     * running sums of rainfall and evaporation over the sorted cells make each probe O(1), so the
-     * whole solve is a sort and a logarithm rather than a flood per candidate level.
-     *
-     * @param sortedGround the basin's cells' true ground elevation, ascending.
-     * @param rainPrefix `rainPrefix[k]` is the rainfall in mm summed over the lowest k cells.
-     * @param evaporationPrefix the same running sum for potential evaporation.
-     * @param catchmentRainMm rainfall in mm summed over every cell that drains into the basin,
-     *   the basin's own cells included — [FlowRouting.accumulate] on the filled surface gives this
-     *   at the basin's pour point.
-     * @param spillSurface the filled surface's level, the brim.
-     * @param minDepth how deep water has to stand before a cell counts as covered, so the answer
-     *   is measured the same way the spill-level footprint is.
-     * @param runoffFraction the share of catchment rainfall that reaches the basin rather than
-     *   evaporating off the ground where it fell.
-     */
-    fun solve(
-        sortedGround: FloatArray,
-        rainPrefix: FloatArray,
-        evaporationPrefix: FloatArray,
-        catchmentRainMm: Float,
-        spillSurface: Float,
-        minDepth: Float,
-        runoffFraction: Float
-    ): Balance {
-        val basinCellCount = sortedGround.size
-        val inflowMm = runoffFraction * catchmentRainMm
-
-        // Net gain in mm with the lowest `submerged` cells under water. Rain that falls on the
-        // lake itself all joins the lake, so those cells swap their runoff share for the whole of
-        // it, and pay evaporation.
-        fun netGainMm(submerged: Int): Float =
-            inflowMm - runoffFraction * rainPrefix[submerged] + rainPrefix[submerged] -
-                evaporationPrefix[submerged]
-
-        if (netGainMm(basinCellCount) >= 0f) {
-            return Balance(basinCellCount, spillSurface, atSpill = true)
-        }
-        if (netGainMm(1) < 0f) return Balance(0, sortedGround[0], atSpill = false)
-
-        // The most cells that still balance. One balances and all of them do not, so the answer
-        // lies between.
-        var balances = 1
-        var doesNot = basinCellCount
-        while (balances + 1 < doesNot) {
-            val midpoint = (balances + doesNot) / 2
-            if (netGainMm(midpoint) >= 0f) balances = midpoint else doesNot = midpoint
-        }
-        val surface = (sortedGround[balances - 1] + minDepth).coerceAtMost(spillSurface)
-        return Balance(balances, surface, atSpill = false)
-    }
 
     /**
      * A seeded, low-amplitude, spatially coherent perturbation of the ground, in the same units as

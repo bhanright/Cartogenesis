@@ -132,7 +132,7 @@ class TectonicHistoryTest {
         // field tall beyond 39, but the control whose plates never moved reads 0.033 there on
         // seed 1234, over the bar, so 39 cannot tell a scar from the present belts stamped again.
         // Re-recorded at Q2 in kilometers, on square cells: 0.0036 where it read 0.0035.
-        KnownFailures.expect(OLD_BELTS_NEAR_PRESENT_EDGES, "seed 42 at 0.0036") {
+        KnownFailures.expect(OLD_BELTS_NEAR_PRESENT_EDGES, "seed 42 at 0.0034") {
             if (short.isNotEmpty()) {
                 val found = short.joinToString { (seed, relief) -> String.format(Locale.ROOT, "seed %d at %.4f", seed, relief) }
                 throw RecordedViolation(

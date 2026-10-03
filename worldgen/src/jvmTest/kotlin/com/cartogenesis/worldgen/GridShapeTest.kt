@@ -138,22 +138,16 @@ class GridShapeTest : BorrowsSharedWorlds() {
         // (docs/DESIGN_LEDGER.md, E1).
         assertTrue(misses.desert.isEmpty(), "the deserts part by more than a change of grid: ${misses.desert}")
         assertTrue(misses.rain.isEmpty(), "the land's rain parts by more than a change of grid: ${misses.rain}")
-        // Recorded at L1's review round, once the rift valleys were Earth's width: seed 99's polar
-        // band parts by more than the spread; not isolated (docs/DESIGN_LEDGER.md, L1).
-        KnownFailures.expect(A_POLAR_BAND_WARMTH_PARTS, "seed 99 90 to 75 degrees +0.49 C") {
-            if (misses.temperature.isNotEmpty()) {
-                throw RecordedViolation(
-                    "the warmth parts by more than a change of grid: ${misses.temperature}",
-                    misses.temperature.joinToString()
-                )
-            }
-        }
+        // Recorded at L1's review round, once the rift valleys were Earth's width (seed 99's polar
+        // band, +0.49 C), and armed again at E1a, whose two heights moved every band
+        // (docs/DESIGN_LEDGER.md, L1 and E1).
+        assertTrue(misses.temperature.isEmpty(), "the warmth parts by more than a change of grid: ${misses.temperature}")
         // Re-recorded at Q2, whose coast reaches its 234 km on square cells: seed 99 at 75 to 60 degrees
         // moved from +0.022 (docs/DESIGN_LEDGER.md, Q2). Re-recorded at L1, whose rifts moved every
         // world: seed 99's two bands came inside the spread, seed 1234's from +0.017 to +0.016.
         KnownFailures.expect(
             "Q1: a square cell's world carries more ice at 60 to 90 degrees than a change of grid gives",
-            "seed 99 -60 to -75 degrees ice +0.024"
+            "seed 99 75 to 60 degrees ice +0.019, seed 99 -60 to -75 degrees ice +0.025"
         ) {
             if (misses.ice.isNotEmpty()) {
                 throw RecordedViolation(
@@ -192,9 +186,6 @@ class GridShapeTest : BorrowsSharedWorlds() {
     private companion object {
         /** The four standard seeds. */
         val SEEDS = listOf(7L, 42L, 1234L, 99L)
-
-        const val A_POLAR_BAND_WARMTH_PARTS =
-            "L1: a polar band's warmth parts across the grids by more than a change of grid gives, on the rifts' worlds"
 
         /** The seed whose control moves both the deserts and the rain furthest. */
         const val CONTROL_SEED = 1234L

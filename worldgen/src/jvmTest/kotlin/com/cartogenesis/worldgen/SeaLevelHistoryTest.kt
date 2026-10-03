@@ -173,17 +173,14 @@ class SeaLevelHistoryTest : BorrowsSharedWorlds() {
 
         // The other half of ground rule 2: the world without the lowstand has to fail a bar the
         // world with it clears, or this guard is measuring nothing.
-        // Recorded since Fix 3b: see [CONTROL_REACHES_THE_CEILING].
-        KnownFailures.expect(CONTROL_REACHES_THE_CEILING, "short on 0 of 3") {
-            if (controlFailures != seeds.size) {
-                throw RecordedViolation(
-                    "the world with the sea held at today's level was expected to fall short of " +
-                        "$controlEstuaryCeiling estuary mouths on all ${seeds.size} seeds and did so on " +
-                        "$controlFailures",
-                    "short on $controlFailures of ${seeds.size}"
-                )
-            }
-        }
+        // Recorded from Fix 3b to L1, when the control reached the ceiling on one seed or more, and
+        // armed at E1a, whose control falls short on every seed (docs/DESIGN_LEDGER.md, Fix 3b and E1).
+        assertTrue(
+            controlFailures == seeds.size,
+            "the world with the sea held at today's level was expected to fall short of " +
+                "$controlEstuaryCeiling estuary mouths on all ${seeds.size} seeds and did so on " +
+                "$controlFailures"
+        )
     }
 
     @Test
@@ -281,19 +278,6 @@ class SeaLevelHistoryTest : BorrowsSharedWorlds() {
     }
 
     private companion object {
-        /**
-         * The known failure the control's clause records since Fix 3b. The claim holds: with the
-         * lowstand the three worlds carry 1.70 times the estuary mouths pooled (2.15, 1.50 and
-         * 1.43), and the lowstand clause is armed again. But the control, the sea held at today's
-         * level, has to fall short of the ceiling of 40 mouths on every seed for the bar to mean
-         * anything, and on the law's terrain seed 1234 reaches 44 without the lowstand: the law
-         * cuts the lower valleys deep enough that the rising sea finds some without the lowstand's
-         * help. The ceiling was set on the capped terrain and is not re-set here
-         * (docs/DESIGN_LEDGER.md, Fix 3b). Re-recorded on square cells at Q2, where the control
-         * reaches 52 and 58 mouths on seeds 7 and 1234 and falls short only on seed 42's 27.
-         */
-        const val CONTROL_REACHES_THE_CEILING =
-            "the erosion: on the law's terrain the sea held at today's level already drowns enough valleys to reach the estuary ceiling on one seed"
     }
 }
 

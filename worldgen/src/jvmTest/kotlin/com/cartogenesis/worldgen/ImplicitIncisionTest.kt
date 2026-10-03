@@ -3,6 +3,8 @@ package com.cartogenesis.worldgen
 import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.pipeline.FlowRouting
+import com.cartogenesis.worldgen.pipeline.GroundCells
+import com.cartogenesis.worldgen.pipeline.GroundWatch
 import com.cartogenesis.worldgen.pipeline.HydraulicErosion
 import com.cartogenesis.worldgen.pipeline.IncisionWatch
 import com.cartogenesis.worldgen.pipeline.PlateStage
@@ -528,7 +530,21 @@ class ImplicitIncisionTest {
         val cut = SeaLevelStage.percentileCut(ground, config.seaLevel, scale)
         val shorelineMetres = scale.altitudeAtField(cut.shorelineHeight).toDouble()
         val before = ground.data.copyOf()
-        val after = runBlocking { HydraulicErosion.apply(config, ground.copy(), config.seaLevel) { it } }
+        // The law cuts the bed; since the two heights (E1) the stage hands on the ground, which
+        // follows the bed only as fast as its hillslopes carry the relief down, so the bed is read.
+        var finalBed = FloatArray(0)
+        val bedWatch = object : GroundWatch {
+            override fun round(
+                round: Int, isLand: BooleanArray, cells: GroundCells, ground: FloatArray,
+                bedCut: DoubleArray, production: DoubleArray, bedsHeld: Int
+            ) {}
+
+            override fun finished(bed: FloatArray, ground: FloatArray) {
+                finalBed = bed.copyOf()
+            }
+        }
+        runBlocking { HydraulicErosion.apply(config, ground.copy(), config.seaLevel, groundWatch = bedWatch) { it } }
+        val after = FloatField(cellsAcross, config.height, finalBed)
 
         val row = config.height / 2
         val landAreaKm2 = (1.0 - config.seaLevel.toDouble()) * scale.worldAreaKm2

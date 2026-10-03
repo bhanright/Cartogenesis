@@ -59,19 +59,6 @@ class PressureWindTest : BorrowsSharedWorlds() {
         const val MONSOON_ROWS = SharedWorlds.DETAIL_ROWS
 
         /**
-         * Failing on square cells since Q2. The cold half of the year blows onto the subtropical
-         * continents' equatorward and eastern coasts at +0.31 m/s pooled, where on the 512 by 512
-         * grid it blew off them at -0.17: seeds 42, 1234 and 99 onshore (+0.76, +0.41, +0.21) and
-         * seed 7 still offshore (-0.43). The warm half still blows on (+0.29 against +0.35). The
-         * cause is not isolated (seed 99's continent is centered at 19.4 degrees where it stood at
-         * 29.1, the other three within half a degree); the sea whose temperature the pressure
-         * answers is still solved on the ocean's own grid, the switch's next chunk
-         * (docs/DESIGN_LEDGER.md, Q2).
-         */
-        const val WINTER_ONSHORE_ON_SQUARE_CELLS =
-            "the wind: on square cells the cold half blows onto the subtropical continents' equatorward and eastern coasts"
-
-        /**
          * How far inland "the interior" starts, in kilometres.
          *
          * Five hundred, which is the chunk's own specification and is also roughly where the
@@ -335,17 +322,14 @@ class PressureWindTest : BorrowsSharedWorlds() {
         }
         // On the implicit update before the uplift was re-derived on it the cold half pooled to
         // -0.04 m/s, seeds 42 and 1234 blowing onshore; with the re-derived uplift it cleared the bar
-        // again (docs/DESIGN_LEDGER.md, Fix 3b), and on square cells it fails: see
-        // [WINTER_ONSHORE_ON_SQUARE_CELLS].
-        // Re-recorded at L1, whose rifts are Earth's half-grabens and the same at every grid (docs/DESIGN_LEDGER.md, L1).
-        KnownFailures.expect(WINTER_ONSHORE_ON_SQUARE_CELLS, "pooled +0.22 m/s") {
-            if (!(winter < -ONSHORE_BAR_MPS)) {
-                throw RecordedViolation(
-                    ("the cold half blows %+.2f m/s onto the same coasts, which is not offshore").format(winter),
-                    String.format(java.util.Locale.ROOT, "pooled %+.2f m/s", winter)
-                )
-            }
-        }
+        // again (docs/DESIGN_LEDGER.md, Fix 3b), and on square cells it failed (+0.31 m/s pooled at Q2).
+        // Re-recorded at L1, whose rifts are Earth's half-grabens and the same at every grid, and
+        // armed at E1a, whose two heights' continents blow offshore in the cold half again
+        // (docs/DESIGN_LEDGER.md, L1 and E1).
+        assertTrue(
+            winter < -ONSHORE_BAR_MPS,
+            ("the cold half blows %+.2f m/s onto the same coasts, which is not offshore").format(winter)
+        )
         // The control, which is the whole of the claim's meaning: with the belts as the entire
         // wind the same coasts do not reverse between the halves of the year.
         assertTrue(

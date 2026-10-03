@@ -1363,6 +1363,26 @@
   1,024 rows. E1a's renders draw the probe's D, the bed under drawn rivers
   and lakes, as a single-cell groove: the bed under a river is a line, and the valley its relief
   stands in has no width on the map yet. Both are E1c's. 2026-10-03, E1a.
+- **The relief's three calibrations wait for the drawing to read the bed.** The exaggeration, the
+  haze and the hachures' slope floor are each derived on the surface the drawing is handed, and on
+  E1a's ground they do not close: the cone pins no bearing until 43.50 (from 37.75), the lamp's
+  contrast is then matched at haze 0.12 with ordinary ground at 0.9451, and under that sky the cone
+  pins none up to the sweep's 48; the slope floor's tenth percentile reads 0.054 at 37.75 and 0.062
+  at 43.50. They are recorded as known failures under one finding (`ReliefShadingTest`) and are to
+  be re-derived, as a fixed point of the three, once E1c hands the drawing D. 2026-10-03, E1a.
+- **Every scale-free metric is inside its tolerance from 512 to 1,024 rows.** `ScaleFreeTest`'s
+  findings, the departures it printed beside its complaints, emptied on E1a's worlds (relief, coast,
+  drainage, the largest lake, ice, the anomaly and the maritime reach on seeds 7, 42, 1234 and 99),
+  and the clause that asked for at least one now counts what was measured. Its own comment asks for
+  the findings to be promoted to assertions one at a time, each with its own chunk; the lake and
+  channel-head clauses beside them still fail (x1.49 and x2.23 on 42's and 99's water, x1.38 to 1.40
+  on three seeds' heads). 2026-10-03, E1a.
+- **The initiated network's density peaks in humid country again.** R1's wet-side decline,
+  measured on the river stage's channels, is lost on E1a's ground: the peak is in humid country on
+  seeds 7 and 1234 and pooled, humid over semi-arid 1.02 to 1.32 (`EarthLikenessTest`, re-recorded).
+  The river stage initiates channels on the ground's gradient, and the ground is the cell's mean over
+  its relief, so the head rule there sees gentler slopes than the one height had; E1c moves the
+  river stage to the bed, and the clause is to be read again then. 2026-10-03, E1a.
 - **The D8 octave, averaged over the grid's real configurations.** `GroundClosure.NETWORK_RELIEF_PER_OCTAVE`
   is derived for a straight trunk crossing a 2-by-2 block, a half of `E / K'` an octave. A turning
   trunk leaves one side cell (a quarter) and a source block three round an outlet (about 0.85), and

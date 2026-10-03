@@ -1051,13 +1051,14 @@ class IsostasyTest : BorrowsSharedWorlds() {
          * How far the collision rate may sit from Earth's surface uplift plus the measured
          * denudation, in millimetres a year.
          *
-         * Two hundredths: half the spread of the five worlds' own figures, which the case prints.
-         * On the implicit incision they run 0.220 to 0.261 mm a year, four hundredths apart; half
-         * that is tight enough that the constant cannot drift away from its derivation unnoticed
-         * and loose enough that a seed's chaos cannot fail it. By the same rule it was sixteen
-         * thousandths under the cap (0.059 to 0.091) and a twentieth on the clock before Fix 3.
+         * Fourteen thousandths: half the spread of the five worlds' own figures, which the case
+         * prints. On the two heights they run 0.053 to 0.081 mm a year, 0.028 apart; half that is
+         * tight enough that the constant cannot drift away from its derivation unnoticed and loose
+         * enough that a seed's chaos cannot fail it. By the same rule it was two hundredths on the
+         * one-height implicit incision (0.220 to 0.261), sixteen thousandths under the cap (0.059
+         * to 0.091) and a twentieth on the clock before Fix 3.
          */
-        const val UPLIFT_RATE_TOLERANCE_MM_PER_YEAR = 0.02
+        const val UPLIFT_RATE_TOLERANCE_MM_PER_YEAR = 0.014
 
 
         /** The known failure the forebulge clause records. See docs/DESIGN_LEDGER.md, Fix 2. */

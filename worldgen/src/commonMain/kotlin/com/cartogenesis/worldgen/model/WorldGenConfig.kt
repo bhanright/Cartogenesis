@@ -1082,9 +1082,9 @@ data class TectonicsConfig(
      * comes off as sediment, so a rate is only meaningful beside the erosion it is racing. The
      * collision rate is therefore Earth's surface uplift for a collision, half a millimetre a year,
      * plus the denudation this model's own erosion takes off the present epoch's collisional and
-     * Andean belts with every uplift rate and the flexure off: 0.238 mm a year pooled over seeds 7,
-     * 42, 1234, 99 and 718106 at 512 (0.224, 0.261, 0.220, 0.231 and 0.257), the mean lowering of
-     * those belts' land over the twelve rounds' years. The flexure is off in that measurement
+     * Andean belts with every uplift rate and the flexure off: 0.068 mm a year pooled over seeds 7,
+     * 42, 1234, 99 and 718106 at 512 rows (0.062, 0.081, 0.053, 0.065 and 0.079), the mean
+     * lowering of those belts' ground over the twelve rounds' years. The flexure is off in that measurement
      * because the plate's rebound under the unloading is the third quantity, the **flexural
      * response**, and would hide part of the denudation behind it; the rounds apply it to what
      * these rates stack on as they always did. `IsostasyTest` re-measures the denudation and
@@ -1093,23 +1093,24 @@ data class TectonicsConfig(
      *
      * What the derivation does not establish: that production, which runs with the flexure on,
      * gains half a millimetre a year of surface on its collisional belts. The sum is exact only for
-     * the flexure-off measurement it was taken from. With the flexure on, the same belts lose
-     * 0.134 mm a year where the flexure-off run lost 0.238, the flexural response entering the
-     * same budget, and nothing here measures the surface uplift production's belts actually make. The rate is the
-     * flexure-off balance, stated as such, and not a calibration of production's ranges.
+     * the flexure-off measurement it was taken from. With the flexure on, the flexural response
+     * enters the same budget, and nothing here measures the surface uplift production's belts
+     * actually make. The rate is the flexure-off balance, stated as such, and not a calibration of
+     * production's ranges.
      *
-     * Derived since Fix 3b on the implicit incision, where the stream-power law and not a
-     * numerical cap sets every cut; the denudation under the cap was 0.074 mm a year and was the
-     * cap's, which is why the derivation waited for this. A chunk that moves the denudation
-     * re-derives it; the history of its figures is in docs/DESIGN_LEDGER.md (S2, S3, Fix 2, Fix 3
-     * and Fix 3b).
+     * Derived since E1 on the two heights, where the trunk's cut lowers the bed and the ground
+     * follows it only as fast as its hillslopes and in-cell channels carry the relief down: in the
+     * twelve rounds' four million years a belt's ground lowers by a quarter of what it did when
+     * every point of a cell went down with its trunk (0.238 mm a year on Fix 3b's implicit
+     * incision). A chunk that moves the denudation re-derives it; the history of its figures is in
+     * docs/DESIGN_LEDGER.md (S2, S3, Fix 2, Fix 3, Fix 3b and E1).
      *
      * Spent over [WorldScale.yearsPerHydraulicRound] per round. See `HydraulicErosion.apply`.
      */
-    val collisionUpliftMmPerYear: Float = 0.738f,
-    val andeanUpliftMmPerYear: Float = 0.2952f,
-    val islandArcUpliftMmPerYear: Float = 0.1038f,
-    val riftShoulderUpliftMmPerYear: Float = 0.04476f,
+    val collisionUpliftMmPerYear: Float = 0.568f,
+    val andeanUpliftMmPerYear: Float = 0.2272f,
+    val islandArcUpliftMmPerYear: Float = 0.07989f,
+    val riftShoulderUpliftMmPerYear: Float = 0.03445f,
     /**
      * The height, in metres, past which the crust's own strength starts to hold a range back.
      *

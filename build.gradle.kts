@@ -155,7 +155,104 @@ abstract class TestTimingReport : BuildService<BuildServiceParameters.None>, Aut
 val testTimingReport =
     gradle.sharedServices.registerIfAbsent("testTimingReport", TestTimingReport::class.java) {}
 
+/*
+ * Record mode for the suites' pinned figures (`PinRecords` in the shared test support): with
+ * `-Precord`, a known failure's signature, a geometry census entry or a render record that no
+ * longer holds is written to `build/pin-records/<task>` as its replacement instead of failing, and
+ * `:worldgen:applyPinRecords` writes the replacements into the source for review as a diff. The
+ * records are cleared before each task runs, so they are always one run's.
+ */
+val recordingPins = providers.gradleProperty("record").map { it != "false" }.getOrElse(false)
+
+/*
+ * The test tiers' world cache (`WorldDiskCache` in the shared test support): every world a test
+ * borrows from `SharedWorlds` is kept here once made, keyed by its settings and a hash of the
+ * generator's compiled classes, and read back by any later worker or run instead of being generated
+ * again. One directory for the three modules that generate worlds, since they ask for the same
+ * standard ones. Under `build/`, so it is never committed and a clean removes it.
+ *
+ * The cap is 20 GB unless `-PworldCacheGigabytes` says otherwise. Measured on the tiers at T1: the
+ * everyday tier's 13 standard worlds take 0.75 GB, and the deep tier's 194 more 16.2 GB, 6.8 GB of
+ * that its 21 worlds of 1,024 rows. Past the cap the least recently used variants go first and the
+ * standard worlds last, so a deep run never costs the next everyday run its worlds. `-PworldCache=off` generates every
+ * world as before, for a run that should not trust the cache; `clearWorldCache` empties it.
+ */
+val worldCacheDirectory = layout.buildDirectory.dir("world-cache").get().asFile
+val worldCacheOn = providers.gradleProperty("worldCache").map { it != "off" }.getOrElse(true)
+val worldCacheBytes = providers.gradleProperty("worldCacheGigabytes").map { it.toLong() }.getOrElse(20L) * 1_000_000_000L
+
+/*
+ * The deep tier's stages, and what each one reaches downstream (docs/PIPELINE.md). The everyday tier
+ * (`jvmTest`, and `:desktop:test`) reads only standard worlds: default settings, at 512 rows or
+ * fewer, one grid per seed. The deep tier (`deepTest` in `:worldgen`, `:cartography` and
+ * `:desktop`) holds the classes, and the methods of classes that mix the two, that build their own
+ * variants for an on/off control, compare grids, or build worlds of 1,024 rows or more; each
+ * module's build script lists them by the stage they guard.
+ *
+ * `-Pstages=climate,ocean` runs the deep classes of those stages and of every stage they reach, so
+ * a change is followed as far as it can move a world. The reach includes the pipeline's loops: the
+ * climate runs inside erosion (the climate feed, over a still ocean) and inside the sea level (the
+ * ice's snow balance), so a change to the climate or the ocean reaches back to erosion and on down.
+ * `engine` (reuse, stopping, the whole pipeline at several grids) and `drawing` read every stage's
+ * results, so every selection reaches them. Without `-Pstages`, every deep class runs.
+ */
+val pipelineReach: Map<String, List<String>> = mapOf(
+    "terrain" to listOf("plates"),
+    "plates" to listOf("erosion"),
+    "erosion" to listOf("sea"),
+    "sea" to listOf("ocean", "climate", "rivers"),
+    "ocean" to listOf("climate", "erosion"),
+    "climate" to listOf("rivers", "realms", "peoples", "landmarks", "erosion", "sea"),
+    "rivers" to listOf("realms", "peoples", "landmarks"),
+    "realms" to listOf("landmarks"),
+    "peoples" to emptyList(),
+    "landmarks" to emptyList(),
+    "engine" to emptyList(),
+    "drawing" to emptyList()
+)
+
+val deepStagesAsked: Set<String>? = providers.gradleProperty("stages").orNull?.let { asked ->
+    val named = asked.split(',').map { it.trim().lowercase() }.filter { it.isNotEmpty() }
+    val unknown = named.filter { it !in pipelineReach }
+    require(unknown.isEmpty()) {
+        "-Pstages names ${unknown.joinToString()}, which is no stage; the stages are ${pipelineReach.keys.joinToString()}"
+    }
+    val reached = LinkedHashSet<String>()
+    val waiting = ArrayDeque(named)
+    while (waiting.isNotEmpty()) {
+        val stage = waiting.removeFirst()
+        if (reached.add(stage)) waiting.addAll(pipelineReach.getValue(stage))
+    }
+    reached + setOf("engine", "drawing")
+}
+
+/** The stages whose deep classes this build runs: those `-Pstages` names and what they reach, or all. */
+extra["deepStages"] = deepStagesAsked ?: pipelineReach.keys
+extra["deepStagesLimited"] = deepStagesAsked != null
+
+tasks.register<Delete>("clearWorldCache") {
+    group = "verification"
+    description = "Deletes every world the test tiers have cached on disk."
+    delete(worldCacheDirectory)
+}
+
 subprojects {
+    if (worldCacheOn) {
+        tasks.withType<Test>().configureEach {
+            systemProperty("cartogenesis.worldCache.directory", worldCacheDirectory.absolutePath)
+            systemProperty("cartogenesis.worldCache.capacityBytes", worldCacheBytes.toString())
+        }
+    }
+
+    if (recordingPins) {
+        tasks.withType<Test>().configureEach {
+            val records = layout.buildDirectory.dir("pin-records/$name").get().asFile
+            systemProperty("cartogenesis.record", "true")
+            systemProperty("cartogenesis.recordDirectory", records.absolutePath)
+            doFirst { records.deleteRecursively() }
+        }
+    }
+
     tasks.withType<Test>().matching { it.path in auditTasksInOrder }.configureEach {
         mustRunAfter(auditTasksInOrder.takeWhile { it != path })
         jvmArgs("-Djava.util.concurrent.ForkJoinPool.common.parallelism=$auditPoolThreads")

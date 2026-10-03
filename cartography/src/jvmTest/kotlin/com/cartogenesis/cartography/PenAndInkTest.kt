@@ -3,6 +3,8 @@ package com.cartogenesis.cartography
 import com.cartogenesis.cartography.geometry.KnownFailures
 import com.cartogenesis.cartography.geometry.RecordedViolation
 import com.cartogenesis.worldgen.BorrowsSharedWorlds
+import com.cartogenesis.worldgen.PinRecord
+import com.cartogenesis.worldgen.PinRecords
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.model.WorldScale
@@ -318,6 +320,16 @@ class PenAndInkTest : BorrowsSharedWorlds() {
             "styles rendering identical pixels: " + collapsed.values.joinToString { group -> group.joinToString("/") { it.key.name } }
         )
         RECORDED_STYLES.forEach { (style, expected) ->
+            // Under record mode a moved render is written as its record's replacement in
+            // [RecordedRenders] rather than failed; the property above still holds either way.
+            if (PinRecords.recording && drawn[style] != expected) {
+                PinRecords.write(PinRecord(
+                    "render hash", PinRecord.Operation.CODE_TOKEN, PinRecords.testName(),
+                    PinRecords.pathOf(RecordedRenders::class.java.name, "RecordedRenders.kt"), 0,
+                    "MapStyle.${style.name} to ", expected.toString(), drawn.getValue(style).toString()
+                ))
+                return@forEach
+            }
             assertEquals(
                 expected,
                 drawn[style],

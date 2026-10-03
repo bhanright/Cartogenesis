@@ -154,11 +154,38 @@ val siteAssemblyClass = "com.cartogenesis.desktop.SiteAssemblyTest"
  * several `:worldgen` runs: the graphics tests here each drive the one card, and two of them
  * driving it at once from separate workers is a combination nothing has tested.
  */
-tasks.named<Test>("test") {
-    filter {
-        auditOnlyClasses.forEach { excludeTestsMatching(it) }
-        excludeTestsMatching(siteAssemblyClass)
-    }
+/*
+ * T1 (the world cache and the deep tier, 2026-10-01): this module's deep tier, by the stage each entry guards; see the root build
+ * script for the tiers and `:worldgen`'s for how the entries are read. The graphics-card classes
+ * compare a world made on the card with one made without it, a setting moved, and skip on a machine
+ * with no card; the benchmarks skip unless asked for.
+ */
+val deepClassesByStage: Map<String, List<String>> = mapOf(
+    "erosion" to listOf(
+        "com.cartogenesis.desktop.GpuErosionTest"
+    ),
+    "ocean" to listOf(
+        "com.cartogenesis.desktop.GpuOceanTest"
+    ),
+    "rivers" to listOf(
+        // Two seeds on the square 512, 1,024 and 2,048 grids.
+        "com.cartogenesis.desktop.OutletResolutionTest"
+    ),
+    "drawing" to listOf(
+        "com.cartogenesis.desktop.EngravedRasterBenchmarkTest",
+        "com.cartogenesis.desktop.ExportSmokeTest",
+        "com.cartogenesis.desktop.GpuExportBenchmarkTest",
+        "com.cartogenesis.desktop.TrueShapeSheetTest",
+        "com.cartogenesis.desktop.WorldLinkDesktopTest",
+        "com.cartogenesis.desktop.DataExportTest.only water and drowned basin floors come back darker than the stated sea level",
+        "com.cartogenesis.desktop.RiverWidthTest.the pen is the same share of the sheet at every size",
+        "com.cartogenesis.desktop.StyleGalleryTest.every style renders, and none of them look alike"
+    )
+)
+val deepClasses = deepClassesByStage.values.flatten()
+
+/** The per-merge tier's share of the machine, which the deep tier takes too. */
+fun Test.withPerMergeBudget() {
     val budget = rootProject.extra
     maxHeapSize = budget["desktopTestHeap"] as String
     val processors = budget["desktopTestProcessors"] as Int
@@ -166,6 +193,34 @@ tasks.named<Test>("test") {
         "-XX:ActiveProcessorCount=$processors",
         "-Djava.util.concurrent.ForkJoinPool.common.parallelism=$processors"
     )
+}
+
+tasks.named<Test>("test") {
+    filter {
+        auditOnlyClasses.forEach { excludeTestsMatching(it) }
+        deepClasses.forEach { excludeTestsMatching(it) }
+        excludeTestsMatching(siteAssemblyClass)
+    }
+    withPerMergeBudget()
+}
+
+tasks.register<Test>("deepTest") {
+    group = "verification"
+    description = "Runs this module's deep tier: the controls, grid comparisons and 1,024-row " +
+        "worlds excluded from the per-merge test task."
+    val testTask = tasks.named<Test>("test").get()
+    testClassesDirs = testTask.testClassesDirs
+    classpath = testTask.classpath
+    @Suppress("UNCHECKED_CAST")
+    val stages = rootProject.extra["deepStages"] as Set<String>
+    filter {
+        val selected = deepClassesByStage.filterKeys { it in stages }.values.flatten()
+        // An empty include list would include everything.
+        selected.ifEmpty { listOf("com.cartogenesis.NoDeepClassInTheStagesAsked") }.forEach { includeTestsMatching(it) }
+        auditOnlyClasses.forEach { excludeTestsMatching(it) }
+        isFailOnNoMatchingTests = !(rootProject.extra["deepStagesLimited"] as Boolean)
+    }
+    withPerMergeBudget()
 }
 
 tasks.register<Test>("audit") {

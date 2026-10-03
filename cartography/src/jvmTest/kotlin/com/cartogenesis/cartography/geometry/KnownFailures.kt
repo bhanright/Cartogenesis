@@ -1,5 +1,6 @@
 package com.cartogenesis.cartography.geometry
 
+import com.cartogenesis.worldgen.PinRecords
 import java.io.File
 import java.util.Locale
 import kotlin.math.abs
@@ -141,14 +142,30 @@ internal object KnownFailures {
 
     /** A clause outside the geometry guard, whose failure is a [RecordedViolation] with [signature]. */
     fun expect(finding: String, signature: String, clause: () -> Unit) =
-        expect(finding, signature, clause) { name, detail -> record("KNOWN FAILURE [$name]", detail) }
+        held(finding, signature, clause, recordable = true) { name, detail -> record("KNOWN FAILURE [$name]", detail) }
 
     /** The same, reporting to [report]; see the geometry guard's overload for why. */
-    fun expect(finding: String, signature: String, clause: () -> Unit, report: (String, String) -> Unit) {
+    fun expect(finding: String, signature: String, clause: () -> Unit, report: (String, String) -> Unit) =
+        held(finding, signature, clause, recordable = false, report)
+
+    /**
+     * The text-signature helper itself. Under record mode ([PinRecords]), and only for a clause
+     * reporting to the tier's report, a different signature is recorded as its literal's
+     * replacement and the clause passes; a clause that no longer fails is a notice, since arming it
+     * is a decision, and still fails. The control tests report elsewhere, so record mode cannot turn
+     * them. The geometry guard's clauses are recorded by the census instead ([Census.failures]),
+     * because their signatures are written in [GeometryExpectations] and not at this call.
+     */
+    internal fun held(finding: String, signature: String, clause: () -> Unit, recordable: Boolean, report: (String, String) -> Unit) {
         try {
             clause()
         } catch (violation: RecordedViolation) {
             if (violation.signature != signature) {
+                if (recordable && PinRecords.recording) {
+                    PinRecords.staleString("known failure", KnownFailures::class.java, signature, violation.signature)
+                    report(finding, violation.message ?: "")
+                    return
+                }
                 throw AssertionError(
                     "$finding: a different violation in its place, [$signature] recorded and [${violation.signature}] found: " +
                         (violation.message ?: "")
@@ -156,6 +173,9 @@ internal object KnownFailures {
             }
             report(finding, violation.message ?: "")
             return
+        }
+        if (recordable && PinRecords.recording) {
+            PinRecords.notice("known failure", KnownFailures::class.java, "$finding no longer fails: arm the clause by hand")
         }
         throw AssertionError("$finding fixed: arm this clause")
     }

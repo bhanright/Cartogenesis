@@ -6,7 +6,8 @@ covers the site's own contents and how to deploy by hand.
 
 ## What the deploy does
 
-The browser application is no longer built (docs/DESIGN_LEDGER.md, G1). What the site serves under
+The browser application is no longer built (docs/DESIGN_LEDGER.md, G1; docs/WEB_VERSION.md has
+its archive and how to revive it). What the site serves under
 `/app/` is a stored copy of it, `web-frozen.zip` on the GitHub release `web-frozen`: the `app/`
 directory the last build that made it assembled, from main at 8198db27, less the loading shell.
 `./gradlew :desktop:assembleSite` checks that copy's SHA-256 against the one in

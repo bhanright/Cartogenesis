@@ -307,8 +307,8 @@ tasks.register<JavaExec>("renderSiteImagery") {
  *
  *     gh release download web-frozen --pattern web-frozen.zip --dir build/web-frozen
  *
- * `-PfrozenWebApp=<path>` names another copy of the zip. Whichever copy is read, it must be the
- * one stored: its SHA-256 is [frozenWebAppSha256], so a release asset replaced by mistake, or a
+ * `-PfrozenWebApp=<path>` names another copy of the zip, and docs/WEB_VERSION.md says how to make a
+ * new one. Whichever copy is read, it must be the one stored: its SHA-256 is [frozenWebAppSha256], so a release asset replaced by mistake, or a
  * download cut short, stops the assembly instead of publishing a different application.
  */
 val frozenWebApp: File = providers.gradleProperty("frozenWebApp")

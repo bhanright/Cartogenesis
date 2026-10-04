@@ -7,14 +7,13 @@
   The site's seed reel and its band caption link there too, beside pictures the current engine
   drew; the page now says the preview's generator is older. Decide whether the desktop should stop
   offering the command, say what the link opens, or point it somewhere that makes today's world.
-- **The browser-only code the interface still carries (G1).** G1 removed the browser module and
-  the Wasm targets and the desktop's grid choices, and left the rest of what served a browser in
-  common code where it was: `WorldLinks.read` and `Platform.openedAt` (the desktop is opened at no
-  address), the compact arrangement's phone wording, `WorldCeilings.BROWSER_TAB`, `FakePlatform`'s
-  browser defaults (512 rows), the data export's one-zip path for a browser
-  (`DataExports`, docs/DEPLOYMENT.md "One zip, not two downloads"), and the KDoc that explains a
-  suspending seam or a sorted map by Kotlin/Wasm. A sweep that removes or rewords them, one module
-  at a time, with the tests that hold them.
+- **The browser-only wording the interface still carries (G1).** G1 removed the browser module
+  and the Wasm targets and kept, on purpose, what a revival would restore onto
+  (docs/WEB_VERSION.md): the `Platform` members a browser implements (`openedAt`, `worldLinkBase`,
+  `BROWSER_TAB`), the `expect` declarations, the suspending accelerator seams, and the data export's
+  one-zip path. Those stay. What could go is wording: the compact arrangement's phone sentences,
+  `FakePlatform`'s browser defaults (512 rows) where a test does not need them, and KDoc that speaks
+  of the browser as a current front end.
 - **The audit tier still makes worlds at 2,048 and 4,096 rows (G1).** The application makes one
   grid, 1,024 rows, and opens saves of other grids; the audit classes that export, save and draw
   at 2,048 and 4,096 (`ExportAuditTest`, `SaveResolutionAuditTest`, `GpuExportBenchmarkTest`, the

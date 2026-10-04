@@ -16,7 +16,8 @@ three apt commands and what to do about the unsigned installer's SmartScreen war
 
 An older browser preview stays online at [cartogenesis.com](https://cartogenesis.com/app/). It is
 no longer developed: it runs the generator as it stood when the browser version was frozen, so its
-worlds differ from the desktop app's.
+worlds differ from the desktop app's. [docs/WEB_VERSION.md](docs/WEB_VERSION.md) records what the
+browser version was, how it was built and deployed, and how to bring it back.
 
 ## What you get
 
@@ -445,6 +446,8 @@ shell and the loader stamping.
   machine and date beside each table.
 - [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md): how the site is assembled and published, and what the
   browser preview's loading shell depends on.
+- [docs/WEB_VERSION.md](docs/WEB_VERSION.md): the browser version, frozen at the tag `web-frozen`:
+  what it was, how it was built and deployed, and how to revive it.
 - [docs/CONVENTIONS.md](docs/CONVENTIONS.md): the naming and comment rules code here follows.
 - [docs/TODO.md](docs/TODO.md): issues found but not yet scheduled.
 - [ROADMAP.md](ROADMAP.md): planned releases and what each brings.

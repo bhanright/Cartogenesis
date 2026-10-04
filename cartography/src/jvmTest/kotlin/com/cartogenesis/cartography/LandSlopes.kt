@@ -16,7 +16,7 @@ internal object LandSlopes {
     /** The land slopes of [world] in ascending order, at [plan]'s stencil and scale, on the ground. */
     fun ascending(world: WorldMap, plan: EngravingPlan): List<Float> {
         val width = world.width
-        val elevation = DrawnRelief.of(world)
+        val elevation = DrawnRelief.withoutDissection(world)
         val reachColumns = plan.gradientStencilColumns
         val reachRows = plan.gradientStencilRows
         val slopes = ArrayList<Float>()

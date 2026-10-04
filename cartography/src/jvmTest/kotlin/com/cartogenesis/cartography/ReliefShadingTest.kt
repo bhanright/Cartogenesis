@@ -178,9 +178,13 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
         return Pair(field, radius)
     }
 
-    /** The [share]th quantile of the scaled land slope, in the units the shading reads. */
+    /**
+     * The [share]th quantile of the scaled land slope, in the units the shading reads: the slope of
+     * the landforms, [DrawnRelief.withoutDissection], under the texture the dissection lays on them,
+     * since the cone this sizes stands for a hill and not for a cell's own ridges.
+     */
     private fun landSlope(world: WorldMap, share: Double, scale: Float = SLOPE_SCALE): Float {
-        val elevation = DrawnRelief.of(world)
+        val elevation = DrawnRelief.withoutDissection(world)
         val land = world.sea.isLand
         val slopes = ArrayList<Float>()
         for (row in 0 until world.height) {
@@ -381,15 +385,12 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
         // (docs/DESIGN_LEDGER.md, Fix 3, Fix 3b and Q4).
         val matched = String.format(java.util.Locale.ROOT, "%.2f", bestHaze)
         val declared = String.format(java.util.Locale.ROOT, "%.2f", ReliefShading.HAZE)
-        // Recorded at E1a, with the exaggeration and the slope floor: see [CALIBRATED_ON_THE_ONE_HEIGHT].
-        KnownFailures.expect(CALIBRATED_ON_THE_ONE_HEIGHT, "haze 0.12") {
-            if (kotlin.math.abs(bestHaze - ReliefShading.HAZE) > HAZE_SWEEP_STEP / 2) {
-                throw RecordedViolation(
-                    "the lamp's contrast is matched at haze $matched, a step or more from the declared $declared",
-                    "haze $matched"
-                )
-            }
-        }
+        // Recorded at E1a, with the exaggeration and the slope floor (see [CALIBRATED_ON_THE_ONE_HEIGHT]);
+        // matched on the declared haze again once the drawing shades [DrawnRelief] (E1c), and armed.
+        assertTrue(
+            kotlin.math.abs(bestHaze - ReliefShading.HAZE) <= HAZE_SWEEP_STEP / 2,
+            "the lamp's contrast is matched at haze $matched, a step or more from the declared $declared"
+        )
         // Ordinary ground is the median light under the sky the map is drawn under — the declared
         // one — and not under whichever haze the sweep matched. Armed again on square cells, with
         // the figure re-derived there and the device's parity guard run on it (it is handed to the

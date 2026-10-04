@@ -4,7 +4,7 @@ package com.cartogenesis.cartography
  * Where a save's bytes go, in order, a piece at a time.
  *
  * A save is written through one of these rather than built as one array because a world's arrays
- * are 146 bytes a cell: 612 MB at 2048 and 2.45 GB at 4096, which no array on either platform can
+ * are 158 bytes a cell: 663 MB at 2048 and 2.65 GB at 4096, which no array on either platform can
  * hold in one piece. The codec hands a sink its header and then one compressed chunk at a time, so
  * what a save costs beyond the world itself is a chunk or two, whatever the grid.
  */

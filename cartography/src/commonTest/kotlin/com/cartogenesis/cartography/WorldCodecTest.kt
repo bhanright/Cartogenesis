@@ -202,12 +202,12 @@ class WorldCodecTest {
 
     @Test
     fun `a 4096 world's payload is counted past what an Int holds`() {
-        // 146 bytes a cell at 4096 is 2,449,473,536 bytes of arrays, which wrapped the old Int
+        // 158 bytes a cell at 4096 is 2,650,800,128 bytes of arrays, which wrapped the old Int
         // sum negative. Counted here from the layout itself, so a narrowing anywhere shows.
         val cells = 4096 * 4096
         val directory = WorldSections.directory(cells, listsBytes = 1_000)
         val arrays = directory.drop(1).sumOf { it.bytes }
-        assertEquals(146L * cells, arrays)
+        assertEquals(158L * cells, arrays)
         assertTrue(WorldSections.payloadBytes(directory) > Int.MAX_VALUE)
         assertEquals(directory.last().offset + WorldSections.RECORD_PREFIX_BYTES + directory.last().name.length +
             directory.last().bytes, WorldSections.payloadBytes(directory))
@@ -216,7 +216,7 @@ class WorldCodecTest {
     /**
      * The top of the ladder saves and opens, and a grid past it is refused by both.
      *
-     * 4096 rows of square cells is 8192 by 4096, 33,554,432 cells and 4.9 GB of arrays, which no
+     * 4096 rows of square cells is 8192 by 4096, 33,554,432 cells and 5.3 GB of arrays, which no
      * test can hold, so each path is asked about the grid alone. [WorldCodec.write] refuses a world
      * past the bound before it reads an array of it; a header claiming the top grid, with the
      * directory this build lays out for that many cells, is read from the header alone; and one
@@ -247,7 +247,7 @@ class WorldCodecTest {
         val top = WorldCodec.decodeHeader(claiming(topColumns, topRows))
         assertEquals(topColumns, top.document.config.width)
         assertEquals(topRows, top.document.config.height)
-        assertTrue(top.payloadBytes > 146L * topColumns * topRows, "the top's payload is not counted in 64 bits")
+        assertTrue(top.payloadBytes > 158L * topColumns * topRows, "the top's payload is not counted in 64 bits")
 
         for ((across, down) in pastTheTop) {
             val refusedOpen = assertFailsWith<WorldFormatException> {

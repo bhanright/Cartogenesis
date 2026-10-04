@@ -87,6 +87,44 @@ object DrawnRelief {
 
     private var lastWorld: WorldMap? = null
     private var lastDrawn: FloatField? = null
+    private var lastPlainWorld: WorldMap? = null
+    private var lastPlain: FloatField? = null
+
+    /**
+     * D without the dissection: the ground, and the bed under the rivers and the lakes. What a
+     * pen's strokes are laid down the slope of, since a stroke is itself the mark a pen gives the
+     * relief and drawn across the dissection it would follow each cell's ridge rather than the
+     * slope. Same units and layout as [of]; not to be written.
+     */
+    fun withoutDissection(world: WorldMap): FloatField {
+        val world0 = lastPlainWorld
+        val plain0 = lastPlain
+        if (world0 === world && plain0 != null) return plain0
+        val sea = world.sea
+        val plain = FloatField(world.width, world.height, sea.relativeElevation.data.copyOf())
+        val under = underWater(world)
+        for (cell in under.indices) {
+            if (under[cell] && sea.isLand[cell]) plain.data[cell] = sea.relativeBed.data[cell]
+        }
+        lastPlainWorld = world
+        lastPlain = plain
+        return plain
+    }
+
+    /**
+     * The surface [style] draws: [of] for a style that shades the relief, [withoutDissection] for a
+     * line-art style, whose hachures are the relief's mark.
+     */
+    fun forStyle(world: WorldMap, style: MapStyle): FloatField =
+        if (style.lineArt) withoutDissection(world) else of(world)
+
+    /** The cells under a traced river or a lake, where the water is drawn on the bed. */
+    private fun underWater(world: WorldMap): BooleanArray {
+        val under = BooleanArray(world.width * world.height)
+        world.rivers.rivers.forEach { river -> river.cells.forEach { under[it] = true } }
+        world.rivers.lakes.lakeId.forEachIndexed { cell, id -> if (id >= 0) under[cell] = true }
+        return under
+    }
 
     /**
      * D for [world], one value per cell, row-major, on `sea.relativeElevation`'s ruler: equal to it
@@ -114,9 +152,7 @@ object DrawnRelief {
         val drawn = FloatField(cellsAcross, cellsDown, ground.copyOf())
         if (bed === ground) return drawn
 
-        val underWater = BooleanArray(cellCount)
-        world.rivers.rivers.forEach { river -> river.cells.forEach { underWater[it] = true } }
-        world.rivers.lakes.lakeId.forEachIndexed { cell, id -> if (id >= 0) underWater[cell] = true }
+        val underWater = underWater(world)
 
         val rowHeight = world.config.cellHeightInCellWidths
         val cellWidthKm = world.config.cellWidthKm

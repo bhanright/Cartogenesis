@@ -226,4 +226,14 @@ internal object GeometryFindings {
      * mapped so that a return is named.
      */
     const val ANOMALY_ALONG_ROWS = "the sea temperature anomaly runs straight along rows"
+
+    /**
+     * A level line of the drawn relief folds back on itself in a hairpin round one of the
+     * dissection's ridges: on 42 at 512 rows, 7.11 against the rough natural bar of 6.15, a 178
+     * degree turn at (820, 201) on the flank of the central massif, once the drawing gives each
+     * cell its own relief as ridges and hollows running down its slope (`DrawnRelief`, E1c). A
+     * kernel's ridge is a wavelength long and the ridges of neighbouring kernels line up down a
+     * steady slope, so a long narrow spur can stand where natural relief would branch.
+     */
+    const val DISSECTION_HAIRPIN = "the drawn dissection's ridges fold its level lines into hairpins"
 }

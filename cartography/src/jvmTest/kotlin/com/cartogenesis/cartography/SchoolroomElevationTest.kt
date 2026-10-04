@@ -51,7 +51,7 @@ class SchoolroomElevationTest : BorrowsSharedWorlds() {
             if (!world.sea.isLand[cell] || world.rivers.lakes.isLake(cell)) continue
             landCells++
             biomesOnLand += world.climate.biome[cell]
-            val expected = style.land(world.sea.relativeElevation.data[cell])
+            val expected = style.land(DrawnRelief.of(world).data[cell])
             if (drawn[cell] != expected) {
                 if (offTheRamp == 0) {
                     firstOff = "cell $cell (${world.climate.biome[cell]}) drew " +

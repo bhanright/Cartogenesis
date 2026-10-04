@@ -290,7 +290,7 @@ object MapRasterizer {
         // The land as the map draws it: the ground with its own relief drawn as dissection, the
         // bed under the rivers and the lakes (see [DrawnRelief]). Everything below that reads a
         // height reads this one.
-        val elevation = DrawnRelief.of(world)
+        val elevation = DrawnRelief.forStyle(world, style)
         // A line-art style never asks for the shaded relief, so it never pays for the pass: the
         // hachures read the same central differences a cell at a time.
         val relief = if (reliefDrawn && !style.lineArt) {
@@ -309,6 +309,7 @@ object MapRasterizer {
         // diagnostic view's sea carries a temperature or an anomaly, and ruling it would bury the
         // thing it is there to show.
         val plan = if (style.lineArt) EngravingPlan(sheet) else null
+
         val engraveWater = style.lineArt && options.view.styled
         val shore = if (plan != null) {
             ShoreDistance.of(sheet, dryLandMask(world, showLakes))
@@ -353,7 +354,7 @@ object MapRasterizer {
             }
 
             var color = baseColor(
-                world, elevation.data, sheet, options.view, style, cell, isobathInterval, flattestSlope,
+                world, elevation, sheet, options.view, style, cell, isobathInterval, flattestSlope,
                 isobathStencil
             )
             val isLand = world.sea.isLand[cell]
@@ -1004,8 +1005,8 @@ object MapRasterizer {
      */
     private fun baseColor(
         world: WorldMap,
-        /** [DrawnRelief]'s heights, which the land's tints are read from. */
-        drawn: FloatArray,
+        /** [DrawnRelief]'s heights for the style, which the tints and the isobaths are read from. */
+        drawn: FloatField,
         sheet: SheetGeometry,
         view: MapView,
         style: MapStyle,
@@ -1015,7 +1016,7 @@ object MapRasterizer {
         isobathStencil: Int
     ): Int {
         val isLand = world.sea.isLand[cell]
-        val relative = drawn[cell]
+        val relative = drawn.data[cell]
         val sheetX = (cell % world.width) * sheet.pixelsPerCellAcross
         val sheetY = (cell / world.width) * sheet.pixelsPerCellDown
 
@@ -1027,8 +1028,8 @@ object MapRasterizer {
                         water
                     } else {
                         val contour = seaContour(
-                            world, sheet, cell, -relative, isobathInterval, flattestSlope,
-                            isobathStencil
+                            drawn, world.config.cellHeightInCellWidths, sheet.pixelsPerCellAcross, cell,
+                            -relative, isobathInterval, flattestSlope, isobathStencil
                         )
                         MapPalette.blend(water, style.coastline, style.isobathInk * contour)
                     }
@@ -1128,7 +1129,7 @@ object MapRasterizer {
                 if (isLand) {
                     MapPalette.blend(
                         WIND_LAND_LOW, WIND_LAND_HIGH,
-                        drawn[cell].coerceIn(0f, 1f)
+                        drawn.data[cell].coerceIn(0f, 1f)
                     )
                 } else {
                     WIND_SEA
@@ -1169,7 +1170,9 @@ object MapRasterizer {
         flattestSlope: Float,
         stencil: Int
     ): Float = seaContour(
-        world.sea.relativeElevation, world.config.cellHeightInCellWidths,
+        // The drawn surface, as the device's isobaths read it: at sea it is the floor, and the
+        // stencil reaches the coast's land cells, which are drawn as [DrawnRelief] draws them.
+        DrawnRelief.of(world), world.config.cellHeightInCellWidths,
         sheet.pixelsPerCellAcross, cell, depth, interval, flattestSlope, stencil
     )
 

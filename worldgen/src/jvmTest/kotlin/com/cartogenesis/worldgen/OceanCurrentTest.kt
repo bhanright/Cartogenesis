@@ -33,8 +33,6 @@ class OceanCurrentTest : BorrowsSharedWorlds() {
         const val DOUBLE_COUNT_SHARE = 0.02
 
         /** The control world's ocean that stops short of its tolerance (docs/TODO.md, E1a round 2). */
-        const val BELTS_ONLY_UNSOLVED = "E1a round 2: a standard world's belts-only ocean does not solve"
-        const val BELTS_ONLY_RECORD = "seed 42"
     }
 
     /**
@@ -70,11 +68,9 @@ class OceanCurrentTest : BorrowsSharedWorlds() {
             }
         }
         assertTrue(failures.isEmpty(), failures.joinToString("\n"))
-        KnownFailures.expect(BELTS_ONLY_UNSOLVED, BELTS_ONLY_RECORD) {
-            if (unsolved.isNotEmpty()) {
-                throw RecordedViolation("the belts-only ocean does not solve: ${unsolved.joinToString("; ")}", unsolved.joinToString("; "))
-            }
-        }
+        // Recorded at E1a round 2 on seed 42; every standard world's belts-only ocean solves again on
+        // E1b's ground, and the clause is armed.
+        assertTrue(unsolved.isEmpty(), "the belts-only ocean does not solve: ${unsolved.joinToString("; ")}")
     }
 
     /**

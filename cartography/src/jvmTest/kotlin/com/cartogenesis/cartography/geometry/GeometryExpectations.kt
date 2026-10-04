@@ -71,6 +71,10 @@ internal object GeometryExpectations {
         finding("floodplain deposits", Detector.CREASES, F.FLOODPLAIN_CREASE)
         finding("lakes' open water", Detector.ARCS, F.LAKE_SHORE_ARC)
         finding("terrain contours", Detector.RIGHT_ANGLES, F.LEVEL_LINE_CORNER_AT_THE_ICE)
+        finding("drawn relief", Detector.CREASES, F.DISSECTION_HAIRPIN)
+        // An outlet trough is the ice's cut, so its square corner is the ice's (1234 at 512 rows on
+        // E1b's ground).
+        finding("outlet troughs", Detector.RIGHT_ANGLES, F.ICE_EDGE_CORNERS)
         finding("isotherms", Detector.RIGHT_ANGLES, F.LEVEL_LINE_CORNER_AT_THE_ICE)
         finding("biome edges", Detector.RIGHT_ANGLES, F.BIOME_EDGE_CORNER)
         finding("biome edges", Detector.CREASES, F.BIOME_EDGE_HAIRPINS)

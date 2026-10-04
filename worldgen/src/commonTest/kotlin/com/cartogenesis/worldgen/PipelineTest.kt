@@ -157,7 +157,8 @@ class PipelineTest {
         val config = config()
         val world = WorldGenerationEngine.generate(config)
         val filled = world.rivers.filledElevation
-        val ground = world.sea.relativeElevation
+        // The surface the water is routed over, which the fill raised: the bed (E1c).
+        val ground = world.sea.relativeBed
         val target = world.rivers.flowTarget
         val lakes = world.rivers.lakes
         var stranded = 0

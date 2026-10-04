@@ -110,7 +110,7 @@ internal class ByteSection(
 /**
  * The per-cell arrays of a world, as a payload of chunks and back.
  *
- * Binary rather than JSON because the arrays are the file: 146 bytes a cell, which is 153 MB at
+ * Binary rather than JSON because the arrays are the file: 158 bytes a cell, which is 166 MB at
  * 1024 before compression, and JSON would roughly triple that while also having to promise that a
  * float survives a decimal round trip. Raw little-endian bits promise it by construction.
  *

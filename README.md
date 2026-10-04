@@ -385,8 +385,8 @@ not matter. The apt repository the `.deb` is served from is rebuilt by the site 
 A save is an uncompressed JSON header (format version, settings, overrides, labels, title, which
 front end wrote it, and a directory of the payload's sections) followed by the payload: the world's
 lists (rivers, lakes, realms, peoples, landmarks) as JSON, then one little-endian binary section per
-per-cell array, 146 bytes a cell in all. The payload is cut into one-mebibyte chunks, each gzipped
-and checksummed on its own, so a save is written and read a chunk at a time: a 4096 world, 4.9 GB
+per-cell array, 158 bytes a cell in all. The payload is cut into one-mebibyte chunks, each gzipped
+and checksummed on its own, so a save is written and read a chunk at a time: a 4096 world, 5.3 GB
 of arrays, saves and opens without any array its size existing in between. The header is
 checksummed too, and each chunk's checksum is bound to the header and to the chunk's place, so an
 edited header, or a header put in front of another save's chunks, is found. The browser keeps its

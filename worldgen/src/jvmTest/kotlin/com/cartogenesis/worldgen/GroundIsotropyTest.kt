@@ -69,16 +69,12 @@ class GroundIsotropyTest : BorrowsSharedWorlds() {
         val past = ratios.indices.filter { abs(ln(ratios[it].ratio)) > SPREADS * ratioSpread(ratios[it].lengthKm) }
         val found = past.joinToString { String.format(java.util.Locale.ROOT, "seed %d %.2f", seeds[it], ratios[it].ratio) } +
             String.format(java.util.Locale.ROOT, ", together %.2f", pooled)
-        // Armed from Q2 to L1; on the two heights' ground (E1a) the coasts are smoother and lean
-        // north-south, the cause not isolated, and the clause is recorded with its figures.
-        KnownFailures.expect(COAST_LEANS_ON_THE_GROUND, "together 0.92") {
-            if (!(past.isEmpty() && abs(ln(pooled)) <= pooledBar)) {
-                throw RecordedViolation(
-                    "the coasts project unequally east-west and north-south on the ground, past what their length allows: $found",
-                    found.removePrefix(", ")
-                )
-            }
-        }
+        // Armed from Q2 to L1; recorded on E1a's ground, where the coasts leaned north-south, and
+        // armed again since the outlets are cut inside the rounds on the lakes' surplus (E1b).
+        assertTrue(
+            past.isEmpty() && abs(ln(pooled)) <= pooledBar,
+            "the coasts project unequally east-west and north-south on the ground, past what their length allows: $found"
+        )
     }
 
     /**
@@ -204,4 +200,3 @@ class GroundIsotropyTest : BorrowsSharedWorlds() {
 }
 
 /** The coast projection's clause, recorded on the two heights' ground (docs/DESIGN_LEDGER.md, E1a). */
-private const val COAST_LEANS_ON_THE_GROUND = "E1a: the coasts lean north-south on the two heights' ground"

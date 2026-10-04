@@ -416,7 +416,7 @@ object RiverStage {
             for (basin in basins.indices) {
                 fillToBrim(lakeId, lakes, basins[basin], spillElevation[basin], outletCell[basin], ground.data)
             }
-            return LakeResult(lakeId, lakes, playa, cellsAcross)
+            return asBodies(lakeId, lakes, playa, cellsAcross, cellsDown, minLakeCells, flowTarget)
         }
 
         // Potential evaporation is a per-cell property of the climate, not of any basin, so it is
@@ -739,7 +739,73 @@ object RiverStage {
                 )
             }
         }
-        return LakeResult(lakeId, lakes, playa, cellsAcross)
+        return asBodies(lakeId, lakes, playa, cellsAcross, cellsDown, minLakeCells, flowTarget)
+    }
+
+    /**
+     * The lakes as bodies of water: every eight-connected piece of a lake's cells its own lake at
+     * that lake's level, numbered lake by lake and within a lake by its lowest cell.
+     *
+     * A lake stands where its surface reaches the ground, and the ground of a cell whose bed lies
+     * under the surface can stand above it: the river's own channel through the basin, wet in its
+     * bed and dry over its interfluves. So one level of water can lie in several pieces joined by
+     * the channel, and each is a body of water of its own. A piece too small to read as water
+     * ([minLakeCells]) is the channel widening and goes back to the land, the river running on
+     * through it. A piece keeps its lake's outlet where the outlet is in it, and otherwise leaves
+     * by the first of its cells, in index order, whose water runs out of it.
+     */
+    private fun asBodies(
+        lakeId: IntArray,
+        lakes: List<Lake>,
+        playa: BooleanArray,
+        cellsAcross: Int,
+        cellsDown: Int,
+        minLakeCells: Int,
+        flowTarget: IntArray
+    ): LakeResult {
+        val pieceOf = IntArray(lakeId.size) { -1 }
+        val pieces = ArrayList<IntArray>()
+        val pieceLake = ArrayList<Int>()
+        val stack = ArrayList<Int>()
+        val members = ArrayList<Int>()
+        for (start in lakeId.indices) {
+            val lake = lakeId[start]
+            if (lake == LakeResult.NO_LAKE || pieceOf[start] >= 0) continue
+            val piece = pieces.size
+            members.clear()
+            stack.add(start)
+            pieceOf[start] = piece
+            while (stack.isNotEmpty()) {
+                val cell = stack.removeAt(stack.size - 1)
+                members.add(cell)
+                FlowRouting.forEachNeighbour(cellsAcross, cellsDown, cell % cellsAcross, cell / cellsAcross) { neighbour ->
+                    if (lakeId[neighbour] == lake && pieceOf[neighbour] < 0) {
+                        pieceOf[neighbour] = piece
+                        stack.add(neighbour)
+                    }
+                }
+            }
+            members.sort()
+            pieces.add(members.toIntArray())
+            pieceLake.add(lake)
+        }
+        // Lake by lake, and within a lake by the lowest cell, which is the order the pieces were
+        // found in once grouped by lake.
+        val order = pieces.indices.sortedWith(compareBy({ pieceLake[it] }, { pieces[it][0] }))
+        val bodyId = IntArray(lakeId.size) { LakeResult.NO_LAKE }
+        val bodies = ArrayList<Lake>()
+        for (piece in order) {
+            val cells = pieces[piece]
+            if (cells.size < minLakeCells && pieceLake.count { it == pieceLake[piece] } > 1) continue
+            val lake = lakes[pieceLake[piece]]
+            val inPiece = { cell: Int -> cell >= 0 && pieceOf[cell] == piece }
+            val outlet = if (inPiece(lake.outletCell)) lake.outletCell
+            else cells.firstOrNull { !inPiece(flowTarget[it]) } ?: cells[0]
+            val id = bodies.size
+            for (cell in cells) bodyId[cell] = id
+            bodies.add(lake.copy(id = id, cellCount = cells.size, outletCell = outlet))
+        }
+        return LakeResult(bodyId, bodies, playa, cellsAcross)
     }
 
     /**

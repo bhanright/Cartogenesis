@@ -1352,7 +1352,8 @@
   the climate feed, the deposition or the flexure and with every cell a channel; in production the
   class spread is not the round's step. The candidates left are the scheme's spatial error, the
   numerical diffusion `K sqrt(A) dx / 2` that an upwind step leaves and that grows with the cell,
-  and the routing. The steps cost a quarter of the erosion stage's time. 2026-10-03, E1a round 2.
+  and the routing. The steps cost about a fifth of the erosion stage's time (seed 7 at 1,024 rows,
+  single runs: 75.1 s with them, 60.3 s without). 2026-10-03, E1a round 2.
 - **Few cells stand below every channel head now, and the heads hold across grids.** E1a's head
   read its gradient off the cell's own last rate, which on a stretch of slope with no channel is
   creep's over kilometres, a hundred-millionth of a metre a year, so a cell once below every head

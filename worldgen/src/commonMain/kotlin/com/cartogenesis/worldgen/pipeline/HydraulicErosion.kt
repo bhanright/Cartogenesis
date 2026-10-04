@@ -1061,31 +1061,17 @@ internal object HydraulicErosion {
             bedCut.fill(0.0)
             production.fill(0.0)
 
-            // Ground as the walk leaves it: the pre-round elevation plus everything this round has
-            // already added or taken away. Deposition is judged against this rather than against
-            // the stale field, or a cell could be raised past the neighbour that feeds it.
+            // The bed as the walk leaves it, spoil included: what the deposition is judged against,
+            // or a cell could be raised past the neighbour that feeds it. Seeded below, once the
+            // round has cut the bed and lowered the ground.
             //
-            // In **shoreline-relative units**, because that is what it is seeded from, and every
-            // amount added to it below is converted into them. They were not: the spoil and the incision were added in height
-            // units while the seed was relative, so the margin `headroom` measures was a relative
-            // number spent as a height one, and an alluvial dam could stand `1 / landRange` times
-            // higher than the no-uphill rule allows — about four times, on the worlds measured.
-            // The incision side had the same muddle and was closed first; this is the
-            // deposition half of it. See docs/DESIGN_LEDGER.md, H5b and E6.
+            // In **shoreline-relative units**, and every amount added to it below is converted into
+            // them. They were not: the spoil and the incision were added in height units while the
+            // seed was relative, so the margin `headroom` measures was a relative number spent as a
+            // height one, and an alluvial dam could stand `1 / landRange` times higher than the
+            // no-uphill rule allows — about four times, on the worlds measured. See
+            // docs/DESIGN_LEDGER.md, H5b and E6.
             val settled = if (carryingSediment) relative.copyOf() else relative
-            if (carryingSediment) {
-                load.fill(0.0)
-                incisedAt.fill(0.0)
-                // The no-uphill rule is judged against the finished surface, spoil included, or
-                // the rounds would each be allowed the same margin over and over.
-                // The spoil is held as a volume; what it does to the bed is the level that volume
-                // reaches on the cell's hypsometry.
-                for (cell in settled.indices) {
-                    if (sediment[cell] > 0f) {
-                        settled[cell] += (cells.bedRiseFor(cell, sediment[cell].toDouble(), groundOf) * toRelative).toFloat()
-                    }
-                }
-            }
 
             // Raw height a delta cell is built up to.
             val deltaTop = sea.shorelineHeight + rates.deltaFreeboard * landRange
@@ -1101,11 +1087,16 @@ internal object HydraulicErosion {
             val startingMass =
                 if (onRound != null) totalMass(groundOf) + totalMass(sediment) else 0.0
 
+            val standingWater = if (onRound != null) {
+                BooleanArray(filledBed.size) { isLand[it] && filledBed[it] - relative[it] > rates.pondDepth }
+            } else {
+                BooleanArray(0)
+            }
             if (onRound != null) {
                 openingPit.fill(false)
                 census(
                     pits, PitStage.OPENING, cellsAcross, isLand, directions, area.data, landCells, surfaceOf,
-                    null, openingPit
+                    null, openingPit, standingWater
                 )
             }
             // The basins the fill raised, for the round's tally only: their outlets are cut by the
@@ -1156,6 +1147,21 @@ internal object HydraulicErosion {
             )
             for (cell in production.indices) incised += production[cell]
             if (carryingSediment) {
+                load.fill(0.0)
+                incisedAt.fill(0.0)
+                // Seeded from the bed and the ground as the round has just left them, so that the
+                // spoil held on a cell is read at the level it reaches on the hypsometry the cell
+                // has now, which is the one it is laid on, and a cell the closure lowered without a
+                // channel's cut (a slope below every head) stands where it stands. Seeded before the
+                // cut instead, a feeder's spoil was read on a higher ground than it is laid on and
+                // a floodplain below it was allowed to rise past it.
+                for (cell in settled.indices) {
+                    if (!isLand[cell]) continue
+                    settled[cell] = (surfaceOf[cell] - sea.shorelineHeight) * toRelative
+                    if (sediment[cell] > 0f) {
+                        settled[cell] += (cells.bedRiseFor(cell, sediment[cell].toDouble(), groundOf) * toRelative).toFloat()
+                    }
+                }
                 for (cell in production.indices) incisedAt[cell] = production[cell]
             } else {
                 // Nothing is carried, so everything the round took off the land so far has left the
@@ -1170,7 +1176,7 @@ internal object HydraulicErosion {
             if (onRound != null) {
                 census(
                     pits, PitStage.INCISION, cellsAcross, isLand, directions, area.data, landCells, surfaceOf,
-                    null, openingPit
+                    null, openingPit, standingWater
                 )
             }
 
@@ -1224,15 +1230,9 @@ internal object HydraulicErosion {
                         (erosion.transportCapacity * sqrt(area.data[cell] / landCells) * slope).toDouble()
 
                     // What the ground lost this round, picked up here so that it travels downstream
-                    // with everything the tributaries brought; and the bed's cut, taken off the
-                    // deposition's own surface at the same point in the walk, so the no-uphill
-                    // rule below sees the channel's margins as the incision left them.
+                    // with everything the tributaries brought.
                     val moved = incisedAt[cell]
                     if (moved > 0.0) carried += moved
-                    if (bedCut[cell] > 0.0) {
-                        // In the relative units [settled] is kept in; see its note.
-                        settled[cell] -= (bedCut[cell] * toRelative).toFloat()
-                    }
 
                     // The river cuts through its own spoil. What earlier rounds laid here is held
                     // off the bed until the last round, while the channels above it go on cutting
@@ -1242,7 +1242,12 @@ internal object HydraulicErosion {
                     // above its feeders is taken back into the load and carried on, as a river
                     // incising through its floodplain carries it.
                     if (entrainSpoil && !ponded && sediment[cell] > 0f) {
-                        val overFeeders = heightOverFeeders(cellsAcross, cellsDown, cell, directions, settled)
+                        // Held to the same margin the floodplain below is laid to: the fall the
+                        // channel needs to carry its load past each feeder, and so strictly downhill.
+                        val overFeeders = heightOverFeeders(
+                            cellsAcross, cellsDown, cell, directions, settled,
+                            gradeFor(erosion, carried, area.data[cell], landCells, cellsAcross), rates.groundSteps
+                        )
                         if (overFeeders > 0f) {
                             val heldRise = cells.bedRiseFor(cell, sediment[cell].toDouble(), groundOf)
                             val keptRise = (heldRise - overFeeders.toDouble() * landRange).coerceAtLeast(0.0)
@@ -1289,16 +1294,7 @@ internal object HydraulicErosion {
                         // cells of dead-straight shore in the scene against 16 on the same ground
                         // with no deposition at all. A river does not aggrade to a flat; it
                         // aggrades until it is steep enough to carry its load, and then it stops.
-                        val grade = if (erosion.gradedAggradation) {
-                            val conveyance =
-                                (erosion.transportCapacity * sqrt(area.data[cell] / landCells)).toDouble()
-                            // In the same relative units `settled` and `ground` are kept in: the
-                            // slope above is a rise per unit of map width, so one cell of it is
-                            // that over `w`.
-                            if (conveyance > 1e-12) (carried / conveyance / cellsAcross).toFloat() else 0f
-                        } else {
-                            0f
-                        }
+                        val grade = gradeFor(erosion, carried, area.data[cell], landCells, cellsAcross)
                         // `room` comes back in the relative units [settled] is kept in; the load
                         // and the field are heights, so it is converted here and nowhere else.
                         val room =
@@ -1531,7 +1527,7 @@ internal object HydraulicErosion {
             if (onRound != null) {
                 census(
                     pits, PitStage.SPOIL, cellsAcross, isLand, directions, area.data, landCells, surfaceOf,
-                    null, openingPit
+                    null, openingPit, standingWater
                 )
             }
 
@@ -1561,7 +1557,7 @@ internal object HydraulicErosion {
             if (onRound != null) {
                 census(
                     pits, PitStage.CLOSING, cellsAcross, isLand, directions, area.data, landCells, surfaceOf,
-                    null, openingPit
+                    null, openingPit, standingWater
                 )
             }
 
@@ -1582,7 +1578,7 @@ internal object HydraulicErosion {
                 // field the next round — or the sea-level cut — will route over.
                 census(
                     pits, PitStage.RELAX, cellsAcross, isLand, directions, area.data, landCells, cells.bed,
-                    null, openingPit
+                    null, openingPit, standingWater
                 )
                 onRound(
                     RoundMass(
@@ -2033,7 +2029,9 @@ internal object HydraulicErosion {
      * is the number of holes that mechanism put in a river's bed.
      *
      * A cell whose receiver is water is never a pit: the sea is the base level and standing below
-     * it is what a river mouth does. [spoil], where the round is still holding its sediment off the
+     * it is what a river mouth does; nor is a cell standing under the round's own standing water, or
+     * draining into it ([underWater]): a lake's floor is not a river's bed, and the fans laid on it
+     * under the water dam nothing. [spoil], where the round is still holding its sediment off the
      * terrain, is added to both cells so that the surface measured is the one the next fill sees.
      */
     private fun census(
@@ -2046,7 +2044,9 @@ internal object HydraulicErosion {
         landCells: Float,
         surface: FloatArray,
         spoil: FloatArray?,
-        already: BooleanArray
+        already: BooleanArray,
+        /** The cells standing under the round's water, whose floor is a lake's and not a river's bed. */
+        underWater: BooleanArray
     ) {
         val opening = slot == PitStage.OPENING
         var count = 0
@@ -2055,6 +2055,7 @@ internal object HydraulicErosion {
             val receiver = directions[cell]
             if (receiver < 0 || !isLand[receiver]) continue
             if (area[cell] / landCells < DRAWN_RIVER) continue
+            if (underWater[cell] || underWater[receiver]) continue
             if (!opening && already[cell]) continue
             val here = surface[cell] + (spoil?.get(cell) ?: 0f)
             val there = surface[receiver] + (spoil?.get(receiver) ?: 0f)
@@ -2361,22 +2362,39 @@ internal object HydraulicErosion {
     }
 
     /**
-     * How far [cell] stands on [settled] above the lowest of the cells that drain into it, in
-     * [settled]'s units; zero or less where it stands at or below every one of them, and zero where
-     * nothing drains into it. The dam the spoil's re-entrainment takes down.
+     * The fall a channel carrying [carried] needs a cell width to carry it, in the relative units
+     * the deposition's surface is kept in: the slope at which the transport capacity of [discharge]
+     * equals the load, read off the capacity's own expression solved for the slope, a rise per unit
+     * of map width and so that over the [cellsAcross] cells of it. Nought with
+     * `ErosionConfig.gradedAggradation` off.
+     */
+    private fun gradeFor(erosion: ErosionConfig, carried: Double, discharge: Float, landCells: Float, cellsAcross: Int): Float {
+        if (!erosion.gradedAggradation) return 0f
+        val conveyance = (erosion.transportCapacity * sqrt(discharge / landCells)).toDouble()
+        return if (conveyance > 1e-12) (carried / conveyance / cellsAcross).toFloat() else 0f
+    }
+
+    /**
+     * How far [cell] stands on [settled] above the lowest of the cells that drain into it less the
+     * fall [grade] a cell width the channel needs over the step from each, in [settled]'s units;
+     * zero or less where it stands that far below every one of them, and zero where nothing drains
+     * into it. The dam the spoil's re-entrainment takes down.
      */
     private fun heightOverFeeders(
         cellsAcross: Int,
         cellsDown: Int,
         cell: Int,
         directions: IntArray,
-        settled: FloatArray
+        settled: FloatArray,
+        grade: Float,
+        steps: GroundSteps
     ): Float {
         var over = Float.NEGATIVE_INFINITY
         var fed = false
         FlowRouting.forEachNeighbour(cellsAcross, cellsDown, cell % cellsAcross, cell / cellsAcross) { neighbour ->
             if (directions[neighbour] == cell) {
-                val above = settled[cell] - settled[neighbour]
+                val above = settled[cell] - settled[neighbour] + grade * steps.between(neighbour, cell, cellsAcross) +
+                    FlowRouting.FLAT_GRADIENT_STEP
                 if (!fed || above > over) over = above
                 fed = true
             }
@@ -2413,10 +2431,12 @@ internal object HydraulicErosion {
             if (directions[neighbour] == cell) {
                 fed = true
                 // The margin up to the feeder, less the fall the channel needs to keep over that
-                // step. At grade this is nought and the cell stops rising; on a reach steeper than
-                // the river needs it is positive and the floor creeps up toward grade.
+                // step and never less than the fill's own least step, so a cell laid level with
+                // its feeder does not round to a hair above it. At grade this is nought and the
+                // cell stops rising; on a reach steeper than the river needs it is positive and the
+                // floor creeps up toward grade.
                 val step = steps.between(neighbour, cell, cellsAcross)
-                val margin = settled[neighbour] - settled[cell] - grade * step
+                val margin = settled[neighbour] - settled[cell] - grade * step - FlowRouting.FLAT_GRADIENT_STEP
                 if (margin < room) room = margin
             }
         }

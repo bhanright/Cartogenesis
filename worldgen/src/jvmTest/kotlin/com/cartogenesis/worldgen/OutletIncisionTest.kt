@@ -134,9 +134,10 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
      * Rain of [DRY_RAINFALL_MM] against [DRY_EVAPORATION_MM] of potential evaporation: a desert
      * basin's (the Great Basin's playas take 200 to 300 mm and could evaporate well over a metre).
      * The lake evaporates everything its catchment sends it, so its outlet carries nothing but the
-     * lip's own rain, and the bowl keeps its whole footprint under water. The control routes the
-     * catchment's whole water over the lip, which is what the rounds did before E1b, and the bowl
-     * drains.
+     * lip's own rain: the lip is worn only as the slope below it is, and the bowl stays closed. A
+     * basin is open once its lip is cut below its floor, [LIP_METRES] less [FLOOR_METRES], which is
+     * the bar. The control routes the catchment's whole water over the lip, which is what the rounds
+     * did before E1b, and the bowl drains.
      */
     @Test
     fun `a closed basin in a dry climate stays closed, and is cut open without its evaporation`() {
@@ -152,13 +153,14 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
         )
         assertTrue(dry.pondedBefore > 0, "the hand-built basin holds no water to begin with")
         assertTrue(
-            dry.pondedAfter >= dry.pondedBefore * KEPT_BY_A_CLOSED_BASIN,
-            "the dry basin kept ${dry.pondedAfter} of its ${dry.pondedBefore} cells under water: its outlet was cut"
+            dry.lipLoweredMetres < LIP_METRES - FLOOR_METRES && dry.pondedAfter > 0,
+            "the dry basin's lip came down ${"%.1f".format(dry.lipLoweredMetres)} m against the " +
+                "${LIP_METRES - FLOOR_METRES} m it stood over the floor, ${dry.pondedAfter} cells left under water: it was cut open"
         )
         assertTrue(
-            control.pondedAfter < control.pondedBefore * KEPT_BY_A_CLOSED_BASIN,
-            "with every drop of its catchment let out over the lip the dry basin still kept " +
-                "${control.pondedAfter} of ${control.pondedBefore} cells, so this case cannot tell the two apart"
+            control.lipLoweredMetres >= LIP_METRES - FLOOR_METRES,
+            "with every drop of its catchment let out over the lip the dry basin's lip still came down only " +
+                "${"%.1f".format(control.lipLoweredMetres)} m, so this case cannot tell the two apart"
         )
     }
 
@@ -179,10 +181,6 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
             )
         )
         assertTrue(wet.pondedBefore > 0, "the hand-built basin holds no water to begin with")
-        assertTrue(
-            wet.pondedAfter < wet.pondedBefore * KEPT_BY_A_CLOSED_BASIN,
-            "the wet basin kept ${wet.pondedAfter} of its ${wet.pondedBefore} cells under water: it did not spill and cut"
-        )
         assertTrue(
             wet.lipLoweredMetres > LIP_METRES - FLOOR_METRES,
             "the wet basin's lip came down ${"%.1f".format(wet.lipLoweredMetres)} m, less than the " +
@@ -373,14 +371,8 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
         const val WET_RAINFALL_MM = 1_500f
         const val WET_EVAPORATION_MM = 500f
 
-        /**
-         * The share of its footprint a basin keeps under water when nothing cuts its outlet: all
-         * of it, less the cells its own inflows shift at the margin, which nine tenths allows.
-         */
-        const val KEPT_BY_A_CLOSED_BASIN = 0.9
-
-        /** The worlds the spoil's dams are counted on: two standard seeds at 256 rows, a minute of rounds. */
+        /** The worlds the spoil's dams are counted on: two standard seeds at the census's grid. */
         val DAM_SEEDS = listOf(7L, 42L)
-        const val DAM_ROWS = 256
+        const val DAM_ROWS = SharedWorlds.DETAIL_ROWS
     }
 }

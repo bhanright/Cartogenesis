@@ -673,9 +673,9 @@ internal object HydraulicErosion {
          */
         lakeEvaporation: Boolean = true,
         relax: suspend (FloatField) -> FloatField
-    ): FloatField {
+    ): Eroded {
         val erosion = config.erosion
-        if (erosion.hydraulicRounds <= 0 || erosion.bedrockErodibilityPerYear <= 0f) return height
+        if (erosion.hydraulicRounds <= 0 || erosion.bedrockErodibilityPerYear <= 0f) return Eroded.oneHeight(height)
         val rates = Rates(config)
 
         val cellsAcross = config.width
@@ -861,6 +861,8 @@ internal object HydraulicErosion {
             sediment.fill(0f)
         }
 
+        // The land the last round routed over, which the heads it found are read on.
+        var lastLand = BooleanArray(cellsAcross * cellsDown)
         repeat(erosion.hydraulicRounds) { round ->
             // A round routes the water over the whole map and then cuts with it, and at export
             // sizes that is seconds of work with nothing in the middle of it that could notice a
@@ -965,10 +967,11 @@ internal object HydraulicErosion {
             val sea = SeaLevelStage.enclosedCut(
                 working, provisionalSeaLevel, config, standBelowToday(config, round)
             )
+            lastLand = sea.isLand
             if (sea.landCellCount == 0) {
                 settle()
                 groundWatch?.finished(cells.bed, working.data)
-                return working
+                return Eroded.of(working, cells, sea.isLand)
             }
             // This round's shoreline is now known, so both fields are taken against this round's
             // land. See [normaliseOverLand] for why that is where the mean has to come from, and
@@ -1574,7 +1577,34 @@ internal object HydraulicErosion {
             }
         }
         groundWatch?.finished(cells.bed, working.data)
-        return working
+        return Eroded.of(working, cells, lastLand)
+    }
+
+    /**
+     * What the rounds hand on: the [ground], the [bed] under it and the channel heads' support
+     * areas the last round found, [channelHeadAreaKm2], each one entry per cell, row-major; the two
+     * heights in the height field's units, the areas in square kilometres and infinite wherever no
+     * head stood.
+     */
+    internal class Eroded(val ground: FloatField, val bed: FloatField, val channelHeadAreaKm2: FloatField) {
+        companion object {
+            /** A field no round touched: its bed is its ground and no head was found anywhere. */
+            fun oneHeight(ground: FloatField): Eroded = Eroded(
+                ground, ground, FloatField(ground.width, ground.height).also { it.data.fill(Float.POSITIVE_INFINITY) }
+            )
+
+            /** The rounds' two heights as [cells] holds them, with the heads read on [isLand]. */
+            fun of(ground: FloatField, cells: GroundCells, isLand: BooleanArray): Eroded {
+                val areas = FloatField(ground.width, ground.height)
+                for (cell in areas.data.indices) {
+                    val squareMetres = cells.headAreaSquareMetres[cell]
+                    areas.data[cell] =
+                        if (isLand[cell]) squareMetres / GroundClosure.SQUARE_METRES_PER_SQUARE_KILOMETRE.toFloat()
+                        else Float.POSITIVE_INFINITY
+                }
+                return Eroded(ground, FloatField(ground.width, ground.height, cells.bed.copyOf()), areas)
+            }
+        }
     }
 
     /**

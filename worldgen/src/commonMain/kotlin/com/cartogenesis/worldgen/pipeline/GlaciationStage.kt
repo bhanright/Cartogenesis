@@ -898,7 +898,20 @@ object GlaciationStage {
             )
         )
 
-        return sea.copy(relativeElevation = FloatField(cellsAcross, cellsDown, carved))
+        // The ice cuts and loads the cell as a whole, so the bed moves with the ground: a trough
+        // deepens the valley floor as far as it lowers the cell, and the relief inside the cell
+        // stands as the rivers left it.
+        val carvedBed =
+            if (sea.relativeBed === sea.relativeElevation) null
+            else FloatArray(cellCount) { cell ->
+                if (isLand[cell]) minOf(sea.relativeBed.data[cell] + (carved[cell] - relative[cell]), carved[cell])
+                else carved[cell]
+            }
+        val carvedField = FloatField(cellsAcross, cellsDown, carved)
+        return sea.copy(
+            relativeElevation = carvedField,
+            relativeBed = carvedBed?.let { FloatField(cellsAcross, cellsDown, it) } ?: carvedField
+        )
     }
 
     /**

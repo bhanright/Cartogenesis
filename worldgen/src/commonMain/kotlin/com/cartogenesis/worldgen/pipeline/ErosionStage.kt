@@ -9,8 +9,28 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 
 data class ErosionResult(
-    /** Height after erosion, one entry per cell, row-major, in the 0..1 range uplift produced. */
+    /**
+     * The ground after erosion: each cell's mean height over its own hillslopes and channels, one
+     * entry per cell, row-major, in the 0..1 range uplift produced. What the shoreline, the climate
+     * and the data export read.
+     */
     val height: FloatField,
+    /**
+     * The bed: each cell's trunk channel at its outlet, the surface the rounds routed the water
+     * over and the rivers stage routes it over, in the same units and the same layout as [height]
+     * and never above it. Equal to it where nothing was cut, and wherever a world was made with
+     * erosion off. See `GroundClosure`.
+     */
+    val bed: FloatField = height,
+    /**
+     * Each land cell's channel-head support area as the last round found it, in square kilometres:
+     * the hollow a slope gathers before its runoff holds a channel, which spaces the cell's own
+     * valleys. Infinite where no head forms (under standing water, at sea, on ground that neither
+     * falls nor wears) and wherever a world was made with erosion off. What the drawing spaces a
+     * cell's dissection by.
+     */
+    val channelHeadAreaKm2: FloatField =
+        FloatField(height.width, height.height).also { it.data.fill(Float.POSITIVE_INFINITY) },
     /**
      * Whether an accelerator did the thermal sweeps, as opposed to looking at the job and
      * declining it, which is a normal outcome the processor then covers with the same answer.
@@ -143,13 +163,22 @@ object ErosionStage {
         val sweepsPerRound =
             (sweepsFor(config) / erosion.hydraulicRounds.coerceAtLeast(1)).coerceAtLeast(1)
 
+        val eroded = HydraulicErosion.apply(
+            config, weathered.height, config.seaLevel, upliftRateMmPerYear, onRound, log,
+            receiverClamp, weightSums, shieldCut, incisionWatch, groundWatch, lakeEvaporation
+        ) { field ->
+            thermalErosion(config, field, accelerator, sweepsPerRound).height
+        }
+        // A stored world replays its ground through the sweeps' seam, the last sweep's answer
+        // being the snapshot; its bed and its heads are not a sweep's answer, so they are handed
+        // back here, or the rivers would be routed over a bed the replay recomputed.
+        val stored =
+            if (erosion.acceleration == Acceleration.GPU) accelerator?.storedBed(config.width, config.height) else null
         return ErosionResult(
-            HydraulicErosion.apply(
-                config, weathered.height, config.seaLevel, upliftRateMmPerYear, onRound, log,
-                receiverClamp, weightSums, shieldCut, incisionWatch, groundWatch, lakeEvaporation
-            ) { field ->
-                thermalErosion(config, field, accelerator, sweepsPerRound).height
-            },
+            height = eroded.ground,
+            bed = stored?.let { FloatField(config.width, config.height, it.bed) } ?: eroded.bed,
+            channelHeadAreaKm2 =
+                stored?.let { FloatField(config.width, config.height, it.channelHeadAreaKm2) } ?: eroded.channelHeadAreaKm2,
             sweptOnDevice = weathered.sweptOnDevice
         )
     }

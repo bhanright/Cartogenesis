@@ -158,8 +158,11 @@ internal object WorldSections {
         // trace, and erosion reads it.
         FloatSection("plates.crustAge") { it.plates.crustAge.data },
         FloatSection("erosion.height") { it.erosion.height.data },
+        FloatSection("erosion.bed") { it.erosion.bed.data },
+        FloatSection("erosion.channelHeadAreaKm2") { it.erosion.channelHeadAreaKm2.data },
         ByteSection("sea.isLand", ByteMeaning.FLAG) { flagsOf(it.sea.isLand) },
         FloatSection("sea.relativeElevation") { it.sea.relativeElevation.data },
+        FloatSection("sea.relativeBed") { it.sea.relativeBed.data },
         FloatSection("ocean.velocityX") { it.ocean.velocityX.data },
         FloatSection("ocean.velocityY") { it.ocean.velocityY.data },
         FloatSection("ocean.temperature") { it.ocean.temperature.data },
@@ -322,12 +325,17 @@ internal object WorldSections {
                 upliftRateMmPerYear = field("plates.upliftRateMmPerYear"),
                 crustAge = field("plates.crustAge")
             ),
-            erosion = ErosionResult(height = field("erosion.height")),
+            erosion = ErosionResult(
+                height = field("erosion.height"),
+                bed = field("erosion.bed"),
+                channelHeadAreaKm2 = field("erosion.channelHeadAreaKm2")
+            ),
             sea = SeaLevelResult(
                 shorelineHeight = lists.shorelineHeight,
                 isLand = flags("sea.isLand"),
                 relativeElevation = field("sea.relativeElevation"),
-                landCellCount = lists.landCellCount
+                landCellCount = lists.landCellCount,
+                relativeBed = field("sea.relativeBed")
             ),
             ocean = OceanResult(
                 velocityX = field("ocean.velocityX"),

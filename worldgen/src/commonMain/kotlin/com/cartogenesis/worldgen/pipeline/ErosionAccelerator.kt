@@ -50,7 +50,23 @@ interface ErosionAccelerator {
         passes: Int,
         rate: Float
     ): FloatArray?
+
+    /**
+     * The bed and the channel heads to hand on with the finished ground, where this accelerator
+     * replays a stored world rather than computing one, for a [width] by [height] grid; null, the
+     * default and every device's answer, keeps what the rounds made. A replay's ground comes back
+     * through [erode], whose last call is the snapshot; the bed is not a sweep's answer and needs
+     * this seam of its own.
+     */
+    fun storedBed(width: Int, height: Int): StoredBed? = null
 }
+
+/**
+ * A stored world's second height and its channel heads, one entry per cell, row-major: the bed in
+ * the height field's units and the heads' support areas in square kilometres, as [ErosionResult]
+ * holds them.
+ */
+class StoredBed(val bed: FloatArray, val channelHeadAreaKm2: FloatArray)
 
 /**
  * The steepest drop a cell may hold toward each kind of neighbour, in the height field's own units:

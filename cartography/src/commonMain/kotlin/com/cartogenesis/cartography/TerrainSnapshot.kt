@@ -1,6 +1,7 @@
 package com.cartogenesis.cartography
 
 import com.cartogenesis.worldgen.pipeline.ErosionAccelerator
+import com.cartogenesis.worldgen.pipeline.StoredBed
 import com.cartogenesis.worldgen.pipeline.ThermalLimits
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
@@ -31,22 +32,35 @@ import kotlinx.serialization.Serializable
 data class TerrainSnapshot(
     val width: Int,
     val height: Int,
-    /** Base64 of the raw float bits, little-endian, one per cell in row-major order. */
-    val data: String
+    /** Base64 of the raw float bits of the ground, little-endian, one per cell in row-major order. */
+    val data: String,
+    /**
+     * The bed and the channel heads' areas the same way, or empty where the snapshot holds the
+     * ground alone: since the erosion keeps two heights, the rivers are routed over the bed, and a
+     * replay that recomputed it would route them over another one.
+     */
+    val bed: String = "",
+    val channelHeadAreaKm2: String = ""
 ) {
 
     /**
-     * The heights, one per cell of [width] by [height], row-major.
+     * The ground, one height per cell of [width] by [height], row-major.
      *
      * Throws [IllegalArgumentException] unless the grid is a real one and [data] holds exactly four
      * bytes for each of its cells: a snapshot that disagrees with its own dimensions is not a
      * shorter terrain, it is not this terrain at all.
      */
-    fun decode(): FloatArray {
+    fun decode(): FloatArray = decode(data)
+
+    /** The bed and the heads, decoded as [decode] decodes the ground; null where the snapshot holds none. */
+    fun decodeBed(): StoredBed? =
+        if (bed.isEmpty() || channelHeadAreaKm2.isEmpty()) null else StoredBed(decode(bed), decode(channelHeadAreaKm2))
+
+    private fun decode(text: String): FloatArray {
         require(width > 0 && height > 0) { "a snapshot of $width by $height cells" }
         val expectedBytes = width.toLong() * height * BYTES_PER_HEIGHT
         require(expectedBytes <= Int.MAX_VALUE) { "a snapshot of $width by $height cells is larger than an array" }
-        val bytes = decodeBase64(data)
+        val bytes = decodeBase64(text)
         require(bytes.size.toLong() == expectedBytes) {
             "a $width by $height snapshot holds ${bytes.size} bytes where it needs $expectedBytes"
         }
@@ -65,7 +79,15 @@ data class TerrainSnapshot(
         /** A float is four bytes, little-endian, and [data] is that many bytes a cell. */
         private const val BYTES_PER_HEIGHT = 4
 
-        fun of(width: Int, height: Int, heights: FloatArray): TerrainSnapshot {
+        /** The ground alone, as a snapshot taken before the erosion had a bed held it. */
+        fun of(width: Int, height: Int, heights: FloatArray): TerrainSnapshot =
+            TerrainSnapshot(width, height, encode(heights))
+
+        /** The ground, the bed and the channel heads, every field of the erosion stage a replay hands on. */
+        fun of(width: Int, height: Int, heights: FloatArray, bed: FloatArray, channelHeadAreaKm2: FloatArray): TerrainSnapshot =
+            TerrainSnapshot(width, height, encode(heights), encode(bed), encode(channelHeadAreaKm2))
+
+        private fun encode(heights: FloatArray): String {
             val bytes = ByteArray(heights.size * BYTES_PER_HEIGHT)
             for (cell in heights.indices) {
                 val bits = heights[cell].toRawBits()
@@ -75,7 +97,7 @@ data class TerrainSnapshot(
                 bytes[at + 2] = ((bits shr 16) and 0xFF).toByte()
                 bytes[at + 3] = ((bits shr 24) and 0xFF).toByte()
             }
-            return TerrainSnapshot(width, height, encodeBase64(bytes))
+            return encodeBase64(bytes)
         }
 
         @OptIn(ExperimentalEncodingApi::class)
@@ -110,4 +132,7 @@ class StoredTerrain(private val snapshot: TerrainSnapshot) : ErosionAccelerator 
         rate: Float
     ): FloatArray? =
         if (width == snapshot.width && height == snapshot.height) snapshot.decode() else null
+
+    override fun storedBed(width: Int, height: Int): StoredBed? =
+        if (width == snapshot.width && height == snapshot.height) snapshot.decodeBed() else null
 }

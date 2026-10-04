@@ -34,7 +34,15 @@ data class SeaLevelResult(
      */
     val relativeElevation: FloatField,
     /** How many entries of [isLand] are true. */
-    val landCellCount: Int
+    val landCellCount: Int,
+    /**
+     * The bed on the same ruler as [relativeElevation]: on land, each cell's trunk channel
+     * (`ErosionResult.bed`), the surface the rivers stage routes the water over, never above the
+     * ground; at sea, and on any cell that became land after the cut, the same as
+     * [relativeElevation], since those cells have one height. Equal to [relativeElevation] wherever
+     * a caller handed the stage no bed.
+     */
+    val relativeBed: FloatField = relativeElevation
 )
 
 /**
@@ -146,6 +154,38 @@ object SeaLevelStage {
     }
 
     /**
+     * [cut] with its bed: [bed], in the height field's units, read onto the land's half of the
+     * ruler from [cut]'s shoreline on every land cell and held at or under the ground there; every
+     * water cell's bed its ground.
+     */
+    private fun withBed(cut: SeaLevelResult, bed: FloatField, scale: WorldScale): SeaLevelResult {
+        val relativeBed = cut.relativeElevation.copy()
+        val landHalfOfField = scale.landHalfOfField.coerceAtLeast(MIN_RANGE)
+        for (cell in relativeBed.data.indices) {
+            if (!cut.isLand[cell]) continue
+            val onRuler = (bed.data[cell] - cut.shorelineHeight) / landHalfOfField
+            if (onRuler < relativeBed.data[cell]) relativeBed.data[cell] = onRuler
+        }
+        return cut.copy(relativeBed = relativeBed)
+    }
+
+    /**
+     * [after] with [before]'s bed carried across a pass that moved the coast or the ground: a cell
+     * that was land in both keeps its bed, held at or under its new ground; any other cell's bed is
+     * its ground, a cell the pass turned from water into land having one height.
+     */
+    internal fun carryBed(before: SeaLevelResult, after: SeaLevelResult): SeaLevelResult {
+        if (before.relativeBed === before.relativeElevation) return after
+        val relativeBed = after.relativeElevation.copy()
+        for (cell in relativeBed.data.indices) {
+            if (!after.isLand[cell] || !before.isLand[cell]) continue
+            val carried = before.relativeBed.data[cell]
+            if (carried < relativeBed.data[cell]) relativeBed.data[cell] = carried
+        }
+        return after.copy(relativeBed = relativeBed)
+    }
+
+    /**
      * Land, water and the shoreline-relative field, for a shoreline already decided.
      *
      * The two halves of [SeaLevelResult.relativeElevation] are divided by the two halves of the
@@ -222,8 +262,8 @@ object SeaLevelStage {
      * Shaping the shelf earlier, as a depression on oceanic crust before the percentile ran, was
      * tried and reverted; see [SeaConfig] and docs/DESIGN_LEDGER.md, B1.
      */
-    fun apply(height: FloatField, config: WorldGenConfig): SeaLevelResult =
-        applyWithValleyBar(height, config, DrownedValleys.RESOLVED_SHARE_OF_A_CELL)
+    fun apply(height: FloatField, config: WorldGenConfig, bed: FloatField = height): SeaLevelResult =
+        applyWithValleyBar(height, config, DrownedValleys.RESOLVED_SHARE_OF_A_CELL, bed)
 
     /**
      * The same cut with [DrownedValleys]' bar moved, which only the diagnosis that asks what the
@@ -232,7 +272,8 @@ object SeaLevelStage {
     internal fun applyWithValleyBar(
         height: FloatField,
         config: WorldGenConfig,
-        resolvedShareOfCell: Float
+        resolvedShareOfCell: Float,
+        bed: FloatField = height
     ): SeaLevelResult {
         val seaConfig = config.sea
         // Today's stand, always: the lowstand belongs to the rounds that carved the terrain this is
@@ -256,8 +297,11 @@ object SeaLevelStage {
         // water into land, and neither will touch a cell whose filling would cut the water around it
         // in two, so no body of water can be enclosed by them. See [WaterTopology], and
         // `LittoralCoastTest`, which counts the bodies the ocean cannot reach on both sides.
-        val resolved = DrownedValleys.apply(enclosed, height, config, resolvedShareOfCell)
-        val beforeShelf = LittoralGrading.apply(resolved, config)
+        // The bed rides along: each pass below decides the coast on the ground, and a cell keeps
+        // its bed only while it stays land.
+        val withBed = if (bed === height) enclosed else withBed(enclosed, bed, config.scale)
+        val resolved = carryBed(withBed, DrownedValleys.apply(withBed, height, config, resolvedShareOfCell))
+        val beforeShelf = carryBed(resolved, LittoralGrading.apply(resolved, config))
         if (seaConfig.shelfWidthKm <= 0.0) return beforeShelf
 
         val cellsAcross = beforeShelf.relativeElevation.width
@@ -314,7 +358,13 @@ object SeaLevelStage {
             withShelf.data[cell] = if (wedgeSurface > naturalFloor) wedgeSurface else naturalFloor
         }
 
-        return beforeShelf.copy(relativeElevation = withShelf)
+        // The shelf moves only water, whose bed is its ground.
+        val shelfBed =
+            if (beforeShelf.relativeBed === beforeShelf.relativeElevation) withShelf
+            else FloatField(cellsAcross, cellsDown, FloatArray(cellCount) { cell ->
+                if (isLand[cell]) beforeShelf.relativeBed.data[cell] else withShelf.data[cell]
+            })
+        return beforeShelf.copy(relativeElevation = withShelf, relativeBed = shelfBed)
     }
 
     /**

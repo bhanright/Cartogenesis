@@ -130,6 +130,13 @@ object WorldCodec {
     /**
      * The only version this build reads or writes.
      *
+     * 21 because each cell carries two heights. The erosion stage writes the bed under the ground
+     * (`erosion.bed`) and each cell's channel-head area (`erosion.channelHeadAreaKm2`), the sea
+     * stage writes the bed on its own ruler (`sea.relativeBed`), and the rivers are routed over the
+     * bed; the outlet notch's settings left the erosion section (`outletIncision`,
+     * `outletIncisionRatio`, `outletReachKm`, `outletFallToTheWater`) and the post-cut outlet left
+     * the sea section (`postCutOutlet`). A format-20 file has no bed to route its rivers over.
+     *
      * 20 because a rift's half-grabens became Earth's lengths in kilometers:
      * `tectonics.riftSegmentMin`, `riftSegmentMax` and `riftAccommodation`, shares of the map's
      * width, became `riftSegmentMinKm`, `riftSegmentMaxKm` and `riftAccommodationKm`. A format-19
@@ -269,7 +276,7 @@ object WorldCodec {
      * every cell-valued name took a `Cells` suffix. 3 was the container below with none of that, 2
      * the JSON text that preceded it; none of them opens.
      */
-    const val FORMAT_VERSION = 20
+    const val FORMAT_VERSION = 21
 
     private val MAGIC = byteArrayOf('C'.code.toByte(), 'G'.code.toByte(), 'W'.code.toByte(), 'D'.code.toByte())
 

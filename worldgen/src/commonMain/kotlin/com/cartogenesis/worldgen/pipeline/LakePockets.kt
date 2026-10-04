@@ -338,7 +338,12 @@ internal class LakePockets private constructor(
             val netPrefix = DoubleArray(count + 1)
             for (index in 0 until count) {
                 val cell = layout[index]
-                netPrefix[index + 1] = netPrefix[index] + lakeShareOfRain * rainMm[cell] - evaporationMm[cell]
+                // A cell of the basin whose ground stands above the brim is never under the lake:
+                // its bed lies below the brim, which put it in the basin, and the water runs
+                // through it in its channel without wetting it.
+                val floods = ground[cell] <= brim
+                netPrefix[index + 1] = netPrefix[index] +
+                    if (floods) lakeShareOfRain * rainMm[cell] - evaporationMm[cell] else 0.0
             }
             val lowestSinceOwnStart = DoubleArray(count)
             for (pocket in 0 until pocketCount) {

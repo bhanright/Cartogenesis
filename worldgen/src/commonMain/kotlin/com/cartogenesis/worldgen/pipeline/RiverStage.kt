@@ -197,7 +197,7 @@ object RiverStage {
             config.width, config.height, sea, climate, routed.filled, routed.flowTarget
         )
         val isChannel = ChannelInitiation.channelMask(
-            config, sea.isLand, sea.landCellCount, sea.relativeElevation, routed.filled,
+            config, sea.isLand, sea.landCellCount, sea.relativeBed, routed.filled,
             routed.flowTarget, climate
         ) { routed.lakes.isOpenWater(it) }
         val rivers = traceRivers(config, sea, flow, routed.flowTarget, routed.lakes, isChannel)
@@ -358,10 +358,16 @@ object RiverStage {
         val playa = BooleanArray(cellCount)
         if (!lakesConfig.enabled) return LakeResult(lakeId, emptyList(), playa, cellsAcross)
 
+        // Two surfaces, as the erosion left them. The water is routed over the bed, so a basin is
+        // the cells the fill stands over the bed by more than the minimum depth; a cell is under
+        // the lake where the water reaches its ground, the cell's mean, which is where half of it
+        // and more is wet on its own hypsometry (`GroundClosure.floodedShare`), so the area a
+        // lake evaporates from is the area drawn as water.
+        val bed = sea.relativeBed
         val ground = sea.relativeElevation
         val submerged = BooleanArray(cellCount) { cell ->
             sea.isLand[cell] &&
-                (filled.data[cell] - ground.data[cell]) >= minDepth
+                (filled.data[cell] - bed.data[cell]) >= minDepth
         }
 
         // Every basin big enough to read as water, in cell-index order. A basin can end up with no
@@ -408,7 +414,7 @@ object RiverStage {
         if (catchmentRainMm == null) {
             val lakes = ArrayList<Lake>()
             for (basin in basins.indices) {
-                fillToBrim(lakeId, lakes, basins[basin], spillElevation[basin], outletCell[basin])
+                fillToBrim(lakeId, lakes, basins[basin], spillElevation[basin], outletCell[basin], ground.data)
             }
             return LakeResult(lakeId, lakes, playa, cellsAcross)
         }
@@ -612,7 +618,7 @@ object RiverStage {
             closed[basin] = true
             for (cell in cells) pending[cell] = true
             LakeWaterBalance.routeIntoWater(
-                cellsAcross, cellsDown, ground, pending, sinks.toIntArray(), cells.size, flowTarget,
+                cellsAcross, cellsDown, bed, pending, sinks.toIntArray(), cells.size, flowTarget,
                 settled, basinMark++, pathKey, config.seed, config.cellHeightInCellWidths,
                 FlowRouting.smoothFieldPeriodCells(config)
             )
@@ -715,7 +721,7 @@ object RiverStage {
         for (basin in basins.indices) {
             val bodies = bodiesOf[basin]
             if (bodies == null) {
-                fillToBrim(lakeId, lakes, basins[basin], spillElevation[basin], outletCell[basin])
+                fillToBrim(lakeId, lakes, basins[basin], spillElevation[basin], outletCell[basin], ground.data)
                 continue
             }
             for (body in bodies.sortedBy { it.cells.min() }) {
@@ -834,19 +840,26 @@ object RiverStage {
         return groups
     }
 
-    /** The right answer wherever the basin overflows: water to the brim over every basin cell. */
+    /**
+     * The right answer wherever the basin overflows: water to the brim over every basin cell whose
+     * [ground] it reaches. A cell whose bed lies under the brim and whose ground stands above it is
+     * the channel the water runs through, not the lake.
+     */
     private fun fillToBrim(
         lakeId: IntArray,
         lakes: MutableList<Lake>,
         basinCells: IntArray,
         spillElevation: Float,
-        outletCell: Int
+        outletCell: Int,
+        ground: FloatArray
     ) {
+        val under = basinCells.count { ground[it] <= spillElevation }
+        if (under == 0) return
         val id = lakes.size
-        for (cell in basinCells) lakeId[cell] = id
+        for (cell in basinCells) if (ground[cell] <= spillElevation) lakeId[cell] = id
         lakes.add(
             Lake(
-                id, basinCells.size, spillElevation, outletCell,
+                id, under, spillElevation, outletCell,
                 endorheic = false, spillElevation = spillElevation
             )
         )
@@ -857,7 +870,7 @@ object RiverStage {
      * the lowest path already reached so it drains rather than ponding.
      */
     private fun fillDepressions(width: Int, height: Int, sea: SeaLevelResult): FloatField =
-        FlowRouting.fillDepressions(width, height, sea.isLand, sea.relativeElevation)
+        FlowRouting.fillDepressions(width, height, sea.isLand, sea.relativeBed)
 
     private fun computeFlowDirections(
         width: Int,
@@ -870,7 +883,7 @@ object RiverStage {
         byFacet: Boolean,
         overPotential: Boolean
     ): IntArray = FlowRouting.flowDirections(
-        width, height, sea.isLand, sea.relativeElevation, filled, seed, cellHeightInCellWidths,
+        width, height, sea.isLand, sea.relativeBed, filled, seed, cellHeightInCellWidths,
         smoothFieldPeriodCells,
         byFacet, overPotential
     )

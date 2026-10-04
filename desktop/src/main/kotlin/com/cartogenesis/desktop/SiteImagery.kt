@@ -31,7 +31,7 @@ import java.io.File
  * The landing page used to carry one hand-made poster, and a hand-made poster is a promise the
  * page cannot keep: a picture drawn by an older renderer goes on claiming things about the
  * generator long after the generator has stopped doing them. So the site holds no image files of
- * its own. `:web:assembleSite` runs this, this generates one world and cuts every figure on the
+ * its own. `:desktop:assembleSite` runs this, this generates one world and cuts every figure on the
  * page out of it, and the release that changes what a coastline looks like changes the coastline
  * the page shows.
  *

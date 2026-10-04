@@ -1,7 +1,12 @@
 name: Deploy cartogenesis.com
 
-# Builds the browser application, assembles it with site/ into web/build/site, and uploads that
-# to the Cloudflare Pages project `cartogenesis`, which serves cartogenesis.com.
+# Assembles cartogenesis.com into desktop/build/site — the stored browser preview under app/, site/
+# laid over it, and the figures rendered from the engine — and uploads that to the Cloudflare Pages
+# project `cartogenesis`, which serves cartogenesis.com.
+#
+# The browser application is no longer built. It is the copy stored as `web-frozen.zip` on the
+# GitHub release `web-frozen`, made from main at 8198db27; the assembly checks its SHA-256 before
+# using it (`assembleSite` in desktop/build.gradle.kts).
 #
 # Tags rather than pushes to a branch: the site carries a download card pointing at the latest
 # GitHub release, so the moment worth publishing is the moment a release exists. workflow_dispatch
@@ -24,7 +29,7 @@ concurrency:
   group: site
   cancel-in-progress: false
 
-# Read-only: the apt step below asks the releases what packages they carry and downloads them.
+# Read-only: the frozen application's step and the apt step below download from the releases.
 # Cloudflare is reached with its own API token, not with this one.
 permissions:
   contents: read
@@ -60,7 +65,7 @@ jobs:
       # The apt repository, rebuilt from scratch into the assembled tree, at /apt.
       #
       # Why here and not in the release workflow: a Cloudflare Pages upload publishes a whole
-      # tree, so whatever is not in web/build/site at this moment is not on cartogenesis.com a
+      # tree, so whatever is not in desktop/build/site at this moment is not on cartogenesis.com a
       # minute later. A site deploy that did not carry apt/ would take the repository off the
       # domain until the next release. Building it here means every deployment carries a complete,
       # current repository, whatever triggered it.
@@ -121,14 +126,21 @@ jobs:
             --local-user "$APT_SIGNING_KEY_ID" --detach-sign --output /dev/null
           echo "Imported and signed with $APT_SIGNING_KEY_ID."
 
-      # Assembles web/build/site, then checks the tree that is about to be uploaded: two .wasm
+      # The browser preview, as stored. Everything a Pages upload does not carry is taken off the
+      # site, so a deploy without it would take /app/ down: a missing release or asset fails here.
+      - name: Download the stored browser application
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download web-frozen --pattern web-frozen.zip --dir build/web-frozen
+
+      # Assembles desktop/build/site, then checks the tree that is about to be uploaded: two .wasm
       # files and no third left over, the six bundled fonts, no source map, and a loader stamp
       # that is a commit rather than the placeholder. A bad tree deploys perfectly happily and is
       # only discovered by a visitor, so it is checked here rather than after.
       - name: Assemble the site
-        run: ./gradlew :web:assembleSite :desktop:siteTest --no-daemon --console=plain
+        run: ./gradlew :desktop:assembleSite :desktop:siteTest --no-daemon --console=plain
 
-      # Built into web/build/site *after* the assembly rather than into site/ before it, for a
+      # Built into desktop/build/site *after* the assembly rather than into site/ before it, for a
       # reason that is easy to miss: every :desktop: test task declares the whole of site/ as an
       # input, so a pool of 100 MB packages dropped in there would be hashed by Gradle on every
       # run. The assembled tree is nobody's input.
@@ -142,7 +154,7 @@ jobs:
 
           # reprepro's basedir: the committed conf/, with the signing key's id put in, and
           # nothing else. Everything under it from here on is reprepro's to write.
-          apt=web/build/site/apt
+          apt=desktop/build/site/apt
           mkdir -p "$apt/conf"
           sed "s/__APT_SIGNING_KEY_ID__/$APT_SIGNING_KEY_ID/" \
             site/apt/conf/distributions > "$apt/conf/distributions"
@@ -177,7 +189,7 @@ jobs:
           # is not uploaded: each package path the index names is redirected to the same file on
           # its GitHub release, which apt follows. The checksums in the index are of that file's
           # content, which is the same bytes, so verification still holds.
-          redirects=web/build/site/_redirects
+          redirects=desktop/build/site/_redirects
           echo "" >> "$redirects"
           echo "# apt packages live on the releases; the signed index above names these paths." >> "$redirects"
           for deb in "$apt"/pool/main/c/cartogenesis/cartogenesis_*_amd64.deb; do
@@ -196,8 +208,8 @@ jobs:
 
       - name: Report what will be uploaded
         run: |
-          find web/build/site -type f -printf '%10s  %P\n' | sort -k2
-          echo "Total: $(du -sh web/build/site | cut -f1)"
+          find desktop/build/site -type f -printf '%10s  %P\n' | sort -k2
+          echo "Total: $(du -sh desktop/build/site | cut -f1)"
 
       # The custom domain serves the project's *production* deployment, and a deployment is
       # production only if its branch name matches the project's production branch. A Direct
@@ -258,7 +270,7 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           # --commit-dirty because the tree being uploaded is a build directory rather than a
           # checkout, and wrangler otherwise warns about it on every run.
-          command: pages deploy web/build/site --project-name=cartogenesis --branch=${{ steps.project.outputs.branch }} --commit-dirty=true
+          command: pages deploy desktop/build/site --project-name=cartogenesis --branch=${{ steps.project.outputs.branch }} --commit-dirty=true
 
       - name: Say where it went
         run: |

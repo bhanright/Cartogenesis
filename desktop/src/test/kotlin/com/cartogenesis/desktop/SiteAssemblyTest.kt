@@ -12,17 +12,18 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
 /**
- * Checks the tree `:web:assembleSite` builds for cartogenesis.com, before it is uploaded.
+ * Checks the tree `:desktop:assembleSite` builds for cartogenesis.com, before it is uploaded.
  *
  * Everything here is a failure that ships silently. A missing font, a source map, an unreplaced
  * loader stamp or a stale second copy of the application wasm all deploy perfectly happily and
  * are only discovered by a visitor — in the stamp's case, by a *returning* visitor on the deploy
  * after next, which is the worst possible place to learn about it.
  *
- * It lives in the desktop module for the same reason `WebDeploymentContractTest` does: the web
- * module compiles to wasm, which cannot read files. It is run by `:desktop:siteTest`, which
- * assembles the site first — never by `:desktop:test`, which has no reason to build 12 MB of
- * WebAssembly and would otherwise be testing whatever an earlier run happened to leave behind.
+ * The browser application under `app/` is a stored copy, no longer built (see `assembleSite` in
+ * this module's build script); everything here holds the tree as it is uploaded, that copy
+ * included. It is run by `:desktop:siteTest`, which assembles the site first — never by
+ * `:desktop:test`, which has no reason to render the site's figures and would otherwise be testing
+ * whatever an earlier run happened to leave behind.
  */
 class SiteAssemblyTest {
 
@@ -180,10 +181,10 @@ class SiteAssemblyTest {
 
     private val site: File
         get() {
-            val dir = File(repoRoot, "web/build/site")
+            val dir = File(repoRoot, "desktop/build/site")
             assertTrue(
                 dir.isDirectory,
-                "no assembled site at ${dir.absolutePath}. Run :web:assembleSite, or :desktop:siteTest " +
+                "no assembled site at ${dir.absolutePath}. Run :desktop:assembleSite, or :desktop:siteTest " +
                     "which does it for you."
             )
             return dir
@@ -863,89 +864,44 @@ class SiteAssemblyTest {
     }
 
     /**
-     * That the sizes the Features list quotes are the sizes the two builds actually allow.
+     * That the sizes the Features list quotes are the one grid the desktop makes.
      *
-     * Every one of these is a number a reader plans around — how large an export they can ask for,
-     * what a phone will do, what a fresh world starts at — and every one of them is a constant in
-     * the code that a later chunk can move. The desktop's are read off the platform itself, handed
-     * the heap of a 16 GB machine (every desktop's ceiling) and of a 32 GB one (the larger ceiling a
-     * heap that holds it is offered, with the memory it takes); the browser's cannot be, because
-     * that class compiles to wasm and this test is a JVM one, so its source is read instead, exactly
-     * as `WebDeploymentContractTest` reads it.
+     * A number a reader plans around — what size a world is, what an export comes out as — and a
+     * constant in the code that a later chunk can move. The desktop makes every world on one grid,
+     * read off the platform itself; an export is that world, a cell to a pixel, so its picture is
+     * the true-shape sheet of that grid; and a cell's width is the declared world width over the
+     * grid's columns, rounded to the kilometer the page quotes.
      */
     @Test
-    fun `the Features list quotes the sizes the code allows`() {
+    fun `the Features list quotes the grid the desktop makes`() {
         val page = file("index.html").readText()
         fun row(term: String): String =
             Regex("""<dt>$term</dt><dd>(.*?)</dd>""").find(page)?.groupValues?.get(1)
                 ?: fail("the Features list no longer has a $term row")
 
-        val gibibyte = 1L shl 30
-        val desktop = DesktopPlatform(heapBytes = 12 * gibibyte)
-        val largest = DesktopPlatform(heapBytes = 24 * gibibyte).generationCeiling
-        val web = File(repoRoot, "web/src/wasmJsMain/kotlin/com/cartogenesis/web/WebPlatform.kt")
-            .readText()
-        fun webNumber(property: String): Int =
-            Regex("""$property[^\n]*?(\d+)""").find(web)?.groupValues?.get(1)?.toInt()
-                ?: fail("WebPlatform.kt no longer states $property")
-
-        val ceiling = desktop.generationCeiling
-        val browserCeiling = when (
-            Regex("""override val generationCeiling: Int = WorldCeilings\.(\w+)""").find(web)?.groupValues?.get(1)
-        ) {
-            "BROWSER_TAB" -> com.cartogenesis.ui.WorldCeilings.BROWSER_TAB
-            "DESKTOP" -> com.cartogenesis.ui.WorldCeilings.DESKTOP
-            else -> fail("WebPlatform.kt no longer states the browser's ceiling as one of WorldCeilings'")
-        }
+        val rows = DesktopPlatform(heapBytes = 12L shl 30).defaultResolution
+        val scale = com.cartogenesis.worldgen.model.WorldScale()
+        val columns = com.cartogenesis.cartography.WorldCodec.COLUMNS_PER_ROW * rows
 
         val exports = row("Export")
-        // A world's size is written by its name, its rows, as the chips say it: "up to 2048". A grid
-        // written "2048 × 2048" is the old square size and says something else.
-        fun quotesSize(text: String, size: Int) = Regex("""\bup to $size\b""").containsMatchIn(text)
         assertTrue(
-            Regex("""desktop app[^.]*""").findAll(exports).any { quotesSize(it.value, ceiling) },
-            "the Export row does not quote the $ceiling this build can finish: \"$exports\""
+            Regex("""\bat $rows\b""").containsMatchIn(exports),
+            "the Export row does not say the desktop makes every world at $rows: \"$exports\""
         )
-        assertTrue(
-            Regex("""browser[^.]*""").findAll(exports).any { quotesSize(it.value, browserCeiling) },
-            "the Export row does not quote the browser's ceiling of $browserCeiling: \"$exports\""
-        )
-        // The larger ceiling, and the memory a machine needs for it, in the same sentence.
-        val memoryNeeded = com.cartogenesis.ui.WorldCeilings.MEMORY_FOR_LARGEST_DESKTOP_GIBIBYTES
-        assertTrue(
-            Regex("""desktop app[^.]*""").findAll(exports).any { sentence ->
-                quotesSize(sentence.value, largest) &&
-                    Regex("""(\d+) GB of memory or more""").find(sentence.value)
-                        ?.groupValues?.get(1)?.toLong()?.let { it >= memoryNeeded } == true
-            },
-            "the Export row does not say the desktop makes $largest on a machine with $memoryNeeded GB of memory or more: \"$exports\""
-        )
-        // And what a world at the ceiling comes out as for a picture: its true-shape sheet, a cell
-        // to a pixel on the grid of square cells the size names.
-        val sheet = com.cartogenesis.cartography.SheetGeometry.of(
-            com.cartogenesis.worldgen.model.WorldScale(),
-            com.cartogenesis.cartography.WorldCodec.COLUMNS_PER_ROW * ceiling, ceiling
-        )
+        val sheet = com.cartogenesis.cartography.SheetGeometry.of(scale, columns, rows)
         assertTrue(
             exports.contains("${sheet.widthPixels} × ${sheet.heightPixels}"),
-            "the Export row does not say a $ceiling world's map image is " +
+            "the Export row does not say a $rows world's map image is " +
                 "${sheet.widthPixels} × ${sheet.heightPixels}: \"$exports\""
         )
 
-        val resolutions = row("Resolution")
+        val resolution = row("Resolution")
+        val cellKm = Math.round(scale.worldWidthKm / columns)
         assertTrue(
-            resolutions.contains("the browser starts at ${webNumber("override val defaultResolution")}"),
-            "the Resolution row does not say what the browser starts at: \"$resolutions\""
+            resolution.contains("$rows rows") && resolution.contains("about $cellKm km"),
+            "the Resolution row does not say the grid is $rows rows of cells about $cellKm km across: \"$resolution\""
         )
-        assertTrue(
-            resolutions.contains("the desktop app at ${desktop.defaultResolution}"),
-            "the Resolution row does not say what the desktop starts at: \"$resolutions\""
-        )
-        println(
-            "SITE the Features list quotes $ceiling as the ceiling, $largest with the memory, $browserCeiling in the browser, " +
-                "and ${webNumber("override val defaultResolution")}/${desktop.defaultResolution} " +
-                "as the starting grids"
-        )
+        println("SITE the Features list quotes the one grid, $rows rows, ${sheet.widthPixels} × ${sheet.heightPixels} pixels, cells about $cellKm km")
     }
 
     /**
@@ -1232,8 +1188,9 @@ class SiteAssemblyTest {
     fun `the shell keeps the two names the application reaches for`() {
         val shell = file("app/index.html").readText()
 
-        // The other half of WebDeploymentContractTest: that one pins the names in the Kotlin
-        // source, this one pins them in the page that is actually deployed.
+        // The names in the page that is actually deployed. The application's side of the first
+        // is read out of its wasm below, since its source is no longer built; `loading` is too
+        // common a word in the wasm to be found there by name.
         assertTrue(
             shell.contains("composeTarget"),
             "the deployed shell has no #composeTarget for Compose to mount into"
@@ -1242,6 +1199,12 @@ class SiteAssemblyTest {
             shell.contains("""id="loading""""),
             "the deployed shell has no #loading, so nothing can signal that the app is ready and " +
                 "the loading overlay never lifts"
+        )
+        val application = File(site, "app").listFiles { f -> f.isFile && f.extension == "wasm" }
+            .orEmpty().filter { it.asLatin1().contains("cartogenesis") }
+        assertTrue(
+            application.any { it.asLatin1().contains("composeTarget") },
+            "the stored application no longer names composeTarget, so it mounts into a div the shell does not have"
         )
     }
 

@@ -1,4 +1,4 @@
-# Deploying the web build
+# Deploying the site
 
 How the site is assembled and published, and the mechanics that are easy to break silently. The
 README carries the commands and the secrets' names; this file carries the reasons. `site/README.md`
@@ -6,29 +6,40 @@ covers the site's own contents and how to deploy by hand.
 
 ## What the deploy does
 
-`./gradlew :web:assembleSite` builds the application and assembles it with `site/` into
-`web/build/site`: it drops the source map and the build's own emitted `index.html`, and stamps the
-loader's URL with the commit. `./gradlew :desktop:siteTest` does the same and then checks the tree
-it produced. Three of its checks lay the page out in a headless Chrome, which the test starts
+The browser application is no longer built (docs/DESIGN_LEDGER.md, G1; docs/WEB_VERSION.md has
+its archive and how to revive it). What the site serves under
+`/app/` is a stored copy of it, `web-frozen.zip` on the GitHub release `web-frozen`: the `app/`
+directory the last build that made it assembled, from main at 8198db27, less the loading shell.
+`./gradlew :desktop:assembleSite` checks that copy's SHA-256 against the one in
+`desktop/build.gradle.kts`, unpacks it, lays `site/` over it, renders the figures from the engine,
+and writes the whole site into `desktop/build/site`, stamping the loader's URL with the commit.
+`./gradlew :desktop:siteTest` does the same and then checks the tree it produced. Three of its checks lay the page out in a headless Chrome, which the test starts
 itself (see `HeadlessChrome` in `:desktop`'s tests): the page running past the screen at widths
 from 360 to 3440, and the zoom lens under a finger. So the machine that runs it needs Chrome,
 found where it is installed or where `CARTOGENESIS_CHROME` points; without it those three fail
 by name rather than passing unmeasured.
 
-`.github/workflows/site.yml` runs both on any pushed `v*` tag, or by hand from the Actions tab, and
-uploads `web/build/site` to the Cloudflare Pages project `cartogenesis` using two repository
-secrets, `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.
+`.github/workflows/site.yml` downloads the stored copy into `build/web-frozen/`, runs both on any
+pushed `v*` tag, or by hand from the Actions tab, and uploads `desktop/build/site` to the Cloudflare
+Pages project `cartogenesis` using two repository secrets, `CLOUDFLARE_API_TOKEN` and
+`CLOUDFLARE_ACCOUNT_ID`. A run without the release fails at the download rather than publishing a
+site with no `/app/`: a Pages upload replaces the whole tree, so what is missing from it is taken
+off the domain. A local run downloads the copy the same way:
+
+    gh release download web-frozen --pattern web-frozen.zip --dir build/web-frozen
+
+or names one with `-PfrozenWebApp=<path>`.
 
 ## The two names the shell depends on
 
 `site/app/index.html` reaches into the application for two names. Breaking either one fails
-silently: the application keeps working and the page around it never finds out.
+silently: the application keeps working and the page around it never finds out. The application
+is frozen now, so only the shell's side can move.
 
-- **`VIEWPORT_ID`** in `web/.../Main.kt` must stay `composeTarget`. The shell creates the div;
-  Compose mounts into it.
-- **`hideLoadingMessage()`** in `web/.../Browser.kt` must keep removing `#loading`, and must keep
-  being called on startup. The shell keeps an empty div with that id so this can delete it, and
-  treats the deletion as its "the app is ready" signal.
+- **`composeTarget`**, the div the shell creates and Compose mounts into (`VIEWPORT_ID` in the
+  browser module's `Main.kt`, at 8198db27).
+- **`#loading`**, an empty div the application's `hideLoadingMessage()` removes on startup, which
+  the shell treats as its "the app is ready" signal.
 
 The second exists because **Compose does not put its canvas in the page.** It attaches a shadow root
 to the viewport div and puts the canvas inside it. From outside, `document.querySelector("canvas")`
@@ -36,10 +47,9 @@ is null, the div reports no children, and a MutationObserver on it never fires �
 canvas is generating a world. There is no other exact readiness signal from outside that shadow
 root.
 
-`WebDeploymentContractTest` pins both, and was shown to fail on each in turn. It reads the web
-module's source text, because the contract is an id inside a `@JsFun` body that no type system sees.
-`desktop/build.gradle.kts` declares those sources as test inputs; without that, Gradle keeps the
-task up to date and the build cache restores a stale pass.
+`SiteAssemblyTest` pins both in the deployed shell, and reads `composeTarget` out of the stored
+application's wasm. `WebDeploymentContractTest`, which pinned them in the browser module's source,
+went with the module.
 
 ## Stamping the loader
 
@@ -47,8 +57,9 @@ The two `.wasm` files carry content hashes; `cartogenesis.js` does not. A new bu
 under new wasm names while the loader keeps its old URL, so a returning visitor with a cached loader
 asks for a wasm hash the deploy has just deleted — a 404 and a dead app, not a stale one.
 
-The site loads `cartogenesis.js?v=<stamp>` and stamps it on every deploy. `:web:assembleSite` does
-the stamping and fails the build rather than shipping an unstamped shell.
+The site loads `cartogenesis.js?v=<stamp>` and stamps it on every deploy. `:desktop:assembleSite`
+does the stamping and fails the build rather than shipping an unstamped shell. With the application
+frozen the loader no longer changes, and a fresh stamp costs a returning visitor one fetch of it.
 
 ## Cloudflare Pages
 
@@ -74,7 +85,7 @@ commands a reader runs and the one-time setup of the signing key.
 
 **The only committed part is `site/apt/conf/distributions`**, which is reprepro's configuration and
 the one part of this a person writes. `dists/`, `pool/` and `key.asc` are written by `reprepro`
-during the deploy, straight into `web/build/site/apt/` rather than into `site/` — every `:desktop:`
+during the deploy, straight into `desktop/build/site/apt/` rather than into `site/` — every `:desktop:`
 test task declares the whole of `site/` as an input, and a pool of 100 MB packages dropped in there
 would be hashed by Gradle on every run. `site/apt/.gitignore` covers a local experiment that writes
 there anyway.
@@ -91,7 +102,7 @@ hard dependency on the releases staying where they are.
 
 **The rebuild runs in `site.yml`, not in `release-linux.yml`**, although the release workflow is
 what produces the `.deb`. A Cloudflare Pages Direct Upload publishes a *whole tree*: whatever is not
-in `web/build/site` at the moment of upload is not on the domain a minute later. A site deploy that
+in `desktop/build/site` at the moment of upload is not on the domain a minute later. A site deploy that
 did not carry `apt/` — a copy change, a hand-run from the Actions tab — would therefore take the
 repository off the site until the next release. Building it in the deploy means every deployment
 carries a complete, current repository, whatever triggered it. `release-linux.yml`'s last job
@@ -110,16 +121,9 @@ Two mechanics that are easy to get wrong:
   passphrase. So the deploy allows loopback pinentry, makes one throwaway signature to put the
   passphrase in the agent's cache, and lets reprepro's own call find it there.
 - **The pool is not uploaded.** Cloudflare Pages refuses files over 25 MiB and a package is about 90, so after reprepro writes the index the deploy deletes `pool/` and appends one `_redirects` rule per package, sending the pool path apt asks for to the same file on its GitHub release. apt follows the redirect and the index's checksums, being of the file's content, still verify. Each deploy keeps one version per package in the index, the newest, which is what apt installs; older versions stay on the release page.
-- Paths are relative, so hosting from a subfolder works unchanged.
-- The `.wasm` MIME type does not matter here: the build instantiates from a buffer rather than
-  streaming.
-- Serve HTTPS. Without it WebGPU is unavailable and the build falls back to the processor silently.
-- `cartogenesis.js.map`, a 1.7 MB source map fetched only when devtools are open, can be deleted
-  from the upload.
-
-Sizes are in the README, measured rather than typed: the assembly measures the loader and the two
-wasm modules it is about to publish and writes the figure into both pages, and `SiteAssemblyTest`
-recomputes it and compares.
+The size of the browser preview's download is measured rather than typed: the assembly measures
+the loader and the two wasm modules it is about to publish and writes the figure into both pages,
+and `SiteAssemblyTest` recomputes it and compares.
 
 ## The PNG encoder, and why it is ours
 
@@ -135,8 +139,8 @@ reader still opens it. `DataExportTest` checks that both paths produce identical
 
 ## One zip, not two downloads
 
-The desktop writes a data export's two files side by side from one save dialog. The browser sends a
-single zip holding both, and that is a decision rather than a shortcut: two downloads from one click
+The desktop writes a data export's two files side by side from one save dialog. The browser preview
+sends a single zip holding both, and that is a decision rather than a shortcut: two downloads from one click
 raises Chrome's unexplained "download multiple files" prompt, and has historically lost the second
 file in Safari, while a heightmap that arrives without its metre scale is a grey rectangle.
 

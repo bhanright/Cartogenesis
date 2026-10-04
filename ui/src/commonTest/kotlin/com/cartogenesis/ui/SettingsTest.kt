@@ -107,10 +107,8 @@ class SettingsTest {
         val platform = FakePlatform()
         val chosen = AppSettings(
             theme = ThemeChoice.MARS,
-            workingResolution = 2048,
             graphicsAccelerationAtLaunch = true,
             exportFormat = ExportFormat.WEBP,
-            exportSize = 4096,
             libraryFolder = "D:/atlas/worlds",
             interfaceScale = 1.3f,
             checkForUpdatesOnLaunch = true,
@@ -148,11 +146,6 @@ class SettingsTest {
 
     @Test
     fun `values out of range are pulled back into it`() {
-        assertEquals(
-            AppSettings.FOLLOW_PLATFORM,
-            SettingsCodec.decode("""{"workingResolution":333}""").workingResolution
-        )
-        assertEquals(1024, SettingsCodec.decode("""{"exportSize":99}""").exportSize)
         assertEquals(1.5f, SettingsCodec.decode("""{"interfaceScale":40.0}""").interfaceScale)
         assertEquals(0.8f, SettingsCodec.decode("""{"interfaceScale":0.01}""").interfaceScale)
     }
@@ -185,25 +178,23 @@ class SettingsTest {
     }
 
     /** The size a fresh world starts at is named by its rows: "1024" is 2048 by 1024 cells. */
+    /**
+     * A fresh world is made on the platform's one grid, named by its rows: "1024" is 2048 by 1024
+     * cells. No preference moves it, and a settings file written when the grid was a choice still
+     * opens, its size read and ignored (docs/DESIGN_LEDGER.md, G1).
+     */
     @Test
-    fun `working resolution decides the grid a fresh world starts at`() {
-        val platform = FakePlatform(defaultResolution = 512)
-        assertEquals(512, SettingsEffects.resolution(AppSettings(), platform))
-        assertEquals(
-            2048,
-            SettingsEffects.resolution(AppSettings(workingResolution = 2048), platform)
-        )
-        val config = SettingsEffects.startingConfig(
-            AppSettings(workingResolution = 1024),
-            platform,
-            seed = 7
-        )
+    fun `a fresh world is made on the platform's one grid`() {
+        val platform = FakePlatform(defaultResolution = 1024)
+        val config = SettingsEffects.startingConfig(AppSettings(), platform, seed = 7)
         assertEquals(2048, config.width)
         assertEquals(1024, config.height)
         assertEquals(1024, Knobs.sizeOf(config))
         assertEquals(7L, config.seed)
-        // The platform's own answer is named the same way.
-        assertEquals(1024, SettingsEffects.startingConfig(AppSettings(), platform, seed = 7).width)
+
+        val older = SettingsCodec.decode("""{"theme":"MARS","workingResolution":2048,"exportSize":4096}""")
+        assertEquals(ThemeChoice.MARS, older.theme, "a settings file that names a grid no longer opens")
+        assertEquals(1024, Knobs.sizeOf(SettingsEffects.startingConfig(older, platform, seed = 7)))
     }
 
     @Test
@@ -225,59 +216,6 @@ class SettingsTest {
                 SettingsEffects.startingConfig(AppSettings(), withCard, 1)
             )
         )
-    }
-
-    /**
-     * The export size's effect. The export format's is what the export row starts on, which only a
-     * running window shows: `SettingsEffectTest` in `:desktop` reads it there.
-     */
-    @Test
-    fun `the default export size is clamped by what this build can finish`() {
-        val big = AppSettings(exportSize = 4096)
-        assertEquals(4096, SettingsEffects.exportSizeWithin(big, ceiling = 4096))
-        // A preference written by a build with a higher ceiling, opened by one without it.
-        assertEquals(2048, SettingsEffects.exportSizeWithin(big, ceiling = 2048))
-    }
-
-    /**
-     * A stored 2048 is brought down to a browser's 1024 on the way in, and said, once.
-     *
-     * The document is what a settings file written before the browser's ceiling was named by rows
-     * reads back as, through the same decoder the application uses. Under the browser's ceiling
-     * the working resolution and the export size both come back as 1024, the fresh world starts
-     * at 1024 rows, and the notice names the size asked for and why; the held document, read
-     * again, has nothing left to say, which is what "once" amounts to, since the application stores
-     * it. Under the desktop's ceiling the same document is untouched and nothing is said. And a
-     * document nobody has touched says nothing anywhere: its sizes are within every host's reach.
-     */
-    @Test
-    fun `a stored 2048 loads as 1024 under a browser's ceiling, with the reason`() {
-        val stored = SettingsCodec.decode(
-            SettingsCodec.encode(AppSettings(workingResolution = 2048, exportSize = 2048))
-        )
-        assertEquals(2048, stored.workingResolution, "the decoder itself moved the size")
-
-        val browser = FakePlatform(ceiling = WorldCeilings.BROWSER_TAB)
-        val held = SettingsEffects.withinCeiling(stored, browser.generationCeiling)
-        assertEquals(1024, held.settings.workingResolution)
-        assertEquals(1024, held.settings.exportSize)
-        assertEquals(1024, Knobs.sizeOf(SettingsEffects.startingConfig(held.settings, browser, seed = 1)))
-        val notice = held.notice ?: fail("a 2048 preference was brought down to 1024 without a word")
-        assertTrue("2048" in notice && "1024" in notice, notice)
-        assertTrue("browser tab" in notice && "desktop app" in notice, notice)
-        assertEquals(null, SettingsEffects.withinCeiling(held.settings, browser.generationCeiling).notice)
-
-        // Even a caller that skipped the clamp gets no world above the ceiling.
-        assertEquals(1024, SettingsEffects.resolution(stored, browser))
-
-        val desktop = FakePlatform(ceiling = WorldCeilings.DESKTOP)
-        val untouched = SettingsEffects.withinCeiling(stored, desktop.generationCeiling)
-        assertEquals(stored, untouched.settings)
-        assertEquals(null, untouched.notice)
-        assertEquals(2048, SettingsEffects.resolution(stored, desktop))
-        // "This platform" is not a size, and is never moved; nor is the default export size.
-        assertEquals(null, SettingsEffects.withinCeiling(AppSettings(), browser.generationCeiling).notice)
-        assertTrue(AppSettings().exportSize <= WorldCeilings.BROWSER_TAB, "a fresh browser is told its default export was brought down")
     }
 
     @Test

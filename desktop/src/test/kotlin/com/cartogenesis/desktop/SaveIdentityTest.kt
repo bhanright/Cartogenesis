@@ -5,11 +5,14 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.DesktopComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.runDesktopComposeUiTest
 import com.cartogenesis.cartography.LibraryEntry
 import com.cartogenesis.cartography.LibraryKeys
@@ -37,7 +40,8 @@ import kotlin.test.assertNull
  * Save read the panel's settings, so during a generation or after a stopped one it filed the world
  * on screen under settings it was not made with. G-D4: Save after Random world wrote the new world
  * over the previous one's file. Each was shown failing with its defect put back: filing the panel's
- * settings recorded a 1024 document with a 512 world, and keeping the document across a change of
+ * settings recorded a 1024 document with a 512 world (when the panel still offered a choice of
+ * grid, which was how this test started a generation; a new seed does it now), and keeping the document across a change of
  * seed recorded the same id twice.
  */
 class SaveIdentityTest {
@@ -58,27 +62,26 @@ class SaveIdentityTest {
             assertEquals(saved.world.config, saved.document.config)
             assertNull(saved.key, "a world never saved was written to a key it did not own")
 
-            // A resolution change starts a generation at once; Save while it runs files the world
-            // still on screen, under that world's settings rather than the panel's new ones.
-            // The resolution chip, not the export button of the same size: the header draws the
-            // chips above the export row, so the chip is the first "1024" in the tree.
-            onAllNodesWithText("1024").onFirst().performClick()
+            // A new seed starts a generation at once; Save while it runs files the world still on
+            // screen, under that world's settings rather than the panel's new ones.
+            val firstSeed = first ?: error("no seed on the map")
+            generateWithSeed(firstSeed + 1)
             save(library, 2)
             val during = library.saves[1]
             assertEquals(during.world.config, during.document.config, "Save filed a world under settings it was not made with")
             assertEquals(saved.document.id, during.document.id, "the same world at the same seed is the same document")
             assertEquals(LibraryKeys.of(saved.document), during.key, "the second Save did not write where the first did")
 
-            // Stopped: the panel keeps 1024 and the map keeps the 512 world, which is the pair the
-            // old Save filed together and could then never open.
+            // Stopped: the panel keeps the new seed and the map keeps the first world, which is the
+            // pair the old Save filed together and could then never open.
             onNodeWithText("Stop").performClick()
             waitUntil(timeoutMillis = GENERATION_TIMEOUT_MS) { onAllStop().isEmpty() }
             save(library, 3)
             val stopped = library.saves[2]
             assertEquals(stopped.world.config, stopped.document.config, "Save after Stop filed the world under the panel's settings")
 
-            // Back to 512, which reuses the world on screen, and then a new world.
-            onNodeWithText("512").performClick()
+            // Back to the first seed, which reuses the world on screen, and then a new world.
+            generateWithSeed(firstSeed)
             waitUntil(timeoutMillis = GENERATION_TIMEOUT_MS) { onAllStop().isEmpty() }
             onNodeWithText("Random world").performClick()
             waitUntil(timeoutMillis = GENERATION_TIMEOUT_MS) { seedOnTheMap().let { it != null && it != first } && onAllStop().isEmpty() }
@@ -95,6 +98,14 @@ class SaveIdentityTest {
         waitForIdle()
         onNodeWithText("Save").performClick()
         waitUntil(timeoutMillis = SAVE_TIMEOUT_MS) { library.saves.size == count }
+    }
+
+    /** Types [seed] into the header's seed field and presses its button, as a reader would. */
+    @OptIn(ExperimentalTestApi::class)
+    private fun DesktopComposeUiTest.generateWithSeed(seed: Long) {
+        onAllNodes(hasSetTextAction()).onFirst().performTextReplacement(seed.toString())
+        waitForIdle()
+        onNodeWithContentDescription("Generate with this seed").performClick()
     }
 
     @OptIn(ExperimentalTestApi::class)

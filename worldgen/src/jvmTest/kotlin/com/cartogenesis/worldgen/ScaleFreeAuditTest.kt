@@ -1,7 +1,6 @@
 package com.cartogenesis.worldgen
 
 import kotlin.test.Test
-import org.junit.Assert.assertTrue
 
 /**
  * The third grid: the same seeds at 2048, against both of the coarser ones.
@@ -11,6 +10,9 @@ import org.junit.Assert.assertTrue
  * derivation of each, are [ScaleFree]'s; what this adds is the longer lever — a quartering of the
  * cell rather than a halving, which is where a metric that is quietly grid-dependent stops being
  * able to hide inside a tolerance.
+ *
+ * Reported rather than asserted ([CrossGridReport]), as [ScaleFreeTest] is: the application makes
+ * one grid (docs/DESIGN_LEDGER.md, G1).
  */
 class ScaleFreeAuditTest {
 
@@ -32,10 +34,10 @@ class ScaleFreeAuditTest {
                 println("SCALEFREE FINDING seed $seed ${rank + 1}. $finding")
             }
         }
-        assertTrue(
-            "the world is not the same world at 512, 1024 and 2048 on a metric this generator" +
-                " was holding: ${complaints.joinToString("; ")}",
-            complaints.isEmpty()
+        CrossGridReport.report(
+            "the same world at 512, 1024 and 2048 measures the same in physical units",
+            complaints.isEmpty(),
+            complaints.joinToString("; ").ifEmpty { "every asserted metric agrees across the three grids" }
         )
     }
 }

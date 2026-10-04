@@ -9,15 +9,12 @@ plugins {
  * Turning a generated world into a picture, without depending on any graphics toolkit.
  *
  * The per-pixel work — hypsometric tints, biome wash, relief shading, coastlines, borders — is
- * plain integer maths over an IntArray, so it is identical on every platform and belongs here.
+ * plain integer math over an IntArray, with no platform in it, and belongs here.
  * The vector overlays are handled by describing them as geometry rather than drawing them, which
  * leaves each platform with only the drawing calls to implement and keeps the decisions shared.
  */
 kotlin {
     jvm { compilerOptions { jvmTarget.set(JvmTarget.JVM_17) } }
-
-    @OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)
-    wasmJs { nodejs() }
 
     sourceSets {
         commonMain.dependencies {
@@ -100,10 +97,6 @@ val auditOnlyClasses = listOf(
 )
 
 /*
- * The per-merge suite's heap and pool are the root build script's budget, and it waits for this
- * project's Wasm tasks for the same project-lock reason `:worldgen`'s build script gives.
- */
-/*
  * T1 (the world cache and the deep tier, 2026-10-01): this module's deep tier, by the stage each entry guards; see the root build
  * script for the tiers and `:worldgen`'s for how the entries are read. Each compares one seed on two
  * grids, one of them the old square grid or 1,024 rows; the comparison's other checks stay.
@@ -126,7 +119,6 @@ fun Test.withPerMergeBudget() {
         "-XX:ActiveProcessorCount=$processors",
         "-Djava.util.concurrent.ForkJoinPool.common.parallelism=$processors"
     )
-    mustRunAfter(tasks.matching { it.name.contains("WasmJs", ignoreCase = true) && !it.name.endsWith("Test") })
 }
 
 tasks.named<Test>("jvmTest") {

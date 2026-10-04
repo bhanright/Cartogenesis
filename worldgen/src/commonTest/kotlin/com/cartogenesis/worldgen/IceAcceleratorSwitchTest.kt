@@ -14,15 +14,13 @@ import kotlinx.coroutines.test.runTest
 /**
  * The ice sheet leaves the processor only when the reader has turned graphics acceleration on.
  *
- * Every host hands the engine its ice device whatever the setting says, as the application, the
- * exports and the browser all do, so the switch has to be read where the device would be called.
+ * Every host hands the engine its ice device whatever the setting says, as the application and the
+ * exports both do, so the switch has to be read where the device would be called.
  * A card rounds its square roots its own way and the sheet's surface is the elevation every later
  * stage reads, so a sheet drawn on one while the switch is off is a different world from the same
  * seed on a machine without one. The device here is a counting fake that answers with a thickness
  * no profile would give, so both halves are visible: whether it was asked, and whether its answer
  * reached the world.
- *
- * Common, so it runs on the JVM and on Wasm, the two engines the application ships.
  */
 class IceAcceleratorSwitchTest {
 

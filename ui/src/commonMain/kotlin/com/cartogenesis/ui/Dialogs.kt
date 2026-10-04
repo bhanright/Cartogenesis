@@ -22,8 +22,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.unit.dp
 
 /**
@@ -55,11 +53,6 @@ internal fun SettingsDialog(
      */
     libraryLocation: String = SettingsEffects.libraryLocation(settings, platform)
 ) {
-    // 1024 in a browser and 2048 on the desktop, for the working resolution and the exports alike;
-    // the chips above it stay in their rows, disabled, and each row's small print says why.
-    val ceiling = platform.generationCeiling
-    val resolutions = Knobs.resolutionChoices(ceiling, platform.heapBytes)
-    val exportSizes = SizeChoice.row(Exports.SIZES, ceiling, platform.heapBytes)
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Settings", style = MaterialTheme.typography.titleLarge) },
@@ -89,32 +82,6 @@ internal fun SettingsDialog(
                     }
                 }
 
-                SettingRow(
-                    "Generation resolution",
-                    "The grid a new world starts at. The world on screen keeps its own." +
-                        reasonsBelow(resolutions)
-                ) {
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        FilterChip(
-                            selected = settings.workingResolution == AppSettings.FOLLOW_PLATFORM,
-                            onClick = {
-                                onSettings(
-                                    settings.copy(workingResolution = AppSettings.FOLLOW_PLATFORM)
-                                )
-                            },
-                            label = { Text("This platform", maxLines = 1) }
-                        )
-                        resolutions.forEach { choice ->
-                            FilterChip(
-                                selected = settings.workingResolution == choice.size,
-                                enabled = choice.enabled,
-                                onClick = { onSettings(settings.copy(workingResolution = choice.size)) },
-                                label = { Text("${choice.size}", maxLines = 1) }
-                            )
-                        }
-                    }
-                }
-
                 // Absent rather than disabled where the host has no graphics API at all, for the
                 // reason [Arrangements.headerKnobs] gives: a phone browser without WebGPU is owed
                 // no explanation of a feature its device does not have, and the header switch this
@@ -137,7 +104,7 @@ internal fun SettingsDialog(
 
                 SettingRow(
                     "Export",
-                    "What the export buttons start as." + reasonsBelow(exportSizes)
+                    "What the export row starts as."
                 ) {
                     ChoiceChips(
                         options = ExportFormat.entries,
@@ -145,19 +112,6 @@ internal fun SettingsDialog(
                         label = { it.label },
                         onSelect = { onSettings(settings.copy(exportFormat = it)) }
                     )
-                    FlowRow(
-                        Modifier.padding(top = 4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        exportSizes.forEach { choice ->
-                            FilterChip(
-                                selected = settings.exportSize == choice.size,
-                                enabled = choice.enabled,
-                                onClick = { onSettings(settings.copy(exportSize = choice.size)) },
-                                label = { Text("${choice.size}", maxLines = 1) }
-                            )
-                        }
-                    }
                 }
 
                 SettingRow(
@@ -247,14 +201,6 @@ internal fun SettingsDialog(
 }
 
 /** A heading, a line of why, and the control. The whole layout vocabulary of the dialog. */
-/**
- * Why each disabled chip of [choices] is disabled, as sentences to follow a row's small print, or
- * nothing when every chip can be pressed. A dialog has no hover to borrow, so the reasons are
- * printed with the row rather than when the pointer finds the chip.
- */
-private fun reasonsBelow(choices: List<SizeChoice>): String =
-    choices.mapNotNull { it.whyOutOfReach }.joinToString("") { " $it." }
-
 @Composable
 private fun SettingRow(title: String, note: String, content: @Composable () -> Unit) {
     Column(Modifier.fillMaxWidth().padding(top = 12.dp)) {
@@ -554,41 +500,5 @@ internal fun SaveAsDialog(initial: String, onDismiss: () -> Unit, onConfirm: (St
             ) { Text("Save") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
-    )
-}
-
-/**
- * [LargeLinks]' question: a link names a world [linkSize] across, above the [defaultSize] this
- * host starts at, and nothing is made until the reader picks one of the two sizes.
- *
- * There is no third way out. Pressing outside the dialog or Escape does nothing, because either
- * would have to mean one of the two answers and neither is safe to assume: a reader who followed a
- * link asked for a world, and closing the question on no world at all would leave a blank window
- * with nothing saying why the link did nothing. The smaller answer holds the focus when the dialog opens, so
- * Enter takes the quick one and Tab reaches the other; both are ordinary buttons with their sizes
- * in their names.
- */
-@Composable
-internal fun LargeLinkDialog(
-    question: String,
-    linkSize: Int,
-    defaultSize: Int,
-    onMakeIt: () -> Unit,
-    onAtDefault: () -> Unit
-) {
-    val atDefaultFocus = remember { FocusRequester() }
-    AlertDialog(
-        onDismissRequest = {},
-        title = { Text("A large world") },
-        text = { Text(question, style = MaterialTheme.typography.bodyMedium) },
-        confirmButton = {
-            TextButton(onClick = onMakeIt) { Text(LargeLinks.makeItLabel(linkSize)) }
-        },
-        dismissButton = {
-            TextButton(onClick = onAtDefault, modifier = Modifier.focusRequester(atDefaultFocus)) {
-                Text(LargeLinks.atDefaultLabel(defaultSize))
-            }
-            LaunchedEffect(atDefaultFocus) { atDefaultFocus.requestFocus() }
-        }
     )
 }

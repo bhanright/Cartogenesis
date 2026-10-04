@@ -15,7 +15,6 @@
 # Built and uploaded by hand from the maintainer's Windows machine.
 Cartogenesis-<version>-windows-portable.zip
 Cartogenesis-<version>.msi
-Cartogenesis-<version>-web.zip
 
 # Built and uploaded by .github/workflows/release-linux.yml.
 Cartogenesis-<version>-linux-amd64.deb

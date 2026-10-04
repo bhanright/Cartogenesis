@@ -1,6 +1,7 @@
 package com.cartogenesis.ui
 
 import com.cartogenesis.cartography.ExportedWorld
+import com.cartogenesis.cartography.SheetGeometry
 import com.cartogenesis.worldgen.WorldGenerationEngine
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
@@ -12,7 +13,10 @@ import com.cartogenesis.worldgen.pipeline.OceanAccelerator
 class ExportSubject(val world: WorldMap, val source: ExportedWorld)
 
 /**
- * What an export at a given size draws, which both front ends ask the same way.
+ * What an export at a given size draws.
+ *
+ * The interface asks only for the world's own size (docs/DESIGN_LEDGER.md, G1); the other sizes
+ * are kept for the exports the tests and the audit tier make at other grids.
  *
  * At the world's own size it is the world on screen, exactly: an opened save, a world made on a
  * graphics card, a world an older build made — whatever is on screen is what is written, and
@@ -53,27 +57,13 @@ object ExportSubjects {
     }
 
     /**
-     * The export row's line about where its pictures come from, for the world on screen made with
-     * [onScreen]: which of [sizes], if any, is that world, and what every other size is — and that
-     * a size is named by its rows, which a picture draws twice as wide, one pixel a cell.
+     * The export row's line about what its button writes for the world on screen made with
+     * [onScreen]: that world itself, one pixel or one sample a cell, at the picture's size.
      */
-    fun note(onScreen: WorldGenConfig, sizes: List<Int>): String {
-        val own = sizes.firstOrNull { isOnScreen(onScreen, it) }
-        return if (own != null) {
-            "At $own, the world's own size, the export is the world on screen. At any other " +
-                "size it is made again from this world's settings and will differ in detail. " +
-                PICTURE_SHAPE
-        } else {
-            "Each size is made again from this world's settings at that size, so it will differ in " +
-                "detail from the ${Knobs.sizeOf(onScreen)} world on screen. " + PICTURE_SHAPE
-        }
+    fun note(onScreen: WorldGenConfig): String {
+        val sheet = SheetGeometry.of(onScreen)
+        return "The export is the world on screen, one pixel a cell: a picture of " +
+            "${sheet.widthPixels} by ${sheet.heightPixels} pixels, the world's true shape, or a " +
+            "data export of ${onScreen.width} by ${onScreen.height} samples."
     }
-
-    /**
-     * What a size means for the file: the rows of the grid, which is twice as many cells across,
-     * each one pixel of a picture and one sample of a data export.
-     */
-    private const val PICTURE_SHAPE =
-        "A size N is a grid of N rows and 2N columns: the picture is 2N by N pixels, the world's " +
-            "true shape, and a data export 2N by N samples, one a cell."
 }

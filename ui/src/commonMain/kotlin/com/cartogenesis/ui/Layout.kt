@@ -45,16 +45,6 @@ internal object Layouts {
     const val COMPACT_BELOW_DP: Float = 800f
 
     /**
-     * The working resolution a compact window starts at, whatever the preference says.
-     *
-     * A phone browser is one thread; 512 takes about forty seconds in a desktop's tab and 1024
-     * about three minutes, which on a phone reads as a hang. A settings file carried over from a
-     * desktop can perfectly well say 2048, and honoring it on a phone would be honoring a
-     * preference into a crash.
-     */
-    const val COMPACT_RESOLUTION: Int = 512
-
-    /**
      * Which arrangement a window of this width, driven by this pointer, gets.
      *
      * The pointer matters independently of the width: a tablet held in landscape is wide enough for
@@ -127,7 +117,6 @@ internal class Reachable(
     val knobs: List<Knob>,
     val styles: List<MapStyle>,
     val views: List<MapView>,
-    val exportSizes: List<Int>,
     /** The picture formats the export row offers: PNG, WebP and JPEG. */
     val pictureFormats: List<ExportFormat>,
     /** The data layers beside them: the heightmap and the two index maps. */
@@ -170,7 +159,6 @@ internal object Arrangements {
         knobs = headerKnobs(platform) + PANEL_SECTIONS.flatMap { Knobs.inSection(it) },
         styles = MapChrome.styles,
         views = MapChrome.views,
-        exportSizes = Exports.SIZES,
         pictureFormats = Exports.PICTURES,
         dataLayers = Exports.LAYERS,
         commands = Menus.file(platform) + MenuCommand.TOOLBAR + Menus.help,
@@ -196,13 +184,12 @@ internal object Arrangements {
      * how far in they are than a percentage does. Nothing else is lost: the ten styles
      * move from a segmented row into a menu, the three menus into one button, and every knob is in
      * the sheet. The export chips are not lost either — both the picture formats and the data
-     * layers are in the sheet's header, at the sizes [Platform.generationCeiling] allows a browser.
+     * layers are in the sheet's header.
      */
     private fun compact(platform: Platform) = Reachable(
         knobs = headerKnobs(platform) + PANEL_SECTIONS.flatMap { Knobs.inSection(it) },
         styles = MapChrome.styles,
         views = MapChrome.views,
-        exportSizes = Exports.SIZES,
         pictureFormats = Exports.PICTURES,
         dataLayers = Exports.LAYERS,
         commands = Menus.file(platform) + MenuCommand.TOOLBAR + Menus.help,

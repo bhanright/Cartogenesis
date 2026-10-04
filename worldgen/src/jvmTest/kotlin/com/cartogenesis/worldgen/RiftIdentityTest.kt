@@ -27,6 +27,10 @@ import kotlin.test.assertTrue
  * erosion. Each rift is compared cell by cell on the ground between each coarser grid and 1,024
  * rows; a cell within a cell width of either grid's join is left out, since a join can fall
  * anywhere inside the cell that holds it at each grid.
+ *
+ * The two clauses that compare grids report rather than fail ([CrossGridReport]): the application
+ * makes one grid (docs/DESIGN_LEDGER.md, G1). The clauses that hold each grid to Earth's bounds
+ * still fail.
  */
 class RiftIdentityTest {
 
@@ -168,7 +172,11 @@ class RiftIdentityTest {
                 }
             }
         }
-        assertTrue(failures.isEmpty(), "a rift is a different rift at another grid: $failures")
+        CrossGridReport.report(
+            "a rift breaks into the same half-grabens at every grid",
+            failures.isEmpty(),
+            failures.joinToString("; ").ifEmpty { "every rift compared agrees" }
+        )
     }
 
     /** The first and last half-graben of every stretch of rift, by its pair and stretch. */
@@ -290,7 +298,11 @@ class RiftIdentityTest {
                 }
             }
         }
-        assertTrue(failures.isEmpty(), "a rift floor floods a different share of its trough at another grid: $failures")
+        CrossGridReport.report(
+            "a rift floor lies below the shoreline over the same share of its trough at every grid",
+            failures.isEmpty(),
+            failures.joinToString("; ").ifEmpty { "every rift compared within its bar" }
+        )
     }
 
     /** Each rift's share of its trough below the plate stage's shoreline, and its length in km. */

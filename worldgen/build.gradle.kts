@@ -6,26 +6,17 @@ plugins {
 }
 
 /**
- * The generation engine is plain Kotlin with no platform dependencies, so it is built for the JVM
- * (which the Android app consumes) and for the browser via Wasm.
+ * The generation engine is plain Kotlin with no platform dependencies, built for the JVM, which the
+ * desktop application runs it on.
  *
- * `commonTest` holds the correctness suite and runs on every target â€” which is what proves the
- * engine really is portable, rather than merely compiling. `jvmTest` holds `DebugMapDump`, which
- * renders PNGs through `java.awt` and so cannot be shared.
- *
- * There used to be a Kotlin/JS target too, kept only for reference: Kotlin/JS routes sin/cos/pow
- * through JavaScript's Math, whose results differ from the JVM in the last bit, which compounds
- * through the FFT and fails the resolution-consistency test, where Kotlin/Wasm matches the JVM
- * exactly. Nothing consumed it once the web build moved to Wasm, so T1 removed it (2026-09-12).
+ * Multiplatform with one target. The engine was built for the browser through Kotlin/Wasm as well
+ * until the browser build was removed (docs/DESIGN_LEDGER.md, G1). The source sets keep their shape:
+ * `commonTest` holds the correctness suite and `jvmTest` what reads files or renders through
+ * `java.awt`, so the engine stays free of platform code even with one platform to run on.
  */
 kotlin {
     jvm {
         compilerOptions { jvmTarget.set(JvmTarget.JVM_17) }
-    }
-
-    @OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)
-    wasmJs {
-        nodejs()
     }
 
     sourceSets {
@@ -311,12 +302,6 @@ val NO_DEEP_CLASS = "com.cartogenesis.NoDeepClassInTheStagesAsked"
  * than once a class. Which classes share a worker is Gradle's choice — it deals them out in the
  * order it finds them and does not look at what they cost — so a world many classes ask for is
  * made at most once in each worker, and how evenly the time falls is left to chance.
- *
- * `mustRunAfter` is for the project lock. Without the configuration cache Gradle runs no two tasks
- * of one project at once, and this one holds the lock for as long as its tests run; the Wasm
- * compilation and package manifests that `:ui` and `:desktop` wait on are tasks of this project,
- * so the rest of the tier used to sit behind the whole of this suite. Ordered after them, the suite
- * starts a moment later and everything else runs beside it.
  */
 /** The per-merge tier's share of the machine, which the deep tier takes too: it is the same work, split. */
 fun Test.withPerMergeBudget() {
@@ -328,7 +313,6 @@ fun Test.withPerMergeBudget() {
         "-XX:ActiveProcessorCount=$processors",
         "-Djava.util.concurrent.ForkJoinPool.common.parallelism=$processors"
     )
-    mustRunAfter(tasks.matching { it.name.contains("WasmJs", ignoreCase = true) && !it.name.endsWith("Test") })
 }
 
 tasks.named<Test>("jvmTest") {

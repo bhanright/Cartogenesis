@@ -17,10 +17,9 @@ class PipelineTest {
         WorldGenConfig.forRows(seed, size)
 
     /**
-     * Two generations of one seed in one process are the same world, on every target this suite
-     * runs on: every stage's per-cell answer that the rest of the pipeline reads, compared array by
-     * array. `WorldFingerprintTest` holds the same property on the JVM over every field reachable
-     * from the world, by reflection; this is the part of it that can be asked on Wasm too.
+     * Two generations of one seed in one process are the same world: every stage's per-cell
+     * answer that the rest of the pipeline reads, compared array by array. `WorldFingerprintTest`
+     * holds the same property over every field reachable from the world, by reflection.
      */
     @Test
     fun `generation is deterministic for a given seed`() = runTest(timeout = 10.minutes) {
@@ -297,10 +296,11 @@ class PipelineTest {
     }
 
     /**
-     * Export re-runs generation at the target size, so a bigger grid has to mean more detail in
-     * the same world — not a different one. Every setting is a length on the ground, so
-     * [WorldGenConfig.atResolution] moves the grid and nothing else; this holds the finished world
-     * to it.
+     * A bigger grid should mean more detail in the same world — not a different one. Every setting
+     * is a length on the ground, so [WorldGenConfig.atResolution] moves the grid and nothing else;
+     * this measures the finished world against it. Reported rather than asserted: the application
+     * makes one grid (docs/DESIGN_LEDGER.md, G1), and a common test cannot see `CrossGridReport`,
+     * so it prints that report's line itself.
      */
     @Test
     fun `world keeps its character when regenerated at a larger resolution`() = runTest(timeout = 10.minutes) {
@@ -308,9 +308,10 @@ class PipelineTest {
         val exported = WorldGenerationEngine.generate(config().atResolution(1024, 512))
 
         val landDelta = kotlin.math.abs(preview.landFraction() - exported.landFraction())
-        assertTrue(
-            landDelta < 0.08f,
-            "land fraction moved from ${preview.landFraction()} to ${exported.landFraction()}"
+        println(
+            "CROSS-GRID ${if (landDelta < 0.08f) "holds" else "departs"} [world keeps its character when " +
+                "regenerated at a larger resolution] land fraction ${preview.landFraction()} at 128 rows and " +
+                "${exported.landFraction()} at 512, against a bar of 0.08"
         )
 
         // Mountain-belt reach is reported rather than asserted, and that is a deliberate

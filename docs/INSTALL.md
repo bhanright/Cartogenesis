@@ -131,20 +131,13 @@ your worlds are not the program's to delete.
 
 ## Browser
 
-> Run Cartogenesis at cartogenesis.com. Nothing is installed and nothing is uploaded. You can also
-> host the web zip yourself over HTTPS.
+> An older browser preview stays online at cartogenesis.com. It is no longer updated; the desktop
+> app is the current version.
 
-[cartogenesis.com](https://cartogenesis.com) runs the whole generator in the page. A recent Chrome,
-Edge, Firefox or Safari will do. The first visit downloads the generator and caches it; nothing you
-make leaves the machine, and worlds are saved to and opened from your own disk.
-
-To host it yourself, take `Cartogenesis-<version>-web.zip` from the release page and unpack it onto
-any static host. Serve it over HTTPS: without a secure context the browser withholds WebGPU and the
-build falls back to the processor without saying so. `docs/DEPLOYMENT.md` has the rest, including
-the one MIME type that matters.
-
-Browser exports are capped below the desktop's, and on phones lower again, because a tab has far
-less memory to work with than an application does.
+[cartogenesis.com](https://cartogenesis.com/app/) still runs the browser version as it was when its
+development stopped: an earlier generator than the desktop app's, in a recent Chrome, Edge, Firefox
+or Safari, with nothing installed and nothing uploaded. The desktop app opens the worlds it saves.
+Releases no longer carry a web zip; the ones that did still offer it on their own release pages.
 
 ## Setting up the apt repository's signing key
 

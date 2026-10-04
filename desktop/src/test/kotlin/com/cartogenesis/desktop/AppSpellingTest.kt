@@ -9,7 +9,7 @@ import kotlin.test.fail
 
 /**
  * That the application speaks American English wherever a reader meets it: every string in the
- * main sources of `:ui`, `:web`, `:desktop` and `:cartography` (labels, style names, prose,
+ * main sources of `:ui`, `:desktop` and `:cartography` (labels, style names, prose,
  * dialogs, messages, the export sidecars' words) and the browser's page shell.
  *
  * Read from the source rather than from the running interface, because the words are spread over
@@ -30,7 +30,7 @@ class AppSpellingTest {
         "cartography/src/commonMain/kotlin/com/cartogenesis/cartography/DataExport.kt" to setOf("colour")
     )
 
-    private val modules = listOf("ui", "web", "desktop", "cartography")
+    private val modules = listOf("ui", "desktop", "cartography")
 
     @Test
     fun `the application's own words are spelled in American English`() {

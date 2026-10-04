@@ -1,15 +1,32 @@
 # To do
 
-- **The WGSL compile check never executes where the tiers run (chunk 5a).** `WgslCompilesTest`
-  asks a device's compiler for every module in `WGSL_MODULES` and prints `WGSL COMPILE CHECK
-  executed` or `skipped`; in this machine's headless Chrome 153 under Karma it skips, because
-  `navigator.gpu` is there and `requestAdapter` gives nothing, and CI's headless Chrome on
-  `ubuntu-latest` has not been seen to do better (read the line in the `:web:wasmJsTest` XML after a
-  CI run). Until a headless adapter is found — a software one launched with WebGPU flags through a
-  Karma custom launcher is the thing to try — only `WgslReservedWordsTest` guards the sources in a
-  tier, and the compiler is asked by hand through `?selftest` in a browser with a device. The ice
-  kernel's new console report of a refused module has likewise been read, not seen: the renamed
-  module compiled on the only device tried.
+- **The desktop's Copy link opens a different world (G1).** File ▸ Copy link to this world writes
+  an address for `cartogenesis.com/app/`, which is now the frozen browser preview: it makes the
+  linked seed and settings with the generator as it stood at 8198db27, so the world it opens is not
+  the one the link was copied from, and the size in the link is honored up to the preview's 1,024.
+  The site's seed reel and its band caption link there too, beside pictures the current engine
+  drew; the page now says the preview's generator is older. Decide whether the desktop should stop
+  offering the command, say what the link opens, or point it somewhere that makes today's world.
+- **The browser-only wording the interface still carries (G1).** G1 removed the browser module
+  and the Wasm targets and kept, on purpose, what a revival would restore onto
+  (docs/WEB_VERSION.md): the `Platform` members a browser implements (`openedAt`, `worldLinkBase`,
+  `BROWSER_TAB`), the `expect` declarations, the suspending accelerator seams, and the data export's
+  one-zip path. Those stay. What could go is wording: the compact arrangement's phone sentences,
+  `FakePlatform`'s browser defaults (512 rows) where a test does not need them, and KDoc that speaks
+  of the browser as a current front end.
+- **The audit tier still makes worlds at 2,048 and 4,096 rows (G1).** The application makes one
+  grid, 1,024 rows, and opens saves of other grids; the audit classes that export, save and draw
+  at 2,048 and 4,096 (`ExportAuditTest`, `SaveResolutionAuditTest`, `GpuExportBenchmarkTest`, the
+  render galleries, `renderSiteImagery`'s figures at 2,048) were written for the ladder. Which of
+  them still earn their minutes is a decision for the budget; the site's figures at 2,048 rows are
+  a picture of a grid the application no longer makes.
+- **`:desktop`'s comments on heap and export sizes (G1).** `desktop/build.gradle.kts` says exports
+  at 4,096 and beyond are the point of the module, and the packaged application's
+  `MaxRAMPercentage` comment reasons from 4,096 and 8,192 exports; neither is offered now.
+- **A deep-tier entry names a method that does not exist.** `worldgen/build.gradle.kts` lists
+  `RiftSegmentationTest.the unsegmented rift fails every one of those` under `plates`, and the class
+  has one test, `a flooded rift's gulfs, bridges and width are reported, segmented and plain`, which
+  therefore runs in the everyday tier. Found during G1.
 - **`--gpu-check` probes the erosion sweeps and the export raster only.** The ocean's and the ice
   sheet's shaders compile on the same context and are not reported; a driver that takes one and
   refuses another would be seen only as a world drawn on the processor.
@@ -343,40 +360,6 @@
   to a cell a pixel (on the ladder as many cells tall as wide it fails: 512 drew two pixels a cell
   across); the two-pixel branch of the sheet stays for such grids and is held by
   `SheetExpansionTest`'s and `GpuRasterTest`'s cases on them. 2026-09-24, Fix A.
-- **How long a phone takes on square cells has not been measured.** The phone's figures were
-  measured on grids as many cells tall as wide (2026-09-12: about twenty seconds at 1024 and 92.7 s
-  at 2048 on a 2026 Qualcomm handset with WebGPU on), when the thermal sweeps the graphics device
-  runs were most of erosion. Since the implicit incision (Fix 3b), which has no graphics-card path,
-  most of a generation is on the processor on every host, and since Q5 a size is named by its rows
-  on a grid twice as wide. `LargeLinks.MEASURED` states the phone's 1024 rows as an estimate, about
-  four minutes, from the desktop tab's 171.6 s with a phone's core taken as up to half again slower,
-  and the compact arrangement's line under the size chips says "expected". What would settle it:
-  open `/app/?seed=42#v=2&size=512` and then `size=1024` on a phone, read the cartouche's "generated
-  in", and put the figures in `LargeLinks.MEASURED` as measured. 2026-09-28, Q5.
-- **A 4096 world cannot be made in a browser tab, so its 8192 by 4096 sheet has never been drawn
-  there.** Tried on 2026-09-25 in Edge 153 on an RTX 3070 Ti (WebGL through ANGLE on Direct3D 11,
-  `MAX_TEXTURE_SIZE` 16,384): the tab's JavaScript heap stood at 1.4 GB five minutes into the
-  generation and 2.7 GB at seven, still wearing down the mountains, and the tab then died before
-  anything was drawn. A 2048 world in the same tab generated in about four minutes (heap peaking
-  near 2.3 GB) and drew its 4096 by 2048 sheet correctly, at 2.9 km a pixel. So the question Fix A
-  left, whether Skia draws an image wider than a device's texture limit (as little as 4,096 on some
-  phones and older integrated graphics), is untested only for the 4096 world, and that world does
-  not get as far as drawing. Not known whether this is new since the ground's ruler or as old as
-  the 4096 chip. 2026-09-25, after Fix A.
-  **The cap is in** (2026-09-25): the browser stops at 2048 for the world on screen and for exports,
-  its 4096 chips shown disabled with the reason, a stored 4096 preference brought down to 2048 with a
-  line saying so, and a 4096 save refused from its header, since its 2.45 GB of arrays is more than
-  the heap the tab died at (`Platform.generationCeiling`, `WorldCeilings.BROWSER_TAB`,
-  `OpeningLimit`). **Still open:** making a 4096 world fit a tab, and then drawing its sheet there,
-  which is the Skia texture-limit question above. When it fits, `WorldCeilings.BROWSER_TAB` is the
-  one number to raise; the browser's opening limit and every size row follow it.
-  **By rows** (2026-09-28, Q5): sizes are named by their rows on grids twice as wide, and the
-  browser stops at 1024 rows (2048 by 1024, 2.1 million cells). Measured in a tab of the production
-  build on the same machine, graphics acceleration off: 1024 rows generated and was drawn in 171.6 s
-  with the tab's JavaScript heap sampled at 1.7 GB at its fullest (512 rows: 36.2 and 39.7 s,
-  0.9 GB). 2048 rows (4096 by 2048, 8.4 million cells, the old 4096's sheet) was not tried in a
-  tab: at the measured heap per cell it wants about 6.8 GB, past the 4 GB a Wasm heap addresses,
-  and its sheet is the one whose drawing is the open question above.
 - **Four grid-shaped marks on seed 718106 at 2048, seen while cutting the site's card pictures.**
   Each breaks rule 13; whether the geometry guard's detectors see them has not been checked:
   - the ice caps end in an edge straight down a column, with a fan of rays off it (the ice's work;
@@ -2076,14 +2059,6 @@
   256 grid and a 512 grid genuinely are different worlds once erosion shapes them. `PipelineTest`
   now reports the figure instead, and `ResolutionScalingTest` pins the contract that actually
   matters. A metric that discriminates the real bug would still be worth having.
-- **Skia is two thirds of the web payload** — 8.4 MB of 12.4 MB raw, 3.2 MB of 4.4 MB on the wire.
-  Nothing the website can do moves the first-visit cost as much as shrinking this would. No obvious
-  lever: it is Compose's renderer, not ours.
-- **The web app does not display properly at mobile resolutions.** Confirmed by the author on a
-  real device 2026-08-25, no longer merely untested. Accepted for now — the site warns small touch
-  screens off rather than blocking them. The interface was laid out for a desktop window: a fixed
-  320px control column either side of the map does not fit a phone, so a real fix is a layout that
-  collapses the panels rather than a tweak.
 - **Match the visual style to the site.** Requested 2026-08-25 for the next version. The app
   currently uses stock Material 3 colours, which sit oddly next to the site it is embedded in. The
   theme is set in one place — `MaterialTheme` in the web and desktop entry points — so this is a

@@ -76,7 +76,9 @@ known failures' signatures. Run the affected tests with `-Precord`, then
 
 Every run of `jvmTest` is the everyday tier: standard worlds only (default settings, 512 rows or
 fewer, one grid per seed). The deep tier — each class's own variants for an on/off control, grid
-comparisons, worlds of 1,024 rows or more — runs with `deepTest`, by stage:
+comparisons, worlds of 1,024 rows or more — runs with `deepTest`, by stage. The application makes
+one grid, 1,024 rows (docs/DESIGN_LEDGER.md, G1), so a grid comparison there reports its figures
+under `CROSS-GRID` rather than failing; the worlds of 1,024 rows are the application's own.
 
     ./gradlew :worldgen:deepTest :cartography:deepTest :desktop:deepTest -Pstages=<stages>
 

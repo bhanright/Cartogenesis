@@ -156,31 +156,26 @@ class SavesAndExportsTest {
     }
 
     @Test
-    fun `the export row says which size is the world on screen`() {
+    fun `the export row says the export is the world on screen, a cell to a pixel`() {
         val at1024 = Knobs.atResolution(WorldGenConfig(seed = 3L), 1024)
-        val at512 = Knobs.atResolution(WorldGenConfig(seed = 3L), 512)
-        val note = ExportSubjects.note(at1024, Exports.SIZES)
+        val note = ExportSubjects.note(at1024)
         println("EXPORT NOTE at 1024: $note")
-        assertTrue("At 1024, the world's own size" in note, note)
-        assertTrue("2N by N pixels" in note, note)
-        assertTrue("from the 512 world on screen" in ExportSubjects.note(at512, Exports.SIZES))
+        assertTrue("the world on screen" in note, note)
+        assertTrue("2048 by 1024 pixels" in note, note)
+        assertTrue("2048 by 1024 samples" in note, note)
     }
 
     /**
-     * Asked of the codec itself, as the grid the panel makes today (as many cells down as across)
-     * and as the grid of square cells the size names by its rows (twice as many across), so that
-     * a bound written as a square of the side cannot pass for the codec's; and the largest size is
-     * the top of the codec's ladder, so raising either alone fails here.
+     * Asked of the codec itself, as the grid of square cells the size names by its rows (twice as
+     * many across), so that a bound written as a square of the side cannot pass for the codec's.
      */
     @Test
-    fun `every working resolution the panel offers is one a save holds`() {
-        val largest = Knobs.RESOLUTIONS.max()
-        assertTrue(WorldCodec.holds(largest, largest), "the panel offers $largest, which a save refuses as too large")
+    fun `the grid the application makes is one a save holds`() {
+        val rows = FakePlatform().defaultResolution
         assertTrue(
-            WorldCodec.holds(WorldCodec.COLUMNS_PER_ROW * largest, largest),
-            "the panel offers $largest rows, whose square cells a save refuses as too large"
+            WorldCodec.holds(WorldCodec.COLUMNS_PER_ROW * rows, rows),
+            "the application makes $rows rows, whose square cells a save refuses as too large"
         )
-        assertEquals(WorldCodec.LARGEST_LADDER_ROWS, largest, "the panel's largest size is not the top of the save's ladder")
     }
 
     @Test

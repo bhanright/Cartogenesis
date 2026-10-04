@@ -2,8 +2,8 @@
 
 What is planned, and roughly in what order. No dates: a release lands when its work is done.
 
-This file is the one place the roadmap is written. `:web:assembleSite` draws the "What comes next"
-table on cartogenesis.com from it at build time, and `SiteAssemblyTest` fails if the page and this
+This file is the one place the roadmap is written. `:desktop:assembleSite` draws the "What comes
+next" table on cartogenesis.com from it at build time, and `SiteAssemblyTest` fails if the page and this
 table disagree, so there is nothing to keep in step by hand.
 
 | Release | What it brings |

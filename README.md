@@ -5,18 +5,19 @@
 [![Nightly audit](https://github.com/bhanright/Cartogenesis/actions/workflows/nightly.yml/badge.svg)](https://github.com/bhanright/Cartogenesis/actions/workflows/nightly.yml)
 
 Cartogenesis generates fantasy world maps from a seed. It models plate tectonics, erosion, climate
-and drainage, then adds realms, peoples and landmarks. The desktop and browser versions share a
-Kotlin Multiplatform engine and a Compose Multiplatform interface.
-
-**Try it** at [cartogenesis.com](https://cartogenesis.com). It runs entirely in the browser and
-uploads nothing.
+and drainage, then adds realms, peoples and landmarks. It is a desktop application for Windows and
+Linux, written in Kotlin with a Compose Multiplatform interface.
 
 **Download it** from the [latest release](https://github.com/bhanright/Cartogenesis/releases/latest):
-a portable Windows zip, an MSI installer, a Debian package and a portable Linux tarball, or the
-browser build as a zip for hosting yourself. Debian and Ubuntu can install and stay up to date from
-an apt repository on the site. The download bundles its own Java runtime; nothing needs to be
+a portable Windows zip, an MSI installer, a Debian package and a portable Linux tarball. Debian and
+Ubuntu can install and stay up to date from an apt repository on the site. The download bundles its own Java runtime; nothing needs to be
 installed first. [docs/INSTALL.md](docs/INSTALL.md) has the steps for each platform, including the
 three apt commands and what to do about the unsigned installer's SmartScreen warning.
+
+An older browser preview stays online at [cartogenesis.com](https://cartogenesis.com/app/). It is
+no longer developed: it runs the generator as it stood when the browser version was frozen, so its
+worlds differ from the desktop app's. [docs/WEB_VERSION.md](docs/WEB_VERSION.md) records what the
+browser version was, how it was built and deployed, and how to bring it back.
 
 ## What you get
 
@@ -26,11 +27,10 @@ three apt commands and what to do about the unsigned installer's SmartScreen war
   satellite-color Natural style, plus a color-blind-safe palette.
 - Interface themes grouped into Standard, Accessible and Styled.
 - Editing of generated names and borders, kept with the world.
-- Save files containing the generated world and your edits, readable by both front ends.
-- Image exports as PNG, WebP or JPEG, drawn at the world's true shape a cell to a pixel — a size is
-  named by its rows, on a grid of square cells twice as many across, so a 2048 world is
-  4096 × 2048 — and data exports (heightmap, biome map, realm map), one sample per cell with JSON
-  sidecars.
+- Save files containing the generated world and your edits.
+- Image exports as PNG, WebP or JPEG, drawn at the world's true shape a cell to a pixel — every world
+  is made on one grid of 1024 rows and 2048 columns of square cells, so a picture is 2048 × 1024 —
+  and data exports (heightmap, biome map, realm map), one sample per cell with JSON sidecars.
 
 MIT licensed; see [LICENSE](LICENSE).
 
@@ -41,18 +41,6 @@ Run the desktop app:
 ```bash
 ./gradlew :desktop:run
 ```
-
-Run the browser build:
-
-```bash
-./gradlew :web:wasmJsBrowserProductionRun
-```
-
-This serves the optimized bundle at http://localhost:8080. Use the production task for interactive
-testing; the development build (`wasmJsBrowserDevelopmentRun`) uses unoptimized WebAssembly and runs
-several times slower. `./gradlew :web:wasmJsBrowserDistribution` writes a static site to
-`web/build/dist/wasmJs/productionExecutable` instead of serving it. The build must be served over
-HTTP: Wasm does not load from `file://`, and WebGPU needs a secure context, which `localhost` is.
 
 While a world is generating, the Generate button reads **Stop**. Selecting it cancels within a
 round of erosion, keeps the previous map on screen, and shows which stage was interrupted. Partially
@@ -65,8 +53,9 @@ declared physical size (`WorldScale`): 12,000 km across, land up to 6,000 m abov
 floor down to 10,000 m below it, and one hydraulic round standing for about 336,000 years
 (`WorldScale.yearsPerHydraulicRound`, 336,476.4, derived from the stream-power constants rather
 than chosen), so twelve rounds are about four million years. Both ends of the vertical range are cell means rather than points — a cell of the
-default grid is 23 km across, and no cell that size holds a summit. Every reach, depth and rate in
-the generator is written in those units and converted to whatever grid the world is generated at.
+grid is 5.9 km across, and no cell that size holds a summit. Every reach, depth and rate in the
+generator is written in those units and converted to the grid the world is generated on, so
+nothing depends on the grid being the one it is.
 
 1. **Terrain.** Seeded Perlin noise produces a gradient field, integrated into a height map by
    Frankot–Chellappa least-squares integration (a 2D FFT). The terrain filter emphasizes relief at
@@ -172,8 +161,7 @@ affect how the map is drawn without changing the generated world.
 - **Generalization.** A sheet draws as much river line per square kilometer of land as a published
   map at its own scale does — measured off Natural Earth's 1:50M and 1:10M river layers and carried
   between scales by Töpfer and Pillewizer's radical law — so the faintest rivers are dropped as you
-  zoom out and return as you zoom in, and the same country looks the same whether the world behind
-  it was generated at 512 or at 2048. A River density slider in the Cartography panel scales that
+  zoom out and return as you zoom in. A River density slider in the Cartography panel scales that
   ink from a quarter of the published figure, which still keeps the largest river, up to every
   river the sheet has room for. The coast is traced as a simplified polyline over the raster.
 - **Graticule.** Lines every ten degrees with figured edges (`40°N`, `170°W`), on screen and on
@@ -183,7 +171,7 @@ affect how the map is drawn without changing the generated world.
   and a pixel covers the same ground either way — quoted at the equator because east–west distance
   on an equirectangular map shrinks with latitude.
 - **True shape.** The world is twice as wide as it is tall on the ground, and its grid is twice as
-  many cells across as down, so a cell is square: 5.9 km a side at 1024, 2.9 km at 2048. Every
+  many cells across as down, so a cell is square: 5.9 km a side on the grid of 1024 rows. Every
   picture — on screen and exported — draws a cell to a pixel, copying its color exactly, and lays
   the ink over it at its own width; data exports keep the grid, one sample per cell, and so have
   the picture's shape.
@@ -194,11 +182,11 @@ they appear identically on screen and in a PNG. The measurements behind them are
 
 ## Exports
 
-Export re-runs the whole pipeline at the target size rather than upscaling the preview, so a larger
-map is more detailed. Every setting of the generator is a length on the ground, a depth or a time,
-converted to cells where each stage reads it, so `WorldGenConfig.atResolution` only changes the
-grid and the same world gains detail; a new setting stated in cells would make exports drift from
-the preview. An export at the size on screen draws the world on screen and is not made again.
+An export is the world on screen, drawn a cell to a pixel: nothing is made again. Every world is
+made on one grid, 1024 rows, so a picture is 2048 × 1024. The generator itself is not tied to that
+grid: every setting is a length on the ground, a depth or a time, converted to cells where each
+stage reads it, so `WorldGenConfig.atResolution` changes only the grid, which the tests use to make
+small worlds and which a choice of planet size will use later.
 
 **Pictures** are PNG, WebP or JPEG. PNG is lossless. WebP is smaller and loses a little detail in
 thin rivers and borders. JPEG is for tools that will not open WebP; it is smaller still and softer.
@@ -224,63 +212,45 @@ the waterline is 0.1831 m and one below it 0.3052 m, so white is +6,000 m and bl
 Land below the waterline is written as it is, not clamped — a basin the sea cannot reach drains out
 into a salt flat below sea level, which on seed 42 at 512 is 497 cells.
 
-In the browser, data exports download as a ZIP containing the PNG and its JSON; this keeps the
-files together and avoids browser restrictions on multiple downloads. Why the PNGs come out of this
-project's own encoder, and why the browser sends one archive rather than two files, are in
-[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+Why the PNGs come out of this project's own encoder is in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
-Generation is most of an export's cost: at 2048, about three and a half minutes of world against a
-few seconds of encoding.
+## The grid, and acceleration
 
-## Resolution, limits and acceleration
-
-The interface offers generation resolutions of 512 to 4096 and exports of 1024 to 8192, each named
-by its rows on a grid of square cells twice as many across: a 1024 world is 2048 × 1024 cells, 5.9
-km a side. Every desktop goes to 2048, which generates in about three and a half minutes. A desktop
-whose heap is at least 17.1 GB, which the packaged app's three quarters of memory gives a machine
-of 23 GB or more, also goes to 4096, which generated in about seventeen minutes with 10.3 GB of its
-heap live; elsewhere the 4096 chip is shown disabled with what the machine lacks. 8192, twice 4096's
-cells, is shown disabled everywhere. The browser goes to 1024, on a phone or a computer, for the
-world on screen and for exports: 1024 generated in a tab in about three minutes with the tab's heap
-at 1.7 GB, and 2048 is four times its cells, more than a Wasm heap addresses at that rate. So the
-larger chips are shown disabled there, a stored larger preference is brought down to 1024 with a
-line saying why, and a larger save from the desktop is refused from its header rather than opened
-into a tab that cannot hold it. One ceiling covers both rows because an export makes the world
-again at its own size; it lives in `Platform.generationCeiling`, with the values, their
-measurements and the 4096 threshold's derivation in `WorldCeilings`. The browser starts at a
-generation resolution of 512 and the desktop at 1024, because a browser tab has one thread and
-generation blocks the page while it runs.
+Every world is made on one grid: 1024 rows and 2048 columns of square cells, 5.9 km a side, which
+generates in about fifty seconds on the processor. The interface offers no other; it used to offer
+512 to 4096 rows, and the browser version went to 1024 (docs/DESIGN_LEDGER.md, G1, for why that
+stopped). A save made at another grid while the grid was a choice still opens, and is drawn and
+exported at its own grid; `Platform.generationCeiling` and `WorldCeilings` still refuse a save the
+machine's memory cannot hold, with the reason.
 
 **Graphics acceleration** is an opt-in toggle in the header and in Settings (as *Graphics
-acceleration at launch*). It runs the erosion sweeps, the ocean-current solve and the ice sheet's
-profile and flow on the graphics device on both platforms, and the export raster on the desktop as
-well (OpenGL compute on the desktop, WGSL in the browser); the panel says which through the
-`Platform` seam. Drawing the map
+acceleration at launch*). It runs the erosion sweeps, the ocean-current solve, the ice sheet's
+profile and flow and the export raster on the graphics device, through OpenGL compute, behind the
+accelerator seams; the panel says what it found through the `Platform` seam. Drawing the map
 runs on the graphics device unconditionally, outside this toggle, because rasterizing pixels makes
 no promise about reproducing a world from its seed. The accelerated erosion agrees with the
 processor to about seven parts in a million but is not bit-identical, so a world generated with
 acceleration stores its terrain in the save (`TerrainSnapshot`) rather than relying on
-regeneration. The browser path can be checked on any machine by loading the web build with
-`?selftest` in the URL.
+regeneration.
 
-Measured timings, and the reasons behind the 8192 limit and the erosion cost, are in
+Measured timings, and the reasons behind the erosion cost, are in
 [docs/PERFORMANCE.md](docs/PERFORMANCE.md), with the machine and date beside each table.
 
 ## Modules
 
-- `:worldgen`: world generation, shared between JVM and WebAssembly.
+- `:worldgen`: world generation.
 - `:cartography`: map rendering and vector-overlay geometry, and the save format. Per-pixel work is
-  plain `IntArray` maths and overlays are described as geometry, so every platform decides alike.
-- `:ui`: the shared Compose Multiplatform interface, including the renderer.
-- `:desktop`: desktop integration, including file dialogs and OpenGL.
-- `:web`: browser integration, including local storage, downloads and WebGPU.
+  plain `IntArray` math and overlays are described as geometry.
+- `:ui`: the Compose Multiplatform interface, including the renderer.
+- `:desktop`: desktop integration, including file dialogs and OpenGL, and the site's assembly.
 
-The two front ends are the same application. What differs arrives through the `Platform` seam:
-where saves live, what export means, whether a graphics device exists.
+What belongs to the host arrives through the `Platform` seam: where saves live, what export means,
+whether a graphics device exists.
 
-`:worldgen` targets **jvm** and **wasmJs**. The correctness suite lives in `commonTest` and runs on
-both; `DebugMapDump` stays JVM-only because it renders through `java.awt`. A third target, **js**,
-was removed in T1; the reason is in [docs/DESIGN_LEDGER.md](docs/DESIGN_LEDGER.md).
+`:worldgen`, `:cartography` and `:ui` are Kotlin Multiplatform modules with one target, the JVM.
+They were also built for the browser through Kotlin/Wasm until G1 removed the browser build; the
+correctness suite still lives in `commonTest`, and what reads files or renders through `java.awt`,
+such as `DebugMapDump`, in `jvmTest`.
 
 ## Building and testing
 
@@ -303,16 +273,8 @@ machine needs rather than what any one machine needs.
 The per-merge tier, which `.github/workflows/ci.yml` runs on every push:
 
 ```bash
-./gradlew :worldgen:jvmTest :worldgen:wasmJsNodeTest
-./gradlew :cartography:jvmTest :cartography:wasmJsNodeTest
+./gradlew :worldgen:jvmTest :cartography:jvmTest :ui:jvmTest
 ./gradlew :desktop:test
-```
-
-The interface's own tests run on the JVM and in a headless browser. CI runs the browser half; run
-both before a merge:
-
-```bash
-./gradlew :ui:jvmTest :ui:wasmJsTest
 ```
 
 The audit tier, run nightly by `.github/workflows/nightly.yml` and on demand:
@@ -339,9 +301,9 @@ audit tasks run one after another rather than side by side, for the memory their
 A timing report — each test task's wall time and the slowest classes — is printed at the end of
 any run that tests.
 
-CI also compares a JVM-versus-Wasm world fingerprint (`WorldFingerprintTest`, read from the test
-runs' own output) and reports a difference as a warning rather than a failure, since saves carry the
-world and the platforms no longer need to agree bit for bit.
+A clause that holds one world to the same answer on two grids prints its verdict and figures under
+`CROSS-GRID` and does not fail (`CrossGridReport` in the shared test support), since the
+application makes one grid; every single-grid guard still fails.
 
 ### Packaging
 
@@ -389,11 +351,9 @@ per-cell array, 146 bytes a cell in all. The payload is cut into one-mebibyte ch
 and checksummed on its own, so a save is written and read a chunk at a time: a 4096 world, 4.9 GB
 of arrays, saves and opens without any array its size existing in between. The header is
 checksummed too, and each chunk's checksum is bound to the header and to the chunk's place, so an
-edited header, or a header put in front of another save's chunks, is found. The browser keeps its
-library in IndexedDB the same way, a mebibyte to a record, or in a folder the reader chose, a
-mebibyte to a write. `WorldCodec` in
-`:cartography` is the whole format, shared by both front ends, with serializers generated from the
-config classes so a new setting cannot go missing from a save.
+edited header, or a header put in front of another save's chunks, is found. `WorldCodec` in
+`:cartography` is the whole format, with serializers generated from the config classes so a new
+setting cannot go missing from a save.
 
 The format is version 14, and only that version opens. A save carries its whole world or it does not
 open: an older or newer file, a truncated one, one whose directory or payload disagrees with this
@@ -408,8 +368,8 @@ override path and a line in `WorldSections` or it will not survive a save.
 
 The desktop keeps saves as ordinary `.cgw` files in `~/.cartogenesis/worlds`, or in the folder
 chosen under Settings ▸ Library folder. Any `.cgw` file in that folder is listed under its own name
-and opens as itself, whatever it is called, so a save downloaded from the browser can simply be
-dropped in. A file that will not open is listed with the reason. A world brought in from a file is
+and opens as itself, whatever it is called, so a save downloaded from the browser preview can
+simply be dropped in. A file that will not open is listed with the reason. A world brought in from a file is
 a new document, so its first Save lands beside any copy already in the library rather than over
 it, and two Saves of one world always leave the later one on disk.
 
@@ -422,76 +382,29 @@ rather than opened as something else. And the copies a client makes when two mac
 world (`world (1).cgw`, `world (conflicted copy).cgw` and the like) are listed as worlds of their
 own, each of which opens, and saves, without touching the other.
 
-In the browser the library starts in the browser's own storage, where clearing the site's data
-removes it. In Chrome and Edge, which offer web pages a folder picker, the Library pane's **Choose a
-folder…** moves it into a folder on your device instead: the same `.cgw` files under the same
-names as the desktop's, so one folder, synced or not, serves both. Firefox and Safari offer no such
-picker; there the library stays in the browser's storage and moves in and out by Download and
-Upload. The browser remembers the folder between visits but asks again before a page may use it,
-so a new visit shows **Reconnect to <folder>** until you click it, and saves nowhere until then.
-**Use this browser's storage** goes back, remembered as a choice of its own, and worlds already in
-the browser's storage can be copied into the folder with one click. A new save is written under a
-temporary name, `.<name>.<token>.tmp`, which most file managers hide, and moved into place whole
-(not the desktop's `~<name>.<token>.tmp`: Chrome refuses a name that begins with a tilde in a
-folder on the disk); a save over an existing file goes through the browser's
-own swap file, committed only when complete. Writes from one tab are made in order; another tab,
-the desktop app or a sync client writing the same folder at the same moment is not ordered against
-it, but a save never leaves half a file, and a new save that finds its name taken takes the next
-free one. Two gaps remain that the browser gives a page no way to close. The name is checked once
-more immediately before the save is put in place, and a file that another program creates under
-that name in the moment between the check and the move is replaced by the save, because a browser
-cannot create a file only if it does not already exist. And in a browser too old to rename files in
-a folder on the disk, the save is copied into its name instead, so an empty `.cgw` with that name
-shows in the folder, and to a sync client, while the copy runs; a file another program writes into
-that name after the copy has checked it is empty, and before the copy starts, is written over, for
-the same reason. Nothing is uploaded anywhere: the
-page reads and writes that folder and nothing else.
-
-Chrome on Android offers the folder picker too, over Android's own storage rather than a directory,
-and two things are weaker there that a page cannot mend. A file cannot be renamed, so every new save
-is copied into its name, the empty `.cgw` showing while the copy runs. And the browser keeps its
-swap file in its own cache and, on close, empties the file and copies the new bytes into it, so a
-save over an existing world that fails partway can leave that file short. A new save is whole
-under its temporary name before it is copied, so when the copy fails that file is kept rather than
-removed, and the failure names it: renamed without its leading dot and ending in `.cgw`, it
-opens. The Library pane shows
-each save, open, delete and copy while it runs, a save with the megabytes written so far, and then
-how it ended, with the browser's own name for any failure (`NotAllowedError` and the like), on a
-phone as on a computer. Opening the app with `?foldertest` in its address, as
-`cartogenesis.com/app/?foldertest`, gives a page instead that takes each of the library's steps in
-a folder you pick, on files of its own named `cartogenesis-folder-check-…` that it removes again,
-and reports what the browser answered to each, as text to copy into a bug report.
+The older browser preview keeps its library in the browser's own storage or, in Chrome and Edge, in
+a folder on the device, as the same `.cgw` files; how it behaves there is as the browser version
+left it, and docs/DESIGN_LEDGER.md has the history. Its saves are format 14 and open in the desktop
+app.
 
 ## Menus, settings and themes
 
 A strip along the top carries **File** (random world, open library, save, save as, export, copy
 link to this world, settings, quit on the desktop), **View** (theme, panel sections, the map toolbar) and **Help** (check for
-updates, report a bug, about). It is drawn in `:ui` so the browser build has it too; the desktop
-binds the usual keystrokes (Ctrl+N, Ctrl+O, Ctrl+S, Ctrl+Shift+S, Ctrl+E, Ctrl+L, Ctrl+comma,
-Ctrl+Q) and the browser binds none, so it never steals Ctrl+S from the tab.
+updates, report a bug, about), with the usual keystrokes (Ctrl+N, Ctrl+O, Ctrl+S, Ctrl+Shift+S,
+Ctrl+E, Ctrl+L, Ctrl+comma, Ctrl+Q).
 
-**Copy link to this world** puts on the clipboard an address that makes the world on screen again
-in the browser: `https://cartogenesis.com/app/?seed=718106#v=2&size=1024&plates=18&style=vellum`.
-The seed is in the query, so `/app/?seed=718106` typed by hand opens that seed at the size and
-settings a fresh window starts with; the rest follows `#`, which a browser never sends to the
-server: the link format's version, the size, and every setting of the world and of the drawing that
-differs from its default. The desktop copies the published address, the browser its own page's. A
-link carries no saved world, no name, no labels and no edits, and neither where the work runs nor
-the river density, which belong to the machine and the reader. Opened, a part the application
-cannot use (a seed that is not a number, a setting it does not know, a value outside its control's
-range) is set aside with one line of status and the rest applies; a size above the browser's
-ceiling is brought down to it with the reason; a link of the first format, whose size counted a grid
-as many cells tall as wide, opens with its size read as rows and a line saying its world differs
-from the one it was copied from; and a link in a format newer than this build's is refused whole
-rather than misread. A link naming a size larger than the one the window starts at
-(512 in a browser, 1024 on the desktop) makes nothing until the reader answers one question: make it
-at the link's size, or open it at the starting size with the link's other settings. The question
-quotes how long that size took where it has been measured on that kind of machine (`LargeLinks`
-holds the figures and their sources) and says so where it has not.
+**Copy link to this world** puts on the clipboard an address for the browser preview:
+`https://cartogenesis.com/app/?seed=718106#v=2&size=1024&plates=18&style=vellum`. The seed is in the
+query and everything else follows `#`, which a browser never sends to the server: the link format's
+version, the size, and every setting of the world and of the drawing that differs from its default.
+A link carries no saved world, no name, no labels and no edits. The preview that opens it runs an
+older generator than the desktop app, so the world it makes from the link is not the one it was
+copied from (docs/TODO.md).
 
 Settings persist through the `Platform` seam as one JSON document
-(`%APPDATA%\Cartogenesis\settings.json` on Windows, local storage in the browser); a document from a
-different build, or a hand-edited typo, opens anyway rather than refusing to start.
+(`%APPDATA%\Cartogenesis\settings.json` on Windows); a document from a different build, or a
+hand-edited typo, opens anyway rather than refusing to start.
 
 Themes come in three groups. **Standard**: System, Light and Dark, on an off-white and a neutral
 charcoal with inks and an accent taken from a map style. **Accessible**: High contrast (black and
@@ -509,25 +422,18 @@ changed settings and opens a pre-filled issue. **About** lists the version, buil
 third-party notices; a Gradle task generates the notices from the build's dependency graph so they
 match what is bundled.
 
-## Deploying the web build
+## Deploying the site
 
-`site/` holds cartogenesis.com: the description page, the loading shell, and Cloudflare Pages'
-`_headers` and `_redirects`. `./gradlew :web:assembleSite` builds the application and assembles the
-site into `web/build/site`; `./gradlew :desktop:siteTest` does that and checks the result.
-`.github/workflows/site.yml` runs both on any pushed `v*` tag, or by hand from the Actions tab, and
-uploads to the Cloudflare Pages project `cartogenesis` using the repository secrets
-`CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`. `site/README.md` covers deploying by hand.
-
-For hosting elsewhere: upload `web/build/dist/wasmJs/productionExecutable` to any static host. It is
-about 16 MB of files, 13 MB of that the loader and the two `.wasm` modules, which gzip to about
-4.6 MB — the figure the site build measures and the figure a visitor waits for. Paths are relative,
-the `.wasm` MIME type does not matter because the build instantiates from a buffer, and HTTPS is
-required for WebGPU.
-
-The loading shell depends on two names in this repository, `VIEWPORT_ID` in the web module's
-`Main.kt` and `hideLoadingMessage()` in `Browser.kt`, and breaking either fails silently.
-`WebDeploymentContractTest` pins both. The reasons, and the loader-stamping the deploy does to avoid
-stale caches, are in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+`site/` holds cartogenesis.com: the description page, the browser preview's loading shell, and
+Cloudflare Pages' `_headers` and `_redirects`. The browser preview itself is no longer built: it is a
+stored copy, `web-frozen.zip` on the GitHub release `web-frozen`, made from the last commit that
+built it. `./gradlew :desktop:assembleSite` lays `site/` over that copy, renders the figures from the
+engine and assembles the site into `desktop/build/site`; `./gradlew :desktop:siteTest` does that and
+checks the result. `.github/workflows/site.yml` downloads the stored copy, runs both on any pushed
+`v*` tag or by hand from the Actions tab, and uploads to the Cloudflare Pages project
+`cartogenesis` using the repository secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.
+`site/README.md` covers deploying by hand, and [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) the loading
+shell and the loader stamping.
 
 ## Documentation
 
@@ -539,7 +445,9 @@ stale caches, are in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 - [docs/PERFORMANCE.md](docs/PERFORMANCE.md): what generation, rendering and export cost, with the
   machine and date beside each table.
 - [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md): how the site is assembled and published, and what the
-  loading shell depends on.
+  browser preview's loading shell depends on.
+- [docs/WEB_VERSION.md](docs/WEB_VERSION.md): the browser version, frozen at the tag `web-frozen`:
+  what it was, how it was built and deployed, and how to revive it.
 - [docs/CONVENTIONS.md](docs/CONVENTIONS.md): the naming and comment rules code here follows.
 - [docs/TODO.md](docs/TODO.md): issues found but not yet scheduled.
 - [ROADMAP.md](ROADMAP.md): planned releases and what each brings.

@@ -237,21 +237,6 @@ private const val DEFAULT_OROGRAPHIC_STRENGTH = 2.0f
  */
 internal object Knobs {
 
-    /**
-     * The sizes a world can be made at, each named by its rows. Powers of two, because the terrain
-     * integrator is FFT-based. 256 rows is a grid the tests make and not a size offered here: at
-     * 23.4 km a cell it is coarser than any map this application draws.
-     */
-    val RESOLUTIONS: List<Int> = listOf(512, 1024, 2048, 4096)
-
-    /**
-     * The working-resolution chips under [ceiling], each with the reason it is out of reach or
-     * none: every one of [RESOLUTIONS], so a browser shows the 2048 it cannot make, disabled,
-     * rather than a row that silently stops at 1024. See [Platform.generationCeiling].
-     */
-    fun resolutionChoices(ceiling: Int, heapBytes: Long? = null): List<SizeChoice> =
-        SizeChoice.row(RESOLUTIONS, ceiling, heapBytes)
-
     fun withSeed(config: WorldGenConfig, seed: Long): WorldGenConfig = config.copy(seed = seed)
 
     /**
@@ -593,69 +578,18 @@ internal object Knobs {
 }
 
 /**
- * What sizes a finished map can be written at, and which of them this build can actually reach.
+ * What the export row offers: the picture formats and the data layers.
  *
- * Declared here for the same reason the knobs are: the ceiling is a *rule*, and a rule drawn only
- * inside a composable can only be checked by looking at it. The rule is that no export ever runs
- * above [Platform.generationCeiling], because an export makes the world again at its size: 8192
- * rows is 134 million cells, twice the world that exhausted a 10 GB heap inside the generator
- * before a pixel was drawn, and 2048 rows is more than a browser tab holds, so their chips are
- * disabled where they cannot finish and any request for them, including one restored from a
- * preference written by an older build, comes back as the ceiling.
- *
- * [clamp] is on the path every export takes rather than only on the button, because a disabled
- * control is a courtesy and not a guarantee: the size that reaches the platform is the one that
- * went through here.
+ * No sizes. An export is the world on screen at its own grid, the one grid the application makes
+ * (docs/DESIGN_LEDGER.md, G1), so there is nothing to choose and nothing to hold to a ceiling.
  */
 internal object Exports {
-
-    /**
-     * The four the row offers, named by rows as the working resolutions are. 1024 is the largest
-     * world a browser tab makes, so without it a browser would have no size to export at, and it
-     * is the desktop's own starting size, where an export is the world on screen and nothing is
-     * made again.
-     */
-    val SIZES: List<Int> = listOf(1024, 2048, 4096, 8192)
 
     /** The picture formats, in the order the chips sit: lossless, small, compatible. */
     val PICTURES: List<ExportFormat> = ExportFormat.entries
 
     /** The data layers: the second kind of export, beside the pictures. */
     val LAYERS: List<DataLayer> = DataLayer.entries
-
-    fun reachable(size: Int, ceiling: Int): Boolean = size <= ceiling
-
-    /**
-     * The largest offered size this build can finish — what an unreachable request falls back to.
-     *
-     * A ceiling below the smallest offered size would leave nothing to fall back *to*, so that
-     * case returns the smallest rather than nothing: a build that cannot manage 1024 has a worse
-     * problem than the export row.
-     */
-    fun clamp(size: Int, ceiling: Int): Int = when {
-        reachable(size, ceiling) -> size
-        else -> SIZES.filter { it <= ceiling }.maxOrNull() ?: SIZES.min()
-    }
-}
-
-/**
- * One chip of a row of sizes: the size, and why it cannot be pressed here, or null when it can.
- *
- * Declared as data for the reason [Knobs] is: which chips are disabled, and what they say, is a
- * rule a test has to be able to read without driving a composition, and the rows draw exactly this.
- */
-internal data class SizeChoice(val size: Int, val whyOutOfReach: String?) {
-    val enabled: Boolean get() = whyOutOfReach == null
-
-    companion object {
-        /**
-         * Every one of [sizes] under [ceiling], on a host whose largest heap is [heapBytes] where
-         * it can say, each with its reason or none. A size out of reach keeps its chip, so the
-         * reader can see where it is and the row does not change width when the ceiling moves.
-         */
-        fun row(sizes: List<Int>, ceiling: Int, heapBytes: Long? = null): List<SizeChoice> =
-            sizes.map { SizeChoice(it, WorldCeilings.whyOutOfReach(it, ceiling, heapBytes)) }
-    }
 }
 
 /**

@@ -918,8 +918,8 @@
 <header class="tray" id="tray" hidden>
   <div class="wrap tray-row">
     <p class="wordmark">Carto<span>genesis</span></p>
-    <a class="btn primary" href="/app/">Try it in your browser</a>
-    <a class="btn secondary" href="#install">Download the app</a>
+    <a class="btn primary" href="#install">Download the app</a>
+    <a class="btn secondary" href="/app/">Browser preview</a>
   </div>
 </header>
 
@@ -935,8 +935,8 @@
       <h1>Build a world from the ground up.</h1>
       <p class="lede">Generate a world map from a seed. Shape its terrain, rivers, climate and borders, then choose a map style and export the result.</p>
       <div class="actions" id="opening-actions">
-        <a class="btn primary" href="/app/" id="launch">Try it in your browser</a>
-        <a class="btn secondary" href="#install" id="launch-desktop">Download the Desktop App (Windows/Linux)</a>
+        <a class="btn primary" href="#install" id="launch-desktop">Download the Desktop App (Windows/Linux)</a>
+        <a class="btn secondary" href="/app/" id="launch">Try the older browser preview</a>
       </div>
       <!-- The world the map above is: its seed, and the application's own link to it.
            SiteSourcesTest holds both to the seed SiteImagery draws the band from. -->
@@ -1327,7 +1327,7 @@
     </div>
 
     <p class="section-lede">
-      Five more worlds, each from a different seed, made at the browser version's starting size and settings. Open any of them to explore it in the app.
+      Five more worlds, each from a different seed, made at 512 rows with the starting settings. Each opens in the older browser preview, whose earlier generator makes it a little differently.
     </p>
 
     <ul class="reel">
@@ -1375,10 +1375,10 @@
       <div><dt>Styles</dt><dd>Twelve map styles, including Atlas, Vellum, Ink wash, Nautical, Pen and ink, Mars, Natural and a color-blind-safe palette.</dd></div>
       <div><dt>Themes</dt><dd>Seventeen interface themes, including light, dark, high contrast and color-blind options.</dd></div>
       <div><dt>Editing</dt><dd>Rename realms, capitals and landmarks, edit their details and notes, and place your own labels. Future updates will add a full atlas system for editing borders, landmarks and labels in more depth.</dd></div>
-      <div><dt>Saves</dt><dd>Save a world and reopen the same file in the browser or the desktop app.</dd></div>
-      <div><dt>Export</dt><dd>Export the map as a PNG, WebP or JPEG image. You can also export the data behind it for other tools: a 16-bit heightmap with its scale in meters, and biome and realm maps with their legends. The desktop app makes worlds up to 2048, whose map images are 4096 × 2048 pixels, and up to 4096 on a computer with 24 GB of memory or more. The browser version, on a phone or a computer, goes up to 1024.</dd></div>
-      <div><dt>Resolution</dt><dd>Choose the world's resolution. Higher settings add detail and need more memory; the browser starts at 512, the desktop app at 1024.</dd></div>
-      <div><dt>Acceleration</dt><dd>Optional graphics acceleration uses the graphics card to speed up erosion, ocean currents and ice sheets, through WebGPU in the browser and OpenGL on the desktop. The desktop app also draws exported maps on the graphics card.</dd></div>
+      <div><dt>Saves</dt><dd>Save a world and reopen the same file later, with your edits and labels.</dd></div>
+      <div><dt>Export</dt><dd>Export the map as a PNG, WebP or JPEG image. You can also export the data behind it for other tools: a 16-bit heightmap with its scale in meters, and biome and realm maps with their legends. The desktop app makes every world at 1024, and its map images are 2048 × 1024 pixels.</dd></div>
+      <div><dt>Resolution</dt><dd>Every world is made on one grid of 1024 rows, each cell about 6 km across.</dd></div>
+      <div><dt>Acceleration</dt><dd>Optional graphics acceleration uses the graphics card to speed up erosion, ocean currents and ice sheets, through OpenGL on the desktop, and the desktop app draws exported maps on the graphics card.</dd></div>
     </dl>
   </section>
 
@@ -1390,18 +1390,17 @@
 
     <div class="practical">
       <div class="panel">
-        <h3>Running it in a browser</h3>
-        <!-- __BUNDLE_MB__ is replaced by :web:assembleSite with the compressed size of the files
+        <h3>The browser preview</h3>
+        <!-- __BUNDLE_MB__ is replaced by :desktop:assembleSite with the compressed size of the files
              a visitor actually fetches to run the generator, measured off the assembled tree. The
              loading shell carries the same token and therefore the same figure. -->
-        <p>Use a recent Chrome, Edge, Firefox or Safari. The first visit downloads the generator, about __BUNDLE_MB__&nbsp;MB, and caches it; nothing you make is uploaded anywhere.</p>
-        <p>Saved worlds stay in the browser's own storage, or, in Chrome and Edge, in a folder on your device that you choose in the Library. The desktop app opens worlds saved in the browser, and the browser opens desktop saves up to 1024.</p>
-        <p>Optional graphics acceleration uses WebGPU where the browser offers it.</p>
+        <p>The browser version is an older preview and is no longer updated: it runs an earlier generator than the desktop app, so its worlds differ from the pictures on this page. For the current version, download the desktop app.</p>
+        <p>The preview runs in a recent Chrome, Edge, Firefox or Safari. The first visit downloads the generator, about __BUNDLE_MB__&nbsp;MB, and caches it; nothing you make is uploaded anywhere. The desktop app opens worlds saved in it.</p>
       </div>
 
       <div class="panel">
         <h3>Sizes, formats and speed</h3>
-        <p>Exporting at a different size builds the world again at that size. The extra detail is newly generated, and small features can differ from the world on screen. Map images are twice as wide as they are tall, so a 2048 world exports as a 4096 × 2048 picture. Larger worlds take longer and use more memory. The browser version makes and exports worlds up to 1024. For larger worlds, use the desktop app.</p>
+        <p>An export is the world on screen, one pixel to a cell. Map images are twice as wide as they are tall, so a world of 1024 rows exports as a 2048 × 1024 picture.</p>
         <p>PNG keeps every pixel. WebP is smaller and softens thin rivers and borders slightly.</p>
       </div>
 
@@ -1436,7 +1435,7 @@
     </div>
 
     <p class="section-lede">
-      Choose your system to see its downloads and how to install them. The browser version needs no installing, but the desktop app makes larger worlds and leverages the GPU more effectively. 
+      Choose your system to see its downloads and how to install them. The desktop app is the current version; the browser preview is an older one, kept online as it was.
     </p>
 
     <div class="dl" id="dl">
@@ -1506,19 +1505,17 @@ sudo apt update &amp;&amp; sudo apt install cartogenesis</code></pre><button typ
             </span>
             <span>
               <span class="dl-name">Browser <span class="dl-tag" hidden>Your system</span></span>
-              <span class="dl-sum">Nothing to install · worlds up to 1024</span>
+              <span class="dl-sum">Older preview · worlds up to 1024</span>
             </span>
           </button>
           <div class="dl-body" id="dl-browser">
             <div class="dl-files">
-              <a class="dl-file first" href="/app/">Try it in your browser</a>
-              <a class="dl-file" href="/releases/latest" data-asset="Cartogenesis-&lt;version&gt;-web.zip">Web zip, to host yourself</a>
+              <a class="dl-file first" href="/app/">Try the older browser preview</a>
             </div>
-            <p>Runs in a recent Chrome, Edge, Firefox or Safari. Nothing is installed, and nothing you make is uploaded. Your worlds are saved in a folder you choose, as the same file format the desktop app uses.</p>
+            <p>An older preview, no longer updated: it runs an earlier generator than the desktop app. It runs in a recent Chrome, Edge, Firefox or Safari; nothing is installed, and nothing you make is uploaded.</p>
             <ul class="dl-notes">
-              <li>Makes worlds up to 1024 in the browser; the desktop app goes to 2048, or 4096 with 24 GB of memory.</li>
-              <li>On a phone, worlds generate at 512 by default, and 1024 works.</li>
-              <li>To host it yourself, serve the web zip's contents over HTTPS.</li>
+              <li>Makes worlds up to 1024; on a phone, worlds generate at 512 by default.</li>
+              <li>The desktop app opens worlds saved in the preview.</li>
             </ul>
           </div>
         </div>

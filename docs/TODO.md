@@ -60,11 +60,8 @@
     by what they did to the culture guard's figures on the capped worlds: set to make worlds pass.
     An Earth figure for the share of a river's load its delta keeps would derive the first.
   - `ErosionConfig.outletIncisionRatio` (1.125) was chosen on the largest lake at three grids,
-    also to make worlds pass. On the law's terrain the notch left seed 99 a lake 2.1 times the
-    Caspian's share and the fill 82% as deep as the control's; once a lake falls with its outlet
-    seed 99's lake is under the Caspian's share, seeds 718106 and 7 keep more than half their
-    water, and the fill stands 82.5% as deep (`OutletIncisionTest` records both).
-    Whether a knickpoint should cut harder than an ordinary reach at all is the question.
+    also to make worlds pass. It went with the notch at E1b: a lake's outlet is cut by the implicit
+    pass with the lake's surplus as its discharge, at the law's own rate.
   2026-09-25, Fix 3b.
 
 - **The channel network the implicit incision leaves grows denser on a finer grid, and the round's
@@ -828,8 +825,9 @@
   and if a lake of three hundred cells can honestly carry a 20-cell straight edge then the bar's
   `STRAIGHTEST_SHORE_OVER_A_CIRCLE` wants re-deriving against Earth's straightest *small* lake rather
   than against Tanganyika. 2026-09-14, F30.
-- **The post-cut outlet takes a deep sill down in one bite, and the slot it leaves is drawn as
-  water.** F30's second body, on the tree as it stood at 00b13fe; S2b's flood repair has since moved
+- **Closed 2026-10-04 by E1b: the pass is gone, a basin the ocean cannot reach being land to the
+  rounds, whose implicit pass cuts its outlet on its surplus.** *The post-cut outlet took a deep sill
+  down in one bite, and the slot it left was drawn as water.* F30's second body, on the tree as it stood at 00b13fe; S2b's flood repair has since moved
   the drowned basins this was measured on and both of F30's canals are gone with them, so the numbers
   below are a record of the mechanism rather than of anything on the map today. The mechanism is
   untouched and will do the same thing again wherever a drowned basin has a deep sill. On seed 364673 at
@@ -1385,6 +1383,58 @@
   read again with the channel heads on the bed (E1c): the peak is no longer in humid country on any
   seed, and seed 7's humid country carries 1.01 times the channel of its semi-arid country where
   Moglen, Eltahir and Bras have it below one (`EarthLikenessTest`, recorded). 2026-10-04, E1c.
+- **The drawn relief has no graphics-card path.** `DrawnRelief`'s dissection is per-cell
+  arithmetic (Gabor kernels oriented down each cell's slope, read through the error function),
+  computed on the processor once a world and handed to both rasters as their elevation, so the card
+  and the processor shade the same surface. By the GPU rule it is the next kernel behind
+  `RasterAccelerator`, held to this answer; E1d's closure kernel behind `ErosionAccelerator` was
+  skipped with the web module going away, and is noted there. 2026-10-04, E1c.
+- **A closed lake's inflows grade to its brim inside the rounds.** The rounds take each lake's
+  evaporation out of what leaves it (`LakeOutlets`), so a lake that keeps all it is sent cuts no
+  outlet, but its level is not solved there: the incision reads the fill's brim as the lake's
+  surface, so its inflows grade to a level the lake does not stand at, and the floor between the
+  water and the brim is treated as under water. The rivers stage solves the level
+  (`LakePockets`). How much of a closed basin's fill this leaves uncut is not measured.
+  2026-10-04, E1b.
+- **The rivers stage wets a lake's cells whole, at their ground.** The rounds read a lake's wet
+  area off each cell's hypsometry (`GroundClosure.floodedShare`); the rivers stage counts a cell
+  under the lake once the water reaches its ground, where half of it and more is wet, which is the
+  same curve's midpoint taken as a step, because the bed's share is not carried past the erosion.
+  The two agree on the mean and part at a lake's margin. 2026-10-04, E1c.
+- **The tropics hold more desert again.** `GeographyAuditTest`'s pooled 0-15 degree band reads
+  x0.68 of its land as desert against Earth's x0.27 and a bar of twice that, on E1b's ground
+  (x0.58 on E1a's, under the bar at E1a round 2): recorded. Not traced; the rounds' lakes and the
+  water the ocean cannot reach move the ground the provisional climate reads. 2026-10-04, E1b.
+- **Seed 42's coast reads under Richardson's floor by ruler.** `LittoralCoastTest`'s per-seed
+  ruler reads 1.074 against the floor of 1.10 on E1b's ground, recorded under the coast's
+  smoothness on the two heights' ground; the pooled box count is 1.055. A candidate not traced: the
+  rounds now route the water the ocean cannot reach as land, so the small coastal hollows the
+  rounds once graded to as sea are filled and cut through. 2026-10-04, E1b.
+- **Pen and ink's strokes stand 31.1 degrees from the fall line.** Over the 30-degree bar
+  (`PenAndInkTest`), the strokes laid on the land with the bed under its rivers and lakes and
+  without the dissection; whether the one-cell grooves turn them is not traced. Recorded.
+  2026-10-04, E1c.
+- **The drawn dissection folds a level line into a hairpin.** The geometry guard's new layer, the
+  drawn relief's level lines, is clean on every detector but one crease on 42 at 512 rows, 7.11
+  against the rough natural bar of 6.15, a 178-degree turn at (820, 201) (`GeometryFindings`,
+  recorded). The bearings are even (1.04, 1.00, 1.06 and 0.99 of their neighbours on seed 42).
+  2026-10-04, E1c.
+- **The lakes' sizes no longer follow Downing's law.** `EarthLikenessTest` reads the pooled
+  lake-size exponent 0.469 over 86 lakes against Downing and others' 1.06 plus or minus 0.34: since
+  a lake is each piece of water standing over its ground (E1c), one basin's water can be several
+  lakes, and more of them are small. Recorded. 2026-10-04, E1c.
+- **The grooves through the spoil leave a few channel pits.** With the spoil re-entrained above
+  its feeders, the laying of it puts no hole in a river's bed on seeds 7 and 42 at 512 rows
+  (`OutletIncisionTest`), but the grooves cut through it afterwards (`openMouths`) leave three on
+  each (`RoundMass.channelPits`, the closing slot). 2026-10-04, E1b.
+- **The geometry guard's lake layer was not shown catching the ground's ruled bar.** The bar the
+  rivers stage's fill over the ground made on seed 42 at 512 rows is found by `StraightRunTest`'s
+  census, which now carries it as its control; the census in `:cartography` was not run on that
+  world. 2026-10-04, E1c.
+- **Two sampled cases lost what they sample.** `LakeWaterBalanceTest`'s wet basin on seed 37 is 78
+  cells on E1b's ground, under the 200 its case needs, and `GlaciationLatticeTest`'s resolution
+  contract on 718106 at sea 0.70 keeps too little water to compare; both recorded, each to be
+  re-picked by its own scan. 2026-10-04, E1b.
 - **The D8 octave, averaged over the grid's real configurations.** `GroundClosure.NETWORK_RELIEF_PER_OCTAVE`
   is derived for a straight trunk crossing a 2-by-2 block, a half of `E / K'` an octave. A turning
   trunk leaves one side cell (a quarter) and a source block three round an outlet (about 0.85), and

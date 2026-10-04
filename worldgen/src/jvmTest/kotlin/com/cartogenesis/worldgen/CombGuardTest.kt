@@ -98,7 +98,7 @@ class CombGuardTest : BorrowsSharedWorlds() {
         // Recorded on the two heights' ground (E1a), the cause not isolated: seed 42's flanks carry
         // a comb down the columns three times the comb along the rows, on the network the river
         // stage draws on the ground until it draws on the bed (E1c).
-        KnownFailures.expect(ONE_SIDED_COMB_ON_THE_GROUND, "seed 42 0.11 down a column and 0.04 along a row") {
+        KnownFailures.expect(ONE_SIDED_COMB_ON_THE_GROUND, "seed 42 0.12 down a column and 0.05 along a row") {
             if (oneSided.isNotEmpty()) {
                 throw RecordedViolation(
                     "the flanks are combed along one axis over $AXIS_FACTOR times the other, in km of comb per 1000 km2 of " +
@@ -227,7 +227,7 @@ class CombGuardTest : BorrowsSharedWorlds() {
             "the square cell: the flanks carry a comb of straight parallel gullies on both axes alike, seven to ten times the router's own"
 
         /** Re-recorded at L1, whose rifts are Earth's half-grabens and the same at every grid (docs/DESIGN_LEDGER.md, L1). */
-        const val RECORDED = "seed 7 0.08 down a column and 0.07 along a row; seed 42 0.11 down a column and 0.04 along a row"
+        const val RECORDED = "seed 7 0.08 down a column and 0.09 along a row; seed 42 0.12 down a column and 0.05 along a row"
 
         /**
          * The grid the guard is taken on, [SharedWorlds.DETAIL_ROWS]: square cells, 1,024 by 512,

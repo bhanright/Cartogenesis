@@ -1434,7 +1434,8 @@
   census, which now carries it as its control; the census in `:cartography` was not run on that
   world. 2026-10-04, E1c.
 - **Two sampled cases lost what they sample.** `LakeWaterBalanceTest`'s wet basin on seed 37 is 78
-  cells on E1b's ground, under the 200 its case needs, and `GlaciationLatticeTest`'s resolution
+  cells on E1b's ground and 97 once the rivers cross the drowned channels, under the 200 its case
+  needs, and `GlaciationLatticeTest`'s resolution
   contract on 718106 at sea 0.70 keeps too little water to compare; both recorded, each to be
   re-picked by its own scan. 2026-10-04, E1b.
 - **A lowland's trunks lie below today's sea far inland.** The rounds cut the trunks to the

@@ -23,6 +23,10 @@ import com.cartogenesis.worldgen.pipeline.NationResult
  * fit — and the caller falls back to the CPU, which remains the reference. So is *declining*: an
  * accelerator that has not implemented some view or pass must return null for it rather than draw
  * something else.
+ *
+ * The recipe's elevation is [DrawnRelief]'s, computed on the processor before either path draws, so
+ * both shade the same surface. Its dissection is per-cell arithmetic and is the next kernel to join
+ * this seam, held to the processor's answer (docs/TODO.md, E1c).
  */
 interface RasterAccelerator {
 

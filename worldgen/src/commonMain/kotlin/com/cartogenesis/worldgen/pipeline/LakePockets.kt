@@ -213,7 +213,10 @@ internal class LakePockets private constructor(
          * [cells] are the basin's cells, [byGround] the same cells packed by [FlowRouting.encode] and
          * sorted, so equal ground falls to the lower index on every platform. [localIndex] is scratch,
          * one entry per cell of the grid, all -1 on entry and left all -1. [rainMm] and
-         * [evaporationMm] are per cell of the grid. The basin must be one eight-connected piece, as
+         * [evaporationMm] are per cell of the grid. [ground] is each cell's mean ground, the level at
+         * which the cell counts as under the lake (the midpoint of its own hypsometry's wetting,
+         * `GroundClosure.floodedShare`); a cell of the basin whose ground stands above [brim] never
+         * floods, its bed alone lying below the brim. The basin must be one eight-connected piece, as
          * the lakes' basins are.
          */
         fun build(

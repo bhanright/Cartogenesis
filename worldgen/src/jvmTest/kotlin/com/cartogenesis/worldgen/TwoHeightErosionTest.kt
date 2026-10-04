@@ -225,6 +225,6 @@ class TwoHeightErosionTest {
         const val BELT_FLOOR = 100.0
 
         const val BELTS_BELOW_EARTH = "E1a: the active belts lower slower than Earth's"
-        const val BELTS_RECORD = "belts at 84.3 m/Myr"
+        const val BELTS_RECORD = "belts at 87.7 m/Myr"
     }
 }

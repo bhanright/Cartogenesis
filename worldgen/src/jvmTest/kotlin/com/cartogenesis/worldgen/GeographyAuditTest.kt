@@ -426,21 +426,15 @@ internal class DesertBands {
 
     fun assertAgainstEarth(seeds: List<Long>) {
         val complaints = report(seeds, "AUDIT BAND", everyBand = false)
-        // Every clause asserted from Fix 3b; the pooled tropical one left its bar again on the two
-        // heights' ground (E1a) and is recorded with its figure until the stages after erosion read
-        // the bed (docs/DESIGN_LEDGER.md, Fix 3b and E1a).
-        KnownFailures.expect(TROPICAL_DESERT_ON_THE_GROUND, "pooled tropics x0.58") {
-            if (complaints.isNotEmpty()) {
-                throw RecordedViolation(
-                    "desert sits in the wrong latitudes against Earth's Koeppen BW shares (0-15 deg 5.2% " +
-                        "of that band's land, 15-45 deg 39.2%, 45-90 deg 2.2%, all Earth's land 19.1%; " +
-                        "see DesertBands for the derivation): $complaints",
-                    complaints.joinToString("; ") { complaint ->
-                        Regex("pooled 0-15 deg at x([0-9.]+)").find(complaint)?.let { "pooled tropics x" + it.groupValues[1] } ?: complaint
-                    }
-                )
-            }
-        }
+        // Every clause asserted from Fix 3b. The pooled tropical one left its bar on E1a's ground and
+        // was recorded; back under it once a slope's head reads its base's lowering (E1a round 2),
+        // it is armed again (docs/DESIGN_LEDGER.md, Fix 3b, E1a and E1a round 2).
+        assertTrue(
+            complaints.isEmpty(),
+            "desert sits in the wrong latitudes against Earth's Koeppen BW shares (0-15 deg 5.2% " +
+                "of that band's land, 15-45 deg 39.2%, 45-90 deg 2.2%, all Earth's land 19.1%; " +
+                "see DesertBands for the derivation): $complaints"
+        )
     }
 
     private fun judge(
@@ -481,5 +475,3 @@ internal class DesertBands {
     private fun pct(v: Double) = "${"%.2f".format(v * 100)}%"
 }
 
-/** The pooled tropical desert clause, recorded on the two heights' ground (docs/DESIGN_LEDGER.md, E1a). */
-private const val TROPICAL_DESERT_ON_THE_GROUND = "E1a: the tropics hold more desert on the two heights' ground"

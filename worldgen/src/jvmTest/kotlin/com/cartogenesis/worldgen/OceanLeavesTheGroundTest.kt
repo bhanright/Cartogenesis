@@ -38,7 +38,8 @@ class OceanLeavesTheGroundTest : BorrowsSharedWorlds() {
      * 55 km across: the plates' partition held and their
      * height, uplift and age moved with everything built on them. Re-taken at E1a, whose two heights
      * moved the erosion and the sea and whose re-derived uplift moved the plates' rates, the plates'
-     * height held. An ocean change that leaks into
+     * height held, and at its second round, which moved the erosion and the sea alone. An ocean
+     * change that leaks into
      * the ground moves them.
      * A chunk meant to move the ground re-takes them here, as the render records are re-taken.
      * At [SharedWorlds.DETAIL_ROWS], whose standard worlds the detail guards generate anyway, so
@@ -70,12 +71,12 @@ class OceanLeavesTheGroundTest : BorrowsSharedWorlds() {
             "plates.continentalShare" to 711069935001870004L,
             "plates.upliftRateMmPerYear" to -5671693104175984468L,
             "plates.crustAge" to 4850336704889317196L,
-            "erosion.height" to -3464322674259207421L,
+            "erosion.height" to -2842046028512012145L,
             "erosion.sweptOnDevice" to -358906410940142731L,
-            "sea.shorelineHeight" to -1052027402221991168L,
-            "sea.isLand" to 7156300629036362970L,
-            "sea.relativeElevation" to -47087748711425215L,
-            "sea.landCellCount" to 7295456909385191317L
+            "sea.shorelineHeight" to -6045999282143408246L,
+            "sea.isLand" to -2704413591031093327L,
+            "sea.relativeElevation" to 7269706305185342219L,
+            "sea.landCellCount" to 6867388847342632308L
         )
     }
 }

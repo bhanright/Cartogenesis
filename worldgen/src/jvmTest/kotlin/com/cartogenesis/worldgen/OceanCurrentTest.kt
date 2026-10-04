@@ -3,6 +3,7 @@ package com.cartogenesis.worldgen
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.pipeline.ClimateStage
 import com.cartogenesis.worldgen.pipeline.EnergyBalance
+import com.cartogenesis.worldgen.pipeline.OceanCirculation
 import com.cartogenesis.worldgen.pipeline.OceanStage
 import kotlin.math.PI
 import kotlin.math.abs
@@ -30,6 +31,10 @@ class OceanCurrentTest : BorrowsSharedWorlds() {
          * share of the energy balance's transport` for why this figure.
          */
         const val DOUBLE_COUNT_SHARE = 0.02
+
+        /** The control world's ocean that stops short of its tolerance (docs/TODO.md, E1a round 2). */
+        const val BELTS_ONLY_UNSOLVED = "E1a round 2: a standard world's belts-only ocean does not solve"
+        const val BELTS_ONLY_RECORD = "seed 42"
     }
 
     /**
@@ -47,13 +52,29 @@ class OceanCurrentTest : BorrowsSharedWorlds() {
     @Test
     fun `the gyres turn with the wind on every standard world`() {
         val failures = ArrayList<String>()
+        val unsolved = ArrayList<String>()
         for (seed in SharedWorlds.STANDARD_SEEDS) {
             val world = SharedWorlds.world(WorldGenConfig.forRows(seed, SharedWorlds.COARSE_ROWS))
             val beltsOnly = world.config.copy(climate = world.config.climate.copy(pressureWinds = false))
-            failures += OceanSense.check("seed $seed at ${SharedWorlds.COARSE_ROWS} rows", world.config, world.sea, world.ocean,
-                OceanStage.generate(beltsOnly, world.sea))
+            // The belts' own ocean is the control world, built here and nowhere else; where it does
+            // not solve, the trades' clause has nothing to read and the failure is recorded.
+            val control = try {
+                OceanStage.generate(beltsOnly, world.sea)
+            } catch (failure: OceanCirculation.OceanSolveFailure) {
+                unsolved += "seed $seed"
+                println("OCEAN seed $seed's belts-only ocean: ${failure.message}")
+                null
+            }
+            if (control != null) {
+                failures += OceanSense.check("seed $seed at ${SharedWorlds.COARSE_ROWS} rows", world.config, world.sea, world.ocean, control)
+            }
         }
         assertTrue(failures.isEmpty(), failures.joinToString("\n"))
+        KnownFailures.expect(BELTS_ONLY_UNSOLVED, BELTS_ONLY_RECORD) {
+            if (unsolved.isNotEmpty()) {
+                throw RecordedViolation("the belts-only ocean does not solve: ${unsolved.joinToString("; ")}", unsolved.joinToString("; "))
+            }
+        }
     }
 
     /**

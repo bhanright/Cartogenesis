@@ -371,7 +371,7 @@ internal class GroundCells(cellCount: Int, initialGround: FloatArray) {
      * Each cell's [baseLoweringMetresPerYear] is set to the rate its foot lowered at against the
      * rock this round, which is what the head rule reads next round: a channel foot's trunk cut
      * ([bedCut], per unit of a cell's area in the field's units), the sea's as the rock rises past it
-     * ([upliftMetres], this round's uplift in metres, null where nothing rises), nothing at a lake's
+     * ([upliftMetresPerYearAt], the rock's uplift rate at a cell, null where nothing rises), nothing at a lake's
      * surface, which rises and falls with the ground that holds it. A slope creeps far too slowly at
      * the grid's lengths to keep up with a foot that lowers, so the foot steepens it from the bottom
      * up, and that is where a channel head forms.
@@ -385,7 +385,7 @@ internal class GroundCells(cellCount: Int, initialGround: FloatArray) {
         cellsUpstream: FloatArray,
         ground: FloatArray,
         bedCut: DoubleArray,
-        upliftMetres: FloatArray?,
+        upliftMetresPerYearAt: ((Int) -> Double)?,
         shorelineHeight: Float,
         landHalfOfField: Float,
         ruler: Ruler,
@@ -407,7 +407,7 @@ internal class GroundCells(cellCount: Int, initialGround: FloatArray) {
                 !isLand[receiver] -> {
                     foot = shorelineHeight
                     distance = stepMetres
-                    if (upliftMetres != null) baseLoweringMetresPerYear[cell] = (upliftMetres[cell] / ruler.years).toFloat()
+                    if (upliftMetresPerYearAt != null) baseLoweringMetresPerYear[cell] = upliftMetresPerYearAt(cell).toFloat()
                 }
                 isChannel[receiver] -> {
                     foot = bed[receiver]

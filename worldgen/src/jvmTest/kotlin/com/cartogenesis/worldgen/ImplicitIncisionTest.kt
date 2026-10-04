@@ -23,7 +23,7 @@ import kotlinx.coroutines.runBlocking
  * The incision is Braun and Willett's implicit update, and the stream-power law and not a limiter
  * sets every cut (`HydraulicErosion.incise`).
  *
- * Four claims, each shown failing on the explicit update chunk 3 left (the cut capped at half the
+ * Five claims, each shown failing on the explicit update chunk 3 left (the cut capped at half the
  * drop) or on a deliberately wrong update, with the figures in docs/DESIGN_LEDGER.md, Fix 3b:
  * - **the bounds and the eligibility**, on production's rounds and on a fixture: no cell the pass
  *   moves ends below the level it grades to or above where it stood, no river mouth below the sea,
@@ -38,7 +38,9 @@ import kotlinx.coroutines.runBlocking
  *   rocks in one landscape, across two uplift rates, and across two rain zones, where the law puts
  *   it at `U / (K sqrt(P))` in the rain's normalised weight;
  * - **a knickpoint retreats as far north-south as east-west**, on the ground, in a round and in two
- *   rounds of half the time.
+ *   rounds of half the time;
+ * - **the round's steps hold every cut to the exact decay**, within `MAX_ROUND_CUT_ERROR`, where a
+ *   single step leaves a cell near `F` 1.6 a fifth short (docs/DESIGN_LEDGER.md, E1a round 2).
  */
 class ImplicitIncisionTest {
 
@@ -61,6 +63,12 @@ class ImplicitIncisionTest {
          */
         const val SMALL_COURANT = 0.1
         const val LARGE_COURANT = 10.0
+
+        /**
+         * How many times a cell's height may be rounded to a float in a round: once for each of the
+         * most steps the stage's criterion asks of any round, whatever its `F`, and once more.
+         */
+        val ROUNDINGS_A_ROUND = HydraulicErosion.subStepsFor(1e-6, 1e6) + 1.0
 
         /** The decay fixture's drop to the sea, in metres. */
         const val DECAY_DROP_METRES = 100.0
@@ -248,13 +256,14 @@ class ImplicitIncisionTest {
                 // the round deepens after the cell has spent most of its steps above it. Where the
                 // law's cut clears the half by less than two float steps of the height, the
                 // rounding of one cell's result can land either side of it, so those cells are
-                // counted and not judged.
+                // counted and not judged; a cell's result is rounded once a step, so the margin is
+                // a float step for each of the most steps the stage's criterion ever asks of a round.
                 if (courantAt[cell] > 1f && before > baseBeforeAt[cell]) {
                     largeCourant++
                     val courant = courantAt[cell].toDouble()
                     val drop = before.toDouble() - baseBeforeAt[cell].toDouble()
                     val margin = (courant / (1.0 + courant) - 0.5) * drop
-                    if (margin < 2.0 * Math.ulp(before)) tooCloseToJudge++
+                    if (margin < ROUNDINGS_A_ROUND * Math.ulp(before)) tooCloseToJudge++
                     else if (before.toDouble() - after.toDouble() <= 0.5 * drop) wrong("cut no more than half its drop at F over one")
                 }
                 if (base < baseBeforeAt[cell]) {
@@ -262,13 +271,14 @@ class ImplicitIncisionTest {
                     if (before <= baseBeforeAt[cell]) {
                         madeEligible++
                         // The law cuts `F / (1 + F)` of the drop to the receiver's new height, and
-                        // where that is under one float step of the height the rounding leaves the
-                        // cell where it stood; such cells are counted and not judged, as the half-
-                        // drop clause's are (seed 42 at 256 rows has one since L1: a drop of 1 mm
-                        // at 11,292 m of the field, where a step is 0.95 mm).
+                        // where that is under a float step of the height for each step the round
+                        // may be spent in, the roundings leave the cell where it stood; such cells
+                        // are counted and not judged, as the half-drop clause's are (seed 42 at 256
+                        // rows has one since L1: a drop of 1 mm at 11,292 m of the field, where a
+                        // step is 0.95 mm).
                         val courant = courantAt[cell].toDouble()
                         val lawCut = courant / (1.0 + courant) * (before.toDouble() - base.toDouble())
-                        if (lawCut < Math.ulp(before)) tooCloseToJudge++
+                        if (lawCut < ROUNDINGS_A_ROUND * Math.ulp(before)) tooCloseToJudge++
                         else if (after >= before) wrong("left standing after its receiver was cut below it")
                     }
                 }
@@ -417,7 +427,7 @@ class ImplicitIncisionTest {
      * The stage's count of steps holds a round's cut to the exact decay's within
      * [HydraulicErosion.MAX_ROUND_CUT_ERROR]: one cell draining to the sea from 100 m, whose exact
      * decay over the round keeps `exp(-F)` of its drop, incised in the count
-     * [HydraulicErosion.incisionSubSteps] reads off it, at `F` from a tenth to three hundred. A
+     * [HydraulicErosion.incisionSubSteps] reads off it, at `F` from a tenth to three thousand. A
      * single step, the update before the round was divided, is the control: it leaves the cell at
      * `F` 1.6 a fifth short.
      */
@@ -454,7 +464,7 @@ class ImplicitIncisionTest {
         }
         val readings = ArrayList<String>()
         var worst = 0.0
-        for (courant in listOf(0.1, 0.5, 1.0, 1.6, 3.0, 10.0, 30.0, 300.0)) {
+        for (courant in listOf(0.1, 0.5, 1.0, 1.6, 3.0, 10.0, 30.0, 300.0, 3_000.0)) {
             val (short, steps) = shortfall(courant, null)
             worst = maxOf(worst, short)
             readings += "F %.1f in %d steps %.4f short".format(courant, steps, short)

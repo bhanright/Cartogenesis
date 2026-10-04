@@ -233,6 +233,7 @@ val deepClassesByStage: Map<String, List<String>> = mapOf(
     "erosion" to listOf(
         "com.cartogenesis.worldgen.DeltaMouthTest",
         "com.cartogenesis.worldgen.ErosionScaleTest",
+        "com.cartogenesis.worldgen.GroundClosureBenchmarkTest",
         "com.cartogenesis.worldgen.ReceiverClampTest",
         "com.cartogenesis.worldgen.RibbonLandTest",
         "com.cartogenesis.worldgen.ValleyIncisionTest",

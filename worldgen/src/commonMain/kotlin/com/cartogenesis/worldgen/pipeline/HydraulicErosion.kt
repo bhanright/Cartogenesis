@@ -740,9 +740,6 @@ internal object HydraulicErosion {
         val bedCut = DoubleArray(cellsAcross * cellsDown)
         val production = DoubleArray(cellsAcross * cellsDown)
         var bedsHeldUnderGround = 0
-        // The rock each cell gained this round, in metres: the rate a slope running to the sea
-        // sees its base fall at (see [GroundCells.closeHillslopes]).
-        val upliftThisRoundMetres = if (upliftRateMmPerYear != null) FloatArray(cellsAcross * cellsDown) else null
         // The closing breach and the post-cut outlet pass route over surfaces the rounds never
         // routed over, each with its own shoreline, so each takes its own normalisation.
         val spoilRunoff = FloatArray(cellsAcross * cellsDown)
@@ -783,6 +780,17 @@ internal object HydraulicErosion {
         val upliftedMetres =
             if (flexure != null && upliftRateMmPerYear != null) FloatArray(cellsAcross * cellsDown)
             else FloatArray(0)
+        // The rate the rock under a cell rises at, in metres a year, as the uplift above spends it:
+        // the rate a slope running to the sea sees its base fall at (see
+        // [GroundCells.closeHillslopes]). Read off the rate field where asked, not kept per cell.
+        val upliftMetresPerYearAt: ((Int) -> Double)? = upliftRateMmPerYear?.let { field ->
+            { cell ->
+                val rate = field.data[cell]
+                if (rate <= 0f) 0.0
+                else rate / MILLIMETRES_PER_METRE *
+                    elevationLimit.upliftShareAt(scale.altitudeAtField(working.data[cell])).toDouble()
+            }
+        }
         val loadDensity = config.isostasy.continentalCrustDensity
         val gravity = config.isostasy.gravity
 
@@ -885,10 +893,9 @@ internal object HydraulicErosion {
             // the weight; what is left over is the surface uplift, and in a belt at steady state
             // the rivers take that away too.
             var upliftedThisRound = 0.0
-            if (upliftRateMmPerYear != null && upliftThisRoundMetres != null) {
+            if (upliftRateMmPerYear != null) {
                 val rate = upliftRateMmPerYear.data
                 val surface = working.data
-                upliftThisRoundMetres.fill(0f)
                 for (cell in surface.indices) {
                     if (rate[cell] <= 0f) continue
                     val altitude = scale.altitudeAtField(surface[cell])
@@ -897,7 +904,6 @@ internal object HydraulicErosion {
                     if (metres <= 0f) continue
                     surface[cell] += metres / metresPerFieldUnit
                     cells.bed[cell] += metres / metresPerFieldUnit
-                    upliftThisRoundMetres[cell] = metres
                     if (upliftedMetres.isNotEmpty()) upliftedMetres[cell] += metres
                     upliftedThisRound += metres.toDouble()
                 }
@@ -1153,7 +1159,7 @@ internal object HydraulicErosion {
             cells.closeChannels(groundOf, bedCut, erodibility, runoff, ruler, production)
             cells.closeHillslopes(
                 cellsAcross, isLand, filledBed, directions, order, cellsUpstream.data, groundOf, bedCut,
-                upliftThisRoundMetres, sea.shorelineHeight, landRange, ruler, production
+                upliftMetresPerYearAt, sea.shorelineHeight, landRange, ruler, production
             )
             for (cell in production.indices) incised += production[cell]
             if (carryingSediment) {
@@ -2617,13 +2623,14 @@ internal object HydraulicErosion {
      * How far short of the exact decay `subSteps` implicit steps leave a cell's cut over a round,
      * as a share of the exact cut, for a cell whose receiver holds still: the exact decay keeps
      * `exp(-F)` of the drop and the steps keep `(1 + F / subSteps)^-subSteps`, so the shortfall is
-     * `((1 + F / n)^-n - exp(-F)) / (1 - exp(-F))`. Written with `expm1` and `ln1p` so a small `F`
-     * keeps its digits.
+     * `((1 + F / n)^-n - exp(-F)) / (1 - exp(-F))`. Written as `kept (1 - exp(-F) / kept)` with
+     * `expm1` and `ln1p`, so a small `F` keeps its digits and a large one, whose two shares both
+     * underflow, reads nothing short rather than nought times infinity.
      */
     internal fun roundCutError(courantNumber: Double, subSteps: Int): Double {
         if (courantNumber <= 0.0) return 0.0
         val logKept = -subSteps * ln1p(courantNumber / subSteps)
-        val shortfall = exp(-courantNumber) * expm1(courantNumber + logKept)
+        val shortfall = exp(logKept) * -expm1(-(courantNumber + logKept))
         return shortfall / -expm1(-courantNumber)
     }
 

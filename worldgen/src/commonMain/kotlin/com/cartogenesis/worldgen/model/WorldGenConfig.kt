@@ -101,9 +101,9 @@ data class WorldScale(
      *
      * Written to a tenth of a year, which is not precision anybody could defend about a landscape:
      * it is the figure at which the coefficient the stage computes lands on the same float it has
-     * always held. A round of erosion is chaotic in its own last bit —
-     * `ErosionConfig.outletIncisionRatio` records the largest lake on a seed jumping by a factor of
-     * two between neighbouring rates — so a rate that is a millionth off is a different world.
+     * always held. A round of erosion is chaotic in its own last bit — the outlet notch it once had
+     * moved the largest lake on a seed by a factor of two between neighbouring rates
+     * (docs/DESIGN_LEDGER.md, E1) — so a rate that is a millionth off is a different world.
      */
     val yearsPerHydraulicRound: Double = 336_476.4
 ) {
@@ -112,8 +112,8 @@ data class WorldScale(
      * The altitude, in metres, of a **land** cell standing at [relativeElevation].
      *
      * The land's half of the ruler. A land cell can stand below the waterline — ice carves troughs
-     * into ground the coastline has already been drawn around, and a drowned basin's outlet is cut
-     * below it — and such a cell keeps the land's scale rather than crossing to the sea's, because
+     * into ground the coastline has already been drawn around, and a basin the sea cannot reach
+     * has its floor below it — and such a cell keeps the land's scale rather than crossing to the sea's, because
      * which half a cell belongs to is a question about `SeaLevelResult.isLand` and not about the
      * sign of a float.
      */
@@ -847,7 +847,7 @@ data class TectonicsConfig(
      *
      * Giving the floor relief *within* itself was likewise written, measured and reverted: the
      * floor is not the plane it looks like, and every amplitude tried put a closed sub-basin below
-     * the sea-level cut that the post-cut outlet cannot open. `RiftDepthTest` and
+     * the sea-level cut that no outlet then opened. `RiftDepthTest` and
      * `RiftDepthAuditTest` are what is left of that — the measurements, without the change. See
      * docs/DESIGN_LEDGER.md, E7, for the figures.
      */
@@ -1572,34 +1572,6 @@ data class SeaConfig(
      */
     val enclosedSeaMaxKm2: Double = 52_560.0,
     /**
-     * Whether a basin the cut converts from unreachable sea to land gets its outlet cut, once,
-     * after the cut.
-     *
-     * [enclosedSeaIsLand] hands the river stage a hollow whose floor lies below sea level, and the
-     * depression fill then raises it to its lowest rim — which can be a good deal wider than the
-     * water that was there. On seed 718106 at 512 one such basin came out at 0.62% of the land,
-     * two and a half times the Caspian's share of Earth's, and at 2048 the same trough held a
-     * Caspian-shaped lake against a coastal rift. Neither of the two mechanisms that size the other
-     * lakes can reach it: `ErosionConfig.outletIncision` runs inside the hydraulic rounds, while
-     * that ground is still under the provisional sea, so there is no lip for it to cut and no
-     * outflow to cut with; and `LakesConfig.waterBalance` cannot drain a floor that is already
-     * below sea level, because there is nowhere for the water to go.
-     *
-     * So the notch is run once more on the far side of the cut, with the same stream power, the
-     * same [ErosionConfig.outletIncisionRatio] and the same units — see
-     * `SeaLevelStage.drainDrownedBasins`. One limit is lifted: inside the rounds the notch may
-     * never cut below the sea, which is the base level a river grades to, but the water behind one
-     * of these sills stands *below* the sea and the river flowing over the sill is grading to
-     * that. So the cut may reach the waterline, and where the outflow has the power to take it
-     * there, the sill becomes water and the basin is an arm of the sea — a sound, or a ria with a
-     * narrow mouth, which is the Bosphorus and the Black Sea. Where it has not, the sill stands and
-     * the basin keeps whatever the water balance then allows it: a lake below sea level, which is
-     * the Caspian, the Dead Sea and the Qattara.
-     *
-     * Off is the control the guard needs: the drowned basins keep whatever sill they were left.
-     */
-    val postCutOutlet: Boolean = true,
-    /**
      * Whether the waves are allowed to put the coast back in order after the sea has finished
      * rising.
      *
@@ -2307,98 +2279,6 @@ data class ErosionConfig(
      * 0.008 of 6,000 m are 24 m and 48 m.
      */
     val deltaFreeboardMetres: Float = 48f,
-    /**
-     * Whether the outflow from a filled basin is allowed to cut its own lip down.
-     *
-     * Every round fills the hollows so the water has somewhere to go, and the routing then runs
-     * over the filled surface — which means the lip of a basin is the one piece of ground the
-     * water never touches, and a tectonic hollow stays a lake the size of the hollow for the whole
-     * life of the world. That is backwards. A basin filled to its rim overflows, the overflow has
-     * a knickpoint at the lip, and the lip gives way: Bonneville emptied through Red Rock Pass in
-     * weeks and left Great Salt Lake, and Agassiz drained through one outlet after another as each
-     * in turn cut down. A lake is sized by the resistance of its outlet, not by the size of its
-     * basin.
-     *
-     * Off is the control the guard needs: a basin stays the size of its own hollow, for ever.
-     */
-    val outletIncision: Boolean = true,
-    /**
-     * How much harder the water cuts at a basin's outlet than it does in an ordinary channel, as a
-     * multiple of the same stream-power coefficient.
-     *
-     * Expressed as a ratio rather than as its own rate because it is the same stream power in the
-     * same form — the discharge through an outlet is the basin's whole catchment, which flow
-     * accumulation has already routed through that cell, and the slope is the one the channel below
-     * the lip stands at. What the multiplier says is that a knickpoint is not an ordinary reach: the
-     * flow over a lip is concentrated into a notch rather than spread across a valley floor, it is
-     * falling over a step rather than running down a grade, and the lip is the one place on the
-     * network where every round's fill hands the water a fresh head to work with.
-     *
-     * Three, and the honest thing to say about the number is that the landscape it acts on is
-     * chaotic in it: measured at three, four, six and eight on seven seeds at 512, the largest lake
-     * on a given seed jumps by a factor of two between neighbouring rates, because which basin ends
-     * up largest changes. Three is chosen on the measurement that does not wander — the same world
-     * at 512, 1024 and 2048 — where it holds the largest lake to within 1.33x on seed 59758 and
-     * 1.01x on seed 42 and under the Caspian's share of the map at every grid. Six clears every
-     * seed at 512 and then leaves seed 59758 a lake of 0.122% of the map at 1024, which is the
-     * defect this rate exists to prevent.
-     *
-     * The number has moved twice, and both moves were the same kind of thing: the *unit* under it
-     * changed and the multiplier absorbed the change, so that the notch went on cutting what it had
-     * been cutting. It was one until the rate was expressed against the land's own relief rather
-     * than against the height field, and rose to three with that change, because the old units
-     * divided it by the range of the land — a different number at every grid, and what made the
-     * largest lake grow threefold from 512 to 2048. It is now 1.125, because the ordinary incision
-     * has been given a unit too: both rates are the one coefficient
-     * [com.cartogenesis.worldgen.pipeline.HydraulicErosion.incisionCoefficient] derives from K and
-     * the time step, and the notch's is charged in shoreline-relative units where the ordinary
-     * cut's is charged on the height field. Three of the old rate is 1.125 of the new one, exactly:
-     * 3 * highestLandMetres / reliefSpanMetres, or 3 * 6,000 / 16,000.
-     *
-     * What that arithmetic exposes is worth saying plainly, because it was invisible while the two
-     * rates were written in different units. Converted to a single ruler, a knickpoint has been
-     * cutting about 1.1 times as hard as an ordinary reach and not three times — and against the
-     * height field, where the ordinary cut is actually spent, about nine tenths as hard. The
-     * physical claim the number is supposed to make is not the claim it was making.
-     *
-     * Re-examined when the implicit incision replaced the capped explicit one (docs/DESIGN_LEDGER.md,
-     * Fix 3b). The notch is still an explicit cut, 1.125 times the law's rate at the lip bounded by
-     * the basin's depth and the sea, while the ordinary reach below it now loses `F / (1 + F)` of its
-     * drop, the law's steady state and not a limiter's. The ratio was chosen on a measurement of the
-     * largest lake at three grids, which is setting a value to make worlds pass and not an Earth
-     * figure, and nothing here derives it. On the law's terrain the notch leaves seed 99 a lake
-     * twice the Caspian's share and the fill 82% as deep as without it (`OutletIncisionTest`).
-     * Whether a knickpoint should cut harder than an ordinary reach at all, and by how much, is
-     * recorded as open in `TODO.md`.
-     */
-    val outletIncisionRatio: Float = 1.125f,
-    /**
-     * How far below the lip the notch is cut, in kilometres.
-     *
-     * Fifteen hundred, which is sixty-four cells of the default grid — a long reach, and it has to
-     * be, for the reason below.
-     *
-     * The lip cannot fall further than the ground immediately below it, so cutting the lip alone
-     * buys one step and then stops: the spill is by construction the *lowest* point on the rim, and
-     * the ground just beyond a saddle is gentle. Cutting the channel with it is what lets the notch
-     * grade toward the steeper ground further down and keep deepening round after round, which is
-     * what a knickpoint retreating upstream actually does.
-     */
-    val outletReachKm: Double = 1_500.0,
-    /**
-     * Whether the notch's channel gradient counts the step into the water the outflow empties into.
-     *
-     * It has to, where the sill runs level all the way to that water: the walk that measures the
-     * fall stops on the last cell of land, so what it reads there is the epsilon the depression
-     * fill nudges a flat by, which is not a small gradient but the absence of one — no stream
-     * power, and a sill that stands for the life of the world however large the catchment behind
-     * it. Only where the walk found no fall the fill did not put there, so an outlet that measured
-     * a real gradient is untouched. See `HydraulicErosion.breach`.
-     *
-     * Off is the rule this replaced, kept as the control `OutletIncisionTest` measures against and
-     * the renders are drawn against; a guard that has only ever been green proves nothing.
-     */
-    val outletFallToTheWater: Boolean = true,
     /**
      * Whether a delta is built as a lobe — sloping seaward from its apex, reaching out in front of
      * its river, and made only of cells the load could lift clear of the water.
@@ -3129,8 +3009,8 @@ data class WorldGenConfig(
      * Whether the water's direction is taken from the steepest triangular facet, with the one
      * receiver drawn across it, rather than snapped to the steepest of the eight neighbours.
      *
-     * Top level rather than inside a section because four stages route water — erosion, the
-     * post-cut outlet inside the sea-level step, glaciation and rivers — and the rule is the same
+     * Top level rather than inside a section because several stages route water — erosion, the
+     * drowned valleys inside the sea-level step, glaciation and rivers — and the rule is the same
      * rule for all of them. Off is the plain steepest-neighbour rule the generator used until F18,
      * kept as the control the straight-bar census is measured against; see
      * [com.cartogenesis.worldgen.pipeline.FlowRouting.flowDirections] for what it does and why.

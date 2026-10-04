@@ -124,7 +124,9 @@ object ErosionStage {
         /** See `HydraulicErosion.incise`: every cell the incision reached, for its guards. */
         incisionWatch: IncisionWatch? = null,
         /** See [GroundWatch]: both heights and the closure, round by round, for their guards. */
-        groundWatch: GroundWatch? = null
+        groundWatch: GroundWatch? = null,
+        /** See `HydraulicErosion.apply`: only ever false in the lake outlets' own guard. */
+        lakeEvaporation: Boolean = true
     ): ErosionResult {
         if (!config.erosion.enabled) return ErosionResult(height)
 
@@ -144,7 +146,7 @@ object ErosionStage {
         return ErosionResult(
             HydraulicErosion.apply(
                 config, weathered.height, config.seaLevel, upliftRateMmPerYear, onRound, log,
-                receiverClamp, weightSums, shieldCut, incisionWatch, groundWatch
+                receiverClamp, weightSums, shieldCut, incisionWatch, groundWatch, lakeEvaporation
             ) { field ->
                 thermalErosion(config, field, accelerator, sweepsPerRound).height
             },

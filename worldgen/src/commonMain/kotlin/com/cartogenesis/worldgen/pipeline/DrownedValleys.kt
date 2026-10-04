@@ -29,8 +29,7 @@ import kotlin.math.sqrt
  * path for per-cell arithmetic and says in the same breath that "work that is a graph walk, a
  * priority queue or a region labelling stays on the CPU and the spec says so" — this is both of
  * those and nothing else, so it stays. It is an eighth of the sea-level stage at that grid and a
- * hundredth of a generation. If it ever needs to be cheaper, the routing it wants is the routing
- * `SeaLevelStage.drainDrownedBasins` computes eight lines earlier and throws away.
+ * hundredth of a generation.
  *
  * Not a change to the erosion. The lowstand's incision is right and the estuaries it makes are the
  * point of it; what is wrong is that a channel a kilometre wide is written into a cell twelve

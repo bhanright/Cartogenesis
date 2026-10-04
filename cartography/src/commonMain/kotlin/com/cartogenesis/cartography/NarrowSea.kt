@@ -9,10 +9,9 @@ import kotlin.math.floor
  * The traced coast is stroked centred on the boundary between land and sea, so half its pen falls
  * on the water, and a channel has a shore on each side. Where the channel is no wider than one
  * whole pen, the two halves meet and nothing of the water is left: it is drawn as a near-black
- * line. That is the channel the drowned-basin breach cuts from an inland arm of the sea to the
- * coast (`SeaLevelStage.drainDrownedBasins`), which on seed 1 at 2048 runs along the southern foot
- * of the east-west range, and it is every inlet a drowned valley leaves up a sunken coast, each
- * inked into a tuft. See docs/DESIGN_LEDGER.md, the water-colors row.
+ * line. That was the channel the drowned-basin breach once cut from an inland arm of the sea to
+ * the coast, which on seed 1 at 2048 ran along the southern foot of the east-west range, and it is
+ * every inlet a drowned valley leaves up a sunken coast, each inked into a tuft. See docs/DESIGN_LEDGER.md, the water-colors row.
  *
  * So a sea cell is open only when it belongs to some block of sea wider than one pen both ways on
  * the sheet, and a sea cell in no such block is a bank to the coast: the ink runs round the open

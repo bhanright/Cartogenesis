@@ -4,10 +4,9 @@ package com.cartogenesis.worldgen.pipeline
  * Whether turning one cell of water into land would cut the water around it in two.
  *
  * Both passes that move the shoreline after the sea-level cut need this and neither can do without
- * it, because nothing downstream can undo an enclosure either of them makes:
- * [SeaLevelStage.drainDrownedBasins] runs before both and only on the basins the percentile drowned,
- * and `ErosionConfig.outletIncision` ran two stages earlier. A bay one of them sealed would be a
- * lake below sea level for good.
+ * it, because nothing downstream can undo an enclosure either of them makes: the outlets of the
+ * basins the enclosure rule makes land are cut inside the hydraulic rounds, two stages earlier. A
+ * bay one of them sealed would be a lake below sea level for good.
  *
  * The test is the digital-topology one for a simple point, on the eight-connected water the rest of
  * this generator uses. The water in the ring of eight neighbours, read round the cell, either forms

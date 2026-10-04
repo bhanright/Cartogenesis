@@ -107,6 +107,10 @@ internal class GroundCells(cellCount: Int, initialGround: FloatArray) {
     fun bedRiseFor(cell: Int, volume: Double, ground: FloatArray): Double =
         GroundClosure.bedRiseForFill(volume, bedShare[cell].toDouble(), reliefAboveBed(cell, ground))
 
+    /** How much of [cell] is under water standing [riseOfBed] over its bed, on its hypsometry as the ground now stands. */
+    fun floodedShare(cell: Int, riseOfBed: Double, ground: FloatArray): Double =
+        GroundClosure.floodedShare(riseOfBed, bedShare[cell].toDouble(), reliefAboveBed(cell, ground))
+
     /** The fill that raises [cell]'s bed from [heldRise] above it to [heldRise] + [rise]. */
     fun fillToRaiseBed(cell: Int, heldRise: Double, rise: Double, ground: FloatArray): Double {
         val share = bedShare[cell].toDouble()

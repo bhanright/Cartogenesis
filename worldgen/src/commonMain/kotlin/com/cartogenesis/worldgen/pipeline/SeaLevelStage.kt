@@ -42,10 +42,12 @@ data class SeaLevelResult(
  *
  * The shoreline is a percentile over the height field — `seaLevel = 0.62` puts 62% of the cells
  * under water — found from a histogram rather than a sort, so that dragging the sea-level slider
- * stays fast at export resolutions. Three rules then run on top of that one cut, each with its own
+ * stays fast at export resolutions. Rules then run on top of that one cut, each with its own
  * switch in [SeaConfig] and its own function below: water the ocean cannot reach becomes land
- * ([markUnreachableWaterAsLand]), a basin drowned that way has its outlet cut
- * ([drainDrownedBasins]), and the sea floor near a coast is remapped onto a continental shelf.
+ * ([markUnreachableWaterAsLand]), the coast is drawn at what the grid can hold, and the sea floor
+ * near a coast is remapped onto a continental shelf. A basin the enclosure turns into land is
+ * land to the hydraulic rounds too, which cut its outlet as they cut every lake's (see
+ * [enclosedCut]).
  *
  * The background — what each rule is modelling, what it was measured against, and what was tried
  * and reverted on the way — is in `GEOGRAPHY.md` and in [SeaConfig]'s own documentation. See
@@ -84,40 +86,6 @@ object SeaLevelStage {
     internal const val SHELF_DEPTH_AT_COAST_METRES = -30f
 
     /**
-     * The most passes [drainDrownedBasins] makes over the drowned basins' outlets.
-     *
-     * A ceiling rather than a count: the loop stops as soon as a pass finds nothing left to cut,
-     * which on most seeds is well inside it, and a pass that finds nothing costs nothing beyond one
-     * priority flood. What the ceiling is for is the case that does not stop quickly — a sill
-     * standing high above the shoreline, which the outflow takes down by one stream-power bite per
-     * pass exactly as a knickpoint retreats over successive floods.
-     *
-     * Eight at H5b, which measured the retreat stopping by the seventh pass on the largest drowned
-     * basin it had. Sixteen since S1 gave the sea's stand its true depth: a lowstand of 120 m is
-     * twice the drop seed 718106 was getting while the same setting was read against that world's
-     * own land relief, so the tract the sea comes back over is deeper, its sill higher, and the
-     * retreat has further to go.
-     *
-     * Sixteen is again where the retreat stops rather than where a guard turns green, and this
-     * time the curve was printed. On seed 718106 at 512 the pass removes 0.60, 0.34, 0.22, 0.14,
-     * 0.089, 0.057, 0.038, 0.025, 0.016, 0.011, 0.0070, 0.0047, 0.0032, 0.0022, 0.0016 and 0.0012
-     * of the height field per pass — a geometric retreat at about 0.65 a pass, which never reaches
-     * zero and is a thousandth of the first pass by the sixteenth. Run to forty instead, the
-     * largest drowned basin comes out at the same 0.3515% of the land it does at sixteen. Not
-     * more, because each pass that does find something is a priority flood and a D8 route over the
-     * whole grid.
-     *
-     * The 2.0 line re-derived the same eight to ten over the same span, for its own reason: the
-     * breach there stopped measuring a sill that runs level to the water as having no gradient, so
-     * a notch that never cut now cuts and the retreat has more to remove per pass. That reason
-     * survives this merge and the ten does not, because it was read against a lowstand of the old
-     * shallow depth. A pass that cuts more can only shorten the retreat, and the loop leaves early
-     * when a pass finds nothing, so sixteen still bounds it.
-     * See docs/DESIGN_LEDGER.md, H5b, S1 and F22, for the pass-by-pass figures.
-     */
-    internal const val MAX_POST_CUT_OUTLET_PASSES = 16
-
-    /**
      * The percentile cut on its own, without the three rules that [apply] runs on top of it.
      *
      * [seaLevelFraction] is the share of the world's cells to put under water, clamped to 0..1.
@@ -138,7 +106,7 @@ object SeaLevelStage {
      *
      * Named apart from [apply] rather than overloading it: a caller that wanted the whole stage
      * and reached the two-float form by accident would silently lose the enclosure rule, the
-     * drowned basins' outlets and the shelf. A whole-stage entry point is `apply`; a partial one
+     * coast's two passes and the shelf. A whole-stage entry point is `apply`; a partial one
      * says which part it does.
      */
     fun percentileCut(
@@ -152,6 +120,29 @@ object SeaLevelStage {
         val shorelineHeight = todaysShoreline - lowstandShareOfField
 
         return landAndWaterAt(height, shorelineHeight, scale)
+    }
+
+    /**
+     * [percentileCut] with the enclosure rule on top, where [SeaConfig.enclosedSeaIsLand] asks for
+     * it: the cut the hydraulic rounds route against, with the same [seaLevelFraction] and
+     * [lowstandShareOfField] as [percentileCut].
+     *
+     * A hollow below the shoreline that the ocean cannot reach is land on the map, so it is land to
+     * the rounds too: the water is routed through it, and its outlet is cut by the same implicit
+     * pass that cuts every lake's, with what its surface evaporates taken out of what leaves it.
+     * Routed as sea, it was a base level every river round it graded to, and the cut below then
+     * found a basin whose sill no round had touched, which is what a pass after the cut once
+     * existed to open (docs/DESIGN_LEDGER.md, H5b and E1b).
+     */
+    internal fun enclosedCut(
+        height: FloatField,
+        seaLevelFraction: Float,
+        config: WorldGenConfig,
+        lowstandShareOfField: Float = 0f
+    ): SeaLevelResult {
+        val cut = percentileCut(height, seaLevelFraction, config.scale, lowstandShareOfField)
+        if (!config.sea.enclosedSeaIsLand) return cut
+        return markUnreachableWaterAsLand(cut, height, config.sea, config.scale, config.squareKilometresPerCell)
     }
 
     /**
@@ -202,8 +193,8 @@ object SeaLevelStage {
      * decide what shape the shoreline is, and the continental shelf under all of it.
      *
      * In that order, and the order is the argument. The percentile ([percentileCut]) decides where
-     * the coastline is; [markUnreachableWaterAsLand] and [drainDrownedBasins] decide which of the
-     * water below it the ocean can actually reach; [DrownedValleys] and [LittoralGrading] move the
+     * the coastline is; [markUnreachableWaterAsLand] decides which of the water below it the ocean
+     * can actually reach; [DrownedValleys] and [LittoralGrading] move the
      * shoreline itself, so they have to run before anything is measured from it, and the valleys go
      * first because the grading should be asked about a coast the grid can hold rather than about
      * the channels through it; and the shelf remap is measured from the finished shoreline and
@@ -255,14 +246,6 @@ object SeaLevelStage {
             } else {
                 plainCut
             }
-        // The basins the line above turned into land get their outlets cut, once, now that there is
-        // a shoreline for them to be measured against.
-        val drained =
-            if (seaConfig.enclosedSeaIsLand && seaConfig.postCutOutlet) {
-                drainDrownedBasins(enclosed, height, config)
-            } else {
-                enclosed
-            }
         // Then the two passes that decide what the coastline the map draws actually is. First the
         // drowned valleys the grid cannot hold: the lowstand cut a channel to every shore and the
         // transgression flooded all of them, and a channel a kilometre wide has no business filling
@@ -273,7 +256,7 @@ object SeaLevelStage {
         // water into land, and neither will touch a cell whose filling would cut the water around it
         // in two, so no body of water can be enclosed by them. See [WaterTopology], and
         // `LittoralCoastTest`, which counts the bodies the ocean cannot reach on both sides.
-        val resolved = DrownedValleys.apply(drained, height, config, resolvedShareOfCell)
+        val resolved = DrownedValleys.apply(enclosed, height, config, resolvedShareOfCell)
         val beforeShelf = LittoralGrading.apply(resolved, config)
         if (seaConfig.shelfWidthKm <= 0.0) return beforeShelf
 
@@ -432,134 +415,6 @@ object SeaLevelStage {
         }
 
         return SeaLevelResult(base.shorelineHeight, isLand, relativeElevation, landCellCount)
-    }
-
-    /**     * Cuts the outlet of every basin the enclosure rule just made, on the far side of the cut.
-     *
-     * [markUnreachableWaterAsLand] hands the river stage a hollow whose floor lies below sea level
-     * and whose rim is ordinary land, and the depression fill then raises the hollow to that rim —
-     * which can be a great deal wider than the water that was there, because the ground around a
-     * coastal saucer is low. Neither mechanism that sizes the other lakes can reach it: the in-round
-     * notch runs while that ground is still under the provisional sea, so there is no lip to cut and
-     * no outflow to cut with, and the water balance cannot drain a floor that is already below sea
-     * level, because there is nowhere for the water to go.
-     *
-     * So this is the in-round breach again, on the same terms — [FlowRouting.spillways] over the
-     * filled surface, stream power with `ErosionConfig.outletIncisionRatio` and the basin's whole
-     * catchment as the discharge — with two differences that follow from *where* it runs rather than
-     * from any change of mind about the physics:
-     *
-     *  - **Only the drowned basins.** A basin whose floor stands above the cut is the in-round
-     *    notch's, was already worked by twelve rounds of it, and cutting it again here would drain
-     *    the world's ordinary lakes a thirteenth time. The test is the basin's own floor.
-     *  - **The notch may reach the waterline.** Inside the rounds the cut stops at the sea, which is
-     *    the base level a river grades to. Here the water behind the sill stands *below* the sea and
-     *    the river crossing the sill grades to that, so the basin's own floor is the limit. Where
-     *    the outflow can take the sill under the waterline the basin joins the ocean at the next
-     *    labelling and the map shows an arm of the sea with a narrow mouth; where it cannot, the
-     *    basin keeps a lake below sea level.
-     *
-     * Two invariants hold this in its seam. The terrain the cut makes lives in
-     * [SeaLevelResult.relativeElevation] and never in `ErosionResult.height`, which this stage is
-     * handed and must not rewrite: erosion is a stage of its own with its own reuse guard and its
-     * own section in a save, and a stage that edited its predecessor's result would be recomputed
-     * away the next time anything upstream changed. And what the notch takes leaves the model, as
-     * the closing breach's spoil does: there is no walk left to carry it downstream, and the
-     * sediment ledger belongs to the hydraulic rounds, which closed two stages ago.
-     *
-     * Deterministic and re-runnable: the pass reads only the height field and the config, so
-     * `WorldGenerationEngine`'s stage reuse gets the same answer as a fresh generation.
-     *
-     * See [SeaConfig.postCutOutlet], `GEOGRAPHY.md` and docs/DESIGN_LEDGER.md, H5b, for what this was
-     * measured to do.
-     */
-    private fun drainDrownedBasins(
-        enclosed: SeaLevelResult,
-        height: FloatField,
-        config: WorldGenConfig
-    ): SeaLevelResult {
-        val cellsAcross = height.width
-        val cellsDown = height.height
-        val shorelineHeight = enclosed.shorelineHeight
-        val scale = config.scale
-        val landHalfOfField = scale.landHalfOfField.coerceAtLeast(MIN_RANGE)
-        // The same rates the hydraulic rounds cut with, converted from the world's scale and this
-        // grid: this pass is the outlet notch run once more on the far side of the cut, so it must
-        // use the notch's own reach, gradient and stream power and not a second copy of them.
-        val rates = HydraulicErosion.Rates(config)
-
-        var current = enclosed
-        var workingHeight: FloatField? = null
-        repeat(MAX_POST_CUT_OUTLET_PASSES) {
-            if (current.landCellCount == 0) return current
-            // A copy, because the breach lowers the surface it is handed along with the terrain and
-            // the next pass takes its own from the re-cut.
-            val relativeElevation = current.relativeElevation.copy()
-            val isLand = current.isLand
-            val filled = FlowRouting.fillDepressions(
-                cellsAcross, cellsDown, isLand, relativeElevation
-            )
-            val flowDirections = FlowRouting.flowDirections(
-                cellsAcross,
-                cellsDown,
-                isLand,
-                relativeElevation,
-                filled,
-                config.seed,
-                config.cellHeightInCellWidths,
-                FlowRouting.smoothFieldPeriodCells(config),
-                config.facetRouting,
-                config.flatPotential
-            )
-            // The land count and the land mask must agree, because every walk below sizes its
-            // arrays by the one and fills them from the other; a mismatch would surface as an index
-            // one past an array's end deep inside the routing, which is exactly how a 2048 run once
-            // failed on a machine that was corrupting memory. One scan per pass names the fault
-            // where it is instead.
-            run {
-                var counted = 0
-                for (cell in isLand.indices) if (isLand[cell]) counted++
-                check(counted == current.landCellCount) {
-                    "the drowned-basin pass was handed $counted land cells under a count of ${current.landCellCount}"
-                }
-            }
-            val catchmentArea = FlowRouting.accumulate(
-                cellsAcross, cellsDown, isLand, filled, flowDirections, current.landCellCount
-            ) { 1f }
-            val spillways = FlowRouting.spillways(
-                cellsAcross, cellsDown, isLand, relativeElevation.data, filled.data,
-                flowDirections, rates.pondDepth
-            )
-
-            // A floor at or above zero stands above the shoreline in relative units, so that basin
-            // belongs to the notch inside the rounds. Marking its spill rather than filtering the
-            // arrays keeps this one specific set of basins rather than a renumbering of them.
-            var drownedBasinCount = 0
-            for (basin in 0 until spillways.count) {
-                if (spillways.floor[basin] >= 0f) spillways.spill[basin] = -1
-                else if (spillways.spill[basin] >= 0) drownedBasinCount++
-            }
-            if (drownedBasinCount == 0) return current
-
-            val terrain = workingHeight ?: height.copy().also { workingHeight = it }
-            val breached = HydraulicErosion.breach(
-                config.erosion, rates, cellsAcross, spillways, isLand, relativeElevation.data,
-                filled.data, flowDirections, catchmentArea.data,
-                current.landCellCount.toFloat(), landHalfOfField, terrain.data,
-                settled = null, load = null, belowSea = true
-            )
-            // Nothing left that the outflow can take off a sill: every basin still here is one the
-            // water cannot open, and another pass would only cost a priority flood.
-            if (breached.cells == 0) return current
-            current = markUnreachableWaterAsLand(
-                landAndWaterAt(terrain, shorelineHeight, scale),
-                terrain,
-                config.sea,
-                scale,
-                config.squareKilometresPerCell
-            )
-        }
-        return current
     }
 
     /** The height below which [submergedFraction] of the world's cells lie. */

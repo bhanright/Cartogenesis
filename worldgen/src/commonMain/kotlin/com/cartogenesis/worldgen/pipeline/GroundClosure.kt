@@ -528,6 +528,19 @@ internal object GroundClosure {
         }
     }
 
+    /**
+     * The share of a cell under water where the water stands [riseOfBed] above its bed, on the same
+     * hypsometry as [fillForBedRise], of which it is the slope: the bed's share wet from the first
+     * millimetre, the rest wetting evenly up to twice the interfluves' [reliefAboveBed], all of it
+     * past that. So the area a lake evaporates from is the area its storage fills.
+     */
+    fun floodedShare(riseOfBed: Double, bedShare: Double, reliefAboveBed: Double): Double {
+        if (riseOfBed <= 0.0) return 0.0
+        if (reliefAboveBed <= 0.0 || bedShare >= 1.0) return 1.0
+        val brim = 2.0 * reliefAboveBed
+        return if (riseOfBed >= brim) 1.0 else bedShare + (1.0 - bedShare) * riseOfBed / brim
+    }
+
     /** The inverse of [fillForBedRise]: how far a fill of [volume] raises the bed. */
     fun bedRiseForFill(volume: Double, bedShare: Double, reliefAboveBed: Double): Double {
         if (volume <= 0.0) return 0.0

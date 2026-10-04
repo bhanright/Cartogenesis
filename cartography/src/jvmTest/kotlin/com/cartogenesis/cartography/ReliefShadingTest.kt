@@ -404,7 +404,7 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
         // card as `uOrdinaryGround`).
         val declaredGround = median(illuminationOverLand(world, ReliefShading.DAYLIGHT))
         println("RELIEF under the declared sky ordinary ground sits at %.4f".format(declaredGround))
-        KnownFailures.expect(CALIBRATED_ON_THE_ONE_HEIGHT, "ordinary ground 0.9588") {
+        KnownFailures.expect(CALIBRATED_ON_THE_ONE_HEIGHT, "ordinary ground 0.8412") {
             if (kotlin.math.abs(declaredGround - ReliefShading.ordinaryGround) > MAX_GROUND_DRIFT) {
                 throw RecordedViolation(
                     "ordinary ground measures ${"%.4f".format(declaredGround)} under the declared sky, " +

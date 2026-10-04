@@ -79,23 +79,12 @@ class EarthLikenessTest : BorrowsSharedWorlds() {
         // 1.05 at L1's review round, whose rift joins are relay ramps.
         KnownFailures.expect(
             LAW_SETS_EVERY_CUT,
-            "7: drainage density peaks in HUMID, not in one of the drylands where Moglen, " +
-                "Eltahir & Bras (1998) put it; " +
-                "7: humid country carries 1.34 times the channel per unit of land that semi-arid country does, " +
+            "7: humid country carries 1.01 times the channel per unit of land that semi-arid country does, " +
                 "where Moglen, " +
                 "Eltahir & Bras (1998) have the density falling away on the wet side and so below one; " +
-                "42: humid country carries 1.14 times the channel per unit of land that semi-arid country does, " +
-                "where Moglen, " +
-                "Eltahir & Bras (1998) have the density falling away on the wet side and so below one; " +
-                "99: humid country carries 1.28 times the channel per unit of land that semi-arid country does, " +
-                "where Moglen, " +
-                "Eltahir & Bras (1998) have the density falling away on the wet side and so below one; " +
-                "pooled: drainage density peaks in HUMID, not in one of the drylands where Moglen, " +
-                "Eltahir & Bras (1998) put it; " +
-                "pooled: humid country carries 1.17 times the channel per unit of land that semi-arid country " +
-                "does, where Moglen, " +
-                "Eltahir & Bras (1998) have the density falling away on the wet side and so below one; " +
-                "pooled: the coastline's box-counting dimension is 1.076, " +
+                "pooled: the lake-size exponent is 0.469 over 86 of them, " +
+                "outside 1.06 +/- 0.34 (Downing et al. 2006, three sampling errors); " +
+                "pooled: the coastline's box-counting dimension is 1.056, " +
                 "outside 1.25 +/- 0.15 (Mandelbrot 1967: Britain 1.25, Richardson's smoothest coast 1.02)"
         ) {
             if (complaints.isNotEmpty()) {

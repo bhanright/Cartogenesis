@@ -259,7 +259,7 @@ class LittoralCoastTest {
         // Q2).
         // Recorded on the two heights' ground (E1a): the shoreline cut on the cells' mean ground is
         // smoother than the one height's, until it is cut on the bed's drowned valleys (E1b, E1c).
-        KnownFailures.expect(COAST_SMOOTH_ON_THE_GROUND, "pooled by M1's box count 1.075") {
+        KnownFailures.expect(COAST_SMOOTH_ON_THE_GROUND, "pooled by M1's box count 1.055") {
             if (complaints.isNotEmpty()) {
                 throw RecordedViolation(
                     complaints.joinToString("; "),
@@ -385,7 +385,7 @@ class LittoralCoastTest {
         // moved it is not isolated (docs/DESIGN_LEDGER.md, L1).
         val gradedShare = graded.smoothShare
         val controlShare = control.smoothShare
-        KnownFailures.expect(GRADING_GAIN_UNDER_ITS_FLOOR, "0.776 against 0.740") {
+        KnownFailures.expect(GRADING_GAIN_UNDER_ITS_FLOOR, "0.854 against 0.807") {
             if (gradedShare < controlShare * SMOOTH_SHARE_GAIN) {
                 throw RecordedViolation(
                     ("the graded coast reads %.3f smooth against the ungraded coast's %.3f, which is not a " +

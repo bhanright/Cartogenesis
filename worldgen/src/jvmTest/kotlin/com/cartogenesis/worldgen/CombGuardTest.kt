@@ -86,18 +86,14 @@ class CombGuardTest : BorrowsSharedWorlds() {
             }
             measured
         }
-        // Recorded on the two heights' ground (E1a): the river stage initiates its channels on the
-        // ground's gradient, and the ground is the cell's mean over its own in-cell relief, smoother
-        // between cells than the one height was, until the stages after erosion read the bed (E1c).
-        KnownFailures.expect(NETWORK_THINNED_ON_THE_GROUND, "seed 7 26.5 from 43.07; seed 42 33.6 from 49.10") {
-            if (thinned.isNotEmpty()) {
-                throw RecordedViolation(
-                    "the network thinned past ScaleFreeTest's $NETWORK_FACTOR, a comb removed by removing channels, " +
-                        "in km per 1000 km2: ${thinned.joinToString("; ")}",
-                    thinned.joinToString("; ")
-                )
-            }
-        }
+        // Recorded on the two heights' ground (E1a), where the river stage initiated its channels on
+        // the ground's gradient, the cell's mean over its own relief; armed again since the rivers
+        // and their heads read the bed (E1c).
+        assertTrue(
+            thinned.isEmpty(),
+            "the network thinned past ScaleFreeTest's $NETWORK_FACTOR, a comb removed by removing channels, " +
+                "in km per 1000 km2: ${thinned.joinToString("; ")}"
+        )
         val oneSided = seeds.filter { it.oneSided }
         // Recorded on the two heights' ground (E1a), the cause not isolated: seed 42's flanks carry
         // a comb down the columns three times the comb along the rows, on the network the river
@@ -300,8 +296,6 @@ class CombGuardTest : BorrowsSharedWorlds() {
 
         /** The initiated network at 512 rows on Q2's head, km of channel per 1,000 km² of land, by seed. */
         val NETWORK_ON_THE_HEAD = listOf(7L to 43.07, 42L to 49.10)
-
-        const val NETWORK_THINNED_ON_THE_GROUND = "E1a: the initiated network thins on the two heights' ground"
 
         const val ONE_SIDED_COMB_ON_THE_GROUND = "E1a: seed 42's flanks are combed down the columns on the two heights' ground"
 

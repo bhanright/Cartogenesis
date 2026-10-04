@@ -15,7 +15,7 @@ import kotlin.test.fail
  * the Download and Installation section against `site/downloads.txt`, `docs/INSTALL.md`,
  * `docs/RELEASE_NOTES_TEMPLATE.md` and the apt repository's own configuration.
  *
- * Read from `site/index.html`, which `:web:assembleSite` copies into the site unchanged in these
+ * Read from `site/index.html`, which `:desktop:assembleSite` copies into the site unchanged in these
  * sections, so they are checked on every merge rather than on release day, when a stale sentence
  * could only block the deploy. What needs the assembled tree — the figures, the bundle, the
  * roadmap drawn into the page, the fonts, the loader stamp — stays with `SiteAssemblyTest`.

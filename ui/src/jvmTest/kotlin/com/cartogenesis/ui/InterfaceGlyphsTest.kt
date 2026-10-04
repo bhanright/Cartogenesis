@@ -9,13 +9,13 @@ import kotlin.test.fail
 /**
  * Every character the interface writes outside ASCII, against the faces it is written in.
  *
- * The browser build draws text with the bundled faces and nothing else: there is no system font
- * behind them, so a character none of them maps is drawn as an empty box. The desktop can hide
- * the same fault behind the operating system's fallback, which is how the dropdown mark `▾` went
- * a fortnight drawn as a box on the web and correctly on the desktop.
+ * The interface sets its text in the bundled faces. A character none of them maps falls to the
+ * operating system's fallback on the desktop, which can hide the fault on one machine and draw a
+ * box on another; the browser build, which had no fallback, showed the dropdown mark `▾` as a box
+ * for a fortnight while the desktop drew it.
  *
- * The characters are read out of the source — every string and character literal in `:ui`'s and
- * `:web`'s main code, comments left out — and the faces out of their own `cmap` tables. A literal's
+ * The characters are read out of the source — every string and character literal in `:ui`'s main
+ * code, comments left out — and the faces out of their own `cmap` tables. A literal's
  * style is chosen at its call site and the Matrix chrome sets every style in the mono face, so the
  * test cannot know which face will draw a given string; every character is held to every bundled
  * face. On the JVM only, because it reads files of the repository.
@@ -38,7 +38,7 @@ class InterfaceGlyphsTest {
         assertTrue(faces.size >= 3, "found ${faces.size} bundled faces; the three families are missing")
         val mapped = faces.associate { it.name to FontCharacterMap.codePoints(it.readBytes()) }
 
-        val sources = listOf("ui/src", "web/src").flatMap { tree ->
+        val sources = listOf("ui/src").flatMap { tree ->
             repositoryFile(tree).walkTopDown()
                 .filter { it.isFile && it.extension == "kt" && it.parentFile.path.contains("Main") }
                 .toList()

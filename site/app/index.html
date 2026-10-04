@@ -67,7 +67,7 @@
   #msg{font-size:13.5px;color:#9c9187;margin:0;min-height:1.4em}
   /* #9c9187 on the ink is 6.0:1. The #6e645c this replaces measured 3.2:1,
      which is below AA for text of any size. */
-  #sub{font-size:12px;color:#9c9187;margin:0;max-width:44ch;line-height:1.6}
+  #sub,#preview{font-size:12px;color:#9c9187;margin:0;max-width:44ch;line-height:1.6}
   #boot a{color:#c9a227}
   .warn #msg{color:#e0a0a0}
 </style>
@@ -85,6 +85,9 @@
        measured off the tree that is about to be published. The landing page carries the same
        token, so the two pages cannot quote different numbers. -->
   <p id="sub">The first visit downloads the generator, about __BUNDLE_MB__&nbsp;MB. Later visits use the cached copy.</p>
+  <!-- The application behind this shell is a stored copy that is no longer developed; the site
+       says so wherever it offers it, and so does the page a visitor waits on. -->
+  <p id="preview">An older preview, no longer updated. The current version is the <a href="/#install">desktop app</a>.</p>
 </div>
 
 <script>

@@ -1,4 +1,9 @@
+import java.io.ByteArrayOutputStream
 import java.io.File
+import java.time.Instant
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
+import java.util.zip.GZIPOutputStream
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
@@ -143,9 +148,10 @@ val auditOnlyClasses = listOf(
 )
 
 /**
- * `SiteAssemblyTest` reads the tree `:web:assembleSite` writes, so it belongs to that task and not
- * to the per-merge suite: run on its own it would either fail for want of a tree or, worse, pass
- * against whatever an earlier run left in `web/build/site`. `siteTest` below builds the tree first.
+ * `SiteAssemblyTest` reads the tree `assembleSite` writes, so it belongs to that task and not to
+ * the per-merge suite: run on its own it would either fail for want of a tree or, worse, pass
+ * against whatever an earlier run left in `desktop/build/site`. `siteTest` below builds the tree
+ * first.
  */
 val siteAssemblyClass = "com.cartogenesis.desktop.SiteAssemblyTest"
 
@@ -236,20 +242,20 @@ tasks.register<Test>("audit") {
     }
 }
 
-/** Where the figures are left for `:web:assembleSite` to pick up. */
-val siteImageryDir = rootProject.layout.projectDirectory.dir("web/build/site-imagery")
+// ---------------------------------------------------------------------------------------------
+// cartogenesis.com
+// ---------------------------------------------------------------------------------------------
+
+/** Where `renderSiteImagery` leaves the figures the page shows, for `assembleSite` to pick up. */
+val siteImageryDir = layout.buildDirectory.dir("site-imagery")
 
 /**
- * Renders every picture on cartogenesis.com from the engine, into `web/build/site-imagery`.
+ * Renders every picture on cartogenesis.com from the engine, into `desktop/build/site-imagery`.
  *
- * It lives in `:desktop` and writes into `:web`'s build directory because that is where the two
- * halves meet: only a JVM module can run the generator and Skia's encoder, and only `:web` knows
- * how to assemble a site. `:web:assembleSite` depends on this task and copies what it wrote.
- *
- * It must run on the deploy runner, which is Linux with no graphics card and no display, so
- * nothing here asks for either: `SiteImagery` never requests the raster accelerator, and Skia
- * writes to memory. Headless is stated anyway, so a stray AWT touch fails here rather than on the
- * runner.
+ * It lives here because only a JVM module can run the generator and Skia's encoder, and it must
+ * run on the deploy runner, which is Linux with no graphics card and no display, so nothing here
+ * asks for either: `SiteImagery` never requests the raster accelerator, and Skia writes to memory.
+ * Headless is stated anyway, so a stray AWT touch fails here rather than on the runner.
  *
  * What it costs a deploy: 57 s on a sixteen-core desktop and 219 s pinned to two cores with
  * `-XX:ActiveProcessorCount=2`, which is the shape of a GitHub runner. Nearly all of it is
@@ -262,7 +268,7 @@ val siteImageryDir = rootProject.layout.projectDirectory.dir("web/build/site-ima
 tasks.register<JavaExec>("renderSiteImagery") {
     group = "distribution"
     description = "Renders cartogenesis.com's figures from seed 718106 at 2048 rows into " +
-        "web/build/site-imagery."
+        "desktop/build/site-imagery."
     mainClass = "com.cartogenesis.desktop.SiteImagery"
     classpath = sourceSets["main"].runtimeClasspath
     // The two worlds are 2048 rows, 4096 by 2048 cells, and every stage keeps float fields over
@@ -274,7 +280,7 @@ tasks.register<JavaExec>("renderSiteImagery") {
         systemProperty("cartogenesis.siteImagery.contact", "true")
     }
 
-    val output = siteImageryDir.asFile
+    val output = siteImageryDir.get().asFile
     argumentProviders.add { listOf(output.absolutePath) }
     outputs.dir(output)
     // The pictures are a function of the generator, so any change to it must re-render them. The
@@ -289,10 +295,342 @@ tasks.register<JavaExec>("renderSiteImagery") {
         .withPathSensitivity(PathSensitivity.RELATIVE)
 }
 
+/**
+ * The browser application the site serves under `/app/`: a stored copy, not a build.
+ *
+ * The browser version is no longer developed (docs/DESIGN_LEDGER.md, G1). What the site serves is
+ * the application exactly as it was last assembled, from main at 8198db27: a zip attached to the
+ * GitHub release `web-frozen` as `web-frozen.zip`, holding `app/` as `:web:assembleSite` wrote it
+ * less the loading shell, which is `site/app/index.html` and is laid over it like every other page.
+ * The deploy downloads it (`.github/workflows/site.yml`); a local run downloads it the same way:
+ *
+ *     gh release download web-frozen --pattern web-frozen.zip --dir build/web-frozen
+ *
+ * `-PfrozenWebApp=<path>` names another copy of the zip. Whichever copy is read, it must be the
+ * one stored: its SHA-256 is [frozenWebAppSha256], so a release asset replaced by mistake, or a
+ * download cut short, stops the assembly instead of publishing a different application.
+ */
+val frozenWebApp: File = providers.gradleProperty("frozenWebApp")
+    .map { rootProject.file(it) }
+    .getOrElse(rootProject.layout.projectDirectory.file("build/web-frozen/web-frozen.zip").asFile)
+
+/** The SHA-256 of `web-frozen.zip` as it was made from 8198db27, in lowercase hex. */
+val frozenWebAppSha256 = "184683473159993afa34c79f5d2b8027ade1a1263dec1919a04b143bc4108023"
+
+/**
+ * The token `site/app/index.html` carries where the loader's cache-buster goes. It is replaced
+ * during assembly, and `SiteAssemblyTest` fails if a copy of it survives into the built tree.
+ */
+val loaderStampPlaceholder = "__STAMP__"
+
+/** The loader's `src` attribute, before and after stamping. Scoped, so prose is never rewritten. */
+fun loaderTag(stamp: String) = """src="cartogenesis.js?v=$stamp""""
+
+/**
+ * What the deploy stamps into the loader's URL: the short commit the site was assembled from.
+ *
+ * Only its *changing* matters. The two `.wasm` files are content-hashed and can be cached for a
+ * year; `cartogenesis.js` never changes name, so without a fresh query on every deploy a returning
+ * visitor's cached loader asks for a wasm hash that no longer exists — a 404 and a dead app rather
+ * than a stale one, which is not a theory but what the v1.0.1 deploy did. The application is frozen
+ * now, so its loader no longer changes, and a fresh stamp costs a returning visitor one fetch of it;
+ * kept because a stamp that stopped changing would be the one thing to remember if it ever thawed.
+ *
+ * A UTC timestamp is the fallback for the case where git cannot answer: a source download, or a
+ * checkout with no history. It is coarser but it still changes per deploy, which is the whole job.
+ *
+ * `by lazy` so that a build which never assembles the site never shells out to git.
+ */
+val siteStamp: String by lazy {
+    val fromGit = runCatching {
+        val process = ProcessBuilder("git", "rev-parse", "--short", "HEAD")
+            .directory(rootDir)
+            .redirectErrorStream(true)
+            .start()
+        val output = process.inputStream.bufferedReader().use { it.readText() }.trim()
+        if (process.waitFor() == 0) output else ""
+    }.getOrDefault("")
+
+    fromGit.ifEmpty {
+        DateTimeFormatter.ofPattern("yyyyMMddHHmm").withZone(ZoneOffset.UTC).format(Instant.now())
+    }
+}
+
+/**
+ * The token both pages carry where the size of the download goes.
+ *
+ * Two pages quote it — the landing page's browser note and the loading shell a reader watches
+ * while it arrives — and a number typed into either goes stale silently. So neither types one: the
+ * assembly measures the files it is about to publish and writes the same figure into both.
+ */
+val bundleSizePlaceholder = "__BUNDLE_MB__"
+
+/**
+ * The compressed size of the three files a visitor fetches to run the generator, in MB.
+ *
+ * Compressed, because that is what a reader waits for: every host this site is served from sends
+ * these gzipped or better, and the raw 13 MB is a number nobody experiences. Gzip at the default
+ * level is the measurement rather than brotli because it is the one every JDK can make — the live
+ * figure is a little smaller, so the page never promises a faster download than it delivers.
+ *
+ * The three files are the loader and the two wasm modules, which is what the shell's own progress
+ * bar counts; the bundled type faces are fetched by the application after it starts.
+ */
+fun engineDownloadMegabytes(appDirectory: File): String {
+    val engine = appDirectory.listFiles()
+        .orEmpty()
+        .filter { it.isFile && (it.extension == "wasm" || it.name == "cartogenesis.js") }
+    check(engine.size >= 2) {
+        "expected the loader and the wasm modules in ${appDirectory.absolutePath}, found " +
+            engine.joinToString { it.name }
+    }
+    val compressed = engine.sumOf { source ->
+        val sink = ByteArrayOutputStream()
+        GZIPOutputStream(sink).use { it.write(source.readBytes()) }
+        sink.size().toLong()
+    }
+    val tenthsOfAMegabyte = (compressed * 10 + 512 * 1024) / (1024 * 1024)
+    return "${tenthsOfAMegabyte / 10}.${tenthsOfAMegabyte % 10}"
+}
+
+/**
+ * `ROADMAP.md`: the one place the planned releases and what they bring are written down.
+ *
+ * The page carries a marker comment where its table goes and the assembly puts the table there, so
+ * the page cannot say a release the file does not and the file cannot plan a release the page
+ * never shows. `SiteAssemblyTest` reads both back and compares them row for row.
+ */
+val roadmapFile = rootProject.layout.projectDirectory.file("ROADMAP.md").asFile
+
+/** The comment in `site/index.html` the table replaces. */
+val roadmapMarker = "<!-- roadmap -->"
+
+/** One row of the file's table: which release, what it brings, and whether it is the current one. */
+class RoadmapRow(val release: String, val brings: String, val current: Boolean)
+
+/**
+ * The rows of the one Markdown table in [roadmapFile], in the order it lists them.
+ *
+ * The heading row and the `---` rule under it are dropped by their shape rather than by counting
+ * lines, so prose may be added above or below the table without moving anything. A release marked
+ * `(current)` is the release the site is describing; the marker is taken off the name and carried
+ * as [RoadmapRow.current], which is what the page draws a tag for.
+ */
+fun roadmapRows(): List<RoadmapRow> {
+    check(roadmapFile.isFile) { "ROADMAP.md is missing: the page's roadmap is drawn from it" }
+    val rows = roadmapFile.readLines()
+        .map { it.trim() }
+        .filter { it.startsWith("|") && it.endsWith("|") }
+        .map { line -> line.trim('|').split('|').map { it.trim() } }
+        .filter { it.size == 2 }
+        .filterNot { it[0].equals("Release", ignoreCase = true) }
+        .filterNot { cells -> cells.all { it.isNotEmpty() && it.all { char -> char == '-' } } }
+        .map { (release, brings) ->
+            RoadmapRow(
+                release = release.removeSuffix("(current)").trim(),
+                brings = brings,
+                current = release.contains("(current)")
+            )
+        }
+    check(rows.isNotEmpty()) { "ROADMAP.md has no table rows for the page to draw" }
+    check(rows.count { it.current } == 1) {
+        "ROADMAP.md marks ${rows.count { it.current }} releases as (current); exactly one is"
+    }
+    return rows
+}
+
+/** `&`, `<` and `>` as a browser must read them, for text that came out of a Markdown file. */
+fun asHtmlText(text: String): String =
+    text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+/**
+ * The roadmap as the page's own Features list is written: a `spec` list, one row per release.
+ *
+ * No new style and no new class. The Features list above it is already a two-column list of a term
+ * and a sentence separated by hairlines, which is exactly what a roadmap is, and the current
+ * release is marked with the same `tag` the download card wears.
+ */
+fun roadmapTable(indent: String): String = buildString {
+    append(indent).append("""<dl class="spec">""")
+    roadmapRows().forEach { row ->
+        val mark = if (row.current) """<span class="tag">Current</span>""" else ""
+        appendLine()
+        append(indent).append("  <div><dt>").append(asHtmlText(row.release)).append(mark)
+            .append("</dt><dd>").append(asHtmlText(row.brings)).append("</dd></div>")
+    }
+    appendLine()
+    append(indent).append("</dl>")
+}
+
+/**
+ * Assembles the whole of cartogenesis.com into `desktop/build/site`, ready to hand to a static host:
+ * the stored browser application under `app/`, `site/` laid over it, and the figures.
+ *
+ * `Sync` rather than `Copy` because the wasm filenames carry content hashes: a tree that is only
+ * ever added to keeps every orphan and deploys all of them.
+ */
+tasks.register<Sync>("assembleSite") {
+    group = "distribution"
+    description = "Assembles cartogenesis.com into desktop/build/site: the stored browser " +
+        "application under app/, site/ laid over it, and the figures, with the loader stamped."
+
+    // The shell is UTF-8 and full of em dashes. Left to the platform default, filtering reads it
+    // as ANSI on Windows and writes mojibake back out; stating the charset is the whole fix.
+    filteringCharset = "UTF-8"
+
+    // Every picture on the page is rendered from the engine by this task, from a fixed seed and
+    // fixed crop windows, so the release that changes what a coastline looks like changes the
+    // coastline the page shows. Nothing in site/ is an image any more.
+    dependsOn("renderSiteImagery")
+
+    into(layout.buildDirectory.dir("site"))
+
+    // The roadmap the landing page draws: a change to it has to re-assemble the page, and Gradle
+    // cannot see a file read inside a copy action.
+    inputs.file(roadmapFile).withPropertyName("roadmapTheLandingPageDraws")
+
+    // The stored application first, so that the pages below are laid over it. Its own copy of the
+    // shell is never in the zip; `site/app/index.html` is the shell.
+    doFirst {
+        check(frozenWebApp.isFile) {
+            "the stored browser application is not at ${frozenWebApp.absolutePath}. Download it " +
+                "with `gh release download web-frozen --pattern web-frozen.zip --dir build/web-frozen`, " +
+                "or name a copy with -PfrozenWebApp=<path>."
+        }
+        val digest = java.security.MessageDigest.getInstance("SHA-256").digest(frozenWebApp.readBytes())
+            .joinToString("") { "%02x".format(it) }
+        check(digest == frozenWebAppSha256) {
+            "${frozenWebApp.absolutePath} has SHA-256 $digest, not the stored application's " +
+                "$frozenWebAppSha256"
+        }
+    }
+    from(provider { if (frozenWebApp.isFile) zipTree(frozenWebApp) else files() }) {
+        include("app/**")
+        // 1.7 MB of debug-only weight that also publishes the original Kotlin, had one been kept.
+        exclude("**/*.map")
+        exclude("app/index.html")
+        includeEmptyDirs = false
+    }
+
+    from(rootProject.layout.projectDirectory.dir("site")) {
+        // Documentation for whoever maintains the site, not part of the site.
+        exclude("README.md")
+
+        // Three files that are about the site rather than part of it: the list of release file
+        // names the page's Download and Installation section is checked against, the rule that
+        // keeps reprepro's output out of git, and reprepro's own configuration, which the site
+        // deploy reads from here and writes back with the signing key's id in it.
+        //
+        // Everything else under site/ is copied as it stands, folders this script has never heard
+        // of included. The apt repository itself is not among them: it is 100 MB of packages, and
+        // every test task here declares site/ as an input, so the deploy builds it straight into
+        // the assembled tree after this task has run. See docs/DEPLOYMENT.md.
+        exclude("downloads.txt")
+        // The web fonts' generator and its record of what each was cut from, which SiteFontsTest
+        // reads: the fonts are published, these two are not.
+        exclude("fonts/build_web_fonts.py")
+        exclude("fonts/faces.json")
+        exclude("apt/.gitignore")
+        exclude("apt/conf/**")
+
+        // The landing page's "What comes next" table, put in where the page keeps its marker.
+        // A whole-line replacement, so the table takes the marker's own indentation with it.
+        filesMatching("index.html") {
+            filter { line ->
+                if (line.trim() == roadmapMarker) roadmapTable(line.substringBefore("<")) else line
+            }
+        }
+
+        filesMatching("app/index.html") {
+            filter { line ->
+                line.replace(loaderTag(loaderStampPlaceholder), loaderTag(siteStamp))
+            }
+        }
+    }
+
+    // The page's typefaces are site/fonts/*.woff2, cut from the application's own faces by
+    // site/fonts/build_web_fonts.py and copied with the rest of site/. Their licences are the
+    // application's, published beside them as the SIL Open Font License asks.
+    into("fonts") {
+        from(rootProject.layout.projectDirectory.dir("ui/licences")) { include("OFL-*.txt") }
+    }
+
+    // The figures, and the relief's heights, which are a PNG because they must arrive without
+    // loss. `include` rather than the whole directory because `-Pcontact` leaves contact sheets in
+    // there, which are a tool for choosing a crop and not part of the site.
+    into("img") {
+        from(siteImageryDir) { include("*.webp", "relief-heights.png") }
+    }
+
+    doLast {
+        val site = destinationDir
+
+        // What the download weighs, written into both pages that quote it, from one measurement of
+        // the tree that is about to be published.
+        val megabytes = engineDownloadMegabytes(File(site, "app"))
+        listOf("index.html", "app/index.html").forEach { path ->
+            val page = File(site, path)
+            val before = page.readText(Charsets.UTF_8)
+            // A page that has lost the token is a page that has stopped saying how big the
+            // download is, or has gone back to a number typed by hand. Both deploy quietly.
+            check(before.contains(bundleSizePlaceholder)) {
+                "$path no longer carries $bundleSizePlaceholder, so nothing measures the size " +
+                    "it tells a reader to expect"
+            }
+            page.writeText(before.replace(bundleSizePlaceholder, megabytes), Charsets.UTF_8)
+        }
+        logger.lifecycle("The browser preview is $megabytes MB compressed; both pages say so")
+
+        val shell = File(site, "app/index.html")
+        // A stamp left unreplaced means the scoped replacement above stopped matching — a rename
+        // of the loader, or the src attribute reformatted. Silent otherwise, and the failure it
+        // leads to is a 404 on a returning visitor's second deploy, which is a bad way to find out.
+        check(shell.isFile && !shell.readText(Charsets.UTF_8).contains(loaderStampPlaceholder)) {
+            "app/index.html still carries the loader placeholder. The replacement is scoped to " +
+                """src="cartogenesis.js?v=..."; check that attribute in site/app/index.html."""
+        }
+        // A marker left behind means the roadmap was never drawn and the page deploys with a
+        // heading over nothing. Silent otherwise, exactly as the loader's stamp would be.
+        val assembledPage = File(site, "index.html").readText(Charsets.UTF_8)
+        check(!assembledPage.contains(roadmapMarker)) {
+            "index.html still carries $roadmapMarker, so the roadmap table was not substituted. " +
+                "The replacement matches the marker on a line of its own in site/index.html."
+        }
+        val releases = roadmapRows()
+        check(releases.all { assembledPage.contains(">${it.release}<") }) {
+            "the assembled page is missing a release ROADMAP.md names: " +
+                releases.map { it.release }.filterNot { assembledPage.contains(">$it<") }
+        }
+        logger.lifecycle(
+            "Roadmap drawn from ROADMAP.md: " + releases.joinToString {
+                it.release + if (it.current) " (current)" else ""
+            }
+        )
+
+        // The page's weight is a thing the design has a target for, so the assembly reports it
+        // rather than leaving it to be measured by hand. "Before the app" is what a reader who
+        // never clicks the browser preview pays: the page, its five faces and its figures, and
+        // nothing under app/, which is the 12 MB of WebAssembly the preview fetches.
+        fun weigh(dir: String) = File(site, dir).walkTopDown()
+            .filter { it.isFile }.sumOf { it.length() }
+        val bytes = site.walkTopDown().filter { it.isFile }.sumOf { it.length() }
+        val page = File(site, "index.html").length()
+        val fonts = weigh("fonts")
+        val images = weigh("img")
+        logger.lifecycle(
+            "Site assembled at $site (${bytes / 1024 / 1024} MB), loader stamp $siteStamp"
+        )
+        logger.lifecycle(
+            "Landing page before the app: ${(page + fonts + images) / 1024} KB " +
+                "(html ${page / 1024}, fonts ${fonts / 1024}, images ${images / 1024})"
+        )
+    }
+}
+
 tasks.register<Test>("siteTest") {
     group = "verification"
     description = "Assembles cartogenesis.com and checks the tree that would be uploaded."
-    dependsOn(":web:assembleSite")
+    dependsOn("assembleSite")
     val testTask = tasks.named<Test>("test").get()
     testClassesDirs = testTask.testClassesDirs
     classpath = testTask.classpath
@@ -303,12 +641,10 @@ tasks.register<Test>("siteTest") {
     // It reads a tree of files and generates nothing: the largest thing it holds is the opening's
     // band decoded, 4096 by 800 pixels, 13 MB.
     maxHeapSize = "512m"
-    // What this test reads is another project's build output. Declaring it as an input here is
-    // what Gradle would want, but it also makes Gradle refuse the build for using an output
-    // without a producing dependency it can see. Never being up to date costs a few seconds and
-    // is the whole point: the run has to look at the tree that was just assembled. Never taken
-    // from the build cache either, for the same reason: a cache key blind to the tree would hand
-    // back an earlier pass over a tree that has since changed.
+    // What this test reads is the assembled tree, which it never declares: never being up to date
+    // costs a few seconds and is the whole point, since the run has to look at the tree that was
+    // just assembled. Never taken from the build cache either, for the same reason: a cache key
+    // blind to the tree would hand back an earlier pass over a tree that has since changed.
     outputs.upToDateWhen { false }
     outputs.cacheIf { false }
 }
@@ -360,16 +696,12 @@ compose.desktop {
 }
 
 /*
- * `WebDeploymentContractTest` reads the web module's sources, which Gradle has no way to know
- * about: without declaring them, the test task stays up to date when they change, and the build
- * cache cheerfully restores the previous *passing* result. Caught exactly that way - the id was
- * renamed to prove the guard bites, and the guard reported success from cache.
+ * Files the tests read by path, which Gradle has no way to know about: without declaring them, a
+ * test task stays up to date when they change, and the build cache restores the previous
+ * *passing* result. Caught exactly that way more than once, each guard reporting success from
+ * cache after it had been broken on purpose to prove it bites.
  */
 tasks.withType<Test>().configureEach {
-    inputs.files(rootProject.fileTree("web/src/wasmJsMain/kotlin"))
-        .withPropertyName("webSourcesReadByDeploymentContractTest")
-        .withPathSensitivity(PathSensitivity.RELATIVE)
-
     // `SitePaletteContrastTest` reads the landing page's own CSS and measures every pair of
     // colours it sets. Same trap, caught the same way: without this the task stays up to date
     // when the page changes and the build cache hands back the previous *passing* result. Proved
@@ -398,11 +730,5 @@ tasks.withType<Test>().configureEach {
     // read by path rather than off the classpath: the same trap, the same declaration.
     inputs.files(rootProject.fileTree("ui/src/commonMain/composeResources/font"))
         .withPropertyName("applicationFacesReadByTheSiteFontsTest")
-        .withPathSensitivity(PathSensitivity.RELATIVE)
-
-    // `FolderInteropTest` reads the desktop's save that the browser's tests open, from `:web`'s
-    // test sources: the same trap, the same declaration.
-    inputs.files(rootProject.fileTree("web/src/wasmJsTest/kotlin"))
-        .withPropertyName("browserTestSourcesReadByTheFolderInteropTest")
         .withPathSensitivity(PathSensitivity.RELATIVE)
 }

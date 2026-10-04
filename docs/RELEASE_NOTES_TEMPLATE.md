@@ -40,7 +40,6 @@ built and uploaded by hand.
 | `Cartogenesis-<version>.msi` | <n> MB | Windows installer. Unsigned, so SmartScreen will warn. |
 | `Cartogenesis-<version>-linux-amd64.deb` | <n> MB | Debian package for Debian, Ubuntu and relatives. |
 | `Cartogenesis-<version>-linux-portable.tar.gz` | <n> MB | Untar and run `bin/Cartogenesis`. No installation. |
-| `Cartogenesis-<version>-web.zip` | <n> MB | Static browser build for any web host. |
 
 ## Installing
 
@@ -65,8 +64,8 @@ sudo apt update && sudo apt install cartogenesis
 `apt upgrade` picks up later releases from then on. For the plain `.deb`:
 `sudo apt install ./Cartogenesis-<version>-linux-amd64.deb`.
 
-**Browser.** Run Cartogenesis at cartogenesis.com. Nothing is installed and nothing is uploaded.
-You can also host the web zip yourself over HTTPS.
+**Browser.** An older browser preview stays online at cartogenesis.com. It is no longer updated;
+the desktop app is the current version.
 
 Longer instructions, including where saves live on each platform and what to do about graphics
 drivers, are in [docs/INSTALL.md](INSTALL.md).

@@ -24,18 +24,17 @@ plugins {
  *   :cartography:jvmTest  1 worker  x 1 processor, 2 GB heap            1 thread,   2 GB
  *   :ui:jvmTest           1 worker  x 1 processor, 0.5 GB heap          1 thread,   0.5 GB
  *   the workers' memory outside their heaps, measured                               1.9 GB
- *   the browser tests' Node and headless Chrome, measured                           0.6 GB
  *   the Gradle daemon and its launcher, and the compiler's daemon idle, measured    1.4 GB
- *                                                                      16 threads, 23.4 GB
+ *                                                                      16 threads, 22.8 GB
  *
  * The workers are counted at their ceilings, because they reach them: a busy JVM's heap grows to
  * its `-Xmx`. The two daemons are counted at what they were measured holding while the tier ran,
  * not at their 4 GB ceilings, because during the tier they schedule and do not compile; a run that
  * compiles first holds the compiler's daemon larger for the minutes it compiles. The tier does not
- * reach that sum at any one moment either: cartography's suite, the interface's and the browser's
- * finish in the first few minutes, while `:worldgen`'s heaps are still growing; the whole build's
- * measured peak, and what one worker cost against it, are in the ledger's T5 row. 23.4 GB leaves
- * 8.6 of the machine's 32 to whatever else it is doing, and on a machine with a record of memory
+ * reach that sum at any one moment either: cartography's suite and the interface's finish in the
+ * first few minutes, while `:worldgen`'s heaps are still growing; the whole build's
+ * measured peak, and what one worker cost against it, are in the ledger's T5 row. 22.8 GB leaves
+ * 9.2 of the machine's 32 to whatever else it is doing, and on a machine with a record of memory
  * faults under load no worker is given more than its measured peak with room over it: the 2048
  * worlds two per-merge guards generate need the whole 3.5 GB of the worker that draws them.
  *

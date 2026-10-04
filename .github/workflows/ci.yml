@@ -12,15 +12,15 @@ concurrency:
   cancel-in-progress: true
 
 # Every `run:` step under `bash -eo pipefail`. With no shell named, GitHub runs a step as `bash -e`,
-# which has no pipefail, so a piped step takes the status of its last command: the two engine test
-# steps below, piped into `tee`, stayed green when a test failed.
+# which has no pipefail, so a piped step takes the status of its last command: two engine test
+# steps that were piped into `tee` stayed green when a test failed.
 defaults:
   run:
     shell: bash
 
 jobs:
   engine:
-    name: Generation engine (JVM + Wasm)
+    name: Generation engine
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -32,51 +32,12 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      # T1: -i (info logging) makes each test's println output — including CrossPlatformFingerprintTest's
-      # `FINGERPRINT` lines — appear in the console of this one run, so the comparison step below
-      # can read it back rather than paying for a second `--rerun-tasks` run of the same tests.
-      # That took CI from three engine test runs (JVM, Wasm, and a rerun of each for the
-      # fingerprint) to two.
       - name: JVM tests
-        run: ./gradlew :worldgen:jvmTest -i --console=plain | tee jvm-test-output.log
+        run: ./gradlew :worldgen:jvmTest --console=plain
 
-      - name: WebAssembly tests
-        run: ./gradlew :worldgen:wasmJsNodeTest -i --console=plain | tee wasm-test-output.log
-
-      # The renderer and the save format are shared, so both have to keep working on every
-      # target — a save that only round-trips on one platform would be worse than none.
-      - name: Cartography tests (JVM + Wasm)
-        run: ./gradlew :cartography:jvmTest :cartography:wasmJsNodeTest --console=plain
-
-      # Comparing the JVM and Wasm fingerprints catches platform drift — a difference usually
-      # signals a platform-dependent bug rather than a harmless variation. This comparison is
-      # informational; a save carries the world, so platforms may differ. The fingerprints
-      # themselves come from the two steps above's own console output, not a fresh test run.
-      - name: JVM and Wasm generation comparison
-        continue-on-error: true
-        run: |
-          # `|| true` because grep exits 1 when it finds nothing, and under pipefail that would end
-          # the step before the check below could say that no fingerprint was captured.
-          { grep 'FINGERPRINT' jvm-test-output.log || true; } | sed 's/^[[:space:]]*//' | sort -u > jvm-fingerprint.txt
-          { grep 'FINGERPRINT' wasm-test-output.log || true; } | sed 's/^[[:space:]]*//' | sort -u > wasm-fingerprint.txt
-
-          echo "--- JVM ---";  cat jvm-fingerprint.txt
-          echo "--- Wasm ---"; cat wasm-fingerprint.txt
-
-          # Each side is checked for having printed anything before the two are compared: an empty
-          # side is a run that printed nothing, not a platform that generated another world. A
-          # test task restored from the build cache runs nothing and prints nothing, which is the
-          # usual way for a side to come out empty here.
-          if [ ! -s jvm-fingerprint.txt ] || [ ! -s wasm-fingerprint.txt ]; then
-            missing=""
-            [ -s jvm-fingerprint.txt ] || missing="JVM"
-            [ -s wasm-fingerprint.txt ] || missing="${missing:+$missing and }Wasm"
-            echo "::warning::No $missing fingerprint captured: the test did not run on that side, or its result was restored from the build cache and printed nothing. Nothing was compared."
-          elif ! diff -u jvm-fingerprint.txt wasm-fingerprint.txt; then
-            echo "::warning::JVM and Wasm generate different worlds from the same seed. This is informational; review for unexpected platform drift."
-          else
-            echo "Fingerprints match."
-          fi
+      # The renderer and the save format, which every picture and every save goes through.
+      - name: Cartography tests
+        run: ./gradlew :cartography:jvmTest --console=plain
 
       - name: Upload test reports
         if: failure()
@@ -102,22 +63,7 @@ jobs:
       - name: Compile and test
         run: ./gradlew :desktop:compileKotlin :desktop:test --console=plain
 
-      # C3: the interface's browser tests were run locally before merges and nowhere else, so a
-      # break in the wasm half of `:ui` reached main unseen. They run on Karma with a headless
-      # Chrome, which `ubuntu-latest` ships and points `CHROME_BIN` at, so the runner needs nothing
-      # installed. Its own step rather than joined to the one above: a Karma failure and a JVM
-      # failure read differently and should not share a line in the log.
-      - name: Interface tests (headless browser)
-        run: ./gradlew :ui:wasmJsTest --console=plain
-
-      # The browser front end, compiled and its own tests run in the same headless Chrome. Nothing
-      # else here depends on `:web`, so without this a member added to `Platform` in `:ui` that
-      # `WebPlatform` does not implement passed every check and failed the release's site deploy.
-      # Its tests are the folder library's: a folder handle and its streams exist only in a browser.
-      - name: Browser front end (headless browser)
-        run: ./gradlew :web:wasmJsTest --console=plain
-
-      # The interface's common tests on the JVM, where the desktop app runs them. The browser run
-      # does not stand in for this one, and nothing else runs it: `:ui` has no audit tier.
+      # The interface's tests on the JVM, where the desktop app runs them. Nothing else runs them:
+      # `:ui` has no audit tier.
       - name: Interface tests (JVM)
         run: ./gradlew :ui:jvmTest --console=plain

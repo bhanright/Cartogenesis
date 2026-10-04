@@ -13,26 +13,17 @@ plugins {
 }
 
 /**
- * The interface, once, for every front end.
+ * The interface.
  *
  * Everything here is Compose Multiplatform and knows nothing about where it is running. The parts
- * that genuinely differ between a desktop window and a browser tab — where saved worlds live, what
- * "export" means, whether there is a GPU to offer — arrive as [com.cartogenesis.ui.Platform],
- * which each front end supplies. What is left is the actual application, and it is shared rather
- * than reimplemented.
+ * that belong to the host — where saved worlds live, what "export" means, whether there is a GPU
+ * to offer — arrive as [com.cartogenesis.ui.Platform], which the desktop front end supplies. It
+ * was written for a browser front end too, which was removed (docs/DESIGN_LEDGER.md, G1); the seam
+ * stays, so the interface still holds no host code.
  */
 kotlin {
     jvm {
         compilerOptions { jvmTarget.set(JvmTarget.JVM_17) }
-    }
-
-    // The browser tests run through Karma, which reads mocha's timeout from
-    // `karma.config.d/mocha-timeout.js` beside this file and nowhere else; see that file. A
-    // `useMocha { timeout }` here reaches nothing on a Wasm target: the Kotlin plugin logs that
-    // Mocha is not supported for Wasm and never applies the block.
-    @OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)
-    wasmJs {
-        browser()
     }
 
     sourceSets {
@@ -44,8 +35,7 @@ kotlin {
             implementation(compose.materialIconsExtended)
             implementation(compose.ui)
             // The three type faces the theme is set in travel with the module rather than being
-            // asked of the host, which is the only way the browser build renders in the same
-            // faces as the desktop one instead of in whatever the page happens to have.
+            // asked of the host, so the window renders in them whatever the machine has installed.
             implementation(compose.components.resources)
         }
         commonTest.dependencies {
@@ -93,11 +83,8 @@ tasks.named<Test>("jvmTest") {
         .withPropertyName("issueFormsReadByTheBugReportFormTest")
         .withPathSensitivity(PathSensitivity.RELATIVE)
 
-    // `InterfaceGlyphsTest` reads the characters out of `:web`'s sources, which this module does
-    // not compile, and holds them to the bundled faces: both inputs, for the same reason.
-    inputs.files(rootProject.fileTree("web/src") { include("**/*.kt") })
-        .withPropertyName("webSourcesReadByTheInterfaceGlyphsTest")
-        .withPathSensitivity(PathSensitivity.RELATIVE)
+    // `InterfaceGlyphsTest` holds the characters of this module's sources to the bundled faces,
+    // read by path: an input, for the same reason.
     inputs.files(fileTree("src/commonMain/composeResources/font"))
         .withPropertyName("facesReadByTheInterfaceGlyphsTest")
         .withPathSensitivity(PathSensitivity.RELATIVE)
@@ -215,9 +202,8 @@ val generateBuildInfo = tasks.register("generateBuildInfo") {
 /**
  * Everything the build resolves, with the licence its POM declares.
  *
- * Three graphs are read. `:ui`'s own JVM runtime is the bulk of it — Compose, Skiko, kotlinx and
- * what they drag in — and its Wasm runtime adds whatever the browser bundle carries that the
- * desktop does not. The third is [noticesExtra], which exists because the desktop front end links
+ * Two graphs are read. `:ui`'s own JVM runtime is the bulk of it — Compose, Skiko, kotlinx and
+ * what they drag in. The second is [noticesExtra], which exists because the desktop front end links
  * LWJGL and this module cannot depend on `:desktop` (that module depends on *this* one, and a
  * configuration cycle is a build failure rather than a clever trick). Its coordinates come from the
  * version catalog, so the versions are still declared in exactly one place.
@@ -251,9 +237,6 @@ val generateNotices = tasks.register("generateNotices") {
 
     val graphs = objects.listProperty(String::class.java)
     graphs.addAll(graphOf("jvmRuntimeClasspath"))
-    configurations.findByName("wasmJsRuntimeClasspath")?.takeIf { it.isCanBeResolved }?.let {
-        graphs.addAll(graphOf(it.name))
-    }
     graphs.addAll(graphOf("noticesExtra"))
     inputs.property("graph", graphs)
 

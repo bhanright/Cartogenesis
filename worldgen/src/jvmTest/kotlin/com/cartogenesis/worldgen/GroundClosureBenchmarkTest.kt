@@ -483,6 +483,6 @@ class GroundClosureBenchmarkTest {
         const val FIDELITY = 0.05
 
         const val CLOSURE_DEPARTS = "E1a: the closure departs from a resolved landscape"
-        const val CLOSURE_RECORD = ""
+        const val CLOSURE_RECORD = "2000 m cells at 2 Myr x0.41; 2000 m cells at 3 Myr x0.64; 2000 m cells at 4 Myr x0.79; 2000 m cells at 5 Myr x0.86; 2000 m cells at 6 Myr x0.90; 2000 m cells at 7 Myr x0.92; 2000 m cells at 8 Myr x0.94; 2000 m cells at 9 Myr x0.94; 1000 m cells at 2 Myr x0.69; 1000 m cells at 3 Myr x0.91; 500 m cells at 2 Myr x0.94; 500 m cells at 4 Myr x1.06; 500 m cells at 5 Myr x1.05; 250 m cells at 2 Myr x1.16; 250 m cells at 3 Myr x1.10; 250 m cells at 4 Myr x1.08; 250 m cells at 5 Myr x1.07; 250 m cells at 6 Myr x1.06; 250 m cells at 7 Myr x1.05"
     }
 }

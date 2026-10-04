@@ -1321,35 +1321,50 @@
   degrees is 0.078), and its catchment of 1.88 million km2 overstates the outlet's stream power by
   up to the square root of the same factor. The metric half is `REALISM_AUDIT.md`'s P1. 2026-10-03, L2's
   diagnosis.
-- **The two heights' closure runs its transient faster than resolved ground, more so on a coarser
-  grid.** On the toy dome (8 km, the sea round it, 0.1 mm/yr of uplift, `A_c` 0.05 km2) a resolved
-  model at 50 m (stream power on every cell past the head, Roering transport on every cell short of
-  it, slopes past the critical gradient failing) and the reduced closure agree at steady state
-  within 4 to 8% (mean ground 316 m resolved; 328, 301, 292 and 295 m reduced at 2 km, 1 km, 500 m
-  and 250 m), and part company in the transient: at 4 Myr the ground has lowered 262 m resolved and
-  421, 361, 316 and 288 m reduced. The closure takes the in-cell network to stand at its steady
-  relief for the interfluves' current rate, where a resolved network's small channels take their
-  own time to cut down; a coarser cell holds more of its network in that term and so gets there
-  sooner. On the real worlds this is the bulk of the cross-grid spread the trunk does not explain
-  (seed 7, the plain variant with every cell a channel and the trunk sub-stepped eight times: 421,
-  384 and 346 m at 256, 512 and 1,024 rows, the trunk's cut per class within 1.08). What would
-  settle it is a network term that relaxes on the network's own response time rather than
-  instantly. 2026-10-03, E1a (the benchmark is described in the ledger row).
-- **The trunk's implicit cut is first-order in a round whose `F` follows the cell.** The update is
-  backward Euler with `F = K dt sqrt(A) / step`, so a coarser cell, whose `F` is smaller for the same
-  catchment, cuts closer to the exact decay than a finer one: the bed's cut by drainage-area class
-  on seed 7 differs by up to x1.25 across 256, 512 and 1,024 rows, and by x1.08 with eight sub-steps
-  a round. Halving the round moves seed 42's ground at 256 rows by x1.17 (`ErosionScaleTest`). The
-  design kept the update as it was; sub-stepping the trunk, or an update exact for a linear decay
-  over the round, is the candidate. 2026-10-03, E1a.
-- **Cells below every channel head are trapped there.** A hillslope cell lowers as a stretch of slope
-  running to the first channel downstream, which on gentle, wooded ground is tens of kilometres, so
-  its rate is a hundred-millionth of a metre a year and the head's support area reconstructed from it
-  stays larger than the cell: seed 7 holds 4,000, 40,000 and 294,000 such cells at 256, 512 and
-  1,024 rows (37% of its land at 1,024), which erode almost nothing. With the cover's factor off the
-  share falls to 2, 9 and 19%; with every cell a channel the cross-grid spread falls from x1.37 to
-  x1.27. R1's cover gain (a hypothesis stated as such) and the head rule are the design's; whether a
-  wooded lowland at 34 km2 a cell should carry no channel at all is the open question. 2026-10-03, E1a.
+- **The two heights' closure departs from a resolved landscape of the same ground, slower on the
+  coarsest grid and faster on the finest.** The benchmark E1a read (262 m of lowering resolved at
+  4 Myr against 421, 361, 316 and 288 m reduced at 2 km, 1 km, 500 m and 250 m) compared different
+  ground: each coarse grid's sea ring and footprint cut off a different part of the dome, whose
+  interior stood 381, 278, 217 and 190 m against the resolved one's 172 m. Run on each grid's own
+  ground (`GroundClosureBenchmarkTest`: the resolved landscape with its sea on the coarse grid's
+  ring, a dome rising from that shore, the coarse grid starting from its block means, the
+  lowering compared over the same land), the reduced closure lowers 0.79, 0.97, 1.06 and 1.08 times
+  the resolved landscape at 4 Myr and 0.94, 1.01, 1.04 and 1.05 at 8 Myr; one rate shared by the
+  hillslopes and the network (E1a) reads 0.88, 1.01, 1.09 and 1.08 at 4 Myr where the two in series
+  read 0.80, 0.99, 1.09 and 1.08 (a scratch model of the same benchmark, the trunk in the same
+  sub-steps): the series holds the coarsest grid back in the first few million years and is the
+  same from 8 Myr on. The coarsest grid's lag moves with the hillslope's length: one hillslope
+  `sqrt(A_c)` long, 224 m on the benchmark, responds on linear creep's `L_h^2 / (3 D)`, 5.2 Myr,
+  where a resolved landscape holds hillslopes of every length from the channel's edge up, and at
+  half that length (a diagnostic, not a proposal) the 2 km grid leads instead, 1.13 at 4 Myr. The
+  finest grid's lead is the near-head cell's, whose hillslopes reach only
+  `X = a / (2 l)`, 125 m at 250 m cells, and whose every cell is a channel where the resolved
+  landscape's channels start at 20 of its cells. Both are the in-cell geometry's (`L_h`, `X`), not
+  the transient law's. Recorded under the benchmark's finding. 2026-10-03, E1a round 2.
+- **The trunk's sub-steps hold its time error to 1% and do not move the grids apart or together.**
+  `HydraulicErosion.incisionSubSteps` spends every round in the fewest steps that keep each cell's
+  cut within 1% of the exact decay, 32 on every round of the standard worlds (the error peaks at
+  `F` near 1.6, which some cell always has). On the production worlds the trunk's cut by
+  drainage-area class still differs by x1.20 to 1.29 across 256, 512 and 1,024 rows with the steps
+  as without (seed 7: 1,019, 933 and 834 m in the 2,500 to 10,000 km2 class with them, 978, 910
+  and 815 m without), and the ground's spread is x1.263 against x1.263 on seed 7 and x1.270 against
+  x1.245 on seed 42. E1a's probe, which read x1.03 to 1.08 with eight steps, ran a variant without
+  the climate feed, the deposition or the flexure and with every cell a channel; in production the
+  class spread is not the round's step. The candidates left are the scheme's spatial error, the
+  numerical diffusion `K sqrt(A) dx / 2` that an upwind step leaves and that grows with the cell,
+  and the routing. The steps cost a quarter of the erosion stage's time. 2026-10-03, E1a round 2.
+- **Few cells stand below every channel head now, and the heads hold across grids.** E1a's head
+  read its gradient off the cell's own last rate, which on a stretch of slope with no channel is
+  creep's over kilometres, a hundred-millionth of a metre a year, so a cell once below every head
+  stayed there: seed 7 held 4,065, 41,218 and 297,664 such cells at 256, 512 and 1,024 rows. The
+  head now reads the rate the slope's base lowers at, the in-cell network's or the first channel's
+  downstream (`GroundCells.baseLoweringMetresPerYear`): 37, 261 and 2,881 on seed 7, 111, 629 and
+  2,409 on seed 42, and the heads' median 0.167, 0.181 and 0.195 km2 on seed 7 (x1.16, from x1.39)
+  and the in-cell density x1.05 (from x1.46). What is left below every head is ground whose base
+  does not lower: a slope to a lake's surface or to a sea with no uplift under it, and the first
+  round, before any base has moved, where the regional gradient alone decides. A slope's own creep
+  still sets how such a cell lowers, which is Earth's at kilometres and so almost nothing.
+  2026-10-03, E1a round 2.
 - **The bed is held under the ground after the sweeps on about 2% of the land each round.** The
   thermal sweeps move the ground alone; where they lower a cell's ground under its own trunk the
   stage brings the bed down to it (`GroundCells.holdBedUnderGround`), which moves no material and is
@@ -1390,6 +1405,32 @@
   Averaging over the configurations a D8 network actually holds is a derivation and not a fit, but
   it was not made before the grids were compared, and the constant was not changed after. 2026-10-03,
   E1a.
+- **Seed 42 at 512 holds a ruled bar of standing water again.** `StraightRunTest`'s census, armed
+  at Q2 at nought on every seed, reads one on E1a round 2's ground: lake 14, 36 cells at (48,167),
+  within a cell of one line it runs 23 cells along. The case's own note says a bar needs a ruled
+  course and a lip for it to pond behind, and the second is chance on any moved world; the ruled
+  courses it also counts (seed 42: 388 by the steepest neighbour, 266 by the facet rule) are what
+  separates the routing rules. Recorded; whether the bar is a course the routing ruled or a lip the
+  round's new ground put across a straight valley is not traced. 2026-10-03, E1a round 2.
+- **The square-fan control passes the delta guard it was the control for.** `DeltaOutlineTest`'s
+  square fans put 0.9% of their perimeter in straight runs past a lobe's reach on E1a round 2's
+  worlds (718106 and 59758 at 1,024 rows), under the 1.2% bar they were shown failing; the lobes and
+  fans the guard holds stand at 0.0% and 0.1%. The control's straight runs are its worlds' as much as
+  its stamp's, so the guard wants a control that fails by construction. Recorded. 2026-10-03, E1a
+  round 2.
+- **Seed 42's widest drawn river stops short of the full pen at 512.** `RiverWidthTest` reads the
+  widest stroke the overlay asks for at 512 and 1,024 and holds it a hundredth of a pixel from
+  `RiverPen`'s full pen; on E1a round 2's seed 42 the 512 sheet's widest is 2.19 px, its largest
+  river reaching the full width only on cells the drawing trims at the shore. The clause reads the
+  pen through one world's largest river, so a world can fail it without the pen changing. Recorded.
+  2026-10-03, E1a round 2.
+- **Seed 42's belts-only ocean does not solve on round 2's ground.** `OceanCirculation` stops at a
+  relative residual of 0.00117 after its 200 iterations against a tolerance of 0.001 at 256 rows,
+  with `climate.pressureWinds` false, the control world `OceanCurrentTest` builds to read the
+  trades' band under the belts alone; with the regional wind on it solves. The same failure as
+  seed 5's below, on another seed, moved by E1a round 2's ground; recorded in that case
+  (`OceanCurrentTest`), whose trades' clause reads the other three standard worlds. 2026-10-03,
+  E1a round 2.
 - **Seed 5's ocean does not solve with the pressure departure off.** `OceanCirculation` stops at a
   relative residual of 0.0017 to 0.0019 after its 200 iterations against a tolerance of 0.001, at 256
   and 512 rows, with `climate.pressureWinds` false (the setting `MeridionalWindTest` builds its

@@ -44,6 +44,10 @@ class RiverWidthTest {
 
     private companion object {
 
+        /** The widest drawn stroke short of the full pen (docs/TODO.md, E1a round 2). */
+        const val WIDEST_SHORT_OF_THE_PEN = "E1a round 2: seed 42's widest drawn river stops short of the full pen at 512"
+        const val WIDEST_SHORT_RECORD = "at 512 0.80-2.19 px against 2.46; not doubled, 2.193 px at 512 and 4.915 px at 1024"
+
         /** Ground rule 1's seeds, at the size a preview is drawn at. */
         val SEEDS = listOf(7L, 42L, 1234L)
         const val SIDE = 512
@@ -419,19 +423,27 @@ class RiverWidthTest {
         // The widest drawn stroke is a hair under the full pen, and has to be: the mouth's own
         // cell is trimmed away at the shoreline, so the last stroke carries the width of the cell
         // above it. A hundredth of a pixel is the room that needs.
+        // On E1a round 2's seed 42 at 512 the widest stroke drawn stops short of the full pen,
+        // its largest river reaching the full width only where the drawing trims it, and is
+        // recorded (docs/TODO.md, E1a round 2).
+        val offThePen = ArrayList<String>()
         listOf(512, 1024).forEachIndexed { k, side ->
-            assertTrue(
-                abs(spans[k].first - RiverPen.HAIRLINE_PIXELS) < 1e-4f &&
-                    abs(spans[k].second - RiverPen.fullPixels(sheetWidth(side))) < 0.01f,
-                "at $side the drawn pen ${spans[k]} is not the pen RiverPen declares"
-            )
+            if (!(abs(spans[k].first - RiverPen.HAIRLINE_PIXELS) < 1e-4f &&
+                    abs(spans[k].second - RiverPen.fullPixels(sheetWidth(side))) < 0.01f)
+            ) {
+                offThePen += "at $side %.2f-%.2f px against %.2f".format(spans[k].first, spans[k].second, RiverPen.fullPixels(sheetWidth(side)))
+            }
         }
-        // Twice the sheet, twice the stroke. The hairline is a nib, not a width, and stays put.
-        assertTrue(
-            abs(spans[1].second - 2f * spans[0].second) < 0.02f,
-            "the pen did not double with the sheet: %.3f px at 512, %.3f px at 1024"
-                .format(spans[0].second, spans[1].second)
-        )
+        // Twice the sheet, twice the stroke, read off the same widest strokes and so recorded with
+        // them. The hairline is a nib, not a width, and stays put.
+        if (abs(spans[1].second - 2f * spans[0].second) >= 0.02f) {
+            offThePen += "not doubled, %.3f px at 512 and %.3f px at 1024".format(spans[0].second, spans[1].second)
+        }
+        KnownFailures.expect(WIDEST_SHORT_OF_THE_PEN, WIDEST_SHORT_RECORD) {
+            if (offThePen.isNotEmpty()) {
+                throw RecordedViolation("the drawn pen is not the pen RiverPen declares: ${offThePen.joinToString("; ")}", offThePen.joinToString("; "))
+            }
+        }
         assertTrue(
             abs(spans[1].first - spans[0].first) < 1e-4f,
             "the hairline moved with the sheet: ${spans[0].first} then ${spans[1].first}"

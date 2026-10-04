@@ -157,6 +157,13 @@ internal interface IncisionWatch {
     )
 
     /**
+     * The implicit pass is about to spend [round] in [subSteps] steps (see
+     * [HydraulicErosion.incisionSubSteps]); every [cut] of the round that follows was made in that
+     * many. Nothing by default.
+     */
+    fun steps(round: Int, subSteps: Int) {}
+
+    /**
      * The implicit pass has cut every cell of [round]. [surface] is the height field as it left it;
      * [ground] (the depression-filled surface the routing ran on) and [relative] are the round's
      * shoreline-relative fields after the outlet notch, whose land half is [landRange] of the
@@ -2519,6 +2526,7 @@ internal object HydraulicErosion {
         subSteps: Int = 1
     ) {
         val asFound = if (watch != null) surfaceOf.copyOf() else null
+        watch?.steps(round, subSteps)
         // The water's surface over each cell of a filled basin for this step, NaN elsewhere: set
         // receivers first, so the outlet's new height is known before the lake behind it.
         val waterSurface = FloatArray(surfaceOf.size)

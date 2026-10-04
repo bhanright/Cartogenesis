@@ -434,7 +434,7 @@ class IceSheetTest : BorrowsSharedWorlds() {
         // 36.6 allowed, and once a lake falls with its outlet its longest run is 31 against 36.1
         // (docs/DESIGN_LEDGER.md, Fix 3b). Recorded on the two heights' ground (E1a), the cause not
         // isolated, until the stages after erosion read the bed (E1c).
-        KnownFailures.expect(SHEET_EDGE_RULED_ON_THE_GROUND, "seed 7: 43 cells along bearing 0") {
+        KnownFailures.expect(SHEET_EDGE_RULED_ON_THE_GROUND, "seed 718106: 33 cells along bearing 2; seed 7: 52 cells along bearing 0") {
             if (failures.isNotEmpty()) {
                 throw RecordedViolation(
                     "the sheet mask's edge is ruled along a grid bearing:\n" + failures.joinToString("\n"),

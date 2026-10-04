@@ -180,13 +180,14 @@ class ClimateFedErosionTest {
         /**
          * What the real stage's one round did to each cell under the two switches, read through
          * its watch: the law's rate, `F` times the drop to the receiver as the pass found it, in
-         * metres; `F` itself; and the share of the drop to the receiver's new height the cell
-         * lost, NaN where the pass left the cell alone.
+         * metres; `F` itself; the share of the drop the cell lost where its receiver held still
+         * over the round, NaN where the pass left the cell alone or its receiver moved; and the
+         * round's count of steps.
          *
          * The law's rate and not the realised cut is what carries the rain and the cover in
-         * proportion. The implicit update realises `F / (1 + F)` of the drop, so a factor on `F`
-         * reaches the cut in full only where `F` is small and less and less as it grows; the
-         * realised cut responds to an erodibility factor `e` as `e (1 + F) / (1 + e F)`.
+         * proportion. The implicit update in `n` steps realises `1 - (1 + F / n)^-n` of a drop to a
+         * receiver that holds still, so a factor on `F` reaches the cut in full only where `F` is
+         * small and less and less as it grows.
          */
         fun observed(climateFeed: Boolean, shieldCut: Boolean): Observed =
             observed.getOrPut(climateFeed to shieldCut) {
@@ -194,13 +195,21 @@ class ClimateFedErosionTest {
                 val spanMetres = once.scale.reliefSpanMetres
                 val result = Observed(FloatArray(cells), FloatArray(cells), FloatArray(cells) { Float.NaN })
                 val watch = object : IncisionWatch {
+                    override fun steps(round: Int, subSteps: Int) {
+                        result.subSteps = subSteps
+                    }
+
                     override fun cut(
                         round: Int, cell: Int, receiver: Int, courantNumber: Float, before: Float,
                         baseBefore: Float, baseAfter: Float, after: Float
                     ) {
                         result.courant[cell] = courantNumber
                         if (before > baseBefore) result.lawMetres[cell] = courantNumber * (before - baseBefore) * spanMetres
-                        if (before > baseAfter) result.shareOfDrop[cell] = (before - after) / (before - baseAfter)
+                        // The share only where the receiver held still over the round, so the steps
+                        // all cut toward the one base and the share is the steps' arithmetic alone.
+                        if (before > baseAfter && baseAfter == baseBefore) {
+                            result.shareOfDrop[cell] = (before - after) / (before - baseAfter)
+                        }
                     }
 
                     override fun incised(
@@ -316,7 +325,13 @@ class ClimateFedErosionTest {
     }
 
     /** One round's reading of every cell; see [Ground.observed]. */
-    private class Observed(val lawMetres: FloatArray, val courant: FloatArray, val shareOfDrop: FloatArray)
+    private class Observed(val lawMetres: FloatArray, val courant: FloatArray, val shareOfDrop: FloatArray) {
+        /** The steps the observed round was spent in. */
+        var subSteps = 1
+    }
+
+    /** The share of its drop a cell whose receiver holds still loses in [subSteps] implicit steps at [courant]. */
+    private fun stepsShare(courant: Double, subSteps: Int): Double = 1.0 - Math.pow(1.0 + courant / subSteps, -subSteps.toDouble())
 
     /**
      * One belt's figures, kept so every seed is printed before any of them is judged.
@@ -448,7 +463,7 @@ class ClimateFedErosionTest {
         // Re-recorded on square cells at Q2 (docs/DESIGN_LEDGER.md, Q2). Re-recorded at L1, whose rifts are Earth's half-grabens and the same at every grid (docs/DESIGN_LEDGER.md, L1).
         KnownFailures.expect(
             "B-I2: the rain-dissection pin was set on rounds without the uplift",
-            "seed 7 at -0.130, seed 42 at 0.047, seed 1234 at 0.041, seed 99 at -0.039; seed 7's flat-rain control at -0.195, seed 42's flat-rain control at -0.020, seed 99's flat-rain control at -0.116"
+            "seed 7 at -0.085, seed 42 at 0.076, seed 1234 at 0.091, seed 99 at 0.031; seed 7's flat-rain control at -0.189, seed 42's flat-rain control at -0.009, seed 99's flat-rain control at -0.105"
         ) {
             if (underThePin.isNotEmpty() || uncontrolled.isNotEmpty()) {
                 val found = underThePin.joinToString { (seed, fed) -> String.format(Locale.ROOT, "seed %d at %.3f", seed, fed) } +
@@ -485,11 +500,13 @@ class ClimateFedErosionTest {
      * drop is the same in both runs, so the quotient is the factor to the last few bits of a float,
      * on every cell.
      *
-     * **The realised cut, where `F` is small.** Under the implicit update a cell loses `F / (1 + F)`
-     * of its drop to its receiver's new height, so a factor `e` on `F` moves that share by
-     * `e (1 + F) / (1 + e F)`, not by `e`. Read as that share, so the receiver's own cut in each run
-     * divides out, the quotient must be exactly this on cells under [SMALL_COURANT], where it is
-     * within `e |1 - e| F` of the factor, the proportional law the clause used to assert.
+     * **The realised cut, where `F` is small.** Under the implicit update in the round's `n` steps a
+     * cell whose receiver holds still loses `s_n(F) = 1 - (1 + F / n)^-n` of its drop, so a factor
+     * `e` on `F` moves that share by `s_n(e F) / s_n(F)`, not by `e` (at one step,
+     * `e (1 + F) / (1 + e F)`). Read as that share on cells whose receiver held still in both runs,
+     * so the receiver's own cut cannot enter, the quotient must be exactly this on cells under
+     * [SMALL_COURANT], where it is within `e |1 - e| F` of the factor, the proportional law the clause
+     * used to assert.
      */
     @Test
     fun `cover on the ground holds the incision back`() {
@@ -539,7 +556,8 @@ class ClimateFedErosionTest {
                 smallChecked++
                 val e = factor[cell].toDouble()
                 val measured = coveredShare.toDouble() / bareShare.toDouble()
-                smallWorst = maxOf(smallWorst, abs(measured - e * (1.0 + courant) / (1.0 + e * courant)))
+                val expected = stepsShare(e * courant, shielded.subSteps) / stepsShare(courant, unshielded.subSteps)
+                smallWorst = maxOf(smallWorst, abs(measured - expected))
                 smallFromFactor = maxOf(smallFromFactor, abs(measured - e))
             }
 
@@ -552,7 +570,7 @@ class ClimateFedErosionTest {
                 ("S3 COVER seed=%d  the law's rate on %d cells of one production round: the factor is " +
                     "right within %.0e on all but %d, worst %.2e, where the unshielded control is out by " +
                     "%.2f; the factor runs %.3f to %.3f; the band ratio (density >= %.1f against <= %.1f) is " +
-                    "%.2f. The realised share on %d cells under F %.1f: within %.1e of e(1+F)/(1+eF), and " +
+                    "%.2f. The realised share on %d cells under F %.1f: within %.1e of s_n(eF)/s_n(F), and " +
                     "at most %.3f from the factor itself").format(
                     seed, checked, OBSERVED_TOLERANCE, outliers, worst, control,
                     factor.filterIndexed { cell, _ -> ground.bareCut.isLand[cell] }.min(),
@@ -579,7 +597,7 @@ class ClimateFedErosionTest {
             assertTrue(
                 smallWorst <= OBSERVED_TOLERANCE,
                 "seed $seed: where F is under $SMALL_COURANT the realised share moved by up to " +
-                    "${"%.2e".format(smallWorst)} off e(1+F)/(1+eF)"
+                    "${"%.2e".format(smallWorst)} off s_n(eF)/s_n(F)"
             )
         }
         // Over the seeds together: at 512 rows seed 1234's flanks hold no cell under the bound,

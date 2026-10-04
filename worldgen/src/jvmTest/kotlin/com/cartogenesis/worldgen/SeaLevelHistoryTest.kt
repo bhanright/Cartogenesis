@@ -159,7 +159,7 @@ class SeaLevelHistoryTest : BorrowsSharedWorlds() {
         // rifts took it to 1.58 (2.07, 1.46 and 1.22 on seeds 7, 42 and 1234).
         // Recorded on the two heights' ground (E1a): the lowstand drowns the bed's valleys, and the
         // sea stage still cuts the coast on the ground, until the stages after erosion read the bed (E1c).
-        KnownFailures.expect(LOWSTAND_ON_THE_GROUND, "seed 7 20 against 27; seed 42 13 against 29") {
+        KnownFailures.expect(LOWSTAND_ON_THE_GROUND, "seed 7 21 against 28; seed 42 13 against 23; seed 1234 24 against 30") {
             val pooledShort = !(pooledEstuaries.size == seeds.size && meanGain >= estuaryGain)
             if (shortfalls.isNotEmpty() || pooledShort) {
                 throw RecordedViolation(

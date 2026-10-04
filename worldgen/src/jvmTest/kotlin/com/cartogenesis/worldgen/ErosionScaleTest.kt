@@ -26,8 +26,8 @@ import org.junit.Assert.assertTrue
  * worlds at three grids, two more seeds on a planet of another size, two seeds held out of every
  * figure the closure was designed against, a round of half the years and a slope facing two ways.
  *
- * Every bar is the design's and every one that fails today is recorded under E1a's findings with
- * the figures it fails by, so a worsening fails as another violation.
+ * Every bar is the design's; every one that fails today is recorded under E1a's findings with the
+ * figures it fails by, so a worsening fails as another violation, and every one that holds is armed.
  */
 class ErosionScaleTest {
 
@@ -126,11 +126,8 @@ class ErosionScaleTest {
             if (ratio > LAKE_FACTOR) over += "seed $seed x%.2f".format(ratio)
         }
         println("EROSIONSCALE standing water on the bed, share of land at 256/512/1,024 rows: " + figures.joinToString("; "))
-        KnownFailures.expect(LAKES_FOLLOW_THE_GRID, LAKES_RECORD) {
-            if (over.isNotEmpty()) {
-                throw RecordedViolation("the bed holds a different share of water at each grid: ${over.joinToString("; ")}", over.joinToString("; "))
-            }
-        }
+        // Recorded at E1a; inside the bar since E1a round 2 and armed (docs/DESIGN_LEDGER.md).
+        assertTrue("the bed holds a different share of water at each grid: ${over.joinToString("; ")}", over.isEmpty())
     }
 
     /**
@@ -159,11 +156,8 @@ class ErosionScaleTest {
             if (densityRatio > HEAD_FACTOR) over += "seed $seed density x%.2f".format(densityRatio)
         }
         println("EROSIONSCALE heads and in-cell network at 256/512/1,024 rows: " + figures.joinToString("; "))
-        KnownFailures.expect(HEADS_FOLLOW_THE_GRID, HEADS_RECORD) {
-            if (over.isNotEmpty()) {
-                throw RecordedViolation("the heads or the in-cell network differ across grids: ${over.joinToString("; ")}", over.joinToString("; "))
-            }
-        }
+        // Recorded at E1a; inside the bar since a head reads its base's lowering (E1a round 2), and armed.
+        assertTrue("the heads or the in-cell network differ across grids: ${over.joinToString("; ")}", over.isEmpty())
     }
 
     /**
@@ -184,9 +178,8 @@ class ErosionScaleTest {
         val figure = "seed $TIME_STEP_SEED at 256 rows: %.1f m in 12 rounds, %.1f m in 24 of half the years, x%.3f"
             .format(coarse.landMeanMetres, fine.landMeanMetres, ratio)
         println("EROSIONSCALE time step $figure")
-        KnownFailures.expect(DENUDATION_FOLLOWS_THE_STEP, STEP_RECORD) {
-            if (ratio > DENUDATION_FACTOR) throw RecordedViolation("the ground's lowering follows the round's length: $figure", "x%.2f".format(ratio))
-        }
+        // Recorded at E1a at x1.18; inside the bar since E1a round 2 and armed.
+        assertTrue("the ground's lowering follows the round's length: $figure", ratio <= DENUDATION_FACTOR)
     }
 
     /**
@@ -465,21 +458,16 @@ class ErosionScaleTest {
 
         const val DENUDATION_FOLLOWS_THE_GRID = "E1a: the ground still lowers by more on a coarser grid"
         const val DENUDATION_RECORD =
-            "seed 7 at 12000 km x1.38; seed 42 at 12000 km x1.41; seed 99 at 12000 km x1.39; seed 1234 at 12000 km x1.34; " +
-                "seed 718106 at 12000 km x1.38; seed 7 at 20000 km x1.42; seed 42 at 20000 km x1.44"
-        const val HELD_OUT_RECORD = "seed 3 x1.40; seed 11 x1.29"
-        const val BED_CUT_FOLLOWS_THE_GRID = "E1a: the trunk's implicit cut follows the cell through its F"
+            "seed 7 at 12000 km x1.26; seed 42 at 12000 km x1.27; seed 99 at 12000 km x1.24; seed 1234 at 12000 km x1.18; " +
+                "seed 718106 at 12000 km x1.26; seed 7 at 20000 km x1.32; seed 42 at 20000 km x1.33"
+        const val HELD_OUT_RECORD = "seed 3 x1.22; seed 11 x1.15"
+        /** Not the round's step: the trunk's sub-steps leave it where it was (docs/TODO.md, E1a round 2). */
+        const val BED_CUT_FOLLOWS_THE_GRID = "E1a: the trunk's cut by drainage-area class follows the grid"
         const val BED_CUT_RECORD =
-            "seed 7 2500-10000 km2 x1.20; seed 7 10000-100000 km2 x1.20; seed 42 2500-10000 km2 x1.29; " +
-                "seed 42 10000-100000 km2 x1.18; seed 99 2500-10000 km2 x1.22; seed 1234 2500-10000 km2 x1.19; " +
-                "seed 1234 100000+ km2 x1.15; seed 718106 2500-10000 km2 x1.20; seed 718106 10000-100000 km2 x1.11"
-        const val LAKES_FOLLOW_THE_GRID = "E1a: the bed's standing water follows the grid"
-        const val LAKES_RECORD = "seed 7 x1.48; seed 1234 x1.49"
-        const val HEADS_FOLLOW_THE_GRID = "E1a: the heads or the in-cell network follow the grid"
-        const val HEADS_RECORD =
-            "seed 7 heads x1.39; seed 7 density x1.46; seed 42 density x1.39; seed 99 heads x1.44; seed 99 density x1.52; " +
-                "seed 1234 heads x1.52; seed 1234 density x1.54; seed 718106 heads x1.37; seed 718106 density x1.47"
-        const val DENUDATION_FOLLOWS_THE_STEP = "E1a: the ground's lowering follows the round's length"
-        const val STEP_RECORD = "x1.18"
+            "seed 7 2500-10000 km2 x1.22; seed 7 10000-100000 km2 x1.29; seed 7 100000+ km2 x1.10; " +
+                "seed 42 2500-10000 km2 x1.31; seed 42 10000-100000 km2 x1.24; seed 42 100000+ km2 x1.14; " +
+                "seed 99 2500-10000 km2 x1.21; seed 99 10000-100000 km2 x1.16; seed 1234 2500-10000 km2 x1.20; " +
+                "seed 1234 10000-100000 km2 x1.17; seed 718106 2500-10000 km2 x1.24; " +
+                "seed 718106 10000-100000 km2 x1.16"
     }
 }

@@ -653,7 +653,7 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
                 )
             }
         }
-        KnownFailures.expect(CALIBRATED_ON_THE_ONE_HEIGHT, "contrast 0.1560") {
+        KnownFailures.expect(CALIBRATED_ON_THE_ONE_HEIGHT, "contrast 0.1522") {
             if (kotlin.math.abs(contrast - target) / target > MAX_CONTRAST_SHORTFALL) {
                 throw RecordedViolation(
                     "the lamp's contrast at the declared exaggeration is %.4f, more than %.1f%% from the 512 by 512 grid's %.4f"

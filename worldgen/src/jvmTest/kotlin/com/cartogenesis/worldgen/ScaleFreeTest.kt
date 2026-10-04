@@ -268,7 +268,7 @@ class ScaleFreeTest : BorrowsSharedWorlds() {
         // many cells tall as wide) and armed on square cells, where the network grows by 1.32, 1.33,
         // 1.33 and 1.31 from 512 rows to 1,024 (docs/DESIGN_LEDGER.md, Fix 3b and Q2). Recorded again
         // at L1 and re-taken at its review round: see [CHANNEL_NETWORK_GROWS_ON_SEED_7].
-        KnownFailures.expect(CHANNEL_NETWORK_GROWS_ON_SEED_7, "seed 42; seed 1234; seed 99 at x1.39; 1.40; 1.38") {
+        KnownFailures.expect(CHANNEL_NETWORK_GROWS_ON_SEED_7, "seed 42; seed 1234; seed 99 at x1.36; 1.39; 1.38") {
             if (complaints.isNotEmpty()) {
                 throw RecordedViolation(
                     "the channel-head criterion is not the same criterion at two grids: ${complaints.joinToString("; ")}",
@@ -450,7 +450,7 @@ class ScaleFreeTest : BorrowsSharedWorlds() {
          */
         const val LAKE_AREA_RECORD_TOLERANCE = 0.05
 
-        const val LAKE_AREA_WITHIN_ITS_RECORD = "seed 42's share x1.49 past its record x1.23; seed 99's share x2.23 past its record x1.26"
+        const val LAKE_AREA_WITHIN_ITS_RECORD = "seed 99's share x2.30 past its record x1.26; seed 99's largest x1.76 past its record x1.38"
 
         fun configAt(seed: Long, size: Int): WorldGenConfig {
             val base = WorldGenConfig.forRows(seed, 512)

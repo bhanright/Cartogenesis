@@ -136,7 +136,6 @@ class ClimateFedErosionTest {
                 // cut, which is not incision and would land in the height difference read back.
                 debrisTravelKm = 0.0,
                 rate = 0f,
-                outletIncision = false,
                 deltaLobe = false
             )
         )

@@ -495,7 +495,8 @@ class RasterRecipe(
                 pixelsPerCellAcross = sheet.pixelsPerCellAcross,
                 pixelsPerCellDown = sheet.pixelsPerCellDown,
                 view = viewId,
-                elevation = world.sea.relativeElevation.data,
+                // The land as the map draws it, on the processor: see [DrawnRelief].
+                elevation = DrawnRelief.of(world).data,
                 land = land,
                 biome = biomes,
                 scalarA = scalarA,

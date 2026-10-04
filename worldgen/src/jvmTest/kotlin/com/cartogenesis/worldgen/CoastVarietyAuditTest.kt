@@ -61,8 +61,7 @@ class CoastVarietyAuditTest {
                 "littoral grading off" to
                     shipped.copy(sea = shipped.sea.copy(littoralGrading = false)),
                 "shelf off" to shipped.copy(sea = shipped.sea.copy(shelfWidthKm = 0.0)),
-                "enclosure off" to shipped.copy(sea = shipped.sea.copy(enclosedSeaIsLand = false)),
-                "post-cut outlet off" to shipped.copy(sea = shipped.sea.copy(postCutOutlet = false))
+                "enclosure off" to shipped.copy(sea = shipped.sea.copy(enclosedSeaIsLand = false))
             )
             sameField.forEach { (name, config) ->
                 report(name, seed, SeaLevelStage.apply(eroded.height, config).isLand, rows,

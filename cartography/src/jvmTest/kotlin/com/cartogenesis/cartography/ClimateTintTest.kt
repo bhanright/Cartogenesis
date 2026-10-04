@@ -168,7 +168,7 @@ class ClimateTintTest : BorrowsSharedWorlds() {
 
                 // The colour this style gave a desert before the climate reached the ramp.
                 val before = style.tint(
-                    style.land(world.sea.relativeElevation.data[cell]), Biome.DESERT
+                    style.land(DrawnRelief.of(world).data[cell]), Biome.DESERT
                 )
                 if (readsGreen(before)) controlGreen++
                 controlHueTotal += hue(before)
@@ -260,7 +260,7 @@ class ClimateTintTest : BorrowsSharedWorlds() {
             if (world.climate.biome[cell] != Biome.GRASSLAND) continue
             val drought = ClimateTint.droughtAt(world, cell)
             val colour = style.ground(
-                world.sea.relativeElevation.data[cell],
+                DrawnRelief.of(world).data[cell],
                 maxOf(BEFORE_GRASSLAND_BARE, drought),
                 ClimateTint.coldnessAt(world, cell),
                 ClimateTint.canopyClosure(Biome.GRASSLAND),

@@ -287,11 +287,15 @@ object MapRasterizer {
 
         val style = options.style
         val reliefDrawn = options.showHillshade && options.view != MapView.NORMALS
+        // The land as the map draws it: the ground with its own relief drawn as dissection, the
+        // bed under the rivers and the lakes (see [DrawnRelief]). Everything below that reads a
+        // height reads this one.
+        val elevation = DrawnRelief.of(world)
         // A line-art style never asks for the shaded relief, so it never pays for the pass: the
         // hachures read the same central differences a cell at a time.
         val relief = if (reliefDrawn && !style.lineArt) {
             ReliefShading.of(
-                world.sea.relativeElevation, world.sea.isLand, options.singleLamp,
+                elevation, world.sea.isLand, options.singleLamp,
                 world.config.cellWidthKm, world.config.cellHeightInCellWidths
             )
         } else null
@@ -309,7 +313,6 @@ object MapRasterizer {
         val shore = if (plan != null) {
             ShoreDistance.of(sheet, dryLandMask(world, showLakes))
         } else null
-        val elevation = world.sea.relativeElevation
 
         // The two things only the fantasy view draws: the ramp modulated by the climate, and the
         // contours in the sea. The other views either mean something a legend explains (elevation,
@@ -350,7 +353,7 @@ object MapRasterizer {
             }
 
             var color = baseColor(
-                world, sheet, options.view, style, cell, isobathInterval, flattestSlope,
+                world, elevation.data, sheet, options.view, style, cell, isobathInterval, flattestSlope,
                 isobathStencil
             )
             val isLand = world.sea.isLand[cell]
@@ -1001,6 +1004,8 @@ object MapRasterizer {
      */
     private fun baseColor(
         world: WorldMap,
+        /** [DrawnRelief]'s heights, which the land's tints are read from. */
+        drawn: FloatArray,
         sheet: SheetGeometry,
         view: MapView,
         style: MapStyle,
@@ -1010,7 +1015,7 @@ object MapRasterizer {
         isobathStencil: Int
     ): Int {
         val isLand = world.sea.isLand[cell]
-        val relative = world.sea.relativeElevation.data[cell]
+        val relative = drawn[cell]
         val sheetX = (cell % world.width) * sheet.pixelsPerCellAcross
         val sheetY = (cell / world.width) * sheet.pixelsPerCellDown
 
@@ -1123,7 +1128,7 @@ object MapRasterizer {
                 if (isLand) {
                     MapPalette.blend(
                         WIND_LAND_LOW, WIND_LAND_HIGH,
-                        world.sea.relativeElevation.data[cell].coerceIn(0f, 1f)
+                        drawn[cell].coerceIn(0f, 1f)
                     )
                 } else {
                     WIND_SEA

@@ -590,7 +590,6 @@ class ImplicitIncisionTest {
                 hydraulicRounds = 1,
                 climateFeed = false,
                 deposition = false,
-                outletIncision = false,
                 bedrockErodibilityPerYear = erodibilityPerYear
             ),
             isostasy = base.isostasy.copy(flexure = false),
@@ -734,7 +733,7 @@ class ImplicitIncisionTest {
         rainOf: (String) -> Float
     ): Steady {
         val base = WorldGenConfig(seed = 11L, width = STEADY_SIDE, height = STEADY_SIDE)
-        val config = base.copy(erosion = base.erosion.copy(climateFeed = false, deposition = false, outletIncision = false))
+        val config = base.copy(erosion = base.erosion.copy(climateFeed = false, deposition = false))
         val side = STEADY_SIDE
         val cellCount = side * side
         val scale = config.scale

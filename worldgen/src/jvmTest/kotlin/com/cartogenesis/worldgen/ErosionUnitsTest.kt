@@ -173,8 +173,7 @@ class ErosionUnitsTest {
             erosion = base.erosion.copy(
                 hydraulicRounds = 1,
                 climateFeed = false,
-                deposition = false,
-                outletIncision = false
+                deposition = false
             ),
             isostasy = base.isostasy.copy(flexure = false),
             sea = base.sea.copy(lowstandMetres = 0f)

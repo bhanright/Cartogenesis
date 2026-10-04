@@ -75,10 +75,11 @@ class SeaLevelHistoryAuditTest {
                     "${was.estuaries} before the chunk"
             )
             // At the size the author exports at. A basin the enclosure rule converts from
-            // unreachable sea to land is filled by the drainage to its sill, and until
-            // `SeaConfig.postCutOutlet` nothing could cut that sill: the notch inside the
-            // hydraulic rounds ran while the ground was still under the provisional sea, and the
-            // water balance has nowhere to drain a floor that is already below sea level. On
+            // unreachable sea to land is filled by the drainage to its sill, and until H5b nothing
+            // could cut that sill: the notch inside the hydraulic rounds ran while the ground was
+            // still under the provisional sea, and the water balance has nowhere to drain a floor
+            // that is already below sea level. Since E1b the rounds route that basin as land, and
+            // its outlet is cut on its surplus as every lake's is. On
             // 718106 at 2048 that left a Caspian-shaped lake filling a coastal rift trough, which
             // is what a render review singled out. The bar is the same one
             // `OutletIncisionTest` and `OutletResolutionTest` hold every other lake to: the

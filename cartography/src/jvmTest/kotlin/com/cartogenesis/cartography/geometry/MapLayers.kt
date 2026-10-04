@@ -1,5 +1,6 @@
 package com.cartogenesis.cartography.geometry
 
+import com.cartogenesis.cartography.DrawnRelief
 import com.cartogenesis.cartography.Isobaths
 import com.cartogenesis.cartography.MapRasterizer
 import com.cartogenesis.cartography.MapSheet
@@ -93,6 +94,10 @@ internal enum class LineClass(val label: String) {
  *  - **terrain contours**: the land's level lines at [TERRAIN_LEVELS_METRES]. The map draws no
  *    contour on land; it draws the height field as a tint and a shading, and the level lines are
  *    how that field's shapes are measured. Over a sheet the land's height is the ice's surface.
+ *  - **drawn relief**: the same level lines of the surface the map actually shades and tints,
+ *    [DrawnRelief]'s: the ground with each cell's relief drawn as dissection and the bed under the
+ *    rivers and lakes, so the dissection's ridges and hollows and the grooves the rivers run in are
+ *    measured where they are drawn.
  *  - **ice**: from the capture — where the ice stood, the valley glaciers' trough axes, the
  *    sheet's ground, every cell the ice cut, the outlet troughs, the valley basins and the scour
  *    basins — and the **ice surface**'s level lines every [ICE_SURFACE_INTERVAL_METRES] over the
@@ -142,6 +147,7 @@ internal object MapLayers {
         layers.add(Layer("rivers as drawn", courses(world, RiverSelection.drawnOn(world, pane, RiverSelection.EARTH_DENSITY_STEP), frame), openLines = true))
         layers.add(Layer("isobaths", isobaths(world, frame)))
         layers.add(Layer("terrain contours", terrainContours(world, frame)))
+        layers.add(Layer("drawn relief", drawnRelief(world, frame)))
 
         val ice = capture.ice
         if (ice == null) {
@@ -224,6 +230,12 @@ internal object MapLayers {
         val metres = world.config.scale.highestLandMetres
         val levels = FloatArray(TERRAIN_LEVELS_METRES.size) { TERRAIN_LEVELS_METRES[it] / metres }
         return levelLines(world.sea.relativeElevation.data, levels, frame, world.sea.isLand)
+    }
+
+    private fun drawnRelief(world: WorldMap, frame: GridFrame): List<Outline> {
+        val metres = world.config.scale.highestLandMetres
+        val levels = FloatArray(TERRAIN_LEVELS_METRES.size) { TERRAIN_LEVELS_METRES[it] / metres }
+        return levelLines(DrawnRelief.of(world).data, levels, frame, world.sea.isLand)
     }
 
     private fun iceSurface(world: WorldMap, thicknessMetres: FloatArray, frame: GridFrame): List<Outline> {

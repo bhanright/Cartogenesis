@@ -180,7 +180,7 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
 
     /** The [share]th quantile of the scaled land slope, in the units the shading reads. */
     private fun landSlope(world: WorldMap, share: Double, scale: Float = SLOPE_SCALE): Float {
-        val elevation = world.sea.relativeElevation
+        val elevation = DrawnRelief.of(world)
         val land = world.sea.isLand
         val slopes = ArrayList<Float>()
         for (row in 0 until world.height) {
@@ -334,7 +334,7 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
         val world = WORLD
         val lamp = Spread(
             ReliefShading.of(
-                world.sea.relativeElevation, world.sea.isLand, singleLamp = true,
+                DrawnRelief.of(world), world.sea.isLand, singleLamp = true,
                 cellWidthKm = world.config.cellWidthKm,
                 cellHeightInCellWidths = world.config.cellHeightInCellWidths
             ),
@@ -540,7 +540,7 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
 
     /** The unnormalised light over every land cell, in cell order. */
     private fun illuminationOverLand(world: WorldMap, sky: ReliefShading.Sky): FloatArray {
-        val elevation = world.sea.relativeElevation
+        val elevation = DrawnRelief.of(world)
         val land = world.sea.isLand
         val light = FloatArray(world.width * world.height)
         for (row in 0 until world.height) {
@@ -573,7 +573,7 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
         val world = WORLD
         val sky = Spread(
             ReliefShading.of(
-                world.sea.relativeElevation, world.sea.isLand, singleLamp = false,
+                DrawnRelief.of(world), world.sea.isLand, singleLamp = false,
                 cellWidthKm = world.config.cellWidthKm,
                 cellHeightInCellWidths = world.config.cellHeightInCellWidths
             ),
@@ -581,7 +581,7 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
         )
         val lamp = Spread(
             ReliefShading.of(
-                world.sea.relativeElevation, world.sea.isLand, singleLamp = true,
+                DrawnRelief.of(world), world.sea.isLand, singleLamp = true,
                 cellWidthKm = world.config.cellWidthKm,
                 cellHeightInCellWidths = world.config.cellHeightInCellWidths
             ),
@@ -696,7 +696,7 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
      */
     private fun conePinnedAt(world: WorldMap, exaggeration: Double): Int {
         val scale = (exaggeration / 2).toFloat()
-        val elevation = world.sea.relativeElevation
+        val elevation = DrawnRelief.of(world)
         val land = world.sea.isLand
         val aspect = world.config.cellHeightInCellWidths
         val light = ArrayList<Float>()
@@ -722,7 +722,7 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
     /** The single lamp's shading over [world]'s land at a central difference's [scale], as spread. */
     private fun lampSpread(world: WorldMap, scale: Float): Spread = Spread(
         ReliefShading.of(
-            world.sea.relativeElevation, world.sea.isLand, singleLamp = true,
+            DrawnRelief.of(world), world.sea.isLand, singleLamp = true,
             cellWidthKm = world.config.cellWidthKm,
             cellHeightInCellWidths = world.config.cellHeightInCellWidths,
             scale = scale

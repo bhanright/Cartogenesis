@@ -114,14 +114,12 @@ class GlaciationCombTest : BorrowsSharedWorlds() {
         listOf(718106L, 42L, 7L).forEach { seed ->
             val config = WorldGenConfig.forRows(seed, 512)
                 .atResolution(2048, 1024)
-                // E1's outlet notch off, because both figures below are shares of the world's
-                // standing water and the notch removes two thirds of it for reasons that have
-                // nothing to do with ice: on seed 718106 at 1024 the lake cells go 6632 -> 2173
-                // while the comb itself holds 113 cells before and 128 after, so an unchanged comb
-                // reads as 1.7% one moment and 5.9% the next. What this guard is about is how much
-                // of the ice's work comes out as a rank of parallel gullies, and that is measured
-                // here against the water the ice had to work with.
-                .let { it.copy(erosion = it.erosion.copy(outletIncision = false)) }
+                // Both figures below are shares of the world's standing water, which moves with
+                // how the outlets are cut for reasons that have nothing to do with ice: E1's notch
+                // took seed 718106's lake cells at 1024 from 6632 to 2173 while the comb held 113
+                // cells before and 128 after, so an unchanged comb read as 1.7% one moment and 5.9%
+                // the next. The notch is gone (E1b); the outlets are cut by the incision on each
+                // lake's surplus, which this guard cannot switch off, and it reads what is left.
                 // And H1's tectonic history off, for a reason of the same shape. Both figures are
                 // shares of the world's standing water, and the history changes how much of that
                 // there is and where: its worn old belts are broad, low-relief uplands, which is

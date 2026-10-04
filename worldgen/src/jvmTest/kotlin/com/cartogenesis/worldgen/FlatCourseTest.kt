@@ -39,21 +39,17 @@ class FlatCourseTest : BorrowsSharedWorlds() {
         const val STANDARD_SIDE = SharedWorlds.DETAIL_ROWS
 
         /**
-         * The most routing passes one default generation makes, counted at the calls to
-         * `FlowRouting.flowDirections`: one per hydraulic round; the closing breach and the mouths
-         * the last round opens, two more; the post-cut outlet pass over the drowned basins, at
-         * least one and at most `SeaLevelStage.MAX_POST_CUT_OUTLET_PASSES`; and one each for the
-         * ice, the drowned valleys and the rivers. Eighteen to thirty-three at the defaults, and the
-         * cost below is charged at the most, which is the figure a device-path decision has to
-         * survive. Fifteen until Audit III (its B-I13), which undercounted every term but the
-         * rounds.
+         * The routing passes one default generation makes, counted at the calls to
+         * `FlowRouting.flowDirections`: one per hydraulic round; the mouths the last round opens, one
+         * more; and one each for the ice, the drowned valleys and the rivers. Sixteen at the
+         * defaults. Eighteen to thirty-three while the rounds closed on a breach and the sea stage
+         * re-cut the drowned basins' outlets (Audit III's B-I13 counted those; E1b removed both).
          */
         fun routingPassesPerGeneration(config: WorldGenConfig): Int =
-            config.erosion.hydraulicRounds + CLOSING_ROUTING_PASSES +
-                SeaLevelStage.MAX_POST_CUT_OUTLET_PASSES + LATER_STAGE_ROUTING_PASSES
+            config.erosion.hydraulicRounds + CLOSING_ROUTING_PASSES + LATER_STAGE_ROUTING_PASSES
 
-        /** The closing breach and the mouths the last round opens. */
-        const val CLOSING_ROUTING_PASSES = 2
+        /** The mouths the last round opens. */
+        const val CLOSING_ROUTING_PASSES = 1
 
         /** The ice, the drowned valleys and the rivers, one each. */
         const val LATER_STAGE_ROUTING_PASSES = 3

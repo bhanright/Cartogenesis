@@ -296,7 +296,6 @@ class UnitsTest : BorrowsSharedWorlds() {
         val carving = GlaciationStage.Carving(config)
         return linkedMapOf(
             "erosion.deltaReach" to rates.deltaReachCells.toFloat(),
-            "erosion.outletReach" to rates.outletReachCells.toFloat(),
             "erosion.debrisTravel" to ErosionStage.sweepsFor(config).toFloat(),
             "sea.shelfWidth" to config.cellsFor(config.sea.shelfWidthKm),
             "ice.valleyWidth" to carving.valleyWidthCells,

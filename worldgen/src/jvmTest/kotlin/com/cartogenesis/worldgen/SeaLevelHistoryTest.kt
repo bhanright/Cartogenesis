@@ -76,24 +76,11 @@ class SeaLevelHistoryTest : BorrowsSharedWorlds() {
         val shortfalls = ArrayList<String>()
         val figures = ArrayList<String>()
         seeds.forEach { seed ->
-            // H5b's post-cut outlet pass held off in *both* arms, so this pair varies the lowstand
-            // and nothing else.
-            //
-            // Not a convenience. An estuary here is a river mouth lying more than three cells
-            // inside a narrow inlet, and H5b added a second mechanism that makes narrow inlets: a
-            // basin the enclosure rule converted, whose outflow has the power to cut its sill down
-            // to the waterline, opens as a sound with a narrow mouth. It makes them whether the sea
-            // ever stood lower or not, so it raises the *control* as much as the world under test —
-            // measured on seed 7 at 512, the world with the sea at today's level for every round
-            // goes from 22 estuary mouths to 33 with the pass on, and the ratio this case is about
-            // falls from 1.64 to 1.30 while the lowstand's own contribution is unchanged. Two
-            // mechanisms and one measurement is not a guard; the same reasoning `GlaciationTest`
-            // gives for switching the outlet notch off before it counts standing water.
-            //
-            // The shipped world's own pair, both mechanisms running, is printed by
-            // `report every corner of the pair` below.
+            // The pair varies the lowstand and nothing else. H5b's post-cut outlet pass, which cut a
+            // converted basin's sill to the waterline and opened it as a sound whatever the sea had
+            // done, was held off in both arms here; it is gone (E1b), the outlets being cut inside
+            // the rounds, which stand at the lowstand or at today's level as the arm says.
             val base = WorldGenConfig.forRows(seed, SharedWorlds.DETAIL_ROWS)
-                .let { it.copy(sea = it.sea.copy(postCutOutlet = false)) }
             val today = Coast(
                 SharedWorlds.world(base.copy(sea = base.sea.copy(lowstandMetres = 0f))),
                 "seed $seed lowstand 0     "
@@ -241,17 +228,10 @@ class SeaLevelHistoryTest : BorrowsSharedWorlds() {
         seeds.forEach { seed ->
             val base = WorldGenConfig.forRows(seed, SharedWorlds.DETAIL_ROWS)
             listOf(
-                "PRE-H5      " to base.sea.copy(
-                    lowstandMetres = 0f, enclosedSeaIsLand = false, postCutOutlet = false
-                ),
-                "lowstand    " to base.sea.copy(
-                    enclosedSeaIsLand = false, postCutOutlet = false
-                ),
-                "enclosure   " to base.sea.copy(lowstandMetres = 0f, postCutOutlet = false),
-                "H5          " to base.sea.copy(postCutOutlet = false),
-                // And H5b's own pair: the post-cut outlet pass on the shipped world, and the same
-                // world without it, so the report can say what the second inlet-maker is worth.
-                "H5b outlet  " to base.sea
+                "PRE-H5      " to base.sea.copy(lowstandMetres = 0f, enclosedSeaIsLand = false),
+                "lowstand    " to base.sea.copy(enclosedSeaIsLand = false),
+                "enclosure   " to base.sea.copy(lowstandMetres = 0f),
+                "H5          " to base.sea
             ).forEach { (name, sea) ->
                 Coast(
                     SharedWorlds.world(base.copy(sea = sea)),

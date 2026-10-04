@@ -152,8 +152,8 @@ class DataExportTest {
      * The obvious assertion — no land cell under 32768 — is false, and finding out why is worth the
      * paragraph. `SeaConfig.enclosedSeaIsLand` turns a body of water the ocean cannot reach into
      * land with a hollow floor below the waterline, which is the Caspian, the Dead Sea and the
-     * Qattara — and with `postCutOutlet` on it is then drained out into a salt flat, so the floor
-     * is dry ground below the waterline rather than a lake. On seed 42 at 512 rows that is 516 cells and
+     * Qattara — and where the basin's surplus has cut its outlet or its water balance dries it,
+     * the floor is dry ground below the waterline rather than a lake. On seed 42 at 512 rows that is 516 cells and
      * the ice accounts for none of them (measured with `GlaciationConfig.enabled` off, which
      * changes nothing here). A heightmap that clamped that floor to sea level would be flattening a
      * real depression, so what is held is the pair that is not allowed: no *open sea* cell may come

@@ -49,6 +49,22 @@ internal fun erodeBlockingReportingRounds(
 ): ErosionResult =
     runBlocking { ErosionStage.apply(config, height, upliftRateMmPerYear, null, onRound) }
 
+/**
+ * The whole stage with the spoil's re-entrainment switchable, reporting each round and logging the
+ * deposition: what the guard on the spoil's dams observes production through. Off is only ever
+ * that guard's control.
+ */
+internal fun erodeBlockingEntrainingSpoil(
+    config: WorldGenConfig,
+    height: FloatField,
+    upliftRateMmPerYear: FloatField?,
+    entrainSpoil: Boolean,
+    onRound: (RoundMass) -> Unit,
+    log: DepositionLog
+): ErosionResult = runBlocking {
+    ErosionStage.apply(config, height, upliftRateMmPerYear, null, onRound, log, entrainSpoil = entrainSpoil)
+}
+
 /** The whole stage, recording which mechanism laid sediment where, for the fan-outline guards. */
 internal fun erodeBlockingLoggingDeposition(
     config: WorldGenConfig,

@@ -464,7 +464,7 @@ class PenAndInkTest : BorrowsSharedWorlds() {
         val sheet = geometry.expand(pixels)
         val sheetWidth = geometry.widthPixels
         val land = world.sea.isLand
-        val elevation = world.sea.relativeElevation
+        val elevation = DrawnRelief.of(world)
         val reachColumns = plan.gradientStencilColumns
         val reachRows = plan.gradientStencilRows
         val window = (plan.hachureLatticePixels * TENSOR_WINDOW_PITCHES).toInt().coerceAtLeast(2)
@@ -576,7 +576,7 @@ class PenAndInkTest : BorrowsSharedWorlds() {
     private fun fixedBearingHatch(world: WorldMap): IntArray {
         val width = world.width
         val height = world.height
-        val elevation = world.sea.relativeElevation
+        val elevation = DrawnRelief.of(world)
         val style = MapStyle.PEN_AND_INK
         val slopeScale = ReliefShading.slopeScale(world.config.cellWidthKm)
         val pixels = IntArray(width * height) { style.paper }
@@ -608,7 +608,7 @@ class PenAndInkTest : BorrowsSharedWorlds() {
     private fun seamReport(world: WorldMap, plan: EngravingPlan): String {
         val width = world.width
         val height = world.height
-        val elevation = world.sea.relativeElevation
+        val elevation = DrawnRelief.of(world)
         var measured = 0
         var seams = 0
         for (row in 1 until height - 1) {

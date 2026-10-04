@@ -53,15 +53,6 @@ class StraightRunRenderTest {
          */
         const val BAR_COLUMN = 503
         const val BAR_ROW = 866
-
-        /** Seed 99 at the size its stuck basin was measured on. */
-        const val STUCK_SIDE = 512
-
-        /**
-         * How far apart, in sheet pixels, a window's water is sampled each way: a sixteenth of the
-         * pixels is enough to rank windows, which only have to find the basin, not measure it.
-         */
-        const val WINDOW_SAMPLE_PIXELS = 4
     }
 
     private fun authorsWorld(side: Int, byFacet: Boolean): WorldMap =
@@ -124,85 +115,6 @@ class StraightRunRenderTest {
 
         written.forEach { println("F18 CROP $it") }
         assertTrue(written.size == 8, "expected eight pictures, wrote ${written.size}")
-    }
-
-    /**
-     * F22: the drowned basins whose sills lay level to the water, before and after they could cut.
-     *
-     * The notch measured its channel's fall to the last cell of land, one step short of the water
-     * the outflow empties into, so a sill that ran level to the shore read as having no gradient
-     * and never cut. What that looks like is a basin of standing water below the shoreline that no
-     * river drains — seed 99 keeps one of 668 cells, 2.64 times the Caspian's share of its land —
-     * and what it looks like afterwards is country.
-     *
-     * The two seeds that carry such a sill, each at the size its basin is worth looking at, with
-     * the window chosen on the *before* world so the pair frames the same ground.
-     */
-    @Test
-    fun `the sills that could not cut, before and after`() {
-        val dir = File("build/f18-crops").apply { mkdirs() }
-        val written = ArrayList<String>()
-        val options = RenderOptions(view = MapView.FANTASY, style = MapStyle.ATLAS)
-
-        listOf(
-            Triple(SiteImagery.SEED, EXPORT_SIDE, "lake-country"),
-            Triple(99L, STUCK_SIDE, "outlet")
-        ).forEach { (seed, side, what) ->
-            var window: Pair<Int, Int>? = null
-            listOf(false to "before", true to "after").forEach { (cutTheSill, which) ->
-                val world = worldWithSill(seed, side, cutTheSill)
-                val sheet = MapImage.toBitmap(
-                    world, options, MapRasterizer.rasterize(world, options), MapSheet.UNGENERALISED
-                )
-                val at = window ?: wettestWindow(world).also { window = it }
-                written += write(dir, "$seed-$side-$what-$which-whole.png", sheet)
-                written += write(
-                    dir, "$seed-$side-$what-$which.png", crop(sheet, at.first, at.second)
-                )
-                sheet.close()
-            }
-        }
-
-        written.forEach { println("F22 CROP $it") }
-        assertTrue(written.size == 8, "expected eight pictures, wrote ${written.size}")
-    }
-
-    private fun worldWithSill(seed: Long, side: Int, cutTheSill: Boolean): WorldMap {
-        val base = if (seed == SiteImagery.SEED) {
-            WorldGenConfig(
-                seed = seed, width = 512, height = 512, seaLevel = SiteImagery.SEA_LEVEL
-            ).let {
-                it.copy(
-                    tectonics = it.tectonics.copy(plateCount = SiteImagery.PLATES),
-                    nations = it.nations.copy(nationCount = SiteImagery.REALMS)
-                )
-            }
-        } else {
-            WorldGenConfig(seed = seed, width = 512, height = 512)
-        }
-        val scaled = base.atResolution(side, side)
-        return WorldGenerationEngine.generateBlocking(
-            scaled.copy(erosion = scaled.erosion.copy(outletFallToTheWater = cutTheSill))
-        )
-    }
-
-    /**
-     * The top-left corner, in sheet pixels, of the [CROP]-square window of the sheet holding the
-     * most standing water: where the stuck basins are. Searched over the sheet itself and sampled
-     * through [SheetGeometry.cellAt], so it is the window [crop] cuts whatever the sheet's shape.
-     */
-    private fun wettestWindow(world: WorldMap): Pair<Int, Int> {
-        val geometry = SheetGeometry.of(world)
-        val lake = world.rivers.lakes.lakeId
-        return bestWindow(geometry) { left, top ->
-            var wet = 0
-            for (y in top until top + CROP step WINDOW_SAMPLE_PIXELS) {
-                for (x in left until left + CROP step WINDOW_SAMPLE_PIXELS) {
-                    if (lake[geometry.cellAt(x.toFloat(), y.toFloat())] >= 0) wet++
-                }
-            }
-            wet
-        }
     }
 
     /**

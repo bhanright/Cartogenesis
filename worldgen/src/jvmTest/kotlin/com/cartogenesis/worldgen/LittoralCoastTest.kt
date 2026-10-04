@@ -396,8 +396,7 @@ class LittoralCoastTest {
     /**
      * The invariant the whole pass rests on: it cannot enclose water.
      *
-     * Nothing downstream could undo it if it did. `SeaLevelStage.drainDrownedBasins` runs before the
-     * grading and only on the basins the percentile drowned, and `ErosionConfig.outletIncision` ran
+     * Nothing downstream could undo it if it did: the outlets are cut inside the hydraulic rounds,
      * two stages earlier, so a bay the grading sealed would be a lake below sea level for good — and
      * a finer grid, which resolves more two-cell bay mouths, would seal more of them, which is how
      * this was found: it took `GlaciationLatticeTest`'s resolution contract from 1.91 to 2.37 against a bar

@@ -540,12 +540,10 @@ class IsostasyTest : BorrowsSharedWorlds() {
                 hydraulicRounds = rounds,
                 bedrockErodibilityPerYear = erodibilityPerYear,
                 deposition = false,
-                // Neither belongs in the relation. The stream-power law is detachment-limited and
-                // says nothing about a hillslope failing at an angle, and the outlet notch is a
-                // second rate with a multiplier of its own.
+                // Neither belongs in the relation: the stream-power law is detachment-limited and
+                // says nothing about a hillslope failing at an angle.
                 criticalFallMetresPerKm = 100_000f,
-                debrisTravelKm = 0.0,
-                outletIncision = false
+                debrisTravelKm = 0.0
             ),
             sea = base.sea.copy(lowstandMetres = 0f)
         )

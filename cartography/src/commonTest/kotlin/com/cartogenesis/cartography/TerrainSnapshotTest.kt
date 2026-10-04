@@ -53,8 +53,11 @@ class TerrainSnapshotTest {
         // No accelerator, so this falls back to the CPU — which is exactly the situation of a GPU
         // world being opened on a machine that has none.
         val original = WorldGenerationEngine.generate(config)
+        // The ground, the bed the rivers are routed over and the heads the drawing spaces its
+        // dissection by: every field of the erosion stage.
         val snapshot = TerrainSnapshot.of(
-            original.width, original.height, original.erosion.height.data
+            original.width, original.height, original.erosion.height.data,
+            original.erosion.bed.data, original.erosion.channelHeadAreaKm2.data
         )
 
         // Now rebuild from the snapshot rather than by eroding again.
@@ -67,6 +70,11 @@ class TerrainSnapshotTest {
                 original.erosion.height.data[i].toRawBits(),
                 reopened.erosion.height.data[i].toRawBits(),
                 "terrain differed at cell $i"
+            )
+            assertEquals(
+                original.erosion.bed.data[i].toRawBits(),
+                reopened.erosion.bed.data[i].toRawBits(),
+                "the bed differed at cell $i"
             )
         }
         assertEquals(original.sea.landCellCount, reopened.sea.landCellCount)

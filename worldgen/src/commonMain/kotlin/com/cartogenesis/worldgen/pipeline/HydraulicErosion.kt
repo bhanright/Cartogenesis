@@ -672,6 +672,17 @@ internal object HydraulicErosion {
          * false in the guard that shows a dry basin's outlet cut without it.
          */
         lakeEvaporation: Boolean = true,
+        /**
+         * A sky held for every round in place of the provisional climate's, for the guards that
+         * need a basin's rain and evaporation set by hand; null, everywhere else, runs the climate
+         * as `ErosionConfig.climateFeed` says.
+         */
+        fixedWeather: Weather? = null,
+        /**
+         * Whether a channel takes back into its load the held spoil that stands above the cells
+         * feeding it. Only ever false in the guard that shows the spoil's dams without it.
+         */
+        entrainSpoil: Boolean = true,
         relax: suspend (FloatField) -> FloatField
     ): Eroded {
         val erosion = config.erosion
@@ -697,14 +708,15 @@ internal object HydraulicErosion {
         // Switched off, the weights are all ones and the cover is nothing, which is the world this
         // stage cut before it could see the weather, to the last bit.
         val refreshAtRound =
-            if (erosion.climateFeed && erosion.hydraulicRounds > 1) erosion.hydraulicRounds / 2
+            if (fixedWeather == null && erosion.climateFeed && erosion.hydraulicRounds > 1) erosion.hydraulicRounds / 2
             else -1
         // Off, every cell sheds Earth's mean: the same weight of one everywhere once normalised,
         // and a rainfall in millimetres for the channel heads' threshold and the channels' width,
         // which read it against Earth's own figures. With no climate there is no evaporation, and
         // every lake lets out all it is sent.
         val opening =
-            if (erosion.climateFeed) provisionalWeather(config, working, provisionalSeaLevel)
+            if (fixedWeather != null) fixedWeather
+            else if (erosion.climateFeed) provisionalWeather(config, working, provisionalSeaLevel)
             else Weather(
                 FloatArray(cellsAcross * cellsDown) { Runoff.EARTH_MEAN_LAND_RAINFALL_MM },
                 FloatArray(cellsAcross * cellsDown),
@@ -1220,6 +1232,29 @@ internal object HydraulicErosion {
                     if (bedCut[cell] > 0.0) {
                         // In the relative units [settled] is kept in; see its note.
                         settled[cell] -= (bedCut[cell] * toRelative).toFloat()
+                    }
+
+                    // The river cuts through its own spoil. What earlier rounds laid here is held
+                    // off the bed until the last round, while the channels above it go on cutting
+                    // down, so a fill that kept the no-uphill rule when it was laid can stand above
+                    // the cells that feed it by now: a dam of the river's own making, which the
+                    // fill would pond the water behind once the spoil is laid. Whatever stands
+                    // above its feeders is taken back into the load and carried on, as a river
+                    // incising through its floodplain carries it.
+                    if (entrainSpoil && !ponded && sediment[cell] > 0f) {
+                        val overFeeders = heightOverFeeders(cellsAcross, cellsDown, cell, directions, settled)
+                        if (overFeeders > 0f) {
+                            val heldRise = cells.bedRiseFor(cell, sediment[cell].toDouble(), groundOf)
+                            val keptRise = (heldRise - overFeeders.toDouble() * landRange).coerceAtLeast(0.0)
+                            val keptVolume = cells.fillToRaiseBed(cell, 0.0, keptRise, groundOf)
+                            val taken = -raise(sediment, cell, keptVolume - sediment[cell].toDouble())
+                            if (taken > 0.0) {
+                                val riseLeft = cells.bedRiseFor(cell, sediment[cell].toDouble(), groundOf)
+                                settled[cell] -= ((heldRise - riseLeft) * toRelative).toFloat()
+                                carried += taken
+                                deposited -= taken
+                            }
+                        }
                     }
 
                     // A cell below every channel head has no channel to lay a floodplain in: what
@@ -2323,6 +2358,30 @@ internal object HydraulicErosion {
         !isLand[receiver] -> shorelineHeight
         !waterSurface[receiver].isNaN() -> maxOf(surface[receiver], waterSurface[receiver])
         else -> surface[receiver]
+    }
+
+    /**
+     * How far [cell] stands on [settled] above the lowest of the cells that drain into it, in
+     * [settled]'s units; zero or less where it stands at or below every one of them, and zero where
+     * nothing drains into it. The dam the spoil's re-entrainment takes down.
+     */
+    private fun heightOverFeeders(
+        cellsAcross: Int,
+        cellsDown: Int,
+        cell: Int,
+        directions: IntArray,
+        settled: FloatArray
+    ): Float {
+        var over = Float.NEGATIVE_INFINITY
+        var fed = false
+        FlowRouting.forEachNeighbour(cellsAcross, cellsDown, cell % cellsAcross, cell / cellsAcross) { neighbour ->
+            if (directions[neighbour] == cell) {
+                val above = settled[cell] - settled[neighbour]
+                if (!fed || above > over) over = above
+                fed = true
+            }
+        }
+        return if (fed) over else 0f
     }
 
     /**

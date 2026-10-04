@@ -12,9 +12,10 @@ import kotlin.test.assertTrue
  * E8's census: how many basins the sea-level cut leaves standing at the waterline, and what became
  * of the rule that was meant to take them.
  *
- * `SeaConfig.postCutOutlet` cuts a converted basin's sill by what the basin's own outflow can take
- * off it and stops when it reaches the shoreline, which is right — a lake whose surface is at sea
- * level has no fall left to cut with. What it leaves is a hollow with its brim a few metres above
+ * A converted basin's sill is cut by what the basin's own outflow can take off it (the post-cut
+ * outlet pass did it once the cut was made; since E1b the rounds' incision does, on the basin's
+ * surplus) and the cut stops when it reaches the shoreline, which is right — a lake whose surface
+ * is at sea level has no fall left to cut with. What it leaves is a hollow with its brim a few metres above
  * the waterline behind ground of the same height, and on Earth that is not a barrier: a spring tide
  * is 2 to 4 m on an open coast, a severe cyclone surge 8 to 9 (Katrina 8.5, Bhola 9), the record
  * 13.7, and the sea has stood where it stands for six thousand years. The Bosporus sill let the

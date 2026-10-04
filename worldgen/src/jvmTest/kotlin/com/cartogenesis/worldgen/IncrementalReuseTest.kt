@@ -105,15 +105,12 @@ class IncrementalReuseTest {
             // own guard would never have caught it going stale, because the sea stage would have
             // been recomputed anyway and would simply have recut a terrain nobody re-eroded.
             "lowstand" to base.copy(sea = base.sea.copy(lowstandMetres = 0f)),
-            // And the other half of H5, which changes only the cut: water the ocean cannot reach
-            // is land, so this moves `isLand` and everything downstream of it without touching a
-            // single height.
+            // And the other half of H5: water the ocean cannot reach is land. It moves `isLand` at
+            // the cut, and since E1b it reaches back into erosion too, whose rounds route that
+            // water as land and cut its outlets, so both the rule and its cap are erosion's
+            // settings as well as the sea stage's.
             "enclosedSea" to base.copy(sea = base.sea.copy(enclosedSeaIsLand = false)),
-            // H5b: the outlet pass that runs on the far side of the cut. Like the enclosure rule
-            // above it changes only the sea stage's own two fields — the notch it cuts lives in
-            // `relativeElevation`, and where the notch reaches the waterline it moves `isLand` too
-            // — so a stale sea stage would carry an undrained basin through every stage below it.
-            "postCutOutlet" to base.copy(sea = base.sea.copy(postCutOutlet = false)),
+            "enclosedSeaMax" to base.copy(sea = base.sea.copy(enclosedSeaMaxKm2 = base.sea.enclosedSeaMaxKm2 / 4.0)),
             // F17's littoral grading moves the shoreline itself, which is the loudest thing a
             // setting in this section can do: a stale sea stage would hand every stage below it a
             // land mask from the other arm.
@@ -326,12 +323,17 @@ class IncrementalReuseTest {
                 upliftRateMmPerYear = field(world.plates.upliftRateMmPerYear),
                 crustAge = field(world.plates.crustAge)
             ),
-            erosion = ErosionResult(height = field(world.erosion.height)),
+            erosion = ErosionResult(
+                height = field(world.erosion.height),
+                bed = field(world.erosion.bed),
+                channelHeadAreaKm2 = field(world.erosion.channelHeadAreaKm2)
+            ),
             sea = SeaLevelResult(
                 shorelineHeight = world.sea.shorelineHeight,
                 isLand = world.sea.isLand.copyOf(),
                 relativeElevation = field(world.sea.relativeElevation),
-                landCellCount = world.sea.landCellCount
+                landCellCount = world.sea.landCellCount,
+                relativeBed = field(world.sea.relativeBed)
             ),
             ocean = OceanResult(
                 velocityX = field(world.ocean.velocityX),

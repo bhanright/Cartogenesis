@@ -91,11 +91,8 @@ class GlaciationLatticeTest : BorrowsSharedWorlds() {
             val config = WorldGenConfig.forRows(718106L, 512)
                 .copy(seaLevel = level)
                 .atResolution(2 * size, size)
-                // Same reason as [GlaciationCombTest]'s: the resolution contract below is a
-                // comparison of lake share of land at two grids, and E1's notch drains basins
-                // unevenly between them — at sea 0.70 it takes seed 718106's 512 grid down to
-                // 0.04% of land, under this test's own floor for having any water to compare.
-                .let { it.copy(erosion = it.erosion.copy(outletIncision = false)) }
+                // The resolution contract below is a comparison of lake share of land at two
+                // grids; E1's notch, which drained basins unevenly between them, is gone (E1b).
             val iced = SharedWorlds.world(config)
             val bare = SharedWorlds.world(
                 config.copy(glaciation = config.glaciation.copy(enabled = false))

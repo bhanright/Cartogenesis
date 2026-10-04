@@ -103,17 +103,11 @@ class LakeWaterBalanceTest : BorrowsSharedWorlds() {
     private val DRY_BASIN_SHARE_OF_SPILL_AREA = 0.50
 
     /**
-     * Both worlds are generated with the outlet notch off, and that is not a convenience.
-     *
-     * E1 drains a filled basin by cutting its lip down, and the two basins this test is built
-     * around are the two largest found anywhere in seeds 1..120 — which makes them the first things
-     * it takes: on the finished code seed 43's dry basin falls from 1775 cells at spill level to
-     * 110, and seed 99's wet one from 433 to 31, so there is nothing left here to put a water
-     * balance on. The two mechanisms are orthogonal — one decides how much rock stands between a
-     * basin and its outlet, the other how much water a catchment can keep in it — and this test is
-     * about the second. Measuring it on terrain that still has basins in it is what keeps it a test
-     * of the balance rather than a test of the notch. Re-picking a seed instead would only have to
-     * be done again the next time anything moves the terrain.
+     * The worlds the two basin cases were picked on were generated with E1's outlet notch off, so
+     * that the basins were still there to put a balance on: the notch, cutting every filled lip by
+     * the basin's whole catchment, took seed 43's dry basin from 1775 cells at spill level to 110.
+     * The notch is gone (E1b); a lip is cut by the incision on the lake's surplus, so a dry basin
+     * keeps its sill, and the worlds below are the shipped ones.
      */
     private fun world(
         seed: Long,
@@ -146,7 +140,6 @@ class LakeWaterBalanceTest : BorrowsSharedWorlds() {
         return SharedWorlds.world(
             base.copy(
                 lakes = base.lakes.copy(waterBalance = waterBalance),
-                erosion = base.erosion.copy(outletIncision = false),
                 tectonics = base.tectonics.copy(historyEpochs = historyEpochs)
             )
         )
@@ -639,7 +632,7 @@ class LakeWaterBalanceTest : BorrowsSharedWorlds() {
 
         // The bar is stated from the measurement rather than from a wish, and it is honest about
         // what it is: at the resolutions this runs at only a handful of drawn rivers end in a
-        // balanced basin — E1's outlet notch drains most basins before the balance ever sees them —
+        // balanced basin — most basins spill and are cut down before the balance ever sees them —
         // so this is a watch on the figure, not a guard that has been shown to fail. The guard that
         // has been shown to fail is `no drawn river runs across a lake`, above. Measured on this
         // pool before the change: 0.431 against 0.481, a ratio of 0.896.

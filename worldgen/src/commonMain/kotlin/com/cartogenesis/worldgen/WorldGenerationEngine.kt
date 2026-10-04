@@ -203,12 +203,15 @@ object WorldGenerationEngine {
                     // stale height field whenever sea level moved.
                     it.config.seaLevel == config.seaLevel &&
                     // And the shoreline the rounds grade to is not today's, it is the stand the
-                    // sea was at while they were cutting. That one field of the sea section is
-                    // named rather than the whole of it on purpose — the shelf remap and the
-                    // enclosed-water rule both happen after erosion, and re-running twelve
-                    // hydraulic rounds because someone moved a shelf slider would undo the whole
-                    // point of this chain.
+                    // sea was at while they were cutting; and the water the ocean cannot reach is
+                    // land to the rounds as it is to the map, so its outlets are cut inside them
+                    // (`SeaLevelStage.enclosedCut`). Those fields of the sea section are named
+                    // rather than the whole of it on purpose — the shelf remap and the coast's
+                    // passes happen after erosion, and re-running twelve hydraulic rounds because
+                    // someone moved a shelf slider would undo the whole point of this chain.
                     it.config.sea.lowstandMetres == config.sea.lowstandMetres &&
+                    it.config.sea.enclosedSeaIsLand == config.sea.enclosedSeaIsLand &&
+                    it.config.sea.enclosedSeaMaxKm2 == config.sea.enclosedSeaMaxKm2 &&
                     // And since S3 the rounds cut with the rain. The provisional march erosion
                     // runs is a whole climate stage over a still ocean, so it reads the climate
                     // section as the real one does and the ocean section through
@@ -237,8 +240,8 @@ object WorldGenerationEngine {
             ?.takeIf {
                 it.erosion === erosion &&
                     it.config.seaLevel == config.seaLevel &&
-                    // The post-cut outlet pass and the ice both route water; see the
-                    // erosion guard above.
+                    // The drowned valleys and the ice both route water; see the erosion guard
+                    // above.
                     it.config.facetRouting == config.facetRouting &&
                     it.config.flatPotential == config.flatPotential &&
                     // The continental shelf is a post-percentile remap of the ocean floor, not a

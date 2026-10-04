@@ -114,8 +114,9 @@ class OutletResolutionTest {
                 overLarge.add("$seed at $rows rows ${"%.2f".format(landLakeShare / caspianShare)}x")
                 // The drowned basins are reported, not asserted, and W1 is why.
                 //
-                // H5b held them to the same bar as the rest, because `SeaConfig.postCutOutlet`
-                // had just brought the two samples under it: a converted basin that overflows now
+                // H5b held them to the same bar as the rest, because its post-cut outlet pass (gone
+                // since E1b, the rounds cutting these outlets on the basin's surplus) had just
+                // brought the two samples under it: a converted basin that overflows now
                 // cuts its own sill, and a notch that reaches the waterline hands the basin back
                 // to the sea. Before that pass seed 42 read 79, 521 and 4499 cells at the three
                 // grids — 0.2820% of its land at 2048, 1.13 times the Caspian's share, growing

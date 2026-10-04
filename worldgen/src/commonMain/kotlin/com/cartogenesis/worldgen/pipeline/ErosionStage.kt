@@ -146,7 +146,9 @@ object ErosionStage {
         /** See [GroundWatch]: both heights and the closure, round by round, for their guards. */
         groundWatch: GroundWatch? = null,
         /** See `HydraulicErosion.apply`: only ever false in the lake outlets' own guard. */
-        lakeEvaporation: Boolean = true
+        lakeEvaporation: Boolean = true,
+        /** See `HydraulicErosion.apply`: only ever false in the spoil's own guard. */
+        entrainSpoil: Boolean = true
     ): ErosionResult {
         if (!config.erosion.enabled) return ErosionResult(height)
 
@@ -165,7 +167,8 @@ object ErosionStage {
 
         val eroded = HydraulicErosion.apply(
             config, weathered.height, config.seaLevel, upliftRateMmPerYear, onRound, log,
-            receiverClamp, weightSums, shieldCut, incisionWatch, groundWatch, lakeEvaporation
+            receiverClamp, weightSums, shieldCut, incisionWatch, groundWatch, lakeEvaporation,
+            entrainSpoil = entrainSpoil
         ) { field ->
             thermalErosion(config, field, accelerator, sweepsPerRound).height
         }

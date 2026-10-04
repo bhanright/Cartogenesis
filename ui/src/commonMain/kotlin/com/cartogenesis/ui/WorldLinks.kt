@@ -21,13 +21,7 @@ internal data class LinkOpening(
     /** What was set aside, brought down or refused, as one line; null when there is nothing to say. */
     val notice: String?,
     /** True when the address named a world this build can read, which is then made without a press of Generate. */
-    val generates: Boolean,
-    /**
-     * The size, by its rows, the link asked for and this host can make — brought down to the
-     * ceiling where it was above it — or null where the link named no size it could use. Read by
-     * [LargeLinks] to decide whether to ask before making it.
-     */
-    val linkedSize: Int? = null
+    val generates: Boolean
 )
 
 /**
@@ -95,6 +89,14 @@ object WorldLinks {
 
     internal const val VERSION_KEY = "v"
     internal const val SIZE_KEY = "size"
+
+    /**
+     * The sizes, by rows, a link may name: those the interface offered while links were copied,
+     * when a world's grid was a choice. The application makes one grid now (docs/DESIGN_LEDGER.md,
+     * G1) and copies that grid's size into every link; a link from before names one of these, and
+     * any other number is set aside rather than made.
+     */
+    private val LINKED_SIZES: List<Int> = listOf(512, 1024, 2048, 4096)
     internal const val STYLE_KEY = "style"
     internal const val VIEW_KEY = "view"
 
@@ -250,31 +252,6 @@ object WorldLinks {
         starting: WorldGenConfig,
         startingOptions: RenderOptions,
         ceiling: Int
-    ): LinkOpening = read(address, starting, startingOptions, ceiling, sizeInstead = null)
-
-    /**
-     * What [read] makes of [address], but with the world made at the size named [size] whatever
-     * size the link names: the reader's answer to [LargeLinks]' question, "open it at the default
-     * size".
-     *
-     * Every other pair is read exactly as [read] reads it, in the link's own order, so the only
-     * difference from the link's world is the size. The link's size is still checked, and a bad
-     * one still set aside, but no line says it was brought down, because the reader chose the size.
-     */
-    internal fun readAtSize(
-        address: String?,
-        starting: WorldGenConfig,
-        startingOptions: RenderOptions,
-        ceiling: Int,
-        size: Int
-    ): LinkOpening = read(address, starting, startingOptions, ceiling, sizeInstead = size)
-
-    private fun read(
-        address: String?,
-        starting: WorldGenConfig,
-        startingOptions: RenderOptions,
-        ceiling: Int,
-        sizeInstead: Int?
     ): LinkOpening {
         val unchanged = LinkOpening(starting, startingOptions, notice = null, generates = false)
         if (address == null) return unchanged
@@ -318,7 +295,6 @@ object WorldLinks {
 
         var options = startingOptions
         var sizeNotice: String? = null
-        var linkedSize: Int? = null
         if (fragmentApplies) {
             val byKey = KEYED.toMap()
             for ((key, value) in pairs) {
@@ -326,21 +302,16 @@ object WorldLinks {
                     VERSION_KEY -> Unit
                     SIZE_KEY -> {
                         val size = value.toIntOrNull()
-                        if (size == null || size !in Knobs.RESOLUTIONS) {
-                            setAside += "$key=$value is not one of ${Knobs.RESOLUTIONS.joinToString()}"
+                        if (size == null || size !in LINKED_SIZES) {
+                            setAside += "$key=$value is not one of ${LINKED_SIZES.joinToString()}"
                         } else {
                             val made = if (size <= ceiling) size
-                            else Knobs.RESOLUTIONS.filter { it <= ceiling }.max()
-                            linkedSize = made
-                            if (sizeInstead != null) {
-                                config = Knobs.atResolution(config, sizeInstead)
-                            } else {
-                                if (made != size) {
-                                    sizeNotice = "The link asks for a $size world and this one is " +
-                                        "made at $made. ${WorldCeilings.whyOutOfReach(size, ceiling)}."
-                                }
-                                config = Knobs.atResolution(config, made)
+                            else LINKED_SIZES.filter { it <= ceiling }.max()
+                            if (made != size) {
+                                sizeNotice = "The link asks for a $size world and this one is " +
+                                    "made at $made. ${WorldCeilings.whyOutOfReach(size, ceiling)}."
                             }
+                            config = Knobs.atResolution(config, made)
                         }
                     }
                     STYLE_KEY -> MapStyle.entries.firstOrNull { wireName(it) == value }
@@ -370,7 +341,7 @@ object WorldLinks {
             "Set aside from this link: ${it.joinToString("; ")}. The rest of it applies."
         }
         val notice = listOfNotNull(olderSizeNotice, setAsideLine, sizeNotice).joinToString(" ").ifEmpty { null }
-        return LinkOpening(config, options, notice, generates = true, linkedSize = linkedSize)
+        return LinkOpening(config, options, notice, generates = true)
     }
 
     /**

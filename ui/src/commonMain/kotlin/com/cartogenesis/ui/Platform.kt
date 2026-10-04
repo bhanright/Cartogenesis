@@ -82,13 +82,13 @@ class ExportOutcome(
 interface Platform {
 
     /**
-     * The working resolution to start at, named by its rows as the chips name it.
+     * The one grid this host makes every world on, named by its rows (the grid is twice as many
+     * cells across).
      *
-     * A platform decision rather than a preference. The JVM spreads generation across every core
-     * and can reach for a GPU; a browser tab has one thread, and `Dispatchers.Default` there is
-     * that same thread, so generating does not merely take longer — it stops the page answering
-     * until it finishes. Starting the web build smaller is the difference between a wait and an
-     * apparent hang.
+     * A platform decision rather than a preference, and no longer a starting point: the interface
+     * offers no other grid (docs/DESIGN_LEDGER.md, G1). A value on the platform rather than a
+     * constant, so that nothing in the interface depends on the number, and a test platform can
+     * make its worlds small.
      */
     val defaultResolution: Int
 
@@ -225,18 +225,15 @@ interface Platform {
     val coarsePointer: Boolean get() = false
 
     /**
-     * The largest world this host can make, as its size is named, by its rows (the grid is twice
-     * as many cells across): what the working resolution may be
-     * set to and what an export may be asked for. One number rather than two, because an export
-     * makes the world again at its own size, so the two could only disagree by offering a size
-     * that ends the same way from either row.
+     * The largest world this host can hold, as its size is named, by its rows (the grid is twice
+     * as many cells across).
      *
-     * [WorldCeilings.DESKTOP] by default, [WorldCeilings.forDesktopHeap] of [heapBytes] on the
-     * desktop, [WorldCeilings.BROWSER_TAB] in every browser, phone or not; each says what was
-     * measured to put it there. A value on the platform rather than a constant in the panel, so
-     * that the build which makes a larger world fit raises this and every row that offers a size
-     * follows: a size above it stays in its row, disabled, with [WorldCeilings.whyOutOfReach]
-     * saying why.
+     * The interface makes one grid, [defaultResolution], so this no longer bounds a choice; it is
+     * the guard on the worlds that arrive at another grid — a save or a link of the years when
+     * the grid was a choice — which are refused in a sentence, with [WorldCeilings.whyOutOfReach],
+     * rather than begun on a heap that cannot finish them. [WorldCeilings.DESKTOP] by default,
+     * [WorldCeilings.forDesktopHeap] of [heapBytes] on the desktop; each says what was measured
+     * to put it there.
      */
     val generationCeiling: Int get() = WorldCeilings.DESKTOP
 
@@ -470,7 +467,7 @@ expect fun formatTimestamp(millis: Long): String
  * one of them. See [Platform.generationCeiling]. Sizes are named by their rows, the grid twice as
  * many cells across. What each was measured at is in docs/DESIGN_LEDGER.md, Q5 and Q6.
  *
- * Public because the web front end, which is a module of its own, declares the browser's.
+ * Public because the desktop front end, which is a module of its own, declares its own.
  */
 object WorldCeilings {
 

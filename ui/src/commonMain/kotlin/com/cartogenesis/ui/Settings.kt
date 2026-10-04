@@ -15,14 +15,14 @@ import kotlinx.serialization.json.Json
  * a **setting of a world** and a **setting of the application**. Ocean coverage, plate count and
  * seasonal tilt are settings of a world: they belong to the map on screen, they travel in the save
  * file, and they live in the panel. Nothing in this file is one of those. These are preferences —
- * which chrome the window wears, how big a world to start at, whether to reach for the graphics
- * card without being asked — and they belong to the person rather than to the map, so they persist
+ * which chrome the window wears, whether to reach for the graphics card without being asked —
+ * and they belong to the person rather than to the map, so they persist
  * between sessions and never enter a save.
  *
  * The rule that follows from that, and that the dialog obeys throughout: **a preference is a
- * default, not a command.** Changing the default working resolution does not resize the world on
- * screen, and changing the default export size does not re-export anything. What is on screen is
- * the reader's; what is here is what the next one starts as. The two exceptions are the two that
+ * default, not a command.** Changing the export format a row starts at does not re-export
+ * anything, and turning acceleration on at launch does not remake the world on screen. What is on
+ * screen is the reader's; what is here is what the next one starts as. The two exceptions are the two that
  * are not defaults at all but properties of the running application — the chrome and the interface
  * scale — and those apply the moment they change.
  */
@@ -31,21 +31,6 @@ data class AppSettings(
     /** Which chrome. [ThemeChoice.SYSTEM] follows the host's own light/dark setting. */
     @SerialName("theme")
     val theme: ThemeChoice = ThemeChoice.SYSTEM,
-
-    /**
-     * The size a new world is generated at, named by its rows as the chips name it, or 0 to take
-     * the platform's own answer.
-     *
-     * Zero rather than a number is the default on purpose: the desktop starts at 1024 and the web
-     * at 512, for the reasons [Platform.defaultResolution] gives, and a settings file written on
-     * one would otherwise impose its answer on the other the first time it was carried across.
-     *
-     * The number names a chip, and a chip names the same sheet it named when sizes counted the
-     * columns of a grid as many cells tall as wide, so a file written then is read as the same
-     * chip: the world is twice the cells, square on the ground, and the picture the same size.
-     */
-    @SerialName("workingResolution")
-    val workingResolution: Int = FOLLOW_PLATFORM,
 
     /**
      * Whether the graphics device is reached for without being asked.
@@ -62,17 +47,6 @@ data class AppSettings(
 
     @SerialName("exportFormat")
     val exportFormat: ExportFormat = ExportFormat.PNG,
-
-    /**
-     * The size, by its rows, that File ▸ Export writes. Held to [Platform.generationCeiling] on
-     * the way in and on the way out; see [SettingsEffects].
-     *
-     * 1024 by default: the largest world a browser tab makes, so no host starts with a default it
-     * has to bring down and say so, and the desktop's own starting size, where the export is the
-     * world on screen and nothing is made again.
-     */
-    @SerialName("exportSize")
-    val exportSize: Int = 1024,
 
     /** Empty means the platform's own library location. Only the desktop has anywhere else. */
     @SerialName("libraryFolder")
@@ -105,8 +79,6 @@ data class AppSettings(
     val riverInkStep: Int = RiverSelection.EARTH_DENSITY_STEP
 ) {
     companion object {
-        const val FOLLOW_PLATFORM = 0
-
         /** What the scale control offers. Below 0.8 the type stops being readable at all. */
         val SCALES: List<Float> = listOf(0.8f, 0.9f, 1.0f, 1.15f, 1.3f, 1.5f)
     }
@@ -153,20 +125,11 @@ object SettingsCodec {
      * single control filled the screen and there was no way back to the dialog.
      */
     private fun AppSettings.sane(): AppSettings = copy(
-        workingResolution = if (workingResolution in Knobs.RESOLUTIONS) workingResolution
-        else AppSettings.FOLLOW_PLATFORM,
-        exportSize = if (exportSize in Exports.SIZES) exportSize else Exports.SIZES.first(),
         interfaceScale = interfaceScale.coerceIn(AppSettings.SCALES.first(), AppSettings.SCALES.last()),
         riverInkStep = riverInkStep
             .coerceIn(RiverSelection.INK_STEPS.first, RiverSelection.INK_STEPS.last)
     )
 }
-
-/**
- * Settings held to a host's ceiling, and the line saying what that moved; see
- * [SettingsEffects.withinCeiling]. [notice] is null when nothing moved.
- */
-internal data class HeldSettings(val settings: AppSettings, val notice: String?)
 
 /**
  * What each setting actually *does*, as a pure function.
@@ -204,56 +167,11 @@ internal object SettingsEffects {
         else settings.copy(riverInkStep = options.riverInkStep)
 
     /**
-     * The grid a fresh world starts at: the preference, or the platform's own if there is none —
-     * and never above 512 in a phone-shaped window.
-     *
-     * The cap is not a preference being overruled for the sake of it. The settings document is one
-     * string per origin and per user, so a reader who works at 2048 on a desktop and then opens the
-     * web build on their phone arrives with `workingResolution = 2048` in local storage; honouring
-     * it there is a minute of a blocked page on one thread, which reads as a browser that has hung.
-     * 512 is what the web front end already starts at for the same reason.
+     * The grid every world is made at, by its rows: the platform's one grid, which no preference
+     * moves. The application used to offer a choice of grids, and a settings file written then may
+     * still name one; it is read and ignored (docs/DESIGN_LEDGER.md, G1).
      */
-    fun resolution(settings: AppSettings, platform: Platform, compact: Boolean = false): Int {
-        val preferred =
-            if (settings.workingResolution == AppSettings.FOLLOW_PLATFORM) platform.defaultResolution
-            else settings.workingResolution
-        // Held to the ceiling here as well as where the settings are read, so that no path to a
-        // fresh world reaches a size the host cannot finish; see [withinCeiling] for the notice.
-        val possible = minOf(preferred, platform.generationCeiling)
-        return if (compact) minOf(possible, Layouts.COMPACT_RESOLUTION) else possible
-    }
-
-    /**
-     * [settings] held to what a host whose [Platform.generationCeiling] is [ceiling] can make, with
-     * the one line that says what moved and why, or a null line when nothing had to. [heapBytes] is
-     * the host's largest heap where it can say ([Platform.heapBytes]), for the reason's figures.
-     *
-     * A settings document written before the browser stopped at 1024, or carried over from a
-     * session that asked for 2048, would otherwise start a world that ends in a dead tab. Clamped
-     * rather than refused, because the rest of the document is still the reader's; said rather than
-     * done quietly, because a reader who chose 2048 and gets 1024 is owed the reason, and said once,
-     * because the caller stores the clamped document so the next launch has nothing to say.
-     */
-    fun withinCeiling(settings: AppSettings, ceiling: Int, heapBytes: Long? = null): HeldSettings {
-        val resolution = settings.workingResolution
-        val resolutionMoves = resolution != AppSettings.FOLLOW_PLATFORM && resolution > ceiling
-        val exportMoves = settings.exportSize > ceiling
-        if (!resolutionMoves && !exportMoves) return HeldSettings(settings, notice = null)
-        val held = settings.copy(
-            workingResolution =
-                if (resolutionMoves) Knobs.RESOLUTIONS.filter { it <= ceiling }.max() else resolution,
-            exportSize = Exports.clamp(settings.exportSize, ceiling)
-        )
-        val asked = if (resolutionMoves) resolution else settings.exportSize
-        val what = when {
-            resolutionMoves && exportMoves -> "Worlds and exports start"
-            resolutionMoves -> "Worlds start"
-            else -> "Exports start"
-        }
-        val notice = "$what at $ceiling here rather than the $asked in your settings. " +
-            "${WorldCeilings.whyOutOfReach(asked, ceiling, heapBytes)}."
-        return HeldSettings(held, notice)
-    }
+    fun resolution(platform: Platform): Int = platform.defaultResolution
 
     /**
      * The config the application opens with.
@@ -266,10 +184,9 @@ internal object SettingsEffects {
     fun startingConfig(
         settings: AppSettings,
         platform: Platform,
-        seed: Long,
-        compact: Boolean = false
+        seed: Long
     ): WorldGenConfig {
-        val size = resolution(settings, platform, compact)
+        val size = resolution(platform)
         val base = Knobs.atResolution(WorldGenConfig(seed = seed), size)
         // A machine with no device gets the CPU whatever the preference says: a config claiming
         // GPU acceleration that silently ran on the CPU would be a lie told to the header switch.
@@ -280,10 +197,6 @@ internal object SettingsEffects {
     /** Whether [startingConfig] will have asked for the graphics device. */
     fun usesGraphicsAcceleration(config: WorldGenConfig): Boolean =
         config.erosion.acceleration == Acceleration.GPU
-
-    /** The default export size, never above what this build can finish. */
-    fun exportSizeWithin(settings: AppSettings, ceiling: Int): Int =
-        Exports.clamp(settings.exportSize, ceiling)
 
     /** Where the library is, in the reader's terms: their folder if they chose one. */
     fun libraryLocation(settings: AppSettings, platform: Platform): String =

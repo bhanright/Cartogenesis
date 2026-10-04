@@ -1,14 +1,10 @@
 package com.cartogenesis.desktop
 
-import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.DesktopComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
-import androidx.compose.ui.test.assertIsFocused
-import androidx.compose.ui.test.performKeyInput
-import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.isRoot
@@ -111,105 +107,29 @@ class WorldLinkDesktopTest {
         assertTrue("glaciers" !in link, link)
     }
 
-    // ---- a link larger than the window starts at asks first ---------------------------------
-
     /**
-     * A link to a 512 world in a window that starts at 128 rows: above the default, so the window asks
-     * and makes nothing until answered. The smaller answer holds the focus, and Enter takes it —
-     * the keyboard's way through — and the world it makes is at 128 with the link's plate count.
+     * A link to a 512 world in a window that starts at 128 rows makes the link's world on arrival,
+     * at the size it names. The window used to ask first, a choice of grid that went with the
+     * others when the application came to make one grid (docs/DESIGN_LEDGER.md, G1); the desktop
+     * is opened at no address, so this is the path only a window opened at a link takes.
      */
     @OptIn(ExperimentalTestApi::class)
     @Test
-    fun `a link above the default size asks first, and Enter opens it at the default with the link's settings`() {
-        val platform = Recording(openedAt = "${WorldLinks.PUBLIC_APP_ADDRESS}?seed=718106#v=${WorldLinks.FORMAT_VERSION}&size=512&plates=9")
-        runDesktopComposeUiTest(width = 1440, height = 900) {
-            setContent { CartogenesisTheme(dark = false) { CartogenesisApp(platform) } }
-            awaitQuestionOrWorld()
-            assertTrue(shown(QUESTION_TITLE), "the window made the link's world without asking")
-            val question = textOf(QUESTION_LEAD)
-            println("LARGE LINK asked on the desktop: $question")
-            assertTrue("This link makes a 512 world, larger than the $WINDOW_ROWS" in question, question)
-            // Asked and not answered: nothing is made, however long the question stands.
-            Thread.sleep(UNANSWERED_MS)
-            waitForIdle()
-            assertNull(worldOnTheMap(), "a world was made before the question was answered")
-            assertTrue(!shown("Stop"), "a generation started before the question was answered")
-
-            onNodeWithText("Open at $WINDOW_ROWS").assertIsFocused()
-            onNodeWithText("Open at $WINDOW_ROWS").performKeyInput { pressKey(Key.Enter) }
-            waitUntil(timeoutMillis = WAIT_MS) { worldOnTheMap() != null && !shown("Stop") }
-            waitForIdle()
-            assertEquals(718106L to WINDOW_ROWS, worldOnTheMap())
-            assertTrue(!shown(QUESTION_TITLE), "the question is still up after it was answered")
-
-            onNodeWithText("File").performClick()
-            waitForIdle()
-            onNodeWithText("Copy link to this world").performClick()
-            waitForIdle()
-        }
-        val link = platform.copied.single()
-        assertTrue("&size=$WINDOW_ROWS" in link, link)
-        assertTrue("&plates=9" in link, "the default size lost the link's plate count: $link")
-    }
-
-    @OptIn(ExperimentalTestApi::class)
-    @Test
-    fun `make it makes the world at the link's size`() {
-        val platform = Recording(openedAt = "${WorldLinks.PUBLIC_APP_ADDRESS}?seed=718106#v=${WorldLinks.FORMAT_VERSION}&size=512&plates=9")
-        runDesktopComposeUiTest(width = 1440, height = 900) {
-            setContent { CartogenesisTheme(dark = false) { CartogenesisApp(platform) } }
-            awaitQuestionOrWorld()
-            assertTrue(shown(QUESTION_TITLE), "the window made the link's world without asking")
-            onNodeWithText("Make it at 512").performClick()
-            waitUntil(timeoutMillis = WAIT_MS) { worldOnTheMap() != null && !shown("Stop") }
-            waitForIdle()
-            assertEquals(718106L to 512, worldOnTheMap())
-
-            onNodeWithText("File").performClick()
-            waitForIdle()
-            onNodeWithText("Copy link to this world").performClick()
-            waitForIdle()
-        }
-        val link = platform.copied.single()
-        assertTrue("&size=512" in link && "&plates=9" in link, link)
-    }
-
-    @OptIn(ExperimentalTestApi::class)
-    @Test
-    fun `a link at the default size makes its world on arrival without asking`() {
+    fun `a link makes its world on arrival, at the size it names, without asking`() {
         val platform = Recording(
-            openedAt = "${WorldLinks.PUBLIC_APP_ADDRESS}?seed=718106#v=${WorldLinks.FORMAT_VERSION}&size=512&plates=9",
-            defaultResolution = 512
+            openedAt = "${WorldLinks.PUBLIC_APP_ADDRESS}?seed=718106#v=${WorldLinks.FORMAT_VERSION}&size=512&plates=9"
         )
         runDesktopComposeUiTest(width = 1440, height = 900) {
             setContent { CartogenesisTheme(dark = false) { CartogenesisApp(platform) } }
-            awaitQuestionOrWorld()
-            assertTrue(!shown(QUESTION_TITLE), "a link at the default size asked first")
+            waitUntil(timeoutMillis = WAIT_MS) { worldOnTheMap() != null && !shown("Stop") }
+            waitForIdle()
             assertEquals(718106L to 512, worldOnTheMap())
         }
-    }
-
-    /**
-     * Until the window has either asked or finished a world, whichever it does, so a window that
-     * should have asked and did not fails on the assertion that says so rather than on a timeout.
-     */
-    @OptIn(ExperimentalTestApi::class)
-    private fun DesktopComposeUiTest.awaitQuestionOrWorld() {
-        waitUntil(timeoutMillis = WAIT_MS) {
-            shown(QUESTION_TITLE) || (worldOnTheMap() != null && !shown("Stop"))
-        }
-        waitForIdle()
     }
 
     @OptIn(ExperimentalTestApi::class)
     private fun DesktopComposeUiTest.shown(text: String): Boolean =
         onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty()
-
-    /** The whole of the first text on screen that contains [part]. */
-    @OptIn(ExperimentalTestApi::class)
-    private fun DesktopComposeUiTest.textOf(part: String): String =
-        onAllNodesWithText(part, substring = true).fetchSemanticsNodes().first()
-            .config[SemanticsProperties.Text].joinToString("") { it.text }
 
     /** The seed on the cartouche, as `ImportSaveTest` reads it. */
     @OptIn(ExperimentalTestApi::class)
@@ -239,16 +159,6 @@ class WorldLinkDesktopTest {
     }
 
     private companion object {
-        const val QUESTION_TITLE = "A large world"
-        const val QUESTION_LEAD = "This link makes a"
-
-        /**
-         * How long an unanswered question is left standing before the test looks for a world: a
-         * world of 128 rows is made in well under this on the test machine, so a window that
-         * generated behind the question would have a world on its map by now.
-         */
-        const val UNANSWERED_MS = 3_000L
-
         /**
          * The window's size, by its rows, a grid 256 by 128. No link names so small a world; the
          * window starts at it only because this one names none.

@@ -24,6 +24,7 @@ import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.ErosionAccelerator
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
@@ -52,11 +53,15 @@ class SettingsEffectTest {
         assertNotEquals(mars, large)
     }
 
+    /**
+     * The header offers no grid: the application makes one, and a settings file written when the
+     * grid was a choice opens on the same window as one that never named one.
+     */
     @Test
-    fun `the stored working resolution is the grid the header opens on`() {
-        assertTrue(headerSays(AppSettings(workingResolution = 2048), "2048 rows"))
-        // And the default follows the platform, which this fake says is 512.
-        assertTrue(headerSays(AppSettings(), "512 rows"))
+    fun `the header offers no choice of grid, whatever the stored settings say`() {
+        val older = SettingsCodec.decode("""{"workingResolution":2048,"exportSize":4096}""")
+        assertEquals(shoot(AppSettings()), shoot(older), "a stored grid still reached the window")
+        assertFalse(headerSays(AppSettings(), "Generation resolution"), "the header still offers a grid")
     }
 
     @Test
@@ -186,10 +191,8 @@ class SettingsEffectTest {
     fun `Reset to defaults writes every default back through the seam`() {
         val everyOneMoved = AppSettings(
             theme = ThemeChoice.MARS,
-            workingResolution = 2048,
             graphicsAccelerationAtLaunch = true,
             exportFormat = ExportFormat.WEBP,
-            exportSize = 2048,
             libraryFolder = "D:/atlas/worlds",
             interfaceScale = 1.3f,
             checkForUpdatesOnLaunch = true,

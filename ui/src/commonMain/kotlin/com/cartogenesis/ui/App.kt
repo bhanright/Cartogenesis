@@ -6,9 +6,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
-import androidx.compose.foundation.hoverable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.ColumnScope
@@ -137,13 +134,7 @@ fun CartogenesisRoot(platform: Platform) {
     // the library *is* rather than a default for next time: a window that opened on the default
     // folder listed none of the reader's worlds, while Settings named the folder they were in.
     LaunchedEffect(platform) {
-        val read = SettingsCodec.decode(runCatching { platform.settingsStore.read() }.getOrNull())
-        // A size this host cannot make, from an older build or another session, is brought down to
-        // the ceiling and said once: the clamped document is written back, so the next launch has
-        // nothing to say.
-        val held = SettingsEffects.withinCeiling(read, platform.generationCeiling, platform.heapBytes)
-        val stored = held.settings
-        if (stored != read) unwritten.trySend(stored)
+        val stored = SettingsCodec.decode(runCatching { platform.settingsStore.read() }.getOrNull())
         val folder = stored.libraryFolder
         val folderNotice =
             if (folder.isNotBlank() && !runCatching { platform.useLibraryFolder(folder) }.getOrDefault(false)) {
@@ -151,7 +142,7 @@ fun CartogenesisRoot(platform: Platform) {
             } else {
                 null
             }
-        launchNotice = listOfNotNull(held.notice, folderNotice).joinToString(" ")
+        launchNotice = folderNotice.orEmpty()
         settings = stored
     }
 
@@ -237,7 +228,7 @@ private fun Application(
      * world rather than on a fresh seed. Read once, when the window first composes, and applied
      * over what the window would have started with, so a link says only what differs from it.
      */
-    val linkStarting = remember { SettingsEffects.startingConfig(settings, platform, freshSeed(), compact) }
+    val linkStarting = remember { SettingsEffects.startingConfig(settings, platform, freshSeed()) }
     val linkStartingOptions = remember { SettingsEffects.startingRenderOptions(settings) }
     val opening = remember {
         WorldLinks.read(
@@ -245,18 +236,6 @@ private fun Application(
             starting = linkStarting,
             startingOptions = linkStartingOptions,
             ceiling = generationCeiling
-        )
-    }
-    /**
-     * The question a link larger than this host's starting size asks before anything is made, or
-     * null when there is none to ask — see [LargeLinks]. Worded once, for the arrangement the window
-     * opened in, since the figure is about the machine the window opened on.
-     */
-    var largeLinkQuestion by remember {
-        mutableStateOf(
-            opening.linkedSize?.takeIf { LargeLinks.asks(opening, platform.defaultResolution) }?.let { size ->
-                LargeLinks.question(size, platform.defaultResolution, GenerationHost.of(platform, compact))
-            }
         )
     }
     var config by remember { mutableStateOf(opening.config) }
@@ -381,10 +360,9 @@ private fun Application(
     // Nothing generates until this is armed - by Go, New world, or Generate. Opening a save from
     // the library arms it too, since a world is then on screen and later edits should live-update
     // it exactly as if it had been generated here.
-    // A link is the reader asking for a world by name, so a window opened at one is armed already -
-    // unless it names a large world, which waits for the reader's answer to [LargeLinkDialog].
+    // A link is the reader asking for a world by name, so a window opened at one is armed already.
     val gate = remember {
-        GenerationGate().also { if (opening.generates && largeLinkQuestion == null) it.request() }
+        GenerationGate().also { if (opening.generates) it.request() }
     }
     // Which of the panel's sections are unrolled. Remembered here rather than inside the panel so
     // that a trip to the atlas or the library and back does not roll them all up again.
@@ -647,7 +625,7 @@ private fun Application(
 
             MenuCommand.SAVE_AS -> saveAs = true
 
-            MenuCommand.EXPORT -> startExport(SettingsEffects.exportSizeWithin(settings, generationCeiling))
+            MenuCommand.EXPORT -> world?.let { shown -> startExport(Knobs.sizeOf(shown.config)) }
 
             // The world on screen and the drawing on screen, not the panel's settings: the panel
             // may already be on the next world while this one is still the one being looked at.
@@ -870,34 +848,6 @@ private fun Application(
             onDismiss = { showSettings = false },
             libraryLocation =
                 if (places.offersFolders) places.location else SettingsEffects.libraryLocation(settings, platform)
-        )
-    }
-
-    largeLinkQuestion?.let { question ->
-        val linkSize = opening.linkedSize ?: return@let
-        LargeLinkDialog(
-            question = question,
-            linkSize = linkSize,
-            defaultSize = platform.defaultResolution,
-            onMakeIt = {
-                largeLinkQuestion = null
-                gate.request()
-            },
-            onAtDefault = {
-                // Read again at the default size rather than the link's world scaled down, so every
-                // other pair reaches the world by the same path it would have at the link's size.
-                val atDefault = WorldLinks.readAtSize(
-                    platform.openedAt, linkStarting, linkStartingOptions, generationCeiling,
-                    size = platform.defaultResolution
-                )
-                config = atDefault.config
-                options = atDefault.options
-                // The link's line said what the link's size came to; this world is at another.
-                status = listOfNotNull(launchNotice.ifBlank { null }, atDefault.notice).joinToString(" ")
-                linkNoticeAfterGenerating = atDefault.notice
-                largeLinkQuestion = null
-                gate.request()
-            }
         )
     }
 
@@ -1223,8 +1173,6 @@ private fun Application(
             hasWorld = world != null,
             worldOnScreen = world?.config,
             exportChoice = exportChoice,
-            generationCeiling = generationCeiling,
-            exportSizes = reachable.exportSizes,
             pictureFormats = reachable.pictureFormats,
             dataLayers = reachable.dataLayers,
             headerKnobs = Arrangements.headerKnobs(platform),
@@ -1235,7 +1183,6 @@ private fun Application(
             onWorldName = naming::rename,
             onConfig = { config = it },
             onSeed = { config = Knobs.withSeed(config, it); gate.request() },
-            onResolution = { config = Knobs.atResolution(config, it) },
             onNewWorld = {
                 config = Knobs.withSeed(config, freshSeed())
                 gate.request()
@@ -1243,11 +1190,7 @@ private fun Application(
             onGenerate = { gate.request() },
             onStop = { stopGenerating() },
             onExportChoice = { exportChoice = it },
-            // Clamped here as well as at the button. The disabled chip is a courtesy; this
-            // is the guarantee, and it is what a size restored from an older build's
-            // preference — which could still say 8192 — passes through. It applies to a data
-            // layer exactly as it does to a picture: both re-run the pipeline at that size.
-            onExport = { startExport(Exports.clamp(it, generationCeiling)) },
+            onExport = { startExport(it) },
             onToggleAtlas = {
                 screen = if (screen == Screen.ATLAS) Screen.MAP else Screen.ATLAS
             },
@@ -1938,9 +1881,6 @@ private fun PanelHeader(
     /** The settings of the world on screen, or null before there is one. */
     worldOnScreen: WorldGenConfig?,
     exportChoice: ExportChoice,
-    /** The largest world this host makes; see [Platform.generationCeiling]. */
-    generationCeiling: Int,
-    exportSizes: List<Int>,
     pictureFormats: List<ExportFormat>,
     dataLayers: List<DataLayer>,
     headerKnobs: List<Knob>,
@@ -1951,7 +1891,6 @@ private fun PanelHeader(
     onWorldName: (String) -> Unit,
     onConfig: (WorldGenConfig) -> Unit,
     onSeed: (Long) -> Unit,
-    onResolution: (Int) -> Unit,
     onNewWorld: () -> Unit,
     onGenerate: () -> Unit,
     onStop: () -> Unit,
@@ -1987,64 +1926,7 @@ private fun PanelHeader(
         ) { Text("Random world", maxLines = 1) }
     }
 
-    val resolutions = Knobs.resolutionChoices(generationCeiling, platform.heapBytes)
-    // Which chip the pointer is over, if it is one whose reason is not printed below; see there.
-    var reachingFor by remember { mutableStateOf<Int?>(null) }
-    // The size by its name, as the chips say it, and in rows, which is what the name counts: the
-    // grid itself, twice as many cells across, is the cartouche's to state.
-    Labelled("Generation resolution", "${Knobs.sizeOf(config)} rows") {
-        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            resolutions.forEach { choice ->
-                val hoverSource = remember { MutableInteractionSource() }
-                val hovered by hoverSource.collectIsHoveredAsState()
-                LaunchedEffect(hovered, choice.enabled) {
-                    if (!choice.enabled && hovered) reachingFor = choice.size
-                    else if (reachingFor == choice.size) reachingFor = null
-                }
-                FilterChip(
-                    selected = Knobs.sizeOf(config) == choice.size,
-                    onClick = { onResolution(choice.size) },
-                    label = { Text("${choice.size}", maxLines = 1) },
-                    enabled = !busy && choice.enabled,
-                    modifier = Modifier.weight(1f).hoverable(hoverSource)
-                )
-            }
-        }
-    }
-
-    // Why a chip above is greyed out. Printed under the row where the reason is a browser's, which
-    // in a browser is always true, and everywhere in the compact arrangement, since a phone has no
-    // pointer to hover with. A size no build makes explains itself when the pointer is on it, as
-    // 8192 does on the export row: in the wide arrangement the header has no room for a standing
-    // line about it, and printed it took the whole column in a 900 dp window and pushed every
-    // section below the fold.
-    val compact = LocalWindowShape.current == WindowShape.COMPACT
-    resolutions.filter { choice ->
-        choice.whyOutOfReach != null &&
-            (compact || choice.size <= WorldCeilings.DESKTOP || choice.size == reachingFor)
-    }.mapNotNull { it.whyOutOfReach }.forEach { reason ->
-        Text(
-            reason,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
-
-    // What the larger chips cost on the device this arrangement is drawn for, from the same table
-    // the large-link question quotes, and saying so where a figure is an estimate rather than a
-    // measurement. The last clause is the honest part — a browser has one thread, so a long stage
-    // is a page that stops answering, and a reader owed no explanation of that concludes the tab
-    // has died. Compact only: a desktop is not what this is about, and the numbers are not its
-    // numbers.
-    if (LocalWindowShape.current == WindowShape.COMPACT) {
-        Text(
-            LargeLinks.phoneCostLine(),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
-
-    // Where the work runs, directly under how finely it is done. The only knob the header draws,
+    // Where the work runs. The only knob the header draws,
     // and it is drawn from the declaration rather than by hand — from the *arrangement's*
     // declaration, which is how a host with no graphics API at all draws no switch here rather
     // than a disabled one. Nothing in this section is a [Mark] — a knob that writes
@@ -2055,10 +1937,7 @@ private fun PanelHeader(
     }
 
     // Export, which would otherwise want a 200 dp column of its own on the far side of the map.
-    OutputOptions(
-        worldOnScreen, exportChoice, generationCeiling, platform.heapBytes, exportSizes,
-        pictureFormats, dataLayers, onExportChoice, onExport
-    )
+    OutputOptions(worldOnScreen, exportChoice, pictureFormats, dataLayers, onExportChoice, onExport)
 
     Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         OutlinedButton(
@@ -2329,26 +2208,22 @@ private fun AcceleratorNote(platform: Platform, onGpu: Boolean) {
  * and the two are labelled rather than run together because they are answers to different
  * questions: one is what you put in a document, the other is what you load into Blender or QGIS.
  * Exactly one chip across both lines is selected — see [ExportChoice] for why there is one
- * selection and not two — so the size buttons below stay a single row that means one thing.
+ * selection and not two — so the one Export button below means one thing.
+ *
+ * There is no size to choose. An export is the world on screen at its own grid, a cell to a pixel,
+ * which is the one grid the application makes (docs/DESIGN_LEDGER.md, G1); the button passes that
+ * world's size to the export, so a world opened from a save of another grid exports at its own.
  */
 @Composable
 private fun OutputOptions(
     /** The settings of the world on screen, or null before there is one to export. */
     worldOnScreen: WorldGenConfig?,
     exportChoice: ExportChoice,
-    generationCeiling: Int,
-    /** The host's largest heap where it can say; see [Platform.heapBytes]. */
-    heapBytes: Long?,
-    sizes: List<Int>,
     pictureFormats: List<ExportFormat>,
     dataLayers: List<DataLayer>,
     onExportChoice: (ExportChoice) -> Unit,
     onExport: (Int) -> Unit
 ) {
-    // Which size the pointer is over, if it is over one that cannot be run. Only that case needs
-    // remembering: the small print for a size that works is the selected chip's own line.
-    var reachingFor by remember { mutableStateOf<Int?>(null) }
-
     HeadedChipRow("Export") {
         pictureFormats.forEach { format ->
             val choice = ExportChoice.Picture(format)
@@ -2369,43 +2244,23 @@ private fun OutputOptions(
             )
         }
     }
-    // One line of small print, which the unreachable size borrows while the pointer is on it. In
-    // the same slot rather than under the row, so nothing moves when it changes.
-    val choices = SizeChoice.row(sizes, generationCeiling, heapBytes)
-    val unreachable = choices.firstOrNull { it.size == reachingFor }?.whyOutOfReach
     Text(
-        unreachable ?: exportChoice.detail,
+        exportChoice.detail,
         style = MaterialTheme.typography.labelSmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )
-    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        choices.forEach { choice ->
-            val size = choice.size
-            // A size this host cannot finish keeps its chip — the row would otherwise change
-            // width when the ceiling moves, and a missing control says nothing about why it is
-            // missing. It is drawn in the muted colour, it cannot be pressed, and hovering it
-            // says what is wrong, in the small print above the row.
-            val withinCeiling = choice.enabled
-            val hoverSource = remember { MutableInteractionSource() }
-            val hovered by hoverSource.collectIsHoveredAsState()
-            LaunchedEffect(hovered, withinCeiling) {
-                if (!withinCeiling && hovered) reachingFor = size
-                else if (reachingFor == size) reachingFor = null
-            }
-            // Not held while a world is being made: an export draws the world on screen, which a
-            // generation under way does not touch until it is finished. A second press starts a
-            // second export in the first one's place.
-            Button(
-                onClick = { onExport(Exports.clamp(size, generationCeiling)) },
-                enabled = withinCeiling && worldOnScreen != null,
-                contentPadding = TIGHT,
-                modifier = Modifier.weight(1f).hoverable(hoverSource)
-            ) { Text("$size", maxLines = 1) }
-        }
-    }
+    // Not held while a world is being made: an export draws the world on screen, which a
+    // generation under way does not touch until it is finished. A second press starts a second
+    // export in the first one's place.
+    Button(
+        onClick = { worldOnScreen?.let { onExport(Knobs.sizeOf(it)) } },
+        enabled = worldOnScreen != null,
+        contentPadding = TIGHT,
+        modifier = Modifier.fillMaxWidth()
+    ) { Text("Export", maxLines = 1) }
     Text(
         if (worldOnScreen == null) "Generate a world to enable export."
-        else ExportSubjects.note(worldOnScreen, sizes),
+        else ExportSubjects.note(worldOnScreen),
         style = MaterialTheme.typography.labelSmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )

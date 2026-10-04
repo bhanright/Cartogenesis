@@ -1,5 +1,6 @@
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.security.MessageDigest
 import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
@@ -497,7 +498,7 @@ tasks.register<Sync>("assembleSite") {
                 "with `gh release download web-frozen --pattern web-frozen.zip --dir build/web-frozen`, " +
                 "or name a copy with -PfrozenWebApp=<path>."
         }
-        val digest = java.security.MessageDigest.getInstance("SHA-256").digest(frozenWebApp.readBytes())
+        val digest = MessageDigest.getInstance("SHA-256").digest(frozenWebApp.readBytes())
             .joinToString("") { "%02x".format(it) }
         check(digest == frozenWebAppSha256) {
             "${frozenWebApp.absolutePath} has SHA-256 $digest, not the stored application's " +

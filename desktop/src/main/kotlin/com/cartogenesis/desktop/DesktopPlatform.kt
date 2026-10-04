@@ -55,11 +55,14 @@ class DesktopPlatform(
     override val heapBytes: Long = Runtime.getRuntime().maxMemory()
 ) : Platform {
 
-    /** 2048 rows on every desktop, 4096 where the heap holds it; see [WorldCeilings.forDesktopHeap]. */
+    /**
+     * 2048 rows on every desktop, 4096 where the heap holds it; see [WorldCeilings.forDesktopHeap].
+     * The guard on a world that arrives at another grid; the interface makes [defaultResolution].
+     */
     override val generationCeiling: Int get() = WorldCeilings.forDesktopHeap(heapBytes)
 
-    // Every core and three quarters of the machine's memory: 1024 rows, a grid 2048 by 1024, is
-    // about fifty seconds on the processor. See docs/DESIGN_LEDGER.md, Q5.
+    // The one grid the desktop makes (docs/DESIGN_LEDGER.md, G1): 1024 rows, a grid 2048 by 1024,
+    // about fifty seconds on the processor with every core. See docs/DESIGN_LEDGER.md, Q5.
     override val defaultResolution: Int = 1024
 
     /**

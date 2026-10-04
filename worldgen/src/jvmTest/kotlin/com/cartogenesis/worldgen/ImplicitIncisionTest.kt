@@ -241,14 +241,18 @@ class ImplicitIncisionTest {
                     mouths++
                     if (after < shorelineHeight) wrong("cut below the shoreline")
                 }
-                // More than half the drop wherever `F` is over one, `F / (1 + F)` being over a
-                // half there, held strictly. Where the law's cut clears the half by less than two
-                // float steps of the height, the rounding of one cell's result can land either
-                // side of it, so those cells are counted and not judged.
-                if (courantAt[cell] > 1f) {
+                // More than half the drop to the base the round opened with wherever `F` is over
+                // one, held strictly: every step grades to a base no higher than that one, so the
+                // round keeps at most `(1 + F / n)^-n <= 1 / (1 + F)` of it, under a half there.
+                // Not the drop to the base the round closed with, which a receiver lowered late in
+                // the round deepens after the cell has spent most of its steps above it. Where the
+                // law's cut clears the half by less than two float steps of the height, the
+                // rounding of one cell's result can land either side of it, so those cells are
+                // counted and not judged.
+                if (courantAt[cell] > 1f && before > baseBeforeAt[cell]) {
                     largeCourant++
                     val courant = courantAt[cell].toDouble()
-                    val drop = before.toDouble() - base.toDouble()
+                    val drop = before.toDouble() - baseBeforeAt[cell].toDouble()
                     val margin = (courant / (1.0 + courant) - 0.5) * drop
                     if (margin < 2.0 * Math.ulp(before)) tooCloseToJudge++
                     else if (before.toDouble() - after.toDouble() <= 0.5 * drop) wrong("cut no more than half its drop at F over one")
@@ -304,7 +308,8 @@ class ImplicitIncisionTest {
      * No cell the pass moves ends below the level it grades to or above where it stood, no river
      * mouth ends below the shoreline, a cell at or below its base is left alone, every cell with
      * `F` over one loses more than half its drop, and a cell its receiver's cut left above it is
-     * cut. Over the twelve rounds of seed 42 at [SharedWorlds.COARSE_ROWS], through the watch, each
+     * cut, the drop being to the base the round opened with and the round spent in the stage's
+     * steps. Over the twelve rounds of seed 42 at [SharedWorlds.COARSE_ROWS], through the watch, each
      * report checked against the field the pass left: the bounds hold or fail cell by cell on any
      * grid, and every kind of cell the clauses ask for is still there on this one.
      *

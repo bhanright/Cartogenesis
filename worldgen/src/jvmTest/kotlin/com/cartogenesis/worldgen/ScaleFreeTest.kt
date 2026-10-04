@@ -22,6 +22,10 @@ import org.junit.Assert.assertTrue
  * Since F35 it asks that last question twice: once of the statistics, which is what the class was
  * built on, and once of the ground itself, because a world whose plates have all moved weighs the
  * same as the world it replaced and the statistics said so for a month.
+ *
+ * Every clause here reports rather than fails ([CrossGridReport]): the application makes one grid
+ * (docs/DESIGN_LEDGER.md, G1), and the figures are kept for when the grid moves with the planet's
+ * size. The vacuity check under the first clause still fails, because it is about the instrument.
  */
 class ScaleFreeTest : BorrowsSharedWorlds() {
 
@@ -103,13 +107,13 @@ class ScaleFreeTest : BorrowsSharedWorlds() {
         findings.forEachIndexed { rank, finding ->
             println("SCALEFREE FINDING ${rank + 1}. $finding")
         }
-        assertTrue(
-            "the world is not the same world at 512 and 1024: ${complaints.joinToString("; ")}",
-            complaints.isEmpty()
+        CrossGridReport.report(
+            "the same world at 512 and 1024 measures the same and stands on the same ground",
+            complaints.isEmpty(),
+            complaints.joinToString("; ").ifEmpty { "every asserted metric, the plate interiors and the land mask agree" }
         )
-        // The other half of the claim, and what stops the clause above passing because nothing was
-        // measured. If this list ever empties, the generator has become scale-free and the
-        // findings should be promoted to assertions, one at a time and each with its own chunk.
+        // What stops the report above saying nothing because nothing was measured. If this list
+        // ever empties, the generator has become scale-free at these two grids.
         assertTrue(
             "no findings at all, which means the suite has stopped measuring rather than that" +
                 " every metric has become scale-free",
@@ -131,9 +135,11 @@ class ScaleFreeTest : BorrowsSharedWorlds() {
         val worst = HashMap<String, Double>()
         SEEDS.forEach { seed ->
             listOf(1024, 2048).forEach { fineSize ->
-                val drift = ScaleFree.plateSeedDriftCoarseCells(
-                    configAt(seed, 512), configAt(seed, fineSize)
-                )
+                // Two grids that drew different plate counts are as far apart as plates can be:
+                // reported as such rather than thrown, as every disagreement here is.
+                val drift = runCatching {
+                    ScaleFree.plateSeedDriftCoarseCells(configAt(seed, 512), configAt(seed, fineSize))
+                }.getOrElse { Double.POSITIVE_INFINITY }
                 println("SCALEFREE plate seeds  seed %d  512 against %d  worst drift %.3f cells"
                     .format(seed, fineSize, drift))
                 if (drift > PLATE_SEED_DRIFT_COARSE_CELLS) {
@@ -141,11 +147,11 @@ class ScaleFreeTest : BorrowsSharedWorlds() {
                 }
             }
         }
-        assertTrue(
-            "a plate seed sits at a different fraction of the grid at one size than at another," +
-                " so the same seed is a different world at each: ${worst.entries.joinToString(";" +
-                    " ") { "${it.key} moved by ${"%.1f".format(it.value)} coarse cells" }}",
-            worst.isEmpty()
+        CrossGridReport.report(
+            "the same seed puts its plates in the same places at every grid",
+            worst.isEmpty(),
+            worst.entries.joinToString("; ") { "${it.key} moved by ${"%.1f".format(it.value)} coarse cells" }
+                .ifEmpty { "every plate seed within $PLATE_SEED_DRIFT_COARSE_CELLS coarse cell" }
         )
     }
 
@@ -155,9 +161,9 @@ class ScaleFreeTest : BorrowsSharedWorlds() {
      * in a pooled figure.
      *
      * The bar, [LAKE_AREA_FACTOR], is a provisional regression bar and policy, not a derivation:
-     * the factor the drainage network is held to. It is not yet met, and runs as a known failure
-     * until the post-cut outlet is resolved (docs/TODO.md, the lake-area entry). What it has to
-     * hold against is chaos as well as the grid: re-drawing the routing's per-cell sub-grid draw at
+     * the factor the drainage network is held to. It was not met when the clause was demoted to a
+     * report (docs/DESIGN_LEDGER.md, L1 and G1). What it has to hold against is chaos as well as
+     * the grid: re-drawing the routing's per-cell sub-grid draw at
      * one grid moves a seed's lake area by up to a quarter and its largest lake by up to half
      * (docs/DESIGN_LEDGER.md, L1), so a lake census is the noisiest figure this suite reads.
      */
@@ -165,7 +171,6 @@ class ScaleFreeTest : BorrowsSharedWorlds() {
     fun `a seed holds the same standing water at every grid`() {
         val over = ArrayList<String>()
         val figures = ArrayList<String>()
-        val worse = ArrayList<String>()
         SEEDS.forEach { seed ->
             val pair = pairOf(seed)
             val atCoarsest = Lakes(worldAt(seed, 256))
@@ -199,25 +204,13 @@ class ScaleFreeTest : BorrowsSharedWorlds() {
             if (shareSpread > LAKE_AREA_FACTOR) over += "seed $seed's share"
             if (largestSpread > LAKE_AREA_FACTOR) over += "seed $seed's largest"
             figures += "seed $seed x%.2f and x%.2f".format(shareSpread, largestSpread)
-            // A worsening is a different failure from the one recorded: a spread past its record by
-            // more than the tolerance names itself in the signature, so the clause fails on it.
-            val (recordedShare, recordedLargest) = LAKE_AREA_RECORD.getValue(seed)
-            if (shareSpread > recordedShare * (1 + LAKE_AREA_RECORD_TOLERANCE)) {
-                worse += "seed $seed's share x%.2f past its record x%.2f".format(shareSpread, recordedShare)
-            }
-            if (largestSpread > recordedLargest * (1 + LAKE_AREA_RECORD_TOLERANCE)) {
-                worse += "seed $seed's largest x%.2f past its record x%.2f".format(largestSpread, recordedLargest)
-            }
         }
-        KnownFailures.expect(LAKE_AREA_FOLLOWS_THE_GRID, LAKE_AREA_WITHIN_ITS_RECORD) {
-            if (over.isNotEmpty()) {
-                throw RecordedViolation(
-                    "standing water differs across 256, 512 and 1,024 rows by more than x$LAKE_AREA_FACTOR: $figures; " +
-                        "over the bar: $over",
-                    if (worse.isEmpty()) LAKE_AREA_WITHIN_ITS_RECORD else worse.joinToString("; ")
-                )
-            }
-        }
+        CrossGridReport.report(
+            "a seed holds the same standing water at every grid",
+            over.isEmpty(),
+            "spreads of the lake share of land and the largest lake across 256, 512 and 1,024 rows " +
+                "against x$LAKE_AREA_FACTOR: $figures" + if (over.isEmpty()) "" else "; over the bar: $over"
+        )
     }
 
     /**
@@ -240,7 +233,6 @@ class ScaleFreeTest : BorrowsSharedWorlds() {
     @Test
     fun `the channel-head threshold is an area of ground and does not move with the grid`() {
         val complaints = ArrayList<String>()
-        val ratios = ArrayList<String>()
         SEEDS.forEach { seed ->
             val pair = pairOf(seed)
             val coarseDensity = pair.coarseDensityKmPerKm2
@@ -251,7 +243,6 @@ class ScaleFreeTest : BorrowsSharedWorlds() {
                     " %.4f at 1024 (x%.2f)").format(seed, coarseDensity, fineDensity, ratio)
             )
             if (ratio < 1.0 / CHANNEL_DENSITY_FACTOR || ratio > CHANNEL_DENSITY_FACTOR) {
-                ratios.add("%.2f".format(ratio))
                 complaints.add(
                     "seed $seed: the criterion initiates ${"%.4f".format(coarseDensity)} km of" +
                         " channel per km2 of land at 512 and ${"%.4f".format(fineDensity)} at" +
@@ -260,18 +251,13 @@ class ScaleFreeTest : BorrowsSharedWorlds() {
                 )
             }
         }
-        // Recorded from Fix 3b to Q2 (1.54, 1.51, 1.43 and 1.45 between the 512 and 1024 grids as
-        // many cells tall as wide) and armed on square cells, where the network grows by 1.32, 1.33,
-        // 1.33 and 1.31 from 512 rows to 1,024 (docs/DESIGN_LEDGER.md, Fix 3b and Q2). Recorded again
-        // at L1 and re-taken at its review round: see [CHANNEL_NETWORK_GROWS_ON_SEED_7].
-        KnownFailures.expect(CHANNEL_NETWORK_GROWS_ON_SEED_7, "seed 1234 at x1.35") {
-            if (complaints.isNotEmpty()) {
-                throw RecordedViolation(
-                    "the channel-head criterion is not the same criterion at two grids: ${complaints.joinToString("; ")}",
-                    complaints.joinToString("; ") { it.substringBefore(":") } + " at x" + ratios.joinToString("; ")
-                )
-            }
-        }
+        // Its history as a guard, armed on square cells and recorded as a known failure from L1,
+        // is in docs/DESIGN_LEDGER.md, Fix 3b, Q2, L1 and G1.
+        CrossGridReport.report(
+            "the channel-head threshold is an area of ground and does not move with the grid",
+            complaints.isEmpty(),
+            complaints.joinToString("; ").ifEmpty { "every seed's density within x$CHANNEL_DENSITY_FACTOR" }
+        )
     }
 
     /**
@@ -396,50 +382,10 @@ class ScaleFreeTest : BorrowsSharedWorlds() {
         const val CHANNEL_DENSITY_FACTOR = 1.35
 
         /**
-         * L1 gave the rifts Earth's half-grabens, 60 to 160 km with sills 50 km across, which a grid
-         * of 1,024 rows draws in four to eight times the cells of the 512-row grid's; seed 7's
-         * initiated network then grew by 1.38 from 512 rows to 1,024 where it grew by 1.32. With the
-         * joins as relay ramps and the valleys Earth's width it is seed 1234's that grows by 1.35, a
-         * hair over, and seeds 7, 42 and 99's by 1.35, 1.31 and 1.28 under it. Whether the finer
-         * rifts are what the extra channels drain is not isolated (docs/DESIGN_LEDGER.md, L1;
-         * docs/TODO.md).
-         */
-        const val CHANNEL_NETWORK_GROWS_ON_SEED_7 =
-            "L1: seed 7's channel-head network grows past the drainage factor from 512 rows to 1,024"
-
-        /**
          * How far a seed's lake share of land, or its largest lake, may move across 256, 512 and
          * 1,024 rows: the drainage network's factor, as a provisional regression bar.
          */
         const val LAKE_AREA_FACTOR = 1.35
-
-        const val LAKE_AREA_FOLLOWS_THE_GRID =
-            "L1: a seed's standing water still follows the grid, pending the post-cut outlet (L2)"
-
-        /**
-         * Each seed's spreads as recorded, its lake share of land and its largest lake, across 256,
-         * 512 and 1,024 rows. On the tree before L1: x1.28 and x1.67, x2.87 and x4.73, x1.79 and
-         * x2.83, x3.21 and x8.08 on seeds 7, 42, 1234 and 99; at L1, x1.96 and x5.38, x1.49 and
-         * x1.46, x2.10 and x1.50, x1.59 and x3.48; at its review round, with the joins as relay ramps
-         * in a trough 328 km across, x4.53 and x13.52 on seed 99; re-taken once the valleys were
-         * Earth's width, 55 km across (docs/DESIGN_LEDGER.md, L1).
-         */
-        val LAKE_AREA_RECORD: Map<Long, Pair<Double, Double>> = mapOf(
-            7L to (1.66 to 2.47),
-            42L to (1.23 to 1.31),
-            1234L to (2.21 to 2.56),
-            99L to (1.26 to 1.38)
-        )
-
-        /**
-         * How far past its record a spread may go before it is a worsening rather than the
-         * recorded failure: a twentieth, policy, over the second decimal the record is written to.
-         * A lake census moves by a quarter between two runs that route a hair differently
-         * (docs/TODO.md, the lake-area entry), so any change to the ground re-takes the record.
-         */
-        const val LAKE_AREA_RECORD_TOLERANCE = 0.05
-
-        const val LAKE_AREA_WITHIN_ITS_RECORD = "every spread within a twentieth of its record"
 
         fun configAt(seed: Long, size: Int): WorldGenConfig {
             val base = WorldGenConfig.forRows(seed, 512)

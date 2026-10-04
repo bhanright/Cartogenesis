@@ -701,9 +701,9 @@ private fun Application(
     // has to run - and because after a Stop it is the only key that can move.
     LaunchedEffect(config, gate.requests) {
         if (!gate.hasGenerated) return@LaunchedEffect
-        // Every way to a size above the ceiling is already closed — the chips, the stored settings
-        // and the saves a browser refuses to open — so this is the guarantee rather than the rule:
-        // a world the host cannot finish is refused in a sentence rather than begun.
+        // The interface makes one grid, so a size above the ceiling arrives only with a world of
+        // another grid — a save or a link from when the grid was a choice — and this is where it
+        // is refused in a sentence rather than begun on a heap that cannot finish it.
         WorldCeilings.whyOutOfReach(Knobs.sizeOf(config), generationCeiling, platform.heapBytes)?.let { reason ->
             status = "$reason."
             return@LaunchedEffect

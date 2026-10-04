@@ -298,8 +298,9 @@ object WorldCodec {
     const val CHUNK_BYTES = 1 shl 20
 
     /**
-     * The rows of the largest working size the interface offers (`Knobs.RESOLUTIONS` in `:ui`,
-     * whose test holds its largest to this).
+     * The rows of the largest working size the interface offered while the grid was a choice. The
+     * interface makes one grid now (docs/DESIGN_LEDGER.md, G1); saves of every size it offered
+     * still open, so the format's bound stays where it was.
      */
     const val LARGEST_LADDER_ROWS = 4096
 

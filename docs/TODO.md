@@ -1302,15 +1302,6 @@
   the cell narrows at a fixed catchment on the ground while the round stays 336,476 years, so a
   river reach on a coarse grid is solved with a different share of its drop per round. 2026-10-03,
   L2's diagnosis.
-- **The rounds' outlet notch shares the post-cut pass's overshoot.** `HydraulicErosion.breach`
-  takes one explicit stream-power step a round, bounded by the basin's depth and the sea but not by
-  the fall to the outflow's own base, so where the step is larger than that fall it cuts the whole
-  path below the lip, the base cell with it, to a surface falling `NOTCH_FALL_METRES_PER_KM`, and
-  every later round measures that 2.5 mm/km as the outlet's slope and lowers the lip by the same
-  amount each time. Measured in the post-cut pass by L2's diagnosis; inside the rounds
-  the code is the same and nothing was measured, so how many of the ordinary lakes' outlets retreat
-  this way, and how much of the lake census's spread across grids it carries, is open. 2026-10-03,
-  L2's diagnosis.
 - **Water that reaches a pole leaves the map there, and a pole's lakes are counted at the
   equator's area.** `FlowRouting.fillDepressions` seeds the top and bottom rows as outlets, so a
   basin whose outflow runs to a pole drains to that pole cell's ground and not to the sea, though
@@ -1372,20 +1363,16 @@
   counted in `RoundMass.bedsHeldUnderGround`: up to 4,295 of seed 42's 199,231 land cells at 512 rows
   in a round. The design asked for that clamp to be redundant. The sweeps reading the in-cell
   geometry (or acting on the interfluves only) would make it so. 2026-10-03, E1a.
-- **The stages after erosion read the ground, and route over it.** Until E1c the sea, the rivers
-  and the drawing take `ErosionResult.height`, the cell's mean ground, which carries each cell's own
-  relief above its bed and so is not monotone down a river: the river stage fills more of it, and
-  the drawn lakes rise from 1.0 to 1.5% of the land to 1.8 to 2.6% on seeds 7 and 42 at 512 and
-  1,024 rows. E1a's renders draw the probe's D, the bed under drawn rivers
-  and lakes, as a single-cell groove: the bed under a river is a line, and the valley its relief
-  stands in has no width on the map yet. Both are E1c's. 2026-10-03, E1a.
-- **The relief's three calibrations wait for the drawing to read the bed.** The exaggeration, the
-  haze and the hachures' slope floor are each derived on the surface the drawing is handed, and on
-  E1a's ground they do not close: the cone pins no bearing until 43.50 (from 37.75), the lamp's
-  contrast is then matched at haze 0.12 with ordinary ground at 0.9451, and under that sky the cone
-  pins none up to the sweep's 48; the slope floor's tenth percentile reads 0.054 at 37.75 and 0.062
-  at 43.50. They are recorded as known failures under one finding (`ReliefShadingTest`) and are to
-  be re-derived, as a fixed point of the three, once E1c hands the drawing D. 2026-10-03, E1a.
+- **The relief's calibrations are to be re-derived on the drawn relief.** The exaggeration, the
+  haze, ordinary ground and the hachures' slope floor are each derived on the surface the drawing
+  is handed, and since E1c that is `DrawnRelief`: the ground with each cell's relief drawn as
+  dissection, the bed under rivers and lakes (line art without the dissection). On it the haze is
+  matched on its declared 0.10 again and the slope floor, read on the landforms the strokes are laid
+  on, is its 0.06 again, and both are armed; ordinary ground under the declared sky is 0.8412
+  against the declared 0.9225, the cone sized by the landforms' slope is pinned on 47 of 360
+  bearings under the dissected relief's light, and the exaggeration's sweep and the lamp's contrast
+  are recorded with them under one finding (`ReliefShadingTest`). To be re-derived together, as a
+  fixed point of the drawing, by the maintainer's eye on the picture. 2026-10-04, E1c.
 - **Every scale-free metric is inside its tolerance from 512 to 1,024 rows.** `ScaleFreeTest`'s
   findings, the departures it printed beside its complaints, emptied on E1a's worlds (relief, coast,
   drainage, the largest lake, ice, the anomaly and the maritime reach on seeds 7, 42, 1234 and 99),
@@ -1393,12 +1380,11 @@
   the findings to be promoted to assertions one at a time, each with its own chunk; the lake and
   channel-head clauses beside them still fail (x1.49 and x2.23 on 42's and 99's water, x1.38 to 1.40
   on three seeds' heads). 2026-10-03, E1a.
-- **The initiated network's density peaks in humid country again.** R1's wet-side decline,
-  measured on the river stage's channels, is lost on E1a's ground: the peak is in humid country on
-  seeds 7 and 1234 and pooled, humid over semi-arid 1.02 to 1.32 (`EarthLikenessTest`, re-recorded).
-  The river stage initiates channels on the ground's gradient, and the ground is the cell's mean over
-  its relief, so the head rule there sees gentler slopes than the one height had; E1c moves the
-  river stage to the bed, and the clause is to be read again then. 2026-10-03, E1a.
+- **The initiated network's density is flat between humid and semi-arid country.** R1's wet-side
+  decline, lost on E1a's ground (the peak in humid country, humid over semi-arid 1.02 to 1.32), is
+  read again with the channel heads on the bed (E1c): the peak is no longer in humid country on any
+  seed, and seed 7's humid country carries 1.01 times the channel of its semi-arid country where
+  Moglen, Eltahir and Bras have it below one (`EarthLikenessTest`, recorded). 2026-10-04, E1c.
 - **The D8 octave, averaged over the grid's real configurations.** `GroundClosure.NETWORK_RELIEF_PER_OCTAVE`
   is derived for a straight trunk crossing a 2-by-2 block, a half of `E / K'` an octave. A turning
   trunk leaves one side cell (a quarter) and a source block three round an outlet (about 0.85), and
@@ -1406,13 +1392,6 @@
   Averaging over the configurations a D8 network actually holds is a derivation and not a fit, but
   it was not made before the grids were compared, and the constant was not changed after. 2026-10-03,
   E1a.
-- **Seed 42 at 512 holds a ruled bar of standing water again.** `StraightRunTest`'s census, armed
-  at Q2 at nought on every seed, reads one on E1a round 2's ground: lake 14, 36 cells at (48,167),
-  within a cell of one line it runs 23 cells along. The case's own note says a bar needs a ruled
-  course and a lip for it to pond behind, and the second is chance on any moved world; the ruled
-  courses it also counts (seed 42: 388 by the steepest neighbour, 266 by the facet rule) are what
-  separates the routing rules. Recorded; whether the bar is a course the routing ruled or a lip the
-  round's new ground put across a straight valley is not traced. 2026-10-03, E1a round 2.
 - **The square-fan control passes the delta guard it was the control for.** `DeltaOutlineTest`'s
   square fans put 0.9% of their perimeter in straight runs past a lobe's reach on E1a round 2's
   worlds (718106 and 59758 at 1,024 rows), under the 1.2% bar they were shown failing; the lobes and
@@ -1425,13 +1404,6 @@
   river reaching the full width only on cells the drawing trims at the shore. The clause reads the
   pen through one world's largest river, so a world can fail it without the pen changing. Recorded.
   2026-10-03, E1a round 2.
-- **Seed 42's belts-only ocean does not solve on round 2's ground.** `OceanCirculation` stops at a
-  relative residual of 0.00117 after its 200 iterations against a tolerance of 0.001 at 256 rows,
-  with `climate.pressureWinds` false, the control world `OceanCurrentTest` builds to read the
-  trades' band under the belts alone; with the regional wind on it solves. The same failure as
-  seed 5's below, on another seed, moved by E1a round 2's ground; recorded in that case
-  (`OceanCurrentTest`), whose trades' clause reads the other three standard worlds. 2026-10-03,
-  E1a round 2.
 - **Seed 5's ocean does not solve with the pressure departure off.** `OceanCirculation` stops at a
   relative residual of 0.0017 to 0.0019 after its 200 iterations against a tolerance of 0.001, at 256
   and 512 rows, with `climate.pressureWinds` false (the setting `MeridionalWindTest` builds its
@@ -1678,6 +1650,29 @@
   bifurcation ratio, which would then want its own measurement of before and after. 2026-09-21, R1.
 
 ## Done
+
+- **The rounds' outlet notch shared the post-cut pass's overshoot** (2026-10-04, E1b) — the explicit
+  notch (`HydraulicErosion.breach`) and the pass after the cut (`SeaLevelStage.drainDrownedBasins`)
+  are gone. A lake's outlet is cut by the same implicit pass that cuts every channel, with the lake's
+  surplus as its discharge (`LakeOutlets`), and a basin the ocean cannot reach is land to the rounds
+  (`SeaLevelStage.enclosedCut`), so its outlet is cut there as every lake's is.
+
+- **The stages after erosion read the ground, and routed over it** (2026-10-04, E1c) — the sea stage
+  carries the bed on its own ruler (`SeaLevelResult.relativeBed`), the rivers stage fills, routes,
+  initiates its channels and finds its lake basins on it, a lake stands where its surface reaches
+  the ground, and the drawing shades `DrawnRelief`, the bed under rivers and lakes. The drawn lakes
+  are 0.7 and 1.3% of the land on seeds 7 and 42 at 512 rows (1.8 to 2.6% on E1a's ground).
+
+- **Seed 42 at 512 held a ruled bar of standing water** (2026-10-04, E1c) — the rivers stage's fill
+  over the ground. The ground stands above the bed by each cell's own relief, which is not monotone
+  down a river, so the fill levels every dip along the course and, where the course runs straight
+  along a row, ponds a ruled trough: routed over the ground on the finished world the bar comes back
+  at (48,167), 30 cells within 0.83 of a cell of a line it runs 22 cells along. Routed over the bed,
+  which the rounds cut monotone down every channel, the census reads nought on every seed and is
+  armed again; `StraightRunTest`'s `the census finds the bar the ground's fill makes` is the control.
+
+- **Seed 42's belts-only ocean did not solve on round 2's ground** (2026-10-04, E1b) — it solves on
+  E1b's ground, and `OceanCurrentTest`'s clause is armed again.
 
 - **A lake's outflow could be discarded as a headwater stub** (2026-09-21, R1) — the course from a
   head fed only by a lake's open water was measured against `RiverConfig.minLengthCells`' eight, and

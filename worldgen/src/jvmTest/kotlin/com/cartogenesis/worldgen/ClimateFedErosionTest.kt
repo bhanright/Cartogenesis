@@ -77,9 +77,11 @@ class ClimateFedErosionTest {
          * the land that round sees, which is what `normaliseOverLand` does inside the stage.
          */
         val runoff = FloatArray(weather.rainfallMm.size).also { weights ->
+            // The land the round routes on, which holds the water the ocean cannot reach (E1b).
+            val roundLand = SeaLevelStage.enclosedCut(weathered, config.seaLevel, config)
             var summed = 0.0
-            for (cell in weights.indices) if (cut.isLand[cell]) summed += weather.rainfallMm[cell]
-            val mean = (summed / cut.landCellCount).toFloat()
+            for (cell in weights.indices) if (roundLand.isLand[cell]) summed += weather.rainfallMm[cell]
+            val mean = (summed / roundLand.landCellCount).toFloat()
             for (cell in weights.indices) weights[cell] = weather.rainfallMm[cell] / mean
         }
 
@@ -87,7 +89,7 @@ class ClimateFedErosionTest {
 
         /** The weights a round over [terrain] would route with: rainfall over its own land mean. */
         fun weightsOver(terrain: FloatField): FloatArray {
-            val over = SeaLevelStage.percentileCut(terrain, config.seaLevel, config.scale)
+            val over = SeaLevelStage.enclosedCut(terrain, config.seaLevel, config)
             val rainfall =
                 HydraulicErosion.provisionalWeather(config, terrain, config.seaLevel).rainfallMm
             var summed = 0.0
@@ -140,7 +142,7 @@ class ClimateFedErosionTest {
             )
         )
 
-        val bareCut = SeaLevelStage.percentileCut(bare, once.seaLevel, once.scale)
+        val bareCut = SeaLevelStage.enclosedCut(bare, once.seaLevel, once)
         private val bareWeather = HydraulicErosion.provisionalWeather(once, bare, once.seaLevel)
 
         /**
@@ -311,7 +313,7 @@ class ClimateFedErosionTest {
         // Recorded on the two heights (E1a): the law's rate is read on the cells the law cuts, those
         // carrying a channel, and on seeds 1234 and 99 the windward flank's share of it falls under
         // the bar; the cause is not isolated (docs/DESIGN_LEDGER.md, E1a).
-        KnownFailures.expect(WET_FLANK_ON_THE_TWO_HEIGHTS, "seed 1234: 1.27 under 1.29, seed 99: 0.86 under 0.93") {
+        KnownFailures.expect(WET_FLANK_ON_THE_TWO_HEIGHTS, "seed 99: 0.87 under 0.93") {
             if (short.isNotEmpty()) {
                 val figures = short.joinToString { String.format(Locale.ROOT, "seed %d: %.2f under %.2f", it.seed, it.forcing, it.bar) }
                 throw RecordedViolation(
@@ -462,7 +464,7 @@ class ClimateFedErosionTest {
         // Re-recorded on square cells at Q2 (docs/DESIGN_LEDGER.md, Q2). Re-recorded at L1, whose rifts are Earth's half-grabens and the same at every grid (docs/DESIGN_LEDGER.md, L1).
         KnownFailures.expect(
             "B-I2: the rain-dissection pin was set on rounds without the uplift",
-            "seed 7 at -0.085, seed 42 at 0.076, seed 1234 at 0.091, seed 99 at 0.031; seed 7's flat-rain control at -0.189, seed 42's flat-rain control at -0.009, seed 99's flat-rain control at -0.105"
+            "seed 7 at -0.095, seed 42 at 0.074, seed 1234 at 0.081, seed 99 at 0.031; seed 7's flat-rain control at -0.192, seed 42's flat-rain control at -0.008, seed 99's flat-rain control at -0.104"
         ) {
             if (underThePin.isNotEmpty() || uncontrolled.isNotEmpty()) {
                 val found = underThePin.joinToString { (seed, fed) -> String.format(Locale.ROOT, "seed %d at %.3f", seed, fed) } +
@@ -748,7 +750,7 @@ class ClimateFedErosionTest {
         belt: Belt,
         weights: FloatArray
     ): Pair<Double, Double> {
-        val cut = SeaLevelStage.percentileCut(terrain, config.seaLevel, config.scale)
+        val cut = SeaLevelStage.enclosedCut(terrain, config.seaLevel, config)
         val filled = FlowRouting.fillDepressions(
             config.width, config.height, cut.isLand, cut.relativeElevation
         )

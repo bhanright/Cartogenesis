@@ -109,8 +109,10 @@ class ValleyIncisionTest : BorrowsSharedWorlds() {
         val w = world.width
         val h = world.height
         // Both sides in the height field's own units, which is what makes them comparable: the
-        // erosion stage's output against the erosion stage's input, at the same cells.
+        // erosion stage's output against the erosion stage's input, at the same cells. The
+        // finished side as the map draws it (E1c): the river on the bed, its banks on the ground.
         val elevation = world.erosion.height.data
+        val channel = world.erosion.bed.data
         val bare = PlateStage.generate(config, TerrainStage.generate(config)).height.data
 
         var erodedTotal = 0.0
@@ -149,7 +151,7 @@ class ValleyIncisionTest : BorrowsSharedWorlds() {
                     if (by < 0 || by >= h) continue
                     val b = by * w + bx
                     if (!world.sea.isLand[b]) continue
-                    erodedBanks += elevation[b] - elevation[here]
+                    erodedBanks += elevation[b] - channel[here]
                     bareBanks += bare[b] - bare[here]
                     found++
                 }

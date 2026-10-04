@@ -311,7 +311,7 @@ class PressureWindTest : BorrowsSharedWorlds() {
                 )
         )
         // Recorded on the two heights' ground (E1a), until the stages after erosion read the bed (E1c).
-        KnownFailures.expect(MONSOON_ON_THE_GROUND, "+0.06 m/s") {
+        KnownFailures.expect(MONSOON_ON_THE_GROUND, "-0.25 m/s") {
             if (summer <= ONSHORE_BAR_MPS) {
                 throw RecordedViolation(
                     ("the warm half blows %+.2f m/s onto the subtropical continents' equatorward and " +

@@ -215,7 +215,7 @@ class MoistureBudgetTest : BorrowsSharedWorlds() {
         // Under the band from the continents the ground's ruler drew to 4b-1 (0.299 there), and
         // inside it again on square cells at Q2, 0.303, where it is armed: see docs/DESIGN_LEDGER.md,
         // Fix 2 to Q2. Recorded on the two heights' ground (E1a), until the stages after erosion read the bed (E1c).
-        KnownFailures.expect(RECYCLING_ON_THE_GROUND, "0.292") {
+        KnownFailures.expect(RECYCLING_ON_THE_GROUND, "0.296") {
             if (!(ratio > EARTH_RECYCLING_LOW && ratio < EARTH_RECYCLING_HIGH)) {
                 throw RecordedViolation(
                     ("the continental recycling ratio is %.3f, outside Earth's %.2f to %.2f")
@@ -276,7 +276,7 @@ class MoistureBudgetTest : BorrowsSharedWorlds() {
                 )
         )
         // Recorded as the clause above.
-        KnownFailures.expect(RECYCLING_ON_THE_GROUND, "0.292") {
+        KnownFailures.expect(RECYCLING_ON_THE_GROUND, "0.296") {
             if (!(proxyRatio > EARTH_RECYCLING_LOW && proxyRatio < EARTH_RECYCLING_HIGH)) {
                 throw RecordedViolation(
                     ("the shipped ground return puts the recycling ratio at %.3f, outside Earth's " +

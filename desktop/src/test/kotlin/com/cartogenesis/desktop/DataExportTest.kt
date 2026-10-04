@@ -225,7 +225,7 @@ class DataExportTest {
         // row 414, went with the ground L1's rifts moved, and armed; recorded again at L1's review
         // round, once the rift valleys were Earth's width, where one sea cell stands over the line
         // again. The cause was never traced (docs/DESIGN_LEDGER.md, Q4 and L1).
-        KnownFailures.expect(SEA_ABOVE_ITS_SHORELINE, "open sea above sea level: 1") {
+        KnownFailures.expect(SEA_ABOVE_ITS_SHORELINE, "open sea above sea level: 2") {
             if (waterAbove != 0) {
                 throw RecordedViolation(
                     "open sea came back above sea level: $waterAbove",

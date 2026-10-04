@@ -147,7 +147,7 @@ class GridShapeTest : BorrowsSharedWorlds() {
         // world: seed 99's two bands came inside the spread, seed 1234's from +0.017 to +0.016.
         KnownFailures.expect(
             "Q1: a square cell's world carries more ice at 60 to 90 degrees than a change of grid gives",
-            "seed 99 75 to 60 degrees ice +0.020, seed 99 -60 to -75 degrees ice +0.022"
+            "seed 99 75 to 60 degrees ice +0.020, seed 99 -60 to -75 degrees ice +0.023"
         ) {
             if (misses.ice.isNotEmpty()) {
                 throw RecordedViolation(

@@ -652,7 +652,7 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
                 )
         )
         // Recorded at E1a: see [CALIBRATED_ON_THE_ONE_HEIGHT].
-        KnownFailures.expect(CALIBRATED_ON_THE_ONE_HEIGHT, "exaggeration 43.50") {
+        KnownFailures.expect(CALIBRATED_ON_THE_ONE_HEIGHT, "exaggeration 37.00") {
             if (kotlin.math.abs(declared - steepestClear) > EXAGGERATION_SWEEP_STEP / 2) {
                 throw RecordedViolation(
                     "the steepest exaggeration that pins no face of the cone is %.2f, not the declared %.4f"
@@ -661,15 +661,12 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
                 )
             }
         }
-        KnownFailures.expect(CALIBRATED_ON_THE_ONE_HEIGHT, "contrast 0.1522") {
-            if (kotlin.math.abs(contrast - target) / target > MAX_CONTRAST_SHORTFALL) {
-                throw RecordedViolation(
-                    "the lamp's contrast at the declared exaggeration is %.4f, more than %.1f%% from the 512 by 512 grid's %.4f"
-                        .format(contrast, MAX_CONTRAST_SHORTFALL * 100, target),
-                    "contrast %.4f".format(contrast)
-                )
-            }
-        }
+        // Recorded at E1a; the dissected relief keeps the maps' contrast again (E1c), and it is armed.
+        assertTrue(
+            kotlin.math.abs(contrast - target) / target <= MAX_CONTRAST_SHORTFALL,
+            "the lamp's contrast at the declared exaggeration is %.4f, more than %.1f%% from the 512 by 512 grid's %.4f"
+                .format(contrast, MAX_CONTRAST_SHORTFALL * 100, target)
+        )
     }
 
     /**

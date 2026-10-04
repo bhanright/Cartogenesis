@@ -15,7 +15,9 @@ site/
 That is the whole of it: two pages, the page's typefaces and two host files. Four things the site serves are *not* in
 here, because keeping a second copy of any of them is how a copy goes stale:
 
-- **The application**, built from `:web` and dropped in under `app/` at assembly time.
+- **The browser preview**, under `app/`: a stored copy of the browser application, which is no
+  longer built or developed. It is `web-frozen.zip` on the GitHub release `web-frozen`, unpacked
+  at assembly time with this folder laid over it; see "Assembling it".
 - **The typefaces' licences**, copied into `fonts/` from `ui/licences`, which is where the
   application keeps them.
 - **Every picture**, under `img/`. There are no image files in this folder at all. They are
@@ -47,21 +49,20 @@ its own.
 ## Assembling it
 
 ```bash
-./gradlew :web:assembleSite
+gh release download web-frozen --pattern web-frozen.zip --dir build/web-frozen   # once
+./gradlew :desktop:assembleSite
 ```
 
-That runs `:web:wasmJsBrowserDistribution` and `:desktop:renderSiteImagery`, then syncs
-`web/build/site` to this folder plus the faces, the figures and the build output under `app/`,
-which is the tree a host serves:
+That runs `:desktop:renderSiteImagery`, checks the stored application's SHA-256, then syncs
+`desktop/build/site` to the stored application's `app/` with this folder laid over it, plus the
+faces' licences and the figures, which is the tree a host serves:
 
-- **`Sync`, not a copy.** The two `.wasm` filenames carry content hashes, so a new build lands
-  *beside* the old one rather than replacing it. A tree that is only ever added to grows about
-  12 MB of orphans per build and publishes all of them.
-- **`cartogenesis.js.map` is dropped.** 1.7 MB, debug-only, and it publishes the original Kotlin.
-- **The build's own `index.html` is dropped.** `site/app/index.html` replaces it.
-- **`composeResources/` is kept when it has files.** Since 2.0 it carries the six bundled interface
-  faces. Empty directories are not copied, so if it ever goes back to being hollow it stops being
-  published without anyone having to remember.
+- **`Sync`, not a copy.** The two `.wasm` filenames carry content hashes, and a tree that is only
+  ever added to keeps every orphan and publishes all of them.
+- **The stored application is checked.** Its SHA-256 is written in `desktop/build.gradle.kts`, so a
+  replaced release asset or a download cut short stops the assembly. `-PfrozenWebApp=<path>` names
+  another copy of the zip.
+- **`site/app/index.html` is the shell.** The stored zip carries no `index.html` of its own.
 - **The loader is stamped.** `site/app/index.html` asks for `cartogenesis.js?v=__STAMP__`; assembly
   replaces the placeholder with the short commit. The replacement is scoped to that one `src`
   attribute, so writing the placeholder anywhere else in the file leaves it unreplaced — and the
@@ -105,9 +106,9 @@ of its box, at rest, with each download card open and with scripts off; and, und
 390 and 768, holds a lens pressed at the map's centre, corners and edges to standing whole on the
 screen and clear of the finger, and a swipe over it to scrolling the page while a held finger does
 not. A machine without Chrome fails those three by name rather than passing them unmeasured;
-the deploy's runner image carries Chrome. It lives in `:desktop` because the web module compiles
-to wasm and cannot read files. It is deliberately excluded from `:desktop:test`, which has no reason
-to build 12 MB of WebAssembly and would otherwise be judging whatever an earlier run left behind.
+the deploy's runner image carries Chrome. It is deliberately excluded from `:desktop:test`, which
+has no reason to render the site's figures and would otherwise be judging whatever an earlier run
+left behind.
 
 ## What the shell depends on
 
@@ -115,7 +116,7 @@ to build 12 MB of WebAssembly and would otherwise be judging whatever an earlier
 *silently* — the app still works and the page around it never finds out:
 
 - **`composeTarget`** — the div Compose mounts into. `VIEWPORT_ID` in
-  `web/src/wasmJsMain/kotlin/com/cartogenesis/web/Main.kt`.
+  the browser module's `Main.kt`, as it stood at 8198db27.
 - **`#loading`** — an invisible, zero-size div that exists only so `hideLoadingMessage()` in
   `Browser.kt` can remove it. Its removal is the shell's "the app is ready" signal.
 
@@ -124,14 +125,14 @@ canvas inside it, so from the page `document.querySelector('canvas')` is null, t
 children, and a MutationObserver on it never fires — all while a canvas is alive and generating a
 world. There is no other exact readiness signal from outside that shadow root.
 
-`WebDeploymentContractTest` pins both names in the Kotlin source and `SiteAssemblyTest` pins them in
-the deployed page.
+`SiteAssemblyTest` pins both names in the deployed page, and reads `composeTarget` out of the stored
+application's wasm.
 
 ## Deploying
 
 `.github/workflows/site.yml` does it: on any pushed `v*` tag, or by hand from the Actions tab
 (`workflow_dispatch`, with an optional `ref` so any branch or tag can be published). It assembles the
-site, runs the guard, and uploads `web/build/site` to the Cloudflare Pages project `cartogenesis`
+site, runs the guard, and uploads `desktop/build/site` to the Cloudflare Pages project `cartogenesis`
 with `cloudflare/wrangler-action@v3`. Two repository secrets:
 
 | Secret | What it is |
@@ -165,7 +166,7 @@ wrangler reads them from there and never wants them on the command line:
 export CLOUDFLARE_API_TOKEN=...                   # the same token as the repository secret
 export CLOUDFLARE_ACCOUNT_ID=...
 npx wrangler pages project list                   # confirm the production branch of `cartogenesis`
-npx wrangler pages deploy web/build/site \
+npx wrangler pages deploy desktop/build/site \
   --project-name=cartogenesis \
   --branch=<that production branch> \
   --commit-dirty=true

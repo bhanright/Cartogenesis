@@ -116,10 +116,10 @@ not say that it is row-major and one entry per cell.
 
 ## 10. Three kinds of name are not renamed
 
-- **Shader source.** GLSL and WGSL identifiers are the shader's, and the uniform names the host
-  code binds by string go with them.
-- **Public entry points the launchers call.** The desktop launcher's and the web page's entry
-  points are renamed only together with their callers, in the same commit.
+- **Shader source.** GLSL identifiers are the shader's, and the uniform names the host code binds
+  by string go with them.
+- **Public entry points the launchers call.** The desktop launcher's entry points are renamed only
+  together with their callers, in the same commit.
 - **Anything that would move a bit.** A rename that changes a generated world is not a rename.
   Check a change against `WorldFingerprintTest` before and after; if it cannot be made without
   moving a bit, leave it alone and say so.
@@ -136,13 +136,14 @@ Nothing is distributed and there are no saves anyone needs to keep, so these nam
 any others rather than frozen behind `@SerialName`. The price is paid once, in the open: **when a
 serialised name moves, `WorldCodec.FORMAT_VERSION` is bumped in the same commit**, and the codec
 refuses every older file by name instead of misreading it. The checked-in gzip fixture is a whole
-save, so it goes stale with the format and is regenerated in the same commit too, and so are the two
-saves the folder interoperability tests read, one written by the desktop's store and one by the
-browser's folder library (`RegenerateInteropFixtures` in `:desktop`'s tests says how).
+save, so it goes stale with the format and is regenerated in the same commit too. The save the
+browser's folder library wrote, which `FolderInteropTest` in `:desktop` opens, cannot be made again:
+the browser build is no longer built, so when the format moves that test and its fixture go, with
+the older browser preview's saves.
 
 Enforced by `WorldCodecTest`, whose cases *a save from an older format is refused rather than
 misread* and *every per-cell array and every list comes back identical* both bind here, and by
-`GzipInteroperabilityTest`, which reads the fixture on both platforms.
+`GzipInteroperabilityTest`, which reads the fixture.
 
 This rule is what changes if the program is ever distributed. From that point a wire name is
 frozen, `@SerialName` holds the old one when the Kotlin name moves, and the version bump gives way
@@ -183,3 +184,17 @@ rule about operators and outputs rather than about any one stage.
   `GeometryControlTest`, all under `cartography/src/jvmTest`; what fails today is recorded by
   finding (`GeometryFindings`) and by the place and figure of each violation, and what is too small
   to measure on today's worlds is listed, in `GeometryExpectations`.
+
+## 14. Nothing depends on the grid being the one the application makes
+
+The application makes every world on one grid, 1,024 rows of square cells (`Platform.defaultResolution`
+on the desktop; see the ledger, G1). That is a decision about the interface, not about the
+generator: every length, depth, rate and area is stated on the ground in `WorldScale`'s units and
+converted to cells where a stage reads it, `WorldGenConfig.forRows` and `atResolution` stay the way
+a world is made at any grid, and the tests make small worlds with them. A constant that names 1,024
+rows, or a cell count that only works because the grid is 2,048 by 1,024, is a defect, because the
+planet's size is to become an input and the grid will move with it.
+
+A test clause that holds one world to the same answer on two grids reports its figures under
+`CROSS-GRID` (`CrossGridReport`) and does not fail; one that holds a single grid to a bar fails as
+any guard does.

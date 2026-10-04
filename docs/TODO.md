@@ -1,5 +1,18 @@
 # To do
 
+- **Two-height erosion is shelved on `chunk/e1-erosion-scale` (E1, 2026-10-04).** The branch splits
+  each cell into a channel bed and a mean ground, with an in-cell closure for the relief between
+  them, implicit lake outlets that carry each basin's actual surplus, rivers routed on the bed, and
+  a drawn dissection from the stored in-cell relief. It brought the same world's denudation across
+  grids from about x3.1 to x1.2-1.3, gave about half again as many lakes, closed dry basins and
+  spilled wet ones, and removed seed 42's ruled bar of standing water at 512 rows. It was not merged
+  because the picture at 1,024 rows was worse than main's: the drawn dissection read as evenly
+  crumpled ground and flattened ridges, escarpment rims and range fronts; seed 7's north-western
+  island grew a straight coast about 130 cells long and a rectangular dry tint; and a whole world
+  took about 85 s against 50 s. With one grid the cross-grid motive mostly lapsed. Revisit with the
+  planet-size input, when cell width will vary again: start from the branch's ledger rows (E1a, E1a
+  round 2, E1b+c), and make the drawing carry ridges and valleys at the relief's own scale before
+  anything else.
 - **The desktop's Copy link opens a different world (G1).** File ▸ Copy link to this world writes
   an address for `cartogenesis.com/app/`, which is now the frozen browser preview: it makes the
   linked seed and settings with the generator as it stood at 8198db27, so the world it opens is not

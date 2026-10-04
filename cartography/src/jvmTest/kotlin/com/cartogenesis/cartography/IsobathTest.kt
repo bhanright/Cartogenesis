@@ -368,7 +368,9 @@ class IsobathTest : BorrowsSharedWorlds() {
         val world = SharedWorlds.world(WORLD_CONFIG)
         assertEquals(ACROSS, world.width)
         assertEquals(DOWN, world.height)
-        val relative = world.sea.relativeElevation.data
+        // The surface the raster draws, whose sea cells are the floor and whose land cells the
+        // stencil reaches at the coast as [DrawnRelief] draws them.
+        val relative = DrawnRelief.of(world).data
         val depth = FloatArray(relative.size) { -relative[it] }
         val copied = contourInk(depth, flatnessRule = true)
         val interval = Isobaths.interval(world.config.scale)

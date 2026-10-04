@@ -207,7 +207,13 @@ class PipelineTest {
             if (t < 0) {
                 stranded++
                 report(i, "no receiver at all, away from the poles")
-            } else if (world.sea.isLand[t] && filled.data[t] > filled.data[i]) {
+            } else if (world.sea.isLand[t] && filled.data[t] > filled.data[i] &&
+                !(filled.data[i] > ground.data[i] && filled.data[t] > ground.data[t] && leavesTheFlat(world, i))
+            ) {
+                // Across a flat the fill raised, the flow follows the flat potential and not the
+                // fill's staircase (F30b), so a receiver a step of that staircase higher is a step
+                // along the flat, wherever the flow goes on to leave it; one that never does, or a
+                // receiver higher on ground the fill did not raise, is a cell stranded.
                 stranded++
                 report(i, "its receiver stands higher than it does on the filled surface")
             } else if (world.sea.isLand[t] && filled.data[t] == filled.data[i] && !descendsAcrossTheFlat(world, i)) {
@@ -242,6 +248,29 @@ class PipelineTest {
             if (world.rivers.lakes.isLake(next) || world.rivers.lakes.isPlaya(next)) return true
             if (filled[next] < level) return true
             if (filled[next] > level) return false
+            cell = next
+        }
+        return false
+    }
+
+    /**
+     * Whether the flow from [start], over cells the fill raised above the bed, reaches a cell it
+     * did not raise, the sea, a lake, a playa or the edge: whether it leaves the flat.
+     */
+    private fun leavesTheFlat(
+        world: com.cartogenesis.worldgen.model.WorldMap,
+        start: Int
+    ): Boolean {
+        val filled = world.rivers.filledElevation.data
+        val bed = world.sea.relativeBed.data
+        var cell = start
+        var steps = 0
+        val limit = world.width * world.height
+        while (steps++ < limit) {
+            val next = world.rivers.flowTarget[cell]
+            if (next < 0 || !world.sea.isLand[next]) return true
+            if (world.rivers.lakes.isLake(next) || world.rivers.lakes.isPlaya(next)) return true
+            if (filled[next] <= bed[next]) return true
             cell = next
         }
         return false

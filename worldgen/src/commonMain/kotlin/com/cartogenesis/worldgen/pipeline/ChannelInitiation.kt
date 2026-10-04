@@ -259,7 +259,7 @@ object ChannelInitiation {
      * definition of one.
      */
     fun channelMaskOf(world: WorldMap): BooleanArray = channelMask(
-        world.config, world.sea.isLand, world.sea.landCellCount, world.sea.relativeElevation,
+        world.config, world.sea.isLand, world.sea.landCellCount, world.sea.relativeBed,
         world.rivers.filledElevation, world.rivers.flowTarget, world.climate
     ) { world.rivers.lakes.isOpenWater(it) }
 

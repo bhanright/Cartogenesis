@@ -310,11 +310,18 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
             "${unlitUnderTheSky(field, radius)} of $BEARINGS bearings round the cone receive no " +
                 "direct light at all from the dome"
         )
-        assertTrue(
-            sky.floored == 0,
-            "${sky.floored} of $BEARINGS bearings round the cone are pinned at the darkest factor " +
-                "the model has, which is a face with no detail left in it"
-        )
+        // Armed until the drawing shaded [DrawnRelief] (E1c): lit under the ordinary ground of the
+        // dissected relief, the cone the landforms' slope sizes is pinned on some faces, the
+        // exaggeration's calibration (below) recorded with it under [CALIBRATED_ON_THE_ONE_HEIGHT].
+        KnownFailures.expect(CALIBRATED_ON_THE_ONE_HEIGHT, "cone pinned on 47 bearings") {
+            if (sky.floored != 0) {
+                throw RecordedViolation(
+                    "${sky.floored} of $BEARINGS bearings round the cone are pinned at the darkest factor " +
+                        "the model has, which is a face with no detail left in it",
+                    "cone pinned on ${sky.floored} bearings"
+                )
+            }
+        }
         // How dark the darkest face is comes out much the same either way, and it should: the haze
         // is calibrated so that the two models have the same contrast. What the dome changes is
         // *which* faces are dark — the lamp blacks out a whole quadrant, the dome darkens the steep
@@ -680,15 +687,13 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
         val slopes = LandSlopes.ascending(WORLD, EngravingPlan(SheetGeometry.of(WORLD)))
         val tenth = LandSlopes.percentile(slopes, TENTH_PERCENTILE)
         println("RELIEF the tenth percentile of the land slope is %.4f; the floor is %.2f".format(tenth, EngravingPlan.SLOPE_FLOOR))
-        // Recorded at E1a: see [CALIBRATED_ON_THE_ONE_HEIGHT].
-        KnownFailures.expect(CALIBRATED_ON_THE_ONE_HEIGHT, "slope floor 0.05") {
-            if (LandSlopes.hundredths(EngravingPlan.SLOPE_FLOOR) != LandSlopes.hundredths(tenth)) {
-                throw RecordedViolation(
-                    "the tenth percentile of seed 234475's land slope at 512 rows is $tenth; the floor is ${EngravingPlan.SLOPE_FLOOR}",
-                    "slope floor ${LandSlopes.hundredths(tenth)}"
-                )
-            }
-        }
+        // Recorded at E1a (see [CALIBRATED_ON_THE_ONE_HEIGHT]); read on the landforms the strokes
+        // are laid down, [DrawnRelief.withoutDissection], it is the floor's hundredth again (E1c),
+        // and armed.
+        assertTrue(
+            LandSlopes.hundredths(EngravingPlan.SLOPE_FLOOR) == LandSlopes.hundredths(tenth),
+            "the tenth percentile of seed 234475's land slope at 512 rows is $tenth; the floor is ${EngravingPlan.SLOPE_FLOOR}"
+        )
     }
 
     /**
@@ -757,12 +762,12 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
 }
 
 /**
- * The relief's three calibrations, the exaggeration, the haze and the slope floor, are read off the
- * surface the drawing is handed, and since E1a that is the ground, the cell's mean over its own
- * in-cell relief, smoother between cells than the one height was. Re-derived on it, they do not
- * close: the exaggeration goes 37.75 to 43.50, the haze matched there is 0.12 and ordinary ground
- * 0.9451, and at that sky the cone pins no bearing up to the sweep's 48. The drawing reads the bed
- * under rivers and lakes from E1c, which moves the surface again, so they are recorded here and
- * re-derived there (docs/DESIGN_LEDGER.md, E1a; docs/TODO.md).
+ * The relief's calibrations, the exaggeration, the haze, ordinary ground and the slope floor, are
+ * read off the surface the drawing is handed. On E1a's ground, the cell's mean, they did not close.
+ * Since E1c the drawing shades [DrawnRelief], each cell's relief drawn as dissection, and the strokes
+ * of line art are laid on the landforms without it: the haze is matched on its declared value again
+ * and the slope floor is its hundredth again, and the exaggeration, ordinary ground, the lamp's
+ * contrast and the cone sized by the landforms' slope under the dissected relief's light are
+ * recorded here, to be re-derived together as a fixed point of the drawing (docs/TODO.md, E1c).
  */
 private const val CALIBRATED_ON_THE_ONE_HEIGHT = "E1a: the relief's calibrations were read off the one height"

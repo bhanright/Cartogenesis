@@ -1,5 +1,6 @@
 package com.cartogenesis.worldgen.pipeline
 
+import com.cartogenesis.worldgen.math.JumpFloodDistance
 import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import kotlin.math.sqrt
@@ -225,9 +226,10 @@ object RiverStage {
     ): Routed {
         val cellsAcross = config.width
         val cellsDown = config.height
-        val filled = fillDepressions(cellsAcross, cellsDown, sea)
+        val surface = routingSurface(config, sea)
+        val filled = FlowRouting.fillDepressions(cellsAcross, cellsDown, sea.isLand, surface)
         val flowTarget = computeFlowDirections(
-            cellsAcross, cellsDown, sea, filled, config.seed, config.cellHeightInCellWidths,
+            cellsAcross, cellsDown, sea, surface, filled, config.seed, config.cellHeightInCellWidths,
             FlowRouting.smoothFieldPeriodCells(config),
             config.facetRouting, config.flatPotential
         )
@@ -932,16 +934,61 @@ object RiverStage {
     }
 
     /**
-     * Priority-flood (Barnes et al.): grow inland from the coast, raising any cell that sits below
-     * the lowest path already reached so it drains rather than ponding.
+     * The surface the water is routed over: the bed, except where the sea has come back over it.
+     *
+     * The rounds cut the trunks to the sea that stood while they cut, and for most of them it
+     * stood 120 m lower (`SeaConfig.lowstandMetres`), so a lowland's trunks can lie below today's
+     * shoreline far inland while the cells' ground, their interfluves, stands well above it: land
+     * whose channels are drowned, a ria coast at the grid's scale. The fill would raise those beds
+     * to the sea's level as one broad flat, and the water then wanders across it along the coast
+     * however the flat's potential leads it, in channels running beside one another the length of
+     * the shore. A drowned channel's water is the sea's, standing at its level and open to it, so
+     * across the cells whose bed lies below the shoreline and which the sea reaches through such
+     * cells the surface is the sea's level, falling toward the open sea by the fill's own least
+     * step ([FlowRouting.FLAT_GRADIENT_STEP]) a cell width of the Euclidean distance to it: the
+     * water leaves for the nearest open sea, as a river reaching its estuary does.
      */
-    private fun fillDepressions(width: Int, height: Int, sea: SeaLevelResult): FloatField =
-        FlowRouting.fillDepressions(width, height, sea.isLand, sea.relativeBed)
+    private fun routingSurface(config: WorldGenConfig, sea: SeaLevelResult): FloatField {
+        val cellsAcross = config.width
+        val cellsDown = config.height
+        val cellCount = cellsAcross * cellsDown
+        val bed = sea.relativeBed
+        val drowned = BooleanArray(cellCount)
+        val stack = ArrayList<Int>()
+        for (cell in 0 until cellCount) {
+            if (sea.isLand[cell]) continue
+            FlowRouting.forEachNeighbour(cellsAcross, cellsDown, cell % cellsAcross, cell / cellsAcross) { neighbour ->
+                if (sea.isLand[neighbour] && !drowned[neighbour] && bed.data[neighbour] < 0f) {
+                    drowned[neighbour] = true
+                    stack.add(neighbour)
+                }
+            }
+        }
+        if (stack.isEmpty()) return bed
+        while (stack.isNotEmpty()) {
+            val cell = stack.removeAt(stack.size - 1)
+            FlowRouting.forEachNeighbour(cellsAcross, cellsDown, cell % cellsAcross, cell / cellsAcross) { neighbour ->
+                if (sea.isLand[neighbour] && !drowned[neighbour] && bed.data[neighbour] < 0f) {
+                    drowned[neighbour] = true
+                    stack.add(neighbour)
+                }
+            }
+        }
+        val distance = FloatArray(cellCount) { if (sea.isLand[it]) JumpFloodDistance.INFINITE else 0f }
+        val nearest = IntArray(cellCount) { if (sea.isLand[it]) -1 else it }
+        JumpFloodDistance.run(cellsAcross, cellsDown, distance, nearest, config.cellHeightInCellWidths)
+        val surface = bed.copy()
+        for (cell in 0 until cellCount) {
+            if (drowned[cell]) surface.data[cell] = distance[cell] * FlowRouting.FLAT_GRADIENT_STEP
+        }
+        return surface
+    }
 
     private fun computeFlowDirections(
         width: Int,
         height: Int,
         sea: SeaLevelResult,
+        surface: FloatField,
         filled: FloatField,
         seed: Long,
         cellHeightInCellWidths: Double,
@@ -949,7 +996,7 @@ object RiverStage {
         byFacet: Boolean,
         overPotential: Boolean
     ): IntArray = FlowRouting.flowDirections(
-        width, height, sea.isLand, sea.relativeBed, filled, seed, cellHeightInCellWidths,
+        width, height, sea.isLand, surface, filled, seed, cellHeightInCellWidths,
         smoothFieldPeriodCells,
         byFacet, overPotential
     )

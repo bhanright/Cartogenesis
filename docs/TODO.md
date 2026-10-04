@@ -1420,9 +1420,11 @@
   recorded). The bearings are even (1.04, 1.00, 1.06 and 0.99 of their neighbours on seed 42).
   2026-10-04, E1c.
 - **The lakes' sizes no longer follow Downing's law.** `EarthLikenessTest` reads the pooled
-  lake-size exponent 0.469 over 86 lakes against Downing and others' 1.06 plus or minus 0.34: since
+  lake-size exponent 0.393 over 97 lakes against Downing and others' 1.06 plus or minus 0.32: since
   a lake is each piece of water standing over its ground (E1c), one basin's water can be several
-  lakes, and more of them are small. Recorded. 2026-10-04, E1c.
+  lakes, and more of them are small (0.469 over 86 before the drowned channels were routed across).
+  The same run's humid-against-semi-arid channel density clause passes, where it read 1.01 through
+  E1b. Recorded. 2026-10-04, E1c.
 - **The grooves through the spoil leave a few channel pits.** With the spoil re-entrained above
   its feeders, the laying of it puts no hole in a river's bed on seeds 7 and 42 at 512 rows
   (`OutletIncisionTest`), but the grooves cut through it afterwards (`openMouths`) leave three on
@@ -1435,6 +1437,24 @@
   cells on E1b's ground, under the 200 its case needs, and `GlaciationLatticeTest`'s resolution
   contract on 718106 at sea 0.70 keeps too little water to compare; both recorded, each to be
   re-picked by its own scan. 2026-10-04, E1b.
+- **A lowland's trunks lie below today's sea far inland.** The rounds cut the trunks to the
+  lowstand's sea for nine of their twelve rounds, at slopes the implicit law leaves near nought on
+  ground with no uplift, and the transgression then stands the sea over them: on seed 7 at 1,024
+  rows the beds of a band fifty cells wide behind the north-western island's southern coast lie 50
+  to 160 m below the shoreline while its ground stands 100 to 370 m above it. The rounds treat
+  those beds as standing water at the sea's level (lake fans are laid in them) and the rivers stage
+  routes across them toward the nearest open sea (`RiverStage.routingSurface`, E1c); filled to the
+  sea's level instead, they made one flat the rivers crossed along the coast in channels side by
+  side, a ruled set of concentric courses the render showed. Whether trunks a thousand kilometres
+  from the sea should stand below it at all is the transport-limited half the law leaves out: an
+  alluvial river keeps the slope its load needs. 2026-10-04, E1c.
+- **Seed 7's north-western island carries a straight coast and a ruled dry tint.** At 1,024 rows
+  its eastern coast runs straight down a column for about 130 cells, and the dry tint inland of it
+  fills a block with edges along a row and a column, where main's island ends further west with a
+  rounded tint. Both are in E1a round 2's render of the same ground, so they came with the two
+  heights, not with E1b or E1c; the coast's land is ground main drowned, and its edge is not
+  traced (a crust edge the drowned plain covered is the candidate). Neither per-merge census reads
+  1,024 rows. 2026-10-04, E1c.
 - **The D8 octave, averaged over the grid's real configurations.** `GroundClosure.NETWORK_RELIEF_PER_OCTAVE`
   is derived for a straight trunk crossing a 2-by-2 block, a half of `E / K'` an octave. A turning
   trunk leaves one side cell (a quarter) and a source block three round an outlet (about 0.85), and

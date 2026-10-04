@@ -404,7 +404,7 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
         // card as `uOrdinaryGround`).
         val declaredGround = median(illuminationOverLand(world, ReliefShading.DAYLIGHT))
         println("RELIEF under the declared sky ordinary ground sits at %.4f".format(declaredGround))
-        KnownFailures.expect(CALIBRATED_ON_THE_ONE_HEIGHT, "ordinary ground 0.8412") {
+        KnownFailures.expect(CALIBRATED_ON_THE_ONE_HEIGHT, "ordinary ground 0.8430") {
             if (kotlin.math.abs(declaredGround - ReliefShading.ordinaryGround) > MAX_GROUND_DRIFT) {
                 throw RecordedViolation(
                     "ordinary ground measures ${"%.4f".format(declaredGround)} under the declared sky, " +
@@ -652,7 +652,7 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
                 )
         )
         // Recorded at E1a: see [CALIBRATED_ON_THE_ONE_HEIGHT].
-        KnownFailures.expect(CALIBRATED_ON_THE_ONE_HEIGHT, "exaggeration 37.00") {
+        KnownFailures.expect(CALIBRATED_ON_THE_ONE_HEIGHT, "exaggeration 36.75") {
             if (kotlin.math.abs(declared - steepestClear) > EXAGGERATION_SWEEP_STEP / 2) {
                 throw RecordedViolation(
                     "the steepest exaggeration that pins no face of the cone is %.2f, not the declared %.4f"

@@ -283,7 +283,7 @@ class LakeWaterBalanceTest : BorrowsSharedWorlds() {
         val basin = basinOf(off, 400f, Float.MAX_VALUE)
         // Seed 37's wet basin is 78 cells on E1b's ground, its outlet cut on its surplus inside the
         // rounds; recorded until the wet case is re-picked by its own scan (docs/TODO.md).
-        KnownFailures.expect(WET_BASIN_GONE, "78 cells") {
+        KnownFailures.expect(WET_BASIN_GONE, "97 cells") {
             if (basin.size < 200) {
                 throw RecordedViolation("seed $wetSeed has no large wet basin any more (${basin.size} cells)", "${basin.size} cells")
             }

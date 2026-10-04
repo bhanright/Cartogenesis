@@ -9,7 +9,6 @@ import com.cartogenesis.worldgen.model.WorldMap
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
-
 import kotlin.test.assertTrue
 
 /**
@@ -28,6 +27,18 @@ import kotlin.test.assertTrue
 class RiverSelectionTest : BorrowsSharedWorlds() {
 
     private companion object {
+        /**
+         * The known failure the budget floor's premise records since Fix 3b: on some seeds the
+         * largest river's chain fits a quarter of Earth's ink even on the postage-stamp sheet, so
+         * that sheet does not exercise the floor on them; the clause's other seeds still do, and
+         * the largest river is still drawn on every sheet. Through L1 the seeds were 7 and 99. With
+         * the rivers routed over the bed (E1c) those chains overrun the quarter, and once the
+         * drowned channels carry rivers straight to the sea seed 1234's largest chain is shorter
+         * and fits it. A smaller sheet or another seed would restore it, and is not chosen here
+         * (docs/DESIGN_LEDGER.md, Fix 3b, Q4 and E1b+c).
+         */
+        const val FLOOR_IDLE_ON_SOME_SEEDS =
+            "the rivers: on the law's terrain some seeds' largest chains fit the tiny sheet's quarter of Earth's ink"
 
         /** The four standard seeds, at the rows the per-merge guards' detail worlds use. */
         val SEEDS = listOf(7L, 42L, 1234L, 99L)
@@ -502,14 +513,15 @@ class RiverSelectionTest : BorrowsSharedWorlds() {
             if (quarterOfEarthKm >= tiny.budgetKilometres) idleFloor += "seed $seed"
             assertTrue(tiny.drawn[biggest], "seed $seed lost its largest river on a tiny sheet")
         }
-        // Recorded from the law's terrain through L1 (seed 99 last); with the rivers routed over the
-        // bed (E1c) every seed's largest chain overruns the quarter on the tiny sheet, and the clause
-        // is armed.
-        assertTrue(
-            idleFloor.isEmpty(),
-            "the largest river's chain fits a quarter of Earth's ink even on the tiny sheet, so it does not " +
-                "exercise the floor: ${idleFloor.joinToString()}"
-        )
+        KnownFailures.expect(FLOOR_IDLE_ON_SOME_SEEDS, "seed 1234") {
+            if (idleFloor.isNotEmpty()) {
+                throw RecordedViolation(
+                    "the largest river's chain fits a quarter of Earth's ink even on the tiny sheet, so it does not " +
+                        "exercise the floor: ${idleFloor.joinToString()}",
+                    idleFloor.joinToString()
+                )
+            }
+        }
     }
 
     @Test

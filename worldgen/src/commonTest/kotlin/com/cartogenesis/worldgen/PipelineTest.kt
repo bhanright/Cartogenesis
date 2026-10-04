@@ -17,10 +17,9 @@ class PipelineTest {
         WorldGenConfig.forRows(seed, size)
 
     /**
-     * Two generations of one seed in one process are the same world, on every target this suite
-     * runs on: every stage's per-cell answer that the rest of the pipeline reads, compared array by
-     * array. `WorldFingerprintTest` holds the same property on the JVM over every field reachable
-     * from the world, by reflection; this is the part of it that can be asked on Wasm too.
+     * Two generations of one seed in one process are the same world: every stage's per-cell
+     * answer that the rest of the pipeline reads, compared array by array. `WorldFingerprintTest`
+     * holds the same property over every field reachable from the world, by reflection.
      */
     @Test
     fun `generation is deterministic for a given seed`() = runTest(timeout = 10.minutes) {

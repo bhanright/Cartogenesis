@@ -1,23 +1,21 @@
 package com.cartogenesis.cartography
 
 /**
- * A real gzip, for [GzipInteroperabilityTest] — proof that the desktop's `java.util.zip` and a
- * browser's `CompressionStream` produce and accept the same bytes, not merely the same format.
+ * A real gzip, for [GzipInteroperabilityTest]: a checked-in save decoded by an RFC 1952 gzip that
+ * is not the one the desktop wrote it with.
  *
  * Test-only: production code reaches gzip through the platform's [Compressor] (`:desktop`'s
- * `GzipCompressor`, `:web`'s `WebGzipCompressor`), which `:cartography` cannot depend on in either
- * direction. This is `:cartography`'s own `jvmTest`/`wasmJsTest` copy of the same two algorithms,
- * kept to the minimum this one test needs.
+ * `GzipCompressor`), which `:cartography` cannot depend on. This is `:cartography`'s own copy,
+ * kept to the minimum this one test needs. Declared in common code because the test is; the JVM's
+ * is the one implementation since the browser targets were removed (G1).
  *
- * Null means this platform's test environment cannot do it — see the wasmJs actual for when that
- * is expected to happen.
+ * Null means this platform's test environment cannot do it.
  */
 expect suspend fun platformGzipCompress(data: ByteArray): ByteArray?
 
 expect suspend fun platformGzipDecompress(data: ByteArray): ByteArray?
 
-/** Whether this platform's test environment can even attempt the round trip. Always true on the
- *  JVM; on wasmJs, whether Node has `CompressionStream`/`DecompressionStream` at all. */
+/** Whether this platform's test environment can even attempt the round trip. Always true on the JVM. */
 internal expect fun platformGzipAvailable(): Boolean
 
 /** Adapts the two functions above to the [Compressor] seam [WorldCodec] expects. */

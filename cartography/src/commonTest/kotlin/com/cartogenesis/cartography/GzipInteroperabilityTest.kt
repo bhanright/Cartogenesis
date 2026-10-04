@@ -8,15 +8,13 @@ import kotlin.test.assertTrue
 import kotlinx.coroutines.test.runTest
 
 /**
- * A save carries the world, and compression is a platform seam — the JVM's `java.util.zip` and a
- * browser's `CompressionStream` — so without this nothing proves the two agree on what "gzip"
- * means rather than each merely reading its own writing back.
+ * A save carries the world, and compression is a platform seam, so without this nothing proves
+ * that a save is RFC 1952 gzip rather than whatever the writer's own reader happens to accept.
  *
- * [GZIP_FIXTURE_BASE64] is a small world (64x32, square cells) written once by the JVM's own gzip algorithm and
- * checked in as bytes, precisely so this does not depend on a JVM being present to write one at
- * test time. This class runs in both `jvmTest` and `wasmJsNodeTest` and decodes the same fixture
- * in both, so a platform whose "gzip" silently drifted from RFC 1952 — a wrong header, a missing
- * trailer, a different dictionary — would fail here without needing a real browser at all.
+ * [GZIP_FIXTURE_BASE64] is a small world (64x32, square cells) written once by the JVM's own gzip
+ * algorithm and checked in as bytes, and decoded here through the test's own gzip. It ran on the
+ * browser's `CompressionStream` too until the browser build was removed (G1); the frozen browser
+ * app's saves are format 14, which this fixture is.
  */
 class GzipInteroperabilityTest {
 
@@ -24,8 +22,7 @@ class GzipInteroperabilityTest {
     @Test
     fun `a gzip container the JVM wrote decodes on this platform too`() = runTest {
         if (!platformGzipAvailable()) {
-            // A test Node too old to have CompressionStream/DecompressionStream at all is
-            // allowed for: there is then nothing this platform's run can prove either way.
+            // A test environment with no gzip at all can prove nothing either way.
             return@runTest
         }
 

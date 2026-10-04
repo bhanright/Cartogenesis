@@ -5,11 +5,11 @@ package com.cartogenesis.worldgen.concurrent
  *
  * Only ever used for work where each iteration writes to indices no other iteration touches, so
  * the result is bit-for-bit identical whether it runs on one thread or twelve. That property is
- * not incidental — a save stores a seed rather than a world, and `WorldFingerprintTest` compares
- * platforms against each other, so a parallel pass that changed its output would break saves and
- * fail CI.
+ * not incidental — `WorldFingerprintTest` holds two generations of one seed to the same world, so
+ * a parallel pass that changed its output with the thread count would fail it.
  *
- * Wasm and JS are single-threaded, and their implementations simply run the loop in order.
+ * Declared in common code with the JVM's implementation the only one: the browser targets, which
+ * ran the loop in order on their one thread, were removed with the browser build (G1).
  */
 expect fun parallelFor(fromInclusive: Int, toExclusive: Int, body: (Int) -> Unit)
 

@@ -18,9 +18,8 @@ import kotlin.test.assertTrue
  * `docs/CONVENTIONS.md` rule 10 names. The digests are printed as `WORLD DIGEST` lines, one per
  * branch, so a comparison says which field moved rather than that the world did.
  *
- * On the JVM only, because the walk is reflection. `CrossPlatformFingerprintTest` prints the
- * fingerprint the JVM and Wasm are compared on, and `PipelineTest` holds determinism over the main
- * per-cell answers on both targets.
+ * On the JVM, because the walk is reflection; `PipelineTest` holds determinism over the main
+ * per-cell answers in the common tests.
  */
 class WorldFingerprintTest {
 

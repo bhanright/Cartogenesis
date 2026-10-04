@@ -550,7 +550,7 @@ tasks.register<Sync>("assembleSite") {
     }
 
     // The page's typefaces are site/fonts/*.woff2, cut from the application's own faces by
-    // site/fonts/build_web_fonts.py and copied with the rest of site/. Their licences are the
+    // site/fonts/build_web_fonts.py and copied with the rest of site/. Their licenses are the
     // application's, published beside them as the SIL Open Font License asks.
     into("fonts") {
         from(rootProject.layout.projectDirectory.dir("ui/licences")) { include("OFL-*.txt") }

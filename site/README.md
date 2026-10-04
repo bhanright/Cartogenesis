@@ -55,7 +55,7 @@ gh release download web-frozen --pattern web-frozen.zip --dir build/web-frozen  
 
 That runs `:desktop:renderSiteImagery`, checks the stored application's SHA-256, then syncs
 `desktop/build/site` to the stored application's `app/` with this folder laid over it, plus the
-faces' licences and the figures, which is the tree a host serves:
+faces' licenses and the figures, which is the tree a host serves:
 
 - **`Sync`, not a copy.** The two `.wasm` filenames carry content hashes, and a tree that is only
   ever added to keeps every orphan and publishes all of them.

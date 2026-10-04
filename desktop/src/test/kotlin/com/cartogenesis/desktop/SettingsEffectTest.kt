@@ -60,7 +60,8 @@ class SettingsEffectTest {
     @Test
     fun `the header offers no choice of grid, whatever the stored settings say`() {
         val older = SettingsCodec.decode("""{"workingResolution":2048,"exportSize":4096}""")
-        assertEquals(shoot(AppSettings()), shoot(older), "a stored grid still reached the window")
+        // Compared as documents rather than as pictures: a fresh window draws a fresh random seed.
+        assertEquals(AppSettings(), older, "a stored grid survived into the settings the window reads")
         assertFalse(headerSays(AppSettings(), "Generation resolution"), "the header still offers a grid")
     }
 

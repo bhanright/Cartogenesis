@@ -5,6 +5,7 @@ import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.FlatRouting
 import com.cartogenesis.worldgen.pipeline.FlowRouting
 import com.cartogenesis.worldgen.pipeline.RiverResult
+import com.cartogenesis.worldgen.pipeline.RiverStage
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -110,15 +111,35 @@ class StraightRunTest : BorrowsSharedWorlds() {
             assertDrainageIsAForest(world, "$seed@$side")
         }
         println("F18 census with the facet rule: ${counted.joinToString(" ")}")
-        // Recorded from Fix 3b's review round, when the lake came to fall with its outlet (seed 42
-        // at 512 by 512 held one bar, 27 cells), and armed on square cells at Q2, where the census
-        // read nought on every seed (docs/DESIGN_LEDGER.md, Q2). Seed 42 at 512 holds one again on
-        // E1a round 2's ground, 36 cells at (48,167), and it is recorded (docs/TODO.md).
-        KnownFailures.expect(RULED_BAR_AGAIN, RULED_BAR_RECORD) {
-            if (total != 0) {
-                throw RecordedViolation("standing water still runs in ruled lines: ${counted.joinToString(" ")}", counted.joinToString(" "))
-            }
-        }
+        // Armed on square cells at Q2, where the census read nought on every seed
+        // (docs/DESIGN_LEDGER.md, Q2); recorded on E1a round 2's ground, where seed 42 at 512 held
+        // one bar, 36 cells at (48,167), and armed again since the rivers are routed over the bed
+        // (E1c): see the case below for what made it.
+        assertTrue(total == 0, "standing water still runs in ruled lines: ${counted.joinToString(" ")}")
+    }
+
+    /**
+     * The bar E1a round 2 left on seed 42 at 512 was the rivers stage's fill over the ground.
+     *
+     * The ground is each cell's mean over its own hillslopes and channels, so down a river it stands
+     * above the bed by each cell's own relief, which is not monotone along the course: the fill
+     * levels every dip of it, and where the course runs straight along a row the water it ponds
+     * runs straight with it. The bed is the surface the rounds routed and cut, monotone down every
+     * channel they cut, and the rivers stage routes over it now. Shown here on the shipped world
+     * with its rivers routed over the ground instead: the census finds the bar at (48,167) again,
+     * 30 cells within a cell of a line it runs 22 cells along, which is what the census exists to
+     * catch.
+     */
+    @Test
+    fun `the census finds the bar the ground's fill makes`() {
+        val world = world(BAR_SEED, STANDARD_SIDE)
+        val onTheGround = RiverStage.generate(
+            world.config, world.sea.copy(relativeBed = world.sea.relativeElevation), world.climate
+        )
+        val bars = RuledLines.ruledBarsOf(world.copy(rivers = onTheGround))
+            .filterNot { standsBelowTheSeaLevelCut(world, it.lakeId) }
+        bars.forEach { println("F18 BAR on $BAR_SEED@$STANDARD_SIDE with the rivers over the ground: $it") }
+        assertTrue(bars.isNotEmpty(), "routed over the ground, seed $BAR_SEED's rivers pond no ruled bar, so the census cannot tell the two apart")
     }
 
     /**
@@ -478,6 +499,5 @@ class StraightRunTest : BorrowsSharedWorlds() {
     }
 }
 
-/** Seed 42's ruled lake on E1a round 2's ground (docs/TODO.md, E1a round 2). */
-private const val RULED_BAR_AGAIN = "E1a round 2: seed 42 at 512 holds a ruled bar of standing water"
-private const val RULED_BAR_RECORD = "298405@1024=0 7@512=0 42@512=1 1234@512=0 99@512=0"
+/** The seed whose rivers, routed over the ground, pond the ruled bar (docs/DESIGN_LEDGER.md, E1c). */
+private const val BAR_SEED = 42L

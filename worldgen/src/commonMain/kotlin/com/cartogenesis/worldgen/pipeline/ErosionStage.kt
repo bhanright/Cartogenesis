@@ -25,12 +25,12 @@ data class ErosionResult(
     /**
      * Each land cell's channel-head support area as the last round found it, in square kilometres:
      * the hollow a slope gathers before its runoff holds a channel, which spaces the cell's own
-     * valleys. Infinite where no head forms (under standing water, at sea, on ground that neither
-     * falls nor wears) and wherever a world was made with erosion off. What the drawing spaces a
-     * cell's dissection by.
+     * valleys. Zero where no head forms (under standing water, at sea, on ground that neither falls
+     * nor wears) and wherever a world was made with erosion off, a head having no area only where
+     * there is none, and every value finite as a save requires. What the drawing spaces a cell's
+     * dissection by.
      */
-    val channelHeadAreaKm2: FloatField =
-        FloatField(height.width, height.height).also { it.data.fill(Float.POSITIVE_INFINITY) },
+    val channelHeadAreaKm2: FloatField = FloatField(height.width, height.height),
     /**
      * Whether an accelerator did the thermal sweeps, as opposed to looking at the job and
      * declining it, which is a normal outcome the processor then covers with the same answer.

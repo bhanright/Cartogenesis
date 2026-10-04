@@ -85,9 +85,6 @@ object DrawnRelief {
     /** Side of the tiles the kernels are filed in, in cells: bookkeeping, so a cell reads only the tiles near it. */
     private const val TILE_CELLS = 8
 
-    /** Square kilometres in which the drawing reads no channel head at all. */
-    private const val NO_HEAD = Float.POSITIVE_INFINITY
-
     private var lastWorld: WorldMap? = null
     private var lastDrawn: FloatField? = null
 
@@ -135,7 +132,8 @@ object DrawnRelief {
             if (!sea.isLand[cell] || underWater[cell]) continue
             if (ground[cell] - bed[cell] <= 0f) continue
             val head = headAreaKm2[cell]
-            if (!(head > 0f) || head == NO_HEAD) continue
+            // No area is no head: a cell under water, or ground that neither falls nor wears.
+            if (!(head > 0f) || head.isInfinite()) continue
             val column = cell % cellsAcross
             val row = cell / cellsAcross
             val east = ground[row * cellsAcross + (column + 1) % cellsAcross]

@@ -1614,15 +1614,13 @@ internal object HydraulicErosion {
     /**
      * What the rounds hand on: the [ground], the [bed] under it and the channel heads' support
      * areas the last round found, [channelHeadAreaKm2], each one entry per cell, row-major; the two
-     * heights in the height field's units, the areas in square kilometres and infinite wherever no
-     * head stood.
+     * heights in the height field's units, the areas in square kilometres and zero wherever no head
+     * stood.
      */
     internal class Eroded(val ground: FloatField, val bed: FloatField, val channelHeadAreaKm2: FloatField) {
         companion object {
             /** A field no round touched: its bed is its ground and no head was found anywhere. */
-            fun oneHeight(ground: FloatField): Eroded = Eroded(
-                ground, ground, FloatField(ground.width, ground.height).also { it.data.fill(Float.POSITIVE_INFINITY) }
-            )
+            fun oneHeight(ground: FloatField): Eroded = Eroded(ground, ground, FloatField(ground.width, ground.height))
 
             /** The rounds' two heights as [cells] holds them, with the heads read on [isLand]. */
             fun of(ground: FloatField, cells: GroundCells, isLand: BooleanArray): Eroded {
@@ -1630,8 +1628,8 @@ internal object HydraulicErosion {
                 for (cell in areas.data.indices) {
                     val squareMetres = cells.headAreaSquareMetres[cell]
                     areas.data[cell] =
-                        if (isLand[cell]) squareMetres / GroundClosure.SQUARE_METRES_PER_SQUARE_KILOMETRE.toFloat()
-                        else Float.POSITIVE_INFINITY
+                        if (isLand[cell] && squareMetres.isFinite()) squareMetres / GroundClosure.SQUARE_METRES_PER_SQUARE_KILOMETRE.toFloat()
+                        else 0f
                 }
                 return Eroded(ground, FloatField(ground.width, ground.height, cells.bed.copyOf()), areas)
             }

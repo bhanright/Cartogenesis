@@ -249,12 +249,10 @@ class ClimateTintTest : BorrowsSharedWorlds() {
                     "${(MIN_STEPPE_SHARE * 100).toInt()}-${((1 - MIN_STEPPE_SHARE) * 100).toInt()}%"
             }
         }
-        // Recorded since Fix 3b: see [STEPPE_NEAR_THE_FOREST_ON_THE_LAWS_TERRAIN].
-        KnownFailures.expect(STEPPE_NEAR_THE_FOREST_ON_THE_LAWS_TERRAIN, "Scroll outside") {
-            if (outside.isNotEmpty()) {
-                throw RecordedViolation(outside.joinToString("; "), outside.joinToString(", ") { it.substringBefore(":") } + " outside")
-            }
-        }
+        // Recorded from Fix 3b to K2 under [STEPPE_NEAR_THE_FOREST_ON_THE_LAWS_TERRAIN]; armed at
+        // K2, where every style draws the steppe inside its band on the gallery's world as K2's
+        // physics draws it.
+        assertTrue(outside.isEmpty(), outside.joinToString("; "))
     }
 
     /**

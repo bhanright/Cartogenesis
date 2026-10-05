@@ -72,7 +72,7 @@ class GroundIsotropyTest : BorrowsSharedWorlds() {
         // Recorded at K2: on the Earth-sized planet one world's coast projects further one way than
         // its length allows, against Earth's 0.98 to 1.00 (docs/DESIGN_LEDGER.md, K2).
         KnownFailures.expect(
-            "K2: a world's coast on the Earth-sized planet projects further one way than its length allows", ""
+            "K2: a world's coast on the Earth-sized planet projects further one way than its length allows", "seed 99 0.93, together 0.99"
         ) {
             if (past.isNotEmpty() || abs(ln(pooled)) > pooledBar) {
                 throw RecordedViolation(

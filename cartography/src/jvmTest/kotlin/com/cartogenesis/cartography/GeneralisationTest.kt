@@ -370,7 +370,7 @@ class GeneralisationTest : BorrowsSharedWorlds() {
      * width and not the grid's.
      *
      * On a 2048-row world's sheet a pixel is 40,075 / 4096 = 9.784 km on the default planet, so a
-     * 5,000 km bar is 511.0 pixels long. On square cells the sheet's pixel and a cell's width are one length, so the
+     * 2,000 km bar is 204.4 pixels long. On square cells the sheet's pixel and a cell's width are one length, so the
      * clause is read as well on the 2048 by 2048 grid, whose cells are two pixels across: its
      * sheet is the same 4096 pixels, and the control, the arithmetic of the squeezed sheet this
      * replaced — a cell's width of ground to the pixel — draws the same bar at 85.3 pixels there,
@@ -400,21 +400,21 @@ class GeneralisationTest : BorrowsSharedWorlds() {
             "the printed bar runs past a quarter of the sheet"
         )
 
-        // A 5,000 km bar, as a 900-pixel frame at this scale chooses it.
-        val fiveThousand =
+        // A 2,000 km bar, as a 900-pixel frame at this scale chooses it.
+        val twoThousand =
             MapScale.longestBarThatFits(MapScale.kilometresPerPixel(geometry, 1f), 900f)
-        assertEquals(5_000.0, fiveThousand.kilometres)
-        assertEquals(5_000.0 / KILOMETRES_PER_PIXEL_AT_2048_ROWS, fiveThousand.lengthPixels.toDouble(), 1e-3)
-        val squeezedPixels = 5_000.0 / scale.cellWidthKm(geometry.cellsAcross)
+        assertEquals(2_000.0, twoThousand.kilometres)
+        assertEquals(2_000.0 / KILOMETRES_PER_PIXEL_AT_2048_ROWS, twoThousand.lengthPixels.toDouble(), 1e-3)
+        val squeezedPixels = 2_000.0 / scale.cellWidthKm(geometry.cellsAcross)
         println(
             "SCALE the printed bar on the ${geometry.cellsAcross} by ${geometry.cellsDown} grid's sheet: " +
-                "${placed.bar.label} over ${placed.bar.lengthPixels} px; 5,000 km is " +
-                "${fiveThousand.lengthPixels} px, and $squeezedPixels px a cell to the pixel"
+                "${placed.bar.label} over ${placed.bar.lengthPixels} px; 2,000 km is " +
+                "${twoThousand.lengthPixels} px, and $squeezedPixels px a cell to the pixel"
         )
         if (!geometry.isCellForPixel) {
             assertTrue(
-                abs(squeezedPixels - fiveThousand.lengthPixels) > 1.0,
-                "the squeezed sheet's arithmetic draws 5,000 km the same length, so the guard cannot " +
+                abs(squeezedPixels - twoThousand.lengthPixels) > 1.0,
+                "the squeezed sheet's arithmetic draws 2,000 km the same length, so the guard cannot " +
                     "tell them apart"
             )
         }

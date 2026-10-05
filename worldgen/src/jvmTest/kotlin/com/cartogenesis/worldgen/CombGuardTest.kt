@@ -293,8 +293,13 @@ class CombGuardTest : BorrowsSharedWorlds() {
         /** How far the network may thin: `ScaleFreeTest`'s grid tolerance. */
         const val NETWORK_FACTOR = 1.35
 
-        /** The initiated network at 512 rows on Q2's head, km of channel per 1,000 km² of land, by seed. */
-        val NETWORK_ON_THE_HEAD = listOf(7L to 43.07, 42L to 49.10)
+        /**
+         * The initiated network at 512 rows, km of channel per 1,000 km² of land, by seed: re-taken
+         * at K2 on the Earth-sized planet, whose 512 rows are cells of 39 km, where a channel cell
+         * stands for more land and the figure falls with it. On Q2's head, on the 12,000 km
+         * planet's 11.7 km cells, it was 43.07 and 49.10.
+         */
+        val NETWORK_ON_THE_HEAD = listOf(7L to 13.88, 42L to 14.38)
 
         val WORLD_SEEDS = NETWORK_ON_THE_HEAD.map { it.first }
     }

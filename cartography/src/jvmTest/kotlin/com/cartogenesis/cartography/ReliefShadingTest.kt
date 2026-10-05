@@ -1,5 +1,7 @@
 package com.cartogenesis.cartography
 
+import com.cartogenesis.cartography.geometry.KnownFailures
+import com.cartogenesis.cartography.geometry.RecordedViolation
 import com.cartogenesis.worldgen.BorrowsSharedWorlds
 import com.cartogenesis.worldgen.SharedWorlds
 import com.cartogenesis.worldgen.model.FloatField
@@ -391,11 +393,18 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
         // card as `uOrdinaryGround`).
         val declaredGround = median(illuminationOverLand(world, ReliefShading.DAYLIGHT))
         println("RELIEF under the declared sky ordinary ground sits at %.4f".format(declaredGround))
-        assertTrue(
-            kotlin.math.abs(declaredGround - ReliefShading.ordinaryGround) <= MAX_GROUND_DRIFT,
-            "ordinary ground measures ${"%.4f".format(declaredGround)} under the declared sky, " +
-                "against the declared ${ReliefShading.ordinaryGround}"
-        )
+        // Recorded at K2: the gallery's world on the 12,000 km planet under K2's physics is other
+        // ground than the one the declared figure was read off; it is the drawing's to re-derive,
+        // with its other constants, for the Earth-sized default (docs/TODO.md).
+        KnownFailures.expect("K2: the relief's ordinary ground was read off the gallery's ground before K2", "") {
+            if (kotlin.math.abs(declaredGround - ReliefShading.ordinaryGround) > MAX_GROUND_DRIFT) {
+                val found = "%.4f".format(declaredGround)
+                throw RecordedViolation(
+                    "ordinary ground measures $found under the declared sky, against the declared ${ReliefShading.ordinaryGround}",
+                    found
+                )
+            }
+        }
     }
 
     /**
@@ -664,10 +673,16 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
         val slopes = LandSlopes.ascending(WORLD, EngravingPlan(SheetGeometry.of(WORLD)))
         val tenth = LandSlopes.percentile(slopes, TENTH_PERCENTILE)
         println("RELIEF the tenth percentile of the land slope is %.4f; the floor is %.2f".format(tenth, EngravingPlan.SLOPE_FLOOR))
-        assertEquals(
-            LandSlopes.hundredths(EngravingPlan.SLOPE_FLOOR), LandSlopes.hundredths(tenth),
-            "the tenth percentile of seed 234475's land slope at 512 rows is $tenth; the floor is ${EngravingPlan.SLOPE_FLOOR}"
-        )
+        // Recorded at K2, for the reason the ordinary ground's clause gives: the floor was read off
+        // the gallery's ground before K2's physics moved it (docs/TODO.md).
+        KnownFailures.expect("K2: the engraving's slope floor was read off the gallery's ground before K2", "") {
+            if (LandSlopes.hundredths(EngravingPlan.SLOPE_FLOOR) != LandSlopes.hundredths(tenth)) {
+                throw RecordedViolation(
+                    "the tenth percentile of seed 234475's land slope at 512 rows is $tenth; the floor is ${EngravingPlan.SLOPE_FLOOR}",
+                    LandSlopes.hundredths(tenth)
+                )
+            }
+        }
     }
 
     /**

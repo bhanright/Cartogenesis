@@ -367,7 +367,7 @@ class PenAndInkTest : BorrowsSharedWorlds() {
         // from Fix 3b, 31.8 to 31.9 degrees on the 512 by 512 grid (docs/DESIGN_LEDGER.md, Q4). 29.6
         // at L1, and 30.0 at its review round, where the exaggeration was re-derived to 37.25.
         // Recorded again at K2, whose physics moved the gallery's ground on the 12,000 km planet.
-        KnownFailures.expect("K2: the engraving's ink on the gallery's world runs past its bar from the aspect", "") {
+        KnownFailures.expect("K2: the engraving's ink on the gallery's world runs past its bar from the aspect", "30.2 degrees") {
             if (engravedError.meanDegrees > MAX_MEAN_ASPECT_ERROR_DEGREES) {
                 val found = "%.1f degrees".format(engravedError.meanDegrees)
                 throw RecordedViolation(

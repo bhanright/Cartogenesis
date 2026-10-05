@@ -62,6 +62,15 @@ class CombGuardTest : BorrowsSharedWorlds() {
         val figure = String.format(Locale.ROOT, "seed %d %.2f down a column and %.2f along a row", seed, column, row)
     }
 
+    /**
+     * [seed]'s standard grid on the 12,000 km planet ([CalibrationPlanet]). The comb is the
+     * router's, a pattern a few cells across, and the census reads it in runs of [SUSTAINED_KM]:
+     * six cells of 11.7 km at 512 rows there, a cell and a half of 39 km on the Earth-sized planet,
+     * where the census reads no comb at all on either axis and neither clause could fail.
+     */
+    private fun onTheCalibrationPlanet(seed: Long): WorldGenConfig =
+        CalibrationPlanet.of(WorldGenConfig.forRows(seed, STANDARD_ROWS))
+
     private fun measure(config: WorldGenConfig): Seed {
         val world = SharedWorlds.world(config)
         val census = CombCensus.of(world, SUSTAINED_KM, NEAREST_KM, FURTHEST_KM, RIDGE_METRES)
@@ -80,7 +89,7 @@ class CombGuardTest : BorrowsSharedWorlds() {
     fun `the flanks are not combed along one axis more than the other, nor past the router's own`() {
         val thinned = ArrayList<String>()
         val seeds = NETWORK_ON_THE_HEAD.map { (seed, networkFloor) ->
-            val measured = measure(WorldGenConfig.forRows(seed, STANDARD_ROWS))
+            val measured = measure(onTheCalibrationPlanet(seed))
             if (measured.census.channelKmPer1000Km2 < networkFloor / NETWORK_FACTOR) {
                 thinned += "seed $seed's network thinned to ${measured.census.channelKmPer1000Km2} km per 1000 km2 from " +
                     "$networkFloor, past ScaleFreeTest's $NETWORK_FACTOR: a comb removed by removing channels"
@@ -90,18 +99,14 @@ class CombGuardTest : BorrowsSharedWorlds() {
         assertTrue(thinned.isEmpty(), thinned.joinToString("\n"))
         val oneSided = seeds.filter { it.oneSided }
         // Recorded at K1, whose square weather moved seed 42's flanks from just under the factor to
-        // just over it, 0.221 against 0.145 down a column and along a row: the same two figures the
-        // symmetric comb below records, to two places (docs/DESIGN_LEDGER.md, K1).
-        KnownFailures.expect(ONE_SIDED_BY_A_HAIR, ONE_SIDED_RECORDED) {
-            if (oneSided.isNotEmpty()) {
-                throw RecordedViolation(
-                    "the flanks are combed along one axis over $AXIS_FACTOR times the other, in km of comb per 1000 km2 of " +
-                        "land: ${oneSided.joinToString("; ") { it.figure }}",
-                    oneSided.joinToString("; ") { String.format(Locale.ROOT, "seed %d %.2f times", it.seed, it.larger / it.smaller) }
-                )
-            }
-        }
-        val bearings = WORLD_SEEDS.map { "seed $it ${BearingCensus.of(SharedWorlds.world(WorldGenConfig.forRows(it, STANDARD_ROWS)))}" }
+        // just over it, 0.221 against 0.145 down a column and along a row; armed again at K2, whose
+        // physics brought them back under it, 0.137 against 0.182 (docs/DESIGN_LEDGER.md, K1 and K2).
+        assertTrue(
+            oneSided.isEmpty(),
+            "the flanks are combed along one axis over $AXIS_FACTOR times the other, in km of comb per 1000 km2 of " +
+                "land: ${oneSided.joinToString("; ") { it.figure }}"
+        )
+        val bearings = WORLD_SEEDS.map { "seed $it ${BearingCensus.of(SharedWorlds.world(onTheCalibrationPlanet(it)))}" }
         bearings.forEach { println("COMB BEARINGS $it") }
         KnownFailures.expect(SYMMETRIC_COMB, RECORDED) {
             val combed = seeds.filter { it.combed }
@@ -122,7 +127,7 @@ class CombGuardTest : BorrowsSharedWorlds() {
      */
     @Test
     fun `the comparison sees the half-height cell's comb down the columns`() {
-        val halfHeight = WORLD_SEEDS.map { measure(WorldGenConfig(seed = it, width = 512, height = 512)) }
+        val halfHeight = WORLD_SEEDS.map { measure(CalibrationPlanet.of(WorldGenConfig(seed = it, width = 512, height = 512))) }
         assertTrue(
             halfHeight.all { it.oneSided && it.column > it.row },
             "the 512 by 512 worlds' comb down the columns was not seen: ${halfHeight.joinToString("; ") { it.figure }}"
@@ -140,7 +145,7 @@ class CombGuardTest : BorrowsSharedWorlds() {
     @Test
     fun `isotropic ground routed by the router passes the guard`() {
         val controls = WORLD_SEEDS.map { seed ->
-            val config = WorldGenConfig.forRows(seed, STANDARD_ROWS)
+            val config = onTheCalibrationPlanet(seed)
             val isLand = SharedWorlds.world(config).sea.isLand
             val metres = isotropicMetres(config, seed)
             val field = FloatField(
@@ -220,13 +225,11 @@ class CombGuardTest : BorrowsSharedWorlds() {
         const val SYMMETRIC_COMB =
             "the square cell: the flanks carry a comb of straight parallel gullies on both axes alike, seven to ten times the router's own"
 
-        /** Re-recorded at L1, whose rifts are Earth's half-grabens and the same at every grid (docs/DESIGN_LEDGER.md, L1). */
-        const val RECORDED = "seed 7 0.17 down a column and 0.12 along a row; seed 42 0.22 down a column and 0.15 along a row"
-
-        const val ONE_SIDED_BY_A_HAIR =
-            "K1: seed 42's flanks carry their comb one-sided past the factor by a hair, down the columns"
-
-        const val ONE_SIDED_RECORDED = "seed 42 1.52 times"
+        /**
+         * Re-recorded at L1, whose rifts are Earth's half-grabens and the same at every grid, and at K2
+         * on the 12,000 km planet under K2's physics (docs/DESIGN_LEDGER.md, L1 and K2).
+         */
+        const val RECORDED = "seed 7 0.18 down a column and 0.14 along a row; seed 42 0.14 down a column and 0.18 along a row"
 
         /**
          * The grid the guard is taken on, [SharedWorlds.DETAIL_ROWS]: square cells, 1,024 by 512,
@@ -293,13 +296,8 @@ class CombGuardTest : BorrowsSharedWorlds() {
         /** How far the network may thin: `ScaleFreeTest`'s grid tolerance. */
         const val NETWORK_FACTOR = 1.35
 
-        /**
-         * The initiated network at 512 rows, km of channel per 1,000 km² of land, by seed: re-taken
-         * at K2 on the Earth-sized planet, whose 512 rows are cells of 39 km, where a channel cell
-         * stands for more land and the figure falls with it. On Q2's head, on the 12,000 km
-         * planet's 11.7 km cells, it was 43.07 and 49.10.
-         */
-        val NETWORK_ON_THE_HEAD = listOf(7L to 13.88, 42L to 14.38)
+        /** The initiated network at 512 rows on Q2's head, km of channel per 1,000 km² of land, by seed. */
+        val NETWORK_ON_THE_HEAD = listOf(7L to 43.07, 42L to 49.10)
 
         val WORLD_SEEDS = NETWORK_ON_THE_HEAD.map { it.first }
     }

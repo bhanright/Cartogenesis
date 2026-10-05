@@ -35,12 +35,13 @@ class LakePocketsTest {
         val cells = (0 until cellsAcross * cellsDown).filter { val column = it % cellsAcross; column != 0 && column != cellsAcross - 1 }.toIntArray()
         val rain = FloatArray(cellsAcross * cellsDown) { rainMm(it % cellsAcross - 1) }
         val evaporation = FloatArray(cellsAcross * cellsDown) { evaporationMm(it % cellsAcross - 1) }
+        val runoff = FloatArray(cellsAcross * cellsDown) { RUNOFF * rain[it] }
 
         fun pockets(brim: Float): LakePockets {
             val byGround = LongArray(cells.size) { FlowRouting.encode(ground[cells[it]], cells[it]) }
             byGround.sort()
             return LakePockets.build(
-                cellsAcross, cellsDown, cells, byGround, ground, rain, evaporation, RUNOFF, brim,
+                cellsAcross, cellsDown, cells, byGround, ground, rain, evaporation, runoff, brim,
                 IntArray(cellsAcross * cellsDown) { -1 }
             )
         }
@@ -81,7 +82,7 @@ class LakePocketsTest {
         // and B's own supply can pay for.
         fun gainOver(cells: IntRange): Double = cells.sumOf { index ->
             val cell = pockets.layout[index]
-            (1.0 - RUNOFF) * strip.rain[cell] - strip.evaporation[cell]
+            (strip.rain[cell] - strip.runoff[cell]).toDouble() - strip.evaporation[cell]
         }
         val surplusA = supply[hollowA] + gainOver(pockets.regionStart[hollowA] until pockets.regionEnd[hollowA])
         val underB = water.ownCellsUnderWater[hollowB]
@@ -130,7 +131,7 @@ class LakePocketsTest {
 
         val net = DoubleArray(pockets.layout.size) { index ->
             val cell = pockets.layout[index]
-            (1.0 - RUNOFF) * strip.rain[cell] - strip.evaporation[cell]
+            (strip.rain[cell] - strip.runoff[cell]).toDouble() - strip.evaporation[cell]
         }
         var running = supply[0]
         var firstStop = net.size

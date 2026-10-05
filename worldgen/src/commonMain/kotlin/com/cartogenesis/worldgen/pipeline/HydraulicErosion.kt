@@ -1634,13 +1634,7 @@ internal object HydraulicErosion {
      * has to be right about is the order of magnitude of the water at a mouth, and it is.
      * See docs/DESIGN_LEDGER.md, S3 and R1.
      */
-    private const val DRAWN_RIVER_CATCHMENT_KM2 = PO_BASIN_KM2 / PO_DELTA_BRANCHES
-
-    /** The Po's basin, in square kilometers, rounded. See [DRAWN_RIVER_CATCHMENT_KM2]. */
-    private const val PO_BASIN_KM2 = 70_000.0
-
-    /** The Po's main branches across its delta. See [DRAWN_RIVER_CATCHMENT_KM2]. */
-    private const val PO_DELTA_BRANCHES = 5
+    private const val DRAWN_RIVER_CATCHMENT_KM2 = 70_000.0 / 5
 
     /** [DRAWN_RIVER_CATCHMENT_KM2] in cells of mean-watered land on a grid of this [scale]. */
     private fun drawnRiverCellsOn(scale: WorldScale, cellsAcross: Int, cellsDown: Int): Float =

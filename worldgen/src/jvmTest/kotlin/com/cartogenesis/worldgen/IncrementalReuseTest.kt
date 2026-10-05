@@ -182,7 +182,7 @@ class IncrementalReuseTest {
             // an endorheic basin rewrites the flow targets under it and takes its catchment out of
             // everything downstream. A stale river stage would show up here and nowhere else.
             "waterBalance" to base.copy(lakes = base.lakes.copy(waterBalance = false)),
-            "runoffFraction" to base.copy(lakes = base.lakes.copy(runoffFraction = 0.08f)),
+            "evaporationScale" to base.copy(lakes = base.lakes.copy(evaporationScale = 0.5f)),
             "ocean" to base.copy(ocean = base.ocean.copy(enabled = !base.ocean.enabled)),
             "upwelling" to base.copy(ocean = base.ocean.copy(upwelling = !base.ocean.upwelling)),
             "nations" to base.copy(nations = base.nations.copy(nationCount = base.nations.nationCount + 4)),

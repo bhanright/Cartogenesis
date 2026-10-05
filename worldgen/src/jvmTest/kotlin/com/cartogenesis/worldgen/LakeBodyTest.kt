@@ -98,7 +98,7 @@ class LakeBodyTest : BorrowsSharedWorlds() {
             val config = WorldGenConfig.forRows(seed, SharedWorlds.DETAIL_ROWS)
             val world = SharedWorlds.world(config)
             val solved = RiverStage.solvedBasins(config, world.sea, world.climate)
-            val rain = world.climate.precipitationMm.data
+            val rain = solved.runoffMm
             val reaching = FlowRouting.accumulate(
                 world.width, world.height, world.sea.isLand, world.rivers.filledElevation,
                 solved.routingAfterClosing, world.sea.landCellCount
@@ -109,10 +109,10 @@ class LakeBodyTest : BorrowsSharedWorlds() {
                 val rainReaching = if (basin.endorheic) {
                     basin.cells.filter { solved.routingAfterClosing[it] < 0 }.sumOf { reaching[it].toDouble() }
                 } else {
-                    basin.catchmentRainMm.toDouble()
+                    basin.catchmentRunoffMm.toDouble()
                 }
                 if (rainReaching <= 0.0) return@forEach
-                val ratio = basin.pocketRainMm / rainReaching
+                val ratio = basin.pocketRunoffMm / rainReaching
                 most = maxOf(most, ratio)
                 least = minOf(least, ratio)
                 if (kotlin.math.abs(ratio - 1.0) > SUMMING_ORDER) {

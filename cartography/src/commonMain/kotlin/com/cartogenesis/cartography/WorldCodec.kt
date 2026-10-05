@@ -135,10 +135,11 @@ object WorldCodec {
      * `tectonics.plateCount` became `meanPlateAreaKm2`, `hotspotPlateFraction`
      * `hotspotsPerMillionKm2`, `epochDriftKm` `plateSpeedMmPerYear`; `erosion.deltaMinCatchment`
      * became `deltaMinCatchmentKm2`; `glaciation.minCatchment` and `fullCatchment` became
-     * `minCatchmentKm2` and `fullCatchmentKm2`; and `glaciation.reliefWindowOctagon` became
-     * `reliefWindowShape`. A format-21 file would open with this build's defaults for every one of
-     * them, and with its own `scale`, which before this format a file whose planet was the default
-     * did not have to hold to mean 12,000 km.
+     * `minCatchmentKm2` and `fullCatchmentKm2`; `glaciation.reliefWindowOctagon` became
+     * `reliefWindowShape`; and `lakes.runoffFraction` is gone, the runoff now each cell's own
+     * (`LakeWaterBalance.runoffShareOfRain`). A format-21 file would open with this build's
+     * defaults for every one of them, and a planet it left at the default, 12,000 km then, would
+     * open 40,075 km round.
      *
      * 21 because the noise lattices and two areas became figures on the ground:
      * `terrain.baseFrequency`, `tectonics.detailFrequency`, `tectonics.rangeVariationCycles` and

@@ -3184,19 +3184,14 @@ data class LakesConfig(
      * a basin's surface settles where its catchment's runoff matches evaporation off the water,
      * capped at the spill. Off reproduces the old world exactly — a basin whose balance reaches the
      * brim takes the same code path either way.
+     *
+     * The runoff is each cell's rain less what its own ground gives back to the air, by Budyko's
+     * curve against the cell's dryness (`LakeWaterBalance.runoffShareOfRain`). It was a fixed
+     * share, Earth's global third, which handed a dry basin three to eighteen times the water its
+     * ground sheds and filled the largest closed basins of an Earth-sized world to the brim, a
+     * lake of 2.8 Caspians on seed 42 (docs/DESIGN_LEDGER.md, K2).
      */
     val waterBalance: Boolean = true,
-    /**
-     * What share of the rain falling on a catchment reaches the basin, rather than evaporating or
-     * transpiring off the ground where it fell.
-     *
-     * Earth's land receives roughly 110,000 cubic kilometres of rain a year and its rivers deliver
-     * roughly 40,000, so a third is the global figure. A real runoff coefficient is far from
-     * constant — it rises with rainfall and falls in hot, dry, vegetated country — and holding it
-     * constant flatters dry basins, giving them more inflow than they would truly get, so the
-     * effect this exists to produce is if anything understated.
-     */
-    val runoffFraction: Float = 0.35f,
     /**
      * Multiplies the Thornthwaite potential evaporation, for a world meant to be wetter or drier
      * than Earth. One is the published curve, unmodified; see

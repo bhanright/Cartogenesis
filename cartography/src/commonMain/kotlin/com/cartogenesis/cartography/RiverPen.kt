@@ -3,18 +3,20 @@ package com.cartogenesis.cartography
 /**
  * The nib a river is drawn with.
  *
- * A drawn river is not its width to scale. The Amazon's mouth is about ten kilometres of channel on
- * a world twelve thousand kilometres round (`NationsConfig.worldWidthKm`), which is 0.08% of the
+ * A drawn river is not its width to scale. The Amazon's mouth is about ten kilometers of channel,
+ * which on a world twelve thousand kilometers round (`WorldScale.worldWidthKm`) is 0.08% of the
  * width and, on a sheet a thousand pixels across, less than one pixel: draw a river honestly and
  * the greatest river on the map disappears. What a cartographer does instead is exaggerate it,
- * roughly threefold for a river of that class, and that is the figure this pen is: a quarter of a
- * percent of the width of the sheet for the biggest river on it.
+ * roughly threefold for a river of that class, and that is the figure this pen is: a stroke
+ * [FULL_STROKE_KM] wide on the ground for the biggest river on the map.
  *
- * So the full stroke is a *share of the map*, not a count of pixels. Held at a fixed five pixels it
- * looked right at 2048 and twice too heavy at 1024 — the same country, the same rivers, half the
- * sheet, the same ink. A share gives the same picture at every size: two and a half pixels at 1024,
- * five at 2048, ten at 4096, and a map printed twice as large has rivers twice as wide, exactly as
- * a map printed twice as large has everything else. See docs/DESIGN_LEDGER.md, F15.
+ * So the full stroke is a *width on the ground*, not a count of pixels. Held at a fixed five
+ * pixels it looked right at 2048 and twice too heavy at 1024 — the same country, the same rivers,
+ * half the sheet, the same ink. A width on the ground gives the same picture at every size: two
+ * and a half pixels at 1024 across the 12,000 km world, five at 2048, ten at 4096, and a map
+ * printed twice as large has rivers twice as wide, exactly as a map printed twice as large has
+ * everything else; and a planet three times as large has a river a third as wide on the same
+ * sheet, as it has a coast a third as long. See docs/DESIGN_LEDGER.md, F15 and K1.
  *
  * The hairline is the exception and stays in pixels, because it is not a width at all — it is the
  * finest mark a nib can leave, and on a bigger sheet the smallest channel is still the smallest
@@ -37,23 +39,28 @@ object RiverPen {
     const val HAIRLINE_PIXELS: Float = 0.8f
 
     /**
-     * The widest stroke, at the mouth of the biggest river on the map, as a share of the map width.
+     * The widest stroke, at the mouth of the biggest river on the map, as a width on the ground in
+     * kilometers.
      *
-     * The Amazon's ten-kilometre mouth is 0.083% of a twelve-thousand-kilometre world; a printed
-     * map exaggerates a river of that class about threefold, which is 0.25%. The five pixels on a
-     * 2048 sheet this replaced is 0.244% of the same width, arrived at by eye and agreeing to the
-     * second digit. Both round to the figure used here.
+     * The Amazon's ten-kilometer mouth, exaggerated about threefold as a printed map exaggerates a
+     * river of that class, is 30 km. The five pixels on a 2048 sheet this pen replaced is 0.244%
+     * of the 12,000 km world's width, 29.3 km, arrived at by eye and agreeing to the second digit.
+     * 28.8 km is the 0.24% of that width the pen was held at as a share of the map until K1.
      */
-    const val FULL_SHARE_OF_MAP_WIDTH: Float = 0.0024f
+    const val FULL_STROKE_KM: Double = 28.8
 
-    /** The widest stroke on a sheet [mapWidthPixels] across, never finer than the hairline. */
-    fun fullPixels(mapWidthPixels: Int): Float =
-        (mapWidthPixels * FULL_SHARE_OF_MAP_WIDTH).coerceAtLeast(HAIRLINE_PIXELS)
+    /**
+     * The widest stroke on a sheet [mapWidthPixels] across a world [worldWidthKm] round, never
+     * finer than the hairline.
+     */
+    fun fullPixels(mapWidthPixels: Int, worldWidthKm: Double): Float =
+        (mapWidthPixels * (FULL_STROKE_KM / worldWidthKm).toFloat()).coerceAtLeast(HAIRLINE_PIXELS)
 
     /**
      * The stroke for a point whose [com.cartogenesis.worldgen.pipeline.River.widthRatio] is
-     * [widthRatio], on a sheet [mapWidthPixels] across.
+     * [widthRatio], on a sheet [mapWidthPixels] across a world [worldWidthKm] round.
      */
-    fun widthPixels(widthRatio: Float, mapWidthPixels: Int): Float =
-        HAIRLINE_PIXELS + (fullPixels(mapWidthPixels) - HAIRLINE_PIXELS) * widthRatio.coerceIn(0f, 1f)
+    fun widthPixels(widthRatio: Float, mapWidthPixels: Int, worldWidthKm: Double): Float =
+        HAIRLINE_PIXELS +
+            (fullPixels(mapWidthPixels, worldWidthKm) - HAIRLINE_PIXELS) * widthRatio.coerceIn(0f, 1f)
 }

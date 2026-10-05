@@ -59,7 +59,7 @@ class ChannelInitiationCostTest {
             val filled = slopeWithARipple(side)
             val flowTarget = FlowRouting.flowDirections(
                 side, side, isLand, filled, filled, config.seed, config.cellHeightInCellWidths,
-                FlowRouting.smoothFieldPeriodCells(config)
+                FlowRouting.smoothFieldLatticeColumns(config)
             )
             val rainfall = madeRainfall(side)
             val cover = madeCover(side)

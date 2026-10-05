@@ -137,9 +137,9 @@ any others rather than frozen behind `@SerialName`. The price is paid once, in t
 serialised name moves, `WorldCodec.FORMAT_VERSION` is bumped in the same commit**, and the codec
 refuses every older file by name instead of misreading it. The checked-in gzip fixture is a whole
 save, so it goes stale with the format and is regenerated in the same commit too. The save the
-browser's folder library wrote, which `FolderInteropTest` in `:desktop` opens, cannot be made again:
-the browser build is no longer built, so when the format moves that test and its fixture go, with
-the older browser preview's saves.
+browser's folder library wrote, which `FolderInteropTest` in `:desktop` opened, could not be made
+again once the browser build was no longer built, so that test and its fixture went with format 21,
+and the older browser preview's saves stopped opening in the desktop then.
 
 Enforced by `WorldCodecTest`, whose cases *a save from an older format is refused rather than
 misread* and *every per-cell array and every list comes back identical* both bind here, and by

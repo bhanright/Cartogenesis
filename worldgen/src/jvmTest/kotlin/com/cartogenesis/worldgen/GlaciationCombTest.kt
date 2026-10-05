@@ -168,22 +168,15 @@ class GlaciationCombTest : BorrowsSharedWorlds() {
         // re-derived uplift it was inside the bar again (docs/DESIGN_LEDGER.md, Fix 3b). Recorded
         // since the lake falls with its outlet, and armed again on square cells at Q2, where the ice
         // adds 1.64, 1.17 and 0.73% (docs/DESIGN_LEDGER.md, Q2). Recorded at L1's review round,
-        // once the rift valleys were Earth's width: seed 42's ice adds 2.23%, over the bar; which of
-        // its valleys the narrower rifts moved is not isolated (docs/DESIGN_LEDGER.md, L1).
-        KnownFailures.expect(ICE_COMB_ON_SEED_42, "42 at 2.23%") {
-            if (over.isNotEmpty()) {
-                throw RecordedViolation(
-                    "the ice puts ${ICE_COMB_BAR * 100}% or more of these worlds' standing water into thin" +
-                        " grid-bearing bars that run parallel to another such bar within ten cells — a" +
-                        " comb of gullies, not a handful of trunk glaciers: $over" +
-                        " (worst ${"%.2f".format(worst * 100)}%)",
-                    over.joinToString()
-                )
-            }
-        }
-    }
-
-    private companion object {
-        const val ICE_COMB_ON_SEED_42 = "L1: the ice combs seed 42's flanks on the rifts' worlds"
+        // once the rift valleys were Earth's width: seed 42's ice adds 2.23%, over the bar; armed
+        // again at K1, whose square weather and scour moved it back under (docs/DESIGN_LEDGER.md,
+        // L1 and K1).
+        assertTrue(
+            "the ice puts ${ICE_COMB_BAR * 100}% or more of these worlds' standing water into thin" +
+                " grid-bearing bars that run parallel to another such bar within ten cells — a" +
+                " comb of gullies, not a handful of trunk glaciers: $over" +
+                " (worst ${"%.2f".format(worst * 100)}%)",
+            over.isEmpty()
+        )
     }
 }

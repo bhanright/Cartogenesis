@@ -167,6 +167,12 @@ object NationStage {
     /**
      * Share of the world's runoff a cell must carry for habitability to treat it as being on a
      * river. See [drawableRiverFlow].
+     *
+     * A share of a world's total, which a planet of another size does not hold: what a settlement
+     * wants is a discharge, and the same share of a planet three times as wide is nine times the
+     * water. It cannot be restated at today's value without moving a world, since the world's
+     * runoff differs from seed to seed, so it is in `TODO.md` with the other shares
+     * (docs/DESIGN_LEDGER.md, K1).
      */
     private const val RIVERINE_FLOW_SHARE = 0.0006f
 
@@ -181,12 +187,14 @@ object NationStage {
     private const val MIN_RIVERINE_FLOOR_CELLS = 2
 
     /**
-     * Radii for the two blurred copies [describe] judges a capital site on, as a divisor of the
-     * map width so a capital is chosen on the same real country at every resolution: the
-     * hinterland it can be fed from, and the ground it has to stand above to be defensible.
+     * Radii for the two blurred copies [describe] judges a capital site on, in kilometers, so a
+     * capital is chosen on the same real country at every resolution and on a planet of any size:
+     * the hinterland it can be fed from, 187.5 km, and the ground it has to stand above to be
+     * defensible, 125 km. The 64th and 96th of the 12,000 km world's width they were set as; read
+     * as the whole cells inside each.
      */
-    private const val HINTERLAND_RADIUS_DIVISOR = 64
-    private const val RELIEF_RADIUS_DIVISOR = 96
+    private const val HINTERLAND_RADIUS_KM = 187.5
+    private const val RELIEF_RADIUS_KM = 125.0
 
     /** Smallest useful blur radius, so a small map still averages more than a single cell. */
     private const val MIN_BLUR_RADIUS = 2
@@ -757,7 +765,7 @@ object NationStage {
         val hinterland = habitability.copy()
         BoxBlur.apply(
             hinterland,
-            radius = (config.width / HINTERLAND_RADIUS_DIVISOR).coerceAtLeast(MIN_BLUR_RADIUS),
+            radius = config.cellsWithin(HINTERLAND_RADIUS_KM).coerceAtLeast(MIN_BLUR_RADIUS),
             passes = BLUR_PASSES
         )
         // Over land and sea together, so near a coast the sea floor pulls the mean down and a low
@@ -767,7 +775,7 @@ object NationStage {
         val smoothedElevation = sea.relativeElevation.copy()
         BoxBlur.apply(
             smoothedElevation,
-            radius = (config.width / RELIEF_RADIUS_DIVISOR).coerceAtLeast(MIN_BLUR_RADIUS),
+            radius = config.cellsWithin(RELIEF_RADIUS_KM).coerceAtLeast(MIN_BLUR_RADIUS),
             passes = BLUR_PASSES
         )
 

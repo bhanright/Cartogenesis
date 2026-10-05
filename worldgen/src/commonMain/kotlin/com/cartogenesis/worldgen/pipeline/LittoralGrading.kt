@@ -245,8 +245,8 @@ internal object LittoralGrading {
      * height between the two so that the share came out right would be tuning a threshold to a
      * target, which the plan's rule 5 forbids.
      *
-     * So Earth's figure goes in directly instead, the way `SeaConfig.enclosedSeaMaxKm2` carries
-     * the Caspian's share of Earth's surface and `GlaciationConfig.maxLakeShareOfMap` carries
+     * So Earth's figure goes in directly instead, the way `SeaConfig.enclosedSeaMaxShareOfSurface`
+     * carries the Caspian's share of Earth's surface and `GlaciationConfig.maxLakeShareOfSurface` carries
      * Superior's: the lowest [SeaConfig.littoralDepositionalShare] of a world's shoreline, ranked by
      * the height of the land behind it, is its depositional coast. What is measured and what is
      * asserted then separate cleanly — the share is Earth's by construction, and what the guards

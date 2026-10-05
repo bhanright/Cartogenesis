@@ -678,7 +678,7 @@ class ImplicitIncisionTest {
             if (rounds <= ROUTED_ROUNDS) {
                 directions = FlowRouting.flowDirections(
                     side, side, isLand, relative, filled, config.seed, config.cellHeightInCellWidths,
-                    FlowRouting.smoothFieldPeriodCells(config),
+                    FlowRouting.smoothFieldLatticeColumns(config),
                     config.facetRouting, config.flatPotential
                 )
                 discharge = FlowRouting.accumulate(side, side, isLand, filled, directions, landCells) { weight[it] }.data

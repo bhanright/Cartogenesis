@@ -228,7 +228,7 @@ class StraightRunAuditTest {
 
         fun route(byFacet: Boolean) = FlowRouting.flowDirections(
             cellsAcross, cellsDown, isLand, ground, filled, seed, world.config.cellHeightInCellWidths,
-            FlowRouting.smoothFieldPeriodCells(world.config), byFacet
+            FlowRouting.smoothFieldLatticeColumns(world.config), byFacet
         )
 
         // Once each to let the just-in-time compiler see them, then measured.

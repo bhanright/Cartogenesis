@@ -7,6 +7,7 @@ import com.cartogenesis.worldgen.model.ClimateConfig
 import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldScale
+import com.cartogenesis.worldgen.noise.GroundLattice
 import com.cartogenesis.worldgen.noise.PerlinNoise
 import kotlin.math.abs
 import kotlin.math.exp
@@ -177,11 +178,17 @@ object ClimateStage {
     internal const val MM_SCALE = 52653f
 
     /**
-     * The grid [MM_SCALE] was calibrated on, in cells across.
+     * The width of the cell [MM_SCALE] was calibrated on, in kilometers: 23.4375 km, a 512-wide
+     * grid's cell on the 12,000 km world, `12,000 / 512`.
      *
-     * 512, the reference grid, whose cell is 23.4 km wide on a 12,000 km world.
+     * A fixed length on the ground and not "the 512 grid's cell on this planet". Taken from the
+     * planet being made, the reference grew with the planet, so the conversion below stayed one
+     * on any planet's 512 grid while the march charged its rain over cells three times as wide on
+     * Earth's: a 40,075 km world rained 1,539 to 1,674 mm a year on its land where the 12,000 km
+     * one rained 472 to 523, and Earth's land rains 715 (the Earth-size audit's D1;
+     * docs/DESIGN_LEDGER.md, K1). On the 12,000 km world the two are the same number to the bit.
      */
-    private const val MM_SCALE_REFERENCE_CELLS_ACROSS = 512
+    internal const val REFERENCE_CELL_WIDTH_KM = 23.4375
 
     /**
      * Millimetres a year per unit of the march's raw output, on *this* grid.
@@ -196,14 +203,13 @@ object ClimateStage {
      * interior the maintainer reported, and it was a unit and not a climate.
      *
      * The correction is a derivation and not a second calibration: annual rainfall at a place does
-     * not depend on how finely the map is cut, so the factor scales with the reference cell's
-     * width over this one's. On the reference grid it is exactly 1, so every figure ever measured
-     * at 512 stands unchanged. See docs/DESIGN_LEDGER.md, W3.
+     * not depend on how finely the map is cut, nor on how large the planet is, so the factor scales
+     * with the calibration cell's width on the ground, [REFERENCE_CELL_WIDTH_KM], over this one's.
+     * On a cell 23.4375 km wide it is exactly 1, so every figure measured on the 512 grid of the
+     * 12,000 km world stands unchanged. See docs/DESIGN_LEDGER.md, W3 and K1.
      */
     internal fun millimetresPerMarchUnit(config: WorldGenConfig): Float =
-        MM_SCALE * (
-            config.scale.cellWidthKm(MM_SCALE_REFERENCE_CELLS_ACROSS) / config.cellWidthKm
-            ).toFloat()
+        MM_SCALE * (REFERENCE_CELL_WIDTH_KM / config.cellWidthKm).toFloat()
 
     /**
      * What [ClimateResult.precipitation] treats as "as wet as it gets", in millimetres a year, for
@@ -341,10 +347,16 @@ object ClimateStage {
     private const val WEATHER_NOISE_C = 3.5f
 
     /**
-     * Cycles of that noise across the map in each direction, which is also the noise's tiling
-     * period — so the pattern meets itself at the map's east-west seam instead of showing a join.
+     * That noise's longest wavelength on the ground, in kilometers: 2,400 km, the 5 cycles round
+     * the 12,000 km world it was set as, read as whole cycles round the planet so the pattern meets
+     * itself at the map's east-west seam instead of showing a join.
+     *
+     * The same wavelength north-south, on a lattice square on the ground. The noise used to cover
+     * as many cycles from pole to pole as round the equator, which on a map twice as wide as it is
+     * tall drew every weather cell twice as long east-west as north-south, so isotherms and the
+     * tints that follow them ran along the rows (docs/DESIGN_LEDGER.md, K1).
      */
-    private const val WEATHER_NOISE_CYCLES = 5
+    private const val WEATHER_NOISE_WAVELENGTH_KM = 2_400.0
 
     /** Octaves of it. Four is enough for a ragged isotherm and no more than the eye can see. */
     private const val WEATHER_NOISE_OCTAVES = 4
@@ -420,13 +432,15 @@ object ClimateStage {
     private const val MAX_BAND_SHARPNESS = 4f
 
     /**
-     * Map width the rain blur's radius is one cell at; it grows in proportion above that.
+     * The rain blur's radius on the ground, in kilometers: 93.75 km, one cell of a 128-wide grid
+     * of the 12,000 km world, which is where it was set as a divisor of the map's width.
      *
-     * Tied to the grid rather than fixed so that a world looks the same at every resolution
-     * instead of smoother at the coarse ones — the blur is softening the march's column-by-column
-     * steps into weather, and a step is one cell wide whatever the cell stands for.
+     * A length on the ground so that a world looks the same at every resolution and on a planet
+     * of any size: the blur is softening the march's column-by-column steps into weather, and the
+     * weather it makes has a scale of its own. Read as whole cells, rounded down, never fewer than
+     * one.
      */
-    private const val RAIN_BLUR_REFERENCE_WIDTH = 128
+    private const val RAIN_BLUR_RADIUS_KM = 93.75
 
     /**
      * Moisture each air mass starts the march with, as a fraction of saturation.
@@ -1247,6 +1261,7 @@ object ClimateStage {
         val cellsDown = config.height
         val climateConfig = config.climate
         val noise = PerlinNoise(config.seed * TEMPERATURE_NOISE_MULTIPLIER + TEMPERATURE_NOISE_OFFSET)
+        val weatherLattice = GroundLattice(config, WEATHER_NOISE_WAVELENGTH_KM)
         val field = FloatField(cellsAcross, cellsDown)
 
         parallelChunks(0, cellsDown) { startRow, endRow ->
@@ -1263,11 +1278,11 @@ object ClimateStage {
                             WorldScale.METRES_PER_KM * climateConfig.lapseRateCPerKm
                     } else 0f
                     val variationC = WEATHER_NOISE_C * noise.fbm(
-                        column * WEATHER_NOISE_CYCLES.toFloat() / cellsAcross,
-                        row * WEATHER_NOISE_CYCLES.toFloat() / cellsDown,
+                        weatherLattice.x(column),
+                        weatherLattice.y(row),
                         octaves = WEATHER_NOISE_OCTAVES,
-                        periodX = WEATHER_NOISE_CYCLES,
-                        periodY = WEATHER_NOISE_CYCLES
+                        periodX = weatherLattice.period,
+                        periodY = weatherLattice.period
                     )
                     field.data[cell] =
                         blendedC(marineFraction.data[cell], seaColumnC, landColumnC) -
@@ -1761,10 +1776,9 @@ object ClimateStage {
             }
         }
 
-        // Softens the march's column-by-column steps into weather. The radius grows with the grid
-        // so that a world looks the same at every resolution rather than smoother at the coarse
-        // ones: one cell at the reference width, two at twice it.
-        val radius = (config.width / RAIN_BLUR_REFERENCE_WIDTH).coerceAtLeast(1)
+        // Softens the march's column-by-column steps into weather, over a radius on the ground, so
+        // a world looks the same at every resolution rather than smoother at the coarse ones.
+        val radius = config.cellsWithin(RAIN_BLUR_RADIUS_KM).coerceAtLeast(1)
         BoxBlur.apply(precipitation, radius = radius, passes = BLUR_PASSES)
         // The tracer is spread by the same kernel, so that a ratio taken between the two is a
         // ratio between two fields that have been through the same arithmetic.

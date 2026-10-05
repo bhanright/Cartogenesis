@@ -39,7 +39,8 @@ class DepressionFillTest {
         val target = FlowRouting.flowDirections(
             SIDE, SIDE, grid.isLand, grid.elevation, filled, seed = 1L,
             cellHeightInCellWidths = WorldGenConfig().cellHeightInCellWidths,
-            smoothFieldPeriodCells = FlowRouting.smoothFieldPeriodCells(WorldGenConfig())
+            // The 512 grid's eight-cell smooth-field period, as lattice cells across this grid.
+            smoothFieldLatticeColumns = SIDE / SMOOTH_FIELD_PERIOD_CELLS
         )
 
         var landCells = 0
@@ -137,6 +138,9 @@ class DepressionFillTest {
 
     private companion object {
         const val SIDE = 32
+
+        /** The smooth field's period in this grid's cells: the 512 by 512 grid's, which this test was written on. */
+        const val SMOOTH_FIELD_PERIOD_CELLS = 8
 
         /** The water the whole grid starts as. */
         const val SEA_FLOOR_FIELD_LEVEL = -0.1f

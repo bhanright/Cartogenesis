@@ -749,7 +749,7 @@ class CoastalSpacingAuditTest {
         })
         val receiver = FlowRouting.flowDirections(
             cellsAcross, cellsDown, BooleanArray(cellsAcross * cellsDown) { true }, plane, plane,
-            AUTHORS_SEED, probe.cellHeightInCellWidths, FlowRouting.smoothFieldPeriodCells(probe),
+            AUTHORS_SEED, probe.cellHeightInCellWidths, FlowRouting.smoothFieldLatticeColumns(probe),
             byFacet = true, overPotential = false
         )
         // Away from the seam, where the plane is not periodic and the wrap would drain west.

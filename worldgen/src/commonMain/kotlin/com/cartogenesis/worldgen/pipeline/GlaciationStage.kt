@@ -7,6 +7,7 @@ import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.GlaciationConfig
 import com.cartogenesis.worldgen.model.IsostasyConfig
 import com.cartogenesis.worldgen.model.WorldGenConfig
+import com.cartogenesis.worldgen.noise.GroundLattice
 import com.cartogenesis.worldgen.noise.PerlinNoise
 import kotlin.math.sqrt
 import kotlinx.coroutines.currentCoroutineContext
@@ -266,13 +267,14 @@ object GlaciationStage {
         /**
          * The smallest and largest basin the ice may cut, as counts of cells on this grid.
          *
-         * Four and 41 at 512, 67 and 671 at 2048 - the same two lakes on the ground either way,
-         * which is the point of holding them as areas.
+         * Four and 41 on the 512 by 512 grid of the 12,000 km world, 33 and 335 on its 1,024
+         * rows - the same two lakes on the ground either way, which is the point of holding them
+         * as areas.
          */
         val minBasinCells: Int =
-            (glaciation.minLakeAreaKm2 / squareKilometresPerCell).toInt().coerceAtLeast(4)
+            (glaciation.minLakeAreaKm2(scale) / squareKilometresPerCell).toInt().coerceAtLeast(4)
         val maxBasinCells: Int =
-            (glaciation.maxLakeAreaKm2 / squareKilometresPerCell).toInt().coerceAtLeast(minBasinCells)
+            (glaciation.maxLakeAreaKm2(scale) / squareKilometresPerCell).toInt().coerceAtLeast(minBasinCells)
     }
 
     suspend fun apply(
@@ -367,7 +369,7 @@ object GlaciationStage {
             filled,
             config.seed,
             config.cellHeightInCellWidths,
-            FlowRouting.smoothFieldPeriodCells(config),
+            FlowRouting.smoothFieldLatticeColumns(config),
             config.facetRouting,
             config.flatPotential
         )
@@ -1211,10 +1213,10 @@ object GlaciationStage {
      *     one of eight bearings, and a tube around a straight line is a ruled bar whatever metric
      *     drew it. With it the footprint stops where the ground climbs, so its edge is a contour.
      *  4. **Filled from the bottom**: the lowest cells of that floor, taken outward from its
-     *     deepest point in order of height until [GlaciationConfig.maxLakeAreaKm2] is reached. The
+     *     deepest point in order of height until [GlaciationConfig.maxLakeShareOfSurface] is reached. The
      *     area cap peels by height, not by ring — see [keepLowestCells] — so what is kept is
      *     connected by construction and its outline is one contour of the ground.
-     *  5. **Sized**: under [GlaciationConfig.minLakeAreaKm2] it is not worth cutting.
+     *  5. **Sized**: under [GlaciationConfig.minLakeShareOfSurface] it is not worth cutting.
      *  6. **Not a bar**, as a last check on the finished shape: nothing two cells or less across
      *     and four or more long on any grid bearing survives.
      *  7. **Within budget**, shared with the sheet: see [GlaciationConfig.sheetLakeShare].
@@ -1550,7 +1552,7 @@ object GlaciationStage {
      * diamonds, so a floor cut from one has facets at 45 degrees however round the basin is.
      *
      * Measured by [JumpFloodDistance] over a window around the basin and not over the whole map,
-     * because a basin holds at most [GlaciationConfig.maxLakeAreaKm2] of ground and a 2048 grid is
+     * because a basin holds at most [GlaciationConfig.maxLakeShareOfSurface] of ground and a 2048 grid is
      * four million cells. The window is padded on every side by a quarter of the basin's longer
      * side plus one, because the flood's x axis wraps: a cell of the basin lies at most half the
      * basin's shorter side from its own rim — walk toward the nearest edge of the basin's box and
@@ -2267,8 +2269,8 @@ object GlaciationStage {
      * Which candidates become lakes is then a matter of the allowance rather than of the quantile.
      * The blobs are ranked by how strongly the score chose them and taken in that order until the
      * budget [GlaciationConfig.sheetLakeShare] sets is spent; one under
-     * [GlaciationConfig.minLakeAreaKm2] is passed over, and one over
-     * [GlaciationConfig.maxLakeAreaKm2] is peeled inward until it fits, because a world map has
+     * [GlaciationConfig.minLakeShareOfSurface] is passed over, and one over
+     * [GlaciationConfig.maxLakeShareOfSurface] is peeled inward until it fits, because a world map has
      * no business carrying a lake several times the size of Superior.
      *
      * Every basin is closed *by construction*. Its floor is cut from the lowest ground in the blob
@@ -2301,8 +2303,12 @@ object GlaciationStage {
         // any platform that runs the same arithmetic.
         val basinNoise = PerlinNoise(config.seed * 31L + 0x91E5L)
         val hummockNoise = PerlinNoise(config.seed * 31L + 0x27C3L)
-        val period = glaciation.sheetBasinCycles.toInt().coerceAtLeast(2)
-        val hummockPeriod = (period * 3).coerceAtLeast(4)
+        // On lattices square on the ground, so a basin is as likely to run north-south as east-west.
+        // The basins' lattice used to cover as many cycles from pole to pole as round the equator,
+        // which on a map twice as wide as it is tall drew every basin twice as long east-west as
+        // north-south (the Earth-size audit's D2; docs/DESIGN_LEDGER.md, K1).
+        val basinLattice = GroundLattice(config, glaciation.sheetBasinWavelengthKm)
+        val hummockLattice = GroundLattice(config, glaciation.sheetBasinWavelengthKm / HUMMOCKS_PER_BASIN)
 
         // The hummocky lowering first, so that the basins below are cut against ground that has
         // already been planed and their rims cannot turn out to be lower than their floors.
@@ -2329,8 +2335,8 @@ object GlaciationStage {
                     val column = (walked % cellsAcross).toFloat()
                     val row = (walked / cellsAcross).toFloat()
                     sum += 0.5f + 0.5f * hummockNoise.fbm(
-                        column * hummockPeriod / cellsAcross, row * hummockPeriod / cellsDown,
-                        3, hummockPeriod, hummockPeriod
+                        hummockLattice.x(column), hummockLattice.y(row),
+                        3, hummockLattice.period, hummockLattice.period
                     )
                     samples++
                     walked = surfaceFlow[walked]
@@ -2383,13 +2389,13 @@ object GlaciationStage {
             val column = (cell % cellsAcross).toFloat()
             val row = (cell / cellsAcross).toFloat()
             val neighbour = 0.5f + 0.5f * basinNoise.fbm(
-                column * period / cellsAcross, row * period / cellsDown, 3, period, period
+                basinLattice.x(column), basinLattice.y(row), 3, basinLattice.period, basinLattice.period
             )
             raw[cell] = neighbour + glaciation.sheetConcavity * (concavity[cell] / concavityNorm).coerceIn(-1f, 1f)
         }
         // Smoothed before it is cut, and this is not cosmetic. The concavity of eroded ground
         // varies cell to cell, so an unsmoothed score threshold shatters every blob into a spray
-        // of three- and four-cell fragments, all of them below [GlaciationConfig.minLakeAreaKm2]
+        // of three- and four-cell fragments, all of them below [GlaciationConfig.minLakeShareOfSurface]
         // and none of them a lake — measured on seed 718106, a fifth of the cells the quantile
         // chose survived into a basin. A basin is a landform, so the field that chooses it is read
         // at a landform's scale.
@@ -2534,16 +2540,24 @@ object GlaciationStage {
     /**
      * How many cells of its own flow line a sheet cell averages its hummock noise over.
      *
-     * The elongation of the lineations, in cells, and it is a landform's figure rather than a
+     * The elongation of the lineations, and it is meant as a landform's figure rather than a
      * knob: Earth's drumlins run 1-2 km long against 400-600 m wide and its megaflutes run tens of
      * kilometres, so a length-to-width ratio between three and ten covers the family (Clark,
      * Hughes and others, *Size and shape characteristics of drumlins*, Quat. Sci. Rev. 28, 2009,
-     * measure a mean elongation of 2.9 with a long tail past 10). The noise's own features are
-     * [GlaciationConfig.sheetBasinCycles] * 3 cycles across the map, which at 1024 is a few cells,
-     * so six cells of averaging puts the ratio in the middle of that range at every grid this
-     * program draws — and the ratio is what a reader sees, not the length.
+     * measure a mean elongation of 2.9 with a long tail past 10). It is a count of cells, though,
+     * and the hummocks it averages are a length on the ground, a third of
+     * [GlaciationConfig.sheetBasinWavelengthKm], 154 km: six cells is 141 km of flow line on the
+     * 23.4 km cells of the 512 by 512 grid and 35 km on the 5.9 km cells of 1,024 rows, so the
+     * elongation falls as the grid is refined. Restating it on the ground moves every glaciated
+     * world, and is in `TODO.md`.
      */
     private const val STREAMLINE_CELLS = 6
+
+    /**
+     * Hummocks per basin wavelength: the sheet's hummocky lowering is three times finer than the
+     * basins it is cut between, so a basin holds a few hummocks rather than being one.
+     */
+    private const val HUMMOCKS_PER_BASIN = 3
 
     /** The four orthogonal neighbours, wrapping east-west and stopping at the poles. */
     private inline fun forEachOrthogonal(

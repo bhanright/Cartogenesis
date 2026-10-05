@@ -49,7 +49,7 @@ class GlaciationAuditTest {
      * The third row is why the lake *counts* are asserted only against the ice's own contribution.
      * Most of this world's standing water at 2048 is not glacial at all — it is in tectonic and
      * erosional basins that exist with the stage switched off — and the largest body on the map is
-     * one of those, larger than [com.cartogenesis.worldgen.model.GlaciationConfig.maxLakeAreaKm2]
+     * one of those, larger than [com.cartogenesis.worldgen.model.GlaciationConfig.maxLakeShareOfSurface]
      * lets the ice cut. This stage can cap what it cuts and does; it cannot cap what it did not
      * make, and a guard that pretended otherwise would be measuring the erosion stage.
      */

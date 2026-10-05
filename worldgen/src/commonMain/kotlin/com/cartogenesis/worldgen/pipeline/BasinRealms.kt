@@ -305,7 +305,14 @@ internal object BasinRealms {
     internal fun smallestRealmCells(landCells: Int): Int =
         (landCells * MIN_ISLAND_REALM_SHARE).toInt().coerceAtLeast(MIN_ISLAND_REALM_CELLS)
 
-    /** Rocks below this share of all land are not given a flag of their own. */
+    /**
+     * Rocks below this share of all land are not given a flag of their own.
+     *
+     * A share of the land for the reason `NationsConfig.maxBasinShare` gives: it is a floor under
+     * realms, and the realms are a count per world, so it moves onto the ground with that count
+     * (`TODO.md`; docs/DESIGN_LEDGER.md, K1). Restated in square kilometers at today's value it
+     * would move worlds, since the land's area differs from seed to seed.
+     */
     private const val MIN_ISLAND_REALM_SHARE = 0.004f
 
     /**

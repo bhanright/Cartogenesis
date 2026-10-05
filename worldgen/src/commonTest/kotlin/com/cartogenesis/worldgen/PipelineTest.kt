@@ -206,8 +206,16 @@ class PipelineTest {
                 stranded++
                 report(i, "no receiver at all, away from the poles")
             } else if (world.sea.isLand[t] && filled.data[t] >= filled.data[i]) {
-                stranded++
-                report(i, "its receiver stands no lower than it does on the filled surface")
+                // A flat the fill raised is routed on its own potential and not on the fill's
+                // staircase (FlatRouting), so across one a receiver may stand level with the cell
+                // on the filled surface: such a cell is held to the weaker rule, that its water
+                // reaches standing water. Seed 42's world at 128 rows has one since K1, at (96, 4),
+                // raised about half a lake's minimum depth (docs/DESIGN_LEDGER.md, K1).
+                val onARaisedFlat = filled.data[i] > ground.data[i] && filled.data[t] == filled.data[i]
+                if (!onARaisedFlat || !reachesWater(world, t)) {
+                    stranded++
+                    report(i, "its receiver stands no lower than it does on the filled surface")
+                }
             }
         }
         println("PIPELINE $insideBasins cells inside filled basins, $stranded stranded")

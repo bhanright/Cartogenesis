@@ -171,7 +171,7 @@ class ReceiverClampTest {
         val flow =
             FlowRouting.flowDirections(
                 w, h, sea.isLand, sea.relativeElevation, filled, config.seed, config.cellHeightInCellWidths,
-                FlowRouting.smoothFieldPeriodCells(config)
+                FlowRouting.smoothFieldLatticeColumns(config)
             )
         val area = FlowRouting.accumulate(w, h, sea.isLand, filled, flow, sea.landCellCount) { 1f }
         val land = sea.landCellCount.toFloat()

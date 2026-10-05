@@ -183,7 +183,7 @@ internal object BasinPartition {
 
         val area = IntArray(unitCount)
         for (cell in 0 until cellCount) if (unitOf[cell] != BasinUnits.NONE) area[unitOf[cell]]++
-        return build(cellsAcross, cellsDown, sea, unitOf, unitCount, area)
+        return build(cellsAcross, cellsDown, straitReachCells(config), sea, unitOf, unitCount, area)
     }
 
     /**
@@ -317,7 +317,7 @@ internal object BasinPartition {
         val areas = IntArray(unitCount)
         for (cell in unitOf.indices) if (unitOf[cell] != BasinUnits.NONE) areas[unitOf[cell]]++
 
-        return build(cellsAcross, cellsDown, sea, unitOf, unitCount, areas)
+        return build(cellsAcross, cellsDown, straitReachCells(config), sea, unitOf, unitCount, areas)
     }
 
     /**
@@ -533,7 +533,7 @@ internal object BasinPartition {
         val unitCount = renumbered.size
         val areas = IntArray(unitCount)
         for (cell in unitOf.indices) if (unitOf[cell] != BasinUnits.NONE) areas[unitOf[cell]]++
-        return build(cellsAcross, cellsDown, sea, unitOf, unitCount, areas)
+        return build(cellsAcross, cellsDown, straitReachCells(config), sea, unitOf, unitCount, areas)
     }
 
     /** Which side of its trunk a cell drains in from, and "not yet decided". */
@@ -572,13 +572,14 @@ internal object BasinPartition {
     private fun build(
         cellsAcross: Int,
         cellsDown: Int,
+        straitReachCells: Int,
         sea: SeaLevelResult,
         unitOf: IntArray,
         unitCount: Int,
         area: IntArray
     ): BasinUnits {
         val (neighbours, landNeighbours) =
-            adjacency(cellsAcross, cellsDown, sea, unitOf, unitCount)
+            adjacency(cellsAcross, cellsDown, straitReachCells, sea, unitOf, unitCount)
 
         // Landmasses: units joined by dry ground only. Straits are deliberately excluded, since the
         // whole point is to know when a realm would have to put to sea.
@@ -617,6 +618,7 @@ internal object BasinPartition {
     private fun adjacency(
         cellsAcross: Int,
         cellsDown: Int,
+        straitReachCells: Int,
         sea: SeaLevelResult,
         unitOf: IntArray,
         unitCount: Int
@@ -650,8 +652,6 @@ internal object BasinPartition {
 
         // Now the straits. Only coastal cells look, and only straight out, which is enough to find
         // the far shore of a channel without turning every bay into a shortcut.
-        val straitReachCells =
-            (cellsAcross / STRAIT_REACH_DIVISOR).coerceAtLeast(MIN_STRAIT_REACH_CELLS)
         for (row in 0 until cellsDown) {
             for (column in 0 until cellsAcross) {
                 val cell = row * cellsAcross + column
@@ -694,15 +694,20 @@ internal object BasinPartition {
     }
 
     /**
-     * How far a coast looks for the far bank of a strait, as a divisor of the map width — a
-     * fortieth, so the crossing a realm will make is the same real distance at every resolution —
-     * with a floor for small maps.
+     * How far a coast looks for the far bank of a strait, in kilometers, so the crossing a realm
+     * will make is the same real distance at every resolution and on a planet of any size — with
+     * a floor in cells for small maps.
      *
-     * A fortieth of a 12,000 km world is 300 km: wider than the Channel, the Strait of Malacca or
-     * the Aegean, and far short of an ocean.
+     * 300 km, the fortieth of the 12,000 km world's width it was set as: wider than the Channel,
+     * the Strait of Malacca or the Aegean, and far short of an ocean. Read as the whole cells
+     * inside it, counted along a row.
      */
-    private const val STRAIT_REACH_DIVISOR = 40
+    private const val STRAIT_REACH_KM = 300.0
     private const val MIN_STRAIT_REACH_CELLS = 4
+
+    /** [STRAIT_REACH_KM] as whole cells of [config]'s grid, never under [MIN_STRAIT_REACH_CELLS]. */
+    private fun straitReachCells(config: WorldGenConfig): Int =
+        config.cellsWithin(STRAIT_REACH_KM).coerceAtLeast(MIN_STRAIT_REACH_CELLS)
 
     /** The eight compass directions a coast probes along, as steps in map coordinates. */
     private val DIRECTION_ACROSS = intArrayOf(1, -1, 0, 0, 1, 1, -1, -1)

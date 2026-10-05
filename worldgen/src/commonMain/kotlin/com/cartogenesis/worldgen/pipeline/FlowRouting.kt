@@ -4,6 +4,7 @@ import com.cartogenesis.worldgen.math.GroundSteps
 import com.cartogenesis.worldgen.math.LongMinHeap
 import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.WorldGenConfig
+import com.cartogenesis.worldgen.noise.GroundLattice
 import kotlin.math.sqrt
 
 /**
@@ -172,7 +173,7 @@ internal object FlowRouting {
      * @param overPotential false to route the fill's flats over its own staircase rather than over
      *   the potential [FlatRouting] lays, the control the ruled-run census over raised ground is
      *   measured against. See [com.cartogenesis.worldgen.model.WorldGenConfig.flatPotential].
-     * @param smoothFieldPeriodCells [smoothFieldPeriodCells] of the world's grid: the period the
+     * @param smoothFieldLatticeColumns [smoothFieldLatticeColumns] of the world's grid: the period the
      *   flats' rain varies over in [FlatRouting].
      */
     fun flowDirections(
@@ -183,7 +184,7 @@ internal object FlowRouting {
         filled: FloatField,
         seed: Long,
         cellHeightInCellWidths: Double,
-        smoothFieldPeriodCells: Int,
+        smoothFieldLatticeColumns: Int,
         byFacet: Boolean = true,
         overPotential: Boolean = true
     ): IntArray {
@@ -193,7 +194,7 @@ internal object FlowRouting {
         val routingSurface =
             if (overPotential) {
                 FlatRouting.surfaceOf(
-                    width, height, isLand, elevation, filled, seed, cellHeightInCellWidths, smoothFieldPeriodCells
+                    width, height, isLand, elevation, filled, seed, cellHeightInCellWidths, smoothFieldLatticeColumns
                 ).heights
             } else {
                 DoubleArray(width * height) { (if (isLand[it]) filled.data[it] else elevation.data[it]).toDouble() }
@@ -343,19 +344,29 @@ internal object FlowRouting {
     private const val SUB_GRID_DRAW_SALT = 0x5f3a91c7_2b64d8e3L
 
     /**
-     * Value noise in -1..1 on a lattice of [periodCells] cells each way, smoothstepped between the
-     * corners so the field has no creases on the lattice lines for a path to follow. [periodCells]
-     * is [smoothFieldPeriodCells] of the world's grid.
+     * Value noise in -1..1 on a lattice of [latticeColumns] cells round the map, smoothstepped
+     * between the corners so the field has no creases on the lattice lines for a path to follow.
+     * [latticeColumns] is [smoothFieldLatticeColumns] of the world. Down the map the lattice
+     * advances as far per row as it does per column, so its cells are as many rows tall as they are
+     * columns wide.
+     *
+     * Where a lattice cell falls is worked out in whole numbers, as a column's share of the map
+     * times the lattice's columns, so the lattice closes on itself at the antimeridian on any grid
+     * and any planet: a period held as a whole number of cells left a part-cell at the seam
+     * wherever the cells did not divide the map (the Earth-size audit's D3). Where they do, the
+     * arithmetic is the period-in-cells arithmetic it replaced, to the bit, because a float
+     * quotient of two exact integers is correctly rounded and `k n / (p n)` is `k / p`.
      *
      * Shared: [LakeWaterBalance.jitter] scales it to nudge exactly-flat ground, and the flats'
      * rain in [FlatRouting] varies by it. Integer mixing at the corners, so every platform agrees.
      */
-    fun smoothSeededField(width: Int, periodCells: Int, column: Int, row: Int, seed: Long): Float {
-        val latticeColumns = (width / periodCells).coerceAtLeast(1)
-        val cornerColumn = column / periodCells
-        val cornerRow = row / periodCells
-        val alongColumn = (column - cornerColumn * periodCells).toFloat() / periodCells
-        val alongRow = (row - cornerRow * periodCells).toFloat() / periodCells
+    fun smoothSeededField(width: Int, latticeColumns: Int, column: Int, row: Int, seed: Long): Float {
+        val columnAlongLattice = column * latticeColumns
+        val rowAlongLattice = row * latticeColumns
+        val cornerColumn = columnAlongLattice / width
+        val cornerRow = rowAlongLattice / width
+        val alongColumn = (columnAlongLattice - cornerColumn * width).toFloat() / width
+        val alongRow = (rowAlongLattice - cornerRow * width).toFloat() / width
         val easedAlongColumn = alongColumn * alongColumn * (3f - 2f * alongColumn)
         val easedAlongRow = alongRow * alongRow * (3f - 2f * alongRow)
         val west = cornerColumn % latticeColumns
@@ -381,8 +392,12 @@ internal object FlowRouting {
      */
     const val SMOOTH_FIELD_PERIOD_KM = 187.5
 
-    /** [SMOOTH_FIELD_PERIOD_KM] as a whole number of [config]'s cells, the period the field is read at. */
-    fun smoothFieldPeriodCells(config: WorldGenConfig): Int = config.wholeCellsFor(SMOOTH_FIELD_PERIOD_KM)
+    /**
+     * [SMOOTH_FIELD_PERIOD_KM] as whole lattice cells round the planet, the lattice the field is
+     * read on: 64 on the 12,000 km world, at every grid.
+     */
+    fun smoothFieldLatticeColumns(config: WorldGenConfig): Int =
+        GroundLattice.wholeCycles(config.scale.worldWidthKm, SMOOTH_FIELD_PERIOD_KM)
 
     /**
      * One lattice point's value in -1..1.

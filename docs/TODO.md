@@ -1,5 +1,67 @@
 # To do
 
+- **The ocean stops solving on one control world since K1's square weather.** Seed 42 at 256 rows
+  with `ClimateConfig.pressureWinds` off, the belts' wind alone, stops at a relative residual of
+  0.00120 against the solve's 0.001 within its 200 V-cycles. Given a thousand, the world's own
+  solve gets there and the ocean re-solved on the standard world's sea stays at 0.0011985, a
+  floor; with the pressure winds on, and at 512 rows either way, it solves, as every other
+  standard seed does. The climate's weather noise alone does it (the
+  scour's change was taken out and the stall stayed). L1 met the same stall and took its change
+  back out; K1's change is the brief's, so four clauses that read the control world pass seed 42 by
+  under `OceanStall` (`OceanCurrentTest`'s gyres, `MeridionalWindTest`'s ridge, `PressureWindTest`'s
+  interior spread and sea-ice edge). A world whose ocean does not solve fails to generate, so the
+  question is the solver's floor and its tolerance, not the world. 2026-10-05, K1.
+- **Shares of a world's total that should be discharges or areas (K1).** Each is a share of a
+  quantity that differs from seed to seed, so it could not be restated at today's value without
+  moving every world, and the physics asks for an absolute: `NationsConfig.riverBorderShare` (a
+  share of the largest river's flow; a frontier river is big in cubic meters a second),
+  `NationStage.RIVERINE_FLOW_SHARE` (a share of the world's runoff; a settlement wants a
+  discharge), `HydraulicErosion.DRAWN_RIVER` and `ErosionConfig.deltaMinCatchment` (shares of the
+  land's water; a delta is built by a river's own discharge and load), and
+  `GlaciationConfig.minCatchment` and `fullCatchment` (shares of the planet's frozen ground; a
+  glacier asks for an area of snowfield). On a planet three times as wide each of them is nine
+  times as much water or ice. A chunk that restates them re-records every world. 2026-10-05, K1.
+- **Shares that move with the counts per world (K1).** `NationsConfig.maxBasinShare` and
+  `minBasinShare`, `CulturesConfig.maxRegionShare` and `minRegionShare`,
+  `BasinRealms.MIN_ISLAND_REALM_SHARE` and the landmarks' spacing are shares of the land, or set by
+  the land and a count, because what they size is the pieces of a count per world: realms
+  (`nationCount`), peoples (`cultureCount`) and landmarks (`LandmarksConfig.count`). They go onto
+  the ground when the counts do, which, with the plates', hotspots', epoch drift's and the atlas's
+  ranks, is the maintainer's decision. `epochDriftKm`'s KDoc now says a plate of a 14-plate world is
+  about 1,300 km in radius on the 12,000 km world and 4,300 on Earth's, so the same drift carries an
+  old belt past a plate's radius on the one and half of it on the other. 2026-10-05, K1.
+- **Out of K1's scope, from the Earth-size audit (2026-10-04).** D4, `NationsConfig.reach` and
+  `seedSpacing` are never read; D5, realms under their own floor at Earth's size (C-42 has a realm
+  of 670 km²), cause not isolated; D6, a lake of 4.23 Caspians in D-42 (Earth at 4,096 rows), the
+  lake-area chaos class with the old rain; and the glaciation's octagonal threshold window
+  (`GlaciationStage`, the relief window), which rule 13 bans.
+- **Land rain moves with the planet's size, wetter on a small one (K1).** With the conversion on
+  the ground, seeds 42, 969495 and 7 at 256 rows rain 1.51 times as much on the land of a 6,000 km
+  planet as on the 12,000 km one, and 0.94 times on a 24,000 km one (99.5th percentiles 1.32 and
+  0.94); at Earth's size, 1,024 rows, the land's mean is 395 and 348 mm on seeds 42 and 969495
+  against Earth's 715. `PlanetWidthRainTest` holds the change within the seeds' own spread, 1.63;
+  what moves it is not isolated: the continents, still a count per world, are another size in
+  kilometers, and the march has only the sea as a source (GEOGRAPHY, "The interior is drier than
+  Earth's"). Read it again when the counts per world go onto the ground. 2026-10-05, K1.
+- **The sheet's streamlines are a count of cells (K1).** `GlaciationStage.STREAMLINE_CELLS`, six
+  cells of flow line, is 141 km on the 512 by 512 grid's 23.4 km cells and 35 km on the 5.9 km cells
+  of 1,024 rows, against hummocks 154 km long, so the drumlins' elongation falls as the grid is
+  refined. Restating it on the ground moves every glaciated world. 2026-10-05, K1.
+- **The coast pen is a share of the sheet (K1).** `MapRasterizer.COAST_SHARE_OF_MAP_WIDTH` is one
+  pixel of the 2,048-pixel sheet it was matched on, where the river pen is now a width on the
+  ground (`RiverPen.FULL_STROKE_KM`); on a planet three times as wide the coast is drawn three
+  times as heavy against its rivers. `GroundFiguresTest` lets it stand by name until this is
+  decided. 2026-10-05, K1.
+- **`RiverConfig.shortestDrawnCourseKm`'s print scale is the 12,000 km world's (K1).** Its KDoc
+  reasons from a whole world printed at about one to forty million, which is a sheet 30 cm wide for
+  the 12,000 km world and a meter for Earth's; the 100 km it sets is a length on the ground, so on a
+  larger planet the shortest drawn course is a smaller part of the sheet. Whether it should follow
+  the sheet or the ground is the same question as the pens'. 2026-10-05, K1.
+- **The relay crest's KDoc gives its wavelength as 100 km; the constant is 200 (K1).**
+  `PlateStage.RELAY_CREST_WAVELENGTH_KM` is 200.0, the lattice's cell on the ground, and the KDoc
+  above it says "its longest wavelength, 100 km, and its octaves, two, down to 50 km". One of the
+  two is a misreading of a Perlin lattice's cell as its wavelength; K1 kept the 200 km lattice
+  bit for bit. 2026-10-05, K1.
 - **Two-height erosion is shelved on `chunk/e1-erosion-scale` (E1, 2026-10-04).** The branch splits
   each cell into a channel bed and a mean ground, with an in-cell closure for the relief between
   them, implicit lake outlets that carry each basin's actual surplus, rivers routed on the bed, and
@@ -1236,7 +1298,7 @@
     1,024 rows against 94,757 at 512, is a basin whose floor stands 130 m below the sea.
   - **Whether a rift trough is sea or land follows its sills.** With Earth's half-grabens the
     trough is a chain of basins joined by sills 50 km across; on seed 42 the chain is one body of
-    enclosed water over `SeaConfig.enclosedSeaMaxKm2` at 256 and 512 rows, so it stays sea, and at
+    enclosed water over the enclosed sea's cap (`SeaConfig.enclosedSeaMaxShareOfSurface`) at 256 and 512 rows, so it stays sea, and at
     1,024 rows the sills part it into basins under the cap, which become land and hold a chain of
     lakes, closed but for one (the world's closed water is 124,420 km2 there against 38,315 at 512
     rows). Earth's rift chains are lakes where the
@@ -1474,7 +1536,10 @@
   kept the value that reproduces today's behaviour: seven times the cap turns several more inland
   seas into land on every seed and moves coastlines nothing else in S1 touches. Which of the two a
   world a seventh of Earth's size should use is a question about what a fantasy world is, not about
-  units. 2026-09-13, S1.
+  units. 2026-09-13, S1. K1 restated both as the shares their derivations name,
+  `SeaConfig.enclosedSeaMaxShareOfSurface` and `GlaciationConfig.maxLakeShareOfSurface`, at the
+  same values on the 12,000 km world, so on a world of Earth's size they are the Caspian and
+  Superior themselves; the question stands for every world smaller than Earth. 2026-10-05, K1.
 - **The height field has no absolute vertical scale, so the three parts of the ruler disagree.**
   `WorldScale` declares the land's relief above the shoreline (6,000 m), the sea's below it
   (10,000 m) and the raw height field's whole range (their sum, 16,000 m). The three are consistent
@@ -1955,7 +2020,7 @@
   contour of a plane is a straight line. Every other belt's stamp varies along its own length,
   though the collision belts the map draws do not (the next entry).
   Giving the trench the same swell was written, run and reverted: at `rangeVariationCycles`'s
-  wavelength (about 160 cells at 2048, against a bench 30 cells long) it slides the coast onto a
+  wavelength (`rangeVariationWavelengthKm` since K1, 923 km; about 160 cells at 2048, against a bench 30 cells long) it slides the coast onto a
   different straight contour instead of bending it, and the window went from 108 cells of thin
   grid-bearing water and a 31-cell run to 146 and 39. Wants a shorter wavelength on the trench, or
   dissection of a coastal plain too flat for the hydraulic rounds to cut. E4/B2's geometry.
@@ -1969,7 +2034,7 @@
   then lifts that footprint by 248 m a round for twelve rounds, so the finished belt is the rate's
   mesa. It is a contour of a stamp that is a function of distance from a warped bisector, times
   width noises 706 and 1,714 km long. The rate drops the pair's convergence (the belt reported
-  converges at 0.25 and rises as fast as its 0.73 neighbour), the swell of `rangeVariationCycles`
+  converges at 0.25 and rises as fast as its 0.73 neighbour), the swell of `rangeVariationWavelengthKm`
   and the roughness. Measured on that belt at the renders' configuration, over 780 km: width 254 km
   with a coefficient of variation of 0.055; edges within 5 to 6 km rms of a straight line; a
   boundary within 12 km of its chord for 974 km; and a flank 37 km wide, varying by 4 to 6 km.

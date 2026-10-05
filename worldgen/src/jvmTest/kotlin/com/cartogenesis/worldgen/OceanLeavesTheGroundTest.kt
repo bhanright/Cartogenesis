@@ -36,8 +36,10 @@ class OceanLeavesTheGroundTest : BorrowsSharedWorlds() {
      * and builds the world on square cells, and at L1, whose rifts are Earth's half-grabens, and
      * again at its review round, whose joins are relay ramps and whose valleys are Earth's width,
      * 55 km across: the plates' partition held and their
-     * height, uplift and age moved with everything built on them. An ocean change that leaks into
-     * the ground moves them.
+     * height, uplift and age moved with everything built on them. K1 re-took the erosion's and the
+     * sea's, the terrain and the plates holding: the erosion is fed a provisional climate, whose
+     * weather noise K1 made square on the ground, and the sea stage carries the ice's scour, which
+     * K1 made square too. An ocean change that leaks into the ground moves them.
      * A chunk meant to move the ground re-takes them here, as the render records are re-taken.
      * At [SharedWorlds.DETAIL_ROWS], whose standard worlds the detail guards generate anyway, so
      * the pin costs a digest and no generation.
@@ -68,12 +70,12 @@ class OceanLeavesTheGroundTest : BorrowsSharedWorlds() {
             "plates.continentalShare" to 711069935001870004L,
             "plates.upliftRateMmPerYear" to -1456071571191777154L,
             "plates.crustAge" to 4850336704889317196L,
-            "erosion.height" to -445160826674577748L,
+            "erosion.height" to 1897314059311859854L,
             "erosion.sweptOnDevice" to -358906410940142731L,
-            "sea.shorelineHeight" to 8012490132785354773L,
-            "sea.isLand" to 1678313860798026421L,
-            "sea.relativeElevation" to -1604328241263658474L,
-            "sea.landCellCount" to -5138425422504148985L
+            "sea.shorelineHeight" to -5482073539928576004L,
+            "sea.isLand" to -4976546756547398359L,
+            "sea.relativeElevation" to 3475480207965293740L,
+            "sea.landCellCount" to -1269096512998148240L
         )
     }
 }

@@ -362,7 +362,7 @@ class LittoralCoastTest {
         // moved it is not isolated (docs/DESIGN_LEDGER.md, L1).
         val gradedShare = graded.smoothShare
         val controlShare = control.smoothShare
-        KnownFailures.expect(GRADING_GAIN_UNDER_ITS_FLOOR, "0.341 against 0.266") {
+        KnownFailures.expect(GRADING_GAIN_UNDER_ITS_FLOOR, "0.340 against 0.267") {
             if (gradedShare < controlShare * SMOOTH_SHARE_GAIN) {
                 throw RecordedViolation(
                     ("the graded coast reads %.3f smooth against the ungraded coast's %.3f, which is not a " +

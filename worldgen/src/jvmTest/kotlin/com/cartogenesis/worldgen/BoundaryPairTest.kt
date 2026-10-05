@@ -356,7 +356,7 @@ class BoundaryPairTest {
      */
     private fun hotspotReach(base: WorldGenConfig, label: String): HotspotReach {
         val withChains = PlateStage.generate(base, TerrainStage.generate(base))
-        val without = base.copy(tectonics = base.tectonics.copy(hotspotPlateFraction = 0f))
+        val without = base.copy(tectonics = base.tectonics.copy(hotspotsPerMillionKm2 = 0.0))
         val flat = PlateStage.generate(without, TerrainStage.generate(without))
         var offset = 0.0
         for (i in withChains.height.data.indices) {
@@ -580,7 +580,7 @@ class BoundaryPairTest {
         val width = config.width
         val height = config.height
         val withChains = PlateStage.generate(config, TerrainStage.generate(config))
-        val without = config.copy(tectonics = config.tectonics.copy(hotspotPlateFraction = 0f))
+        val without = config.copy(tectonics = config.tectonics.copy(hotspotsPerMillionKm2 = 0.0))
         val flat = PlateStage.generate(without, TerrainStage.generate(without))
 
         val delta = FloatArray(width * height)

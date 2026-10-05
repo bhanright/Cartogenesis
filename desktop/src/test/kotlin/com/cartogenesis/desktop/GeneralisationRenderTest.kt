@@ -77,7 +77,7 @@ class GeneralisationRenderTest {
             seaLevel = SiteImagery.SEA_LEVEL
         ).let { base ->
             base.copy(
-                tectonics = base.tectonics.copy(plateCount = SiteImagery.PLATES),
+                tectonics = base.tectonics.withPlateCount(SiteImagery.PLATES, base.scale),
                 nations = base.nations.copy(nationCount = SiteImagery.REALMS)
             )
         },

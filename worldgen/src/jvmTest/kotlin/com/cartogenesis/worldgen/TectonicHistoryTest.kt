@@ -59,7 +59,8 @@ class TectonicHistoryTest {
         val config = base.copy(
             tectonics = base.tectonics.copy(
                 historyEpochs = epochs,
-                epochDriftKm = driftKm ?: base.tectonics.epochDriftKm
+                plateSpeedMmPerYear = driftKm?.let { it * MILLIMETERS_PER_KM / base.tectonics.epochLengthYears }
+                    ?: base.tectonics.plateSpeedMmPerYear
             ),
             // Flattening the plate interiors is switching isostasy off since S2, where before it
             // was setting the step between them to zero: either way what is left is one level for
@@ -387,6 +388,9 @@ class TectonicHistoryTest {
     }
 
     private companion object {
+        /** Millimeters in a kilometer, to turn a drift asked for in kilometers into a speed. */
+        const val MILLIMETERS_PER_KM = 1e6
+
         /** The shipped setting, so the guard measures the world the app builds. */
         const val DEFAULT_EPOCHS = 3
 

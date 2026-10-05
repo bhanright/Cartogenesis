@@ -607,7 +607,7 @@ object SiteImagery {
     fun config(): WorldGenConfig {
         val base = WorldGenConfig(seed = SEED, seaLevel = SEA_LEVEL)
         return base.copy(
-            tectonics = base.tectonics.copy(plateCount = PLATES),
+            tectonics = base.tectonics.withPlateCount(PLATES, base.scale),
             nations = base.nations.copy(nationCount = REALMS)
         ).atRows(GRID_ROWS)
     }

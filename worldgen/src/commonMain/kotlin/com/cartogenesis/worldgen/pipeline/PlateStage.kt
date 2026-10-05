@@ -1169,11 +1169,14 @@ object PlateStage {
      * cells; carried back in cells both ways, a plate drifting north travelled half as far as one
      * drifting east.
      *
-     * X wraps, because the world is a cylinder. Y clamps, because it is not: a plate whose drift
-     * points at a pole was, far enough back, at the pole and no further, and a seed off the edge
-     * of the grid has no Voronoi cell to own. Two seeds clamped onto the same cell is harmless —
-     * the later id simply takes the cell and the earlier plate has no region in that epoch, which
-     * is a plate that had not yet rifted away from its neighbour.
+     * X wraps, because the world is a cylinder. Y crosses the pole, because the world is a
+     * sphere: a seed carried north past the top row comes down the far side of the pole, half the
+     * equator round, as a path along a meridian does. With Earth's drift over an epoch, 8,400 km
+     * (`TectonicsConfig.plateSpeedMmPerYear`), a seed clamped at the edge instead, as it was when
+     * the drift was a tenth of that, would pile a third of the plates onto the polar rows. Two
+     * seeds on the same cell is harmless — the later id simply takes the cell and the earlier
+     * plate has no region in that epoch, which is a plate that had not yet rifted away from its
+     * neighbour.
      */
     internal fun displacedPlates(
         config: WorldGenConfig,
@@ -1183,10 +1186,19 @@ object PlateStage {
         val width = config.width
         val height = config.height
         val distanceRows = distanceCellWidths / config.cellHeightInCellWidths.toFloat()
-        var wrappedSeedX = (plate.seedX - plate.driftX * distanceCellWidths).roundToInt() % width
+        // Rows measured from the north pole's edge to a cell's middle, so a reflection at either
+        // pole is a reflection about the grid's own edge and lands on a whole row.
+        val fromNorthPole = plate.seedY + 0.5 - plate.driftY.toDouble() * distanceRows
+        val polesCrossed = kotlin.math.floor(fromNorthPole / height).toInt()
+        val withinOneSweep = fromNorthPole - polesCrossed.toDouble() * height
+        val overAPole = polesCrossed % 2 != 0
+        val rowFromNorth = if (overAPole) height - withinOneSweep else withinOneSweep
+        val seedY = kotlin.math.floor(rowFromNorth).toInt().coerceIn(0, height - 1)
+        val halfwayRound = if (overAPole) width / 2 else 0
+        var wrappedSeedX =
+            ((plate.seedX - plate.driftX * distanceCellWidths).roundToInt() + halfwayRound) % width
         if (wrappedSeedX < 0) wrappedSeedX += width
-        val clampedSeedY = (plate.seedY - plate.driftY * distanceRows).roundToInt().coerceIn(0, height - 1)
-        plate.copy(seedX = wrappedSeedX, seedY = clampedSeedY)
+        plate.copy(seedX = wrappedSeedX, seedY = seedY)
     }
 
     /**
@@ -1789,16 +1801,21 @@ object PlateStage {
      * Nearly free, and it puts islands somewhere other than a plate boundary — which is otherwise
      * the only place this generator has anything to offer the open ocean.
      *
+     * Fixed in the mantle and so drawn without regard to the plates: [TectonicsConfig.hotspotCount]
+     * points spread uniformly over the sphere, each carried by whichever plate lies over it.
      * Restricted to oceanic plates, so what comes out is island chains in deep water rather than
      * volcanic fields inland, and clipped to the carrying plate, so a trail stops at the boundary
-     * instead of running on across a neighbour that never passed over the hotspot.
+     * instead of running on across a neighbour that never passed over the hotspot. A point is
+     * read on the plate that owns its own cell, so the clip trims a chain where it leaves the plate
+     * and never erases one outright, which is what a point drawn on the map and stamped on a plate
+     * chosen apart from it did in the first version of this, on every seed tried.
      *
-     * Determinism: the plates are walked in id order and all three draws are taken for every plate
-     * whether or not it ends up carrying one, so the sequence does not depend on the outcome of any
-     * test — and never on a hash order. Each stamped seamount also gets a running index, walked in
-     * the same fixed order, which seeds its own rim modulation (see [stampSeamount]) — again never
-     * from a hash order, and never from the [Random] shared by the placement draws above, so tuning
-     * one does not reseed the other.
+     * Determinism: the hotspots are walked in draw order and both draws are taken for every one
+     * whether or not it lands on oceanic crust, so the sequence does not depend on the outcome of
+     * any test — and never on a hash order. Each stamped seamount also gets a running index, walked
+     * in the same fixed order, which seeds its own rim modulation (see [stampSeamount]) — again
+     * never from a hash order, and never from the [Random] shared by the placement draws above, so
+     * tuning one does not reseed the other.
      */
     private fun stampHotspotChains(
         config: WorldGenConfig,
@@ -1808,9 +1825,12 @@ object PlateStage {
     ) {
         val tectonics = config.tectonics
         val cellWidths = BeltCellWidths.of(config)
-        if (tectonics.hotspotPlateFraction <= 0f || tectonics.hotspotHeight == 0f) return
+        val hotspots = tectonics.hotspotCount(config.scale)
+        if (hotspots <= 0 || tectonics.hotspotHeight == 0f) return
         if (cellWidths.hotspotRadiusCells <= 0f || cellWidths.hotspotSpacingCells <= 0f) return
 
+        val cellsAcross = config.width
+        val cellsDown = config.height
         val random = Random(config.seed * 31337 + 7)
         val sizeNoise = PerlinNoise(config.seed * 104729 + 4441)
         val sizeLattice = GroundLattice(config, SEAMOUNT_SIZE_WAVELENGTH_KM)
@@ -1819,17 +1839,19 @@ object PlateStage {
         val rowsPerCellWidth = (1.0 / config.cellHeightInCellWidths).toFloat()
         var ventIndex = 0
 
-        plates.forEach { plate ->
-            val roll = random.nextFloat()
-            // Offset from the plate's own seed point, not a free point on the map. A hotspot
-            // placed anywhere at all lands on some other plate nineteen times in twenty, and the
-            // clip to the carrying plate in [stampSeamount] then erases the whole chain — which is
-            // exactly what the first version of this did, on every seed tried.
-            val spreadCellWidths = cellWidths.hotspotChainLengthCells * 0.3f
-            val originX = plate.seedX + (random.nextFloat() - 0.5f) * spreadCellWidths
-            val originY = plate.seedY + (random.nextFloat() - 0.5f) * spreadCellWidths * rowsPerCellWidth
-            if (plate.type != PlateType.OCEANIC) return@forEach
-            if (roll >= tectonics.hotspotPlateFraction) return@forEach
+        repeat(hotspots) {
+            // Uniform on the sphere: uniform in longitude, and in the sine of latitude, since a
+            // band of latitude holds ground in proportion to the cosine.
+            val longitudeShare = random.nextDouble()
+            val sineOfLatitude = 2.0 * random.nextDouble() - 1.0
+            val rowsFromNorth =
+                (0.5 - kotlin.math.asin(sineOfLatitude) / PI) * cellsDown
+            val originX = (longitudeShare * cellsAcross).toFloat()
+            val originY = rowsFromNorth.toFloat()
+            val originCell = originY.toInt().coerceIn(0, cellsDown - 1) * cellsAcross +
+                originX.toInt().coerceIn(0, cellsAcross - 1)
+            val plate = plates[plateId[originCell]]
+            if (plate.type != PlateType.OCEANIC) return@repeat
 
             var travelledCells = 0f
             while (travelledCells <= cellWidths.hotspotChainLengthCells) {
@@ -2036,7 +2058,7 @@ object PlateStage {
         val width = config.width
         val height = config.height
         val random = Random(config.seed * 7919 + 13)
-        val plateCount = config.tectonics.plateCount.coerceAtLeast(2)
+        val plateCount = config.tectonics.plateCount(config.scale)
         val shuffledOrder = MutableList(plateCount) { it }
         shuffledOrder.shuffle(random)
         val poleMarginRows = (SEED_REFERENCE_CELLS * SEED_POLE_MARGIN_SHARE).toInt()
@@ -2098,7 +2120,7 @@ object PlateStage {
         val tectonics = config.tectonics
         val width = config.width
         val height = config.height
-        val plateCount = tectonics.plateCount.coerceAtLeast(2)
+        val plateCount = tectonics.plateCount(config.scale)
 
         // Seeds and drifts first, all oceanic for now: the assignment below reads neither the
         // types nor anything derived from them, so the partition is settled before the crusts are.

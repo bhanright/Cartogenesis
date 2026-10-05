@@ -1,5 +1,6 @@
 package com.cartogenesis.worldgen
 
+import com.cartogenesis.worldgen.model.ReliefWindowShape
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.pipeline.ClimateStage
 import com.cartogenesis.worldgen.pipeline.GlaciationStage
@@ -404,10 +405,10 @@ class IceSheetTest : BorrowsSharedWorlds() {
     /**
      * The sheet's own edge follows the ground, not the grid: F30 closed.
      *
-     * The mask twice, once through each relief window, and the octagon's outline asserted against
-     * the run a shape its size explains — [OutlineRuns]'s own bar, the one I2 wrote for a basin
-     * and F30 asks of a lake shore. The square window's figure is printed beside it, because that
-     * is the world this clause is shown failing on.
+     * The mask through the generator's relief window, the disc, asserted against the run a shape
+     * its size explains — [OutlineRuns]'s own bar, the one I2 wrote for a basin and F30 asks of a
+     * lake shore. The square window's figure is printed beside it, because that is the world this
+     * clause is shown failing on, and the octagon's, which replaced the square until K2.
      *
      * Measured on the largest connected piece of the sheet rather than on the mask as a whole: a
      * mask of several separate caps has no one outline, and the defect is a facet on one cap's
@@ -419,24 +420,28 @@ class IceSheetTest : BorrowsSharedWorlds() {
         seeds.forEach { seed ->
             val measured = measure(seed)
             val config = measured.config
-            val octagon = largestSheetOutline(config, measured.mass.onTheSheet)
-            val square = carve(
-                config.copy(glaciation = config.glaciation.copy(reliefWindowOctagon = false))
+            val disc = largestSheetOutline(config, measured.mass.onTheSheet)
+            fun through(shape: ReliefWindowShape) = carve(
+                config.copy(glaciation = config.glaciation.copy(reliefWindowShape = shape))
             ).let { largestSheetOutline(config, it.mass.onTheSheet) }
+            val square = through(ReliefWindowShape.SQUARE)
+            val octagon = through(ReliefWindowShape.OCTAGON)
             println(
                 ("I1 EDGE seed %d: the largest sheet is %d cells with a run of %d along bearing" +
                     " %d, against %.1f allowed; through the square window it is %d cells with a" +
-                    " run of %d, against %.1f (reported, the world this is shown failing on)")
+                    " run of %d, against %.1f (reported, the world this is shown failing on);" +
+                    " through the octagon %d cells with a run of %d, against %.1f")
                     .format(
-                        seed, octagon.cells, octagon.run, octagon.bearing, octagon.allowed,
-                        square.cells, square.run, square.allowed
+                        seed, disc.cells, disc.run, disc.bearing, disc.allowed,
+                        square.cells, square.run, square.allowed,
+                        octagon.cells, octagon.run, octagon.allowed
                     )
             )
-            if (octagon.cells >= OutlineRuns.SMALLEST_BODY_THE_BAR_BINDS &&
-                octagon.run > octagon.allowed
+            if (disc.cells >= OutlineRuns.SMALLEST_BODY_THE_BAR_BINDS &&
+                disc.run > disc.allowed
             ) {
-                failures += "seed $seed: the sheet's edge runs ${octagon.run} cells straight along" +
-                    " bearing ${octagon.bearing}, against ${"%.1f".format(octagon.allowed)} allowed"
+                failures += "seed $seed: the sheet's edge runs ${disc.run} cells straight along" +
+                    " bearing ${disc.bearing}, against ${"%.1f".format(disc.allowed)} allowed"
             }
         }
         // Armed at Fix 3b's review round: seed 59758's edge ran 46 cells along bearing 0 against

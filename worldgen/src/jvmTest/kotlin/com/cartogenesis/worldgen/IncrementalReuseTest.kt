@@ -73,7 +73,7 @@ class IncrementalReuseTest {
             ),
             "terrain" to base.copy(terrain = base.terrain.copy(octaves = base.terrain.octaves - 1)),
             "tectonics" to base.copy(
-                tectonics = base.tectonics.copy(plateCount = base.tectonics.plateCount + 3)
+                tectonics = base.tectonics.withPlateCount(base.tectonics.plateCount(base.scale) + 3, base.scale)
             ),
             // The crust's own settings, which the plate stage reads to turn a crust into an
             // altitude and the erosion stage reads to bend the plate under what it moves.

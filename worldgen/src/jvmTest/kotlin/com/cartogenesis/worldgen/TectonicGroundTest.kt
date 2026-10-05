@@ -318,7 +318,7 @@ class TectonicGroundTest {
         riftWidthKm = tectonics.riftWidthKm * factor,
         riftShoulderOffsetKm = tectonics.riftShoulderOffsetKm * factor,
         riftShoulderWidthKm = tectonics.riftShoulderWidthKm * factor,
-        epochDriftKm = tectonics.epochDriftKm * factor,
+        plateSpeedMmPerYear = tectonics.plateSpeedMmPerYear * factor,
         beltAgeBlurKm = tectonics.beltAgeBlurKm * factor,
         hotspotChainLengthKm = tectonics.hotspotChainLengthKm * factor,
         hotspotSpacingKm = tectonics.hotspotSpacingKm * factor,

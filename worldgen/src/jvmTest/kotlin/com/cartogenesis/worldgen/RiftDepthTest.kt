@@ -55,7 +55,7 @@ class RiftDepthTest {
     private fun config(seed: Long, size: Int = 512): WorldGenConfig {
         val base = WorldGenConfig.forRows(seed, 512).copy(seaLevel = 0.62f)
         val authored = base.copy(
-            tectonics = base.tectonics.copy(plateCount = 14),
+            tectonics = base.tectonics.withPlateCount(14, base.scale),
             nations = base.nations.copy(nationCount = 12)
         )
         return if (size == 512) authored else authored.atResolution(2 * size, size)

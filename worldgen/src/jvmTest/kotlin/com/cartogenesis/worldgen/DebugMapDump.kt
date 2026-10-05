@@ -458,7 +458,7 @@ class DebugMapDump {
                 val config = base.copy(tectonics = base.tectonics.copy(hotspotConeDetail = detail))
                 val terrain = TerrainStage.generate(config)
                 val withChains = PlateStage.generate(config, terrain)
-                val without = config.copy(tectonics = config.tectonics.copy(hotspotPlateFraction = 0f))
+                val without = config.copy(tectonics = config.tectonics.copy(hotspotsPerMillionKm2 = 0.0))
                 val flat = PlateStage.generate(without, TerrainStage.generate(without))
 
                 var peakI = -1

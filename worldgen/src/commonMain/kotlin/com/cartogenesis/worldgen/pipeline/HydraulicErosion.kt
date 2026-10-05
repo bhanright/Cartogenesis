@@ -72,8 +72,8 @@ internal data class RoundMass(
      * deposition and the closing passes do to the finished surface shows up in the closing slot,
      * which is taken after the spoil is laid.
      *
-     * A channel is a cell carrying at least [DRAWN_RIVER] of the land's water, which is the
-     * erosion stage's own rule for one and not the network the map draws. Diagnostics only;
+     * A channel is a cell carrying the water of [DRAWN_RIVER_CATCHMENT_KM2] of land or more, which
+     * is the erosion stage's own rule for one and not the network the map draws. Diagnostics only;
      * nothing reads them back, and they are computed only when a caller asked for the round tally.
      */
     val channelPits: IntArray = IntArray(0)
@@ -621,6 +621,10 @@ internal object HydraulicErosion {
         val cellsAcross = config.width
         val cellsDown = config.height
         var working = height.copy()
+        // The delta's catchment in cells of mean-watered land, which is the unit the accumulation
+        // below counts in: its weights average one over the land.
+        val deltaMinCells = (erosion.deltaMinCatchmentKm2 / config.squareKilometresPerCell).toFloat()
+        val drawnRiverCells = drawnRiverCellsOn(config.scale, cellsAcross, cellsDown)
 
         // The sky the rounds work under, solved on the terrain the thermal sweeps left and taken
         // again halfway through.
@@ -958,7 +962,7 @@ internal object HydraulicErosion {
             if (onRound != null) {
                 openingPit.fill(false)
                 census(
-                    pits, PitStage.OPENING, cellsAcross, isLand, directions, area.data, landCells, surfaceOf,
+                    pits, PitStage.OPENING, cellsAcross, isLand, directions, area.data, drawnRiverCells, surfaceOf,
                     null, openingPit
                 )
             }
@@ -995,7 +999,7 @@ internal object HydraulicErosion {
 
             if (onRound != null) {
                 census(
-                    pits, PitStage.NOTCH, cellsAcross, isLand, directions, area.data, landCells, surfaceOf,
+                    pits, PitStage.NOTCH, cellsAcross, isLand, directions, area.data, drawnRiverCells, surfaceOf,
                     null, openingPit
                 )
             }
@@ -1021,7 +1025,7 @@ internal object HydraulicErosion {
 
             if (onRound != null) {
                 census(
-                    pits, PitStage.INCISION, cellsAcross, isLand, directions, area.data, landCells, surfaceOf,
+                    pits, PitStage.INCISION, cellsAcross, isLand, directions, area.data, drawnRiverCells, surfaceOf,
                     null, openingPit
                 )
             }
@@ -1147,7 +1151,7 @@ internal object HydraulicErosion {
                         // Only for a watercourse big enough to be a river, though. Let every rill
                         // build and the coastline merely creeps outward everywhere at once, which
                         // is a wider continent rather than a delta.
-                        val river = area.data[cell] / landCells >= erosion.deltaMinCatchment
+                        val river = area.data[cell] >= deltaMinCells
                         // Which way the trunk was pointing when it arrived, so the lobe can build
                         // out in front of the river rather than equally in every direction.
                         val outX = shortestX(receiver % cellsAcross - cell % cellsAcross, cellsAcross).toFloat()
@@ -1329,7 +1333,7 @@ internal object HydraulicErosion {
 
             if (onRound != null) {
                 census(
-                    pits, PitStage.SPOIL, cellsAcross, isLand, directions, area.data, landCells, surfaceOf,
+                    pits, PitStage.SPOIL, cellsAcross, isLand, directions, area.data, drawnRiverCells, surfaceOf,
                     null, openingPit
                 )
             }
@@ -1425,7 +1429,7 @@ internal object HydraulicErosion {
 
             if (onRound != null) {
                 census(
-                    pits, PitStage.CLOSING, cellsAcross, isLand, directions, area.data, landCells, surfaceOf,
+                    pits, PitStage.CLOSING, cellsAcross, isLand, directions, area.data, drawnRiverCells, surfaceOf,
                     null, openingPit
                 )
             }
@@ -1436,7 +1440,7 @@ internal object HydraulicErosion {
                 // Against the same round's routing, on the field the relaxation left, which is the
                 // field the next round — or the sea-level cut — will route over.
                 census(
-                    pits, PitStage.RELAX, cellsAcross, isLand, directions, area.data, landCells, working.data,
+                    pits, PitStage.RELAX, cellsAcross, isLand, directions, area.data, drawnRiverCells, working.data,
                     null, openingPit
                 )
                 onRound(
@@ -1587,16 +1591,25 @@ internal object HydraulicErosion {
     private const val MIN_DISTRIBUTARY_FALL = 1e-7f
 
     /**
-     * How much of the land's water a watercourse must carry before this stage treats it as a river.
+     * How much water a watercourse must carry before this stage treats it as a river, stated as
+     * the square kilometers of land that shed it at the land's mean rain.
      *
-     * **A share of runoff and no longer a share of area, and that is the intended effect.** The
-     * accumulation this is compared against is weighted by rainfall now, and [normaliseOverLand]
-     * leaves the land a mean weight of exactly one, so dividing a catchment's summed weight by the
-     * land's cell count still gives a share — of the water that falls on the map rather than of the
-     * ground it falls on. Under flat rain the two were the same number and this threshold sat at a
-     * fixed fraction of the map's *area*. It now sits where the water is: on a wet flank a smaller
+     * **A discharge and not an area, and that is the intended effect.** The accumulation this is
+     * compared against is weighted by rainfall, and [normaliseOverLand] leaves the land a mean
+     * weight of exactly one, so a catchment's summed weight times a cell's area is the ground that
+     * would shed its water at the mean. It sits where the water is: on a wet flank a smaller
      * catchment reaches it and on a dry one a larger one does not, which is a channel threshold
      * following the discharge rather than the geometry.
+     *
+     * **Fourteen thousand square kilometers, a fifth of the Po's basin.** What this rule asks is
+     * whether a distributary is worth cutting across a delta and a river worth carrying to its
+     * mouth, so it is set by the delta it feeds: the smallest catchment that builds one is the
+     * Po's, about 70,000 km² ([ErosionConfig.deltaMinCatchmentKm2]), and the Po reaches the
+     * Adriatic down five main branches (the Maistra, the Pila, the Tolle, the Gnocca and the Goro),
+     * a fifth of it each. A constant and not a read of that setting, because the outlet pass runs
+     * with deposition off as well as on and `DepositionTest` holds that no deposition knob moves a
+     * world with deposition off. It was a share, 0.06% of the land's water: 13,000 km² of a
+     * 12,000 km world's land and 140,000 of an Earth-sized one's (docs/DESIGN_LEDGER.md, K2).
      *
      * **This stage's own rule, and a separate approximation from the network the map draws.**
      * Since R1 a watercourse is drawn where `ChannelInitiation` says the ground can be cut — an
@@ -1620,13 +1633,18 @@ internal object HydraulicErosion {
      * count a wet-country trunk the map does not draw and miss a dry-country one it does. What it
      * has to be right about is the order of magnitude of the water at a mouth, and it is.
      * See docs/DESIGN_LEDGER.md, S3 and R1.
-     *
-     * Still a share of a world's total, the land's water, where the order of magnitude it has to
-     * be right about is a discharge: on a planet three times as wide the same share is nine times
-     * the water. Not restated with the other figures in K1, because the land's water differs from
-     * seed to seed and no one discharge is today's value; it is in `TODO.md`.
      */
-    private const val DRAWN_RIVER = 0.0006f
+    private const val DRAWN_RIVER_CATCHMENT_KM2 = PO_BASIN_KM2 / PO_DELTA_BRANCHES
+
+    /** The Po's basin, in square kilometers, rounded. See [DRAWN_RIVER_CATCHMENT_KM2]. */
+    private const val PO_BASIN_KM2 = 70_000.0
+
+    /** The Po's main branches across its delta. See [DRAWN_RIVER_CATCHMENT_KM2]. */
+    private const val PO_DELTA_BRANCHES = 5
+
+    /** [DRAWN_RIVER_CATCHMENT_KM2] in cells of mean-watered land on a grid of this [scale]. */
+    private fun drawnRiverCellsOn(scale: WorldScale, cellsAcross: Int, cellsDown: Int): Float =
+        (DRAWN_RIVER_CATCHMENT_KM2 / scale.squareKilometresPerCell(cellsAcross, cellsDown)).toFloat()
 
     /**
      * How much of bare rock's erodibility a closed plant canopy takes away.
@@ -1779,6 +1797,7 @@ internal object HydraulicErosion {
         val isLand = sea.isLand
         val surfaceOf = working.data
         val landRange = scale.landHalfOfField.coerceAtLeast(1e-6f)
+        val drawnRiverCells = drawnRiverCellsOn(scale, cellsAcross, cellsDown)
         // Measured against the pond depth rather than against the delta's freeboard, though a
         // freeboard is what it is cutting through. `DepositionTest` holds that no deposition knob
         // may change a world with deposition switched off, and this pass runs either way; reading
@@ -1823,11 +1842,11 @@ internal object HydraulicErosion {
         for (rank in order.indices.reversed()) {
             val cell = order[rank]
             // Every watercourse carrying a river's worth of water, not only the few big enough
-            // to build a delta: at `deltaMinCatchment` instead — five times as much — the trunk at
+            // to build a delta: at `deltaMinCatchmentKm2` instead — five times as much — the trunk at
             // the author's own mouth on seed 59758 did not qualify and nothing was cut. Which
             // courses the map goes on to draw is `ChannelInitiation`'s answer and not this one;
-            // see [DRAWN_RIVER] for why this pass keeps a rule of its own.
-            if (area.data[cell] / landCells < DRAWN_RIVER) continue
+            // see [DRAWN_RIVER_CATCHMENT_KM2] for why this pass keeps a rule of its own.
+            if (area.data[cell] < drawnRiverCells) continue
             val standing = filled.data[cell] - sea.relativeElevation.data[cell]
             val onFlat = standing > 0f && (standing <= pondDepth || spoil[cell] > 0f)
             if (!onFlat) continue
@@ -2151,7 +2170,7 @@ internal object HydraulicErosion {
         isLand: BooleanArray,
         directions: IntArray,
         area: FloatArray,
-        landCells: Float,
+        drawnRiverCells: Float,
         surface: FloatArray,
         spoil: FloatArray?,
         already: BooleanArray
@@ -2162,7 +2181,7 @@ internal object HydraulicErosion {
             if (!isLand[cell]) continue
             val receiver = directions[cell]
             if (receiver < 0 || !isLand[receiver]) continue
-            if (area[cell] / landCells < DRAWN_RIVER) continue
+            if (area[cell] < drawnRiverCells) continue
             if (!opening && already[cell]) continue
             val here = surface[cell] + (spoil?.get(cell) ?: 0f)
             val there = surface[receiver] + (spoil?.get(receiver) ?: 0f)

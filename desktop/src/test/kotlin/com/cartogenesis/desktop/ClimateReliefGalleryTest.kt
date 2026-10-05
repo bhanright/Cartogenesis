@@ -270,7 +270,7 @@ class ClimateReliefGalleryTest {
             "718106" to WorldGenConfig(seed = 718106L, width = 512, height = 512, seaLevel = 0.62f)
                 .let { base ->
                     base.copy(
-                        tectonics = base.tectonics.copy(plateCount = 14),
+                        tectonics = base.tectonics.withPlateCount(14, base.scale),
                         nations = base.nations.copy(nationCount = 12)
                     )
                 }

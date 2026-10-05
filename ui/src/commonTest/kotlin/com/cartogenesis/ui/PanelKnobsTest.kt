@@ -119,7 +119,8 @@ class PanelKnobsTest {
      */
     private val oldPanelCouldSet: List<Pair<String, WorldGenConfig>> = listOf(
         "seaLevel" to base.copy(seaLevel = 0.4f),
-        "tectonics.plateCount" to base.copy(tectonics = base.tectonics.copy(plateCount = 21)),
+        "tectonics.meanPlateAreaKm2" to
+            base.copy(tectonics = base.tectonics.copy(meanPlateAreaKm2 = base.scale.sphereAreaKm2 / 21)),
         "nations.nationCount" to base.copy(nations = base.nations.copy(nationCount = 3)),
         "nations.wilderness" to
             base.copy(nations = base.nations.copy(wilderness = WildernessMode.LEAVE_WILDERNESS)),
@@ -233,7 +234,7 @@ class PanelKnobsTest {
             Knobs.graphicsAcceleration.set(base, true)
         )
         assertEquals(
-            base.copy(tectonics = base.tectonics.copy(plateCount = 9)),
+            base.copy(tectonics = base.tectonics.copy(meanPlateAreaKm2 = base.scale.sphereAreaKm2 / 9)),
             Knobs.plates.set(base, 9)
         )
         assertEquals(

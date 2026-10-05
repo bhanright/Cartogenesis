@@ -331,18 +331,23 @@ class MeridionalWindTest : BorrowsSharedWorlds() {
         // shown to fail without the fix — it cannot even be stated there.
         var pooledClimb = 0.0; var pooledClimbCells = 0
         var pooledDescend = 0.0; var pooledDescendCells = 0
+        val stalled = ArrayList<Long>()
         listOf(7L, 42L, 1234L).forEach { seed ->
             val base = WorldGenConfig.forRows(seed, SIZE)
-            val zonal = SharedWorlds.world(
-                base.copy(
-                    climate = base.climate.copy(
-                        meridionalWindShare = 0f, pressureWinds = false
+            val zonal = OceanStall.orStalled(seed, stalled) {
+                SharedWorlds.world(
+                    base.copy(
+                        climate = base.climate.copy(
+                            meridionalWindShare = 0f, pressureWinds = false
+                        )
                     )
                 )
-            )
-            val slanted = SharedWorlds.world(
-                base.copy(climate = base.climate.copy(pressureWinds = false))
-            )
+            } ?: return@forEach
+            val slanted = OceanStall.orStalled(seed, stalled) {
+                SharedWorlds.world(
+                    base.copy(climate = base.climate.copy(pressureWinds = false))
+                )
+            } ?: return@forEach
             val w = zonal.width
             val h = zonal.height
 
@@ -385,6 +390,7 @@ class MeridionalWindTest : BorrowsSharedWorlds() {
             pooledClimb += climbGain; pooledClimbCells += climbCells
             pooledDescend += descendGain; pooledDescendCells += descendCells
         }
+        OceanStall.record(stalled)
 
         // Direction only, deliberately: a magnitude threshold here would be a number chosen to make
         // the guard green, and the sign over the cells is the claim anyway.

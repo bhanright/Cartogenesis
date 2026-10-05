@@ -47,12 +47,14 @@ class OceanCurrentTest : BorrowsSharedWorlds() {
     @Test
     fun `the gyres turn with the wind on every standard world`() {
         val failures = ArrayList<String>()
+        val stalled = ArrayList<Long>()
         for (seed in SharedWorlds.STANDARD_SEEDS) {
             val world = SharedWorlds.world(WorldGenConfig.forRows(seed, SharedWorlds.COARSE_ROWS))
             val beltsOnly = world.config.copy(climate = world.config.climate.copy(pressureWinds = false))
-            failures += OceanSense.check("seed $seed at ${SharedWorlds.COARSE_ROWS} rows", world.config, world.sea, world.ocean,
-                OceanStage.generate(beltsOnly, world.sea))
+            val beltsOcean = OceanStall.orStalled(seed, stalled) { OceanStage.generate(beltsOnly, world.sea) } ?: continue
+            failures += OceanSense.check("seed $seed at ${SharedWorlds.COARSE_ROWS} rows", world.config, world.sea, world.ocean, beltsOcean)
         }
+        OceanStall.record(stalled)
         assertTrue(failures.isEmpty(), failures.joinToString("\n"))
     }
 

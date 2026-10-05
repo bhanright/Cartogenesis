@@ -217,17 +217,20 @@ class GroundFiguresTest {
                 }
             }
         }
-        (figuresCalled(LATTICE_CALLS) + figuresCalled(REACH_CALLS)).forEach { figure ->
+        (figuresCalled(LATTICE_CALLS, evaluated = false) + figuresCalled(REACH_CALLS, evaluated = false)).forEach { figure ->
             if (!NAMED_IN_KILOMETERS.containsMatchIn(figure.text)) wrong += "${figure.where} reads ${figure.text}, no figure in kilometers"
         }
         assertTrue(wrong.isEmpty(), "figures on the map rather than on the ground:\n" + wrong.joinToString("\n"))
     }
 
-    /** One figure a stage reads at a call: where, the argument's text, and what it evaluates to. */
+    /** One figure a stage reads at a call: where, the argument's text, and what it evaluates to (NaN unread). */
     private class Figure(val where: String, val text: String, val value: Double)
 
-    /** Every call matching [call] in the main sources, its figure argument evaluated. */
-    private fun figuresCalled(call: Call): List<Figure> {
+    /**
+     * Every call matching [call] in the main sources, its figure argument [evaluated] or left as
+     * text, which is all the source rule reads and all a figure in some other unit allows.
+     */
+    private fun figuresCalled(call: Call, evaluated: Boolean = true): List<Figure> {
         val figures = ArrayList<Figure>()
         for (source in sources()) {
             val text = source.readText()
@@ -237,7 +240,7 @@ class GroundFiguresTest {
                 val arguments = splitArguments(argumentsAt(text, match.range.last + 1))
                 val argument = arguments.getOrNull(call.argument) ?: return@forEach
                 val where = "${source.name}:${lineOf(text, start)}"
-                figures += Figure(where, argument, evaluate(argument, where))
+                figures += Figure(where, argument, if (evaluated) evaluate(argument, where) else Double.NaN)
             }
         }
         return figures

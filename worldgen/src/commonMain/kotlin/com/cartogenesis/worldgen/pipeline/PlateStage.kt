@@ -3441,7 +3441,7 @@ object PlateStage {
     /**
      * The per-cell roughness that breaks a belt's crest into peaks, between these two, at a
      * longest wavelength of [ROUGHNESS_WAVELENGTH_KM], 1,000 km, the 12 cycles round the
-     * 12,000 km world it was set as. Centred a little below 1 so it takes as much off a crest as
+     * 12,000 km world it was set as. Centered a little below 1 so it takes as much off a crest as
      * it adds.
      */
     private const val ROUGHNESS_MIN = 0.75f

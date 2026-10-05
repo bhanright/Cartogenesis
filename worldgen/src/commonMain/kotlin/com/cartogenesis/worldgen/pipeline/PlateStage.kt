@@ -16,6 +16,7 @@ import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.exp
 import kotlin.math.floor
+import kotlin.math.ln
 import kotlin.math.pow
 import kotlin.math.roundToInt
 import kotlin.math.sin
@@ -1864,6 +1865,7 @@ object PlateStage {
                 val sizeJitter = 0.6f + 0.8f * (0.5f + 0.5f * sizeNoise.fbm(
                     sizeLattice.x(ventX), sizeLattice.y(ventY), 2, sizeLattice.period, sizeLattice.period
                 )).coerceIn(0f, 1f)
+                val volcanoSize = volcanoSizeShare(config.seed, ventIndex)
                 stampSeamount(
                     uplift = uplift,
                     cellHeightInCellWidths = config.cellHeightInCellWidths.toFloat(),
@@ -1871,10 +1873,10 @@ object PlateStage {
                     plate = plate.id,
                     ventX = ventX,
                     ventY = ventY,
-                    radius = cellWidths.hotspotRadiusCells,
+                    radius = cellWidths.hotspotRadiusCells * volcanoSize,
                     // The crust cools and the seamount subsides with it, as the square of age.
                     amplitude = tectonics.hotspotHeight *
-                        (1f - ageAlongChain) * (1f - ageAlongChain) * sizeJitter,
+                        (1f - ageAlongChain) * (1f - ageAlongChain) * sizeJitter * volcanoSize,
                     seed = config.seed,
                     ventIndex = ventIndex,
                     detail = tectonics.hotspotConeDetail
@@ -1981,6 +1983,37 @@ object PlateStage {
         z = (z xor (z ushr 27)) * 0x94D049BB133111EBUL.toLong()
         return z xor (z ushr 31)
     }
+
+    /**
+     * How large the [ventIndex]th volcano of a hotspot chain is against the largest a chain builds,
+     * as a share of its radius and height, between [SMALLEST_VOLCANO_VOLUME_SHARE]'s cube root and 1.
+     *
+     * A chain is a line of separate volcanoes of very different sizes, not a ridge of one cone
+     * repeated: the Island of Hawaii is 213,000 km³ in seven volcanoes (Robinson and Eakins,
+     * *Calculated volumes of individual shield volcanoes at the young end of the Hawaiian Ridge*,
+     * J. Volcanol. Geotherm. Res. 151, 2006), of which Mauna Loa alone is some 75,000 (USGS), so the
+     * other six average about a third of it, and a volcano's volume is drawn uniformly in its
+     * logarithm over the decade below Mauna Loa's. A cone of one shape has its radius and height
+     * as the cube root of its volume. Drawn per volcano, from the world's seed and the vent's own
+     * index, so the chain is beaded the way its volcanoes are; with every cone the size of the
+     * largest, [TectonicsConfig.hotspotSpacingKm] apart, the chain was a ridge of one width from
+     * end to end, a ruled line across the ocean (docs/CONVENTIONS.md, rule 13).
+     */
+    private fun volcanoSizeShare(seed: Long, ventIndex: Int): Float {
+        val bits = seedHash(seed xor VOLCANO_SIZE_SALT, ventIndex.toLong())
+        val unit = ((bits ushr 40) and 0xFFFFFF).toDouble() / 0xFFFFFF.toDouble()
+        val volumeShare = exp(unit * ln(SMALLEST_VOLCANO_VOLUME_SHARE))
+        return volumeShare.pow(1.0 / 3.0).toFloat()
+    }
+
+    /**
+     * A hotspot chain's smallest volcano against its largest, by volume: a tenth, the decade below
+     * Mauna Loa over which the chain's volcanoes are drawn. See [volcanoSizeShare].
+     */
+    private const val SMALLEST_VOLCANO_VOLUME_SHARE = 0.1
+
+    /** Keeps a volcano's size draw apart from its rim's, which hashes the same seed and index. */
+    private const val VOLCANO_SIZE_SALT = 0x5EAB0A7E5L
 
     /**
      * A handful of low-order harmonics of the rim radius, amplitude and phase both drawn from
@@ -3390,7 +3423,8 @@ object PlateStage {
     /**
      * The seamounts' size noise's wavelength on the ground, in kilometers: 1,333.3 km, the 9
      * cycles round the 12,000 km world it was set as, so neighbouring vents in a chain,
-     * [TectonicsConfig.hotspotSpacingKm] apart, are sized alike and chains a plate apart are not.
+     * [TectonicsConfig.hotspotSpacingKm] apart, are sized alike and chains a plate apart are not;
+     * one volcano against the next differs by [volcanoSizeShare] on top of it.
      */
     private const val SEAMOUNT_SIZE_WAVELENGTH_KM = 1_333.3
 

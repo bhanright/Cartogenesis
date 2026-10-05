@@ -47,8 +47,8 @@ class OceanCurrentTest : BorrowsSharedWorlds() {
     @Test
     fun `the gyres turn with the wind on every standard world`() {
         // Armed again at K2: on the Earth-sized planet the control ocean under the belts' wind
-        // alone solves on every standard world, seed 42 at 256 rows included, so K1's stall
-        // (`OceanStall`) no longer holds here.
+        // alone solves on every standard world, seed 42 at 256 rows included, so K1's stall no
+        // longer holds here, nor in the three other clauses that read the control.
         val failures = ArrayList<String>()
         for (seed in SharedWorlds.STANDARD_SEEDS) {
             val world = SharedWorlds.world(WorldGenConfig.forRows(seed, SharedWorlds.COARSE_ROWS))

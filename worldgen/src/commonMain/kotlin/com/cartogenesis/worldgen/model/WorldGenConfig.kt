@@ -1319,11 +1319,13 @@ data class TectonicsConfig(
      */
     val hotspotSpacingKm: Double = 50.0,
     /**
-     * Radius of a single seamount where it meets the sea floor, in kilometers, round on the ground.
+     * Radius of a chain's largest seamount where it meets the sea floor, in kilometers, round on
+     * the ground.
      *
      * Mauna Loa's base is more than 90 miles, 145 km, across on the sea floor (USGS), the largest of
-     * the chain's volcanoes; half of it, 72.5 km. With [hotspotSpacingKm] the cones overlap, and a
-     * point on the ridge between two vents carries about 1.4 times one cone's height.
+     * the chain's volcanoes; half of it, 72.5 km. Each volcano of a chain is drawn smaller than
+     * this by its own volume (`PlateStage.volcanoSizeShare`), so with [hotspotSpacingKm] the cones
+     * overlap into a beaded ridge rather than one of a single width.
      */
     val hotspotRadiusKm: Double = 72.5,
     /** Height of the youngest seamount in a chain, in normalized elevation units. */

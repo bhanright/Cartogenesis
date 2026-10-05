@@ -359,10 +359,9 @@ class PressureWindTest : BorrowsSharedWorlds() {
         var pooledWithout = 0.0
         var pooledMean = 0.0
         var seedsMeasured = 0
-        val stalled = ArrayList<Long>()
         seeds.forEach { seed ->
             val world = generate(seed, pressureWinds = true)
-            val control = OceanStall.orStalled(seed, stalled) { generate(seed, pressureWinds = false) } ?: return@forEach
+            val control = generate(seed, pressureWinds = false)
             val withPressure = interiorRainSpread(world) ?: return@forEach
             val withoutPressure = interiorRainSpread(control) ?: return@forEach
             seedsMeasured++
@@ -378,7 +377,6 @@ class PressureWindTest : BorrowsSharedWorlds() {
                     )
             )
         }
-        OceanStall.record(stalled)
         assertTrue(seedsMeasured > 0, "no seed had an interior to measure")
         val meanWith = pooledWith / seedsMeasured
         val meanWithout = pooledWithout / seedsMeasured
@@ -424,10 +422,9 @@ class PressureWindTest : BorrowsSharedWorlds() {
 
     @Test
     fun `what the regional wind did to the sea-ice edge, and to the water under it`() {
-        val stalled = ArrayList<Long>()
         seeds.forEach { seed ->
             val world = generate(seed, pressureWinds = true)
-            val control = OceanStall.orStalled(seed, stalled) { generate(seed, pressureWinds = false) } ?: return@forEach
+            val control = generate(seed, pressureWinds = false)
             val spread = iceEdgeSpreadDegrees(world)
             val controlSpread = iceEdgeSpreadDegrees(control)
             // What the stress did to the water underneath, so the finding says whether the edge
@@ -452,7 +449,6 @@ class PressureWindTest : BorrowsSharedWorlds() {
                     )
             )
         }
-        OceanStall.record(stalled)
     }
 
     private fun generate(seed: Long, pressureWinds: Boolean, rows: Int = size): WorldMap {

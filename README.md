@@ -184,9 +184,12 @@ they appear identically on screen and in a PNG. The measurements behind them are
 
 An export is the world on screen, drawn a cell to a pixel: nothing is made again. Every world is
 made on one grid, 1024 rows, so a picture is 2048 × 1024. The generator itself is not tied to that
-grid: every setting is a length on the ground, a depth or a time, converted to cells where each
-stage reads it, so `WorldGenConfig.atResolution` changes only the grid, which the tests use to make
-small worlds and which a choice of planet size will use later.
+grid: every length, from a belt's width to a noise lattice's wavelength, is stated on the ground,
+with every depth and time, and converted to cells where each stage reads it, so
+`WorldGenConfig.atResolution` changes only the grid, which the tests use to make small worlds. What
+is not yet a figure on the ground, ready for a choice of planet size, is a short list: the counts
+per world (plates, realms, peoples, landmarks) and the thresholds still stated as shares of the
+world's land or water, each named in [docs/TODO.md](docs/TODO.md).
 
 **Pictures** are PNG, WebP or JPEG. PNG is lossless. WebP is smaller and loses a little detail in
 thin rivers and borders. JPEG is for tools that will not open WebP; it is smaller still and softer.

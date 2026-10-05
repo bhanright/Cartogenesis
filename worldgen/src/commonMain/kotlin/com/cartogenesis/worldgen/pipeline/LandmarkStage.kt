@@ -130,7 +130,9 @@ object LandmarkStage {
         scored.sortByDescending { it.second }
 
         // Natural spacing for this many sites over this much land, pulled in a little so a world
-        // that cannot quite fit them at arm's length still gets its full count.
+        // that cannot quite fit them at arm's length still gets its full count. Not a share of
+        // the map: it is set by the land and the count, so it is a length on the ground on square
+        // cells, and it moves onto the ground for good when the count per world does (TODO.md).
         val spacingCells = kotlin.math.sqrt(
             sea.landCellCount.toDouble() / landmarksConfig.count
         ).toFloat() * SPACING_SLACK

@@ -167,6 +167,12 @@ object NationStage {
     /**
      * Share of the world's runoff a cell must carry for habitability to treat it as being on a
      * river. See [drawableRiverFlow].
+     *
+     * A share of a world's total, which a planet of another size does not hold: what a settlement
+     * wants is a discharge, and the same share of a planet three times as wide is nine times the
+     * water. It cannot be restated at today's value without moving a world, since the world's
+     * runoff differs from seed to seed, so it is in `TODO.md` with the other shares
+     * (docs/DESIGN_LEDGER.md, K1).
      */
     private const val RIVERINE_FLOW_SHARE = 0.0006f
 

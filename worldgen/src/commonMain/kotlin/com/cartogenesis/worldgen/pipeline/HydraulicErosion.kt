@@ -1620,6 +1620,11 @@ internal object HydraulicErosion {
      * count a wet-country trunk the map does not draw and miss a dry-country one it does. What it
      * has to be right about is the order of magnitude of the water at a mouth, and it is.
      * See docs/DESIGN_LEDGER.md, S3 and R1.
+     *
+     * Still a share of a world's total, the land's water, where the order of magnitude it has to
+     * be right about is a discharge: on a planet three times as wide the same share is nine times
+     * the water. Not restated with the other figures in K1, because the land's water differs from
+     * seed to seed and no one discharge is today's value; it is in `TODO.md`.
      */
     private const val DRAWN_RIVER = 0.0006f
 

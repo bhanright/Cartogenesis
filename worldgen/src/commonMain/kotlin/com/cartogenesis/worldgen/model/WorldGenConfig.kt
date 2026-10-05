@@ -1039,10 +1039,13 @@ data class TectonicsConfig(
      *
      * A plate boundary only moves if the plates either side of it move relative to one another, so
      * this is what decides how far an old belt ends up from a present one. At the default a
-     * two-epochs-ago boundary sits some 2,100 km from where its plates are now, against a plate
-     * radius of about 3,200 km on a 14-plate world — far enough that an old belt lands well inside
-     * a plate interior rather than merging with the modern edge beside it, which is the whole
-     * point. 1,054.6875 km, the 512 grid's 45 cell widths.
+     * two-epochs-ago boundary sits some 2,100 km from where its plates are now — far enough that
+     * an old belt does not merge with the modern edge beside it, which is the whole point. A
+     * plate of a 14-plate world is about 1,300 km in radius on the 12,000 km world, a disc of a
+     * fourteenth of its 72 million km², and about 4,300 on a world of Earth's size, so the same
+     * drift carries an old belt past a plate's whole radius on the one and a half of it on the
+     * other; how far a plate drifts in an epoch is in `TODO.md` with the counts per world.
+     * 1,054.6875 km, the 512 grid's 45 cell widths.
      */
     val epochDriftKm: Double = 1_054.6875,
     /**
@@ -2295,6 +2298,13 @@ data class ErosionConfig(
      * carries enough to lift the cell in front of it over a shoreline that is, by construction,
      * right there — so the whole coastline creeps out by a few cells and nothing stands out as a
      * landform. Deltas are made by rivers, and a third of a percent of a continent is a river.
+     *
+     * The catchment is weighted by its runoff, so this is a share of all the water the land sheds
+     * rather than an area. A share of a world's total, which a planet of another size does not
+     * hold — what builds a delta is a river's own discharge and load — and which cannot be
+     * restated at today's value without moving a world, since the total differs from seed to
+     * seed. It waits in `TODO.md` with the other shares of a world's total (docs/DESIGN_LEDGER.md,
+     * K1).
      */
     val deltaMinCatchment: Float = 0.003f,
     /**
@@ -2580,10 +2590,18 @@ data class GlaciationConfig(
      * in the 512 crops this stage was reviewed on. At the default it asks for a quarter of a
      * percent of the world's frozen ground before any ice is called a glacier at all: some eighty
      * cells of snowfield on seed 718106 at 512, and the same fraction of the world at any grid.
+     *
+     * Still a share of a world's total, the planet's frozen ground, where a glacier's own physics
+     * asks for an area of snowfield: on a planet three times as wide the same share is nine times
+     * the snowfield. Not restated in K1, because the frozen ground differs from seed to seed and no
+     * one area is today's value; it is in `TODO.md` (docs/DESIGN_LEDGER.md, K1).
      */
     val minCatchment: Float = 0.0025f,
-    /** Frozen catchment, in the same share-of-frozen-ground units, at which a glacier is at full
-     * width and cuts its full depth. */
+    /**
+     * Frozen catchment, in the same share-of-frozen-ground units, at which a glacier is at full
+     * width and cuts its full depth. A share of the planet's frozen ground for [minCatchment]'s
+     * reason, and in `TODO.md` with it.
+     */
     val fullCatchment: Float = 0.06f,
     /**
      * How much local relief the ground must have before valley-glacier machinery runs on it, in
@@ -2651,6 +2669,10 @@ data class GlaciationConfig(
      * of glaciers, in its trunk valleys. Measured against the connected frozen region rather than
      * against all frozen ground so that a small cold massif gets its own few glaciers instead of
      * none, and a continental ice field does not get hundreds.
+     *
+     * A share, and rightly: the question is whether a path is one of the few draining its own
+     * field, which is a question about the field and not about the planet, so it holds on a
+     * planet of any size.
      */
     val trunkCatchment: Float = 0.05f,
     /**
@@ -2702,6 +2724,10 @@ data class GlaciationConfig(
      * ice sheet*, Science 311, 2006) and the twenty largest outlets between them drain roughly half
      * of it, so a bar of 2% names the family without admitting every notch in the margin. Off is
      * the control the fjord guard needs. See `GlaciationStage.cutOutletTroughs`.
+     *
+     * [outletCatchment] is that bar, a share of the sheet's own area, and rightly a share: like
+     * Jakobshavn's 6.5% of Greenland, it is a statement about how a sheet drains, which holds for
+     * a sheet of any size on a planet of any size.
      */
     val outletTroughs: Boolean = true,
     val outletCatchment: Float = 0.02f,
@@ -3044,9 +3070,20 @@ data class NationsConfig(
      * A single river basin can be a fifth of a continent. Left whole, every realm would be
      * enormous and shaped alike; cut too fine and realms become mosaics of scraps with no
      * geography to them.
+     *
+     * A share of the land and not an area, and kept one when the other figures went onto the
+     * ground (docs/DESIGN_LEDGER.md, K1), because what it sizes is the pieces realms are built
+     * from, and the realms are a count per world, [nationCount]: as a share, a realm is built from
+     * the same number of pieces on a planet of any size, where an area would build each realm of a
+     * world three times as wide from nine times as many. It moves onto the ground with the counts
+     * per world, which are in `TODO.md`. Nor could it be restated at today's value without moving
+     * a world: the land's area differs from seed to seed, so no one area is today's.
      */
     val maxBasinShare: Float = 0.020f,
-    /** Smallest catchment worth keeping, as a share of all land. Below this it joins a neighbour. */
+    /**
+     * Smallest catchment worth keeping, as a share of all land. Below this it joins a neighbour.
+     * A share for [maxBasinShare]'s reason.
+     */
     val minBasinShare: Float = 0.0035f,
     /**
      * What it costs a realm to take a catchment on the far side of a strait, on the same scale as
@@ -3057,13 +3094,19 @@ data class NationsConfig(
      */
     val straitCrossingCost: Float = 3.5f,
     /**
-     * How much water a river needs before a catchment is cut in two along it, as a share of all
-     * land draining through.
+     * How much water a river needs before a catchment is cut in two along it, as a share of the
+     * flow of the largest river on the map, `RiverResult.flowAccumulation` at its highest.
      *
      * This is what gives the world its river borders. Without it every frontier is a watershed,
      * because a catchment contains its own river and the water is therefore interior. Real borders
      * are both kinds — the Pyrenees are a divide, the Rio Grande is a river — and a world with only
      * divides is as one-note as a world with neither.
+     *
+     * A share of the largest river and not a discharge, which a planet of another size or rain
+     * does not hold: a river big enough to be a frontier is big in cubic meters a second, not
+     * against the greatest river of its world. Restating it as a discharge moves every world's
+     * borders, since the largest river differs from seed to seed, so it waits in `TODO.md` with
+     * the other shares of a world's total (docs/DESIGN_LEDGER.md, K1).
      */
     val riverBorderShare: Float = 0.045f,
     /**
@@ -3137,9 +3180,16 @@ data class CulturesConfig(
     /**
      * Largest catchment left whole when dividing land into cultural regions, as a share of the
      * land's area on the ground; no region piece is larger.
+     *
+     * A share for the reason `NationsConfig.maxBasinShare` gives: the regions are what the peoples
+     * are built from, and the peoples are a count per world, [cultureCount], which moves onto the
+     * ground with the other counts (`TODO.md`).
      */
     val maxRegionShare: Float = 0.030f,
-    /** Smallest cultural region, as a share of land; anything under is merged into a neighbour. */
+    /**
+     * Smallest cultural region, as a share of land; anything under is merged into a neighbour. A
+     * share for [maxRegionShare]'s reason.
+     */
     val minRegionShare: Float = 0.006f
 )
 

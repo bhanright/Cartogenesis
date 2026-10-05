@@ -3383,12 +3383,16 @@ object PlateStage {
     private const val SEED_LATITUDE_SPAN = 0.88f
 
     /**
-     * The grid a plate seed's position is drawn against, whatever grid the world is generated on.
+     * The grid a plate seed's position is drawn against, whatever grid the world is generated on:
+     * a seed's place is drawn as one of 512 columns and 512 rows of the map and read as that
+     * fraction of the map's width and height.
      *
-     * `WorldGenConfig`'s own default, which is the grid every world in this project is defined at
-     * and the one `atResolution` refines from. A seed's place on the planet is a property of the
-     * seed, not of how finely the map is cut, so it is settled here once and read as a fraction
-     * everywhere else — see [drawPlateSeeds].
+     * A seed's place on the planet is a property of the seed, not of how finely the map is cut, so
+     * it is settled here once and read as a fraction everywhere else — see [drawPlateSeeds]. 512
+     * because it was `WorldGenConfig`'s default grid when the draw was settled, and the draws made
+     * on it are the worlds every seed has named since; it is a fraction of the map and not a
+     * length, so it holds on a planet of any size, and it is not the grid the application makes
+     * worlds on, which is 1,024 rows (docs/DESIGN_LEDGER.md, G1).
      */
     private const val SEED_REFERENCE_CELLS = 512
 

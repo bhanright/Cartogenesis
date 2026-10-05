@@ -347,18 +347,16 @@ object ClimateStage {
     private const val WEATHER_NOISE_C = 3.5f
 
     /**
-     * That noise's longest wavelength east-west, in kilometers: 2,400 km, the 5 cycles round the
-     * 12,000 km world it was set as, read as whole cycles round the planet so the pattern meets
+     * That noise's longest wavelength on the ground, in kilometers: 2,400 km, the 5 cycles round
+     * the 12,000 km world it was set as, read as whole cycles round the planet so the pattern meets
      * itself at the map's east-west seam instead of showing a join.
+     *
+     * The same wavelength north-south, on a lattice square on the ground. The noise used to cover
+     * as many cycles from pole to pole as round the equator, which on a map twice as wide as it is
+     * tall drew every weather cell twice as long east-west as north-south, so isotherms and the
+     * tints that follow them ran along the rows (docs/DESIGN_LEDGER.md, K1).
      */
     private const val WEATHER_NOISE_WAVELENGTH_KM = 2_400.0
-
-    /**
-     * Its longest wavelength north-south, in kilometers: 1,200 km, the 5 cycles from pole to pole
-     * of the 12,000 km world it was set as, half the east-west one, so the noise's cells are twice
-     * as long east-west as north-south on the ground.
-     */
-    private const val WEATHER_NOISE_WAVELENGTH_DOWN_KM = 1_200.0
 
     /** Octaves of it. Four is enough for a ragged isotherm and no more than the eye can see. */
     private const val WEATHER_NOISE_OCTAVES = 4
@@ -1263,8 +1261,7 @@ object ClimateStage {
         val cellsDown = config.height
         val climateConfig = config.climate
         val noise = PerlinNoise(config.seed * TEMPERATURE_NOISE_MULTIPLIER + TEMPERATURE_NOISE_OFFSET)
-        val weatherCyclesAcross = GroundLattice.wholeCycles(config.scale.worldWidthKm, WEATHER_NOISE_WAVELENGTH_KM)
-        val weatherCyclesDown = GroundLattice.wholeCycles(config.scale.poleToPoleKm, WEATHER_NOISE_WAVELENGTH_DOWN_KM)
+        val weatherLattice = GroundLattice(config, WEATHER_NOISE_WAVELENGTH_KM)
         val field = FloatField(cellsAcross, cellsDown)
 
         parallelChunks(0, cellsDown) { startRow, endRow ->
@@ -1281,11 +1278,11 @@ object ClimateStage {
                             WorldScale.METRES_PER_KM * climateConfig.lapseRateCPerKm
                     } else 0f
                     val variationC = WEATHER_NOISE_C * noise.fbm(
-                        column * weatherCyclesAcross.toFloat() / cellsAcross,
-                        row * weatherCyclesDown.toFloat() / cellsDown,
+                        weatherLattice.x(column),
+                        weatherLattice.y(row),
                         octaves = WEATHER_NOISE_OCTAVES,
-                        periodX = weatherCyclesAcross,
-                        periodY = weatherCyclesDown
+                        periodX = weatherLattice.period,
+                        periodY = weatherLattice.period
                     )
                     field.data[cell] =
                         blendedC(marineFraction.data[cell], seaColumnC, landColumnC) -

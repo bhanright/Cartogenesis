@@ -103,6 +103,8 @@ val auditOnlyClasses = listOf(
  */
 val deepClassesByStage: Map<String, List<String>> = mapOf(
     "drawing" to listOf(
+        // A report, not a gate: the census on a planet of Earth's size (docs/DESIGN_LEDGER.md, K1).
+        "com.cartogenesis.cartography.geometry.EarthSizeGeometryReport",
         "com.cartogenesis.cartography.RasterMarkWidthTest",
         "com.cartogenesis.cartography.ReliefShadingTest.the exaggeration is the steepest that pins no face of the cone, and keeps the maps' contrast",
         "com.cartogenesis.cartography.RiverSelectionTest.one pane draws the same density from a 512 world and a 1024 world"

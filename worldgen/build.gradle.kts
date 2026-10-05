@@ -259,6 +259,7 @@ val deepClassesByStage: Map<String, List<String>> = mapOf(
         "com.cartogenesis.worldgen.GridShapeTest",
         "com.cartogenesis.worldgen.MeridionalWindTest",
         "com.cartogenesis.worldgen.MoistureBudgetTest",
+        "com.cartogenesis.worldgen.PlanetWidthRainTest",
         "com.cartogenesis.worldgen.PressureWindTest",
         "com.cartogenesis.worldgen.SnowBalanceTest",
         "com.cartogenesis.worldgen.AbsoluteRainfallTest.an arid config and a lush one classify identically under the old normalization, not under this one",

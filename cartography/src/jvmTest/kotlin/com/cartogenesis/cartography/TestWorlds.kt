@@ -1,5 +1,6 @@
 package com.cartogenesis.cartography
 
+import com.cartogenesis.worldgen.CalibrationPlanet
 import com.cartogenesis.worldgen.SharedWorlds
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
@@ -12,13 +13,15 @@ import com.cartogenesis.worldgen.model.WorldMap
  * somebody can go and see. Its sheet is the 1024 by 512 pixels the 512 by 512 grid's was, a
  * cell to a pixel where that grid's cell was two pixels wide. Four classes want
  * it, and generating it in each cost fifteen seconds a run and put the suite over its heap, so it
- * is made once and lent. Asked of [SharedWorlds] on every read rather than held here, so that every
- * class that reads it is a borrower whose tests are checked for writing to it.
+ * is made once and lent. It stands on the 12,000 km planet ([CalibrationPlanet]), where the
+ * drawing's constants these tests hold were derived. Asked of [SharedWorlds] on every read rather
+ * than held here, so that every class that reads it is a borrower whose tests are checked for
+ * writing to it.
  */
 internal object TestWorlds {
 
     /** The gallery's settings, for a figure that reads the grid without the world. */
-    val galleryConfig: WorldGenConfig = WorldGenConfig.forRows(seed = 234475L, rows = 512)
+    val galleryConfig: WorldGenConfig = CalibrationPlanet.of(WorldGenConfig.forRows(seed = 234475L, rows = 512))
 
     val gallery: WorldMap
         get() = SharedWorlds.world(galleryConfig)

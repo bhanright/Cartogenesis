@@ -1,5 +1,6 @@
 package com.cartogenesis.cartography.geometry
 
+import com.cartogenesis.worldgen.CalibrationPlanet
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.pipeline.BoundaryClass
 import com.cartogenesis.worldgen.pipeline.PlateResult
@@ -47,7 +48,10 @@ class RiftSillGeometryTest {
 
     @Test
     fun `a rift's sills cross its trough as ragged oblique ramps, not straight rungs`() {
-        val config = WorldGenConfig.forRows(SEED, ROWS)
+        // On the 12,000 km planet with its fourteen plates, where seed 42 has the rifts named below
+        // and a valley 55 km across is four cells at 512 rows; on the Earth-sized planet's 39 km
+        // cells it is one and a half, too few for a level line's shape.
+        val config = CalibrationPlanet.of(WorldGenConfig.forRows(SEED, ROWS))
         val plates = PlateStage.generate(config, TerrainStage.generate(config))
         val report = PlateStage.presentRiftSegments(config)
         val frame = GridFrame(config.width, config.height, config.cellWidthKm, config.cellHeightKm)

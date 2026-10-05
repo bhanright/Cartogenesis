@@ -302,7 +302,9 @@ internal object Knobs {
     /**
      * How many plates the planet is cut into. The setting behind it is a mean plate area, Earth's
      * 34 million km² by default, so the count shown is the planet's sphere over that area and a
-     * count chosen here is written back as the area that gives it on this planet.
+     * count chosen here is written back as the area that gives it on this planet. The count the
+     * setting already makes is written back as the setting itself, so a world nobody touched keeps
+     * Earth's area to the last digit rather than the area its rounded count implies.
      */
     val plates = Stepper(
         section = PanelSection.TERRAIN,
@@ -310,7 +312,8 @@ internal object Knobs {
         range = 3..40,
         read = { it.tectonics.plateCount(it.scale) },
         write = { config, plateCount ->
-            config.copy(tectonics = config.tectonics.withPlateCount(plateCount, config.scale))
+            if (plateCount == config.tectonics.plateCount(config.scale)) config
+            else config.copy(tectonics = config.tectonics.withPlateCount(plateCount, config.scale))
         }
     )
 

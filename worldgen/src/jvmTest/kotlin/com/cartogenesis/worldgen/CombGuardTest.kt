@@ -78,15 +78,16 @@ class CombGuardTest : BorrowsSharedWorlds() {
 
     @Test
     fun `the flanks are not combed along one axis more than the other, nor past the router's own`() {
+        val thinned = ArrayList<String>()
         val seeds = NETWORK_ON_THE_HEAD.map { (seed, networkFloor) ->
             val measured = measure(WorldGenConfig.forRows(seed, STANDARD_ROWS))
-            assertTrue(
-                measured.census.channelKmPer1000Km2 >= networkFloor / NETWORK_FACTOR,
-                "seed $seed's network thinned to ${measured.census.channelKmPer1000Km2} km per 1000 km2 from " +
+            if (measured.census.channelKmPer1000Km2 < networkFloor / NETWORK_FACTOR) {
+                thinned += "seed $seed's network thinned to ${measured.census.channelKmPer1000Km2} km per 1000 km2 from " +
                     "$networkFloor, past ScaleFreeTest's $NETWORK_FACTOR: a comb removed by removing channels"
-            )
+            }
             measured
         }
+        assertTrue(thinned.isEmpty(), thinned.joinToString("\n"))
         val oneSided = seeds.filter { it.oneSided }
         // Recorded at K1, whose square weather moved seed 42's flanks from just under the factor to
         // just over it, 0.221 against 0.145 down a column and along a row: the same two figures the

@@ -72,8 +72,9 @@ object SiteImagery {
     /**
      * The world is made at the size "2048", as the application names sizes: 2048 rows and twice as
      * many columns ([WorldCodec.COLUMNS_PER_ROW]), 4096 by 2048 cells, square on the ground and
-     * 2.9 km a side. Its sheet ([com.cartogenesis.cartography.SheetGeometry]) is a cell to a
-     * pixel, 4096 by 2048, and the figures are cut out of that sheet at 1:1.
+     * 9.8 km a side on the Earth-sized planet. Its sheet
+     * ([com.cartogenesis.cartography.SheetGeometry]) is a cell to a pixel, 4096 by 2048, and the
+     * figures are cut out of that sheet at 1:1.
      *
      * 2048 is the largest size every desktop build makes and the resolution the page's claims are
      * about. It is also what makes a 1600-wide crop possible without inventing pixels.

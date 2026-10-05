@@ -653,8 +653,13 @@ class DataExportTest {
          * so every mark the raster makes has single-pixel edges both ways, and every figure rose
          * together: WebP 45, JPEG at quality 90 **46**, at quality 30 **63**. Halfway, rounded down,
          * is **54**; the relation against WebP holds as it did, 46 against 45 and five of room.
+         *
+         * Re-derived a fifth time on the Earth-sized planet (K2), whose sheet of the same 1,024 by
+         * 512 grid draws a world three times as wide in the same pixels, so its coasts and borders
+         * turn more often in a pixel: WebP 57, JPEG at quality 90 **59**, at quality 30 **67**.
+         * Halfway is **63**; the relation against WebP holds, 59 against 57 and five of room.
          */
-        const val MAX_JPEG_DRIFT = 54
+        const val MAX_JPEG_DRIFT = 63
 
         /** And the same bound as a relation, measured against WebP in the same run. */
         const val OVER_WEBP = 5

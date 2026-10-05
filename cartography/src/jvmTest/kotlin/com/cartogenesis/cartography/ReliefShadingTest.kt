@@ -134,7 +134,9 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
         const val PLANE_TOLERANCE = 0.01
 
         /** The gallery's seed on the 512 by 512 grid, the grid the maps were drawn on before. */
-        val HALF_HEIGHT_GALLERY = com.cartogenesis.worldgen.model.WorldGenConfig(seed = 234475L, width = 512, height = 512)
+        val HALF_HEIGHT_GALLERY = com.cartogenesis.worldgen.CalibrationPlanet.of(
+            com.cartogenesis.worldgen.model.WorldGenConfig(seed = 234475L, width = 512, height = 512)
+        )
 
         /** The exaggeration the maps were drawn at on that grid, set by eye: 24 on its cell. */
         const val HALF_HEIGHT_EXAGGERATION = 24.0

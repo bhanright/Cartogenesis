@@ -116,7 +116,7 @@ class LakeBodyTest : BorrowsSharedWorlds() {
                 most = maxOf(most, ratio)
                 least = minOf(least, ratio)
                 if (kotlin.math.abs(ratio - 1.0) > SUMMING_ORDER) {
-                    failures += "seed $seed: a basin of ${basin.cells.size} cells handed %.4f of its catchment".format(ratio)
+                    failures += "seed $seed: a basin of ${basin.cells.size} cells handed %.4f of its catchment (%.6g of %.6g mm-cells; the largest runoff carried on the map %.6g)".format(ratio, basin.pocketRunoffMm, rainReaching, reaching.max())
                 }
             }
             println(

@@ -1728,9 +1728,12 @@ data class SeaConfig(
      * At or below the cap, not above it, so a body exactly this size becomes a lake.
      *
      * A share of the surface because that is what the figure is: the Caspian's *share of Earth*,
-     * 0.073%, carried onto this planet, so the cap grows with the planet's area. On the 12,000 km
-     * world, a seventh of Earth's surface, it is 52,560 km², the figure it was held at in square
-     * kilometers until K1; on a world of Earth's size it is 371,000 km², the Caspian itself.
+     * 0.073%, carried onto this planet, so the cap grows with the planet's area. It is read as a
+     * share of the map's cells, [WorldScale.worldAreaKm2], which give every cell the same ground
+     * and so stand for `pi / 2` times the sphere: on the 12,000 km world it is 52,560 km² of
+     * cells, the figure it was held at until K1, and on a world of Earth's size 586,000, the
+     * Caspian's 371,000 on the sphere drawn as the equirectangular map draws it (its share of the
+     * cells is its share of Earth).
      * Whether a world smaller than Earth should cap at the Caspian's own area rather than its
      * share is a real question and not answered here: on the 12,000 km world seven times the cap
      * turns several more inland seas into land on every seed and moves coastlines. It is written
@@ -2932,8 +2935,9 @@ data class GlaciationConfig(
      * surface, so the cap grows with the planet's area as Superior's share says it should, and an
      * area rather than a count of cells, so that every grid draws the same lake: on the 12,000 km
      * world, a seventh of Earth's surface, it is 11,520 km², 42 cells of the 512 by 512 grid and
-     * 335 of the 5.9 km cells of 1,024 rows, and on a world of Earth's size it is Superior's own
-     * 82,100. The caveat [SeaConfig.enclosedSeaMaxShareOfSurface] carries applies.
+     * 335 of the 5.9 km cells of 1,024 rows, and on a world of Earth's size it is 128,500 km² of
+     * the map's cells, Superior's share of them, as [SeaConfig.enclosedSeaMaxShareOfSurface] reads
+     * its share. The caveat that setting carries applies.
      *
      * A basin over the cap is not thrown away — that would delete the lake country rather than
      * size it — it is peeled inward, ring by ring, until its floor fits. The rest of the blob keeps

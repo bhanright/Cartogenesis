@@ -433,23 +433,17 @@ class JumpFloodDistanceTest : BorrowsSharedWorlds() {
                     stageEightFold, chamferEightFold
                 )
         )
-        // The flood is not exact on land-mask sources (A-I11, above), and told how tall a row is it
-        // misses on this shelf too: a handful of cells hear of a coast a whisker farther than the
-        // nearest. Recorded under that finding rather than excused; re-recorded on square cells at Q2.
-        KnownFailures.expect(
-            "A-I11: the plain jump flood is not exact on land-mask sources, and seed 42's shelf is drawn off it",
-            // Re-recorded at L1, whose rifts are Earth's half-grabens and the same at every grid (docs/DESIGN_LEDGER.md, L1).
-            "7 cells, the worst 0.0031 cell widths at (614,217)"
-        ) {
-            if (offCells > 0) {
-                val found = String.format(
-                    Locale.ROOT, "%d cells, the worst %.4f cell widths at (%d,%d)", offCells, worstError, worstAt % w, worstAt / w
-                )
-                throw RecordedViolation(
-                    "$found of seed 42's shelf stand at a distance from land that is not the true one", found
-                )
-            }
-        }
+        // The flood is not exact on land-mask sources (A-I11, above), and seed 42's shelf on the
+        // 12,000 km world had a handful of cells that heard of a coast a whisker farther than the
+        // nearest, recorded under that finding from Q2 to K2. On the Earth-sized planet's seed 42
+        // every plateau cell reads its true distance, so the clause is armed (docs/DESIGN_LEDGER.md, K2).
+        assertTrue(
+            offCells == 0,
+            String.format(
+                Locale.ROOT, "%d cells of seed 42's shelf, the worst %.4f cell widths off at (%d,%d), stand at a " +
+                    "distance from land that is not the true one", offCells, worstError, worstAt % w, worstAt / w
+            )
+        )
         assertTrue(
             stageEightFold < roundnessFloor,
             "the shelf the stage drew has an eight-fold component of $stageEightFold, over $roundnessFloor"

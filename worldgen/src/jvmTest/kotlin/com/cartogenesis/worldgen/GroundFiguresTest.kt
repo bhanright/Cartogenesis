@@ -116,7 +116,7 @@ class GroundFiguresTest {
      */
     @Test
     fun `every area carried as a share of the surface tracks the planet's area`() {
-        val stock = WorldGenConfig()
+        val stock = WorldGenConfig(scale = WorldScale(worldWidthKm = CALIBRATION_PLANET_KM))
         val onTheStockWorld = mapOf(
             "sea.enclosedSeaMax" to (stock.sea.enclosedSeaMaxKm2(stock.scale) to 52_560.0),
             "glaciation.maxLake" to (stock.glaciation.maxLakeAreaKm2(stock.scale) to 11_520.0),
@@ -159,7 +159,7 @@ class GroundFiguresTest {
     @Test
     fun `the rain's conversion is the same per kilometer of travel on any planet`() {
         val calibrated = ClimateStage.MM_SCALE.toDouble() * ClimateStage.REFERENCE_CELL_WIDTH_KM
-        assertEquals(WorldScale().worldWidthKm / CALIBRATION_GRID_COLUMNS, ClimateStage.REFERENCE_CELL_WIDTH_KM, 0.0)
+        assertEquals(CALIBRATION_PLANET_KM / CALIBRATION_GRID_COLUMNS, ClimateStage.REFERENCE_CELL_WIDTH_KM, 0.0)
         for (widthKm in PLANET_WIDTHS_KM) {
             for (config in gridsOf(widthKm)) {
                 val perKm = ClimateStage.millimetresPerMarchUnit(config).toDouble() * config.cellWidthKm
@@ -371,8 +371,8 @@ class GroundFiguresTest {
     private class Call(val pattern: Regex, val argument: Int)
 
     private companion object {
-        /** Half, the stock and twice the stock planet's width, in kilometers. */
-        val PLANET_WIDTHS_KM = doubleArrayOf(6_000.0, 12_000.0, 24_000.0)
+        /** Half, the calibration planet and twice its width, and the default, Earth's, in kilometers. */
+        val PLANET_WIDTHS_KM = doubleArrayOf(6_000.0, 12_000.0, 24_000.0, WorldScale.EARTH_EQUATOR_KM)
 
         /** Where the figures live: the generator's and the drawing's main sources. */
         val SOURCE_ROOTS = listOf("worldgen/src/commonMain/kotlin", "cartography/src/commonMain/kotlin")
@@ -426,6 +426,12 @@ class GroundFiguresTest {
 
         /** A constant declared in a source: its name and its initializer, to the end of the line. */
         val CONSTANT = Regex("""const val ([A-Z][A-Z0-9_]*)\s*(?::\s*\w+)?\s*=\s*([^\n]+)""")
+
+        /**
+         * The planet the figures were first set on, in kilometers round: the default until K2,
+         * kept as the reference the restatements are held to.
+         */
+        const val CALIBRATION_PLANET_KM = 12_000.0
 
         /** Columns of the grid the rain's conversion was calibrated on, on the 12,000 km world. */
         const val CALIBRATION_GRID_COLUMNS = 512

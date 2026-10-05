@@ -114,7 +114,7 @@ class ColdWaterPlacementTest : BorrowsSharedWorlds() {
             }
         }
         // Re-recorded at L1, whose rifts are Earth's half-grabens and the same at every grid (docs/DESIGN_LEDGER.md, L1).
-        KnownFailures.expect(TONGUE_REACHES_THE_EASTERN_BOUNDARY, "seed 42: the coldest eastern-boundary water, -2.23 C, lies at 7.9 degrees") {
+        KnownFailures.expect(TONGUE_REACHES_THE_EASTERN_BOUNDARY, "seed 7: the coldest eastern-boundary water, -1.66 C, lies at 4.4 degrees; seed 7: the coldest eastern-boundary water, -1.25 C, lies at -47.6 degrees; seed 1234: the coldest eastern-boundary water, -1.55 C, lies at -4.4 degrees; seed 99: the coldest eastern-boundary water, -1.88 C, lies at 4.4 degrees; seed 99: the coldest eastern-boundary water, -1.37 C, lies at -4.4 degrees") {
             if (failures.isNotEmpty()) throw RecordedViolation(failures.joinToString("\n"), failures.joinToString("; "))
         }
     }
@@ -138,7 +138,7 @@ class ColdWaterPlacementTest : BorrowsSharedWorlds() {
         }
         // Re-recorded on square cells at Q2, the ocean still solved on its own grid (docs/DESIGN_LEDGER.md, Q2).
         // Re-recorded at L1, whose rifts are Earth's half-grabens and the same at every grid (docs/DESIGN_LEDGER.md, L1).
-        KnownFailures.expect(EQUATORIAL_TONGUE_SHALLOW, "seed 7 1.97 of 3.23 C; seed 42 2.15 of 3.39 C; seed 99 1.67 of 3.47 C") {
+        KnownFailures.expect(EQUATORIAL_TONGUE_SHALLOW, "seed 7 1.66 of 4.92 C; seed 42 1.86 of 4.80 C; seed 1234 2.29 of 6.18 C; seed 99 1.46 of 4.64 C") {
             if (failures.isNotEmpty()) throw RecordedViolation(failures.joinToString("\n"), shortOf.joinToString("; "))
         }
     }

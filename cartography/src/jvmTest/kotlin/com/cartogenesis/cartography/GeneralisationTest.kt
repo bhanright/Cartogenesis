@@ -5,6 +5,7 @@ import com.cartogenesis.cartography.geometry.RecordedViolation
 import com.cartogenesis.worldgen.BorrowsSharedWorlds
 import com.cartogenesis.worldgen.SharedWorlds
 import com.cartogenesis.worldgen.model.WorldGenConfig
+import com.cartogenesis.worldgen.model.WorldScale
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.River
 import java.util.Locale
@@ -46,6 +47,9 @@ class GeneralisationTest : BorrowsSharedWorlds() {
     private companion object {
         /** The worlds' rows: 512 rows of square cells, 1024 by 512, a cell to a pixel of the sheet. */
         const val ROWS = 512
+
+        /** A pixel of a 4096-pixel sheet of the default, Earth-sized planet, in kilometers. */
+        const val KILOMETRES_PER_PIXEL_AT_2048_ROWS = WorldScale.EARTH_EQUATOR_KM / 4096
 
         /**
          * The true-shape sheets the graticule is asked about, by their width in pixels: the sheets
@@ -365,8 +369,8 @@ class GeneralisationTest : BorrowsSharedWorlds() {
      * The printed sheet's own bar, placed by the renderer, is measured against the sheet's pixel
      * width and not the grid's.
      *
-     * On a 2048-row world's sheet a pixel is 12,000 / 4096 = 2.9297 km, so a 500 km bar is 170.7
-     * pixels long. On square cells the sheet's pixel and a cell's width are one length, so the
+     * On a 2048-row world's sheet a pixel is 40,075 / 4096 = 9.784 km on the default planet, so a
+     * 5,000 km bar is 511.0 pixels long. On square cells the sheet's pixel and a cell's width are one length, so the
      * clause is read as well on the 2048 by 2048 grid, whose cells are two pixels across: its
      * sheet is the same 4096 pixels, and the control, the arithmetic of the squeezed sheet this
      * replaced — a cell's width of ground to the pixel — draws the same bar at 85.3 pixels there,
@@ -384,7 +388,7 @@ class GeneralisationTest : BorrowsSharedWorlds() {
     private fun printedBarOn(geometry: SheetGeometry) {
         val scale = WorldGenConfig().scale
         val kilometresPerPixel = scale.worldWidthKm / geometry.widthPixels
-        assertEquals(2.9296875, kilometresPerPixel, 1e-12)
+        assertEquals(KILOMETRES_PER_PIXEL_AT_2048_ROWS, kilometresPerPixel, 1e-12)
 
         val placed = MapRasterizer.placedScaleBar(geometry)
         assertEquals(
@@ -396,21 +400,21 @@ class GeneralisationTest : BorrowsSharedWorlds() {
             "the printed bar runs past a quarter of the sheet"
         )
 
-        // A 500 km bar, as a 900-pixel frame at this scale chooses it.
-        val fiveHundred =
+        // A 5,000 km bar, as a 900-pixel frame at this scale chooses it.
+        val fiveThousand =
             MapScale.longestBarThatFits(MapScale.kilometresPerPixel(geometry, 1f), 900f)
-        assertEquals(500.0, fiveHundred.kilometres)
-        assertEquals(500.0 / 2.9296875, fiveHundred.lengthPixels.toDouble(), 1e-3)
-        val squeezedPixels = 500.0 / scale.cellWidthKm(geometry.cellsAcross)
+        assertEquals(5_000.0, fiveThousand.kilometres)
+        assertEquals(5_000.0 / KILOMETRES_PER_PIXEL_AT_2048_ROWS, fiveThousand.lengthPixels.toDouble(), 1e-3)
+        val squeezedPixels = 5_000.0 / scale.cellWidthKm(geometry.cellsAcross)
         println(
             "SCALE the printed bar on the ${geometry.cellsAcross} by ${geometry.cellsDown} grid's sheet: " +
-                "${placed.bar.label} over ${placed.bar.lengthPixels} px; 500 km is " +
-                "${fiveHundred.lengthPixels} px, and $squeezedPixels px a cell to the pixel"
+                "${placed.bar.label} over ${placed.bar.lengthPixels} px; 5,000 km is " +
+                "${fiveThousand.lengthPixels} px, and $squeezedPixels px a cell to the pixel"
         )
         if (!geometry.isCellForPixel) {
             assertTrue(
-                abs(squeezedPixels - fiveHundred.lengthPixels) > 1.0,
-                "the squeezed sheet's arithmetic draws 500 km the same length, so the guard cannot " +
+                abs(squeezedPixels - fiveThousand.lengthPixels) > 1.0,
+                "the squeezed sheet's arithmetic draws 5,000 km the same length, so the guard cannot " +
                     "tell them apart"
             )
         }

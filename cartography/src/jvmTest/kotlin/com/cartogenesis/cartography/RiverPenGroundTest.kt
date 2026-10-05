@@ -30,7 +30,7 @@ class RiverPenGroundTest {
 
     @Test
     fun `on the 12,000 km world the stroke is the share of the map it was held at`() {
-        val stockWidthKm = WorldScale().worldWidthKm
+        val stockWidthKm = TWELVE_THOUSAND_KM
         for (sheetPixels in intArrayOf(512, 1024, 2048, 4096)) {
             assertEquals(
                 sheetPixels * SHARE_OF_MAP_WIDTH_HELD, RiverPen.fullPixels(sheetPixels, stockWidthKm), 0f,
@@ -42,6 +42,9 @@ class RiverPenGroundTest {
     private companion object {
         /** The share of the map's width the full stroke was held at until K1. */
         const val SHARE_OF_MAP_WIDTH_HELD = 0.0024f
+
+        /** The planet the share was held on, the default until K2. */
+        const val TWELVE_THOUSAND_KM = 12_000.0
 
         /** A float product's last few places, as a share of it. */
         const val FLOAT_ROUNDING = 1e-6

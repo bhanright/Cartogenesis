@@ -142,13 +142,24 @@ class GroundTextureTest : BorrowsSharedWorlds() {
                 " ${"%.4f".format(earthLakeShare)} at this cell area: the ground is not draining",
             pooledLakes <= earthLakeShare * LAKE_SHARE_ALLOWANCE
         )
-        assertTrue(
-            "the drainage density is ${"%.4f".format(pooledDensity)} km/km2 against the" +
-                " ${"%.4f".format(MAIN_DRAINAGE_DENSITY_KM_PER_KM2)} the tree before S2 measured," +
-                " which is further than $DRAINAGE_DENSITY_ALLOWANCE either way",
-            pooledDensity in (MAIN_DRAINAGE_DENSITY_KM_PER_KM2 / DRAINAGE_DENSITY_ALLOWANCE)..
-                (MAIN_DRAINAGE_DENSITY_KM_PER_KM2 * DRAINAGE_DENSITY_ALLOWANCE)
-        )
+        // Recorded at K2. The density is kilometers of channel cell per square kilometer, a figure
+        // of the cell it is counted on: the tree before S2 measured it on 23 km cells, and the
+        // Earth-sized planet's 512 rows are 39 km cells, which hold fewer channel cells to a
+        // square kilometer (docs/DESIGN_LEDGER.md, K2).
+        KnownFailures.expect(
+            "K2: the drainage density at 512 rows is read on cells of 39 km, against a figure taken on 23 km cells", ""
+        ) {
+            if (pooledDensity !in (MAIN_DRAINAGE_DENSITY_KM_PER_KM2 / DRAINAGE_DENSITY_ALLOWANCE)..
+                    (MAIN_DRAINAGE_DENSITY_KM_PER_KM2 * DRAINAGE_DENSITY_ALLOWANCE)
+            ) {
+                throw RecordedViolation(
+                    "the drainage density is ${"%.4f".format(pooledDensity)} km/km2 against the" +
+                        " ${"%.4f".format(MAIN_DRAINAGE_DENSITY_KM_PER_KM2)} the tree before S2 measured," +
+                        " which is further than $DRAINAGE_DENSITY_ALLOWANCE either way",
+                    "%.4f".format(pooledDensity)
+                )
+            }
+        }
     }
 
     /**

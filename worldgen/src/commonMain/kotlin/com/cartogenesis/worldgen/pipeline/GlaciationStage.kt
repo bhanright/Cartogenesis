@@ -396,8 +396,10 @@ object GlaciationStage {
         // its own depth, so a coast standing over deep ocean does not read as relief it does not
         // have, while a headland standing over the sea does.
         stopIfAsked()
+        // Two cells is the least window a valley can be told in, and it wins over the ceiling on a
+        // grid whose cells are wider than the ceiling's half, as Earth's planet's are at 16 rows.
         val reliefRadiusCellWidths = (glaciation.reliefWindow * carving.valleyWidthCells)
-            .coerceIn(2f, config.wholeCellsFor(RELIEF_RADIUS_CEILING_KM).toFloat())
+            .coerceAtMost(config.wholeCellsFor(RELIEF_RADIUS_CEILING_KM).toFloat()).coerceAtLeast(2f)
         val relief =
             localRelief(
                 cellsAcross, cellsDown, relative, reliefRadiusCellWidths, config.cellHeightInCellWidths,
@@ -2420,7 +2422,7 @@ object GlaciationStage {
         // over the whole province, so the concavity term can be weighed against a 0..1 noise
         // without a constant nobody could justify.
         val meanRadius = (carving.valleyWidthCells * 0.5f).toInt()
-            .coerceIn(2, config.wholeCellsFor(HOLLOWNESS_RADIUS_CEILING_KM))
+            .coerceAtMost(config.wholeCellsFor(HOLLOWNESS_RADIUS_CEILING_KM)).coerceAtLeast(2)
         val concavity = FloatArray(cellCount)
         var concavityScale = 0.0
         for (cell in 0 until cellCount) {

@@ -520,7 +520,7 @@ class RiverSelectionTest : BorrowsSharedWorlds() {
         }
         // Re-recorded at L1: seed 42's largest chain fits the quarter too on L1's worlds, and no
         // longer at its review round, whose rift joins are relay ramps (docs/DESIGN_LEDGER.md, L1).
-        KnownFailures.expect(FLOOR_IDLE_ON_SOME_SEEDS, "seed 7, seed 99") {
+        KnownFailures.expect(FLOOR_IDLE_ON_SOME_SEEDS, "seed 7, seed 42, seed 1234") {
             if (idleFloor.isNotEmpty()) {
                 throw RecordedViolation(
                     "the largest river's chain fits a quarter of Earth's ink even on the tiny sheet, so it does not " +

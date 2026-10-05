@@ -7,7 +7,6 @@ import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.GlaciationConfig
 import com.cartogenesis.worldgen.model.IsostasyConfig
 import com.cartogenesis.worldgen.model.WorldGenConfig
-import com.cartogenesis.worldgen.model.WorldScale
 import com.cartogenesis.worldgen.noise.GroundLattice
 import com.cartogenesis.worldgen.noise.PerlinNoise
 import kotlin.math.sqrt
@@ -2304,16 +2303,12 @@ object GlaciationStage {
         // any platform that runs the same arithmetic.
         val basinNoise = PerlinNoise(config.seed * 31L + 0x91E5L)
         val hummockNoise = PerlinNoise(config.seed * 31L + 0x27C3L)
-        // Whole cycles round the planet, so the pattern joins at the east-west seam; down the map
-        // the same count from pole to pole, which draws each lattice cell twice as long east-west
-        // as north-south on the ground.
-        val period = GroundLattice.wholeCycles(config.scale.worldWidthKm, glaciation.sheetBasinWavelengthKm)
-            .coerceAtLeast(MIN_BASIN_CYCLES)
-        val periodDown = GroundLattice.wholeCycles(
-            config.scale.poleToPoleKm, glaciation.sheetBasinWavelengthKm * WorldScale.WORLD_HEIGHT_AS_SHARE_OF_WIDTH
-        ).coerceAtLeast(MIN_BASIN_CYCLES)
-        val hummockPeriod = (period * HUMMOCKS_PER_BASIN).coerceAtLeast(MIN_HUMMOCK_CYCLES)
-        val hummockPeriodDown = (periodDown * HUMMOCKS_PER_BASIN).coerceAtLeast(MIN_HUMMOCK_CYCLES)
+        // On lattices square on the ground, so a basin is as likely to run north-south as east-west.
+        // The basins' lattice used to cover as many cycles from pole to pole as round the equator,
+        // which on a map twice as wide as it is tall drew every basin twice as long east-west as
+        // north-south (the Earth-size audit's D2; docs/DESIGN_LEDGER.md, K1).
+        val basinLattice = GroundLattice(config, glaciation.sheetBasinWavelengthKm)
+        val hummockLattice = GroundLattice(config, glaciation.sheetBasinWavelengthKm / HUMMOCKS_PER_BASIN)
 
         // The hummocky lowering first, so that the basins below are cut against ground that has
         // already been planed and their rims cannot turn out to be lower than their floors.
@@ -2340,8 +2335,8 @@ object GlaciationStage {
                     val column = (walked % cellsAcross).toFloat()
                     val row = (walked / cellsAcross).toFloat()
                     sum += 0.5f + 0.5f * hummockNoise.fbm(
-                        column * hummockPeriod / cellsAcross, row * hummockPeriodDown / cellsDown,
-                        3, hummockPeriod, hummockPeriodDown
+                        hummockLattice.x(column), hummockLattice.y(row),
+                        3, hummockLattice.period, hummockLattice.period
                     )
                     samples++
                     walked = surfaceFlow[walked]
@@ -2394,7 +2389,7 @@ object GlaciationStage {
             val column = (cell % cellsAcross).toFloat()
             val row = (cell / cellsAcross).toFloat()
             val neighbour = 0.5f + 0.5f * basinNoise.fbm(
-                column * period / cellsAcross, row * periodDown / cellsDown, 3, period, periodDown
+                basinLattice.x(column), basinLattice.y(row), 3, basinLattice.period, basinLattice.period
             )
             raw[cell] = neighbour + glaciation.sheetConcavity * (concavity[cell] / concavityNorm).coerceIn(-1f, 1f)
         }
@@ -2558,17 +2553,11 @@ object GlaciationStage {
      */
     private const val STREAMLINE_CELLS = 6
 
-    /** The fewest basin cycles round the map or down it, so a tiny planet still has a pattern. */
-    private const val MIN_BASIN_CYCLES = 2
-
     /**
      * Hummocks per basin wavelength: the sheet's hummocky lowering is three times finer than the
      * basins it is cut between, so a basin holds a few hummocks rather than being one.
      */
     private const val HUMMOCKS_PER_BASIN = 3
-
-    /** The fewest hummock cycles round the map or down it, [MIN_BASIN_CYCLES]' twin. */
-    private const val MIN_HUMMOCK_CYCLES = 4
 
     /** The four orthogonal neighbours, wrapping east-west and stopping at the poles. */
     private inline fun forEachOrthogonal(

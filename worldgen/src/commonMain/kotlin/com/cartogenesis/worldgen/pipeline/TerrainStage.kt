@@ -4,6 +4,7 @@ import com.cartogenesis.worldgen.math.Fft2D
 import com.cartogenesis.worldgen.concurrent.parallelChunks
 import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.WorldGenConfig
+import com.cartogenesis.worldgen.noise.GroundLattice
 import com.cartogenesis.worldgen.noise.PerlinNoise
 import kotlin.math.PI
 import kotlin.math.sqrt
@@ -139,28 +140,20 @@ object TerrainStage {
         val eastwardNoise = PerlinNoise(config.seed)
         val southwardNoise = PerlinNoise(southwardNoiseSeed(config.seed))
 
-        // The noise lattice tiles this many times round the map east to west, which is what makes
-        // the world wrap, and is square on the ground, so down a world half as tall as it is wide
-        // it covers half as many cycles. A lattice with as many cycles down the map as across it
-        // is square in cells, and on this map's cells that drew every landform twice as long
+        // The noise lattice tiles whole cycles round the map east to west, which is what makes the
+        // world wrap, and is square on the ground, so down a world half as tall as it is wide it
+        // covers half as many cycles. A lattice with as many cycles down the map as across it is
+        // square in cells, and on this map's cells that drew every landform twice as long
         // east-west as north-south: the land's own outlines projected twice as far east-west on
-        // the ground (docs/GEOGRAPHY.md, and docs/DESIGN_LEDGER.md, Fix 2).
-        val latticeCyclesAcrossMap = terrain.baseFrequency
-        val rowScale = config.cellHeightInCellWidths
-        val latticeStepX = latticeCyclesAcrossMap.toFloat() / cellsAcross
-        val latticeStepY = (latticeCyclesAcrossMap * rowScale / cellsAcross).toFloat()
-        // Down the map the field is transformed as a periodic one like any other, so the lattice's
-        // period north-south is the cycles it covers when that is whole, and the pole-to-pole
-        // stretch joins up at the poles as it did before; at an odd count it is the period across,
-        // which the lattice never reaches, and the poles meet the transform's seam unjoined.
-        val cyclesDownMap = latticeCyclesAcrossMap * rowScale * cellsDown / cellsAcross
-        val wholeCyclesDown = kotlin.math.round(cyclesDownMap).toInt()
-        val latticePeriodY =
-            if (wholeCyclesDown >= 1 && kotlin.math.abs(cyclesDownMap - wholeCyclesDown) < 1e-9) wholeCyclesDown
-            else latticeCyclesAcrossMap
+        // the ground (docs/GEOGRAPHY.md, and docs/DESIGN_LEDGER.md, Fix 2). Down the map the field
+        // is transformed as a periodic one like any other, so the lattice's period there is the
+        // one that joins the poles when it can.
+        val lattice = GroundLattice(config, terrain.baseWavelengthKm)
+        val latticePeriodY = lattice.periodDownJoiningPoles
         // A slope along a row is a rise per cell width and one down a column a rise per row, and a
         // row is [rowScale] of a cell width on the ground, so the same slope on the ground is that
         // share of the rise per row.
+        val rowScale = config.cellHeightInCellWidths
         val southwardStrength = (terrain.gradientStrength * rowScale).toFloat()
 
         // Filled row-band per core. fbm() keeps no state between calls, and each cell writes only
@@ -172,19 +165,19 @@ object TerrainStage {
                 var cell = row * cellsAcross
                 for (column in 0 until cellsAcross) {
                     eastwardGradient.data[cell] = terrain.gradientStrength * eastwardNoise.fbm(
-                        column * latticeStepX,
-                        row * latticeStepY,
+                        lattice.x(column),
+                        lattice.y(row),
                         terrain.octaves,
-                        latticeCyclesAcrossMap,
+                        lattice.period,
                         latticePeriodY,
                         terrain.lacunarity,
                         terrain.gain
                     )
                     southwardGradient.data[cell] = southwardStrength * southwardNoise.fbm(
-                        column * latticeStepX,
-                        row * latticeStepY,
+                        lattice.x(column),
+                        lattice.y(row),
                         terrain.octaves,
-                        latticeCyclesAcrossMap,
+                        lattice.period,
                         latticePeriodY,
                         terrain.lacunarity,
                         terrain.gain

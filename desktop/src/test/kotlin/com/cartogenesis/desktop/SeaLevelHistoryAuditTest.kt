@@ -135,7 +135,7 @@ class SeaLevelHistoryAuditTest {
             val land = world.sea.isLand
             val scale = w / 512f
             val cap = world.config.let {
-                (it.sea.enclosedSeaMaxKm2 / it.squareKilometresPerCell).toInt()
+                (it.sea.enclosedSeaMaxKm2(it.scale) / it.squareKilometresPerCell).toInt()
             }
 
             val body = IntArray(size) { -1 }

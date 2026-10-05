@@ -544,7 +544,8 @@ class LakeWaterBalanceTest : BorrowsSharedWorlds() {
             w, h, ground, pending, water.toIntArray(), w * h, flowTarget,
             IntArray(w * h) { -1 }, 0, FloatArray(w * h), seed = 59758L,
             cellHeightInCellWidths = WorldGenConfig().cellHeightInCellWidths,
-            smoothFieldPeriodCells = com.cartogenesis.worldgen.pipeline.FlowRouting.smoothFieldPeriodCells(WorldGenConfig())
+            // The 512 by 512 grid's eight-cell smooth-field period, as lattice cells across this grid.
+            smoothFieldLatticeColumns = w / 8
         )
 
         val straight = Straightness()

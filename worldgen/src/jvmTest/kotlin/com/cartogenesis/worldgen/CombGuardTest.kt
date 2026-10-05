@@ -142,7 +142,7 @@ class CombGuardTest : BorrowsSharedWorlds() {
             val filled = FlowRouting.fillDepressions(config.width, config.height, isLand, field)
             val target = FlowRouting.flowDirections(
                 config.width, config.height, isLand, field, filled, config.seed,
-                config.cellHeightInCellWidths, FlowRouting.smoothFieldPeriodCells(config)
+                config.cellHeightInCellWidths, FlowRouting.smoothFieldLatticeColumns(config)
             )
             val census = CombCensus.of(
                 config, isLand, isLand, target, metres, SUSTAINED_KM, NEAREST_KM, FURTHEST_KM, RIDGE_METRES

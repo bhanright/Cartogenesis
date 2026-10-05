@@ -226,6 +226,12 @@ data class WorldScale(
     val worldAreaKm2: Double get() = worldWidthKm * worldWidthKm * WORLD_HEIGHT_AS_SHARE_OF_WIDTH
 
     /**
+     * How far the map runs from pole to pole, in kilometers: half the equator, on the
+     * equirectangular map. The north-south twin of [worldWidthKm], for a figure counted down the map.
+     */
+    val poleToPoleKm: Double get() = worldWidthKm * WORLD_HEIGHT_AS_SHARE_OF_WIDTH
+
+    /**
      * The planet's radius, in meters: the equator's length, [worldWidthKm], over two pi.
      *
      * The one place the planet's size becomes a radius. Everything whose physics reads the size of
@@ -272,8 +278,17 @@ data class WorldScale(
 /** Base terrain: the random gradient ("normal map") field that gets integrated into elevation. */
 @Serializable
 data class TerrainConfig(
+    /**
+     * Octaves of the base noise, each [lacunarity] times finer than the one before: eight carry
+     * [baseWavelengthKm] down to 23.4 km, the finest the 512 by 512 grid it was set on resolves.
+     */
     val octaves: Int = 8,
-    val baseFrequency: Int = 4,
+    /**
+     * The base noise's longest wavelength on the ground, in kilometers: 3,000 km, the 4 cycles
+     * round the 12,000 km world it was set as. Read as whole cycles round the planet, so the field tiles east-west, and on a lattice square
+     * on the ground (`GroundLattice`).
+     */
+    val baseWavelengthKm: Double = 3_000.0,
     val lacunarity: Float = 2f,
     /**
      * Octave falloff of the *gradient* field, not of the terrain. Integration divides amplitude by
@@ -715,8 +730,13 @@ data class TectonicsConfig(
      * stop flat plains routing water in straight parallel lines.
      */
     val detailAmplitude: Float = 0.012f,
-    /** Cycles across the map for that fine relief; also its noise period, so it tiles in X. */
-    val detailFrequency: Int = 96,
+    /**
+     * The fine relief's longest wavelength on the ground, in kilometers: 125 km, the 96 cycles
+     * round the 12,000 km world it was set as, and an order of magnitude under the belts it
+     * roughens. Read as whole cycles round the planet, so the noise tiles east-west
+     * (`GroundLattice`).
+     */
+    val detailWavelengthKm: Double = 125.0,
     /**
      * How much a mountain belt's height varies along its own length.
      *
@@ -726,13 +746,16 @@ data class TectonicsConfig(
      */
     val rangeVariation: Float = 0.88f,
     /**
-     * Cycles across the map for that variation — lower means longer, smoother swells.
+     * The wavelength of that variation along a belt, in kilometers — longer means longer,
+     * smoother swells.
      *
-     * Kept high enough that a long belt breaks into a chain of separate massifs rather than
-     * running unbroken from one end to the other. Where such a belt crosses submerged ground that
-     * is the difference between a continuous ruler-straight strip of land and an island arc.
+     * 923.1 km, the 13 cycles round the 12,000 km world it was set as. Kept short enough that a
+     * long belt breaks into a chain of separate massifs rather than running unbroken from one end
+     * to the other: the Andes, 7,000 km long, carries several. Where such a belt crosses submerged
+     * ground that is the difference between a continuous ruler-straight strip of land and an
+     * island arc.
      */
-    val rangeVariationCycles: Float = 13f,
+    val rangeVariationWavelengthKm: Double = 923.1,
     /**
      * Whether a convergent boundary's profile depends on which crusts are colliding.
      *
@@ -1159,7 +1182,7 @@ data class TectonicsConfig(
      * Held at three cells rather than the six first tried, for a reason about the *length* of a
      * belt rather than its cross-section. A blur is isotropic: at six cells and two passes its
      * reach is comparable to the saddles [rangeVariation] leaves between one massif and the next
-     * (about forty cells at 512 for [rangeVariationCycles] of thirteen), so it does not only round
+     * (about forty cells at 512 for a [rangeVariationWavelengthKm] of 923 km), so it does not only round
      * the profile, it fills the gaps and welds a chain of worn massifs into one continuous upland.
      * That is bad geography — the Appalachians are a province of separate ranges with valleys
      * through them — and it showed up downstream as one people holding 45% of seed 42's habitable
@@ -1543,7 +1566,8 @@ data class SeaConfig(
     val enclosedSeaIsLand: Boolean = true,
     /**
      * How large a body of unreachable water may be and still be turned into land, as a share of the
-     * map. Bigger ones are left as sea.
+     * planet's surface. Bigger ones are left as sea. [enclosedSeaMaxKm2] is the area it stands for
+     * on a given planet.
      *
      * The Caspian is 371,000 km² on a 510-million-km² Earth, which is 0.073% of the surface and the
      * largest lake this planet has; `OutletIncisionTest` already holds the generator to it for the
@@ -1562,14 +1586,16 @@ data class SeaConfig(
      *
      * At or below the cap, not above it, so a body exactly this size becomes a lake.
      *
-     * In square kilometres since the world had an area to state one against. The value is the
-     * Caspian's *share of Earth* — 0.073% — carried onto this map, which is 52,600 km² because
-     * this world is a seventh of Earth's surface. The Caspian itself is 371,000 km². Which of the
-     * two a world this size should use is a real question and not this chunk's to answer: seven
-     * times the cap turns several more inland seas into land on every seed and moves coastlines
-     * that nothing else in S1 touches. It is written up in `TODO.md`.
+     * A share of the surface because that is what the figure is: the Caspian's *share of Earth*,
+     * 0.073%, carried onto this planet, so the cap grows with the planet's area. On the 12,000 km
+     * world, a seventh of Earth's surface, it is 52,560 km², the figure it was held at in square
+     * kilometers until K1; on a world of Earth's size it is 371,000 km², the Caspian itself.
+     * Whether a world smaller than Earth should cap at the Caspian's own area rather than its
+     * share is a real question and not answered here: on the 12,000 km world seven times the cap
+     * turns several more inland seas into land on every seed and moves coastlines. It is written
+     * up in `TODO.md`.
      */
-    val enclosedSeaMaxKm2: Double = 52_560.0,
+    val enclosedSeaMaxShareOfSurface: Double = 0.00073,
     /**
      * Whether a basin the cut converts from unreachable sea to land gets its outlet cut, once,
      * after the cut.
@@ -1659,8 +1685,8 @@ data class SeaConfig(
      * pass grades.
      *
      * Earth's own figure, put into the model directly rather than reached through a threshold on
-     * the height of the land — the way [enclosedSeaMaxKm2] carries the Caspian's share of Earth's
-     * surface and `GlaciationConfig.maxLakeShareOfMap` carries Superior's. Luijendijk et al. (2018),
+     * the height of the land — the way [enclosedSeaMaxShareOfSurface] carries the Caspian's share of
+     * Earth's surface and `GlaciationConfig.maxLakeShareOfSurface` carries Superior's. Luijendijk et al. (2018),
      * *Scientific Reports* 8:6641, classify 31% of the world's ice-free shoreline as sandy from
      * three decades of satellite imagery; Bird (2000), *Coastal Geomorphology: An Introduction*,
      * puts the depositional share at about a third; Young and Carilli (2019) put the rocky share at
@@ -1697,7 +1723,10 @@ data class SeaConfig(
      * Off is the control its guard needs, and is the coast release 2.0.2 drew.
      */
     val drownedValleyFill: Boolean = true
-)
+) {
+    /** [enclosedSeaMaxShareOfSurface] on a planet of [scale]'s size, in square kilometers. */
+    fun enclosedSeaMaxKm2(scale: WorldScale): Double = enclosedSeaMaxShareOfSurface * scale.worldAreaKm2
+}
 
 @Serializable
 data class ClimateConfig(
@@ -2720,40 +2749,45 @@ data class GlaciationConfig(
      */
     val sheetLakeShare: Float = 0.02f,
     /**
-     * The largest single basin the ice may cut, in square kilometres.
+     * The largest single basin the ice may cut, as a share of the planet's surface.
      *
      * Not a tuning knob but a fact about worlds: Lake Superior, the largest lake on Earth that is
      * not a sea, is 82,100 km² against Earth's 510 million, which is 0.016% of the surface. A body
-     * of water larger than that share of a world is not a lake, it is the Caspian. Expressed
-     * as an area rather than in cells, so that 512, 1024 and 2048 draw the same lake: 42 cells at
-     * 512, 168 at 1024, 671 at 2048, every one of them 11,520 km². Superior's share of Earth
-     * carried onto a world a seventh of its size, so the same caveat as
-     * [SeaConfig.enclosedSeaMaxKm2] applies - the lake Earth actually has is seven times this.
+     * of water larger than that share of a world is not a lake, it is the Caspian. A share of the
+     * surface, so the cap grows with the planet's area as Superior's share says it should, and an
+     * area rather than a count of cells, so that every grid draws the same lake: on the 12,000 km
+     * world, a seventh of Earth's surface, it is 11,520 km², 42 cells of the 512 by 512 grid and
+     * 335 of the 5.9 km cells of 1,024 rows, and on a world of Earth's size it is Superior's own
+     * 82,100. The caveat [SeaConfig.enclosedSeaMaxShareOfSurface] carries applies.
      *
      * A basin over the cap is not thrown away — that would delete the lake country rather than
      * size it — it is peeled inward, ring by ring, until its floor fits. The rest of the blob keeps
      * the scour without the water.
      */
-    val maxLakeAreaKm2: Double = 11_520.0,
+    val maxLakeShareOfSurface: Double = 0.00016,
     /**
-     * The smallest basin the ice bothers to cut, in square kilometres.
+     * The smallest basin the ice bothers to cut, as a share of the planet's surface.
      *
-     * The floor that stops a finer grid from manufacturing speckle. A tenth of [maxLakeAreaKm2]
-     * is 1,152 km², Lake Geneva's order of magnitude, and roughly the smallest body a map of a
-     * whole world should draw at all.
+     * The floor that stops a finer grid from manufacturing speckle. A tenth of
+     * [maxLakeShareOfSurface], 1,152 km² on the 12,000 km world, Lake Geneva's order of magnitude
+     * and roughly the smallest body a map of a whole world should draw at all; a share because
+     * what a map of a whole world can draw grows with the world.
      *
-     * Four cells at 512, 17 at 1024, 67 at 2048. At 512 and 1024 [LakesConfig.minLakeAreaKm2] is
-     * still the binding floor, so this changes nothing there; at 2048 and above it takes over,
-     * which is the point.
+     * Four cells of the 512 by 512 grid and 33 of the 5.9 km cells of 1,024 rows on the 12,000 km
+     * world. [LakesConfig.minLakeAreaKm2], 3,296 km², is larger, and it is the floor the river
+     * stage holds every lake to, the ones in the basins the ice cuts among them.
      */
-    val minLakeAreaKm2: Double = 1_152.0,
+    val minLakeShareOfSurface: Double = 0.000016,
     /**
-     * The size of the basins, as the number of noise periods across the map.
+     * The size of the basins, as the wavelength of the noise that places them on the ground, in
+     * kilometers: 461.5 km, the 26 cycles round the 12,000 km world it was set as.
      *
-     * A fraction of the world rather than a count of cells, so the same world gains detail rather
-     * than changing character when it is generated at export resolution.
+     * A length on the ground rather than a count of cells or of cycles round the map, so the same
+     * world gains detail rather than changing character at a finer grid, and a larger planet has
+     * more basins of the same size rather than the same basins larger. The hummocks the sheet
+     * leaves between them are a third of it.
      */
-    val sheetBasinCycles: Float = 26f,
+    val sheetBasinWavelengthKm: Double = 461.5,
     /**
      * How much a cell's own hollowness counts toward being chosen as a basin, against the noise.
      *
@@ -2888,7 +2922,13 @@ data class GlaciationConfig(
     val fjordDepthMetres: Float = 2_000f,
     /** How far out to sea that basin reaches, in kilometres. */
     val fjordReachKm: Double = 140.625
-)
+) {
+    /** [maxLakeShareOfSurface] on a planet of [scale]'s size, in square kilometers. */
+    fun maxLakeAreaKm2(scale: WorldScale): Double = maxLakeShareOfSurface * scale.worldAreaKm2
+
+    /** [minLakeShareOfSurface] on a planet of [scale]'s size, in square kilometers. */
+    fun minLakeAreaKm2(scale: WorldScale): Double = minLakeShareOfSurface * scale.worldAreaKm2
+}
 
 /** Standing fresh water in basins the terrain does not drain. */
 @Serializable
@@ -3193,6 +3233,12 @@ data class WorldGenConfig(
 
     /** [kilometres] on the ground as a count of cells of this grid. */
     fun cellsFor(kilometres: Double): Float = scale.cellsAcrossFor(kilometres, width)
+
+    /**
+     * The whole cells that fit inside [kilometers] on the ground, counted along a row: the count
+     * rounded down, for a reach or a radius that must not run past the length it states.
+     */
+    fun cellsWithin(kilometers: Double): Int = kotlin.math.floor(cellsFor(kilometers)).toInt()
 
     /** [kilometres] on the ground as a whole number of cells, never fewer than [atLeast]. */
     fun wholeCellsFor(kilometres: Double, atLeast: Int = 1): Int =

@@ -456,7 +456,7 @@ object MapRasterizer {
                 val fromY = (fromCell / cellsAcross) + HALF_A_CELL
                 val toY = (toCell / cellsAcross) + HALF_A_CELL
                 val widthPixels =
-                    RiverPen.widthPixels(river.widthRatio[vertex], sheetWidthPixels)
+                    RiverPen.widthPixels(river.widthRatio[vertex], sheetWidthPixels, world.config.scale.worldWidthKm)
                 // The last drawn segment stops short of the water, so the round cap's outer
                 // edge lands on the shoreline; [trimmedAtTheShore] says why.
                 val reach =
@@ -920,7 +920,7 @@ object MapRasterizer {
         if (!intoWater) return whole
 
         val halfStrokePixels =
-            RiverPen.widthPixels(river.widthRatio[lastOnLand], sheet.widthPixels) / 2f
+            RiverPen.widthPixels(river.widthRatio[lastOnLand], sheet.widthPixels, world.config.scale.worldWidthKm) / 2f
         val toTheShorePixels = stepPixels(cells[lastOnLand], mouth, sheet) / 2f
         if (toTheShorePixels >= halfStrokePixels) {
             // The stroke ends on the last step, between that cell's centre and the shoreline.

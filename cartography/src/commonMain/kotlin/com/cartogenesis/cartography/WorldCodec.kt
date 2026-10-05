@@ -130,6 +130,15 @@ object WorldCodec {
     /**
      * The only version this build reads or writes.
      *
+     * 21 because the noise lattices and two areas became figures on the ground:
+     * `terrain.baseFrequency`, `tectonics.detailFrequency`, `tectonics.rangeVariationCycles` and
+     * `glaciation.sheetBasinCycles`, counts of cycles round the map, became `baseWavelengthKm`,
+     * `detailWavelengthKm`, `rangeVariationWavelengthKm` and `sheetBasinWavelengthKm`; and
+     * `sea.enclosedSeaMaxKm2`, `glaciation.maxLakeAreaKm2` and `glaciation.minLakeAreaKm2`, areas
+     * fixed at the 12,000 km world's, became `enclosedSeaMaxShareOfSurface`,
+     * `maxLakeShareOfSurface` and `minLakeShareOfSurface`. A format-20 file would open with this
+     * build's defaults for all seven, which on a planet of another size is a different world.
+     *
      * 20 because a rift's half-grabens became Earth's lengths in kilometers:
      * `tectonics.riftSegmentMin`, `riftSegmentMax` and `riftAccommodation`, shares of the map's
      * width, became `riftSegmentMinKm`, `riftSegmentMaxKm` and `riftAccommodationKm`. A format-19
@@ -269,7 +278,7 @@ object WorldCodec {
      * every cell-valued name took a `Cells` suffix. 3 was the container below with none of that, 2
      * the JSON text that preceded it; none of them opens.
      */
-    const val FORMAT_VERSION = 20
+    const val FORMAT_VERSION = 21
 
     private val MAGIC = byteArrayOf('C'.code.toByte(), 'G'.code.toByte(), 'W'.code.toByte(), 'D'.code.toByte())
 

@@ -364,7 +364,7 @@ object SeaLevelStage {
      *
      * The cut itself stays where the percentile put it. Solving instead for the rank at which the
      * *ocean* covers what the slider asks for was written and reverted; see
-     * [SeaConfig.enclosedSeaMaxKm2], `GEOGRAPHY.md` and docs/DESIGN_LEDGER.md, H5.
+     * [SeaConfig.enclosedSeaMaxShareOfSurface], `GEOGRAPHY.md` and docs/DESIGN_LEDGER.md, H5.
      */
     private fun markUnreachableWaterAsLand(
         base: SeaLevelResult,
@@ -415,9 +415,9 @@ object SeaLevelStage {
         if (bodyCount <= 1) return base
 
         // Anything bigger than the largest lake Earth has is a sea, whatever the connectivity says.
-        // See [SeaConfig.enclosedSeaMaxKm2], which carries the measurements this cap comes from.
+        // See [SeaConfig.enclosedSeaMaxShareOfSurface], which carries the measurements this cap comes from.
         val largestLakeCells =
-            (seaConfig.enclosedSeaMaxKm2 / squareKilometresPerCell).toInt()
+            (seaConfig.enclosedSeaMaxKm2(scale) / squareKilometresPerCell).toInt()
         val isLand = base.isLand.copyOf()
         val relativeElevation = base.relativeElevation.copy()
         val landHalfOfField = scale.landHalfOfField.coerceAtLeast(MIN_RANGE)
@@ -507,7 +507,7 @@ object SeaLevelStage {
                 filled,
                 config.seed,
                 config.cellHeightInCellWidths,
-                FlowRouting.smoothFieldPeriodCells(config),
+                FlowRouting.smoothFieldLatticeColumns(config),
                 config.facetRouting,
                 config.flatPotential
             )

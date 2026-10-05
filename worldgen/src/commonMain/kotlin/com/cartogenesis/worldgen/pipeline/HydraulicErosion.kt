@@ -880,7 +880,7 @@ internal object HydraulicErosion {
             )
             val directions = FlowRouting.flowDirections(
                 cellsAcross, cellsDown, sea.isLand, sea.relativeElevation, filled,
-                config.seed, config.cellHeightInCellWidths, FlowRouting.smoothFieldPeriodCells(config),
+                config.seed, config.cellHeightInCellWidths, FlowRouting.smoothFieldLatticeColumns(config),
                 config.facetRouting, config.flatPotential
             )
             // Discharge and not catchment: each cell hands on what falls on it, so what arrives
@@ -1373,7 +1373,7 @@ internal object HydraulicErosion {
                     val spoilFlow =
                         FlowRouting.flowDirections(
                             cellsAcross, cellsDown, after.isLand, spoilGround, spoilFilled,
-                            config.seed, config.cellHeightInCellWidths, FlowRouting.smoothFieldPeriodCells(config),
+                            config.seed, config.cellHeightInCellWidths, FlowRouting.smoothFieldLatticeColumns(config),
                             config.facetRouting,
                             config.flatPotential
                         )
@@ -1415,7 +1415,7 @@ internal object HydraulicErosion {
                 val opened = openMouths(
                     cellsAcross, cellsDown, working, provisionalSeaLevel, config.scale, spoil,
                     rates.pondDepth, config.seed, config.cellHeightInCellWidths,
-                    FlowRouting.smoothFieldPeriodCells(config), config.facetRouting,
+                    FlowRouting.smoothFieldLatticeColumns(config), config.facetRouting,
                     config.flatPotential,
                     rainfallMm, weightSums
                 )
@@ -1761,7 +1761,7 @@ internal object HydraulicErosion {
         pondDepth: Float,
         seed: Long,
         cellHeightInCellWidths: Double,
-        smoothFieldPeriodCells: Int,
+        smoothFieldLatticeColumns: Int,
         byFacet: Boolean,
         overPotential: Boolean,
         /** The march's rainfall in millimetres, floored; this pass normalises it for itself. */
@@ -1789,7 +1789,7 @@ internal object HydraulicErosion {
             FlowRouting.fillDepressions(cellsAcross, cellsDown, isLand, sea.relativeElevation)
         val flow = FlowRouting.flowDirections(
             cellsAcross, cellsDown, isLand, sea.relativeElevation, filled, seed, cellHeightInCellWidths,
-            smoothFieldPeriodCells,
+            smoothFieldLatticeColumns,
             byFacet, overPotential
         )
         // Weighted as the rounds weighted it, so a groove is cut where a river's water is and not

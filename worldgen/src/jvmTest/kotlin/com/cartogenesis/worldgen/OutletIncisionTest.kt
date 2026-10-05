@@ -325,7 +325,7 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
             val filled = FlowRouting.fillDepressions(SHELF_GRID, SHELF_GRID, isLand, field)
             val flow = FlowRouting.flowDirections(
                 SHELF_GRID, SHELF_GRID, isLand, field, filled, config.seed, config.cellHeightInCellWidths,
-                FlowRouting.smoothFieldPeriodCells(config)
+                FlowRouting.smoothFieldLatticeColumns(config)
             )
             val area = FlowRouting.accumulate(SHELF_GRID, SHELF_GRID, isLand, filled, flow, landCells.toInt()) { 1f }
             return Routed(relative.copyOf(), filled.data, flow, area.data)
@@ -516,7 +516,7 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
         // share and the mean is 0.46 times it. Seed 42's basin is 130,000 km² of ground against
         // the Caspian's 371,000, because this world is a seventh of Earth's size and a share of
         // *its* land is a seventh of the lake — the same reading `TODO.md` records for
-        // `SeaConfig.enclosedSeaMaxKm2`.
+        // `SeaConfig.enclosedSeaMaxShareOfSurface`.
         val pooledDrowned = drownedShares.average()
         println(
             "OUTLET pooled largest drowned basin %.4f%% of land, %.2fx the Caspian's share: %s"

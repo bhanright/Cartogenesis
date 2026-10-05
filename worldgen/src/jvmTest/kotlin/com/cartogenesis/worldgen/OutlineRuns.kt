@@ -103,7 +103,7 @@ internal object OutlineRuns {
      * chord of `sqrt(R)`, so its outline runs about `2 * sqrt(R)` cells along an axis before it
      * steps. A round body of `n` cells therefore shows a run of `2 * (n / pi)^(1/4)` — nine cells
      * for the 671-cell cap a 2048 grid gives
-     * [com.cartogenesis.worldgen.model.GlaciationConfig.maxLakeAreaKm2], and fourteen for a lake of
+     * [com.cartogenesis.worldgen.model.GlaciationConfig.maxLakeShareOfSurface], and fourteen for a lake of
      * four thousand. That is the floor for any shape and is not a defect; it is the grid, and a
      * rougher shore than a circle's runs *shorter*, not longer.
      *

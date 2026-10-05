@@ -48,6 +48,9 @@ class RiverWidthTest {
         val SEEDS = listOf(7L, 42L, 1234L)
         const val SIDE = 512
 
+        /** The planet every world here is made on, the default, which the pen's width is read against. */
+        val WORLD_WIDTH_KM = WorldScale().worldWidthKm
+
         /** The seeds for the mouth: the author's own, and the four the audit standardised on. */
         val MOUTH_SEEDS = listOf(298405L, 7L, 42L, 1234L, 99L)
 
@@ -131,7 +134,7 @@ class RiverWidthTest {
         (0.55f * (discharge / smallest).pow(0.28f)).coerceIn(0.5f, 2.8f).coerceAtLeast(0.9f)
 
     private fun pen(ratio: Float, cellsAcross: Int = SIDE): Float =
-        RiverPen.widthPixels(ratio, cellsAcross)
+        RiverPen.widthPixels(ratio, cellsAcross, WORLD_WIDTH_KM)
 
     /** The true-shape sheet's width for a world [side] cells square, which the drawn pen is a share of. */
     private fun sheetWidth(side: Int): Int = SheetGeometry.of(WorldScale(), side, side).widthPixels
@@ -238,7 +241,7 @@ class RiverWidthTest {
      */
     @Test
     fun `the rivers on a map use the whole of the pen the sheet allows`() {
-        val nib = RiverPen.fullPixels(SIDE) / RiverPen.HAIRLINE_PIXELS
+        val nib = RiverPen.fullPixels(SIDE, WORLD_WIDTH_KM) / RiverPen.HAIRLINE_PIXELS
         var worstNow = Double.MAX_VALUE
         var bestBefore = 0.0
         SEEDS.forEach { seed ->
@@ -273,9 +276,9 @@ class RiverWidthTest {
                 "seed $seed: the finest river is drawn %.2f px, not the hairline".format(narrowNow)
             )
             assertTrue(
-                abs(wideNow - RiverPen.fullPixels(SIDE)) < 0.01f,
+                abs(wideNow - RiverPen.fullPixels(SIDE, WORLD_WIDTH_KM)) < 0.01f,
                 "seed $seed: the biggest river is drawn %.2f px, not the full pen %.2f px"
-                    .format(wideNow, RiverPen.fullPixels(SIDE))
+                    .format(wideNow, RiverPen.fullPixels(SIDE, WORLD_WIDTH_KM))
             )
         }
         // The superseded rule's ends are its own clamps, 0.9 and 2.8 px, and have nothing to do
@@ -288,8 +291,8 @@ class RiverWidthTest {
         println(
             ("RIVERWIDTH the nib spans %.2fx at 512, %.2fx at 1024 and %.2fx at 2048; the drawn " +
                 "spread is %.2fx at 512, %.2fx under the superseded rule").format(
-                nib, RiverPen.fullPixels(1024) / RiverPen.HAIRLINE_PIXELS,
-                RiverPen.fullPixels(2048) / RiverPen.HAIRLINE_PIXELS, worstNow, bestBefore
+                nib, RiverPen.fullPixels(1024, WORLD_WIDTH_KM) / RiverPen.HAIRLINE_PIXELS,
+                RiverPen.fullPixels(2048, WORLD_WIDTH_KM) / RiverPen.HAIRLINE_PIXELS, worstNow, bestBefore
             )
         )
     }
@@ -422,7 +425,7 @@ class RiverWidthTest {
         listOf(512, 1024).forEachIndexed { k, side ->
             assertTrue(
                 abs(spans[k].first - RiverPen.HAIRLINE_PIXELS) < 1e-4f &&
-                    abs(spans[k].second - RiverPen.fullPixels(sheetWidth(side))) < 0.01f,
+                    abs(spans[k].second - RiverPen.fullPixels(sheetWidth(side), WORLD_WIDTH_KM)) < 0.01f,
                 "at $side the drawn pen ${spans[k]} is not the pen RiverPen declares"
             )
         }
@@ -579,7 +582,7 @@ class RiverWidthTest {
         val world = world(42L)
         val sheet = SheetGeometry.of(world)
         // Half the full pen on the sheet, in cells of the narrower side, and two for the cap.
-        val reach = (RiverPen.fullPixels(sheet.widthPixels) / 2f /
+        val reach = (RiverPen.fullPixels(sheet.widthPixels, WORLD_WIDTH_KM) / 2f /
             minOf(sheet.pixelsPerCellAcross, sheet.pixelsPerCellDown)).toInt() + 2
         val nearRiver = dilatedRiverMask(world, reach)
 

@@ -519,7 +519,7 @@ object PlateStage {
         // come out as straight parallel lines that never join. This gives the water something to
         // converge on.
         val detailNoise = PerlinNoise(config.seed * 7919 + 13)
-        val detailLattice = GroundLattice(config, tectonics.detailFrequency.toFloat())
+        val detailLattice = GroundLattice(config, tectonics.detailWavelengthKm)
 
         // How far in from the edge of its own crust each cell sits, 0 at the edge and 1 in the
         // craton. Both the crust's thickness and the relief it carries are read off it. With
@@ -972,9 +972,10 @@ object PlateStage {
      * crust is one thing or the other, everything in the band between — which keeps a continental
      * interior at exactly the level its column floats at and lets the margin wander.
      *
-     * The cycles are counted across the map rather than in cells, as every other noise in this file
-     * is, so a margin has the same shape at 512 and at 2048 with more of its octaves resolved, and
-     * on a lattice square on the ground, so it wanders as far north-south as east-west.
+     * The wavelength is a length on the ground rather than a count of cells, as every other noise
+     * in this file is, so a margin has the same shape at any grid with more of its octaves
+     * resolved and on a planet of any size, and on a lattice square on the ground, so it wanders
+     * as far north-south as east-west.
      */
     private fun roughenMargins(config: WorldGenConfig, continentalShare: FloatField) {
         val roughness = config.tectonics.marginRoughness
@@ -982,7 +983,7 @@ object PlateStage {
         val cellsAcross = config.width
         val cellsDown = config.height
         val noise = PerlinNoise(config.seed * 104729 + 6199)
-        val lattice = GroundLattice(config, MARGIN_CYCLES)
+        val lattice = GroundLattice(config, MARGIN_WAVELENGTH_KM)
         parallelChunks(0, cellsDown) { startRow, endRow ->
             for (row in startRow until endRow) {
                 for (column in 0 until cellsAcross) {
@@ -1322,13 +1323,13 @@ object PlateStage {
         val ageBandSpan = 1f / epochs
         // Every belt noise on a lattice square on the ground, so a belt swells, pinches and breaks
         // into massifs at the same spacing whichever way it runs.
-        val widthSwellLattice = GroundLattice(config, WIDTH_SWELL_CYCLES)
-        val roughnessLattice = GroundLattice(config, ROUGHNESS_CYCLES)
-        val rangeLattice = GroundLattice(config, tectonics.rangeVariationCycles)
-        val edgeJitterLattice = GroundLattice(config, EDGE_JITTER_CYCLES)
-        val arcChainLattice = GroundLattice(config, ARC_CHAIN_CYCLES)
-        // The relay crest's own irregularity, on a lattice whose cycles are a length on the ground.
-        val relayLattice = GroundLattice(config, (config.scale.worldWidthKm / RELAY_CREST_WAVELENGTH_KM).toFloat())
+        val widthSwellLattice = GroundLattice(config, WIDTH_SWELL_WAVELENGTH_KM)
+        val roughnessLattice = GroundLattice(config, ROUGHNESS_WAVELENGTH_KM)
+        val rangeLattice = GroundLattice(config, tectonics.rangeVariationWavelengthKm)
+        val edgeJitterLattice = GroundLattice(config, EDGE_JITTER_WAVELENGTH_KM)
+        val arcChainLattice = GroundLattice(config, ARC_CHAIN_WAVELENGTH_KM)
+        // The relay crest's own irregularity.
+        val relayLattice = GroundLattice(config, RELAY_CREST_WAVELENGTH_KM)
 
         run {
             val beltReachCells = cellWidths.boundaryFalloffCells
@@ -1389,13 +1390,12 @@ object PlateStage {
                         // thing that makes plate edges read as drawn on rather than grown. Real
                         // ranges swell, sag, and break into separate massifs.
                         val alongStrikeAmount = tectonics.rangeVariation.coerceIn(0f, 1f)
-                        val swellCycles = rangeLattice.period.coerceAtLeast(1)
                         val swell = rangeNoise.fbm(
                             rangeLattice.x(column),
                             rangeLattice.y(row),
                             3,
-                            swellCycles,
-                            swellCycles
+                            rangeLattice.period,
+                            rangeLattice.period
                         )
                         // Raised to a power so the belt spends more of its length low and rises
                         // into discrete massifs, rather than undulating gently about its mean. A
@@ -1813,7 +1813,7 @@ object PlateStage {
 
         val random = Random(config.seed * 31337 + 7)
         val sizeNoise = PerlinNoise(config.seed * 104729 + 4441)
-        val sizeLattice = GroundLattice(config, SEAMOUNT_SIZE_CYCLES)
+        val sizeLattice = GroundLattice(config, SEAMOUNT_SIZE_WAVELENGTH_KM)
         // A chain's lengths are in cell widths of ground, so a step north or south of one is this
         // many rows.
         val rowsPerCellWidth = (1.0 / config.cellHeightInCellWidths).toFloat()
@@ -2779,7 +2779,7 @@ object PlateStage {
     private class PlateWarp(config: WorldGenConfig) {
         private val warpX = PerlinNoise(config.seed * 6151 + 3)
         private val warpY = PerlinNoise(config.seed * 6151 + 9)
-        private val lattice = GroundLattice(config, WARP_CYCLES)
+        private val lattice = GroundLattice(config, WARP_WAVELENGTH_KM)
         private val amplitudeCellWidths =
             config.cellsFor(config.tectonics.boundaryFalloffKm) * WARP_AMPLITUDE_IN_BELT_WIDTHS
         private val amplitudeRows = (amplitudeCellWidths / config.cellHeightInCellWidths).toFloat()
@@ -3303,14 +3303,14 @@ object PlateStage {
     }
 
     /**
-     * How many times the margin noise repeats across the map, and over how many octaves.
+     * The margin noise's longest wavelength on the ground, in kilometers, and its octaves.
      *
-     * Twenty-four cycles is a base wavelength of twenty-one cells at 512 and eighty-five at 2048 —
-     * the scale of a coastal embayment — and six octaves carry it down to a third of a cell at 512.
-     * The coastline's box count is taken over four, eight and sixteen cells, all of which sit
-     * inside that range with power in them, which is the point. See [roughenMargins].
+     * 500 km, the scale of a coastal embayment: the 24 cycles round the 12,000 km world it was set
+     * as. Six octaves carry it down to 15.6 km, and the coastline's box count, taken over spans of
+     * tens to a few hundred kilometers, sits inside that range with power in it, which is the
+     * point. See [roughenMargins].
      */
-    private const val MARGIN_CYCLES = 24f
+    private const val MARGIN_WAVELENGTH_KM = 500.0
     private const val MARGIN_OCTAVES = 6
 
     /**
@@ -3318,13 +3318,14 @@ object PlateStage {
      * runs it between these two.
      *
      * A belt that keeps one width for its whole length reads as drawn on even once its height
-     * varies. [WIDTH_SWELL_CYCLES] is how many times that swell repeats across the map — slow
-     * enough that neighbouring cells agree and the belt stays continuous rather than dissolving
-     * into blotches.
+     * varies. [WIDTH_SWELL_WAVELENGTH_KM] is the swell's wavelength along the belt, 1,714.3 km,
+     * the 7 cycles round the 12,000 km world it was set as: slow enough that neighbouring cells
+     * agree and the belt stays continuous rather than dissolving into blotches, and several
+     * swells along a belt the length of the Andes.
      */
     private const val WIDTH_SWELL_MIN = 0.55f
     private const val WIDTH_SWELL_SPAN = 0.85f
-    private const val WIDTH_SWELL_CYCLES = 7f
+    private const val WIDTH_SWELL_WAVELENGTH_KM = 1_714.3
 
     /**
      * [WIDTH_SWELL_MIN] plus [WIDTH_SWELL_SPAN], written out rather than added.
@@ -3334,10 +3335,13 @@ object PlateStage {
      */
     private const val MAX_WIDTH_SCALE = 1.4f
 
-    /** The finer jitter of a belt's rim, on the same terms. See `edgeJitter` in [stampEpoch]. */
+    /**
+     * The finer jitter of a belt's rim, on the same terms, at a wavelength of 705.9 km: the 17
+     * cycles round the 12,000 km world it was set as. See `edgeJitter` in [stampEpoch].
+     */
     private const val EDGE_JITTER_MIN = 0.72f
     private const val EDGE_JITTER_SPAN = 0.56f
-    private const val EDGE_JITTER_CYCLES = 17f
+    private const val EDGE_JITTER_WAVELENGTH_KM = 705.9
 
     /** [EDGE_JITTER_MIN] plus [EDGE_JITTER_SPAN], written out for [MAX_WIDTH_SCALE]'s reason. */
     private const val MAX_EDGE_JITTER = 1.28f
@@ -3362,10 +3366,11 @@ object PlateStage {
     private const val RIM_HARMONICS = 3
 
     /**
-     * How many times the seamounts' size noise repeats round the map: nine, so neighbouring vents
-     * in a chain, fifteen cell widths apart, are sized alike and chains a plate apart are not.
+     * The seamounts' size noise's wavelength on the ground, in kilometers: 1,333.3 km, the 9
+     * cycles round the 12,000 km world it was set as, so neighbouring vents in a chain,
+     * [TectonicsConfig.hotspotSpacingKm] apart, are sized alike and chains a plate apart are not.
      */
-    private const val SEAMOUNT_SIZE_CYCLES = 9f
+    private const val SEAMOUNT_SIZE_WAVELENGTH_KM = 1_333.3
 
     /**
      * How far a plate seed is kept from each pole, as a share of the grid's height, and the band
@@ -3388,25 +3393,29 @@ object PlateStage {
     private const val SEED_REFERENCE_CELLS = 512
 
     /**
-     * How far the domain warp may push a plate boundary, in belt half-widths, and how many times
-     * its noise repeats across the map.
+     * How far the domain warp may push a plate boundary, in belt half-widths, and its noise's
+     * longest wavelength on the ground, in kilometers.
      *
      * Straight Voronoi edges are the one thing that makes a plate map look computed; the warp is
      * what makes a boundary meander. Kept comparable to the belt it carries, so the meander is of
-     * the same scale as the mountains along it.
+     * the same scale as the mountains along it. 2,000 km, the 6 cycles round the 12,000 km world
+     * it was set as: a bend or two along a boundary the length of a plate. Counted in cycles it
+     * stayed six on a world of Earth's size, where a bend is 6,679 km and the boundaries ran
+     * straight (docs/DESIGN_LEDGER.md, K1).
      */
     private const val WARP_AMPLITUDE_IN_BELT_WIDTHS = 1.6f
-    private const val WARP_CYCLES = 6f
+    private const val WARP_WAVELENGTH_KM = 2_000.0
 
     /**
-     * The along-strike modulation of a volcanic arc: [ARC_CHAIN_CYCLES] repeats across the map,
-     * raised to [ARC_CHAIN_EXPONENT] and scaled to [ARC_CHAIN_PEAK].
+     * The along-strike modulation of a volcanic arc: a wavelength of [ARC_CHAIN_WAVELENGTH_KM],
+     * 461.5 km, the 26 cycles round the 12,000 km world it was set as, raised to
+     * [ARC_CHAIN_EXPONENT] and scaled to [ARC_CHAIN_PEAK].
      *
      * Sampled fine and raised to a power, so the arc is a row of separate cones rather than a
      * continuous wall of one height. The peak above 1 is what lets the tallest cones in a chain
      * stand above the arc's nominal crest.
      */
-    private const val ARC_CHAIN_CYCLES = 26f
+    private const val ARC_CHAIN_WAVELENGTH_KM = 461.5
     private const val ARC_CHAIN_EXPONENT = 2.5f
     private const val ARC_CHAIN_PEAK = 1.6f
 
@@ -3426,13 +3435,14 @@ object PlateStage {
     private const val MIN_SEED_SEPARATION_CELLS = 1e-4f
 
     /**
-     * The per-cell roughness that breaks a belt's crest into peaks, between these two, repeating
-     * [ROUGHNESS_CYCLES] times across the map. Centred a little below 1 so it takes as much off a
-     * crest as it adds.
+     * The per-cell roughness that breaks a belt's crest into peaks, between these two, at a
+     * longest wavelength of [ROUGHNESS_WAVELENGTH_KM], 1,000 km, the 12 cycles round the
+     * 12,000 km world it was set as. Centred a little below 1 so it takes as much off a crest as
+     * it adds.
      */
     private const val ROUGHNESS_MIN = 0.75f
     private const val ROUGHNESS_SPAN = 0.5f
-    private const val ROUGHNESS_CYCLES = 12f
+    private const val ROUGHNESS_WAVELENGTH_KM = 1_000.0
 
     /** How much of the full ridge roughness a plateau feels: a plain at altitude, not a range. */
     private const val PLATEAU_ROUGHNESS_DAMPING = 0.7f

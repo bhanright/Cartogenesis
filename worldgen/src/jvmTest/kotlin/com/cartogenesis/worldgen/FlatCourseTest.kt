@@ -154,7 +154,7 @@ class FlatCourseTest : BorrowsSharedWorlds() {
         val filled = FlowRouting.fillDepressions(cellsAcross, cellsDown, isLand, ground)
         val surface = FlatRouting.surfaceOf(
             cellsAcross, cellsDown, isLand, ground, filled, config.seed, config.cellHeightInCellWidths,
-            FlowRouting.smoothFieldPeriodCells(config)
+            FlowRouting.smoothFieldLatticeColumns(config)
         )
         println(
             "F30B trench: %d flats over %d raised cells, %d kept the staircase; the flat's first cell stands %.3g above its entry"
@@ -188,11 +188,11 @@ class FlatCourseTest : BorrowsSharedWorlds() {
         // it, and put the share over the line it is meant to sit well under.
         var surfaceMs = Double.MAX_VALUE
         val rowScale = world.config.cellHeightInCellWidths
-        val period = FlowRouting.smoothFieldPeriodCells(world.config)
-        var surface = FlatRouting.surfaceOf(world.width, world.height, sea.isLand, sea.relativeElevation, filled, seed, rowScale, period)
+        val latticeColumns = FlowRouting.smoothFieldLatticeColumns(world.config)
+        var surface = FlatRouting.surfaceOf(world.width, world.height, sea.isLand, sea.relativeElevation, filled, seed, rowScale, latticeColumns)
         repeat(3) {
             val surfaceStarted = System.nanoTime()
-            surface = FlatRouting.surfaceOf(world.width, world.height, sea.isLand, sea.relativeElevation, filled, seed, rowScale, period)
+            surface = FlatRouting.surfaceOf(world.width, world.height, sea.isLand, sea.relativeElevation, filled, seed, rowScale, latticeColumns)
             surfaceMs = minOf(surfaceMs, (System.nanoTime() - surfaceStarted) / 1_000_000.0)
         }
         val passes = routingPassesPerGeneration(world.config)
@@ -291,7 +291,7 @@ internal object FlatCourse {
         val filled = world.rivers.filledElevation
         val flow = FlowRouting.flowDirections(
             world.width, world.height, sea.isLand, sea.relativeElevation, filled,
-            world.config.seed, world.config.cellHeightInCellWidths, FlowRouting.smoothFieldPeriodCells(world.config),
+            world.config.seed, world.config.cellHeightInCellWidths, FlowRouting.smoothFieldLatticeColumns(world.config),
             world.config.facetRouting,
             world.config.flatPotential
         )

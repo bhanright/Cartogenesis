@@ -730,7 +730,7 @@ class ClimateFedErosionTest {
         )
         val directions = FlowRouting.flowDirections(
             config.width, config.height, cut.isLand, cut.relativeElevation, filled,
-            config.seed, config.cellHeightInCellWidths, FlowRouting.smoothFieldPeriodCells(config),
+            config.seed, config.cellHeightInCellWidths, FlowRouting.smoothFieldLatticeColumns(config),
             config.facetRouting, config.flatPotential
         )
         val area = FlowRouting.accumulate(

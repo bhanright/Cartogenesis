@@ -63,7 +63,7 @@ internal object FlatRouting {
         filled: FloatField,
         seed: Long,
         cellHeightInCellWidths: Double,
-        smoothFieldPeriodCells: Int
+        smoothFieldLatticeColumns: Int
     ): Surface {
         val cellCount = width * height
         val ground = elevation.data
@@ -115,7 +115,7 @@ internal object FlatRouting {
             val entryHeight = highestEntryOf(width, height, members, memberCount, localIndex, surface, entryLevel)
             val potential = solvePotential(
                 width, height, members, memberCount, localIndex, surface, entryLevel, seed, cellHeightInCellWidths,
-                smoothFieldPeriodCells
+                smoothFieldLatticeColumns
             )
 
             if (potential != null &&
@@ -222,7 +222,7 @@ internal object FlatRouting {
         entryLevel: Double,
         seed: Long,
         cellHeightInCellWidths: Double,
-        smoothFieldPeriodCells: Int
+        smoothFieldLatticeColumns: Int
     ): DoubleArray? {
         val stencil = stencil(cellHeightInCellWidths)
         val diagonal = stencil.diagonal
@@ -290,7 +290,7 @@ internal object FlatRouting {
         val residual = DoubleArray(memberCount) {
             val cell = members[it]
             1.0 + RAIN_RELIEF * FlowRouting.smoothSeededField(
-                width, smoothFieldPeriodCells, cell % width, cell / width, seed xor RAIN_RELIEF_SALT
+                width, smoothFieldLatticeColumns, cell % width, cell / width, seed xor RAIN_RELIEF_SALT
             )
         }
         val runs = ColumnRuns(width, members, memberCount, localIndex, degree, northSouth)

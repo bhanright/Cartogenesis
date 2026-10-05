@@ -312,7 +312,7 @@ internal class Coast(world: WorldMap, label: String) {
     /**
      * And the ones the rule deliberately leaves: unreachable water larger than the Caspian, which is
      * an inland sea and not a lake. Reported, never asserted — E4's flooded rift segments are these,
-     * and turning them into lakes is what `SeaConfig.enclosedSeaMaxKm2` exists to stop.
+     * and turning them into lakes is what `SeaConfig.enclosedSeaMaxShareOfSurface` exists to stop.
      */
     val inlandSeas: Int
     val inlandSeaCells: Int
@@ -367,7 +367,7 @@ internal class Coast(world: WorldMap, label: String) {
         // The same cap the rule itself uses, on this world's own cells, so what this counts is
         // exactly what it should have taken and did not at whatever grid it was generated on.
         val cap = world.config.let {
-            (it.sea.enclosedSeaMaxKm2 / it.squareKilometresPerCell).toInt()
+            (it.sea.enclosedSeaMaxKm2(it.scale) / it.squareKilometresPerCell).toInt()
         }
         var pocketBodies = 0
         var pocketArea = 0

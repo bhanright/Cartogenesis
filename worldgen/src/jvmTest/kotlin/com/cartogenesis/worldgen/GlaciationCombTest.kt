@@ -160,7 +160,7 @@ class GlaciationCombTest : BorrowsSharedWorlds() {
         }
         // Recorded at K2: on the Earth-sized planet one ice-made lake is a straight one-cell line
         // (docs/DESIGN_LEDGER.md, K2; docs/TODO.md).
-        KnownFailures.expect("K2: an ice-made lake on the Earth-sized planet is a straight one-cell line along a D8 bearing", "unrecorded") {
+        KnownFailures.expect("K2: an ice-made lake on the Earth-sized planet is a straight one-cell line along a D8 bearing", "seed 42 at 1024 has 1") {
             if (straight.isNotEmpty()) {
                 throw RecordedViolation(
                     straight.joinToString("; ") + " lakes that are a straight one-cell line along a D8 bearing — a" +

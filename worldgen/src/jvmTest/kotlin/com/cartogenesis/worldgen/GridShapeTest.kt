@@ -161,10 +161,10 @@ class GridShapeTest : BorrowsSharedWorlds() {
             WorldGenerationEngine.generateBlocking(slantInRows),
             misses
         )
-        // Recorded at K2: on the Earth-sized planet the doubled slant moves the deserts less than
-        // the spread, which was measured on the 12,000 km planet's worlds (docs/DESIGN_LEDGER.md, K2;
-        // docs/TODO.md).
-        KnownFailures.expect("K2: the doubled slant moves the Earth-sized planet's deserts less than the 12,000 km planet's spread", "unrecorded") {
+        // Recorded at K2: on the Earth-sized planet the doubled slant moves one band's desert past
+        // the spread and no band's rain, the spreads measured on the 12,000 km planet's worlds
+        // (docs/DESIGN_LEDGER.md, K2; docs/TODO.md).
+        KnownFailures.expect("K2: the doubled slant moves the Earth-sized planet's rain less than the 12,000 km planet's spread", "deserts 1, rain 0") {
             if (misses.desert.isEmpty() || misses.rain.isEmpty()) {
                 throw RecordedViolation(
                     "a slant twice as steep moved past the spread: deserts ${misses.desert}; land rain ${misses.rain}",

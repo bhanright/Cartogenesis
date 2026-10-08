@@ -217,7 +217,7 @@ class MoistureBudgetTest : BorrowsSharedWorlds() {
         // Fix 2 to Q2.
         // Recorded at K2: on the Earth-sized planet more of the continents' rain last evaporated
         // from land than on Earth (docs/DESIGN_LEDGER.md, K2; docs/TODO.md).
-        KnownFailures.expect("K2: the Earth-sized planet's continental recycling ratio is over Earth's band", "unrecorded 1") {
+        KnownFailures.expect("K2: the Earth-sized planet's continental recycling ratio is over Earth's band", "0.506") {
             if (!(ratio > EARTH_RECYCLING_LOW && ratio < EARTH_RECYCLING_HIGH)) {
                 throw RecordedViolation(
                     ("the continental recycling ratio is %.3f, outside Earth's %.2f to %.2f")
@@ -278,7 +278,7 @@ class MoistureBudgetTest : BorrowsSharedWorlds() {
                 )
         )
         // Recorded as the clause above.
-        KnownFailures.expect("K2: the shipped ground return on the Earth-sized planet recycles over Earth's band", "unrecorded 2") {
+        KnownFailures.expect("K2: the shipped ground return on the Earth-sized planet recycles over Earth's band", "0.506") {
             if (!(proxyRatio > EARTH_RECYCLING_LOW && proxyRatio < EARTH_RECYCLING_HIGH)) {
                 throw RecordedViolation(
                     ("the shipped ground return puts the recycling ratio at %.3f, outside Earth's " +

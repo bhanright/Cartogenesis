@@ -645,7 +645,7 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
         )
         // Recorded at K2: the gallery's ground moved with K2's figures, and re-deriving a drawing
         // constant on it is the drawing's chunk (docs/TODO.md).
-        KnownFailures.expect("K2: the exaggeration was read off the gallery's ground before K2", "unrecorded") {
+        KnownFailures.expect("K2: the exaggeration was read off the gallery's ground before K2", "41.00") {
             if (kotlin.math.abs(declared - steepestClear) > EXAGGERATION_SWEEP_STEP / 2) {
                 throw RecordedViolation(
                     "the steepest exaggeration that pins no face of the cone is %.2f, not the declared %.4f"

@@ -936,7 +936,7 @@ class IsostasyTest : BorrowsSharedWorlds() {
         )
         // Recorded at K2: the Earth-sized planet's moat is shallower than a fifth of Airy's share
         // (docs/DESIGN_LEDGER.md, K2; docs/TODO.md).
-        KnownFailures.expect("K2: the moat round the Earth-sized planet's ice is shallower than its share of Airy's", "unrecorded") {
+        KnownFailures.expect("K2: the moat round the Earth-sized planet's ice is shallower than its share of Airy's", "moat 69 m of 433") {
             if (deepestMoat !in (thickest * airyRatio * MOAT_SHARE_OF_AIRY_FLOOR)..(thickest * airyRatio).toDouble()) {
                 throw RecordedViolation(
                     "the moat round the ice is ${"%.0f".format(deepestMoat)} m deep, which is not between" +

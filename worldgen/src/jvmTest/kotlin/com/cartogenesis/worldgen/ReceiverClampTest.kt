@@ -139,7 +139,7 @@ class ReceiverClampTest {
         )
         // Recorded at K2: on the Earth-sized planet the clamped incision leaves a channel cell below
         // its receiver, which the FastScape bound says it cannot (docs/DESIGN_LEDGER.md, K2; docs/TODO.md).
-        KnownFailures.expect("K2: the clamped incision leaves a channel cell below its receiver on the Earth-sized planet", "unrecorded") {
+        KnownFailures.expect("K2: the clamped incision leaves a channel cell below its receiver on the Earth-sized planet", "seed 7: 1") {
             if (holesWith.isNotEmpty()) {
                 throw RecordedViolation(
                     "the incision put channel cells below the cell they drain into over the twelve rounds, " +

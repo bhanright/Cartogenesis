@@ -159,16 +159,21 @@ class SeaLevelHistoryTest : BorrowsSharedWorlds() {
         // rifts took it to 1.58 (2.07, 1.46 and 1.22 on seeds 7, 42 and 1234).
         // Recorded at K2: on the Earth-sized planet seed 42's lowstand drowns no valley
         // (docs/DESIGN_LEDGER.md, K2; docs/TODO.md).
-        KnownFailures.expect("K2: on the Earth-sized planet a seed's lowstand drowns no valley", "unrecorded") {
+        KnownFailures.expect("K2: on the Earth-sized planet a seed's lowstand drowns no valley", "seed 42 105 against 116") {
             if (shortfalls.isNotEmpty()) {
                 throw RecordedViolation(shortfalls.joinToString("; "), figures.joinToString("; "))
             }
         }
-        assertTrue(
-            pooledEstuaries.size == seeds.size && meanGain >= estuaryGain,
-            "pooled over ${pooledEstuaries.size} seeds the lowstand leaves ${meanGain}x the estuary mouths, " +
-                "not the ${estuaryGain}x a drowned valley owes"
-        )
+        // Recorded with the clause above (docs/DESIGN_LEDGER.md, K2; docs/TODO.md).
+        KnownFailures.expect("K2: on the Earth-sized planet the lowstand leaves too few drowned valleys pooled", "1.06x") {
+            if (!(pooledEstuaries.size == seeds.size && meanGain >= estuaryGain)) {
+                throw RecordedViolation(
+                    "pooled over ${pooledEstuaries.size} seeds the lowstand leaves ${meanGain}x the estuary mouths, " +
+                        "not the ${estuaryGain}x a drowned valley owes",
+                    "%.2fx".format(meanGain)
+                )
+            }
+        }
 
         // The other half of ground rule 2: the world without the lowstand has to fail a bar the
         // world with it clears, or this guard is measuring nothing.

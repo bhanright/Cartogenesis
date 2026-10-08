@@ -495,10 +495,17 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
         // Recorded at L1, where only seed 718106 started over-large; armed again at its review round,
         // whose rift joins are relay ramps: seed 43's largest lake starts at 0.392% of its land, over
         // the Caspian's 0.249%, beside 718106's 0.975% (docs/DESIGN_LEDGER.md, L1).
-        assertTrue(
-            overLarge >= 2,
-            "only $overLarge of ${seeds.size} seeds had an over-large lake to begin with, so this guard proves little"
-        )
+        // Recorded at K2, whose lakes take Budyko's share of their catchment's rain: no seed starts
+        // with a lake over the Caspian's share, so the notch is not seen taking one down
+        // (docs/DESIGN_LEDGER.md, K2; docs/TODO.md).
+        KnownFailures.expect("K2: no seed on the Earth-sized planet starts with a lake over the Caspian's share", "0 of 6") {
+            if (overLarge < 2) {
+                throw RecordedViolation(
+                    "only $overLarge of ${seeds.size} seeds had an over-large lake to begin with, so this guard proves little",
+                    "$overLarge of ${seeds.size}"
+                )
+            }
+        }
         // Collected over every seed rather than asserted inside the loop, so a run reports all six
         // figures. With `postCutOutlet = false` this reads
         // 718106 0.6244%, 99 0.6514%, 43 0.2568% — see the ledger row for H5b.

@@ -100,8 +100,8 @@ internal class LakePockets private constructor(
      * Where the water stands in every pocket, given the water each leaf pocket's catchment sends it.
      *
      * [leafSupplyMm] is, per pocket, the runoff that reaches it in millimeter-cells before any lake
-     * is counted (zero for a joined pocket); [runoffFraction] is the share of rain that runs off
-     * land, so a cell under water swaps that share for the whole of its rain.
+     * is counted (zero for a joined pocket); a cell under water swaps its runoff, the share of its
+     * rain its ground sheds, for the whole of its rain.
      *
      * The supplies are added leaf by leaf in index order, each carried as far as it goes: into its
      * pocket, over the saddle when the pocket fills, down into the pocket across the saddle or, when
@@ -212,7 +212,7 @@ internal class LakePockets private constructor(
          *
          * [cells] are the basin's cells, [byGround] the same cells packed by [FlowRouting.encode] and
          * sorted, so equal ground falls to the lower index on every platform. [localIndex] is scratch,
-         * one entry per cell of the grid, all -1 on entry and left all -1. [rainMm] and
+         * one entry per cell of the grid, all -1 on entry and left all -1. [rainMm], [runoffMm] and
          * [evaporationMm] are per cell of the grid. The basin must be one eight-connected piece, as
          * the lakes' basins are.
          */
@@ -224,7 +224,7 @@ internal class LakePockets private constructor(
             ground: FloatArray,
             rainMm: FloatArray,
             evaporationMm: FloatArray,
-            runoffFraction: Float,
+            runoffMm: FloatArray,
             brim: Float,
             localIndex: IntArray
         ): LakePockets {
@@ -334,11 +334,12 @@ internal class LakePockets private constructor(
 
             val layout = IntArray(count) { cellAtRank[laidOutRank[it]] }
             val groundAt = FloatArray(count) { ground[layout[it]] }
-            val lakeShareOfRain = 1.0 - runoffFraction
+            // A cell under water takes the whole of its rain where its ground took its runoff.
             val netPrefix = DoubleArray(count + 1)
             for (index in 0 until count) {
                 val cell = layout[index]
-                netPrefix[index + 1] = netPrefix[index] + lakeShareOfRain * rainMm[cell] - evaporationMm[cell]
+                netPrefix[index + 1] =
+                    netPrefix[index] + (rainMm[cell] - runoffMm[cell]).toDouble() - evaporationMm[cell]
             }
             val lowestSinceOwnStart = DoubleArray(count)
             for (pocket in 0 until pocketCount) {

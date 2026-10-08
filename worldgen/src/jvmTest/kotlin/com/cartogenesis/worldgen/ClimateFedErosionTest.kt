@@ -441,7 +441,7 @@ class ClimateFedErosionTest {
         // Re-recorded on square cells at Q2 (docs/DESIGN_LEDGER.md, Q2). Re-recorded at L1, whose rifts are Earth's half-grabens and the same at every grid (docs/DESIGN_LEDGER.md, L1).
         KnownFailures.expect(
             "B-I2: the rain-dissection pin was set on rounds without the uplift",
-            "seed 7 at -0.021, seed 42 at 0.147, seed 1234 at 0.154, seed 99 at 0.124; seed 7's flat-rain control at -0.161, seed 99's flat-rain control at -0.090"
+            "; seed 42's flat-rain control at -0.010, seed 1234's flat-rain control at -0.003"
         ) {
             if (underThePin.isNotEmpty() || uncontrolled.isNotEmpty()) {
                 val found = underThePin.joinToString { (seed, fed) -> String.format(Locale.ROOT, "seed %d at %.3f", seed, fed) } +

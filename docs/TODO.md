@@ -1,48 +1,133 @@
 # To do
 
-- **The ocean stops solving on one control world since K1's square weather.** Seed 42 at 256 rows
-  with `ClimateConfig.pressureWinds` off, the belts' wind alone, stops at a relative residual of
-  0.00120 against the solve's 0.001 within its 200 V-cycles. Given a thousand, the world's own
-  solve gets there and the ocean re-solved on the standard world's sea stays at 0.0011985, a
-  floor; with the pressure winds on, and at 512 rows either way, it solves, as every other
-  standard seed does. The climate's weather noise alone does it (the
-  scour's change was taken out and the stall stayed). L1 met the same stall and took its change
-  back out; K1's change is the brief's, so four clauses that read the control world pass seed 42 by
-  under `OceanStall` (`OceanCurrentTest`'s gyres, `MeridionalWindTest`'s ridge, `PressureWindTest`'s
-  interior spread and sea-ice edge). A world whose ocean does not solve fails to generate, so the
-  question is the solver's floor and its tolerance, not the world. 2026-10-05, K1.
-- **Shares of a world's total that should be discharges or areas (K1).** Each is a share of a
-  quantity that differs from seed to seed, so it could not be restated at today's value without
-  moving every world, and the physics asks for an absolute: `NationsConfig.riverBorderShare` (a
-  share of the largest river's flow; a frontier river is big in cubic meters a second),
-  `NationStage.RIVERINE_FLOW_SHARE` (a share of the world's runoff; a settlement wants a
-  discharge), `HydraulicErosion.DRAWN_RIVER` and `ErosionConfig.deltaMinCatchment` (shares of the
-  land's water; a delta is built by a river's own discharge and load), and
-  `GlaciationConfig.minCatchment` and `fullCatchment` (shares of the planet's frozen ground; a
-  glacier asks for an area of snowfield). On a planet three times as wide each of them is nine
-  times as much water or ice. A chunk that restates them re-records every world. 2026-10-05, K1.
-- **Shares that move with the counts per world (K1).** `NationsConfig.maxBasinShare` and
-  `minBasinShare`, `CulturesConfig.maxRegionShare` and `minRegionShare`,
-  `BasinRealms.MIN_ISLAND_REALM_SHARE` and the landmarks' spacing are shares of the land, or set by
-  the land and a count, because what they size is the pieces of a count per world: realms
-  (`nationCount`), peoples (`cultureCount`) and landmarks (`LandmarksConfig.count`). They go onto
-  the ground when the counts do, which, with the plates', hotspots', epoch drift's and the atlas's
-  ranks, is the maintainer's decision. `epochDriftKm`'s KDoc now says a plate of a 14-plate world is
-  about 1,300 km in radius on the 12,000 km world and 4,300 on Earth's, so the same drift carries an
-  old belt past a plate's radius on the one and half of it on the other. 2026-10-05, K1.
-- **Out of K1's scope, from the Earth-size audit (2026-10-04).** D4, `NationsConfig.reach` and
-  `seedSpacing` are never read; D5, realms under their own floor at Earth's size (C-42 has a realm
-  of 670 km²), cause not isolated; D6, a lake of 4.23 Caspians in D-42 (Earth at 4,096 rows), the
-  lake-area chaos class with the old rain; and the glaciation's octagonal threshold window
-  (`GlaciationStage`, the relief window), which rule 13 bans.
+- **The atlas overhaul: what the Earth-sized planet left for the realms, peoples and landmarks
+  (K2).** K2 moved the default planet to Earth's 40,075 km and the geography with it; the atlas was
+  out of its scope and was only kept from crashing or hanging. What the overhaul must revisit:
+  - **Shares of the land that should be areas or discharges:** `NationsConfig.maxBasinShare` and
+    `minBasinShare`, `CulturesConfig.maxRegionShare` and `minRegionShare`,
+    `BasinRealms.MIN_ISLAND_REALM_SHARE`, the landmarks' spacing, `NationsConfig.riverBorderShare`
+    (a share of the largest river's flow; a frontier river is big in cubic meters a second) and
+    `NationStage.RIVERINE_FLOW_SHARE` (a share of the world's runoff; a settlement wants a
+    discharge).
+  - **The counts per world:** `nationCount`, `cultureCount` and `LandmarksConfig.count` are counts
+    of a world, so on the Earth-sized planet a realm is an Earth continent's size: seed 42 at 1,024
+    rows draws 15 realms, the largest 90 Mkm² and the median 6.6 (the probe at K2's head).
+  - **The ranks:** `Atlas.IMPERIAL_KM2` (1.65 Mkm²) and `CITY_STATE_KM2` (0.41 Mkm²) were set as
+    shares of the 12,000 km world, so on the Earth-sized planet nearly every realm is an empire and
+    none a free city.
+  - **D4 and D5 of the Earth-size audit:** `NationsConfig.reach` and `seedSpacing` are never read;
+    realms fall under their own floor at Earth's size (C-42 had one of 670 km²), cause not isolated.
+  - **The realm known failures:** `ClearStyleTest`'s realm fills under the margin, and
+    `OceanCurrentTest`'s warm coasts, which read the realms' habitability.
+  2026-10-08, K2.
+- **The plate partition has one population where Earth has two (K2).** Bird's PB2002 model (2003)
+  has 52 plates, 14 large and 38 small, and Morra, Seton, Quevedo and Müller (EPSL 373, 2013) find
+  plate sizes on Earth fall in two populations, a few large plates and a power law of small ones;
+  Sornette and Pisarenko (2003) fit the small ones' tail. The generator draws a warped Voronoi of
+  fifteen seeds: seed 42's plates on the sphere run from 2.77 to 0.28 of the 34.1 Mkm² mean, where
+  Earth's Pacific is 3.0 of it and its minor plates go down to 0.007. A partition that draws the
+  large plates and then the small ones at their boundaries, by those distributions, is its own
+  chunk, and moves every world. 2026-10-08, K2.
+- **The disc relief window has no graphics-card path (K2).** `GlaciationStage.localRelief` takes
+  the largest and smallest height within a disc on the ground (`ReliefWindowShape.DISC`, which
+  replaced the octagon rule 13 bans), one half-width slide per distinct row folded down the column.
+  Neither the octagon nor the disc ever had a device kernel; the project's rule asks for one behind
+  the accelerator seam, held to the processor's answer cell for cell. 2026-10-08, K2.
+- **A lake's evaporation is Thornthwaite's, which under-reads open water (K2).** K2's lakes take
+  Budyko's share of their catchment's rain (`LakeWaterBalance.runoffShareOfRain`), which took seed
+  42's largest lake at Earth's size from 2.79 Caspians to about one. What is left over a Caspian in
+  square kilometers sits in closed basins on a dry equator (seed 42's largest, at 5.7 S, takes 311
+  mm a year on it), and the water loses only Thornthwaite's potential evaporation, a land formula
+  read off air temperature: 979 mm a year on that lake at 24 and 18 C, where an open water surface
+  in that warmth loses more: Lake Victoria, at about the same temperature, some 1,500. Penman's combination equation, or a lake-evaporation
+  figure on the ground, is the next step; the Caspian guards pass on the share of land without it.
+  2026-10-08, K2.
+- **The glacier strength is the square root of the catchment's share, where Bahr's scaling gives
+  0.375 (K2).** `GlaciationStage`'s `strength`, which sets a trough's depth, half-width and ice
+  thickness, is `sqrt(ice / fullCatchmentCells)`; a valley glacier's thickness grows with its
+  area to the 0.375 under Bahr, Meier and Peckham's volume-area scaling (1997), which K2 cites for
+  the catchments' areas. Moving the exponent moves every glaciated world. 2026-10-08, K2.
+- **The drawing's constants and the site's figures were read off the 12,000 km planet (K2).** The
+  guards that hold a drawing constant at the cell size it was set on build their worlds on
+  `CalibrationPlanet`, the 12,000 km world with fourteen plates: the gallery (`TestWorlds`), the
+  isobaths, the relief shading's floor, haze, ordinary ground and exaggeration, the river pen's
+  span, the engraving's ink, the thermal aspect, the shelf contour, the comb guard and the
+  boundary-pair profiles. Three of them are K2 known failures, since even that planet's ground
+  moved with K2's figures (the exaggeration reads 41 where 37.5 is declared; the slope floor
+  0.054 against 0.06; ordinary ground 0.9106 against 0.8963). Each wants re-deriving on the
+  Earth-sized planet's 19.6 km cells, where the river pen is about one and a half pixels on the
+  2,048-pixel sheet, and the site's figures with them. 2026-10-08, K2.
+- **The everyday tier's 512 rows are 39 km cells on the Earth-sized planet (K2).** Guards whose
+  figure is a few cells of ground read the grid there: `GroundTextureTest`'s drainage density
+  (0.0067 km/km² against 0.0136 taken on 23 km cells), `GroundIsotropyTest`'s coastline, and the
+  operators and figures K2 moved to the calibration planet: the ground's texture, read against a
+  box 94 km in half-width, cannot tell the texture rule from the grid on 39 km cells, where the
+  control with the rule off already reads inside the record. Whether the everyday tier should be 1,024 rows on
+  the Earth-sized planet is a budget question. 2026-10-08, K2.
+- **The Earth-sized planet has half Earth's lowlands (K2).** Seed 42 at 1,024 rows holds 12.8% of
+  its land under 200 m, 19.9% at 200-500 m and 32.6% at 500 m-1 km, where Earth's hypsometry gives
+  25, 22 and 22; the 1-2 km band is 27.7% against 19. The plains stand too high, and the lowstand,
+  the deltas and the margins are the stages to read. 2026-10-08, K2.
+- **The Earth-sized planet's physical known failures (K2).** Recorded, each with its figure, where
+  a guard set on the 12,000 km planet's worlds reads the Earth-sized planet's and misses Earth's
+  figure: `CurrentFeedsRainTest` (seed 7's sample cold coast is shorter than the sample asks, and
+  its warm sample coast comes out half a percent drier with the coupling on),
+  `GlacialBasinShapeTest` (the ice leaves ground level to a meter over more than Salar de Uyuni's
+  10,582 km²), `GlaciationCombTest` (one ice-made lake a straight one-cell line along a D8
+  bearing, rule 13), `GroundTextureTest` (the drowned continental crust lies 0.47 within 800 km of
+  its edge against Earth's 0.80: the continents are flooded rather than shelved), `IceSheetTest`
+  (seed 7's sheet flows outward a hair short of what its dome owes), `IsostasyTest` (the moat round
+  the ice is under a fifth of Airy's share), `MeridionalWindTest` (seed 9's monsoon coast 0.10% of
+  land), `MoistureBudgetTest` (the continental recycling ratio about 0.5 against Earth's 0.30 to
+  0.45), `ReceiverClampTest` (the clamped incision leaves a channel cell below its receiver, which
+  the FastScape bound says it cannot: a numerical defect to trace), `SeaLevelHistoryTest` (seed
+  42's lowstand drowns no valley, and pooled the lowstand leaves 1.06 times the estuary mouths
+  where a drowned valley owes 1.5) and `LakeWaterBalanceTest` (the dry basin's lake spills into a
+  lower hollow that keeps no water, a playa downstream of a lake). And three instruments: `OutletIncisionTest`'s Caspian clause sees no seed start with a lake over the
+  Caspian's share, since K2's Budyko runoff, so it cannot show the notch taking one down and wants
+  seeds that do; `GridShapeTest`'s doubled-slant control moves no band of the Earth-sized
+  planet's rain past the spread measured on the 12,000 km planet's worlds, which wants
+  re-measuring there; and
+  `RibbonLandTest`'s strip is a share of the map's width (`w / 170`, 71 km of half-width on the
+  12,000 km planet and 236 km on Earth's), so the case runs on the calibration planet until the
+  strip is a width on the ground and the Earth-sized world is held to Earth's 0.7 to 1.0% of land.
+  2026-10-08, K2.
+- **The hotspot trails' plate turns are drawn from one measured turn (K2).** A plate turns at each
+  of the planet's reorganizations by an angle drawn uniformly up to the Hawaiian-Emperor bend's 60
+  degrees either way (`PlateStage.plateTurnRadians`): Earth gives the Pacific's turn well
+  measured and no distribution of them. The plates' present drift alone builds the belts, so the
+  turns live in the trails and nowhere else; a plate history that turns its plates at the same
+  reorganizations would carry them into the belts, the sutures and the old crust (the tectonic
+  history entry). 2026-10-08, K2.
 - **Land rain moves with the planet's size, wetter on a small one (K1).** With the conversion on
   the ground, seeds 42, 969495 and 7 at 256 rows rain 1.51 times as much on the land of a 6,000 km
   planet as on the 12,000 km one, and 0.94 times on a 24,000 km one (99.5th percentiles 1.32 and
-  0.94); at Earth's size, 1,024 rows, the land's mean is 395 and 348 mm on seeds 42 and 969495
-  against Earth's 715. `PlanetWidthRainTest` holds the change within the seeds' own spread, 1.63;
-  what moves it is not isolated: the continents, still a count per world, are another size in
-  kilometers, and the march has only the sea as a source (GEOGRAPHY, "The interior is drier than
-  Earth's"). Read it again when the counts per world go onto the ground. 2026-10-05, K1.
+  0.94). `PlanetWidthRainTest` holds the change within the seeds' own spread, 1.63. K2's figures
+  for the Earth-sized default are in the entry below. 2026-10-05, K1.
+- **The Earth-sized planet's land is dry, and a figure read per cell of the map reads it drier
+  (K2).** Mean land rain at 1,024 rows is 445, 353 and 505 mm on seeds 42, 969495 and 7, weighted
+  by area on the sphere, against Earth's 715; read per cell of the map, as the Earth-size audit and
+  K2's first figures read it, 303, 260 and 361, because a cell at 75 degrees stands for a quarter
+  of the ground a cell at the equator does and the polar land rains 63 to 69 mm. The rest of the
+  shortfall is three things, none of them a law K2 moved, and none tuned:
+  - **The interior.** Land more than 1,000 km from the sea rains 17 to 221 mm (per cell) and is 30%
+    of the land's cells on the Earth-sized planet, against 6% for the same seed on the 12,000 km
+    planet with fourteen plates, which rains 552 mm on the sphere. The march's only moisture source
+    is the sea (GEOGRAPHY.md, "The interior is drier than Earth's"), and a planet with Earth's
+    continents has Earth's interiors.
+  - **The equator.** Land within 10 degrees of it rains 808, 977 and 1,120 mm, where Earth's
+    equatorial land, the Amazon, the Congo and the islands between Asia and Australia, takes
+    1,500 to 2,500.
+  - **The sea.** The ocean takes 4,110 to 4,190 mm a year on the sphere against Earth's about 1,100,
+    eight to twelve times the land's figure where Earth's is one and a half: the march rains most of
+    its water out before it reaches a coast. Whether the millimeter conversion, which was set on the
+    land, means anything over the sea is the first question.
+  Plate count is not the cause: seed 42 with 14, 15 and 30 plates rains 483, 445 and 508 mm on the
+  sphere, the continents' draw moving rather than a trend. The same per-cell reading puts the land
+  at 38% of the map's cells and 34 to 37% of the sphere (Earth 29%, the sea-level setting being a
+  share of cells), and the ice-sheet biome at 3.9 to 4.1% of the land's cells and 1.8 to 2.5% of its
+  area (Earth 10.1%). The guards that hold a figure to Earth's read it per cell; reading them on the
+  sphere is a change of its own. 2026-10-08, K2.
 - **The sheet's streamlines are a count of cells (K1).** `GlaciationStage.STREAMLINE_CELLS`, six
   cells of flow line, is 141 km on the 512 by 512 grid's 23.4 km cells and 35 km on the 5.9 km cells
   of 1,024 rows, against hummocks 154 km long, so the drumlins' elongation falls as the grid is
@@ -1264,7 +1349,7 @@
   formula tends to on a fine grid; Q2 kept the formula because restating it would move every world
   at every grid, and a chunk that changes the tectonics should take it. 2026-09-28, Q2.
 
-- **Reopened 2026-10-03 at L1's review round.** L1's first rifts moved seed 42's ground and took the cell with it, and the clause was armed (closed 2026-09-29); with the rift valleys at Earth's width one sea cell of seed 42 at 512 rows stands over its shoreline again, where is not located, and `DataExportTest`'s clause is recorded again as a known failure. The cause is still not traced. *One sea cell of seed 42 at 512 rows stands above the shoreline the sea stage cut.* At column 33,
+- **Closed again 2026-10-08 at K2**, whose worlds have no sea cell over its shoreline; the clause is armed, and the cause of the cell L1's worlds had was never traced. **Reopened 2026-10-03 at L1's review round.** L1's first rifts moved seed 42's ground and took the cell with it, and the clause was armed (closed 2026-09-29); with the rift valleys at Earth's width one sea cell of seed 42 at 512 rows stands over its shoreline again, where is not located, and `DataExportTest`'s clause is recorded again as a known failure. The cause is still not traced. *One sea cell of seed 42 at 512 rows stands above the shoreline the sea stage cut.* At column 33,
   row 414, beside the land, 9.0e-5 of the field (about half a meter) over the line; the same seed on
   the 512 by 512 grid has none. `DataExportTest`'s open-sea clause, which the heightmap draws
   faithfully, runs as a known failure on it. Which of the sea stage's rules leaves water over the

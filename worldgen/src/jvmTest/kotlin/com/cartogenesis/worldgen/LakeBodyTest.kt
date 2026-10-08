@@ -89,7 +89,9 @@ class LakeBodyTest : BorrowsSharedWorlds() {
      * and seed 42's rift basin at 1,024 rows enough to fill it to the brim; left out whole, it lost
      * the tributaries that join such a path, and one of seed 7's basins was handed 0.68 of its rain.
      * The bar is the catchment itself, with a ten-thousandth either way for the order the two sums
-     * are taken in.
+     * are taken in, and never finer than a float can hold of the largest water the map carries: a
+     * basin in dry country is handed runoff a millionth of a trunk's, which the float fields carry
+     * to that trunk's last place and no finer (K2, where the runoff became Budyko's).
      */
     @Test
     fun `a closed basin's pockets are handed exactly the rain that reaches the basin`() {
@@ -98,7 +100,7 @@ class LakeBodyTest : BorrowsSharedWorlds() {
             val config = WorldGenConfig.forRows(seed, SharedWorlds.DETAIL_ROWS)
             val world = SharedWorlds.world(config)
             val solved = RiverStage.solvedBasins(config, world.sea, world.climate)
-            val rain = world.climate.precipitationMm.data
+            val rain = solved.runoffMm
             val reaching = FlowRouting.accumulate(
                 world.width, world.height, world.sea.isLand, world.rivers.filledElevation,
                 solved.routingAfterClosing, world.sea.landCellCount
@@ -109,14 +111,15 @@ class LakeBodyTest : BorrowsSharedWorlds() {
                 val rainReaching = if (basin.endorheic) {
                     basin.cells.filter { solved.routingAfterClosing[it] < 0 }.sumOf { reaching[it].toDouble() }
                 } else {
-                    basin.catchmentRainMm.toDouble()
+                    basin.catchmentRunoffMm.toDouble()
                 }
                 if (rainReaching <= 0.0) return@forEach
-                val ratio = basin.pocketRainMm / rainReaching
+                val ratio = basin.pocketRunoffMm / rainReaching
                 most = maxOf(most, ratio)
                 least = minOf(least, ratio)
-                if (kotlin.math.abs(ratio - 1.0) > SUMMING_ORDER) {
-                    failures += "seed $seed: a basin of ${basin.cells.size} cells handed %.4f of its catchment".format(ratio)
+                val floatFloor = Math.ulp(reaching.max()).toDouble()
+                if (kotlin.math.abs(basin.pocketRunoffMm - rainReaching) > maxOf(SUMMING_ORDER * rainReaching, floatFloor)) {
+                    failures += "seed $seed: a basin of ${basin.cells.size} cells handed %.4f of its catchment (%.6g of %.6g mm-cells; the largest runoff carried on the map %.6g)".format(ratio, basin.pocketRunoffMm, rainReaching, reaching.max())
                 }
             }
             println(

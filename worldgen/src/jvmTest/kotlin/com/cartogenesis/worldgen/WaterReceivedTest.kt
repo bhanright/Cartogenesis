@@ -65,7 +65,7 @@ class WaterReceivedTest {
         val upper = solved.basins.single { HandMadeWorlds.cellAt(config, 12, 32) in it.cells }
         val lower = solved.basins.single { HandMadeWorlds.cellAt(config, 34, 32) in it.cells }
         assertTrue(upper.endorheic, "the upper basin was meant to close; it overflows, so the fixture asks nothing")
-        assertTrue(upper.catchmentRainMm > 0f, "the upper basin has no rain on it, and with none the old order passes too")
+        assertTrue(upper.catchmentRunoffMm > 0f, "the upper basin has no rain on it, and with none the old order passes too")
         assertTrue(upper.exits.isNotEmpty() && lower.exits.isNotEmpty(), "a basin with no exit")
         assertTrue(
             reaches(solved.routingBeforeClosing, sea.isLand, upper.exits.first(), lower.cells.toHashSet()),
@@ -73,15 +73,15 @@ class WaterReceivedTest {
         )
 
         val lowerCells = lower.cells.toHashSet()
-        val reachingMm = rainReaching(solved.routingAfterClosing, sea.isLand, climate.precipitationMm.data, lowerCells)
+        val reachingMm = rainReaching(solved.routingAfterClosing, sea.isLand, solved.runoffMm, lowerCells)
         println(
             "CLOSED BASIN upper %d cells, %d exits, %.0f mm of rain, closed; lower %d cells, %d exits, inflow %.0f against %.0f reaching it"
-                .format(upper.cells.size, upper.exits.size, upper.catchmentRainMm, lower.cells.size, lower.exits.size, lower.catchmentRainMm, reachingMm)
+                .format(upper.cells.size, upper.exits.size, upper.catchmentRunoffMm, lower.cells.size, lower.exits.size, lower.catchmentRunoffMm, reachingMm)
         )
         assertEquals(
-            reachingMm, lower.catchmentRainMm.toDouble(), reachingMm * 1e-5,
+            reachingMm, lower.catchmentRunoffMm.toDouble(), reachingMm * 1e-5,
             "the lower basin was given %.0f mm of rain where %.0f reaches it: %.0f too many, against the %.0f the closed basin above it keeps"
-                .format(lower.catchmentRainMm, reachingMm, lower.catchmentRainMm - reachingMm, upper.catchmentRainMm)
+                .format(lower.catchmentRunoffMm, reachingMm, lower.catchmentRunoffMm - reachingMm, upper.catchmentRunoffMm)
         )
     }
 
@@ -146,12 +146,12 @@ class WaterReceivedTest {
             reaches(solved.routingBeforeClosing, sea.isLand, cell(12, 30), b.cells.toHashSet()),
             "A's water does not reach B on the routing the fill left"
         )
-        val rain = climate.precipitationMm.data
+        val rain = solved.runoffMm
         val intoA = rainReaching(solved.routingBeforeClosing, sea.isLand, rain, a.cells.toHashSet())
         val intoB = rainReaching(solved.routingAfterClosing, sea.isLand, rain, b.cells.toHashSet())
-        println("TWO EXITS A given %.0f against %.0f entering it; B given %.0f against %.0f reaching it".format(a.catchmentRainMm, intoA, b.catchmentRainMm, intoB))
-        assertEquals(intoA, a.catchmentRainMm.toDouble(), 1e-3, "A's inflow counted the path that leaves and returns twice, or missed an exit")
-        assertEquals(intoB, b.catchmentRainMm.toDouble(), 1e-3, "B was given rain that stops in A")
+        println("TWO EXITS A given %.0f against %.0f entering it; B given %.0f against %.0f reaching it".format(a.catchmentRunoffMm, intoA, b.catchmentRunoffMm, intoB))
+        assertEquals(intoA, a.catchmentRunoffMm.toDouble(), 1e-3, "A's inflow counted the path that leaves and returns twice, or missed an exit")
+        assertEquals(intoB, b.catchmentRunoffMm.toDouble(), 1e-3, "B was given rain that stops in A")
         assertTrue(solved.basins.indexOf(a) < solved.basins.indexOf(b), "B was solved before A, which feeds it")
     }
 
@@ -201,15 +201,15 @@ class WaterReceivedTest {
         assertTrue(reaches(solved.routingBeforeClosing, sea.isLand, cell(10, 30), b.cells.toHashSet()), "A does not feed B")
         assertTrue(reaches(solved.routingBeforeClosing, sea.isLand, cell(14, 35), a.cells.toHashSet()), "B does not feed A")
         assertTrue(a.endorheic && b.endorheic, "both basins were meant to close")
-        val rain = climate.precipitationMm.data
+        val rain = solved.runoffMm
         val intoA = rainReaching(solved.routingAfterClosing, sea.isLand, rain, a.cells.toHashSet())
         val intoB = rainReaching(solved.routingAfterClosing, sea.isLand, rain, b.cells.toHashSet())
         println(
             "FEEDING EACH OTHER %d group(s) solved together; A given %.0f against %.0f reaching it, B given %.0f against %.0f"
-                .format(solved.groupsSolvedTogether, a.catchmentRainMm, intoA, b.catchmentRainMm, intoB)
+                .format(solved.groupsSolvedTogether, a.catchmentRunoffMm, intoA, b.catchmentRunoffMm, intoB)
         )
-        assertEquals(intoA, a.catchmentRainMm.toDouble(), 1e-3, "A was given rain that stops in B")
-        assertEquals(intoB, b.catchmentRainMm.toDouble(), 1e-3, "B was given rain that stops in A")
+        assertEquals(intoA, a.catchmentRunoffMm.toDouble(), 1e-3, "A was given rain that stops in B")
+        assertEquals(intoB, b.catchmentRunoffMm.toDouble(), 1e-3, "B was given rain that stops in A")
         assertEquals(1, solved.groupsSolvedTogether, "the two basins were not found feeding each other")
     }
 
@@ -258,13 +258,13 @@ class WaterReceivedTest {
         val b = solved.basins.single { cell(12, 35) in it.cells }
         assertTrue(a.endorheic && b.endorheic, "both basins were meant to close")
         assertTrue(solved.basins.indexOf(b) < solved.basins.indexOf(a), "B was meant to be solved and closed first")
-        val rain = climate.precipitationMm.data
+        val rain = solved.runoffMm
         val intoA = rainReaching(solved.routingAfterClosing, sea.isLand, rain, a.cells.toHashSet())
         println(
             "KEPT BELOW A's pockets handed %.0f mm-cells against %.0f reaching it once B has closed (its catchment at its exits %.0f)"
-                .format(a.pocketRainMm, intoA, a.catchmentRainMm)
+                .format(a.pocketRunoffMm, intoA, a.catchmentRunoffMm)
         )
-        assertEquals(intoA, a.pocketRainMm, 1e-3, "A's pockets were handed other than the rain that reaches A")
+        assertEquals(intoA, a.pocketRunoffMm, 1e-3, "A's pockets were handed other than the rain that reaches A")
     }
 
     /** Whether the water from [start] enters [cells] on [routing]. */

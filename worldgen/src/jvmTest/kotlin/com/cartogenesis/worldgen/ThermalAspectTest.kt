@@ -2,6 +2,7 @@ package com.cartogenesis.worldgen
 
 import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.WorldGenConfig
+import com.cartogenesis.worldgen.model.WorldScale
 import com.cartogenesis.worldgen.pipeline.ErosionStage
 import kotlin.math.abs
 import kotlin.math.sqrt
@@ -31,8 +32,8 @@ class ThermalAspectTest {
 
     @Test
     fun `a settled slope stands at the critical gradient whichever way it faces`() = listOf(
-        WorldGenConfig(seed = 1L, width = SIDE, height = SIDE),
-        WorldGenConfig(seed = 1L, width = 2 * SIDE, height = SIDE)
+        WorldGenConfig(seed = 1L, width = SIDE, height = SIDE, scale = WorldScale(worldWidthKm = PLANET_KM)),
+        WorldGenConfig(seed = 1L, width = 2 * SIDE, height = SIDE, scale = WorldScale(worldWidthKm = PLANET_KM))
     ).forEach { config ->
         val cellsAcross = config.width
         val cellsDown = config.height
@@ -81,6 +82,14 @@ class ThermalAspectTest {
          * columns, whose square cells allow 1,406 m both ways.
          */
         const val SIDE = 256
+
+        /**
+         * The planet the mesa stands on, 12,000 km round, so that a 256 grid's cells are the ones
+         * above. On the Earth-sized planet they are 157 km across, a wall of one cell may hold
+         * 9,400 m, and the mesa would stand without a sweep; what is measured is the sweep, not the
+         * planet.
+         */
+        const val PLANET_KM = 12_000.0
 
         /** The mesa: 6,000 m above its plain, which no wall of one cell can hold either way. */
         const val MESA_METRES = 6_000.0

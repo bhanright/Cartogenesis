@@ -231,31 +231,36 @@ object RiverStage {
             FlowRouting.smoothFieldLatticeColumns(config),
             config.facetRouting, config.flatPotential
         )
-        val catchmentRainMm = if (config.lakes.enabled && config.lakes.waterBalance) {
+        val shedding = if (config.lakes.enabled && config.lakes.waterBalance) {
+            LakeWaterBalance.shedding(sea.isLand, climate, config.lakes.evaporationScale)
+        } else null
+        val catchmentRunoffMm = shedding?.let { water ->
             FlowRouting.accumulate(
                 cellsAcross, cellsDown, sea.isLand, filled, flowTarget, sea.landCellCount
-            ) { cell -> climate.precipitationMm.data[cell] }
-        } else null
-        val lakes = findLakes(config, sea, climate, filled, flowTarget, catchmentRainMm, solved)
+            ) { cell -> water.runoffMm[cell] }
+        }
+        solved?.runoffMm = shedding?.runoffMm ?: FloatArray(0)
+        val lakes = findLakes(config, sea, climate, filled, flowTarget, catchmentRunoffMm, shedding, solved)
         solved?.routingAfterClosing = flowTarget
         return Routed(filled, flowTarget, lakes)
     }
 
     /**
      * One closed basin as the water balance was handed it: its cells at spill level, the cells its
-     * water leaves by, the catchment rainfall in millimetre-cells that fed it, and whether the
+     * water leaves by, the catchment's runoff in millimeter-cells that fed it, and whether the
      * balance closed it.
      */
     internal class SolvedBasin(
         val cells: IntArray,
         val exits: IntArray,
-        val catchmentRainMm: Float,
+        val catchmentRunoffMm: Float,
         val endorheic: Boolean,
         /**
-         * The rain the balance handed the basin's pockets, summed over all of them, in
-         * millimeter-cells: what their catchments send them, before the runoff share is taken.
+         * The runoff the balance handed the basin's pockets, summed over all of them, in
+         * millimeter-cells: what their catchments send them, each cell's rain less what its own
+         * ground gives back to the air (`LakeWaterBalance.runoffShareOfRain`).
          */
-        val pocketRainMm: Double
+        val pocketRunoffMm: Double
     )
 
     /**
@@ -269,6 +274,8 @@ object RiverStage {
         var groupsSolvedTogether = 0
         var routingBeforeClosing = IntArray(0)
         var routingAfterClosing = IntArray(0)
+        /** Each cell's runoff, in millimeters a year, as the balance weighed it. */
+        var runoffMm = FloatArray(0)
     }
 
     /** [SolvedBasins] for the world [sea] and [climate] describe, routed as [generate] routes it. */
@@ -295,11 +302,13 @@ object RiverStage {
         flowTarget: IntArray
     ): SolvedBasins {
         val routing = flowTarget.copyOf()
-        val catchmentRainMm = FlowRouting.accumulate(
+        val shedding = LakeWaterBalance.shedding(sea.isLand, climate, config.lakes.evaporationScale)
+        val catchmentRunoffMm = FlowRouting.accumulate(
             config.width, config.height, sea.isLand, filled, routing, sea.landCellCount
-        ) { cell -> climate.precipitationMm.data[cell] }
+        ) { cell -> shedding.runoffMm[cell] }
         val solved = SolvedBasins()
-        findLakes(config, sea, climate, filled, routing, catchmentRainMm, solved)
+        solved.runoffMm = shedding.runoffMm
+        findLakes(config, sea, climate, filled, routing, catchmentRunoffMm, shedding, solved)
         solved.routingAfterClosing = routing
         return solved
     }
@@ -322,10 +331,10 @@ object RiverStage {
      * [flowTarget] is taken by this function and modified, rather than being read. A lake is
      * numbered basin by basin in cell-index order, and within a basin by its lowest cell.
      *
-     * **Upstream basins first, and a closed one takes its rain with it.** [catchmentRainMm] is
+     * **Upstream basins first, and a closed one takes its water with it.** [catchmentRunoffMm] is
      * accumulated once, over the routing as the fill left it, when every basin still spills; so at
-     * a lower basin's pour point it counts the rain of every basin above it. A basin the balance
-     * closes never sends that rain on, so the moment one is closed its catchment is taken out of
+     * a lower basin's pour point it counts the runoff of every basin above it. A basin the balance
+     * closes never sends that water on, so the moment one is closed its catchment is taken out of
      * every cell below its old spill, before any basin further down is solved. That needs the
      * basins upstream first, which is a topological order of the graph whose edges run from each
      * basin to the basin its exits' water reaches next on the routing the fill left; a group of
@@ -341,7 +350,8 @@ object RiverStage {
         climate: ClimateResult,
         filled: FloatField,
         flowTarget: IntArray,
-        catchmentRainMm: FloatField?,
+        catchmentRunoffMm: FloatField?,
+        shedding: LakeWaterBalance.Shedding?,
         solved: SolvedBasins?
     ): LakeResult {
         val cellsAcross = config.width
@@ -405,7 +415,7 @@ object RiverStage {
             } ?: cells[0]
         }
 
-        if (catchmentRainMm == null) {
+        if (catchmentRunoffMm == null || shedding == null) {
             val lakes = ArrayList<Lake>()
             for (basin in basins.indices) {
                 fillToBrim(lakeId, lakes, basins[basin], spillElevation[basin], outletCell[basin])
@@ -413,15 +423,10 @@ object RiverStage {
             return LakeResult(lakeId, lakes, playa, cellsAcross)
         }
 
-        // Potential evaporation is a per-cell property of the climate, not of any basin, so it is
-        // worth computing once rather than once per candidate level.
-        val evaporationMm = FloatArray(cellCount) { cell ->
-            if (!sea.isLand[cell]) 0f else LakeWaterBalance.potentialEvaporationMm(
-                climate.summerTemperature.data[cell],
-                climate.winterTemperature.data[cell],
-                lakesConfig.evaporationScale
-            )
-        }
+        // Potential evaporation and runoff are per-cell properties of the climate, not of any
+        // basin, so they are computed once rather than once per candidate level.
+        val evaporationMm = shedding.potentialEvaporationMm
+        val runoffMm = shedding.runoffMm
 
         // Where each basin's water leaves it: every cell of the basin whose receiver lies outside
         // it. Usually one, the pour point on the rim; where a rim is level for several cells the
@@ -488,14 +493,14 @@ object RiverStage {
             byGround.sort()
             LakePockets.build(
                 cellsAcross, cellsDown, cells, byGround, ground.data, climate.precipitationMm.data,
-                evaporationMm, lakesConfig.runoffFraction, spillElevation[basin], localIndex
+                evaporationMm, runoffMm, spillElevation[basin], localIndex
             ).also { pocketsCache[basin] = it }
         }
 
-        // The runoff each of a basin's leaf pockets receives, in millimeter-cells: the share of the
-        // rain on every basin cell that drains to it, and of everything [field] carries in from
-        // outside the basin at the cells its water enters by. A basin in [absorbing] keeps its
-        // water, so what it would have sent is not counted.
+        // The runoff each of a basin's leaf pockets receives, in millimeter-cells: the runoff of
+        // every basin cell that drains to it, and everything [field] carries in from outside the
+        // basin at the cells its water enters by. A basin in [absorbing] keeps its water, so what
+        // it would have sent is not counted.
         fun leafSuppliesOf(basin: Int, pockets: LakePockets, field: FloatArray, absorbing: (Int) -> Boolean): DoubleArray {
             // The water below the basin on the routing the fill left that is the basin's own: a
             // path that leaves the basin across a level rim can turn back into it further along, and
@@ -518,17 +523,16 @@ object RiverStage {
                 }
             }
             val supply = DoubleArray(pockets.pocketCount)
-            val runoff = lakesConfig.runoffFraction.toDouble()
             for (index in pockets.layout.indices) {
                 val cell = pockets.layout[index]
-                var arrivingMm = climate.precipitationMm.data[cell].toDouble()
+                var arrivingMm = runoffMm[cell].toDouble()
                 FlowRouting.forEachNeighbour(cellsAcross, cellsDown, cell % cellsAcross, cell / cellsAcross) { neighbor ->
                     val from = inBasin[neighbor]
                     if (from == basin || !sea.isLand[neighbor] || routingBeforeClosing[neighbor] != cell) return@forEachNeighbour
                     if (from >= 0 && absorbing(from)) return@forEachNeighbour
                     arrivingMm += (field[neighbor] - carriedOwnMm[neighbor]).coerceAtLeast(0.0)
                 }
-                supply[pockets.leafOfLaidOut[index]] += runoff * arrivingMm
+                supply[pockets.leafOfLaidOut[index]] += arrivingMm
             }
             for (cell in carriedTouched) carriedOwnMm[cell] = 0.0
             return supply
@@ -618,10 +622,10 @@ object RiverStage {
             )
         }
 
-        // The rain reaching every cell on the routing the fill left, with every basin in
+        // The runoff reaching every cell on the routing the fill left, with every basin in
         // [absorbing] keeping what reaches it: the exact field a sequence of single closures
         // arrives at, and what a group of basins feeding each other is measured with.
-        fun rainWithSinks(absorbing: (Int) -> Boolean): FloatArray {
+        fun runoffWithSinks(absorbing: (Int) -> Boolean): FloatArray {
             val routing = routingBeforeClosing.copyOf()
             for (cell in 0 until cellCount) {
                 val basin = inBasin[cell]
@@ -629,7 +633,7 @@ object RiverStage {
             }
             return FlowRouting.accumulate(
                 cellsAcross, cellsDown, sea.isLand, filled, routing, sea.landCellCount
-            ) { cell -> climate.precipitationMm.data[cell] }.data
+            ) { cell -> runoffMm[cell] }.data
         }
 
         for (group in groupsUpstreamFirst) {
@@ -639,13 +643,13 @@ object RiverStage {
                 // Every cell of the basin drains out through its exits, so the accumulation there
                 // is the whole catchment — the basin plus every slope that feeds it, less every
                 // closed basin above it.
-                val catchmentMm = inflowOf(basin, catchmentRainMm.data)
-                val supplies = leafSuppliesOf(basin, pockets, catchmentRainMm.data) { closed[it] }
+                val catchmentMm = inflowOf(basin, catchmentRunoffMm.data)
+                val supplies = leafSuppliesOf(basin, pockets, catchmentRunoffMm.data) { closed[it] }
                 val water = pockets.solve(supplies)
                 solved?.basins?.add(
                     SolvedBasin(
                         basins[basin].copyOf(), exitsOf[basin].copyOf(), catchmentMm, endorheic = !water.rootFull,
-                        pocketRainMm = supplies.sum() / lakesConfig.runoffFraction
+                        pocketRunoffMm = supplies.sum()
                     )
                 )
                 if (water.rootFull) continue
@@ -654,12 +658,12 @@ object RiverStage {
                 // any basin was closed: a closed basin below has re-pointed its own cells at its
                 // water, and the rain being taken out was counted along the way the fill sent it.
                 for (exit in exitsOf[basin]) {
-                    val leaving = catchmentRainMm.data[exit]
+                    val leaving = catchmentRunoffMm.data[exit]
                     var below = routingBeforeClosing[exit]
                     var steps = 0
                     while (below >= 0 && sea.isLand[below] && steps++ < cellCount) {
-                        catchmentRainMm.data[below] =
-                            (catchmentRainMm.data[below] - leaving).coerceAtLeast(0f)
+                        catchmentRunoffMm.data[below] =
+                            (catchmentRunoffMm.data[below] - leaving).coerceAtLeast(0f)
                         below = routingBeforeClosing[below]
                     }
                 }
@@ -683,7 +687,7 @@ object RiverStage {
             }
             var fields: List<FloatArray> = emptyList()
             for (pass in 0..group.size) {
-                fields = List(group.size) { member -> rainWithSinks(keepsItsWater(member)) }
+                fields = List(group.size) { member -> runoffWithSinks(keepsItsWater(member)) }
                 val next = BooleanArray(group.size) { member ->
                     val pockets = pocketsOf(group[member])
                     !pockets.solve(leafSuppliesOf(group[member], pockets, fields[member], keepsItsWater(member))).rootFull
@@ -699,14 +703,14 @@ object RiverStage {
                 solved?.basins?.add(
                     SolvedBasin(
                         basins[basin].copyOf(), exitsOf[basin].copyOf(), inflowOf(basin, fields[member]),
-                        endorheic = !water.rootFull, pocketRainMm = supplies.sum() / lakesConfig.runoffFraction
+                        endorheic = !water.rootFull, pocketRunoffMm = supplies.sum()
                     )
                 )
                 if (!water.rootFull) close(basin, pockets, water)
             }
             // Everything below the group sees its closures: the field re-taken whole, which the
             // single closures' subtractions would have arrived at one by one.
-            rainWithSinks { closed[it] }.copyInto(catchmentRainMm.data)
+            runoffWithSinks { closed[it] }.copyInto(catchmentRunoffMm.data)
         }
 
         // Lakes numbered basin by basin in cell-index order, and within a basin by the lowest cell

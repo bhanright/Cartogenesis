@@ -77,11 +77,19 @@ class BoundaryPairTest {
     private val ROUND_ON_THE_GROUND = 0.10
 
     /**
-     * The rows the hotspot cone is asserted at: 1,024, whose square cells are 5.9 km, the width a
-     * cell had across the 2048 by 2048 grid the case was written at, so the cone is as many cell
-     * widths across as it was when its bars were set, at half the cells.
+     * The rows the hotspot cone is asserted at: 1,024, whose square cells are 5.9 km on the 12,000 km
+     * planet the cone guard measures on ([CalibrationPlanet]), the width a cell had across the 2048
+     * by 2048 grid the case was written at. The largest cone, 72.5 km in radius since K2, is twelve
+     * of them; on the Earth-sized planet's 19.6 km cells it would be under four, where a cell is a
+     * quarter of the radius and no five-percent facet can be read.
      */
     private val FINE_ROWS = 1024
+
+    /**
+     * How far off a cell's center the cone guard stamps its vent, in cells: a third and a bit, a
+     * position no grid line or diagonal passes through.
+     */
+    private val CONE_OFF_CENTER_CELLS = 0.37f
 
     /**
      * The world with the plate-base step flattened, which is what makes the belts measurable.
@@ -100,9 +108,14 @@ class BoundaryPairTest {
      * of every comparison here are measured the same way, including the one-profile control, so
      * what is compared is the belts. Before S2 the same flattening was had by setting the plate
      * elevation bias to zero, which was the step's own setting.
+     *
+     * On the 12,000 km planet ([CalibrationPlanet]), where 256 rows are cells of 23 km and a rift's
+     * 55 km valley two of them; on the Earth-sized planet's 78 km cells the valley and its shoulders
+     * fall inside one cell and the rift has no profile to read. The belts are lengths on the
+     * ground, so their profiles are the same on either planet.
      */
     private fun platesOf(seed: Long, crustPairs: Boolean = true): Pair<WorldGenConfig, PlateResult> {
-        val config = WorldGenConfig.forRows(seed, SharedWorlds.COARSE_ROWS).let {
+        val config = CalibrationPlanet.of(WorldGenConfig.forRows(seed, SharedWorlds.COARSE_ROWS)).let {
             it.copy(
                 tectonics = it.tectonics.copy(crustPairProfiles = crustPairs),
                 isostasy = it.isostasy.copy(enabled = false)
@@ -356,7 +369,7 @@ class BoundaryPairTest {
      */
     private fun hotspotReach(base: WorldGenConfig, label: String): HotspotReach {
         val withChains = PlateStage.generate(base, TerrainStage.generate(base))
-        val without = base.copy(tectonics = base.tectonics.copy(hotspotPlateFraction = 0f))
+        val without = base.copy(tectonics = base.tectonics.copy(hotspotsPerMillionKm2 = 0.0))
         val flat = PlateStage.generate(without, TerrainStage.generate(without))
         var offset = 0.0
         for (i in withChains.height.data.indices) {
@@ -568,28 +581,42 @@ class BoundaryPairTest {
     }
 
     /**
-     * A seed 718106 hotspot cone's half-height radius read at sixteen bearings *on the ground*, in
+     * The largest hotspot cone's half-height radius read at sixteen bearings *on the ground*, in
      * cell widths: its mean, the relative amplitude of its eighth harmonic (the faceting the E3 guard
      * is about) and of its second (an ellipse, which is what a cone round in cells is on cells half
      * as tall as they are wide).
+     *
+     * One cone stamped on its own by the stage's own stamp, at [TectonicsConfig.hotspotRadiusKm],
+     * seed 718106's first vent. Read off a generated world, as this was until K2, the highest cone
+     * is whichever plume and volcano drew largest, and since K2 the median cone is drawn at about a
+     * third of the largest's radius (`PlateStage.plumeFluxShare`, `volcanoSizeShare`), a cone of a
+     * few cells whose ellipse is the grid's and not the stamp's.
      */
     private fun shape(rows: Int, detail: Boolean): Triple<Double, Double, Double> {
-        val config = WorldGenConfig.forRows(718106L, rows).let {
-            it.copy(tectonics = it.tectonics.copy(hotspotConeDetail = detail))
-        }
+        val config = CalibrationPlanet.of(WorldGenConfig.forRows(718106L, rows))
         val width = config.width
         val height = config.height
-        val withChains = PlateStage.generate(config, TerrainStage.generate(config))
-        val without = config.copy(tectonics = config.tectonics.copy(hotspotPlateFraction = 0f))
-        val flat = PlateStage.generate(without, TerrainStage.generate(without))
+        val stamped = com.cartogenesis.worldgen.model.FloatField(width, height)
+        PlateStage.stampSeamount(
+            uplift = stamped,
+            cellHeightInCellWidths = config.cellHeightInCellWidths.toFloat(),
+            plateId = IntArray(width * height),
+            plate = 0,
+            // Off the cell grid's own centers, as a vent carried by a drift is.
+            ventX = width / 2f + CONE_OFF_CENTER_CELLS,
+            ventY = height / 2f + CONE_OFF_CENTER_CELLS,
+            radius = config.cellsFor(config.tectonics.hotspotRadiusKm),
+            amplitude = 1f,
+            seed = config.seed,
+            ventIndex = 0,
+            detail = detail
+        )
 
-        val delta = FloatArray(width * height)
+        val delta = stamped.data
         var peakI = -1
         var peakV = 0f
         for (i in delta.indices) {
-            val d = withChains.height.data[i] - flat.height.data[i]
-            delta[i] = d
-            if (d > peakV) { peakV = d; peakI = i }
+            if (delta[i] > peakV) { peakV = delta[i]; peakI = i }
         }
         val cx = (peakI % width).toFloat()
         val cy = (peakI / width).toFloat()

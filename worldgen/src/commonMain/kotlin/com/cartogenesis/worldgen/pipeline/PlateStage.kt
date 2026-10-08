@@ -16,6 +16,7 @@ import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.exp
 import kotlin.math.floor
+import kotlin.math.ln
 import kotlin.math.pow
 import kotlin.math.roundToInt
 import kotlin.math.sin
@@ -1169,11 +1170,14 @@ object PlateStage {
      * cells; carried back in cells both ways, a plate drifting north travelled half as far as one
      * drifting east.
      *
-     * X wraps, because the world is a cylinder. Y clamps, because it is not: a plate whose drift
-     * points at a pole was, far enough back, at the pole and no further, and a seed off the edge
-     * of the grid has no Voronoi cell to own. Two seeds clamped onto the same cell is harmless —
-     * the later id simply takes the cell and the earlier plate has no region in that epoch, which
-     * is a plate that had not yet rifted away from its neighbour.
+     * X wraps, because the world is a cylinder. Y crosses the pole, because the world is a
+     * sphere: a seed carried north past the top row comes down the far side of the pole, half the
+     * equator round, as a path along a meridian does. With Earth's drift over an epoch, 8,400 km
+     * (`TectonicsConfig.plateSpeedMmPerYear`), a seed clamped at the edge instead, as it was when
+     * the drift was a tenth of that, would pile a third of the plates onto the polar rows. Two
+     * seeds on the same cell is harmless — the later id simply takes the cell and the earlier
+     * plate has no region in that epoch, which is a plate that had not yet rifted away from its
+     * neighbor.
      */
     internal fun displacedPlates(
         config: WorldGenConfig,
@@ -1183,10 +1187,19 @@ object PlateStage {
         val width = config.width
         val height = config.height
         val distanceRows = distanceCellWidths / config.cellHeightInCellWidths.toFloat()
-        var wrappedSeedX = (plate.seedX - plate.driftX * distanceCellWidths).roundToInt() % width
+        // Rows measured from the north pole's edge to a cell's middle, so a reflection at either
+        // pole is a reflection about the grid's own edge and lands on a whole row.
+        val fromNorthPole = plate.seedY + 0.5 - plate.driftY.toDouble() * distanceRows
+        val polesCrossed = kotlin.math.floor(fromNorthPole / height).toInt()
+        val withinOneSweep = fromNorthPole - polesCrossed.toDouble() * height
+        val overAPole = polesCrossed % 2 != 0
+        val rowFromNorth = if (overAPole) height - withinOneSweep else withinOneSweep
+        val seedY = kotlin.math.floor(rowFromNorth).toInt().coerceIn(0, height - 1)
+        val halfwayRound = if (overAPole) width / 2 else 0
+        var wrappedSeedX =
+            ((plate.seedX - plate.driftX * distanceCellWidths).roundToInt() + halfwayRound) % width
         if (wrappedSeedX < 0) wrappedSeedX += width
-        val clampedSeedY = (plate.seedY - plate.driftY * distanceRows).roundToInt().coerceIn(0, height - 1)
-        plate.copy(seedX = wrappedSeedX, seedY = clampedSeedY)
+        plate.copy(seedX = wrappedSeedX, seedY = seedY)
     }
 
     /**
@@ -1789,16 +1802,21 @@ object PlateStage {
      * Nearly free, and it puts islands somewhere other than a plate boundary — which is otherwise
      * the only place this generator has anything to offer the open ocean.
      *
+     * Fixed in the mantle and so drawn without regard to the plates: [TectonicsConfig.hotspotCount]
+     * points spread uniformly over the sphere, each carried by whichever plate lies over it.
      * Restricted to oceanic plates, so what comes out is island chains in deep water rather than
      * volcanic fields inland, and clipped to the carrying plate, so a trail stops at the boundary
-     * instead of running on across a neighbour that never passed over the hotspot.
+     * instead of running on across a neighbor that never passed over the hotspot. A point is
+     * read on the plate that owns its own cell, so the clip trims a chain where it leaves the plate
+     * and never erases one outright, which is what a point drawn on the map and stamped on a plate
+     * chosen apart from it did in the first version of this, on every seed tried.
      *
-     * Determinism: the plates are walked in id order and all three draws are taken for every plate
-     * whether or not it ends up carrying one, so the sequence does not depend on the outcome of any
-     * test — and never on a hash order. Each stamped seamount also gets a running index, walked in
-     * the same fixed order, which seeds its own rim modulation (see [stampSeamount]) — again never
-     * from a hash order, and never from the [Random] shared by the placement draws above, so tuning
-     * one does not reseed the other.
+     * Determinism: the hotspots are walked in draw order and both draws are taken for every one
+     * whether or not it lands on oceanic crust, so the sequence does not depend on the outcome of
+     * any test — and never on a hash order. Each stamped seamount also gets a running index, walked
+     * in the same fixed order, which seeds its own rim modulation (see [stampSeamount]) — again
+     * never from a hash order, and never from the [Random] shared by the placement draws above, so
+     * tuning one does not reseed the other.
      */
     private fun stampHotspotChains(
         config: WorldGenConfig,
@@ -1807,61 +1825,311 @@ object PlateStage {
         uplift: FloatField
     ) {
         val tectonics = config.tectonics
-        val cellWidths = BeltCellWidths.of(config)
-        if (tectonics.hotspotPlateFraction <= 0f || tectonics.hotspotHeight == 0f) return
-        if (cellWidths.hotspotRadiusCells <= 0f || cellWidths.hotspotSpacingCells <= 0f) return
-
-        val random = Random(config.seed * 31337 + 7)
-        val sizeNoise = PerlinNoise(config.seed * 104729 + 4441)
-        val sizeLattice = GroundLattice(config, SEAMOUNT_SIZE_WAVELENGTH_KM)
-        // A chain's lengths are in cell widths of ground, so a step north or south of one is this
-        // many rows.
-        val rowsPerCellWidth = (1.0 / config.cellHeightInCellWidths).toFloat()
-        var ventIndex = 0
-
-        plates.forEach { plate ->
-            val roll = random.nextFloat()
-            // Offset from the plate's own seed point, not a free point on the map. A hotspot
-            // placed anywhere at all lands on some other plate nineteen times in twenty, and the
-            // clip to the carrying plate in [stampSeamount] then erases the whole chain — which is
-            // exactly what the first version of this did, on every seed tried.
-            val spreadCellWidths = cellWidths.hotspotChainLengthCells * 0.3f
-            val originX = plate.seedX + (random.nextFloat() - 0.5f) * spreadCellWidths
-            val originY = plate.seedY + (random.nextFloat() - 0.5f) * spreadCellWidths * rowsPerCellWidth
-            if (plate.type != PlateType.OCEANIC) return@forEach
-            if (roll >= tectonics.hotspotPlateFraction) return@forEach
-
-            var travelledCells = 0f
-            while (travelledCells <= cellWidths.hotspotChainLengthCells) {
-                // The hotspot stays put and the plate slides over it, so the volcano it built a
-                // while ago has since been carried a while along the drift vector. Older means
-                // further along, and lower: the crust cools and the seamount subsides with it.
-                val ventX = originX + plate.driftX * travelledCells
-                val ventY = originY + plate.driftY * travelledCells * rowsPerCellWidth
-                val ageAlongChain = travelledCells / cellWidths.hotspotChainLengthCells
-                val sizeJitter = 0.6f + 0.8f * (0.5f + 0.5f * sizeNoise.fbm(
-                    sizeLattice.x(ventX), sizeLattice.y(ventY), 2, sizeLattice.period, sizeLattice.period
-                )).coerceIn(0f, 1f)
+        for (trail in hotspotTrails(config, plates, plateId)) {
+            for (vent in trail.vents) {
                 stampSeamount(
                     uplift = uplift,
                     cellHeightInCellWidths = config.cellHeightInCellWidths.toFloat(),
                     plateId = plateId,
-                    plate = plate.id,
-                    ventX = ventX,
-                    ventY = ventY,
-                    radius = cellWidths.hotspotRadiusCells,
-                    // The crust cools and the seamount subsides with it, as the square of age.
-                    amplitude = tectonics.hotspotHeight *
-                        (1f - ageAlongChain) * (1f - ageAlongChain) * sizeJitter,
+                    plate = trail.plate,
+                    ventX = vent.column,
+                    ventY = vent.row,
+                    radius = vent.radiusCellWidths,
+                    amplitude = vent.amplitude,
                     seed = config.seed,
-                    ventIndex = ventIndex,
+                    ventIndex = vent.index,
                     detail = tectonics.hotspotConeDetail
                 )
-                ventIndex++
-                travelledCells += cellWidths.hotspotSpacingCells
             }
         }
     }
+
+    /**
+     * One hotspot's trail: the [plate] that carries it and its volcanoes, youngest first.
+     *
+     * [vents] holds every volcano the hotspot built over [TectonicsConfig.hotspotChainLengthKm] of
+     * plate travel, including those carried off the plate's edge, which the stamp clips away.
+     */
+    internal class HotspotTrail(val plate: Int, val vents: List<HotspotVent>)
+
+    /**
+     * One volcano of a hotspot trail: where it stands now, as a column and a row of the map (not
+     * wrapped east-west), its base radius in cell widths of ground, its height in normalized
+     * elevation units, and its running [index] over the whole world, which seeds its rim and size.
+     */
+    internal class HotspotVent(
+        val column: Float,
+        val row: Float,
+        val radiusCellWidths: Float,
+        val amplitude: Float,
+        val index: Int
+    )
+
+    /**
+     * The volcanoes each hotspot on an oceanic plate has built, where they stand today: see
+     * [stampHotspotChains] for the placement and its determinism.
+     *
+     * A volcano built when the plate had travelled `s` since stands where the plume stood then,
+     * carried `s` along the plate's courses: the plume's position now, plus the plate's travel,
+     * minus the plume's own displacement since. A plume fixed in the mantle under a plate that never
+     * turns leaves a trail as straight as the plate's drift, and every trail on a plate parallel to
+     * the next, ruled lines across the ocean
+     * (docs/CONVENTIONS.md, rule 13). Earth's trails bend for two reasons, both drawn here. Plates
+     * change course: the Hawaiian-Emperor bend of 60 degrees is the Pacific plate turning about 47
+     * million years ago (Torsvik et al. 2017, see [LARGEST_PLATE_TURN_DEGREES]), and the Louisville
+     * chain on the same plate bends at the same age. So each plate's past drift turns at the planet's
+     * reorganizations, [REORGANIZATION_INTERVAL_KM] of travel apart, every trail on a plate bending
+     * at the same age and by the plate's own angle. And plumes move: the Hawaiian plume drifted south
+     * as the Emperor seamounts were built (Tarduno et al. 2003, see [PLUME_SPEED_SHARE_OF_PLATE]).
+     * Each plume here drifts at [plumeSpeedShare] of its plate's speed on a course that wanders over
+     * [PLUME_COURSE_KM] of plate travel, its own and not its neighbors', so no two trails are alike.
+     *
+     * The plate's present drift is the one the belts are built from; the turns before it are the
+     * trail's alone, since an epoch of [TectonicsConfig.epochLengthYears] holds one drift.
+     *
+     * Each plume also has its own strength ([plumeFluxShare]) and its volcanoes their own spacing
+     * ([ventSpacingShare]) and size ([volcanoSizeShare]): Earth's chains are neither one size nor
+     * evenly spaced.
+     *
+     * [plumeSpeedShare] and [plateTurns] are parameters so a guard can draw the fixed-plume,
+     * fixed-course trails it is set against; the generator always passes the defaults.
+     */
+    internal fun hotspotTrails(
+        config: WorldGenConfig,
+        plates: List<Plate>,
+        plateId: IntArray,
+        plumeSpeedShare: Float = PLUME_SPEED_SHARE_OF_PLATE,
+        plateTurns: Boolean = true
+    ): List<HotspotTrail> {
+        val tectonics = config.tectonics
+        val cellWidths = BeltCellWidths.of(config)
+        val hotspots = tectonics.hotspotCount(config.scale)
+        if (hotspots <= 0 || tectonics.hotspotHeight == 0f) return emptyList()
+        if (cellWidths.hotspotRadiusCells <= 0f || cellWidths.hotspotSpacingCells <= 0f) return emptyList()
+
+        val cellsAcross = config.width
+        val cellsDown = config.height
+        val random = Random(config.seed * 31337 + 7)
+        val sizeNoise = PerlinNoise(config.seed * 104729 + 4441)
+        val sizeLattice = GroundLattice(config, SEAMOUNT_SIZE_WAVELENGTH_KM)
+        val plumeCourseCells = config.cellsFor(PLUME_COURSE_KM)
+        val reorganizationCells = config.cellsFor(REORGANIZATION_INTERVAL_KM)
+        // How far the plates have travelled since the planet's latest reorganization: anywhere in
+        // one interval, drawn once for the world, since a reorganization is every plate's at once.
+        val latestReorganizationCells =
+            (unitDraw(config.seed xor REORGANIZATION_SALT, 0L) * reorganizationCells).toFloat()
+        // A chain's lengths are in cell widths of ground, so a step north or south of one is this
+        // many rows.
+        val rowsPerCellWidth = (1.0 / config.cellHeightInCellWidths).toFloat()
+        val trails = ArrayList<HotspotTrail>()
+        var ventIndex = 0
+
+        for (hotspot in 0 until hotspots) {
+            // Uniform on the sphere: uniform in longitude, and in the sine of latitude, since a
+            // band of latitude holds ground in proportion to the cosine.
+            val longitudeShare = random.nextDouble()
+            val sineOfLatitude = 2.0 * random.nextDouble() - 1.0
+            val rowsFromNorth =
+                (0.5 - kotlin.math.asin(sineOfLatitude) / PI) * cellsDown
+            val originX = (longitudeShare * cellsAcross).toFloat()
+            val originY = rowsFromNorth.toFloat()
+            val originCell = originY.toInt().coerceIn(0, cellsDown - 1) * cellsAcross +
+                originX.toInt().coerceIn(0, cellsAcross - 1)
+            val plate = plates[plateId[originCell]]
+            if (plate.type != PlateType.OCEANIC) continue
+
+            // A volcano's volume goes with its plume's flux, so its radius and height go with
+            // the flux's cube root, as [volcanoSizeShare]'s go with its own volume's.
+            val plumeSize = plumeFluxShare(config.seed, hotspot).pow(1.0 / 3.0).toFloat()
+            val initialHeadingRadians = unitDraw(config.seed xor PLUME_HEADING_SALT, hotspot.toLong()) * 2.0 * PI
+            // The plume's displacement since the youngest volcano was built, in cell widths of
+            // ground east and south.
+            var plumeShiftEast = 0f
+            var plumeShiftSouth = 0f
+            // How far the plate has carried the oldest volcano so far, east and south, on the
+            // courses it held since.
+            var carriedEast = 0f
+            var carriedSouth = 0f
+            val presentHeadingRadians = atan2(plate.driftY, plate.driftX).toDouble()
+            val vents = ArrayList<HotspotVent>()
+            var travelledCells = 0f
+            while (travelledCells <= cellWidths.hotspotChainLengthCells) {
+                // The plate slides over the plume, so the volcano it built a while ago has since
+                // been carried along the plate's courses, from wherever the plume then stood.
+                // Older means further along, and lower: the crust cools and the seamount subsides
+                // with it.
+                val ventX = originX + carriedEast - plumeShiftEast
+                val ventY = originY + (carriedSouth - plumeShiftSouth) * rowsPerCellWidth
+                val ageAlongChain = travelledCells / cellWidths.hotspotChainLengthCells
+                val sizeJitter = 0.6f + 0.8f * (0.5f + 0.5f * sizeNoise.fbm(
+                    sizeLattice.x(ventX), sizeLattice.y(ventY), 2, sizeLattice.period, sizeLattice.period
+                )).coerceIn(0f, 1f)
+                val volcanoSize = volcanoSizeShare(config.seed, ventIndex) * plumeSize
+                vents.add(
+                    HotspotVent(
+                        column = ventX,
+                        row = ventY,
+                        radiusCellWidths = cellWidths.hotspotRadiusCells * volcanoSize,
+                        // The crust cools and the seamount subsides with it, as the square of age.
+                        amplitude = tectonics.hotspotHeight *
+                            (1f - ageAlongChain) * (1f - ageAlongChain) * sizeJitter * volcanoSize,
+                        index = ventIndex
+                    )
+                )
+                val stepCells = cellWidths.hotspotSpacingCells * ventSpacingShare(config.seed, ventIndex)
+                // The plume's course over this step, in the middle of it.
+                val heading = initialHeadingRadians + 2.0 * PI * plumeCourseTurns(
+                    config.seed, hotspot, (travelledCells + stepCells / 2f) / plumeCourseCells
+                )
+                plumeShiftEast += plumeSpeedShare * stepCells * cos(heading).toFloat()
+                plumeShiftSouth += plumeSpeedShare * stepCells * sin(heading).toFloat()
+                // The plate's course over the same step: its present drift, turned by every
+                // reorganization the step lies before.
+                var plateHeading = presentHeadingRadians
+                if (plateTurns) {
+                    var reorganizationCellsAgo = latestReorganizationCells
+                    var reorganization = 0
+                    while (reorganizationCellsAgo < travelledCells + stepCells / 2f) {
+                        plateHeading += plateTurnRadians(config.seed, plate.id, reorganization)
+                        reorganizationCellsAgo += reorganizationCells
+                        reorganization++
+                    }
+                }
+                carriedEast += stepCells * cos(plateHeading).toFloat()
+                carriedSouth += stepCells * sin(plateHeading).toFloat()
+                ventIndex++
+                travelledCells += stepCells
+            }
+            trails.add(HotspotTrail(plate.id, vents))
+        }
+        return trails
+    }
+
+    /**
+     * A plume's buoyancy flux against the strongest on the planet, between [WEAKEST_PLUME_FLUX_SHARE]
+     * and 1, drawn from the world's seed and the hotspot's place in the draw.
+     *
+     * Sleep (*Hotspots and mantle plumes: some phenomenology*, J. Geophys. Res. 95, 1990) estimates
+     * the fluxes of 37 hotspots: they span a factor of twenty, Hawaii's 8.7 Mg/s the largest, and
+     * total 50 Mg/s, a mean of 1.35, 0.155 of Hawaii's. A density falling as the inverse square of
+     * the flux over that factor of twenty has both: its mean is ln 20 / 19, 0.158. Drawn by inverting
+     * its distribution, `1 / (20 - 19u)` for a uniform `u`. Most plumes are weak, and most chains
+     * are small, mostly drowned seamounts beside the occasional Hawaii.
+     */
+    private fun plumeFluxShare(seed: Long, hotspot: Int): Double {
+        val unit = unitDraw(seed xor PLUME_FLUX_SALT, hotspot.toLong())
+        val strongestOverWeakest = 1.0 / WEAKEST_PLUME_FLUX_SHARE
+        return 1.0 / (strongestOverWeakest - (strongestOverWeakest - 1.0) * unit)
+    }
+
+    /**
+     * The [hotspot]th plume's course against the heading drawn for it, in whole turns, once its
+     * plate has travelled [coursesTravelled] of [PLUME_COURSE_KM].
+     *
+     * A smooth wander along the plate's travel and nothing else: a knot at every whole course, each
+     * drawn uniformly within half a turn either way, eased between by smoothstep so the course
+     * bends rather than kinks. Half a turn either way, because a plume's course is free in every
+     * direction, so over one course it may come to head anywhere. In courses of travel, a length on
+     * the ground, and drawn per plume from the seed, so no two plumes wander alike and no map
+     * lattice is read.
+     */
+    private fun plumeCourseTurns(seed: Long, hotspot: Int, coursesTravelled: Float): Double {
+        val knot = floor(coursesTravelled).toInt()
+        val along = (coursesTravelled - knot).toDouble()
+        val eased = along * along * (3.0 - 2.0 * along)
+        fun knotTurns(index: Int): Double =
+            unitDraw(seed xor PLUME_COURSE_SALT, hotspot.toLong() * KNOTS_PER_PLUME + index) - 0.5
+        return knotTurns(knot) + (knotTurns(knot + 1) - knotTurns(knot)) * eased
+    }
+
+    /**
+     * How far [plate] turned at the [reorganization]th of the planet's reorganizations counted back
+     * from the present, in radians, positive clockwise on the map: uniform up to
+     * [LARGEST_PLATE_TURN_DEGREES] either way.
+     *
+     * Earth gives one plate's turn well measured, the Pacific's, and nothing like a distribution of
+     * them, so the draw takes it as the largest and lets every smaller turn be as likely.
+     */
+    private fun plateTurnRadians(seed: Long, plate: Int, reorganization: Int): Double {
+        val unit = unitDraw(seed xor PLATE_TURN_SALT, plate.toLong() * TURNS_PER_PLATE + reorganization)
+        return (2.0 * unit - 1.0) * LARGEST_PLATE_TURN_DEGREES * PI / 180.0
+    }
+
+    /**
+     * How far the [ventIndex]th volcano stands from the next older one, as a share of
+     * [TectonicsConfig.hotspotSpacingKm]: uniform over the 40 to 60 km the USGS gives between the
+     * Hawaiian volcanoes along each of their two lines, 0.8 to 1.2 of the 50 km middle. The spacing is
+     * the plate's bend under each new load (ten Brink 1991), which varies with the load and the
+     * plate; one spacing for every step drew a chain as evenly dashed as a ruled line.
+     */
+    private fun ventSpacingShare(seed: Long, ventIndex: Int): Float =
+        (1.0 - VENT_SPACING_SPREAD + 2.0 * VENT_SPACING_SPREAD *
+            unitDraw(seed xor VENT_SPACING_SALT, ventIndex.toLong())).toFloat()
+
+    /** A uniform draw in 0..1 from [seed] and [index], by [seedHash]'s mix: no shared [Random]. */
+    private fun unitDraw(seed: Long, index: Long): Double {
+        val bits = seedHash(seed, index)
+        return ((bits ushr 40) and 0xFFFFFF).toDouble() / 0xFFFFFF.toDouble()
+    }
+
+    /**
+     * How fast a plume drifts in the mantle against how fast its plate moves over it: 0.23.
+     *
+     * Tarduno et al. (*The Emperor Seamounts: southward motion of the Hawaiian hotspot plume in
+     * Earth's mantle*, Science 301, 2003) date and place the Emperor seamounts' lavas by their
+     * magnetization and find the Hawaiian plume moving south at more than 40 mm a year from 81 to 47
+     * million years ago, and about still since. Over the chain's 81 million years that is
+     * 40 × 34 / 81, 17 mm a year, against the Pacific plate's 72 over the hotspot (USGS; see
+     * [TectonicsConfig.hotspotChainLengthKm]): 0.23.
+     */
+    internal const val PLUME_SPEED_SHARE_OF_PLATE = 0.23f
+
+    /**
+     * How far a plate travels while its plume holds one course, in kilometers: 2,450, the Hawaiian
+     * plume's 34 million years of southward drift, 81 to 47 million years ago (Tarduno et al. 2003,
+     * see [PLUME_SPEED_SHARE_OF_PLATE]), at the Pacific plate's 72 mm a year.
+     */
+    internal const val PLUME_COURSE_KM = 2_450.0
+
+    /**
+     * The largest turn a plate makes at a reorganization, in degrees: 60, the Hawaiian-Emperor bend.
+     * Torsvik, Doubrovine, Steinberger, Gaina, Spakman and Domeier (*Pacific plate motion change
+     * caused the Hawaiian-Emperor Bend*, Nature Communications 8, 2017) show the plume's southward
+     * drift moved where the Emperor seamounts stand but cannot make the bend: the Pacific plate
+     * turned, about 47 million years ago, from nearly north, along the Emperor chain, to north-west,
+     * along the Hawaiian.
+     */
+    private const val LARGEST_PLATE_TURN_DEGREES = 60.0
+
+    /**
+     * How far a plate travels between the planet's reorganizations, in kilometers: 3,960, 55 million
+     * years at the Pacific plate's 72 mm a year. Matthews, Seton and Müller (*A global-scale plate
+     * reorganization event at 105-100 Ma*, EPSL 355-356, 2012) date the reorganization that bent
+     * Earth's largest set of fracture zones to 105 to 100 million years ago, and Torsvik et al. 2017
+     * the Pacific's turn at the Hawaiian-Emperor bend to about 47 (see [LARGEST_PLATE_TURN_DEGREES]):
+     * 55 million years apart.
+     */
+    private const val REORGANIZATION_INTERVAL_KM = 3_960.0
+
+    /** More reorganizations than any trail can reach back over, so each plate's turns draw apart. */
+    private const val TURNS_PER_PLATE = 1_000L
+
+    /** More course knots than any trail can reach, so each plume's knots draw apart. */
+    private const val KNOTS_PER_PLUME = 1_000L
+
+    /** The weakest plume's flux against the strongest's: Sleep's factor of twenty. See [plumeFluxShare]. */
+    private const val WEAKEST_PLUME_FLUX_SHARE = 1.0 / 20.0
+
+    /** Half the spread of a volcano's spacing about its mean, as a share of it. See [ventSpacingShare]. */
+    private const val VENT_SPACING_SPREAD = 0.2
+
+    /** Keeps each per-hotspot and per-vent draw apart from the others that hash the same seed. */
+    private const val PLUME_HEADING_SALT = 0x4EAD1A6L
+    private const val PLUME_FLUX_SALT = 0xF10C5L
+    private const val PLUME_COURSE_SALT = 0xC0A25EL
+    private const val PLATE_TURN_SALT = 0x7E2A1L
+    private const val REORGANIZATION_SALT = 0x2E0A6L
+    private const val VENT_SPACING_SALT = 0x5BAC1A6L
 
     /**
      * One seamount: a smooth cone of [radius] cell widths on the ground, wrapping in x and clipped
@@ -1882,7 +2150,7 @@ object PlateStage {
      * the single-sample, unmodulated stamp the guard measures its "before" against. See
      * docs/DESIGN_LEDGER.md, E3, for the eight-fold amplitudes at each grid.
      */
-    private fun stampSeamount(
+    internal fun stampSeamount(
         uplift: FloatField,
         cellHeightInCellWidths: Float,
         plateId: IntArray,
@@ -1961,6 +2229,36 @@ object PlateStage {
     }
 
     /**
+     * How large the [ventIndex]th volcano of a hotspot chain is against the largest a chain builds,
+     * as a share of its radius and height, between [SMALLEST_VOLCANO_VOLUME_SHARE]'s cube root and 1.
+     *
+     * A chain is a line of separate volcanoes of very different sizes, not a ridge of one cone
+     * repeated: the Island of Hawaii is 213,000 km³ in seven volcanoes (Robinson and Eakins,
+     * *Calculated volumes of individual shield volcanoes at the young end of the Hawaiian Ridge*,
+     * J. Volcanol. Geotherm. Res. 151, 2006), of which Mauna Loa alone is some 75,000 (USGS), so the
+     * other six average about a third of it, and a volcano's volume is drawn uniformly in its
+     * logarithm over the decade below Mauna Loa's. A cone of one shape has its radius and height
+     * as the cube root of its volume. Drawn per volcano, from the world's seed and the vent's own
+     * index, so the chain is beaded the way its volcanoes are; with every cone the size of the
+     * largest, [TectonicsConfig.hotspotSpacingKm] apart, the chain was a ridge of one width from
+     * end to end, a ruled line across the ocean (docs/CONVENTIONS.md, rule 13).
+     */
+    private fun volcanoSizeShare(seed: Long, ventIndex: Int): Float {
+        val unit = unitDraw(seed xor VOLCANO_SIZE_SALT, ventIndex.toLong())
+        val volumeShare = exp(unit * ln(SMALLEST_VOLCANO_VOLUME_SHARE))
+        return volumeShare.pow(1.0 / 3.0).toFloat()
+    }
+
+    /**
+     * A hotspot chain's smallest volcano against its largest, by volume: a tenth, the decade below
+     * Mauna Loa over which the chain's volcanoes are drawn. See [volcanoSizeShare].
+     */
+    private const val SMALLEST_VOLCANO_VOLUME_SHARE = 0.1
+
+    /** Keeps a volcano's size draw apart from its rim's, which hashes the same seed and index. */
+    private const val VOLCANO_SIZE_SALT = 0x5EAB0A7E5L
+
+    /**
      * A handful of low-order harmonics of the rim radius, amplitude and phase both drawn from
      * [hash]. Frequencies 2, 3 and 5 are chosen to stay well clear of 8: the guard reads the rim
      * at sixteen bearings, so a component at exactly the eighth harmonic is indistinguishable from
@@ -2036,7 +2334,7 @@ object PlateStage {
         val width = config.width
         val height = config.height
         val random = Random(config.seed * 7919 + 13)
-        val plateCount = config.tectonics.plateCount.coerceAtLeast(2)
+        val plateCount = config.tectonics.plateCount(config.scale)
         val shuffledOrder = MutableList(plateCount) { it }
         shuffledOrder.shuffle(random)
         val poleMarginRows = (SEED_REFERENCE_CELLS * SEED_POLE_MARGIN_SHARE).toInt()
@@ -2098,7 +2396,7 @@ object PlateStage {
         val tectonics = config.tectonics
         val width = config.width
         val height = config.height
-        val plateCount = tectonics.plateCount.coerceAtLeast(2)
+        val plateCount = tectonics.plateCount(config.scale)
 
         // Seeds and drifts first, all oceanic for now: the assignment below reads neither the
         // types nor anything derived from them, so the partition is settled before the crusts are.
@@ -3368,7 +3666,8 @@ object PlateStage {
     /**
      * The seamounts' size noise's wavelength on the ground, in kilometers: 1,333.3 km, the 9
      * cycles round the 12,000 km world it was set as, so neighbouring vents in a chain,
-     * [TectonicsConfig.hotspotSpacingKm] apart, are sized alike and chains a plate apart are not.
+     * [TectonicsConfig.hotspotSpacingKm] apart, are sized alike and chains a plate apart are not;
+     * one volcano against the next differs by [volcanoSizeShare] on top of it.
      */
     private const val SEAMOUNT_SIZE_WAVELENGTH_KM = 1_333.3
 

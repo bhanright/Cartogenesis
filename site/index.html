@@ -1094,7 +1094,7 @@
         <img class="relief-still" id="relief-still" src="img/relief-natural.webp" width="640" height="400" loading="lazy" decoding="async"
              alt="A peninsula in the Natural style: a ridge of brown hills along its south-east shore, forested valleys behind it whose rivers gather into a lake, and the sea falling away beyond the coast.">
         <canvas class="relief-canvas" id="relief-canvas" width="640" height="400" aria-hidden="true" hidden
-                data-heights="img/relief-heights.png" data-point-spacing="2" data-steps-per-metre="4" data-kilometres-per-pixel="2.9296875"></canvas>
+                data-heights="img/relief-heights.png" data-point-spacing="2" data-steps-per-metre="4" data-kilometres-per-pixel="9.783935546875"></canvas>
       </div>
       <figcaption>
         <span class="say">A 3D view of the same land, lit from the upper left. Move the pointer over it to tilt it.</span>
@@ -1377,7 +1377,7 @@
       <div><dt>Editing</dt><dd>Rename realms, capitals and landmarks, edit their details and notes, and place your own labels. Future updates will add a full atlas system for editing borders, landmarks and labels in more depth.</dd></div>
       <div><dt>Saves</dt><dd>Save a world and reopen the same file later, with your edits and labels.</dd></div>
       <div><dt>Export</dt><dd>Export the map as a PNG, WebP or JPEG image. You can also export the data behind it for other tools: a 16-bit heightmap with its scale in meters, and biome and realm maps with their legends. The desktop app makes every world at 1024, and its map images are 2048 × 1024 pixels.</dd></div>
-      <div><dt>Resolution</dt><dd>Every world is made on one grid of 1024 rows, each cell about 6 km across.</dd></div>
+      <div><dt>Resolution</dt><dd>Every world is made on one grid of 1024 rows, each cell about 20 km across.</dd></div>
       <div><dt>Acceleration</dt><dd>Optional graphics acceleration uses the graphics card to speed up erosion, ocean currents and ice sheets, through OpenGL on the desktop, and the desktop app draws exported maps on the graphics card.</dd></div>
     </dl>
   </section>
@@ -2246,12 +2246,12 @@ sudo apt update &amp;&amp; sudo apt install cartogenesis</code></pre><button typ
   var reliefCanvas = document.getElementById('relief-canvas');
   if (reliefCanvas && mayMove && window.fetch && window.createImageBitmap && window.Promise) {
     var reliefStill = document.getElementById('relief-still');
-    /* Heights are drawn this many times their true scale. The patch is some
-       1,900 km across and its range rises under 4 km (3,892 m when it was
-       drawn), so at its true scale the relief would stand a five-hundredth of
-       the patch's width: at twenty times the highest ground stands at about a
-       twenty-fourth of it, enough to see move as the patch tilts and not so much
-       that a valley hides behind its own hills. */
+    /* Heights are drawn this many times their true scale. Twenty was set on the
+       12,000 km planet, where the patch was some 1,900 km across and its range
+       rose under 4 km, so the highest ground stood at about a twenty-fourth of
+       the patch's width. On the Earth-sized planet the same 640 pixels are some
+       6,300 km and the patch is a different place; the factor and the patch
+       wait to be chosen again for it (docs/TODO.md). */
     var RELIEF_EXAGGERATION = 20;
     /* The farthest the patch tilts each way, in radians: fifteen degrees. */
     var MOST_TILT = 15 * Math.PI / 180;

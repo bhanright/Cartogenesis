@@ -130,6 +130,17 @@ object WorldCodec {
     /**
      * The only version this build reads or writes.
      *
+     * 22 because the default planet became Earth's, 40,075 km round, and the counts and shares
+     * that sized its tectonics, deltas and glaciers became Earth's figures on the ground:
+     * `tectonics.plateCount` became `meanPlateAreaKm2`, `hotspotPlateFraction`
+     * `hotspotsPerMillionKm2`, `epochDriftKm` `plateSpeedMmPerYear`; `erosion.deltaMinCatchment`
+     * became `deltaMinCatchmentKm2`; `glaciation.minCatchment` and `fullCatchment` became
+     * `minCatchmentKm2` and `fullCatchmentKm2`; `glaciation.reliefWindowOctagon` became
+     * `reliefWindowShape`; and `lakes.runoffFraction` is gone, the runoff now each cell's own
+     * (`LakeWaterBalance.runoffShareOfRain`). A format-21 file would open with this build's
+     * defaults for every one of them, and a planet it left at the default, 12,000 km then, would
+     * open 40,075 km round.
+     *
      * 21 because the noise lattices and two areas became figures on the ground:
      * `terrain.baseFrequency`, `tectonics.detailFrequency`, `tectonics.rangeVariationCycles` and
      * `glaciation.sheetBasinCycles`, counts of cycles round the map, became `baseWavelengthKm`,
@@ -278,7 +289,7 @@ object WorldCodec {
      * every cell-valued name took a `Cells` suffix. 3 was the container below with none of that, 2
      * the JSON text that preceded it; none of them opens.
      */
-    const val FORMAT_VERSION = 21
+    const val FORMAT_VERSION = 22
 
     private val MAGIC = byteArrayOf('C'.code.toByte(), 'G'.code.toByte(), 'W'.code.toByte(), 'D'.code.toByte())
 

@@ -345,7 +345,10 @@ class JumpFloodDistanceTest : BorrowsSharedWorlds() {
      */
     @Test
     fun `seed 42's shelf break follows a round contour`() {
-        val config = WorldGenConfig.forRows(42L, SharedWorlds.DETAIL_ROWS)
+        // On the 12,000 km planet: its shelf, 75 km wide, is six cells at 512 rows there and two on
+        // the Earth-sized planet's 39 km cells, too thin a band for the chamfer control's octagon
+        // to show, so on Earth's the control reads nothing and the guard could not fail.
+        val config = CalibrationPlanet.of(WorldGenConfig.forRows(42L, SharedWorlds.DETAIL_ROWS))
         val world = SharedWorlds.world(config)
         val w = world.width
         val h = world.height
@@ -439,7 +442,7 @@ class JumpFloodDistanceTest : BorrowsSharedWorlds() {
         KnownFailures.expect(
             "A-I11: the plain jump flood is not exact on land-mask sources, and seed 42's shelf is drawn off it",
             // Re-recorded at L1, whose rifts are Earth's half-grabens and the same at every grid (docs/DESIGN_LEDGER.md, L1).
-            "7 cells, the worst 0.0031 cell widths at (614,217)"
+            "8 cells, the worst 0.0031 cell widths at (665,265)"
         ) {
             if (offCells > 0) {
                 val found = String.format(

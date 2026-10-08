@@ -43,8 +43,12 @@ import kotlin.test.assertTrue
 class IncrementalReuseTest {
 
     // Seed 99 rather than the usual 42, because 42 at this size has no lakes at all and the
-    // lakes case then passes without ever exercising the setting it names.
-    private val base = WorldGenConfig.forRows(99L, REUSE_ROWS)
+    // lakes case then passes without ever exercising the setting it names. On the 12,000 km planet
+    // ([CalibrationPlanet]), where 128 rows are cells of 46.9 km: on the Earth-sized planet's 157 km
+    // cells the uplift, shelf and littoral settings move no cell of the world, and a setting that
+    // moves nothing cannot show its stage's guard working. The reuse chain is the engine's, and
+    // the same on a planet of any size.
+    private val base = CalibrationPlanet.of(WorldGenConfig.forRows(99L, REUSE_ROWS))
 
     @Test
     fun `reusing stages gives the same world as generating afresh`() {
@@ -73,7 +77,7 @@ class IncrementalReuseTest {
             ),
             "terrain" to base.copy(terrain = base.terrain.copy(octaves = base.terrain.octaves - 1)),
             "tectonics" to base.copy(
-                tectonics = base.tectonics.copy(plateCount = base.tectonics.plateCount + 3)
+                tectonics = base.tectonics.withPlateCount(base.tectonics.plateCount(base.scale) + 3, base.scale)
             ),
             // The crust's own settings, which the plate stage reads to turn a crust into an
             // altitude and the erosion stage reads to bend the plate under what it moves.
@@ -182,7 +186,7 @@ class IncrementalReuseTest {
             // an endorheic basin rewrites the flow targets under it and takes its catchment out of
             // everything downstream. A stale river stage would show up here and nowhere else.
             "waterBalance" to base.copy(lakes = base.lakes.copy(waterBalance = false)),
-            "runoffFraction" to base.copy(lakes = base.lakes.copy(runoffFraction = 0.08f)),
+            "evaporationScale" to base.copy(lakes = base.lakes.copy(evaporationScale = 0.5f)),
             "ocean" to base.copy(ocean = base.ocean.copy(enabled = !base.ocean.enabled)),
             "upwelling" to base.copy(ocean = base.ocean.copy(upwelling = !base.ocean.upwelling)),
             "nations" to base.copy(nations = base.nations.copy(nationCount = base.nations.nationCount + 4)),

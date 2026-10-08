@@ -50,7 +50,7 @@ class BayHeadDeltaAuditTest {
     private fun config(graded: Boolean): WorldGenConfig {
         val base = WorldGenConfig.forRows(718106L, 512).copy(seaLevel = 0.62f)
         val authored = base.copy(
-            tectonics = base.tectonics.copy(plateCount = 14),
+            tectonics = base.tectonics.withPlateCount(14, base.scale),
             nations = base.nations.copy(nationCount = 12)
         ).atResolution(4096, 2048)
         return authored.copy(erosion = authored.erosion.copy(gradedAggradation = graded))

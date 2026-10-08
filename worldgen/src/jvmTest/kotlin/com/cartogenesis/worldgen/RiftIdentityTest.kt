@@ -211,7 +211,7 @@ class RiftIdentityTest {
     /**
      * A stretch of rift keeps its half-grabens when another stretch of the same pair comes or goes.
      *
-     * Seed 42's north-south rift is cut in two places, 250 km apart and more than the trough's
+     * Seed 42's longest rift is cut in two places, 250 km apart and more than the trough's
      * half-width across, so it breaks into three stretches with a short one of 80 km in the middle;
      * then the short one is taken away too. Which stretches a pair's boundary breaks into is a
      * question of topology, a third plate pinching it here or a gap just over the joining
@@ -223,7 +223,11 @@ class RiftIdentityTest {
     fun `a stretch of rift keeps its half-grabens when another stretch of the pair comes or goes`() {
         val config = WorldGenConfig.forRows(42L, 512)
         val whole = PlateStage.presentRiftSegments(config)
-        val pair = 2 * PAIR_STRIDE + 7
+        // The pair whose rift runs furthest, which is the one there is room to cut in two places:
+        // on the Earth-sized planet's fifteen plates that is no longer the 2-7 pair the 12,000 km
+        // world's fourteen gave seed 42.
+        val pair = whole.cell.indices.groupBy { whole.lowId[it] * PAIR_STRIDE + whole.highId[it] }
+            .maxBy { (_, onIt) -> onIt.maxOf { whole.alongKm[it] } - onIt.minOf { whole.alongKm[it] } }.key
         val entries = whole.cell.indices.filter { whole.lowId[it] * PAIR_STRIDE + whole.highId[it] == pair }
         val start = entries.minOf { whole.alongKm[it] } + CUT_FROM_THE_END_KM
         fun cellsBetween(fromKm: Float, toKm: Float) =

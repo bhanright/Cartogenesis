@@ -221,18 +221,10 @@ class DataExportTest {
                 "$landBelowWithoutBasins with enclosed seas left as sea"
         )
         assertTrue(landBelow > 0, "this world was supposed to have a below-sea-level basin on it")
-        // Recorded from Q4 to L1, when seed 42's one sea cell above its shoreline, at column 33,
-        // row 414, went with the ground L1's rifts moved, and armed; recorded again at L1's review
-        // round, once the rift valleys were Earth's width, where one sea cell stands over the line
-        // again. The cause was never traced (docs/DESIGN_LEDGER.md, Q4 and L1).
-        KnownFailures.expect(SEA_ABOVE_ITS_SHORELINE, "open sea above sea level: 1") {
-            if (waterAbove != 0) {
-                throw RecordedViolation(
-                    "open sea came back above sea level: $waterAbove",
-                    "open sea above sea level: $waterAbove"
-                )
-            }
-        }
+        // A known failure from Q4 to L1 and again from L1's review round to K1, one sea cell over
+        // its shoreline whose cause was never traced; armed at K2, whose worlds have none
+        // (docs/DESIGN_LEDGER.md, Q4, L1 and K2).
+        assertEquals(0, waterAbove, "open sea came back above sea level: $waterAbove")
         assertEquals(
             0,
             landBelowWithoutBasins,
@@ -608,15 +600,6 @@ class DataExportTest {
 
     private companion object {
         /**
-         * The known failure the open-sea clause records: seed 42 at 512 rows has one sea cell above
-         * its own shoreline, the sea stage leaving a cell of water standing over the line it cut.
-         * The heightmap draws it as it is, so the export is faithful and the ground is not;
-         * `docs/TODO.md` has the entry.
-         */
-        const val SEA_ABOVE_ITS_SHORELINE =
-            "the heightmap: a sea cell stands above the shoreline on square cells"
-
-        /**
          * How far a colour channel may drift at the 99th percentile before the JPEG chip's small
          * print stops being honest.
          *
@@ -653,8 +636,13 @@ class DataExportTest {
          * so every mark the raster makes has single-pixel edges both ways, and every figure rose
          * together: WebP 45, JPEG at quality 90 **46**, at quality 30 **63**. Halfway, rounded down,
          * is **54**; the relation against WebP holds as it did, 46 against 45 and five of room.
+         *
+         * Re-derived a fifth time on the Earth-sized planet (K2), whose sheet of the same 1,024 by
+         * 512 grid draws a world three times as wide in the same pixels, so its coasts and borders
+         * turn more often in a pixel: WebP 57, JPEG at quality 90 **59**, at quality 30 **67**.
+         * Halfway is **63**; the relation against WebP holds, 59 against 57 and five of room.
          */
-        const val MAX_JPEG_DRIFT = 54
+        const val MAX_JPEG_DRIFT = 63
 
         /** And the same bound as a relation, measured against WebP in the same run. */
         const val OVER_WEBP = 5

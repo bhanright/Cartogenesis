@@ -58,7 +58,7 @@ class RealmIdRangeTest : BorrowsSharedWorlds() {
 internal fun authorsConfig(seed: Long): WorldGenConfig {
     val base = WorldGenConfig.forRows(seed, SharedWorlds.COARSE_ROWS).copy(seaLevel = 0.62f)
     return base.copy(
-        tectonics = base.tectonics.copy(plateCount = 14),
+        tectonics = base.tectonics.withPlateCount(14, base.scale),
         nations = base.nations.copy(nationCount = 12)
     )
 }

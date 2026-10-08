@@ -49,13 +49,15 @@ generated worlds are discarded.
 ## How a world is made
 
 Each stage feeds the next, and every stage is deterministic for a given seed. The world has a
-declared physical size (`WorldScale`): 12,000 km across, land up to 6,000 m above the waterline, sea
-floor down to 10,000 m below it, and one hydraulic round standing for about 336,000 years
-(`WorldScale.yearsPerHydraulicRound`, 336,476.4, derived from the stream-power constants rather
-than chosen), so twelve rounds are about four million years. Both ends of the vertical range are cell means rather than points — a cell of the
-grid is 5.9 km across, and no cell that size holds a summit. Every reach, depth and rate in the
+declared physical size (`WorldScale`): Earth's, 40,075 km round the equator, land up to 6,000 m
+above the waterline, sea floor down to 10,000 m below it, and one hydraulic round standing for
+about 336,000 years (`WorldScale.yearsPerHydraulicRound`, 336,476.4, derived from the
+stream-power constants rather than chosen), so twelve rounds are about four million years. Both
+ends of the vertical range are cell means rather than points — a cell of the grid is 19.6 km
+across, and no cell that size holds a summit. Every reach, depth, rate and count per area in the
 generator is written in those units and converted to the grid the world is generated on, so
-nothing depends on the grid being the one it is.
+nothing depends on the grid being the one it is, and a planet of another size draws the same
+physics: fifteen plates and forty-nine hotspots on Earth's, as on Earth, fewer on a smaller one.
 
 1. **Terrain.** Seeded Perlin noise produces a gradient field, integrated into a height map by
    Frankot–Chellappa least-squares integration (a 2D FFT). The terrain filter emphasizes relief at
@@ -171,7 +173,7 @@ affect how the map is drawn without changing the generated world.
   and a pixel covers the same ground either way — quoted at the equator because east–west distance
   on an equirectangular map shrinks with latitude.
 - **True shape.** The world is twice as wide as it is tall on the ground, and its grid is twice as
-  many cells across as down, so a cell is square: 5.9 km a side on the grid of 1024 rows. Every
+  many cells across as down, so a cell is square: 19.6 km a side on the grid of 1024 rows. Every
   picture — on screen and exported — draws a cell to a pixel, copying its color exactly, and lays
   the ink over it at its own width; data exports keep the grid, one sample per cell, and so have
   the picture's shape.
@@ -206,7 +208,7 @@ The measured trade-offs are in [docs/PERFORMANCE.md](docs/PERFORMANCE.md); `Expo
 
 Each data export is a PNG and a JSON sidecar of the same name. The sidecar carries the seed, the
 pixel dimensions (the grid's, one sample per cell, unlike the picture exports), the world's width
-(12,000 km), the cell size east-west and north-south, the square kilometers per cell, the
+(40,075 km by default), the cell size east-west and north-south, the square kilometers per cell, the
 save format version and the build. **Sea level is gray level 32768 on every world**, fixed rather
 than derived per world, because its job is to be typed into somebody else's program. There are
 32767 levels either side of the waterline, and the sidecar states a meters-per-level figure for
@@ -219,7 +221,7 @@ Why the PNGs come out of this project's own encoder is in [docs/DEPLOYMENT.md](d
 
 ## The grid, and acceleration
 
-Every world is made on one grid: 1024 rows and 2048 columns of square cells, 5.9 km a side, which
+Every world is made on one grid: 1024 rows and 2048 columns of square cells, 19.6 km a side, which
 generates in about fifty seconds on the processor. The interface offers no other; it used to offer
 512 to 4096 rows, and the browser version went to 1024 (docs/DESIGN_LEDGER.md, G1, for why that
 stopped). A save made at another grid while the grid was a choice still opens, and is drawn and

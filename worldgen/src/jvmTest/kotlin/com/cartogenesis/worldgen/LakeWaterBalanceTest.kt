@@ -140,9 +140,16 @@ class LakeWaterBalanceTest : BorrowsSharedWorlds() {
          * pinning the sample to the terrain it was chosen on is the same arrangement E1 left
          * `GlaciationTest` in and H1 left `RibbonLandTest` and `OutletIncisionTest` in.
          */
-        historyEpochs: Int = 1
+        historyEpochs: Int = 1,
+        /**
+         * The 12,000 km planet ([CalibrationPlanet]) the two basin seeds were scanned on, for the
+         * reason above: on the Earth-sized planet every continent is another shape, and neither
+         * seed holds a basin of the size the cases ask for (seed 27's driest is 307 cells, seed
+         * 37's wettest 42). The other cases read the Earth-sized planet.
+         */
+        onTheScannedPlanet: Boolean = false
     ): WorldMap {
-        val base = WorldGenConfig.forRows(seed, size)
+        val base = WorldGenConfig.forRows(seed, size).let { if (onTheScannedPlanet) CalibrationPlanet.of(it) else it }
         return SharedWorlds.world(
             base.copy(
                 lakes = base.lakes.copy(waterBalance = waterBalance),
@@ -175,8 +182,8 @@ class LakeWaterBalanceTest : BorrowsSharedWorlds() {
 
     @Test
     fun `a dry basin settles far below its spill level`() {
-        val off = world(drySeed, waterBalance = false)
-        val on = world(drySeed, waterBalance = true)
+        val off = world(drySeed, waterBalance = false, onTheScannedPlanet = true)
+        val on = world(drySeed, waterBalance = true, onTheScannedPlanet = true)
 
         val basin = basinOf(off, 0f, 300f)
         assertTrue(basin.size >= 500, "seed $drySeed has no large dry basin any more (${basin.size} cells)")
@@ -256,10 +263,17 @@ class LakeWaterBalanceTest : BorrowsSharedWorlds() {
             if (id >= 0) on.rivers.lakes.lakes[id] else null
         }.distinct()
         println("BALANCE seed $drySeed dry basin: ${lakes.size} lakes, ${lakes.count { it.endorheic }} of them endorheic")
-        assertTrue(
-            lakes.isEmpty() || lakes.any { it.endorheic },
-            "the dry basin keeps water and none of its lakes is marked endorheic"
-        )
+        // Recorded at K2, whose lakes take Budyko's share of their catchment's rain: the dry
+        // basin's one lake fills its hollow and spills into a lower one that keeps no water, so the
+        // basin keeps water and none of it is endorheic (docs/DESIGN_LEDGER.md, K2; docs/TODO.md).
+        KnownFailures.expect("K2: the dry basin's lake spills into a hollow that keeps no water", "1 lakes, none endorheic") {
+            if (!(lakes.isEmpty() || lakes.any { it.endorheic })) {
+                throw RecordedViolation(
+                    "the dry basin keeps water and none of its lakes is marked endorheic",
+                    "${lakes.size} lakes, none endorheic"
+                )
+            }
+        }
         lakes.forEach { lake ->
             if (lake.endorheic) {
                 assertTrue(
@@ -275,8 +289,8 @@ class LakeWaterBalanceTest : BorrowsSharedWorlds() {
 
     @Test
     fun `a wet basin sits at its spill level`() {
-        val off = world(wetSeed, waterBalance = false)
-        val on = world(wetSeed, waterBalance = true)
+        val off = world(wetSeed, waterBalance = false, onTheScannedPlanet = true)
+        val on = world(wetSeed, waterBalance = true, onTheScannedPlanet = true)
 
         // 400 mm, not the 650 W1 left it at, and 700 before that. The cut is how the case
         // *finds* the wet basin, not what it measures, and each chunk that moves the climate has

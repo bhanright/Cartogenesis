@@ -16,7 +16,7 @@ import kotlin.math.pow
  * basin many times its own size, because a lake with no outlet loses water only by evaporating,
  * and the surface settles exactly where the catchment's inflow matches evaporation off the water:
  *
- *     inflow  =  runoffFraction x (rainfall over the catchment)
+ *     inflow  =  runoff over the catchment (each cell's rain less what its ground evaporates)
  *     loss    =  (potential evaporation - rainfall on the water) x lake area
  *
  * Area grows with level — that is the basin's hypsometry — so raising the surface raises the loss
@@ -82,6 +82,62 @@ internal object LakeWaterBalance {
 
     /** Months the world's two seasonal temperature fields each stand for. */
     private const val MONTHS_PER_SEASON = 6.0
+
+    /**
+     * What a land cell gives a lake, and what a lake's water loses there, per cell of the grid.
+     *
+     * [potentialEvaporationMm] is [potentialEvaporationMm] at every land cell and zero at sea.
+     * [runoffMm] is the share of the cell's rain that runs off rather than evaporating or
+     * transpiring where it fell, in millimeters a year: [runoffShareOfRain] of it.
+     */
+    internal class Shedding(val potentialEvaporationMm: FloatArray, val runoffMm: FloatArray)
+
+    /** [Shedding] for every cell of [climate]'s grid, [isLand] saying which cells are land. */
+    fun shedding(isLand: BooleanArray, climate: ClimateResult, evaporationScale: Float): Shedding {
+        val cellCount = isLand.size
+        val potential = FloatArray(cellCount) { cell ->
+            if (!isLand[cell]) 0f else potentialEvaporationMm(
+                climate.summerTemperature.data[cell], climate.winterTemperature.data[cell], evaporationScale
+            )
+        }
+        val rain = climate.precipitationMm.data
+        val runoff = FloatArray(cellCount) { cell ->
+            if (!isLand[cell]) 0f else rain[cell] * runoffShareOfRain(rain[cell], potential[cell])
+        }
+        return Shedding(potential, runoff)
+    }
+
+    /**
+     * The share of a year's rain, [rainMm], that runs off ground whose potential evaporation is
+     * [potentialMm], 0..1: one less Budyko's (1974) actual evapotranspiration over the rain,
+     *
+     * ```
+     * runoff / P = 1 - sqrt( f * tanh(1 / f) * (1 - exp(-f)) )     with f = PET / P
+     * ```
+     *
+     * the same curve `VegetationDensity.evaporativeFraction` grows the plant cover by. A catchment
+     * in a steady state sends on what its ground does not give back to the air, and how much that
+     * is turns on how dry it is: where the energy is short of the water (f under 1) most of the
+     * rain runs off, and where the water is short of the energy (f over 2, a semi-arid basin)
+     * nearly all of it goes back to the air. Earth's land as a whole stands near a dryness of one
+     * and sheds a third of its rain, the 40,000 km³ its rivers deliver of the 110,000 that falls;
+     * at a dryness of one this curve gives 0.31, at 0.8 it gives 0.39. A semi-arid basin, at a
+     * dryness of 2 to 4, gives 0.11 to 0.02, where a fixed share of 0.35 gave it three to eighteen
+     * times the water and filled the world's dry interiors to their brims (docs/DESIGN_LEDGER.md,
+     * K2).
+     *
+     * Ground that cannot evaporate anything, frozen the year round, sheds all of its rain; ground
+     * with no rain sheds none.
+     */
+    fun runoffShareOfRain(rainMm: Float, potentialMm: Float): Float {
+        if (rainMm <= 0f) return 0f
+        val dryness = potentialMm / rainMm
+        if (dryness <= 0f) return 1f
+        val evaporatedShare = kotlin.math.sqrt(
+            dryness * kotlin.math.tanh(1f / dryness) * (1f - kotlin.math.exp(-dryness))
+        )
+        return (1f - evaporatedShare).coerceIn(0f, 1f)
+    }
 
     private fun monthlyHeatIndex(temperatureC: Float): Double =
         if (temperatureC <= 0f) 0.0 else (temperatureC / 5.0).pow(1.514)

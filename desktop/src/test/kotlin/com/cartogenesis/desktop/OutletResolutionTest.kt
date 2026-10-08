@@ -202,24 +202,14 @@ class OutletResolutionTest {
         // Every world in the pool: an empty pool averages to NaN, which is under no bar and over
         // none, so a pool that lost its worlds would pass the clause below by saying nothing.
         assertEquals(6, largestLandLakeShares.size, "the pool holds ${largestLandLakeShares.size} worlds, not six")
-        // Over since S3: with the rounds cutting on real rain, the dry interiors that hold these
-        // worlds' largest hollows take less discharge, the outlet notch that would open them cuts
-        // less, and the largest lake pooled read over the Caspian's share where it read 0.79 of it
-        // before. What would bring it under is the notch reading the lake balance rather than a
-        // uniform accumulation, which the outlet review names, and not a wetter bar; until then the
-        // bar runs as a known failure.
-        KnownFailures.expect(
-            "Audit III C-I1: the largest lake in the land, pooled over the grids, is over the Caspian's share",
-            "the pooled largest lake is over the Caspian's share"
-        ) {
-            if (pooledLargest >= caspianShare) {
-                throw RecordedViolation(
-                    "the largest lake pooled over ${largestLandLakeShares.size} worlds is " +
-                        "${"%.2f".format(pooledLargest / caspianShare)}x the Caspian's share of land: $overLarge",
-                    "the pooled largest lake is over the Caspian's share"
-                )
-            }
-        }
+        // A known failure from S3 to K1 (Audit III's C-I1); armed at K2, whose lakes take Budyko's
+        // share of their catchment's rain rather than a fixed third of it, and whose pooled largest
+        // lake is under the Caspian's share (docs/DESIGN_LEDGER.md, K2).
+        assertTrue(
+            pooledLargest < caspianShare,
+            "the largest lake pooled over ${largestLandLakeShares.size} worlds is " +
+                "${"%.2f".format(pooledLargest / caspianShare)}x the Caspian's share of land: $overLarge"
+        )
         println(
             "OUTLET SCALE FINDING basins below the sea-level cut at or over the Caspian's share " +
                 "of their land: $overLargeDrowned"

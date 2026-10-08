@@ -1,6 +1,7 @@
 package com.cartogenesis.worldgen.model
 
 import com.cartogenesis.worldgen.math.GroundSteps
+import kotlin.math.pow
 import kotlinx.serialization.Serializable
 
 /**
@@ -35,10 +36,14 @@ data class WorldScale(
      * The map is an equirectangular projection of a whole world, so it covers 360 degrees of
      * longitude against 180 of latitude and is twice as wide as it is tall — hence
      * [WORLD_HEIGHT_AS_SHARE_OF_WIDTH]. A cell is not square in kilometres unless the grid is too.
-     * Earth's equator is 40,075 km; 12,000 km is a smaller world, and the one every knob in this
-     * file is calibrated against.
+     *
+     * Earth's equator, [EARTH_EQUATOR_KM], and every figure in this file is set from Earth's on
+     * Earth's terms: a length on the ground, an area, a count per area. Until K2 the default was a
+     * world of 12,000 km, against which the figures were first calibrated in cells; that world can
+     * still be made by passing its width here, and every figure scales to it physically
+     * (docs/DESIGN_LEDGER.md, K1 and K2).
      */
-    val worldWidthKm: Double = 12_000.0,
+    val worldWidthKm: Double = EARTH_EQUATOR_KM,
     /**
      * The altitude of the highest land, in metres: the top of the land's half of the ruler.
      *
@@ -240,6 +245,18 @@ data class WorldScale(
      */
     val radiusMeters: Double get() = worldWidthKm * METRES_PER_KM / (2.0 * kotlin.math.PI)
 
+    /**
+     * The planet's true surface, in square kilometers: `4 pi r^2`, which is the equator's length
+     * squared over pi.
+     *
+     * Not [worldAreaKm2]. The map gives every cell the same ground, so its area is the
+     * equirectangular sheet's, `pi / 2` times the sphere's; that is the area the stages that count
+     * cells have always meant. What is counted *per area of the planet* — its plates and its
+     * hotspots — is counted on the sphere, so a planet of Earth's size has Earth's number of them
+     * (511.2 million km² on Earth's 40,075 km equator; see [EARTH_SURFACE_KM2]).
+     */
+    val sphereAreaKm2: Double get() = worldWidthKm * worldWidthKm / kotlin.math.PI
+
     /** How far one degree of latitude runs on the ground, in meters: a meridian's length over 180. */
     val metersPerDegreeLatitude: Double get() = radiusMeters * kotlin.math.PI / DEGREES_POLE_TO_POLE
 
@@ -258,6 +275,17 @@ data class WorldScale(
     companion object {
         /** Pole to pole against the equator's whole circumference, on an equirectangular map. */
         const val WORLD_HEIGHT_AS_SHARE_OF_WIDTH = 0.5
+
+        /** Earth's equatorial circumference, in kilometers (WGS 84: 40,075.017). */
+        const val EARTH_EQUATOR_KM = 40_075.0
+
+        /**
+         * Earth's surface, in square kilometers: 510.1 million (WGS 84). The denominator of every
+         * count per area that is read off Earth. [sphereAreaKm2] gives 511.2 million for
+         * [EARTH_EQUATOR_KM], 0.2% more, because Earth is oblate and its equator is its longest
+         * circumference; a count read off one and spent on the other keeps Earth's to the same 0.2%.
+         */
+        const val EARTH_SURFACE_KM2 = 510.1e6
 
         /** Metres in a kilometre, so no stage has to write the conversion out. */
         const val METRES_PER_KM = 1_000f
@@ -383,7 +411,36 @@ data class TerrainConfig(
 
 @Serializable
 data class TectonicsConfig(
-    val plateCount: Int = 14,
+    /**
+     * How much of the planet's surface one plate covers on average, in square kilometers: the
+     * plates are this planet's sphere ([WorldScale.sphereAreaKm2]) over this, rounded, at least two
+     * (see [plateCount]).
+     *
+     * Earth's: 510.1 million km² over its 15 plates, the seven major ones (the Pacific, North
+     * American, Eurasian, African, Antarctic, Indo-Australian and South American, 44 to 103
+     * million km² each) and about eight minor (the Nazca, Philippine Sea, Arabian, Caribbean,
+     * Cocos, Scotia, Juan de Fuca and the Indian where it is told from the Australian, 0.25 to 16
+     * million), which is 34 million km² a plate. An area rather than a count because a plate's size
+     * is set by the mantle that drives it and not by the planet it sits on; a planet three times
+     * as wide is nine times as many plates, and on the 12,000 km world this file was first
+     * calibrated on it is two.
+     *
+     * Bird's PB2002 model (*An updated digital model of plate boundaries*, G-cubed 4, 2003) counts
+     * 52 by adding 38 microplates to the 14 large ones NUVEL-1A moves, and what it shows is that
+     * the sizes are not one population: the cumulative count of plates larger than an area falls
+     * as a power of it from the microplates up to the large plates (Sornette and Pisarenko,
+     * *Fractal plate tectonics*, GRL 30, 2003), and Morra, Seton, Quevedo and Müller
+     * (*Organization of the tectonic plates in the last 200 Myr*, EPSL 373, 2013) find two
+     * populations, large and small, each a power law of its own, through the whole of the last
+     * 200 million years. **The generator's partition does not match that.** Its plates are the
+     * cells of a warped Voronoi partition of seeds drawn uniformly on the map (`PlateStage`), whose
+     * areas spread like a Poisson-Voronoi cell's, a narrow hump about the mean whose largest is
+     * two to three times it and whose smallest is a third or so of it: Earth's seven major plates,
+     * 1.3 to 3.0 times the mean, are inside that, but Earth's minor plates, 0.01 to 0.5 times it,
+     * are not, and a world of fifteen Voronoi plates has none of them. A partition with Earth's two
+     * populations is in `TODO.md`.
+     */
+    val meanPlateAreaKm2: Double = WorldScale.EARTH_SURFACE_KM2 / EARTH_PLATE_COUNT,
     /**
      * How much of a plate's continental crust stands under water, as a share of its area — which
      * is what turns the ocean-coverage slider into a count of continental plates.
@@ -1034,20 +1091,27 @@ data class TectonicsConfig(
      */
     val historyEpochs: Int = 3,
     /**
-     * How far a plate travels between one epoch and the next, in kilometers, whichever way it
-     * drifts.
+     * How fast a plate drifts, in millimeters a year, whichever way it drifts: with
+     * [epochLengthYears], how far it travels between one epoch and the next ([epochDriftKm]).
      *
      * A plate boundary only moves if the plates either side of it move relative to one another, so
-     * this is what decides how far an old belt ends up from a present one. At the default a
-     * two-epochs-ago boundary sits some 2,100 km from where its plates are now — far enough that
-     * an old belt does not merge with the modern edge beside it, which is the whole point. A
-     * plate of a 14-plate world is about 1,300 km in radius on the 12,000 km world, a disc of a
-     * fourteenth of its 72 million km², and about 4,300 on a world of Earth's size, so the same
-     * drift carries an old belt past a plate's whole radius on the one and a half of it on the
-     * other; how far a plate drifts in an epoch is in `TODO.md` with the counts per world.
-     * 1,054.6875 km, the 512 grid's 45 cell widths.
+     * this is what decides how far an old belt ends up from a present one. Earth's: Zahirovic,
+     * Müller, Seton and Flament (*Tectonic speed limits from plate kinematic reconstructions*, EPSL
+     * 418, 2015) put the median root-mean-square speed of every plate over the last 200 million
+     * years at about 40 mm a year, the fastest, oceanic plates bounded by subduction, at about 85,
+     * and plates more than a quarter cratonic at about 28. The last is taken, because the old
+     * belts this drift places are the ones a continent keeps: an old belt on an oceanic plate has
+     * gone down a trench long before 300 million years are up, and the Appalachians and the Urals
+     * ride plates that are mostly craton.
+     *
+     * Over an epoch of 300 million years that is 8,400 km, a fifth of the equator and more than a
+     * plate's whole width on Earth (a plate of 34 million km² is a disc 6,600 km across), so a past
+     * epoch's boundaries lie where the plates' present arrangement gives no hint of them, which is
+     * what 300 million years does on Earth: the Appalachians and the Urals stand well over a
+     * thousand kilometers from any boundary today. A plate carried past a pole comes down the far
+     * side of it, half a meridian round (`PlateStage.displacedPlates`).
      */
-    val epochDriftKm: Double = 1_054.6875,
+    val plateSpeedMmPerYear: Double = CRATONIC_PLATE_SPEED_MM_PER_YEAR,
     /**
      * How long one tectonic epoch lasts, in years, and how long a dead orogen takes to fall to
      * `1/e` of its height once its uplift has stopped.
@@ -1217,22 +1281,55 @@ data class TectonicsConfig(
      */
     val crustAgeReference: Float = 0.05f,
     /**
-     * Share of plates that carry a hotspot — a point fixed in the mantle that the plate drifts
-     * over, leaving a line of seamounts behind it.
+     * How many hotspots the planet carries per million square kilometers of its sphere — points
+     * fixed in the mantle that the plates drift over, each leaving a line of seamounts on the
+     * plate above it. Zero turns them off.
      *
-     * Only oceanic plates are considered, so what this produces is island chains in open water
-     * rather than volcanic fields inland.
+     * Earth's: the 49 hotspots Courtillot, Davaille, Besse and Stock catalogue (*Three distinct
+     * types of hotspots in the Earth's mantle*, EPSL 205, 2003) over Earth's 510.1 million km²,
+     * 0.096 per million. Stricter lists are shorter: only seven of the 49 (three in the Pacific,
+     * four in the Indo-Atlantic) meet their criteria for a plume from the deep mantle, and the
+     * rest come from shallower boundary layers; every one of them builds volcanoes, and that is
+     * what this draws. A density rather than a count so a planet of another size carries as many
+     * per area; a share of the plates, as this was, carried about five on any planet.
+     *
+     * Drawn uniformly over the sphere, independent of the plates, as a fixed point in the mantle
+     * is. One that lands on continental crust builds nothing here, since what this models is the
+     * seamount chain and not a volcanic field inland, and Earth's continental hotspots (Yellowstone,
+     * Afar, Cameroon) are not chains of islands either. See `PlateStage.stampHotspotChains`.
      */
-    val hotspotPlateFraction: Float = 0.35f,
+    val hotspotsPerMillionKm2: Double =
+        EARTH_HOTSPOT_COUNT / (WorldScale.EARTH_SURFACE_KM2 / 1e6),
     /**
-     * How long a hotspot trail runs before it has subsided to nothing, in kilometers: 2,578.125 km,
-     * the 512 grid's 110 cell widths.
+     * How long a hotspot trail runs before it has subsided to nothing, in kilometers.
+     *
+     * The Hawaiian-Emperor chain's, 5,800 km from Lō'ihi, the youngest volcano, to the Aleutian
+     * trench, where Detroit Seamount, 81 million years old, is the oldest dated (USGS): 72 mm a
+     * year, the Pacific plate's speed over the hotspot, and the longest-lived track on Earth. A
+     * track is cut short where its plate meets a boundary, as the Emperor chain is at the trench.
      */
-    val hotspotChainLengthKm: Double = 2_578.125,
-    /** Distance between successive seamounts along a trail, in kilometers: the 512 grid's 15 cell widths. */
-    val hotspotSpacingKm: Double = 351.5625,
-    /** Radius of a single seamount, in kilometers, round on the ground: the 512 grid's 5 cell widths. */
-    val hotspotRadiusKm: Double = 117.1875,
+    val hotspotChainLengthKm: Double = 5_800.0,
+    /**
+     * Distance between successive seamounts along a trail, in kilometers.
+     *
+     * Fifty, the middle of the 40 to 60 km the USGS's Hawaiian Volcano Observatory gives between
+     * the summits along each of the two lines the Hawaiian volcanoes stand in, the Loa and the Kea
+     * trends; the spacing is set by the bend of the plate under the last volcano's load (ten Brink,
+     * *Volcano spacing and plate rigidity*, Geology 19, 1991), so the cones overlap into a ridge.
+     * Each volcano's own spacing is drawn over the whole 40 to 60 (`PlateStage.ventSpacingShare`).
+     */
+    val hotspotSpacingKm: Double = 50.0,
+    /**
+     * Radius of a chain's largest seamount where it meets the sea floor, in kilometers, round on
+     * the ground.
+     *
+     * Mauna Loa's base is more than 90 miles, 145 km, across on the sea floor (USGS), the largest of
+     * the chain's volcanoes; half of it, 72.5 km. Each volcano of a chain is drawn smaller than
+     * this by its own volume (`PlateStage.volcanoSizeShare`) and by its plume's flux against
+     * Hawaii's, the strongest (`PlateStage.plumeFluxShare`), so with [hotspotSpacingKm] the cones
+     * overlap into a beaded ridge rather than one of a single width, and most chains are smaller.
+     */
+    val hotspotRadiusKm: Double = 72.5,
     /** Height of the youngest seamount in a chain, in normalized elevation units. */
     val hotspotHeight: Float = 0.17f,
     /**
@@ -1243,7 +1340,52 @@ data class TectonicsConfig(
      * guard measures "before" against.
      */
     val hotspotConeDetail: Boolean = true
-)
+) {
+    /**
+     * How far a plate travels between one epoch and the next, in kilometers: [plateSpeedMmPerYear]
+     * over [epochLengthYears]. Derived, so the drift is a speed and a time and nothing else.
+     */
+    val epochDriftKm: Double get() = plateSpeedMmPerYear * epochLengthYears / MILLIMETERS_PER_KM
+
+    /**
+     * How many plates a planet of [scale]'s size is cut into: its sphere over [meanPlateAreaKm2],
+     * rounded, never fewer than two. Fifteen on Earth's.
+     */
+    fun plateCount(scale: WorldScale): Int =
+        kotlin.math.round(scale.sphereAreaKm2 / meanPlateAreaKm2).toInt().coerceAtLeast(MIN_PLATES)
+
+    /**
+     * How many hotspots a planet of [scale]'s size carries: its sphere times
+     * [hotspotsPerMillionKm2], rounded. Forty-nine on Earth's.
+     */
+    fun hotspotCount(scale: WorldScale): Int =
+        kotlin.math.round(scale.sphereAreaKm2 / SQUARE_KM_PER_MILLION * hotspotsPerMillionKm2).toInt()
+            .coerceAtLeast(0)
+
+    /** This section with [meanPlateAreaKm2] set so a planet of [scale]'s size has [count] plates. */
+    fun withPlateCount(count: Int, scale: WorldScale): TectonicsConfig =
+        copy(meanPlateAreaKm2 = scale.sphereAreaKm2 / count.coerceAtLeast(MIN_PLATES))
+
+    companion object {
+        /** Earth's plates: seven major and about eight minor. See [meanPlateAreaKm2]. */
+        const val EARTH_PLATE_COUNT = 15
+
+        /** The fewest plates a partition can have and still have a boundary. */
+        const val MIN_PLATES = 2
+
+        /** Median RMS speed of plates more than a quarter cratonic. See [plateSpeedMmPerYear]. */
+        const val CRATONIC_PLATE_SPEED_MM_PER_YEAR = 28.0
+
+        /**
+         * The hotspots Courtillot, Davaille, Besse and Stock catalogue on Earth (*Three distinct
+         * types of hotspots in the Earth's mantle*, EPSL 205, 2003). See [hotspotsPerMillionKm2].
+         */
+        const val EARTH_HOTSPOT_COUNT = 49
+
+        private const val MILLIMETERS_PER_KM = 1e6
+        private const val SQUARE_KM_PER_MILLION = 1e6
+    }
+}
 
 /**
  * The crust floating on the mantle: what sets the two levels the world's hypsometry is built
@@ -1590,9 +1732,12 @@ data class SeaConfig(
      * At or below the cap, not above it, so a body exactly this size becomes a lake.
      *
      * A share of the surface because that is what the figure is: the Caspian's *share of Earth*,
-     * 0.073%, carried onto this planet, so the cap grows with the planet's area. On the 12,000 km
-     * world, a seventh of Earth's surface, it is 52,560 km², the figure it was held at in square
-     * kilometers until K1; on a world of Earth's size it is 371,000 km², the Caspian itself.
+     * 0.073%, carried onto this planet, so the cap grows with the planet's area. It is read as a
+     * share of the map's cells, [WorldScale.worldAreaKm2], which give every cell the same ground
+     * and so stand for `pi / 2` times the sphere: on the 12,000 km world it is 52,560 km² of
+     * cells, the figure it was held at until K1, and on a world of Earth's size 586,000, the
+     * Caspian's 371,000 on the sphere drawn as the equirectangular map draws it (its share of the
+     * cells is its share of Earth).
      * Whether a world smaller than Earth should cap at the Caspian's own area rather than its
      * share is a real question and not answered here: on the 12,000 km world seven times the cap
      * turns several more inland seas into land on every seed and moves coastlines. It is written
@@ -2291,22 +2436,32 @@ data class ErosionConfig(
     /** The same, for a river reaching a lake: how much of its load the basin traps at the inflow. */
     val lakeShare: Float = 0.1f,
     /**
-     * How much land a watercourse must drain, as a share of all land, before it builds anything at
-     * its mouth. Below it, everything the flow carries disperses into the sea.
+     * How much land a watercourse must drain before it builds anything at its mouth, in square
+     * kilometers of land watered at the land's own mean. Below it, everything the flow carries
+     * disperses into the sea.
      *
      * Without this the result is not deltas but a prograded coast: every rill reaching the water
      * carries enough to lift the cell in front of it over a shoreline that is, by construction,
      * right there — so the whole coastline creeps out by a few cells and nothing stands out as a
-     * landform. Deltas are made by rivers, and a third of a percent of a continent is a river.
+     * landform. Deltas are made by rivers.
      *
-     * The catchment is weighted by its runoff, so this is a share of all the water the land sheds
-     * rather than an area. A share of a world's total, which a planet of another size does not
-     * hold — what builds a delta is a river's own discharge and load — and which cannot be
-     * restated at today's value without moving a world, since the total differs from seed to
-     * seed. It waits in `TODO.md` with the other shares of a world's total (docs/DESIGN_LEDGER.md,
-     * K1).
+     * The catchment is weighted by its rain against the land's mean (the erosion's own weighting,
+     * `Runoff`), so a wet basin reaches this with less ground and a dry one needs more: it is a
+     * discharge, stated as the area that sheds it at the mean.
+     *
+     * Earth gives a likelihood and not a threshold. Of 5,399 coastal rivers wider than 50 m,
+     * Caldwell and others (*A global delta dataset and the environmental variables that predict
+     * delta formation on marine coastlines*, Earth Surf. Dynam. 7, 2019) find 40% with a delta, the
+     * likelihood rising with the river's water, its sediment and its basin, and falling with the
+     * waves and the tide that rework what it brings; the deltaic rivers' discharges and basins are
+     * an order of magnitude larger than the rest's. This model has no waves and no tide, so the
+     * threshold is set where Earth's quietest sea draws the line: on the microtidal, low-wave
+     * Mediterranean, the rivers whose deltas stand out on a map of the whole sea are the Po (a basin
+     * of about 71,000 km²), the Ebro (about 85,000) and the Rhône (about 98,000). Seventy thousand,
+     * the Po's. It was a share, 0.3% of the land's water: 65,000 km² of a 12,000 km world's land
+     * and 700,000 of an Earth-sized one's (docs/DESIGN_LEDGER.md, K2).
      */
-    val deltaMinCatchment: Float = 0.003f,
+    val deltaMinCatchmentKm2: Double = 70_000.0,
     /**
      * How far from a mouth sediment may be laid, in kilometres — the radius of a delta or a
      * lacustrine fan.
@@ -2572,37 +2727,36 @@ data class GlaciationConfig(
      */
     val glacialMaximumC: Float = 6f,
     /**
-     * Smallest frozen catchment that carries a valley glacier, as a share of *the frozen ground*.
+     * Smallest frozen catchment that carries a valley glacier, in square kilometers of frozen
+     * ground draining through the cell.
      *
-     * The equivalent of [ErosionConfig.deltaMinCatchment], and there for the same reason: without
-     * it every frozen cell is its own little glacier and the whole ice cap is stippled with troughs
-     * instead of drained by a few of them.
+     * The equivalent of [ErosionConfig.deltaMinCatchmentKm2], and there for the same reason:
+     * without it every frozen cell is its own little glacier and the whole ice cap is stippled with
+     * troughs instead of drained by a few of them. Frozen ground and not land, because what feeds a
+     * glacier is the snow that falls on frozen ground above it.
      *
-     * Measured against the frozen cells rather than against all land, which is the correction the
-     * lattice forced. A share of all land makes the same trough appear or not depending on how much
-     * *warm* ground the world happens to have: on a world that is a tenth frozen the threshold asks
-     * for ten times the snowfield it asks for on a world that is frozen through. What feeds a
-     * glacier is the snow that falls on frozen ground above it, so that is the denominator. It is
-     * also the half of the resolution bug: a share of *all land* is a share of a number that
-     * quadruples with the grid, so at 1024 the same setting admitted four times as many parallel
-     * flow paths per unit of map as at 512 while the trough stayed the same fraction
-     * of the map wide — which is why the mesh appeared at the desktop's default resolution and not
-     * in the 512 crops this stage was reviewed on. At the default it asks for a quarter of a
-     * percent of the world's frozen ground before any ice is called a glacier at all: some eighty
-     * cells of snowfield on seed 718106 at 512, and the same fraction of the world at any grid.
-     *
-     * Still a share of a world's total, the planet's frozen ground, where a glacier's own physics
-     * asks for an area of snowfield: on a planet three times as wide the same share is nine times
-     * the snowfield. Not restated in K1, because the frozen ground differs from seed to seed and no
-     * one area is today's value; it is in `TODO.md` (docs/DESIGN_LEDGER.md, K1).
+     * Earth's: the snowfield of a glacier as long as the shortest trough this stage cuts,
+     * [minTroughLengthKm]. A valley glacier's width grows as its length to the 0.6 (Bahr, Meier and
+     * Peckham, *The physical basis of glacier volume-area scaling*, JGR 102, 1997), so its area grows
+     * as its length to the 1.6, and the Fedchenko, 77 km long and about 700 km², sets the
+     * constant: `700 * (328.125 / 77)^1.6` is 7,100 km². It was a share, a quarter of a percent of
+     * the world's frozen ground: some eighty cells of 274 km² on seed 718106 at 512 by 512 on the
+     * 12,000 km world, 22,000 km², and eleven times that on an Earth-sized one (docs/DESIGN_LEDGER.md,
+     * K2). See [valleyGlacierAreaKm2].
      */
-    val minCatchment: Float = 0.0025f,
+    val minCatchmentKm2: Double = valleyGlacierAreaKm2(SHORTEST_TROUGH_KM),
     /**
-     * Frozen catchment, in the same share-of-frozen-ground units, at which a glacier is at full
-     * width and cuts its full depth. A share of the planet's frozen ground for [minCatchment]'s
-     * reason, and in `TODO.md` with it.
+     * Frozen catchment, in square kilometers, at which a glacier is at full width and cuts its full
+     * depth; the glacier's strength is the root of its catchment over this.
+     *
+     * [MIN_TO_FULL_CATCHMENT] times [minCatchmentKm2], 171,000 km². The ratio is the model's own:
+     * it is the span of the strength proxy the trough is drawn with, which was set as two shares
+     * of the frozen ground, 0.0025 and 0.06, and is kept as their ratio, so the smallest glacier
+     * and the largest stand as far apart in strength as they did. Earth's own span of thickness
+     * with catchment, which grows as the area to the 0.375 under Bahr and others' scaling where
+     * this root grows as the 0.5, is not what the proxy was written from (`TODO.md`).
      */
-    val fullCatchment: Float = 0.06f,
+    val fullCatchmentKm2: Double = valleyGlacierAreaKm2(SHORTEST_TROUGH_KM) * MIN_TO_FULL_CATCHMENT,
     /**
      * How much local relief the ground must have before valley-glacier machinery runs on it, in
      * metres.
@@ -2637,16 +2791,18 @@ data class GlaciationConfig(
      */
     val reliefWindow: Float = 2f,
     /**
-     * Whether the relief window is an octagon rather than a square.
+     * The shape of the window [valleyReliefMetres] is measured over: a disc on the ground.
      *
-     * F30's control, and it is a control rather than a taste. A sliding extremum over a *square*
-     * window makes a plateau round every summit whose edge is the square's own outline, so
-     * `channelled` - and with it the sheet mask, and with that every scour basin clipped to it -
-     * carried straight edges `2 * reliefWindow * valleyWidthCells` cells long at 0 and 90 degrees.
-     * Off is that world, which is what the outline clause is shown failing against; on is the
-     * octagon, whose longest facet is a fifth of it. See `GlaciationStage.localRelief`.
+     * A sliding extremum makes a plateau round every summit whose edge is the window's own
+     * outline, so `channelled` - and with it the sheet mask, and with that every scour basin
+     * clipped to it - carries the window's shape. A square carried straight edges
+     * `2 * reliefWindow * valleyWidthCells` cells long at 0 and 90 degrees (F30); the octagon that
+     * replaced it carried facets a fifth as long at the grid's eight bearings, which rule 13 bans
+     * as well (docs/CONVENTIONS.md); a disc on the ground has no bearing of its own, on square
+     * cells or any other. The other two are kept as the controls the window's guard and the
+     * sheet's outline clause are shown failing against. See `GlaciationStage.localRelief`.
      */
-    val reliefWindowOctagon: Boolean = true,
+    val reliefWindowShape: ReliefWindowShape = ReliefWindowShape.DISC,
     /**
      * The shortest channelled flow path that may become a trough, in kilometres.
      *
@@ -2656,7 +2812,7 @@ data class GlaciationConfig(
      * from the furthest head above the cell to the furthest snout below it — before any of it is
      * carved.
      */
-    val minTroughLengthKm: Double = 328.125,
+    val minTroughLengthKm: Double = SHORTEST_TROUGH_KM,
     /**
      * The catchment a trough needs as a share of *its own ice field's* frozen ground.
      *
@@ -2783,8 +2939,9 @@ data class GlaciationConfig(
      * surface, so the cap grows with the planet's area as Superior's share says it should, and an
      * area rather than a count of cells, so that every grid draws the same lake: on the 12,000 km
      * world, a seventh of Earth's surface, it is 11,520 km², 42 cells of the 512 by 512 grid and
-     * 335 of the 5.9 km cells of 1,024 rows, and on a world of Earth's size it is Superior's own
-     * 82,100. The caveat [SeaConfig.enclosedSeaMaxShareOfSurface] carries applies.
+     * 335 of the 5.9 km cells of 1,024 rows, and on a world of Earth's size it is 128,500 km² of
+     * the map's cells, Superior's share of them, as [SeaConfig.enclosedSeaMaxShareOfSurface] reads
+     * its share. The caveat that setting carries applies.
      *
      * A basin over the cap is not thrown away — that would delete the lake country rather than
      * size it — it is peeled inward, ring by ring, until its floor fits. The rest of the blob keeps
@@ -2954,6 +3111,52 @@ data class GlaciationConfig(
 
     /** [minLakeShareOfSurface] on a planet of [scale]'s size, in square kilometers. */
     fun minLakeAreaKm2(scale: WorldScale): Double = minLakeShareOfSurface * scale.worldAreaKm2
+
+    companion object {
+        /** [minTroughLengthKm]'s default, which [minCatchmentKm2]'s is derived from. */
+        const val SHORTEST_TROUGH_KM = 328.125
+
+        /** The Fedchenko Glacier's length, in kilometers: the scaling's anchor. */
+        private const val FEDCHENKO_LENGTH_KM = 77.0
+
+        /** The Fedchenko Glacier's area, in square kilometers, about 700. */
+        private const val FEDCHENKO_AREA_KM2 = 700.0
+
+        /**
+         * How a valley glacier's area grows with its length: one plus the 0.6 its width grows by
+         * (Bahr, Meier and Peckham 1997). See [minCatchmentKm2].
+         */
+        private const val AREA_EXPONENT_OF_LENGTH = 1.6
+
+        /**
+         * [fullCatchmentKm2] over [minCatchmentKm2]: 0.06 over 0.0025, the two shares of the frozen
+         * ground the strength proxy was set with.
+         */
+        const val MIN_TO_FULL_CATCHMENT = 24.0
+
+        /**
+         * The area, in square kilometers, of a valley glacier [lengthKm] long, by Bahr and others'
+         * length-area scaling anchored on the Fedchenko.
+         */
+        fun valleyGlacierAreaKm2(lengthKm: Double): Double =
+            FEDCHENKO_AREA_KM2 * (lengthKm / FEDCHENKO_LENGTH_KM).pow(AREA_EXPONENT_OF_LENGTH)
+    }
+}
+
+/**
+ * The window a sliding extremum is taken over: see [GlaciationConfig.reliefWindowShape]. [DISC] is
+ * the generator's; [SQUARE] and [OCTAGON] are the controls its guard is shown failing on.
+ */
+@Serializable
+enum class ReliefWindowShape {
+    /** Every cell whose middle lies within the radius on the ground. */
+    DISC,
+
+    /** Every cell within the radius along a row and down a column, counted in cells. */
+    SQUARE,
+
+    /** A square dilated by a diamond, in cells: the regular octagon closest to a circle. */
+    OCTAGON
 }
 
 /** Standing fresh water in basins the terrain does not drain. */
@@ -2989,19 +3192,14 @@ data class LakesConfig(
      * a basin's surface settles where its catchment's runoff matches evaporation off the water,
      * capped at the spill. Off reproduces the old world exactly — a basin whose balance reaches the
      * brim takes the same code path either way.
+     *
+     * The runoff is each cell's rain less what its own ground gives back to the air, by Budyko's
+     * curve against the cell's dryness (`LakeWaterBalance.runoffShareOfRain`). It was a fixed
+     * share, Earth's global third, which handed a dry basin three to eighteen times the water its
+     * ground sheds and filled the largest closed basins of an Earth-sized world to the brim, a
+     * lake of 2.8 Caspians on seed 42 (docs/DESIGN_LEDGER.md, K2).
      */
     val waterBalance: Boolean = true,
-    /**
-     * What share of the rain falling on a catchment reaches the basin, rather than evaporating or
-     * transpiring off the ground where it fell.
-     *
-     * Earth's land receives roughly 110,000 cubic kilometres of rain a year and its rivers deliver
-     * roughly 40,000, so a third is the global figure. A real runoff coefficient is far from
-     * constant — it rises with rainfall and falls in hot, dry, vegetated country — and holding it
-     * constant flatters dry basins, giving them more inflow than they would truly get, so the
-     * effect this exists to produce is if anything understated.
-     */
-    val runoffFraction: Float = 0.35f,
     /**
      * Multiplies the Thornthwaite potential evaporation, for a world meant to be wetter or drier
      * than Earth. One is the published curve, unmodified; see

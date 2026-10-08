@@ -77,7 +77,7 @@ class StraightRunRenderTest {
         )
         return WorldGenerationEngine.generateBlocking(
             base.copy(
-                tectonics = base.tectonics.copy(plateCount = SiteImagery.PLATES),
+                tectonics = base.tectonics.withPlateCount(SiteImagery.PLATES, base.scale),
                 nations = base.nations.copy(nationCount = SiteImagery.REALMS)
             ).atResolution(side, side).copy(facetRouting = byFacet)
         )
@@ -173,7 +173,7 @@ class StraightRunRenderTest {
                 seed = seed, width = 512, height = 512, seaLevel = SiteImagery.SEA_LEVEL
             ).let {
                 it.copy(
-                    tectonics = it.tectonics.copy(plateCount = SiteImagery.PLATES),
+                    tectonics = it.tectonics.withPlateCount(SiteImagery.PLATES, it.scale),
                     nations = it.nations.copy(nationCount = SiteImagery.REALMS)
                 )
             }

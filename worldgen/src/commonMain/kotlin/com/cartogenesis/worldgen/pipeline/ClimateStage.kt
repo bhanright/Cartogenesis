@@ -440,7 +440,7 @@ object ClimateStage {
      * weather it makes has a scale of its own. Read as whole cells, rounded down, never fewer than
      * one.
      */
-    private const val RAIN_BLUR_RADIUS_KM = 93.75
+    internal const val RAIN_BLUR_RADIUS_KM = 93.75
 
     /**
      * Moisture each air mass starts the march with, as a fraction of saturation.

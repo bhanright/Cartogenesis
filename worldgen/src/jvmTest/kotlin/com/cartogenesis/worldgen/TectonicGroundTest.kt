@@ -53,6 +53,16 @@ class TectonicGroundTest {
     )
 
     /**
+     * The same two grids on the 12,000 km planet ([CalibrationPlanet]), whose 512 rows are cells of
+     * 11.7 km, the size the margin's and the rift's bearings were measured at: on the Earth-sized
+     * planet's 39 km cells the margin's 300 km is under eight cells and a rift's 93.75 km centerline
+     * step under three, and what those two cases read there is the staircase of the grid, not the
+     * operator's bearing. Not the drift's case: a plate's drift is Earth's 8,400 km an epoch, which
+     * on the smaller planet runs most of the way round it.
+     */
+    private val calibrationGrids = grids.map { Grid(CalibrationPlanet.of(it.config)) }
+
+    /**
      * A belt's distance from its boundary is a length on the ground, not a count of cells.
      *
      * Two boundaries, one along a row and one along a column, and the cell that stands [OFFSET_KM]
@@ -91,7 +101,7 @@ class TectonicGroundTest {
      * distance between where it passes a tenth and where it passes nine tenths.
      */
     @Test
-    fun `the continental margin is as wide as the setting says at every bearing`() = grids.forEach { grid -> with(grid) {
+    fun `the continental margin is as wide as the setting says at every bearing`() = calibrationGrids.forEach { grid -> with(grid) {
         val widths = MARGIN_BEARINGS_DEGREES.associateWith { degrees ->
             val normal = degrees * PI / 180.0
             val crust = straightEdge(normal)
@@ -177,7 +187,7 @@ class TectonicGroundTest {
      * it runs, so its half-grabens are cut to the same lengths in kilometres at every bearing.
      */
     @Test
-    fun `a rift is measured along its course on the ground`() = grids.forEach { grid -> with(grid) {
+    fun `a rift is measured along its course on the ground`() = calibrationGrids.forEach { grid -> with(grid) {
         val measured = RIFT_BEARINGS_DEGREES.associateWith { degrees ->
             val angle = degrees * PI / 180.0
             val run = straightRun(angle, RIFT_LENGTH_CELL_WIDTHS)
@@ -318,7 +328,7 @@ class TectonicGroundTest {
         riftWidthKm = tectonics.riftWidthKm * factor,
         riftShoulderOffsetKm = tectonics.riftShoulderOffsetKm * factor,
         riftShoulderWidthKm = tectonics.riftShoulderWidthKm * factor,
-        epochDriftKm = tectonics.epochDriftKm * factor,
+        plateSpeedMmPerYear = tectonics.plateSpeedMmPerYear * factor,
         beltAgeBlurKm = tectonics.beltAgeBlurKm * factor,
         hotspotChainLengthKm = tectonics.hotspotChainLengthKm * factor,
         hotspotSpacingKm = tectonics.hotspotSpacingKm * factor,

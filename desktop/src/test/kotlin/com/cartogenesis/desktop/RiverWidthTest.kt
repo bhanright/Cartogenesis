@@ -7,6 +7,7 @@ import com.cartogenesis.cartography.RenderOptions
 import com.cartogenesis.cartography.RiverSelection
 import com.cartogenesis.cartography.RiverPen
 import com.cartogenesis.cartography.SheetGeometry
+import com.cartogenesis.worldgen.CalibrationPlanet
 import com.cartogenesis.worldgen.model.WorldScale
 import com.cartogenesis.ui.MapImage
 import com.cartogenesis.worldgen.SharedWorlds
@@ -48,8 +49,13 @@ class RiverWidthTest {
         val SEEDS = listOf(7L, 42L, 1234L)
         const val SIDE = 512
 
-        /** The planet every world here is made on, the default, which the pen's width is read against. */
-        val WORLD_WIDTH_KM = WorldScale().worldWidthKm
+        /**
+         * The planet every world here is made on, which the pen's width is read against: the
+         * calibration planet, 12,000 km round, where a 512-pixel sheet's widest stroke stands over the
+         * hairline. On the Earth-sized planet it is 0.37 pixels, under the hairline, so every river
+         * of a 512 sheet is drawn at the hairline and the law has no span to be read on.
+         */
+        val WORLD_WIDTH_KM = CalibrationPlanet.WIDTH_KM
 
         /** The seeds for the mouth: the author's own, and the four the audit standardised on. */
         val MOUTH_SEEDS = listOf(298405L, 7L, 42L, 1234L, 99L)
@@ -137,7 +143,8 @@ class RiverWidthTest {
         RiverPen.widthPixels(ratio, cellsAcross, WORLD_WIDTH_KM)
 
     /** The true-shape sheet's width for a world [side] cells square, which the drawn pen is a share of. */
-    private fun sheetWidth(side: Int): Int = SheetGeometry.of(WorldScale(), side, side).widthPixels
+    private fun sheetWidth(side: Int): Int =
+        SheetGeometry.of(WorldScale(worldWidthKm = WORLD_WIDTH_KM), side, side).widthPixels
 
     /**
      * How many drawn steps of [rivers] narrow, how many of those narrow where the water did not
@@ -175,7 +182,7 @@ class RiverWidthTest {
 
     private fun world(seed: Long, side: Int = SIDE): WorldMap =
         SharedWorlds.world(
-            WorldGenConfig(seed = seed, width = side, height = side)
+            CalibrationPlanet.of(WorldGenConfig(seed = seed, width = side, height = side))
         )
 
     @Test
@@ -618,7 +625,7 @@ class RiverWidthTest {
         // Generated here rather than borrowed from `SharedWorlds`, because the generation's time
         // is one of the two figures printed.
         val generateMs = measureTimeMillis {
-            world = WorldGenerationEngine.generateBlocking(WorldGenConfig(seed = 42L, width = SIDE, height = SIDE))
+            world = WorldGenerationEngine.generateBlocking(CalibrationPlanet.of(WorldGenConfig(seed = 42L, width = SIDE, height = SIDE)))
         }
         val ready = world!!
         MapRasterizer.overlay(ready, options)

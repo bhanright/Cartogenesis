@@ -185,7 +185,7 @@ class DepositionTest : BorrowsSharedWorlds() {
                 transportCapacity = 0.1f,
                 depositionRate = 1f,
                 deltaShare = 1f,
-                deltaMinCatchment = 0f,
+                deltaMinCatchmentKm2 = 0.0,
                 lakeShare = 1f,
                 deltaReachKm = 469.0,
                 deltaFreeboardMetres = 3_000f

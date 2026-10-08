@@ -122,8 +122,15 @@ class UnitsTest : BorrowsSharedWorlds() {
      *
      * A length on the ground is more cells on a finer grid *and* more cells on a smaller world, and
      * both follow from the same division. The whole-cell figures are rounded, so they are compared
-     * as counts rather than exactly doubled.
+     * as counts rather than exactly doubled: a figure rounded to whole cells stands within half a
+     * cell of its exact count, so twice it may be a cell off the doubled count and half a cell more,
+     * and four times it two cells and a half. On the 12,000 km world every whole-cell reach here was
+     * a whole number at 512 rows and the rounding never showed; on the Earth-sized one the delta's
+     * 140.6 km is 3.6 cells of 39 km.
      */
+    /** How far a whole-cell count may stand off [factor] times another, each rounded to half a cell. */
+    private fun roundingAfter(factor: Double): Double = (factor + 1.0) * HALF_A_CELL
+
     @Test
     fun `every reach is a length on the ground, not a count of cells`() {
         val narrower = stock.copy(
@@ -134,10 +141,10 @@ class UnitsTest : BorrowsSharedWorlds() {
 
         here.forEach { (name, cells) ->
             val moved = there.getValue(name)
-            println("UNITS reach %-22s %8.3f cells at 12,000 km, %8.3f at 6,000".format(name, cells, moved))
+            println("UNITS reach %-22s %8.3f cells on the stock planet, %8.3f on one half as wide".format(name, cells, moved))
             assertEquals(
                 "$name is not read back through WorldScale.worldWidthKm",
-                (cells * 2.0), moved.toDouble(), 1.0
+                (cells * 2.0), moved.toDouble(), roundingAfter(2.0)
             )
         }
 
@@ -147,7 +154,7 @@ class UnitsTest : BorrowsSharedWorlds() {
         here.forEach { (name, cells) ->
             assertEquals(
                 "$name does not scale with the grid",
-                cells * 4.0, finer.getValue(name).toDouble(), 1.0
+                cells * 4.0, finer.getValue(name).toDouble(), roundingAfter(4.0)
             )
         }
     }
@@ -309,6 +316,9 @@ class UnitsTest : BorrowsSharedWorlds() {
     }
 
     private companion object {
+        /** How far a count rounded to whole cells may stand from its exact count. */
+        const val HALF_A_CELL = 0.5
+
         /**
          * How far the sea-level cut may land from the level `WorldScale` declares the shoreline at,
          * in metres.

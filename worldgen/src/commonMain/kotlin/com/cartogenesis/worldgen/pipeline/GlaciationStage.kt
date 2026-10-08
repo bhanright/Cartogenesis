@@ -6,9 +6,11 @@ import com.cartogenesis.worldgen.model.Acceleration
 import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.GlaciationConfig
 import com.cartogenesis.worldgen.model.IsostasyConfig
+import com.cartogenesis.worldgen.model.ReliefWindowShape
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.noise.GroundLattice
 import com.cartogenesis.worldgen.noise.PerlinNoise
+import kotlin.math.floor
 import kotlin.math.sqrt
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -394,10 +396,15 @@ object GlaciationStage {
         // its own depth, so a coast standing over deep ocean does not read as relief it does not
         // have, while a headland standing over the sea does.
         stopIfAsked()
-        val reliefRadius = (glaciation.reliefWindow * carving.valleyWidthCells).toInt()
-            .coerceIn(2, config.wholeCellsFor(RELIEF_RADIUS_CEILING_KM))
+        // Two cells is the least window a valley can be told in, and it wins over the ceiling on a
+        // grid whose cells are wider than the ceiling's half, as Earth's planet's are at 16 rows.
+        val reliefRadiusCellWidths = (glaciation.reliefWindow * carving.valleyWidthCells)
+            .coerceAtMost(config.wholeCellsFor(RELIEF_RADIUS_CEILING_KM).toFloat()).coerceAtLeast(2f)
         val relief =
-            localRelief(cellsAcross, cellsDown, relative, reliefRadius, glaciation.reliefWindowOctagon)
+            localRelief(
+                cellsAcross, cellsDown, relative, reliefRadiusCellWidths, config.cellHeightInCellWidths,
+                glaciation.reliefWindowShape
+            )
         // Straight, with nothing between the share and the field. `relative` is a cell's altitude
         // over `WorldScale.highestLandMetres` since S2, and `valleyRelief` is a depth in metres
         // over the same figure, so the two are already in one another's units. Before S2 the field
@@ -414,8 +421,9 @@ object GlaciationStage {
             }
         }
 
-        // The denominator is the frozen ground, not the land: see [GlaciationConfig.minCatchment].
-        val frozenLand = frozenCount.toFloat()
+        // Frozen catchments in cells of this grid: see [GlaciationConfig.minCatchmentKm2].
+        val minCatchmentCells = (glaciation.minCatchmentKm2 / config.squareKilometresPerCell).toFloat()
+        val fullCatchmentCells = (glaciation.fullCatchmentKm2 / config.squareKilometresPerCell).toFloat()
         val glacier = BooleanArray(cellCount)
         val strength = FloatArray(cellCount)
         // Cells travelled since the ice left frozen ground. A snout sits below its own snowline —
@@ -445,10 +453,10 @@ object GlaciationStage {
         for (rank in order.indices) {
             val cell = order[rank]
             if (frozen[cell]) runOut[cell] = 0
-            val share = ice[cell] / frozenLand
+            val catchmentCells = ice[cell]
             val fieldId = fieldOf[cell]
             val fieldShare = if (fieldId >= 0) ice[cell] / field.size[fieldId].toFloat() else 0f
-            if (share >= glaciation.minCatchment && fieldShare >= glaciation.trunkCatchment &&
+            if (catchmentCells >= minCatchmentCells && fieldShare >= glaciation.trunkCatchment &&
                 runOut[cell] <= carving.runOutCells && channelled[cell]
             ) {
                 candidate[cell] = true
@@ -530,7 +538,7 @@ object GlaciationStage {
             // number, the over-deepening included, and an over-deepening scaled to a fifth is a
             // basin shallower than [LakesConfig.minDepth] — which is to say a basin that the river
             // stage will not see as a lake, on a glacier that was carved anyway.
-            strength[cell] = sqrt((ice[cell] / frozenLand) / glaciation.fullCatchment).coerceIn(MIN_THICKNESS, 1f)
+            strength[cell] = sqrt(ice[cell] / fullCatchmentCells).coerceIn(MIN_THICKNESS, 1f)
         }
 
         // No two glaciers of the same bearing within a trough of each other. Ice that close together
@@ -2039,72 +2047,132 @@ object GlaciationStage {
      * otherwise silently rescale every cut this stage makes.
      */
     /**
-     * The elevation range inside an octagonal window of about [radius] cells around every cell:
-     * relief, as the one measurement that separates ground a glacier is channelled by from ground
-     * it is not.
+     * The elevation range inside a window of [radiusCellWidths] around every cell, a disc on the
+     * ground unless [shape] asks for one of the controls: relief, as the one measurement that
+     * separates ground a glacier is channelled by from ground it is not.
      *
      * Water counts at the waterline rather than at its own depth. A cliff standing over the sea is
      * relief and a shallow shelf beside a plain is not, and reading the sea floor would make every
      * coast look alpine.
      *
-     * ### Why the window is not a square, which is F30's finding
+     * ### Why the window is a disc
      *
      * A sliding extremum does not change while the same summit stays inside the window, so the
      * field it makes is a plateau around every summit and the plateau's *edge* is the set of cells
-     * where that summit leaves the window — which is the window's own outline, turned inside out.
-     * With a square window that outline is four straight lines `2 * radius` cells long, 53 at 1024
-     * and 105 at 2048, and `channelled` — this field against one threshold — inherits them whole.
-     * The sheet mask is what `channelled` leaves, so the sheet's own edges ran dead straight at 0
-     * and 90 degrees, and a scour basin clipped to that mask carried a ruled edge with it. That is
-     * why I2's outline guard reported the scour basins instead of asserting on them.
+     * where that summit leaves the window — which is the window's own outline, turned inside out,
+     * and `channelled`, this field against one threshold, inherits it whole; the sheet mask is what
+     * `channelled` leaves, and every scour basin is clipped to that. A square window drew straight
+     * edges `2 * radius` cells long at 0 and 90 degrees (F30). The octagon that replaced it, a
+     * square dilated by a diamond in four separable passes, drew facets `2 * radius *
+     * tan(22.5 degrees)` long at the grid's eight bearings, and in cells, so on cells that are not
+     * square on the ground it was an octagon stretched with them; rule 13 bans both. A disc on the
+     * ground has no bearing of its own: a plateau's edge is an arc of the window's radius about the
+     * summit that makes it, and a range's edge a chain of such arcs about its summits, which is the
+     * terrain's shape and not the grid's. `ReliefWindowTest` holds the outline round and shows the
+     * octagon and the square failing.
      *
-     * The cure is the window TODO.md costed: an octagon, which is a square dilated by a diamond
-     * and so is still four separable passes' worth of arithmetic per extremum rather than the
-     * `radius^2` a disc would cost. Two of the passes run along the grid's diagonals, which on a
-     * cylinder is exactly a column pass on a sheared copy: the diagonal through `(x, y)` is the
-     * set `((x + y) mod width, y)`, one line per column and every line exactly as long as the map
-     * is tall, so there is no seam to special-case.
-     *
-     * The two radii are set so the octagon is as close to a circle as an octagon gets: a regular
-     * one, whose corner stands `sec(22.5 degrees)` = 1.0824 times its flat. Solving `square +
-     * 2 * diagonal` against `(square + diagonal) * sqrt(2)` for that ratio gives
-     * [OCTAGON_SQUARE_SHARE] and [OCTAGON_DIAGONAL_OVER_SQUARE]. What is left is a window whose
-     * furthest and nearest points differ by 8.2% instead of a square's 41%, and whose longest
-     * straight facet is `2 * radius * tan(22.5 degrees)` = 0.83 of the radius rather than twice it
-     * — a fifth of what it was. It is not a circle and it is not claimed to be; the residual facet
-     * is measured on the sheet mask's own outline in `GlacialBasinShapeTest`.
-     *
-     * Each pass is a monotonic-deque sliding window, so the cost is a constant per cell rather
-     * than the square of the radius. East-west wraps, north-south clamps, exactly as the rest of
-     * the pipeline treats the grid.
+     * The disc is the union of the rows it covers, each a run of cells as wide as the circle is at
+     * that row's height on the ground, so its extremum is a sliding extremum along each row at
+     * every distinct half-width, folded down the column over the rows that half-width covers:
+     * `O(radius)` work per cell where the octagon's was a constant, which on the application's grid
+     * is a radius of 15 cells. East-west wraps and north-south clamps, as the rest of the pipeline
+     * treats the grid; a row past a pole holds nothing that a nearer row of the disc does not.
      */
     internal fun localRelief(
         cellsAcross: Int,
         cellsDown: Int,
         relative: FloatArray,
-        radius: Int,
-        octagon: Boolean
+        radiusCellWidths: Float,
+        cellHeightInCellWidths: Double,
+        shape: ReliefWindowShape
     ): FloatArray {
         val cellCount = cellsAcross * cellsDown
         val surface = FloatArray(cellCount) { relative[it].coerceAtLeast(0f) }
-        val squareRadius = if (octagon) (OCTAGON_SQUARE_SHARE * radius).toInt().coerceAtLeast(1) else radius
-        val diagonalRadius =
-            if (octagon) (OCTAGON_DIAGONAL_OVER_SQUARE * squareRadius).toInt().coerceAtLeast(1) else 0
+        val radius = radiusCellWidths.toInt().coerceAtLeast(1)
         val deque = IntArray(cellsAcross + cellsDown + 4 * (radius + 1))
         // Three buffers, not four: the first pass's scratch is free again once the highest field
         // has landed in the second, so the lowest is computed through the same one.
         val scratch = FloatArray(cellCount)
-        val highest = octagonExtreme(
-            cellsAcross, cellsDown, surface, squareRadius, diagonalRadius, true, deque,
-            scratch, FloatArray(cellCount)
-        )
-        val lowest = octagonExtreme(
-            cellsAcross, cellsDown, surface, squareRadius, diagonalRadius, false, deque,
-            scratch, surface
-        )
+        val highest: FloatArray
+        val lowest: FloatArray
+        if (shape == ReliefWindowShape.DISC) {
+            highest = discExtreme(
+                cellsAcross, cellsDown, surface, radiusCellWidths, cellHeightInCellWidths, true,
+                deque, scratch, FloatArray(cellCount)
+            )
+            lowest = discExtreme(
+                cellsAcross, cellsDown, surface, radiusCellWidths, cellHeightInCellWidths, false,
+                deque, scratch, FloatArray(cellCount)
+            )
+        } else {
+            val octagon = shape == ReliefWindowShape.OCTAGON
+            val squareRadius =
+                if (octagon) (OCTAGON_SQUARE_SHARE * radius).toInt().coerceAtLeast(1) else radius
+            val diagonalRadius =
+                if (octagon) (OCTAGON_DIAGONAL_OVER_SQUARE * squareRadius).toInt().coerceAtLeast(1) else 0
+            highest = octagonExtreme(
+                cellsAcross, cellsDown, surface, squareRadius, diagonalRadius, true, deque,
+                scratch, FloatArray(cellCount)
+            )
+            lowest = octagonExtreme(
+                cellsAcross, cellsDown, surface, squareRadius, diagonalRadius, false, deque,
+                scratch, surface
+            )
+        }
         val out = FloatArray(cellCount)
         for (cell in 0 until cellCount) out[cell] = highest[cell] - lowest[cell]
         return out
+    }
+
+    /**
+     * The largest (or smallest) value of [src] over every cell whose middle lies within
+     * [radiusCellWidths] of a cell's middle on the ground, rows being [cellHeightInCellWidths] of a
+     * cell width tall. [rowPass] is scratch of the grid's size; [into] is filled and returned.
+     */
+    private fun discExtreme(
+        cellsAcross: Int,
+        cellsDown: Int,
+        src: FloatArray,
+        radiusCellWidths: Float,
+        cellHeightInCellWidths: Double,
+        wantMax: Boolean,
+        deque: IntArray,
+        rowPass: FloatArray,
+        into: FloatArray
+    ): FloatArray {
+        val radius = radiusCellWidths.toDouble()
+        val furthestRowOffset =
+            floor(radius / cellHeightInCellWidths).toInt().coerceAtMost(cellsDown - 1)
+        var passHalfWidth = -1
+        for (rowOffset in 0..furthestRowOffset) {
+            val heightOnGround = rowOffset * cellHeightInCellWidths
+            val halfWidth = floor(sqrt(radius * radius - heightOnGround * heightOnGround)).toInt()
+                .coerceIn(0, cellsAcross / 2)
+            if (halfWidth != passHalfWidth) {
+                slideAcross(cellsAcross, cellsDown, src, rowPass, halfWidth, wantMax, deque)
+                passHalfWidth = halfWidth
+            }
+            if (rowOffset == 0) {
+                rowPass.copyInto(into)
+                continue
+            }
+            for (row in 0 until cellsDown) {
+                val base = row * cellsAcross
+                for (direction in -1..1 step 2) {
+                    val sourceRow = row + direction * rowOffset
+                    if (sourceRow < 0 || sourceRow >= cellsDown) continue
+                    val sourceBase = sourceRow * cellsAcross
+                    for (column in 0 until cellsAcross) {
+                        val candidate = rowPass[sourceBase + column]
+                        val held = into[base + column]
+                        if (if (wantMax) candidate > held else candidate < held) {
+                            into[base + column] = candidate
+                        }
+                    }
+                }
+            }
+        }
+        return into
     }
 
     /**
@@ -2130,7 +2198,7 @@ object GlaciationStage {
         slideAcross(cellsAcross, cellsDown, src, first, squareRadius, wantMax, deque)
         slideDown(cellsAcross, cellsDown, first, second, squareRadius, wantMax, deque)
         // A diagonal radius of zero is the square window F30 found, kept as that finding's own
-        // control: see `GlaciationConfig.reliefWindowOctagon`.
+        // control: see `GlaciationConfig.reliefWindowShape`.
         if (diagonalRadius <= 0) return second
         slideDiagonal(cellsAcross, cellsDown, second, first, diagonalRadius, wantMax, deque, true)
         slideDiagonal(cellsAcross, cellsDown, first, second, diagonalRadius, wantMax, deque, false)
@@ -2354,7 +2422,7 @@ object GlaciationStage {
         // over the whole province, so the concavity term can be weighed against a 0..1 noise
         // without a constant nobody could justify.
         val meanRadius = (carving.valleyWidthCells * 0.5f).toInt()
-            .coerceIn(2, config.wholeCellsFor(HOLLOWNESS_RADIUS_CEILING_KM))
+            .coerceAtMost(config.wholeCellsFor(HOLLOWNESS_RADIUS_CEILING_KM)).coerceAtLeast(2)
         val concavity = FloatArray(cellCount)
         var concavityScale = 0.0
         for (cell in 0 until cellCount) {

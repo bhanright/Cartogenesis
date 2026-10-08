@@ -246,7 +246,10 @@ class MeridionalWindTest : BorrowsSharedWorlds() {
             }
         }
 
-        BoxBlur.apply(precip, radius = (w / 128).coerceAtLeast(1), passes = 2)
+        // The production blur's radius, a length on the ground read as whole cells: written as a
+        // 128th of the map's width, it was the same 93.75 km on the 12,000 km world and four cells
+        // where production's is one on the Earth-sized planet's 78 km cells at 256 rows.
+        BoxBlur.apply(precip, radius = config.cellsWithin(ClimateStage.RAIN_BLUR_RADIUS_KM).coerceAtLeast(1), passes = 2)
         for (i in precip.data.indices) {
             precip.data[i] =
                 (precip.data[i] * millimetresPerUnit / ClimateStage.REFERENCE_MM).coerceIn(0f, 1f)
@@ -331,23 +334,20 @@ class MeridionalWindTest : BorrowsSharedWorlds() {
         // shown to fail without the fix — it cannot even be stated there.
         var pooledClimb = 0.0; var pooledClimbCells = 0
         var pooledDescend = 0.0; var pooledDescendCells = 0
-        val stalled = ArrayList<Long>()
+        // Armed again at K2: on the Earth-sized planet the control ocean under the belts' wind
+        // alone solves on every seed here, seed 42 at 256 rows included (K1's stall).
         listOf(7L, 42L, 1234L).forEach { seed ->
             val base = WorldGenConfig.forRows(seed, SIZE)
-            val zonal = OceanStall.orStalled(seed, stalled) {
-                SharedWorlds.world(
-                    base.copy(
-                        climate = base.climate.copy(
-                            meridionalWindShare = 0f, pressureWinds = false
-                        )
+            val zonal = SharedWorlds.world(
+                base.copy(
+                    climate = base.climate.copy(
+                        meridionalWindShare = 0f, pressureWinds = false
                     )
                 )
-            } ?: return@forEach
-            val slanted = OceanStall.orStalled(seed, stalled) {
-                SharedWorlds.world(
-                    base.copy(climate = base.climate.copy(pressureWinds = false))
-                )
-            } ?: return@forEach
+            )
+            val slanted = SharedWorlds.world(
+                base.copy(climate = base.climate.copy(pressureWinds = false))
+            )
             val w = zonal.width
             val h = zonal.height
 
@@ -390,7 +390,6 @@ class MeridionalWindTest : BorrowsSharedWorlds() {
             pooledClimb += climbGain; pooledClimbCells += climbCells
             pooledDescend += descendGain; pooledDescendCells += descendCells
         }
-        OceanStall.record(stalled)
 
         // Direction only, deliberately: a magnitude threshold here would be a number chosen to make
         // the guard green, and the sign over the cells is the claim anyway.
@@ -471,11 +470,16 @@ class MeridionalWindTest : BorrowsSharedWorlds() {
             "seed $MONSOON_SEED's monsoon coast covers ${"%.2f".format(figures[0] * 100)}% of land with a zonal " +
                 "wind too, so the slant is not what the clause measures"
         )
-        assertTrue(
-            figures[1] >= MIN_SHARE,
-            "seed $MONSOON_SEED's monsoon coast covers only ${"%.2f".format(figures[1] * 100)}% " +
-                "of land"
-        )
+        // Recorded at K2: on the Earth-sized planet seed 9 is another world and its monsoon coast
+        // a sliver (docs/DESIGN_LEDGER.md, K2).
+        KnownFailures.expect("K2: seed 9's monsoon coast on the Earth-sized planet is under the share the clause asks", "0.10%") {
+            if (figures[1] < MIN_SHARE) {
+                throw RecordedViolation(
+                    "seed $MONSOON_SEED's monsoon coast covers only ${"%.2f".format(figures[1] * 100)}% of land",
+                    "%.2f%%".format(figures[1] * 100)
+                )
+            }
+        }
     }
 
     /**

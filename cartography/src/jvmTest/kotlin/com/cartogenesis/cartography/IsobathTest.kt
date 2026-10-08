@@ -3,6 +3,7 @@ package com.cartogenesis.cartography
 import com.cartogenesis.cartography.geometry.KnownFailures
 import com.cartogenesis.cartography.geometry.RecordedViolation
 import com.cartogenesis.worldgen.BorrowsSharedWorlds
+import com.cartogenesis.worldgen.CalibrationPlanet
 import com.cartogenesis.worldgen.SharedWorlds
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import kotlin.math.sin
@@ -99,14 +100,14 @@ class IsobathTest : BorrowsSharedWorlds() {
          */
         const val MIN_SLOPE_INKED = 0.015
 
-        /** The world these figures are read against: the generator's own defaults. */
-        val CONFIG = WorldGenConfig.forRows(seed = 1L, rows = DOWN)
+        /** The world these figures are read against: the generator's defaults on [CalibrationPlanet]. */
+        val CONFIG = CalibrationPlanet.of(WorldGenConfig.forRows(seed = 1L, rows = DOWN))
 
         /**
          * A generated world at the same grid, where the raster's own contour arithmetic is read:
          * the default settings, as the gallery and the census use them.
          */
-        val WORLD_CONFIG = WorldGenConfig.forRows(seed = 42L, rows = DOWN)
+        val WORLD_CONFIG = CalibrationPlanet.of(WorldGenConfig.forRows(seed = 42L, rows = DOWN))
 
         /**
          * Contour ink a reader sees, on [Isobaths.ink]'s 0-to-1 scale: a tenth of a line's full

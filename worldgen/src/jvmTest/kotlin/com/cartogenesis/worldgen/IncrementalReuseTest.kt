@@ -43,8 +43,12 @@ import kotlin.test.assertTrue
 class IncrementalReuseTest {
 
     // Seed 99 rather than the usual 42, because 42 at this size has no lakes at all and the
-    // lakes case then passes without ever exercising the setting it names.
-    private val base = WorldGenConfig.forRows(99L, REUSE_ROWS)
+    // lakes case then passes without ever exercising the setting it names. On the 12,000 km planet
+    // ([CalibrationPlanet]), where 128 rows are cells of 46.9 km: on the Earth-sized planet's 157 km
+    // cells the uplift, shelf and littoral settings move no cell of the world, and a setting that
+    // moves nothing cannot show its stage's guard working. The reuse chain is the engine's, and
+    // the same on a planet of any size.
+    private val base = CalibrationPlanet.of(WorldGenConfig.forRows(99L, REUSE_ROWS))
 
     @Test
     fun `reusing stages gives the same world as generating afresh`() {

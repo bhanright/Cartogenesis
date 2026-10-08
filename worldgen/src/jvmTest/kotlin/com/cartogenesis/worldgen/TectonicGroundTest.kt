@@ -46,10 +46,15 @@ class TectonicGroundTest {
     /**
      * Cells half as tall as they are wide, at 512 by 512, and square, at 1,024 by 512: each case
      * below is read on both.
+     *
+     * Both on the 12,000 km planet ([CalibrationPlanet]), whose 512 rows are cells of 11.7 km, the
+     * size these operators' bearings were measured at: on the Earth-sized planet's 39 km cells the
+     * margin's 300 km is under eight cells and a rift's 93.75 km centerline step under three, and
+     * what the cases read there is the staircase of the grid, not the operator's bearing.
      */
     private val grids = listOf(
-        Grid(WorldGenConfig(seed = 1L, width = 512, height = 512)),
-        Grid(WorldGenConfig.forRows(1L, 512))
+        Grid(CalibrationPlanet.of(WorldGenConfig(seed = 1L, width = 512, height = 512))),
+        Grid(CalibrationPlanet.of(WorldGenConfig.forRows(1L, 512)))
     )
 
     /**

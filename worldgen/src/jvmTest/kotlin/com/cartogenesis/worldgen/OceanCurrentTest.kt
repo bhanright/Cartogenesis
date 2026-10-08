@@ -87,7 +87,7 @@ class OceanCurrentTest : BorrowsSharedWorlds() {
         )
         // Recorded at K2: settlement is the realms' business, which waits for the atlas overhaul on
         // the Earth-sized planet (docs/TODO.md, docs/DESIGN_LEDGER.md, K2).
-        KnownFailures.expect("K2: the realms' settlement on the Earth-sized planet, before the atlas overhaul", "cold coasts settled no worse than warm ones: seed 1234 at -1.2%") {
+        KnownFailures.expect("K2: the realms' settlement on the Earth-sized planet, before the atlas overhaul", "cold coasts settled no worse than warm ones: seed 1234 at -1.5%") {
             val complaints = listOfNotNull(
                 under.takeIf { it.isNotEmpty() }?.let { "cold coasts settled no worse than warm ones: $it" },
                 "pooled %.1f%%".format((pooled - 1) * 100).takeIf { pooled <= 1.02 }

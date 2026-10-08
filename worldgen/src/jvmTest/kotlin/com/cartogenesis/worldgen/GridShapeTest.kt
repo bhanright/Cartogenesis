@@ -28,6 +28,11 @@ import kotlin.test.assertTrue
  * The comparison reports rather than fails ([CrossGridReport]): the application makes one grid
  * (docs/DESIGN_LEDGER.md, G1), and the grid of 512 by 512 is not it. The control still fails,
  * because it is about the instrument.
+ *
+ * Every world here is on the 12,000 km planet ([CalibrationPlanet]), the one the cell sizes above
+ * and the spreads below were measured on. On the Earth-sized planet the control's doubled slant
+ * moved no band's desert past the spread (K2): a spread taken on one planet's worlds is not the
+ * instrument for another's, and re-deriving it there is a measurement of its own.
  */
 class GridShapeTest : BorrowsSharedWorlds() {
 
@@ -127,8 +132,8 @@ class GridShapeTest : BorrowsSharedWorlds() {
         SEEDS.forEach { seed ->
             compare(
                 seed,
-                SharedWorlds.world(WorldGenConfig(seed = seed, width = 512, height = 512)),
-                SharedWorlds.world(WorldGenConfig.forRows(seed, SQUARE_ROWS)),
+                SharedWorlds.world(CalibrationPlanet.of(WorldGenConfig(seed = seed, width = 512, height = 512))),
+                SharedWorlds.world(CalibrationPlanet.of(WorldGenConfig.forRows(seed, SQUARE_ROWS))),
                 misses
             )
         }
@@ -148,7 +153,7 @@ class GridShapeTest : BorrowsSharedWorlds() {
      */
     @Test
     fun `the comparison sees the belts' slant counted in rows`() {
-        val squareCells = WorldGenConfig.forRows(CONTROL_SEED, SQUARE_ROWS)
+        val squareCells = CalibrationPlanet.of(WorldGenConfig.forRows(CONTROL_SEED, SQUARE_ROWS))
         val slantInRows = squareCells.copy(
             climate = squareCells.climate.copy(
                 meridionalWindShare = squareCells.climate.meridionalWindShare * ROWS_PER_CELL_ON_TODAYS_GRID
@@ -157,7 +162,7 @@ class GridShapeTest : BorrowsSharedWorlds() {
         val misses = Misses()
         compare(
             CONTROL_SEED,
-            SharedWorlds.world(WorldGenConfig(seed = CONTROL_SEED, width = 512, height = 512)),
+            SharedWorlds.world(CalibrationPlanet.of(WorldGenConfig(seed = CONTROL_SEED, width = 512, height = 512))),
             WorldGenerationEngine.generateBlocking(slantInRows),
             misses
         )

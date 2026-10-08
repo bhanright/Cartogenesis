@@ -79,7 +79,7 @@ class EarthLikenessTest : BorrowsSharedWorlds() {
         // 1.05 at L1's review round, whose rift joins are relay ramps.
         KnownFailures.expect(
             LAW_SETS_EVERY_CUT,
-            "42: humid country carries 1.28 times the channel per unit of land that semi-arid country does, " +
+            "42: humid country carries 1.26 times the channel per unit of land that semi-arid country does, " +
                 "where Moglen, " +
                 "Eltahir & Bras (1998) have the density falling away on the wet side and so below one; " +
                 "1234: humid country carries 1.11 times the channel per unit of land that semi-arid country does, " +

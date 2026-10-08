@@ -1177,7 +1177,7 @@ object PlateStage {
      * the drift was a tenth of that, would pile a third of the plates onto the polar rows. Two
      * seeds on the same cell is harmless — the later id simply takes the cell and the earlier
      * plate has no region in that epoch, which is a plate that had not yet rifted away from its
-     * neighbour.
+     * neighbor.
      */
     internal fun displacedPlates(
         config: WorldGenConfig,
@@ -1806,7 +1806,7 @@ object PlateStage {
      * points spread uniformly over the sphere, each carried by whichever plate lies over it.
      * Restricted to oceanic plates, so what comes out is island chains in deep water rather than
      * volcanic fields inland, and clipped to the carrying plate, so a trail stops at the boundary
-     * instead of running on across a neighbour that never passed over the hotspot. A point is
+     * instead of running on across a neighbor that never passed over the hotspot. A point is
      * read on the plate that owns its own cell, so the clip trims a chain where it leaves the plate
      * and never erases one outright, which is what a point drawn on the map and stamped on a plate
      * chosen apart from it did in the first version of this, on every seed tried.

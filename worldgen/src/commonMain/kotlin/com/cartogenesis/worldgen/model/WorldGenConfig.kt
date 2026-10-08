@@ -1316,6 +1316,7 @@ data class TectonicsConfig(
      * the summits along each of the two lines the Hawaiian volcanoes stand in, the Loa and the Kea
      * trends; the spacing is set by the bend of the plate under the last volcano's load (ten Brink,
      * *Volcano spacing and plate rigidity*, Geology 19, 1991), so the cones overlap into a ridge.
+     * Each volcano's own spacing is drawn over the whole 40 to 60 (`PlateStage.ventSpacingShare`).
      */
     val hotspotSpacingKm: Double = 50.0,
     /**
@@ -1324,8 +1325,9 @@ data class TectonicsConfig(
      *
      * Mauna Loa's base is more than 90 miles, 145 km, across on the sea floor (USGS), the largest of
      * the chain's volcanoes; half of it, 72.5 km. Each volcano of a chain is drawn smaller than
-     * this by its own volume (`PlateStage.volcanoSizeShare`), so with [hotspotSpacingKm] the cones
-     * overlap into a beaded ridge rather than one of a single width.
+     * this by its own volume (`PlateStage.volcanoSizeShare`) and by its plume's flux against
+     * Hawaii's, the strongest (`PlateStage.plumeFluxShare`), so with [hotspotSpacingKm] the cones
+     * overlap into a beaded ridge rather than one of a single width, and most chains are smaller.
      */
     val hotspotRadiusKm: Double = 72.5,
     /** Height of the youngest seamount in a chain, in normalized elevation units. */

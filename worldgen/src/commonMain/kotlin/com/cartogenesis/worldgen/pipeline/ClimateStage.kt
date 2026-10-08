@@ -1809,6 +1809,13 @@ object ClimateStage {
             }
             precipitation.data.copyInto(cells.rainBeforeBlur.data)
             if (warm) ledger.warmHalf = cells else ledger.coldHalf = cells
+            ledger.inputs.add(
+                MoistureLedger.Inputs(
+                    warm, temperature, seaSurface, seaIce, wind.zonal, wind.meridional,
+                    wind.beltZonal, bandOfRow, convergencePerCell, inversionSuppression,
+                    biotemperatureC
+                )
+            )
         }
 
         // Softens the march's column-by-column steps into weather, over a radius on the ground, so
@@ -1915,6 +1922,9 @@ object ClimateStage {
         val landOriginMoisture = FloatArray(rowCount)
         val previousColumn = FloatArray(rowCount)
         val previousColumnLandOrigin = FloatArray(rowCount)
+        // How much of each row's parcel the next column's rows sampled, for the ledger's
+        // per-cell account of what the blend makes and destroys.
+        val sampledShare = if (ledgerCells != null) FloatArray(rowCount) else null
 
         // Laps around the cylinder: the first two seed a realistic moisture state and leave a
         // rainfall for the ground's wetness to be read off, the last is the one that gets
@@ -1931,6 +1941,7 @@ object ClimateStage {
                 moisture.copyInto(previousColumn)
                 landOriginMoisture.copyInto(previousColumnLandOrigin)
                 if (entry != null) entry.advectionGain -= previousColumn.sumOf { it.toDouble() }
+                sampledShare?.fill(0f)
 
                 for (rowWithinRun in 0 until rowCount) {
                     val row = firstRow + rowWithinRun
@@ -1972,6 +1983,12 @@ object ClimateStage {
                         landOriginMoisture[rowWithinRun] = previousColumnLandOrigin[rowBefore] +
                             (previousColumnLandOrigin[rowAfter] -
                                 previousColumnLandOrigin[rowBefore]) * shareOfAfter
+                        if (sampledShare != null) {
+                            sampledShare[rowBefore] += 1f - shareOfAfter
+                            sampledShare[rowAfter] += shareOfAfter
+                        }
+                    } else if (sampledShare != null) {
+                        sampledShare[rowWithinRun] += 1f
                     }
 
                     val columnBefore = moisture[rowWithinRun]
@@ -2082,6 +2099,12 @@ object ClimateStage {
                             ledgerCells.groundReturn.data[cell] = marched.returned
                             ledgerCells.coldCapRemoved.data[cell] = capped.toFloat()
                         }
+                    }
+                }
+                if (recording && sampledShare != null && ledgerCells != null) {
+                    for (rowWithinRun in 0 until rowCount) {
+                        ledgerCells.advectionGain.data[(firstRow + rowWithinRun) * cellsAcross + upwindColumn] =
+                            (sampledShare[rowWithinRun] - 1f) * previousColumn[rowWithinRun]
                     }
                 }
             }

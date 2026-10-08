@@ -113,8 +113,42 @@ internal class MoistureLedger {
 
         /** What the cold cap clipped off the parcel at each land cell. */
         val coldCapRemoved = FloatField(cellsAcross, cellsDown)
+
+        /**
+         * What the sideways blend made or destroyed of each cell's air in the step that carried
+         * it on: the share of the cell's parcel the next column's rows sampled, less one, times the
+         * parcel. Negative where the wind converges and the blend drops the air that meets,
+         * positive where it diverges and the blend copies it; over a column it sums to that step's
+         * [Lap.advectionGain]. Over sea and land alike.
+         */
+        val advectionGain = FloatField(cellsAcross, cellsDown)
     }
 
     var warmHalf: Cells? = null
     var coldHalf: Cells? = null
+
+    /**
+     * What one season's march read, kept by reference so that a measurement can march the same
+     * inputs another way and set the answer beside this one. Every field is the march's own, one
+     * entry per cell, row-major; the wind is the pair the march steps by.
+     */
+    class Inputs(
+        val warm: Boolean,
+        val temperatureC: FloatField,
+        val seaSurfaceC: FloatField,
+        val seaIce: BooleanArray,
+        /** Which way the air over each cell moves along the row, +1 eastward. */
+        val zonalDirection: IntArray,
+        /** Rows the air crosses per cell of zonal travel, positive toward the south. */
+        val slantRowsPerCell: FloatArray,
+        /** Each row's belt direction, which partitions the rows into the runs the march sweeps. */
+        val beltZonal: IntArray,
+        /** The circulation belt's multiplier on the rain rate, per row. */
+        val bandOfRow: FloatArray,
+        val convergencePerCell: FloatField?,
+        val inversionSuppression: FloatField?,
+        val biotemperatureC: FloatField?
+    )
+
+    val inputs = ArrayList<Inputs>()
 }

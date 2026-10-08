@@ -152,7 +152,7 @@ class MoistureClosureTest : BorrowsSharedWorlds() {
             .format(seeds.size, signature, worstShare, worstLap))
         // The two leaks docs/TODO.md records and the row blend's own, measured: see the class
         // comment, and notes on the fix in docs/TODO.md's entry.
-        KnownFailures.expect("C1: the moisture march does not conserve its water", "unaccounted +0.000 of the sources") {
+        KnownFailures.expect("C1: the moisture march does not conserve its water", "unaccounted +15.657 of the sources: open sea rain +15.731, cold cap -0.029, row blend -0.045") {
             if (worstShare > CLOSURE_TOLERANCE) {
                 throw RecordedViolation(
                     ("the march's water budget does not close: the worst lap leaves %.3f of its " +

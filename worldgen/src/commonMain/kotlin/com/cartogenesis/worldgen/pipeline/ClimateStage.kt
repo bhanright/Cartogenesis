@@ -761,7 +761,9 @@ object ClimateStage {
         sea: SeaLevelResult,
         ocean: OceanResult,
         /** The glacial forcing, in degrees of global mean; zero is today's world. */
-        globalCoolingC: Float = 0f
+        globalCoolingC: Float = 0f,
+        /** Filled with the march's water budget when handed in; see [moistureLedger]. */
+        ledger: MoistureLedger? = null
     ): SeasonalFields {
         val cellsAcross = config.width
         val cellsDown = config.height
@@ -892,12 +894,14 @@ object ClimateStage {
         val summerRaw = buildPrecipitation(
             config, sea, warmHalfTemperature, warmHalfSeaSurface, summerSeaIce, summerWind.march,
             ocean, bands(cellsDown, climateConfig, warm = true),
-            summerConvergence, summerInversion, biotemperatureC, summerLandOrigin
+            summerConvergence, summerInversion, biotemperatureC, summerLandOrigin,
+            warm = true, ledger = ledger
         )
         val winterRaw = buildPrecipitation(
             config, sea, coldHalfTemperature, coldHalfSeaSurface, winterSeaIce, winterWind.march,
             ocean, bands(cellsDown, climateConfig, warm = false),
-            winterConvergence, winterInversion, biotemperatureC, winterLandOrigin
+            winterConvergence, winterInversion, biotemperatureC, winterLandOrigin,
+            warm = false, ledger = ledger
         )
 
         // mm/year, by the one conversion factor the whole model uses. Unclamped: this is what
@@ -1705,7 +1709,10 @@ object ClimateStage {
         inversionSuppression: FloatField?,
         /** Holdridge's biotemperature per cell, or null when the ground's return is the proxy. */
         biotemperatureC: FloatField?,
-        landOriginPrecipitation: FloatField
+        landOriginPrecipitation: FloatField,
+        /** Which half-year this is, for the [ledger]'s entries; the march itself does not read it. */
+        warm: Boolean,
+        ledger: MoistureLedger?
     ): FloatField {
         val cellsAcross = config.width
         val cellsDown = config.height
@@ -1748,7 +1755,20 @@ object ClimateStage {
             runNeedsSecondSweep[run] = anyReversed
         }
 
-        parallelChunks(0, runStartRows.size - 1) { firstRun, lastRun ->
+        // The budget's entries, one set of laps per run and sweep, each filled by the one thread
+        // that marches it and handed to the ledger in run order afterwards, so the ledger reads
+        // the same whatever the scheduling. None of it exists without a ledger.
+        val runCount = runStartRows.size - 1
+        val firstSweepLaps = ledger?.let {
+            Array(runCount) { run -> lapEntries(warm, runStartRows, run, wind.beltZonal, cellsAcross, 1) }
+        }
+        val secondSweepLaps = ledger?.let {
+            Array(runCount) { run -> lapEntries(warm, runStartRows, run, wind.beltZonal, cellsAcross, -1) }
+        }
+        val cells = ledger?.let { MoistureLedger.Cells(cellsAcross, cellsDown) }
+        val reversedCells = ledger?.let { MoistureLedger.Cells(cellsAcross, cellsDown) }
+
+        parallelChunks(0, runCount) { firstRun, lastRun ->
             for (run in firstRun until lastRun) {
                 val firstRow = runStartRows[run]
                 val lastRow = runStartRows[run + 1]
@@ -1757,23 +1777,38 @@ object ClimateStage {
                     config, sea, temperature, seaSurface, seaIce, wind, ocean, bandOfRow,
                     convergencePerCell, inversionSuppression, biotemperatureC,
                     precipitation, landOriginPrecipitation, sweepDirection = beltDirection,
-                    firstRow = firstRow, lastRow = lastRow
+                    firstRow = firstRow, lastRow = lastRow,
+                    ledgerLaps = firstSweepLaps?.get(run), ledgerCells = cells
                 )
                 if (runNeedsSecondSweep[run]) {
                     marchRun(
                         config, sea, temperature, seaSurface, seaIce, wind, ocean, bandOfRow,
                         convergencePerCell, inversionSuppression, biotemperatureC,
                         reversed, reversedLandOrigin, sweepDirection = -beltDirection,
-                        firstRow = firstRow, lastRow = lastRow
+                        firstRow = firstRow, lastRow = lastRow,
+                        ledgerLaps = secondSweepLaps?.get(run), ledgerCells = reversedCells
                     )
                     for (cell in firstRow * cellsAcross until lastRow * cellsAcross) {
                         if (wind.zonal[cell] != beltDirection) {
                             precipitation.data[cell] = reversed.data[cell]
                             landOriginPrecipitation.data[cell] = reversedLandOrigin.data[cell]
+                            if (cells != null && reversedCells != null) {
+                                cells.groundReturn.data[cell] = reversedCells.groundReturn.data[cell]
+                                cells.coldCapRemoved.data[cell] = reversedCells.coldCapRemoved.data[cell]
+                            }
                         }
                     }
                 }
             }
+        }
+
+        if (ledger != null && cells != null) {
+            for (run in 0 until runCount) {
+                ledger.laps.addAll(firstSweepLaps!![run])
+                if (runNeedsSecondSweep[run]) ledger.laps.addAll(secondSweepLaps!![run])
+            }
+            precipitation.data.copyInto(cells.rainBeforeBlur.data)
+            if (warm) ledger.warmHalf = cells else ledger.coldHalf = cells
         }
 
         // Softens the march's column-by-column steps into weather, over a radius on the ground, so
@@ -1799,6 +1834,39 @@ object ClimateStage {
     private fun shareOfLengthPerCell(cellWidthKm: Float, lengthKm: Float): Float =
         if (lengthKm <= 0f) 0f else (cellWidthKm / lengthKm).coerceAtMost(1f)
 
+    /**
+     * Empty ledger entries for every lap of one run's sweep: [sweepSign] is +1 for the sweep the
+     * belt blows and -1 for the second sweep against it.
+     */
+    private fun lapEntries(
+        warm: Boolean,
+        runStartRows: List<Int>,
+        run: Int,
+        beltZonal: IntArray,
+        cellsAcross: Int,
+        sweepSign: Int
+    ): Array<MoistureLedger.Lap> {
+        val firstRow = runStartRows[run]
+        val lastRow = runStartRows[run + 1]
+        return Array(MARCH_LAPS) { lap ->
+            MoistureLedger.Lap(
+                warm, firstRow, lastRow, sweepSign * beltZonal[firstRow], sweepSign < 0, lap,
+                (lastRow - firstRow).toLong() * cellsAcross
+            )
+        }
+    }
+
+    /**
+     * The march's water budget for a world, term by term, lap by lap: the same two seasonal
+     * marches [generate] runs, with a [MoistureLedger] handed in to be filled. Nothing the march
+     * computes is changed by the ledger, so this is a measurement of the world [generate] makes.
+     */
+    internal fun moistureLedger(
+        config: WorldGenConfig,
+        sea: SeaLevelResult,
+        ocean: OceanResult
+    ): MoistureLedger = MoistureLedger().also { seasonalFields(config, sea, ocean, ledger = it) }
+
     /** One circulation belt's worth of rows, marched together. See [buildPrecipitation]. */
     private fun marchRun(
         config: WorldGenConfig,
@@ -1816,7 +1884,10 @@ object ClimateStage {
         landOriginPrecipitation: FloatField,
         sweepDirection: Int,
         firstRow: Int,
-        lastRow: Int
+        lastRow: Int,
+        /** One entry per lap, filled when a ledger is being kept; see [moistureLedger]. */
+        ledgerLaps: Array<MoistureLedger.Lap>? = null,
+        ledgerCells: MoistureLedger.Cells? = null
     ) {
         val cellsAcross = config.width
         val climateConfig = config.climate
@@ -1850,6 +1921,8 @@ object ClimateStage {
         // recorded, so the arbitrary starting value washes out. See [MARCH_LAPS].
         for (lap in 0 until MARCH_LAPS) {
             val recording = lap == MARCH_LAPS - 1
+            val entry = ledgerLaps?.get(lap)
+            if (entry != null) entry.storageAtStart = moisture.sumOf { it.toDouble() }
             for (stepAlongWind in 0 until cellsAcross) {
                 val column =
                     if (sweepDirection > 0) stepAlongWind else cellsAcross - 1 - stepAlongWind
@@ -1857,6 +1930,7 @@ object ClimateStage {
                 upwindColumn = ((upwindColumn % cellsAcross) + cellsAcross) % cellsAcross
                 moisture.copyInto(previousColumn)
                 landOriginMoisture.copyInto(previousColumnLandOrigin)
+                if (entry != null) entry.advectionGain -= previousColumn.sumOf { it.toDouble() }
 
                 for (rowWithinRun in 0 until rowCount) {
                     val row = firstRow + rowWithinRun
@@ -1902,6 +1976,7 @@ object ClimateStage {
 
                     val columnBefore = moisture[rowWithinRun]
                     val landBefore = landOriginMoisture[rowWithinRun]
+                    if (entry != null) entry.advectionGain += columnBefore.toDouble()
 
                     if (!sea.isLand[cell]) {
                         val marched = if (seaIce[cell]) {
@@ -1926,6 +2001,17 @@ object ClimateStage {
                         landOriginMoisture[rowWithinRun] =
                             landBefore * (1f - marched.rainShareOfColumn)
                         if (recording) precipitation.data[cell] = marched.rain
+                        if (entry != null) {
+                            if (seaIce[cell]) {
+                                entry.seaIceRain += marched.rain.toDouble()
+                            } else {
+                                // What the step added, the evaporation, is read off the parcel and
+                                // not off the formula, so whatever the step took out is in it too.
+                                entry.seaEvaporation +=
+                                    marched.moisture.toDouble() - columnBefore.toDouble()
+                                entry.openSeaRainRecorded += marched.rain.toDouble()
+                            }
+                        }
                         continue
                     }
 
@@ -1986,8 +2072,20 @@ object ClimateStage {
                     // as the ground's wetness.
                     precipitation.data[cell] = marched.rain
                     if (recording) landOriginPrecipitation.data[cell] = landRain
+                    if (entry != null) {
+                        val capped = (columnBefore.toDouble() - marched.rain.toDouble() +
+                            marched.returned.toDouble()) - marched.moisture.toDouble()
+                        entry.landRain += marched.rain.toDouble()
+                        entry.groundReturn += marched.returned.toDouble()
+                        entry.coldCapRemoved += capped
+                        if (recording && ledgerCells != null) {
+                            ledgerCells.groundReturn.data[cell] = marched.returned
+                            ledgerCells.coldCapRemoved.data[cell] = capped.toFloat()
+                        }
+                    }
                 }
             }
+            if (entry != null) entry.storageAtEnd = moisture.sumOf { it.toDouble() }
         }
     }
 

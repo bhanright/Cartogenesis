@@ -46,16 +46,21 @@ class TectonicGroundTest {
     /**
      * Cells half as tall as they are wide, at 512 by 512, and square, at 1,024 by 512: each case
      * below is read on both.
-     *
-     * Both on the 12,000 km planet ([CalibrationPlanet]), whose 512 rows are cells of 11.7 km, the
-     * size these operators' bearings were measured at: on the Earth-sized planet's 39 km cells the
-     * margin's 300 km is under eight cells and a rift's 93.75 km centerline step under three, and
-     * what the cases read there is the staircase of the grid, not the operator's bearing.
      */
     private val grids = listOf(
-        Grid(CalibrationPlanet.of(WorldGenConfig(seed = 1L, width = 512, height = 512))),
-        Grid(CalibrationPlanet.of(WorldGenConfig.forRows(1L, 512)))
+        Grid(WorldGenConfig(seed = 1L, width = 512, height = 512)),
+        Grid(WorldGenConfig.forRows(1L, 512))
     )
+
+    /**
+     * The same two grids on the 12,000 km planet ([CalibrationPlanet]), whose 512 rows are cells of
+     * 11.7 km, the size the margin's and the rift's bearings were measured at: on the Earth-sized
+     * planet's 39 km cells the margin's 300 km is under eight cells and a rift's 93.75 km centerline
+     * step under three, and what those two cases read there is the staircase of the grid, not the
+     * operator's bearing. Not the drift's case: a plate's drift is Earth's 8,400 km an epoch, which
+     * on the smaller planet runs most of the way round it.
+     */
+    private val calibrationGrids = grids.map { Grid(CalibrationPlanet.of(it.config)) }
 
     /**
      * A belt's distance from its boundary is a length on the ground, not a count of cells.
@@ -96,7 +101,7 @@ class TectonicGroundTest {
      * distance between where it passes a tenth and where it passes nine tenths.
      */
     @Test
-    fun `the continental margin is as wide as the setting says at every bearing`() = grids.forEach { grid -> with(grid) {
+    fun `the continental margin is as wide as the setting says at every bearing`() = calibrationGrids.forEach { grid -> with(grid) {
         val widths = MARGIN_BEARINGS_DEGREES.associateWith { degrees ->
             val normal = degrees * PI / 180.0
             val crust = straightEdge(normal)
@@ -182,7 +187,7 @@ class TectonicGroundTest {
      * it runs, so its half-grabens are cut to the same lengths in kilometres at every bearing.
      */
     @Test
-    fun `a rift is measured along its course on the ground`() = grids.forEach { grid -> with(grid) {
+    fun `a rift is measured along its course on the ground`() = calibrationGrids.forEach { grid -> with(grid) {
         val measured = RIFT_BEARINGS_DEGREES.associateWith { degrees ->
             val angle = degrees * PI / 180.0
             val run = straightRun(angle, RIFT_LENGTH_CELL_WIDTHS)

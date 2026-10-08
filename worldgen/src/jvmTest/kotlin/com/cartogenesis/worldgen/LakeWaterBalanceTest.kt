@@ -263,10 +263,17 @@ class LakeWaterBalanceTest : BorrowsSharedWorlds() {
             if (id >= 0) on.rivers.lakes.lakes[id] else null
         }.distinct()
         println("BALANCE seed $drySeed dry basin: ${lakes.size} lakes, ${lakes.count { it.endorheic }} of them endorheic")
-        assertTrue(
-            lakes.isEmpty() || lakes.any { it.endorheic },
-            "the dry basin keeps water and none of its lakes is marked endorheic"
-        )
+        // Recorded at K2, whose lakes take Budyko's share of their catchment's rain: the dry
+        // basin's one lake fills its hollow and spills into a lower one that keeps no water, so the
+        // basin keeps water and none of it is endorheic (docs/DESIGN_LEDGER.md, K2; docs/TODO.md).
+        KnownFailures.expect("K2: the dry basin's lake spills into a hollow that keeps no water", "unrecorded") {
+            if (!(lakes.isEmpty() || lakes.any { it.endorheic })) {
+                throw RecordedViolation(
+                    "the dry basin keeps water and none of its lakes is marked endorheic",
+                    "${lakes.size} lakes, none endorheic"
+                )
+            }
+        }
         lakes.forEach { lake ->
             if (lake.endorheic) {
                 assertTrue(

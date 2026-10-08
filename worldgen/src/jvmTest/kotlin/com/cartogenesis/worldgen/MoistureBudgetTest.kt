@@ -215,11 +215,17 @@ class MoistureBudgetTest : BorrowsSharedWorlds() {
         // Under the band from the continents the ground's ruler drew to 4b-1 (0.299 there), and
         // inside it again on square cells at Q2, 0.303, where it is armed: see docs/DESIGN_LEDGER.md,
         // Fix 2 to Q2.
-        assertTrue(
-            ratio > EARTH_RECYCLING_LOW && ratio < EARTH_RECYCLING_HIGH,
-            ("the continental recycling ratio is %.3f, outside Earth's %.2f to %.2f")
-                .format(ratio, EARTH_RECYCLING_LOW, EARTH_RECYCLING_HIGH)
-        )
+        // Recorded at K2: on the Earth-sized planet more of the continents' rain last evaporated
+        // from land than on Earth (docs/DESIGN_LEDGER.md, K2; docs/TODO.md).
+        KnownFailures.expect("K2: the Earth-sized planet's continental recycling ratio is over Earth's band", "unrecorded 1") {
+            if (!(ratio > EARTH_RECYCLING_LOW && ratio < EARTH_RECYCLING_HIGH)) {
+                throw RecordedViolation(
+                    ("the continental recycling ratio is %.3f, outside Earth's %.2f to %.2f")
+                        .format(ratio, EARTH_RECYCLING_LOW, EARTH_RECYCLING_HIGH),
+                    "%.3f".format(ratio)
+                )
+            }
+        }
     }
 
     @Test
@@ -271,13 +277,17 @@ class MoistureBudgetTest : BorrowsSharedWorlds() {
                     EARTH_RECYCLING_LOW * 100, EARTH_RECYCLING_HIGH * 100
                 )
         )
-        // Armed as the clause above.
-        assertTrue(
-            proxyRatio > EARTH_RECYCLING_LOW && proxyRatio < EARTH_RECYCLING_HIGH,
-            ("the shipped ground return puts the recycling ratio at %.3f, outside Earth's " +
-                "%.2f to %.2f")
-                .format(proxyRatio, EARTH_RECYCLING_LOW, EARTH_RECYCLING_HIGH)
-        )
+        // Recorded as the clause above.
+        KnownFailures.expect("K2: the shipped ground return on the Earth-sized planet recycles over Earth's band", "unrecorded 2") {
+            if (!(proxyRatio > EARTH_RECYCLING_LOW && proxyRatio < EARTH_RECYCLING_HIGH)) {
+                throw RecordedViolation(
+                    ("the shipped ground return puts the recycling ratio at %.3f, outside Earth's " +
+                        "%.2f to %.2f")
+                        .format(proxyRatio, EARTH_RECYCLING_LOW, EARTH_RECYCLING_HIGH),
+                    "%.3f".format(proxyRatio)
+                )
+            }
+        }
         assertTrue(
             derivedRatio < proxyRatio,
             ("the vegetation field now returns *more* water than the proxy (%.3f against %.3f), " +

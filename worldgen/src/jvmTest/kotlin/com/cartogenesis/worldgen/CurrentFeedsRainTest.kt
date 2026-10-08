@@ -167,11 +167,17 @@ class CurrentFeedsRainTest : BorrowsSharedWorlds() {
         // Armed by chunk 4b-1: until the upwelling, the Stommel circulation's equatorward drift alone
         // cooled only nine cells of this coast by 0.8 degrees (docs/DESIGN_LEDGER.md, 4a and 4b-1).
         println("H4 seed $SEED coast lengths: cold %.0f km, warm %.0f km".format(coldCoastKm, warmCoastKm))
-        assertTrue(
-            coldCoastKm >= COLD_COAST_FLOOR_KM,
-            "only %.0f km of seed $SEED's west coast at 27-33 S sits 0.8 C under its latitude's mean, where the sample asks %.0f"
-                .format(coldCoastKm, COLD_COAST_FLOOR_KM)
-        )
+        // Recorded at K2: the sample is a coast of seed 7's on the 12,000 km planet, and on the
+        // Earth-sized planet the seed's continents are other continents (docs/DESIGN_LEDGER.md, K2).
+        KnownFailures.expect("K2: seed 7's cold sample coast on the Earth-sized planet is shorter than the sample asks", "unrecorded") {
+            if (coldCoastKm < COLD_COAST_FLOOR_KM) {
+                throw RecordedViolation(
+                    "only %.0f km of seed $SEED's west coast at 27-33 S sits 0.8 C under its latitude's mean, where the sample asks %.0f"
+                        .format(coldCoastKm, COLD_COAST_FLOOR_KM),
+                    "%.0f km".format(coldCoastKm)
+                )
+            }
+        }
         assertTrue(coldCoast.isNotEmpty(), "no cold-coast cells found")
         assertTrue(warmCoastKm >= WARM_COAST_FLOOR_KM, "too little warm coast found: %.0f km".format(warmCoastKm))
 

@@ -2150,7 +2150,7 @@ object PlateStage {
      * the single-sample, unmodulated stamp the guard measures its "before" against. See
      * docs/DESIGN_LEDGER.md, E3, for the eight-fold amplitudes at each grid.
      */
-    private fun stampSeamount(
+    internal fun stampSeamount(
         uplift: FloatField,
         cellHeightInCellWidths: Float,
         plateId: IntArray,

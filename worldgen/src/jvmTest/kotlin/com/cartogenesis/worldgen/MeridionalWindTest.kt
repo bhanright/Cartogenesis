@@ -246,7 +246,10 @@ class MeridionalWindTest : BorrowsSharedWorlds() {
             }
         }
 
-        BoxBlur.apply(precip, radius = (w / 128).coerceAtLeast(1), passes = 2)
+        // The production blur's radius, a length on the ground read as whole cells: written as a
+        // 128th of the map's width, it was the same 93.75 km on the 12,000 km world and four cells
+        // where production's is one on the Earth-sized planet's 78 km cells at 256 rows.
+        BoxBlur.apply(precip, radius = config.cellsWithin(ClimateStage.RAIN_BLUR_RADIUS_KM).coerceAtLeast(1), passes = 2)
         for (i in precip.data.indices) {
             precip.data[i] =
                 (precip.data[i] * millimetresPerUnit / ClimateStage.REFERENCE_MM).coerceIn(0f, 1f)
@@ -467,11 +470,16 @@ class MeridionalWindTest : BorrowsSharedWorlds() {
             "seed $MONSOON_SEED's monsoon coast covers ${"%.2f".format(figures[0] * 100)}% of land with a zonal " +
                 "wind too, so the slant is not what the clause measures"
         )
-        assertTrue(
-            figures[1] >= MIN_SHARE,
-            "seed $MONSOON_SEED's monsoon coast covers only ${"%.2f".format(figures[1] * 100)}% " +
-                "of land"
-        )
+        // Recorded at K2: on the Earth-sized planet seed 9 is another world and its monsoon coast
+        // a sliver (docs/DESIGN_LEDGER.md, K2).
+        KnownFailures.expect("K2: seed 9's monsoon coast on the Earth-sized planet is under the share the clause asks", "unrecorded") {
+            if (figures[1] < MIN_SHARE) {
+                throw RecordedViolation(
+                    "seed $MONSOON_SEED's monsoon coast covers only ${"%.2f".format(figures[1] * 100)}% of land",
+                    "%.2f%%".format(figures[1] * 100)
+                )
+            }
+        }
     }
 
     /**

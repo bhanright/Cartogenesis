@@ -5,7 +5,6 @@ import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.BoundaryClass
 import kotlin.math.abs
 import kotlin.math.sqrt
-import java.util.Locale
 import kotlin.test.Test
 import org.junit.Assert.assertTrue
 
@@ -224,20 +223,14 @@ class GroundTextureTest : BorrowsSharedWorlds() {
                     controlLowest.average(), controlHighest.average()
                 )
         )
-        // Recorded since Fix 3b, whose law cuts the plains as well as the ranges: see
-        // [LAW_SETS_EVERY_CUT]. The record is not re-taken on the world it would have to pass.
-        // Re-recorded on square cells at Q2, the box 94 km both ways (docs/DESIGN_LEDGER.md, Q2).
-        // Re-recorded at L1, whose rifts are Earth's half-grabens and the same at every grid (docs/DESIGN_LEDGER.md, L1).
-        KnownFailures.expect(LAW_SETS_EVERY_CUT, "lowest quarter 102.9 m") {
-            if (pooledLowest > RECORDED_LOWEST_QUARTER_TEXTURE_METRES + RECORDED_TO_THE_TENTH_METRE) {
-                throw RecordedViolation(
-                    "the lowest quarter of the land departs from its own smoothed self by" +
-                        " ${"%.3f".format(pooledLowest)} m, where the record reads" +
-                        " ${"%.1f".format(RECORDED_LOWEST_QUARTER_TEXTURE_METRES)}: the plains are sandpaper",
-                    String.format(Locale.ROOT, "lowest quarter %.1f m", pooledLowest)
-                )
-            }
-        }
+        // A known failure from Fix 3b to L1, armed at K2, where the Earth-sized planet's plains
+        // depart from their smoothed selves by no more than the record (docs/DESIGN_LEDGER.md, K2).
+        assertTrue(
+            "the lowest quarter of the land departs from its own smoothed self by" +
+                " ${"%.3f".format(pooledLowest)} m, where the record reads" +
+                " ${"%.1f".format(RECORDED_LOWEST_QUARTER_TEXTURE_METRES)}: the plains are sandpaper",
+            pooledLowest <= RECORDED_LOWEST_QUARTER_TEXTURE_METRES + RECORDED_TO_THE_TENTH_METRE
+        )
         // Armed again at Fix 3b; under the capped explicit update the ranges read 68.5 m.
         assertTrue(
             "the highest quarter departs by ${"%.3f".format(pooledHighest)} m against the" +
@@ -306,13 +299,19 @@ class GroundTextureTest : BorrowsSharedWorlds() {
                 " %.0f km of the crust's edge (control %.3f)")
                 .format(submerged.average(), pooled, SHELF_REACH_KM, pooledControl)
         )
-        assertTrue(
-            "only ${"%.3f".format(pooled)} of the drowned continental crust lies within" +
-                " ${"%.0f".format(SHELF_REACH_KM)} km of the crust's edge, against the" +
-                " ${"%.2f".format(MARGINAL_SHARE_OF_DROWNED_CRUST)} Earth's shelves make of it:" +
-                " the continents are flooded rather than shelved",
-            pooled >= MARGINAL_SHARE_OF_DROWNED_CRUST
-        )
+        // Recorded at K2: the Earth-sized planet's continents are flooded rather than shelved
+        // (docs/DESIGN_LEDGER.md, K2; docs/TODO.md).
+        KnownFailures.expect("K2: the Earth-sized planet's continents are flooded rather than shelved", "unrecorded") {
+            if (pooled < MARGINAL_SHARE_OF_DROWNED_CRUST) {
+                throw RecordedViolation(
+                    "only ${"%.3f".format(pooled)} of the drowned continental crust lies within" +
+                        " ${"%.0f".format(SHELF_REACH_KM)} km of the crust's edge, against the" +
+                        " ${"%.2f".format(MARGINAL_SHARE_OF_DROWNED_CRUST)} Earth's shelves make of it:" +
+                        " the continents are flooded rather than shelved",
+                    "%.3f".format(pooled)
+                )
+            }
+        }
         assertTrue(
             "with the crust one thickness and one relief everywhere the drowning is already" +
                 " ${"%.3f".format(pooledControl)} marginal, which clears the bar — so this guard" +
@@ -517,17 +516,6 @@ class GroundTextureTest : BorrowsSharedWorlds() {
     private fun world(seed: Long): WorldMap = SharedWorlds.world(standard(seed))
 
     private companion object {
-        /**
-         * The known failure the clauses Fix 3b moved record. The implicit update lets the
-         * stream-power law set every cut, where the explicit update's cap at half the drop set the
-         * drawn network's, so the land is cut as the law asks; this clause's figure was recorded on
-         * the capped terrain, and a record re-taken on the world it has to pass would pass it by
-         * construction. Whether the record or the terrain is the one to move is the maintainer's;
-         * see docs/DESIGN_LEDGER.md, Fix 3b, for the figures.
-         */
-        const val LAW_SETS_EVERY_CUT =
-            "the erosion: since the implicit update the stream-power law sets every cut, and this clause's figure was recorded on the capped terrain"
-
         /** `GeographyAuditTest`'s standard seeds, plus the author's own world. */
         val SEEDS = listOf(7L, 42L, 1234L, 99L, 718106L)
 

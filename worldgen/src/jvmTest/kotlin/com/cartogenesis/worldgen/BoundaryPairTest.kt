@@ -86,10 +86,10 @@ class BoundaryPairTest {
     private val FINE_ROWS = 1024
 
     /**
-     * How far apart the cone guard spaces a chain's volcanoes, in the largest one's radii: four,
-     * so every cone's half-height contour stands clear of the next one's foot.
+     * How far off a cell's center the cone guard stamps its vent, in cells: a third and a bit, a
+     * position no grid line or diagonal passes through.
      */
-    private val ISOLATED_CONE_SPACING_IN_RADII = 4.0
+    private val CONE_OFF_CENTER_CELLS = 0.37f
 
     /**
      * The world with the plate-base step flattened, which is what makes the belts measurable.
@@ -581,36 +581,42 @@ class BoundaryPairTest {
     }
 
     /**
-     * A seed 718106 hotspot cone's half-height radius read at sixteen bearings *on the ground*, in
+     * The largest hotspot cone's half-height radius read at sixteen bearings *on the ground*, in
      * cell widths: its mean, the relative amplitude of its eighth harmonic (the faceting the E3 guard
      * is about) and of its second (an ellipse, which is what a cone round in cells is on cells half
      * as tall as they are wide).
+     *
+     * One cone stamped on its own by the stage's own stamp, at [TectonicsConfig.hotspotRadiusKm],
+     * seed 718106's first vent. Read off a generated world, as this was until K2, the highest cone
+     * is whichever plume and volcano drew largest, and since K2 the median cone is drawn at about a
+     * third of the largest's radius (`PlateStage.plumeFluxShare`, `volcanoSizeShare`), a cone of a
+     * few cells whose ellipse is the grid's and not the stamp's.
      */
     private fun shape(rows: Int, detail: Boolean): Triple<Double, Double, Double> {
-        // One cone on its own: a chain's volcanoes stand a spacing apart that is less than their
-        // radius, and the half-height contour round the highest of them would take in its
-        // neighbors. Spaced four of the largest radii apart, every cone stands clear of the next.
-        val config = CalibrationPlanet.of(WorldGenConfig.forRows(718106L, rows)).let {
-            it.copy(
-                tectonics = it.tectonics.copy(
-                    hotspotConeDetail = detail,
-                    hotspotSpacingKm = it.tectonics.hotspotRadiusKm * ISOLATED_CONE_SPACING_IN_RADII
-                )
-            )
-        }
+        val config = CalibrationPlanet.of(WorldGenConfig.forRows(718106L, rows))
         val width = config.width
         val height = config.height
-        val withChains = PlateStage.generate(config, TerrainStage.generate(config))
-        val without = config.copy(tectonics = config.tectonics.copy(hotspotsPerMillionKm2 = 0.0))
-        val flat = PlateStage.generate(without, TerrainStage.generate(without))
+        val stamped = com.cartogenesis.worldgen.model.FloatField(width, height)
+        PlateStage.stampSeamount(
+            uplift = stamped,
+            cellHeightInCellWidths = config.cellHeightInCellWidths.toFloat(),
+            plateId = IntArray(width * height),
+            plate = 0,
+            // Off the cell grid's own centers, as a vent carried by a drift is.
+            ventX = width / 2f + CONE_OFF_CENTER_CELLS,
+            ventY = height / 2f + CONE_OFF_CENTER_CELLS,
+            radius = config.cellsFor(config.tectonics.hotspotRadiusKm),
+            amplitude = 1f,
+            seed = config.seed,
+            ventIndex = 0,
+            detail = detail
+        )
 
-        val delta = FloatArray(width * height)
+        val delta = stamped.data
         var peakI = -1
         var peakV = 0f
         for (i in delta.indices) {
-            val d = withChains.height.data[i] - flat.height.data[i]
-            delta[i] = d
-            if (d > peakV) { peakV = d; peakI = i }
+            if (delta[i] > peakV) { peakV = delta[i]; peakI = i }
         }
         val cx = (peakI % width).toFloat()
         val cy = (peakI / width).toFloat()

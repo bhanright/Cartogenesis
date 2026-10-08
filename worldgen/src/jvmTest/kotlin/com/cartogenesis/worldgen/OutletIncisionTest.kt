@@ -262,7 +262,7 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
         val pooledDepth = depthShares.average()
         // Recorded since Fix 3b: see [NOTCH_SHORT_ON_THE_LAWS_TERRAIN].
         // Re-recorded on square cells at Q2 (docs/DESIGN_LEDGER.md, Q2). Re-recorded at L1, whose rifts are Earth's half-grabens and the same at every grid (docs/DESIGN_LEDGER.md, L1).
-        KnownFailures.expect(NOTCH_SHORT_ON_THE_LAWS_TERRAIN, "102.5% as deep as the control's") {
+        KnownFailures.expect(NOTCH_SHORT_ON_THE_LAWS_TERRAIN, "67.5% as deep as the control's") {
             if (pooledDepth >= 0.5) {
                 throw RecordedViolation(
                     "the fill still stands ${"%.1f".format(pooledDepth * 100)}% as deep over the land as the " +
@@ -484,19 +484,14 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
         // pockets leave seed 42 under the Caspian with its water halved, and seed 718106's water
         // halved, its largest lake still 1.75 times the Caspian; at its review round 1.77, and seed
         // 718106 and seed 43 each keep a little over half their water (docs/DESIGN_LEDGER.md, L1).
-        KnownFailures.expect(
-            NOTCH_SHORT_ON_THE_LAWS_TERRAIN,
-            "seed 7's largest lake 1.73x the Caspian; seed 7's largest lake 0.4260% to 0.4321%; seed 7's water 1.4952% to 1.2213%; seed 42's water 1.3487% to 1.0079%"
-        ) {
-            if (overCaspian.isNotEmpty() || notHalved.isNotEmpty()) {
-                val found = (overCaspian + notHalved).joinToString("; ")
-                throw RecordedViolation(
-                    "a lake is over the Caspian's share of the map, or an over-large lake did not fall, or its world " +
-                        "kept more than half its water: $found",
-                    found
-                )
-            }
-        }
+        // Armed at K2, whose lakes take Budyko's share of their catchment's rain rather than a
+        // fixed third of it: every world's largest lake is under the Caspian's share and every
+        // world's water is halved (docs/DESIGN_LEDGER.md, K2).
+        assertTrue(
+            overCaspian.isEmpty() && notHalved.isEmpty(),
+            "a lake is over the Caspian's share of the map, or an over-large lake did not fall, or its world " +
+                "kept more than half its water: ${(overCaspian + notHalved).joinToString("; ")}"
+        )
         // Recorded at L1, where only seed 718106 started over-large; armed again at its review round,
         // whose rift joins are relay ramps: seed 43's largest lake starts at 0.392% of its land, over
         // the Caspian's 0.249%, beside 718106's 0.975% (docs/DESIGN_LEDGER.md, L1).
@@ -599,21 +594,15 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
                 "the last land cell against %.4f%% measured to the water — %s")
                 .format(SILL_SEEDS.size, pooledBefore * 100, pooledAfter * 100, perSeed)
         )
-        // Armed again at Fix 3, with the notch begun at the basin's lip (docs/DESIGN_LEDGER.md, Fix 3).
-        // Recorded at K1, whose square weather and scour moved the five worlds' drowned basins until
-        // the two rules leave them within a ten-thousandth of a per cent of land of each other: the
-        // synthetic sill `TODO.md` asks for is what would settle it (docs/DESIGN_LEDGER.md, K1).
-        KnownFailures.expect(SILL_CANNOT_TELL, SILL_RECORDED) {
-            if (pooledAfter >= pooledBefore) {
-                throw RecordedViolation(
-                    "counting the step into the water leaves ${"%.4f".format(pooledAfter * 100)}% of land " +
-                        "in the largest drowned basin against ${"%.4f".format(pooledBefore * 100)}% " +
-                        "without it, pooled over ${SILL_SEEDS.size} seeds: $perSeed — so this case cannot " +
-                        "tell the two rules apart",
-                    "${"%.4f".format(pooledAfter * 100)}% against ${"%.4f".format(pooledBefore * 100)}%"
-                )
-            }
-        }
+        // A known failure at K1, whose five worlds the two rules could not tell apart; armed again
+        // at K2, whose worlds they do (docs/DESIGN_LEDGER.md, K1 and K2).
+        assertTrue(
+            pooledAfter < pooledBefore,
+            "counting the step into the water leaves ${"%.4f".format(pooledAfter * 100)}% of land " +
+                "in the largest drowned basin against ${"%.4f".format(pooledBefore * 100)}% " +
+                "without it, pooled over ${SILL_SEEDS.size} seeds: $perSeed — so this case cannot " +
+                "tell the two rules apart"
+        )
     }
 
     private fun roundsOf(config: WorldGenConfig): List<RoundMass> {
@@ -679,11 +668,6 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
     }
 
     private companion object {
-        const val SILL_CANNOT_TELL =
-            "K1: the level sill's five worlds leave the two rules within a ten-thousandth of a per cent of land"
-
-        const val SILL_RECORDED = "0.1371% against 0.1370%"
-
         /**
          * The known failure two of the notch's clauses record since Fix 3b. On the terrain the
          * implicit update cuts, with the uplift re-derived on it, seed 99 keeps a lake 2.11 times

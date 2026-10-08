@@ -127,23 +127,18 @@ class TectonicHistoryTest {
             )
             if (inland.relief < MIN_BELT_PEAK) short += seed to inland.relief
         }
-        // Seed 42 has not met this since the distance was measured on the ground (see the KDoc
-        // on [MIN_INLAND_KM]), and it runs as a known failure rather than at a nearer distance:
-        // its history's belts stand 39 to 52 cell widths from a present boundary, 0.050 of the
-        // field tall beyond 39, but the control whose plates never moved reads 0.033 there on
-        // seed 1234, over the bar, so 39 cannot tell a scar from the present belts stamped again.
-        // Re-recorded at Q2 in kilometers, on square cells: 0.0036 where it read 0.0035.
-        KnownFailures.expect(OLD_BELTS_NEAR_PRESENT_EDGES, "seed 42 at 0.0034") {
-            if (short.isNotEmpty()) {
-                val found = short.joinToString { (seed, relief) -> String.format(Locale.ROOT, "seed %d at %.4f", seed, relief) }
-                throw RecordedViolation(
-                    "the history's tallest ground more than $MIN_INLAND_KM km from any present " +
-                        "boundary is under $MIN_BELT_PEAK on $found — an old belt that never leaves a modern " +
-                        "plate edge is not a scar, it is the same range twice",
-                    found
-                )
-            }
-        }
+        // A known failure on seed 42 from when the distance was put on the ground until K1, kept at
+        // this distance because the never-moved control reads over the bar nearer in ([MIN_INLAND_KM]).
+        // Armed at K2: on the Earth-sized planet, with an epoch's drift Earth's plate speed over
+        // the epoch, 8,400 km, every seed's old belts stand clear of its present boundaries
+        // (docs/DESIGN_LEDGER.md, K2).
+        assertTrue(
+            short.isEmpty(),
+            "the history's tallest ground more than $MIN_INLAND_KM km from any present " +
+                "boundary is under $MIN_BELT_PEAK on " +
+                short.joinToString { (seed, relief) -> String.format(Locale.ROOT, "seed %d at %.4f", seed, relief) } +
+                " — an old belt that never leaves a modern plate edge is not a scar, it is the same range twice"
+        )
     }
 
     /**
@@ -413,10 +408,6 @@ class TectonicHistoryTest {
          * km, the last over it.
          */
         const val MIN_INLAND_KM = 1_218.75f
-
-        /** The known failure the inland clause records. */
-        const val OLD_BELTS_NEAR_PRESENT_EDGES =
-            "the plates: on the ground's ruler seed 42's old belts stand within 1,219 km of a present boundary"
 
         /** The Appalachians against the Alps: roughly 2,000 m against 4,500. */
         const val MIN_LOWER = 1.8f

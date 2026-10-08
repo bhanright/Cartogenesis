@@ -119,7 +119,7 @@
     equatorial land, the Amazon, the Congo and the islands between Asia and Australia, takes
     1,500 to 2,500.
   - **The sea.** The ocean takes 4,110 to 4,190 mm a year on the sphere against Earth's about 1,100,
-    nine to twelve times the land's figure where Earth's is one and a half: the march rains most of
+    eight to twelve times the land's figure where Earth's is one and a half: the march rains most of
     its water out before it reaches a coast. Whether the millimeter conversion, which was set on the
     land, means anything over the sea is the first question.
   Plate count is not the cause: seed 42 with 14, 15 and 30 plates rains 483, 445 and 508 mm on the

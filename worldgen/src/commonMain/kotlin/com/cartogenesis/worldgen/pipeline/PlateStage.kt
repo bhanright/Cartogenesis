@@ -1944,7 +1944,6 @@ object PlateStage {
             val initialHeadingRadians = unitDraw(config.seed xor PLUME_HEADING_SALT, hotspot.toLong()) * 2.0 * PI
             // The plume's displacement since the youngest volcano was built, in cell widths of
             // ground east and south.
-            val courseNoise = PerlinNoise(seedHash(config.seed xor PLUME_COURSE_SALT, hotspot.toLong()))
             var plumeShiftEast = 0f
             var plumeShiftSouth = 0f
             // How far the plate has carried the oldest volcano so far, east and south, on the
@@ -1978,15 +1977,9 @@ object PlateStage {
                     )
                 )
                 val stepCells = cellWidths.hotspotSpacingCells * ventSpacingShare(config.seed, ventIndex)
-                // The plume's course over this step, read from a noise of the plate's travel, one
-                // lattice cycle per course, seeded for this plume alone. Read half a row into the
-                // lattice, where Perlin noise is not pinned to zero at every whole cycle. A unit of
-                // the noise is a full turn, so over one course a plume may come to head anywhere.
-                val heading = initialHeadingRadians + 2.0 * PI * courseNoise.noise(
-                    (travelledCells + stepCells / 2f) / plumeCourseCells,
-                    0.5f,
-                    COURSE_NOISE_PERIOD,
-                    COURSE_NOISE_PERIOD
+                // The plume's course over this step, in the middle of it.
+                val heading = initialHeadingRadians + 2.0 * PI * plumeCourseTurns(
+                    config.seed, hotspot, (travelledCells + stepCells / 2f) / plumeCourseCells
                 )
                 plumeShiftEast += plumeSpeedShare * stepCells * cos(heading).toFloat()
                 plumeShiftSouth += plumeSpeedShare * stepCells * sin(heading).toFloat()
@@ -2027,6 +2020,26 @@ object PlateStage {
         val unit = unitDraw(seed xor PLUME_FLUX_SALT, hotspot.toLong())
         val strongestOverWeakest = 1.0 / WEAKEST_PLUME_FLUX_SHARE
         return 1.0 / (strongestOverWeakest - (strongestOverWeakest - 1.0) * unit)
+    }
+
+    /**
+     * The [hotspot]th plume's course against the heading drawn for it, in whole turns, once its
+     * plate has travelled [coursesTravelled] of [PLUME_COURSE_KM].
+     *
+     * A smooth wander along the plate's travel and nothing else: a knot at every whole course, each
+     * drawn uniformly within half a turn either way, eased between by smoothstep so the course
+     * bends rather than kinks. Half a turn either way, because a plume's course is free in every
+     * direction, so over one course it may come to head anywhere. In courses of travel, a length on
+     * the ground, and drawn per plume from the seed, so no two plumes wander alike and no map
+     * lattice is read.
+     */
+    private fun plumeCourseTurns(seed: Long, hotspot: Int, coursesTravelled: Float): Double {
+        val knot = floor(coursesTravelled).toInt()
+        val along = (coursesTravelled - knot).toDouble()
+        val eased = along * along * (3.0 - 2.0 * along)
+        fun knotTurns(index: Int): Double =
+            unitDraw(seed xor PLUME_COURSE_SALT, hotspot.toLong() * KNOTS_PER_PLUME + index) - 0.5
+        return knotTurns(knot) + (knotTurns(knot + 1) - knotTurns(knot)) * eased
     }
 
     /**
@@ -2101,8 +2114,8 @@ object PlateStage {
     /** More reorganizations than any trail can reach back over, so each plate's turns draw apart. */
     private const val TURNS_PER_PLATE = 1_000L
 
-    /** The course noise's lattice period, in courses: far longer than any trail runs. */
-    private const val COURSE_NOISE_PERIOD = 256
+    /** More course knots than any trail can reach, so each plume's knots draw apart. */
+    private const val KNOTS_PER_PLUME = 1_000L
 
     /** The weakest plume's flux against the strongest's: Sleep's factor of twenty. See [plumeFluxShare]. */
     private const val WEAKEST_PLUME_FLUX_SHARE = 1.0 / 20.0

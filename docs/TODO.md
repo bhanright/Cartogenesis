@@ -104,6 +104,30 @@
   planet as on the 12,000 km one, and 0.94 times on a 24,000 km one (99.5th percentiles 1.32 and
   0.94). `PlanetWidthRainTest` holds the change within the seeds' own spread, 1.63. K2's figures
   for the Earth-sized default are in the entry below. 2026-10-05, K1.
+- **The Earth-sized planet's land is dry, and a figure read per cell of the map reads it drier
+  (K2).** Mean land rain at 1,024 rows is 445, 353 and 505 mm on seeds 42, 969495 and 7, weighted
+  by area on the sphere, against Earth's 715; read per cell of the map, as the Earth-size audit and
+  K2's first figures read it, 303, 260 and 361, because a cell at 75 degrees stands for a quarter
+  of the ground a cell at the equator does and the polar land rains 63 to 69 mm. The rest of the
+  shortfall is three things, none of them a law K2 moved, and none tuned:
+  - **The interior.** Land more than 1,000 km from the sea rains 17 to 221 mm (per cell) and is 30%
+    of the land's cells on the Earth-sized planet, against 6% for the same seed on the 12,000 km
+    planet with fourteen plates, which rains 552 mm on the sphere. The march's only moisture source
+    is the sea (GEOGRAPHY.md, "The interior is drier than Earth's"), and a planet with Earth's
+    continents has Earth's interiors.
+  - **The equator.** Land within 10 degrees of it rains 808, 977 and 1,120 mm, where Earth's
+    equatorial land, the Amazon, the Congo and the islands between Asia and Australia, takes
+    1,500 to 2,500.
+  - **The sea.** The ocean takes 4,110 to 4,190 mm a year on the sphere against Earth's about 1,100,
+    nine to twelve times the land's figure where Earth's is one and a half: the march rains most of
+    its water out before it reaches a coast. Whether the millimeter conversion, which was set on the
+    land, means anything over the sea is the first question.
+  Plate count is not the cause: seed 42 with 14, 15 and 30 plates rains 483, 445 and 508 mm on the
+  sphere, the continents' draw moving rather than a trend. The same per-cell reading puts the land
+  at 38% of the map's cells and 34 to 37% of the sphere (Earth 29%, the sea-level setting being a
+  share of cells), and the ice-sheet biome at 3.9 to 4.1% of the land's cells and 1.8 to 2.5% of its
+  area (Earth 10.1%). The guards that hold a figure to Earth's read it per cell; reading them on the
+  sphere is a change of its own. 2026-10-08, K2.
 - **The sheet's streamlines are a count of cells (K1).** `GlaciationStage.STREAMLINE_CELLS`, six
   cells of flow line, is 141 km on the 512 by 512 grid's 23.4 km cells and 35 km on the 5.9 km cells
   of 1,024 rows, against hummocks 154 km long, so the drumlins' elongation falls as the grid is

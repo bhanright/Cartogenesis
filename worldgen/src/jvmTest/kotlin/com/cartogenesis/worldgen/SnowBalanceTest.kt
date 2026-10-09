@@ -393,7 +393,7 @@ class SnowBalanceTest : BorrowsSharedWorlds() {
         // old one's cold cap dropped, and at these 256 rows the ice covers a quarter of the land,
         // where at 1,024 rows it covers 9% (docs/DESIGN_LEDGER.md, C1b; docs/TODO.md, "The ice
         // after C1b"). The ice is measured in C1b and not fixed.
-        KnownFailures.expect("C1b: the ice covers more than twice Earth's share of the land at 256 rows", "") {
+        KnownFailures.expect("C1b: the ice covers more than twice Earth's share of the land at 256 rows", "24.39%") {
             if (shareOn > EARTH_ICE_SHARE * 2) {
                 throw RecordedViolation(
                     "ice covers ${"%.2f".format(shareOn)}% of land, more than twice Earth's ${EARTH_ICE_SHARE}%",
@@ -474,7 +474,7 @@ class SnowBalanceTest : BorrowsSharedWorlds() {
             shareOff > 25.0
         )
         // Recorded at C1b, for the same snow (docs/TODO.md, "The ice after C1b").
-        KnownFailures.expect("C1b: some of the cold dry interior is ice under the conserving march's snow", "") {
+        KnownFailures.expect("C1b: some of the cold dry interior is ice under the conserving march's snow", "6.0%") {
             if (shareOn >= 2.0) {
                 throw RecordedViolation(
                     "${"%.1f".format(shareOn)}% of the cold dry interior is still ice sheet",

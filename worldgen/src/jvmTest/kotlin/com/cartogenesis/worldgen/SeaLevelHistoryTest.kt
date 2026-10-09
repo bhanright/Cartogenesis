@@ -229,7 +229,7 @@ class SeaLevelHistoryTest : BorrowsSharedWorlds() {
         // Recorded at C1b: on seed 1234 one body of 370 cells, under the Caspian's cap, is water
         // the ocean cannot reach after the cut, and six river mouths end in it. Which stage leaves it was not traced
         // (docs/DESIGN_LEDGER.md, C1b; docs/TODO.md).
-        KnownFailures.expect("C1b: a pocket of water the ocean cannot reach survives the cut on seed 1234", "") {
+        KnownFailures.expect("C1b: a pocket of water the ocean cannot reach survives the cut on seed 1234", "seed 1234: 1 pockets of 370 cells; seed 1234: 6 river mouths in them") {
             if (survivors.isNotEmpty()) {
                 throw RecordedViolation(
                     "pockets of water the ocean cannot reach survived the cut — every body no larger than " +

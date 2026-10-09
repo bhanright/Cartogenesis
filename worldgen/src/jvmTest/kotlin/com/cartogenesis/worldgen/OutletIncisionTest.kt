@@ -495,7 +495,7 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
         // start with a lake over the Caspian's share again, and the notch takes their worlds' water
         // to 0.68 and 0.76 of the control rather than under half (docs/DESIGN_LEDGER.md, C1b;
         // docs/TODO.md, "The march's misses against Earth, after C1b").
-        KnownFailures.expect("C1b: the notch leaves the over-large lakes' worlds more than half their water", "") {
+        KnownFailures.expect("C1b: the notch leaves the over-large lakes' worlds more than half their water", "seed 718106's water 1.6869% to 1.1644%; seed 99's largest lake 0.3111% to 0.3112%; seed 99's water 1.9695% to 1.3258%") {
             if (notHalved.isNotEmpty()) {
                 throw RecordedViolation(
                     "an over-large lake did not fall, or its world kept more than half its water: " +

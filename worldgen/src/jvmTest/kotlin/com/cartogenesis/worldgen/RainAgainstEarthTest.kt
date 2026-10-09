@@ -168,10 +168,10 @@ class RainAgainstEarthTest : BorrowsSharedWorlds() {
         KnownFailures.expect("C1b2: the sea evaporates less than Earth's", "x0.75") {
             nearEarth("open-sea evaporation, mm", pooled.seaEvaporation / pooled.seaArea, EARTH_OCEAN_EVAPORATION_MM)
         }
-        KnownFailures.expect("C1b2: the open sea rains less than Earth's", "x0.73") {
+        KnownFailures.expect("C1b2: the open sea rains less than Earth's", "x0.74") {
             nearEarth("open-sea rain, mm", pooled.seaRain / pooled.seaArea, EARTH_OCEAN_RAIN_MM)
         }
-        KnownFailures.expect("C1b2: the land rains less than Earth's", "x0.62") {
+        KnownFailures.expect("C1b2: the land rains less than Earth's", "x0.55") {
             nearEarth("land rain, mm", pooled.landRain / pooled.landArea, EARTH_LAND_RAIN_MM)
         }
     }

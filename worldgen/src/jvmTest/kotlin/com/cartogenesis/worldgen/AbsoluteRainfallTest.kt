@@ -59,17 +59,10 @@ class AbsoluteRainfallTest : BorrowsSharedWorlds() {
             "ABSRAIN desert share by seed (absolute mm): " +
                 seeds.joinToString { "$it=%.2f%%".format(shares.getValue(it)) }
         )
-        // Recorded at C1b2: every world is drier on the march whose land rains at its own humidity,
-        // and the driest and the wettest stand closer, 1.48 times apart then and a hair under 1.5
-        // at A1-1 (docs/TODO.md, "The march's misses against Earth, after C1b2").
-        KnownFailures.expect("C1b2: the seeds' desert shares stand close", "1.50x") {
-            try {
-                assertRatioAtLeast(shares, 1.5f, "seeds no longer differ in how much desert they carry")
-            } catch (failure: AssertionError) {
-                val ratio = shares.values.max() / shares.values.filter { it > 0f }.min()
-                throw RecordedViolation(failure.message ?: "", "%.2fx".format(ratio))
-            }
-        }
+        // Armed again at A1-2, at 1.53: C1b2 recorded the seeds standing 1.48 times apart and A1-1
+        // a hair under 1.5; the pressure wind on the sphere moved them back over it
+        // (docs/DESIGN_LEDGER.md, A1-2).
+        assertRatioAtLeast(shares, 1.5f, "seeds no longer differ in how much desert they carry")
     }
 
     /**

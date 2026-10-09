@@ -259,7 +259,7 @@ class LittoralCoastTest {
         // two cells, the grid's own scale, and the pooled box count's dimension falls under one; the
         // cause is not isolated beyond that (docs/DESIGN_LEDGER.md, K2).
         KnownFailures.expect(
-            "K2: the coastline's dimension on the Earth-sized planet's 512 rows reads under Richardson's band", "pooled by M1's box count: the coastline's box-counting dimension is 0.890, outside 1.25 +/- 0.15 (Mandelbrot 1967: Britain 1.25, Richardson's smoothest coast 1.02)"
+            "K2: the coastline's dimension on the Earth-sized planet's 512 rows reads under Richardson's band", "pooled by M1's box count: the coastline's box-counting dimension is 0.887, outside 1.25 +/- 0.15 (Mandelbrot 1967: Britain 1.25, Richardson's smoothest coast 1.02)"
         ) {
             if (complaints.isNotEmpty()) throw RecordedViolation(complaints.joinToString("; "), complaints.joinToString("; "))
         }

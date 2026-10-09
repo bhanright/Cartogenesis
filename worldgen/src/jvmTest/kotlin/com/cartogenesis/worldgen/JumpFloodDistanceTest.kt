@@ -442,7 +442,7 @@ class JumpFloodDistanceTest : BorrowsSharedWorlds() {
         KnownFailures.expect(
             "A-I11: the plain jump flood is not exact on land-mask sources, and seed 42's shelf is drawn off it",
             // Re-recorded at L1, whose rifts are Earth's half-grabens and the same at every grid (docs/DESIGN_LEDGER.md, L1).
-            "4 cells, the worst 0.0031 cell widths at (859,50)"
+            "7 cells, the worst 0.0031 cell widths at (84,14)"
         ) {
             if (offCells > 0) {
                 val found = String.format(

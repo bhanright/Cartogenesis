@@ -27,7 +27,7 @@ class AtmosphereRemapCostTest {
         const val WARM_UP_RUNS = 2
         const val MEASURED_RUNS = 5
 
-        /** The share of a 2048 world above which per-cell work is worth a graphics path (rule 8). */
+        /** The share of a world at the application's grid above which per-cell work is worth a graphics path (rule 8). */
         const val WORTH_A_DEVICE_SHARE = 0.01
 
         /** Coupling updates a climate run makes, by the design's estimate (its section 11). */
@@ -72,7 +72,8 @@ class AtmosphereRemapCostTest {
             operators.laplacian(forcing)
         }
         val calls = UPDATES_PER_CLIMATE * HALVES * CLIMATES_PER_WORLD
-        val worldSeconds = GenerationTime.secondsAt(2048)
+        // The application's grid, 2,048 by 1,024: `secondsAt` takes the rows.
+        val worldSeconds = GenerationTime.secondsAt(1024)
         val downShare = calls * forcingMs / 1000.0 / worldSeconds
         val upShare = calls * FIELDS_UP_PER_UPDATE * upMs / 1000.0 / worldSeconds
         val operatorShare = calls * operatorsMs / 1000.0 / worldSeconds

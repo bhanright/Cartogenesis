@@ -165,7 +165,7 @@ class SeaLevelHistoryTest : BorrowsSharedWorlds() {
         // the sphere moved the ground back over it (docs/DESIGN_LEDGER.md, A1-2).
         assertTrue(shortfalls.isEmpty(), shortfalls.joinToString("; "))
         // Recorded with the clause above (docs/DESIGN_LEDGER.md, K2; docs/TODO.md).
-        KnownFailures.expect("K2: on the Earth-sized planet the lowstand leaves too few drowned valleys pooled", "1.30x") {
+        KnownFailures.expect("K2: on the Earth-sized planet the lowstand leaves too few drowned valleys pooled", "1.38x") {
             if (!(pooledEstuaries.size == seeds.size && meanGain >= estuaryGain)) {
                 throw RecordedViolation(
                     "pooled over ${pooledEstuaries.size} seeds the lowstand leaves ${meanGain}x the estuary mouths, " +

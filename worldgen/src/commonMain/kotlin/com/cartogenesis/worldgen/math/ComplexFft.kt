@@ -68,6 +68,8 @@ class ComplexFft(val length: Int) {
             when (radix) {
                 2 -> radixTwo(fromReal, fromImaginary, toReal, toImaginary, stride, quarter, sign)
                 4 -> radixFour(fromReal, fromImaginary, toReal, toImaginary, stride, quarter, sign)
+                3 -> radixThree(fromReal, fromImaginary, toReal, toImaginary, stride, quarter, sign)
+                5 -> radixFive(fromReal, fromImaginary, toReal, toImaginary, stride, quarter, sign)
                 else -> radixAny(fromReal, fromImaginary, toReal, toImaginary, stride, quarter, radix, sign, scratch)
             }
             val swapReal = fromReal
@@ -164,6 +166,101 @@ class ComplexFft(val length: Int) {
         }
     }
 
+    /** Three points: `b_k = sum_r a_r w^(r k)`, `w = exp(sign 2 pi i / 3)`, each output then turned by its twiddle. */
+    private fun radixThree(
+        inReal: DoubleArray, inImaginary: DoubleArray, outReal: DoubleArray, outImaginary: DoubleArray,
+        stride: Int, quarter: Int, sign: Double
+    ) {
+        val rootSine = sign * SINE_OF_A_THIRD
+        for (q in 0 until quarter) {
+            val step = q * stride
+            val w1Real = cosTable[step]
+            val w1Imaginary = sign * sinTable[step]
+            val w2Real = cosTable[2 * step]
+            val w2Imaginary = sign * sinTable[2 * step]
+            val in0 = stride * q
+            val in1 = stride * (q + quarter)
+            val in2 = stride * (q + 2 * quarter)
+            val out = stride * 3 * q
+            for (t in 0 until stride) {
+                val aReal = inReal[in0 + t]
+                val aImaginary = inImaginary[in0 + t]
+                val sumReal = inReal[in1 + t] + inReal[in2 + t]
+                val sumImaginary = inImaginary[in1 + t] + inImaginary[in2 + t]
+                val differenceReal = inReal[in1 + t] - inReal[in2 + t]
+                val differenceImaginary = inImaginary[in1 + t] - inImaginary[in2 + t]
+                outReal[out + t] = aReal + sumReal
+                outImaginary[out + t] = aImaginary + sumImaginary
+                // a0 + cos(2 pi / 3) (a1 + a2), and i sin(2 pi / 3) (a1 - a2) either side of it.
+                val middleReal = aReal - 0.5 * sumReal
+                val middleImaginary = aImaginary - 0.5 * sumImaginary
+                val turnedReal = -rootSine * differenceImaginary
+                val turnedImaginary = rootSine * differenceReal
+                val y1Real = middleReal + turnedReal
+                val y1Imaginary = middleImaginary + turnedImaginary
+                val y2Real = middleReal - turnedReal
+                val y2Imaginary = middleImaginary - turnedImaginary
+                outReal[out + stride + t] = y1Real * w1Real - y1Imaginary * w1Imaginary
+                outImaginary[out + stride + t] = y1Real * w1Imaginary + y1Imaginary * w1Real
+                outReal[out + 2 * stride + t] = y2Real * w2Real - y2Imaginary * w2Imaginary
+                outImaginary[out + 2 * stride + t] = y2Real * w2Imaginary + y2Imaginary * w2Real
+            }
+        }
+    }
+
+    /** Five points, as [radixThree] with `w = exp(sign 2 pi i / 5)`. */
+    private fun radixFive(
+        inReal: DoubleArray, inImaginary: DoubleArray, outReal: DoubleArray, outImaginary: DoubleArray,
+        stride: Int, quarter: Int, sign: Double
+    ) {
+        val sine1 = sign * SINE_OF_A_FIFTH
+        val sine2 = sign * SINE_OF_TWO_FIFTHS
+        for (q in 0 until quarter) {
+            val step = q * stride
+            val in0 = stride * q
+            val in1 = stride * (q + quarter)
+            val in2 = stride * (q + 2 * quarter)
+            val in3 = stride * (q + 3 * quarter)
+            val in4 = stride * (q + 4 * quarter)
+            val out = stride * 5 * q
+            for (t in 0 until stride) {
+                val aReal = inReal[in0 + t]
+                val aImaginary = inImaginary[in0 + t]
+                val sum14Real = inReal[in1 + t] + inReal[in4 + t]
+                val sum14Imaginary = inImaginary[in1 + t] + inImaginary[in4 + t]
+                val sum23Real = inReal[in2 + t] + inReal[in3 + t]
+                val sum23Imaginary = inImaginary[in2 + t] + inImaginary[in3 + t]
+                val difference14Real = inReal[in1 + t] - inReal[in4 + t]
+                val difference14Imaginary = inImaginary[in1 + t] - inImaginary[in4 + t]
+                val difference23Real = inReal[in2 + t] - inReal[in3 + t]
+                val difference23Imaginary = inImaginary[in2 + t] - inImaginary[in3 + t]
+                outReal[out + t] = aReal + sum14Real + sum23Real
+                outImaginary[out + t] = aImaginary + sum14Imaginary + sum23Imaginary
+                val middle1Real = aReal + COSINE_OF_A_FIFTH * sum14Real + COSINE_OF_TWO_FIFTHS * sum23Real
+                val middle1Imaginary = aImaginary + COSINE_OF_A_FIFTH * sum14Imaginary + COSINE_OF_TWO_FIFTHS * sum23Imaginary
+                val middle2Real = aReal + COSINE_OF_TWO_FIFTHS * sum14Real + COSINE_OF_A_FIFTH * sum23Real
+                val middle2Imaginary = aImaginary + COSINE_OF_TWO_FIFTHS * sum14Imaginary + COSINE_OF_A_FIFTH * sum23Imaginary
+                // i (s1 d14 + s2 d23) and i (s2 d14 - s1 d23): multiplying by i swaps the parts.
+                val turned1Real = -(sine1 * difference14Imaginary + sine2 * difference23Imaginary)
+                val turned1Imaginary = sine1 * difference14Real + sine2 * difference23Real
+                val turned2Real = -(sine2 * difference14Imaginary - sine1 * difference23Imaginary)
+                val turned2Imaginary = sine2 * difference14Real - sine1 * difference23Real
+                writeTurned(outReal, outImaginary, out + stride + t, middle1Real + turned1Real, middle1Imaginary + turned1Imaginary, step, sign)
+                writeTurned(outReal, outImaginary, out + 2 * stride + t, middle2Real + turned2Real, middle2Imaginary + turned2Imaginary, 2 * step, sign)
+                writeTurned(outReal, outImaginary, out + 3 * stride + t, middle2Real - turned2Real, middle2Imaginary - turned2Imaginary, 3 * step, sign)
+                writeTurned(outReal, outImaginary, out + 4 * stride + t, middle1Real - turned1Real, middle1Imaginary - turned1Imaginary, 4 * step, sign)
+            }
+        }
+    }
+
+    /** Writes [real] + i [imaginary] turned by the twiddle at table index [twiddle] to [slot]. */
+    private fun writeTurned(outReal: DoubleArray, outImaginary: DoubleArray, slot: Int, real: Double, imaginary: Double, twiddle: Int, sign: Double) {
+        val twiddleReal = cosTable[twiddle]
+        val twiddleImaginary = sign * sinTable[twiddle]
+        outReal[slot] = real * twiddleReal - imaginary * twiddleImaginary
+        outImaginary[slot] = real * twiddleImaginary + imaginary * twiddleReal
+    }
+
     /** Any radix by the direct sum, whose angles `2 pi r k / p` are the table's at the stride `length / p`. */
     private fun radixAny(
         inReal: DoubleArray, inImaginary: DoubleArray, outReal: DoubleArray, outImaginary: DoubleArray,
@@ -200,6 +297,15 @@ class ComplexFft(val length: Int) {
     }
 
     companion object {
+        /** `sin(2 pi / 3)`, the radix-three butterfly's one irrational. */
+        private val SINE_OF_A_THIRD = sin(2.0 * PI / 3.0)
+
+        /** `cos` and `sin` of `2 pi / 5` and `4 pi / 5`, the radix-five butterfly's. */
+        private val COSINE_OF_A_FIFTH = cos(2.0 * PI / 5.0)
+        private val COSINE_OF_TWO_FIFTHS = cos(4.0 * PI / 5.0)
+        private val SINE_OF_A_FIFTH = sin(2.0 * PI / 5.0)
+        private val SINE_OF_TWO_FIFTHS = sin(4.0 * PI / 5.0)
+
         /** The prime factors of [number], smallest first, with repeats. */
         fun primeFactors(number: Int): IntArray {
             val factors = ArrayList<Int>()

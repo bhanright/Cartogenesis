@@ -76,21 +76,15 @@ class PressureWindCostTest {
                 val worldSeconds = GenerationTime.secondsAt(2048)
                 val share = perWorldMs / 1000.0 / worldSeconds
                 println("PRESSURE WIND COST: %.2f%% of a %.1f s world at 2048, measured in this run".format(share * 100, worldSeconds))
-                // The signature carries no figure, because the figure is a ratio of two timings and
-                // moves from run to run; what is recorded is that the one clause is over its bar.
-                KnownFailures.expect(
-                    "D I-4: the pressure wind is more than a hundredth of a world, so rule 8's exemption is not established",
-                    "over a hundredth of a world at 2048"
-                ) {
-                    if (share >= WORTH_A_DEVICE_SHARE) {
-                        throw RecordedViolation(
-                            ("the pressure wind takes %.2f%% of a world at 2048, above the %.0f%% at " +
-                                "which rule 8 asks for a graphics path rather than a measurement")
-                                .format(share * 100, WORTH_A_DEVICE_SHARE * 100),
-                            "over a hundredth of a world at 2048"
-                        )
-                    }
-                }
+                // Recorded at Audit I as over the hundredth (D I-4); armed at A1-2, where the pressure
+                // is smoothed on the atmosphere's grid and the field and its wind measured 0.50% of a
+                // world, so the processor's path is rule 8's measured exception (docs/DESIGN_LEDGER.md,
+                // A1-2). The figure is a ratio of two timings and moves from run to run.
+                assertTrue(
+                    share < WORTH_A_DEVICE_SHARE,
+                    ("the pressure wind takes %.2f%% of a world at 2048, above the %.0f%% at which rule 8 " +
+                        "asks for a graphics path rather than a measurement").format(share * 100, WORTH_A_DEVICE_SHARE * 100)
+                )
             }
         }
     }

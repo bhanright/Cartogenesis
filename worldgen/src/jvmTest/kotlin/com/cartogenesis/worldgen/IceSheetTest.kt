@@ -68,7 +68,7 @@ class IceSheetTest : BorrowsSharedWorlds() {
         // Recorded at C1b: the march that closes its budget snows on the polar land where the old one
         // dropped the cold cap's water, and the sheets it feeds stand thicker than Earth's. The ice
         // is measured and not fixed in C1b (docs/TODO.md, "The ice sheets after C1b").
-        KnownFailures.expect("C1b: the sheets the conserving march feeds stand thicker than Earth's", "") {
+        KnownFailures.expect("C1b: the sheets the conserving march feeds stand thicker than Earth's", "seed 718106 stands 6984; seed 59758 stands 7654; seed 7 stands 7533; seed 42 stands 7829") {
             if (failures.isNotEmpty()) {
                 throw RecordedViolation(
                     "the sheets are outside the envelope Earth's two sit in:\n" + failures.joinToString("\n"),
@@ -76,24 +76,15 @@ class IceSheetTest : BorrowsSharedWorlds() {
                 )
             }
         }
-        // Failing since the ground was put on its ruler, and the ice's to settle rather than this
-        // chunk's: the collision plateaus are as wide north-south as east-west now, the sheets grow
-        // on them, and a sheet as wide as Greenland's stands on a bed near 3 km high on average,
-        // up to 5 km under its middle, so the profile its lower margins raise barely clears the
-        // ground it covers. See docs/DESIGN_LEDGER.md, Fix 2; re-recorded on square cells at Q2.
-        KnownFailures.expect(
-            THIN_SHEETS_ON_HIGH_GROUND,
-            // Re-recorded at L1, whose rifts are Earth's half-grabens and the same at every grid (docs/DESIGN_LEDGER.md, L1).
-            "seed 718106 at 1156 m over 627 km, seed 59758 at 1534 m over 548 km, seed 7 at 1339 m over 648 km"
-        ) {
-            if (thin.isNotEmpty()) {
-                throw RecordedViolation(
-                    "sheets whose middles stand $CONTINENTAL_MARGIN_KM km or more from their margins are thinner " +
-                        "than the $CONTINENTAL_THICKNESS_FLOOR_M m Greenland's divide stands at: ${thin.joinToString()}",
-                    thin.joinToString()
-                )
-            }
-        }
+        // Failed from Fix 2 to C1b, sheets on high plateaus standing under Greenland's divide; armed
+        // at C1b, whose march snows on the polar land the water the old one's cold cap dropped, so
+        // the sheets now stand past the floor (and, above, past Earth's envelope: the known failure
+        // there is the opposite miss). See docs/DESIGN_LEDGER.md, Fix 2 and C1b.
+        assertTrue(
+            "sheets whose middles stand $CONTINENTAL_MARGIN_KM km or more from their margins are thinner " +
+                "than the $CONTINENTAL_THICKNESS_FLOOR_M m Greenland's divide stands at: ${thin.joinToString()}",
+            thin.isEmpty()
+        )
     }
 
     /**
@@ -748,10 +739,6 @@ class IceSheetTest : BorrowsSharedWorlds() {
          * tier. See docs/DESIGN_LEDGER.md, Q2.
          */
         const val DOME_SEED = 20L
-
-        /** The known failure the thickness clause records, the ice's to settle. */
-        const val THIN_SHEETS_ON_HIGH_GROUND =
-            "the ice: sheets as wide as Greenland's grow on high plateaus and stand under its thickness"
 
         /** `GlaciationTest`'s own worlds, so one set of ice answers every clause. */
         val seeds = listOf(718106L, 59758L, 7L, 42L)

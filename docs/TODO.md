@@ -709,7 +709,7 @@
     (`RiftDepthAuditTest`, the audit tier);
   - *the ice* (chunk 5): the bed under seed 7's cap sinks a metre past Airy's share of its column
     (`IsostasyTest`); sheets as wide as Greenland's grow on high plateaus and stand under its 2,000 m
-    (`IceSheetTest`, seeds 718106 and 7); seed 59758's sheet edge runs 70 cells along a row, the
+    (`IceSheetTest`, seeds 718106 and 7; armed at C1b, whose snow thickens them past it); seed 59758's sheet edge runs 70 cells along a row, the
     census's ice-edge finding (`IceSheetTest`);
   - *the erosion* (chunk 3, done as Fix 3 and Fix 3b): the coast's projection ratio and the valley
     notch, both under B-D1 (`GroundIsotropyTest`, `ValleyIncisionTest`); seed 1234's windward flank

@@ -167,7 +167,7 @@ class RainAgainstEarthTest : BorrowsSharedWorlds() {
         nearEarth("land's return over its rain", pooled.landReturn / pooled.landRain, EARTH_LAND_RETURN_SHARE)
         // The land's rain does not, for the causes docs/TODO.md's "The march's misses against Earth,
         // after C1b" measures: the orographic term's share of it.
-        KnownFailures.expect("C1b: the land rains more than Earth's", "x0.00") {
+        KnownFailures.expect("C1b: the land rains more than Earth's", "x1.66") {
             nearEarth("land rain, mm", pooled.landRain / pooled.landArea, EARTH_LAND_RAIN_MM)
         }
     }

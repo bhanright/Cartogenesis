@@ -79,19 +79,25 @@ class EarthLikenessTest : BorrowsSharedWorlds() {
         // 1.05 at L1's review round, whose rift joins are relay ramps.
         KnownFailures.expect(
             LAW_SETS_EVERY_CUT,
-            "42: humid country carries 1.26 times the channel per unit of land that semi-arid country does, " +
+            "7: humid country carries 1.07 times the channel per unit of land that semi-arid country does, " +
                 "where Moglen, " +
                 "Eltahir & Bras (1998) have the density falling away on the wet side and so below one; " +
-                "1234: humid country carries 1.11 times the channel per unit of land that semi-arid country does, " +
+                "42: drainage density peaks in HUMID, not in one of the drylands where Moglen, " +
+                "Eltahir & Bras (1998) put it; " +
+                "42: humid country carries 1.61 times the channel per unit of land that semi-arid country does, " +
                 "where Moglen, " +
                 "Eltahir & Bras (1998) have the density falling away on the wet side and so below one; " +
-                "99: humid country carries 1.11 times the channel per unit of land that semi-arid country does, " +
+                "99: drainage density peaks in HUMID, not in one of the drylands where Moglen, " +
+                "Eltahir & Bras (1998) put it; " +
+                "99: humid country carries 1.04 times the channel per unit of land that semi-arid country does, " +
                 "where Moglen, " +
                 "Eltahir & Bras (1998) have the density falling away on the wet side and so below one; " +
-                "pooled: humid country carries 1.11 times the channel per unit of land that semi-arid country " +
+                "pooled: humid country carries 1.15 times the channel per unit of land that semi-arid country " +
                 "does, where Moglen, " +
                 "Eltahir & Bras (1998) have the density falling away on the wet side and so below one; " +
-                "pooled: the coastline's box-counting dimension is 0.870, " +
+                "pooled: the lake-size exponent is 0.871 over 711 of them, " +
+                "outside 1.06 +/- 0.12 (Downing et al. 2006, three sampling errors); " +
+                "pooled: the coastline's box-counting dimension is 0.883, " +
                 "outside 1.25 +/- 0.15 (Mandelbrot 1967: Britain 1.25, Richardson's smoothest coast 1.02)"
         ) {
             if (complaints.isNotEmpty()) {

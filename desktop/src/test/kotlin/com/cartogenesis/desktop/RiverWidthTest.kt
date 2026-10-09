@@ -376,7 +376,7 @@ class RiverWidthTest {
         // Recorded at C1b: the discharge is the annual runoff, which carries no floor, so a branch
         // from dry country brings next to nothing and both it and the trunk it joins can sit at
         // the hairline's clamp (docs/DESIGN_LEDGER.md, C1b; docs/TODO.md).
-        KnownFailures.expect("C1b: dry branches and their trunks meet at the hairline", "0.0%") {
+        KnownFailures.expect("C1b: dry branches and their trunks meet at the hairline", "84.1%") {
             if (worstShareNow < MIN_WIDENING_JUNCTIONS) {
                 throw RecordedViolation(
                     "only %.1f%% of confluences widen the trunk on the worst seed, under %.1f%%"

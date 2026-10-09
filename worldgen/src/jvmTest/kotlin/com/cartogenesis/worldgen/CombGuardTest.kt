@@ -229,7 +229,7 @@ class CombGuardTest : BorrowsSharedWorlds() {
          * Re-recorded at L1, whose rifts are Earth's half-grabens and the same at every grid, and at K2
          * on the 12,000 km planet under K2's physics (docs/DESIGN_LEDGER.md, L1 and K2).
          */
-        const val RECORDED = "seed 7 0.18 down a column and 0.14 along a row; seed 42 0.14 down a column and 0.18 along a row"
+        const val RECORDED = "seed 7 0.19 down a column and 0.13 along a row; seed 42 0.13 down a column and 0.16 along a row"
 
         /**
          * The grid the guard is taken on, [SharedWorlds.DETAIL_ROWS]: square cells, 1,024 by 512,

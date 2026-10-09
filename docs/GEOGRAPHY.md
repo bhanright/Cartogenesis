@@ -1270,7 +1270,10 @@ below now modulates that lifetime and reaches its floor without a kink; the ITCZ
 bump in it but the trades' water gathered where they meet; and the ground's return is not scaled by
 the belt, because it is the ground's own rain against its own evaporative demand. The two
 mechanisms below are what the old march did and what its successor keeps in physical form; their
-figures are the old march's. `ClimateConfig.groundReturn` off is the control for the second.
+figures are the old march's. `ClimateConfig.groundReturn` off is the control for the second. On
+C1b's march the deserts do not sit in the horse latitudes yet: the subtropics take a summer
+monsoon's water and the tropical interiors are dry (`GeographyAuditTest`'s band clause is a known
+failure; docs/TODO.md, "The desert left the horse latitudes").
 
 Deserts belong to the horse latitudes, near 30 degrees, where air that rose at the equator descends
 dry. Getting them there took two mechanisms rather than a tuned constant.

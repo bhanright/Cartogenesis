@@ -74,7 +74,7 @@
   a guard set on the 12,000 km planet's worlds reads the Earth-sized planet's and misses Earth's
   figure (C1b's worlds pass and arm six: the cold coast, the dome flow, the clamp, the
   doubled slant, the dry basin's endorheic lake and the Caspian clause's over-large starts): `CurrentFeedsRainTest` (seed 7's sample cold coast is shorter than the sample asks, and
-  its warm sample coast comes out half a percent drier with the coupling on),
+  its warm sample coast comes out half a percent drier with the coupling on, 3.3% at C1b),
   `GlacialBasinShapeTest` (the ice leaves ground level to a meter over more than Salar de Uyuni's
   10,582 km²), `GlaciationCombTest` (one ice-made lake a straight one-cell line along a D8
   bearing, rule 13), `GroundTextureTest` (the drowned continental crust lies 0.47 within 800 km of

@@ -1402,10 +1402,14 @@ point of sea water at the ocean's mean salinity, that cell is under ice for that
 freezing test reads the water and not the air above it, which in a polar winter is a dozen degrees
 colder than the sea it sits on. Two masks are saved, one per calendar half, each holding one
 hemisphere's winter pack and the other's summer remnant; the perennial ice, which is what the map
-draws, is the sea frozen through its own warmest month. Measured at A1-1 on seeds 7, 42 and 1234
-at 256 rows, the winter pack covers 26.4, 24.3 and 31.2% of the sea and the perennial pack 8.2, 5.7
-and 8.4%, a third to a quarter of it, against Earth's 9 million km² at the two minima to 34 million
-at the two maxima (NSIDC: 6.5 and 15.5 in the Arctic, 2.5 and 18.5 in the Antarctic), 0.26. The moisture march takes nothing at all from a frozen
+draws, is the sea frozen through its own warmest half-year, as before A1-1. Measured at A1-1 on
+seeds 7, 42 and 1234 at 256 rows, the winter pack covers 26.4, 24.3 and 31.2% of the sea and the
+perennial pack 22.2, 20.6 and 26.5%, five sixths of it, against Earth's 9 million km² at the two
+minima to 34 million at the two maxima (NSIDC: 6.5 and 15.5 in the Arctic, 2.5 and 18.5 in the
+Antarctic), a quarter. Read on the warmest month instead the share comes out near Earth's, but at
+the wrong place: the model carries no latent heat to hold a frozen sea at its melting point, so
+the pole's summer sun opens the polar sea while the sea twenty degrees from it stays frozen.
+TODO.md has it. The moisture march takes nothing at all from a frozen
 cell, because a metre of ice is a lid — and that is why polar deserts exist, and what keeps an ice
 sheet at the pole from feeding itself indefinitely.
 

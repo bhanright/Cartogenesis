@@ -128,7 +128,13 @@ class ZonalColumn internal constructor(
     /** April to September, the half-year about July; with [januaryHalfC] it averages to [annualC]. */
     val julyHalfC: FloatArray,
     /** October to March, the half-year about January. */
-    val januaryHalfC: FloatArray
+    val januaryHalfC: FloatArray,
+    /**
+     * The warmest half-year wherever in the year it falls, each place's own as the warmest month
+     * is: what the perennial sea ice is read on, the pack that survives a summer (see
+     * `ClimateStage`'s perennial mask for why a half-year and not a month).
+     */
+    val warmestHalfC: FloatArray
 ) {
     internal fun at(season: Season): FloatArray = when (season) {
         Season.ANNUAL -> annualC
@@ -138,6 +144,7 @@ class ZonalColumn internal constructor(
         Season.JANUARY -> januaryC
         Season.JULY_HALF -> julyHalfC
         Season.JANUARY_HALF -> januaryHalfC
+        Season.WARMEST_HALF -> warmestHalfC
     }
 }
 
@@ -147,9 +154,10 @@ class ZonalColumn internal constructor(
  * [SUMMER] and [WINTER] are each place's own warmest and coldest *month*, which is what Koppen's
  * thresholds are stated on. The other four are calendar windows, one moment of the planet for
  * every band: [JULY] and [JANUARY] the months, [JULY_HALF] (April to September) and
- * [JANUARY_HALF] (October to March) the half-years. See [ZonalColumn].
+ * [JANUARY_HALF] (October to March) the half-years. [WARMEST_HALF] is each place's own warmest
+ * half-year, which only the perennial sea ice reads. See [ZonalColumn].
  */
-enum class Season { ANNUAL, SUMMER, WINTER, JULY, JANUARY, JULY_HALF, JANUARY_HALF }
+enum class Season { ANNUAL, SUMMER, WINTER, JULY, JANUARY, JULY_HALF, JANUARY_HALF, WARMEST_HALF }
 
 /**
  * A one-dimensional energy-balance model of the atmosphere, solved per season.
@@ -618,8 +626,8 @@ object EnergyBalance {
      * (Trenberth, Fasullo and Kiehl 2009, *Earth's global energy budget*, Bull. Amer. Meteor.
      * Soc. 90, Tables 2a and 2b, ocean, the CERES period).
      *
-     * The water takes that share of the sunlight's departure from the band's annual mean, and the
-     * air keeps the rest and the mean. The mean surface sunlight goes back up as the surface's own
+     * The water takes that share of the sunlight's departure from the band's annual mean, on the
+     * share of the band's sea that is open, and the air keeps the rest and the mean. The mean surface sunlight goes back up as the surface's own
      * losses, which follow the humidity deficit and the sky's longwave rather than the air-sea
      * difference — over the ocean 97.1 W/m2 of latent heat, 12 of sensible and 57.4 of net
      * longwave against the 167.8 in, the same table — so the model carries them as a constant equal
@@ -1067,6 +1075,12 @@ object EnergyBalance {
          */
         val meanSeaSurfaceSun = DoubleArray(BANDS)
 
+        /**
+         * The share of the absorbed sunlight the band's water takes: the sea surface's, on the
+         * share of the band's sea that is open. Refreshed with the white share once a year.
+         */
+        val openSeaSurfaceShare = DoubleArray(BANDS)
+
         /** The sunlight the water takes on the step being marched, W/m2, per band. */
         val waterSunThisStep = DoubleArray(BANDS)
 
@@ -1255,7 +1269,7 @@ object EnergyBalance {
             val absorbed = sunlight * (1.0 - geometry.bandAlbedo[band])
             // The sea surface's share of the sunlight's departure from its annual mean goes into
             // the water; the air keeps the rest, so the column's total is what it absorbs.
-            val waterSun = absorbed * SEA_SURFACE_SHARE_OF_ABSORBED_SUN - geometry.meanSeaSurfaceSun[band]
+            val waterSun = absorbed * geometry.openSeaSurfaceShare[band] - geometry.meanSeaSurfaceSun[band]
             geometry.waterSunThisStep[band] = waterSun
             var land = (landC[band] + stepSeconds / landHeat * (absorbed - outgoingOffset)) /
                 (1.0 + stepSeconds * OUTGOING_PER_DEGREE_W_PER_M2_C / landHeat)
@@ -1339,7 +1353,13 @@ object EnergyBalance {
             val white = geometry.whiteFraction(bandAnnualC)
             geometry.white[band] = white
             geometry.bandAlbedo[band] = albedoOf(white, latitudeOfBand(band).toDouble())
-            geometry.meanSeaSurfaceSun[band] = SEA_SURFACE_SHARE_OF_ABSORBED_SUN *
+            // Only the open sea's surface: a frozen one spends its sunlight melting ice at the
+            // freezing point, a latent heat this model does not carry, so its share stays in the
+            // air as it did before the water took any. Given to two metres of ice as warmth
+            // instead, the polar summer's sun raised the frozen column past the freezing point
+            // and opened the pole's sea while the sea twenty degrees from it stayed frozen.
+            geometry.openSeaSurfaceShare[band] = SEA_SURFACE_SHARE_OF_ABSORBED_SUN * (1.0 - white)
+            geometry.meanSeaSurfaceSun[band] = geometry.openSeaSurfaceShare[band] *
                 geometry.annualInsolation[band] * (1.0 - geometry.bandAlbedo[band])
             geometry.mixedLayerHeatCapacity[band] = MIXED_LAYER_HEAT_CAPACITY_J_PER_M2_C +
                 (FROZEN_SEA_HEAT_CAPACITY_J_PER_M2_C - MIXED_LAYER_HEAT_CAPACITY_J_PER_M2_C) *
@@ -1420,7 +1440,7 @@ object EnergyBalance {
 
     /**
      * Turns one surface's recorded year into a [ZonalColumn]: the annual mean, the warmest and
-     * coldest month, and the calendar's July, January and half-years.
+     * coldest month and the warmest half-year, and the calendar's July, January and half-years.
      *
      * The extremes are a sliding window round the year, so a southern band finds the southern
      * summer without being told which hemisphere it is in and a maritime column finds its own
@@ -1438,6 +1458,7 @@ object EnergyBalance {
         val january = FloatArray(BANDS)
         val julyHalf = FloatArray(BANDS)
         val januaryHalf = FloatArray(BANDS)
+        val warmestHalf = FloatArray(BANDS)
         for (band in 0 until BANDS) {
             var yearTotal = 0.0
             for (step in 0 until STEPS_PER_YEAR) yearTotal += year[step * BANDS + band]
@@ -1447,12 +1468,19 @@ object EnergyBalance {
             for (step in 0 until MONTH_STEPS) monthTotal += year[step * BANDS + band]
             var warmestMonthTotal = monthTotal
             var coldestMonthTotal = monthTotal
+            var halfTotal = 0.0
+            for (step in 0 until HALF_YEAR_STEPS) halfTotal += year[step * BANDS + band]
+            var warmestHalfTotal = halfTotal
             for (start in 1 until STEPS_PER_YEAR) {
                 monthTotal += year[((start + MONTH_STEPS - 1) % STEPS_PER_YEAR) * BANDS + band] -
                     year[(start - 1) * BANDS + band]
                 if (monthTotal > warmestMonthTotal) warmestMonthTotal = monthTotal
                 if (monthTotal < coldestMonthTotal) coldestMonthTotal = monthTotal
+                halfTotal += year[((start + HALF_YEAR_STEPS - 1) % STEPS_PER_YEAR) * BANDS + band] -
+                    year[(start - 1) * BANDS + band]
+                if (halfTotal > warmestHalfTotal) warmestHalfTotal = halfTotal
             }
+            warmestHalf[band] = (warmestHalfTotal / HALF_YEAR_STEPS).toFloat()
             warmestMonth[band] = (warmestMonthTotal / MONTH_STEPS).toFloat()
             coldestMonth[band] = (coldestMonthTotal / MONTH_STEPS).toFloat()
 
@@ -1463,7 +1491,7 @@ object EnergyBalance {
             julyHalf[band] = (julyHalfTotal / HALF_YEAR_STEPS).toFloat()
             januaryHalf[band] = ((yearTotal - julyHalfTotal) / HALF_YEAR_STEPS).toFloat()
         }
-        return ZonalColumn(annual, warmestMonth, coldestMonth, july, january, julyHalf, januaryHalf)
+        return ZonalColumn(annual, warmestMonth, coldestMonth, july, january, julyHalf, januaryHalf, warmestHalf)
     }
 
     /** The sum of one band's recorded [year] over [steps] steps from [firstStep], round the year. */

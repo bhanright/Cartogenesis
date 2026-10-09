@@ -297,8 +297,8 @@ class SeaIceTest : BorrowsSharedWorlds() {
         else world.climate.julyHalfSeaIce[cell]
 
     /**
-     * Whether [cell]'s sea survives its summer: frozen through its own warmest month, which is the
-     * pack the biome draws.
+     * Whether [cell]'s sea survives its summer: frozen through its own warmest half-year, which is
+     * the pack the biome draws.
      */
     private fun summerIce(world: WorldMap, cell: Int): Boolean =
         !world.sea.isLand[cell] && world.climate.biome[cell] == Biome.ICE_SHEET

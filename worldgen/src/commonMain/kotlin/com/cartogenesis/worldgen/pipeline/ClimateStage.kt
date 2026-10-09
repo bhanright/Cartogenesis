@@ -121,7 +121,7 @@ data class ClimateResult(
      * other's summer remnant; frozen in either is the winter pack, which on Earth reaches the Sea
      * of Okhotsk and the Gulf of Bothnia. The perennial ice, which is what an atlas draws and what
      * [ClimateStage.classify] paints as `ICE_SHEET` over water, is the sea frozen through its own
-     * warmest month, and the biome carries it.
+     * warmest half-year, and the biome carries it.
      *
      * The moisture march reads whichever mask belongs to the half it is marching, and takes no
      * moisture at all from a frozen cell — a metre of ice is a lid, which is why the polar ocean is
@@ -567,7 +567,7 @@ object ClimateStage {
         val januaryHalfPrecipitationMm: FloatField,
         val julyHalfSeaIce: BooleanArray,
         val januaryHalfSeaIce: BooleanArray,
-        /** Frozen through its own warmest month: the pack that survives the summer. */
+        /** Frozen through its own warmest half-year: the pack that survives the summer. */
         val perennialSeaIce: BooleanArray,
         val wind: WindField,
         val landOriginPrecipitationMm: FloatField,
@@ -793,11 +793,18 @@ object ClimateStage {
         val julyHalfSeaIce = seaIceMask(config, sea, julyHalfSeaSurface)
         val januaryHalfSeaIce = seaIceMask(config, sea, januaryHalfSeaSurface)
         // The pack an atlas draws is the one that survives the summer: frozen through the water's
-        // own warmest month, wherever in the year the lag puts it, as Koppen's months are each
-        // place's own. A calendar half's mean is colder than that month by the lag and the
-        // half-year's averaging both, and would draw nearly the whole winter pack as perennial.
+        // own warmest half-year, wherever in the year the lag puts it, as Koppen's months are each
+        // place's own. Not a calendar half, whose mean the lag leaves colder than the water's own
+        // summer, so that it drew 95% of the winter pack as perennial; and not the warmest month,
+        // because the model carries no latent heat to hold a frozen sea at its melting point, and
+        // under the pole's summer sun the frozen column's warmest month passes it and opened the
+        // pole while the sea twenty degrees from it stayed frozen. See docs/DESIGN_LEDGER.md, A1-1.
         val perennialSeaIce = seaIceMask(
-            config, sea, seaSurfaceTemperature(config, sea, zonal, summerTemperature, Season.SUMMER)
+            config, sea, seaSurfaceTemperature(
+                config, sea, zonal,
+                seasonalTemperature(config, temperature, zonal, marineFraction, Season.WARMEST_HALF),
+                Season.WARMEST_HALF
+            )
         )
 
         // A pressure field per half-year, and a third for the annual wind. The annual one is built
@@ -1869,7 +1876,7 @@ object ClimateStage {
         precipitationMm: FloatField,
         summerPrecipitationMm: FloatField,
         winterPrecipitationMm: FloatField,
-        /** The perennial pack, frozen through its own warmest month: see [ClimateResult.julyHalfSeaIce]. */
+        /** The perennial pack, frozen through its own warmest half-year: see [ClimateResult.julyHalfSeaIce]. */
         perennialSeaIce: BooleanArray,
         /**
          * [SnowBalance]'s field, or null when `ClimateConfig.snowBalance` is off and the ice gate

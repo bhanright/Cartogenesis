@@ -195,7 +195,14 @@ val auditOnlyClasses = listOf(
     "com.cartogenesis.worldgen.PressureWindCostTest",
     "com.cartogenesis.worldgen.VegetationCostTest",
     // A1-2's: what carrying fields to and from the atmosphere's grid costs against the same world.
-    "com.cartogenesis.worldgen.AtmosphereRemapCostTest"
+    "com.cartogenesis.worldgen.AtmosphereRemapCostTest",
+    // A1-3's: the stationary-wave model's benchmarks on the ladder of grids, on two to sixteen
+    // levels and with the damping halved and doubled, a printed report of a few minutes; and what
+    // its factoring and solving cost against a world, with the machine's whole pool as a world has.
+    // The benchmarks' own figures and the model's invariants run per merge in
+    // `StationaryWaveBenchmarkTest` and `StationaryWaveModelTest`.
+    "com.cartogenesis.worldgen.StationaryWaveReport",
+    "com.cartogenesis.worldgen.StationaryWaveCostTest"
 )
 
 /*

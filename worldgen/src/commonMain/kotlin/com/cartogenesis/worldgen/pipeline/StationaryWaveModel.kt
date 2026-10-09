@@ -1,7 +1,6 @@
 package com.cartogenesis.worldgen.pipeline
 
 import com.cartogenesis.worldgen.concurrent.parallelChunks
-import com.cartogenesis.worldgen.concurrent.parallelFor
 import com.cartogenesis.worldgen.math.ComplexBlockTridiagonal
 import com.cartogenesis.worldgen.math.ComplexFft
 import kotlin.math.abs
@@ -24,6 +23,43 @@ class WaveForcing(
     )
 
     companion object {
+        /**
+         * The width, as a Gaussian's standard deviation on the ground in meters, that forcing from the
+         * map is spread to before the model reads it: a quarter of the storm track's deformation
+         * radius (`PressureWind.rossbyRadiusKm`, 970 km on Earth), 243 km.
+         *
+         * The model is the large-scale atmosphere. Below about a quarter of the deformation radius a
+         * response is the non-rotating flow over terrain that the ground's own lift treats, and the
+         * map keeps that part (the A1a design, section 3.4). Forcing carried down as the coarse cells'
+         * area mean holds every scale down to a cell, so its terrain slopes, and the pressure
+         * gradients the model makes of them, grow as the grid is refined: the A1a prototype's mean
+         * surface wind grew with its grid for that reason. Spread to a fixed length on the ground,
+         * the forcing is the same on every grid that resolves the length, and the response converges
+         * (docs/DESIGN_LEDGER.md, A1-3).
+         */
+        val GROUND_FORCING_WIDTH_METERS: Double = PressureWind.rossbyRadiusKm() * 1_000.0 / 4.0
+
+        /**
+         * Forcing from fields on the map's grid, as the model is to read it: [columnKelvinPerSecond]
+         * (the column's mass-weighted mean heating, kelvin a second) spread over the interfaces by
+         * [profile], and [surfaceHeightMeters]; each carried down by [remap]'s area mean, spread to
+         * [GROUND_FORCING_WIDTH_METERS] (or the coast's filter width, [AtmosphereRemap.FILTER_WIDTH_IN_ROWS]
+         * rows, on a grid too coarse for it) and filtered as [AtmosphereRemap.forcing] does. Either
+         * field may be absent.
+         */
+        fun fromGround(
+            remap: AtmosphereRemap,
+            levels: AtmosphereLevels,
+            columnKelvinPerSecond: FloatArray?,
+            surfaceHeightMeters: FloatArray?,
+            profile: (Double) -> Double
+        ): WaveForcing {
+            val widthInRows = max(AtmosphereRemap.FILTER_WIDTH_IN_ROWS, GROUND_FORCING_WIDTH_METERS / remap.coarse.rowSpacingMeters)
+            val heating = columnKelvinPerSecond?.let { heatingFromColumn(levels, remap.forcing(it, widthInRows), profile) }
+            val height = surfaceHeightMeters?.let { remap.forcing(it, widthInRows) }
+            return WaveForcing(heating, height)
+        }
+
         /**
          * A column heating [columnKelvinPerSecond] (the mass-weighted mean heating rate of the column,
          * `[cell]`) spread over [levels]' interior interfaces by the shape [profile], a function of
@@ -113,8 +149,9 @@ class WaveResponse(
  *
  * **The zonal mean** (wave 0) is solved only when [solveZonalMean] is set; the geopotential is then
  * fixed up to a constant (the rigid lid holds no mass budget), which is settled by replacing one
- * continuity equation, redundant with the rest, by a pin and then removing the area mean of the
- * surface pressure. The answer does not depend on the pin (`StationaryWaveModelTest`).
+ * continuity equation, redundant with the rest, by a pin (the lowest level's geopotential on
+ * [zonalMeanPinRow]) and then removing the area mean of the surface pressure. The answer does not
+ * depend on where the pin is (`StationaryWaveModelTest`).
  *
  * **What it solves**: zonal waves 0 or 1 to [highestZonalWave], by default a third of the columns, the
  * transform's two-thirds rule; anything finer in the forcing is not seen.
@@ -123,7 +160,13 @@ class StationaryWaveModel(
     val basicState: ZonalBasicState,
     val damping: WaveDamping,
     val solveZonalMean: Boolean = false,
-    val highestZonalWave: Int = basicState.grid.columns / 3
+    val highestZonalWave: Int = basicState.grid.columns / 3,
+    val zonalMeanPinRow: Int = basicState.grid.rows - 1,
+    /**
+     * Holds the northward wind on the polar faces at zero, as the A1a prototype did, in place of a
+     * regular vector's wave-1 part: only for the test that shows what that costs.
+     */
+    internal val polarWindHeldAtZero: Boolean = false
 ) {
     val grid: SphericalGrid = basicState.grid
     val levels: AtmosphereLevels = basicState.levels
@@ -140,6 +183,7 @@ class StationaryWaveModel(
 
     init {
         require(highestZonalWave in firstWave until grid.columns / 2) { "zonal waves up to $highestZonalWave on ${grid.columns} columns" }
+        require(zonalMeanPinRow in 0 until grid.rows) { "the zonal mean's pin on row $zonalMeanPinRow of ${grid.rows}" }
     }
 
     /** The waves this model solves. */
@@ -161,10 +205,11 @@ class StationaryWaveModel(
             val spectra = ForcingSpectra(forcing)
             val solutionReal = Array(waves.count()) { DoubleArray(grid.rows * blockSize) }
             val solutionImaginary = Array(waves.count()) { DoubleArray(grid.rows * blockSize) }
-            parallelFor(0, waves.count()) { index ->
-                val wave = waves.first + index
-                rightHandSide(wave, spectra, rowScales[index], solutionReal[index], solutionImaginary[index])
-                systems[index].solve(solutionReal[index], solutionImaginary[index])
+            parallelChunks(0, waves.count()) { start, end ->
+                for (index in start until end) {
+                    rightHandSide(waves.first + index, spectra, rowScales[index], solutionReal[index], solutionImaginary[index])
+                    systems[index].solve(solutionReal[index], solutionImaginary[index])
+                }
             }
             return response(solutionReal, solutionImaginary, spectra)
         }
@@ -175,11 +220,14 @@ class StationaryWaveModel(
         val count = waves.count()
         val systems = arrayOfNulls<ComplexBlockTridiagonal>(count)
         val scales = arrayOfNulls<DoubleArray>(count)
-        parallelFor(0, count) { index ->
-            val system = ComplexBlockTridiagonal(grid.rows, blockSize)
-            scales[index] = assemble(waves.first + index, system)
-            system.factorize()
-            systems[index] = system
+        // In chunks of waves, one per worker: `parallelFor` keeps a hundred items on one thread.
+        parallelChunks(0, count) { start, end ->
+            for (index in start until end) {
+                val system = ComplexBlockTridiagonal(grid.rows, blockSize)
+                scales[index] = assemble(waves.first + index, system)
+                system.factorize()
+                systems[index] = system
+            }
         }
         @Suppress("UNCHECKED_CAST")
         return Factored(systems as Array<ComplexBlockTridiagonal>, scales as Array<DoubleArray>)
@@ -191,13 +239,17 @@ class StationaryWaveModel(
         val count = waves.count()
         val solutionReal = Array(count) { DoubleArray(grid.rows * blockSize) }
         val solutionImaginary = Array(count) { DoubleArray(grid.rows * blockSize) }
-        parallelFor(0, count) { index ->
-            val wave = waves.first + index
+        parallelChunks(0, count) { start, end ->
+            // One system per worker, cleared for each of its waves.
             val system = ComplexBlockTridiagonal(grid.rows, blockSize)
-            val scales = assemble(wave, system)
-            system.factorize()
-            rightHandSide(wave, spectra, scales, solutionReal[index], solutionImaginary[index])
-            system.solve(solutionReal[index], solutionImaginary[index])
+            for (index in start until end) {
+                val wave = waves.first + index
+                system.clear()
+                val scales = assemble(wave, system)
+                system.factorize()
+                rightHandSide(wave, spectra, scales, solutionReal[index], solutionImaginary[index])
+                system.solve(solutionReal[index], solutionImaginary[index])
+            }
         }
         return response(solutionReal, solutionImaginary, spectra)
     }
@@ -335,7 +387,7 @@ class StationaryWaveModel(
     }
 
     /** Whether [level]'s continuity on [row] is replaced by the zonal mean's pin. */
-    private fun isPinned(wave: Int, row: Int, level: Int) = wave == 0 && row == grid.rows - 1 && level == levelCount - 1
+    private fun isPinned(wave: Int, row: Int, level: Int) = wave == 0 && row == zonalMeanPinRow && level == levelCount - 1
 
     /**
      * Writes one row's equations for one wave into the block system: each term is a coefficient on an
@@ -364,8 +416,8 @@ class StationaryWaveModel(
         /** A term on `v` at [face] and [level]; the polar faces carry a regular vector's wave-1 part. */
         private fun addNorthAtFace(equation: Int, face: Int, level: Int, real: Double, imaginary: Double) {
             when (face) {
-                0 -> if (oddWave) add(equation, 0, northSlot(level), real, imaginary)
-                rows -> if (oddWave) add(equation, rows - 2, northSlot(level), real, imaginary)
+                0 -> if (oddWave && !polarWindHeldAtZero) add(equation, 0, northSlot(level), real, imaginary)
+                rows -> if (oddWave && !polarWindHeldAtZero) add(equation, rows - 2, northSlot(level), real, imaginary)
                 else -> add(equation, face - 1, northSlot(level), real, imaginary)
             }
         }
@@ -544,8 +596,10 @@ class StationaryWaveModel(
             val faces = DoubleArray((rows + 1) * columns)
             for (face in 1 until rows) rowField.copyInto(faces, face * columns, (face - 1) * columns, face * columns)
             // The polar faces: the odd waves of the next face in, a regular vector's part there.
-            faces.polarFace(0, rowField, 0)
-            faces.polarFace(rows, rowField, rows - 2)
+            if (!polarWindHeldAtZero) {
+                faces.polarFace(0, rowField, 0)
+                faces.polarFace(rows, rowField, rows - 2)
+            }
             faces
         }
         val groundOmega = run {

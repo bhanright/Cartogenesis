@@ -811,9 +811,11 @@ class DeltaOutlineTest {
          *
          * What a real delta has is none at all, so the bar is set between the two measured
          * populations rather than from a figure in the world: at 512 the square fans put 2.0% and
-         * 1.8% of their perimeter in such runs and the curved ones put 0.7% and 0.0%, and 1.2% is
+         * 1.8% of their perimeter in such runs and the curved ones put 0.7% and 0.0%, and 1.2% was
          * about the geometric midpoint — 1.7 times under the worst square and 1.7 times over the
-         * worst curve. The gap is far wider at the grid the author was looking at, where the square
+         * worst curve. Re-derived the same way at A1-2, whose pressure wind moved the ground: the
+         * square fans now put 1.1% at most and the curved ones 0.6%, and 0.8% is the midpoint, 1.4
+         * times under the one and 1.3 times over the other. The gap is far wider at the grid the author was looking at, where the square
          * a lacustrine fan takes is forty-nine cells on a side rather than thirteen: see the
          * ledger's 2048 figures.
          *
@@ -823,7 +825,7 @@ class DeltaOutlineTest {
          * bearing, is the geometry guard's (`GeometryGuardTest` in `:cartography`, whose layers
          * include the delta lobes and the lake fans this measures).
          */
-        const val STRAIGHT_BAR = 0.012
+        const val STRAIGHT_BAR = 0.008
 
         /** The least a rim's longest radius may exceed its shortest. */
         const val RATIO_BAR = 1.5

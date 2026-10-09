@@ -164,7 +164,7 @@ class GlaciationCombTest : BorrowsSharedWorlds() {
         // Recorded again at A1-1, whose calendar seasons and sea-surface sunlight grow more ice and
         // with it three such lakes on two worlds; a rule 13 finding, not traced (docs/TODO.md).
         val signature = straight.joinToString("; ")
-        KnownFailures.expect("A1-1: an ice-made lake is a straight one-cell line", "seed 718106 at 1024 has 2; seed 42 at 1024 has 1") {
+        KnownFailures.expect("A1-1: an ice-made lake is a straight one-cell line", "seed 42 at 1024 has 1") {
             if (straight.isNotEmpty()) {
                 throw RecordedViolation(
                     signature + " lakes that are a straight one-cell line along a D8 bearing — a" +
@@ -183,7 +183,7 @@ class GlaciationCombTest : BorrowsSharedWorlds() {
         // again at K1, whose square weather and scour moved it back under (docs/DESIGN_LEDGER.md,
         // L1 and K1). Recorded at C1b, whose snow makes the ice larger and thicker: it adds 2.9 to
         // 3.1% on all three (docs/DESIGN_LEDGER.md, C1b; docs/TODO.md, "The ice after C1b").
-        KnownFailures.expect("C1b: the larger ice adds a comb of grid-bearing bars to the standing water", "[718106 at 4.19%, 42 at 2.07%]") {
+        KnownFailures.expect("C1b: the larger ice adds a comb of grid-bearing bars to the standing water", "[718106 at 5.67%, 42 at 2.85%]") {
             if (over.isNotEmpty()) {
                 throw RecordedViolation(
                     "the ice puts ${ICE_COMB_BAR * 100}% or more of these worlds' standing water into thin" +

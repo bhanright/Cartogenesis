@@ -262,7 +262,7 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
         val pooledDepth = depthShares.average()
         // Recorded since Fix 3b: see [NOTCH_SHORT_ON_THE_LAWS_TERRAIN].
         // Re-recorded on square cells at Q2 (docs/DESIGN_LEDGER.md, Q2). Re-recorded at L1, whose rifts are Earth's half-grabens and the same at every grid (docs/DESIGN_LEDGER.md, L1).
-        KnownFailures.expect(NOTCH_SHORT_ON_THE_LAWS_TERRAIN, "61.6% as deep as the control's") {
+        KnownFailures.expect(NOTCH_SHORT_ON_THE_LAWS_TERRAIN, "63.1% as deep as the control's") {
             if (pooledDepth >= 0.5) {
                 throw RecordedViolation(
                     "the fill still stands ${"%.1f".format(pooledDepth * 100)}% as deep over the land as the " +
@@ -499,7 +499,7 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
         // Recorded at A1-1, whose calendar seasons moved seed 99's ground: its largest lake does not
         // fall with its outlet and its world keeps 0.70 of its water (docs/TODO.md).
         val signature = notHalved.joinToString("; ")
-        KnownFailures.expect("A1-1: an over-large lake does not fall with its outlet", "seed 99's water 1.3854% to 0.8140%") {
+        KnownFailures.expect("A1-1: an over-large lake does not fall with its outlet", "seed 99's water 1.5527% to 1.1577%") {
             if (notHalved.isNotEmpty()) {
                 throw RecordedViolation(
                     "an over-large lake did not fall, or its world kept more than half its water: $signature",

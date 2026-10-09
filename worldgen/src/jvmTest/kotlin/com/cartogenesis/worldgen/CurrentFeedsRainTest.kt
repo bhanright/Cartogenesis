@@ -188,16 +188,9 @@ class CurrentFeedsRainTest : BorrowsSharedWorlds() {
         // tenths of a percent wetter with the currents on, and on Fix 3b's terrain it came out drier
         // (docs/DESIGN_LEDGER.md, Fix 2 and Fix 3b).
         assertTrue(coldOn < coldOff, "cold-current coast should get drier with the currents on: off=$coldOff, on=$coldOn")
-        // Recorded at K2: on the Earth-sized planet the warm sample coast comes out half a percent
-        // drier with the currents on (docs/DESIGN_LEDGER.md, K2); re-recorded at C1b, 3.3% drier on its
-        // rain.
-        KnownFailures.expect("K2: the warm sample coast on the Earth-sized planet dries with the currents on", "off 31, on 31") {
-            if (warmOn < warmOff * 0.999) {
-                throw RecordedViolation(
-                    "warm-current coast should not get drier with the currents on: off=$warmOff, on=$warmOn",
-                    "off %.0f, on %.0f".format(warmOff, warmOn)
-                )
-            }
-        }
+        // Recorded at K2: on the Earth-sized planet the warm sample coast came out half a percent
+        // drier with the currents on (docs/DESIGN_LEDGER.md, K2), 3.3% drier at C1b; armed at A1-2,
+        // whose pressure wind on the sphere leaves it no drier.
+        assertTrue(warmOn >= warmOff * 0.999, "warm-current coast should not get drier with the currents on: off=$warmOff, on=$warmOn")
     }
 }

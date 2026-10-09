@@ -134,7 +134,7 @@ class GlaciationLatticeTest : BorrowsSharedWorlds() {
         // Recorded at C1b, whose snow makes the sheets larger and thicker (seed 718106's flat cold
         // country cut 36 to 45% deep at C1b; docs/DESIGN_LEDGER.md, C1b; docs/TODO.md, "The ice
         // after C1b").
-        KnownFailures.expect("C1b: the thicker sheets cut a trough's depth into the flat frozen country", "on 1024 at sea 0.70, the desktop default the ice cut a trough's depth into 49.0%; on 512 at sea 0.70 the ice cut a trough's depth into 49.9%; on 512 at sea 0.50 the ice cut a trough's depth into 41.8%") {
+        KnownFailures.expect("C1b: the thicker sheets cut a trough's depth into the flat frozen country", "on 1024 at sea 0.70, the desktop default the ice cut a trough's depth into 46.1%; on 512 at sea 0.70 the ice cut a trough's depth into 50.4%; on 512 at sea 0.50 the ice cut a trough's depth into 41.9%") {
             if (grooved.isNotEmpty()) {
                 throw RecordedViolation(
                     grooved.joinToString("; ") + ": flat ground is under a sheet, and a sheet does not drive" +

@@ -161,11 +161,9 @@ class SeaLevelHistoryTest : BorrowsSharedWorlds() {
         // (docs/DESIGN_LEDGER.md, K2; docs/TODO.md).
         // Armed at C1b2, whose rain moved the ground (docs/DESIGN_LEDGER.md, C1b2).
         // Recorded again at A1-1: its calendar seasons moved the ground once more, and seed 1234's
-        // lowstand now leaves 109 estuary mouths against 114 (docs/TODO.md).
-        val shortfallSignature = figures.joinToString("; ")
-        KnownFailures.expect("A1-1: on one seed the lowstand drowns no valley", "seed 1234 109 against 112") {
-            if (shortfalls.isNotEmpty()) throw RecordedViolation(shortfalls.joinToString("; "), shortfallSignature)
-        }
+        // lowstand left 109 estuary mouths against 114. Armed again at A1-2, whose pressure wind on
+        // the sphere moved the ground back over it (docs/DESIGN_LEDGER.md, A1-2).
+        assertTrue(shortfalls.isEmpty(), shortfalls.joinToString("; "))
         // Recorded with the clause above (docs/DESIGN_LEDGER.md, K2; docs/TODO.md).
         KnownFailures.expect("K2: on the Earth-sized planet the lowstand leaves too few drowned valleys pooled", "1.30x") {
             if (!(pooledEstuaries.size == seeds.size && meanGain >= estuaryGain)) {
@@ -231,7 +229,7 @@ class SeaLevelHistoryTest : BorrowsSharedWorlds() {
         // Recorded at C1b: on seed 1234 one body of 370 cells, under the Caspian's cap, is water
         // the ocean cannot reach after the cut, and six river mouths end in it. Which stage leaves it was not traced
         // (docs/DESIGN_LEDGER.md, C1b; docs/TODO.md).
-        KnownFailures.expect("C1b: a pocket of water the ocean cannot reach survives the cut on seed 1234", "seed 1234: 1 pockets of 374 cells; seed 1234: 6 river mouths in them") {
+        KnownFailures.expect("C1b: a pocket of water the ocean cannot reach survives the cut on seed 1234", "seed 1234: 1 pockets of 363 cells; seed 1234: 5 river mouths in them") {
             if (survivors.isNotEmpty()) {
                 throw RecordedViolation(
                     "pockets of water the ocean cannot reach survived the cut — every body no larger than " +

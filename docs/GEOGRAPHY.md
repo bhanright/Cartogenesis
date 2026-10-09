@@ -1457,7 +1457,7 @@ there is no seasonal forcing for the energy balance to answer.
   the 247.7 W/m² an ocean column absorbs (Trenberth, Fasullo and Kiehl 2009), where before all of it
   heated the air and the air ran several degrees warmer than the water every summer, against Kara
   and others' (2007) sea standing warmer than the air nearly everywhere. On Earth's land fraction
-  the swings at 50–60° are 35.4 °C for land, 9.3 for marine air and 7.8 for water, against
+  the swings at 50–60° are 35.6 °C for land, 9.3 for marine air and 7.8 for water, against
   34–38, 8–11 and 5–8 (they were 38.7, 13.0 and 6.9). On seed 42 at 1,024 rows at 35° N, July against
   January: land 30.1 and 2.6 °C, marine air 19.6 and 13.7, water 18.1 and 15.3. The water is still
   too steady there, a fifty-metre layer all year where Earth's summer layer is 20–30 m (TODO.md).
@@ -1465,7 +1465,7 @@ there is no seasonal forcing for the energy balance to answer.
   so the map's air over a cold current is cold.
 - **A summer's contrast across a coast is half of Earth's.** Read the way Earth's is, a month's
   sea-level temperature less its latitude's mean across a coast, seeds 42, 969495 and 7 at 1,024
-  rows stand 7.5–11.5 °C across their subtropical west coasts in July against the 18–20 Nakamura and
+  rows stand 7.6–11.5 °C across their subtropical west coasts in July against the 18–20 Nakamura and
   Miyasaka (2004) read off the NCEP reanalysis, and 9.4–15.3 across their east coasts against
   Earth's 2–8. The world's west coasts are no further from their sea than its east coasts, because
   the sea off them is barely colder than its latitude: the ocean's anomaly there is a degree where

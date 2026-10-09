@@ -159,7 +159,7 @@ class GlaciationTest : BorrowsSharedWorlds() {
         // in each hollow, 0.59 (docs/DESIGN_LEDGER.md, L1).
         KnownFailures.expect(
             "C I4: glaciated country holds no more lakes than the ice's absence leaves",
-            "cold-country lakes 0.53 to 0.74 per 10k cells, iced zone ratio 0.53"
+            "cold-country lakes 1.28 to 2.52 per 10k cells, iced zone ratio 1.71"
         ) {
             val tripled = with.coldLakes.toLong() * without.coldLand >= 3L * without.coldLakes * with.coldLand
             val contrasted = with.ratio >= COLD_LAKE_RATIO

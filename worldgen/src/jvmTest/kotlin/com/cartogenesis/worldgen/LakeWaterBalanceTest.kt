@@ -250,11 +250,18 @@ class LakeWaterBalanceTest : BorrowsSharedWorlds() {
         // So the figure is a regression pin on this one hollow, moved three times, and the claim
         // it serves is carried by the control above; "far below its spill level" in the class's
         // own words now reads "under half its footprint".
-        assertTrue(
-            share < DRY_BASIN_SHARE_OF_SPILL_AREA,
-            "seed $drySeed's dry basin holds ${"%.0f".format(share * 100)}% of its spill area," +
-                " wanted under ${"%.0f".format(DRY_BASIN_SHARE_OF_SPILL_AREA * 100)}%"
-        )
+        // Recorded at C1b: the land rains more than Earth's and its catchments shed more of it,
+        // and the dry basin's lake stands at 85% of its footprint (docs/DESIGN_LEDGER.md, C1b;
+        // docs/TODO.md, "The march's misses against Earth, after C1b").
+        KnownFailures.expect("C1b: the dry basin's lake fills most of its footprint on the wetter land", "") {
+            if (share >= DRY_BASIN_SHARE_OF_SPILL_AREA) {
+                throw RecordedViolation(
+                    "seed $drySeed's dry basin holds ${"%.0f".format(share * 100)}% of its spill area," +
+                        " wanted under ${"%.0f".format(DRY_BASIN_SHARE_OF_SPILL_AREA * 100)}%",
+                    "${"%.0f".format(share * 100)}%"
+                )
+            }
+        }
 
         // Since L1 a closed basin holds a lake in each of its hollows, and a hollow full to its
         // saddle spills into the next, so the basin can hold several: every one that keeps its water

@@ -205,11 +205,19 @@ class OutletResolutionTest {
         // A known failure from S3 to K1 (Audit III's C-I1); armed at K2, whose lakes take Budyko's
         // share of their catchment's rain rather than a fixed third of it, and whose pooled largest
         // lake is under the Caspian's share (docs/DESIGN_LEDGER.md, K2).
-        assertTrue(
-            pooledLargest < caspianShare,
-            "the largest lake pooled over ${largestLandLakeShares.size} worlds is " +
-                "${"%.2f".format(pooledLargest / caspianShare)}x the Caspian's share of land: $overLarge"
-        )
+        // Recorded at C1b: the land rains more than Earth's and its rain grows with the grid, and
+        // seed 59758's largest lake with it, 1.10, 3.42 and 7.16 times the Caspian's share at 256,
+        // 512 and 1,024 rows (docs/DESIGN_LEDGER.md, C1b; docs/TODO.md, "The march's misses
+        // against Earth, after C1b").
+        KnownFailures.expect("C1b: the largest lake pooled over the grids stands over the Caspian's share", "") {
+            if (pooledLargest >= caspianShare) {
+                throw RecordedViolation(
+                    "the largest lake pooled over ${largestLandLakeShares.size} worlds is " +
+                        "${"%.2f".format(pooledLargest / caspianShare)}x the Caspian's share of land: $overLarge",
+                    "%.2fx".format(pooledLargest / caspianShare)
+                )
+            }
+        }
         println(
             "OUTLET SCALE FINDING basins below the sea-level cut at or over the Caspian's share " +
                 "of their land: $overLargeDrowned"

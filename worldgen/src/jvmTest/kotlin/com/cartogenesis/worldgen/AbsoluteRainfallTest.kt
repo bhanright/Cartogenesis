@@ -120,17 +120,21 @@ class AbsoluteRainfallTest : BorrowsSharedWorlds() {
         // for - that the old normalization hid most of the difference - as a ratio between the two
         // measurements rather than as an absolute bar, and it bites at 0.60 of the way. See
         // docs/DESIGN_LEDGER.md, W3.
-        assertTrue(
-            oldRatio < newRatio * 0.75f,
-            "the old per-world normalization should have hidden most of the arid/lush difference, " +
-                "but measured %.2fx against absolute millimetres' %.2fx (arid %.2f%%, lush %.2f%%)"
-                .format(oldRatio, newRatio, oldArid, oldLush)
-        )
-        assertTrue(
-            newRatio >= 1.5f,
-            "absolute mm should tell the arid config from the lush one, but measured only " +
-                "%.2fx (arid %.2f%%, lush %.2f%%)".format(newRatio, newArid, newLush)
-        )
+        // Recorded at C1b: on the conserving march the world six degrees colder carries a little
+        // less desert than the one four degrees warmer (4.67% against 5.26% at 256 rows), so the
+        // colder config is not the arid one this clause was written for, and neither measure tells
+        // the two apart. On Earth the last glacial maximum's deserts were wider than today's
+        // (docs/DESIGN_LEDGER.md, C1b; docs/TODO.md).
+        KnownFailures.expect("C1b: a world six degrees colder is no drier on the conserving march", "") {
+            if (!(oldRatio < newRatio * 0.75f && newRatio >= 1.5f)) {
+                throw RecordedViolation(
+                    "the old per-world normalization should have hidden most of the arid/lush difference, " +
+                        "and absolute mm should tell them apart by 1.5x: measured %.2fx against absolute %.2fx (arid %.2f%%, lush %.2f%%)"
+                        .format(oldRatio, newRatio, newArid, newLush),
+                    "old %.2fx, absolute %.2fx".format(oldRatio, newRatio)
+                )
+            }
+        }
     }
 
     /**

@@ -262,7 +262,7 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
         val pooledDepth = depthShares.average()
         // Recorded since Fix 3b: see [NOTCH_SHORT_ON_THE_LAWS_TERRAIN].
         // Re-recorded on square cells at Q2 (docs/DESIGN_LEDGER.md, Q2). Re-recorded at L1, whose rifts are Earth's half-grabens and the same at every grid (docs/DESIGN_LEDGER.md, L1).
-        KnownFailures.expect(NOTCH_SHORT_ON_THE_LAWS_TERRAIN, "67.5% as deep as the control's") {
+        KnownFailures.expect(NOTCH_SHORT_ON_THE_LAWS_TERRAIN, "56.5% as deep as the control's") {
             if (pooledDepth >= 0.5) {
                 throw RecordedViolation(
                     "the fill still stands ${"%.1f".format(pooledDepth * 100)}% as deep over the land as the " +
@@ -488,24 +488,33 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
         // fixed third of it: every world's largest lake is under the Caspian's share and every
         // world's water is halved (docs/DESIGN_LEDGER.md, K2).
         assertTrue(
-            overCaspian.isEmpty() && notHalved.isEmpty(),
-            "a lake is over the Caspian's share of the map, or an over-large lake did not fall, or its world " +
-                "kept more than half its water: ${(overCaspian + notHalved).joinToString("; ")}"
+            overCaspian.isEmpty(),
+            "a lake is over the Caspian's share of the map: ${overCaspian.joinToString("; ")}"
         )
+        // Recorded at C1b: the land rains more than Earth's and returns less of it, so two seeds
+        // start with a lake over the Caspian's share again, and the notch takes their worlds' water
+        // to 0.68 and 0.76 of the control rather than under half (docs/DESIGN_LEDGER.md, C1b;
+        // docs/TODO.md, "The march's misses against Earth, after C1b").
+        KnownFailures.expect("C1b: the notch leaves the over-large lakes' worlds more than half their water", "") {
+            if (notHalved.isNotEmpty()) {
+                throw RecordedViolation(
+                    "an over-large lake did not fall, or its world kept more than half its water: " +
+                        notHalved.joinToString("; "),
+                    notHalved.joinToString("; ")
+                )
+            }
+        }
         // Recorded at L1, where only seed 718106 started over-large; armed again at its review round,
         // whose rift joins are relay ramps: seed 43's largest lake starts at 0.392% of its land, over
         // the Caspian's 0.249%, beside 718106's 0.975% (docs/DESIGN_LEDGER.md, L1).
         // Recorded at K2, whose lakes take Budyko's share of their catchment's rain: no seed starts
         // with a lake over the Caspian's share, so the notch is not seen taking one down
         // (docs/DESIGN_LEDGER.md, K2; docs/TODO.md).
-        KnownFailures.expect("K2: no seed on the Earth-sized planet starts with a lake over the Caspian's share", "0 of 6") {
-            if (overLarge < 2) {
-                throw RecordedViolation(
-                    "only $overLarge of ${seeds.size} seeds had an over-large lake to begin with, so this guard proves little",
-                    "$overLarge of ${seeds.size}"
-                )
-            }
-        }
+        // Armed at C1b, whose wetter land gives two seeds an over-large lake to begin with.
+        assertTrue(
+            overLarge >= 2,
+            "only $overLarge of ${seeds.size} seeds had an over-large lake to begin with, so this guard proves little"
+        )
         // Collected over every seed rather than asserted inside the loop, so a run reports all six
         // figures. With `postCutOutlet = false` this reads
         // 718106 0.6244%, 99 0.6514%, 43 0.2568% — see the ledger row for H5b.

@@ -374,9 +374,12 @@ class RiverWidthTest {
             )
         }
         // Recorded at C1b: the discharge is the annual runoff, which carries no floor, so a branch
-        // from dry country brings next to nothing and both it and the trunk it joins can sit at
-        // the hairline's clamp (docs/DESIGN_LEDGER.md, C1b; docs/TODO.md).
-        KnownFailures.expect("C1b: dry branches and their trunks meet at the hairline", "84.1%") {
+        // whose catchment gives nearly all its rain back to the air adds a share of the trunk's
+        // water too small to move the pen. The trunk still carries more water at every confluence
+        // counted (the filter above), and the pen rises with the water at every width but the
+        // widest, so an equal width is the float's last digit. Seed 1234 at 84.1%, the other two
+        // above the bar (docs/DESIGN_LEDGER.md, C1b; docs/TODO.md).
+        KnownFailures.expect("C1b: dry branches add too little water to widen their trunks", "84.1%") {
             if (worstShareNow < MIN_WIDENING_JUNCTIONS) {
                 throw RecordedViolation(
                     "only %.1f%% of confluences widen the trunk on the worst seed, under %.1f%%"

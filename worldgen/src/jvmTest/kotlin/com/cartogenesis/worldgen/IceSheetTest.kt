@@ -67,7 +67,7 @@ class IceSheetTest : BorrowsSharedWorlds() {
         }
         // Recorded at C1b: the march that closes its budget snows on the polar land where the old one
         // dropped the cold cap's water, and the sheets it feeds stand thicker than Earth's. The ice
-        // is measured and not fixed in C1b (docs/TODO.md, "The ice sheets after C1b").
+        // is measured and not fixed in C1b (docs/TODO.md, "The ice after C1b").
         KnownFailures.expect("C1b: the sheets the conserving march feeds stand thicker than Earth's", "seed 718106 stands 6984; seed 59758 stands 7654; seed 7 stands 7533; seed 42 stands 7829") {
             if (failures.isNotEmpty()) {
                 throw RecordedViolation(
@@ -207,16 +207,13 @@ class IceSheetTest : BorrowsSharedWorlds() {
         // Recorded from Fix 3b to Q2 on seeds 59758 and 7 on the 512 by 512 grid, and armed on
         // square cells, where neither is read and [DOME_SEED]'s sheet knows its dome
         // (docs/DESIGN_LEDGER.md, Q2).
-        // Recorded at K2: on the Earth-sized planet seed 7's sheet flows outward a hair short of
-        // the bar (docs/DESIGN_LEDGER.md, K2).
-        KnownFailures.expect("K2: a sheet on the Earth-sized planet flows outward short of what its dome owes", "seed 7: 66.1% of the ice near the dome flows outward at a mean 68.3 degrees off radial, where a flow that knows its dome owes 67% and 67.5 degrees against an indifferent bearing's 50% and 90") {
-            if (failures.isNotEmpty()) {
-                throw RecordedViolation(
-                    "the sheet is not flowing down its own surface:\n" + failures.joinToString("\n"),
-                    failures.joinToString("; ")
-                )
-            }
-        }
+        // Recorded at K2, where on the Earth-sized planet seed 7's sheet flowed outward a hair
+        // short of the bar; passing at C1b, whose snow thickens the sheets, and armed
+        // (docs/DESIGN_LEDGER.md, K2 and C1b).
+        assertTrue(
+            "the sheet is not flowing down its own surface:\n" + failures.joinToString("\n"),
+            failures.isEmpty()
+        )
     }
 
     /**

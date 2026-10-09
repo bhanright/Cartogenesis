@@ -4,8 +4,10 @@ import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.ClimateStage
 import com.cartogenesis.worldgen.pipeline.Season
+import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.roundToInt
+import kotlin.math.sin
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -118,6 +120,9 @@ class MeridionalWindTest : BorrowsSharedWorlds() {
         }
     }
 
+    /** The three belts' width at no tilt, in degrees of latitude: 30, 60 and 90 are their edges. */
+    private val BELT_DEGREES = 30f
+
     @Test
     fun `the belts slant toward the thermal equator and away from it, in both hemispheres`() {
         val world = SharedWorlds.world(
@@ -144,8 +149,13 @@ class MeridionalWindTest : BorrowsSharedWorlds() {
                 belt < 60f -> -equatorward  // westerlies, out toward the polar front
                 else -> equatorward         // polar easterlies, back down toward it
             }
+            // Since C1b the slant is a half sine across each belt, zero at its edges and at the
+            // equator and pi/2 of the belt's mean at its middle, so the mean is still the share.
+            // The stored wind is the warm half's at no tilt, whose belts stand at 0, 30, 60 and 90.
+            val near = (belt / BELT_DEGREES).toInt().coerceAtMost(2) * BELT_DEGREES
+            val shape = (PI / 2.0 * sin(PI * (belt - near) / BELT_DEGREES)).toFloat()
             assertEquals(
-                expected * slantRowsPerCell, drift, 1e-6f,
+                expected * slantRowsPerCell * shape, drift, 1e-6f,
                 "the wind at ${"%.1f".format(lat)} degrees drifts the wrong way"
             )
             checked++
@@ -311,7 +321,7 @@ class MeridionalWindTest : BorrowsSharedWorlds() {
         )
         // Recorded at K2: on the Earth-sized planet seed 9 is another world and its monsoon coast
         // a sliver (docs/DESIGN_LEDGER.md, K2).
-        KnownFailures.expect("K2: seed 9's monsoon coast on the Earth-sized planet is under the share the clause asks", "0.10%") {
+        KnownFailures.expect("K2: seed 9's monsoon coast on the Earth-sized planet is under the share the clause asks", "0.09%") {
             if (figures[1] < MIN_SHARE) {
                 throw RecordedViolation(
                     "seed $MONSOON_SEED's monsoon coast covers only ${"%.2f".format(figures[1] * 100)}% of land",

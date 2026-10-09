@@ -116,22 +116,32 @@ class GlaciationLatticeTest : BorrowsSharedWorlds() {
             )
         }
 
+        val grooved = ArrayList<String>()
         results.forEach { (label, work) ->
             assertTrue("no flat cold country to measure on $label", work.coldFlat > 5000)
-            assertTrue(
-                "on $label the ice cut a trough's depth into" +
+            if (work.deepCut >= 0.15f) {
+                grooved += "on $label the ice cut a trough's depth into" +
                     " ${"%.1f".format(work.deepCut * 100)}% of the flat frozen country" +
-                    " (${work.coldFlat} cells, mean cut ${"%.5f".format(work.meanCut)}): flat" +
-                    " ground is under a sheet, and a sheet does not drive a valley down every" +
-                    " line of the flow grid",
-                work.deepCut < 0.15f
-            )
+                    " (${work.coldFlat} cells, mean cut ${"%.5f".format(work.meanCut)})"
+            }
             assertTrue(
                 "on $label the ice laid till on ${"%.2f".format(work.till * 100)}% of the flat" +
                     " frozen country — a recessional moraine is a bar across a valley, and every" +
                     " one of them on a plain is a straight line of the lattice",
                 work.till < 0.01f
             )
+        }
+        // Recorded at C1b, whose snow makes the sheets larger and thicker (seed 718106's flat cold
+        // country cut 36 to 45% deep at C1b; docs/DESIGN_LEDGER.md, C1b; docs/TODO.md, "The ice
+        // after C1b").
+        KnownFailures.expect("C1b: the thicker sheets cut a trough's depth into the flat frozen country", "") {
+            if (grooved.isNotEmpty()) {
+                throw RecordedViolation(
+                    grooved.joinToString("; ") + ": flat ground is under a sheet, and a sheet does not drive" +
+                        " a valley down every line of the flow grid",
+                    grooved.joinToString("; ") { it.substringBefore(" of the flat") }
+                )
+            }
         }
 
         // Resolution invariance, which is half the defect. Every length this stage uses is in cells

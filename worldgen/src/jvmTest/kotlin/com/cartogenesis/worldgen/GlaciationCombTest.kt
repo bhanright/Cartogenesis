@@ -183,7 +183,7 @@ class GlaciationCombTest : BorrowsSharedWorlds() {
         // again at K1, whose square weather and scour moved it back under (docs/DESIGN_LEDGER.md,
         // L1 and K1). Recorded at C1b, whose snow makes the ice larger and thicker: it adds 2.9 to
         // 3.1% on all three (docs/DESIGN_LEDGER.md, C1b; docs/TODO.md, "The ice after C1b").
-        KnownFailures.expect("C1b: the larger ice adds a comb of grid-bearing bars to the standing water", "[718106 at 2.04%]") {
+        KnownFailures.expect("C1b: the larger ice adds a comb of grid-bearing bars to the standing water", "[718106 at 5.33%, 42 at 3.40%]") {
             if (over.isNotEmpty()) {
                 throw RecordedViolation(
                     "the ice puts ${ICE_COMB_BAR * 100}% or more of these worlds' standing water into thin" +

@@ -167,7 +167,7 @@ class SeaLevelHistoryTest : BorrowsSharedWorlds() {
             if (shortfalls.isNotEmpty()) throw RecordedViolation(shortfalls.joinToString("; "), shortfallSignature)
         }
         // Recorded with the clause above (docs/DESIGN_LEDGER.md, K2; docs/TODO.md).
-        KnownFailures.expect("K2: on the Earth-sized planet the lowstand leaves too few drowned valleys pooled", "1.38x") {
+        KnownFailures.expect("K2: on the Earth-sized planet the lowstand leaves too few drowned valleys pooled", "1.29x") {
             if (!(pooledEstuaries.size == seeds.size && meanGain >= estuaryGain)) {
                 throw RecordedViolation(
                     "pooled over ${pooledEstuaries.size} seeds the lowstand leaves ${meanGain}x the estuary mouths, " +

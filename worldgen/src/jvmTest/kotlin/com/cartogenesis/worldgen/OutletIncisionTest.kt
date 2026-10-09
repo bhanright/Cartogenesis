@@ -516,7 +516,7 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
         // Armed at C1b, whose wetter land gives two seeds an over-large lake to begin with; recorded
         // again at C1b2, whose drier land gives none, so the notch is not seen taking one down
         // (docs/TODO.md, "The march's misses against Earth, after C1b2").
-        KnownFailures.expect("C1b2: no seed starts with a lake over the Caspian's share", "0 of 6") {
+        KnownFailures.expect("C1b2: no seed starts with a lake over the Caspian's share", "1 of 6") {
             if (overLarge < 2) {
                 throw RecordedViolation(
                     "only $overLarge of ${seeds.size} seeds had an over-large lake to begin with, so this guard proves little",

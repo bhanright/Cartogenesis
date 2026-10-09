@@ -190,7 +190,9 @@ enum class Season { ANNUAL, SUMMER, WINTER, JULY, JANUARY, JULY_HALF, JANUARY_HA
  * [LAND_HEAT_CAPACITY_J_PER_M2_C] against [MARINE_AIR_HEAT_CAPACITY_J_PER_M2_C], the land's soil
  * and the sea's damp counted on top of the same atmospheric column — and in what sits under them.
  * Under the marine column is [MIXED_LAYER_HEAT_CAPACITY_J_PER_M2_C], twenty times either, coupled
- * to the air by the bulk surface flux [SURFACE_EXCHANGE_W_PER_M2_C] and coupled to nothing else.
+ * to the air by the bulk surface flux [SURFACE_EXCHANGE_W_PER_M2_C] and taking the sea surface's
+ * share of the sunlight's seasonal swing ([SEA_SURFACE_SHARE_OF_ABSORBED_SUN]), and coupled to
+ * nothing else.
  *
  * That is the entire land-sea contrast: no continentality setting, no damping factor, only the
  * capacities, the flux, and the world's own geography deciding how much of each band is which.
@@ -243,7 +245,7 @@ object EnergyBalance {
      * is a little over a day, and the diffusion is solved implicitly, so nothing here is near a
      * stability limit.
      */
-    private const val STEPS_PER_YEAR = 360
+    internal const val STEPS_PER_YEAR = 360
 
     /**
      * Steps in a month, which is the window "summer" and "winter" are the extremes of, and the
@@ -256,7 +258,7 @@ object EnergyBalance {
      * month extremes, so every gate was being asked of a number a third short of the one it was
      * written for.
      */
-    private const val MONTH_STEPS = STEPS_PER_YEAR / 12
+    internal const val MONTH_STEPS = STEPS_PER_YEAR / 12
 
     /**
      * Steps in half a year, which is the window the calendar's two half-years are taken over.
@@ -280,8 +282,8 @@ object EnergyBalance {
      * Koppen map this generator's desert share is read against.
      */
     internal const val APRIL_FIRST_STEP = 12
-    private const val JULY_FIRST_STEP = APRIL_FIRST_STEP + 3 * MONTH_STEPS
-    private const val JANUARY_FIRST_STEP = JULY_FIRST_STEP + HALF_YEAR_STEPS
+    internal const val JULY_FIRST_STEP = APRIL_FIRST_STEP + 3 * MONTH_STEPS
+    internal const val JANUARY_FIRST_STEP = JULY_FIRST_STEP + HALF_YEAR_STEPS
 
     /**
      * Whether a moment of the year, given as a fraction of it from the northern spring equinox,
@@ -599,19 +601,41 @@ object EnergyBalance {
      * from 1.5% of the map to nothing, and `OceanCurrentTest`'s warm-against-cold coastal
      * habitability went from +13.2% to -2.4%.
      *
-     * So the sunlight, the outgoing radiation, the zonal exchange with the land and the meridional
-     * transport all belong to the **air**, which is what the atmosphere does with them and what a
-     * coast feels; and the mixed layer hangs off it as a buffer, exchanging by the bulk surface flux
-     * below. The annual mean is untouched by the split — at steady state the water sits exactly at
-     * the air's temperature and the air's budget is the one the single column always had — and the
-     * seasonal cycle is not. Measured at 50-60 degrees, warmest month against coldest: the air
-     * swings 13.0 C and the water 6.9, against Earth's 8-11 for zonal-mean marine air and 5-8 for
-     * the sea surface under it. The water is right and the air is at the top of its range, which is
-     * the honest place for it to be: with a bulk coefficient of 25 against a fifty-metre slab's
-     * inertia the air can only hand the water about half its amplitude, and Earth's air-sea
-     * difference over the open ocean is nearer a degree all year. See TODO.md.
+     * So the outgoing radiation, the zonal exchange with the land and the meridional transport all
+     * belong to the **air**, which is what the atmosphere does with them and what a coast feels,
+     * and so does the sunlight but for the sea surface's share of its seasonal swing
+     * ([SEA_SURFACE_SHARE_OF_ABSORBED_SUN]); the mixed layer hangs off the air as a buffer,
+     * exchanging by the bulk surface flux below. The annual mean is untouched by the split — at
+     * steady state the water sits exactly at the air's temperature and the air's budget is the one
+     * the single column always had — and the seasonal cycle is not. See docs/DESIGN_LEDGER.md, W1
+     * and A1-1, for the swings measured against Earth's.
      */
     private const val MARINE_AIR_HEAT_CAPACITY_J_PER_M2_C = 1.04e7
+
+    /**
+     * The share of the sunlight a marine column absorbs that the sea surface takes: 167.8 of the
+     * 247.7 W/m2 the ocean's column absorbs reaches the water, and 78.2 stays in the air
+     * (Trenberth, Fasullo and Kiehl 2009, *Earth's global energy budget*, Bull. Amer. Meteor.
+     * Soc. 90, Tables 2a and 2b, ocean, the CERES period).
+     *
+     * The water takes that share of the sunlight's departure from the band's annual mean, and the
+     * air keeps the rest and the mean. The mean surface sunlight goes back up as the surface's own
+     * losses, which follow the humidity deficit and the sky's longwave rather than the air-sea
+     * difference — over the ocean 97.1 W/m2 of latent heat, 12 of sensible and 57.4 of net
+     * longwave against the 167.8 in, the same table — so the model carries them as a constant equal
+     * to the mean, and the bulk coefficient [SURFACE_EXCHANGE_W_PER_M2_C] carries the part that
+     * follows the difference. The water's year therefore still integrates to no exchange with the
+     * air, which is the slab's structural limit: nothing carries heat away under the surface, so
+     * the water's annual mean is the air's.
+     *
+     * Before A1-1 all the sunlight heated the marine air and the water was warmed only through the
+     * air, so the air ran several degrees warmer than the water every summer and colder every
+     * winter, where over Earth's open ocean the sea surface stands warmer than the air above it by
+     * under a degree nearly everywhere "because solar radiation is absorbed more efficiently by the
+     * ocean" (Kara, Hurlburt and Loh 2007, J. Geophys. Res. 112, C05020). See
+     * docs/DESIGN_LEDGER.md, A1-1, for the figures before and after.
+     */
+    private const val SEA_SURFACE_SHARE_OF_ABSORBED_SUN = 167.8 / 247.7
 
     /**
      * How fast the sea surface and the air above it trade heat, in watts per square metre per
@@ -788,7 +812,14 @@ object EnergyBalance {
          * seasonal-contrast guard passes the mixed layer's own, which is the planet with one heat
          * capacity for both surfaces that its control is about.
          */
-        landHeatCapacityJPerM2C: Double = LAND_HEAT_CAPACITY_J_PER_M2_C
+        landHeatCapacityJPerM2C: Double = LAND_HEAT_CAPACITY_J_PER_M2_C,
+        /**
+         * Handed the last simulated year of the land air, the marine air and the water, each
+         * indexed `step * BANDS + band` in degrees Celsius, when it is not null: for the guards
+         * that hold this model's windows to the year they were cut from. Nothing in the pipeline
+         * passes it.
+         */
+        recordedYear: ((land: DoubleArray, marineAir: DoubleArray, water: DoubleArray) -> Unit)? = null
     ): ZonalClimate {
         val geometry = Geometry(
             transportTropicsW.toDouble(), transportPolarW.toDouble(), iceAlbedoFeedback,
@@ -800,6 +831,7 @@ object EnergyBalance {
             for (step in 0 until STEPS_PER_YEAR) total += insolation[step * BANDS + band]
             total / STEPS_PER_YEAR
         }
+        annualInsolation.copyInto(geometry.annualInsolation)
         val outgoingOffset = OUTGOING_OFFSET_W_PER_M2 + outgoingOffsetShiftW
 
         val landC = DoubleArray(BANDS)
@@ -845,6 +877,7 @@ object EnergyBalance {
             lastYearMeanC = globalMean(geometry, landFraction, landAnnualC, seaAirAnnualC)
         }
 
+        recordedYear?.invoke(lastYearLand.copyOf(), lastYearSeaAir.copyOf(), lastYearWater.copyOf())
         val waterOpenShare = FloatArray(BANDS)
         val waterOpenC = FloatArray(BANDS)
         openWater(lastYearWater, waterOpenShare, waterOpenC)
@@ -1021,6 +1054,23 @@ object EnergyBalance {
         val white = DoubleArray(BANDS)
 
         /**
+         * Each band's annual-mean insolation, W/m2, set once a solve; with the band's albedo it
+         * gives [meanSeaSurfaceSun].
+         */
+        val annualInsolation = DoubleArray(BANDS)
+
+        /**
+         * The sea surface's share of the band's mean absorbed sunlight, W/m2, refreshed with the
+         * albedo once a year: what the water's own losses return to the air on the mean, so that
+         * only the sunlight's departure from it moves the water. See
+         * [SEA_SURFACE_SHARE_OF_ABSORBED_SUN].
+         */
+        val meanSeaSurfaceSun = DoubleArray(BANDS)
+
+        /** The sunlight the water takes on the step being marched, W/m2, per band. */
+        val waterSunThisStep = DoubleArray(BANDS)
+
+        /**
          * The band's planetary albedo, refreshed with [white] once a year.
          *
          * Held rather than recomputed because it depends only on the white share and the latitude,
@@ -1158,9 +1208,9 @@ object EnergyBalance {
      * Carries all three reservoirs of every band forward one time step.
      *
      * Four terms in order. **Radiation**, implicitly in each air column's own temperature, so no
-     * step can overshoot the equilibrium it is heading for whatever the step length; the water
-     * carries none of it, because the sunlight the sea absorbs and the infrared it sends to space
-     * both pass through the air, which is where the model's radiative law lives. **The zonal
+     * step can overshoot the equilibrium it is heading for whatever the step length; the infrared
+     * to space is the air's, which is where the model's radiative law lives, and the sea surface's
+     * share of the sunlight's seasonal departure is the water's ([SEA_SURFACE_SHARE_OF_ABSORBED_SUN]). **The zonal
      * exchange** between the band's two air columns, at [ZONAL_EXCHANGE_W_PER_M2_C], which keeps a
      * continent and the coast beside it in the same climate over the year while leaving them free
      * to differ within it. **The meridional transport**, implicitly, spreading the watts it brings
@@ -1203,10 +1253,14 @@ object EnergyBalance {
         for (band in 0 until BANDS) {
             val sunlight = insolation[step * BANDS + band]
             val absorbed = sunlight * (1.0 - geometry.bandAlbedo[band])
+            // The sea surface's share of the sunlight's departure from its annual mean goes into
+            // the water; the air keeps the rest, so the column's total is what it absorbs.
+            val waterSun = absorbed * SEA_SURFACE_SHARE_OF_ABSORBED_SUN - geometry.meanSeaSurfaceSun[band]
+            geometry.waterSunThisStep[band] = waterSun
             var land = (landC[band] + stepSeconds / landHeat * (absorbed - outgoingOffset)) /
                 (1.0 + stepSeconds * OUTGOING_PER_DEGREE_W_PER_M2_C / landHeat)
             var seaAir =
-                (seaAirC[band] + stepSeconds / marineAirHeat * (absorbed - outgoingOffset)) /
+                (seaAirC[band] + stepSeconds / marineAirHeat * (absorbed - waterSun - outgoingOffset)) /
                     (1.0 + stepSeconds * OUTGOING_PER_DEGREE_W_PER_M2_C / marineAirHeat)
 
             // The zonal exchange, between the two *air* columns, toward the band's own mean and so
@@ -1242,8 +1296,8 @@ object EnergyBalance {
             // because one of them is compared against a marine-air climatology and the other
             // against a sea-surface one. Implicit in the pair, because 4.8 days of air memory
             // against a step of one day is close enough to stiff to matter.
-            val water = waterC[band]
             val waterHeat = geometry.mixedLayerHeatCapacity[band]
+            val water = waterC[band] + stepSeconds / waterHeat * geometry.waterSunThisStep[band]
             val exchange = stepSeconds * SURFACE_EXCHANGE_W_PER_M2_C
             val determinant =
                 waterHeat * marineAirHeat + exchange * waterHeat + exchange * marineAirHeat
@@ -1285,6 +1339,8 @@ object EnergyBalance {
             val white = geometry.whiteFraction(bandAnnualC)
             geometry.white[band] = white
             geometry.bandAlbedo[band] = albedoOf(white, latitudeOfBand(band).toDouble())
+            geometry.meanSeaSurfaceSun[band] = SEA_SURFACE_SHARE_OF_ABSORBED_SUN *
+                geometry.annualInsolation[band] * (1.0 - geometry.bandAlbedo[band])
             geometry.mixedLayerHeatCapacity[band] = MIXED_LAYER_HEAT_CAPACITY_J_PER_M2_C +
                 (FROZEN_SEA_HEAT_CAPACITY_J_PER_M2_C - MIXED_LAYER_HEAT_CAPACITY_J_PER_M2_C) *
                 white

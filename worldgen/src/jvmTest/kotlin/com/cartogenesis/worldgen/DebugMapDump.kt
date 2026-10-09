@@ -334,9 +334,10 @@ class DebugMapDump {
     internal enum class Mode {
         FANTASY, ELEVATION, PLATES, BIOME, RAINFALL, TEMPERATURE, NORMALS, NATIONS, CULTURES,
         HABITABILITY,
-        // The local warm and cold season, not July and January. Side by side these are where the
-        // subtropical dry belt's migration shows: it sits some ten degrees poleward in the summer
-        // map and the same distance equatorward in the winter one.
+        // The calendar's: the rain of April to September and of October to March, and July's and
+        // January's temperature. Side by side these are where the subtropical dry belt's migration
+        // shows: it sits some ten degrees poleward in a hemisphere's summer map and the same
+        // distance equatorward in its winter one.
         SUMMER_RAINFALL, WINTER_RAINFALL, SUMMER_TEMPERATURE, WINTER_TEMPERATURE,
         // Which half of the year the rain arrives in, and the wind vector that decides it.
         SEASON_CONTRAST, WIND,

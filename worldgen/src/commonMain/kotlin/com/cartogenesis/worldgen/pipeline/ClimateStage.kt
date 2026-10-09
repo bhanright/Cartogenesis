@@ -766,6 +766,7 @@ object ClimateStage {
         val marineFraction = marineAirFraction(config, sea)
         val temperature = annualTemperature(config, sea, zonal, marineFraction)
         applyMaritimeInfluence(config, sea, ocean, temperature, waterExposure(config, sea))
+        carrySeaAnomalyIntoMarineAir(config, sea, ocean, temperature)
         // Three readings of the same year. The local extreme months are what `classify` gates on,
         // because Koppen's thresholds are monthly means; the calendar's July and January are what
         // a map of a season draws; and the calendar's half-years are what the snow balance and the
@@ -792,8 +793,8 @@ object ClimateStage {
         val januaryHalfSeaSurface =
             seaSurfaceTemperature(config, sea, zonal, januaryHalfTemperature, Season.JANUARY_HALF)
 
-        val julyHalfSeaIce = seaIceMask(config, sea, ocean, julyHalfSeaSurface)
-        val januaryHalfSeaIce = seaIceMask(config, sea, ocean, januaryHalfSeaSurface)
+        val julyHalfSeaIce = seaIceMask(config, sea, julyHalfSeaSurface)
+        val januaryHalfSeaIce = seaIceMask(config, sea, januaryHalfSeaSurface)
 
         // A pressure field per half-year, and a third for the annual wind. The annual one is built
         // from the annual temperature rather than averaged from the other two, which is the same
@@ -858,9 +859,9 @@ object ClimateStage {
             inversion: FloatField?
         ): MoistureMarch.Season {
             val totalWind = wind.totalMps
+            // The water carries the current anomaly already, through the air it is built from.
             val seaSurfaceC = FloatArray(cellsAcross * cellsDown) { cell ->
-                if (sea.isLand[cell]) airC.data[cell]
-                else waterC.data[cell] + (if (config.ocean.enabled) ocean.anomaly.data[cell] else 0f)
+                if (sea.isLand[cell]) airC.data[cell] else waterC.data[cell]
             }
             return MoistureMarch.Season(
                 airTemperatureC = airC.data,
@@ -963,11 +964,12 @@ object ClimateStage {
      *
      * The freezing test is a question about the sea surface, not the air over it: -1.8 C is where
      * water of the ocean's mean salinity turns to ice, and the marine air above a freezing sea is
-     * colder than that all winter without the sea being frozen. Add the current anomaly the ocean
-     * stage measured — so a warm current keeps a polar sea open where its latitude alone would
-     * freeze it, which is the Norwegian Sea, and a cold one closes a sea further from the pole,
-     * which is the Labrador. The march reads the same water field, which is what keeps the mask
-     * and the march from disagreeing about which cells are ice.
+     * colder than that all winter without the sea being frozen. The water carries the current
+     * anomaly the ocean stage measured, through the air it is built from
+     * ([carrySeaAnomalyIntoMarineAir]) — so a warm current keeps a polar sea open where its
+     * latitude alone would freeze it, which is the Norwegian Sea, and a cold one closes a sea
+     * further from the pole, which is the Labrador. The march reads the same water field, which is
+     * what keeps the mask and the march from disagreeing about which cells are ice.
      *
      * Empty when `ClimateConfig.seaIce` is off, which is the control the guard needs.
      * See [ClimateResult.julyHalfSeaIce] for what the two masks are for.
@@ -975,15 +977,13 @@ object ClimateStage {
     private fun seaIceMask(
         config: WorldGenConfig,
         sea: SeaLevelResult,
-        ocean: OceanResult,
         seaSurface: FloatField
     ): BooleanArray {
         val frozen = BooleanArray(config.width * config.height)
         if (!config.climate.seaIce) return frozen
         for (cell in frozen.indices) {
             if (sea.isLand[cell]) continue
-            val anomalyC = if (config.ocean.enabled) ocean.anomaly.data[cell] else 0f
-            frozen[cell] = seaSurface.data[cell] + anomalyC <= EnergyBalance.SEA_FREEZING_C
+            frozen[cell] = seaSurface.data[cell] <= EnergyBalance.SEA_FREEZING_C
         }
         return frozen
     }
@@ -1128,6 +1128,35 @@ object ClimateStage {
                 if (!sea.isLand[cell]) continue
                 temperature.data[cell] +=
                     spreadAnomaly.data[cell] * exposure.data[cell] * oceanConfig.coastalInfluence
+            }
+        }
+    }
+
+    /**
+     * Gives the air over every sea cell the water's own departure from its latitude, the current
+     * anomaly [OceanResult.anomaly], so the air over a cold current is cold and the air over a warm
+     * one warm.
+     *
+     * Over Earth's open ocean the air follows the sea surface one for one: annual means at every
+     * one-degree bin regress as `Tsst = 0.93 + 1.00 Tair` in ERA-40 and `0.63 + 1.00 Tair` in COADS,
+     * the sea "generally" under a degree warmer "nearly everywhere" (Kara, Hurlburt and Loh 2007,
+     * J. Geophys. Res. 112, C05020). Before A1-1 the air over the sea took its band's marine column
+     * alone, so it stood at its latitude's temperature over the California Current and the Gulf
+     * Stream alike, and a month's temperature across a west coast held only the land's column
+     * against the sea's. Every season and the water under the air are built from this field, so
+     * they carry the anomaly through it and nothing adds it a second time.
+     */
+    private fun carrySeaAnomalyIntoMarineAir(
+        config: WorldGenConfig,
+        sea: SeaLevelResult,
+        ocean: OceanResult,
+        temperature: FloatField
+    ) {
+        if (!config.ocean.enabled) return
+        parallelChunks(0, config.width * config.height) { startCell, endCell ->
+            for (cell in startCell until endCell) {
+                if (sea.isLand[cell]) continue
+                temperature.data[cell] += ocean.anomaly.data[cell]
             }
         }
     }

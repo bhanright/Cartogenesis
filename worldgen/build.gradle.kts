@@ -256,6 +256,7 @@ val deepClassesByStage: Map<String, List<String>> = mapOf(
     ),
     "climate" to listOf(
         "com.cartogenesis.worldgen.CurrentFeedsRainTest",
+        "com.cartogenesis.worldgen.RainGeometryTest",
         "com.cartogenesis.worldgen.GridShapeTest",
         "com.cartogenesis.worldgen.MeridionalWindTest",
         "com.cartogenesis.worldgen.MoistureBudgetTest",

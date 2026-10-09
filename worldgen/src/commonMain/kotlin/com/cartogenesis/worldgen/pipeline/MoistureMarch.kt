@@ -64,7 +64,7 @@ import kotlin.math.exp
  * equals the ground's return plus the runoff, closes cell by cell. The laps run both seasons in
  * step and update the return from the year's rain between laps.
  */
-internal object MoistureMarch {
+object MoistureMarch {
 
     /**
      * The lifetime of a column's water against rain, in days: the turnover time of the
@@ -89,11 +89,12 @@ internal object MoistureMarch {
     /**
      * Laps of both seasons round the planet. The first starts from half-saturated air over dry
      * ground and leaves a year's rain for the second's ground to give back; each later one
-     * carries the return a lap further toward the year it belongs to. Eight is where the last
-     * lap's storage changes by under a thousandth of its sources on the standard worlds, the bar
-     * `MoistureClosureTest` holds it to.
+     * carries the return a lap further toward the year it belongs to. Ten is where the last lap's
+     * storage changes by well under the uncertainty of Earth's own global rain on the standard
+     * worlds and on the application's 1,024 rows, the bar `MoistureClosureTest` holds it to;
+     * eight left 0.9 percent on one seed at 1,024 rows (docs/DESIGN_LEDGER.md, C1).
      */
-    const val LAPS = 8
+    const val LAPS = 10
 
     /** Seconds in a year: 365.25 days. */
     const val SECONDS_PER_YEAR = 3.15576e7
@@ -157,7 +158,7 @@ internal object MoistureMarch {
      * evaporation it was coupled to. [ledger], when handed in, is filled with every term; nothing
      * the march computes depends on it.
      */
-    fun run(inputs: Inputs, ledger: MoistureLedger? = null): Result {
+    internal fun run(inputs: Inputs, ledger: MoistureLedger? = null): Result {
         val config = inputs.config
         val cellsAcross = config.width
         val cellsDown = config.height
@@ -520,79 +521,85 @@ internal object MoistureMarch {
             val climate = config.climate
             val lifetimeSeconds = RAIN_LIFETIME_DAYS * SECONDS_PER_DAY
             val lapseRate = climate.lapseRateCPerKm.toDouble()
-            for (column in 0 until cellsAcross) {
-                for (row in 0 until cellsDown) {
-                    val cell = row * cellsAcross + column
-                    val here = index(row, column)
-                    direction[here] = if (season.zonalDirection[cell] >= 0) 1 else -1
-                    surface[here] = when {
-                        inputs.isLand[cell] -> LAND
-                        season.seaIce[cell] -> SEA_ICE
-                        else -> OPEN_SEA
-                    }
-                    val airC = season.airTemperatureC[cell].toDouble()
-                    saturatedMm[here] = ColumnWater.saturatedColumnMm(airC, lapseRate).toFloat()
-                    airSaturationHumidity[here] = ColumnWater.specificHumidity(
-                        ColumnWater.saturationVaporPressureKpa(airC), ColumnWater.SEA_LEVEL_PRESSURE_KPA
-                    ).toFloat()
-                    if (surface[here] == OPEN_SEA) {
-                        seaSurfaceHumidity[here] =
-                            SurfaceEvaporation.seaSurfaceHumidity(season.seaSurfaceC[cell].toDouble()).toFloat()
+            parallelChunks(0, cellsAcross) { startColumn, endColumn ->
+                for (column in startColumn until endColumn) {
+                    for (row in 0 until cellsDown) {
+                        val cell = row * cellsAcross + column
+                        val here = index(row, column)
+                        direction[here] = if (season.zonalDirection[cell] >= 0) 1 else -1
+                        surface[here] = when {
+                            inputs.isLand[cell] -> LAND
+                            season.seaIce[cell] -> SEA_ICE
+                            else -> OPEN_SEA
+                        }
+                        val airC = season.airTemperatureC[cell].toDouble()
+                        saturatedMm[here] = ColumnWater.saturatedColumnMm(airC, lapseRate).toFloat()
+                        airSaturationHumidity[here] = ColumnWater.specificHumidity(
+                            ColumnWater.saturationVaporPressureKpa(airC), ColumnWater.SEA_LEVEL_PRESSURE_KPA
+                        ).toFloat()
+                        if (surface[here] == OPEN_SEA) {
+                            seaSurfaceHumidity[here] =
+                                SurfaceEvaporation.seaSurfaceHumidity(season.seaSurfaceC[cell].toDouble()).toFloat()
+                        }
                     }
                 }
             }
             // Faces: the meridional wind at the face below each row, the mean of the two rows'.
-            for (column in 0 until cellsAcross) {
-                for (row in 0 until cellsDown - 1) {
-                    val above = season.southwardMps[row * cellsAcross + column]
-                    val below = season.southwardMps[(row + 1) * cellsAcross + column]
-                    faceShare[index(row, column)] = ((above + below) * 0.5 * grid.faceSharePerMps[row]).toFloat()
+            parallelChunks(0, cellsAcross) { startColumn, endColumn ->
+                for (column in startColumn until endColumn) {
+                    for (row in 0 until cellsDown - 1) {
+                        val above = season.southwardMps[row * cellsAcross + column]
+                        val below = season.southwardMps[(row + 1) * cellsAcross + column]
+                        faceShare[index(row, column)] = ((above + below) * 0.5 * grid.faceSharePerMps[row]).toFloat()
+                    }
                 }
             }
             // The fixed shares: the lifetime under the belts' factor, the air's own convergence
             // and the climb, each per column crossed.
-            for (column in 0 until cellsAcross) {
-                val west = (column + cellsAcross - 1) % cellsAcross
-                val east = (column + 1) % cellsAcross
-                for (row in 0 until cellsDown) {
-                    val cell = row * cellsAcross + column
-                    val here = index(row, column)
-                    val lid = if (inputs.isLand[cell]) lidFactor(cell) else 1.0
-                    lifetimeShare[here] = (grid.secondsPerColumn[row] / lifetimeSeconds *
-                        season.beltRainFactorOfRow[row] * lid).toFloat()
+            parallelChunks(0, cellsAcross) { startColumn, endColumn ->
+                for (column in startColumn until endColumn) {
+                    val west = (column + cellsAcross - 1) % cellsAcross
+                    val east = (column + 1) % cellsAcross
+                    for (row in 0 until cellsDown) {
+                        val cell = row * cellsAcross + column
+                        val here = index(row, column)
+                        val lid = if (inputs.isLand[cell]) lidFactor(cell) else 1.0
+                        lifetimeShare[here] = (grid.secondsPerColumn[row] / lifetimeSeconds *
+                            season.beltRainFactorOfRow[row] * lid).toFloat()
 
-                    // The air's own budget per column: what flows in through the four sides less
-                    // what flows out, as shares of the column. Zonally a cell always sends its
-                    // column on and takes in each neighbor that blows toward it.
-                    val fromWest = direction[index(row, west)] > 0
-                    val fromEast = direction[index(row, east)] < 0
-                    var inflow = (if (fromWest) 1.0 else 0.0) + (if (fromEast) 1.0 else 0.0)
-                    var outflow = 1.0
-                    var climbWeight = 0.0
-                    var climbSum = 0.0
-                    if (fromWest) { climbWeight += 1.0; climbSum += inputs.relativeElevation[row * cellsAcross + west] }
-                    if (fromEast) { climbWeight += 1.0; climbSum += inputs.relativeElevation[row * cellsAcross + east] }
-                    if (row > 0) {
-                        val north = faceShare[index(row - 1, column)].toDouble()
-                        if (north > 0.0) {
-                            inflow += north
-                            climbWeight += north
-                            climbSum += north * inputs.relativeElevation[(row - 1) * cellsAcross + column]
-                        } else outflow -= north
-                    }
-                    if (row < cellsDown - 1) {
-                        val south = faceShare[here].toDouble()
-                        if (south < 0.0) {
-                            inflow -= south
-                            climbWeight -= south
-                            climbSum -= south * inputs.relativeElevation[(row + 1) * cellsAcross + column]
-                        } else outflow += south
-                    }
-                    convergenceShare[here] =
-                        if (config.climate.convergenceRain) (inflow - outflow).coerceAtLeast(0.0).toFloat() else 0f
-                    if (inputs.isLand[cell] && climbWeight > 0.0) {
-                        val rise = (inputs.relativeElevation[cell] - climbSum / climbWeight).coerceAtLeast(0.0)
-                        orographicShare[here] = (config.climate.orographicStrength * rise * lid).toFloat()
+                        // The air's own budget per column: what flows in through the four sides less
+                        // what flows out, as shares of the column. Zonally a cell always sends its
+                        // column on and takes in each neighbor that blows toward it.
+                        val fromWest = direction[index(row, west)] > 0
+                        val fromEast = direction[index(row, east)] < 0
+                        var inflow = (if (fromWest) 1.0 else 0.0) + (if (fromEast) 1.0 else 0.0)
+                        var outflow = 1.0
+                        var climbWeight = 0.0
+                        var climbSum = 0.0
+                        if (fromWest) { climbWeight += 1.0; climbSum += inputs.relativeElevation[row * cellsAcross + west] }
+                        if (fromEast) { climbWeight += 1.0; climbSum += inputs.relativeElevation[row * cellsAcross + east] }
+                        if (row > 0) {
+                            val north = faceShare[index(row - 1, column)].toDouble()
+                            if (north > 0.0) {
+                                inflow += north
+                                climbWeight += north
+                                climbSum += north * inputs.relativeElevation[(row - 1) * cellsAcross + column]
+                            } else outflow -= north
+                        }
+                        if (row < cellsDown - 1) {
+                            val south = faceShare[here].toDouble()
+                            if (south < 0.0) {
+                                inflow -= south
+                                climbWeight -= south
+                                climbSum -= south * inputs.relativeElevation[(row + 1) * cellsAcross + column]
+                            } else outflow += south
+                        }
+                        convergenceShare[here] =
+                            if (config.climate.convergenceRain) (inflow - outflow).coerceAtLeast(0.0).toFloat() else 0f
+                        if (inputs.isLand[cell] && climbWeight > 0.0) {
+                            val rise = (inputs.relativeElevation[cell] - climbSum / climbWeight).coerceAtLeast(0.0)
+                            orographicShare[here] = (config.climate.orographicStrength * rise * lid).toFloat()
+                        }
                     }
                 }
             }

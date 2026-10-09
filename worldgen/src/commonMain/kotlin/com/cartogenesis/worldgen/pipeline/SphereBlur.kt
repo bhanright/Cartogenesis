@@ -4,7 +4,6 @@ import com.cartogenesis.worldgen.concurrent.parallelChunks
 import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import kotlin.math.PI
-import kotlin.math.ceil
 import kotlin.math.cos
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
@@ -27,8 +26,8 @@ import kotlin.math.sqrt
  *   latitude, so the area-weighted sum is untouched and the pole, which has no boundary, is
  *   closed.
  *
- * Three box passes and a diffusion of many small steps are both close to a Gaussian, so the
- * kernel is near round on the ground and has no preferred bearing (conventions rule 13).
+ * Three box passes and four implicit diffusion steps are both close to a Gaussian, so the kernel
+ * is near round on the ground and has no preferred bearing (conventions rule 13).
  */
 internal object SphereBlur {
 
@@ -36,11 +35,11 @@ internal object SphereBlur {
     private const val ROW_PASSES = 3
 
     /**
-     * The largest diffusion number a step across rows may take: a quarter, inside the half where
-     * an explicit step on the polar row, whose one boundary is twice as long as its own width,
-     * would start to overshoot.
+     * Implicit diffusion steps across rows. One backward step spreads a spike into a two-sided
+     * exponential; the sum of four is within a few percent of a Gaussian of the same variance, as
+     * the three box passes along the row are, so the kernel is near round on the ground.
      */
-    private const val MAX_DIFFUSION_PER_STEP = 0.25
+    private const val ROW_DIFFUSION_STEPS = 4
 
     /**
      * Spreads [field] in place with a Gaussian of standard deviation [sigmaKm] on the ground.
@@ -79,28 +78,33 @@ internal object SphereBlur {
             }
         }
 
-        // Across rows: steps whose variances add to the target, each at most the stable number.
+        // Across rows: backward-Euler steps of the flux-form diffusion, whose variances add to the
+        // target. Each is one tridiagonal solve per column, stable at any step and conservative
+        // because every boundary's flux enters the two rows beside it with opposite signs.
         val varianceRows = (sigmaKm / cellHeightKm).let { it * it }
-        val steps = ceil(varianceRows / (2.0 * MAX_DIFFUSION_PER_STEP)).toInt()
-        if (steps <= 0) return
-        val diffusion = varianceRows / (2.0 * steps)
+        val diffusion = varianceRows / (2.0 * ROW_DIFFUSION_STEPS)
         // The boundary between row r and row r + 1, at that row's southern edge.
         val cosBoundary = DoubleArray(cellsDown - 1) { boundary ->
             cos((90.0 - 180.0 * (boundary + 1) / cellsDown) * PI / 180.0)
         }
         parallelChunks(0, cellsAcross) { startColumn, endColumn ->
             val column = DoubleArray(cellsDown)
-            val next = DoubleArray(cellsDown)
+            val upper = DoubleArray(cellsDown)
             for (columnIndex in startColumn until endColumn) {
                 for (row in 0 until cellsDown) column[row] = data[row * cellsAcross + columnIndex].toDouble()
-                repeat(steps) {
+                repeat(ROW_DIFFUSION_STEPS) {
+                    var previousUpper = 0.0
+                    var previousSolved = 0.0
                     for (row in 0 until cellsDown) {
-                        val fromNorth = if (row > 0) cosBoundary[row - 1] * (column[row - 1] - column[row]) else 0.0
-                        val fromSouth =
-                            if (row < cellsDown - 1) cosBoundary[row] * (column[row + 1] - column[row]) else 0.0
-                        next[row] = column[row] + diffusion * (fromNorth + fromSouth) / cosRow[row]
+                        val north = if (row > 0) diffusion * cosBoundary[row - 1] / cosRow[row] else 0.0
+                        val south = if (row < cellsDown - 1) diffusion * cosBoundary[row] / cosRow[row] else 0.0
+                        val denominator = 1.0 + north + south + north * previousUpper
+                        upper[row] = -south / denominator
+                        previousSolved = (column[row] + north * previousSolved) / denominator
+                        column[row] = previousSolved
+                        previousUpper = upper[row]
                     }
-                    next.copyInto(column)
+                    for (row in cellsDown - 2 downTo 0) column[row] -= upper[row] * column[row + 1]
                 }
                 for (row in 0 until cellsDown) data[row * cellsAcross + columnIndex] = column[row].toFloat()
             }

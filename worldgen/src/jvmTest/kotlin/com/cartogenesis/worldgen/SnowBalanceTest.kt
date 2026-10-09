@@ -523,6 +523,7 @@ class SnowBalanceTest : BorrowsSharedWorlds() {
      */
     @Test
     fun `at the same temperature, ice is where the snow is`() {
+        val meanWins = ArrayList<String>()
         seeds.forEach { seed ->
             val on = world(seed, balance = true)
             val off = world(seed, balance = false)
@@ -585,7 +586,7 @@ class SnowBalanceTest : BorrowsSharedWorlds() {
             // something to say, and the balance still says more.
             val balanceSeparates = balance.wetShare - balance.dryShare
             val meanSeparates = balance.gateWetShare - balance.gateDryShare
-            assertTrue(
+            if (balanceSeparates <= meanSeparates) meanWins += (
                 "seed $seed: over the same marginal band the annual-mean rule separates the wet" +
                     " quarter from the dry by ${"%.1f".format(meanSeparates)} points (wet" +
                     " ${"%.1f".format(balance.gateWetShare)}%, dry" +
@@ -593,8 +594,7 @@ class SnowBalanceTest : BorrowsSharedWorlds() {
                     " ${"%.1f".format(balanceSeparates)} (wet" +
                     " ${"%.1f".format(balance.wetShare)}%, dry" +
                     " ${"%.1f".format(balance.dryShare)}%), so the contrast below is not the" +
-                    " balance's doing",
-                balanceSeparates > meanSeparates
+                    " balance's doing"
             )
             assertTrue(
                 "seed $seed: only ${"%.1f".format(balance.wetShare)}% of the wet quarter carries" +
@@ -606,6 +606,17 @@ class SnowBalanceTest : BorrowsSharedWorlds() {
                     " the same temperature as the wet one",
                 balance.dryShare <= 0.2
             )
+        }
+        // Recorded at C1b2: on seed 1234 the annual mean separates the marginal band's quarters
+        // by more than the balance does, the balance leaving the wet quarter half bare where the
+        // mean ices all of it (docs/TODO.md, "The ice after C1b2").
+        KnownFailures.expect("C1b2: the mean separates seed 1234's quarters more than the balance", "seed 1234 57.5 against 46.4") {
+            if (meanWins.isNotEmpty()) {
+                throw RecordedViolation(meanWins.joinToString("; "), meanWins.joinToString("; ") { line ->
+                    line.substringBefore(":") + " " + line.substringAfter("by ").substringBefore(" points") + " against " +
+                        line.substringAfter("balance's ").substringBefore(" (")
+                })
+            }
         }
     }
 

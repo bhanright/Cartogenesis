@@ -103,6 +103,48 @@ class RainGeometryTest : BorrowsSharedWorlds() {
         noWorse("the 250 mm isohyet's straightest edge along a row", dryEdge, MAIN_DRY_ROW_EDGE_KM)
     }
 
+
+    /**
+     * No front of the rain runs straight along a row for longer than the climate's own weather
+     * would bend it ([RainFronts] says what a front is, and how its straight run is measured).
+     *
+     * **The bar** is a quarter of the weather's wavelength on the ground
+     * ([ClimateStage.WEATHER_NOISE_WAVELENGTH_KM], 2,400 km, so 600 km): over a quarter of its
+     * cycle the climate's weather noise has turned from its crest to its slope, and a front the
+     * weather drew would have moved with it. One that holds a single row for longer is held there
+     * by a field that knows only latitude. The longest run down a column is printed beside it, the
+     * grid's other axis, as the control.
+     *
+     * **Shown failing on the tree before C1b2** (cb877879), which carried the zonal wind's sign
+     * flipping on a row and the full transport speed either side: 1,147, 788 and 821 km along a
+     * row on seeds 42, 969495 and 7, the first the straight lower edge of seed 42's wet band at 12
+     * S, the second the front at 70 S. C1b2's continuous wind takes that seam out; what still holds
+     * a row is the belts' factor on the rain, a function of latitude and season alone, which the
+     * condensate's conversion now reads too (docs/TODO.md, "Fronts along the belts' factor").
+     */
+    @Test
+    fun `the rain draws no straight front along a row at 1,024 rows`() {
+        val bar = ClimateStage.WEATHER_NOISE_WAVELENGTH_KM / 4.0
+        val over = ArrayList<String>()
+        seeds.forEach { seed ->
+            val world = SharedWorlds.world(WorldGenConfig.forRows(seed, ROWS))
+            val found = RainFronts.longest(world, world.climate.precipitationMm.data)
+            println(
+                "FRONT seed %d: the longest straight front along a row %.0f km at %.1f degrees (column %d), down a column %.0f km; bar %.0f"
+                    .format(seed, found.alongRowKm, found.rowLatitude, found.rowColumn, found.downColumnKm, bar)
+            )
+            if (found.alongRowKm > bar) over += "%d %.0f km at %.0f".format(seed, found.alongRowKm, found.rowLatitude)
+        }
+        KnownFailures.expect("C1b2: fronts along the belts' factor", "") {
+            if (over.isNotEmpty()) {
+                throw RecordedViolation(
+                    "fronts hold a row for longer than a quarter of the weather's wavelength: " + over.joinToString("; "),
+                    over.joinToString("; ")
+                )
+            }
+        }
+    }
+
     /** The largest row step of [rain] over land within [MAX_LATITUDE], over the median step. */
     private fun largestRowStep(world: WorldMap, rain: FloatArray): Double {
         val steps = ArrayList<Double>()

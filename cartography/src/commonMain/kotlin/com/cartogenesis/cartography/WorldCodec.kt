@@ -134,7 +134,9 @@ object WorldCodec {
      * its budget: `climate.depletionLengthKm`, `climate.oceanEvaporationLengthKm`,
      * `climate.evapotranspirationLengthKm`, `climate.currentMoisture` and
      * `climate.vegetationRecycling` are gone, their work now physical rates in the march;
-     * `climate.groundReturn` is new, the control for the ground's return; and the climate gained `climate.potentialEvapotranspirationMm` and `climate.openWaterEvaporationMm`,
+     * `climate.groundReturn` is new, the control for the ground's return; `climate.orographicStrength`
+     * became `climate.rainShadowScale`, a multiple of the cloud's conversion to rain whose one is
+     * Earth's; and the climate gained `climate.potentialEvapotranspirationMm` and `climate.openWaterEvaporationMm`,
      * which the rivers and lakes read so that their runoff is the rain the march's ground did not
      * give back. A format-22 file would open with no evaporation fields at all.
      *

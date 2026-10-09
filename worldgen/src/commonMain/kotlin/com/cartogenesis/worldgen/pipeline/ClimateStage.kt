@@ -322,7 +322,7 @@ object ClimateStage {
      * tall drew every weather cell twice as long east-west as north-south, so isotherms and the
      * tints that follow them ran along the rows (docs/DESIGN_LEDGER.md, K1).
      */
-    private const val WEATHER_NOISE_WAVELENGTH_KM = 2_400.0
+    internal const val WEATHER_NOISE_WAVELENGTH_KM = 2_400.0
 
     /** Octaves of it. Four is enough for a ragged isotherm and no more than the eye can see. */
     private const val WEATHER_NOISE_OCTAVES = 4

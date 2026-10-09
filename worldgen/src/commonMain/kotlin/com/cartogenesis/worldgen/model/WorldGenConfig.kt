@@ -1926,6 +1926,17 @@ data class ClimateConfig(
      */
     val convergenceRain: Boolean = false,
     /**
+     * Whether the ground gives water back to the moisture march: Budyko's share of each land
+     * cell's year of rain, against its potential evapotranspiration, returned to the air passing
+     * over it.
+     *
+     * On. Off is the control GEOGRAPHY.md's "Where the deserts are" is measured against: land that
+     * never re-moistens the air, so a rain shadow stays a desert for the rest of the continent,
+     * wherever it falls. Only the march reads it; the rivers' runoff is Budyko's either way, so the
+     * control's surface budget does not close, which a control need not.
+     */
+    val groundReturn: Boolean = true,
+    /**
      * Whether a cold sea puts a stratus lid on the air above a subtropical west coast.
      *
      * On. Off is the generator before the Atacama, the Namib and Baja had a mechanism: a cold

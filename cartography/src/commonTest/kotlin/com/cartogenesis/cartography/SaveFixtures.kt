@@ -94,7 +94,9 @@ internal object SyntheticWorlds {
                 winterSeaIce = BooleanArray(cells) { it % 7 == 0 },
                 biome = Array(cells) { Biome.entries[it % Biome.entries.size] },
                 vegetationDensity = field(),
-                permafrost = ByteArray(cells) { (it % 3).toByte() }
+                permafrost = ByteArray(cells) { (it % 3).toByte() },
+                potentialEvapotranspirationMm = field(),
+                openWaterEvaporationMm = field()
             ),
             rivers = RiverResult(
                 filledElevation = field(),

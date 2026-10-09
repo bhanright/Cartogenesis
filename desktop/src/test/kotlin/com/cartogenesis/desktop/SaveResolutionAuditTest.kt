@@ -234,7 +234,8 @@ class SaveResolutionAuditTest {
                 precipitationMm = field(), windDirection = IntArray(cells) { it % 3 - 1 }, windMeridional = field(),
                 summerSeaIce = BooleanArray(cells), winterSeaIce = BooleanArray(cells) { it % 7 == 0 },
                 biome = Array(cells) { Biome.entries[it % Biome.entries.size] },
-                vegetationDensity = field(), permafrost = ByteArray(cells)
+                vegetationDensity = field(), permafrost = ByteArray(cells),
+                potentialEvapotranspirationMm = field(), openWaterEvaporationMm = field()
             ),
             rivers = RiverResult(
                 filledElevation = field(), flowAccumulation = field(), flowTarget = none(), rivers = emptyList(),

@@ -195,7 +195,7 @@ object MoistureMarch {
             cold.updateLandPotential()
             parallelChunks(0, cellsDown) { startRow, endRow ->
                 for (cell in startRow * cellsAcross until endRow * cellsAcross) {
-                    if (!inputs.isLand[cell]) continue
+                    if (!inputs.isLand[cell] || !config.climate.groundReturn) continue
                     val potential = (warm.potentialMmRowMajor(cell) + cold.potentialMmRowMajor(cell)) * 0.5f
                     val annualReturnMm = groundReturnMm(annualRain.data[cell], potential)
                     warm.setGroundReturn(cell, annualReturnMm, potential)

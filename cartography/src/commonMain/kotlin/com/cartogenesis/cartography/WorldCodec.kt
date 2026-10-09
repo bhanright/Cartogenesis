@@ -133,8 +133,8 @@ object WorldCodec {
      * 23 because the moisture march began carrying water in kilograms per square meter and closing
      * its budget: `climate.depletionLengthKm`, `climate.oceanEvaporationLengthKm`,
      * `climate.evapotranspirationLengthKm`, `climate.currentMoisture` and
-     * `climate.vegetationRecycling` are gone, their work now physical rates in the march, and the
-     * climate gained `climate.potentialEvapotranspirationMm` and `climate.openWaterEvaporationMm`,
+     * `climate.vegetationRecycling` are gone, their work now physical rates in the march;
+     * `climate.groundReturn` is new, the control for the ground's return; and the climate gained `climate.potentialEvapotranspirationMm` and `climate.openWaterEvaporationMm`,
      * which the rivers and lakes read so that their runoff is the rain the march's ground did not
      * give back. A format-22 file would open with no evaporation fields at all.
      *

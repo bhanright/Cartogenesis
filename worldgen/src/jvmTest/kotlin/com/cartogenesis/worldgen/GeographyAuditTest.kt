@@ -168,8 +168,8 @@ class GeographyAuditTest : BorrowsSharedWorlds() {
     /**
      * The control the per-band guard needs: a world whose land never gives its moisture back.
      *
-     * `ClimateConfig.evapotranspirationLengthKm` is the mechanism GEOGRAPHY.md's "Where the deserts are"
-     * credits with putting the desert in the horse latitudes at all. With it at zero, orographic
+     * `ClimateConfig.groundReturn` is the mechanism GEOGRAPHY.md's "Where the deserts are"
+     * credits with putting the desert in the horse latitudes at all. With it off, orographic
      * depletion is permanent — air wrung out by one range stays wrung out for the rest of the
      * continent — so a rain shadow becomes a desert wherever it happens to fall, including on the
      * wettest rows of the map. That is exactly the defect the old in-band figure was written for,
@@ -181,7 +181,7 @@ class GeographyAuditTest : BorrowsSharedWorlds() {
         seeds.forEach { seed ->
             val base = WorldGenConfig.forRows(seed, SharedWorlds.COARSE_ROWS)
             val world = SharedWorlds.world(
-                base.copy(climate = base.climate.copy(convergenceRain = false))
+                base.copy(climate = base.climate.copy(groundReturn = false))
             )
             for (i in 0 until world.width * world.height) {
                 if (!world.sea.isLand[i]) continue

@@ -165,7 +165,8 @@ class IncrementalReuseTest {
             // here has to invalidate everything downstream the way the rest of this section does.
             "seaIce" to base.copy(climate = base.climate.copy(seaIce = false)),
             // The march's convergence sink is a climate setting the march reads.
-            "convergenceRain" to base.copy(climate = base.climate.copy(convergenceRain = false)),
+            "convergenceRain" to base.copy(climate = base.climate.copy(convergenceRain = true)),
+            "groundReturn" to base.copy(climate = base.climate.copy(groundReturn = false)),
             "rivers" to base.copy(
                 rivers = base.rivers.copy(
                     channelHeadAreaSlopeKm2 =

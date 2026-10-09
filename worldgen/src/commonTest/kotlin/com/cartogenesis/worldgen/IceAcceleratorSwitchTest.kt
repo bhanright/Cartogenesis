@@ -113,7 +113,8 @@ class IceAcceleratorSwitchTest {
             nearestMarginCell: IntArray,
             bedRelative: FloatArray,
             onTheSheet: BooleanArray,
-            metresPerRootKilometre: Float,
+            domeMetresOfMargin: FloatArray,
+            divideKmOfMargin: FloatArray,
             metresPerFieldUnit: Float,
             cellHeightInCellWidths: Float,
             cellSpanKm: Float

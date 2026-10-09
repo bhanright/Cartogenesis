@@ -40,8 +40,14 @@ internal data class GlacialMass(
      * the elevation field.
      */
     val iceThicknessMetres: FloatArray,
-    /** How far each frozen cell stands from the ice margin, in kilometres: the profile's argument. */
+    /** How far each frozen cell stands from the nearest ice margin, in kilometres. */
     val marginDistanceKm: FloatArray,
+    /**
+     * Each margin cell's body's Vialov dome, metres, and its divide's distance from the margin,
+     * kilometres, zero off the margin: what the profile rising from that cell was drawn with.
+     */
+    val domeMetresOfMargin: FloatArray,
+    val divideKmOfMargin: FloatArray,
     /** The sheet regime's own mask, so a guard can ask a question of the sheet and not of the ice. */
     val onTheSheet: BooleanArray,
     /** Which neighbour the ice flows to down its own surface, and -1 off the sheet. */
@@ -565,8 +571,8 @@ object GlaciationStage {
         }
 
         // The sheet as a body rather than a mask: how far each cell of the ice stands from the
-        // margin, how thick the plastic profile makes it there, and which way the *surface* of
-        // that profile falls. See [IceSheet] for the equation and its one constant.
+        // margin, how thick its body's Vialov profile makes it there, and which way the *surface*
+        // of that profile falls. See [IceSheet] for the equation.
         //
         // The distance is measured over the whole frozen body, because a sheet's margin is where
         // the ice ends and not where this stage's own regime split falls; the thickness is kept
@@ -574,17 +580,34 @@ object GlaciationStage {
         // with its own thickness ([GlaciationConfig.valleyIceThicknessMetres]) and is not a
         // kilometre-thick plateau standing over the landscape.
         stopIfAsked()
-        val metresPerRootKm =
-            IceSheet.metresPerRootKilometre(config.isostasy.iceDensity, config.isostasy.gravity)
         // The side of the square with one cell's area, which is the span the profile is averaged
         // over: see [IceSheet.profileMetres] for why it is not the cell's width.
         val cellSpanKm = sqrt(config.squareKilometresPerCell).toFloat()
+        val marginCells = IceSheet.marginCells(config, frozen)
+        // The geometric distance, for the tally and for each body's divide: what reads it asks
+        // how big a body of ice is.
+        val marginDistanceKm = IceSheet.nearestMarginKm(config, frozen, marginCells)
+        val domes = bodyDomes(config, sea, field, frozen, marginDistanceKm, snowBalance)
+        val domeMetresOfMargin = FloatArray(cellCount)
+        val divideKmOfMargin = FloatArray(cellCount)
+        for (cell in 0 until cellCount) {
+            if (!marginCells[cell]) continue
+            // A margin cell between two bodies rises the larger one's profile.
+            val column = cell % cellsAcross
+            val row = cell / cellsAcross
+            var widest = -1
+            FlowRouting.forEachNeighbour(cellsAcross, cellsDown, column, row) { neighbour ->
+                val body = field.id[neighbour]
+                if (body >= 0 && (widest < 0 || domes.divideKm[body] > domes.divideKm[widest])) widest = body
+            }
+            if (widest < 0) continue
+            domeMetresOfMargin[cell] = domes.domeMetres[widest]
+            divideKmOfMargin[cell] = domes.divideKm[widest]
+        }
         val margin = IceSheet.marginDistanceKm(
-            config, frozen, relative, config.scale.highestLandMetres, metresPerRootKm, cellSpanKm
+            config, frozen, marginCells, relative, config.scale.highestLandMetres,
+            domeMetresOfMargin, divideKmOfMargin, cellSpanKm, marginDistanceKm
         )
-        // The geometric one for the tally, since what reads it asks how big a body of ice is;
-        // the profile's own argument stays inside [IceSheet.Margin]. See that class.
-        val marginDistanceKm = margin.nearestMarginKm
 
         // And which of that ice is a *sheet*. The profile is a sheet's and only a sheet's, so a
         // frozen body smaller than [IceSheet.SMALLEST_SHEET_SQUARE_KM] is left as the frozen
@@ -609,13 +632,13 @@ object GlaciationStage {
             if (config.erosion.acceleration == Acceleration.GPU) accelerator else null
         val accelerated = deviceForTheSheet?.sheet(
             cellsAcross, cellsDown, margin.distanceKm, margin.nearestCell, relative, sheetBody,
-            metresPerRootKm, config.scale.highestLandMetres,
+            domeMetresOfMargin, divideKmOfMargin, config.scale.highestLandMetres,
             config.cellHeightInCellWidths.toFloat(), cellSpanKm
         )
         val iceThicknessMetres = accelerated?.thicknessMetres
             ?: IceSheet.profile(
-                margin, relative, sheetBody, metresPerRootKm, config.scale.highestLandMetres,
-                cellSpanKm
+                margin, relative, sheetBody, domeMetresOfMargin, divideKmOfMargin,
+                config.scale.highestLandMetres, cellSpanKm
             )
         val surfaceFlow = accelerated?.flowReceiver
             ?: IceSheet.flowReceivers(
@@ -873,6 +896,8 @@ object GlaciationStage {
                 iceDepressionMetres = iceDepression,
                 iceThicknessMetres = iceThicknessMetres,
                 marginDistanceKm = marginDistanceKm,
+                domeMetresOfMargin = domeMetresOfMargin,
+                divideKmOfMargin = divideKmOfMargin,
                 onTheSheet = sheet,
                 sheetFlowReceiver = surfaceFlow,
                 iceSurfaceCells = iceSurfaceCells,
@@ -1763,6 +1788,51 @@ object GlaciationStage {
 
     /** The connected fields of frozen ground, and how many cells each holds. */
     private class FrozenFields(val id: IntArray, val size: IntArray, val count: Int)
+
+    /** Each frozen body's Vialov dome, in metres, and its divide's distance from its margin, km. */
+    private class BodyDomes(val domeMetres: FloatArray, val divideKm: FloatArray)
+
+    /**
+     * Every frozen body's dome ([IceSheet.domeMetres]): its divide is its ice farthest from its
+     * margin, its snow the mean of its snow balance where that is positive (Antarctica's
+     * [IceSheet.EARTH_SHEET_ACCUMULATION_MM] when the mask was frozen on temperature alone), and its
+     * surface the annual air over the divide in the glacial maximum's climate the mask was frozen
+     * in, [GlaciationConfig.glacialMaximumC] colder than today's: the climate's own temperature
+     * field, lapse rate and all, read before the dome lifts it.
+     */
+    private fun bodyDomes(
+        config: WorldGenConfig,
+        sea: SeaLevelResult,
+        field: FrozenFields,
+        frozen: BooleanArray,
+        marginDistanceKm: FloatArray,
+        snowBalance: FloatField?
+    ): BodyDomes {
+        val divideKm = FloatArray(field.count)
+        val divideCell = IntArray(field.count) { -1 }
+        val snowSum = DoubleArray(field.count)
+        for (cell in frozen.indices) {
+            val body = field.id[cell]
+            if (body < 0) continue
+            if (divideCell[body] < 0 || marginDistanceKm[cell] > divideKm[body]) {
+                divideKm[body] = marginDistanceKm[cell]
+                divideCell[body] = cell
+            }
+            snowSum[body] += (snowBalance?.data?.get(cell) ?: IceSheet.EARTH_SHEET_ACCUMULATION_MM).coerceAtLeast(0f)
+        }
+        val temperature = ClimateStage.buildTemperature(config, sea).data
+        val domeMetres = FloatArray(field.count) { body ->
+            if (divideCell[body] < 0) 0f else IceSheet.domeMetres(
+                divideKm[body],
+                (snowSum[body] / field.size[body]).toFloat(),
+                temperature[divideCell[body]] - config.glaciation.glacialMaximumC,
+                config.climate.lapseRateCPerKm,
+                config.isostasy.iceDensity,
+                config.isostasy.gravity
+            )
+        }
+        return BodyDomes(domeMetres, divideKm)
+    }
 
     /** What the parallel rule threw away, for the tally. */
     private class Suppression(val cells: Int, val trunks: Int, val kept: Int)

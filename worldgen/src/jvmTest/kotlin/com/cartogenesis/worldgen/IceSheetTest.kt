@@ -512,10 +512,10 @@ class IceSheetTest : BorrowsSharedWorlds() {
      *
      * ### The step
      *
-     * A plastic dome rises at `k * sqrt(x)` from its margin, so the fastest it can ever climb
-     * across one cell is the climb out of the margin itself: [IceSheet.profileMetres] over one
-     * cell width, which is 404 m at 1024 on a world 12,000 km across and less everywhere further
-     * in, the curve being concave. Two neighbouring cells *both carrying ice* therefore cannot
+     * A Vialov dome rises steepest out of its margin, as the three-eighths power of the distance,
+     * so the fastest it can ever climb across one cell is the climb out of the margin itself:
+     * [IceSheet.profileMetres] over one cell width for the body with the steepest dome, and less
+     * everywhere further in, the curve being concave. Two neighbouring cells *both carrying ice* therefore cannot
      * stand more than that apart, whatever the ground under them is doing, because where there is
      * ice the surface is the dome and not the bed. It is a ceiling derived from the equation the
      * sheet is drawn by, not a figure fitted to a world.
@@ -555,11 +555,16 @@ class IceSheetTest : BorrowsSharedWorlds() {
             // all is a separate finding; see docs/TODO.md.
             val bed = measured.bed.relativeElevation.data
             val surface = FloatArray(bed.size) { bed[it] * metres + thickness[it] }
-            val stepCeiling = IceSheet.profileMetres(
-                config.cellWidthKm.toFloat(),
-                IceSheet.metresPerRootKilometre(config.isostasy.iceDensity, config.isostasy.gravity),
-                sqrt(config.squareKilometresPerCell).toFloat()
-            )
+            // The steepest any body's profile climbs over its first cell of ice.
+            var stepCeiling = 0f
+            for (cell in thickness.indices) {
+                val dome = measured.mass.domeMetresOfMargin[cell]
+                if (dome <= 0f) continue
+                stepCeiling = maxOf(stepCeiling, IceSheet.profileMetres(
+                    config.cellWidthKm.toFloat(), dome, measured.mass.divideKmOfMargin[cell],
+                    sqrt(config.squareKilometresPerCell).toFloat()
+                ))
+            }
             var worstAcross = 0f
             var worstDown = 0f
             var overAcross = 0

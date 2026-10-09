@@ -37,18 +37,30 @@ class IceSheetParity private constructor() {
     val onTheSheet = BooleanArray(cellCount) {
         frozen[it] && random.nextFloat() > SHARE_LEFT_OFF_THE_SHEET
     }
-    val metresPerRootKilometre =
-        IceSheet.metresPerRootKilometre(config.isostasy.iceDensity, config.isostasy.gravity)
     val metresPerFieldUnit = config.scale.highestLandMetres
     val cellHeightInCellWidths = config.cellHeightInCellWidths.toFloat()
     val cellSpanKm = sqrt(config.squareKilometresPerCell).toFloat()
+    private val marginCells = IceSheet.marginCells(config, frozen)
+    private val nearestKm = IceSheet.nearestMarginKm(config, frozen, marginCells)
+
+    /**
+     * One dome for the whole fixture, Vialov's over its farthest ice under Antarctica's snow at
+     * [FIXTURE_SURFACE_C], handed to every margin cell, which is what a world hands the device.
+     */
+    private val dome = IceSheet.domeMetres(
+        nearestKm.max(), IceSheet.EARTH_SHEET_ACCUMULATION_MM, FIXTURE_SURFACE_C,
+        config.climate.lapseRateCPerKm, config.isostasy.iceDensity, config.isostasy.gravity
+    )
+    val domeMetresOfMargin = FloatArray(cellCount) { if (marginCells[it]) dome else 0f }
+    val divideKmOfMargin = FloatArray(cellCount) { if (marginCells[it]) nearestKm.max() else 0f }
     val margin = IceSheet.marginDistanceKm(
-        config, frozen, bedRelative, metresPerFieldUnit, metresPerRootKilometre, cellSpanKm
+        config, frozen, marginCells, bedRelative, metresPerFieldUnit, domeMetresOfMargin, divideKmOfMargin,
+        cellSpanKm, nearestKm
     )
 
     /** The processor's thickness, in metres, per cell: the reference. */
     val processorThicknessMetres = IceSheet.profile(
-        margin, bedRelative, onTheSheet, metresPerRootKilometre, metresPerFieldUnit, cellSpanKm
+        margin, bedRelative, onTheSheet, domeMetresOfMargin, divideKmOfMargin, metresPerFieldUnit, cellSpanKm
     )
 
     /** The processor's flow receiver per cell, -1 where none is lower: the reference. */
@@ -61,7 +73,7 @@ class IceSheetParity private constructor() {
     suspend fun askDevice(device: IceSheetAccelerator): IceSheetAccelerator.Sheet? =
         device.sheet(
             cellsAcross, cellsDown, margin.distanceKm, margin.nearestCell, bedRelative, onTheSheet,
-            metresPerRootKilometre, metresPerFieldUnit, cellHeightInCellWidths, cellSpanKm
+            domeMetresOfMargin, divideKmOfMargin, metresPerFieldUnit, cellHeightInCellWidths, cellSpanKm
         )
 
     /** How far [onTheDevice] sits from the processor over the sheet's cells. */
@@ -127,5 +139,8 @@ class IceSheetParity private constructor() {
 
         /** One frozen cell in twenty left bare, so the margins are ragged, not straight rows. */
         private const val SHARE_LEFT_OFF_THE_SHEET = 0.05f
+
+        /** The fixture's ice surface before its dome lifts it, degrees: a polar plateau's. */
+        private const val FIXTURE_SURFACE_C = -30f
     }
 }

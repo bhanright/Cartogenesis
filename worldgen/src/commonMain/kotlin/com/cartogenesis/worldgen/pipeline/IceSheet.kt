@@ -3,115 +3,261 @@ package com.cartogenesis.worldgen.pipeline
 import com.cartogenesis.worldgen.math.JumpFloodDistance
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldScale
+import kotlin.math.exp
+import kotlin.math.pow
 import kotlin.math.sqrt
 
 /**
  * An ice sheet as a *body*: how thick it is, how high its surface stands, and which way that
  * surface falls.
  *
- * Until this existed the generator had a frozen *mask* and nothing else. A mask has no altitude,
- * so the ice made no climate of its own; it has no surface, so the ice had nowhere to flow from
- * except the bed's own drainage, which on a sheet lies a kilometre underneath and is not what
- * steers anything; and it has no weight beyond a constant, so the crust under it sank by a number
- * somebody chose. All three follow from a thickness, and a thickness follows from one equation.
- *
  * ### The profile
  *
- * Ice is a solid that deforms until the shear stress at its base reaches about the same figure
- * wherever you measure it — Cuffey and Paterson (*The Physics of Glaciers*, 4th edn, 2010, §8.5)
- * put the basal shear stress of the ice sheets at 50 to 150 kPa and take 100 kPa as the
- * representative value. A sheet spreading under its own weight until it everywhere reaches that
- * stress has the *perfectly plastic* profile of Nye (1951) and Vialov (1958):
+ * A sheet is the snow that falls on it flowing out to its margin. In the steady state the ice
+ * flux through a line `x` from the divide is the snow that fell between the divide and that line,
+ * `a x`, and the flux the ice carries under its own weight is Glen's flow law in the shallow-ice
+ * approximation, `2 A (rho g)^n H^(n+2) |dH/dx|^n / (n + 2)` (Cuffey and Paterson, *The Physics of
+ * Glaciers*, 4th edn, 2010, chapter 8). Setting one against the other over a flat bed with no
+ * sliding gives Vialov's (1958) profile,
  *
  * ```
- * H(x) = sqrt(2 * tau0 * x / (rho_ice * g))
+ * H(x)^((2n+2)/n) = H0^((2n+2)/n) (1 - (x / L)^((n+1)/n))
+ * H0 = 2^(n/(2n+2)) ((n+2) a / (2 A (rho g)^n))^(1/(2n+2)) L^(1/2)
  * ```
  *
- * where `x` is the distance from the margin. `H` is the height of the ice *above the elevation of
- * its own margin* — the equation solves for a surface, and over a flat bed the surface and the
- * thickness are the same thing, which is why the shape is usually quoted as a thickness. The
- * constant in front is not a taste: with
- * tau0 at 100 kPa, ice at 917 kg/m3 and g at 9.81 m/s2 it is
- * [metresPerRootKilometre] = `sqrt(2 * 1e5 * 1000 / (917 * 9.81))` = 149.1 metres per root
- * kilometre.
+ * with `L` the distance from the divide to the margin, `n` Glen's exponent, 3. The dome's height
+ * goes as the square root of the sheet's size and only as the eighth root of the snow and the
+ * ice's softness, which is why sheets on Earth stand within a factor of two of each other.
  *
- * Checked against the two sheets there are. Greenland's divide stands about 400 km from the
- * nearest margin, which the profile puts at 2,982 m against a measured maximum near 3,000
- * (Morlighem et al. 2017). Antarctica's is about 1,000 km in, which the profile puts at 4,715 m
- * against Bedmap2's measured maximum of 4,776 (Fretwell et al. 2013).
+ * Each frozen body takes its own: `L` is the farthest any of its ice stands from its margin, `a`
+ * is the mean of its snow balance, and `A` is the rate factor of its ice, which depends on how
+ * warm the ice is where it deforms ([effectiveRateFactorPerPa3s]). So the profile is a function of
+ * the distance from the margin alone within one body, and the surface is the lower envelope of
+ * the profiles rising from every point of the margin, as before (see [marginDistanceKm]).
  *
  * It is asked of sheets only. A body of ice under [SMALLEST_SHEET_SQUARE_KM] is an ice cap by
- * glaciology's own definition and gets no profile at all — see that constant, and the render that
- * made the case for it.
+ * glaciology's own definition and gets no profile at all.
  *
  * ### The surface, and why it is the terrain
  *
  * A sheet's surface is its own ground: Greenland's summit is cold because it is three kilometres
- * up, not because Greenland is further north than Ellesmere. So the surface — the dome, or the
- * bed where the bed stands through it — is written into the elevation field the pipeline reads,
- * the thickness being the difference between the two, and the climate stage's
- * existing lapse rate then makes the dome colder than its bed by exactly
- * [surfaceCoolingC]. Nothing in the climate had to change for that to be true, which is the test
- * that it is the right place to put it: an altitude is a property of the ground, and the top of a
- * kilometre of ice is where the air is.
+ * up. So the surface is written into the elevation field the pipeline reads, the thickness being
+ * the difference between it and the bed, and the climate's lapse rate makes the dome colder than
+ * its bed by [surfaceCoolingC].
  *
  * ### The flow
  *
- * Ice flows down the slope of *its own surface*. That is the one fact that separates a sheet from
- * a valley glacier, and it is why a sheet's scour is radial about its dome while a valley
- * glacier's follows the valley: under a sheet the bed's drainage network is irrelevant, and a
- * dome whose height is `sqrt(distance from the margin)` falls away from its own summit in every
- * direction at once. [flowReceivers] is the steepest descent of that surface, and
- * the scour that follows it comes out streamlined along it — the flutes and drumlin fields of the
- * Laurentide's bed — rather than as the isotropic blobs the mask alone could justify.
+ * Ice flows down the slope of *its own surface*, which falls away from the divide in every
+ * direction; [flowReceivers] is the steepest descent of it.
  *
  * ### Where it runs
  *
- * The profile and the surface flow are per-cell arithmetic over two fields, which is rule 8's
- * case, so both go through [IceSheetAccelerator] with this object's own code as the reference and
- * `GpuIceSheetTest` on the desktop measuring the two against each other on [IceSheetParity]'s
- * fixture, and the browser's `?selftest` page reporting the same measure for its device.
+ * The profile and the surface flow are per-cell arithmetic over grid fields, so both go through
+ * [IceSheetAccelerator] with this object's own code as the reference and `GpuIceSheetTest` on the
+ * desktop measuring the two against each other on [IceSheetParity]'s fixture. The profile's shape
+ * is one table ([VIALOV_SHAPE]) both read, so the device does the same arithmetic in the same
+ * order.
  */
 object IceSheet {
 
     /**
-     * The basal shear stress an ice sheet spreads until it reaches, in pascals.
-     *
-     * Cuffey and Paterson, 4th edn, §8.5: 50-150 kPa across the sheets and the outlet glaciers,
-     * with 100 kPa the representative figure. It is the only free constant in the profile and it
-     * is an observed one.
-     */
-    const val BASAL_SHEAR_STRESS_PASCALS = 100_000f
-
-    /**
      * The thickest ice measured on Earth, in metres: Bedmap2's deepest sounding in the Astrolabe
-     * Subglacial Basin (Fretwell et al. 2013). The envelope guard's ceiling, and nothing a
-     * generated sheet may pass.
+     * Subglacial Basin (Fretwell et al. 2013). The envelope guard's ceiling.
      */
     const val THICKEST_ICE_ON_EARTH_METRES = 4_776f
 
+    /** Glen's flow-law exponent, three (Cuffey and Paterson 2010, section 3.4). */
+    const val GLEN_EXPONENT = 3
+
     /**
-     * How thick a sheet stands one kilometre in from its margin, in metres — the whole constant of
-     * the profile, so a reader can check it against the arithmetic in the class comment.
-     *
-     * `sqrt(2 * tau0 * 1000 m / (rho_ice * g))` with the caller's own ice density and gravity, so
-     * the figure moves when the planet's do rather than being written down twice.
+     * Cuffey and Paterson's (2010, Eq. 3.35) rate factor: `A* exp(-(Q/R)(1/T_h - 1/T*))` with
+     * `A*` 3.5e-25 per second per pascal cubed at `T*` minus ten degrees, and an activation energy
+     * of 60 kJ/mol below it and 115 kJ/mol above it, `T_h` the temperature reckoned from the
+     * pressure melting point. Their recommended values for ice with no enhancement.
      */
-    fun metresPerRootKilometre(iceDensityKgPerM3: Float, gravityMPerS2: Float): Float =
-        sqrt(
-            2.0 * BASAL_SHEAR_STRESS_PASCALS * WorldScale.METRES_PER_KM /
-                (iceDensityKgPerM3.toDouble() * gravityMPerS2)
-        ).toFloat()
+    private const val RATE_FACTOR_AT_REFERENCE_PER_PA3S = 3.5e-25
+    private const val REFERENCE_KELVIN = 263.15
+    private const val COLD_ACTIVATION_J_PER_MOL = 6.0e4
+    private const val WARM_ACTIVATION_J_PER_MOL = 1.15e5
+    private const val GAS_CONSTANT_J_PER_MOL_K = 8.314
+
+    /**
+     * How fast the melting point falls with pressure, kelvin per pascal: 7.42e-8 for pure ice
+     * (Cuffey and Paterson 2010, section 9.2).
+     */
+    private const val MELTING_POINT_PER_PA = 7.42e-8
+
+    /**
+     * The heat rising into a sheet's bed, watts per square meter: Pollack, Hurter and Johnson's
+     * (1993) mean over the continents, 65 mW/m².
+     */
+    const val GEOTHERMAL_FLUX_W_PER_M2 = 0.065
+
+    /**
+     * Ice's thermal conductivity, `9.828 exp(-0.0057 T)` W/(m K), and its heat capacity,
+     * `152.5 + 7.122 T` J/(kg K), `T` in kelvin (Cuffey and Paterson 2010, section 9.2).
+     */
+    private fun conductivityWPerMK(kelvin: Double) = 9.828 * exp(-0.0057 * kelvin)
+    private fun heatCapacityJPerKgK(kelvin: Double) = 152.5 + 7.122 * kelvin
+
+    /**
+     * The snow a sheet with no snow balance of its own is given, millimeters of water a year:
+     * Antarctica's grounded ice's mean, 143 kg m⁻² a⁻¹ (Arthern, Winebrenner and Vaughan 2006).
+     * Only the control that freezes on temperature alone reads it.
+     */
+    const val EARTH_SHEET_ACCUMULATION_MM = 143f
+
+    /** Water's density over ice's turns a millimeter of water into ice. */
+    private const val WATER_DENSITY_KG_PER_M3 = 1_000.0
+
+    /** Seconds in a year. */
+    private const val SECONDS_PER_YEAR = 3.15576e7
+
+    /**
+     * The rate factor of a column's ice, per second per pascal cubed, weighted as Glen's law
+     * weights it: the flux of a column whose rate factor varies with height is
+     * `2 (rho g |dH/dx|)^n H^(n+2) Int A(z) (1 - z/H)^(n+1) dz/H`, so the one rate factor that
+     * carries the same flux is `(n + 2)` times that integral, and the deforming ice near the bed
+     * counts for nearly all of it.
+     *
+     * The temperature through the column is Robin's (1955) steady solution for snow falling at
+     * [accumulationMPerS] of ice onto a surface at [surfaceC] over the continents' geothermal flux,
+     * `T(z) = T_s + (G l sqrt(pi) / 2k) (erf(H/l) - erf(z/l))` with `l = sqrt(2 kappa H / a)`
+     * (Cuffey and Paterson 2010, section 9.3), held at the pressure melting point where it would
+     * pass it, which under a thick sheet it does: the bed is temperate and the ice above it soft.
+     */
+    fun effectiveRateFactorPerPa3s(
+        thicknessM: Double,
+        surfaceC: Double,
+        accumulationMPerS: Double,
+        iceDensityKgPerM3: Double,
+        gravityMPerS2: Double
+    ): Double {
+        val surfaceKelvin = surfaceC + ColumnWater.KELVIN_AT_ZERO_C
+        val conductivity = conductivityWPerMK(surfaceKelvin)
+        val diffusivity = conductivity / (iceDensityKgPerM3 * heatCapacityJPerKgK(surfaceKelvin))
+        val length = sqrt(2.0 * diffusivity * thicknessM / accumulationMPerS.coerceAtLeast(1.0e-12))
+        val warming = GEOTHERMAL_FLUX_W_PER_M2 * length * sqrt(kotlin.math.PI) / (2.0 * conductivity)
+        val topErf = erf(thicknessM / length)
+        var weighted = 0.0
+        for (step in 0 until COLUMN_STEPS) {
+            val fraction = (step + 0.5) / COLUMN_STEPS
+            val heightM = fraction * thicknessM
+            val pressurePa = iceDensityKgPerM3 * gravityMPerS2 * (thicknessM - heightM)
+            val meltingC = -MELTING_POINT_PER_PA * pressurePa
+            val temperatureC = minOf(surfaceC + warming * (topErf - erf(heightM / length)), meltingC)
+            // Homologous: reckoned from the melting point at that depth.
+            val homologousKelvin = temperatureC - meltingC + ColumnWater.KELVIN_AT_ZERO_C
+            val activation = if (homologousKelvin < REFERENCE_KELVIN) COLD_ACTIVATION_J_PER_MOL else WARM_ACTIVATION_J_PER_MOL
+            val rate = RATE_FACTOR_AT_REFERENCE_PER_PA3S *
+                exp(-activation / GAS_CONSTANT_J_PER_MOL_K * (1.0 / homologousKelvin - 1.0 / REFERENCE_KELVIN))
+            weighted += rate * (1.0 - fraction).pow(GLEN_EXPONENT + 1)
+        }
+        return (GLEN_EXPONENT + 2) * weighted / COLUMN_STEPS
+    }
+
+    /** Steps through a column's height for its rate factor: a fortieth of the ice each. */
+    private const val COLUMN_STEPS = 40
+
+    /**
+     * The error function, Abramowitz and Stegun's 7.1.26, good to 1.5e-7: the temperature profile
+     * needs it to a hundredth of a degree.
+     */
+    private fun erf(value: Double): Double {
+        val sign = if (value < 0.0) -1.0 else 1.0
+        val x = kotlin.math.abs(value)
+        val t = 1.0 / (1.0 + 0.3275911 * x)
+        val polynomial = t * (0.254829592 + t * (-0.284496736 + t * (1.421413741 + t * (-1.453152027 + t * 1.061405429))))
+        return sign * (1.0 - polynomial * exp(-x * x))
+    }
+
+    /**
+     * The height of a body's dome over its margin, in metres: Vialov's `H0` for a sheet whose
+     * divide stands [divideKm] from its margin, under [accumulationMmWater] of snow a year, with a
+     * surface at [surfaceC] before the dome lifts it. The rate factor depends on how thick the ice
+     * is and the thickness on the rate factor, and the surface cools by [lapseRateCPerKm] as the
+     * dome rises, so the two are iterated together from the dome of ice at the reference
+     * temperature; each pass changes the height by the eighth root of the rate factor's change,
+     * and [DOME_PASSES] is where the last pass moves it by under a meter.
+     */
+    fun domeMetres(
+        divideKm: Float,
+        accumulationMmWater: Float,
+        surfaceC: Float,
+        lapseRateCPerKm: Float,
+        iceDensityKgPerM3: Float,
+        gravityMPerS2: Float
+    ): Float {
+        if (divideKm <= 0f) return 0f
+        val accumulation = accumulationMmWater.coerceAtLeast(SnowBalance.SMALLEST_MEANINGFUL_BALANCE_MM) /
+            WorldScale.METRES_PER_KM.toDouble() * WATER_DENSITY_KG_PER_M3 / iceDensityKgPerM3 / SECONDS_PER_YEAR
+        val weight = iceDensityKgPerM3.toDouble() * gravityMPerS2
+        val n = GLEN_EXPONENT.toDouble()
+        val lengthM = divideKm * WorldScale.METRES_PER_KM.toDouble()
+        var rateFactor = RATE_FACTOR_AT_REFERENCE_PER_PA3S
+        var height = 0.0
+        for (pass in 0 until DOME_PASSES) {
+            val flux = (n + 2.0) * accumulation / (2.0 * rateFactor * weight.pow(n))
+            height = 2.0.pow(n / (2.0 * n + 2.0)) * flux.pow(1.0 / (2.0 * n + 2.0)) * sqrt(lengthM)
+            val domeSurfaceC = (surfaceC - height / WorldScale.METRES_PER_KM * lapseRateCPerKm).coerceAtLeast(COLDEST_SURFACE_C)
+            rateFactor = effectiveRateFactorPerPa3s(height, domeSurfaceC, accumulation, iceDensityKgPerM3.toDouble(), gravityMPerS2.toDouble())
+        }
+        return height.toFloat()
+    }
+
+    /**
+     * The coldest a dome's surface is taken to be, degrees: the coldest air measured at Earth's
+     * surface, -89.2 C at Vostok in 1983. A dome the lapse rate would carry colder than that is
+     * taller than any on Earth, and its ice is stiff whichever way the last degrees go.
+     */
+    private const val COLDEST_SURFACE_C = -89.2
+
+    /** Passes of [domeMetres]'s iteration. */
+    private const val DOME_PASSES = 6
+
+    /**
+     * Vialov's profile as a share of the dome's height, at a distance from the margin over the
+     * divide's, tabulated from the margin to the divide at [SHAPE_STEPS] points:
+     * `(1 - (1 - s)^(4/3))^(3/8)` with `n` 3. Past the divide, where the margin a cell's surface is
+     * measured from stands farther off than the body's own half-width, it rises on as the square
+     * root, which meets the profile at the divide.
+     */
+    val VIALOV_SHAPE: FloatArray by lazy {
+        val n = GLEN_EXPONENT.toDouble()
+        FloatArray(SHAPE_STEPS + 1) { step ->
+            val fromMargin = step.toDouble() / SHAPE_STEPS
+            (1.0 - (1.0 - fromMargin).pow((n + 1.0) / n)).coerceAtLeast(0.0).pow(n / (2.0 * n + 2.0)).toFloat()
+        }
+    }
+
+    /** The shape table's intervals: a 4,096th of the half-width, a kilometer or less on any sheet. */
+    const val SHAPE_STEPS = 4096
+
+    /**
+     * Points the profile is averaged over across one cell's span of distances, and so the cell's
+     * mean rather than its middle: eight, which near the margin, where the profile rises as the
+     * three-eighths power, holds the mean within a percent.
+     */
+    const val SPAN_SAMPLES = 8
+
+    /** The profile's share of the dome at [fromMargin] of the divide's distance: the table, read linearly. */
+    fun shapeAt(fromMargin: Float): Float {
+        if (fromMargin <= 0f) return 0f
+        if (fromMargin >= 1f) return sqrt(fromMargin)
+        val position = fromMargin * SHAPE_STEPS
+        val below = position.toInt().coerceAtMost(SHAPE_STEPS - 1)
+        val share = position - below
+        return VIALOV_SHAPE[below] + (VIALOV_SHAPE[below + 1] - VIALOV_SHAPE[below]) * share
+    }
 
     /**
      * Which margin each frozen cell's dome rises from, how far off it is, and how far off the
      * *nearest* margin is, all in kilometres.
      *
-     * The two distances are not the same quantity and are not interchangeable. [distanceKm] is the
-     * profile's argument: how far the cell stands from the margin whose profile reaches it lowest,
-     * which is the one the surface is measured from. [nearestMarginKm] is the geometric one, how
-     * far the ice edge is in a straight line, and it is what a reader means by a sheet's
-     * half-width; every guard that asks how big a body of ice is asks that one.
+     * [distanceKm] is the profile's argument: how far the cell stands from the margin whose
+     * profile reaches it lowest, which is the one the surface is measured from. [nearestMarginKm]
+     * is the geometric one, how far the ice edge is in a straight line, which is what a reader
+     * means by a sheet's half-width.
      */
     class Margin(
         val distanceKm: FloatArray,
@@ -120,79 +266,14 @@ object IceSheet {
     )
 
     /**
-     * Which margin cell each frozen cell's surface is measured from, and how far away it is in
-     * kilometres — the margin whose profile reaches the cell *lowest*, which is not always the
-     * nearest one.
-     *
-     * By [JumpFloodDistance] rather than a chamfer transform, so the contours are circles and the
-     * margin the profile is measured from is the real one; and with the grid's own row scale, so
-     * the answer is a length on the ground. Before S2b every distance field in this stage counted
-     * cells, which on a map twice as wide as it is tall made a sheet twice as thick northward as
-     * eastward for no reason but the grid.
-     *
-     * ### Why the lowest and not the nearest
-     *
-     * The surface is the margin's own elevation plus the profile ([surfaceMetres]), and until I3
-     * that elevation was read off the *nearest* margin cell. A nearest-cell lookup is a piecewise
-     * constant field: every cell of a sheet that shares one nearest margin reads exactly one
-     * datum, and the boundary between two such regions is a Voronoi edge, across which the datum
-     * steps by however much the ground at the two margin cells differs. On seed 878210 at 1024
-     * that step reached 1,965 m between two neighbouring cells and averaged 40.9 m over every
-     * east-west pair on the ice — as much as the dome's own fall across the same cell. What it
-     * drew is the defect it was reported as: a sheet in flat facets with hard edges, and, where
-     * the margin runs east and west so that each column takes a margin cell of its own, a flank
-     * ruled in vertical stripes one cell wide.
-     *
-     * The plastic condition says which margin is the right one. Ice yields until
-     * `|grad S| = tau0 / (rho g H)`, and the surface satisfying that with `S = z` along a margin
-     * of varying height is the *lower envelope* of the profiles rising from every margin point:
-     *
-     * ```
-     * S(x) = min over margin cells m of ( z_m + k * sqrt(distance from x to m) )
-     * ```
-     *
-     * which is that equation's viscosity solution and not a smoothing of anything. Differentiate
-     * one branch: `|grad S| = k^2 / (2 (S - z_m))`, which with `k^2 = 2 tau0 / (rho g)` is the
-     * yield condition itself. It is continuous wherever the branches are, a minimum of continuous
-     * functions being continuous; where two branches meet the surface has a crease rather than a
-     * step, and a crease between two margins is an ice divide, which is what that ground really
-     * carries. Over a level margin every branch shares one datum and the envelope is exactly the
-     * nearest-margin answer it replaces.
-     *
-     * So the flood is run over the plastic cost instead of over the distance: each cell takes the
-     * margin that puts the lowest surface over it and reports how far off that margin is, which
-     * [profileMetres] turns into the height above it. Its sources are the margin itself — ice-free
-     * ground with ice against it — and not every ice-free cell, which is a distinction the plain
-     * flood never had to make, the nearest ice-free cell being on the edge whatever else is seeded.
-     * An envelope will rise a profile from anything it is offered, and seeded with the whole ocean
-     * it hands a dome eight hundred kilometres of open water to start from: on the reported world
-     * that took the thickest ice from 2,739 m to 1,730 and the continental clause with it. A weighted flood is not exact the way the
-     * plain one is — see [JumpFloodDistance.run] — and what it can leave behind is a cell whose
-     * surface is a little too high, which is why `IceSheetTest` measures the finished surface for
-     * steps rather than taking the flood's word for it.
+     * The margin itself: ice-free cells with ice against them, the only sources a sheet's surface
+     * rises from.
      */
-    fun marginDistanceKm(
-        config: WorldGenConfig,
-        frozen: BooleanArray,
-        /** The shoreline-relative ground the margins stand on. */
-        bedRelative: FloatArray,
-        /** What one unit of [bedRelative] is worth in metres. */
-        metresPerFieldUnit: Float,
-        metresPerRootKilometre: Float,
-        cellSpanKm: Float
-    ): Margin {
+    fun marginCells(config: WorldGenConfig, frozen: BooleanArray): BooleanArray {
         val cellsAcross = config.width
         val cellsDown = config.height
-        val cellCount = cellsAcross * cellsDown
-        val distance = FloatArray(cellCount) { JumpFloodDistance.INFINITE }
-        val nearest = IntArray(cellCount) { -1 }
-        // The margin, and only the margin: ice-free ground with ice against it. The plain
-        // nearest-margin flood could seed every ice-free cell, because the nearest one of those is
-        // always on the edge anyway; an envelope cannot, because a profile is allowed to rise from
-        // any source it is offered and the open ocean a thousand kilometres from the nearest ice
-        // is not a place an ice sheet's surface starts. A margin is where the ice ends.
-        for (cell in 0 until cellCount) {
-            if (frozen[cell]) continue
+        return BooleanArray(cellsAcross * cellsDown) { cell ->
+            if (frozen[cell]) return@BooleanArray false
             val column = cell % cellsAcross
             val row = cell / cellsAcross
             var touchesIce = false
@@ -206,170 +287,128 @@ object IceSheet {
                     if (frozen[neighbourRow * cellsAcross + neighbourColumn]) touchesIce = true
                 }
             }
-            if (touchesIce) {
-                distance[cell] = 0f
-                nearest[cell] = cell
-            }
+            touchesIce
         }
+    }
+
+    /**
+     * How far each frozen cell stands from the nearest margin in a straight line, kilometres, and
+     * zero off the ice: the plain jump flood over the margin's cells, on the ground.
+     */
+    fun nearestMarginKm(config: WorldGenConfig, frozen: BooleanArray, margin: BooleanArray): FloatArray {
+        val cellCount = config.width * config.height
+        val distance = FloatArray(cellCount) { if (margin[it]) 0f else JumpFloodDistance.INFINITE }
+        val nearest = IntArray(cellCount) { if (margin[it]) it else -1 }
+        JumpFloodDistance.run(config.width, config.height, distance, nearest, config.cellHeightInCellWidths)
         val kilometresPerCellWidth = config.cellWidthKm.toFloat()
-
-        // The plain flood first, over the same sources, which answers the geometric question:
-        // how far is the edge of the ice. Nothing about the surface is read off it — the envelope
-        // below is what the profile is measured over — but it is what a sheet's half-width means,
-        // and the envelope's own distance is not that, since the margin governing a cell may be
-        // twice as far off as the nearest one and on the far side of a strait.
-        val nearestMargin = distance.copyOf()
-        val nearestMarginCell = nearest.copyOf()
-        JumpFloodDistance.run(
-            config.width, config.height, nearestMargin, nearestMarginCell,
-            config.cellHeightInCellWidths
-        )
         for (cell in 0 until cellCount) {
-            nearestMargin[cell] =
-                if (!frozen[cell] || nearestMargin[cell] >= JumpFloodDistance.INFINITE) 0f
-                else nearestMargin[cell] * kilometresPerCellWidth
+            distance[cell] =
+                if (!frozen[cell] || distance[cell] >= JumpFloodDistance.INFINITE) 0f
+                else distance[cell] * kilometresPerCellWidth
         }
+        return distance
+    }
 
+    /**
+     * Which margin cell each frozen cell's surface is measured from, and how far away it is in
+     * kilometres: the margin whose profile reaches the cell *lowest*, which is not always the
+     * nearest one.
+     *
+     * The surface over a margin of varying height is the lower envelope of the profiles rising
+     * from every margin point, `S(x) = min over m of (z_m + H(|x - m|; m))`, each margin point
+     * carrying the dome and the divide distance of the body it bounds ([domeMetresOfMargin],
+     * [divideKmOfMargin]). Continuous wherever the branches are; where two meet the surface has a
+     * crease, which between two margins is an ice divide. The flood is run over that cost. Its
+     * sources are the margin itself ([marginCells]), not every ice-free cell: an envelope rises a
+     * profile from anything it is offered, and the open ocean far from the ice is not where a
+     * sheet's surface starts. A weighted flood is not exact the way the plain one is (see
+     * [JumpFloodDistance.run]), which is why `IceSheetTest` measures the finished surface for steps.
+     */
+    fun marginDistanceKm(
+        config: WorldGenConfig,
+        frozen: BooleanArray,
+        margin: BooleanArray,
+        /** The shoreline-relative ground the margins stand on. */
+        bedRelative: FloatArray,
+        /** What one unit of [bedRelative] is worth in metres. */
+        metresPerFieldUnit: Float,
+        domeMetresOfMargin: FloatArray,
+        divideKmOfMargin: FloatArray,
+        cellSpanKm: Float,
+        nearestMarginKm: FloatArray
+    ): Margin {
+        val cellCount = config.width * config.height
+        val distance = FloatArray(cellCount) { if (margin[it]) 0f else JumpFloodDistance.INFINITE }
+        val nearest = IntArray(cellCount) { if (margin[it]) it else -1 }
+        val kilometresPerCellWidth = config.cellWidthKm.toFloat()
         JumpFloodDistance.run(
             config.width, config.height, distance, nearest, config.cellHeightInCellWidths
         ) { source, squaredCellWidths ->
             // The surface this margin would put over the cell, in metres: the ground it stands on,
-            // floored at the waterline as [surfaceMetres] floors it, plus the profile over the
-            // distance. Compared as a height and not as a distance, which is the whole change.
+            // floored at the waterline as [surfaceMetres] floors it, plus its body's profile over
+            // the distance. Compared as a height and not as a distance.
             val km = sqrt(squaredCellWidths).toFloat() * kilometresPerCellWidth
             val datum = (bedRelative[source] * metresPerFieldUnit).coerceAtLeast(0f)
-            (datum + profileMetres(km, metresPerRootKilometre, cellSpanKm)).toDouble()
+            (datum + profileMetres(km, domeMetresOfMargin[source], divideKmOfMargin[source], cellSpanKm)).toDouble()
         }
         for (cell in 0 until cellCount) {
-            // Ground with no ice on it has no profile and stands where it stands, so its reading
-            // is nothing however far off the ice happens to be. A world entirely under ice has no
-            // margin to measure from at all, and the flood leaves its sentinel behind rather than
-            // an answer; zero is the honest reading of "no margin anywhere", and it makes such a
-            // world bare rather than infinitely thick.
+            // Ground with no ice on it has no profile; a world entirely under ice has no margin
+            // and is left bare rather than infinitely thick.
             distance[cell] =
                 if (!frozen[cell] || distance[cell] >= JumpFloodDistance.INFINITE) 0f
                 else distance[cell] * kilometresPerCellWidth
             if (!frozen[cell]) nearest[cell] = cell
         }
-        return Margin(distance, nearest, nearestMargin)
+        return Margin(distance, nearest, nearestMarginKm)
     }
 
     /**
-     * The smallest body of ice that is an ice *sheet*, in square kilometres.
-     *
-     * Fifty thousand is the figure glaciology uses, and it is a definition rather than a
-     * threshold somebody picked: a mass of land ice larger than about 50,000 km2 is an ice sheet
-     * and one smaller than it is an ice cap or an ice field (Cuffey and Paterson, 4th edn, §1.2;
-     * Benn and Evans, *Glaciers and Glaciation*, 2nd edn, §1.5). Earth keeps the two sides of it
-     * well apart: the sheets are Greenland at 1.71 million km2 and Antarctica at 13.9 million,
-     * and the largest caps that are *not* sheets are Severny Island's at 20,500 km2,
-     * Austfonna's at 8,100 and Vatnajokull's at 7,900.
-     *
-     * The line is here because the profile is a sheet's and only a sheet's. Nye's and Vialov's
-     * equation describes a body spreading under its own weight until the shear stress at its base
-     * everywhere reaches yield, which is what a sheet does and what a small cap on a plain does
-     * not; applied to one anyway it gives a few hundred metres of ice with a margin the grid
-     * cannot draw, and the render showed exactly that — a cream mesa with a one-cell cliff round
-     * it, dropped on a green plain. A body under the line keeps no thickness and nothing is
-     * written into the elevation field for it: it stays the frozen ground it was before this
-     * chunk, which is the honest answer, because a cap of that size *is* frozen ground and the
-     * map has never claimed to know how thick it is.
-     *
-     * An area rather than a radius in cells, so the same world at 512, 1024 and 2048 draws the
-     * same caps. What it comes to on the standard grids, at a world 12,000 km across: 91 cells at
-     * 512, 364 at 1024 and 1,458 at 2048 — a cap about 10, 19 and 38 cells across.
+     * The smallest body of ice that is an ice *sheet*, in square kilometres: 50,000, glaciology's
+     * own line between a sheet and an ice cap (Cuffey and Paterson, 4th edn, §1.2; Benn and Evans,
+     * *Glaciers and Glaciation*, 2nd edn, §1.5). A body under it keeps no thickness and nothing
+     * is written into the elevation field for it.
      */
     const val SMALLEST_SHEET_SQUARE_KM = 50_000.0
 
     /**
-     * Two thirds, which is the mean of `sqrt(x)` over `0..x` as a share of `sqrt(x)` itself.
-     *
-     * Named because it is the whole of why a margin is no longer a cliff: see [profileMetres].
-     */
-    private const val MEAN_OF_A_ROOT_OVER_ITS_SPAN = 2f / 3f
-
-    /**
-     * The plastic profile over one cell, in metres above the margin it is measured from: the
-     * *mean* of `H(x)` across the ground the cell covers, not its value at the cell's middle.
-     *
-     * `H = k * sqrt(x)` has an infinite slope at `x = 0`, so a cell's middle is a bad place to
-     * ask it anything near the margin. Sampled there, the first cell of ice at 2048 on a world
-     * 12,000 km across stood `k * sqrt(5.86)` = 361 m up and the ice ended in a step; Earth's
-     * margins taper over a kilometre or two, which is a fifth of a cell here, so the step was the
-     * equation telling the truth at a resolution that cannot draw it.
-     *
-     * A cell covers a span of distances, not a point, and the height a map cell should carry is
-     * the mean over that span. The margin line — where the ice is nothing — lies half a cell
-     * outside the first cell of ice, since the distance field measures centre to centre and the
-     * last ice-free centre reads zero; so a cell reading [marginDistanceKm] covers
-     * `marginDistanceKm - cellSpanKm` to `marginDistanceKm` of distance from that line, floored
-     * at nothing.
-     *
-     * [cellSpanKm] is the side of the square with a cell's own area, and not its width, because
-     * this is a distance measured in every direction at once. An equirectangular cell is twice as
-     * wide as it is tall — 5.86 km by 2.93 at 2048 on a world 12,000 km across — so the width
-     * over-smooths a margin running east and west by a factor of two, and the height
-     * under-smooths one running north and south by the same. The side of the equal-area square,
-     * 4.14 km there, is the one figure that is right on average whatever bearing the margin
-     * happens to lie along, and it is the figure a cell would have if the grid were square. Over `x1..x2` the mean of `k * sqrt(x)` is
-     * `(2/3) * k * (x2^1.5 - x1^1.5) / (x2 - x1)`, which at the first cell is
-     * [MEAN_OF_A_ROOT_OVER_ITS_SPAN] of what the point sample gave — 241 m rather than 361 — and
-     * which falls to nothing as the margin line is approached rather than stepping to it. Far
-     * from the margin the two agree to a metre, because a root is very nearly straight there:
-     * three cells in it is 440 m against the point sample's 442.
-     *
-     * Written with the roots factored out rather than as that fraction, and the difference is not
-     * cosmetic. With `a = sqrt(x1)` and `b = sqrt(x2)` the quotient is `(b^3 - a^3) / (b^2 - a^2)`,
-     * whose common factor `(b - a)` cancels to leave `(a^2 + a*b + b^2) / (a + b)` — the same
-     * number with nothing subtracted. Spelt as the difference, five hundred kilometres in from a
-     * margin it takes two values near 11,000 to make one near 200, which throws away most of a
-     * float's precision: the parity clause measured the card 2.05e-6 of the thickest ice from the
-     * processor against a bar of a part in a million, and this is what it was measuring. The
-     * factored form is exact arithmetic on quantities of the size of the answer.
+     * The profile over one cell, in metres above the margin it is measured from: the *mean* of
+     * the body's profile across the ground the cell covers, `marginDistanceKm - cellSpanKm` to
+     * `marginDistanceKm`, not its value at the cell's middle, so the ice tapers to its margin
+     * rather than ending in a step. [cellSpanKm] is the side of the square with a cell's own
+     * area, the span that is right on average whatever bearing the margin lies along. The mean
+     * is taken at [SPAN_SAMPLES] midpoints, the same points in the same order on every device.
      */
     fun profileMetres(
         marginDistanceKm: Float,
-        metresPerRootKilometre: Float,
+        domeMetres: Float,
+        divideKm: Float,
         cellSpanKm: Float
     ): Float {
-        val far = marginDistanceKm
-        if (far <= 0f) return 0f
+        if (marginDistanceKm <= 0f || domeMetres <= 0f || divideKm <= 0f) return 0f
         val near = (marginDistanceKm - cellSpanKm).coerceAtLeast(0f)
-        val rootFar = sqrt(far)
-        val rootNear = sqrt(near)
-        val mean = (near + rootNear * rootFar + far) / (rootNear + rootFar)
-        return MEAN_OF_A_ROOT_OVER_ITS_SPAN * metresPerRootKilometre * mean
+        val span = marginDistanceKm - near
+        var sum = 0f
+        for (sample in 0 until SPAN_SAMPLES) {
+            val distance = near + span * ((sample + 0.5f) / SPAN_SAMPLES)
+            sum += shapeAt(distance / divideKm)
+        }
+        return domeMetres * (sum / SPAN_SAMPLES)
     }
 
     /**
-     * How high the sheet's *surface* stands at one cell, in metres above the shoreline.
-     *
-     * The profile is a surface and not a drape, and the difference is the whole of what makes a
-     * sheet a sheet. Nye's and Vialov's equation solves for the height of the ice *above the
-     * elevation of its own margin*: a plastic body spreading until it everywhere reaches its yield
-     * stress has a smooth dome for a top, and the bed it happens to be sitting on does not show
-     * through it. That is why Greenland's surface is a plain sloping evenly to the coast over a
-     * bed with two-kilometre mountains in it, and why a sheet's flow is radial while a valley
-     * glacier's is not: the surface the ice runs down has no valleys.
-     *
-     * Adding the profile to the bed instead — the first thing I1 tried — gives a surface that
-     * follows every hill under it, and with it a flow that is the bed's flow again. Measured on
-     * the four standard worlds at 512: only 57 to 81% of the ice within 500 km of the dome then
-     * flowed away from it, at a mean bearing 58 to 80 degrees off radial, which is a sheet that
-     * has not noticed it is a sheet.
-     *
-     * The margin's own elevation is floored at the waterline. A marine margin is where the ice
-     * meets the sea, and the sea is where its surface starts; reading the sea floor there would
-     * begin the dome a kilometre down.
+     * How high the sheet's *surface* stands at one cell, in metres above the shoreline: the
+     * margin's own ground, floored at the waterline (a marine margin is where the ice meets the
+     * sea), plus the profile. The profile is a surface and not a drape: the bed it sits on does not
+     * show through it.
      */
     fun surfaceMetres(
         marginBedMetres: Float,
         marginDistanceKm: Float,
-        metresPerRootKilometre: Float,
+        domeMetres: Float,
+        divideKm: Float,
         cellSpanKm: Float
     ): Float =
-        marginBedMetres.coerceAtLeast(0f) +
-            profileMetres(marginDistanceKm, metresPerRootKilometre, cellSpanKm)
+        marginBedMetres.coerceAtLeast(0f) + profileMetres(marginDistanceKm, domeMetres, divideKm, cellSpanKm)
 
     /**
      * How much colder the top of [thicknessMetres] of ice is than its bed, in degrees.
@@ -384,29 +423,29 @@ object IceSheet {
 
     /**
      * The thickness over a whole grid, in metres: the dome's surface less the bed under it, and
-     * never less than nothing.
+     * never less than nothing; where the bed stands above the dome the answer is zero, a nunatak.
+     * Each cell reads the dome and divide distance of the margin its surface rises from.
      *
-     * Where the bed stands above the dome the answer is zero, and that is a nunatak — a peak
-     * standing out of the ice, which Greenland and Antarctica both have and which falls out of the
-     * arithmetic rather than having to be drawn.
-     *
-     * The CPU reference the accelerator is measured against.
+     * The processor's reference the accelerator is measured against.
      */
     fun profile(
         margin: Margin,
         bedRelative: FloatArray,
         onTheSheet: BooleanArray,
-        metresPerRootKilometre: Float,
+        domeMetresOfMargin: FloatArray,
+        divideKmOfMargin: FloatArray,
         metresPerFieldUnit: Float,
         cellSpanKm: Float
     ): FloatArray = FloatArray(bedRelative.size) { cell ->
         if (!onTheSheet[cell]) 0f else {
             val nearest = margin.nearestCell[cell]
-            val marginBed = if (nearest < 0) 0f else bedRelative[nearest] * metresPerFieldUnit
-            val surface = surfaceMetres(
-                marginBed, margin.distanceKm[cell], metresPerRootKilometre, cellSpanKm
-            )
-            (surface - bedRelative[cell] * metresPerFieldUnit).coerceAtLeast(0f)
+            if (nearest < 0) 0f else {
+                val surface = surfaceMetres(
+                    bedRelative[nearest] * metresPerFieldUnit, margin.distanceKm[cell],
+                    domeMetresOfMargin[nearest], divideKmOfMargin[nearest], cellSpanKm
+                )
+                (surface - bedRelative[cell] * metresPerFieldUnit).coerceAtLeast(0f)
+            }
         }
     }
 

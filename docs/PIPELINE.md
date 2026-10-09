@@ -112,5 +112,11 @@ always. Without it, every deep class runs. What to name, by where the change is:
 | `:desktop`'s atmosphere remapping on the card (`GpuAtmosphere`) | none: `GpuAtmosphereTest` is everyday, and skips without a card |
 | The shared test support (`SharedWorlds`, `WorldFile`, `WorldDiskCache`) | none: `WorldDiskCacheTest` is everyday |
 
+The dry stationary-wave model (`StationaryWaveModel.kt`, `ZonalBasicState.kt`, `AtmosphereLevels.kt`,
+`WaveDamping.kt`, with `math/ComplexBlockTridiagonal.kt` and `math/SymmetricEigen.kt`) is read by no stage
+yet (docs/DESIGN_LEDGER.md, A1-3): a change to it moves no world and calls for no deep class. Its tests
+are `StationaryWaveModelTest` and `StationaryWaveBenchmarkTest`, everyday, and `StationaryWaveReport` and
+`StationaryWaveCostTest` in the audit tier.
+
 Any change to the generator's code also empties the world cache for the next run (its key is a hash
 of the compiled classes), so the first everyday run after one generates its standard worlds afresh.

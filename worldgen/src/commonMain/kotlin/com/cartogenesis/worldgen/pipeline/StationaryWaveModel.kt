@@ -155,6 +155,12 @@ class WaveResponse(
  *
  * **What it solves**: zonal waves 0 or 1 to [highestZonalWave], by default a third of the columns, the
  * transform's two-thirds rule; anything finer in the forcing is not seen.
+ *
+ * **What it has been shown to do** (docs/DESIGN_LEDGER.md, A1-3): Gill's (1980) Kelvin and planetary
+ * waves on a resting state, Hoskins and Karoly's (1981) great-circle trains and their stationary
+ * wavelength, Rodwell and Hoskins' (2001) descent west of a monsoon; second-order convergence on the
+ * atmosphere's grid; and, against 24 levels, a surface pressure that four levels miss by 50 to 65%
+ * (relative RMS) and sixteen by 3 to 6% (docs/TODO.md).
  */
 class StationaryWaveModel(
     val basicState: ZonalBasicState,

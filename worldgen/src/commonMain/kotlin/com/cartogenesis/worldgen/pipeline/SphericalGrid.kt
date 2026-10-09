@@ -119,10 +119,11 @@ class SphericalGrid(val rows: Int, val columns: Int, val radiusMeters: Double) {
          * `rows = q pi a / L_d = q pi a 2 Omega sin(45 deg) / (N H)`,
          *
          * rounded up until the `2 rows` longitudes are 5-smooth for the transform. The rows go as the
-         * radius times the spin; on Earth's planet that is 120, at half the radius 60 and at twice
-         * 240. The third vertical mode's deformation radius in mid-latitudes, about 100 km, is not
-         * the scale: the forcing has none of it, and whether the winds and vertical motion the model
-         * makes from that forcing converge at this grid is the dry model's to show.
+         * radius times the spin; on Earth's planet that is 150, at half the radius 75 and at twice
+         * 300. The slow vertical modes' deformation radii are not the scale: the forcing the model
+         * reads is spread to a quarter of `L_d` on the ground (`WaveForcing.fromGround`), and the
+         * stationary-wave model's winds, vertical motion and surface pressure under such forcing are
+         * within the tolerance at this grid (`StationaryWaveReport`; docs/DESIGN_LEDGER.md, A1-3).
          */
         fun rowsForAtmosphere(radiusMeters: Double): Int {
             val deformationRadiusMeters = PressureWind.rossbyRadiusKm() * WorldScale.METRES_PER_KM

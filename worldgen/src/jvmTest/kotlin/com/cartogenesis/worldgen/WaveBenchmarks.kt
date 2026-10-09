@@ -241,7 +241,7 @@ internal object WaveBenchmarks {
 
     /**
      * The train in [field] downstream of a source at ([sourceLatitude], [sourceLongitude]) of radius
-     * [sourceRadius]: the extrema at least a fifth of the field's largest, poleward of the source and
+     * [sourceRadius]: the extrema at least [TRAIN_SHARE] of the field's largest, poleward of the source and
      * within 150 degrees east of it, beyond the source's own radius (where the forced response, not
      * the free wave, stands). The wavelength is twice the mean arc between successive extrema of
      * opposite sign along the best great circle through the source.
@@ -271,6 +271,11 @@ internal object WaveBenchmarks {
         return WaveTrain(train, offsets.maxOrNull() ?: Double.NaN, offsets.average(), wavelength, Math.toDegrees(train.map { it.latitude }.average()))
     }
 
+    /**
+     * The smallest extremum, as a share of the field's largest, counted in a train: the third
+     * extremum of the jets' mountain train stands at a fifth of the largest and the super-rotation's
+     * at near a half, so this takes both.
+     */
     private const val TRAIN_SHARE = 0.15
     private const val TRAIN_REACH_DEGREES = 150
 

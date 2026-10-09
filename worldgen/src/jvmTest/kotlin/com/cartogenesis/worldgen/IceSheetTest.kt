@@ -68,7 +68,7 @@ class IceSheetTest : BorrowsSharedWorlds() {
         // Recorded at C1b: the march that closes its budget snows on the polar land where the old one
         // dropped the cold cap's water, and the sheets it feeds stand thicker than Earth's. The ice
         // is measured and not fixed in C1b (docs/TODO.md, "The ice after C1b").
-        KnownFailures.expect("C1b: the sheets the conserving march feeds stand thicker than Earth's", "seed 718106 stands 4816; seed 59758 stands 5499; seed 42 stands 5501") {
+        KnownFailures.expect("C1b: the sheets the conserving march feeds stand thicker than Earth's", "seed 718106 stands 5803; seed 59758 stands 6494; seed 7 stands 6062; seed 42 stands 5640") {
             if (failures.isNotEmpty()) {
                 throw RecordedViolation(
                     "the sheets are outside the envelope Earth's two sit in:\n" + failures.joinToString("\n"),
@@ -753,8 +753,15 @@ class IceSheetTest : BorrowsSharedWorlds() {
          * and this one the most, 80.3%, reading 93.4% outward at 34.8 degrees off radial; of the
          * other seven, five pass the clause and two do not (seed 10 at 64.5% outward, seed 15 at
          * 49.3%, docs/TODO.md, "The ice after C1b2").
+         *
+         * Scanned again at A1-1, whose calendar seasons and sea-surface sunlight feed the sheets
+         * more snow, and seed 2's sheet now fills 17.7% of its disc. Of seeds 1 to 25 (bar 7)
+         * eleven fill a third, and seed 17 the most, 99.1%, reading 83.1% outward at 51.4 degrees
+         * off radial; of the other ten, three pass the clause (seeds 14, 18 and 22) and seven do
+         * not, four of them at an indifferent bearing's 47 to 51% outward or less (seeds 4, 6, 23 and 24) (docs/TODO.md,
+         * "The ice after A1-1").
          */
-        const val DOME_SEED = 2L
+        const val DOME_SEED = 17L
 
         /** `GlaciationTest`'s own worlds, so one set of ice answers every clause. */
         val seeds = listOf(718106L, 59758L, 7L, 42L)

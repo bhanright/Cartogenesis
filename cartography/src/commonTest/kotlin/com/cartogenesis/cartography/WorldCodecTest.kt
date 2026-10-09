@@ -202,13 +202,13 @@ class WorldCodecTest {
 
     @Test
     fun `a 4096 world's payload is counted past what an Int holds`() {
-        // 154 bytes a cell at 4096 is 2,583,691,264 bytes of arrays, which wrapped the old Int
-        // sum negative (146 until C1b's two evaporation fields). Counted here from the layout
-        // itself, so a narrowing anywhere shows.
+        // 162 bytes a cell at 4096 is 2,717,908,992 bytes of arrays, which wrapped the old Int
+        // sum negative (146 until C1b's two evaporation fields, 154 until A1-1's July and January).
+        // Counted here from the layout itself, so a narrowing anywhere shows.
         val cells = 4096 * 4096
         val directory = WorldSections.directory(cells, listsBytes = 1_000)
         val arrays = directory.drop(1).sumOf { it.bytes }
-        assertEquals(154L * cells, arrays)
+        assertEquals(162L * cells, arrays)
         assertTrue(WorldSections.payloadBytes(directory) > Int.MAX_VALUE)
         assertEquals(directory.last().offset + WorldSections.RECORD_PREFIX_BYTES + directory.last().name.length +
             directory.last().bytes, WorldSections.payloadBytes(directory))

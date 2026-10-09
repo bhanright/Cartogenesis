@@ -404,7 +404,7 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
         // Recorded at K2: the gallery's world on the 12,000 km planet under K2's physics is other
         // ground than the one the declared figure was read off; it is the drawing's to re-derive,
         // with its other constants, for the Earth-sized default (docs/TODO.md).
-        KnownFailures.expect("K2: the relief's ordinary ground was read off the gallery's ground before K2", "0.9178") {
+        KnownFailures.expect("K2: the relief's ordinary ground was read off the gallery's ground before K2", "0.9266") {
             if (kotlin.math.abs(declaredGround - ReliefShading.ordinaryGround) > MAX_GROUND_DRIFT) {
                 val found = "%.4f".format(declaredGround)
                 throw RecordedViolation(

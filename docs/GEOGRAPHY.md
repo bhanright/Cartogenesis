@@ -1357,14 +1357,17 @@ Trenberth and Caron's observed 5.3, 5.0 and 3.3.
   agreeing to a tenth, which is what says the shape is right and not merely that the curve has a
   spare parameter. The water is not blended onto the land at all: it is read where the sea freezes
   and where the moisture march evaporates, and nowhere else.
-- **Each column's year is kept twice, as months and as halves.** Every threshold the biome stage
-  reads is one of Köppen's and Köppen's are monthly means — the 10 °C tree line, the −3 °C
-  continental winter, the 18 °C tropical one — so a band's stored "summer" is the warmest
-  thirty-step window of its own year and its "winter" the coldest. For a sinusoidal year a half-year
-  mean is 0.64 of the month extreme, so handing halves to those gates asks each of them a question a
-  third short of the one it was written for. But the snow balance's degree-day sum and the moisture
-  march both *integrate across* a season, and those read the warm and cold half-years' means
-  instead. Neither reading serves both.
+- **Each column's year is kept three ways: its own months, and the calendar's months and
+  halves.** Every threshold the biome stage reads is one of Köppen's and Köppen's are monthly means
+  — the 10 °C tree line, the −3 °C continental winter, the 18 °C tropical one — so a band's stored
+  "summer" is the warmest thirty-step window of its own year and its "winter" the coldest, wherever
+  the lag puts them. For a sinusoidal year a half-year mean is 0.64 of the month extreme, so handing
+  halves to those gates asks each of them a question a third short of the one it was written for.
+  Everything that is one moment of the planet reads the calendar instead: July and January for the
+  maps of a season, and April to September and October to March, the halves Peel, Finlayson and
+  McMahon (2007) draw their Köppen map's summer and winter from, for the snow balance's degree-day
+  sum and the moisture march, which *integrate across* a season. Since A1-1 those are the same
+  steps in every band, so the northern summer and the southern winter are one window.
 - **The albedo is the model's own ice.** A band whose annual mean falls below −10 °C is white
   (Budyko's and North's ice line, where snow cover becomes permanent enough to change what the
   planet reflects), ramped over 4.5 °C either side. The ice-free albedo is a least-squares fit to
@@ -1393,37 +1396,45 @@ without its mechanism: a tenth of the heat transport bakes the equator to 41 °C
 capacities and not the geography; and an upright axis has no seasons at all, to a ten-thousandth of
 a degree.
 
-**Sea ice, and why the polar ocean is a desert.** Where a season's *water* — the band's mixed layer
-plus the current anomaly the ocean stage carries — sits at or below −1.8 °C, the freezing
-point of sea water at the ocean's mean salinity, that cell is under ice for that season. The
+**Sea ice, and why the polar ocean is a desert.** Where a half-year's *water* — the band's mixed
+layer plus the current anomaly the ocean stage carries — sits at or below −1.8 °C, the freezing
+point of sea water at the ocean's mean salinity, that cell is under ice for that half. The
 freezing test reads the water and not the air above it, which in a polar winter is a dozen degrees
-colder than the sea it sits on. Two masks
-are saved, one per season: the cold season's is the winter pack and the warm season's is the
-perennial ice, which is what the map draws. The moisture march takes nothing at all from a frozen
+colder than the sea it sits on. Two masks are saved, one per calendar half, each holding one
+hemisphere's winter pack and the other's summer remnant; the perennial ice, which is what the map
+draws, is the sea frozen through its own warmest month. Measured at A1-1 on seeds 7, 42 and 1234
+at 256 rows, the winter pack covers 26.4, 24.3 and 31.2% of the sea and the perennial pack 8.2, 5.7
+and 8.4%, a third to a quarter of it, against Earth's 9 million km² at the two minima to 34 million
+at the two maxima (NSIDC: 6.5 and 15.5 in the Arctic, 2.5 and 18.5 in the Antarctic), 0.26. The moisture march takes nothing at all from a frozen
 cell, because a metre of ice is a lid — and that is why polar deserts exist, and what keeps an ice
 sheet at the pole from feeding itself indefinitely.
 
 On Earth's own land fraction the model's cold-season edge lands at 60.4° N and 61.1° S against
-Earth's zonal-mean 60. On the map, measured over seeds 7, 42 and 1234 at 512: the cold season
-freezes 25–33% of the sea and reaches 55–58° of latitude, the warm season's perennial pack holds
-16–26% and reaches 62–64°, and every cell frozen in the warm season is frozen in the cold one by
-construction. The lid is worth a factor of four to seven in the rain: on seed 7 the frozen sea takes
+Earth's zonal-mean 60. On the map before A1-1, measured over seeds 7, 42 and 1234 at 512: the cold
+season froze 25–33% of the sea and reached 55–58° of latitude, and the warm half-year's pack held
+16–26%, two thirds of the winter's where Earth's minimum is a quarter of its maximum. The lid is worth a factor of four to seven in the rain: on seed 7 the frozen sea takes
 523 mm a year against 2,135 mm over the open water at the same latitudes, on seed 42 351 against
 2,508, on seed 1234 257 against 1,811. With `ClimateConfig.seaIce` off — the control — the same
 cells take 1,228, 1,592 and 1,305 mm, because then the polar ocean evaporates like any other.
 
 ## The year has two halves
 
-Temperature and rainfall are computed twice, for the local warm season and the local cold one, and
-biomes are read off all four numbers instead of two. Rainfall's seasons are one setting —
+Temperature and rainfall are computed twice, for the calendar's two half-years, April to September
+and October to March, each one moment of the planet, and biomes are read off each cell's warmer and
+cooler half instead of the annual figures alone. Rainfall's seasons are one setting —
 `ClimateConfig.seasonalTiltDegrees`, the degrees the thermal equator migrates toward whichever
 hemisphere is in summer — carried by the wind belts and the rain belts alike; temperature's are the
 same number read as the planet's axial tilt, so switching seasons off stands the axis upright and
 there is no seasonal forcing for the energy balance to answer.
 
-- **"Summer" is local, not July.** Northern July and southern January are both stored as the warm
-  season, so one classification rule serves both hemispheres and a dry-summer coast reads the same
-  either side of the equator.
+- **The halves are the calendar's, and a place's summer is its warmer half.** Until A1-1 each band
+  took its own warmest half-year, so the march's warm half was every hemisphere's summer at once and
+  its thermal equator stood ten degrees into both hemispheres together. Now the belts ride one
+  thermal equator, in the north from April to September and in the south from October to March,
+  and the winter hemisphere's trades cross the equator to it. The biome stage still applies one
+  rule to both hemispheres: a cell's summer rain is the rain of whichever half is warmer there, Peel
+  and others' rule, read on the cell's own temperatures so that the switch follows the thermal
+  equator over the land and not the equator's row.
 - **The stored temperature of a season is its warmest or coldest month, and the rain's is its
   half-year.** Two different questions get asked of the same year. Köppen's thresholds are monthly
   means — the 10 °C tree line, the −3 °C continental winter — so what the biome stage reads and
@@ -1438,11 +1449,24 @@ there is no seasonal forcing for the energy balance to answer.
   annual ones bit for bit and the generator reproduces the pre-seasons world exactly.
 - **The sea barely swings, and nobody told it to.** Water's heat capacity is why a maritime climate
   has a small annual range, and since W1 that is a heat capacity in a model rather than a damping
-  factor. Measured on seed 42 at 35°, warmest month against coldest: land swings 20.6 °C through
-  the year and the marine air 10.8 °C. Earth's figures there are 8–26 over land, 7–11 for the air
-  over the ocean and 6–9 for the water beneath it. What the map stores over water is the air, which
-  is what a coast feels; the water is a degree or two steadier than that and is read where the sea
-  freezes and where the march evaporates.
+  factor. Since A1-1 the sea surface takes its own share of the sunlight's seasonal swing, 167.8 of
+  the 247.7 W/m² an ocean column absorbs (Trenberth, Fasullo and Kiehl 2009), where before all of it
+  heated the air and the air ran several degrees warmer than the water every summer, against Kara
+  and others' (2007) sea standing warmer than the air nearly everywhere. On Earth's land fraction
+  the swings at 50–60° are 35.4 °C for land, 9.3 for marine air and 7.8 for water, against
+  34–38, 8–11 and 5–8 (they were 38.7, 13.0 and 6.9). On seed 42 at 1,024 rows at 35° N, July against
+  January: land 30.1 and 2.6 °C, marine air 19.6 and 13.7, water 18.1 and 15.3. The water is still
+  too steady there, a fifty-metre layer all year where Earth's summer layer is 20–30 m (TODO.md).
+  The air over the sea carries the ocean's anomaly too, one for one as Kara and others measure it,
+  so the map's air over a cold current is cold.
+- **A summer's contrast across a coast is half of Earth's.** Read the way Earth's is, a month's
+  sea-level temperature less its latitude's mean across a coast, seeds 42, 969495 and 7 at 1,024
+  rows stand 7.5–11.5 °C across their subtropical west coasts in July against the 18–20 Nakamura and
+  Miyasaka (2004) read off the NCEP reanalysis, and 9.4–15.3 across their east coasts against
+  Earth's 2–8. The world's west coasts are no further from their sea than its east coasts, because
+  the sea off them is barely colder than its latitude: the ocean's anomaly there is a degree where
+  the California and Canary Currents' air is 6–10 under its latitude. `CoastContrastTest` records
+  it, and TODO.md says what is missing.
 - **Two new classes come out of the seasonality rather than the total.** A Mediterranean coast is
   dry in the warm half of the year and wet in the cold one, which happens where the subtropical
   high sits over a west-facing coast all summer and the westerlies swing back over it in winter; a

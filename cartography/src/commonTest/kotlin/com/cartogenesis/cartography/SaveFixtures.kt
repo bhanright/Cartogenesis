@@ -38,8 +38,14 @@ import kotlinx.serialization.json.Json
  */
 internal object SyntheticWorlds {
 
-    /** Which cells of a field hold a value rather than zero. */
-    private const val SPACING = 97
+    /**
+     * Which cells of a field hold a value rather than zero: every thirteenth, so no run of zeros
+     * reaches the sixty-four bytes after which a chunk that fails its checks is read as a file cut
+     * off and padded rather than a damaged one (`UNFILLED_TAIL_BYTES` in `WorldSections`). At 97,
+     * a run of 384 zero bytes, chunk 0 ended in one once A1-1 added two fields ahead of it, and a
+     * flipped byte in it was refused as unfilled.
+     */
+    private const val SPACING = 13
 
     /**
      * One lake, one realm, one people, one landmark, one river, one plate, on a grid of square cells

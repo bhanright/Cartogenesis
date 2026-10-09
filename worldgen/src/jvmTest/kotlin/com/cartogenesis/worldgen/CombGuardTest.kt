@@ -229,7 +229,7 @@ class CombGuardTest : BorrowsSharedWorlds() {
          * Re-recorded at L1, whose rifts are Earth's half-grabens and the same at every grid, and at K2
          * on the 12,000 km planet under K2's physics (docs/DESIGN_LEDGER.md, L1 and K2).
          */
-        const val RECORDED = "seed 7 0.22 down a column and 0.16 along a row; seed 42 0.15 down a column and 0.17 along a row"
+        const val RECORDED = "seed 7 0.20 down a column and 0.16 along a row; seed 42 0.15 down a column and 0.18 along a row"
 
         /**
          * The grid the guard is taken on, [SharedWorlds.DETAIL_ROWS]: square cells, 1,024 by 512,
@@ -278,9 +278,11 @@ class CombGuardTest : BorrowsSharedWorlds() {
          * 0.0201 on seed 7's columns (0.0068 on its rows, 0.0111 and 0.0137 on seed 42's), so 0.021;
          * re-derived at L1's review round, whose rift joins are relay ramps and moved the land the
          * control is laid over: 0.0229 on seed 42's rows (0.0076 on its columns, 0.0162 and 0.0085
-         * on seed 7's), so 0.023.
+         * on seed 7's), so 0.023; and again at A1-1, whose calendar seasons moved the provisional
+         * rain and so the land: 0.0231 on seed 42's rows (0.0077 on its columns, 0.0200 and 0.0094
+         * on seed 7's), so 0.024.
          */
-        const val COMB_FLOOR_KM_PER_1000_KM2 = 0.023
+        const val COMB_FLOOR_KM_PER_1000_KM2 = 0.024
 
         /**
          * The isotropic control's surface: 400 cosines, 40 to 4,000 km long, standing at an rms

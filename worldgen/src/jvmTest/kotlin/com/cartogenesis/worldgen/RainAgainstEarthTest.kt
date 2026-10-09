@@ -165,10 +165,10 @@ class RainAgainstEarthTest : BorrowsSharedWorlds() {
         // The sea evaporates less than Earth's, and the rain with it, for the causes docs/TODO.md's
         // "The march's misses against Earth, after C1b2" measures: the marine air stands at the
         // sea's own temperature and the wind at one speed.
-        KnownFailures.expect("C1b2: the sea evaporates less than Earth's", "x0.74") {
+        KnownFailures.expect("C1b2: the sea evaporates less than Earth's", "x0.75") {
             nearEarth("open-sea evaporation, mm", pooled.seaEvaporation / pooled.seaArea, EARTH_OCEAN_EVAPORATION_MM)
         }
-        KnownFailures.expect("C1b2: the open sea rains less than Earth's", "x0.71") {
+        KnownFailures.expect("C1b2: the open sea rains less than Earth's", "x0.73") {
             nearEarth("open-sea rain, mm", pooled.seaRain / pooled.seaArea, EARTH_OCEAN_RAIN_MM)
         }
         KnownFailures.expect("C1b2: the land rains less than Earth's", "x0.62") {

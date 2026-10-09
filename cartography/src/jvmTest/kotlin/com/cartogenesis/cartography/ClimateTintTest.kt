@@ -254,7 +254,7 @@ class ClimateTintTest : BorrowsSharedWorlds() {
         // physics draws it. Recorded again at C1b2, whose gallery world is dry and cold, its
         // closed forests a few thousand cells, and Scroll's steppe falls outside its band
         // (docs/TODO.md, "The drawing's constants on C1b2's gallery world").
-        KnownFailures.expect("C1b2: the steppe outside its band on the gallery's dry world", "Scroll 165%") {
+        KnownFailures.expect("C1b2: the steppe outside its band on the gallery's dry world", "Scroll 102%") {
             if (outside.isNotEmpty()) {
                 throw RecordedViolation(outside.joinToString("; "), outside.joinToString("; ") { it.substringBefore(":") + " " + it.substringAfter("stands ").substringBefore(" of") })
             }

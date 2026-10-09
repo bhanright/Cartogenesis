@@ -105,4 +105,17 @@ object Runoff {
     /** [annualWeightMm] as a share of Earth's land mean — the absolute form. */
     fun shareOfEarthMean(precipitationMm: Float): Float =
         annualWeightMm(precipitationMm) / EARTH_MEAN_LAND_RAINFALL_MM
+
+    /**
+     * A cell's runoff in a year, in millimeters: [precipitationMm] less what the ground gives back
+     * against [potentialMm], by Budyko's curve ([LakeWaterBalance.runoffShareOfRain]). Zero where
+     * there is no rain; all of it where nothing can evaporate. No floor: the curve gives a
+     * hyper-arid cell its own small share, and a year's discharge is water, not a storm.
+     */
+    fun annualRunoffMm(precipitationMm: Float, potentialMm: Float): Float =
+        precipitationMm.coerceAtLeast(0f) * LakeWaterBalance.runoffShareOfRain(precipitationMm, potentialMm)
+
+    /** [annualRunoffMm] at [cell] of [climate]. */
+    fun annualRunoffMm(climate: ClimateResult, cell: Int): Float =
+        annualRunoffMm(climate.precipitationMm.data[cell], climate.potentialEvapotranspirationMm.data[cell])
 }

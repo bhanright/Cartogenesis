@@ -146,8 +146,8 @@ object VegetationDensity {
      * [density] is 0..1 and is 0 at every sea cell, because a sea cell has no ground to carry a
      * cover and every consumer reads it behind the land mask anyway. [permafrost] holds a
      * [Permafrost] ordinal a cell, and is [Permafrost.NONE] at sea for the same reason: sea ice is
-     * frozen water rather than frozen ground and `ClimateResult.summerSeaIce` already says where
-     * it is.
+     * frozen water rather than frozen ground and `ClimateResult.julyHalfSeaIce` and its pair
+     * already say where it is.
      */
     class Field(val density: FloatField, val permafrost: ByteArray)
 

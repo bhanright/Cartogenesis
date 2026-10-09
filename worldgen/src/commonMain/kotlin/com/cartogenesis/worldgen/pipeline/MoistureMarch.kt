@@ -187,7 +187,6 @@ object MoistureMarch {
 
     /** What a season's march reads, every per-cell array row-major on the world's grid. */
     class Season(
-        val warm: Boolean,
         /** The half-year's air temperature, degrees Celsius. */
         val airTemperatureC: FloatArray,
         /** The water's temperature at sea cells, current and all; ignored on land. */
@@ -213,8 +212,10 @@ object MoistureMarch {
         val relativeElevation: FloatArray,
         /** Height above the sea in meters at land cells, zero at sea. */
         val elevationM: FloatArray,
-        val warm: Season,
-        val cold: Season,
+        /** April to September, the calendar's half about July. */
+        val julyHalf: Season,
+        /** October to March, the half about January. */
+        val januaryHalf: Season,
         /** The relief share of the inversion's lid, `SeaLevelResult.relativeElevation` units. */
         val lidElevation: Float,
         /** The blur's width on the ground, the standard deviation of its Gaussian, kilometers. */
@@ -223,8 +224,8 @@ object MoistureMarch {
 
     /** What the march hands back, every field row-major, millimeters a year. */
     class Result(
-        val warmRainMm: FloatField,
-        val coldRainMm: FloatField,
+        val julyHalfRainMm: FloatField,
+        val januaryHalfRainMm: FloatField,
         /** The year's rain whose water last evaporated from land: the recycling numerator. */
         val landOriginRainMm: FloatField,
         /** The year's FAO-56 reference evapotranspiration at every cell. */
@@ -246,9 +247,9 @@ object MoistureMarch {
         val cellsDown = config.height
         val cellCount = cellsAcross * cellsDown
         val grid = Grid(config)
-        val warm = SeasonMarch(inputs, inputs.warm, grid, keepCells = ledger != null)
-        val cold = SeasonMarch(inputs, inputs.cold, grid, keepCells = ledger != null)
-        val seasons = arrayOf(warm, cold)
+        val july = SeasonMarch(inputs, inputs.julyHalf, grid, keepCells = ledger != null)
+        val january = SeasonMarch(inputs, inputs.januaryHalf, grid, keepCells = ledger != null)
+        val seasons = arrayOf(july, january)
 
         val annualRain = FloatField(cellsAcross, cellsDown)
         val previousRain = FloatArray(cellCount)
@@ -270,14 +271,14 @@ object MoistureMarch {
             annualRain.data.copyInto(previousRain)
             parallelChunks(0, cellsDown) { startRow, endRow ->
                 for (cell in startRow * cellsAcross until endRow * cellsAcross) {
-                    annualRain.data[cell] = (warm.rainMmRowMajor(cell) + cold.rainMmRowMajor(cell)) * 0.5f
+                    annualRain.data[cell] = (july.rainMmRowMajor(cell) + january.rainMmRowMajor(cell)) * 0.5f
                 }
             }
             SphereBlur.apply(config, annualRain, inputs.blurSigmaKm)
-            warm.updateLandPotential()
-            cold.updateLandPotential()
+            july.updateLandPotential()
+            january.updateLandPotential()
             for (cell in 0 until cellCount) {
-                annualPotential[cell] = (warm.potentialMmRowMajor(cell) + cold.potentialMmRowMajor(cell)) * 0.5f
+                annualPotential[cell] = (july.potentialMmRowMajor(cell) + january.potentialMmRowMajor(cell)) * 0.5f
             }
             lap++
             val change = landChangeShare(inputs.isLand, annualRain.data, previousRain, grid)
@@ -290,29 +291,29 @@ object MoistureMarch {
                 for (cell in startRow * cellsAcross until endRow * cellsAcross) {
                     if (!inputs.isLand[cell]) continue
                     val returning = config.climate.groundReturn
-                    warm.setGroundReturn(cell, annualRain.data[cell], annualPotential[cell], returning)
-                    cold.setGroundReturn(cell, annualRain.data[cell], annualPotential[cell], returning)
+                    july.setGroundReturn(cell, annualRain.data[cell], annualPotential[cell], returning)
+                    january.setGroundReturn(cell, annualRain.data[cell], annualPotential[cell], returning)
                 }
             }
         }
         val lapsRun = lap
         ledger?.lapsRun = lapsRun
 
-        warm.finishPotentials()
-        cold.finishPotentials()
-        val warmRain = warm.rainField()
-        val coldRain = cold.rainField()
+        july.finishPotentials()
+        january.finishPotentials()
+        val julyRain = july.rainField()
+        val januaryRain = january.rainField()
         val landOrigin = FloatField(cellsAcross, cellsDown)
         for (cell in 0 until cellCount) {
             landOrigin.data[cell] =
-                (warm.landRainMmRowMajor(cell) + cold.landRainMmRowMajor(cell)) * 0.5f
+                (july.landRainMmRowMajor(cell) + january.landRainMmRowMajor(cell)) * 0.5f
         }
         if (ledger != null) {
-            ledger.warmHalf = warm.cells
-            ledger.coldHalf = cold.cells
+            ledger.julyHalf = july.cells
+            ledger.januaryHalf = january.cells
         }
-        SphereBlur.apply(config, warmRain, inputs.blurSigmaKm)
-        SphereBlur.apply(config, coldRain, inputs.blurSigmaKm)
+        SphereBlur.apply(config, julyRain, inputs.blurSigmaKm)
+        SphereBlur.apply(config, januaryRain, inputs.blurSigmaKm)
         SphereBlur.apply(config, landOrigin, inputs.blurSigmaKm)
 
         // The potential the rivers read is the one the last lap's ground return was set from on
@@ -322,11 +323,11 @@ object MoistureMarch {
         val openWater = FloatField(cellsAcross, cellsDown)
         for (cell in 0 until cellCount) {
             potential.data[cell] = if (inputs.isLand[cell]) {
-                warm.returnPotentialMm(cell)
+                july.returnPotentialMm(cell)
             } else {
-                (warm.potentialMmRowMajor(cell) + cold.potentialMmRowMajor(cell)) * 0.5f
+                (july.potentialMmRowMajor(cell) + january.potentialMmRowMajor(cell)) * 0.5f
             }
-            openWater.data[cell] = (warm.openWaterMmRowMajor(cell) + cold.openWaterMmRowMajor(cell)) * 0.5f
+            openWater.data[cell] = (july.openWaterMmRowMajor(cell) + january.openWaterMmRowMajor(cell)) * 0.5f
         }
 
         if (ledger != null) {
@@ -335,14 +336,14 @@ object MoistureMarch {
             val residual = FloatField(cellsAcross, cellsDown)
             val returnedRain = FloatField(cellsAcross, cellsDown)
             for (cell in 0 until cellCount) {
-                finalRain.data[cell] = (warmRain.data[cell] + coldRain.data[cell]) * 0.5f
-                sources.data[cell] = (warm.sourceMmRowMajor(cell) + cold.sourceMmRowMajor(cell)) * 0.5f
+                finalRain.data[cell] = (julyRain.data[cell] + januaryRain.data[cell]) * 0.5f
+                sources.data[cell] = (july.sourceMmRowMajor(cell) + january.sourceMmRowMajor(cell)) * 0.5f
                 if (inputs.isLand[cell]) {
                     val rain = finalRain.data[cell]
-                    val returned = (warm.groundReturnMmRowMajor(cell) + cold.groundReturnMmRowMajor(cell)) * 0.5f
+                    val returned = (july.groundReturnMmRowMajor(cell) + january.groundReturnMmRowMajor(cell)) * 0.5f
                     val runoff = rain * LakeWaterBalance.runoffShareOfRain(rain, potential.data[cell])
                     residual.data[cell] = rain - returned - runoff
-                    returnedRain.data[cell] = warm.returnRainMm(cell)
+                    returnedRain.data[cell] = july.returnRainMm(cell)
                 }
             }
             ledger.finalAnnualRainMm = finalRain
@@ -350,7 +351,7 @@ object MoistureMarch {
             ledger.surfaceResidualMm = residual
             ledger.returnRainMm = returnedRain
         }
-        return Result(warmRain, coldRain, landOrigin, potential, openWater, lapsRun)
+        return Result(julyRain, januaryRain, landOrigin, potential, openWater, lapsRun)
     }
 
     /**

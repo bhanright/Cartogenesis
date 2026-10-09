@@ -90,7 +90,7 @@ internal const val MAP_TOOLBAR: String = "Map toolbar"
  * Midnight, Schoolroom, Verdant, Scroll, Pen and ink, Mars, Natural and Colour-blind — measure some
  * 800 dp set as cells, so they still fit on one row with room left for the small
  * print, which is the first thing to be elided as the row fills. The fifteen view names run past 1300
- * dp, largely because four of them are things like "Temperature, summer"; a second segmented row
+ * dp, largely because four of them are things like "Rainfall, April to September"; a second segmented row
  * would either wrap or be cut, and a wrapped segmented control is no longer a segmented control.
  * So the views are a menu, which also puts the current view in words at the right of the strip
  * where a chart would print its subject.

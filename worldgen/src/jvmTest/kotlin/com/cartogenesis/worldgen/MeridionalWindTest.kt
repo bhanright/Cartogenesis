@@ -109,7 +109,7 @@ class MeridionalWindTest : BorrowsSharedWorlds() {
             val world = SharedWorlds.world(
                 base.copy(climate = base.climate.copy(meridionalWindShare = 0f, pressureWinds = false))
             )
-            for (season in listOf(Season.WARM_HALF, Season.COLD_HALF)) {
+            for (season in listOf(Season.JULY_HALF, Season.JANUARY_HALF)) {
                 val wind = ClimateStage.seasonalSurfaceWindMps(
                     world.config, world.sea, world.climate.temperature, season
                 )
@@ -151,7 +151,7 @@ class MeridionalWindTest : BorrowsSharedWorlds() {
             }
             // Since C1b the slant is a half sine across each belt, zero at its edges and at the
             // equator and pi/2 of the belt's mean at its middle, so the mean is still the share.
-            // The stored wind is the warm half's at no tilt, whose belts stand at 0, 30, 60 and 90.
+            // The stored wind is the annual one, whose belts stand at 0, 30, 60 and 90.
             val near = (belt / BELT_DEGREES).toInt().coerceAtMost(2) * BELT_DEGREES
             val shape = (PI / 2.0 * sin(PI * (belt - near) / BELT_DEGREES)).toFloat()
             assertEquals(
@@ -365,8 +365,11 @@ class MeridionalWindTest : BorrowsSharedWorlds() {
             for (x in 0 until w) {
                 val i = y * w + x
                 if (!world.sea.isLand[i]) continue
-                val summer = world.climate.summerPrecipitation.data[i]
-                val winter = world.climate.winterPrecipitation.data[i]
+                // The coast's own warm half: the calendar's half about July in the north.
+                val julyHalf = world.climate.julyHalfPrecipitation.data[i]
+                val januaryHalf = world.climate.januaryHalfPrecipitation.data[i]
+                val summer = if (lat > 0f) julyHalf else januaryHalf
+                val winter = if (lat > 0f) januaryHalf else julyHalf
                 if (summer < WET_SEASON || summer <= RATIO * winter) continue
                 if (!facesSea(world, x, y, seaward)) continue
                 mask[i] = true

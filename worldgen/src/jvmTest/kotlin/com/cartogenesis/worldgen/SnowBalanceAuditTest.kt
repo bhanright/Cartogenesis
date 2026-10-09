@@ -51,17 +51,17 @@ class SnowBalanceAuditTest {
             // Best of five, because what rule 8 is asking is what the work costs, not what the
             // slowest scheduling of it costs.
             val generated = ClimateStage.generateWithSeasonalMm(cfg, sea, ocean!!)
-            val warmHalf = ClimateStage.halfYearTemperature(cfg, sea, generated.result.temperature, Season.WARM_HALF)
-            val coldHalf = ClimateStage.halfYearTemperature(cfg, sea, generated.result.temperature, Season.COLD_HALF)
+            val julyHalf = ClimateStage.halfYearTemperature(cfg, sea, generated.result.temperature, Season.JULY_HALF)
+            val januaryHalf = ClimateStage.halfYearTemperature(cfg, sea, generated.result.temperature, Season.JANUARY_HALF)
             var balanceMs = Long.MAX_VALUE
             repeat(5) {
                 val ms = measureTimeMillis {
                     SnowBalance.field(
                         sea.isLand,
-                        warmHalf,
-                        coldHalf,
-                        generated.summerPrecipitationMm,
-                        generated.winterPrecipitationMm
+                        julyHalf,
+                        januaryHalf,
+                        generated.julyHalfPrecipitationMm,
+                        generated.januaryHalfPrecipitationMm
                     )
                 }
                 if (ms < balanceMs) balanceMs = ms

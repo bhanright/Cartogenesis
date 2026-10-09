@@ -749,14 +749,19 @@ class SnowBalanceTest : BorrowsSharedWorlds() {
         // The warm *half-year's* mean, which is what the balance integrates its degree-days over,
         // rebuilt because `ClimateResult` stores the warmest month instead — see `Season`. Reading
         // the saved field here would band the map by a different quantity from the one the balance
-        // was decided on, and on some seeds it selects no cells at all.
-        val warmHalf = ClimateStage.halfYearTemperature(
-            world.config, world.sea, world.climate.temperature, Season.WARM_HALF
+        // was decided on, and on some seeds it selects no cells at all. Each cell's warm half is
+        // the warmer of the calendar's two.
+        val julyHalf = ClimateStage.halfYearTemperature(
+            world.config, world.sea, world.climate.temperature, Season.JULY_HALF
         )
+        val januaryHalf = ClimateStage.halfYearTemperature(
+            world.config, world.sea, world.climate.temperature, Season.JANUARY_HALF
+        )
+        val warmHalf = FloatArray(w * h) { maxOf(julyHalf.data[it], januaryHalf.data[it]) }
         val marginal = (0 until w * h).filter { i ->
             world.sea.isLand[i] &&
-                warmHalf.data[i] >= MARGINAL_LOW &&
-                warmHalf.data[i] <= MARGINAL_HIGH
+                warmHalf[i] >= MARGINAL_LOW &&
+                warmHalf[i] <= MARGINAL_HIGH
         }
         if (marginal.size < 1000) return null
         val rain = marginal.map { world.climate.precipitationMm.data[it] }.sorted()

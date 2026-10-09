@@ -50,12 +50,22 @@ data class ClimateResult(
      * [summerTemperature] — and a coast's warmest month runs later than the interior's beside it,
      * because water remembers longer. Months rather than half-years because every threshold
      * [ClimateStage.classify] applies to them is one of Koppen's and Koppen's are monthly means.
-     * Storing the local season rather than the calendar month is what lets
+     * Storing the local extreme rather than the calendar month is what lets
      * [ClimateStage.classify] apply one rule to the whole map instead of branching on the sign of
      * the latitude — a Mediterranean coast is a Mediterranean coast either side of the equator.
+     * Everything that is one moment of the planet reads [julyTemperature] and [januaryTemperature]
+     * or the half-years instead.
      */
     val summerTemperature: FloatField,
     val winterTemperature: FloatField,
+    /**
+     * Temperature in the calendar's July and January, in degrees Celsius, one entry per cell,
+     * row-major: one moment of the planet each, the northern summer with the southern winter and
+     * the other way about, which is what a map compared with an atlas's isotherms shows. See
+     * [EnergyBalance.APRIL_FIRST_STEP] for where the months sit in the model's year.
+     */
+    val julyTemperature: FloatField,
+    val januaryTemperature: FloatField,
     /**
      * Rainfall, normalized to 0..1 for every downstream consumer that was built against that
      * scale — rendering, [ClimateStage.classify]'s seasonal-shape checks, `CultureStage`'s climate
@@ -68,13 +78,15 @@ data class ClimateResult(
      */
     val precipitation: FloatField,
     /**
-     * Warm- and cold-season rainfall, on the same scale as [precipitation] — the same fixed
-     * mm-to-0..1 factor is applied to all three, so the three fields can be compared against each
-     * other and against the seasonal-shape thresholds. [precipitation] is their mean, except where
-     * the clamp at 1 bites on a season.
+     * Rainfall in the calendar's two half-years, April to September and October to March, on the
+     * same scale as [precipitation] — the same fixed mm-to-0..1 factor is applied to all three, so
+     * the three fields can be compared against each other. [precipitation] is their mean, except
+     * where the clamp at 1 bites on a half. These are the march's own two seasons, each one moment
+     * of the planet; a place's own summer is whichever of the two is warmer there (see
+     * [ClimateStage.classify]).
      */
-    val summerPrecipitation: FloatField,
-    val winterPrecipitation: FloatField,
+    val julyHalfPrecipitation: FloatField,
+    val januaryHalfPrecipitation: FloatField,
     /**
      * Annual rainfall in millimeters, the march's own: it carries water in kilograms per square
      * meter and records what rains in kilograms per square meter a year, so there is no
@@ -100,22 +112,22 @@ data class ClimateResult(
      */
     val windMeridional: FloatField,
     /**
-     * Where the sea is frozen in each season: one entry per cell, row-major, true where that
-     * season's sea surface sits at or below the freezing point of sea water
-     * ([EnergyBalance.SEA_FREEZING_C], -1.8 C at the ocean's mean salinity) and false everywhere
-     * on land.
+     * Where the sea is frozen in each of the calendar's half-years, April to September and
+     * October to March: one entry per cell, row-major, true where that half's sea surface sits at
+     * or below the freezing point of sea water ([EnergyBalance.SEA_FREEZING_C], -1.8 C at the
+     * ocean's mean salinity) and false everywhere on land.
      *
-     * Two masks rather than one, because the two are different countries. The cold season's is the
-     * winter pack, which on Earth reaches the Sea of Okhotsk and the Gulf of Bothnia and is gone
-     * by August; the warm season's is the perennial ice, which is what an atlas draws and what
-     * [ClimateStage.classify] paints as `ICE_SHEET` over water.
+     * Each mask is one moment of the planet, so each holds one hemisphere's winter pack and the
+     * other's summer remnant. Frozen in both is the perennial ice, which is what an atlas draws
+     * and what [ClimateStage.classify] paints as `ICE_SHEET` over water; frozen in either is the
+     * winter pack, which on Earth reaches the Sea of Okhotsk and the Gulf of Bothnia.
      *
-     * The moisture march reads whichever mask belongs to the season it is marching, and takes no
+     * The moisture march reads whichever mask belongs to the half it is marching, and takes no
      * moisture at all from a frozen cell — a metre of ice is a lid, which is why the polar ocean is
      * a desert and why a polar desert exists on the coast beside it.
      */
-    val summerSeaIce: BooleanArray,
-    val winterSeaIce: BooleanArray,
+    val julyHalfSeaIce: BooleanArray,
+    val januaryHalfSeaIce: BooleanArray,
     val biome: Array<Biome>,
     /**
      * How much living cover the ground carries, 0 on bare rock or ice to 1 under a closed forest,
@@ -168,11 +180,13 @@ data class ClimateResult(
  * prevailing wind bands so that windward slopes get soaked and leeward slopes fall into rain
  * shadow.
  *
- * Run twice over, for the warm season and the cold one. The whole of the seasonal machinery is one
- * number — [ClimateConfig.seasonalTiltDegrees], the distance the thermal equator migrates
- * toward whichever hemisphere is in summer — applied to the latitude that the temperature
- * curve, the wind belts and the rain belts are all read off. The annual fields are kept as they were, so every stage
- * downstream of this one sees exactly what it saw before seasons existed.
+ * Run twice over, for the calendar's two half-years, April to September and October to March:
+ * each is one moment of the planet, one hemisphere's summer and the other's winter. The whole of
+ * the seasonal machinery is one number — [ClimateConfig.seasonalTiltDegrees], the distance the
+ * thermal equator migrates into the summer hemisphere — applied to the obliquity the energy
+ * balance's sun is computed at and to the latitude the wind belts and the rain belts are read
+ * off. The annual fields are kept as they were, so every stage downstream of this one sees
+ * exactly what it saw before seasons existed.
  */
 object ClimateStage {
 
@@ -490,8 +504,16 @@ object ClimateStage {
      */
     internal class Generated(
         val result: ClimateResult,
+        /**
+         * Each cell's own summer and winter rain in millimetres, which [classify] reads: the
+         * warmer and the cooler of the two calendar half-years at that cell (Peel, Finlayson and
+         * McMahon 2007; see [localSummerIsJulyHalf]).
+         */
         val summerPrecipitationMm: FloatField,
         val winterPrecipitationMm: FloatField,
+        /** The march's own two seasons, the calendar's half-years, in millimetres. */
+        val julyHalfPrecipitationMm: FloatField,
+        val januaryHalfPrecipitationMm: FloatField,
         /**
          * Annual rainfall whose water last evaporated from land rather than from the sea, in
          * millimetres: the numerator of the continental recycling ratio. Measured rather than
@@ -529,18 +551,21 @@ object ClimateStage {
         /** The warmest and coldest month, which is what Koppen's thresholds are stated on. */
         val summerTemperature: FloatField,
         val winterTemperature: FloatField,
+        /** The calendar's July and January, which is what the maps of a season draw. */
+        val julyTemperature: FloatField,
+        val januaryTemperature: FloatField,
         /**
-         * The warm and cold half-years' means, which is what anything integrating across a season
+         * The calendar's half-years' means, which is what anything integrating across a season
          * needs — the snow balance's degree-day sum and the moisture march's evaporation. Not
          * saved: `ClimateResult` carries the months, because those are what a reader and a
          * classifier want. See [Season].
          */
-        val warmHalfTemperature: FloatField,
-        val coldHalfTemperature: FloatField,
-        val summerPrecipitationMm: FloatField,
-        val winterPrecipitationMm: FloatField,
-        val summerSeaIce: BooleanArray,
-        val winterSeaIce: BooleanArray,
+        val julyHalfTemperature: FloatField,
+        val januaryHalfTemperature: FloatField,
+        val julyHalfPrecipitationMm: FloatField,
+        val januaryHalfPrecipitationMm: FloatField,
+        val julyHalfSeaIce: BooleanArray,
+        val januaryHalfSeaIce: BooleanArray,
         val wind: WindField,
         val landOriginPrecipitationMm: FloatField,
         val potentialEvapotranspirationMm: FloatField,
@@ -574,10 +599,10 @@ object ClimateStage {
         val fields = seasonalFields(config, sea, ocean, globalCoolingC)
         return SnowBalance.field(
             sea.isLand,
-            fields.warmHalfTemperature,
-            fields.coldHalfTemperature,
-            fields.summerPrecipitationMm,
-            fields.winterPrecipitationMm
+            fields.julyHalfTemperature,
+            fields.januaryHalfTemperature,
+            fields.julyHalfPrecipitationMm,
+            fields.januaryHalfPrecipitationMm
         )
     }
 
@@ -594,28 +619,42 @@ object ClimateStage {
         val temperature = fields.temperature
         val summerTemperature = fields.summerTemperature
         val winterTemperature = fields.winterTemperature
-        val summerPrecipitationMm = fields.summerPrecipitationMm
-        val winterPrecipitationMm = fields.winterPrecipitationMm
+        val julyHalfPrecipitationMm = fields.julyHalfPrecipitationMm
+        val januaryHalfPrecipitationMm = fields.januaryHalfPrecipitationMm
 
         val precipitationMm = FloatField(cellsAcross, cellsDown)
         for (cell in 0 until cellCount) {
             precipitationMm.data[cell] =
-                (summerPrecipitationMm.data[cell] + winterPrecipitationMm.data[cell]) * 0.5f
+                (julyHalfPrecipitationMm.data[cell] + januaryHalfPrecipitationMm.data[cell]) * 0.5f
+        }
+
+        // Each cell's own summer and winter, for the shapes classify asks about: whichever of the
+        // two calendar halves is warmer there.
+        val summerPrecipitationMm = FloatField(cellsAcross, cellsDown)
+        val winterPrecipitationMm = FloatField(cellsAcross, cellsDown)
+        for (cell in 0 until cellCount) {
+            val julyIsSummer = localSummerIsJulyHalf(
+                fields.julyHalfTemperature.data[cell], fields.januaryHalfTemperature.data[cell]
+            )
+            summerPrecipitationMm.data[cell] =
+                if (julyIsSummer) julyHalfPrecipitationMm.data[cell] else januaryHalfPrecipitationMm.data[cell]
+            winterPrecipitationMm.data[cell] =
+                if (julyIsSummer) januaryHalfPrecipitationMm.data[cell] else julyHalfPrecipitationMm.data[cell]
         }
 
         // The 0..1 copy the stage's consumers were built against: rendering, CultureStage's
-        // climate distance, RiverStage's and NationStage's runoff weighting, and classify's own
-        // seasonal-shape ratios. One fixed factor for all three fields, so they can be compared
-        // with each other: REFERENCE_MM maps to 1, clamped.
+        // climate distance, RiverStage's and NationStage's runoff weighting. One fixed factor for
+        // all three fields, so they can be compared with each other: REFERENCE_MM maps to 1,
+        // clamped.
         val precipitation = FloatField(cellsAcross, cellsDown)
-        val summerPrecipitation = FloatField(cellsAcross, cellsDown)
-        val winterPrecipitation = FloatField(cellsAcross, cellsDown)
+        val julyHalfPrecipitation = FloatField(cellsAcross, cellsDown)
+        val januaryHalfPrecipitation = FloatField(cellsAcross, cellsDown)
         for (cell in 0 until cellCount) {
             precipitation.data[cell] = (precipitationMm.data[cell] / REFERENCE_MM).coerceIn(0f, 1f)
-            summerPrecipitation.data[cell] =
-                (summerPrecipitationMm.data[cell] / REFERENCE_MM).coerceIn(0f, 1f)
-            winterPrecipitation.data[cell] =
-                (winterPrecipitationMm.data[cell] / REFERENCE_MM).coerceIn(0f, 1f)
+            julyHalfPrecipitation.data[cell] =
+                (julyHalfPrecipitationMm.data[cell] / REFERENCE_MM).coerceIn(0f, 1f)
+            januaryHalfPrecipitation.data[cell] =
+                (januaryHalfPrecipitationMm.data[cell] / REFERENCE_MM).coerceIn(0f, 1f)
         }
 
         // Recomputed here rather than carried down from the glaciation stage's provisional run:
@@ -624,15 +663,15 @@ object ClimateStage {
         // economy — see [SnowBalanceAccelerator].
         val snowBalance = if (config.climate.snowBalance) {
             SnowBalance.field(
-                sea.isLand, fields.warmHalfTemperature, fields.coldHalfTemperature,
-                summerPrecipitationMm, winterPrecipitationMm
+                sea.isLand, fields.julyHalfTemperature, fields.januaryHalfTemperature,
+                julyHalfPrecipitationMm, januaryHalfPrecipitationMm
             )
         } else null
 
         val biome = classify(
             cellsAcross, cellsDown, sea, temperature, summerTemperature, winterTemperature,
             precipitationMm, summerPrecipitationMm, winterPrecipitationMm,
-            fields.summerSeaIce, snowBalance
+            perennialSeaIce(fields.julyHalfSeaIce, fields.januaryHalfSeaIce), snowBalance
         )
 
         // The cover on the ground and the frozen ground under it, beside the classification and
@@ -654,14 +693,16 @@ object ClimateStage {
                 temperature = temperature,
                 summerTemperature = summerTemperature,
                 winterTemperature = winterTemperature,
+                julyTemperature = fields.julyTemperature,
+                januaryTemperature = fields.januaryTemperature,
                 precipitation = precipitation,
-                summerPrecipitation = summerPrecipitation,
-                winterPrecipitation = winterPrecipitation,
+                julyHalfPrecipitation = julyHalfPrecipitation,
+                januaryHalfPrecipitation = januaryHalfPrecipitation,
                 precipitationMm = precipitationMm,
                 windDirection = fields.wind.zonal,
                 windMeridional = FloatField(cellsAcross, cellsDown, fields.wind.meridional),
-                summerSeaIce = fields.summerSeaIce,
-                winterSeaIce = fields.winterSeaIce,
+                julyHalfSeaIce = fields.julyHalfSeaIce,
+                januaryHalfSeaIce = fields.januaryHalfSeaIce,
                 biome = biome,
                 vegetationDensity = vegetation.density,
                 permafrost = vegetation.permafrost,
@@ -670,9 +711,30 @@ object ClimateStage {
             ),
             summerPrecipitationMm = summerPrecipitationMm,
             winterPrecipitationMm = winterPrecipitationMm,
+            julyHalfPrecipitationMm = julyHalfPrecipitationMm,
+            januaryHalfPrecipitationMm = januaryHalfPrecipitationMm,
             landOriginPrecipitationMm = fields.landOriginPrecipitationMm
         )
     }
+
+    /**
+     * Whether a place's own summer is the calendar's half about July, given its mean temperature
+     * in that half and in the half about January, both in degrees Celsius.
+     *
+     * Peel, Finlayson and McMahon's rule for the Koppen map (2007, Table 1): "Summer (winter) is
+     * defined as the warmer (cooler) six month period of ONDJFM and AMJJAS". Read on the place's
+     * own temperatures rather than on the sign of its latitude, so the switch from one half to the
+     * other follows the thermal equator over the land rather than running along the equator's row.
+     */
+    internal fun localSummerIsJulyHalf(julyHalfC: Float, januaryHalfC: Float): Boolean =
+        julyHalfC >= januaryHalfC
+
+    /**
+     * The perennial sea ice: frozen in both of the calendar's half-years, which is frozen in the
+     * warmer of them wherever that is, the pack that survives the summer.
+     */
+    internal fun perennialSeaIce(julyHalfSeaIce: BooleanArray, januaryHalfSeaIce: BooleanArray): BooleanArray =
+        BooleanArray(julyHalfSeaIce.size) { julyHalfSeaIce[it] && januaryHalfSeaIce[it] }
 
     private fun seasonalFields(
         config: WorldGenConfig,
@@ -704,31 +766,36 @@ object ClimateStage {
         val marineFraction = marineAirFraction(config, sea)
         val temperature = annualTemperature(config, sea, zonal, marineFraction)
         applyMaritimeInfluence(config, sea, ocean, temperature, waterExposure(config, sea))
-        // Two readings of the same year. The months are what `classify` gates on, because Koppen's
-        // thresholds are monthly means; the half-years are what the snow balance and the moisture
-        // march integrate across, because a degree-day sum over 182 days wants those 182 days'
-        // mean and not the peak of July. See `Season`.
+        // Three readings of the same year. The local extreme months are what `classify` gates on,
+        // because Koppen's thresholds are monthly means; the calendar's July and January are what
+        // a map of a season draws; and the calendar's half-years are what the snow balance and the
+        // moisture march integrate across, because a degree-day sum over 182 days wants those 182
+        // days' mean and not the peak of July. See `Season`.
         val summerTemperature =
             seasonalTemperature(config, temperature, zonal, marineFraction, Season.SUMMER)
         val winterTemperature =
             seasonalTemperature(config, temperature, zonal, marineFraction, Season.WINTER)
-        val warmHalfTemperature =
-            seasonalTemperature(config, temperature, zonal, marineFraction, Season.WARM_HALF)
-        val coldHalfTemperature =
-            seasonalTemperature(config, temperature, zonal, marineFraction, Season.COLD_HALF)
+        val julyTemperature =
+            seasonalTemperature(config, temperature, zonal, marineFraction, Season.JULY)
+        val januaryTemperature =
+            seasonalTemperature(config, temperature, zonal, marineFraction, Season.JANUARY)
+        val julyHalfTemperature =
+            seasonalTemperature(config, temperature, zonal, marineFraction, Season.JULY_HALF)
+        val januaryHalfTemperature =
+            seasonalTemperature(config, temperature, zonal, marineFraction, Season.JANUARY_HALF)
 
         // The water under the marine air, half-year by half-year. The ice test and the march's
         // evaporation are questions about the sea surface, not about the air over it: a sea
         // freezes when the water reaches -1.8, and what evaporates is water.
-        val warmHalfSeaSurface =
-            seaSurfaceTemperature(config, sea, zonal, warmHalfTemperature, Season.WARM_HALF)
-        val coldHalfSeaSurface =
-            seaSurfaceTemperature(config, sea, zonal, coldHalfTemperature, Season.COLD_HALF)
+        val julyHalfSeaSurface =
+            seaSurfaceTemperature(config, sea, zonal, julyHalfTemperature, Season.JULY_HALF)
+        val januaryHalfSeaSurface =
+            seaSurfaceTemperature(config, sea, zonal, januaryHalfTemperature, Season.JANUARY_HALF)
 
-        val summerSeaIce = seaIceMask(config, sea, ocean, warmHalfSeaSurface)
-        val winterSeaIce = seaIceMask(config, sea, ocean, coldHalfSeaSurface)
+        val julyHalfSeaIce = seaIceMask(config, sea, ocean, julyHalfSeaSurface)
+        val januaryHalfSeaIce = seaIceMask(config, sea, ocean, januaryHalfSeaSurface)
 
-        // A pressure field per season, and a third for the annual wind. The annual one is built
+        // A pressure field per half-year, and a third for the annual wind. The annual one is built
         // from the annual temperature rather than averaged from the other two, which is the same
         // field: the anomaly is linear in temperature and the wind is linear in the anomaly, so
         // the wind from the mean pressure and the mean of the two winds are one answer, and this
@@ -737,35 +804,36 @@ object ClimateStage {
         val pressureWinds = climateConfig.pressureWinds
         val annualPressureHpa =
             if (pressureWinds) PressureWind.pressureAnomalyHpa(config, temperature) else null
-        val summerPressureHpa = if (pressureWinds) {
-            PressureWind.pressureAnomalyHpa(config, warmHalfTemperature)
+        val julyHalfPressureHpa = if (pressureWinds) {
+            PressureWind.pressureAnomalyHpa(config, julyHalfTemperature)
         } else null
-        val winterPressureHpa = if (pressureWinds) {
-            PressureWind.pressureAnomalyHpa(config, coldHalfTemperature)
+        val januaryHalfPressureHpa = if (pressureWinds) {
+            PressureWind.pressureAnomalyHpa(config, januaryHalfTemperature)
         } else null
 
         // The stored wind is the annual one, unshifted: it is what the rest of the pipeline and
-        // the wind view mean by "the prevailing wind". Each season marches along its own belts,
+        // the wind view mean by "the prevailing wind". Each half marches along its own belts,
         // which live only as long as the march does.
         val slantRowsPerCell = slantRowsPerCell(config)
         val wind = withPressureDeparture(
             config, sea,
-            buildWind(cellsAcross, cellsDown, tiltDegrees = 0f, warm = true, slantRowsPerCell),
+            buildWind(cellsAcross, cellsDown, thermalEquatorDegrees = 0f, slantRowsPerCell),
             annualPressureHpa
         ).march
 
-        // Each season's wind in meters a second, belts and pressure departure together: the
-        // march carries its water along the zonal direction and across the rows at the
-        // meridional speed.
-        val summerWind = withPressureDeparture(
+        // Each half's wind in meters a second, belts and pressure departure together: the march
+        // carries its water along the zonal direction and across the rows at the meridional
+        // speed. The belts ride one thermal equator, in the northern hemisphere in the half about
+        // July and in the southern in the half about January.
+        val julyHalfWind = withPressureDeparture(
             config, sea,
-            buildWind(cellsAcross, cellsDown, tiltDegrees, warm = true, slantRowsPerCell),
-            summerPressureHpa
+            buildWind(cellsAcross, cellsDown, thermalEquatorDegrees(tiltDegrees, julyHalf = true), slantRowsPerCell),
+            julyHalfPressureHpa
         )
-        val winterWind = withPressureDeparture(
+        val januaryHalfWind = withPressureDeparture(
             config, sea,
-            buildWind(cellsAcross, cellsDown, tiltDegrees, warm = false, slantRowsPerCell),
-            winterPressureHpa
+            buildWind(cellsAcross, cellsDown, thermalEquatorDegrees(tiltDegrees, julyHalf = false), slantRowsPerCell),
+            januaryHalfPressureHpa
         )
 
         // The marine inversion, a property of the season rather than of the parcel: where a cold
@@ -773,16 +841,16 @@ object ClimateStage {
         // without the term rather than with a zero in it.
         val seaSurfaceAnomalyC =
             if (climateConfig.marineInversion && config.ocean.enabled) ocean.anomaly else null
-        val summerInversion = MoistureBudget.inversionSuppression(
-            config, sea, seaSurfaceAnomalyC, tiltDegrees, warm = true
+        val julyHalfInversion = MoistureBudget.inversionSuppression(
+            config, sea, seaSurfaceAnomalyC, thermalEquatorDegrees(tiltDegrees, julyHalf = true)
         )
-        val winterInversion = MoistureBudget.inversionSuppression(
-            config, sea, seaSurfaceAnomalyC, tiltDegrees, warm = false
+        val januaryHalfInversion = MoistureBudget.inversionSuppression(
+            config, sea, seaSurfaceAnomalyC, thermalEquatorDegrees(tiltDegrees, julyHalf = false)
         )
 
         val obliquityDegrees = EnergyBalance.obliquityDegrees(tiltDegrees).toDouble()
         fun marchSeason(
-            warm: Boolean,
+            julyHalf: Boolean,
             airC: FloatField,
             waterC: FloatField,
             seaIce: BooleanArray,
@@ -795,17 +863,16 @@ object ClimateStage {
                 else waterC.data[cell] + (if (config.ocean.enabled) ocean.anomaly.data[cell] else 0f)
             }
             return MoistureMarch.Season(
-                warm = warm,
                 airTemperatureC = airC.data,
                 seaSurfaceC = seaSurfaceC,
                 seaIce = seaIce,
                 eastwardMps = totalWind.eastwardMps,
                 southwardMps = totalWind.southwardMps,
-                beltRainFactorOfRow = bands(cellsDown, climateConfig, warm),
+                beltRainFactorOfRow = bands(cellsDown, climateConfig, julyHalf),
                 inversionSuppression = inversion?.data,
                 extraterrestrialOfRow = DoubleArray(cellsDown) { row ->
                     SurfaceEvaporation.halfYearExtraterrestrialMjPerM2Day(
-                        latitudeOf(row, cellsDown).toDouble(), obliquityDegrees, warm
+                        latitudeOf(row, cellsDown).toDouble(), obliquityDegrees, julyHalf
                     )
                 }
             )
@@ -821,11 +888,13 @@ object ClimateStage {
                 isLand = sea.isLand,
                 relativeElevation = sea.relativeElevation.data,
                 elevationM = elevationM,
-                warm = marchSeason(
-                    true, warmHalfTemperature, warmHalfSeaSurface, summerSeaIce, summerWind, summerInversion
+                julyHalf = marchSeason(
+                    true, julyHalfTemperature, julyHalfSeaSurface, julyHalfSeaIce, julyHalfWind,
+                    julyHalfInversion
                 ),
-                cold = marchSeason(
-                    false, coldHalfTemperature, coldHalfSeaSurface, winterSeaIce, winterWind, winterInversion
+                januaryHalf = marchSeason(
+                    false, januaryHalfTemperature, januaryHalfSeaSurface, januaryHalfSeaIce,
+                    januaryHalfWind, januaryHalfInversion
                 ),
                 lidElevation = config.scale.reliefShareOfMetres(MoistureBudget.INVERSION_LID_METRES),
                 blurSigmaKm = RAIN_BLUR_SIGMA_KM
@@ -837,12 +906,14 @@ object ClimateStage {
             temperature = temperature,
             summerTemperature = summerTemperature,
             winterTemperature = winterTemperature,
-            warmHalfTemperature = warmHalfTemperature,
-            coldHalfTemperature = coldHalfTemperature,
-            summerPrecipitationMm = marched.warmRainMm,
-            winterPrecipitationMm = marched.coldRainMm,
-            summerSeaIce = summerSeaIce,
-            winterSeaIce = winterSeaIce,
+            julyTemperature = julyTemperature,
+            januaryTemperature = januaryTemperature,
+            julyHalfTemperature = julyHalfTemperature,
+            januaryHalfTemperature = januaryHalfTemperature,
+            julyHalfPrecipitationMm = marched.julyHalfRainMm,
+            januaryHalfPrecipitationMm = marched.januaryHalfRainMm,
+            julyHalfSeaIce = julyHalfSeaIce,
+            januaryHalfSeaIce = januaryHalfSeaIce,
             wind = wind,
             landOriginPrecipitationMm = marched.landOriginRainMm,
             potentialEvapotranspirationMm = marched.potentialEvapotranspirationMm,
@@ -899,7 +970,7 @@ object ClimateStage {
      * and the march from disagreeing about which cells are ice.
      *
      * Empty when `ClimateConfig.seaIce` is off, which is the control the guard needs.
-     * See [ClimateResult.summerSeaIce] for what the two masks are for.
+     * See [ClimateResult.julyHalfSeaIce] for what the two masks are for.
      */
     private fun seaIceMask(
         config: WorldGenConfig,
@@ -1212,12 +1283,13 @@ object ClimateStage {
     }
 
     /**
-     * A half-year's mean temperature, rebuilt from a finished world's annual field.
+     * A calendar half-year's mean temperature, rebuilt from a finished world's annual field;
+     * [season] is [Season.JULY_HALF] or [Season.JANUARY_HALF].
      *
-     * `ClimateResult` stores the warmest and coldest *month*, because those are what Koppen's gates
-     * and a reader want, but the snow balance and the moisture march were run on the half-years —
-     * see [Season]. A guard that needs to redo either of those computations asks for this rather
-     * than reaching for the saved field and quietly measuring a different quantity.
+     * `ClimateResult` stores the months, because those are what Koppen's gates and a reader want,
+     * but the snow balance and the moisture march were run on the half-years — see [Season]. A
+     * guard that needs to redo either of those computations asks for this rather than reaching for
+     * the saved field and quietly measuring a different quantity.
      */
     internal fun halfYearTemperature(
         config: WorldGenConfig,
@@ -1229,7 +1301,7 @@ object ClimateStage {
     )
 
     /**
-     * The warm- or cold-season temperature, as a departure from the annual mean.
+     * A season's temperature, any reading of [Season], as a departure from the annual mean.
      *
      * Everything a season shares with the annual field — the altitude lapse, the current anomaly,
      * the noise — is already in [annual], so what is added is the band's own seasonal departure,
@@ -1326,46 +1398,58 @@ object ClimateStage {
      * sine between the two latitudes where it is zero, `pi/2` at the middle, so the mean over each
      * stretch is the mean `ClimateConfig.meridionalWindShare` states.
      *
-     * Zero at every edge of a belt, the ITCZ and the subtropical high, because an edge is where two
-     * cells' surface legs meet or part, and a wind that kept its strength up to the edge and
-     * reversed there would pile the water carried on it into the one row beside a converging edge
-     * and empty the row beside a diverging one. And zero at the geographic equator, in both
-     * seasons: each half-year here is both hemispheres' own summer or both their winters, so the
-     * two hemispheres' winds meet at the equator as mirror images, and a wind that is not zero
-     * there jumps from one sign to the other across a single row. In the cold half that meeting
-     * is the ITCZ; in the warm half, whose thermal equators stand [tiltDegrees] into each
-     * hemisphere, the equator is where the air parts for them.
+     * Zero at every edge of a belt, the thermal equator, the subtropical high and the polar front,
+     * all measured from the thermal equator, because an edge is where two cells' surface legs meet
+     * or part, and a wind that kept its strength up to the edge and reversed there would pile the
+     * water carried on it into the one row beside a converging edge and empty the row beside a
+     * diverging one. Not zero at the geographic equator: each half-year is one moment of the
+     * planet, so the winter hemisphere's trades blow across the equator to a thermal equator
+     * standing in the summer hemisphere, which is the cross-equatorial leg of Earth's winter Hadley
+     * cell.
      *
-     * [absoluteLatitude] is the row's distance from the geographic equator in degrees.
+     * [latitude] is the row's latitude in degrees and [thermalEquatorDegrees] the latitude the
+     * season's thermal equator stands at.
      */
-    private fun meridionalProfile(absoluteLatitude: Float, tiltDegrees: Float, warm: Boolean): Float {
-        // The geographic latitudes where the belts' meridional wind is zero this season: the
-        // equator, the thermal equator (in the warm half), and the two belt edges, shifted with it.
-        val shift = if (warm) tiltDegrees else -tiltDegrees
+    private fun meridionalProfile(latitude: Float, thermalEquatorDegrees: Float): Float {
+        val fromThermalEquator = latitude - thermalEquatorDegrees
+        val beltDegrees = abs(fromThermalEquator)
+        // The pole on this row's side of the thermal equator, in degrees from it.
+        val poleDegrees = if (fromThermalEquator >= 0f) {
+            POLE_DEGREES - thermalEquatorDegrees
+        } else {
+            POLE_DEGREES + thermalEquatorDegrees
+        }
         val zeros = floatArrayOf(
             0f,
-            shift.coerceAtLeast(0f),
-            (TRADE_BELT_EDGE_DEGREES + shift).coerceIn(0f, POLE_DEGREES),
-            (WESTERLY_BELT_EDGE_DEGREES + shift).coerceIn(0f, POLE_DEGREES),
-            POLE_DEGREES
+            TRADE_BELT_EDGE_DEGREES.coerceAtMost(poleDegrees),
+            WESTERLY_BELT_EDGE_DEGREES.coerceAtMost(poleDegrees),
+            poleDegrees
         )
         for (segment in 0 until zeros.size - 1) {
             val near = zeros[segment]
             val far = zeros[segment + 1]
-            if (absoluteLatitude < near || absoluteLatitude >= far || far <= near) continue
-            return (PI / 2.0 * sin(PI * (absoluteLatitude - near) / (far - near))).toFloat()
+            if (beltDegrees < near || beltDegrees >= far || far <= near) continue
+            return (PI / 2.0 * sin(PI * (beltDegrees - near) / (far - near))).toFloat()
         }
         return 0f
     }
 
     /**
+     * The latitude a half-year's thermal equator stands at, in degrees: [tiltDegrees] into the
+     * northern hemisphere in the half about July ([julyHalf]), as far into the southern in the
+     * half about January.
+     */
+    internal fun thermalEquatorDegrees(tiltDegrees: Float, julyHalf: Boolean): Float =
+        if (julyHalf) tiltDegrees else -tiltDegrees
+
+    /**
      * Simplified three-cell circulation: polar easterlies, mid-latitude westerlies, and tropical
      * trade winds blowing east to west — each of them slanted across the latitude lines.
      *
-     * The belts ride the thermal equator, so in summer they sit [tiltDegrees] poleward of their
-     * annual position and in winter [tiltDegrees] equatorward. That migration is what puts a
-     * west coast at 35 degrees under the westerlies in winter and under the trades in summer,
-     * which is the Mediterranean climate in one sentence.
+     * The belts ride the thermal equator at [thermalEquatorDegrees], so in a hemisphere's summer
+     * they sit that far poleward of their annual position and in its winter as far equatorward.
+     * That migration is what puts a west coast at 35 degrees under the westerlies in winter and
+     * under the trades in summer, which is the Mediterranean climate in one sentence.
      *
      * The slant is the other half of a circulation cell, and the half that makes a monsoon. Each
      * cell has air rising at one edge and sinking at the other, and the surface leg runs between
@@ -1379,8 +1463,7 @@ object ClimateStage {
     private fun buildWind(
         cellsAcross: Int,
         cellsDown: Int,
-        tiltDegrees: Float,
-        warm: Boolean,
+        thermalEquatorDegrees: Float,
         slantRowsPerCell: Float
     ): WindField {
         val zonal = IntArray(cellsAcross * cellsDown)
@@ -1388,16 +1471,12 @@ object ClimateStage {
         val zonalShareOfRow = FloatArray(cellsDown)
         for (row in 0 until cellsDown) {
             val latitude = latitudeOf(row, cellsDown)
-            // Which way "poleward" points for this row, as a step in map coordinates: rows grow
-            // southward, so the northern hemisphere's pole is at the smaller row number.
-            val poleward = if (latitude < 0f) 1f else -1f
-            // Signed distance from the thermal equator, positive poleward. Negative means the
-            // thermal equator has migrated past this row, into its own hemisphere.
-            val fromThermalEquator =
-                if (warm) abs(latitude) - tiltDegrees else abs(latitude) + tiltDegrees
+            // Signed distance from the thermal equator, positive to its north.
+            val fromThermalEquator = latitude - thermalEquatorDegrees
             val beltDegrees = abs(fromThermalEquator)
-            // Away from the thermal equator, again as a step in map coordinates.
-            val outward = if (fromThermalEquator < 0f) -poleward else poleward
+            // Away from the thermal equator, as a step in map coordinates: rows grow southward,
+            // so north of it is the smaller row number.
+            val outward = if (fromThermalEquator >= 0f) -1f else 1f
             val zonalDirection = when {
                 beltDegrees < TRADE_BELT_EDGE_DEGREES -> -1   // trade winds
                 beltDegrees < WESTERLY_BELT_EDGE_DEGREES -> 1 // westerlies
@@ -1410,7 +1489,7 @@ object ClimateStage {
                 beltDegrees < WESTERLY_BELT_EDGE_DEGREES -> outward
                 // The polar cell's, back down toward it.
                 else -> -outward
-            } * slantRowsPerCell * meridionalProfile(abs(latitude), tiltDegrees, warm)
+            } * slantRowsPerCell * meridionalProfile(latitude, thermalEquatorDegrees)
             // The belts' zonal wind itself, measured from the thermal equator as the direction is,
             // and continuous through zero at each edge where the direction steps.
             zonalShareOfRow[row] = SurfaceBelts.zonalShare(beltDegrees)
@@ -1531,8 +1610,9 @@ object ClimateStage {
     }
 
     /**
-     * The surface wind of one season over a finished world, in metres a second, eastward and
-     * southward - the field `PressureWindTest` measures against its coastlines.
+     * The surface wind of one calendar half-year over a finished world, in metres a second,
+     * eastward and southward - the field `PressureWindTest` measures against its coastlines;
+     * [season] is [Season.JULY_HALF] or [Season.JANUARY_HALF].
      *
      * Rebuilt rather than stored: only the annual wind is saved, and a guard that read the annual
      * wind would be asking a question about the year when the question is about July. Everything
@@ -1548,9 +1628,10 @@ object ClimateStage {
     ): PressureWind.Vectors {
         val climateConfig = config.climate
         val tiltDegrees = if (climateConfig.seasons) climateConfig.seasonalTiltDegrees else 0f
-        val warm = season == Season.WARM_HALF || season == Season.SUMMER
+        val julyHalf = season == Season.JULY_HALF || season == Season.JULY
         val belts = buildWind(
-            config.width, config.height, tiltDegrees, warm, slantRowsPerCell(config)
+            config.width, config.height, thermalEquatorDegrees(tiltDegrees, julyHalf),
+            slantRowsPerCell(config)
         )
         val pressureHpa = if (climateConfig.pressureWinds) {
             PressureWind.pressureAnomalyHpa(
@@ -1564,25 +1645,21 @@ object ClimateStage {
         return totalWindMps(config, belts, PressureWind.surfaceWind(config, sea, pressureHpa))
     }
 
-    /** The circulation belt each row sits in for a season, precomputed per row. */
-    private fun bands(cellsDown: Int, climate: ClimateConfig, warm: Boolean): FloatArray =
-        FloatArray(cellsDown) { row -> seasonalBand(latitudeOf(row, cellsDown), climate, warm) }
+    /** The circulation belt each row sits in for a half-year, precomputed per row. */
+    private fun bands(cellsDown: Int, climate: ClimateConfig, julyHalf: Boolean): FloatArray =
+        FloatArray(cellsDown) { row -> seasonalBand(latitudeOf(row, cellsDown), climate, julyHalf) }
 
     /**
-     * The belt factor the march applies at a latitude in one season — shifted and sharpened.
+     * The belt factor the march applies at a latitude in one calendar half-year, the half about
+     * July when [julyHalf] — shifted with the thermal equator and sharpened.
      *
      * Exposed so a diagnostic can report the number that was actually applied rather than a copy
      * of the formula that drifts away from it, which is what `DesertCauseTest`'s own copy had
      * already done before seasons made the question harder.
      */
-    internal fun seasonalBand(latitude: Float, climate: ClimateConfig, warm: Boolean): Float {
+    internal fun seasonalBand(latitude: Float, climate: ClimateConfig, julyHalf: Boolean): Float {
         val tiltDegrees = if (climate.seasons) climate.seasonalTiltDegrees else 0f
-        val absoluteLatitude = abs(latitude)
-        val fromThermalEquator = if (warm) {
-            abs(absoluteLatitude - tiltDegrees)
-        } else {
-            absoluteLatitude + tiltDegrees
-        }
+        val fromThermalEquator = abs(latitude - thermalEquatorDegrees(tiltDegrees, julyHalf))
         return latitudeBandAt(
             fromThermalEquator,
             climate.subtropicalDryness,
@@ -1758,8 +1835,8 @@ object ClimateStage {
         precipitationMm: FloatField,
         summerPrecipitationMm: FloatField,
         winterPrecipitationMm: FloatField,
-        /** The perennial pack: see [ClimateResult.summerSeaIce]. */
-        summerSeaIce: BooleanArray,
+        /** The perennial pack, frozen in both half-years: see [ClimateResult.julyHalfSeaIce]. */
+        perennialSeaIce: BooleanArray,
         /**
          * [SnowBalance]'s field, or null when `ClimateConfig.snowBalance` is off and the ice gate
          * is the annual-mean one it replaced.
@@ -1771,9 +1848,9 @@ object ClimateStage {
                 // Sea ice, which is frozen sea water and not a mass balance at all: it forms
                 // because the water froze, and no amount of snowfall makes it and no amount of
                 // drought prevents it. The snow balance is about glaciers, so it is not asked
-                // here. The warm season's mask rather than the cold one's, because what an atlas
-                // draws as ice is the pack that is still there in August.
-                if (summerSeaIce[cell]) Biome.ICE_SHEET
+                // here. The perennial pack rather than the winter one, because what an atlas draws
+                // as ice is the pack that is still there at the end of its own summer.
+                if (perennialSeaIce[cell]) Biome.ICE_SHEET
                 else if (sea.relativeElevation.data[cell] > SHALLOW_OCEAN_DEPTH) Biome.SHALLOW_OCEAN
                 else Biome.OCEAN
             } else {

@@ -43,7 +43,7 @@ internal class MoistureLedger {
     }
 
     /** One lap of one season's march: both sweeps, every cell once. */
-    class Lap(val warm: Boolean, val lap: Int) {
+    class Lap(val julyHalf: Boolean, val lap: Int) {
         /** What the march holds before the lap's first column and after its last: parcels and banks. */
         var storageAtStart = 0.0
         var storageAtEnd = 0.0
@@ -129,8 +129,8 @@ internal class MoistureLedger {
         val condensateRain = FloatField(cellsAcross, cellsDown)
     }
 
-    var warmHalf: Cells? = null
-    var coldHalf: Cells? = null
+    var julyHalf: Cells? = null
+    var januaryHalf: Cells? = null
 
     /**
      * The annual field the rest of the pipeline reads, after the two seasons are averaged and the

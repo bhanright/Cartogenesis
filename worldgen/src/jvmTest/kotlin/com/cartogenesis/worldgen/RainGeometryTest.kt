@@ -74,8 +74,8 @@ class RainGeometryTest : BorrowsSharedWorlds() {
             val world = SharedWorlds.world(WorldGenConfig.forRows(seed, ROWS))
             val generated = ClimateStage.generateWithSeasonalMm(world.config, world.sea, world.ocean)
             annual[index] = largestRowStep(world, generated.result.precipitationMm.data)
-            summer[index] = largestRowStep(world, generated.summerPrecipitationMm.data)
-            winter[index] = largestRowStep(world, generated.winterPrecipitationMm.data)
+            summer[index] = largestRowStep(world, generated.julyHalfPrecipitationMm.data)
+            winter[index] = largestRowStep(world, generated.januaryHalfPrecipitationMm.data)
             val desert = BooleanArray(world.width * world.height) { world.climate.biome[it] == Biome.DESERT }
             val dry = BooleanArray(world.width * world.height) {
                 world.sea.isLand[it] && world.climate.precipitationMm.data[it] < DRY_MM
@@ -85,7 +85,7 @@ class RainGeometryTest : BorrowsSharedWorlds() {
             desertEdge[index] = desertRow
             dryEdge[index] = dryRow
             println(
-                ("RULE13 seed %d: row steps annual %.2f, summer %.2f, winter %.2f (main %.2f, %.2f, %.2f); " +
+                ("RULE13 seed %d: row steps annual %.2f, April-September %.2f, October-March %.2f (main %.2f, %.2f, %.2f); " +
                     "desert edge along a row %.0f km, down a column %.0f (main %.0f); under %.0f mm along a row %.0f km, " +
                     "down a column %.0f (main %.0f)")
                     .format(seed, annual[index], summer[index], winter[index], MAIN_ANNUAL_STEP[index],
@@ -97,8 +97,10 @@ class RainGeometryTest : BorrowsSharedWorlds() {
             assertTrue(branch.average() <= main.average(), "$name: %.2f pooled against main's %.2f".format(branch.average(), main.average()))
         }
         noWorse("the annual rain's largest row step", annual, MAIN_ANNUAL_STEP)
-        noWorse("the warm half's largest row step", summer, MAIN_SUMMER_STEP)
-        noWorse("the cold half's largest row step", winter, MAIN_WINTER_STEP)
+        // Main's two figures were each hemisphere's own warm and cold half; the march now runs the
+        // calendar's, which no longer meet as mirror images at the equator.
+        noWorse("the April-September half's largest row step", summer, MAIN_SUMMER_STEP)
+        noWorse("the October-March half's largest row step", winter, MAIN_WINTER_STEP)
         noWorse("the desert's straightest edge along a row", desertEdge, MAIN_DESERT_ROW_EDGE_KM)
         noWorse("the 250 mm isohyet's straightest edge along a row", dryEdge, MAIN_DRY_ROW_EDGE_KM)
     }

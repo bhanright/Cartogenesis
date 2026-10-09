@@ -138,7 +138,7 @@ class MoistureClosureTest : BorrowsSharedWorlds() {
             val (_, ledger) = ledgerFor(seed)
             ledger.laps.filter { it.lap == ledger.lapsRun - 1 }.forEach { lap ->
                 val share = abs(lap.storageAtEnd - lap.storageAtStart) / lap.sources
-                println("STEADY seed %d %s half: the last lap's storage changed by %.2e of its sources".format(seed, if (lap.warm) "warm" else "cold", share))
+                println("STEADY seed %d %s half: the last lap's storage changed by %.2e of its sources".format(seed, if (lap.julyHalf) "April-September" else "October-March", share))
                 worst = maxOf(worst, share)
             }
         }
@@ -225,8 +225,7 @@ class MoistureClosureTest : BorrowsSharedWorlds() {
     fun `a world with no source rains its water out and nothing more`() {
         val config = WorldGenConfig.forRows(1L, SYNTHETIC_ROWS)
         val cells = config.width * config.height
-        fun season(warm: Boolean) = MoistureMarch.Season(
-            warm = warm,
+        fun season() = MoistureMarch.Season(
             airTemperatureC = FloatArray(cells) { -20f },
             seaSurfaceC = FloatArray(cells) { -1.8f },
             seaIce = BooleanArray(cells) { true },
@@ -243,14 +242,14 @@ class MoistureClosureTest : BorrowsSharedWorlds() {
                 isLand = BooleanArray(cells),
                 relativeElevation = FloatArray(cells) { -0.5f },
                 elevationM = FloatArray(cells),
-                warm = season(true),
-                cold = season(false),
+                julyHalf = season(),
+                januaryHalf = season(),
                 lidElevation = 0f,
                 blurSigmaKm = 0.0
             ),
             ledger
         )
-        assertTrue(result.warmRainMm.data.all { it.isFinite() && it >= 0f }, "the rain is not finite and positive")
+        assertTrue(result.julyHalfRainMm.data.all { it.isFinite() && it >= 0f }, "the rain is not finite and positive")
         ledger.laps.forEach { lap ->
             assertEquals(0.0, lap.sources, 0.0, "a world with no source evaporated something")
             assertTrue(lap.storageAtEnd <= lap.storageAtStart, "lap ${lap.lap}: the storage grew with no source")

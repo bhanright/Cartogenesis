@@ -54,7 +54,7 @@ class PressureWindIceTest {
         /**
          * What a rainfall field of 1.0 means in millimetres.
          *
-         * `ClimateResult.summerPrecipitation` and `winterPrecipitation` are the 0..1 copies, so
+         * `ClimateResult.julyHalfPrecipitation` and `januaryHalfPrecipitation` are the 0..1 copies, so
          * this recovers their millimetres. They clamp at 1, which is 1,200 mm — far above anything
          * a polar cap receives, so the recovery is exact everywhere this report looks, and the
          * pooled figures over all land carry the clamp and are labelled as such.
@@ -79,15 +79,11 @@ class PressureWindIceTest {
             "polar south" to { latitude: Float -> latitude < -POLAR_EDGE_DEGREES },
             "mountain" to { latitude: Float -> abs(latitude) <= POLAR_EDGE_DEGREES }
         )
-        val warmOn = ClimateStage.halfYearTemperature(
-            on.config, on.sea, on.climate.temperature, Season.WARM_HALF
-        )
-        val warmOff = ClimateStage.halfYearTemperature(
-            off.config, off.sea, off.climate.temperature, Season.WARM_HALF
-        )
+        val warmOn = LocalSeasons(on)
+        val warmOff = LocalSeasons(off)
         caps.forEach { (name, inCap) ->
-            val measuredOn = capMeasure(on, warmOn.data, inCap)
-            val measuredOff = capMeasure(off, warmOff.data, inCap)
+            val measuredOn = capMeasure(on, warmOn, inCap)
+            val measuredOff = capMeasure(off, warmOff, inCap)
             println(
                 ("ICE CAP seed %d %s: ice %d -> %d cells; over the cap's own land, cold-half " +
                     "rain %.0f -> %.0f mm, warm-half rain %.0f -> %.0f mm, warm-half temperature " +
@@ -98,10 +94,10 @@ class PressureWindIceTest {
                         measuredOff.coldRainMm, measuredOn.coldRainMm,
                         measuredOff.warmRainMm, measuredOn.warmRainMm,
                         measuredOff.warmTemperatureC, measuredOn.warmTemperatureC,
-                        meanOver(off, warmOff.data, measuredOff.frozen).coldRainMm,
-                        meanOver(on, warmOn.data, measuredOff.frozen).coldRainMm,
-                        meanOver(off, warmOff.data, measuredOff.frozen).warmTemperatureC,
-                        meanOver(on, warmOn.data, measuredOff.frozen).warmTemperatureC
+                        meanOver(warmOff, measuredOff.frozen).coldRainMm,
+                        meanOver(warmOn, measuredOff.frozen).coldRainMm,
+                        meanOver(warmOff, measuredOff.frozen).warmTemperatureC,
+                        meanOver(warmOn, measuredOff.frozen).warmTemperatureC
                     )
             )
         }
@@ -114,8 +110,13 @@ class PressureWindIceTest {
     private fun reportBands(seed: Long, on: WorldMap, off: WorldMap) {
         val cellsAcross = on.width
         val cellsDown = on.height
-        val summerWind = ClimateStage.seasonalSurfaceWindMps(
-            on.config, on.sea, on.climate.temperature, Season.WARM_HALF
+        // Each band's own summer: the calendar half about July north of the equator, about January
+        // south of it.
+        val julyHalfWind = ClimateStage.seasonalSurfaceWindMps(
+            on.config, on.sea, on.climate.temperature, Season.JULY_HALF
+        )
+        val januaryHalfWind = ClimateStage.seasonalSurfaceWindMps(
+            on.config, on.sea, on.climate.temperature, Season.JANUARY_HALF
         )
         val cellWidthOverHeight = (on.config.scale.cellWidthKm(cellsAcross) /
             on.config.scale.cellHeightKm(cellsDown)).toFloat()
@@ -134,6 +135,7 @@ class PressureWindIceTest {
             for (row in 0 until cellsDown) {
                 val latitude = ClimateStage.latitudeOf(row, cellsDown)
                 if (latitude <= band || latitude > top) continue
+                val summerWind = if (latitude > 0f) julyHalfWind else januaryHalfWind
                 for (column in 0 until cellsAcross) {
                     val cell = row * cellsAcross + column
                     rainOn += on.climate.precipitationMm.data[cell]
@@ -177,9 +179,29 @@ class PressureWindIceTest {
         val frozen: BooleanArray
     )
 
+    /**
+     * Each cell's own warm and cold half-year: the warmer and the cooler of the calendar's two
+     * (Peel, Finlayson and McMahon 2007), its temperature and its rain in millimetres.
+     */
+    private class LocalSeasons(world: WorldMap) {
+        private val julyC = ClimateStage.halfYearTemperature(
+            world.config, world.sea, world.climate.temperature, Season.JULY_HALF
+        ).data
+        private val januaryC = ClimateStage.halfYearTemperature(
+            world.config, world.sea, world.climate.temperature, Season.JANUARY_HALF
+        ).data
+        private val julyRain = world.climate.julyHalfPrecipitation.data
+        private val januaryRain = world.climate.januaryHalfPrecipitation.data
+
+        private fun julyIsWarm(cell: Int) = ClimateStage.localSummerIsJulyHalf(julyC[cell], januaryC[cell])
+        fun warmC(cell: Int): Float = if (julyIsWarm(cell)) julyC[cell] else januaryC[cell]
+        fun warmRainMm(cell: Int): Float = (if (julyIsWarm(cell)) julyRain[cell] else januaryRain[cell]) * REFERENCE_MM
+        fun coldRainMm(cell: Int): Float = (if (julyIsWarm(cell)) januaryRain[cell] else julyRain[cell]) * REFERENCE_MM
+    }
+
     private fun capMeasure(
         world: WorldMap,
-        warmTemperatureC: FloatArray,
+        seasons: LocalSeasons,
         inCap: (Float) -> Boolean
     ): CapMeasure {
         val cellsAcross = world.width
@@ -194,9 +216,9 @@ class PressureWindIceTest {
             if (!world.sea.isLand[cell]) continue
             if (!inCap(ClimateStage.latitudeOf(cell / cellsAcross, cellsDown))) continue
             landCells++
-            coldRain += world.climate.winterPrecipitation.data[cell] * REFERENCE_MM
-            warmRain += world.climate.summerPrecipitation.data[cell] * REFERENCE_MM
-            warmC += warmTemperatureC[cell]
+            coldRain += seasons.coldRainMm(cell)
+            warmRain += seasons.warmRainMm(cell)
+            warmC += seasons.warmC(cell)
             if (world.climate.biome[cell] == Biome.ICE_SHEET) {
                 iceCells++
                 frozen[cell] = true
@@ -210,8 +232,7 @@ class PressureWindIceTest {
 
     /** The same two inputs over a fixed set of cells, so both worlds are read on one ground. */
     private fun meanOver(
-        world: WorldMap,
-        warmTemperatureC: FloatArray,
+        seasons: LocalSeasons,
         cells: BooleanArray
     ): CapMeasure {
         var coldRain = 0.0
@@ -221,9 +242,9 @@ class PressureWindIceTest {
         for (cell in cells.indices) {
             if (!cells[cell]) continue
             counted++
-            coldRain += world.climate.winterPrecipitation.data[cell] * REFERENCE_MM
-            warmRain += world.climate.summerPrecipitation.data[cell] * REFERENCE_MM
-            warmC += warmTemperatureC[cell]
+            coldRain += seasons.coldRainMm(cell)
+            warmRain += seasons.warmRainMm(cell)
+            warmC += seasons.warmC(cell)
         }
         if (counted == 0) return CapMeasure(0, 0.0, 0.0, 0.0, cells)
         return CapMeasure(0, coldRain / counted, warmRain / counted, warmC / counted, cells)

@@ -78,7 +78,8 @@ internal object SurfaceEvaporation {
     /**
      * The half-year's mean extraterrestrial radiation on a horizontal surface at
      * [latitudeDegrees], in megajoules per square meter per day: FAO-56's Eq. 21 to 25 averaged
-     * over the half of the year whose sun is that hemisphere's (the warm half when [warm]).
+     * over one of the calendar's half-years, April to September when [julyHalf] and October to
+     * March otherwise ([EnergyBalance.APRIL_FIRST_STEP]), the windows the march's two seasons are.
      *
      * The orbit is circular and the solar constant is the energy balance's, so the sun that sets
      * the potential evaporation is the sun that set the temperature: FAO-56's inverse distance
@@ -88,7 +89,7 @@ internal object SurfaceEvaporation {
     fun halfYearExtraterrestrialMjPerM2Day(
         latitudeDegrees: Double,
         obliquityDegrees: Double,
-        warm: Boolean
+        julyHalf: Boolean
     ): Double {
         val latitudeRadians = latitudeDegrees * PI / 180.0
         val obliquityRadians = obliquityDegrees * PI / 180.0
@@ -96,11 +97,10 @@ internal object SurfaceEvaporation {
         var days = 0
         for (step in 0 until DAYS_PER_YEAR) {
             // Step zero is the northern spring equinox, as in the energy balance.
-            val orbitRadians = 2.0 * PI * (step + 0.5) / DAYS_PER_YEAR
+            val fractionOfYear = (step + 0.5) / DAYS_PER_YEAR
+            if (EnergyBalance.inJulyHalf(fractionOfYear) != julyHalf) continue
+            val orbitRadians = 2.0 * PI * fractionOfYear
             val declination = asin(sin(obliquityRadians) * sin(orbitRadians))
-            // The half-year whose sun is this hemisphere's: the declination on the latitude's side.
-            val hemisphereSummer = if (latitudeDegrees >= 0.0) declination >= 0.0 else declination <= 0.0
-            if (hemisphereSummer != warm && obliquityDegrees != 0.0) continue
             val sunsetCosine = -tan(latitudeRadians) * tan(declination)
             val sunsetHourAngle = when {
                 sunsetCosine <= -1.0 -> PI

@@ -145,7 +145,8 @@ object SnowBalance {
      *
      * Positive means the cell keeps snow through the year, which is a glacier. The seasonal
      * rainfall arguments are in the moisture march's annual-equivalent millimetres, as
-     * [ClimateResult.precipitationMm]'s two halves are.
+     * [ClimateResult.precipitationMm]'s two halves are. The two halves may come in either order,
+     * a place's own summer and winter or the calendar's two halves: the sum is symmetric in them.
      */
     fun balanceMm(
         summerC: Float,
@@ -172,23 +173,23 @@ object SnowBalance {
      */
     fun field(
         isLand: BooleanArray,
-        summerTemperature: FloatField,
-        winterTemperature: FloatField,
-        summerPrecipitationMm: FloatField,
-        winterPrecipitationMm: FloatField
+        julyHalfTemperature: FloatField,
+        januaryHalfTemperature: FloatField,
+        julyHalfPrecipitationMm: FloatField,
+        januaryHalfPrecipitationMm: FloatField
     ): FloatField {
-        val cellsAcross = summerTemperature.width
-        val cellsDown = summerTemperature.height
+        val cellsAcross = julyHalfTemperature.width
+        val cellsDown = julyHalfTemperature.height
         val balance = FloatField(cellsAcross, cellsDown)
         parallelChunks(0, cellsDown) { startRow, endRow ->
             for (row in startRow until endRow) {
                 for (cell in row * cellsAcross until (row + 1) * cellsAcross) {
                     if (!isLand[cell]) continue
                     balance.data[cell] = balanceMm(
-                        summerTemperature.data[cell],
-                        winterTemperature.data[cell],
-                        summerPrecipitationMm.data[cell],
-                        winterPrecipitationMm.data[cell]
+                        julyHalfTemperature.data[cell],
+                        januaryHalfTemperature.data[cell],
+                        julyHalfPrecipitationMm.data[cell],
+                        januaryHalfPrecipitationMm.data[cell]
                     )
                 }
             }
@@ -267,9 +268,9 @@ interface SnowBalanceAccelerator {
     suspend fun balance(
         width: Int,
         height: Int,
-        summerTemperature: FloatArray,
-        winterTemperature: FloatArray,
-        summerPrecipitationMm: FloatArray,
-        winterPrecipitationMm: FloatArray
+        julyHalfTemperature: FloatArray,
+        januaryHalfTemperature: FloatArray,
+        julyHalfPrecipitationMm: FloatArray,
+        januaryHalfPrecipitationMm: FloatArray
     ): FloatArray?
 }

@@ -130,6 +130,14 @@ object WorldCodec {
     /**
      * The only version this build reads or writes.
      *
+     * 24 because the climate's seasons became the calendar's: `climate.summerPrecipitation` and
+     * `climate.winterPrecipitation` became `climate.julyHalfPrecipitation` and
+     * `climate.januaryHalfPrecipitation`, the rain of April to September and of October to March,
+     * the two sea-ice masks became `climate.julyHalfSeaIce` and `climate.januaryHalfSeaIce`, and the
+     * climate gained `climate.julyTemperature` and `climate.januaryTemperature`. A format-23 file's
+     * "summer" was each hemisphere's own, so its masks and its seasonal rain would mean something
+     * else here.
+     *
      * 23 because the moisture march began carrying water in kilograms per square meter and closing
      * its budget: `climate.depletionLengthKm`, `climate.oceanEvaporationLengthKm`,
      * `climate.evapotranspirationLengthKm`, `climate.currentMoisture` and
@@ -299,7 +307,7 @@ object WorldCodec {
      * every cell-valued name took a `Cells` suffix. 3 was the container below with none of that, 2
      * the JSON text that preceded it; none of them opens.
      */
-    const val FORMAT_VERSION = 23
+    const val FORMAT_VERSION = 24
 
     private val MAGIC = byteArrayOf('C'.code.toByte(), 'G'.code.toByte(), 'W'.code.toByte(), 'D'.code.toByte())
 

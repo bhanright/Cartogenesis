@@ -504,7 +504,11 @@ class PressureWindTest : BorrowsSharedWorlds() {
         return best
     }
 
-    /** The mean onshore wind on a continent's equatorward and eastern coasts, in each season. */
+    /**
+     * The mean onshore wind on a continent's equatorward and eastern coasts, in each season: each
+     * coast's own summer, the calendar half about July north of the equator and about January south
+     * of it, which on a subtropical coast is the warmer half by a wide margin.
+     */
     private class Onshore(
         val summerOnshoreMps: Double,
         val winterOnshoreMps: Double,
@@ -512,11 +516,11 @@ class PressureWindTest : BorrowsSharedWorlds() {
     )
 
     private fun onshoreFlow(world: WorldMap, continent: Continent): Onshore {
-        val summer = ClimateStage.seasonalSurfaceWindMps(
-            world.config, world.sea, world.climate.temperature, Season.WARM_HALF
+        val julyHalf = ClimateStage.seasonalSurfaceWindMps(
+            world.config, world.sea, world.climate.temperature, Season.JULY_HALF
         )
-        val winter = ClimateStage.seasonalSurfaceWindMps(
-            world.config, world.sea, world.climate.temperature, Season.COLD_HALF
+        val januaryHalf = ClimateStage.seasonalSurfaceWindMps(
+            world.config, world.sea, world.climate.temperature, Season.JANUARY_HALF
         )
         val cellsAcross = world.width
         val cellsDown = world.height
@@ -553,6 +557,8 @@ class PressureWindTest : BorrowsSharedWorlds() {
             // to the east. A coast that is both counts once.
             val latitude = ClimateStage.latitudeOf(cell / cellsAcross, cellsDown)
             val equatorwardSouth = if (latitude > 0f) 1f else -1f
+            val summer = if (latitude > 0f) julyHalf else januaryHalf
+            val winter = if (latitude > 0f) januaryHalf else julyHalf
             val facesEquator = outwardSouth * equatorwardSouth > 0f
             val facesEast = outwardEast > 0f
             if (!facesEquator && !facesEast) continue
@@ -626,7 +632,8 @@ class PressureWindTest : BorrowsSharedWorlds() {
                 if (latitude <= 0f) break
                 val cell = row * cellsAcross + column
                 if (world.sea.isLand[cell]) continue
-                if (world.climate.winterSeaIce[cell]) continue
+                // The northern winter is the calendar's half about January.
+                if (world.climate.januaryHalfSeaIce[cell]) continue
                 // The first open water met walking equatorward from the pole is the edge, and the
                 // walk stops there: the ice edge is the poleward limit of the open sea.
                 edgeLatitude = latitude.toDouble()
@@ -635,7 +642,7 @@ class PressureWindTest : BorrowsSharedWorlds() {
             // Only columns whose ice actually reaches somewhere count.
             val hasIce = (0 until cellsDown).any { row ->
                 ClimateStage.latitudeOf(row, cellsDown) > 0f &&
-                    world.climate.winterSeaIce[row * cellsAcross + column]
+                    world.climate.januaryHalfSeaIce[row * cellsAcross + column]
             }
             if (hasIce && edgeLatitude != null) edges.add(edgeLatitude)
         }

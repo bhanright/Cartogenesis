@@ -115,6 +115,6 @@ class DesertCauseTest {
      * diagnostic, since the misplaced deserts were diagnosed against it.
      */
     private fun bandFactor(lat: Float, config: WorldGenConfig): Float =
-        (ClimateStage.seasonalBand(lat, config.climate, warm = true) +
-            ClimateStage.seasonalBand(lat, config.climate, warm = false)) * 0.5f
+        (ClimateStage.seasonalBand(lat, config.climate, julyHalf = true) +
+            ClimateStage.seasonalBand(lat, config.climate, julyHalf = false)) * 0.5f
 }

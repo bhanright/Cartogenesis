@@ -100,8 +100,8 @@ class RainAgainstEarthTest : BorrowsSharedWorlds() {
 
     private fun figuresOf(world: WorldMap, ledger: MoistureLedger): Figures {
         val figures = Figures()
-        val warm = ledger.warmHalf!!
-        val cold = ledger.coldHalf!!
+        val julyHalf = ledger.julyHalf!!
+        val januaryHalf = ledger.januaryHalf!!
         val rain = world.climate.precipitationMm.data
         for (row in 0 until world.height) {
             val area = cos(ClimateStage.latitudeOf(row, world.height) * PI / 180.0)
@@ -109,17 +109,17 @@ class RainAgainstEarthTest : BorrowsSharedWorlds() {
                 val cell = row * world.width + column
                 figures.allArea += area
                 figures.allRain += area * rain[cell]
-                figures.columnWater += area * (warm.columnWater.data[cell] + cold.columnWater.data[cell]) * 0.5
+                figures.columnWater += area * (julyHalf.columnWater.data[cell] + januaryHalf.columnWater.data[cell]) * 0.5
                 if (world.sea.isLand[cell]) {
                     figures.landArea += area
                     figures.landRain += area * rain[cell]
-                    figures.landReturn += area * (warm.groundReturn.data[cell] + cold.groundReturn.data[cell]) * 0.5
+                    figures.landReturn += area * (julyHalf.groundReturn.data[cell] + januaryHalf.groundReturn.data[cell]) * 0.5
                     if (world.climate.biome[cell] == Biome.DESERT) figures.desert += area
                     if (world.climate.biome[cell] == Biome.ICE_SHEET) figures.ice += area
                 } else {
                     figures.seaArea += area
                     figures.seaRain += area * rain[cell]
-                    figures.seaEvaporation += area * (warm.seaEvaporation.data[cell] + cold.seaEvaporation.data[cell]) * 0.5
+                    figures.seaEvaporation += area * (julyHalf.seaEvaporation.data[cell] + januaryHalf.seaEvaporation.data[cell]) * 0.5
                 }
             }
         }

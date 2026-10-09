@@ -80,16 +80,15 @@ object MoistureBudget {
      * parcel crossing it.
      *
      * [seaSurfaceAnomalyC] is the current stage's departure from the latitude mean, and
-     * [tiltDegrees] with [warm] place the stratus belt in this season the same way the rain belts
-     * are placed. Returns null when `ClimateConfig.marineInversion` is off or the ocean stage is,
+     * [thermalEquatorDegrees], the latitude the season's thermal equator stands at, places the
+     * stratus belt the same way the rain belts are placed. Returns null when `ClimateConfig.marineInversion` is off or the ocean stage is,
      * so the march runs without the term rather than with a zero one.
      */
     internal fun inversionSuppression(
         config: WorldGenConfig,
         sea: SeaLevelResult,
         seaSurfaceAnomalyC: FloatField?,
-        tiltDegrees: Float,
-        warm: Boolean
+        thermalEquatorDegrees: Float
     ): FloatField? {
         if (seaSurfaceAnomalyC == null) return null
         val cellsAcross = config.width
@@ -101,11 +100,7 @@ object MoistureBudget {
         parallelChunks(0, cellsDown) { startRow, endRow ->
             for (row in startRow until endRow) {
                 val latitude = ClimateStage.latitudeOf(row, cellsDown)
-                val fromThermalEquator = if (warm) {
-                    abs(abs(latitude) - tiltDegrees)
-                } else {
-                    abs(latitude) + tiltDegrees
-                }
+                val fromThermalEquator = abs(latitude - thermalEquatorDegrees)
                 val inBelt = stratusBelt(fromThermalEquator)
                 if (inBelt <= 0f) continue
 

@@ -2011,9 +2011,9 @@ data class ClimateConfig(
      * Whether the sea freezes.
      *
      * On, a water cell whose sea surface sits at or below the freezing point of sea water in a
-     * season is under ice for that season
-     * ([com.cartogenesis.worldgen.pipeline.ClimateResult.summerSeaIce]), the moisture march takes
-     * nothing at all from it, and the warm season's mask is what the biome draws as pack ice.
+     * half-year is under ice for that half
+     * ([com.cartogenesis.worldgen.pipeline.ClimateResult.julyHalfSeaIce]), the moisture march takes
+     * nothing at all from it, and what is frozen in both halves is what the biome draws as pack ice.
      *
      * Off leaves the polar ocean evaporating as freely as the tropics do, which is the world before
      * W1 and is the control its guard needs. It is not a plausible world: an ocean under a metre of

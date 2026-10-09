@@ -57,14 +57,16 @@ internal object HandMadeWorlds {
             temperature = field { x, y -> (summerC(x, y) + winterC(x, y)) / 2f },
             summerTemperature = summer,
             winterTemperature = winter,
+            julyTemperature = summer,
+            januaryTemperature = winter,
             precipitation = field { x, y -> (rainMm(x, y) / ClimateStage.REFERENCE_MM).coerceIn(0f, 1f) },
-            summerPrecipitation = field { x, y -> (rainMm(x, y) / 2f / ClimateStage.REFERENCE_MM).coerceIn(0f, 1f) },
-            winterPrecipitation = field { x, y -> (rainMm(x, y) / 2f / ClimateStage.REFERENCE_MM).coerceIn(0f, 1f) },
+            julyHalfPrecipitation = field { x, y -> (rainMm(x, y) / 2f / ClimateStage.REFERENCE_MM).coerceIn(0f, 1f) },
+            januaryHalfPrecipitation = field { x, y -> (rainMm(x, y) / 2f / ClimateStage.REFERENCE_MM).coerceIn(0f, 1f) },
             precipitationMm = precipitationMm,
             windDirection = IntArray(cellCount) { 1 },
             windMeridional = FloatField(cellsAcross, config.height),
-            summerSeaIce = BooleanArray(cellCount),
-            winterSeaIce = BooleanArray(cellCount),
+            julyHalfSeaIce = BooleanArray(cellCount),
+            januaryHalfSeaIce = BooleanArray(cellCount),
             biome = Array(cellCount) { Biome.GRASSLAND },
             vegetationDensity = FloatField(cellsAcross, config.height),
             permafrost = ByteArray(cellCount),
@@ -80,8 +82,8 @@ internal object HandMadeWorlds {
      * read a humidity off, so it states one; the figure is the world's own, as the climate's is.
      */
     fun referenceYearMm(summerC: Float, winterC: Float, open: Boolean): Float {
-        fun half(temperatureC: Float, warm: Boolean): Double {
-            val sun = SurfaceEvaporation.halfYearExtraterrestrialMjPerM2Day(HAND_MADE_LATITUDE, EARTH_OBLIQUITY, warm)
+        fun half(temperatureC: Float, julyHalf: Boolean): Double {
+            val sun = SurfaceEvaporation.halfYearExtraterrestrialMjPerM2Day(HAND_MADE_LATITUDE, EARTH_OBLIQUITY, julyHalf)
             val vapor = HAND_MADE_HUMIDITY * ColumnWater.saturationVaporPressureKpa(temperatureC.toDouble())
             return if (open) {
                 SurfaceEvaporation.openWaterEvaporationMmPerDay(temperatureC.toDouble(), vapor, sun, 0.0)

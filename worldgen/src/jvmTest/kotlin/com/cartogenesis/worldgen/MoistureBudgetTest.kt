@@ -402,10 +402,11 @@ class MoistureBudgetTest : BorrowsSharedWorlds() {
             0f
         }
         var strongest = 0f
-        listOf(true, false).forEach { warm ->
+        listOf(true, false).forEach { julyHalf ->
             val field = MoistureBudget.inversionSuppression(
                 world.config, world.sea,
-                if (world.config.ocean.enabled) world.ocean.anomaly else null, tilt, warm
+                if (world.config.ocean.enabled) world.ocean.anomaly else null,
+                ClimateStage.thermalEquatorDegrees(tilt, julyHalf)
             ) ?: return@forEach
             var sum = 0.0
             var peak = 0f
@@ -422,7 +423,7 @@ class MoistureBudgetTest : BorrowsSharedWorlds() {
                 ("LID seed %d %s: strength over the coast's own cells mean %.3f, peak %.3f; " +
                     "%d of %d of those cells already stand above the %.0f m lid")
                     .format(
-                        seed, if (warm) "warm" else "cold", sum / coast.cells.size, peak,
+                        seed, if (julyHalf) "April-September" else "October-March", sum / coast.cells.size, peak,
                         aboveLid, coast.cells.size, MoistureBudget.INVERSION_LID_METRES
                     )
             )

@@ -7,6 +7,7 @@ import com.cartogenesis.worldgen.model.WildernessMode
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.Biome
+import com.cartogenesis.worldgen.pipeline.ClimateStage
 import com.cartogenesis.worldgen.pipeline.PlateStage
 import com.cartogenesis.worldgen.pipeline.TerrainStage
 import java.awt.BasicStroke
@@ -1153,19 +1154,23 @@ class DebugMapDump {
                     // and the sea beside it were the same colour, which is precisely the thing
                     // these two maps exist to let you tell apart.
                     Mode.SUMMER_RAINFALL ->
-                        if (land) grad(world.climate.summerPrecipitation.data[i], 0xE8D9A8, 0x1F4E79)
+                        if (land) grad(world.climate.julyHalfPrecipitation.data[i], 0xE8D9A8, 0x1F4E79)
                         else 0x000000
 
                     Mode.WINTER_RAINFALL ->
-                        if (land) grad(world.climate.winterPrecipitation.data[i], 0xE8D9A8, 0x1F4E79)
+                        if (land) grad(world.climate.januaryHalfPrecipitation.data[i], 0xE8D9A8, 0x1F4E79)
                         else 0x000000
 
                     // Which half of the year the rain arrives in, rather than how much of it
                     // there is: red where the warm half dominates, blue where the cold half does.
                     // A monsoon coast is a red band with the sea on its equatorward side.
                     Mode.SEASON_CONTRAST -> if (!land) 0x000000 else {
-                        val summer = world.climate.summerPrecipitation.data[i]
-                        val winter = world.climate.winterPrecipitation.data[i]
+                        // Each hemisphere's own warm half of the calendar's two.
+                        val north = ClimateStage.latitudeOf(i / world.width, world.height) > 0f
+                        val julyHalf = world.climate.julyHalfPrecipitation.data[i]
+                        val januaryHalf = world.climate.januaryHalfPrecipitation.data[i]
+                        val summer = if (north) julyHalf else januaryHalf
+                        val winter = if (north) januaryHalf else julyHalf
                         val lopsided = kotlin.math.ln(
                             ((summer + 0.02f) / (winter + 0.02f)).toDouble()
                         ).toFloat() / kotlin.math.ln(3.0).toFloat()
@@ -1178,13 +1183,13 @@ class DebugMapDump {
 
                     Mode.SUMMER_TEMPERATURE ->
                         grad(
-                            ((world.climate.summerTemperature.data[i] + 30f) / 70f).coerceIn(0f, 1f),
+                            ((world.climate.julyTemperature.data[i] + 30f) / 70f).coerceIn(0f, 1f),
                             0x3B4CC0, 0xB40426
                         )
 
                     Mode.WINTER_TEMPERATURE ->
                         grad(
-                            ((world.climate.winterTemperature.data[i] + 30f) / 70f).coerceIn(0f, 1f),
+                            ((world.climate.januaryTemperature.data[i] + 30f) / 70f).coerceIn(0f, 1f),
                             0x3B4CC0, 0xB40426
                         )
 

@@ -267,12 +267,7 @@ class RealmSpreadTest : BorrowsSharedWorlds() {
         val median = sizes[sizes.size / 2].toDouble()
         val spread = sizes.first() / median.coerceAtLeast(1.0)
         println("SIZES $sizes (largest/median %.1f)".format(spread))
-        // Recorded at A1-1, whose calendar seasons moved seed 42's land and its habitability and
-        // left its largest realm 2.1 times its median (docs/TODO.md).
-        val signature = "largest/median %.2f".format(spread)
-        KnownFailures.expect("A1-1: seed 42's realms stand close in size", "largest/median 2.06") {
-            if (spread < 3.0) throw RecordedViolation("realm sizes are too uniform: $signature", signature)
-        }
+        assertTrue(spread >= 3.0, "realm sizes are too uniform: largest/median $spread")
     }
 
     private companion object {

@@ -77,12 +77,12 @@ class OceanLeavesTheGroundTest : BorrowsSharedWorlds() {
             "plates.continentalShare" to 5707884443378334786L,
             "plates.upliftRateMmPerYear" to -1700415688480725156L,
             "plates.crustAge" to 8840618518047909851L,
-            "erosion.height" to -4033662174162807779L,
+            "erosion.height" to 2930612244039184731L,
             "erosion.sweptOnDevice" to -358906410940142731L,
-            "sea.shorelineHeight" to 5032772416166312320L,
-            "sea.isLand" to -8661269100029397005L,
-            "sea.relativeElevation" to -6695848492929497819L,
-            "sea.landCellCount" to -6987157067374052816L
+            "sea.shorelineHeight" to -8666624348893664897L,
+            "sea.isLand" to -6136183961975964843L,
+            "sea.relativeElevation" to -3170208218106769422L,
+            "sea.landCellCount" to 58872202534487179L
         )
     }
 }

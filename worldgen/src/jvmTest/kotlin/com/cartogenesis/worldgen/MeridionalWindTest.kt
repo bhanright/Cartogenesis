@@ -261,7 +261,7 @@ class MeridionalWindTest : BorrowsSharedWorlds() {
         // Recorded at C1b2: the climb's condensate reads the wind's whole vector and the column's
         // saturated share, and the slant alone no longer wets the windward side of an east-west
         // ridge (docs/TODO.md, "The march's misses against Earth, after C1b2").
-        KnownFailures.expect("C1b2: the slant does not wet an east-west ridge's windward side", "-0.0468 against -0.0421") {
+        KnownFailures.expect("C1b2: the slant does not wet an east-west ridge's windward side", "-0.0465 against -0.0407") {
             if (climbedAll <= descendedAll) {
                 throw RecordedViolation(
                     "the slant did not wet meridional windward slopes relative to lee ones over the three " +

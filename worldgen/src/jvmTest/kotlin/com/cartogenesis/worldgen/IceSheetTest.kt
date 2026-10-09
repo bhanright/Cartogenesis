@@ -68,7 +68,7 @@ class IceSheetTest : BorrowsSharedWorlds() {
         // Recorded at C1b: the march that closes its budget snows on the polar land where the old one
         // dropped the cold cap's water, and the sheets it feeds stand thicker than Earth's. The ice
         // is measured and not fixed in C1b (docs/TODO.md, "The ice after C1b").
-        KnownFailures.expect("C1b: the sheets the conserving march feeds stand thicker than Earth's", "seed 718106 stands 5803; seed 59758 stands 6494; seed 7 stands 6062; seed 42 stands 5640") {
+        KnownFailures.expect("C1b: the sheets the conserving march feeds stand thicker than Earth's", "seed 718106 stands 5260; seed 59758 stands 6576; seed 7 stands 6545; seed 42 stands 5700") {
             if (failures.isNotEmpty()) {
                 throw RecordedViolation(
                     "the sheets are outside the envelope Earth's two sit in:\n" + failures.joinToString("\n"),
@@ -213,15 +213,10 @@ class IceSheetTest : BorrowsSharedWorlds() {
         // Recorded at C1b2: Vialov's dome is flat across its top, where Nye's rose as a root to the
         // last, so near the divide of the reported world at 1,024 rows the surface's fall is the
         // margins' datums and the bed showing through more than the profile (docs/TODO.md, "The
-        // ice after C1b2").
-        KnownFailures.expect("C1b2: the reported world's flow near its flat dome", "seed 878210 64.0% at 73.4") {
-            if (failures.isNotEmpty()) {
-                throw RecordedViolation(
-                    "the sheet is not flowing down its own surface:\n" + failures.joinToString("\n"),
-                    failures.joinToString("; ") { it.substringBefore(":") + " " + it.substringAfter(": ").substringBefore("% of") + "% at " + it.substringAfter("mean ").substringBefore(" degrees") }
-                )
-            }
-        }
+        // ice after C1b2"). Armed at A1-1, and not because the flow mended: the reported world's
+        // sheet fills 159 cells of its 2,051-cell disc, under the third the clause reads, and the
+        // two seeds it reads, 42 and [DOME_SEED], flow outward (docs/TODO.md, "The ice after A1-1").
+        assertTrue("the sheet is not flowing down its own surface:" + "\n" + failures.joinToString("\n"), failures.isEmpty())
     }
 
     /**

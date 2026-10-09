@@ -402,7 +402,7 @@ class SnowBalanceTest : BorrowsSharedWorlds() {
         // 8.2 to 9.3% of the land of seeds 42, 969495 and 7 at 1,024 rows against Earth's 10.1
         // (docs/TODO.md, "The ice after A1-1").
         val signature = "%.2f%%".format(shareOn)
-        KnownFailures.expect("A1-1: the ice covers more than twice Earth's share of the land's cells", "24.54%") {
+        KnownFailures.expect("A1-1: the ice covers more than twice Earth's share of the land's cells", "24.46%") {
             if (shareOn > EARTH_ICE_SHARE * 2) {
                 throw RecordedViolation("ice covers $signature of land, more than twice Earth's ${EARTH_ICE_SHARE}%", signature)
             }
@@ -480,7 +480,7 @@ class SnowBalanceTest : BorrowsSharedWorlds() {
             shareOff > 25.0
         )
         // Recorded at C1b, for the same snow (docs/TODO.md, "The ice after C1b").
-        KnownFailures.expect("C1b: some of the cold dry interior is ice under the conserving march's snow", "3.3%") {
+        KnownFailures.expect("C1b: some of the cold dry interior is ice under the conserving march's snow", "3.4%") {
             if (shareOn >= 2.0) {
                 throw RecordedViolation(
                     "${"%.1f".format(shareOn)}% of the cold dry interior is still ice sheet",

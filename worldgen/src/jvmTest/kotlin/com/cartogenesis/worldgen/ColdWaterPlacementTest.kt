@@ -114,7 +114,7 @@ class ColdWaterPlacementTest : BorrowsSharedWorlds() {
             }
         }
         // Re-recorded at L1, whose rifts are Earth's half-grabens and the same at every grid (docs/DESIGN_LEDGER.md, L1).
-        KnownFailures.expect(TONGUE_REACHES_THE_EASTERN_BOUNDARY, "seed 7: the coldest eastern-boundary water, -1.83 C, lies at 4.4 degrees; seed 7: the coldest eastern-boundary water, -1.92 C, lies at -44.8 degrees; seed 1234: the coldest eastern-boundary water, -1.63 C, lies at -4.4 degrees; seed 99: the coldest eastern-boundary water, -1.50 C, lies at -4.4 degrees") {
+        KnownFailures.expect(TONGUE_REACHES_THE_EASTERN_BOUNDARY, "seed 7: the coldest eastern-boundary water, -1.83 C, lies at 4.4 degrees; seed 7: the coldest eastern-boundary water, -1.93 C, lies at -44.8 degrees; seed 1234: the coldest eastern-boundary water, -1.59 C, lies at -4.4 degrees; seed 99: the coldest eastern-boundary water, -1.50 C, lies at -4.4 degrees") {
             if (failures.isNotEmpty()) throw RecordedViolation(failures.joinToString("\n"), failures.joinToString("; "))
         }
     }

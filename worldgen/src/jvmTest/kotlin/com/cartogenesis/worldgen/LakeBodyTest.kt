@@ -73,10 +73,9 @@ class LakeBodyTest : BorrowsSharedWorlds() {
             if (touching.isNotEmpty()) failures += "seed $seed: lakes at two levels touching ${touching.take(6)}"
         }
         // Recorded at C1b2: the march's new rain left two lakes of two pieces each, a lake rule
-        // the rain only exposed (docs/TODO.md, "A lake in two pieces").
-        KnownFailures.expect("C1b2: a lake in two pieces", "[seed 1234: [lake 94 in 2 pieces]]") {
-            if (failures.isNotEmpty()) throw RecordedViolation("a body of water holds more than one level: $failures", failures.toString())
-        }
+        // the rain only exposed; armed at A1-1, whose ground leaves none (docs/DESIGN_LEDGER.md,
+        // C1b2 and A1-1).
+        assertTrue(failures.isEmpty(), "a body of water holds more than one level: $failures")
     }
 
     /**
@@ -131,13 +130,10 @@ class LakeBodyTest : BorrowsSharedWorlds() {
                     .format(seed, SharedWorlds.DETAIL_ROWS, solved.basins.size, least, most)
             )
         }
-        // Recorded at A1-1, whose calendar seasons moved seed 42's ground and left one basin of 59
-        // cells handed half as much again as the rain reaching it: a fault of the basins' own
-        // accounting the new ground exposed, not traced (docs/TODO.md).
-        val signature = failures.joinToString("; ") { it.substringBefore(" (") }
-        KnownFailures.expect("A1-1: a basin handed more than the rain reaching it", "seed 42: a basin of 59 cells handed 1.5015 of its catchment") {
-            if (failures.isNotEmpty()) throw RecordedViolation("rain counted twice or lost: $failures", signature)
-        }
+        // A1-1's first pass on its ground left one basin of 59 cells on seed 42 handed 1.50 times
+        // the rain reaching it, a fault of the basins' own accounting the ground exposed; its last
+        // pass's ground leaves none (docs/DESIGN_LEDGER.md, A1-1).
+        assertTrue(failures.isEmpty(), "rain counted twice or lost: $failures")
     }
 
     private companion object {

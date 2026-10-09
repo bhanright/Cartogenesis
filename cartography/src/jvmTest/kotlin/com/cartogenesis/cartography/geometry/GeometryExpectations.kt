@@ -17,8 +17,10 @@ internal object GeometryExpectations {
             finding(layer, Detector.FACETS, F.ICE_EDGE_ALONG_A_ROW)
         }
         // The ice's crease is two of its straight runs meeting (718106 at 2048), in the sheet's
-        // ground and its cut as in the drawn ice (99 and 59758 at 2048 columns of square cells).
-        for (layer in listOf("ice as drawn", "ice sheet ground", "ice carving")) {
+        // ground and its cut as in the drawn ice (99 and 59758 at 2048 columns of square cells),
+        // and in the sheet's surface since C1b's snow made the sheets on 7 and 1234 large enough at
+        // 512 rows to measure.
+        for (layer in listOf("ice as drawn", "ice sheet ground", "ice carving", "ice surface")) {
             finding(layer, Detector.CREASES, F.ICE_EDGE_ALONG_A_ROW)
         }
         finding("ice occupancy", Detector.RIGHT_ANGLES, F.ICE_EDGE_CORNERS)
@@ -194,7 +196,7 @@ internal object GeometryExpectations {
         insufficient("ice surface", Detector.ALIGNED_SIDE, 7L, 1234L, 99L)
         insufficient("ice surface", Detector.RECTANGLE, 7L, 42L, 1234L, 99L)
         insufficient("ice surface", Detector.FACETS, 7L, 1234L, 99L)
-        insufficient("ice surface", Detector.CREASES, 7L, 1234L, 99L)
+        insufficient("ice surface", Detector.CREASES, 99L)
         insufficient("ice surface", Detector.RIGHT_ANGLES, 7L, 99L)
         insufficient("ice surface", Detector.ARCS, 7L, 99L)
         insufficient("ice surface", Detector.COMBS, 7L, 1234L, 99L)

@@ -41,7 +41,10 @@ class OceanLeavesTheGroundTest : BorrowsSharedWorlds() {
      * weather noise K1 made square on the ground, and the sea stage carries the ice's scour, which
      * K1 made square too. K2 re-took every one of them, terrain included: the default planet became
      * Earth's, 40,075 km round, so every lattice on the ground is another count of cycles and the
-     * plates are fifteen. An ocean change that leaks into the ground moves them.
+     * plates are fifteen. C1b re-took the erosion's and the sea's, the terrain and the plates
+     * holding: the erosion is fed the provisional climate's rain, which the conserving moisture march
+     * redrew, and the sea stage carries the ice its snow feeds. An ocean change that leaks into the
+     * ground moves them.
      * A chunk meant to move the ground re-takes them here, as the render records are re-taken.
      * At [SharedWorlds.DETAIL_ROWS], whose standard worlds the detail guards generate anyway, so
      * the pin costs a digest and no generation.
@@ -72,12 +75,12 @@ class OceanLeavesTheGroundTest : BorrowsSharedWorlds() {
             "plates.continentalShare" to 5707884443378334786L,
             "plates.upliftRateMmPerYear" to -1700415688480725156L,
             "plates.crustAge" to 8840618518047909851L,
-            "erosion.height" to -764119881059144335L,
+            "erosion.height" to -6797173752980635689L,
             "erosion.sweptOnDevice" to -358906410940142731L,
-            "sea.shorelineHeight" to 8930012999547282008L,
-            "sea.isLand" to 8576149400318180388L,
-            "sea.relativeElevation" to -5882165350155285745L,
-            "sea.landCellCount" to -819146187983780767L
+            "sea.shorelineHeight" to -3103712900963185492L,
+            "sea.isLand" to 476919537999599645L,
+            "sea.relativeElevation" to -1796128584895953178L,
+            "sea.landCellCount" to -6594495311917145537L
         )
     }
 }

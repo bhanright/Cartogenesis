@@ -85,15 +85,13 @@ class OceanCurrentTest : BorrowsSharedWorlds() {
         println(
             "OCEAN pooled coastal gap %.1f%% over %d seeds".format((pooled - 1) * 100, gaps.size)
         )
-        // Recorded at K2: settlement is the realms' business, which waits for the atlas overhaul on
-        // the Earth-sized planet (docs/TODO.md, docs/DESIGN_LEDGER.md, K2).
-        KnownFailures.expect("K2: the realms' settlement on the Earth-sized planet, before the atlas overhaul", "cold coasts settled no worse than warm ones: seed 1234 at -1.5%") {
-            val complaints = listOfNotNull(
-                under.takeIf { it.isNotEmpty() }?.let { "cold coasts settled no worse than warm ones: $it" },
-                "pooled %.1f%%".format((pooled - 1) * 100).takeIf { pooled <= 1.02 }
-            )
-            if (complaints.isNotEmpty()) throw RecordedViolation(complaints.joinToString("; "), complaints.joinToString("; "))
-        }
+        // Recorded at K2, when settlement waited for the atlas overhaul on the Earth-sized planet,
+        // and armed again at C1b, whose climate passes it (docs/DESIGN_LEDGER.md, K2 and C1b).
+        val complaints = listOfNotNull(
+            under.takeIf { it.isNotEmpty() }?.let { "cold coasts settled no worse than warm ones: $it" },
+            "pooled %.1f%%".format((pooled - 1) * 100).takeIf { pooled <= 1.02 }
+        )
+        assertTrue(complaints.isEmpty(), complaints.joinToString("; "))
     }
 
     /**

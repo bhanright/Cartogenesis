@@ -160,16 +160,15 @@ class RainAgainstEarthTest : BorrowsSharedWorlds() {
             "EARTH diagnosed, pooled: the atmosphere holds %.1f mm (Earth %.1f) and turns it over in %.1f days (Earth %.1f)"
                 .format(pooled.columnWater / pooled.allArea, EARTH_COLUMN_WATER_MM, days, EARTH_RESIDENCE_DAYS)
         )
-        // The open sea's rain and evaporation stand inside Earth's, and are held there.
+        // The open sea's rain and evaporation and the land's return stand inside Earth's, and are
+        // held there.
         nearEarth("open-sea rain, mm", pooled.seaRain / pooled.seaArea, EARTH_OCEAN_RAIN_MM)
         nearEarth("open-sea evaporation, mm", pooled.seaEvaporation / pooled.seaArea, EARTH_OCEAN_EVAPORATION_MM)
-        // The land's rain and its return do not, for the causes docs/TODO.md's "The march's misses
-        // against Earth, after C1b" measures: the orographic term's share and where the rain falls.
+        nearEarth("land's return over its rain", pooled.landReturn / pooled.landRain, EARTH_LAND_RETURN_SHARE)
+        // The land's rain does not, for the causes docs/TODO.md's "The march's misses against Earth,
+        // after C1b" measures: the orographic term's share of it.
         KnownFailures.expect("C1b: the land rains more than Earth's", "x0.00") {
             nearEarth("land rain, mm", pooled.landRain / pooled.landArea, EARTH_LAND_RAIN_MM)
-        }
-        KnownFailures.expect("C1b: the land returns less of its rain than Earth's", "x0.00") {
-            nearEarth("land's return over its rain", pooled.landReturn / pooled.landRain, EARTH_LAND_RETURN_SHARE)
         }
     }
 

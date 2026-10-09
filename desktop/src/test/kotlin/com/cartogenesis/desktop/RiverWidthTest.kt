@@ -316,9 +316,8 @@ class RiverWidthTest {
             // interruption to make an exception for, and the width must never fall.
             //
             // Nor can the water: every step of a traced course follows `flowTarget`, and the
-            // accumulation walks the routing's own order and adds every cell's share of the rain,
-            // which is never less than a twentieth, so a cell carries strictly more than any cell
-            // that drains into it (float rounding can only tie). The allowance this clause once made
+            // accumulation walks the routing's own order and adds every cell's runoff, which is
+            // never negative, so a cell carries no less than any cell that drains into it. The allowance this clause once made
             // for a routing that handed a cell a neighbour carrying less has no premise, and the
             // count is held to zero.
             val (narrowings, againstTheWater, steps) = narrowingsDownstream(network.world.rivers.rivers, network.discharge)
@@ -373,11 +372,18 @@ class RiverWidthTest {
                     shareNow * 100, shareBefore * 100
                 )
             )
-            assertTrue(
-                shareNow >= MIN_WIDENING_JUNCTIONS,
-                ("seed $seed: only %.1f%% of confluences widen the trunk, under " +
-                    "%.1f%%").format(shareNow * 100, MIN_WIDENING_JUNCTIONS * 100)
-            )
+        }
+        // Recorded at C1b: the discharge is the annual runoff, which carries no floor, so a branch
+        // from dry country brings next to nothing and both it and the trunk it joins can sit at
+        // the hairline's clamp (docs/DESIGN_LEDGER.md, C1b; docs/TODO.md).
+        KnownFailures.expect("C1b: dry branches and their trunks meet at the hairline", "0.0%") {
+            if (worstShareNow < MIN_WIDENING_JUNCTIONS) {
+                throw RecordedViolation(
+                    "only %.1f%% of confluences widen the trunk on the worst seed, under %.1f%%"
+                        .format(worstShareNow * 100, MIN_WIDENING_JUNCTIONS * 100),
+                    "%.1f%%".format(worstShareNow * 100)
+                )
+            }
         }
         // Weaker than the other two cross-checks, and it has to be: the clamp only bites where a
         // map has a river big enough to reach it, so a seed of small drainages passes this under

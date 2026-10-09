@@ -118,9 +118,10 @@ data class ClimateResult(
      * ocean's mean salinity) and false everywhere on land.
      *
      * Each mask is one moment of the planet, so each holds one hemisphere's winter pack and the
-     * other's summer remnant. Frozen in both is the perennial ice, which is what an atlas draws
-     * and what [ClimateStage.classify] paints as `ICE_SHEET` over water; frozen in either is the
-     * winter pack, which on Earth reaches the Sea of Okhotsk and the Gulf of Bothnia.
+     * other's summer remnant; frozen in either is the winter pack, which on Earth reaches the Sea
+     * of Okhotsk and the Gulf of Bothnia. The perennial ice, which is what an atlas draws and what
+     * [ClimateStage.classify] paints as `ICE_SHEET` over water, is the sea frozen through its own
+     * warmest month, and the biome carries it.
      *
      * The moisture march reads whichever mask belongs to the half it is marching, and takes no
      * moisture at all from a frozen cell — a metre of ice is a lid, which is why the polar ocean is
@@ -566,6 +567,8 @@ object ClimateStage {
         val januaryHalfPrecipitationMm: FloatField,
         val julyHalfSeaIce: BooleanArray,
         val januaryHalfSeaIce: BooleanArray,
+        /** Frozen through its own warmest month: the pack that survives the summer. */
+        val perennialSeaIce: BooleanArray,
         val wind: WindField,
         val landOriginPrecipitationMm: FloatField,
         val potentialEvapotranspirationMm: FloatField,
@@ -671,7 +674,7 @@ object ClimateStage {
         val biome = classify(
             cellsAcross, cellsDown, sea, temperature, summerTemperature, winterTemperature,
             precipitationMm, summerPrecipitationMm, winterPrecipitationMm,
-            perennialSeaIce(fields.julyHalfSeaIce, fields.januaryHalfSeaIce), snowBalance
+            fields.perennialSeaIce, snowBalance
         )
 
         // The cover on the ground and the frozen ground under it, beside the classification and
@@ -729,12 +732,6 @@ object ClimateStage {
     internal fun localSummerIsJulyHalf(julyHalfC: Float, januaryHalfC: Float): Boolean =
         julyHalfC >= januaryHalfC
 
-    /**
-     * The perennial sea ice: frozen in both of the calendar's half-years, which is frozen in the
-     * warmer of them wherever that is, the pack that survives the summer.
-     */
-    internal fun perennialSeaIce(julyHalfSeaIce: BooleanArray, januaryHalfSeaIce: BooleanArray): BooleanArray =
-        BooleanArray(julyHalfSeaIce.size) { julyHalfSeaIce[it] && januaryHalfSeaIce[it] }
 
     private fun seasonalFields(
         config: WorldGenConfig,
@@ -795,6 +792,13 @@ object ClimateStage {
 
         val julyHalfSeaIce = seaIceMask(config, sea, julyHalfSeaSurface)
         val januaryHalfSeaIce = seaIceMask(config, sea, januaryHalfSeaSurface)
+        // The pack an atlas draws is the one that survives the summer: frozen through the water's
+        // own warmest month, wherever in the year the lag puts it, as Koppen's months are each
+        // place's own. A calendar half's mean is colder than that month by the lag and the
+        // half-year's averaging both, and would draw nearly the whole winter pack as perennial.
+        val perennialSeaIce = seaIceMask(
+            config, sea, seaSurfaceTemperature(config, sea, zonal, summerTemperature, Season.SUMMER)
+        )
 
         // A pressure field per half-year, and a third for the annual wind. The annual one is built
         // from the annual temperature rather than averaged from the other two, which is the same
@@ -915,6 +919,7 @@ object ClimateStage {
             januaryHalfPrecipitationMm = marched.januaryHalfRainMm,
             julyHalfSeaIce = julyHalfSeaIce,
             januaryHalfSeaIce = januaryHalfSeaIce,
+            perennialSeaIce = perennialSeaIce,
             wind = wind,
             landOriginPrecipitationMm = marched.landOriginRainMm,
             potentialEvapotranspirationMm = marched.potentialEvapotranspirationMm,
@@ -1864,7 +1869,7 @@ object ClimateStage {
         precipitationMm: FloatField,
         summerPrecipitationMm: FloatField,
         winterPrecipitationMm: FloatField,
-        /** The perennial pack, frozen in both half-years: see [ClimateResult.julyHalfSeaIce]. */
+        /** The perennial pack, frozen through its own warmest month: see [ClimateResult.julyHalfSeaIce]. */
         perennialSeaIce: BooleanArray,
         /**
          * [SnowBalance]'s field, or null when `ClimateConfig.snowBalance` is off and the ice gate

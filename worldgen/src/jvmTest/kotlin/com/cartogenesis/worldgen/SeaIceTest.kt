@@ -181,7 +181,7 @@ class SeaIceTest : BorrowsSharedWorlds() {
             if (world.sea.isLand[cell]) continue
             if (world.climate.biome[cell] != Biome.ICE_SHEET) continue
             iceCells++
-            if (!summerIce(world, cell)) iceOutsidePack++
+            if (!winterIce(world, cell)) iceOutsidePack++
         }
         println("SEA ICE seed 42: $iceCells water cells drawn as ice, $iceOutsidePack of them off the pack")
         assertTrue(iceCells > 0, "no water cell is drawn as ice at all")
@@ -296,10 +296,12 @@ class SeaIceTest : BorrowsSharedWorlds() {
         if (ClimateStage.latitudeOf(cell / world.width, world.height) > 0f) world.climate.januaryHalfSeaIce[cell]
         else world.climate.julyHalfSeaIce[cell]
 
-    /** Whether [cell]'s sea is frozen in its own summer; see [winterIce]. */
+    /**
+     * Whether [cell]'s sea survives its summer: frozen through its own warmest month, which is the
+     * pack the biome draws.
+     */
     private fun summerIce(world: WorldMap, cell: Int): Boolean =
-        if (ClimateStage.latitudeOf(cell / world.width, world.height) > 0f) world.climate.julyHalfSeaIce[cell]
-        else world.climate.januaryHalfSeaIce[cell]
+        !world.sea.isLand[cell] && world.climate.biome[cell] == Biome.ICE_SHEET
 
     /** Mean cold-season rainfall in millimetres over the cells [mask] marks, on [world]. */
     private fun meanRainOver(world: WorldMap, mask: BooleanArray): Double {

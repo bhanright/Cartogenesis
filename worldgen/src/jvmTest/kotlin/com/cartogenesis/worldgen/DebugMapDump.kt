@@ -154,7 +154,7 @@ class DebugMapDump {
         val base = WorldGenConfig.forRows(seed, 512)
         val after = WorldGenerationEngine.generateBlocking(base)
         val before = WorldGenerationEngine.generateBlocking(
-            base.copy(climate = base.climate.copy(currentMoisture = 0f))
+            base.copy(ocean = base.ocean.copy(enabled = false))
         )
         write(render(before, Mode.RAINFALL), "seed$seed-h4-before-rainfall.png")
         write(render(before, Mode.BIOME), "seed$seed-h4-before-biome.png")

@@ -131,7 +131,7 @@ object ChannelInitiation {
      * A cell's runoff as a share of Earth's mean over land.
      *
      * [Runoff.shareOfEarthMean], and the division is the whole of what this file adds to the
-     * shared weight. **Absolute, against Earth's 715 mm land mean and not against this world's**,
+     * shared weight. **Absolute, against Earth's land runoff and not against this world's**,
      * because the threshold on the other side of [isChannelHead] is an area of real ground in
      * square kilometres: divided by the world's own mean, a world twice as wet would draw exactly
      * the same network, since every weight would be divided by twice as much. Divided by Earth's,
@@ -139,8 +139,8 @@ object ChannelInitiation {
      * divides the same weight by its own land's mean instead, and [Runoff] says why each is right
      * where it stands.
      */
-    fun runoffShareOfEarthMean(precipitationMm: Float): Float =
-        Runoff.shareOfEarthMean(precipitationMm)
+    fun runoffShareOfEarthMean(precipitationMm: Float, potentialMm: Float): Float =
+        Runoff.shareOfEarthMean(precipitationMm, potentialMm)
 
     /**
      * The drainage area above each cell in square kilometres, each contributing cell counted in
@@ -164,12 +164,13 @@ object ChannelInitiation {
         filled: FloatField,
         flowTarget: IntArray,
         precipitationMm: FloatField,
+        potentialMm: FloatField,
         squareKilometresPerCell: Double
     ): FloatField {
         val cellAreaKm2 = squareKilometresPerCell.toFloat()
         return FlowRouting.accumulate(
             cellsAcross, cellsDown, isLand, filled, flowTarget, landCellCount
-        ) { cell -> runoffShareOfEarthMean(precipitationMm.data[cell]) * cellAreaKm2 }
+        ) { cell -> runoffShareOfEarthMean(precipitationMm.data[cell], potentialMm.data[cell]) * cellAreaKm2 }
     }
 
     /**
@@ -225,7 +226,7 @@ object ChannelInitiation {
 
         val areaKm2 = runoffWeightedAreaKm2(
             cellsAcross, cellsDown, isLand, landCellCount, filled, flowTarget,
-            climate.precipitationMm, config.squareKilometresPerCell
+            climate.precipitationMm, climate.potentialEvapotranspirationMm, config.squareKilometresPerCell
         )
         val gradient = gradientToReceiver(config, isLand, ground, flowTarget)
         val vegetationDensity = climate.vegetationDensity
@@ -274,10 +275,10 @@ object ChannelInitiation {
      * the downstream rule in [channelMask] carries it — which is the Lena and the Yenisey, rivers
      * that rise where the summer thaws and run on over ground that does not.
      *
-     * **Read off the thermometer, and no longer off Thornthwaite's demand.** The demand is zero on
-     * exactly this ground, so it gave the right answer and was the tidier way to say it; but the
-     * demand that was run is [LakeWaterBalance.potentialEvaporationMm], whose last act is to
-     * multiply by `LakesConfig.evaporationScale`. That figure is a setting on how hard a lake's
+     * **Read off the thermometer, and no longer off an evaporative demand.** Thornthwaite's demand,
+     * which the lakes read until C1, is zero on exactly this ground, so it gave the right answer
+     * and was the tidier way to say it; but the demand that was run was multiplied by
+     * `LakesConfig.evaporationScale`. That figure is a setting on how hard a lake's
      * surface evaporates, and a world that turns it off got a demand of zero everywhere: every land
      * cell read as permanently frozen, no cell anywhere passed the head test, and the map came out
      * with no channel on it at all. Seed 42 at 512 initiates 52,525 channel cells and initiated

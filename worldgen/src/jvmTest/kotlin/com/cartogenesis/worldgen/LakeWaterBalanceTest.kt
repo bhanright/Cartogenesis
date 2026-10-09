@@ -3,6 +3,7 @@ package com.cartogenesis.worldgen
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.LakeWaterBalance
+import com.cartogenesis.worldgen.pipeline.SurfaceEvaporation
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -23,6 +24,11 @@ import kotlin.test.assertTrue
  * the second, and a world with no lakes in it is not more realistic than one with too many.
  */
 class LakeWaterBalanceTest : BorrowsSharedWorlds() {
+
+    /** FAO-56's Example 17 result, mm a day, and the rounding its printed figures carry. */
+    private val FAO_EXAMPLE_17_MM_PER_DAY = 5.72
+    private val FAO_EXAMPLE_ROUNDING_MM_PER_DAY = 0.02
+
 
     // Both are samples, re-picked at S2's fourth pass by the same scan that chose their
     // predecessors, and for the same reason it has had to be run at every terrain change: the
@@ -189,11 +195,7 @@ class LakeWaterBalanceTest : BorrowsSharedWorlds() {
         assertTrue(basin.size >= 500, "seed $drySeed has no large dry basin any more (${basin.size} cells)")
 
         val rain = basin.map { off.climate.precipitationMm.data[it] }.average()
-        val evaporation = basin.map {
-            LakeWaterBalance.potentialEvaporationMm(
-                off.climate.summerTemperature.data[it], off.climate.winterTemperature.data[it], 1f
-            )
-        }.average()
+        val evaporation = basin.map { off.climate.openWaterEvaporationMm.data[it] }.average()
 
         val stillWet = basin.count { on.rivers.lakes.isLake(it) }
         val share = stillWet.toDouble() / basin.size
@@ -400,21 +402,20 @@ class LakeWaterBalanceTest : BorrowsSharedWorlds() {
     }
 
     /**
-     * Thornthwaite at the plan's two calibration points, so a change to the curve has to say so.
-     * Nothing was fitted to land on these — the published constants do it by themselves.
+     * FAO-56's Penman-Monteith reproduces its own worked Example 17, Bangkok in April: a mean of
+     * 30.2 C, saturation and actual vapor pressures of 4.42 and 2.85 kPa, 14.19 MJ/m² a day of
+     * available energy, 101.3 kPa and 2 m/s give 5.72 mm a day. A change to the equation or its
+     * constants has to say so here.
      */
     @Test
-    fun `the evaporation curve is calibrated`() {
-        val hotDesert = LakeWaterBalance.potentialEvaporationMm(35f, 15f, 1f)
-        val coolTemperate = LakeWaterBalance.potentialEvaporationMm(18f, 2f, 1f)
-        val frozen = LakeWaterBalance.potentialEvaporationMm(-5f, -30f, 1f)
-        println(
-            "BALANCE evaporation: hot desert ${"%.0f".format(hotDesert)} mm/yr, " +
-                "cool temperate ${"%.0f".format(coolTemperate)} mm/yr, frozen ${"%.0f".format(frozen)} mm/yr"
-        )
-        assertTrue(hotDesert in 1800f..2500f, "hot desert evaporates $hotDesert mm/yr, wanted near 2000")
-        assertTrue(coolTemperate in 400f..650f, "cool temperate evaporates $coolTemperate mm/yr, wanted near 500")
-        assertEquals(0f, frozen, 0f, "frozen ground evaporates nothing")
+    fun `the land's potential evapotranspiration is FAO-56's, worked example and all`() {
+        val bangkokApril = SurfaceEvaporation.penmanMonteithMmPerDay(30.2, 4.42, 2.85, 14.19, 101.3, 2.0)
+        println("BALANCE FAO-56 Example 17: %.3f mm/day against 5.72".format(bangkokApril))
+        assertEquals(FAO_EXAMPLE_17_MM_PER_DAY, bangkokApril, FAO_EXAMPLE_ROUNDING_MM_PER_DAY)
+        // The Budyko curve the two sides of the surface budget share has no hole at a vanishing
+        // rain: the limit is that all of it goes back to the air.
+        assertEquals(0f, LakeWaterBalance.runoffShareOfRain(1e-30f, 1500f), 0f)
+        assertEquals(0f, LakeWaterBalance.runoffShareOfRain(Float.MIN_VALUE, 2500f), 0f)
     }
 
     /** One D8 step of a drawn river, as a unit bearing, with the seam wrapped. */

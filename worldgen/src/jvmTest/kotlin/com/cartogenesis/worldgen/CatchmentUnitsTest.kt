@@ -181,7 +181,7 @@ class CatchmentUnitsTest : BorrowsSharedWorlds() {
                 y in combRows && y < combRows.last -> HandMadeWorlds.cellAt(config, x, y + 1)
                 else -> HandMadeWorlds.cellAt(config, x + 1, y)
             }
-        }, flowOf = { Runoff.annualWeightMm(100f) })
+        }, flowOf = { Runoff.annualRunoffMm(100f, 50f) })
         val landKm2 = sea.landCellCount * config.squareKilometresPerCell
         val limitKm2 = landKm2 * config.nations.maxBasinShare
         val combKm2 = combRows.count() * 61 * config.squareKilometresPerCell

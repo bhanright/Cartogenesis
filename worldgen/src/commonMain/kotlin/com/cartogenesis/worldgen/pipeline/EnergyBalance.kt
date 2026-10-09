@@ -272,7 +272,7 @@ object EnergyBalance {
      * The solar constant, in watts per square metre: Kopp and Lean (2011), *A new, lower value of
      * total solar irradiance*, Geophys. Res. Lett. 38.
      */
-    private const val SOLAR_CONSTANT_W_PER_M2 = 1361.0
+    internal const val SOLAR_CONSTANT_W_PER_M2 = 1361.0
 
     /**
      * Outgoing longwave radiation as `A + B T` in watts per square metre, with `T` in degrees
@@ -386,6 +386,21 @@ object EnergyBalance {
             tropics * DIFFUSION_STORM_TRACK_SHARE *
             cloudBelt(latitudeDegrees, STORM_TRACK_DEGREES, STORM_TRACK_WIDTH_DEGREES)
     }
+
+    /**
+     * The eddies' share of [diffusivityAt] at one latitude, in watts per square metre per degree:
+     * the polar floor and the storm track's Gaussian, without the cosine-squared term that stands
+     * for the Hadley cell's mean overturning.
+     *
+     * Read by the moisture march, which carries the Hadley cell's water on its own meridional
+     * wind and needs from here only what the eddies mix: the same depressions that carry the heat
+     * across the mid-latitudes carry the water, and the heat this diffusivity carries includes
+     * the latent heat of that water. See [MoistureMarch.eddyMixingShare].
+     */
+    internal fun eddyDiffusivityAt(latitudeDegrees: Double): Double =
+        DIFFUSION_POLAR_W_PER_M2_C +
+            DIFFUSION_TROPICS_W_PER_M2_C * DIFFUSION_STORM_TRACK_SHARE *
+            cloudBelt(latitudeDegrees, STORM_TRACK_DEGREES, STORM_TRACK_WIDTH_DEGREES)
 
     /**
      * Planetary albedo of an ice-free surface: a clear-sky base that climbs toward the poles, plus
@@ -570,8 +585,8 @@ object EnergyBalance {
      *
      * Twenty-five together, the top of the 15-25 the standard formulae give across the range of
      * wind speeds and surface temperatures a planet has. Warmer water couples harder, because the
-     * latent term follows Clausius-Clapeyron — the same 7% a degree `ClimateConfig.currentMoisture`
-     * uses — and that dependence is not modelled here; 25 is the mid-latitude figure, which is
+     * latent term follows Clausius-Clapeyron, about 7% a degree, and that dependence is not
+     * modelled here; 25 is the mid-latitude figure, which is
      * where the coasts this matters for are.
      *
      * It sets how fast the air forgets the water: `C_air / 25` is 4.8 days, so marine air tracks

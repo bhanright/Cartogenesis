@@ -62,12 +62,14 @@ class ChannelInitiationCostTest {
                 FlowRouting.smoothFieldLatticeColumns(config)
             )
             val rainfall = madeRainfall(side)
+            // Half the rain as the potential: humid ground, where most of every cell's rain runs off.
+            val potential = FloatField(side, side, FloatArray(side * side) { rainfall.data[it] * 0.5f })
             val cover = madeCover(side)
             val squareKilometresPerCell = config.squareKilometresPerCell
 
             fun run(): Int {
                 val areaKm2 = ChannelInitiation.runoffWeightedAreaKm2(
-                    side, side, isLand, cellCount, filled, flowTarget, rainfall,
+                    side, side, isLand, cellCount, filled, flowTarget, rainfall, potential,
                     squareKilometresPerCell
                 )
                 val gradient =

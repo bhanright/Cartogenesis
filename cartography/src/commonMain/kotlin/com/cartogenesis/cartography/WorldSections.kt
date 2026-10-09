@@ -179,6 +179,10 @@ internal object WorldSections {
         ByteSection("climate.winterSeaIce", ByteMeaning.FLAG) { flagsOf(it.climate.winterSeaIce) },
         FloatSection("climate.windMeridional") { it.climate.windMeridional.data },
         FloatSection("climate.vegetationDensity") { it.climate.vegetationDensity.data },
+        // The potential evaporation the march's ground return and the rivers' runoff both read,
+        // so the two add to the rain at every cell.
+        FloatSection("climate.potentialEvapotranspirationMm") { it.climate.potentialEvapotranspirationMm.data },
+        FloatSection("climate.openWaterEvaporationMm") { it.climate.openWaterEvaporationMm.data },
         ByteSection("climate.permafrost", ByteMeaning.PERMAFROST) { bytesOf(it.climate.permafrost) },
         ByteSection("climate.biome", ByteMeaning.BIOME) { biomesOf(it.climate.biome) },
         FloatSection("rivers.filledElevation") { it.rivers.filledElevation.data },
@@ -349,7 +353,9 @@ internal object WorldSections {
                 permafrost = arrays.getValue("climate.permafrost") as ByteArray,
                 summerSeaIce = flags("climate.summerSeaIce"),
                 winterSeaIce = flags("climate.winterSeaIce"),
-                biome = arrays.getValue("climate.biome") as Array<Biome>
+                biome = arrays.getValue("climate.biome") as Array<Biome>,
+                potentialEvapotranspirationMm = field("climate.potentialEvapotranspirationMm"),
+                openWaterEvaporationMm = field("climate.openWaterEvaporationMm")
             ),
             rivers = RiverResult(
                 filledElevation = field("rivers.filledElevation"),

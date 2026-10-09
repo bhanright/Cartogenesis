@@ -4,151 +4,144 @@ import com.cartogenesis.worldgen.model.FloatField
 
 /**
  * The moisture march's water budget, every term of it, as the march spends it: what the sea
- * evaporates, what the ground gives back, what rains, what the cold cap takes, what the sideways
- * blend between rows adds or loses, and how much the parcels hold at the start and end of a lap.
+ * evaporates, what the ground gives back, what rains and by which mechanism, and what the march
+ * holds at the start and end of each lap, in transit along the rows and banked between its two
+ * sweeps.
  *
  * A measurement and nothing else: the march fills it only when one is handed in
- * ([ClimateStage.moistureLedger]), reads nothing back from it, and a world generated without one
- * is the same world to the bit. It exists because the budget was found not to close by reading the
- * code (docs/TODO.md, "The moisture march does not conserve its water"), and a budget that is read
- * rather than summed cannot say how much each leak is worth.
+ * ([ClimateStage.moistureLedger]), reads nothing back from it, and a world generated without one is
+ * the same world to the bit.
  *
- * Every figure is in the march's own unit, a fraction of saturation, summed over the steps that
- * spent it. [ClimateStage.millimetresPerMarchUnit] over the number of cells marched turns any of
- * them into millimetres a year averaged over those cells, which is how `MoistureClosureTest` prints
- * them.
+ * **The unit.** Every lap term is in the march's own unit, millimeters of column water carried
+ * across one cell, which is a mass flux: a millimeter of column water moving at the transport
+ * speed through the side of a cell one row tall carries `U x cellHeight` kilograms a second,
+ * whatever the latitude, because a row's side is the same length at every latitude. So the terms
+ * add across rows without weights, and [millimetersPerYearOverTheSphere] turns any of them into a
+ * mean over the planet's surface. See [MoistureMarch].
  */
 internal class MoistureLedger {
 
-    /**
-     * One lap of one sweep of one circulation belt in one season: the rows [firstRow] until
-     * [lastRow], swept toward [sweepDirection] (+1 eastward), in the warm half when [warm].
-     *
-     * The terms are kept apart so that each can be weighed against the others; [unaccounted] is
-     * what a closed budget would hold at zero.
-     */
-    class Lap(
-        val warm: Boolean,
-        val firstRow: Int,
-        val lastRow: Int,
-        val sweepDirection: Int,
-        /**
-         * True for the second sweep, the one against the belt, which only the cells whose own wind
-         * is reversed take their rain from; the first sweeps between them march every cell once.
-         */
-        val againstTheBelt: Boolean,
-        val lap: Int,
-        /** The cells this lap stepped through: its rows times the map's width. */
-        val cellsMarched: Long
-    ) {
-        /** What the parcels hold before the lap's first step and after its last. */
+    /** Which surface a term fell on. */
+    enum class Surface { LAND, OPEN_SEA, SEA_ICE }
+
+    /** Which mechanism rained it. Each is charged once, on the water left by the ones before. */
+    enum class Sink {
+        /** The column's own lifetime, [MoistureMarch.RAIN_LIFETIME_DAYS], under the belts' descent. */
+        LIFETIME,
+
+        /** The air the wind gathers into a cell rising and raining what it brought. */
+        CONVERGENCE,
+
+        /** The climb the air made getting here, the panel's orographic setting. */
+        OROGRAPHIC,
+
+        /** What a column holds beyond the saturated column at its temperature. */
+        SATURATION
+    }
+
+    /** One lap of one season's march: both sweeps, every cell once. */
+    class Lap(val warm: Boolean, val lap: Int) {
+        /** What the march holds before the lap's first column and after its last: parcels and banks. */
         var storageAtStart = 0.0
         var storageAtEnd = 0.0
 
-        /** Open sea's evaporation into the parcel. */
+        /** The part of [storageAtEnd] banked between the two sweeps rather than carried in a parcel. */
+        var bankAtEnd = 0.0
+
+        /** The land-origin part of the same. */
+        var landStorageAtStart = 0.0
+        var landStorageAtEnd = 0.0
+
+        /** Open sea's evaporation into the parcels. */
         var seaEvaporation = 0.0
 
-        /** The ground's return into the parcel. */
+        /** The ground's return into the parcels: Budyko's share of each land cell's own rain. */
         var groundReturn = 0.0
 
-        /** Rain over land, taken out of the parcel. */
-        var landRain = 0.0
+        /** Rain by mechanism and surface, indexed `[sink.ordinal][surface.ordinal]`. */
+        val rain = Array(Sink.entries.size) { DoubleArray(Surface.entries.size) }
 
-        /** Rain over sea ice, taken out of the parcel. */
-        var seaIceRain = 0.0
+        /** Rain of land-origin water, every mechanism and surface together. */
+        var landOriginRain = 0.0
 
-        /** Rain over open sea as the march records it. */
-        var openSeaRainRecorded = 0.0
+        /** The most transport sub-steps one column needed to keep every parcel positive. */
+        var mostSubsteps = 0
 
-        /** Rain over open sea as the march takes it out of the parcel. */
-        var openSeaRainRemoved = 0.0
+        /** Parcels found below zero after transport; zero is what positivity means. */
+        var negativeParcels = 0
 
-        /** What the cold cap clips off a parcel over land after its rain is taken. */
-        var coldCapRemoved = 0.0
+        /** Steps where the land-origin water stood outside zero to the column's water. */
+        var tracerOutOfBounds = 0
 
-        /**
-         * What the sideways blend between rows adds to a column of parcels, summed over the lap's
-         * column steps: the sum of the parcels after each step's blend less the sum before it. A
-         * conservative transport holds this at zero.
-         */
-        var advectionGain = 0.0
+        /** Values that were not finite numbers anywhere in the lap. */
+        var nonFinite = 0
 
-        /** Every source the budget names: what the sea and the ground put into the air. */
+        /** Every source the budget names. */
         val sources: Double get() = seaEvaporation + groundReturn
 
-        /** Every sink the budget names: the rain the march records, wherever it fell. */
-        val recordedRain: Double get() = landRain + seaIceRain + openSeaRainRecorded
+        /** Every sink: the rain, by every mechanism, wherever it fell. */
+        val totalRain: Double get() = rain.sumOf { it.sum() }
 
         /**
-         * The storage change the sources and the recorded rain do not explain. Zero for a closed
-         * budget; on a march with leaks, water that appeared (positive) or vanished (negative)
-         * without being evaporated or rained.
+         * The storage change the sources and the rain do not explain. Zero, to the rounding of the
+         * sums, for a march that conserves its water.
          */
-        val unaccounted: Double get() = (storageAtEnd - storageAtStart) - (sources - recordedRain)
+        val unaccounted: Double get() = (storageAtEnd - storageAtStart) - (sources - totalRain)
 
-        /**
-         * The same storage change rebuilt from every term the ledger keeps, leaks included. Equal
-         * to the measured change up to float rounding when the ledger has found every term, which
-         * is the instrument's own check on itself.
-         */
-        val explainedByEveryTerm: Double
-            get() = sources - landRain - seaIceRain - openSeaRainRemoved - coldCapRemoved +
-                advectionGain
+        /** The same for the land-origin water: its source is the ground's return alone. */
+        val landUnaccounted: Double
+            get() = (landStorageAtEnd - landStorageAtStart) - (groundReturn - landOriginRain)
     }
 
-    /** Every lap marched, in the order the march ran them: season, belt, sweep, lap. */
+    /** Every lap marched, in the order the march ran them: lap, then season. */
     val laps = ArrayList<Lap>()
 
     /**
-     * The recorded lap's per-cell figures, one field per season, filled the way the march fills
-     * its rain: from the sweep whose direction each cell's own wind blows. Zero over the sea,
-     * except [rainBeforeBlur], which holds the sea's recorded rain too.
+     * The recorded lap's per-cell figures for one season, in millimeters a year at each cell,
+     * before the blur.
      */
     class Cells(cellsAcross: Int, cellsDown: Int) {
-        /** The march's rain before the blur spreads it, in march units per cell. */
-        val rainBeforeBlur = FloatField(cellsAcross, cellsDown)
-
-        /** The ground's return into the parcel at each land cell. */
+        val rain = FloatField(cellsAcross, cellsDown)
         val groundReturn = FloatField(cellsAcross, cellsDown)
+        val seaEvaporation = FloatField(cellsAcross, cellsDown)
 
-        /** What the cold cap clipped off the parcel at each land cell. */
-        val coldCapRemoved = FloatField(cellsAcross, cellsDown)
+        /** The column's water as the march leaves each cell, millimeters. */
+        val columnWater = FloatField(cellsAcross, cellsDown)
 
         /**
-         * What the sideways blend made or destroyed of each cell's air in the step that carried
-         * it on: the share of the cell's parcel the next column's rows sampled, less one, times the
-         * parcel. Negative where the wind converges and the blend drops the air that meets,
-         * positive where it diverges and the blend copies it; over a column it sums to that step's
-         * [Lap.advectionGain]. Over sea and land alike.
+         * The rain the air's own convergence makes at each cell. Charged only where the air the
+         * cell takes in through its four sides exceeds what it sends on, so it falls where the
+         * wind gathers and nowhere else, and cannot cancel against a divergence beside it.
          */
-        val advectionGain = FloatField(cellsAcross, cellsDown)
+        val convergenceRain = FloatField(cellsAcross, cellsDown)
     }
 
     var warmHalf: Cells? = null
     var coldHalf: Cells? = null
 
     /**
-     * What one season's march read, kept by reference so that a measurement can march the same
-     * inputs another way and set the answer beside this one. Every field is the march's own, one
-     * entry per cell, row-major; the wind is the pair the march steps by.
+     * The annual field the rest of the pipeline reads, after the two seasons are averaged and the
+     * blur has spread them, in millimeters a year per cell; and the annual sources the last lap
+     * spent, sea and ground, the same way. Their area-weighted sums are the closure of the final
+     * field.
      */
-    class Inputs(
-        val warm: Boolean,
-        val temperatureC: FloatField,
-        val seaSurfaceC: FloatField,
-        val seaIce: BooleanArray,
-        /** Which way the air over each cell moves along the row, +1 eastward. */
-        val zonalDirection: IntArray,
-        /** Rows the air crosses per cell of zonal travel, positive toward the south. */
-        val slantRowsPerCell: FloatArray,
-        /** Each row's belt direction, which partitions the rows into the runs the march sweeps. */
-        val beltZonal: IntArray,
-        /** The circulation belt's multiplier on the rain rate, per row. */
-        val bandOfRow: FloatArray,
-        val convergencePerCell: FloatField?,
-        val inversionSuppression: FloatField?,
-        val biotemperatureC: FloatField?
-    )
+    var finalAnnualRainMm: FloatField? = null
+    var finalAnnualSourcesMm: FloatField? = null
 
-    val inputs = ArrayList<Inputs>()
+    /**
+     * The surface's own budget at each land cell: the rain the pipeline reads less what the
+     * march's ground returned less the runoff the lakes and rivers route, in millimeters a year.
+     * Zero where the march's return and the rivers' runoff read the same rain and the same
+     * potential evaporation; what is left is the last lap's distance from convergence.
+     */
+    var surfaceResidualMm: FloatField? = null
+
+    /**
+     * Millimeters a year over the planet's surface per unit of a lap term: the transport speed
+     * times a year over the sphere's area in meters of the row's side, which is the grid's cells
+     * summed by their widths. Set by the march that fills the ledger.
+     */
+    var millimetersPerYearPerUnit = 0.0
+
+    fun millimetersPerYearOverTheSphere(units: Double): Double = units * millimetersPerYearPerUnit
 }

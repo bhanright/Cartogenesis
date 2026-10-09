@@ -154,8 +154,8 @@ data class RiverResult(
     /** Depression-filled elevation — every land cell has a downhill path to the sea. */
     val filledElevation: FloatField,
     /**
-     * The discharge each cell carries, in millimetre-cells: every upstream cell's rainfall in
-     * millimetres a year, held at [Runoff.FLOOR_MM] where drier, summed down the routing.
+     * The discharge each cell carries, in millimeter-cells: every upstream cell's runoff in
+     * millimeters a year, [Runoff.annualRunoffMm], summed down the routing.
      */
     val flowAccumulation: FloatField,
     /**
@@ -184,7 +184,7 @@ object RiverStage {
      * [sea] gives the land mask and the ground the water runs over; [climate] gives the rainfall in
      * millimetres a year, which both the discharge and the lake water balance are weighted by.
      * Every per-cell array is row-major at `config.width` by `config.height`, and
-     * [RiverResult.flowAccumulation] is in millimetre-cells: [Runoff.annualWeightMm] summed over
+     * [RiverResult.flowAccumulation] is in millimetre-cells: [Runoff.annualRunoffMm] summed over
      * every cell upstream.
      */
     fun generate(
@@ -425,7 +425,7 @@ object RiverStage {
 
         // Potential evaporation and runoff are per-cell properties of the climate, not of any
         // basin, so they are computed once rather than once per candidate level.
-        val evaporationMm = shedding.potentialEvaporationMm
+        val evaporationMm = shedding.openWaterEvaporationMm
         val runoffMm = shedding.runoffMm
 
         // Where each basin's water leaves it: every cell of the basin whose receiver lies outside
@@ -880,7 +880,7 @@ object RiverStage {
     )
 
     /**
-     * The discharge every cell carries, in millimetre-cells: [Runoff.annualWeightMm] summed over
+     * The discharge every cell carries, in millimetre-cells: [Runoff.annualRunoffMm] summed over
      * the cell and everything upstream of it.
      *
      * The absolute rainfall and not `ClimateResult.precipitation`, the 0..1 copy clamped at
@@ -899,7 +899,7 @@ object RiverStage {
         flowTarget: IntArray
     ): FloatField = FlowRouting.accumulate(
         cellsAcross, cellsDown, sea.isLand, filled, flowTarget, sea.landCellCount
-    ) { cell -> Runoff.annualWeightMm(climate.precipitationMm.data[cell]) }
+    ) { cell -> Runoff.annualRunoffMm(climate, cell) }
 
     /**
      * Whether a headwater is a lake's outflow rather than a scratch on a hillside: some neighbour

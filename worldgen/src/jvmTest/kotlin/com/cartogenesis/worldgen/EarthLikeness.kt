@@ -1054,6 +1054,7 @@ internal object EarthLikeness {
                     world.width, world.height, world.sea.isLand, world.sea.landCellCount,
                     world.rivers.filledElevation, world.rivers.flowTarget,
                     world.climate.precipitationMm,
+                    world.climate.potentialEvapotranspirationMm,
                     world.config.scale.squareKilometresPerCell(world.width, world.height)
                 )
                 val riverConfig = world.config.rivers
@@ -1122,11 +1123,7 @@ internal object EarthLikeness {
         val aridity = arrayOfNulls<Aridity>(world.width * world.height)
         for (cell in aridity.indices) {
             if (!world.sea.isLand[cell]) continue
-            val potentialEvaporation = LakeWaterBalance.potentialEvaporationMm(
-                world.climate.summerTemperature.data[cell],
-                world.climate.winterTemperature.data[cell],
-                world.config.lakes.evaporationScale
-            )
+            val potentialEvaporation = world.climate.potentialEvapotranspirationMm.data[cell]
             aridity[cell] =
                 aridityOf(world.climate.precipitationMm.data[cell], potentialEvaporation)
         }

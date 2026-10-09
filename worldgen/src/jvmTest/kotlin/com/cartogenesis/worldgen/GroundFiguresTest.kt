@@ -4,6 +4,7 @@ import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldScale
 import com.cartogenesis.worldgen.noise.GroundLattice
 import com.cartogenesis.worldgen.pipeline.ClimateStage
+import com.cartogenesis.worldgen.pipeline.MoistureMarch
 import com.cartogenesis.worldgen.pipeline.FlowRouting
 import java.io.File
 import kotlin.math.abs
@@ -148,23 +149,26 @@ class GroundFiguresTest {
     }
 
     /**
-     * The rain's conversion turns a unit of the march into the same millimeters on the ground on
-     * any planet and any grid: the factor times the cell's width is the calibration's own product,
-     * [ClimateStage.MM_SCALE] times [ClimateStage.REFERENCE_CELL_WIDTH_KM].
+     * The rain's lifetime is the same per kilometer of travel on any planet and any grid: the
+     * share of a column the march rains in crossing one cell is that cell's ground width over the
+     * transport speed times the lifetime, so it over the width is one figure everywhere.
      *
-     * The tree before referred the conversion to this planet's own 512 grid, so the product grew
-     * with the planet: twice the rain per unit of the march on a planet twice as wide (the
-     * Earth-size audit's D1). `PlanetWidthRainTest` holds the rain itself.
+     * The march carried its rain through a conversion fitted on one grid until C1, and the tree
+     * before that referred the conversion to the planet's own 512 grid, so a planet twice as wide
+     * rained twice as much per unit of the march (the Earth-size audit's D1).
+     * `PlanetWidthRainTest` holds the rain itself.
      */
     @Test
-    fun `the rain's conversion is the same per kilometer of travel on any planet`() {
-        val calibrated = ClimateStage.MM_SCALE.toDouble() * ClimateStage.REFERENCE_CELL_WIDTH_KM
-        assertEquals(CALIBRATION_PLANET_KM / CALIBRATION_GRID_COLUMNS, ClimateStage.REFERENCE_CELL_WIDTH_KM, 0.0)
+    fun `the rain's lifetime is the same per kilometer of travel on any planet`() {
+        val perKm = 1_000.0 / (MoistureMarch.TRANSPORT_SPEED_MPS * MoistureMarch.RAIN_LIFETIME_DAYS * 86_400.0)
         for (widthKm in PLANET_WIDTHS_KM) {
             for (config in gridsOf(widthKm)) {
-                val perKm = ClimateStage.millimetresPerMarchUnit(config).toDouble() * config.cellWidthKm
-                println("GROUND rain conversion on a %6.0f km planet (%4d by %4d): %.1f mm-km a unit".format(widthKm, config.width, config.height, perKm))
-                assertEquals(calibrated, perKm, calibrated * FLOAT_ROUNDING, "the conversion on a $widthKm km planet at ${config.width} by ${config.height}")
+                for (row in listOf(0, config.height / 3, config.height / 2)) {
+                    val groundKm = config.cellWidthKm * kotlin.math.cos(ClimateStage.latitudeOf(row, config.height) * kotlin.math.PI / 180.0)
+                    val share = MoistureMarch.lifetimeSharePerColumn(config, row)
+                    assertEquals(perKm, share / groundKm, perKm * FLOAT_ROUNDING, "the lifetime per km on a $widthKm km planet at ${config.width} by ${config.height}, row $row")
+                }
+                println("GROUND rain lifetime on a %6.0f km planet (%4d by %4d): %.3e of a column per km".format(widthKm, config.width, config.height, perKm))
             }
         }
     }
@@ -432,9 +436,6 @@ class GroundFiguresTest {
          * kept as the reference the restatements are held to.
          */
         const val CALIBRATION_PLANET_KM = 12_000.0
-
-        /** Columns of the grid the rain's conversion was calibrated on, on the 12,000 km world. */
-        const val CALIBRATION_GRID_COLUMNS = 512
 
         /** Kilometers a float's last places are worth on a wavelength of a few thousand. */
         const val ROUNDING_KM = 1e-6

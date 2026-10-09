@@ -181,7 +181,7 @@ class GeographyAuditTest : BorrowsSharedWorlds() {
         seeds.forEach { seed ->
             val base = WorldGenConfig.forRows(seed, SharedWorlds.COARSE_ROWS)
             val world = SharedWorlds.world(
-                base.copy(climate = base.climate.copy(evapotranspirationLengthKm = 0f))
+                base.copy(climate = base.climate.copy(convergenceRain = false))
             )
             for (i in 0 until world.width * world.height) {
                 if (!world.sea.isLand[i]) continue

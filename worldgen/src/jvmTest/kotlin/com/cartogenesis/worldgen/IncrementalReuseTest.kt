@@ -151,11 +151,6 @@ class IncrementalReuseTest {
             "permafrost" to base.copy(
                 vegetation = base.vegetation.copy(permafrost = false)
             ),
-            // Flipped from the default, which is off: set to the value it already had, this case
-            // compared two identical configs until Audit III (its E-T5).
-            "vegetationRecycling" to base.copy(
-                climate = base.climate.copy(vegetationRecycling = !base.climate.vegetationRecycling)
-            ),
             // The slant of the wind belts is the same section again. It turns the wind the
             // moisture march follows and, since the belts became one vector, the ocean's stress.
             "meridionalWindShare" to base.copy(
@@ -169,11 +164,8 @@ class IncrementalReuseTest {
             // W1: the sea-ice masks are climate sections, and the march reads them, so a change
             // here has to invalidate everything downstream the way the rest of this section does.
             "seaIce" to base.copy(climate = base.climate.copy(seaIce = false)),
-            // H4: the march's over-sea moisture pickup now scales by the ocean stage's current
-            // anomaly, so this knob has to invalidate the same way the others in this section do.
-            "currentMoisture" to base.copy(
-                climate = base.climate.copy(currentMoisture = base.climate.currentMoisture + 0.1f)
-            ),
+            // The march's convergence sink is a climate setting the march reads.
+            "convergenceRain" to base.copy(climate = base.climate.copy(convergenceRain = false)),
             "rivers" to base.copy(
                 rivers = base.rivers.copy(
                     channelHeadAreaSlopeKm2 =
@@ -357,7 +349,9 @@ class IncrementalReuseTest {
                 winterSeaIce = world.climate.winterSeaIce.copyOf(),
                 biome = world.climate.biome.copyOf(),
                 vegetationDensity = field(world.climate.vegetationDensity),
-                permafrost = world.climate.permafrost.copyOf()
+                permafrost = world.climate.permafrost.copyOf(),
+                potentialEvapotranspirationMm = field(world.climate.potentialEvapotranspirationMm),
+                openWaterEvaporationMm = field(world.climate.openWaterEvaporationMm)
             ),
             rivers = RiverResult(
                 filledElevation = field(world.rivers.filledElevation),

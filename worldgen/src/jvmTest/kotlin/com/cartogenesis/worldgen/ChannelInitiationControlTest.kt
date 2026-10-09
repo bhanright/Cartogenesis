@@ -79,8 +79,8 @@ class ChannelInitiationControlTest : BorrowsSharedWorlds() {
      * `ChannelInitiation.neverThaws` keeps a channel head off ground where water never runs, and it
      * used to ask for that ground by running Thornthwaite's demand and testing it for zero. The
      * demand is zero exactly where neither season rises above freezing, so the answer was right —
-     * except that the demand it ran is `LakeWaterBalance.potentialEvaporationMm`, whose last act is
-     * to multiply by `LakesConfig.evaporationScale`. That is a knob on how hard a lake's surface
+     * except that the demand it ran was a lake's, whose last act is to multiply by
+     * `LakesConfig.evaporationScale`; the lakes' demand today is `LakeWaterBalance.shedding`'s. That is a knob on how hard a lake's surface
      * evaporates, and at zero it made the whole world read as permanently frozen: every land cell
      * failed the head test and the map carried no channel at all.
      *
@@ -105,7 +105,9 @@ class ChannelInitiationControlTest : BorrowsSharedWorlds() {
         // The two rules, counted over the same land: the thermometer's, and the demand's with the
         // lake's scale at zero.
         val climate = noLakeEvaporation.climate
-        val scale = noLakeEvaporation.config.lakes.evaporationScale
+        val lakeDemand = LakeWaterBalance.shedding(
+            noLakeEvaporation.sea.isLand, climate, noLakeEvaporation.config.lakes.evaporationScale
+        ).openWaterEvaporationMm
         var land = 0
         var frozenNow = 0
         var frozenBefore = 0
@@ -113,10 +115,7 @@ class ChannelInitiationControlTest : BorrowsSharedWorlds() {
             if (!noLakeEvaporation.sea.isLand[cell]) continue
             land++
             if (climate.summerTemperature.data[cell] <= 0f) frozenNow++
-            val demandMm = LakeWaterBalance.potentialEvaporationMm(
-                climate.summerTemperature.data[cell], climate.winterTemperature.data[cell], scale
-            )
-            if (demandMm <= 0f) frozenBefore++
+            if (lakeDemand[cell] <= 0f) frozenBefore++
         }
 
         println(

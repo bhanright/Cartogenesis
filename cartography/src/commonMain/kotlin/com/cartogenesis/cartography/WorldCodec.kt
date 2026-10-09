@@ -130,6 +130,14 @@ object WorldCodec {
     /**
      * The only version this build reads or writes.
      *
+     * 23 because the moisture march began carrying water in kilograms per square meter and closing
+     * its budget: `climate.depletionLengthKm`, `climate.oceanEvaporationLengthKm`,
+     * `climate.evapotranspirationLengthKm`, `climate.currentMoisture` and
+     * `climate.vegetationRecycling` are gone, their work now physical rates in the march, and the
+     * climate gained `climate.potentialEvapotranspirationMm` and `climate.openWaterEvaporationMm`,
+     * which the rivers and lakes read so that their runoff is the rain the march's ground did not
+     * give back. A format-22 file would open with no evaporation fields at all.
+     *
      * 22 because the default planet became Earth's, 40,075 km round, and the counts and shares
      * that sized its tectonics, deltas and glaciers became Earth's figures on the ground:
      * `tectonics.plateCount` became `meanPlateAreaKm2`, `hotspotPlateFraction`
@@ -289,7 +297,7 @@ object WorldCodec {
      * every cell-valued name took a `Cells` suffix. 3 was the container below with none of that, 2
      * the JSON text that preceded it; none of them opens.
      */
-    const val FORMAT_VERSION = 22
+    const val FORMAT_VERSION = 23
 
     private val MAGIC = byteArrayOf('C'.code.toByte(), 'G'.code.toByte(), 'W'.code.toByte(), 'D'.code.toByte())
 

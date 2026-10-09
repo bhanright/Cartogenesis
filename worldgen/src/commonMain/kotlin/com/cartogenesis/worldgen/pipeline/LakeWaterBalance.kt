@@ -4,7 +4,6 @@ import com.cartogenesis.worldgen.math.GroundSteps
 import com.cartogenesis.worldgen.math.LongMinHeap
 import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.LakesConfig
-import kotlin.math.pow
 
 /**
  * How high the water actually stands in a basin the terrain never drains.
@@ -17,7 +16,7 @@ import kotlin.math.pow
  * and the surface settles exactly where the catchment's inflow matches evaporation off the water:
  *
  *     inflow  =  runoff over the catchment (each cell's rain less what its ground evaporates)
- *     loss    =  (potential evaporation - rainfall on the water) x lake area
+ *     loss    =  (open-water evaporation - rainfall on the water) x lake area
  *
  * Area grows with level — that is the basin's hypsometry — so raising the surface raises the loss
  * while the inflow barely moves, and there is one level where the two meet. Below the spill, the
@@ -36,75 +35,29 @@ import kotlin.math.pow
 internal object LakeWaterBalance {
 
     /**
-     * Potential evaporation in millimetres a year, by Thornthwaite (1948), read off the seasonal
-     * temperature fields.
-     *
-     * Thornthwaite is the standard temperature-only estimate — it needs no radiation, no humidity
-     * and no wind, which is all this pipeline has to offer it. Its monthly form is
-     *
-     *     i     = (T / 5) ^ 1.514                      for T > 0, else 0
-     *     I     = sum of i over the twelve months
-     *     a     = 6.75e-7 I^3 - 7.71e-5 I^2 + 1.792e-2 I + 0.49239
-     *     PET   = 16 (10 T / I) ^ a                    millimetres in that month
-     *
-     * The world stores two seasons rather than twelve months, so the year is taken as six months at
-     * the warm-season temperature and six at the cold-season one. The daylength correction is left
-     * at one: it is a rescaling by latitude of an estimate that is already coarse, and the fields
-     * the temperature came from have the latitude in them already.
-     *
-     * Nothing here is fitted. Put the plan's two calibration points through it and it lands on
-     * them by itself:
-     *
-     * | place                        | warm | cold | I     | a    | PET     |
-     * |------------------------------|------|------|-------|------|---------|
-     * | hot desert (Sahara-like)     | 35 C | 15 C | 145.9 | 3.56 | 2270 mm |
-     * | cool temperate (Europe-like) | 18 C |  2 C |  43.2 | 1.18 |  554 mm |
-     *
-     * against the 2000 mm and 500 mm the plan asks for. [LakesConfig.evaporationScale] exists to
-     * move that without touching the curve; it is 1.
-     *
-     * Frozen country evaporates nothing, which is why cold basins stay full to the brim and the
-     * glacial lakes are untouched.
-     */
-    fun potentialEvaporationMm(summerC: Float, winterC: Float, scale: Float): Float {
-        // The bare figures below are Thornthwaite's own, in the order the formula above gives
-        // them: `I` is the year's heat index, `a` its cubic in `I`.
-        val warmIndex = monthlyHeatIndex(summerC)
-        val coldIndex = monthlyHeatIndex(winterC)
-        val yearHeatIndex = MONTHS_PER_SEASON * (warmIndex + coldIndex)
-        if (yearHeatIndex <= 0.0) return 0f
-        val exponent = 6.75e-7 * yearHeatIndex * yearHeatIndex * yearHeatIndex -
-            7.71e-5 * yearHeatIndex * yearHeatIndex + 1.792e-2 * yearHeatIndex + 0.49239
-        val yearMm = MONTHS_PER_SEASON * monthlyPotentialMm(summerC, yearHeatIndex, exponent) +
-            MONTHS_PER_SEASON * monthlyPotentialMm(winterC, yearHeatIndex, exponent)
-        return (yearMm * scale).toFloat().coerceAtLeast(0f)
-    }
-
-    /** Months the world's two seasonal temperature fields each stand for. */
-    private const val MONTHS_PER_SEASON = 6.0
-
-    /**
      * What a land cell gives a lake, and what a lake's water loses there, per cell of the grid.
      *
-     * [potentialEvaporationMm] is [potentialEvaporationMm] at every land cell and zero at sea.
-     * [runoffMm] is the share of the cell's rain that runs off rather than evaporating or
-     * transpiring where it fell, in millimeters a year: [runoffShareOfRain] of it.
+     * [openWaterEvaporationMm] is what a lake's surface at the cell loses in a year, millimeters:
+     * the climate's open-water evaporation ([ClimateResult.openWaterEvaporationMm]) times
+     * `LakesConfig.evaporationScale`, at land cells, and zero at sea. [runoffMm] is the share of
+     * the cell's rain that runs off rather than going back to the air, in millimeters a year:
+     * [runoffShareOfRain] of it against the climate's potential evapotranspiration, the same
+     * share the moisture march's ground return is the rest of.
      */
-    internal class Shedding(val potentialEvaporationMm: FloatArray, val runoffMm: FloatArray)
+    internal class Shedding(val openWaterEvaporationMm: FloatArray, val runoffMm: FloatArray)
 
     /** [Shedding] for every cell of [climate]'s grid, [isLand] saying which cells are land. */
     fun shedding(isLand: BooleanArray, climate: ClimateResult, evaporationScale: Float): Shedding {
         val cellCount = isLand.size
-        val potential = FloatArray(cellCount) { cell ->
-            if (!isLand[cell]) 0f else potentialEvaporationMm(
-                climate.summerTemperature.data[cell], climate.winterTemperature.data[cell], evaporationScale
+        val openWater = FloatArray(cellCount) { cell ->
+            if (!isLand[cell]) 0f else climate.openWaterEvaporationMm.data[cell] * evaporationScale
+        }
+        val runoff = FloatArray(cellCount) { cell ->
+            if (!isLand[cell]) 0f else Runoff.annualRunoffMm(
+                climate.precipitationMm.data[cell], climate.potentialEvapotranspirationMm.data[cell]
             )
         }
-        val rain = climate.precipitationMm.data
-        val runoff = FloatArray(cellCount) { cell ->
-            if (!isLand[cell]) 0f else rain[cell] * runoffShareOfRain(rain[cell], potential[cell])
-        }
-        return Shedding(potential, runoff)
+        return Shedding(openWater, runoff)
     }
 
     /**
@@ -115,50 +68,30 @@ internal object LakeWaterBalance {
      * runoff / P = 1 - sqrt( f * tanh(1 / f) * (1 - exp(-f)) )     with f = PET / P
      * ```
      *
-     * the same curve `VegetationDensity.evaporativeFraction` grows the plant cover by. A catchment
-     * in a steady state sends on what its ground does not give back to the air, and how much that
-     * is turns on how dry it is: where the energy is short of the water (f under 1) most of the
-     * rain runs off, and where the water is short of the energy (f over 2, a semi-arid basin)
-     * nearly all of it goes back to the air. Earth's land as a whole stands near a dryness of one
-     * and sheds a third of its rain, the 40,000 km³ its rivers deliver of the 110,000 that falls;
-     * at a dryness of one this curve gives 0.31, at 0.8 it gives 0.39. A semi-arid basin, at a
-     * dryness of 2 to 4, gives 0.11 to 0.02, where a fixed share of 0.35 gave it three to eighteen
-     * times the water and filled the world's dry interiors to their brims (docs/DESIGN_LEDGER.md,
-     * K2).
+     * the same curve `VegetationDensity.evaporativeFraction` grows the plant cover by, and the
+     * curve the moisture march's ground return is the other side of
+     * ([MoistureMarch.groundReturnMm]). A catchment in a steady state sends on what its ground
+     * does not give back to the air, and how much that is turns on how dry it is: where the energy
+     * is short of the water (f under 1) most of the rain runs off, and where the water is short of
+     * the energy (f over 2, a semi-arid basin) nearly all of it goes back to the air. At a dryness
+     * of one this curve gives 0.31, at 0.8 it gives 0.39; a semi-arid basin, at a dryness of 2 to
+     * 4, gives 0.11 to 0.02.
      *
      * Ground that cannot evaporate anything, frozen the year round, sheds all of its rain; ground
-     * with no rain sheds none.
+     * with no rain sheds none. Worked in double, because at a rain far below the potential the
+     * dryness overflows a float, and `tanh(1/f)` of an infinite `f` is zero against an infinite
+     * `f`, which is not a number; the limit as the rain vanishes is that all of it goes back.
      */
     fun runoffShareOfRain(rainMm: Float, potentialMm: Float): Float {
         if (rainMm <= 0f) return 0f
-        val dryness = potentialMm / rainMm
-        if (dryness <= 0f) return 1f
+        val dryness = potentialMm.toDouble() / rainMm.toDouble()
+        if (dryness <= 0.0) return 1f
+        if (!dryness.isFinite()) return 0f
         val evaporatedShare = kotlin.math.sqrt(
-            dryness * kotlin.math.tanh(1f / dryness) * (1f - kotlin.math.exp(-dryness))
+            dryness * kotlin.math.tanh(1.0 / dryness) * (1.0 - kotlin.math.exp(-dryness))
         )
-        return (1f - evaporatedShare).coerceIn(0f, 1f)
+        return (1.0 - evaporatedShare).coerceIn(0.0, 1.0).toFloat()
     }
-
-    private fun monthlyHeatIndex(temperatureC: Float): Double =
-        if (temperatureC <= 0f) 0.0 else (temperatureC / 5.0).pow(1.514)
-
-    /** Thornthwaite's monthly total, capped: the power law runs away on a warm, low-index year. */
-    private fun monthlyPotentialMm(
-        temperatureC: Float,
-        yearHeatIndex: Double,
-        exponent: Double
-    ): Double {
-        if (temperatureC <= 0f) return 0.0
-        val potentialMm = 16.0 * (10.0 * temperatureC / yearHeatIndex).pow(exponent)
-        return potentialMm.coerceAtMost(MAX_MONTHLY_PET)
-    }
-
-    /**
-     * 500 mm in a month is half again the hottest month Thornthwaite is ever asked to produce on
-     * Earth. The cap is there only so a world with a warm season and no cold one at all — a tiny
-     * heat index under a large exponent — cannot return infinity.
-     */
-    private const val MAX_MONTHLY_PET = 500.0
 
     /**
      * A seeded, low-amplitude, spatially coherent perturbation of the ground, in the same units as

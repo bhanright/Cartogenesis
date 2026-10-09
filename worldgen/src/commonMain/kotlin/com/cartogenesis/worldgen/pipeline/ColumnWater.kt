@@ -31,16 +31,6 @@ internal object ColumnWater {
     /** The standard atmosphere at sea level, in kilopascals. */
     const val SEA_LEVEL_PRESSURE_KPA = 101.325
 
-    /** One kilometer in meters, for the lapse rate the configuration states per kilometer. */
-    private const val METERS_PER_KM = 1_000.0
-
-    /**
-     * The least lapse rate the saturated column is evaluated at, in kelvin per meter: a tenth of a
-     * degree per kilometer. Not physics but a guard: an isothermal column has no vapor scale
-     * height, and the formula below would hand back an infinite column for a lapse of zero.
-     */
-    private const val MIN_LAPSE_K_PER_M = 1.0e-4
-
     /**
      * Saturation vapor pressure over water at [temperatureC], in kilopascals: FAO-56's Eq. 11
      * (Allen and others 1998), `0.6108 exp(17.27 T / (T + 237.3))`, the Tetens form.
@@ -79,30 +69,123 @@ internal object ColumnWater {
      * The water a saturated column of air holds over ground at [surfaceTemperatureC], in
      * kilograms per square meter, which is millimeters of water.
      *
-     * Clausius-Clapeyron up a column cooling at [lapseRateCPerKm]. The vapor density at saturation
-     * at the surface is `e_s / (R_v T)`, and up a column cooling at `Gamma` its logarithm falls as
-     * `d ln rho/dz = -Gamma (L / (R_v T) - 1) / T`, so the saturated vapor thins with height over
-     * a scale height `H = T / (Gamma (L / (R_v T) - 1))` and the column holds `rho_s H`. At the
-     * standard atmosphere's 6.5 K/km that is 2.5 km at 15 C, and the column 32 mm at 15 C, 10 mm at
-     * 0 C, 58 mm at 25 C and 1.2 mm at -25 C. Earth's atmosphere holds 12.6e3 km³ over its 510
-     * million km² (Trenberth and others 2011, as van der Ent and Tuinenburg 2017 use it), a mean
-     * of 24.7 mm, which at a mean surface temperature near 14 C is three quarters of this column:
-     * the check, read off the world in `MoistureClosureTest`, and not an input.
+     * Clausius-Clapeyron up the saturated adiabat: the column's temperature falls with height at
+     * the moist adiabat's own lapse rate ([moistAdiabaticLapseKPerM]) from the surface's, its
+     * pressure hydrostatically from the standard sea level's, and the saturated vapor density
+     * `e_s / (R_v T)` is summed up it, in [COLUMN_STEP_M] steps to [COLUMN_TOP_M]. The tropical
+     * troposphere stands close to that adiabat (Xu and Emanuel 1989), and Bretherton, Peters and
+     * Back's (2004) column humidity, which the march's rain reads, divides by the saturated column
+     * of the real temperature profile. It is 75 mm at 25 C, 36 mm at 15 C, 13 mm at 0 C and 1.3
+     * at -25 C. Earth's atmosphere holds 12.6e3 km³ over its 510 million km² (Trenberth and
+     * others 2011, as van der Ent and Tuinenburg 2017 use it), a mean of 24.7 mm: the check, read
+     * off the world in `RainAgainstEarthTest`, and not an input.
      *
-     * The scale height is held at the surface's temperature rather than integrated through a
-     * column whose temperature changes with height; over the 2.5 km that hold most of the water
-     * that is a few percent, and the formula stays one exponential.
+     * Tabulated once by the surface's temperature at [COLUMN_TABLE_STEP_C] and read by linear
+     * interpolation, since every cell of every lap asks it.
      */
-    fun saturatedColumnMm(surfaceTemperatureC: Double, lapseRateCPerKm: Double): Double {
-        val kelvin = surfaceTemperatureC + KELVIN_AT_ZERO_C
-        val lapseKPerM = (lapseRateCPerKm / METERS_PER_KM).coerceAtLeast(MIN_LAPSE_K_PER_M)
-        val vaporDensityKgPerM3 = saturationVaporPressureKpa(surfaceTemperatureC) * PASCALS_PER_KPA /
-            (WATER_VAPOR_GAS_CONSTANT_J_PER_KG_K * kelvin)
-        val scaleHeightM = kelvin /
-            (lapseKPerM * (LATENT_HEAT_J_PER_KG / (WATER_VAPOR_GAS_CONSTANT_J_PER_KG_K * kelvin) - 1.0))
-        return vaporDensityKgPerM3 * scaleHeightM
+    fun saturatedColumnMm(surfaceTemperatureC: Double): Double {
+        val position = ((surfaceTemperatureC - COLUMN_TABLE_COLDEST_C) / COLUMN_TABLE_STEP_C)
+            .coerceIn(0.0, (saturatedColumnTable.size - 1).toDouble())
+        val below = position.toInt().coerceAtMost(saturatedColumnTable.size - 2)
+        val share = position - below
+        return saturatedColumnTable[below] * (1.0 - share) + saturatedColumnTable[below + 1] * share
+    }
+
+    /** The saturated column summed up the moist adiabat from one surface temperature, mm. */
+    internal fun integratedSaturatedColumnMm(surfaceTemperatureC: Double): Double {
+        var kelvin = surfaceTemperatureC + KELVIN_AT_ZERO_C
+        var pressureKpa = SEA_LEVEL_PRESSURE_KPA
+        var column = 0.0
+        var height = 0.0
+        while (height < COLUMN_TOP_M) {
+            val celsius = kelvin - KELVIN_AT_ZERO_C
+            val density = saturationVaporPressureKpa(celsius) * PASCALS_PER_KPA / (WATER_VAPOR_GAS_CONSTANT_J_PER_KG_K * kelvin)
+            // The midpoint rule over the step: the density there, from the lapse and the
+            // hydrostatic fall half a step up.
+            val lapse = moistAdiabaticLapseKPerM(celsius, pressureKpa)
+            val midKelvin = kelvin - lapse * COLUMN_STEP_M * 0.5
+            val midPressure = pressureKpa * kotlin.math.exp(-STANDARD_GRAVITY_MPS2 * COLUMN_STEP_M * 0.5 / (DRY_AIR_GAS_CONSTANT_J_PER_KG_K * kelvin))
+            val midCelsius = midKelvin - KELVIN_AT_ZERO_C
+            val midDensity = saturationVaporPressureKpa(midCelsius) * PASCALS_PER_KPA / (WATER_VAPOR_GAS_CONSTANT_J_PER_KG_K * midKelvin)
+            column += midDensity * COLUMN_STEP_M
+            val midLapse = moistAdiabaticLapseKPerM(midCelsius, midPressure)
+            kelvin -= midLapse * COLUMN_STEP_M
+            pressureKpa *= kotlin.math.exp(-STANDARD_GRAVITY_MPS2 * COLUMN_STEP_M / (DRY_AIR_GAS_CONSTANT_J_PER_KG_K * midKelvin))
+            height += COLUMN_STEP_M
+            if (density < NEGLIGIBLE_VAPOR_KG_PER_M3) break
+        }
+        return column
+    }
+
+    /**
+     * The table's span and step, degrees Celsius: from colder than any air the energy balance
+     * makes to warmer than any it makes, at a twentieth of a degree, where the interpolation is
+     * a part in a hundred thousand off the integral.
+     */
+    private const val COLUMN_TABLE_COLDEST_C = -80.0
+    private const val COLUMN_TABLE_WARMEST_C = 50.0
+    private const val COLUMN_TABLE_STEP_C = 0.05
+
+    /**
+     * The column's step and top, meters: fifty meters, a hundredth of the vapor's own scale height,
+     * up to sixteen kilometers, over the tropical tropopause, past which a saturated column holds
+     * under a hundred thousandth of its water.
+     */
+    private const val COLUMN_STEP_M = 50.0
+    private const val COLUMN_TOP_M = 16_000.0
+
+    /** Below this saturated vapor density the rest of the column is nothing, kg m⁻³. */
+    private const val NEGLIGIBLE_VAPOR_KG_PER_M3 = 1.0e-9
+
+    private val saturatedColumnTable: DoubleArray by lazy {
+        val steps = ((COLUMN_TABLE_WARMEST_C - COLUMN_TABLE_COLDEST_C) / COLUMN_TABLE_STEP_C).toInt() + 1
+        DoubleArray(steps) { integratedSaturatedColumnMm(COLUMN_TABLE_COLDEST_C + it * COLUMN_TABLE_STEP_C) }
     }
 
     /** Pascals in a kilopascal. */
     private const val PASCALS_PER_KPA = 1_000.0
+
+    /**
+     * The water air lifted over the ground condenses per meter it rises, in kilograms per cubic
+     * meter: Smith and Barstad's (2004) thermodynamic sensitivity `C_w = rho_s Gamma_m / gamma`,
+     * the saturated vapor density at the surface's [surfaceTemperatureC] times the moist
+     * adiabat's lapse rate over the environment's, [lapseRateCPerKm]. A column of saturated air
+     * carried up a slope at `w` meters a second condenses `C_w w` kilograms per square meter a
+     * second, which is their linear model's source term.
+     */
+    fun upliftCondensationKgPerM3(surfaceTemperatureC: Double, lapseRateCPerKm: Double): Double {
+        val kelvin = surfaceTemperatureC + KELVIN_AT_ZERO_C
+        val vaporPressurePa = saturationVaporPressureKpa(surfaceTemperatureC) * PASCALS_PER_KPA
+        val vaporDensity = vaporPressurePa / (WATER_VAPOR_GAS_CONSTANT_J_PER_KG_K * kelvin)
+        val environmentKPerM = lapseRateCPerKm / METERS_PER_KM
+        if (environmentKPerM <= 0.0) return 0.0
+        return vaporDensity * moistAdiabaticLapseKPerM(surfaceTemperatureC, SEA_LEVEL_PRESSURE_KPA) / environmentKPerM
+    }
+
+    /** One kilometer in meters, for the lapse rate the configuration states per kilometer. */
+    private const val METERS_PER_KM = 1_000.0
+
+
+    /**
+     * The saturated adiabatic lapse rate at [temperatureC] and [pressureKpa], kelvin per meter:
+     * `g (1 + L r / (R_d T)) / (c_p + L² r epsilon / (R_d T²))`, with `r` the saturation mixing
+     * ratio and `epsilon` water's molar mass over dry air's (the American Meteorological
+     * Society's glossary; Wallace and Hobbs 2006, section 3.5). 3.8 K/km at 25 C and sea level, 6.5
+     * at 0 C, nearing the dry 9.8 in the cold.
+     */
+    fun moistAdiabaticLapseKPerM(temperatureC: Double, pressureKpa: Double): Double {
+        val kelvin = temperatureC + KELVIN_AT_ZERO_C
+        val vaporPressure = saturationVaporPressureKpa(temperatureC)
+        val mixingRatio = MOLAR_MASS_RATIO * vaporPressure / (pressureKpa - vaporPressure)
+        val numerator = 1.0 + LATENT_HEAT_J_PER_KG * mixingRatio / (DRY_AIR_GAS_CONSTANT_J_PER_KG_K * kelvin)
+        val denominator = DRY_AIR_HEAT_CAPACITY_J_PER_KG_K +
+            LATENT_HEAT_J_PER_KG * LATENT_HEAT_J_PER_KG * mixingRatio * MOLAR_MASS_RATIO /
+            (DRY_AIR_GAS_CONSTANT_J_PER_KG_K * kelvin * kelvin)
+        return STANDARD_GRAVITY_MPS2 * numerator / denominator
+    }
+
+    /** Dry air's gas constant and heat capacity at constant pressure, and standard gravity. */
+    private const val DRY_AIR_GAS_CONSTANT_J_PER_KG_K = 287.04
+    private const val DRY_AIR_HEAT_CAPACITY_J_PER_KG_K = 1004.0
+    private const val STANDARD_GRAVITY_MPS2 = 9.80665
 }

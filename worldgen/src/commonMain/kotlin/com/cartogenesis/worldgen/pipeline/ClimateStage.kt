@@ -376,7 +376,7 @@ object ClimateStage {
     private const val POLAR_DRY_WIDTH_DEGREES = 18f
 
     /**
-     * The floor a circulation belt's factor on the rain's lifetime approaches where the
+     * The floor a circulation belt's factor on the rain's rates approaches where the
      * subtropical high's descent outweighs the baseline: a twentieth.
      *
      * At the default dryness the profile goes negative across roughly 25 to 35 degrees, and the
@@ -799,9 +799,7 @@ object ClimateStage {
                 airTemperatureC = airC.data,
                 seaSurfaceC = seaSurfaceC,
                 seaIce = seaIce,
-                zonalDirection = IntArray(cellsAcross * cellsDown) { cell ->
-                    if (totalWind.eastwardMps[cell] >= 0f) 1 else -1
-                },
+                eastwardMps = totalWind.eastwardMps,
                 southwardMps = totalWind.southwardMps,
                 beltRainFactorOfRow = bands(cellsDown, climateConfig, warm),
                 inversionSuppression = inversion?.data,
@@ -1273,20 +1271,19 @@ object ClimateStage {
     }
 
     /**
-     * The prevailing wind as a vector: a zonal direction of ±1 and a slant in rows per cell, both
-     * per cell, plus the belt's own zonal direction per row.
+     * The prevailing wind as the wind view reads it: a zonal direction of ±1 and a slant in rows
+     * per cell, both per cell, and the belts' own zonal wind per row as a share of
+     * [PressureWind.BELT_SPEED_MPS], positive eastward.
      *
-     * The belt direction is kept beside the cell-by-cell one because the two answer different
-     * questions. [zonal] is which way the air over *this cell* is moving, which is what the march
-     * follows and what the wind view draws. [beltZonal] is which way the *circulation cell* that
-     * row belongs to moves, which is what partitions the map into the runs the march sweeps — and
-     * that partition has to be a property of the row, not of the cell, or the wavefront would have
-     * no direction to sweep in.
+     * The belts' zonal wind is continuous across every belt edge and passes through zero there
+     * ([SurfaceBelts.zonalShare]), so where the pressure field's departure is added to it the line
+     * the total wind reverses along is the belts' edge moved by the land and sea under it, not a
+     * latitude row. [zonal] is the sign of that total at each cell.
      */
     private class WindField(
         val zonal: IntArray,
         val meridional: FloatArray,
-        val beltZonal: IntArray
+        val zonalShareOfRow: FloatArray
     )
 
     /**
@@ -1388,7 +1385,7 @@ object ClimateStage {
     ): WindField {
         val zonal = IntArray(cellsAcross * cellsDown)
         val meridional = FloatArray(cellsAcross * cellsDown)
-        val beltZonal = IntArray(cellsDown)
+        val zonalShareOfRow = FloatArray(cellsDown)
         for (row in 0 until cellsDown) {
             val latitude = latitudeOf(row, cellsDown)
             // Which way "poleward" points for this row, as a step in map coordinates: rows grow
@@ -1414,13 +1411,15 @@ object ClimateStage {
                 // The polar cell's, back down toward it.
                 else -> -outward
             } * slantRowsPerCell * meridionalProfile(abs(latitude), tiltDegrees, warm)
-            beltZonal[row] = zonalDirection
+            // The belts' zonal wind itself, measured from the thermal equator as the direction is,
+            // and continuous through zero at each edge where the direction steps.
+            zonalShareOfRow[row] = SurfaceBelts.zonalShare(beltDegrees)
             for (column in 0 until cellsAcross) {
                 zonal[row * cellsAcross + column] = zonalDirection
                 meridional[row * cellsAcross + column] = slant
             }
         }
-        return WindField(zonal, meridional, beltZonal)
+        return WindField(zonal, meridional, zonalShareOfRow)
     }
 
     /**
@@ -1450,7 +1449,7 @@ object ClimateStage {
         }
         val departure = PressureWind.surfaceWind(config, sea, pressureHpa)
         val total = totalWindMps(config, belts, departure)
-        return SeasonWind(marchWindOf(config, total, belts.beltZonal), total)
+        return SeasonWind(marchWindOf(config, total, belts.zonalShareOfRow), total)
     }
 
     /**
@@ -1485,7 +1484,7 @@ object ClimateStage {
         val southward = FloatArray(cellsAcross * cellsDown)
         parallelChunks(0, cellsDown) { startRow, endRow ->
             for (cell in startRow * cellsAcross until endRow * cellsAcross) {
-                eastward[cell] = belts.zonal[cell] * PressureWind.BELT_SPEED_MPS +
+                eastward[cell] = belts.zonalShareOfRow[cell / cellsAcross] * PressureWind.BELT_SPEED_MPS +
                     departure.eastwardMps[cell]
                 southward[cell] = belts.meridional[cell] * PressureWind.BELT_SPEED_MPS *
                     cellHeightOverWidth + departure.southwardMps[cell]
@@ -1498,7 +1497,7 @@ object ClimateStage {
     private fun marchWindOf(
         config: WorldGenConfig,
         wind: PressureWind.Vectors,
-        beltZonal: IntArray
+        zonalShareOfRow: FloatArray
     ): WindField {
         val cellsAcross = config.width
         val cellsDown = config.height
@@ -1528,7 +1527,7 @@ object ClimateStage {
                 }
             }
         }
-        return WindField(zonal, meridional, beltZonal)
+        return WindField(zonal, meridional, zonalShareOfRow)
     }
 
     /**
@@ -1630,15 +1629,15 @@ object ClimateStage {
     ): MoistureLedger = MoistureLedger().also { seasonalFields(config, sea, ocean, ledger = it) }
 
     /**
-     * How much the circulation belt lengthens or shortens a column's rain lifetime, at a given
-     * distance from the thermal equator: a multiplier on [MoistureMarch.RAIN_LIFETIME_DAYS]'s rate,
-     * 1 being an unremarkable latitude.
+     * How much the circulation belt speeds or slows the rain, at a given distance from the thermal
+     * equator: a multiplier on the rate of every sink the march charges (the column's rain, the
+     * cloud's conversion to rain and the convergence closure), 1 being an unremarkable latitude.
      *
      * Three bumps, each centred where the atmosphere actually puts it: the dry descending air of
      * the horse latitudes near 30, the wet mid-latitude storm track near 55, and the polar cell's
      * own dry descent at the pole. The march has no vertical motion of its own, so the descent is
-     * stated here, as a modulation of the lifetime; the ascent at the ITCZ is not, because the
-     * transport gathers the trades' water there and the convergence rains it.
+     * stated here, as a modulation of the rain's rates; the ascent at the ITCZ is not, because the
+     * transport gathers the trades' water there and the column's own humidity rains it.
      *
      * Taken from the *thermal* equator rather than the geographic one, which is what lets the
      * whole system migrate with the season: the same row sits under the dry descending limb in

@@ -149,9 +149,10 @@ class GroundFiguresTest {
     }
 
     /**
-     * The rain's lifetime is the same per kilometer of travel on any planet and any grid: the
-     * share of a column the march rains in crossing one cell is that cell's ground width over the
-     * transport speed times the lifetime, so it over the width is one figure everywhere.
+     * The march's clock is the same per kilometer of travel on any planet and any grid: every rate
+     * the march charges, the column's rain, the cloud's delays and the sources, is charged over the
+     * time the wind takes to cross a cell, which is that cell's ground width over the speed, so it
+     * over the width is one figure everywhere.
      *
      * The march carried its rain through a conversion fitted on one grid until C1b, and the tree
      * before that referred the conversion to the planet's own 512 grid, so a planet twice as wide
@@ -159,16 +160,16 @@ class GroundFiguresTest {
      * `PlanetWidthRainTest` holds the rain itself.
      */
     @Test
-    fun `the rain's lifetime is the same per kilometer of travel on any planet`() {
-        val perKm = 1_000.0 / (MoistureMarch.TRANSPORT_SPEED_MPS * MoistureMarch.RAIN_LIFETIME_DAYS * 86_400.0)
+    fun `the march's clock is the same per kilometer of travel on any planet`() {
+        val perKm = 1_000.0 / MoistureMarch.TRANSPORT_SPEED_MPS
         for (widthKm in PLANET_WIDTHS_KM) {
             for (config in gridsOf(widthKm)) {
                 for (row in listOf(0, config.height / 3, config.height / 2)) {
                     val groundKm = config.cellWidthKm * kotlin.math.cos(ClimateStage.latitudeOf(row, config.height) * kotlin.math.PI / 180.0)
-                    val share = MoistureMarch.lifetimeSharePerColumn(config, row)
-                    assertEquals(perKm, share / groundKm, perKm * FLOAT_ROUNDING, "the lifetime per km on a $widthKm km planet at ${config.width} by ${config.height}, row $row")
+                    val seconds = MoistureMarch.referenceSecondsPerColumn(config, row)
+                    assertEquals(perKm, seconds / groundKm, perKm * FLOAT_ROUNDING, "the crossing time per km on a $widthKm km planet at ${config.width} by ${config.height}, row $row")
                 }
-                println("GROUND rain lifetime on a %6.0f km planet (%4d by %4d): %.3e of a column per km".format(widthKm, config.width, config.height, perKm))
+                println("GROUND the march's crossing on a %6.0f km planet (%4d by %4d): %.3e s per km".format(widthKm, config.width, config.height, perKm))
             }
         }
     }

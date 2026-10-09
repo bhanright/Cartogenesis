@@ -1898,10 +1898,13 @@ data class ClimateConfig(
     /** Temperature drop per kilometre of altitude, in C. */
     val lapseRateCPerKm: Float = 6.5f,
     /**
-     * How much moisture windward slopes wring out of passing air. Raising this deepens rain
-     * shadows; push it far above the base rate and mountains take essentially all the rain.
+     * How fast cloud turns to rain, as a multiple of Earth's: Smith and Barstad's (2004) thousand
+     * seconds for cloud water to become hydrometeors ([com.cartogenesis.worldgen.pipeline.MoistureMarch.CLOUD_CONVERSION_SECONDS]).
+     * One is Earth's. Above it a range rains out more of what the climb condenses on its windward
+     * side and leaves less to evaporate again in its lee, so its rain shadow deepens; at zero no
+     * cloud ever rains and every rain shadow is gone.
      */
-    val orographicStrength: Float = 2.0f,
+    val rainShadowScale: Float = 1f,
     /**
      * How strongly the descending air of the horse latitudes suppresses rain, near 30 degrees.
      *

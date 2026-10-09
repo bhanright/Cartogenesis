@@ -26,17 +26,20 @@ internal class MoistureLedger {
 
     /** Which mechanism rained it. Each is charged once, on the water left by the ones before. */
     enum class Sink {
-        /** The column's own lifetime, [MoistureMarch.RAIN_LIFETIME_DAYS], under the belts' descent. */
-        LIFETIME,
+        /**
+         * The column's own rain at its relative humidity, Bretherton, Peters and Back's relation,
+         * under the belts' descent and the inversion's lid ([MoistureMarch.columnRainMmPerDay]).
+         */
+        COLUMN,
 
-        /** The air the wind gathers into a cell rising and raining what it brought. */
+        /** The air the wind gathers into a cell rising and raining what it brought, when switched on. */
         CONVERGENCE,
 
-        /** The climb the air made getting here, the panel's orographic setting. */
-        OROGRAPHIC,
-
-        /** What a column holds beyond the saturated column at its temperature. */
-        SATURATION
+        /**
+         * Cloud the column could not hold at its temperature, from the climb or the cold, fallen
+         * out over Smith and Barstad's two delays, or where the wind turns and does not carry it on.
+         */
+        CONDENSATE
     }
 
     /** One lap of one season's march: both sweeps, every cell once. */
@@ -64,8 +67,9 @@ internal class MoistureLedger {
         /** Rain of land-origin water, every mechanism and surface together. */
         var landOriginRain = 0.0
 
-        /** The most transport sub-steps one column needed to keep every parcel positive. */
-        var mostSubsteps = 0
+        /** Vapor turned to cloud where the column could not hold it, and cloud evaporated again. */
+        var condensed = 0.0
+        var reevaporated = 0.0
 
         /** Parcels found below zero after transport; zero is what positivity means. */
         var negativeParcels = 0
@@ -108,12 +112,21 @@ internal class MoistureLedger {
         /** The column's water as the march leaves each cell, millimeters. */
         val columnWater = FloatField(cellsAcross, cellsDown)
 
+        /** The saturated column at each cell's air temperature, millimeters. */
+        val saturatedColumn = FloatField(cellsAcross, cellsDown)
+
+        /** The sea's surface less the air over it, degrees, at open-sea cells. */
+        val seaMinusAirC = FloatField(cellsAcross, cellsDown)
+
         /**
          * The rain the air's own convergence makes at each cell. Charged only where the air the
          * cell takes in through its four sides exceeds what it sends on, so it falls where the
          * wind gathers and nowhere else, and cannot cancel against a divergence beside it.
          */
         val convergenceRain = FloatField(cellsAcross, cellsDown)
+
+        /** The rain the condensate makes at each cell: the climb's and the cold's cloud, fallen. */
+        val condensateRain = FloatField(cellsAcross, cellsDown)
     }
 
     var warmHalf: Cells? = null
@@ -135,6 +148,22 @@ internal class MoistureLedger {
      * potential evaporation; what is left is the last lap's distance from convergence.
      */
     var surfaceResidualMm: FloatField? = null
+
+    /**
+     * The year of rain the last lap's ground return was set from, at each land cell, millimeters:
+     * the lap before the last one's, which the convergence test holds within a thousandth of the
+     * land's mean rain of the last.
+     */
+    var returnRainMm: FloatField? = null
+
+    /** How many laps the march ran before the year's rain settled. */
+    var lapsRun = 0
+
+    /**
+     * After each lap, the land's mean change of annual rain from the lap before, over its mean
+     * rain: what [MoistureMarch.CONVERGED_SHARE] is held against.
+     */
+    val settling = ArrayList<Double>()
 
     /**
      * Millimeters a year over the planet's surface per unit of a lap term: the transport speed

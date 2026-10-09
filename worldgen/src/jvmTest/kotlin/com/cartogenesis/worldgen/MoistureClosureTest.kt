@@ -61,23 +61,31 @@ class MoistureClosureTest : BorrowsSharedWorlds() {
         const val FIELD_TOLERANCE = 1e-5
 
         /**
-         * How far the surface budget may stand from closing, as a share of the land's mean rain:
-         * a hundredth. The march's ground return is Budyko's share of the year's rain from the lap
-         * before; the rivers' runoff is the rest of the final year's, so what is left at a cell is
-         * the march's distance from its fixed point.
+         * The float rounding a cell's surface budget may carry beyond the convergence bound, as a
+         * share of its rain: a hundred thousandth, a float's rounding over the few sums that make the
+         * rain, the return and the runoff.
+         *
+         * The bound itself is the march's own: the ground's return in the last lap was set from the
+         * year the lap before made, and the rivers' runoff is the rest of the last year's, so at a
+         * cell the two miss by Budyko's return of the change between those two years, which is never
+         * more than the change; and the march stops when the land's mean change is under
+         * [MoistureMarch.CONVERGED_SHARE] of its mean rain.
          */
-        const val SURFACE_TOLERANCE = 0.01
+        const val FLOAT_SLACK = 1e-5
 
         /** The synthetic world's rows: a grid small enough to march in a moment. */
         const val SYNTHETIC_ROWS = 32
 
         /**
          * What a world with no source may still hold after the march's laps, as a share of what
-         * it started with: a tenth. The slowest parcel is the one beside the pole, whose lap round
-         * a 32-row grid's last row is 1,960 km, 2.9 days at the transport speed; ten laps are 3.3
-         * of the 8.9-day lifetime, `exp(-3.3)` = 0.04 left, and every other row keeps less.
+         * it started with. Its air starts at four fifths of its saturated column, and the column's
+         * rain ([MoistureMarch.columnRainMmPerDay]) is a millimeter a day or more while it stands
+         * above [MoistureMarch.COLUMN_RAIN_HUMIDITY_OFFSET] of it, which empties the 2 mm a column
+         * holds at -20 C within days, well inside the laps; below the offset the rain slows
+         * exponentially, which is why dry air keeps its water, so the bar is the offset over the
+         * starting four fifths and not nothing.
          */
-        const val NO_SOURCE_REMAINDER = 0.1
+        val NO_SOURCE_REMAINDER = MoistureMarch.COLUMN_RAIN_HUMIDITY_OFFSET / 0.8
     }
 
     private fun ledgerFor(seed: Long): Pair<WorldMap, MoistureLedger> {
@@ -91,12 +99,12 @@ class MoistureClosureTest : BorrowsSharedWorlds() {
         var worstLand = 0.0
         seeds.forEach { seed ->
             val (_, ledger) = ledgerFor(seed)
-            assertTrue(ledger.laps.size == 2 * MoistureMarch.LAPS, "seed $seed: the march filled ${ledger.laps.size} laps")
+            assertTrue(ledger.laps.size == 2 * ledger.lapsRun, "seed $seed: the march filled ${ledger.laps.size} laps of ${ledger.lapsRun}")
             ledger.laps.forEach { lap ->
                 worst = maxOf(worst, abs(lap.unaccounted) / lap.sources)
                 if (lap.groundReturn > 0.0) worstLand = maxOf(worstLand, abs(lap.landUnaccounted) / lap.sources)
             }
-            val last = ledger.laps.filter { it.lap == MoistureMarch.LAPS - 1 }
+            val last = ledger.laps.filter { it.lap == ledger.lapsRun - 1 }
             fun mm(term: (MoistureLedger.Lap) -> Double) = ledger.millimetersPerYearOverTheSphere(last.sumOf(term) / 2)
             val sinks = MoistureLedger.Sink.entries.joinToString { sink ->
                 "%s %.0f".format(sink.name.lowercase(), mm { lap -> lap.rain[sink.ordinal].sum() })
@@ -116,8 +124,7 @@ class MoistureClosureTest : BorrowsSharedWorlds() {
     fun `every parcel stays positive, every tracer inside its water and every value finite`() {
         seeds.forEach { seed ->
             val (_, ledger) = ledgerFor(seed)
-            val substeps = ledger.laps.maxOf { it.mostSubsteps }
-            println("POSITIVITY seed %d: at most %d transport sub-steps a column".format(seed, substeps))
+            println("POSITIVITY seed %d: %d laps".format(seed, ledger.lapsRun))
             assertEquals(0, ledger.laps.sumOf { it.negativeParcels }, "seed $seed: parcels below zero after transport")
             assertEquals(0, ledger.laps.sumOf { it.tracerOutOfBounds }, "seed $seed: land-origin water outside 0..W")
             assertEquals(0, ledger.laps.sumOf { it.nonFinite }, "seed $seed: values that are not finite numbers")
@@ -129,7 +136,7 @@ class MoistureClosureTest : BorrowsSharedWorlds() {
         var worst = 0.0
         seeds.forEach { seed ->
             val (_, ledger) = ledgerFor(seed)
-            ledger.laps.filter { it.lap == MoistureMarch.LAPS - 1 }.forEach { lap ->
+            ledger.laps.filter { it.lap == ledger.lapsRun - 1 }.forEach { lap ->
                 val share = abs(lap.storageAtEnd - lap.storageAtStart) / lap.sources
                 println("STEADY seed %d %s half: the last lap's storage changed by %.2e of its sources".format(seed, if (lap.warm) "warm" else "cold", share))
                 worst = maxOf(worst, share)
@@ -158,7 +165,7 @@ class MoistureClosureTest : BorrowsSharedWorlds() {
                     assertEquals(stored[cell], rain[cell], 0f, "seed $seed cell $cell: the ledger's field is not the climate's")
                 }
             }
-            val last = ledger.laps.filter { it.lap == MoistureMarch.LAPS - 1 }
+            val last = ledger.laps.filter { it.lap == ledger.lapsRun - 1 }
             val storedMm = ledger.millimetersPerYearOverTheSphere(last.sumOf { it.storageAtEnd - it.storageAtStart } / 2)
             val residual = (rainSum - sourceSum) / area + storedMm
             println(
@@ -177,10 +184,12 @@ class MoistureClosureTest : BorrowsSharedWorlds() {
         seeds.forEach { seed ->
             val (world, ledger) = ledgerFor(seed)
             val residual = ledger.surfaceResidualMm!!.data
+            val returnedFrom = ledger.returnRainMm!!.data
             var area = 0.0
             var rain = 0.0
             var off = 0.0
             var worst = 0.0
+            var outside = 0
             for (row in 0 until world.height) {
                 val weight = cos(ClimateStage.latitudeOf(row, world.height) * PI / 180.0)
                 for (column in 0 until world.width) {
@@ -189,12 +198,20 @@ class MoistureClosureTest : BorrowsSharedWorlds() {
                     area += weight
                     rain += weight * world.climate.precipitationMm.data[cell]
                     off += weight * abs(residual[cell])
+                    // A cell misses by Budyko's return of the change between the year its return
+                    // was set from and the year it rains, which is never more than that change.
+                    val stillMoving = abs(world.climate.precipitationMm.data[cell] - returnedFrom[cell])
+                    val allowed = stillMoving + FLOAT_SLACK * world.climate.precipitationMm.data[cell]
+                    if (abs(residual[cell]) > allowed) outside++
                     worst = maxOf(worst, abs(residual[cell]).toDouble())
                 }
             }
-            println("SURFACE seed %d: rain less return less runoff averages %.2f mm on land, against a mean rain of %.0f; the worst cell %.0f mm"
-                .format(seed, off / area, rain / area, worst))
-            assertTrue(off / rain <= SURFACE_TOLERANCE, "seed $seed: the surface budget is %.2f%% off".format(100 * off / rain))
+            val bound = MoistureMarch.CONVERGED_SHARE * rain / area
+            println("SURFACE seed %d after %d laps: rain less return less runoff averages %.3f mm on land against the convergence bound of %.3f, a mean rain of %.0f; the worst cell %.1f mm; %d cells outside their own last change"
+                .format(seed, ledger.lapsRun, off / area, bound, rain / area, worst, outside))
+            assertTrue(ledger.lapsRun < MoistureMarch.MAX_LAPS, "seed $seed: the year's rain had not settled after ${ledger.lapsRun} laps")
+            assertEquals(0, outside, "seed $seed: land cells whose surface budget misses by more than their year moved in the last lap")
+            assertTrue(off / area <= bound, "seed $seed: the land's surface budget is %.3f mm off on average, over the bound of %.3f".format(off / area, bound))
         }
     }
 
@@ -213,7 +230,7 @@ class MoistureClosureTest : BorrowsSharedWorlds() {
             airTemperatureC = FloatArray(cells) { -20f },
             seaSurfaceC = FloatArray(cells) { -1.8f },
             seaIce = BooleanArray(cells) { true },
-            zonalDirection = IntArray(cells) { cell -> if ((cell / config.width) % 7 < 4) 1 else -1 },
+            eastwardMps = FloatArray(cells) { cell -> if ((cell / config.width) % 7 < 4) 7.5f else -7.5f },
             southwardMps = FloatArray(cells) { cell -> if ((cell / config.width) % 2 == 0) 1.5f else -0.5f },
             beltRainFactorOfRow = FloatArray(config.height) { 1f },
             inversionSuppression = null,
@@ -242,7 +259,7 @@ class MoistureClosureTest : BorrowsSharedWorlds() {
         }
         val first = ledger.laps.first { it.lap == 0 }
         val last = ledger.laps.last()
-        println("NO SOURCE: storage %.3e at the start, %.3e after %d laps".format(first.storageAtStart, last.storageAtEnd, MoistureMarch.LAPS))
+        println("NO SOURCE: storage %.3e at the start, %.3e after %d laps".format(first.storageAtStart, last.storageAtEnd, ledger.lapsRun))
         assertTrue(last.storageAtEnd < first.storageAtStart * NO_SOURCE_REMAINDER, "the march kept its water with nothing to replace it")
     }
 }

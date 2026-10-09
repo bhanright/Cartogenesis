@@ -226,7 +226,7 @@ private fun relativeTo(default: Float): (Float) -> String =
  */
 private const val DEFAULT_ANDEAN_HEIGHT = 0.52f
 private const val DEFAULT_BEDROCK_ERODIBILITY_PER_YEAR = 1e-6f
-private const val DEFAULT_OROGRAPHIC_STRENGTH = 2.0f
+private const val DEFAULT_RAIN_SHADOW_SCALE = 1f
 
 /**
  * Every knob on the panel and in the atlas, in the order they are drawn.
@@ -377,17 +377,17 @@ internal object Knobs {
      * climate stage, and the one whose effect is unmistakable on the map, since it is what puts a
      * desert behind every range. Continentality would have been the other candidate, but it moves
      * the *seasonal swing*, which is what [seasonalTiltDegrees] beside it already governs; this
-     * moves the rain. Zero flattens every rain shadow; 5 lets a range take essentially all the
-     * rain.
+     * moves the rain. It is how fast cloud turns to rain as a multiple of Earth's: zero flattens
+     * every rain shadow, five rains out nearly all a range condenses on its windward side.
      */
     val rainShadow = Dial(
         section = PanelSection.CLIMATE,
         label = "Rain shadow",
         range = 0f..5f,
-        show = relativeTo(DEFAULT_OROGRAPHIC_STRENGTH),
-        read = { it.climate.orographicStrength },
+        show = relativeTo(DEFAULT_RAIN_SHADOW_SCALE),
+        read = { it.climate.rainShadowScale },
         write = { config, strength ->
-            config.copy(climate = config.climate.copy(orographicStrength = strength))
+            config.copy(climate = config.climate.copy(rainShadowScale = strength))
         }
     )
 

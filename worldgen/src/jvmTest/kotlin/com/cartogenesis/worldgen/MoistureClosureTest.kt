@@ -22,9 +22,9 @@ import kotlin.test.assertTrue
  * holds at each lap's start and end, in the parcels carried along the rows and in the bank between
  * its two sweeps. The march carries water between rows and columns as fluxes, each face's taken
  * out of one row and given to the other, so the budget closes by construction; these clauses are
- * what would see a change that broke that. Until C1 it did not close: the rain over open sea was
+ * what would see a change that broke that. Until C1b it did not close: the rain over open sea was
  * never taken out, the cold cap dropped water, and the row blend made and lost it, together 15.7
- * times the march's sources (docs/DESIGN_LEDGER.md, C1).
+ * times the march's sources (docs/DESIGN_LEDGER.md, C1b).
  *
  * At [SharedWorlds.COARSE_ROWS] on the standard seeds: a closure is a property of the march's
  * arithmetic, the same on every grid, and the cheapest standard world asks it as well as any.

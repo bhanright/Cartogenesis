@@ -71,8 +71,8 @@ class CurrentFeedsRainTest : BorrowsSharedWorlds() {
      * The control turns off more than the evaporation: without currents there is no anomaly for
      * the coast's temperature to feel and no cold water for the marine inversion to stand over.
      * Both act the same way on a cold coast, so the claim is the currents' and not the bulk
-     * formula's alone. Until C1 the coupling was a setting of its own, a second 7 percent a degree
-     * on top of the saturation the march then did not have (docs/DESIGN_LEDGER.md, H4 and C1).
+     * formula's alone. Until C1b the coupling was a setting of its own, a second 7 percent a degree
+     * on top of the saturation the march then did not have (docs/DESIGN_LEDGER.md, H4 and C1b).
      */
     @Test
     fun `a cold-current coast dries out while a warm one does not`() {

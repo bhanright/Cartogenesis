@@ -22,7 +22,7 @@ import kotlin.math.tan
  *
  * All three are potential rates. The march spends the sea's directly, because the sea never runs
  * out; it spends the land's through Budyko's curve, which turns a potential into what the ground's
- * own rain lets it give back; and the lakes lose the open water's. See docs/DESIGN_LEDGER.md, C1.
+ * own rain lets it give back; and the lakes lose the open water's. See docs/DESIGN_LEDGER.md, C1b.
  */
 internal object SurfaceEvaporation {
 

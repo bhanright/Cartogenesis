@@ -343,7 +343,7 @@ object WorldCodec {
      * 8192 by 4096, [LARGEST_LADDER_ROWS] rows and [COLUMNS_PER_ROW] columns for each of them.
      *
      * A count of cells rather than a side, because the grid is twice as wide as it is tall and what
-     * a save costs is its cells: 146 bytes a cell of arrays, about 4.9 GB at the top. A file
+     * a save costs is its cells: 154 bytes a cell of arrays, about 5.2 GB at the top. A file
      * claiming more is refused before anything is allocated for it. The 8192-row export is made and
      * drawn without ever being saved, so it does not need this raised.
      */

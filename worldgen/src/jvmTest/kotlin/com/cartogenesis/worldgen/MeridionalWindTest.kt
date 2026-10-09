@@ -94,7 +94,7 @@ class MeridionalWindTest : BorrowsSharedWorlds() {
      * the belts carry nothing across the latitude lines, so the only water that crosses a row is
      * what the storm track's eddies mix.
      *
-     * Until C1 this was checked against a from-scratch reimplementation of the per-row zonal scan,
+     * Until C1b this was checked against a from-scratch reimplementation of the per-row zonal scan,
      * bit for bit, because a zero slant made the march exactly that scan. It no longer is: the
      * march carries water between rows as fluxes and the eddies stir the rows together whatever
      * the mean wind, which is what lets water cross a belt's edge at all (`MoistureMarch`). What

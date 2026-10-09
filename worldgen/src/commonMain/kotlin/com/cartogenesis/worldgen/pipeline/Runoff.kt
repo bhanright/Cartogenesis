@@ -1,45 +1,67 @@
 package com.cartogenesis.worldgen.pipeline
 
 /**
- * How much water a land cell sheds in a year, in millimeters: the one weight every stage that
- * routes water routes with — the erosion rounds, the channel-initiation criterion, the drawn
- * network's discharge in `RiverStage`, the lakes' inflow and the riverine threshold `NationStage`
- * reads off it.
+ * How much water a land cell sheds, in millimeters: two figures since C1b, for two questions.
  *
- * **The runoff is the rain the ground did not give back.** The moisture march returns Budyko's
- * share of each land cell's year of rain to the air against the cell's potential
- * evapotranspiration ([MoistureMarch.groundReturnMm]); what is left runs off, and this is that
- * remainder, against the same rain and the same potential ([ClimateResult.precipitationMm],
- * [ClimateResult.potentialEvapotranspirationMm]). So at every cell the rain is the return plus the
- * runoff, and water the march put back into the air is not routed down the rivers as well. Until
- * C1 every stage routed the whole rainfall with a floor of 60 mm under it, a stand-in for a
- * runoff nothing modeled; the floor went with it, because Budyko's curve already gives a
- * hyper-arid cell its own small share, and a floor was water the cell's climate did not have
- * (docs/DESIGN_LEDGER.md, C1).
+ * **What the rivers carry in a year is [annualRunoffMm]**: the year's rain less what the ground
+ * gave back to the air, Budyko's share against the climate's potential evapotranspiration, the
+ * same curve and the same two fields the moisture march's ground return reads
+ * ([MoistureMarch.groundReturnMm]). So at every land cell the rain is the return plus the runoff,
+ * and water the march put back into the air is not routed down the rivers as well. The drawn
+ * network's discharge in `RiverStage`, the lakes' inflow (`LakeWaterBalance.shedding`) and the
+ * riverine threshold `NationStage` reads read it.
  *
- * Still annual and still smooth: what reaches a channel is delivered in floods rather than evenly,
- * and soil and snow carry water across the seasons, which an annual curve at each cell does not
- * see. Stated once, here, where the substitution is made.
+ * **What cuts a channel is [annualWeightMm]**: the rainfall, with a floor, as below. The erosion
+ * rounds and the channel-initiation criterion read it, and not the annual runoff, because a
+ * channel is cut by its floods and not by its year's mean: Budyko's curve is a long-term partition
+ * of a catchment's water (Budyko 1974; McMahon and others 2013 state its limits), and in dry
+ * country, where it returns nearly all of a year's rain to the air, the rare storm still runs off
+ * and cuts, which is why drainage density peaks in semi-arid country (Langbein and Schumm 1958,
+ * GEOGRAPHY.md). The rainfall stands in for the storms, which nothing models, and the floor below
+ * for the hyper-arid upland's rare one.
  *
- * **The two normalizations, and why each is right for its consumer.** The two stages that compare
- * the weight against a fitted or measured figure do not route [annualRunoffMm] raw; each divides it
+ * What follows is the storm weight's own account, from before C1b.
+ *
+ * Four stages asked the same question of a cell and used to answer it three ways. `RiverStage` added
+ * a floor to a rainfall normalised to 0..1 and clamped at 1,200 mm, `ChannelInitiation` added a
+ * hundred and fifty millimetres to a rainfall in millimetres, and `HydraulicErosion` took the larger
+ * of the rainfall and a floor; all three meant "an arid upland still feeds the channel that leaves
+ * it", and two of them named a different floor for it. There is one figure here now and the stages
+ * differ only in what they divide it by, which is the part that genuinely differs.
+ *
+ * **Rainfall standing in for the storms.** What actually cuts a channel is the water a storm
+ * delivers faster than the ground takes it in, and storms are not modelled, so the weight is an
+ * upper bound on the water and a smooth one on a quantity that is not smooth. Stated once, in the
+ * place the substitution is made.
+ *
+ * **The two normalisations, and why each is right for its consumer.** The two stages that compare
+ * the weight against a fitted or measured figure do not route [annualWeightMm] raw; each divides it
  * by a mean, and they divide by different ones on purpose. The drawn network and the realm stage
- * route it raw, because everything they do with it is a ratio within the one world — a channel's
- * width against the widest, a threshold as a share of all the land's water.
+ * route [annualRunoffMm] raw, because everything they do with it is a ratio within the one world —
+ * a channel's width against the widest, a threshold as a share of all the land's water.
  *
- * `ChannelInitiation` divides by **Earth's own mean over land**, [EARTH_MEAN_LAND_RUNOFF_MM] —
- * an absolute reference. Its threshold is an area in square kilometers read off Montgomery and
+ * `ChannelInitiation` divides by **Earth's own mean over land**, [EARTH_MEAN_LAND_RAINFALL_MM] —
+ * an absolute reference. Its threshold is an area in square kilometres read off Montgomery and
  * Dietrich's field surveys, so the quantity it compares against that threshold has to be a
- * physical area of real ground and not a share of this world's.
+ * physical area of real ground and not a share of this world's. Against the world's own mean a
+ * world twice as wet would draw exactly the same network, because every weight would be divided by
+ * twice as much; against Earth's it draws a denser one, which is the answer the criterion exists to
+ * give.
  *
  * `HydraulicErosion` divides by **the mean over the land the pass is routing on** — a relative
- * reference, re-taken every pass because the shoreline moves. `Rates.incisionCoefficient` was
- * fitted at one world's total water and nothing re-fits it, and a mean of exactly 1 is what keeps
- * an accumulation a share of the land's water, so `E = K A^m S^n` is spent against the A it was
- * calibrated with. The cost is stated where it is paid: the erosion answers *where* the water runs
- * and not *how much*.
+ * reference, re-taken every pass because the shoreline moves. Its arithmetic is the opposite case:
+ * `Rates.incisionCoefficient` was fitted at one world's total water and nothing re-fits it, and the
+ * stage turns an accumulation into a share by dividing it by the land's *cell count* in two places
+ * at once. A mean of exactly 1 is what keeps that division meaning "this cell's share of the land's
+ * water", so `E = K A^m S^n` is spent against the A it was calibrated with. Handed the absolute
+ * weight instead, A would be re-scaled by a factor nothing in the stage accounts for.
  *
- * See docs/DESIGN_LEDGER.md, R1, S3, chunk 6 and C1.
+ * The cost of the relative form is stated where it is paid: the erosion answers *where* the rain
+ * falls and not *how much*, so a uniformly wetter world erodes exactly as it did. The channel
+ * criterion has no such blind spot, and that difference between the two stages is real rather than
+ * an inconsistency to be tidied away.
+ *
+ * See docs/DESIGN_LEDGER.md, R1, S3 and chunk 6.
  */
 object Runoff {
 
@@ -51,26 +73,36 @@ object Runoff {
     const val HYPER_ARID_ARIDITY_INDEX = 0.05f
 
     /**
-     * Earth's runoff over its land, in millimeters a year: the 40.0e3 km³ its rivers and
-     * Antarctica's ice deliver to the sea (Trenberth and others 2007, from Dai and Trenberth 2002)
-     * over its 148.9 million km² of land. The reference the absolute form divides by.
+     * The least water a cell is counted as shedding, in millimetres a year.
+     *
+     * A floor and not a physical term. Below it a desert range would contribute nothing at all to
+     * the water leaving it, and the channel that drains it would have no discharge to cut with or
+     * to be initiated by — but a dry upland does gather a trickle from snowmelt and the odd storm,
+     * and its channels are cut by the rare storm rather than by the annual mean.
+     *
+     * Sixty millimetres is where the hyper-arid class ends: UNEP's aridity index, rainfall over
+     * potential evaporation, puts the line at [HYPER_ARID_ARIDITY_INDEX], and under a potential
+     * evaporation of [ClimateStage.REFERENCE_MM] — the scale the climate normalises its rainfall
+     * against, and within the spread of the estimates of Earth's mean over land — that is sixty.
+     * So a cell drier than the driest class keeps that class's edge, and nothing wetter is
+     * touched. It is also the figure the river stage's own floor stood for since E1, 0.05 of the
+     * 1,200 mm scale, so the erosion and the channel criterion, which read it already, do not move.
      */
-    const val EARTH_MEAN_LAND_RUNOFF_MM = 40.0e3f / 148.9e6f * 1.0e6f
+    const val FLOOR_MM = HYPER_ARID_ARIDITY_INDEX * ClimateStage.REFERENCE_MM
 
     /**
-     * A cell's runoff in millimeters a year: [precipitationMm] less what the ground gives back
-     * against [potentialMm], by Budyko's curve ([LakeWaterBalance.runoffShareOfRain]). Zero where
-     * there is no rain; all of it where nothing can evaporate.
+     * The rainfall the absolute form is measured against, in millimetres a year: Earth's mean over
+     * land, about 715 (Legates & Willmott's land mean, quoted at 700-750 in every later census).
+     *
+     * See the class note for which consumer divides by this and why the other one does not.
      */
-    fun annualRunoffMm(precipitationMm: Float, potentialMm: Float): Float =
-        precipitationMm.coerceAtLeast(0f) *
-            LakeWaterBalance.runoffShareOfRain(precipitationMm, potentialMm)
+    const val EARTH_MEAN_LAND_RAINFALL_MM = 715f
 
-    /** [annualRunoffMm] at [cell] of [climate]. */
-    fun annualRunoffMm(climate: ClimateResult, cell: Int): Float =
-        annualRunoffMm(climate.precipitationMm.data[cell], climate.potentialEvapotranspirationMm.data[cell])
+    /** A cell's annual water in millimetres: its rainfall, or [FLOOR_MM] where that is drier. */
+    fun annualWeightMm(precipitationMm: Float): Float =
+        if (precipitationMm > FLOOR_MM) precipitationMm else FLOOR_MM
 
-    /** [annualRunoffMm] as a share of Earth's land mean — the absolute form. */
-    fun shareOfEarthMean(precipitationMm: Float, potentialMm: Float): Float =
-        annualRunoffMm(precipitationMm, potentialMm) / EARTH_MEAN_LAND_RUNOFF_MM
+    /** [annualWeightMm] as a share of Earth's land mean — the absolute form. */
+    fun shareOfEarthMean(precipitationMm: Float): Float =
+        annualWeightMm(precipitationMm) / EARTH_MEAN_LAND_RAINFALL_MM
 }

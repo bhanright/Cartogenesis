@@ -28,7 +28,7 @@ import kotlin.math.sqrt
  * ### Accumulation
  *
  * The precipitation that falls as snow. The seasonal rainfall fields are half-year rates in the
- * annual-equivalent millimetres [ClimateStage.MM_SCALE] produces — the annual total is their mean —
+ * annual-equivalent millimetres the moisture march records — the annual total is their mean —
  * so each season contributes half of its own rate, and each is asked separately what fraction of
  * it fell frozen. Asking both halves rather than only the cold one is what lets a polar cell whose
  * *summer* never thaws accumulate all year, which is the Antarctic case and the reason an ice sheet
@@ -144,7 +144,7 @@ object SnowBalance {
      * Accumulation minus ablation for one cell, in millimetres of water equivalent a year.
      *
      * Positive means the cell keeps snow through the year, which is a glacier. The seasonal
-     * rainfall arguments are in [ClimateStage.MM_SCALE]'s annual-equivalent millimetres, as
+     * rainfall arguments are in the moisture march's annual-equivalent millimetres, as
      * [ClimateResult.precipitationMm]'s two halves are.
      */
     fun balanceMm(

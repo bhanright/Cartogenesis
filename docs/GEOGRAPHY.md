@@ -47,7 +47,17 @@ initiates nothing of its own and is carried by the downstream rule instead. Grou
 thaws — where the warmest month of the year stays at or below freezing — starts no channel, though
 a river rising in a warmer catchment still runs across it.
 
-The runoff itself is one figure for the whole pipeline, `Runoff.annualWeightMm`: a cell's rainfall
+**Since C1b the rivers carry the rain the ground did not give back.** `Runoff.annualRunoffMm` is
+the year's rain less Budyko's evaporated share of it against the climate's FAO-56 potential
+evapotranspiration, the same curve and the same two fields the moisture march's ground return
+reads, so at every land cell the rain is the return plus the runoff, and the drawn network's
+discharge, the lakes' inflow and the realms' riverine threshold carry no water the march put back
+into the air. What cuts a channel, in the erosion rounds and the channel-head criterion, is still
+the rainfall weight below, floor and all: a channel is cut by its storms and not by its year's
+mean, and in dry country Budyko's annual curve returns nearly all of the rain that the rare storm
+still runs off with.
+
+The weight that cuts is `Runoff.annualWeightMm`: a cell's rainfall
 in millimetres a year, held at or above a floor of **60 mm** so that an arid upland still feeds the
 channel leaving it. Sixty millimetres is where UNEP's hyper-arid class ends — an aridity index,
 rainfall over potential evaporation, of 0.05 — under a potential evaporation of 1,200 mm, the scale
@@ -1251,6 +1261,17 @@ are 14/18, 8/14, 8/16, 6/14 and 3/14, 39 of 76, against 36 of 77 on origin/main.
 
 ## Where the deserts are
 
+**Since C1b the march is a budget in kilograms per square meter.** Column water is carried along
+the wind and between rows as fluxes that conserve it, taken up from the sea by the bulk formula and
+from the ground as Budyko's share of each cell's own year of rain, and rained by the column's
+8.9-day lifetime under the belts' descent, by the climb, and wherever the column holds more than
+its saturated water at its temperature (Clausius-Clapeyron up a 6.5 K/km lapse). The belts' factor
+below now modulates that lifetime and reaches its floor without a kink; the ITCZ is no longer a
+bump in it but the trades' water gathered where they meet; and the ground's return is not scaled by
+the belt, because it is the ground's own rain against its own evaporative demand. The two
+mechanisms below are what the old march did and what its successor keeps in physical form; their
+figures are the old march's. `ClimateConfig.groundReturn` off is the control for the second.
+
 Deserts belong to the horse latitudes, near 30 degrees, where air that rose at the equator descends
 dry. Getting them there took two mechanisms rather than a tuned constant.
 
@@ -1515,6 +1536,16 @@ pressure, and surface pressure comes from temperature:
 
 The deserts survived it: `GeographyAuditTest` reads 100% in band on all four seeds, up from
 100/99/100/98.
+
+**Since C1b the runs, the walls and the blend are gone.** Every cell is marched by the sweep its own
+wind blows in, one eastward and one westward over the whole map, and water crossing from one
+sweep's cell into the other's, through a face between rows or where two zonal winds meet, is banked
+and taken up by the other sweep. Between rows water moves as a donor-cell flux of the cell's own
+meridional wind, cut into as many sub-steps as keep every parcel positive, and the storm track's
+eddies mix the rows at the energy balance's own eddy diffusivity, so a circulation belt's edge is
+crossed. The belts' meridional wind is a half sine between its zeros, the belt edges and the
+equator, with the same mean as before. What the bullets above say of the old march's blend and
+clamp is its history (docs/DESIGN_LEDGER.md, C1b).
 
 ## Coasts and the sea beside them
 

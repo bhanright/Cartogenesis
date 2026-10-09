@@ -35,7 +35,7 @@ import kotlin.math.exp
  * of the donor's parcel per column, donor-cell upwind, out of one row and into the other. That is
  * the transport, and it is conservative by construction: what one row loses through a face the
  * other gains, in kilograms a second, whatever the two rows' time steps (docs/DESIGN_LEDGER.md,
- * C1, for the clock it replaced).
+ * C1b, for the clock it replaced).
  *
  * # Two sweeps, and the bank between them
  *
@@ -73,9 +73,10 @@ object MoistureMarch {
      * 8.9 +- 0.4 from the closed budget of Rodell and others (2015) and Trenberth and others'
      * (2011) storage, and dispute the 4 to 5 days of Laederach and Sodemann (2016), whose figure is
      * the median of a long-tailed distribution and not its mean. It is the baseline hazard of the
-     * march's rain; the belts' descent modulates it and the convergence, orographic and saturation
-     * sinks are added to it, so the turnover the world ends with is a result, which
-     * `MoistureClosureTest` diagnoses rather than asserts.
+     * march's rain; the belts' descent modulates it and the orographic and saturation sinks (and
+     * the convergence closure, when `ClimateConfig.convergenceRain` switches it on) are added to it,
+     * so the turnover the world ends with is a result, which `RainAgainstEarthTest` diagnoses
+     * rather than asserts.
      */
     const val RAIN_LIFETIME_DAYS = 8.9
 
@@ -87,12 +88,12 @@ object MoistureMarch {
     const val TRANSPORT_SPEED_MPS = PressureWind.BELT_SPEED_MPS.toDouble()
 
     /**
-     * Laps of both seasons round the planet. The first starts from half-saturated air over dry
-     * ground and leaves a year's rain for the second's ground to give back; each later one
+     * Laps of both seasons round the planet. The first starts from air at four fifths of its
+     * saturated column over dry ground and leaves a year's rain for the second's ground to give back; each later one
      * carries the return a lap further toward the year it belongs to. Ten is where the last lap's
      * storage changes by well under the uncertainty of Earth's own global rain on the standard
      * worlds and on the application's 1,024 rows, the bar `MoistureClosureTest` holds it to;
-     * eight left 0.9 percent on one seed at 1,024 rows (docs/DESIGN_LEDGER.md, C1).
+     * eight left 0.9 percent on one seed at 1,024 rows (docs/DESIGN_LEDGER.md, C1b).
      */
     const val LAPS = 10
 
@@ -102,7 +103,10 @@ object MoistureMarch {
     /** Seconds in a day. */
     private const val SECONDS_PER_DAY = 86_400.0
 
-    /** The saturation the first lap's air starts at; the laps wash it out. */
+    /**
+     * The share of its saturated column the first lap's air starts at. A starting guess and no
+     * more: the laps wash it out, and nearer the march's own humidity they have less to wash.
+     */
     private const val INITIAL_HUMIDITY = 0.8
 
     /** What a season's march reads, every per-cell array row-major on the world's grid. */

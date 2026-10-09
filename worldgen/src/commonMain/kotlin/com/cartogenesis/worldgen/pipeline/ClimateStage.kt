@@ -243,9 +243,10 @@ object ClimateStage {
      *
      * Koppen's 70/30 concentration split was fit to Earth, where a strongly one-sided year is the
      * exception. In this march it is close to the rule everywhere cold, for a reason with nothing
-     * to do with monsoons: the cold cap in [marchLandStep] suppresses moisture in proportion to
-     * temperature, and winter is colder than summer at the same cell by construction, so winter is
-     * systematically the drier season across the whole cold half of every world. At Koppen's own
+     * to do with monsoons: cold air holds less water (the saturated column of [ColumnWater] falls
+     * by Clausius-Clapeyron, as the cold cap that stood for it until C1b did), and winter is colder
+     * than summer at the same cell by construction, so winter is systematically the drier season
+     * across the whole cold half of every world. At Koppen's own
      * figure the full "a hot climate needs proportionally more rain" penalty therefore lands on
      * ordinary continental interiors merely for being cold and seasonal, and desert swallows the
      * 45-50 degree rain-shadow country out of all proportion to horse-latitude desert.
@@ -355,7 +356,7 @@ object ClimateStage {
     // The three bumps of [latitudeBandAt]'s rain-rate profile, each placed where the atmosphere
     // actually puts it and each as wide as that feature really is. The ITCZ is not one of them:
     // the march's transport gathers the trades' water into it and the convergence rains it, so a
-    // bump here would count the same rising air twice (docs/DESIGN_LEDGER.md, C1). Read from the *thermal*
+    // bump here would count the same rising air twice (docs/DESIGN_LEDGER.md, C1b). Read from the *thermal*
     // equator, so the whole profile migrates with the season. A strength above zero encourages
     // rain and below zero suppresses it; the subtropical high's strength is
     // `ClimateConfig.subtropicalDryness`, because how arid a world's horse latitudes are is the
@@ -381,7 +382,7 @@ object ClimateStage {
      * At the default dryness the profile goes negative across roughly 25 to 35 degrees, and the
      * floor is what is left there. It is reached smoothly rather than by a clamp ([smoothFloor]):
      * a clamp put a kink in the profile at the latitude where it bit, which drew the desert's
-     * edge straight along a row (docs/DESIGN_LEDGER.md, C1). The figure itself has no Earth
+     * edge straight along a row (docs/DESIGN_LEDGER.md, C1b). The figure itself has no Earth
      * source; it stands until the atmosphere solves the descent it stands in for (docs/TODO.md).
      */
     private const val MIN_BAND = 0.05f
@@ -1867,8 +1868,9 @@ object ClimateStage {
      * fifth, for a reason specific to this march rather than to Koppen's formula, documented there.
      *
      * The concentration term needs a floor as well as a ratio, which is why this reads
-     * [summerShare]/[winterShare] *and* [summerMm]/[winterMm] rather than the ratio alone. This
-     * march's cold cap suppresses winter moisture far more than summer moisture everywhere cold —
+     * [summerShare]/[winterShare] *and* [summerMm]/[winterMm] rather than the ratio alone. Cold
+     * air's smaller saturated column holds winter moisture down far more than summer's everywhere
+     * cold —
      * a temperature effect, not a seasonal-rainfall-pattern one — so the ratio on its own calls
      * almost every cold cell "summer-concentrated" regardless of whether either season brought
      * meaningful rain. [KOPPEN_CONCENTRATION_FLOOR_MM] requires the wetter season to have brought

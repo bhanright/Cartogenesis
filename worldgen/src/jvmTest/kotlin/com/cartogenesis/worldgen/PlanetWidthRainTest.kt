@@ -70,7 +70,7 @@ class PlanetWidthRainTest {
         /** The stock planet's width, in kilometers. */
         const val STOCK_WIDTH_KM = 12_000.0
 
-        /** The percentile `ClimateStage.MM_SCALE` was calibrated at: the windward coasts. */
+        /** The windward coasts' percentile, the one the rain's old conversion was calibrated at. */
         const val WETTEST_PERCENTILE = 0.995
     }
 }

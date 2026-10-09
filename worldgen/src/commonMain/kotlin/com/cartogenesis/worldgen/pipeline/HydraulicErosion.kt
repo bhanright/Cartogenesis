@@ -416,7 +416,7 @@ internal object HydraulicErosion {
         val cut = SeaLevelStage.percentileCut(
             terrain, provisionalSeaLevel, config.scale, standBelowToday(config, round)
         )
-        val rainfall = FloatArray(cellCount)
+        val rainfall = FloatArray(cellCount) { Runoff.FLOOR_MM }
         if (cut.landCellCount == 0) return Weather(rainfall, FloatArray(cellCount))
 
         val climate =
@@ -425,21 +425,19 @@ internal object HydraulicErosion {
             ).result
         val annualMm = climate.precipitationMm.data
 
-        // [Runoff.annualRunoffMm], which is the one every stage in the pipeline reads: see that
-        // file for why this stage divides the weight by its own land's mean where
-        // `ChannelInitiation` divides it by Earth's.
+        // [Runoff.annualWeightMm] and its floor, which is the one every stage in the pipeline
+        // reads: see that file for why there is a floor at all and for why this stage divides the
+        // weight by its own land's mean where `ChannelInitiation` divides it by Earth's.
         //
         // Every cell, and the sea's cells too. The provisional march's shoreline is not the
         // shoreline of every round: the sea stands lower early on and rises up the valleys as the
         // rounds close, so ground that is under the march's water is land the later rounds route
         // over. Left at zero, that ground would contribute nothing to the water below it — a hole
         // in the discharge field exactly where a river mouth is — until the midpoint march caught
-        // up with it. The climate rains on the sea's cells too and states the potential
-        // evapotranspiration land would have there, so the runoff such ground would shed is a
-        // figure the march has.
-        val potentialMm = climate.potentialEvapotranspirationMm.data
+        // up with it. The floor is the honest figure for a cell the march has no rainfall for, and
+        // it is the same floor an arid upland gets.
         for (cell in 0 until cellCount) {
-            rainfall[cell] = Runoff.annualRunoffMm(annualMm[cell], potentialMm[cell])
+            rainfall[cell] = Runoff.annualWeightMm(annualMm[cell])
         }
 
         // Zero everywhere when the vegetation section is switched off, because that is the field
@@ -516,9 +514,9 @@ internal object HydraulicErosion {
      * With the feed off the field is all ones, whose mean is one, so every weight comes back as
      * exactly the 1f the accumulation used to be handed and the old world is reproduced to the bit.
      *
-     * The field handed in is [Runoff.annualRunoffMm] per cell. That file carries the other divisor
-     * the same weight is taken against — `ChannelInitiation` divides it by Earth's land mean, for
-     * reasons that are the mirror image of the ones above.
+     * The field handed in is [Runoff.annualWeightMm] per cell. That file carries the floor under
+     * it and the other divisor the same weight is taken against — `ChannelInitiation` divides it
+     * by Earth's land mean, for reasons that are the mirror image of the ones above.
      */
     /**
      * What a routing pass hands its accumulation, summed over the land it routes on, and that

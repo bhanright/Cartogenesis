@@ -47,7 +47,7 @@ import kotlinx.coroutines.runBlocking
  * this is the proof at the two sizes where it matters, through the real desktop library and the
  * real gzip. Sizes are named by their rows, on grids of square cells twice as many across.
  *
- * 2048 rows (4096 by 2048) is a real world. 4096 rows (8192 by 4096, 146 bytes a cell, 4.9 GB of
+ * 2048 rows (4096 by 2048) is a real world. 4096 rows (8192 by 4096, 154 bytes a cell, 5.2 GB of
  * arrays) is a synthetic one, every array its full size, because a generated one is a quarter of
  * an hour and a save does not care what the numbers in its arrays are; the format's round trip on
  * real data is `WorldCodecTest`'s, on every merge.

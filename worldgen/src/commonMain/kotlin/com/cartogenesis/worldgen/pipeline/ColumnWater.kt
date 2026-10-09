@@ -7,7 +7,7 @@ import kotlin.math.exp
  * thermodynamics the moisture march and the evaporation formulas share, in physical units.
  *
  * Every figure here is either a physical constant or a formula read from its source; nothing is
- * fitted to a world. See docs/DESIGN_LEDGER.md, C1.
+ * fitted to a world. See docs/DESIGN_LEDGER.md, C1b.
  */
 internal object ColumnWater {
 

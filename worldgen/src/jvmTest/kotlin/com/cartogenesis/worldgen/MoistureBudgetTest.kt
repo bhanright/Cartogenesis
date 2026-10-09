@@ -240,7 +240,7 @@ class MoistureBudgetTest : BorrowsSharedWorlds() {
                 "march (%.0f), against %.0f: the reason it is off has changed")
                 .format(withClosure, shipped, GPCP_OCEAN_PEAK_MM)
         )
-        KnownFailures.expect("C1: the convergence closure rains the equatorial band past GPCP's", "x0.0") {
+        KnownFailures.expect("C1b: the convergence closure rains the equatorial band past GPCP's", "x0.0") {
             if (withClosure > GPCP_OCEAN_PEAK_MM * EARTH_TOLERANCE) {
                 throw RecordedViolation(
                     "with the convergence closure the ocean's wettest band takes %.0f mm, x%.2f GPCP's %.0f"

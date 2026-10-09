@@ -17,7 +17,7 @@ import kotlin.test.assertTrue
  * Two latitude-only things used to draw the dry belts' edges straight along the rows: the march
  * walled each circulation belt off from the next, so the rain stepped at the belts' edges, and the
  * belts' factor on the rain was clamped flat across the subtropics, so the desert's edge sat where
- * the clamp began (docs/DESIGN_LEDGER.md, C1). Water now crosses the belts' edges on the eddies
+ * the clamp began (docs/DESIGN_LEDGER.md, C1b). Water now crosses the belts' edges on the eddies
  * and the mean meridional wind, which falls to zero at every edge, and the factor reaches its
  * floor without a kink.
  *

@@ -1921,7 +1921,7 @@ data class ClimateConfig(
      * on its own against the equatorial band it fails: on the Earth-sized planet the ocean's
      * zonal-mean rain peaks at about twice GPCP's 8 mm a day near 7 N (Adler and others), the
      * open sea rains half again Earth's and the atmosphere turns its water over in four and a half
-     * days against Trenberth's nine (docs/DESIGN_LEDGER.md, C1). Kept as the control that
+     * days against Trenberth's nine (docs/DESIGN_LEDGER.md, C1b). Kept as the control that
      * measures it.
      */
     val convergenceRain: Boolean = false,

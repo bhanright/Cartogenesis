@@ -177,18 +177,16 @@ object NationStage {
     private const val RIVERINE_FLOW_SHARE = 0.0006f
 
     /**
-     * The floor under that threshold, in millimeter-cells: a world with almost no rain still has a
-     * few riverine cells rather than all of them, since a threshold of nothing is passed by every
-     * cell.
+     * The floor under that threshold, in cells of [Runoff.FLOOR_MM]: a world with almost no rain
+     * still has a few riverine cells rather than all of them, since a threshold of nothing is
+     * passed by every cell.
      *
-     * Two cells of water at the edge of the hyper-arid class, rain at
-     * [Runoff.HYPER_ARID_ARIDITY_INDEX] of [ClimateStage.REFERENCE_MM]'s evaporative demand: the
-     * figure this floor stood at while every cell carried at least that much
-     * (docs/DESIGN_LEDGER.md, C1), kept so a desert world's realms do not move for the change of
-     * unit.
+     * Two, which asked for water from above while every cell carried at least its own floor's.
+     * Since C1b the discharge is the annual runoff, which carries no floor, and the figure is kept
+     * as it stood so a desert world's realms do not move for the change of unit
+     * (docs/DESIGN_LEDGER.md, C1b).
      */
-    private const val MIN_RIVERINE_FLOW_MM =
-        2f * Runoff.HYPER_ARID_ARIDITY_INDEX * ClimateStage.REFERENCE_MM
+    private const val MIN_RIVERINE_FLOOR_CELLS = 2
 
     /**
      * Radii for the two blurred copies [describe] judges a capital site on, in kilometers, so a
@@ -730,7 +728,7 @@ object NationStage {
             }
         }
         return (totalRunoffMm * RIVERINE_FLOW_SHARE).toFloat()
-            .coerceAtLeast(MIN_RIVERINE_FLOW_MM)
+            .coerceAtLeast(MIN_RIVERINE_FLOOR_CELLS * Runoff.FLOOR_MM)
     }
 
     /**

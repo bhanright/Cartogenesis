@@ -12,8 +12,8 @@ import kotlin.math.exp
  *
  * A property of the air column over the ground rather than of the parcel crossing it, which is
  * why it is built here, before the march, and handed to it. What the march's own lengths and rates
- * were until C1, the depletion, evaporation and return lengths and the convergence term beside
- * this one, are now physical rates in [MoistureMarch]; see docs/DESIGN_LEDGER.md, W3 and C1.
+ * were until C1b, the depletion, evaporation and return lengths and the convergence term beside
+ * this one, are now physical rates in [MoistureMarch]; see docs/DESIGN_LEDGER.md, W3 and C1b.
  */
 object MoistureBudget {
 

@@ -142,10 +142,10 @@ class DebugMapDump {
     }
 
     /**
-     * H4: seed 26's southern-hemisphere cold-current coast (see `CurrentFeedsRainTest`), before
-     * (`currentMoisture = 0`, today's field) and after (the default 0.07/deg). Annual rainfall and
-     * biome only, since the effect is on the annual march's over-sea pickup rather than anything
-     * seasonal.
+     * H4: seed 26's southern-hemisphere cold-current coast (see `CurrentFeedsRainTest`), without
+     * the ocean's currents and with them, whose sea surface the march's evaporation reads. Annual
+     * rainfall and biome only, since the effect is on the march's evaporation over the sea rather
+     * than anything seasonal.
      */
     @Test
     fun `dump the H4 current-coupled coast before and after`() {

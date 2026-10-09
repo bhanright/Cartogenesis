@@ -16,7 +16,7 @@ import kotlin.test.assertTrue
  * Before A4, `normalizeByLandPercentile` rescaled every world so its 88th land percentile sat at
  * 1.0 before `classify` ever saw it, so a seed whose march put down twice the rain of another
  * still classified the same — every audited seed carried within a point of 4.6% desert regardless
- * of how arid its march actually was. `classify` reads millimeters, which since C1 are the march's
+ * of how arid its march actually was. `classify` reads millimeters, which since C1b are the march's
  * own kilograms per square meter and not a calibrated conversion, so a genuinely arider world
  * produces genuinely more desert and a genuinely wetter one produces genuinely less.
  *

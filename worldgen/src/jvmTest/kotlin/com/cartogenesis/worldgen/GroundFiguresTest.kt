@@ -153,7 +153,7 @@ class GroundFiguresTest {
      * share of a column the march rains in crossing one cell is that cell's ground width over the
      * transport speed times the lifetime, so it over the width is one figure everywhere.
      *
-     * The march carried its rain through a conversion fitted on one grid until C1, and the tree
+     * The march carried its rain through a conversion fitted on one grid until C1b, and the tree
      * before that referred the conversion to the planet's own 512 grid, so a planet twice as wide
      * rained twice as much per unit of the march (the Earth-size audit's D1).
      * `PlanetWidthRainTest` holds the rain itself.
@@ -389,10 +389,12 @@ class GroundFiguresTest {
 
         /**
          * The lattices and reaches there are in the sources the day this was written, as a floor
-         * under the reading: fewer means the reading broke, not that a lattice went away.
+         * under the reading: fewer means the reading broke, not that a lattice went away. The
+         * reaches were four until C1b took the rain blur off whole cells and onto a Gaussian on the
+         * ground (`SphereBlur`), which reads no reach.
          */
         const val MOST_LATTICES_EXPECTED = 14
-        const val MOST_REACHES_EXPECTED = 4
+        const val MOST_REACHES_EXPECTED = 3
 
         /** A declaration named for a count round the map, a frequency, a divisor or a share of the map. */
         val NAMED_ON_THE_MAP = Regex(

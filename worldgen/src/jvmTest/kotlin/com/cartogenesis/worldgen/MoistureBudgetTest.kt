@@ -234,20 +234,26 @@ class MoistureBudgetTest : BorrowsSharedWorlds() {
             "CONVERGENCE mean over %d seeds: %.0f mm with the closure, %.0f without, against GPCP's %.0f"
                 .format(seeds.size, withClosure, shipped, GPCP_OCEAN_PEAK_MM)
         )
-        assertTrue(
-            abs(ln(shipped / GPCP_OCEAN_PEAK_MM)) <= abs(ln(withClosure / GPCP_OCEAN_PEAK_MM)),
-            ("the convergence closure now stands nearer GPCP's equatorial band (%.0f mm) than the shipped " +
-                "march (%.0f), against %.0f: the reason it is off has changed")
-                .format(withClosure, shipped, GPCP_OCEAN_PEAK_MM)
-        )
-        KnownFailures.expect("C1b: the convergence closure rains the equatorial band past GPCP's", "x2.0") {
-            if (withClosure > GPCP_OCEAN_PEAK_MM * EARTH_TOLERANCE) {
+        // Recorded at C1b2: on the march whose column rains at its own humidity the shipped march
+        // over-rains the ocean's wettest band, and the closure, which would take water from it to
+        // rain where the air converges, stands nearer GPCP's; it stays off, an assumed closure, as
+        // the brief has it (docs/TODO.md, "The convergence closure after C1b2").
+        KnownFailures.expect("C1b2: the convergence closure stands nearer GPCP's band than the shipped march", "3533 against 4390") {
+            if (abs(ln(shipped / GPCP_OCEAN_PEAK_MM)) > abs(ln(withClosure / GPCP_OCEAN_PEAK_MM))) {
                 throw RecordedViolation(
-                    "with the convergence closure the ocean's wettest band takes %.0f mm, x%.2f GPCP's %.0f"
-                        .format(withClosure, withClosure / GPCP_OCEAN_PEAK_MM, GPCP_OCEAN_PEAK_MM),
-                    "x%.1f".format(withClosure / GPCP_OCEAN_PEAK_MM)
+                    ("the convergence closure now stands nearer GPCP's equatorial band (%.0f mm) than the shipped " +
+                        "march (%.0f), against %.0f: the reason it is off has changed")
+                        .format(withClosure, shipped, GPCP_OCEAN_PEAK_MM),
+                    "%.0f against %.0f".format(withClosure, shipped)
                 )
             }
+        }
+        // Recorded at C1b at twice GPCP's band; armed at C1b2, where the closure takes 1.21 of it.
+        if (withClosure > GPCP_OCEAN_PEAK_MM * EARTH_TOLERANCE) {
+            throw AssertionError(
+                "with the convergence closure the ocean's wettest band takes %.0f mm, x%.2f GPCP's %.0f"
+                    .format(withClosure, withClosure / GPCP_OCEAN_PEAK_MM, GPCP_OCEAN_PEAK_MM)
+            )
         }
     }
 

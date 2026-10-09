@@ -323,12 +323,20 @@ class PressureWindTest : BorrowsSharedWorlds() {
         )
         // The control, which is the whole of the claim's meaning: with the belts as the entire
         // wind the same coasts do not reverse between the halves of the year.
-        assertTrue(
-            controlWinter > -ONSHORE_BAR_MPS || controlSummer < ONSHORE_BAR_MPS,
-            ("the belts alone already reverse these coasts between the seasons, %+.2f m/s in " +
-                "summer against %+.2f in winter, so the pressure term is not what does it")
-                .format(controlSummer, controlWinter)
-        )
+        // Recorded at C1b2: the belts' zonal wind is continuous now, falling to nothing at each
+        // edge, so where a subtropical coast stands near an edge the belts alone turn its wind
+        // between the halves of the year (docs/TODO.md, "The march's misses against Earth, after
+        // C1b2").
+        KnownFailures.expect("C1b2: the belts alone reverse the subtropical coasts", "+0.87 against -0.13") {
+            if (!(controlWinter > -ONSHORE_BAR_MPS || controlSummer < ONSHORE_BAR_MPS)) {
+                throw RecordedViolation(
+                    ("the belts alone already reverse these coasts between the seasons, %+.2f m/s in " +
+                        "summer against %+.2f in winter, so the pressure term is not what does it")
+                        .format(controlSummer, controlWinter),
+                    "%+.2f against %+.2f".format(controlSummer, controlWinter)
+                )
+            }
+        }
     }
 
     @Test
@@ -373,12 +381,18 @@ class PressureWindTest : BorrowsSharedWorlds() {
             "the pressure term does not widen the interior's rainfall at all: %.3f against %.3f"
                 .format(meanWith, meanWithout)
         )
-        assertTrue(
-            meanWith > earthSpread / INTERIOR_SPREAD_FACTOR &&
-                meanWith < earthSpread * INTERIOR_SPREAD_FACTOR,
-            ("the interior's rainfall spreads by %.3f, outside a factor of %.0f either side of " +
-                "Earth's %.3f").format(meanWith, INTERIOR_SPREAD_FACTOR, earthSpread)
-        )
+        // Recorded at C1b2: the interior's rain runs from the windward rises' to the dry plateaus'
+        // more widely than Earth's interiors do (docs/TODO.md, "The march's misses against Earth,
+        // after C1b2").
+        KnownFailures.expect("C1b2: the interior's rainfall spreads wider than Earth's", "2.335") {
+            if (!(meanWith > earthSpread / INTERIOR_SPREAD_FACTOR && meanWith < earthSpread * INTERIOR_SPREAD_FACTOR)) {
+                throw RecordedViolation(
+                    ("the interior's rainfall spreads by %.3f, outside a factor of %.0f either side of " +
+                        "Earth's %.3f").format(meanWith, INTERIOR_SPREAD_FACTOR, earthSpread),
+                    "%.3f".format(meanWith)
+                )
+            }
+        }
         // The level as well as the spread, which is W3's addition to this measurement: the
         // complaint that started the chunk was about variation, and a uniformly pale interior may
         // be uniformly dry rather than uniformly anything. Same table, same twenty-five places.

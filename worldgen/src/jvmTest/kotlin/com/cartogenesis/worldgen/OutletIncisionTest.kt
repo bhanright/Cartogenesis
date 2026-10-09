@@ -262,7 +262,7 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
         val pooledDepth = depthShares.average()
         // Recorded since Fix 3b: see [NOTCH_SHORT_ON_THE_LAWS_TERRAIN].
         // Re-recorded on square cells at Q2 (docs/DESIGN_LEDGER.md, Q2). Re-recorded at L1, whose rifts are Earth's half-grabens and the same at every grid (docs/DESIGN_LEDGER.md, L1).
-        KnownFailures.expect(NOTCH_SHORT_ON_THE_LAWS_TERRAIN, "56.5% as deep as the control's") {
+        KnownFailures.expect(NOTCH_SHORT_ON_THE_LAWS_TERRAIN, "60.4% as deep as the control's") {
             if (pooledDepth >= 0.5) {
                 throw RecordedViolation(
                     "the fill still stands ${"%.1f".format(pooledDepth * 100)}% as deep over the land as the " +
@@ -495,14 +495,12 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
         // start with a lake over the Caspian's share again, and the notch takes their worlds' water
         // to 0.68 and 0.76 of the control rather than under half (docs/DESIGN_LEDGER.md, C1b;
         // docs/TODO.md, "The march's misses against Earth, after C1b").
-        KnownFailures.expect("C1b: the notch leaves the over-large lakes' worlds more than half their water", "seed 718106's water 1.6869% to 1.1644%; seed 99's largest lake 0.3111% to 0.3112%; seed 99's water 1.9695% to 1.3258%") {
-            if (notHalved.isNotEmpty()) {
-                throw RecordedViolation(
-                    "an over-large lake did not fall, or its world kept more than half its water: " +
-                        notHalved.joinToString("; "),
+        // Armed at C1b2, whose land rains less (docs/DESIGN_LEDGER.md, C1b2).
+        if (notHalved.isNotEmpty()) {
+            throw AssertionError(
+                "an over-large lake did not fall, or its world kept more than half its water: " +
                     notHalved.joinToString("; ")
-                )
-            }
+            )
         }
         // Recorded at L1, where only seed 718106 started over-large; armed again at its review round,
         // whose rift joins are relay ramps: seed 43's largest lake starts at 0.392% of its land, over

@@ -160,14 +160,12 @@ class GlaciationCombTest : BorrowsSharedWorlds() {
         }
         // Recorded at K2: on the Earth-sized planet one ice-made lake is a straight one-cell line
         // (docs/DESIGN_LEDGER.md, K2; docs/TODO.md).
-        KnownFailures.expect("K2: an ice-made lake on the Earth-sized planet is a straight one-cell line along a D8 bearing", "seed 42 at 1024 has 1") {
-            if (straight.isNotEmpty()) {
-                throw RecordedViolation(
-                    straight.joinToString("; ") + " lakes that are a straight one-cell line along a D8 bearing — a" +
-                        " trough is a valley the ice found, not a line drawn down a flow path",
-                    straight.joinToString("; ")
-                )
-            }
+        // Armed at C1b2, whose ice draws no such lake (docs/DESIGN_LEDGER.md, C1b2).
+        if (straight.isNotEmpty()) {
+            throw AssertionError(
+                straight.joinToString("; ") + " lakes that are a straight one-cell line along a D8 bearing — a" +
+                    " trough is a valley the ice found, not a line drawn down a flow path"
+            )
         }
         // Collected and asserted once, rather than seed by seed, so a run reports all three figures
         // instead of stopping at the first that is over. On the implicit update before the uplift

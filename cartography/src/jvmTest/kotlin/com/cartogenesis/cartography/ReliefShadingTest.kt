@@ -653,14 +653,12 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
         )
         // Recorded at K2: the gallery's ground moved with K2's figures, and re-deriving a drawing
         // constant on it is the drawing's chunk (docs/TODO.md).
-        KnownFailures.expect("K2: the exaggeration was read off the gallery's ground before K2", "42.75") {
-            if (kotlin.math.abs(declared - steepestClear) > EXAGGERATION_SWEEP_STEP / 2) {
-                throw RecordedViolation(
-                    "the steepest exaggeration that pins no face of the cone is %.2f, not the declared %.4f"
-                        .format(steepestClear, declared),
-                    "%.2f".format(steepestClear)
-                )
-            }
+        // Armed at C1b2, whose gallery world reads the declared figure again (docs/DESIGN_LEDGER.md, C1b2).
+        if (kotlin.math.abs(declared - steepestClear) > EXAGGERATION_SWEEP_STEP / 2) {
+            throw AssertionError(
+                "the steepest exaggeration that pins no face of the cone is %.2f, not the declared %.4f"
+                    .format(steepestClear, declared)
+            )
         }
         // The contrast is held against another grid's picture, so it is reported rather than
         // asserted: the application makes one grid (docs/DESIGN_LEDGER.md, G1).

@@ -159,11 +159,8 @@ class SeaLevelHistoryTest : BorrowsSharedWorlds() {
         // rifts took it to 1.58 (2.07, 1.46 and 1.22 on seeds 7, 42 and 1234).
         // Recorded at K2: on the Earth-sized planet seed 42's lowstand drowns no valley
         // (docs/DESIGN_LEDGER.md, K2; docs/TODO.md).
-        KnownFailures.expect("K2: on the Earth-sized planet a seed's lowstand drowns no valley", "seed 1234 94 against 96") {
-            if (shortfalls.isNotEmpty()) {
-                throw RecordedViolation(shortfalls.joinToString("; "), figures.joinToString("; "))
-            }
-        }
+        // Armed at C1b2, whose rain moved the ground (docs/DESIGN_LEDGER.md, C1b2).
+        if (shortfalls.isNotEmpty()) throw AssertionError(shortfalls.joinToString("; "))
         // Recorded with the clause above (docs/DESIGN_LEDGER.md, K2; docs/TODO.md).
         KnownFailures.expect("K2: on the Earth-sized planet the lowstand leaves too few drowned valleys pooled", "1.11x") {
             if (!(pooledEstuaries.size == seeds.size && meanGain >= estuaryGain)) {
@@ -229,7 +226,7 @@ class SeaLevelHistoryTest : BorrowsSharedWorlds() {
         // Recorded at C1b: on seed 1234 one body of 370 cells, under the Caspian's cap, is water
         // the ocean cannot reach after the cut, and six river mouths end in it. Which stage leaves it was not traced
         // (docs/DESIGN_LEDGER.md, C1b; docs/TODO.md).
-        KnownFailures.expect("C1b: a pocket of water the ocean cannot reach survives the cut on seed 1234", "seed 1234: 1 pockets of 370 cells; seed 1234: 6 river mouths in them") {
+        KnownFailures.expect("C1b: a pocket of water the ocean cannot reach survives the cut on seed 1234", "seed 1234: 1 pockets of 374 cells; seed 1234: 7 river mouths in them") {
             if (survivors.isNotEmpty()) {
                 throw RecordedViolation(
                     "pockets of water the ocean cannot reach survived the cut — every body no larger than " +

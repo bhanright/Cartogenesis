@@ -396,13 +396,9 @@ class SnowBalanceTest : BorrowsSharedWorlds() {
         // Earth's 10.1% is, the same worlds hold 7.86% (17.48% with the balance off), inside the
         // bar, but then the control is inside it too (docs/DESIGN_LEDGER.md, C1b; docs/TODO.md,
         // "The ice after C1b"). The ice is measured in C1b and not fixed.
-        KnownFailures.expect("C1b: the ice covers more than twice Earth's share of the land at 256 rows", "24.39%") {
-            if (shareOn > EARTH_ICE_SHARE * 2) {
-                throw RecordedViolation(
-                    "ice covers ${"%.2f".format(shareOn)}% of land, more than twice Earth's ${EARTH_ICE_SHARE}%",
-                    "%.2f%%".format(shareOn)
-                )
-            }
+        // Armed at C1b2, whose snow is the march's at its own humidity (docs/DESIGN_LEDGER.md, C1b2).
+        if (shareOn > EARTH_ICE_SHARE * 2) {
+            throw AssertionError("ice covers ${"%.2f".format(shareOn)}% of land, more than twice Earth's ${EARTH_ICE_SHARE}%")
         }
         // A finding, not an assertion, and the one clause of this guard that is. See
         // [LOW_ICE_IS_A_FINDING] for the mechanism and the figures.
@@ -477,7 +473,7 @@ class SnowBalanceTest : BorrowsSharedWorlds() {
             shareOff > 25.0
         )
         // Recorded at C1b, for the same snow (docs/TODO.md, "The ice after C1b").
-        KnownFailures.expect("C1b: some of the cold dry interior is ice under the conserving march's snow", "6.0%") {
+        KnownFailures.expect("C1b: some of the cold dry interior is ice under the conserving march's snow", "2.4%") {
             if (shareOn >= 2.0) {
                 throw RecordedViolation(
                     "${"%.1f".format(shareOn)}% of the cold dry interior is still ice sheet",
@@ -539,8 +535,8 @@ class SnowBalanceTest : BorrowsSharedWorlds() {
                     " (down to ${balance.wetFloor?.let { "%.3f".format(it) } ?: "no ice"})," +
                     " dry ${"%.1f".format(balance.dryShare)}%" +
                     " (${balance.dryFloor?.let { "%.3f".format(it) } ?: "no ice"});" +
-                    " control wet ${"%.1f".format(control!!.wetShare)}%," +
-                    " dry ${"%.1f".format(control.dryShare)}%" +
+                    " control wet ${control?.let { "%.1f".format(it.wetShare) } ?: "none"}%," +
+                    " dry ${control?.let { "%.1f".format(it.dryShare) } ?: "none"}%" +
                     " [wet ${"%.0f".format(balance.wetMm)}mm, dry ${"%.0f".format(balance.dryMm)}mm]"
             )
             println(
@@ -548,8 +544,8 @@ class SnowBalanceTest : BorrowsSharedWorlds() {
                     " wet ${"%.1f".format(balance.gateWetShare)}%," +
                     " dry ${"%.1f".format(balance.gateDryShare)}%" +
                     " (the control world's own band: wet" +
-                    " ${"%.1f".format(control.gateWetShare)}%, dry" +
-                    " ${"%.1f".format(control.gateDryShare)}%)"
+                    " ${control?.let { "%.1f".format(it.gateWetShare) } ?: "none"}%, dry" +
+                    " ${control?.let { "%.1f".format(it.gateDryShare) } ?: "none"}%; a world with no marginal band of its own reads none)"
             )
             // The margin below is measured on one world, and until I3 it was measured across two.
             //

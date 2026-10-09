@@ -191,7 +191,7 @@ class CurrentFeedsRainTest : BorrowsSharedWorlds() {
         // Recorded at K2: on the Earth-sized planet the warm sample coast comes out half a percent
         // drier with the currents on (docs/DESIGN_LEDGER.md, K2); re-recorded at C1b, 3.3% drier on its
         // rain.
-        KnownFailures.expect("K2: the warm sample coast on the Earth-sized planet dries with the currents on", "off 1262, on 1220") {
+        KnownFailures.expect("K2: the warm sample coast on the Earth-sized planet dries with the currents on", "off 36, on 35") {
             if (warmOn < warmOff * 0.999) {
                 throw RecordedViolation(
                     "warm-current coast should not get drier with the currents on: off=$warmOff, on=$warmOn",

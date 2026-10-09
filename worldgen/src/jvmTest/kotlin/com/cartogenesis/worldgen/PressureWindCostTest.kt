@@ -20,7 +20,7 @@ import kotlin.test.assertTrue
  * the arithmetic costs and not what a world costs: a world at 2048 spends minutes in erosion before
  * it reaches the climate at all, and timing the pair inside that would be measuring the erosion.
  * The field is the one the stage really hands it — a smooth zonal profile with a continent-sized
- * warm anomaly on it — so the box blur's running sums do the same work they would on a real world.
+ * warm anomaly on it — so the smoothing on the sphere does the same work it would on a real world.
  */
 class PressureWindCostTest {
 

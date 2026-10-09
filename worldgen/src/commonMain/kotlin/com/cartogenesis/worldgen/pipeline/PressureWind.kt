@@ -1,6 +1,5 @@
 package com.cartogenesis.worldgen.pipeline
 
-import com.cartogenesis.worldgen.math.BoxBlur
 import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldScale
@@ -128,6 +127,13 @@ internal object PressureWind {
     /** Where the Rossby radius is evaluated: the middle of the mid-latitudes. */
     private const val ROSSBY_REFERENCE_LATITUDE_DEGREES = 45.0
 
+    /**
+     * Implicit steps the smoothing is split into. Four, as `SphereBlur` takes across rows: one
+     * backward step spreads a spike into a two-sided exponential, and four of a quarter the strength
+     * are within a few percent of the Gaussian of the same variance.
+     */
+    private const val SMOOTHING_STEPS = 4
+
     /** One hectopascal in pascals, for the one place the gradient leaves the map's own unit. */
     private const val PASCALS_PER_HPA = 100f
 
@@ -149,10 +155,8 @@ internal object PressureWind {
      * on the ground, so the same world smooths over the same distance at every grid — see
      * `ScaleFreeTest`.
      *
-     * It is used as the box blur's *radius*, and three box passes of half-width `r` approximate a
-     * Gaussian whose standard deviation is `sqrt(3 ((2r+1)^2 - 1) / 12)`, which for any `r` worth
-     * blurring with is `r` again to within a per cent. So the smoothed field's standard deviation
-     * is this radius, not some multiple of it, and the number below means what it says.
+     * It is the standard deviation of the Gaussian [smooth] spreads the anomaly with, so the
+     * smoothed field's width is this radius and not some multiple of it.
      */
     fun rossbyRadiusKm(): Double {
         val coriolisAt45 = 2.0 * WorldScale.ROTATION_RATE_PER_S *
@@ -215,26 +219,22 @@ internal object PressureWind {
     }
 
     /**
-     * Smooths a pressure field over [rossbyRadiusKm] on the ground.
+     * Smooths a pressure field over [rossbyRadiusKm] on the ground: implicit diffusion on the
+     * sphere ([SphericalOperators.diffuse]) whose kernel approaches a Gaussian of that standard
+     * deviation, in place.
      *
-     * Two radii, not one, because a cell is not square unless the grid is: an equirectangular map
-     * is twice as wide as it is tall, so the same distance east is a different number of cells
-     * from the same distance south on any grid whose width is not twice its height.
+     * On the sphere and not in cells, because the gradient [surfaceWind] takes is the sphere's. A
+     * blur whose radius is a count of cells spreads 970 km east-west at the equator and a few
+     * kilometers near a pole, and the true east-west gradient of what it leaves there is that
+     * departure over a few kilometers; a row-by-row blur on the ground leaves each polar row's own
+     * departure too, which is not one value at the pole. Either way the polar rows' winds ran away
+     * and the ocean's heat, forced by them, did not solve (docs/DESIGN_LEDGER.md, A1-2).
      */
     fun smooth(config: WorldGenConfig, pressureHpa: FloatField) {
-        val radiusKm = rossbyRadiusKm()
-        BoxBlur.apply(
-            pressureHpa,
-            radiusAcross = config.wholeCellsFor(radiusKm),
-            radiusDown = rowsFor(config, radiusKm),
-            passes = BoxBlur.PASSES_FOR_GAUSSIAN
-        )
-    }
-
-    /** A length on the ground as a whole number of *rows*, never fewer than one. */
-    fun rowsFor(config: WorldGenConfig, kilometres: Double): Int {
-        val cellHeightKm = config.scale.cellHeightKm(config.height)
-        return kotlin.math.round(kilometres / cellHeightKm).toInt().coerceAtLeast(1)
+        val grid = SphericalGrid.forGround(config.width, config.height, config.scale)
+        val field = DoubleArray(pressureHpa.data.size) { pressureHpa.data[it].toDouble() }
+        val smoothed = SphericalOperators(grid).diffuse(field, rossbyRadiusKm() * WorldScale.METRES_PER_KM, SMOOTHING_STEPS)
+        for (cell in smoothed.indices) pressureHpa.data[cell] = smoothed[cell].toFloat()
     }
 
     /** A surface wind as two components in metres a second, eastward and southward, per cell. */
@@ -282,37 +282,26 @@ internal object PressureWind {
         val eastward = FloatArray(cellsAcross * cellsDown)
         val southward = FloatArray(cellsAcross * cellsDown)
 
-        // Metres between the centres of neighbouring cells, along each axis. The gradient is a
-        // central difference, so the span between the two samples is two cells.
-        val metresAcross = (config.scale.cellWidthKm(cellsAcross) * 1_000.0).toFloat()
-        val metresDown = (config.scale.cellHeightKm(cellsDown) * 1_000.0).toFloat()
+        // The gradient in the sphere's own metric: east-west across a row's own ground, which is
+        // cos(latitude) of the equator's, and north-south across the pole onto the meridian
+        // opposite rather than one-sided at the outermost row (`SphericalOperators`). The northward
+        // component lives on the faces between rows; its mean over a cell's two faces is the
+        // central difference across the cell.
+        val grid = SphericalGrid.forGround(cellsAcross, cellsDown, config.scale)
+        val operators = SphericalOperators(grid)
+        val pressurePa = DoubleArray(cellsAcross * cellsDown) { pressureHpa.data[it] * PASCALS_PER_HPA.toDouble() }
+        val gradient = operators.gradient(pressurePa)
+        val gradientNorthward = operators.northAtCenters(gradient)
 
         val seaDrag = surfaceDrag(CROSS_ISOBAR_SEA_DEGREES)
         val landDrag = surfaceDrag(CROSS_ISOBAR_LAND_DEGREES)
 
         for (row in 0 until cellsDown) {
             val coriolis = coriolisParameter(ClimateStage.latitudeOf(row, cellsDown))
-            // Rows do not wrap: the map does not join up over the poles, so the outermost row
-            // takes a one-sided difference by sampling itself on the missing side.
-            val rowNorth = (row - 1).coerceAtLeast(0)
-            val rowSouth = (row + 1).coerceAtMost(cellsDown - 1)
-            val spanDown = (rowSouth - rowNorth) * metresDown
             for (column in 0 until cellsAcross) {
                 val cell = row * cellsAcross + column
-                // Columns wrap: the map joins up east to west.
-                val columnEast = if (column + 1 == cellsAcross) 0 else column + 1
-                val columnWest = if (column == 0) cellsAcross - 1 else column - 1
-
-                val gradientEast = (pressureHpa.data[row * cellsAcross + columnEast] -
-                    pressureHpa.data[row * cellsAcross + columnWest]) *
-                    PASCALS_PER_HPA / (2f * metresAcross)
-                // Northward, against the map's own axis: rows grow southward.
-                val gradientNorth = (pressureHpa.data[rowNorth * cellsAcross + column] -
-                    pressureHpa.data[rowSouth * cellsAcross + column]) *
-                    PASCALS_PER_HPA / spanDown
-
-                val accelerationEast = -gradientEast / AIR_DENSITY_KG_PER_M3
-                val accelerationNorth = -gradientNorth / AIR_DENSITY_KG_PER_M3
+                val accelerationEast = (-gradient.eastAtCenters[cell] / AIR_DENSITY_KG_PER_M3).toFloat()
+                val accelerationNorth = (-gradientNorthward[cell] / AIR_DENSITY_KG_PER_M3).toFloat()
 
                 val drag = if (sea.isLand[cell]) landDrag else seaDrag
                 val inverseBalance = 1f / (drag * drag + coriolis * coriolis)

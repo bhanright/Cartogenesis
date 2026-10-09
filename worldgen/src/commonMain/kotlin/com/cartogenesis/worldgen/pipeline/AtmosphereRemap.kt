@@ -139,89 +139,12 @@ class AtmosphereRemap(val groundColumns: Int, val groundRows: Int, val coarse: S
 
     /**
      * [field] on [coarse]'s centers spread by [FILTER_STEPS] implicit diffusion steps whose kernel
-     * approaches a Gaussian of [widthInRows] row spacings' standard deviation on the ground. A new
-     * array; [field] is not touched. Exactly conservative, and the filtered field stays inside the
-     * range of [field]: each step's matrix is an M-matrix, whose inverse has no negative entry.
+     * approaches a Gaussian of [widthInRows] row spacings' standard deviation on the ground
+     * ([SphericalOperators.diffuse]). A new array; [field] is not touched.
      */
     fun smooth(field: DoubleArray, widthInRows: Double = FILTER_WIDTH_IN_ROWS): DoubleArray {
         if (widthInRows <= 0.0) return field.copyOf()
-        val widthMeters = widthInRows * coarse.rowSpacingMeters
-        // n steps of diffusivity-time tau spread a spike to a variance of 2 n tau in each direction.
-        val tauSquareMeters = widthMeters * widthMeters / (2.0 * FILTER_STEPS)
-        var result = field.copyOf()
-        repeat(FILTER_STEPS) { result = diffusionStep(result, tauSquareMeters) }
-        return result
-    }
-
-    /**
-     * One backward Euler step of diffusion, `(1 - tau L) out = in`, solved exactly: the row's Fourier
-     * series diagonalizes the longitude part, whose second difference has the symbol
-     * `(2 - 2 cos(m dlambda)) / dlambda^2`, and each wavenumber is then one tridiagonal system down
-     * the rows, the latitude part in flux form with no flux through a pole.
-     */
-    private fun diffusionStep(field: DoubleArray, tauSquareMeters: Double): DoubleArray {
-        val rows = coarse.rows
-        val columns = coarse.columns
-        val radius = coarse.radiusMeters
-        val spectrumReal = DoubleArray(rows * columns)
-        val spectrumImaginary = DoubleArray(rows * columns)
-        val transform = coarse.rowTransform
-        parallelChunks(0, rows) { startRow, endRow ->
-            val scratch = ComplexFft.Scratch(columns)
-            val real = DoubleArray(columns)
-            val imaginary = DoubleArray(columns)
-            for (row in startRow until endRow) {
-                for (column in 0 until columns) {
-                    real[column] = field[row * columns + column]
-                    imaginary[column] = 0.0
-                }
-                transform.forward(real, imaginary, scratch)
-                real.copyInto(spectrumReal, row * columns)
-                imaginary.copyInto(spectrumImaginary, row * columns)
-            }
-        }
-        val spacing = coarse.rowSpacingRadians
-        val columnSpacing = coarse.columnSpacingRadians
-        parallelChunks(0, columns) { startSlot, endSlot ->
-            val lower = DoubleArray(rows)
-            val diagonal = DoubleArray(rows)
-            val upper = DoubleArray(rows)
-            val lineReal = DoubleArray(rows)
-            val lineImaginary = DoubleArray(rows)
-            for (slot in startSlot until endSlot) {
-                val wavenumber = SphericalOperators.signedWavenumber(slot, columns)
-                val zonalSymbol = (2.0 - 2.0 * cos(wavenumber * columnSpacing)) / (columnSpacing * columnSpacing)
-                for (row in 0 until rows) {
-                    val span = coarse.sinSpanOfRow[row]
-                    val zonal = spacing / (radius * radius * span * coarse.cosLatitude[row]) * zonalSymbol
-                    val toNorth = coarse.cosFace[row] / (radius * radius * spacing * span)
-                    val toSouth = coarse.cosFace[row + 1] / (radius * radius * spacing * span)
-                    lower[row] = -tauSquareMeters * toNorth
-                    upper[row] = -tauSquareMeters * toSouth
-                    diagonal[row] = 1.0 + tauSquareMeters * (zonal + toNorth + toSouth)
-                    lineReal[row] = spectrumReal[row * columns + slot]
-                    lineImaginary[row] = spectrumImaginary[row * columns + slot]
-                }
-                solveTridiagonal(lower, diagonal, upper, lineReal, lineImaginary)
-                for (row in 0 until rows) {
-                    spectrumReal[row * columns + slot] = lineReal[row]
-                    spectrumImaginary[row * columns + slot] = lineImaginary[row]
-                }
-            }
-        }
-        val result = DoubleArray(rows * columns)
-        parallelChunks(0, rows) { startRow, endRow ->
-            val scratch = ComplexFft.Scratch(columns)
-            val real = DoubleArray(columns)
-            val imaginary = DoubleArray(columns)
-            for (row in startRow until endRow) {
-                spectrumReal.copyInto(real, 0, row * columns, (row + 1) * columns)
-                spectrumImaginary.copyInto(imaginary, 0, row * columns, (row + 1) * columns)
-                transform.inverse(real, imaginary, scratch)
-                for (column in 0 until columns) result[row * columns + column] = real[column] / columns
-            }
-        }
-        return result
+        return SphericalOperators(coarse).diffuse(field, widthInRows * coarse.rowSpacingMeters, FILTER_STEPS)
     }
 
     /**
@@ -524,26 +447,6 @@ class AtmosphereRemap(val groundColumns: Int, val groundRows: Int, val coarse: S
                 total[coarseIndex] = sum
             }
             return Overlaps(first, count, offset, weights.toDoubleArray(), total)
-        }
-
-        /** Solves a tridiagonal system for two right-hand sides at once, in place, by the Thomas sweep. */
-        private fun solveTridiagonal(lower: DoubleArray, diagonal: DoubleArray, upper: DoubleArray, real: DoubleArray, imaginary: DoubleArray) {
-            val size = diagonal.size
-            val modifiedUpper = DoubleArray(size)
-            var pivot = diagonal[0]
-            modifiedUpper[0] = upper[0] / pivot
-            real[0] /= pivot
-            imaginary[0] /= pivot
-            for (index in 1 until size) {
-                pivot = diagonal[index] - lower[index] * modifiedUpper[index - 1]
-                modifiedUpper[index] = upper[index] / pivot
-                real[index] = (real[index] - lower[index] * real[index - 1]) / pivot
-                imaginary[index] = (imaginary[index] - lower[index] * imaginary[index - 1]) / pivot
-            }
-            for (index in size - 2 downTo 0) {
-                real[index] -= modifiedUpper[index] * real[index + 1]
-                imaginary[index] -= modifiedUpper[index] * imaginary[index + 1]
-            }
         }
     }
 }

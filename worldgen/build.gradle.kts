@@ -193,7 +193,9 @@ val auditOnlyClasses = listOf(
     "com.cartogenesis.worldgen.StraightRunTest.report how straight every shore is",
     "com.cartogenesis.worldgen.ChannelInitiationCostTest",
     "com.cartogenesis.worldgen.PressureWindCostTest",
-    "com.cartogenesis.worldgen.VegetationCostTest"
+    "com.cartogenesis.worldgen.VegetationCostTest",
+    // A1-2's: what carrying fields to and from the atmosphere's grid costs against the same world.
+    "com.cartogenesis.worldgen.AtmosphereRemapCostTest"
 )
 
 /*

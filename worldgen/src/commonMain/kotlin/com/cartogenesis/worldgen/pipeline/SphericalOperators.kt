@@ -171,6 +171,111 @@ class SphericalOperators(val grid: SphericalGrid) {
     /** The Laplacian of the Laplacian of [scalar], its unit per meter to the fourth. */
     fun biharmonic(scalar: DoubleArray): DoubleArray = laplacian(laplacian(scalar))
 
+    /**
+     * [field] spread by [steps] backward Euler steps of diffusion whose kernel approaches a Gaussian
+     * of [widthMeters] standard deviation on the ground, the same width in every direction. A new
+     * array; [field] is not touched.
+     *
+     * Each step solves `(1 - tau L) out = in` exactly: the row's Fourier series diagonalizes the
+     * longitude part, taken as the second difference, whose symbol is
+     * `(2 - 2 cos(m dlambda)) / dlambda^2`, and each wavenumber is then one tridiagonal system down
+     * the rows, the latitude part in the flux form of [laplacian] with no flux through a pole. So
+     * each step's matrix is an M-matrix: its inverse has no negative entry, the result stays inside
+     * the range of [field], a constant is kept, and the area integral is unchanged to rounding.
+     * Near a pole the longitude term is `m^2 / cos^2(phi)` times the latitude term's, so every
+     * zonal wave but the mean is drawn toward the row beyond it, which is what leaves a field one
+     * value at the pole where a row-by-row blur leaves whatever each row held.
+     */
+    fun diffuse(field: DoubleArray, widthMeters: Double, steps: Int): DoubleArray {
+        checkCenters(field)
+        if (widthMeters <= 0.0 || steps <= 0) return field.copyOf()
+        // n steps of diffusivity-time tau spread a spike to a variance of 2 n tau in each direction.
+        val tauSquareMeters = widthMeters * widthMeters / (2.0 * steps)
+        var result = field.copyOf()
+        repeat(steps) { result = diffusionStep(result, tauSquareMeters) }
+        return result
+    }
+
+    private fun diffusionStep(field: DoubleArray, tauSquareMeters: Double): DoubleArray {
+        val rows = grid.rows
+        val columns = grid.columns
+        val radius = grid.radiusMeters
+        val spectrumReal = DoubleArray(rows * columns)
+        val spectrumImaginary = DoubleArray(rows * columns)
+        val transform = grid.rowTransform
+        parallelChunks(0, rows) { startRow, endRow ->
+            val scratch = ComplexFft.Scratch(columns)
+            val real = DoubleArray(columns)
+            val imaginary = DoubleArray(columns)
+            for (row in startRow until endRow) {
+                for (column in 0 until columns) {
+                    real[column] = field[row * columns + column]
+                    imaginary[column] = 0.0
+                }
+                transform.forward(real, imaginary, scratch)
+                real.copyInto(spectrumReal, row * columns)
+                imaginary.copyInto(spectrumImaginary, row * columns)
+            }
+        }
+        val spacing = grid.rowSpacingRadians
+        val columnSpacing = grid.columnSpacingRadians
+        parallelChunks(0, columns) { startSlot, endSlot ->
+            val lower = DoubleArray(rows)
+            val diagonal = DoubleArray(rows)
+            val upper = DoubleArray(rows)
+            val lineReal = DoubleArray(rows)
+            val lineImaginary = DoubleArray(rows)
+            val modifiedUpper = DoubleArray(rows)
+            for (slot in startSlot until endSlot) {
+                val wavenumber = signedWavenumber(slot, columns)
+                val zonalSymbol = (2.0 - 2.0 * kotlin.math.cos(wavenumber * columnSpacing)) / (columnSpacing * columnSpacing)
+                for (row in 0 until rows) {
+                    val span = grid.sinSpanOfRow[row]
+                    val zonal = spacing / (radius * radius * span * grid.cosLatitude[row]) * zonalSymbol
+                    val toNorth = grid.cosFace[row] / (radius * radius * spacing * span)
+                    val toSouth = grid.cosFace[row + 1] / (radius * radius * spacing * span)
+                    lower[row] = -tauSquareMeters * toNorth
+                    upper[row] = -tauSquareMeters * toSouth
+                    diagonal[row] = 1.0 + tauSquareMeters * (zonal + toNorth + toSouth)
+                    lineReal[row] = spectrumReal[row * columns + slot]
+                    lineImaginary[row] = spectrumImaginary[row * columns + slot]
+                }
+                // The Thomas sweep, for both halves of the wave at once.
+                var pivot = diagonal[0]
+                modifiedUpper[0] = upper[0] / pivot
+                lineReal[0] /= pivot
+                lineImaginary[0] /= pivot
+                for (row in 1 until rows) {
+                    pivot = diagonal[row] - lower[row] * modifiedUpper[row - 1]
+                    modifiedUpper[row] = upper[row] / pivot
+                    lineReal[row] = (lineReal[row] - lower[row] * lineReal[row - 1]) / pivot
+                    lineImaginary[row] = (lineImaginary[row] - lower[row] * lineImaginary[row - 1]) / pivot
+                }
+                for (row in rows - 2 downTo 0) {
+                    lineReal[row] -= modifiedUpper[row] * lineReal[row + 1]
+                    lineImaginary[row] -= modifiedUpper[row] * lineImaginary[row + 1]
+                }
+                for (row in 0 until rows) {
+                    spectrumReal[row * columns + slot] = lineReal[row]
+                    spectrumImaginary[row * columns + slot] = lineImaginary[row]
+                }
+            }
+        }
+        val result = DoubleArray(rows * columns)
+        parallelChunks(0, rows) { startRow, endRow ->
+            val scratch = ComplexFft.Scratch(columns)
+            val real = DoubleArray(columns)
+            val imaginary = DoubleArray(columns)
+            for (row in startRow until endRow) {
+                spectrumReal.copyInto(real, 0, row * columns, (row + 1) * columns)
+                spectrumImaginary.copyInto(imaginary, 0, row * columns, (row + 1) * columns)
+                transform.inverse(real, imaginary, scratch)
+                for (column in 0 until columns) result[row * columns + column] = real[column] / columns
+            }
+        }
+        return result
+    }
+
     /** [vector]'s northward component at the cell centers: the mean of each cell's two faces. */
     fun northAtCenters(vector: Vector): DoubleArray {
         val columns = grid.columns

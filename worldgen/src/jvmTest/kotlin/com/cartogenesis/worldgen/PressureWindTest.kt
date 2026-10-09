@@ -327,7 +327,7 @@ class PressureWindTest : BorrowsSharedWorlds() {
         // edge, so where a subtropical coast stands near an edge the belts alone turn its wind
         // between the halves of the year (docs/TODO.md, "The march's misses against Earth, after
         // C1b2").
-        KnownFailures.expect("C1b2: the belts alone reverse the subtropical coasts", "+0.87 against -0.13") {
+        KnownFailures.expect("C1b2: the belts alone reverse the subtropical coasts", "+0.82 against -0.19") {
             if (!(controlWinter > -ONSHORE_BAR_MPS || controlSummer < ONSHORE_BAR_MPS)) {
                 throw RecordedViolation(
                     ("the belts alone already reverse these coasts between the seasons, %+.2f m/s in " +
@@ -384,7 +384,7 @@ class PressureWindTest : BorrowsSharedWorlds() {
         // Recorded at C1b2: the interior's rain runs from the windward rises' to the dry plateaus'
         // more widely than Earth's interiors do (docs/TODO.md, "The march's misses against Earth,
         // after C1b2").
-        KnownFailures.expect("C1b2: the interior's rainfall spreads wider than Earth's", "2.335") {
+        KnownFailures.expect("C1b2: the interior's rainfall spreads wider than Earth's", "2.304") {
             if (!(meanWith > earthSpread / INTERIOR_SPREAD_FACTOR && meanWith < earthSpread * INTERIOR_SPREAD_FACTOR)) {
                 throw RecordedViolation(
                     ("the interior's rainfall spreads by %.3f, outside a factor of %.0f either side of " +

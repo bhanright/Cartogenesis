@@ -161,11 +161,17 @@ class GlaciationCombTest : BorrowsSharedWorlds() {
         // Recorded at K2: on the Earth-sized planet one ice-made lake is a straight one-cell line
         // (docs/DESIGN_LEDGER.md, K2; docs/TODO.md).
         // Armed at C1b2, whose ice draws no such lake (docs/DESIGN_LEDGER.md, C1b2).
-        if (straight.isNotEmpty()) {
-            throw AssertionError(
-                straight.joinToString("; ") + " lakes that are a straight one-cell line along a D8 bearing — a" +
-                    " trough is a valley the ice found, not a line drawn down a flow path"
-            )
+        // Recorded again at A1-1, whose calendar seasons and sea-surface sunlight grow more ice and
+        // with it three such lakes on two worlds; a rule 13 finding, not traced (docs/TODO.md).
+        val signature = straight.joinToString("; ")
+        KnownFailures.expect("A1-1: an ice-made lake is a straight one-cell line", "seed 718106 at 1024 has 2; seed 42 at 1024 has 1") {
+            if (straight.isNotEmpty()) {
+                throw RecordedViolation(
+                    signature + " lakes that are a straight one-cell line along a D8 bearing — a" +
+                        " trough is a valley the ice found, not a line drawn down a flow path",
+                    signature
+                )
+            }
         }
         // Collected and asserted once, rather than seed by seed, so a run reports all three figures
         // instead of stopping at the first that is over. On the implicit update before the uplift

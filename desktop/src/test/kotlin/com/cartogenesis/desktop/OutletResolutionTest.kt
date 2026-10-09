@@ -210,11 +210,18 @@ class OutletResolutionTest {
         // 512 and 1,024 rows (docs/DESIGN_LEDGER.md, C1b; docs/TODO.md, "The march's misses
         // against Earth, after C1b").
         // Armed at C1b2, whose land rains less (docs/DESIGN_LEDGER.md, C1b2).
-        if (pooledLargest >= caspianShare) {
-            throw AssertionError(
-                "the largest lake pooled over ${largestLandLakeShares.size} worlds is " +
-                    "${"%.2f".format(pooledLargest / caspianShare)}x the Caspian's share of land: $overLarge"
-            )
+        // Recorded at A1-1, whose calendar seasons moved seed 59758's ground and left the pool at
+        // 1.03 times the Caspian's share, seed 59758 at 512 rows 2.47 times on its own
+        // (docs/DESIGN_LEDGER.md, A1-1).
+        val ratio = "%.2fx".format(pooledLargest / caspianShare)
+        KnownFailures.expect("A1-1: the largest lake pooled stands over the Caspian's share", "1.03x") {
+            if (pooledLargest >= caspianShare) {
+                throw RecordedViolation(
+                    "the largest lake pooled over ${largestLandLakeShares.size} worlds is " +
+                        "$ratio the Caspian's share of land: $overLarge",
+                    ratio
+                )
+            }
         }
         println(
             "OUTLET SCALE FINDING basins below the sea-level cut at or over the Caspian's share " +

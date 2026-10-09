@@ -135,7 +135,7 @@ class LakeBodyTest : BorrowsSharedWorlds() {
         // cells handed half as much again as the rain reaching it: a fault of the basins' own
         // accounting the new ground exposed, not traced (docs/TODO.md).
         val signature = failures.joinToString("; ") { it.substringBefore(" (") }
-        KnownFailures.expect("A1-1: a basin handed more than the rain reaching it", signature) {
+        KnownFailures.expect("A1-1: a basin handed more than the rain reaching it", "seed 42: a basin of 59 cells handed 1.5015 of its catchment") {
             if (failures.isNotEmpty()) throw RecordedViolation("rain counted twice or lost: $failures", signature)
         }
     }

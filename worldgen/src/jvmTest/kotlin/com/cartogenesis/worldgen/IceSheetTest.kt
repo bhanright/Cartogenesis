@@ -214,7 +214,7 @@ class IceSheetTest : BorrowsSharedWorlds() {
         // last, so near the divide of the reported world at 1,024 rows the surface's fall is the
         // margins' datums and the bed showing through more than the profile (docs/TODO.md, "The
         // ice after C1b2").
-        KnownFailures.expect("C1b2: the reported world's flow near its flat dome", "seed 878210 64.5% at 72.4") {
+        KnownFailures.expect("C1b2: the reported world's flow near its flat dome", "seed 878210 64.0% at 73.4") {
             if (failures.isNotEmpty()) {
                 throw RecordedViolation(
                     "the sheet is not flowing down its own surface:\n" + failures.joinToString("\n"),

@@ -102,7 +102,7 @@ class CoastContrastTest : BorrowsSharedWorlds() {
                 .format(west.meanC, west.coasts, east.meanC, east.coasts)
         )
         val signature = "x%.2f".format(west.meanC / EARTH_JULY_WEST_MID_C)
-        KnownFailures.expect("A1-1: a summer's contrast across a west coast is under Earth's", signature) {
+        KnownFailures.expect("A1-1: a summer's contrast across a west coast is under Earth's", "x0.46") {
             if (west.meanC !in EARTH_JULY_WEST_LOW_C..EARTH_JULY_WEST_HIGH_C) {
                 throw RecordedViolation(
                     "the summer's west-coast contrast is %+.1f C, outside Earth's %.0f to %.0f"
@@ -112,7 +112,7 @@ class CoastContrastTest : BorrowsSharedWorlds() {
             }
         }
         val shape = "west %+.0f east %+.0f".format(west.meanC, east.meanC)
-        KnownFailures.expect("A1-1: a summer's west coast stands no further from its sea than an east coast", shape) {
+        KnownFailures.expect("A1-1: a summer's west coast stands no further from its sea than an east coast", "west +9 east +10") {
             if (west.meanC <= east.meanC) {
                 throw RecordedViolation(
                     "the west coasts' summer contrast %+.1f C does not exceed the east coasts' %+.1f, where Earth's is 18 to 20 against 2 to 8"

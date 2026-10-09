@@ -261,7 +261,7 @@ class MeridionalWindTest : BorrowsSharedWorlds() {
         // Recorded at C1b2: the climb's condensate reads the wind's whole vector and the column's
         // saturated share, and the slant alone no longer wets the windward side of an east-west
         // ridge (docs/TODO.md, "The march's misses against Earth, after C1b2").
-        KnownFailures.expect("C1b2: the slant does not wet an east-west ridge's windward side", "-0.0515 against -0.0463") {
+        KnownFailures.expect("C1b2: the slant does not wet an east-west ridge's windward side", "-0.0468 against -0.0421") {
             if (climbedAll <= descendedAll) {
                 throw RecordedViolation(
                     "the slant did not wet meridional windward slopes relative to lee ones over the three " +
@@ -328,7 +328,7 @@ class MeridionalWindTest : BorrowsSharedWorlds() {
         )
         // Recorded at K2: on the Earth-sized planet seed 9 is another world and its monsoon coast
         // a sliver (docs/DESIGN_LEDGER.md, K2).
-        KnownFailures.expect("K2: seed 9's monsoon coast on the Earth-sized planet is under the share the clause asks", "0.36%") {
+        KnownFailures.expect("K2: seed 9's monsoon coast on the Earth-sized planet is under the share the clause asks", "0.39%") {
             if (figures[1] < MIN_SHARE) {
                 throw RecordedViolation(
                     "seed $MONSOON_SEED's monsoon coast covers only ${"%.2f".format(figures[1] * 100)}% of land",

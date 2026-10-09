@@ -390,9 +390,12 @@ class SnowBalanceTest : BorrowsSharedWorlds() {
             shareOff > EARTH_ICE_SHARE * 2
         )
         // Recorded at C1b: the march that closes its budget snows on the polar land the water the
-        // old one's cold cap dropped, and at these 256 rows the ice covers a quarter of the land,
-        // where at 1,024 rows it covers 9% (docs/DESIGN_LEDGER.md, C1b; docs/TODO.md, "The ice
-        // after C1b"). The ice is measured in C1b and not fixed.
+        // old one's cold cap dropped, and the ice covers a quarter of the land's cells. The share
+        // is of cells, and a row's cells stand for cos(latitude) of an equator row's ground, so
+        // the count weighs the polar land several times over: weighed by area on the sphere, as
+        // Earth's 10.1% is, the same worlds hold 7.86% (17.48% with the balance off), inside the
+        // bar, but then the control is inside it too (docs/DESIGN_LEDGER.md, C1b; docs/TODO.md,
+        // "The ice after C1b"). The ice is measured in C1b and not fixed.
         KnownFailures.expect("C1b: the ice covers more than twice Earth's share of the land at 256 rows", "24.39%") {
             if (shareOn > EARTH_ICE_SHARE * 2) {
                 throw RecordedViolation(

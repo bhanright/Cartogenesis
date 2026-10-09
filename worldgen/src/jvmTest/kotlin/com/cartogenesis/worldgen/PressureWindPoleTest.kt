@@ -7,7 +7,6 @@ import com.cartogenesis.worldgen.pipeline.ClimateStage
 import com.cartogenesis.worldgen.pipeline.PressureWind
 import com.cartogenesis.worldgen.pipeline.SeaLevelResult
 import com.cartogenesis.worldgen.pipeline.SphericalGrid
-import com.cartogenesis.worldgen.pipeline.SphericalOperators
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.acos
@@ -91,25 +90,50 @@ class PressureWindPoleTest {
         assertTrue(boxedPolar > boxedElsewhere, "the cell-counted blur's control passes, so the guard shows nothing")
     }
 
-    /** The smoothing on the sphere keeps the anomaly's area integral and stays inside its range. */
+    /**
+     * The smoothing keeps the anomaly's area integral and range: the carry down and the diffusion
+     * conserve exactly and stay inside the range, and the carry up reads a series smooth at the
+     * deformation radius, which moves either by a small part of the step. And about the pole the
+     * field is regular: its first row holds the slope across the pole and nothing shorter.
+     */
     @Test
-    fun `the smoothing conserves and makes no new extremes`() {
+    fun `the smoothing conserves, makes no new extremes and leaves the pole one value`() {
         val grid = SphericalGrid.forGround(columns, rows, config.scale)
-        val field = DoubleArray(columns * rows) { if (sea.isLand[it]) 1.0 else 0.0 }
-        val smoothed = SphericalOperators(grid).diffuse(field, PressureWind.rossbyRadiusKm() * 1_000.0, 4)
-        var before = 0.0
-        var after = 0.0
-        for (cell in field.indices) {
-            before += field[cell] * grid.cellAreaSquareMeters[cell / columns]
-            after += smoothed[cell] * grid.cellAreaSquareMeters[cell / columns]
+        val field = FloatField(columns, rows, FloatArray(columns * rows) { if (sea.isLand[it]) 1f else 0f })
+        val before = field.data.copyOf()
+        PressureWind.smooth(config, field)
+        var integralBefore = 0.0
+        var integralAfter = 0.0
+        for (cell in before.indices) {
+            integralBefore += before[cell] * grid.cellAreaSquareMeters[cell / columns]
+            integralAfter += field.data[cell] * grid.cellAreaSquareMeters[cell / columns]
         }
-        println("PRESSURE POLE smoothing: integral moved by %.2e, range %.3e to %.6f".format(abs(after - before) / before, smoothed.min(), smoothed.max()))
-        assertTrue(abs(after - before) / before < 1e-12, "the smoothing moves the integral by ${(after - before) / before}")
-        assertTrue(smoothed.min() >= -1e-12 && smoothed.max() <= 1 + 1e-12, "the smoothing overshoots its input's range")
-        // And the first row about the pole is near one value: its spread along the row is under a
-        // tenth of the continent's step, where the input's is the whole step.
-        val firstRow = (0 until columns).map { smoothed[it] }
-        println("PRESSURE POLE smoothing: the first row spans %.4f to %.4f".format(firstRow.min(), firstRow.max()))
-        assertTrue(firstRow.max() - firstRow.min() < 0.1, "the polar row keeps a spread of ${firstRow.max() - firstRow.min()}")
+        val moved = abs(integralAfter - integralBefore) / integralBefore
+        // About the pole a smooth field is its value there plus a slope across it: along the first
+        // row, one zonal wave and nothing shorter.
+        val waves = (1..8).map { wave ->
+            var real = 0.0
+            var imaginary = 0.0
+            for (column in 0 until columns) {
+                val angle = 2 * PI * wave * column / columns
+                real += field.data[column] * cos(angle)
+                imaginary += field.data[column] * sin(angle)
+            }
+            2 * sqrt(real * real + imaginary * imaginary) / columns
+        }
+        val shorter = waves.drop(1).max()
+        println("PRESSURE POLE smoothing: integral moved by %.2e, range %.3e to %.4f; the first row's first wave %.4f, the largest shorter one %.2e"
+            .format(moved, field.data.min(), field.data.max(), waves[0], shorter))
+        assertTrue(moved < SMOOTHING_TOLERANCE, "the smoothing moves the integral by $moved")
+        assertTrue(field.data.min() >= -SMOOTHING_TOLERANCE && field.data.max() <= 1 + SMOOTHING_TOLERANCE, "the smoothing overshoots its input's range")
+        assertTrue(shorter < SMOOTHING_TOLERANCE, "the polar row holds a zonal wave shorter than the first of $shorter")
+    }
+
+    private companion object {
+        /**
+         * A thousandth of the step: what the series may move the integral or overshoot by, or leave
+         * in the first row's shorter waves, on a field the Gaussian has made smooth at 970 km.
+         */
+        const val SMOOTHING_TOLERANCE = 1e-3
     }
 }

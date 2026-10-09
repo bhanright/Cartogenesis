@@ -47,7 +47,8 @@ class GpuAtmosphereTest {
             var onCpu: DoubleArray? = null
             var onGpu: FloatArray? = null
             val cpuMillis = timed { onCpu = remap.areaMean(field) }
-            val gpuMillis = timed { onGpu = assertNotNull(gpu.areaMean(remap, field), "the device declined to carry down") }
+            val gpuMillis = timed { onGpu = gpu.areaMean(remap, field) }
+            assertNotNull(onGpu, "the device declined to carry down")
             val largest = field.maxOf { abs(it) }.toDouble()
             val worst = worstDifference(onCpu!!, onGpu!!)
             val bound = areaMeanBound(remap, largest)
@@ -72,7 +73,8 @@ class GpuAtmosphereTest {
             var onCpu: DoubleArray? = null
             var onGpu: FloatArray? = null
             val cpuMillis = timed { onCpu = remap.evaluate(remap.coefficients(coarseField), rows, columns) }
-            val gpuMillis = timed { onGpu = assertNotNull(gpu.toGround(remap, coefficients), "the device declined to carry up") }
+            val gpuMillis = timed { onGpu = gpu.toGround(remap, coefficients) }
+            assertNotNull(onGpu, "the device declined to carry up")
             val worst = worstDifference(onCpu!!, onGpu!!)
             val bound = seriesBound(coefficients)
             println("ATMOSPHERE up $columns by $rows: worst %.3e against a bound of %.3e; processor %.1f ms, device %.1f ms".format(worst, bound, cpuMillis, gpuMillis))
@@ -123,10 +125,11 @@ class GpuAtmosphereTest {
         return worst
     }
 
+    /** Milliseconds a call, the mean of [TIMED_RUNS]; the last run's result is the one kept. */
     private inline fun timed(body: () -> Unit): Double {
         val started = System.nanoTime()
-        body()
-        return (System.nanoTime() - started) / 1e6
+        repeat(TIMED_RUNS) { body() }
+        return (System.nanoTime() - started) / 1e6 / TIMED_RUNS
     }
 
     private fun deviceOrSkip(): GpuAtmosphere {
@@ -144,6 +147,9 @@ class GpuAtmosphereTest {
     private companion object {
         /** Binary32's unit roundoff, `2^-24`. */
         const val UNIT_ROUNDOFF = 1.0 / (1 shl 24)
+
+        /** Calls each time is the mean of. */
+        const val TIMED_RUNS = 5
 
         /** A term's own roundings beyond the sums': its coefficient, its table entry, its product. */
         const val ROUNDINGS_PER_TERM = 4

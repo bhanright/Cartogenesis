@@ -219,22 +219,31 @@ internal object PressureWind {
     }
 
     /**
-     * Smooths a pressure field over [rossbyRadiusKm] on the ground: implicit diffusion on the
-     * sphere ([SphericalOperators.diffuse]) whose kernel approaches a Gaussian of that standard
-     * deviation, in place.
+     * Smooths a pressure field over [rossbyRadiusKm] on the ground, in place: carried down to the
+     * atmosphere's grid ([SphericalGrid.forAtmosphere], [AtmosphereRemap.areaMean]), spread there by
+     * implicit diffusion on the sphere ([SphericalOperators.diffuse]) whose kernel approaches a
+     * Gaussian of that standard deviation, and carried back up by its double Fourier series.
      *
      * On the sphere and not in cells, because the gradient [surfaceWind] takes is the sphere's. A
      * blur whose radius is a count of cells spreads 970 km east-west at the equator and a few
      * kilometers near a pole, and the true east-west gradient of what it leaves there is that
-     * departure over a few kilometers; a row-by-row blur on the ground leaves each polar row's own
-     * departure too, which is not one value at the pole. Either way the polar rows' winds ran away
-     * and the ocean's heat, forced by them, did not solve (docs/DESIGN_LEDGER.md, A1-2).
+     * departure over a few kilometers; with the gradient in the sphere's metric the polar rows' winds
+     * ran to hundreds and thousands of meters a second, and the ocean's heat, forced by them, did
+     * not solve (docs/DESIGN_LEDGER.md, A1-2). The diffusion leaves the field one value at each pole
+     * and the series keeps it so.
+     *
+     * On the atmosphere's grid because nothing finer survives the smoothing: its rows are a seventh
+     * of the deformation radius apart, so the field the Gaussian leaves is resolved there many times
+     * over, and the diffusion solves 45,000 cells on Earth's planet rather than the map's two
+     * million.
      */
     fun smooth(config: WorldGenConfig, pressureHpa: FloatField) {
-        val grid = SphericalGrid.forGround(config.width, config.height, config.scale)
-        val field = DoubleArray(pressureHpa.data.size) { pressureHpa.data[it].toDouble() }
-        val smoothed = SphericalOperators(grid).diffuse(field, rossbyRadiusKm() * WorldScale.METRES_PER_KM, SMOOTHING_STEPS)
-        for (cell in smoothed.indices) pressureHpa.data[cell] = smoothed[cell].toFloat()
+        val coarse = SphericalGrid.forAtmosphere(config.scale)
+        val remap = AtmosphereRemap(config.width, config.height, coarse)
+        val spread = SphericalOperators(coarse).diffuse(
+            remap.areaMean(pressureHpa.data), rossbyRadiusKm() * WorldScale.METRES_PER_KM, SMOOTHING_STEPS
+        )
+        remap.toGround(spread).copyInto(pressureHpa.data)
     }
 
     /** A surface wind as two components in metres a second, eastward and southward, per cell. */

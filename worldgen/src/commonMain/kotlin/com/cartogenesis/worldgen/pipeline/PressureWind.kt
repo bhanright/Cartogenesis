@@ -229,8 +229,8 @@ internal object PressureWind {
      * kilometers near a pole, and the true east-west gradient of what it leaves there is that
      * departure over a few kilometers; with the gradient in the sphere's metric the polar rows' winds
      * ran to hundreds and thousands of meters a second, and the ocean's heat, forced by them, did
-     * not solve (docs/DESIGN_LEDGER.md, A1-2). The diffusion leaves the field one value at each pole
-     * and the series keeps it so.
+     * not solve (docs/DESIGN_LEDGER.md, A1-2). Near a pole the diffusion draws every zonal wave but
+     * the mean toward the row beyond it, and the series carrying it up takes one value at the pole.
      *
      * On the atmosphere's grid because nothing finer survives the smoothing: its rows are a seventh
      * of the deformation radius apart, so the field the Gaussian leaves is resolved there many times

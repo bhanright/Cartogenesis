@@ -33,14 +33,17 @@ import kotlin.math.sqrt
  *
  * **The filter** is applied to forcing on the way down ([forcing]), once, so the model reads a field
  * whose series ends smoothly at the coarse grid's resolution. A coast is a step; the area mean
- * spreads it over one coarse cell, and a trigonometric series cut off across that ramp still rings
- * (Gibbs) and leaves the coarse grid's period in the field. The filter is Gelb and Gottlieb's
- * exponential filter, `exp(-alpha eta^p)` on the double Fourier coefficients, `eta` the wave's
- * distance from the origin over the grid's own limits in each direction and `alpha` the double's
- * machine zero, so the last waves the grid holds are gone and the first ones are untouched
- * (*The Resolution of the Gibbs Phenomenon for Fourier Spectral Methods*, 2007, section 2). Its
- * order [FILTER_ORDER] is set by the coast's overshoot it allows. Carrying up applies no filter of
- * its own: what comes up is the series of what is there, exactly.
+ * spreads it over one coarse cell, and a trigonometric series through that ramp still rings (Gibbs,
+ * 15.7% over a continent's step) and leaves the coarse grid's period in the field. Two filters do it,
+ * in turn. Implicit diffusion on the sphere ([SphericalOperators.diffuse]) of [FILTER_WIDTH_IN_ROWS]
+ * rows conserves, keeps a constant and makes no extreme of its own, and holds the step's overshoot to
+ * [STEP_OVERSHOOT_BOUND]; then Gelb and Gottlieb's exponential filter, `exp(-alpha eta^p)` on the
+ * double Fourier coefficients, `eta` the wave's distance from the origin over the grid's own limits
+ * in each direction and `alpha` the double's machine zero, takes out the waves nearest the limit that
+ * the diffusion's second difference leaves (*The Resolution of the Gibbs Phenomenon for Fourier
+ * Spectral Methods*, 2007, section 2). Either alone fails: the exponential filter does not bound the
+ * step, and the diffusion alone leaves the period. Carrying up applies no filter of its own: what
+ * comes up is the series of what is there, exactly.
  */
 class AtmosphereRemap(val groundColumns: Int, val groundRows: Int, val coarse: SphericalGrid) {
 
@@ -372,8 +375,11 @@ class AtmosphereRemap(val groundColumns: Int, val groundRows: Int, val coarse: S
          * The series filter's order, `p` in `exp(-alpha eta^p)`. The diffusion leaves a little of the
          * waves nearest the grid's limit, since a second difference damps them less than the true
          * Laplacian would, and those are the waves that put the coarse grid's period into what comes
-         * up; at order eight the filter removes them and leaves every wave below half the limit within
-         * 0.14% of itself. See docs/DESIGN_LEDGER.md, A1-2.
+         * up. At order eight a wave at a quarter of the limit keeps all but 0.06% of itself and one at
+         * half the limit 87%, so on the sweep in `AtmosphereRemapTest` the storm track's bump comes
+         * back 0.94% off with the filter and without it, the step overshoots 1.67% against 1.42%,
+         * and the period goes. Other orders were not swept beside the diffusion. See
+         * docs/DESIGN_LEDGER.md, A1-2.
          */
         const val FILTER_ORDER = 8
 

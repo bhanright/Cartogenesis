@@ -18,7 +18,7 @@ import kotlin.test.assertTrue
  * water and its numbers finite.
  *
  * [MoistureLedger] sums every term the march spends, lap by lap: the sea's evaporation, the
- * ground's return, the rain by each of its four mechanisms and each surface, and what the march
+ * ground's return, the rain by each of its mechanisms and each surface, and what the march
  * holds at each lap's start and end, in the parcels carried along the rows and in the bank between
  * its two sweeps. The march carries water between rows and columns as fluxes, each face's taken
  * out of one row and given to the other, so the budget closes by construction; these clauses are

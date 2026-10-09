@@ -429,7 +429,7 @@ internal class DesertBands {
         // Every clause asserted from Fix 3b to C1b. Recorded at C1b: the conserving march puts the
         // summer's monsoon over the subtropics and leaves the tropical interiors dry, for the
         // causes docs/TODO.md's "The desert left the horse latitudes (C1b)" measures.
-        KnownFailures.expect("C1b: desert out of the horse latitudes on the conserving march", "AUDIT BAND seed 42 15-45 deg at x0.23 against Earth's x2.05, under by more than 3.0x; AUDIT BAND pooled 0-15 deg at x2.95 against Earth's x0.27, over by more than 2.0x") {
+        KnownFailures.expect("C1b: desert out of the horse latitudes on the conserving march", "AUDIT BAND pooled 0-15 deg at x1.52 against Earth's x0.27, over by more than 2.0x") {
             if (complaints.isNotEmpty()) {
                 throw RecordedViolation(
                     "desert sits in the wrong latitudes against Earth's Koeppen BW shares (0-15 deg 5.2% " +

@@ -173,10 +173,10 @@ object Shoreline {
         for (vertex in 0 until distinct) {
             // An open chain's window is cut to the line left on the shorter side, both sides alike;
             // a ring's to half its length each way, so no stretch of it is counted twice.
-            val width = if (ring) sigma else min(sigma, min(alongFromStart[vertex], totalLength - alongFromStart[vertex]) / WINDOW_SIGMAS)
-            if (width <= 0f) continue
-            val reach = if (ring) min(WINDOW_SIGMAS * width, totalLength / 2f) else WINDOW_SIGMAS * width
-            val pieceLength = width / PIECES_PER_SIGMA
+            val windowSigma = if (ring) sigma else min(sigma, min(alongFromStart[vertex], totalLength - alongFromStart[vertex]) / WINDOW_SIGMAS)
+            if (windowSigma <= 0f) continue
+            val reach = if (ring) min(WINDOW_SIGMAS * windowSigma, totalLength / 2f) else WINDOW_SIGMAS * windowSigma
+            val pieceLength = windowSigma / PIECES_PER_SIGMA
             var weightSum = 0.0
             var sumX = 0.0
             var sumY = 0.0
@@ -193,7 +193,7 @@ object Shoreline {
                         for (piece in 0 until pieces) {
                             val alongSegment = (piece + HALF) * counted / pieces
                             val alongLine = travelled + alongSegment
-                            val weight = exp(-(alongLine * alongLine) / (2.0 * width * width)) * (counted / pieces)
+                            val weight = exp(-(alongLine * alongLine) / (2.0 * windowSigma * windowSigma)) * (counted / pieces)
                             val share = alongSegment / segmentLength
                             weightSum += weight
                             sumX += weight * (line[from * 2] + share * (line[to * 2] - line[from * 2]))

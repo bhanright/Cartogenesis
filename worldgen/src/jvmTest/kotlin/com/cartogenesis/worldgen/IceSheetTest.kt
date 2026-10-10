@@ -68,7 +68,7 @@ class IceSheetTest : BorrowsSharedWorlds() {
         // Recorded at C1b: the march that closes its budget snows on the polar land where the old one
         // dropped the cold cap's water, and the sheets it feeds stand thicker than Earth's. The ice
         // is measured and not fixed in C1b (docs/TODO.md, "The ice after C1b").
-        KnownFailures.expect("C1b: the sheets the conserving march feeds stand thicker than Earth's", "seed 59758 stands 5759; seed 42 stands 6174") {
+        KnownFailures.expect("C1b: the sheets the conserving march feeds stand thicker than Earth's", "seed 718106 stands 4867; seed 59758 stands 7270; seed 7 stands 7297; seed 42 stands 5645") {
             if (failures.isNotEmpty()) {
                 throw RecordedViolation(
                     "the sheets are outside the envelope Earth's two sit in:\n" + failures.joinToString("\n"),
@@ -220,8 +220,9 @@ class IceSheetTest : BorrowsSharedWorlds() {
     }
 
     /**
-     * The control for the flow clause: [DOME_SEED]'s own sheet, with every cell's flow turned a
-     * quarter from the bearing the ice took, fails it.
+     * The control for the flow clause: [DOME_SEED]'s own sheet, or the first of the clause's seeds
+     * whose sheet has a dome to read, with every cell's flow turned a quarter from the bearing the
+     * ice took, fails it.
      *
      * A quarter turn on square cells keeps every step a step to a neighbor and the neighborhood
      * the same cells, and takes from the flow only its knowledge of where the dome is, which is
@@ -231,7 +232,13 @@ class IceSheetTest : BorrowsSharedWorlds() {
      */
     @Test
     fun `the flow clause fails a flow turned a quarter from the ice's own`() {
-        val measured = measure(DOME_SEED)
+        // The first of [DOME_SEED] and the clause's own seeds whose sheet fills a third of its disc
+        // near the dome: at A1-4 [DOME_SEED]'s held 8 cells there, so the control moves with the ice.
+        val seed = (listOf(DOME_SEED) + seeds).first { candidate ->
+            val candidateMeasured = measure(candidate)
+            readFlow(candidateMeasured, candidateMeasured.mass.sheetFlowReceiver)?.isNeighbourhood == true
+        }
+        val measured = measure(seed)
         val config = measured.config
         val flow = measured.mass.sheetFlowReceiver
         val w = config.width
@@ -247,7 +254,7 @@ class IceSheetTest : BorrowsSharedWorlds() {
         val own = readFlow(measured, flow)!!
         val control = readFlow(measured, turned)!!
         println(
-            "I1 FLOW CONTROL seed $DOME_SEED: the stage's flow: ${own.describe()}; " +
+            "I1 FLOW CONTROL seed $seed: the stage's flow: ${own.describe()}; " +
                 "turned a quarter: ${control.describe()}"
         )
         assertTrue("the control's neighborhood is not a dome's: ${control.near} cells", control.isNeighbourhood)

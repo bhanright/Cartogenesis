@@ -124,7 +124,13 @@
   `RibbonLandTest`'s strip is a share of the map's width (`w / 170`, 71 km of half-width on the
   12,000 km planet and 236 km on Earth's), so the case runs on the calibration planet until the
   strip is a width on the ground and the Earth-sized world is held to Earth's 0.7 to 1.0% of land.
-  2026-10-08, K2.
+  2026-10-08, K2. **H1's ground clears seven of these, and they are armed:** `CurrentFeedsRainTest`'s
+  cold sample coast, `GlaciationCombTest`'s straight lake, `IsostasyTest`'s moat (62 m of 239, on
+  a thinner sheet rather than a deeper moat) and its foreland, `ReceiverClampTest` (no cell is
+  left below its receiver now, but the cell K2 found was never traced, so the defect may stand
+  elsewhere), `SeaLevelHistoryTest`'s seed 42 and `LakeWaterBalanceTest`'s dry basin on the
+  re-picked sample. The drowned crust is worse (0.394 at 512 rows) and is H1's entry above; the
+  rest stand. 2026-10-10, H1.
 - **The hotspot trails' plate turns are drawn from one measured turn (K2).** A plate turns at each
   of the planet's reorganizations by an angle drawn uniformly up to the Hawaiian-Emperor bend's 60
   degrees either way (`PlateStage.plateTurnRadians`): Earth gives the Pacific's turn well

@@ -815,7 +815,9 @@ class DeltaOutlineTest {
          * about the geometric midpoint — 1.7 times under the worst square and 1.7 times over the
          * worst curve. Re-derived the same way at A1-2, whose pressure wind moved the ground: the
          * square fans now put 1.1% at most and the curved ones 0.6%, and 0.8% is the midpoint, 1.4
-         * times under the one and 1.3 times over the other. The gap is far wider at the grid the author was looking at, where the square
+         * times under the one and 1.3 times over the other. Re-derived again at A1-5, whose rain moved
+         * the ground: the square fans 1.6% and the curved ones 0.81%, and 1.1% is the midpoint, 1.4
+         * times under the one and over the other. The gap is far wider at the grid the author was looking at, where the square
          * a lacustrine fan takes is forty-nine cells on a side rather than thirteen: see the
          * ledger's 2048 figures.
          *
@@ -825,7 +827,7 @@ class DeltaOutlineTest {
          * bearing, is the geometry guard's (`GeometryGuardTest` in `:cartography`, whose layers
          * include the delta lobes and the lake fans this measures).
          */
-        const val STRAIGHT_BAR = 0.008
+        const val STRAIGHT_BAR = 0.011
 
         /** The least a rim's longest radius may exceed its shortest. */
         const val RATIO_BAR = 1.5

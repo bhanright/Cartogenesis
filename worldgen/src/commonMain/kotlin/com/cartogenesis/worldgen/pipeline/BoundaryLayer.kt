@@ -399,13 +399,13 @@ internal object BoundaryLayer {
     }
 
     /**
-     * The share of the heap the factors may take, as its inverse: a quarter. The factors are about
-     * 700 MB on Earth's planet at eight levels, so a heap of 2.8 GB or more keeps them: the
-     * application's (three quarters of the machine's memory) and the world tests' 3 and 3.5 GB,
-     * which hold a world of the application's 1,024 rows and its march beside them; the drawing's
-     * 2 GB and the interface's half a gigabyte factor each lap instead.
+     * The share of the heap the factors may take, as its inverse: an eighth. The factors are about
+     * 700 MB on Earth's planet at eight levels, so a heap of 5.6 GB or more keeps them, the
+     * application's (three quarters of the machine's memory); the test workers' 3 to 4 GB, which
+     * hold a world of 1,024 rows, its march and a drawing beside them, ran out of heap with the
+     * factors kept at a quarter, and they and the interface's half a gigabyte factor each lap.
      */
-    const val FACTORS_SHARE_OF_HEAP = 4L
+    const val FACTORS_SHARE_OF_HEAP = 8L
 
     /** The block-tridiagonal factors' blocks per row (below, on and above the diagonal) and a complex double's bytes. */
     private const val FACTOR_BLOCKS_PER_ROW = 3L

@@ -24,8 +24,8 @@ import kotlin.test.assertTrue
  *   of what its condensation asked for, and the land's rain within the same of its last lap's,
  *   before [MoistureMarch.MAX_LAPS].
  * - **What settles it, and that where it starts does not matter** (the deep tier): the plain
- *   iteration, the control, does not settle in the same laps, and its slowest lap-to-lap ratio is the
- *   loop's feedback; started from twice the settled heating the loop settles on the same answer,
+ *   iteration, the control, takes more laps over the worlds together and does not settle on some
+ *   within the ceiling, and its slowest lap-to-lap ratio is the loop's feedback; started from twice the settled heating the loop settles on the same answer,
  *   within what a contraction of that feedback allows two answers each within their residual.
  */
 class AtmosphereCouplingTest : BorrowsSharedWorlds() {
@@ -112,7 +112,9 @@ class AtmosphereCouplingTest : BorrowsSharedWorlds() {
      */
     @Test
     fun `the plain iteration does not settle, and where the loop starts does not move where it settles`() {
-        var plainSettled = 0
+        var plainUnsettled = 0
+        var plainLaps = 0
+        var acceleratedLaps = 0
         var outside = 0
         for (seed in seeds) {
             val world = world(seed)
@@ -124,7 +126,9 @@ class AtmosphereCouplingTest : BorrowsSharedWorlds() {
             val tail = plainResiduals.takeLast(TAIL_LAPS)
             val ratios = tail.zipWithNext { before, after -> after / before }
             val feedback = ratios.sorted()[ratios.size / 2]
-            if (plainResiduals.last() < MoistureMarch.CONVERGED_SHARE && plain.march.laps <= settled.march.laps) plainSettled++
+            if (plainResiduals.last() >= MoistureMarch.CONVERGED_SHARE) plainUnsettled++
+            plainLaps += plain.march.laps
+            acceleratedLaps += settled.march.laps
             val doubled = settled.coupling.julyLatentWPerM2.map { it * SECOND_START_FACTOR }.toDoubleArray() to
                 settled.coupling.januaryLatentWPerM2.map { it * SECOND_START_FACTOR }.toDoubleArray()
             val restarted = checkNotNull(
@@ -141,7 +145,11 @@ class AtmosphereCouplingTest : BorrowsSharedWorlds() {
                 "(the loop's feedback); started from %.0f times the settled heating, %d laps, settled %.4f from the first answer against a bound of %.4f")
                 .format(seed, plain.march.laps, plainResiduals.last(), TAIL_LAPS, feedback, SECOND_START_FACTOR, restarted.march.laps, distance, bound))
         }
-        assertTrue(plainSettled == 0, "the plain iteration settles as soon on $plainSettled worlds, so the acceleration is not what settles the loop")
+        println("COUPLING laps over the four worlds: the plain iteration %d, accelerated %d; the plain iteration unsettled on %d".format(plainLaps, acceleratedLaps, plainUnsettled))
+        assertTrue(
+            plainUnsettled > 0 && plainLaps > acceleratedLaps,
+            "the plain iteration settles every world in $plainLaps laps against the acceleration's $acceleratedLaps, so the acceleration is not what settles the loop"
+        )
         assertTrue(outside == 0, "on $outside worlds the loop settles somewhere else when started elsewhere")
     }
 

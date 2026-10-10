@@ -402,7 +402,7 @@ class SnowBalanceTest : BorrowsSharedWorlds() {
         // 8.2 to 9.3% of the land of seeds 42, 969495 and 7 at 1,024 rows against Earth's 10.1
         // (docs/TODO.md, "The ice after A1-1").
         val signature = "%.2f%%".format(shareOn)
-        KnownFailures.expect("A1-1: the ice covers more than twice Earth's share of the land's cells", "25.98%") {
+        KnownFailures.expect("A1-1: the ice covers more than twice Earth's share of the land's cells", "25.82%") {
             if (shareOn > EARTH_ICE_SHARE * 2) {
                 throw RecordedViolation("ice covers $signature of land, more than twice Earth's ${EARTH_ICE_SHARE}%", signature)
             }
@@ -479,15 +479,9 @@ class SnowBalanceTest : BorrowsSharedWorlds() {
                 " ice, so there is nothing here for the balance to fix",
             shareOff > 25.0
         )
-        // Recorded at C1b, for the same snow (docs/TODO.md, "The ice after C1b").
-        KnownFailures.expect("C1b: some of the cold dry interior is ice under the conserving march's snow", "2.2%") {
-            if (shareOn >= 2.0) {
-                throw RecordedViolation(
-                    "${"%.1f".format(shareOn)}% of the cold dry interior is still ice sheet",
-                    "%.1f%%".format(shareOn)
-                )
-            }
-        }
+        // Recorded at C1b, for the same snow (docs/TODO.md, "The ice after C1b"); armed at A1-5,
+        // whose rain from the solved vertical motion leaves the cold dry interior under 2% ice.
+        assertTrue("${"%.1f".format(shareOn)}% of the cold dry interior is still ice sheet", shareOn < 2.0)
     }
 
     /**

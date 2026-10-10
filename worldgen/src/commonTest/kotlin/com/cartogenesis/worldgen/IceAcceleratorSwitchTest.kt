@@ -10,6 +10,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.test.runTest
+import kotlin.time.Duration.Companion.minutes
 
 /**
  * The ice sheet leaves the processor only when the reader has turned graphics acceleration on.
@@ -25,7 +26,7 @@ import kotlinx.coroutines.test.runTest
 class IceAcceleratorSwitchTest {
 
     @Test
-    fun `the ice sheet is drawn on the device only when acceleration is on`() = runTest {
+    fun `the ice sheet is drawn on the device only when acceleration is on`() = runTest(timeout = WORLDS_TIMEOUT) {
         val device = CountingIceDevice()
 
         val onTheProcessor = WorldGenerationEngine.generate(config, iceAccelerator = device)
@@ -71,7 +72,7 @@ class IceAcceleratorSwitchTest {
      * under the other answer. Shown on the world's own ground, not by reading the guards.
      */
     @Test
-    fun `turning acceleration on or off re-draws the ice rather than reusing it`() = runTest {
+    fun `turning acceleration on or off re-draws the ice rather than reusing it`() = runTest(timeout = WORLDS_TIMEOUT) {
         val device = CountingIceDevice()
         val onTheProcessor = WorldGenerationEngine.generate(config, iceAccelerator = device)
         assertEquals(0, device.calls, "the processor's world asked the device")
@@ -147,6 +148,13 @@ class IceAcceleratorSwitchTest {
          * common suite generates, and a world with no sheet never reaches the device at all.
          */
         const val SEED = 7L
+
+        /**
+         * How long the three worlds of a case may take: ten minutes, as `PipelineTest`'s worlds have.
+         * A world of 128 rows carries the coupled atmosphere's cost, which is the planet's and not
+         * the map's (docs/DESIGN_LEDGER.md, A1-5), and three of them outgrew the default minute.
+         */
+        val WORLDS_TIMEOUT = 10.minutes
 
         val config = WorldGenConfig.forRows(SEED, 128)
 

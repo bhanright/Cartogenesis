@@ -1,5 +1,14 @@
 # To do
 
+- **`GroundFiguresTest` fails on main at 4c7f3a4a.** Its case *no figure in the source is counted
+  in cycles round the map or as a share of it* names `Shoreline.kt:179` (`:cartography`, G2's
+  drawn coast), `width / PIECES_PER_SIGMA`, as dividing the grid. Seen on both everyday runs of
+  `:worldgen:jvmTest` in WC1, which changed no generator or drawing code; whether the figure is a
+  length on the ground the scan misreads or one in cells is not checked. 2026-10-10, WC1.
+- **Two evictions at once may let go of more than the cap asks.** Each process lists the shared
+  world cache, sums it and deletes from the oldest without a lock over the whole directory, so two
+  stores that finish together can each delete for the same excess. It costs generations only, never
+  a wrong or partial world; a lock over eviction would close it if it is ever seen. 2026-10-10, WC1.
 - **The geometry census's clauses at Earth's size that are the ground's, not the drawing's (G2).**
   G2 traced every clause the census makes on a drawn layer at the default planet (seeds 42 and
   969495 at 1,024 rows) to the operator that makes it; these five are in the fields, and the

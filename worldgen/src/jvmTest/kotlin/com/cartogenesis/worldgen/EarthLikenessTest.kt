@@ -81,27 +81,21 @@ class EarthLikenessTest : BorrowsSharedWorlds() {
             LAW_SETS_EVERY_CUT,
             "42: drainage density peaks in HUMID, not in one of the drylands where Moglen, " +
                 "Eltahir & Bras (1998) put it; " +
-                "42: humid country carries 1.28 times the channel per unit of land that semi-arid " +
+                "42: humid country carries 1.04 times the channel per unit of land that semi-arid " +
                 "country does, where Moglen, " +
                 "Eltahir & Bras (1998) have the density falling away on the wet side and so below one; " +
-                "1234: drainage density peaks in HUMID, not in one of the drylands where Moglen, " +
-                "Eltahir & Bras (1998) put it; " +
-                "1234: humid country carries 1.08 times the channel per unit of land that semi-arid " +
+                "1234: humid country carries 1.17 times the channel per unit of land that semi-arid " +
                 "country does, where Moglen, " +
                 "Eltahir & Bras (1998) have the density falling away on the wet side and so below one; " +
-                "99: drainage density peaks in HUMID, not in one of the drylands where Moglen, " +
-                "Eltahir & Bras (1998) put it; " +
-                "99: humid country carries 1.15 times the channel per unit of land that semi-arid " +
+                "99: humid country carries 1.21 times the channel per unit of land that semi-arid " +
                 "country does, where Moglen, " +
                 "Eltahir & Bras (1998) have the density falling away on the wet side and so below one; " +
-                "pooled: drainage density peaks in HUMID, not in one of the drylands where Moglen, " +
-                "Eltahir & Bras (1998) put it; " +
                 "pooled: humid country carries 1.10 times the channel per unit of land that semi-arid " +
                 "country does, where Moglen, " +
                 "Eltahir & Bras (1998) have the density falling away on the wet side and so below one; " +
-                "pooled: the lake-size exponent is 0.871 over 626 of them, " +
+                "pooled: the lake-size exponent is 0.903 over 638 of them, " +
                 "outside 1.06 +/- 0.13 (Downing et al. 2006, three sampling errors); " +
-                "pooled: the coastline's box-counting dimension is 0.889, " +
+                "pooled: the coastline's box-counting dimension is 0.885, " +
                 "outside 1.25 +/- 0.15 (Mandelbrot 1967: Britain 1.25, Richardson's smoothest coast 1.02)"
         ) {
             if (complaints.isNotEmpty()) {

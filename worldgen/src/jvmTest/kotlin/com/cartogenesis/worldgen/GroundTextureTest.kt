@@ -147,7 +147,7 @@ class GroundTextureTest : BorrowsSharedWorlds() {
         // Earth-sized planet's 512 rows are 39 km cells, which hold fewer channel cells to a
         // square kilometer (docs/DESIGN_LEDGER.md, K2).
         KnownFailures.expect(
-            "K2: the drainage density at 512 rows is read on cells of 39 km, against a figure taken on 23 km cells", "0.0056"
+            "K2: the drainage density at 512 rows is read on cells of 39 km, against a figure taken on 23 km cells", "0.0054"
         ) {
             if (pooledDensity !in (MAIN_DRAINAGE_DENSITY_KM_PER_KM2 / DRAINAGE_DENSITY_ALLOWANCE)..
                     (MAIN_DRAINAGE_DENSITY_KM_PER_KM2 * DRAINAGE_DENSITY_ALLOWANCE)

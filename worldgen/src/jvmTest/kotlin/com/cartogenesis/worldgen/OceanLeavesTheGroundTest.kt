@@ -47,8 +47,9 @@ class OceanLeavesTheGroundTest : BorrowsSharedWorlds() {
      * sinks and wind moved the provisional rain, and the ice's profile is Glen's law's. A1-1 re-took
      * the same two: the provisional climate's seasons became the calendar's and its sea surface
      * takes its share of the sun. A1-2 re-took the same two: the provisional climate's pressure wind
-     * is smoothed and differentiated on the sphere. An ocean change that leaks into the ground moves
-     * them.
+     * is smoothed and differentiated on the sphere. A1-4 and A1-5 re-took the same two: the
+     * provisional climate's wind became the boundary layer's, and then its rain the coupled
+     * atmosphere's vertical motion's. An ocean change that leaks into the ground moves them.
      * A chunk meant to move the ground re-takes them here, as the render records are re-taken.
      * At [SharedWorlds.DETAIL_ROWS], whose standard worlds the detail guards generate anyway, so
      * the pin costs a digest and no generation.
@@ -79,12 +80,12 @@ class OceanLeavesTheGroundTest : BorrowsSharedWorlds() {
             "plates.continentalShare" to 5707884443378334786L,
             "plates.upliftRateMmPerYear" to -1700415688480725156L,
             "plates.crustAge" to 8840618518047909851L,
-            "erosion.height" to -5100047290716867456L,
+            "erosion.height" to 424537893365974125L,
             "erosion.sweptOnDevice" to -358906410940142731L,
-            "sea.shorelineHeight" to -8801466501441038213L,
-            "sea.isLand" to 8346819145637856899L,
-            "sea.relativeElevation" to -9025812006234579336L,
-            "sea.landCellCount" to -2389793183661927401L
+            "sea.shorelineHeight" to -6560826777609224278L,
+            "sea.isLand" to -4568625188585807751L,
+            "sea.relativeElevation" to -8095792413560435193L,
+            "sea.landCellCount" to -5173831719124787021L
         )
     }
 }

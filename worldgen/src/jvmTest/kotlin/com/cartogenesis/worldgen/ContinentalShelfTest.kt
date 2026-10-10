@@ -147,7 +147,7 @@ class ContinentalShelfTest : BorrowsSharedWorlds() {
         // seed 42's east- and west-facing shelf holds 88% of its band (docs/TODO.md).
         KnownFailures.expect(
             "A1-4: seed 42's shelf off east- and west-facing coasts falls short",
-            "seed 42: the shelf's plateau holds 90% of its band off north- and south-facing coasts and 88% off east- and west-facing ones"
+            "seed 42: the shelf's plateau holds 90% of its band off north- and south-facing coasts and 87% off east- and west-facing ones"
         ) {
             if (failures.isNotEmpty()) throw RecordedViolation(failures.joinToString(System.lineSeparator()), failures.joinToString("; "))
         }

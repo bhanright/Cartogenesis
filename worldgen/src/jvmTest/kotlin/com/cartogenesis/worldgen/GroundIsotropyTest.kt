@@ -73,7 +73,7 @@ class GroundIsotropyTest : BorrowsSharedWorlds() {
         // allowed; armed at C1b2, whose rain moved the ground; recorded again at A1-1, whose
         // calendar seasons moved it again and left seed 99's coast at 0.94, the four together at
         // 1.00 (docs/DESIGN_LEDGER.md, K2, C1b2 and A1-1).
-        KnownFailures.expect("A1-1: one world's coast projects further one way than its length allows", "seed 99 0.93, together 0.98") {
+        KnownFailures.expect("A1-1: one world's coast projects further one way than its length allows", "seed 99 0.93, together 0.99") {
             if (!(past.isEmpty() && abs(ln(pooled)) <= pooledBar)) {
                 throw RecordedViolation(
                     "the coasts project more one way than the other on the ground, past what their length allows: $found",

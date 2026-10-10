@@ -267,8 +267,9 @@ internal object BoundaryLayer {
      * One world's boundary layer, ready to be solved for any latent heating: everything that does
      * not depend on the rain, built once. The basic state and the drag are the same in both
      * calendar halves, so with [keepFactors] every wave is factored once here and each solve after
-     * is a back-substitution, two a coupling lap; without it each solve factors afresh and keeps
-     * nothing (about 700 MB of factors on Earth's planet at eight levels).
+     * is a back-substitution, two a coupling lap; without it each solve factors afresh, both halves
+     * at once, and keeps nothing (about 700 MB of factors on Earth's planet at eight levels;
+     * [keepsFactors] decides). The answer is the same to the bit either way.
      */
     class Solver(
         val config: WorldGenConfig,
@@ -381,6 +382,34 @@ internal object BoundaryLayer {
             )
         }
     }
+
+    /**
+     * Whether a world's coupled loop keeps every wave's factors between its laps: when they take no
+     * more than [FACTORS_SHARE_OF_HEAP] of the most heap the platform gives
+     * ([com.cartogenesis.worldgen.concurrent.maximumHeapBytes]). Kept, each lap back-substitutes;
+     * not kept, each lap factors afresh. The two compute the same numbers in the same order, so the
+     * choice moves the cost of a world and never the world (`StationaryWaveModelTest`).
+     */
+    fun keepsFactors(config: WorldGenConfig): Boolean {
+        val coarse = SphericalGrid.forAtmosphere(config.scale)
+        val blockSize = 4 * LEVEL_COUNT - 1
+        val waves = coarse.columns / 3
+        val bytes = waves.toLong() * coarse.rows * FACTOR_BLOCKS_PER_ROW * blockSize * blockSize * COMPLEX_BYTES
+        return bytes <= com.cartogenesis.worldgen.concurrent.maximumHeapBytes() / FACTORS_SHARE_OF_HEAP
+    }
+
+    /**
+     * The share of the heap the factors may take, as its inverse: a quarter. The factors are about
+     * 700 MB on Earth's planet at eight levels, so a heap of 2.8 GB or more keeps them: the
+     * application's (three quarters of the machine's memory) and the world tests' 3 and 3.5 GB,
+     * which hold a world of the application's 1,024 rows and its march beside them; the drawing's
+     * 2 GB and the interface's half a gigabyte factor each lap instead.
+     */
+    const val FACTORS_SHARE_OF_HEAP = 4L
+
+    /** The block-tridiagonal factors' blocks per row (below, on and above the diagonal) and a complex double's bytes. */
+    private const val FACTOR_BLOCKS_PER_ROW = 3L
+    private const val COMPLEX_BYTES = 16L
 
     /**
      * The dry model's damping: [WaveDamping.forWorlds]'s free atmosphere and mixing, the shallow

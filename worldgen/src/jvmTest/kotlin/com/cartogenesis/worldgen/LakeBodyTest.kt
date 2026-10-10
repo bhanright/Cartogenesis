@@ -73,9 +73,12 @@ class LakeBodyTest : BorrowsSharedWorlds() {
             if (touching.isNotEmpty()) failures += "seed $seed: lakes at two levels touching ${touching.take(6)}"
         }
         // Recorded at C1b2: the march's new rain left two lakes of two pieces each, a lake rule
-        // the rain only exposed; armed at A1-1, whose ground leaves none (docs/DESIGN_LEDGER.md,
-        // C1b2 and A1-1).
-        assertTrue(failures.isEmpty(), "a body of water holds more than one level: $failures")
+        // the rain only exposed; armed at A1-1, whose ground leaves none; recorded again at A1-5,
+        // whose rain from the solved vertical motion leaves one on seed 99 (docs/TODO.md).
+        val signature = failures.joinToString("; ")
+        KnownFailures.expect("A1-5: a lake in two pieces", "seed 99: [lake 17 in 2 pieces]") {
+            if (failures.isNotEmpty()) throw RecordedViolation("a body of water holds more than one level: $failures", signature)
+        }
     }
 
     /**

@@ -68,7 +68,7 @@ class IceSheetTest : BorrowsSharedWorlds() {
         // Recorded at C1b: the march that closes its budget snows on the polar land where the old one
         // dropped the cold cap's water, and the sheets it feeds stand thicker than Earth's. The ice
         // is measured and not fixed in C1b (docs/TODO.md, "The ice after C1b").
-        KnownFailures.expect("C1b: the sheets the conserving march feeds stand thicker than Earth's", "seed 718106 stands 4867; seed 59758 stands 7270; seed 7 stands 7297; seed 42 stands 5645") {
+        KnownFailures.expect("C1b: the sheets the conserving march feeds stand thicker than Earth's", "seed 718106 stands 5683; seed 59758 stands 5794; seed 7 stands 6388; seed 42 stands 6024") {
             if (failures.isNotEmpty()) {
                 throw RecordedViolation(
                     "the sheets are outside the envelope Earth's two sit in:\n" + failures.joinToString("\n"),

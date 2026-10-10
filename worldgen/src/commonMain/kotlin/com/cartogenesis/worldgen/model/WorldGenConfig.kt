@@ -456,34 +456,29 @@ data class TectonicsConfig(
      * *area* until the target is met, so a world of fourteen plates of unequal size lands on the
      * share asked for rather than on the nearest whole plate.
      *
-     * **A fifth, which is this model's own figure and not Earth's 29%.** The number has to be the
-     * one the model actually drowns or the sea-level cut cannot land on the isostatic datum, and
-     * where it lands is not a tidiness question: every metre the cut stands above the datum is a
-     * metre of continental platform put under shallow water, and enough of them smear the two
-     * hypsometric modes back into one. At Earth's 0.291 the crust drew more continent than the
-     * slider asked for — 0.43 to 0.49 of the world above the datum against the 0.38 wanted, so the
-     * cut came up 131 to 323 m to meet it — and the fringe that drowned was the busiest band on the
-     * map: three of the five standard worlds then had no hypsometric trough at all. At 0.20 the
-     * crust lands on the coverage asked for, all five carry a trough, and all five put their sea
-     * mode within Earth's tolerance of -3,700.
+     * **Earth's own 0.29.** Where the sea stands on a continent is what this decides: the cut
+     * drowns this share of the crust, so the land is the crust above its own 29th percentile, and
+     * that is the whole of the land's hypsometry. Earth's continental platform — its land under
+     * 2 km and its shelves to 500 m, on the six ice-free continents of NOAA's ETOPO5 — stands at a
+     * mean of 374 m about the sea with a spread of 503 m; with this share the Earth-sized planet's
+     * reads 373 to 391 m and 500 to 506 m on seeds 42 and 7 at 512 rows, and its land under 500 m
+     * is 46 to 55% against Earth's 54%. See docs/DESIGN_LEDGER.md, H1.
      *
-     * The gap to Earth's 29% is a finding and it has a name. This generator's continents drown a
-     * fifth of themselves where Earth's drown three tenths because it has no epicontinental seas —
-     * no Hudson Bay, no Baltic, no North Sea, no Sunda shelf — since nothing in the model floods a
-     * continent's interior, which is a question about how crustal thickness varies *inside* a
-     * plate. In `TODO.md`.
+     * It was 0.20 from S2 to H1, a figure the model was measured to drown at the isostatic datum on
+     * the 12,000 km planet, so the cut would land there; S2 recorded that at 0.29 the cut climbed
+     * 131 to 323 m and drowned the busiest band of a small planet's platform. The Earth-sized
+     * planet's continents are three times as wide against the same margins, so the crust drowns
+     * about an eighth of itself at the datum — 12.5% on seed 42 — and at 0.20 the cut still stood
+     * 250 to 450 m above the datum, where the platform's hump put half the land between 500 m and
+     * 2 km. No one model figure lands the cut on the datum anyway, since the continents are whole
+     * plates and the nearest a world can come is half a plate either way, so the share is Earth's
+     * and the datum is where Earth's platform floats ([IsostasyConfig.continentalFreeboardMetres]).
      *
      * S2's first pass measured 0.12 here and recorded that taking it cost the coastline everything:
      * the shoreline then sat on the margin's own slope, where the ground falls hundreds of metres a
-     * cell, and the four standard seeds carried 1, 1, 2 and 4 islands between them with a
-     * box-counting dimension of 1.05. That reading was true of the surface it was taken on — a base
-     * relief of 2,000 m peak to peak whose loudest component was the width of the map. With the
-     * relief shaped into a 400 km band instead ([TerrainConfig.reliefCornerKm]) and given Earth's
-     * own spread ([continentalReliefStandardDeviationMetres]), the platform's edge carries enough
-     * topography of its own that a shoreline standing on it is still a coastline: 1.105 to 1.177
-     * across the five worlds, inside Mandelbrot's band.
+     * cell. Earth's share puts it on the platform instead, which is where Earth's coasts are.
      */
-    val continentalCrustSubmergedShare: Float = 0.20f,
+    val continentalCrustSubmergedShare: Float = 0.29f,
     /**
      * What one unit of every belt height below is worth, in metres.
      *
@@ -606,13 +601,17 @@ data class TectonicsConfig(
      * about 900. Nothing outside an orogen stands higher than the high plains, and the orogens are
      * the belts' business: see [orogenReliefStandardDeviationMetres].
      *
-     * It is also what makes the continents drown, and *where* they drown. A platform floating at
-     * 840 m with 700 m of spread on it everywhere puts a fifth of itself under water wherever the
-     * noise happens to dip, interior included, which is the flooded continent the author named in
-     * S2's third pass; with the spread falling to
-     * [cratonReliefStandardDeviationMetres] inland the same fifth drowns at the rim, which is
-     * where Earth's is. [continentalCrustSubmergedShare] carries what the model actually drowns
-     * and is what the sea-level cut is solved against.
+     * It is also what makes the continents drown, and *where* they drown. A platform with 700 m of
+     * spread on it everywhere puts a fifth of itself under water wherever the noise happens to dip,
+     * interior included, which is the flooded continent the author named in S2's third pass; with
+     * the spread falling to [cratonReliefStandardDeviationMetres] inland more of it drowns at the
+     * rim, which is where Earth's does. [continentalCrustSubmergedShare] is how much drowns.
+     *
+     * Checked against Earth at H1: the Earth-sized planet's platform — the crust's land under 2 km
+     * and its water to 500 m, belts left out — spreads by 500 to 506 m about the sea on seeds 42 and
+     * 7 at 512 rows, against the 503 m of the six ice-free continents in NOAA's ETOPO5 read the same
+     * way. The 700 m here is the noise's share of that before the texture, the craton's tilt and the
+     * margin's ramp are added, not the whole of it.
      *
      * Two hundred and fifty on the sea floor. Abyssal hills carry 50 to 300 m of relief with a
      * spacing of two to eight kilometres (Goff & Jordan, *Stochastic modeling of seafloor
@@ -1340,7 +1339,25 @@ data class TectonicsConfig(
      * guard measures "before" against.
      */
     val hotspotConeDetail: Boolean = true,
-    /** Whether the continental platform's closed hollows are filled to their spill level. */
+    /**
+     * Whether the continental platform's closed hollows are filled with sediment to the level they
+     * spill at.
+     *
+     * The base relief is the platform's own warping — its swells and its sags, hundreds to
+     * thousands of kilometres across — and a sag in a continent is a sedimentary basin. Over the
+     * time a platform's relief takes to form, a closed basin takes the sediment of its own
+     * catchment until it overflows: Carroll and Bohacs's overfilled basin, whose potential
+     * accommodation (the space between the basin's floor and its spill point) is less than what its
+     * catchment supplies (Bohacs, AAPG 1999, and the lake-basin-type model it summarizes). So the
+     * platform's closed hollows come out as plains at their spill level, and only a hollow open to
+     * the sea by lower ground is left as deep as it is.
+     *
+     * The belts are laid on afterwards and are not filled: a rift, a foreland moat and a trench
+     * subside faster than they fill, which is why Tanganyika is a lake.
+     *
+     * Off is the platform as the noise left it, the control `HypsometryTest` is shown against.
+     * See docs/DESIGN_LEDGER.md, H1.
+     */
     val basinFill: Boolean = true
 ) {
     /**
@@ -1450,8 +1467,7 @@ data class IsostasyConfig(
      *
      * Spent through [TectonicsConfig.cratonReachKm], and *mass-neutral*: the profile's mean over
      * the continental crust of the map is subtracted before it is applied, so the average column
-     * is still 41 km and the datum is still Earth's 840 m of freeboard
-     * ([continentalFreeboardMetres]). What it changes is not how high a continent stands but how
+     * is still 41 km and the datum is still where [continentalFreeboardMetres] puts it. What it changes is not how high a continent stands but how
      * it is tilted — up in the middle, down at the rim — which is what puts the drowned part of it
      * where Earth's is.
      */
@@ -1462,11 +1478,21 @@ data class IsostasyConfig(
      *
      * Airy isostasy fixes the *differences* between columns and says nothing about where the datum
      * is; what puts the datum where it is on a real planet is how much water it has. So one figure
-     * is declared and the rest follow, and this is Earth's own: the mean elevation of the land is
-     * 840 m (Cogley 1984; Eakins & Sharman's ETOPO1 volumes give 797 m for the same quantity, and
-     * the difference is what counts as land at the shelf edge).
+     * is declared and the rest follow, and it is Earth's continental platform: the mean altitude of
+     * the six ice-free continents' land under 2 km and their shelves to 500 m, 374 m in NOAA's
+     * ETOPO5 read by continent in 500 m bands at their midpoints. That is the ground a standard
+     * column stands for, the crust away from its orogens, and it is what the column floats at once
+     * the sea has drowned [TectonicsConfig.continentalCrustSubmergedShare] of it.
+     *
+     * It was Earth's mean land elevation, 840 m (Cogley 1984), from S2 to H1. That figure is the
+     * mean of everything standing above the sea, the orogens and Antarctica's ice included, and
+     * the belts and the ice sheets are this generator's own layers on top of the column, so taking
+     * it for the column counted them twice: the platform floated a few hundred metres higher than
+     * Earth's, and with Earth's submerged share the cut stood 480 to 680 m above the datum to meet
+     * it. The finished world's mean land elevation is what is held to Earth's 840 now
+     * (`HypsometryTest`). See docs/DESIGN_LEDGER.md, H1.
      */
-    val continentalFreeboardMetres: Float = 840f,
+    val continentalFreeboardMetres: Float = 374f,
     /**
      * How deep the sea floor lies at a spreading ridge, and how much deeper it sinks per root of
      * a million years — the depth-age curve the whole ocean's shape now comes from.

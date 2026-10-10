@@ -35,6 +35,9 @@ class StationaryWaveCostTest {
 
         /** A complex number's two doubles, in bytes. */
         const val BYTES_PER_COMPLEX = 16
+
+        /** The most factor storage measured here: the audit tier's heap is eight gigabytes, shared with a world. */
+        const val KEEPABLE_FACTOR_BYTES = 1_000_000_000L
     }
 
     private fun millisecondsEach(body: () -> Unit): Double {
@@ -58,11 +61,19 @@ class StationaryWaveCostTest {
             val shape = WaveFixtures.ellipse(grid, 25 * DEGREES, 1.6, 10 * DEGREES, 20 * DEGREES)
             val column = DoubleArray(grid.cellCount) { 2.0 / WaveFixtures.SECONDS_PER_DAY * shape[it] }
             val forcing = WaveForcing(WaveForcing.heatingFromColumn(levels, column, WaveFixtures::deepProfile))
+            val factorBytes = model.waves.count().toLong() * grid.rows * 3 * model.blockSize * model.blockSize * BYTES_PER_COMPLEX
+            val oneShotMs = millisecondsEach { model.solve(forcing) }
+            if (factorBytes > KEEPABLE_FACTOR_BYTES) {
+                // Sixteen levels' factors are 2.9 GB: they are not kept, and each solve factors again.
+                val share = solves * oneShotMs / 1000.0 / worldSeconds
+                println(("STATIONARY WAVE COST ${levels.levelCount} levels on ${grid.rows} by ${grid.columns} (blocks of ${model.blockSize}): factoring and solving at once %.0f ms; " +
+                    "its factors would be %.0f MB and are not kept. Per world of %.1f s at the design's $solves solves: %.2f%%").format(oneShotMs, factorBytes / 1e6, worldSeconds, 100 * share))
+                continue
+            }
             var factored: StationaryWaveModel.Factored? = null
             val factorMs = millisecondsEach { factored = model.factorize() }
             val solveMs = millisecondsEach { factored!!.solve(forcing) }
-            val oneShotMs = millisecondsEach { model.solve(forcing) }
-            val factorBytes = model.waves.count().toLong() * grid.rows * 3 * model.blockSize * model.blockSize * BYTES_PER_COMPLEX
+            factored = null
             val share = (factorings * factorMs + solves * solveMs) / 1000.0 / worldSeconds
             if (levels.levelCount == 4) fourLevelShare = share
             println(("STATIONARY WAVE COST ${levels.levelCount} levels on ${grid.rows} by ${grid.columns} (waves ${model.waves.first} to ${model.waves.last}, blocks of ${model.blockSize}): " +

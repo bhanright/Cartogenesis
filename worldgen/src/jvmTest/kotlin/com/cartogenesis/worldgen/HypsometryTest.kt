@@ -7,7 +7,7 @@ import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.sqrt
 import kotlin.test.Test
-import kotlin.test.assertTrue
+import org.junit.Assert.assertTrue
 
 /**
  * How the land is spread over altitude, held to Earth's own continents.

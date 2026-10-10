@@ -1339,7 +1339,9 @@ data class TectonicsConfig(
      * unmodulated stamp, which is what [com.cartogenesis.worldgen.pipeline.PlateStage]'s hotspot
      * guard measures "before" against.
      */
-    val hotspotConeDetail: Boolean = true
+    val hotspotConeDetail: Boolean = true,
+    /** Whether the continental platform's closed hollows are filled to their spill level. */
+    val basinFill: Boolean = true
 ) {
     /**
      * How far a plate travels between one epoch and the next, in kilometers: [plateSpeedMmPerYear]

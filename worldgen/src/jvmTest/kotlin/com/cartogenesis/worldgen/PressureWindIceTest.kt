@@ -113,10 +113,10 @@ class PressureWindIceTest {
         // Each band's own summer: the calendar half about July north of the equator, about January
         // south of it.
         val julyHalfWind = ClimateStage.seasonalSurfaceWindMps(
-            on.config, on.sea, on.climate.temperature, Season.JULY_HALF
+            on.config, on.sea, Season.JULY_HALF
         )
         val januaryHalfWind = ClimateStage.seasonalSurfaceWindMps(
-            on.config, on.sea, on.climate.temperature, Season.JANUARY_HALF
+            on.config, on.sea, Season.JANUARY_HALF
         )
         val cellWidthOverHeight = (on.config.scale.cellWidthKm(cellsAcross) /
             on.config.scale.cellHeightKm(cellsDown)).toFloat()

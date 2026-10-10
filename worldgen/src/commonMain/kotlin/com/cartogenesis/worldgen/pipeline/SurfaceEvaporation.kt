@@ -177,9 +177,10 @@ internal object SurfaceEvaporation {
     private const val PSYCHROMETRIC_PER_KPA = 0.665e-3
 
     /**
-     * The wind at 2 m, in meters a second: FAO-56's 2 m/s, "the average over 2000 weather
-     * stations around the globe" it recommends where no wind is measured. The march's belts are a
-     * zonal mean over the sea at 10 m and say nothing of the wind over a field.
+     * The wind at 2 m, in meters a second, where no wind is solved: FAO-56's 2 m/s, "the average
+     * over 2000 weather stations around the globe" it recommends where no wind is measured. The
+     * march hands in the boundary layer's own ([BoundaryLayer.windAt2mMps]) when the atmosphere is
+     * solved; this is the belts' control's.
      */
     const val LAND_WIND_AT_2_M_MPS = 2.0
 
@@ -211,12 +212,18 @@ internal object SurfaceEvaporation {
      * [referenceEvapotranspirationMmPerDay] written as what it is in the air's relative humidity
      * `h`: `constant + perRootHumidity sqrt(h) + perHumidity h`, the humidity entering through
      * the vapor deficit and the longwave's `sqrt(e_a)`. Everything else is the ground's and the
-     * sun's, so the march builds these once and spends only the humidity each lap.
+     * sun's, so the march builds these once and spends only the humidity each lap. [windAt2mMps]
+     * is the wind over the reference grass at 2 m, meters a second.
      */
-    fun referenceTerms(temperatureC: Double, extraterrestrialMjPerM2Day: Double, elevationM: Double): HumidityTerms {
+    fun referenceTerms(
+        temperatureC: Double,
+        extraterrestrialMjPerM2Day: Double,
+        elevationM: Double,
+        windAt2mMps: Double = LAND_WIND_AT_2_M_MPS
+    ): HumidityTerms {
         val slope = ColumnWater.saturationSlopeKpaPerC(temperatureC)
         val psychrometric = psychrometricKpaPerC(pressureAtKpa(elevationM))
-        val wind = LAND_WIND_AT_2_M_MPS
+        val wind = windAt2mMps
         val denominator = slope + psychrometric * (1.0 + REFERENCE_RESISTANCE_RATIO_PER_MPS * wind)
         val aerodynamic = psychrometric * REFERENCE_AERODYNAMIC_TERM / (temperatureC + FAO_KELVIN_OFFSET) * wind
         return humidityTerms(
@@ -317,11 +324,16 @@ internal object SurfaceEvaporation {
     ): Double = openWaterTerms(temperatureC, extraterrestrialMjPerM2Day, elevationM)
         .mmPerDay(actualVaporKpa / ColumnWater.saturationVaporPressureKpa(temperatureC))
 
-    /** [openWaterEvaporationMmPerDay] in the air's relative humidity; see [referenceTerms]. */
-    fun openWaterTerms(temperatureC: Double, extraterrestrialMjPerM2Day: Double, elevationM: Double): HumidityTerms {
+    /** [openWaterEvaporationMmPerDay] in the air's relative humidity, at [windAt2mMps]; see [referenceTerms]. */
+    fun openWaterTerms(
+        temperatureC: Double,
+        extraterrestrialMjPerM2Day: Double,
+        elevationM: Double,
+        windAt2mMps: Double = LAND_WIND_AT_2_M_MPS
+    ): HumidityTerms {
         val slope = ColumnWater.saturationSlopeKpaPerC(temperatureC)
         val psychrometric = psychrometricKpaPerC(pressureAtKpa(elevationM))
-        val windFunction = PENMAN_WIND_CONSTANT + PENMAN_WIND_PER_MPS * LAND_WIND_AT_2_M_MPS
+        val windFunction = PENMAN_WIND_CONSTANT + PENMAN_WIND_PER_MPS * windAt2mMps
         val denominator = slope + psychrometric
         return humidityTerms(
             temperatureC, extraterrestrialMjPerM2Day, elevationM, OPEN_WATER_ALBEDO,

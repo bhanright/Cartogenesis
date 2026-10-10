@@ -111,7 +111,7 @@ class MeridionalWindTest : BorrowsSharedWorlds() {
             )
             for (season in listOf(Season.JULY_HALF, Season.JANUARY_HALF)) {
                 val wind = ClimateStage.seasonalSurfaceWindMps(
-                    world.config, world.sea, world.climate.temperature, season
+                    world.config, world.sea, season
                 )
                 val largest = wind.southwardMps.maxOf { abs(it) }
                 assertEquals(0f, largest, 0f, "seed $seed, $season: a belt with no slant blows across the rows")

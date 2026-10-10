@@ -54,11 +54,18 @@ class WaveForcing(
             surfaceHeightMeters: FloatArray?,
             profile: (Double) -> Double
         ): WaveForcing {
-            val widthInRows = max(AtmosphereRemap.FILTER_WIDTH_IN_ROWS, GROUND_FORCING_WIDTH_METERS / remap.coarse.rowSpacingMeters)
+            val widthInRows = groundWidthInRows(remap)
             val heating = columnKelvinPerSecond?.let { heatingFromColumn(levels, remap.forcing(it, widthInRows), profile) }
             val height = surfaceHeightMeters?.let { remap.forcing(it, widthInRows) }
             return WaveForcing(heating, height)
         }
+
+        /**
+         * The spread [fromGround] gives forcing on [remap]'s coarse grid, in coarse row spacings:
+         * [GROUND_FORCING_WIDTH_METERS], or the coast's filter width on a grid too coarse for it.
+         */
+        fun groundWidthInRows(remap: AtmosphereRemap): Double =
+            max(AtmosphereRemap.FILTER_WIDTH_IN_ROWS, GROUND_FORCING_WIDTH_METERS / remap.coarse.rowSpacingMeters)
 
         /**
          * A column heating [columnKelvinPerSecond] (the mass-weighted mean heating rate of the column,
@@ -116,7 +123,7 @@ class WaveResponse(
 /**
  * A steady, linear, primitive-equation atmosphere about a zonal-mean [basicState]: the stationary
  * waves a heating and the terrain make (Hoskins and Karoly 1981; the dry linear baroclinic model of
- * Watanabe and Kimoto 2000, reduced). Nothing in a world reads it yet.
+ * Watanabe and Kimoto 2000, reduced). The boundary layer reads it ([BoundaryLayer]).
  *
  * **The equations**, linearized about the zonal wind `U_k(phi)` at each level, with `m` the zonal
  * wavenumber, `a` the radius, `f` the Coriolis parameter and `zeta` the basic state's vorticity:
@@ -240,11 +247,19 @@ class StationaryWaveModel(
     }
 
     /** The response to [forcing], each wave assembled, factored and solved in turn and then let go. */
-    fun solve(forcing: WaveForcing): WaveResponse {
-        val spectra = ForcingSpectra(forcing)
+    fun solve(forcing: WaveForcing): WaveResponse = solveEach(listOf(forcing)).single()
+
+    /**
+     * The responses to every one of [forcings], each wave assembled and factored once and
+     * back-substituted for each forcing in turn, then let go: one factoring serves them all, and
+     * no more than one wave's factors per worker are held at once (the whole set is about 700 MB
+     * on Earth's planet at eight levels).
+     */
+    fun solveEach(forcings: List<WaveForcing>): List<WaveResponse> {
+        val spectra = forcings.map { ForcingSpectra(it) }
         val count = waves.count()
-        val solutionReal = Array(count) { DoubleArray(grid.rows * blockSize) }
-        val solutionImaginary = Array(count) { DoubleArray(grid.rows * blockSize) }
+        val solutionReal = Array(forcings.size) { Array(count) { DoubleArray(grid.rows * blockSize) } }
+        val solutionImaginary = Array(forcings.size) { Array(count) { DoubleArray(grid.rows * blockSize) } }
         parallelChunks(0, count) { start, end ->
             // One system per worker, cleared for each of its waves.
             val system = ComplexBlockTridiagonal(grid.rows, blockSize)
@@ -253,11 +268,13 @@ class StationaryWaveModel(
                 system.clear()
                 val scales = assemble(wave, system)
                 system.factorize()
-                rightHandSide(wave, spectra, scales, solutionReal[index], solutionImaginary[index])
-                system.solve(solutionReal[index], solutionImaginary[index])
+                for (which in forcings.indices) {
+                    rightHandSide(wave, spectra[which], scales, solutionReal[which][index], solutionImaginary[which][index])
+                    system.solve(solutionReal[which][index], solutionImaginary[which][index])
+                }
             }
         }
-        return response(solutionReal, solutionImaginary, spectra)
+        return forcings.indices.map { response(solutionReal[it], solutionImaginary[it], spectra[it]) }
     }
 
     /** The forcing's zonal spectra row by row: raw transform coefficients, `sum_c x_c exp(-2 pi i m c / N)`. */

@@ -192,7 +192,7 @@ val auditOnlyClasses = listOf(
     // generation the first of them pays for and the others share.
     "com.cartogenesis.worldgen.StraightRunTest.report how straight every shore is",
     "com.cartogenesis.worldgen.ChannelInitiationCostTest",
-    "com.cartogenesis.worldgen.PressureWindCostTest",
+    "com.cartogenesis.worldgen.BoundaryLayerCostTest",
     "com.cartogenesis.worldgen.VegetationCostTest",
     // A1-2's: what carrying fields to and from the atmosphere's grid costs against the same world.
     "com.cartogenesis.worldgen.AtmosphereRemapCostTest",

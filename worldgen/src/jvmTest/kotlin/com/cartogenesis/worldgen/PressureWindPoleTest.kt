@@ -1,12 +1,11 @@
 package com.cartogenesis.worldgen
 
-import com.cartogenesis.worldgen.math.BoxBlur
 import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.WorldGenConfig
+import com.cartogenesis.worldgen.pipeline.BoundaryLayer
 import com.cartogenesis.worldgen.pipeline.ClimateStage
 import com.cartogenesis.worldgen.pipeline.PressureWind
 import com.cartogenesis.worldgen.pipeline.SeaLevelResult
-import com.cartogenesis.worldgen.pipeline.SphericalGrid
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.acos
@@ -17,16 +16,18 @@ import kotlin.test.Test
 import kotlin.test.assertTrue
 
 /**
- * The pressure wind in the sphere's metric, near the poles.
+ * The boundary layer's wind in the sphere's metric, near the poles.
  *
  * The gradient's east-west part is the pressure's change along a row over that row's own ground,
  * `cos(latitude)` of the equator's, so near a pole any departure a row holds along its length is a
  * steep gradient. The pressure must therefore be smooth on the sphere before it is differentiated;
- * a blur counted in cells is not, and with the true metric it drove the polar rows' winds to
- * thousands of meters a second (docs/DESIGN_LEDGER.md, A1-2). The guard: the same continent laid
- * across a pole and at 40 degrees, the fastest wind poleward of 80 degrees is no faster than the
- * fastest about the other, where the Coriolis parameter is two-thirds as large and the same
- * gradient drives a faster geostrophic wind; and the same wind from the cell-counted blur fails it.
+ * a field that changes at a coarse cell's edge is not, and with the true metric such fields drove
+ * the polar rows' winds to thousands of meters a second (docs/DESIGN_LEDGER.md, A1-2). The guard:
+ * the same continent laid across a pole and at 40 degrees, the fastest departure from the belts
+ * poleward of 80 degrees is no faster than the fastest about the other, where the Coriolis
+ * parameter is two-thirds as large and the same gradient drives a faster geostrophic wind; and the
+ * same pressure with its polar rows carried up row by row, each keeping its coarse row's waves to
+ * the last row before the pole, fails it.
  */
 class PressureWindPoleTest {
 
@@ -34,7 +35,7 @@ class PressureWindPoleTest {
     private val config = WorldGenConfig.forRows(42L, rows)
     private val columns = config.width
 
-    /** Two continents of 1,500 km, about 80 N and about 40 N, warmer than the sea by 15 C, over a zonal profile. */
+    /** Two continents of 1,500 km, about 80 N and about 40 N. */
     private fun isLand(cell: Int): Boolean {
         val latitude = ClimateStage.latitudeOf(cell / columns, rows) * PI / 180
         val longitude = (cell % columns + 0.5) * 2 * PI / columns
@@ -50,90 +51,83 @@ class PressureWindPoleTest {
         SeaLevelResult(shorelineHeight = 0f, isLand = land, relativeElevation = FloatField(columns, rows), landCellCount = land.count { it })
     }
 
-    private val temperature = FloatField(columns, rows).also { field ->
-        for (cell in field.data.indices) {
-            val latitude = ClimateStage.latitudeOf(cell / columns, rows) * PI / 180
-            field.data[cell] = (27 - 47 * sin(latitude) * sin(latitude) + if (sea.isLand[cell]) 15.0 else 0.0).toFloat()
-        }
-    }
+    private val atmosphere = ClimateStage.atmosphere(config, sea)
 
-    /** The fastest wind poleward of 80 degrees and the fastest elsewhere, meters a second. */
-    private fun fastest(wind: PressureWind.Vectors): Pair<Double, Double> {
+    /** The fastest departure of [wind] from the belts poleward of 80 degrees and elsewhere, meters a second. */
+    private fun fastest(wind: PressureWind.Vectors, half: BoundaryLayer.Half): Pair<Double, Double> {
         var polar = 0.0
         var elsewhere = 0.0
         for (cell in wind.eastwardMps.indices) {
-            val speed = sqrt((wind.eastwardMps[cell] * wind.eastwardMps[cell] + wind.southwardMps[cell] * wind.southwardMps[cell]).toDouble())
-            if (abs(ClimateStage.latitudeOf(cell / columns, rows)) > 80f) polar = maxOf(polar, speed) else elsewhere = maxOf(elsewhere, speed)
+            val row = cell / columns
+            val east = (wind.eastwardMps[cell] - half.beltEastwardMps[row]).toDouble()
+            val south = (wind.southwardMps[cell] - half.beltSouthwardMps[row]).toDouble()
+            // Over land the belts' own wind is slowed and turned too; only the sea's departure is the eddies'.
+            if (sea.isLand[cell]) continue
+            val speed = sqrt(east * east + south * south)
+            if (abs(ClimateStage.latitudeOf(row, rows)) > 80f) polar = maxOf(polar, speed) else elsewhere = maxOf(elsewhere, speed)
         }
         return polar to elsewhere
     }
 
-    @Test
-    fun `the wind over a polar continent is no faster than over the same continent at 40 degrees`() {
-        val (polar, elsewhere) = fastest(PressureWind.surfaceWind(config, sea, PressureWind.pressureAnomalyHpa(config, temperature)))
-
-        // The control: the same anomaly blurred in cells, as the pressure was before it was smoothed on the sphere.
-        val boxed = FloatField(columns, rows)
+    /**
+     * The control: the pressure carried up, with each ground row poleward of 80 degrees given its
+     * coarse row's values, cell by cell, as a field carried up row by row would hold them. A field regular at the pole holds its waves there in proportion to the
+     * distance from the pole; this one holds them to the last row.
+     */
+    private fun polarRowsKept(half: BoundaryLayer.Half): FloatArray {
+        val coarse = atmosphere.remap.coarse
+        val field = half.eddyPressurePa.copyOf()
         for (row in 0 until rows) {
-            var sum = 0.0
-            for (column in 0 until columns) sum += temperature.data[row * columns + column]
-            val mean = sum / columns
+            if (abs(ClimateStage.latitudeOf(row, rows)) <= 80f) continue
+            val coarseRow = row * coarse.rows / rows
             for (column in 0 until columns) {
-                boxed.data[row * columns + column] = (-(temperature.data[row * columns + column] - mean) * PressureWind.HPA_PER_KELVIN).toFloat()
+                val coarseColumn = column * coarse.columns / columns
+                field[row * columns + column] = half.eddyPressureCoarsePa[coarseRow * coarse.columns + coarseColumn].toFloat()
             }
         }
-        val radiusKm = PressureWind.rossbyRadiusKm()
-        BoxBlur.apply(boxed, radiusAcross = config.wholeCellsFor(radiusKm), radiusDown = kotlin.math.round(config.rowsFor(radiusKm)).toInt(), passes = BoxBlur.PASSES_FOR_GAUSSIAN)
-        val (boxedPolar, boxedElsewhere) = fastest(PressureWind.surfaceWind(config, sea, boxed))
-        println("PRESSURE POLE fastest poleward of 80 degrees %.1f m/s, elsewhere %.1f; blurred in cells %.1f and %.1f".format(polar, elsewhere, boxedPolar, boxedElsewhere))
+        return field
+    }
+
+    @Test
+    fun `the wind over a polar continent is no faster than over the same continent at 40 degrees`() {
+        val half = atmosphere.julyHalf
+        val (polar, elsewhere) = fastest(PressureWind.Vectors(half.eastwardMps, half.southwardMps), half)
+        val kept = PressureWind.surfaceWind(config, sea, polarRowsKept(half), half.beltEastwardMps, half.beltSouthwardMps)
+        val (keptPolar, keptElsewhere) = fastest(kept, half)
+        println("PRESSURE POLE fastest eddy wind over the sea poleward of 80 degrees %.2f m/s, elsewhere %.2f; with the polar rows kept row by row %.1f and %.1f"
+            .format(polar, elsewhere, keptPolar, keptElsewhere))
         assertTrue(polar <= elsewhere, "the polar wind runs at $polar m/s against $elsewhere about the continent at 40 degrees")
-        assertTrue(boxedPolar > boxedElsewhere, "the cell-counted blur's control passes, so the guard shows nothing")
+        assertTrue(keptPolar > keptElsewhere, "the control with the polar rows kept passes, so the guard shows nothing")
     }
 
     /**
-     * The smoothing keeps the anomaly's area integral and range: the carry down and the diffusion
-     * conserve exactly and stay inside the range, and the carry up reads a series smooth at the
-     * deformation radius, which moves either by a small part of the step. And about the pole the
-     * field is regular: its first row holds the slope across the pole and nothing shorter.
+     * About the pole the carried-up pressure is regular: its first row holds the slope across the
+     * pole, one zonal wave, and nothing shorter, as a field smooth on the sphere must.
      */
     @Test
-    fun `the smoothing conserves, makes no new extremes and leaves the pole one value`() {
-        val grid = SphericalGrid.forGround(columns, rows, config.scale)
-        val field = FloatField(columns, rows, FloatArray(columns * rows) { if (sea.isLand[it]) 1f else 0f })
-        val before = field.data.copyOf()
-        PressureWind.smooth(config, field)
-        var integralBefore = 0.0
-        var integralAfter = 0.0
-        for (cell in before.indices) {
-            integralBefore += before[cell] * grid.cellAreaSquareMeters[cell / columns]
-            integralAfter += field.data[cell] * grid.cellAreaSquareMeters[cell / columns]
-        }
-        val moved = abs(integralAfter - integralBefore) / integralBefore
-        // About the pole a smooth field is its value there plus a slope across it: along the first
-        // row, one zonal wave and nothing shorter.
+    fun `the carried-up pressure is one value at the pole with a slope across it`() {
+        val field = atmosphere.julyHalf.eddyPressurePa
+        val range = field.max() - field.min()
         val waves = (1..8).map { wave ->
             var real = 0.0
             var imaginary = 0.0
             for (column in 0 until columns) {
                 val angle = 2 * PI * wave * column / columns
-                real += field.data[column] * cos(angle)
-                imaginary += field.data[column] * sin(angle)
+                real += field[column] * cos(angle)
+                imaginary += field[column] * sin(angle)
             }
-            2 * sqrt(real * real + imaginary * imaginary) / columns
+            2 * sqrt(real * real + imaginary * imaginary) / columns / range
         }
         val shorter = waves.drop(1).max()
-        println("PRESSURE POLE smoothing: integral moved by %.2e, range %.3e to %.4f; the first row's first wave %.4f, the largest shorter one %.2e"
-            .format(moved, field.data.min(), field.data.max(), waves[0], shorter))
-        assertTrue(moved < SMOOTHING_TOLERANCE, "the smoothing moves the integral by $moved")
-        assertTrue(field.data.min() >= -SMOOTHING_TOLERANCE && field.data.max() <= 1 + SMOOTHING_TOLERANCE, "the smoothing overshoots its input's range")
-        assertTrue(shorter < SMOOTHING_TOLERANCE, "the polar row holds a zonal wave shorter than the first of $shorter")
+        println("PRESSURE POLE the first row's first wave %.4f of the field's range, the largest shorter one %.2e".format(waves[0], shorter))
+        assertTrue(shorter < POLAR_ROW_TOLERANCE, "the polar row holds a zonal wave shorter than the first of $shorter of the range")
     }
 
     private companion object {
         /**
-         * A thousandth of the step: what the series may move the integral or overshoot by, or leave
-         * in the first row's shorter waves, on a field the Gaussian has made smooth at 970 km.
+         * A thousandth of the field's range: what the polar row's waves shorter than the first may
+         * hold of a series that takes one value at the pole.
          */
-        const val SMOOTHING_TOLERANCE = 1e-3
+        const val POLAR_ROW_TOLERANCE = 1e-3
     }
 }

@@ -154,8 +154,7 @@ class PressureWindTest : BorrowsSharedWorlds() {
     }
 
     @Test
-    fun `the pressure relation and the Ekman turn are the figures they are derived from`() {
-        val hpaPerKelvin = PressureWind.HPA_PER_KELVIN
+    fun `the Rossby radius and the Ekman turn are the figures they are derived from`() {
         val rossbyKm = PressureWind.rossbyRadiusKm()
         val seaTurnAt45 =
             PressureWind.crossIsobarDegreesAt(45f, PressureWind.CROSS_ISOBAR_SEA_DEGREES)
@@ -164,15 +163,9 @@ class PressureWindTest : BorrowsSharedWorlds() {
         val seaTurnAt15 =
             PressureWind.crossIsobarDegreesAt(15f, PressureWind.CROSS_ISOBAR_SEA_DEGREES)
         println(
-            ("PRESSURE WIND: %.3f hPa per degree (Earth's Siberian-high-to-monsoon-low ratio " +
-                "2.0), Rossby radius %.0f km, cross-isobar turn at 45 deg %.1f over sea and " +
+            ("PRESSURE WIND: Rossby radius %.0f km, cross-isobar turn at 45 deg %.1f over sea and " +
                 "%.1f over land, at 15 deg %.1f over sea")
-                .format(hpaPerKelvin, rossbyKm, seaTurnAt45, landTurnAt45, seaTurnAt15)
-        )
-        assertTrue(
-            abs(hpaPerKelvin - 2.484f) < 0.01f,
-            "the hydrostatic relation reads $hpaPerKelvin hPa per degree, not the 2.484 its three " +
-                "constants give"
+                .format(rossbyKm, seaTurnAt45, landTurnAt45, seaTurnAt15)
         )
         assertTrue(
             rossbyKm > 900.0 && rossbyKm < 1_050.0,
@@ -517,10 +510,10 @@ class PressureWindTest : BorrowsSharedWorlds() {
 
     private fun onshoreFlow(world: WorldMap, continent: Continent): Onshore {
         val julyHalf = ClimateStage.seasonalSurfaceWindMps(
-            world.config, world.sea, world.climate.temperature, Season.JULY_HALF
+            world.config, world.sea, Season.JULY_HALF
         )
         val januaryHalf = ClimateStage.seasonalSurfaceWindMps(
-            world.config, world.sea, world.climate.temperature, Season.JANUARY_HALF
+            world.config, world.sea, Season.JANUARY_HALF
         )
         val cellsAcross = world.width
         val cellsDown = world.height

@@ -460,26 +460,25 @@ object OceanStage {
     internal class Stress(val eastward: DoubleArray, val northward: DoubleArray)
 
     /**
-     * The year's wind stress on the sea, on the solve grid, `ρ_air C_D |W| W`: the belts' annual
+     * The year's wind stress on the sea, on the solve grid, `rho_air C_D |W| W`: the belts' annual
      * wind ([SurfaceBelts], its zonal profile not migrated), its meridional leg included, turning
-     * through zero at the equator as the year's mean under the ITCZ's migration, and with
-     * `ClimateConfig.pressureWinds` on the regional wind of the annual pressure ([PressureWind]),
-     * read bilinearly from the map.
+     * through zero at the equator as the year's mean under the ITCZ's migration; and with
+     * `ClimateConfig.pressureWinds` on, the stress the boundary layer's own wind adds to it
+     * ([eddyStressOnMap]), read bilinearly from the map.
      *
-     * One annual pattern and not the mean of two half-years' stresses. The belts' zonal profile is
-     * already the annual mean's shape, so migrating it by the tilt and averaging the two halves
-     * would smooth it a second time: done, it left the westerlies' mean stress with two humps and
-     * three zeros of its curl, and the westerlies' band flowing west on two standard seeds
-     * (docs/DESIGN_LEDGER.md, 4b-1). The temperature the pressure is read off leaves out the
-     * current anomaly, which this stage has not computed and could not have: the currents cannot
-     * be forced by a wind their own warmth forced.
+     * The zonal mean keeps the belts' annual stress. The belts' zonal profile is already the
+     * annual mean's shape, so migrating it by the tilt and averaging the two halves would smooth
+     * it a second time: done, it left the westerlies' mean stress with two humps and three zeros of
+     * its curl, and the westerlies' band flowing west on two standard seeds (docs/DESIGN_LEDGER.md,
+     * 4b-1). What the land and the sea and the terrain do to the wind is averaged as stress over
+     * the two calendar halves, `|V| V` and not the stress of the mean wind. The boundary layer reads
+     * the energy balance's temperatures and no current, so the currents are not forced by a wind
+     * their own warmth forced.
      */
     internal fun annualStress(config: WorldGenConfig, sea: SeaLevelResult, across: Int, down: Int): Stress {
         val cellsAcross = config.width
         val cellsDown = config.height
-        val wind = if (config.climate.pressureWinds) {
-            PressureWind.surfaceWind(config, sea, PressureWind.pressureAnomalyHpa(config, ClimateStage.buildTemperature(config, sea)))
-        } else null
+        val eddy = if (config.climate.pressureWinds) eddyStressOnMap(config, sea) else null
         val eastward = DoubleArray(across * down)
         val northward = DoubleArray(across * down)
         val migrationDegrees = if (config.climate.seasons) config.climate.seasonalTiltDegrees else 0f
@@ -487,23 +486,57 @@ object OceanStage {
             for (row in startRow until endRow) {
                 val latitude = ClimateStage.latitudeOf(row, down)
                 val belts = SurfaceBelts.windMps(latitude, config.climate.meridionalWindShare, migrationDegrees)
+                val east = belts.eastwardMps.toDouble()
+                val north = belts.northwardMps.toDouble()
+                val dragPerMeter = PressureWind.AIR_DENSITY_KG_PER_M3 * DRAG_COEFFICIENT * sqrt(east * east + north * north)
                 val mapRow = (row + 0.5f) * cellsDown / down - 0.5f
                 for (column in 0 until across) {
-                    var east = belts.eastwardMps.toDouble()
-                    var north = belts.northwardMps.toDouble()
-                    if (wind != null) {
-                        val mapColumn = (column + 0.5f) * cellsAcross / across - 0.5f
-                        east += sample(wind.eastwardMps, cellsAcross, cellsDown, mapColumn, mapRow)
-                        north -= sample(wind.southwardMps, cellsAcross, cellsDown, mapColumn, mapRow)
-                    }
-                    val dragPerMeter = PressureWind.AIR_DENSITY_KG_PER_M3 * DRAG_COEFFICIENT * sqrt(east * east + north * north)
                     val cell = row * across + column
                     eastward[cell] = dragPerMeter * east
                     northward[cell] = dragPerMeter * north
+                    if (eddy != null) {
+                        val mapColumn = (column + 0.5f) * cellsAcross / across - 0.5f
+                        eastward[cell] += sample(eddy.first, cellsAcross, cellsDown, mapColumn, mapRow)
+                        northward[cell] += sample(eddy.second, cellsAcross, cellsDown, mapColumn, mapRow)
+                    }
                 }
             }
         }
         return Stress(eastward, northward)
+    }
+
+    /**
+     * The stress the boundary layer's wind lays on the sea beyond its belts', on the map's grid,
+     * newtons a square meter, eastward then northward: for each calendar half
+     * `rho C_D (|V| V - |B| B)`, `V` the half's surface wind at the cell and `B` the half's belts on
+     * its row, and the mean of the two halves. Over open sea with no eddy pressure `V` is `B` and
+     * this is zero, so it is the stress of the eddies alone, with the belts' wind it rides on.
+     */
+    private fun eddyStressOnMap(config: WorldGenConfig, sea: SeaLevelResult): Pair<FloatArray, FloatArray> {
+        val atmosphere = ClimateStage.atmosphere(config, sea)
+        val cellsAcross = config.width
+        val cellCount = cellsAcross * config.height
+        val eastward = FloatArray(cellCount)
+        val northward = FloatArray(cellCount)
+        val perHalf = PressureWind.AIR_DENSITY_KG_PER_M3 * DRAG_COEFFICIENT * 0.5
+        for (half in listOf(atmosphere.julyHalf, atmosphere.januaryHalf)) {
+            parallelChunks(0, config.height) { startRow, endRow ->
+                for (row in startRow until endRow) {
+                    val beltEast = half.beltEastwardMps[row].toDouble()
+                    val beltNorth = -half.beltSouthwardMps[row].toDouble()
+                    val beltSpeed = sqrt(beltEast * beltEast + beltNorth * beltNorth)
+                    for (column in 0 until cellsAcross) {
+                        val cell = row * cellsAcross + column
+                        val east = half.eastwardMps[cell].toDouble()
+                        val north = -half.southwardMps[cell].toDouble()
+                        val speed = sqrt(east * east + north * north)
+                        eastward[cell] += (perHalf * (speed * east - beltSpeed * beltEast)).toFloat()
+                        northward[cell] += (perHalf * (speed * north - beltSpeed * beltNorth)).toFloat()
+                    }
+                }
+            }
+        }
+        return eastward to northward
     }
 
     /**

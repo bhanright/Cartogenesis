@@ -74,7 +74,8 @@ import kotlin.math.exp
  *
  * The open sea evaporates by the bulk formula against surface air at the marine boundary layer's
  * own relative humidity ([MARINE_RELATIVE_HUMIDITY]), not the column's, at the scalar mean wind
- * the turbulence feels ([TRANSPORT_SPEED_MPS]) whatever the mean vector wind does. The ground gives
+ * the turbulence feels ([Season.scalarWindAt10mMps]), the mean wind and the weather's gusts
+ * together, which does not fall to nothing where the mean wind reverses. The ground gives
  * back Budyko's share of its own year of rain against its potential evapotranspiration.
  *
  * # One season at a time, coupled through the year's rain
@@ -90,12 +91,10 @@ import kotlin.math.exp
 object MoistureMarch {
 
     /**
-     * The speed the march's unit of water is stated at, in meters a second, and the scalar mean
-     * wind the sea's evaporation is driven by: the belts' own, [PressureWind.BELT_SPEED_MPS], the
-     * wind at the core of the trades and the westerlies. The evaporation reads the scalar wind and
-     * not the mean vector, because the turbulence that lifts the water off the sea is driven by
-     * the wind's speed through every gust and calm, which does not fall to nothing where the mean
-     * wind reverses.
+     * The speed the march's unit of water is stated at, in meters a second: the belts' own,
+     * [PressureWind.BELT_SPEED_MPS], the wind at the core of the trades and the westerlies. A unit
+     * and nothing else where the boundary layer is solved; with the belts alone, the belts' control,
+     * it is also the scalar mean wind the sea's evaporation is driven by everywhere.
      */
     const val TRANSPORT_SPEED_MPS = PressureWind.BELT_SPEED_MPS.toDouble()
 
@@ -196,6 +195,14 @@ object MoistureMarch {
         val eastwardMps: FloatArray,
         /** The meridional wind, meters a second, positive toward the south (down the map). */
         val southwardMps: FloatArray,
+        /**
+         * The wind's mean speed at 10 m through every gust and calm, meters a second, which the
+         * sea's evaporation reads ([BoundaryLayer.scalarWindAt10mMps]); null for the belts' control,
+         * which reads [TRANSPORT_SPEED_MPS].
+         */
+        val scalarWindAt10mMps: FloatArray? = null,
+        /** The wind at 2 m over FAO-56's grass, meters a second; null for its 2 m/s station mean. */
+        val windAt2mMps: FloatArray? = null,
         /** The belts' rain factor per row: [ClimateStage.seasonalBand]. */
         val beltRainFactorOfRow: FloatArray,
         /** The marine inversion's hold on each land cell's rain, 0..1, or null when it is off. */
@@ -603,7 +610,8 @@ object MoistureMarch {
                         val cell = row * cellsAcross + column
                         if (!inputs.isLand[cell]) continue
                         val terms = SurfaceEvaporation.referenceTerms(
-                            season.airTemperatureC[cell].toDouble(), sun, inputs.elevationM[cell].toDouble()
+                            season.airTemperatureC[cell].toDouble(), sun, inputs.elevationM[cell].toDouble(),
+                            windAt2m(cell)
                         )
                         potentialConstant[cell] = terms.constant.toFloat()
                         potentialPerRootHumidity[cell] = terms.perRootHumidity.toFloat()
@@ -621,10 +629,13 @@ object MoistureMarch {
 
         private fun index(row: Int, column: Int) = column * cellsDown + row
 
+        /** The wind at 2 m over [cell] (row-major), meters a second. */
+        private fun windAt2m(cell: Int): Double =
+            season.windAt2mMps?.let { it[cell].toDouble() } ?: SurfaceEvaporation.LAND_WIND_AT_2_M_MPS
+
         private fun precompute() {
             val climate = config.climate
-            val transferMassFlux = PressureWind.AIR_DENSITY_KG_PER_M3 *
-                SurfaceEvaporation.evaporationTransferCoefficient(TRANSPORT_SPEED_MPS) * TRANSPORT_SPEED_MPS
+            val referenceMassFlux = transferMassFlux(TRANSPORT_SPEED_MPS)
             val slowest = TRANSPORT_SPEED_MPS * SLOWEST_SPEED_SHARE
             parallelChunks(0, cellsAcross) { startColumn, endColumn ->
                 for (column in startColumn until endColumn) {
@@ -646,8 +657,9 @@ object MoistureMarch {
                             val airHumidity = MARINE_RELATIVE_HUMIDITY * ColumnWater.specificHumidity(
                                 ColumnWater.saturationVaporPressureKpa(airC), ColumnWater.SEA_LEVEL_PRESSURE_KPA
                             )
+                            val massFlux = season.scalarWindAt10mMps?.let { transferMassFlux(it[cell].toDouble()) } ?: referenceMassFlux
                             seaEvaporationRate[here] = SurfaceEvaporation.bulkEvaporationKgPerM2S(
-                                surfaceHumidity, airHumidity, transferMassFlux
+                                surfaceHumidity, airHumidity, massFlux
                             ).toFloat()
                         }
                         val lid = if (inputs.isLand[cell]) lidFactor(cell) else 1.0
@@ -714,6 +726,10 @@ object MoistureMarch {
                 }
             }
         }
+
+        /** The bulk formula's `rho C_E(U) U` at a wind of [windMps], kilograms per square meter per second. */
+        private fun transferMassFlux(windMps: Double): Double =
+            PressureWind.AIR_DENSITY_KG_PER_M3 * SurfaceEvaporation.evaporationTransferCoefficient(windMps) * windMps
 
         /** The marine inversion's hold on a land cell's rain, as [MoistureBudget] defines it. */
         private fun lidFactor(cell: Int): Double {
@@ -1075,10 +1091,10 @@ object MoistureMarch {
                         val elevation = inputs.elevationM[cell].toDouble()
                         val humidity = humidity[index(row, column)].toDouble()
                         if (!inputs.isLand[cell]) {
-                            potentialMm[cell] = (SurfaceEvaporation.referenceTerms(airC, sun, elevation)
+                            potentialMm[cell] = (SurfaceEvaporation.referenceTerms(airC, sun, elevation, windAt2m(cell))
                                 .mmPerDay(humidity) * SurfaceEvaporation.DAYS_PER_YEAR_DOUBLE).toFloat()
                         }
-                        openWaterMm[cell] = (SurfaceEvaporation.openWaterTerms(airC, sun, elevation)
+                        openWaterMm[cell] = (SurfaceEvaporation.openWaterTerms(airC, sun, elevation, windAt2m(cell))
                             .mmPerDay(humidity) * SurfaceEvaporation.DAYS_PER_YEAR_DOUBLE).toFloat()
                     }
                 }

@@ -86,7 +86,7 @@ class CalendarSeasonsTest : BorrowsSharedWorlds() {
         val cellsAcross = world.width
         val cellsDown = world.height
         fun equatorSouthwardMps(season: Season): Double {
-            val wind = ClimateStage.seasonalSurfaceWindMps(world.config, world.sea, world.climate.temperature, season)
+            val wind = ClimateStage.seasonalSurfaceWindMps(world.config, world.sea, season)
             // The two rows either side of the equator.
             val rows = listOf(cellsDown / 2 - 1, cellsDown / 2)
             return rows.sumOf { row ->

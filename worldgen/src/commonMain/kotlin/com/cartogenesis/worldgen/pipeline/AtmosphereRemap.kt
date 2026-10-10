@@ -265,6 +265,16 @@ class AtmosphereRemap(val groundColumns: Int, val groundRows: Int, val coarse: S
         evaluate(coefficients(field), groundRows, groundColumns).let { values -> FloatArray(values.size) { values[it].toFloat() } }
 
     /**
+     * [field], a scalar the model made on [coarse]'s centers, read at every ground cell's center
+     * through the forcing's own two filters, the diffusion of [FILTER_WIDTH_IN_ROWS] rows and the
+     * series filter of [FILTER_ORDER]: the model was forced with nothing near the grid's limit, so
+     * what it holds there is its differences' own and not the planet's, and carried up unfiltered it
+     * left the coarse grid's period down the map (docs/DESIGN_LEDGER.md, A1-4).
+     */
+    fun outputToGround(field: DoubleArray): FloatArray =
+        evaluate(coefficients(smooth(field), FILTER_ORDER), groundRows, groundColumns).let { values -> FloatArray(values.size) { values[it].toFloat() } }
+
+    /**
      * The tangent vector [east], [north] (both at [coarse]'s centers) at every ground cell's center:
      * carried as its three Cartesian components, each a scalar, and read back in each ground cell's
      * own east and north. Returns the eastward then the northward component, row-major on the map.

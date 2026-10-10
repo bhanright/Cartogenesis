@@ -807,46 +807,47 @@ object ClimateStage {
             )
         )
 
-        // A pressure field per half-year, and a third for the annual wind. The annual one is built
-        // from the annual temperature rather than averaged from the other two, which is the same
-        // field: the anomaly is linear in temperature and the wind is linear in the anomaly, so
-        // the wind from the mean pressure and the mean of the two winds are one answer, and this
-        // is the cheaper way to get it. Null when the pressure term is off, which is what makes
-        // that setting a control rather than a near-miss.
-        val pressureWinds = climateConfig.pressureWinds
-        val annualPressureHpa =
-            if (pressureWinds) PressureWind.pressureAnomalyHpa(config, temperature) else null
-        val julyHalfPressureHpa = if (pressureWinds) {
-            PressureWind.pressureAnomalyHpa(config, julyHalfTemperature)
-        } else null
-        val januaryHalfPressureHpa = if (pressureWinds) {
-            PressureWind.pressureAnomalyHpa(config, januaryHalfTemperature)
+        // The boundary layer's pressure and wind for each half-year, solved by the dry atmosphere
+        // over this world's land, sea and terrain. Null when the pressure term is off, which is
+        // what makes that setting a control rather than a near-miss: the belts are then the whole
+        // wind.
+        val atmosphere = if (climateConfig.pressureWinds) {
+            atmosphere(config, sea, zonal, marineFraction, globalCoolingC)
         } else null
 
-        // The stored wind is the annual one, unshifted: it is what the rest of the pipeline and
-        // the wind view mean by "the prevailing wind". Each half marches along its own belts,
-        // which live only as long as the march does.
+        // Each half's wind in meters a second: the march carries its water along the zonal
+        // direction and across the rows at the meridional speed. The belts ride one thermal
+        // equator, in the northern hemisphere in the half about July and in the southern in the
+        // half about January.
         val slantRowsPerCell = slantRowsPerCell(config)
-        val wind = withPressureDeparture(
-            config, sea,
-            buildWind(cellsAcross, cellsDown, thermalEquatorDegrees = 0f, slantRowsPerCell),
-            annualPressureHpa
-        ).march
+        val julyHalfWind = seasonWind(
+            config, buildWind(cellsAcross, cellsDown, thermalEquatorDegrees(tiltDegrees, julyHalf = true), slantRowsPerCell),
+            atmosphere?.julyHalf
+        )
+        val januaryHalfWind = seasonWind(
+            config, buildWind(cellsAcross, cellsDown, thermalEquatorDegrees(tiltDegrees, julyHalf = false), slantRowsPerCell),
+            atmosphere?.januaryHalf
+        )
 
-        // Each half's wind in meters a second, belts and pressure departure together: the march
-        // carries its water along the zonal direction and across the rows at the meridional
-        // speed. The belts ride one thermal equator, in the northern hemisphere in the half about
-        // July and in the southern in the half about January.
-        val julyHalfWind = withPressureDeparture(
-            config, sea,
-            buildWind(cellsAcross, cellsDown, thermalEquatorDegrees(tiltDegrees, julyHalf = true), slantRowsPerCell),
-            julyHalfPressureHpa
-        )
-        val januaryHalfWind = withPressureDeparture(
-            config, sea,
-            buildWind(cellsAcross, cellsDown, thermalEquatorDegrees(tiltDegrees, julyHalf = false), slantRowsPerCell),
-            januaryHalfPressureHpa
-        )
+        // The stored wind is the annual one: what the wind view means by "the prevailing wind".
+        // With the atmosphere it is the mean of the two halves' winds; without it, the belts about
+        // the geographic equator, every cell of a row the same.
+        val wind = if (atmosphere == null) {
+            buildWind(cellsAcross, cellsDown, thermalEquatorDegrees = 0f, slantRowsPerCell)
+        } else {
+            val annual = PressureWind.Vectors(
+                FloatArray(cellsAcross * cellsDown) {
+                    (julyHalfWind.totalMps.eastwardMps[it] + januaryHalfWind.totalMps.eastwardMps[it]) * 0.5f
+                },
+                FloatArray(cellsAcross * cellsDown) {
+                    (julyHalfWind.totalMps.southwardMps[it] + januaryHalfWind.totalMps.southwardMps[it]) * 0.5f
+                }
+            )
+            marchWindOf(
+                config, annual,
+                buildWind(1, cellsDown, thermalEquatorDegrees = 0f, slantRowsPerCell).zonalShareOfRow
+            )
+        }
 
         // The marine inversion, a property of the season rather than of the parcel: where a cold
         // sea has put a stratus lid on the air. Null when its setting is off, so the march runs
@@ -874,12 +875,23 @@ object ClimateStage {
             val seaSurfaceC = FloatArray(cellsAcross * cellsDown) { cell ->
                 if (sea.isLand[cell]) airC.data[cell] else waterC.data[cell]
             }
+            // The wind's speed through every gust and calm, which the sea's evaporation and the
+            // ground's potential read; the belts' control keeps the march's own scalar winds.
+            val solved = atmosphere != null
+            val scalarAt10m = if (solved) FloatArray(cellsAcross * cellsDown) { cell ->
+                BoundaryLayer.scalarWindAt10mMps(totalWind.eastwardMps[cell], totalWind.southwardMps[cell], sea.isLand[cell])
+            } else null
+            val at2m = if (solved) FloatArray(cellsAcross * cellsDown) { cell ->
+                BoundaryLayer.windAt2mMps(totalWind.eastwardMps[cell], totalWind.southwardMps[cell])
+            } else null
             return MoistureMarch.Season(
                 airTemperatureC = airC.data,
                 seaSurfaceC = seaSurfaceC,
                 seaIce = seaIce,
                 eastwardMps = totalWind.eastwardMps,
                 southwardMps = totalWind.southwardMps,
+                scalarWindAt10mMps = scalarAt10m,
+                windAt2mMps = at2m,
                 beltRainFactorOfRow = bands(cellsDown, climateConfig, julyHalf),
                 inversionSuppression = inversion?.data,
                 extraterrestrialOfRow = DoubleArray(cellsDown) { row ->
@@ -1543,75 +1555,97 @@ object ClimateStage {
     }
 
     /**
-     * The belts of [buildWind] with the pressure field's regional departure added to them.
+     * A half-year's wind from its belts and, when the pressure term is on, the boundary layer's
+     * solved wind for that half ([BoundaryLayer]), whose zonal mean over the open sea is those
+     * belts: the wind in metres a second and the direction-and-slant pair the march reads.
      *
-     * The belts stay the zonal mean and this is what the map's own land and sea do to it, so the
-     * sum is a wind and not a second opinion. Both halves are put into metres a second to be
-     * added — the belts through [PressureWind.BELT_SPEED_MPS], which is the one number a belt
-     * never needed until something had to be added to it — and the total is converted straight
-     * back into the pair the march reads, a zonal direction and a slant in rows.
-     *
-     * Passing a null [pressureHpa] returns [belts] untouched, which is how
-     * `ClimateConfig.pressureWinds = false` reproduces the old wind exactly rather than
-     * approximately: the arithmetic below is not merely skipped in its effect, it is not run.
+     * Passing no [atmosphere] gives the belts alone, which is how `ClimateConfig.pressureWinds =
+     * false` reproduces the belts' wind exactly: the solved wind is not computed at all.
      */
-    private fun withPressureDeparture(
-        config: WorldGenConfig,
-        sea: SeaLevelResult,
-        belts: WindField,
-        pressureHpa: FloatField?
-    ): SeasonWind {
-        if (pressureHpa == null) {
-            val still = PressureWind.Vectors(
-                FloatArray(config.width * config.height), FloatArray(config.width * config.height)
-            )
-            return SeasonWind(belts, totalWindMps(config, belts, still))
-        }
-        val departure = PressureWind.surfaceWind(config, sea, pressureHpa)
-        val total = totalWindMps(config, belts, departure)
+    private fun seasonWind(config: WorldGenConfig, belts: WindField, atmosphere: BoundaryLayer.Half?): SeasonWind {
+        if (atmosphere == null) return SeasonWind(belts, beltWindMps(config, belts))
+        val total = PressureWind.Vectors(atmosphere.eastwardMps, atmosphere.southwardMps)
         return SeasonWind(marchWindOf(config, total, belts.zonalShareOfRow), total)
     }
 
     /**
      * A season's wind: the direction-and-slant pair the stored wind is drawn from, and the wind
-     * itself in meters a second, belts and pressure departure together, which the march carries
-     * its water on.
-     *
-     * Passing no pressure field gives the belts alone, which is how
-     * `ClimateConfig.pressureWinds = false` reproduces the belts' wind exactly.
+     * itself in meters a second, which the march carries its water on.
      */
     private class SeasonWind(val march: WindField, val totalMps: PressureWind.Vectors)
 
     /**
-     * The belts and the pressure departure added together, in metres a second: the wind itself,
-     * before it is squeezed back into the direction-and-slant pair the march reads.
-     *
-     * Separate from [marchWindOf] because a guard that asks which way the wind blows onto a coast
-     * wants a vector with a speed in it, and the pair the march reads has thrown the speed away.
-     * Both come from this one function, so the guard and the march cannot be measuring different
-     * winds.
+     * The belts' wind in metres a second, per cell: their zonal share of
+     * [PressureWind.BELT_SPEED_MPS] and their slant turned back into a meridional speed.
      */
-    private fun totalWindMps(
-        config: WorldGenConfig,
-        belts: WindField,
-        departure: PressureWind.Vectors
-    ): PressureWind.Vectors {
-        val cellsAcross = config.width
-        val cellsDown = config.height
+    private fun beltWindMps(config: WorldGenConfig, belts: WindField): PressureWind.Vectors {
+        val cellsAcross = belts.meridional.size / belts.zonalShareOfRow.size
+        val cellsDown = belts.zonalShareOfRow.size
         val cellHeightOverWidth =
-            (config.scale.cellHeightKm(cellsDown) / config.scale.cellWidthKm(cellsAcross)).toFloat()
+            (config.scale.cellHeightKm(config.height) / config.scale.cellWidthKm(config.width)).toFloat()
         val eastward = FloatArray(cellsAcross * cellsDown)
         val southward = FloatArray(cellsAcross * cellsDown)
         parallelChunks(0, cellsDown) { startRow, endRow ->
             for (cell in startRow * cellsAcross until endRow * cellsAcross) {
-                eastward[cell] = belts.zonalShareOfRow[cell / cellsAcross] * PressureWind.BELT_SPEED_MPS +
-                    departure.eastwardMps[cell]
-                southward[cell] = belts.meridional[cell] * PressureWind.BELT_SPEED_MPS *
-                    cellHeightOverWidth + departure.southwardMps[cell]
+                eastward[cell] = belts.zonalShareOfRow[cell / cellsAcross] * PressureWind.BELT_SPEED_MPS
+                southward[cell] = belts.meridional[cell] * PressureWind.BELT_SPEED_MPS * cellHeightOverWidth
             }
         }
         return PressureWind.Vectors(eastward, southward)
     }
+
+    /**
+     * A half-year's belts on each row of the map, metres a second, eastward and southward: the
+     * zonal-mean surface wind the boundary layer's pressure is built from ([BoundaryLayer]).
+     */
+    internal fun beltWindOfRows(config: WorldGenConfig, julyHalf: Boolean): PressureWind.Vectors {
+        val climateConfig = config.climate
+        val tiltDegrees = if (climateConfig.seasons) climateConfig.seasonalTiltDegrees else 0f
+        val belts = buildWind(1, config.height, thermalEquatorDegrees(tiltDegrees, julyHalf), slantRowsPerCell(config))
+        return beltWindMps(config, belts)
+    }
+
+    /**
+     * The boundary layer's last answer and what it was asked: the ocean's stress and the climate
+     * read the same world's atmosphere one after the other, and it is the same one.
+     */
+    private class SolvedAtmosphere(
+        val config: WorldGenConfig,
+        val sea: SeaLevelResult,
+        val globalCoolingC: Float,
+        val atmosphere: BoundaryLayer.Atmosphere
+    )
+
+    @kotlin.concurrent.Volatile
+    private var lastAtmosphere: SolvedAtmosphere? = null
+
+    /**
+     * The boundary layer of [sea] under the energy balance [zonal] (solved at [globalCoolingC]) and
+     * [marineFraction], both halves ([BoundaryLayer.solve]). The last one solved is kept: it is a
+     * pure function of the configuration, the sea result and the cooling, and the ocean's stress
+     * and the climate ask for the same one in turn.
+     */
+    internal fun atmosphere(
+        config: WorldGenConfig,
+        sea: SeaLevelResult,
+        zonal: ZonalClimate,
+        marineFraction: FloatField,
+        globalCoolingC: Float = 0f
+    ): BoundaryLayer.Atmosphere {
+        lastAtmosphere?.let { last ->
+            if (last.sea === sea && last.globalCoolingC == globalCoolingC && last.config == config) return last.atmosphere
+        }
+        val solved = BoundaryLayer.solve(
+            config, sea, zonal, marineFraction,
+            beltWindOfRows(config, julyHalf = true), beltWindOfRows(config, julyHalf = false)
+        )
+        lastAtmosphere = SolvedAtmosphere(config, sea, globalCoolingC, solved)
+        return solved
+    }
+
+    /** [atmosphere] for a world's own sea under today's energy balance. */
+    internal fun atmosphere(config: WorldGenConfig, sea: SeaLevelResult): BoundaryLayer.Atmosphere =
+        atmosphere(config, sea, zonalClimate(config, sea), marineAirFraction(config, sea))
 
     /** A wind in metres a second as the march reads it: a zonal direction and a slant in rows. */
     private fun marchWindOf(
@@ -1656,34 +1690,19 @@ object ClimateStage {
      * [season] is [Season.JULY_HALF] or [Season.JANUARY_HALF].
      *
      * Rebuilt rather than stored: only the annual wind is saved, and a guard that read the annual
-     * wind would be asking a question about the year when the question is about July. Everything
-     * it rebuilds from is either in the world already (the annual temperature) or is a pure
-     * function of the configuration and the land mask, so the field it returns is the one the
-     * season's march actually followed.
+     * wind would be asking a question about the year when the question is about July. It is a pure
+     * function of the configuration and the sea result ([atmosphere]), so the field it returns is
+     * the one the season's march actually followed.
      */
-    internal fun seasonalSurfaceWindMps(
-        config: WorldGenConfig,
-        sea: SeaLevelResult,
-        annualTemperature: FloatField,
-        season: Season
-    ): PressureWind.Vectors {
-        val climateConfig = config.climate
-        val tiltDegrees = if (climateConfig.seasons) climateConfig.seasonalTiltDegrees else 0f
+    internal fun seasonalSurfaceWindMps(config: WorldGenConfig, sea: SeaLevelResult, season: Season): PressureWind.Vectors {
         val julyHalf = season == Season.JULY_HALF || season == Season.JULY
-        val belts = buildWind(
-            config.width, config.height, thermalEquatorDegrees(tiltDegrees, julyHalf),
-            slantRowsPerCell(config)
-        )
-        val pressureHpa = if (climateConfig.pressureWinds) {
-            PressureWind.pressureAnomalyHpa(
-                config, halfYearTemperature(config, sea, annualTemperature, season)
-            )
-        } else {
-            // A flat field drives no wind at all, so this is the belts alone in metres a second,
-            // which is what the control has to be able to measure.
-            FloatField(config.width, config.height)
+        if (!config.climate.pressureWinds) {
+            val tiltDegrees = if (config.climate.seasons) config.climate.seasonalTiltDegrees else 0f
+            val belts = buildWind(config.width, config.height, thermalEquatorDegrees(tiltDegrees, julyHalf), slantRowsPerCell(config))
+            return beltWindMps(config, belts)
         }
-        return totalWindMps(config, belts, PressureWind.surfaceWind(config, sea, pressureHpa))
+        val half = atmosphere(config, sea).half(julyHalf)
+        return PressureWind.Vectors(half.eastwardMps, half.southwardMps)
     }
 
     /** The circulation belt each row sits in for a half-year, precomputed per row. */

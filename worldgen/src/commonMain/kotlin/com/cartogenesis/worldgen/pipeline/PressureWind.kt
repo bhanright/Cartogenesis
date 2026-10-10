@@ -1,74 +1,29 @@
 package com.cartogenesis.worldgen.pipeline
 
-import com.cartogenesis.worldgen.model.FloatField
+import com.cartogenesis.worldgen.concurrent.parallelChunks
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldScale
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.atan
-import kotlin.math.ln
 import kotlin.math.sin
 import kotlin.math.tan
 
 /**
- * Surface pressure, and the wind that blows down its gradient.
+ * The surface wind that blows down the sea-level pressure's gradient, and the figures the balance
+ * is built from.
  *
- * The circulation belts in [ClimateStage] are the zonal mean of the surface wind: what is left of
- * the wind after every longitude at a latitude has been averaged together. Averaging away the
- * longitude is exactly what throws out the monsoon, because the monsoon is the departure. A
- * heated continent in summer is a *thermal low* and the sea beside it is relatively high, so the
- * surface air blows in off the water onto the land; in winter the continent is the high and the
- * air blows out over the sea and arrives on the far coast dry. That is the Asian monsoon and the
- * Siberian outflow, and neither is a function of latitude alone.
+ * The pressure is the boundary layer's ([BoundaryLayer]): a zonal mean from the circulation belts
+ * and the stationary waves the dry atmosphere solves for the land and sea and the terrain under it.
+ * [surfaceWind] balances its gradient against the Coriolis force and a linear surface drag on the
+ * map's own grid, cell by cell, with land's drag and the sea's, so the wind changes at the real
+ * coast and not at a coarse cell's edge.
  *
- * This object computes that departure in three steps, all of them per cell:
- *
- * 1. **A pressure anomaly from a temperature anomaly.** The departure of a cell's seasonal surface
- *    temperature from the mean of its own row, converted to hectopascals by the hydrostatic
- *    relation for a heated column ([HPA_PER_KELVIN]), then smoothed to the scale the atmosphere
- *    actually organises pressure on ([rossbyRadiusKm]).
- * 2. **A wind from the pressure gradient**, balancing the gradient against the Coriolis force and
- *    a linear surface drag ([surfaceWind]). Far from the equator that is the geostrophic wind
- *    turned across the isobars by the Ekman angle; at the equator, where the Coriolis parameter
- *    vanishes, the same expression becomes a straight down-gradient flow with no division by zero
- *    anywhere in between.
- * 3. **Addition to the belts**, which [ClimateStage.buildWind] does. The belts stay the zonal mean
- *    and this is the regional departure, so a world generated with [WorldGenConfig.climate]'s
- *    `pressureWinds` switched off has exactly the wind it had before this existed — which is what
- *    gives the guards on it a control.
+ * A world generated with [WorldGenConfig.climate]'s `pressureWinds` switched off has the belts
+ * alone, every cell of a row blowing the same way, which is what gives the guards on the solved
+ * wind a control.
  */
 internal object PressureWind {
-
-    /**
-     * How far the surface pressure falls, in hectopascals, for each degree Celsius a column of air
-     * is warmer than its neighbours.
-     *
-     * The hydrostatic relation, in the form Holton & Hakim state it (*An Introduction to Dynamic
-     * Meteorology*, 5th edition, the hypsometric equation and the thermal low): the thickness of
-     * the layer between two pressure surfaces is `Z = (R T / g) ln(p_surface / p_top)`, so warming
-     * the layer by one degree expands it by `(R / g) ln(p_surface / p_top)` metres. Hold the
-     * pressure at the top of the layer fixed — that is what the *level of non-divergence* means,
-     * the height near 500 hPa where the outflow aloft balances the inflow below — and that
-     * expansion has to come out of the surface pressure. Combining the two and cancelling the gas
-     * constant and gravity leaves
-     *
-     * `dp_surface/dT = -p_surface * ln(p_surface / p_top) / T`
-     *
-     * which at [SEA_LEVEL_PRESSURE_HPA], [NON_DIVERGENT_LEVEL_HPA] and [REFERENCE_COLUMN_K] is
-     * 2.48 hPa per degree. Nothing here was chosen to make a picture look right; the three numbers
-     * it is built from are the standard atmosphere's surface pressure, the standard level of
-     * non-divergence, and the standard atmosphere's mean surface temperature.
-     *
-     * Earth's own figure, for the record rather than as a bar: the Siberian high in January
-     * averages about 1035 hPa and the South Asian low in July about 995 hPa, a 40 hPa range, over
-     * a land-sea seasonal temperature contrast of about 20 degrees at those latitudes — 2.0 hPa
-     * per degree. This derivation runs 1.24 times that, because the whole of the surface anomaly
-     * is not felt through the whole depth of the column. The figure is left where the physics puts
-     * it rather than scaled down to Earth's ratio, and the guards on this chunk read the *sign* of
-     * the coast-normal wind rather than its speed for that reason.
-     */
-    val HPA_PER_KELVIN: Float = (SEA_LEVEL_PRESSURE_HPA *
-        ln(SEA_LEVEL_PRESSURE_HPA / NON_DIVERGENT_LEVEL_HPA) / REFERENCE_COLUMN_K).toFloat()
 
     /**
      * The angle the surface wind crosses the isobars by, over the sea, in degrees.
@@ -98,21 +53,6 @@ internal object PressureWind {
      */
     const val BELT_SPEED_MPS = 7.5f
 
-    /** The standard atmosphere at sea level, in hectopascals. */
-    private const val SEA_LEVEL_PRESSURE_HPA = 1013.25
-
-    /**
-     * The level of non-divergence, in hectopascals: the height at which the outflow aloft from a
-     * thermal low balances the inflow beneath it, so that a warmed column's expansion is paid for
-     * out of the surface pressure rather than shared with the pressure above.
-     *
-     * Its ratio to the surface, `ln(1013.25 / 500)`, is a factor of [HPA_PER_KELVIN].
-     */
-    private const val NON_DIVERGENT_LEVEL_HPA = 500.0
-
-    /** The standard atmosphere's mean surface temperature, in kelvin: 15 degrees Celsius. */
-    private const val REFERENCE_COLUMN_K = 288.15
-
     /** Density of air at sea level, in kilograms per cubic metre, at the standard atmosphere. */
     internal const val AIR_DENSITY_KG_PER_M3 = 1.225f
 
@@ -127,16 +67,6 @@ internal object PressureWind {
     /** Where the Rossby radius is evaluated: the middle of the mid-latitudes. */
     private const val ROSSBY_REFERENCE_LATITUDE_DEGREES = 45.0
 
-    /**
-     * Implicit steps the smoothing is split into. Four, as `SphereBlur` takes across rows: one
-     * backward step spreads a spike into a two-sided exponential, and four of a quarter the strength
-     * are within a few percent of the Gaussian of the same variance.
-     */
-    private const val SMOOTHING_STEPS = 4
-
-    /** One hectopascal in pascals, for the one place the gradient leaves the map's own unit. */
-    private const val PASCALS_PER_HPA = 100f
-
     private const val DEGREES_TO_RADIANS = PI / 180.0
 
     /**
@@ -147,16 +77,14 @@ internal object PressureWind {
      * kilometre-scale wiggles and a bay a hundred kilometres across is warmer than the cape beside
      * it, but the atmosphere does not carry a separate low over every bay: below the deformation
      * radius a pressure anomaly cannot hold itself up against the flow that drains it, and
-     * disperses. Smoothing the anomaly at this radius before taking a gradient from it is what
-     * makes the result a synoptic weather map rather than a differentiated coastline.
+     * disperses.
      *
      * With `N = 1.0e-2` per second, `H = 10 km` and `f` at 45 degrees this is 970 km, which is the
      * thousand kilometres the chunk was specified at, derived rather than assumed. It is a length
-     * on the ground, so the same world smooths over the same distance at every grid — see
-     * `ScaleFreeTest`.
+     * on the ground, the same at every grid.
      *
-     * It is the standard deviation of the Gaussian [smooth] spreads the anomaly with, so the
-     * smoothed field's width is this radius and not some multiple of it.
+     * The atmosphere's grid is sized by it ([SphericalGrid.rowsForAtmosphere]), and the forcing the
+     * stationary waves read is spread to a quarter of it ([WaveForcing.GROUND_FORCING_WIDTH_METERS]).
      */
     fun rossbyRadiusKm(): Double {
         val coriolisAt45 = 2.0 * WorldScale.ROTATION_RATE_PER_S *
@@ -185,79 +113,21 @@ internal object PressureWind {
         return coriolisAt45 * tan(crossIsobarDegrees * DEGREES_TO_RADIANS).toFloat()
     }
 
-    /**
-     * The surface pressure anomaly of a season, in hectopascals, one value per cell.
-     *
-     * Zero is not a pressure but the mean of the cell's own row: only the *departure* from the
-     * zonal mean can drive a wind that the belts do not already carry, and the belts are the zonal
-     * mean by construction. Warm against its row means low, cold against its row means high, which
-     * puts the thermal low over the summer continent and the thermal high over the winter one. It
-     * puts no ridge over a sea a cold current has chilled: the temperature it is given carries no
-     * current anomaly over water on either path, since the climate stage's maritime influence adds
-     * the anomaly to land cells only and the ocean's own stress reads the temperature before there
-     * is an anomaly at all. Earth's subtropical highs are not thermal lows' mirror images either;
-     * they wait on an atmosphere that is solved (docs/TODO.md, "Build the atmosphere").
-     */
-    fun pressureAnomalyHpa(config: WorldGenConfig, seasonTemperatureC: FloatField): FloatField {
-        val cellsAcross = config.width
-        val cellsDown = config.height
-        val field = FloatField(cellsAcross, cellsDown)
-
-        for (row in 0 until cellsDown) {
-            val rowStart = row * cellsAcross
-            var sum = 0.0
-            for (column in 0 until cellsAcross) sum += seasonTemperatureC.data[rowStart + column]
-            val zonalMeanC = (sum / cellsAcross).toFloat()
-            for (column in 0 until cellsAcross) {
-                field.data[rowStart + column] =
-                    -(seasonTemperatureC.data[rowStart + column] - zonalMeanC) * HPA_PER_KELVIN
-            }
-        }
-
-        smooth(config, field)
-        return field
-    }
-
-    /**
-     * Smooths a pressure field over [rossbyRadiusKm] on the ground, in place: carried down to the
-     * atmosphere's grid ([SphericalGrid.forAtmosphere], [AtmosphereRemap.areaMean]), spread there by
-     * implicit diffusion on the sphere ([SphericalOperators.diffuse]) whose kernel approaches a
-     * Gaussian of that standard deviation, and carried back up by its double Fourier series.
-     *
-     * On the sphere and not in cells, because the gradient [surfaceWind] takes is the sphere's. A
-     * blur whose radius is a count of cells spreads 970 km east-west at the equator and a few
-     * kilometers near a pole, and the true east-west gradient of what it leaves there is that
-     * departure over a few kilometers; with the gradient in the sphere's metric the polar rows' winds
-     * ran to hundreds and thousands of meters a second, and the ocean's heat, forced by them, did
-     * not solve (docs/DESIGN_LEDGER.md, A1-2). Near a pole the diffusion draws every zonal wave but
-     * the mean toward the row beyond it, and the series carrying it up takes one value at the pole.
-     *
-     * On the atmosphere's grid because nothing finer survives the smoothing: its rows are a seventh
-     * of the deformation radius apart, so the field the Gaussian leaves is resolved there many times
-     * over, and the diffusion solves 45,000 cells on Earth's planet rather than the map's two
-     * million.
-     */
-    fun smooth(config: WorldGenConfig, pressureHpa: FloatField) {
-        val coarse = SphericalGrid.forAtmosphere(config.scale)
-        val remap = AtmosphereRemap(config.width, config.height, coarse)
-        val spread = SphericalOperators(coarse).diffuse(
-            remap.areaMean(pressureHpa.data), rossbyRadiusKm() * WorldScale.METRES_PER_KM, SMOOTHING_STEPS
-        )
-        remap.toGround(spread).copyInto(pressureHpa.data)
-    }
-
     /** A surface wind as two components in metres a second, eastward and southward, per cell. */
     class Vectors(val eastwardMps: FloatArray, val southwardMps: FloatArray)
 
     /**
-     * The surface wind the pressure field drives, in metres a second, one vector per cell.
+     * The surface wind a sea-level pressure drives, in metres a second, one vector per cell of the
+     * map: the pressure's departure from its zonal mean, [eddyPressurePa] (pascals, row-major on
+     * the map), on top of the belts' zonal-mean wind, [beltEastwardMps] and [beltSouthwardMps]
+     * (metres a second, one each per row of the map), which set the zonal mean's own pressure.
      *
      * The balance solved at every cell is the momentum equation with a linear drag — the standard
      * damped surface-layer form, and the one Gill and Matsuno use for exactly this job of getting
      * a surface wind out of a tropical pressure field without the geostrophic relation blowing up:
      *
      * ```
-     * k u - f v = -(1/rho) dp/dx
+     * k u - f v = -(1/rho) dp/dx + F
      * k v + f u = -(1/rho) dp/dy
      * ```
      *
@@ -268,14 +138,20 @@ internal object PressureWind {
      * u = (k Gx + f Gy) / (k^2 + f^2)      v = (k Gy - f Gx) / (k^2 + f^2)
      * ```
      *
-     * where `G` is the acceleration the pressure gradient supplies. Where `f` is much larger than
-     * `k` — the middle and high latitudes — this is the geostrophic wind, along the isobars, with
-     * low pressure on the left in the northern hemisphere, turned toward the low by `atan(k/f)`.
-     * At the equator `f` is zero, the denominator is `k^2` rather than nothing, and what is left
-     * is a flow straight down the gradient from high to low. **That is the tropical limit, and it
-     * is why there is no division by `f` and no special case at the equator anywhere below.** It
-     * is also the physically right answer: tropical surface flow really does run down the pressure
-     * gradient into the convergence zone rather than along the isobars.
+     * where `G` is the acceleration the pressure gradient and `F` supply. Where `f` is much larger
+     * than `k` — the middle and high latitudes — this is the geostrophic wind, along the isobars,
+     * with low pressure on the left in the northern hemisphere, turned toward the low by
+     * `atan(k/f)`. At the equator `f` is zero, the denominator is `k^2` rather than nothing, and
+     * what is left is a flow straight down the gradient from high to low. **That is the tropical
+     * limit, and it is why there is no division by `f` and no special case at the equator.**
+     *
+     * **The zonal mean.** Its pressure gradient is the belts' own under the sea's drag,
+     * `-(1/rho) dp/dy = k v + f u` ([BoundaryLayer.zonalPressurePa] integrates it), and `F`, the
+     * eastward push `k u - f v` the belts need, is what holds their zonal wind against the drag
+     * where no zonal pressure gradient can: on Earth that is the eddies' convergence of westerly
+     * momentum in the westerlies and its divergence from the trades, which no mean pressure
+     * carries. With both, the open sea's wind under no eddy pressure is the belts exactly, and a
+     * coast's land is slowed and turned more by its own larger drag.
      *
      * Over land the drag is larger ([CROSS_ISOBAR_LAND_DEGREES]), so the wind there crosses the
      * isobars at a steeper angle and blows further into the continent's thermal low than it would
@@ -284,7 +160,9 @@ internal object PressureWind {
     fun surfaceWind(
         config: WorldGenConfig,
         sea: SeaLevelResult,
-        pressureHpa: FloatField
+        eddyPressurePa: FloatArray,
+        beltEastwardMps: FloatArray,
+        beltSouthwardMps: FloatArray
     ): Vectors {
         val cellsAcross = config.width
         val cellsDown = config.height
@@ -298,27 +176,30 @@ internal object PressureWind {
         // central difference across the cell.
         val grid = SphericalGrid.forGround(cellsAcross, cellsDown, config.scale)
         val operators = SphericalOperators(grid)
-        val pressurePa = DoubleArray(cellsAcross * cellsDown) { pressureHpa.data[it] * PASCALS_PER_HPA.toDouble() }
-        val gradient = operators.gradient(pressurePa)
+        val gradient = operators.gradient(DoubleArray(cellsAcross * cellsDown) { eddyPressurePa[it].toDouble() })
         val gradientNorthward = operators.northAtCenters(gradient)
 
-        val seaDrag = surfaceDrag(CROSS_ISOBAR_SEA_DEGREES)
-        val landDrag = surfaceDrag(CROSS_ISOBAR_LAND_DEGREES)
+        val seaDrag = surfaceDrag(CROSS_ISOBAR_SEA_DEGREES).toDouble()
+        val landDrag = surfaceDrag(CROSS_ISOBAR_LAND_DEGREES).toDouble()
+        val density = AIR_DENSITY_KG_PER_M3.toDouble()
 
-        for (row in 0 until cellsDown) {
-            val coriolis = coriolisParameter(ClimateStage.latitudeOf(row, cellsDown))
-            for (column in 0 until cellsAcross) {
-                val cell = row * cellsAcross + column
-                val accelerationEast = (-gradient.eastAtCenters[cell] / AIR_DENSITY_KG_PER_M3).toFloat()
-                val accelerationNorth = (-gradientNorthward[cell] / AIR_DENSITY_KG_PER_M3).toFloat()
-
-                val drag = if (sea.isLand[cell]) landDrag else seaDrag
-                val inverseBalance = 1f / (drag * drag + coriolis * coriolis)
-                eastward[cell] =
-                    (drag * accelerationEast + coriolis * accelerationNorth) * inverseBalance
-                // Southward is the negative of northward, because rows grow southward.
-                southward[cell] =
-                    -(drag * accelerationNorth - coriolis * accelerationEast) * inverseBalance
+        parallelChunks(0, cellsDown) { startRow, endRow ->
+            for (row in startRow until endRow) {
+                val coriolis = coriolisParameter(ClimateStage.latitudeOf(row, cellsDown)).toDouble()
+                val beltEast = beltEastwardMps[row].toDouble()
+                val beltNorth = -beltSouthwardMps[row].toDouble()
+                val beltPush = seaDrag * beltEast - coriolis * beltNorth
+                val zonalPressurePush = seaDrag * beltNorth + coriolis * beltEast
+                for (column in 0 until cellsAcross) {
+                    val cell = row * cellsAcross + column
+                    val accelerationEast = -gradient.eastAtCenters[cell] / density + beltPush
+                    val accelerationNorth = -gradientNorthward[cell] / density + zonalPressurePush
+                    val drag = if (sea.isLand[cell]) landDrag else seaDrag
+                    val inverseBalance = 1.0 / (drag * drag + coriolis * coriolis)
+                    eastward[cell] = ((drag * accelerationEast + coriolis * accelerationNorth) * inverseBalance).toFloat()
+                    // Southward is the negative of northward, because rows grow southward.
+                    southward[cell] = (-(drag * accelerationNorth - coriolis * accelerationEast) * inverseBalance).toFloat()
+                }
             }
         }
         return Vectors(eastward, southward)

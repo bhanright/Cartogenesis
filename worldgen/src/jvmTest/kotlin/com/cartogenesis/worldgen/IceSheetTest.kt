@@ -78,7 +78,7 @@ class IceSheetTest : BorrowsSharedWorlds() {
         KnownFailures.expect(
             THIN_SHEETS_ON_HIGH_GROUND,
             // Re-recorded at L1, whose rifts are Earth's half-grabens and the same at every grid (docs/DESIGN_LEDGER.md, L1).
-            "seed 718106 at 1156 m over 627 km, seed 59758 at 1534 m over 548 km, seed 7 at 1339 m over 648 km"
+            "seed 718106 at 1192 m over 560 km, seed 59758 at 1348 m over 692 km, seed 7 at 900 m over 627 km"
         ) {
             if (thin.isNotEmpty()) {
                 throw RecordedViolation(

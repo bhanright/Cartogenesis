@@ -1,5 +1,46 @@
 # To do
 
+- **The geometry census's clauses at Earth's size that are the ground's, not the drawing's (G2).**
+  G2 traced every clause the census makes on a drawn layer at the default planet (seeds 42 and
+  969495 at 1,024 rows) to the operator that makes it; these five are in the fields, and the
+  drawing only shows them:
+  - **969495's isobath facet**, 55.5 cell widths (1,085 km) at 116.7 degrees about (105, 940): the
+    5,000 m level line runs straight across plate 13, 145 to 183 cell widths from any boundary, on
+    a floor rising about 600 m across ten cells. The drawn isobath is the floor's own level set,
+    inked per cell from the cell's depth (`Isobaths.ink`), so the straight run is the sea floor's;
+    which part of the plate stage's depth (the age-depth curve, the ridge geometry) rules it is not
+    isolated.
+  - **969495's plate-boundary facet**, 53.7 cell widths at 45.0 degrees about (1675, 527): the
+    partition's own straight boundary.
+  - **The sea temperature anomaly's aligned sides on both worlds**, 101 steps along row 529 on 42
+    and 73 along row 503 on 969495: within three degrees of the equator the anomaly varies by
+    under 0.05 C over 80 columns and by 0.5 C over three rows, a band along the rows that the
+    ocean stage makes and the currents view colors cell by cell.
+  - **42's terrain contours and ice surface, one arc**, 139 degrees of a circle 16.5 cells round
+    about (1153, 1001): the ice sheet's surface wrapping an ice-free hollow (row 1001 carries no
+    ice from column 1139 to 1155, on ground 259 to 1,406 m high); the map draws no contour on land
+    and the census's terrain contours read the ice's surface over the sheet, so this is
+    `IceSheet`'s shape.
+  - **Round coasts the littoral grading makes**, now that the drawn coast no longer hides them under
+    the grid's staircase: the drawn coast's arc on 7 and 99 at 512 rows and on 42 at Earth's size,
+    124 degrees of circles 12.0 to 12.1 cells round, at the arc detector's floors (`Arcs`: a third
+    of a turn, twelve cells, a quarter of a cell rms). With `SeaConfig.littoralDepositionalShare`
+    at zero, 7's and 42's are gone, the grading's curvature flow having rounded those headlands;
+    99's stays, its cause not isolated. The drawing fits no arc to the census's natural shorelines
+    (`CoastLineTest`). 2026-10-09, G2.
+- **The narrow sea is decided by a square window (G2).** `NarrowSea.mask` calls a sea cell open
+  only where it lies in an all-sea block as many cells across and down as a pen's width needs, two
+  by two on the Earth-sized planet's 512- and 1,024-row grids, which is a thresholded square window
+  of the kind rule 13 names. At two cells the square and a disc differ by a cell's corners, and the
+  geometry census sees no clause on the coast it shapes; a disc on the ground, or the Euclidean
+  distance the shore distance already solves, would remove the rule's exception. 2026-10-09, G2.
+- **The level-0 contour still inks the sea beside the coast (Audit III F-C4).** `Isobaths.ink`
+  treats depth zero as a contour like any other, so 3,045 of 5,164 sea cells beside land on the
+  gallery's world take contour ink past a tenth and the coast is drawn twice, the second time in
+  the isobaths' cell staircase; `IsobathTest` keeps it as a known failure. Since G2 the coast's own
+  ink reaches the sea cells beside the shore too, so the two inks lie on the same cells; the fix is
+  still to start the contours at the first interval, in the shader's copy as well. Out of G2's
+  scope, which was the census's clauses. 2026-10-09, G2.
 - **The atlas overhaul: what the Earth-sized planet left for the realms, peoples and landmarks
   (K2).** K2 moved the default planet to Earth's 40,075 km and the geography with it; the atlas was
   out of its scope and was only kept from crashing or hanging. What the overhaul must revisit:

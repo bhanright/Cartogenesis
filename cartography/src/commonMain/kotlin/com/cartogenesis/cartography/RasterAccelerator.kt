@@ -1,6 +1,7 @@
 package com.cartogenesis.cartography
 
 import com.cartogenesis.worldgen.model.WorldMap
+import com.cartogenesis.worldgen.model.WorldScale
 import com.cartogenesis.worldgen.pipeline.Biome
 import com.cartogenesis.worldgen.pipeline.CultureResult
 import com.cartogenesis.worldgen.pipeline.LakeResult
@@ -203,6 +204,14 @@ class RasterRecipe(
     val lakeDeep: Int,
     val coastline: Int,
     val coastlineStrength: Float,
+    /**
+     * The meters [elevation]'s 1 stands for on land and its -1 at sea, so the coast can put the
+     * waterline between two cells by their altitudes as [CoastLine] does: the two halves of the
+     * field are on different rulers, and a straight line through the raw field would put it in
+     * another place.
+     */
+    val highestLandMeters: Float = WorldScale().highestLandMetres,
+    val deepestOceanMeters: Float = WorldScale().deepestOceanMetres,
     val border: Int,
     val wilderness: Int,
     val reliefStrength: Float,
@@ -534,6 +543,8 @@ class RasterRecipe(
                 lakeDeep = style.lakeDeep,
                 coastline = style.coastline,
                 coastlineStrength = style.coastlineStrength,
+                highestLandMeters = world.config.scale.highestLandMetres,
+                deepestOceanMeters = world.config.scale.deepestOceanMetres,
                 border = style.border,
                 wilderness = style.wilderness,
                 reliefStrength = style.reliefStrength,

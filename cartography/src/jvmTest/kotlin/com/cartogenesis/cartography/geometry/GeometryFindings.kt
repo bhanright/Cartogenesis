@@ -14,12 +14,14 @@ package com.cartogenesis.cartography.geometry
 internal object GeometryFindings {
 
     /**
-     * The raster coast (`MapRasterizer.drawCoastline`) inks a bank cell only where the open water
-     * lies to its east or south, so east- and south-facing shores are drawn whole, north-facing
+     * The raster coast (`MapRasterizer.drawCoastline`) inked a bank cell only where the open water
+     * lay to its east or south, so east- and south-facing shores were drawn whole, north-facing
      * ones 35 to 50% and west-facing a fifth to three tenths: the most-drawn facing 3.4 to 4.7
      * times the least on every world at both grids, since the narrow sea became a bank
      * (`NarrowSea`) and the east- and south-facing shores beside it stopped counting as undrawn.
-     * On square cells 3.0 to 3.5 times at 512 rows and 2.7 to 3.5 at 2048 columns.
+     * On square cells 3.0 to 3.5 times at 512 rows and 2.7 to 3.5 at 2048 columns. Cleared at G2,
+     * which inks every cell by its distance from the shoreline (`CoastLine`); kept named so a
+     * facing that returns is recorded under it (docs/DESIGN_LEDGER.md, G2).
      */
     const val COAST_INK = "the raster coast inks east- and south-facing shores only"
 
@@ -74,6 +76,14 @@ internal object GeometryFindings {
      * On square cells at 2048 columns (Q4) 1234's two, 10.9 cells in radius, fall under the floor of
      * twelve the natural controls there set, and two drawn coasts carry one each: 99's, 160 degrees
      * at (2000, 489), and 969495's, 137 degrees at (251, 1000).
+     *
+     * Since G2 the drawn coast runs where the ground puts the waterline and is smoothed along its
+     * length, so the grid's staircase no longer hides a round shore: at 512 rows 7's headland, 124
+     * degrees of a circle 12.0 cells round about (447, 267), and 99's shore, 124 degrees of 12.1
+     * about (518, 160); at Earth's size 42's headland, 124 degrees of 12.1 about (759, 761). The
+     * ground's, not the drawing's: with `SeaConfig.littoralDepositionalShare` at zero, the littoral
+     * grading's curvature flow off, 7's and 42's are gone and 99's stays (its cause is not
+     * isolated), and the same drawing fits no arc to a natural shoreline (`CoastLineTest`).
      */
     const val COAST_ARC = "a coast follows a circular arc"
 

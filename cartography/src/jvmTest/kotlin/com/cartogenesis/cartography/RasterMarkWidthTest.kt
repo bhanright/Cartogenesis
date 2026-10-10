@@ -20,12 +20,14 @@ import kotlin.test.assertTrue
  * row crosses a mark running north-south, and a run down a column one running east-west, so the
  * thinnest run each way is the mark's width each way, and the commonest run is its usual width.
  *
- * On the gallery's world at 512 rows both are one pixel each way, which is what a cell to a pixel
- * draws and what the clause asks: the same width both ways, and that width one pixel. Two
- * controls fail it. The same seed on the 512 by 512 grid, whose sheet is the same 1024 pixels
- * across: no run along a row is shorter than two pixels, so the two ways disagree. And the square
- * world's own coast thickened to two pixels both ways, each inked pixel inking the one east of it
- * and the one south: the two ways agree, and the width is two.
+ * Since G2 the coast inks every cell within a cell of the shoreline, either side of it, so on the
+ * gallery's world at 512 rows the mark is usually two pixels each way and one at its thinnest,
+ * which is what a cell to a pixel draws and what the clause asks: the same width both ways, and
+ * that width the pen's. Two controls fail it. The same seed on the 512 by 512 grid, whose sheet is
+ * the same 1024 pixels across: the runs along the rows are longer than those down the columns,
+ * commonest six pixels against four at G2, so the two ways disagree. And the square world's own coast thickened by a pixel both
+ * ways, each inked pixel inking the one east of it and the one south: the two ways agree, and the
+ * width is the pen's and one more. Before G2 the mark was the landward cell, one pixel each way.
  */
 class RasterMarkWidthTest : BorrowsSharedWorlds() {
 
@@ -40,9 +42,9 @@ class RasterMarkWidthTest : BorrowsSharedWorlds() {
         val agree: Boolean
             get() = thinnestAcross == thinnestDown && commonestAcross == commonestDown
 
-        /** Whether the mark is [MARK_PIXELS] wide both ways, at its thinnest and as it usually is. */
-        val onePixelBothWays: Boolean
-            get() = agree && thinnestAcross == MARK_PIXELS && commonestAcross == MARK_PIXELS
+        /** Whether the mark is usually [MARK_PIXELS] wide both ways, and as thin at its thinnest both ways. */
+        val penWideBothWays: Boolean
+            get() = agree && commonestAcross == MARK_PIXELS
 
         override fun toString(): String =
             "%d runs along the rows, thinnest %d px, commonest %d px, mean %.2f; %d down the columns, thinnest %d px, commonest %d px, mean %.2f"
@@ -124,13 +126,13 @@ class RasterMarkWidthTest : BorrowsSharedWorlds() {
                 "clause cannot see a two-pixel mark: $halfHeight"
         )
         assertTrue(
-            thickened.agree && !thickened.onePixelBothWays,
+            thickened.agree && !thickened.penWideBothWays,
             "the thickened control is not a mark as wide both ways and wider than a pixel, so the " +
                 "clause cannot see a mark too wide: $thickened"
         )
         assertTrue(
-            square.onePixelBothWays,
-            "on square cells the raster's coast is not one pixel wide both ways: $square"
+            square.penWideBothWays,
+            "on square cells the raster's coast is not the pen's $MARK_PIXELS pixels wide both ways: $square"
         )
     }
 
@@ -138,8 +140,13 @@ class RasterMarkWidthTest : BorrowsSharedWorlds() {
         const val INK = 1
         const val PAPER = 0
 
-        /** The width a cell's mark has on a sheet drawn a cell to a pixel: one pixel. */
-        const val MARK_PIXELS = 1
+        /**
+         * The width the coast's mark usually has on a sheet drawn a cell to a pixel: two pixels.
+         * Its ink reaches a cell either side of the shoreline ([CoastLine.reachPixels]), so a
+         * shoreline running between two cell centres inks both, and only one where it runs through
+         * a centre, which leaves the cells either side exactly a cell off it and bare.
+         */
+        const val MARK_PIXELS = 2
 
         /** The gallery's seed on a grid as many cells tall as wide: cells two pixels across. */
         val HALF_HEIGHT_CONTROL = WorldGenConfig(seed = 234475L, width = 512, height = 512)

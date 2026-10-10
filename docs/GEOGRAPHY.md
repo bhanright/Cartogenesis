@@ -164,8 +164,9 @@ on the line and nothing a cell away, so the ink is centred on the waterline and 
 takes as much of it as one facing east; the overlay traces the same line, smooths it along its own
 length with a Gaussian of half a cell, which keeps every vertex within 0.40 of a cell of the
 waterline, and strokes it over the fill at 0.05% of the sheet's width, one pixel at 2048. Where the
-mask and the ground disagree — land the mask keeps below the waterline, a channel too narrow for a
-coast — the ground cannot place the shore and the crossing is halfway between the two cells. Where
+mask and the ground disagree — a channel too narrow for a coast, whose floor is under water and
+across whose mouth the coast is drawn — the ground cannot place the shore and the crossing is
+halfway between the two cells. Where
 four cells meet in a checkerboard the contour is closed so that land touching corner to corner stays
 one coast, which is the same assumption the flow routing makes when it lets a river run diagonally
 across an isthmus a cell wide. Until G2 the raster inked a land cell only where water lay east or

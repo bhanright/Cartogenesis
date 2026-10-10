@@ -32,9 +32,9 @@ import kotlin.test.assertTrue
  * The field's shoreline here is traced by the geometry census's own tracer ([Contours.ofField]) on
  * the cells' altitudes in metres, which shares no code with the drawing's [CoastLine]: the two
  * agree only if the drawing puts its line where the ground crosses the waterline. Where the mask
- * the coast is drawn round and the sign of the ground disagree — a narrow channel's bank, ground
- * the ice cut below the waterline — the ground cannot say where the shore is, and those cells are
- * left out and counted.
+ * the coast is drawn round and the sign of the ground disagree — a channel too narrow for a coast,
+ * which is a bank with its floor under water — the ground cannot say where the shore is, and those
+ * cells are left out and counted.
  *
  * Each clause has its control, the operator the drawing used before: the raster inked a bank cell
  * only where water lay east or south of it, and the overlay ran along the half-cell lattice.
@@ -56,9 +56,9 @@ class CoastLineTest : BorrowsSharedWorlds() {
         /**
          * The share of the inked cells, or of the drawn vertices, that must lie where the ground
          * and the mask agree for a world's clause to say anything: most of the coast, so the clause
-         * is about the coast and not about a remnant of it. Where they disagree is land the mask
-         * keeps below the waterline: 2,149 cells of seed 42 at 512 rows, down to 1,615 m, 166 of
-         * them under lakes.
+         * is about the coast and not about a remnant of it. Seed 42 at 512 rows has 2,149 cells
+         * where they disagree: 1,622 of narrow sea the coast is drawn round, and 527 of land below
+         * the waterline, none of it beside the sea and 166 under lakes.
          */
         const val LEAST_SHARE_CHECKED = 0.5
 

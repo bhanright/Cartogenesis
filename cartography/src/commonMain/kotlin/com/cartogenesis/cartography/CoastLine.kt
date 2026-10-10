@@ -22,9 +22,10 @@ import kotlin.math.min
  * and its water neighbour below it, the crossing is where the straight line between the two
  * altitudes reaches zero ([shareTowardWater]); that is the field's own contour to within the
  * interpolation, which is exact on a uniform slope. Where the two disagree with the mask — a
- * narrow channel's bank lies below the water, or ground the ice cut below the waterline meets
- * the sea — the ground cannot say where the shore is and the crossing is halfway, as it always
- * was. Checkerboards keep the land connected across the diagonal, as the flow routing assumes.
+ * channel too narrow for a coast is a bank whose floor lies below the water, and land the mask
+ * keeps below the waterline could meet the sea — the ground cannot say where the shore is and
+ * the crossing is halfway, as it always was. Checkerboards keep the land connected across the
+ * diagonal, as the flow routing assumes.
  *
  * [metres] is each cell's altitude in metres, read off the half of the ruler its own side of the
  * shoreline uses, row-major, one entry a cell; [banks] is the mask the coast runs round.

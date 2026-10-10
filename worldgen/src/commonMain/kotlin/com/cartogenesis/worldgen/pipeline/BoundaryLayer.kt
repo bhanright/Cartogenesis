@@ -384,12 +384,17 @@ internal object BoundaryLayer {
     }
 
     /**
-     * How many waves' factors a world's coupled loop keeps between its laps: as many as take no
-     * more than [FACTORS_SHARE_OF_HEAP] of the most heap the platform gives
-     * ([com.cartogenesis.worldgen.concurrent.maximumHeapBytes]), every wave in a large heap. A kept
-     * wave back-substitutes each lap; any other factors afresh. The two compute the same numbers in
-     * the same order ([StationaryWaveModel.Factored]), so the count moves the cost of a world and
-     * never the world (`StationaryWaveModelTest`).
+     * How many waves' factors a world's coupled loop keeps between its laps: every wave when all of
+     * them take no more than [FACTORS_SHARE_OF_HEAP] of the most heap the platform gives
+     * ([com.cartogenesis.worldgen.concurrent.maximumHeapBytes]), and none otherwise. A kept wave
+     * back-substitutes each lap; any other factors afresh. The two compute the same numbers in the
+     * same order ([StationaryWaveModel.Factored]), so the count moves the cost of a world and never
+     * the world (`StationaryWaveModelTest`).
+     *
+     * All or none, not as many as the share holds: the share is of the heap's ceiling, not of what
+     * the world beside the loop leaves free, and keeping the 64 waves an eighth of a test worker's
+     * 3.5 GB holds (448 MB) ran the deep tier's worlds of 1,024 rows out of heap in fourteen tests
+     * where keeping none had passed them.
      */
     fun wavesToKeep(config: WorldGenConfig): Int {
         val coarse = SphericalGrid.forAtmosphere(config.scale)
@@ -397,15 +402,15 @@ internal object BoundaryLayer {
         val waves = coarse.columns / 3
         val bytesPerWave = coarse.rows.toLong() * FACTOR_BLOCKS_PER_ROW * blockSize * blockSize * COMPLEX_BYTES
         val budget = com.cartogenesis.worldgen.concurrent.maximumHeapBytes() / FACTORS_SHARE_OF_HEAP
-        return (budget / bytesPerWave).coerceIn(0L, waves.toLong()).toInt()
+        return if (waves * bytesPerWave <= budget) waves else 0
     }
 
     /**
      * The share of the heap the factors may take, as its inverse: an eighth. Every wave's factors
-     * are about 700 MB on Earth's planet at eight levels, kept whole in a heap of 5.6 GB or more,
-     * the application's (three quarters of the machine's memory); the test workers' 3 to 4 GB,
-     * which hold a world of 1,024 rows, its march and a drawing beside them, ran out of heap with
-     * every wave kept at a quarter, and keep half of them at an eighth.
+     * are about 700 MB on Earth's planet at eight levels, kept in a heap of 5.6 GB or more, the
+     * application's (three quarters of the machine's memory); the test workers' 3 to 4 GB, which
+     * hold a world of 1,024 rows, its march and a drawing beside them, ran out of heap with every
+     * wave kept at a quarter.
      */
     const val FACTORS_SHARE_OF_HEAP = 8L
 

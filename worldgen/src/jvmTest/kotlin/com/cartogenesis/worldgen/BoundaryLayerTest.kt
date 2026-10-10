@@ -96,8 +96,6 @@ class BoundaryLayerTest : BorrowsSharedWorlds() {
         val pressure = DoubleArray(columns * rows) { half.seaLevelPressurePa(it, columns) }
         val gradient = operators.gradient(pressure)
         val gradientNorth = operators.northAtCenters(gradient)
-        val seaDrag = PressureWind.surfaceDrag(PressureWind.CROSS_ISOBAR_SEA_DEGREES).toDouble()
-        val landDrag = PressureWind.surfaceDrag(PressureWind.CROSS_ISOBAR_LAND_DEGREES).toDouble()
         val density = PressureWind.AIR_DENSITY_KG_PER_M3.toDouble()
         var worst = 0.0
         // The zonal mean's northward gradient is the trapezoid rule's between rows, so it is read at
@@ -106,15 +104,17 @@ class BoundaryLayerTest : BorrowsSharedWorlds() {
             val coriolis = PressureWind.coriolisParameter(ClimateStage.latitudeOf(row, rows)).toDouble()
             val beltEast = half.beltEastwardMps[row].toDouble()
             val beltNorth = -half.beltSouthwardMps[row].toDouble()
-            val push = seaDrag * beltEast - coriolis * beltNorth
+            val beltDrag = PressureWind.beltDrag(half.beltEastwardMps[row], half.beltSouthwardMps[row])
+            val push = beltDrag * beltEast - coriolis * beltNorth
             // The trapezoid's own zonal-mean gradient at this row: the mean of the faces either side.
             val zonalNorth = (half.zonalPressurePa[row - 1] - half.zonalPressurePa[row + 1]) / (2 * grid.rowSpacingMeters)
-            val exactZonalNorth = -density * (seaDrag * beltNorth + coriolis * beltEast)
+            val exactZonalNorth = -density * (beltDrag * beltNorth + coriolis * beltEast)
             for (column in 0 until columns) {
                 val cell = row * columns + column
-                val drag = if (world.sea.isLand[cell]) landDrag else seaDrag
                 val east = half.eastwardMps[cell].toDouble()
                 val north = -half.southwardMps[cell].toDouble()
+                // The bulk stress's drag at the cell's own speed, which the balance was solved for.
+                val drag = BoundaryLayer.surfaceDragPerSecond(world.sea.isLand[cell], sqrt(east * east + north * north))
                 // The eddies' gradient here, and the zonal mean's as the wind was built with it.
                 val eddyNorth = gradientNorth[cell] - zonalNorth
                 val pressureNorth = eddyNorth + exactZonalNorth

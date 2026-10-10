@@ -5,9 +5,9 @@ import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldScale
 import kotlin.math.PI
 import kotlin.math.abs
-import kotlin.math.atan
+import kotlin.math.atan2
 import kotlin.math.sin
-import kotlin.math.tan
+import kotlin.math.sqrt
 
 /**
  * The surface wind that blows down the sea-level pressure's gradient, and the figures the balance
@@ -24,22 +24,6 @@ import kotlin.math.tan
  * wind a control.
  */
 internal object PressureWind {
-
-    /**
-     * The angle the surface wind crosses the isobars by, over the sea, in degrees.
-     *
-     * Friction at the surface takes a bite out of the wind, the Coriolis force that was balancing
-     * the pressure gradient weakens with it, and the balance tips toward low pressure. Holton &
-     * Hakim give the observed cross-isobar angle as 10-20 degrees over the ocean and 25-45 over
-     * land; Ekman's own 1905 boundary-layer solution gives 45 degrees for the flow right at the
-     * surface, which the depth-averaged wind never reaches. The two figures here are the middle of
-     * the range this chunk was specified against — 20-30 over sea, larger over land — and of
-     * Holton & Hakim's land range.
-     */
-    const val CROSS_ISOBAR_SEA_DEGREES = 25f
-
-    /** See [CROSS_ISOBAR_SEA_DEGREES]: rougher ground, a deeper boundary layer, a bigger turn. */
-    const val CROSS_ISOBAR_LAND_DEGREES = 40f
 
     /**
      * The speed of the belts, in metres a second, so the pressure departure can be added to them.
@@ -97,21 +81,15 @@ internal object PressureWind {
         2f * WorldScale.ROTATION_RATE_PER_S * sin(latitudeDegrees * DEGREES_TO_RADIANS).toFloat()
 
     /**
-     * The linear surface drag, in radians a second, that turns the wind across the isobars by
-     * [crossIsobarDegrees].
-     *
-     * The turn comes out of the balance in [surfaceWind] as `atan(drag / f)`, so a drag fixed at
-     * `f * tan(angle)` for one reference latitude gives that angle there and rather more of a turn
-     * toward the poles, where `f` is larger — which is the wrong way round from the observations,
-     * but only mildly so, and the alternative of scaling the drag with latitude would make the
-     * drag vanish at the equator along with `f` and take the tropical limit with it. Evaluated at
-     * [ROSSBY_REFERENCE_LATITUDE_DEGREES], the two angles give drag timescales `1/k` of 5.8 hours
-     * over sea and 3.2 over land, both inside the few hours a boundary layer takes to spin down.
+     * The drag on the boundary layer's wind over land or the sea at the belts' speed, per second:
+     * the surface's stress on the layer's mass, one law for the surface wind's balance here and the
+     * dry model's lowest level ([BoundaryLayer.surfaceDragPerSecond]).
      */
-    fun surfaceDrag(crossIsobarDegrees: Float): Float {
-        val coriolisAt45 = coriolisParameter(ROSSBY_REFERENCE_LATITUDE_DEGREES.toFloat())
-        return coriolisAt45 * tan(crossIsobarDegrees * DEGREES_TO_RADIANS).toFloat()
-    }
+    fun surfaceDrag(isLand: Boolean): Double = BoundaryLayer.surfaceDragPerSecond(isLand)
+
+    /** The sea's drag under the belts' own wind on a row, [eastwardMps] by [southwardMps], per second. */
+    fun beltDrag(eastwardMps: Float, southwardMps: Float): Double =
+        BoundaryLayer.surfaceDragPerSecond(false, sqrt(eastwardMps.toDouble() * eastwardMps + southwardMps.toDouble() * southwardMps))
 
     /** A surface wind as two components in metres a second, eastward and southward, per cell. */
     class Vectors(val eastwardMps: FloatArray, val southwardMps: FloatArray)
@@ -122,17 +100,23 @@ internal object PressureWind {
      * the map), on top of the belts' zonal-mean wind, [beltEastwardMps] and [beltSouthwardMps]
      * (metres a second, one each per row of the map), which set the zonal mean's own pressure.
      *
-     * The balance solved at every cell is the momentum equation with a linear drag — the standard
-     * damped surface-layer form, and the one Gill and Matsuno use for exactly this job of getting
-     * a surface wind out of a tropical pressure field without the geostrophic relation blowing up:
+     * The balance solved at every cell is the momentum equation with a drag — the standard damped
+     * surface-layer form, and the one Gill and Matsuno use for exactly this job of getting a surface
+     * wind out of a tropical pressure field without the geostrophic relation blowing up:
      *
      * ```
      * k u - f v = -(1/rho) dp/dx + F
      * k v + f u = -(1/rho) dp/dy
      * ```
      *
-     * with `f` the Coriolis parameter from latitude and `k` the drag from [surfaceDrag]. Its
-     * solution is one pair of expressions that covers the whole map:
+     * with `f` the Coriolis parameter from latitude and `k` the drag: the well-mixed layer's
+     * momentum budget under the surface's bulk stress (de Roode and Siebesma 2020, their equations
+     * 3, 4, 8 and 10, the mixed layer of Stevens and others 2002), `k = c s` with `c` the stress's
+     * drag per unit of speed ([BoundaryLayer.dragPerSpeed]) and `s` the speed the stress feels,
+     * `sqrt(|V|^2 + U_t^2)` with the weather's gusts `U_t`. The speed is the wind's own, so the
+     * balance is solved for it first: with `|G|` the acceleration's size, `|V| = |G| / sqrt(f^2 +
+     * k^2)` is a quadratic in `|V|^2`, `c^2 |V|^4 + (f^2 + c^2 U_t^2) |V|^2 - |G|^2 = 0`, whose
+     * positive root is exact. Then the solution is one pair of expressions that covers the whole map:
      *
      * ```
      * u = (k Gx + f Gy) / (k^2 + f^2)      v = (k Gy - f Gx) / (k^2 + f^2)
@@ -145,16 +129,17 @@ internal object PressureWind {
      * what is left is a flow straight down the gradient from high to low. **That is the tropical
      * limit, and it is why there is no division by `f` and no special case at the equator.**
      *
-     * **The zonal mean.** Its pressure gradient is the belts' own under the sea's drag,
-     * `-(1/rho) dp/dy = k v + f u` ([BoundaryLayer.zonalPressurePa] integrates it), and `F`, the
+     * **The zonal mean.** Its pressure gradient is the belts' own under the sea's drag at the
+     * belts' speed ([beltDrag]), `-(1/rho) dp/dy = k v + f u` ([BoundaryLayer.zonalPressurePa]
+     * integrates it), and `F`, the
      * eastward push `k u - f v` the belts need, is what holds their zonal wind against the drag
      * where no zonal pressure gradient can: on Earth that is the eddies' convergence of westerly
      * momentum in the westerlies and its divergence from the trades, which no mean pressure
      * carries. With both, the open sea's wind under no eddy pressure is the belts exactly, and a
      * coast's land is slowed and turned more by its own larger drag.
      *
-     * Over land the drag is larger ([CROSS_ISOBAR_LAND_DEGREES]), so the wind there crosses the
-     * isobars at a steeper angle and blows further into the continent's thermal low than it would
+     * Over land the drag is larger ([BoundaryLayer.LAND_DRAG_COEFFICIENT]), so the wind there crosses
+     * the isobars at a steeper angle and blows further into the continent's thermal low than it would
      * over water — which is the monsoon reaching inland rather than running along the coast.
      */
     fun surfaceWind(
@@ -179,8 +164,9 @@ internal object PressureWind {
         val gradient = operators.gradient(DoubleArray(cellsAcross * cellsDown) { eddyPressurePa[it].toDouble() })
         val gradientNorthward = operators.northAtCenters(gradient)
 
-        val seaDrag = surfaceDrag(CROSS_ISOBAR_SEA_DEGREES).toDouble()
-        val landDrag = surfaceDrag(CROSS_ISOBAR_LAND_DEGREES).toDouble()
+        val seaPerSpeed = BoundaryLayer.dragPerSpeed(isLand = false)
+        val landPerSpeed = BoundaryLayer.dragPerSpeed(isLand = true)
+        val gustsSquared = BoundaryLayer.TRANSIENT_WIND_MPS * BoundaryLayer.TRANSIENT_WIND_MPS
         val density = AIR_DENSITY_KG_PER_M3.toDouble()
 
         parallelChunks(0, cellsDown) { startRow, endRow ->
@@ -188,13 +174,18 @@ internal object PressureWind {
                 val coriolis = coriolisParameter(ClimateStage.latitudeOf(row, cellsDown)).toDouble()
                 val beltEast = beltEastwardMps[row].toDouble()
                 val beltNorth = -beltSouthwardMps[row].toDouble()
-                val beltPush = seaDrag * beltEast - coriolis * beltNorth
-                val zonalPressurePush = seaDrag * beltNorth + coriolis * beltEast
+                val beltDrag = beltDrag(beltEastwardMps[row], beltSouthwardMps[row])
+                val beltPush = beltDrag * beltEast - coriolis * beltNorth
+                val zonalPressurePush = beltDrag * beltNorth + coriolis * beltEast
                 for (column in 0 until cellsAcross) {
                     val cell = row * cellsAcross + column
                     val accelerationEast = -gradient.eastAtCenters[cell] / density + beltPush
                     val accelerationNorth = -gradientNorthward[cell] / density + zonalPressurePush
-                    val drag = if (sea.isLand[cell]) landDrag else seaDrag
+                    val perSpeed = if (sea.isLand[cell]) landPerSpeed else seaPerSpeed
+                    val drag = perSpeed * sqrt(balancedSpeedSquared(
+                        accelerationEast * accelerationEast + accelerationNorth * accelerationNorth,
+                        coriolis * coriolis, perSpeed, gustsSquared
+                    ) + gustsSquared)
                     val inverseBalance = 1.0 / (drag * drag + coriolis * coriolis)
                     eastward[cell] = ((drag * accelerationEast + coriolis * accelerationNorth) * inverseBalance).toFloat()
                     // Southward is the negative of northward, because rows grow southward.
@@ -206,13 +197,26 @@ internal object PressureWind {
     }
 
     /**
-     * The cross-isobar turn a given drag produces at a latitude, in degrees — the figure
-     * [surfaceDrag] was built to deliver, read back out so a guard can measure the angle the code
-     * actually applied instead of restating the formula and drifting away from it.
+     * The square of the speed `s` at which `s^2 (f^2 + c^2 (s^2 + U_t^2)) = |G|^2`, the drag balance
+     * of an acceleration of size squared [accelerationSquared] under a Coriolis parameter squared
+     * [coriolisSquared], a drag per unit of speed [perSpeed] and gusts squared [gustsSquared]:
+     * the positive root of the quadratic in `s^2`, written so it keeps its digits when the drag is
+     * weak.
      */
-    fun crossIsobarDegreesAt(latitudeDegrees: Float, crossIsobarDegrees: Float): Float {
-        val coriolis = abs(coriolisParameter(latitudeDegrees))
-        if (coriolis == 0f) return 90f
-        return (atan(surfaceDrag(crossIsobarDegrees) / coriolis) / DEGREES_TO_RADIANS).toFloat()
+    private fun balancedSpeedSquared(accelerationSquared: Double, coriolisSquared: Double, perSpeed: Double, gustsSquared: Double): Double {
+        val linear = coriolisSquared + perSpeed * perSpeed * gustsSquared
+        val quadratic = perSpeed * perSpeed
+        if (accelerationSquared == 0.0) return 0.0
+        return 2.0 * accelerationSquared / (linear + sqrt(linear * linear + 4.0 * quadratic * accelerationSquared))
+    }
+
+    /**
+     * The angle the balance in [surfaceWind] turns the wind across the isobars by at a latitude,
+     * over land when [isLand], in degrees: `atan(k / |f|)`, read back from the drag the code
+     * applies so a guard measures what is used and not a copy of it.
+     */
+    fun crossIsobarDegreesAt(latitudeDegrees: Float, isLand: Boolean): Double {
+        val coriolis = abs(coriolisParameter(latitudeDegrees).toDouble())
+        return atan2(surfaceDrag(isLand), coriolis) / DEGREES_TO_RADIANS
     }
 }

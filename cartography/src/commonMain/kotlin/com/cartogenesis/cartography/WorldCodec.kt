@@ -130,6 +130,10 @@ object WorldCodec {
     /**
      * The only version this build reads or writes.
      *
+     * 25 because `climate.subtropicalDryness` left the settings: the subtropics' dryness is the
+     * solved atmosphere's descent, not a strength a reader states, and a format-24 file's setting
+     * would be read as nothing.
+     *
      * 24 because the climate's seasons became the calendar's: `climate.summerPrecipitation` and
      * `climate.winterPrecipitation` became `climate.julyHalfPrecipitation` and
      * `climate.januaryHalfPrecipitation`, the rain of April to September and of October to March,
@@ -307,7 +311,7 @@ object WorldCodec {
      * every cell-valued name took a `Cells` suffix. 3 was the container below with none of that, 2
      * the JSON text that preceded it; none of them opens.
      */
-    const val FORMAT_VERSION = 24
+    const val FORMAT_VERSION = 25
 
     private val MAGIC = byteArrayOf('C'.code.toByte(), 'G'.code.toByte(), 'W'.code.toByte(), 'D'.code.toByte())
 

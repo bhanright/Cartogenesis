@@ -9,12 +9,12 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
- * The boundary layer under the dry stationary waves, for each calendar half-year: the sea-level
+ * The boundary layer under the stationary waves, for each calendar half-year: the sea-level
  * pressure, the surface wind that pressure drives, and the vertical motion at the layer's top.
  *
- * **The dry atmosphere** is [StationaryWaveModel] on [LEVEL_COUNT] equal-mass levels about
+ * **The atmosphere** is [StationaryWaveModel] on [LEVEL_COUNT] equal-mass levels about
  * Jablonowski and Williamson's balanced basic state, on the atmosphere's own grid
- * ([SphericalGrid.forAtmosphere]). Two things force it, both departures from the zonal mean:
+ * ([SphericalGrid.forAtmosphere]). Three things force it, all departures from the zonal mean:
  *
  * - **The land and the sea.** The lower troposphere, every interface below Nakamura and Miyasaka's
  *   `sigma` of [SHALLOW_HEATING_TOP_SHARE], is relaxed toward the energy balance's own surface
@@ -25,9 +25,11 @@ import kotlin.math.sqrt
  *   weather noise, the altitude's lapse and the currents' anomaly are not the energy balance's and
  *   are not in it; the currents' warmth is the marine air's, a later chunk's (docs/TODO.md).
  * - **The terrain**, lifting the basic state's surface wind.
+ * - **The latent heat of the rain's condensation**, when the climate couples it to the march
+ *   ([Solver], [AtmosphereCoupling]), spread up each column by [latentHeatingShape].
  *
- * Both are carried down to the atmosphere's grid spread to a quarter of the deformation radius on
- * the ground ([WaveForcing.fromGround]). There is no latent heat yet.
+ * All are carried down to the atmosphere's grid spread to a quarter of the deformation radius on
+ * the ground ([WaveForcing.fromGround]).
  *
  * **The sea-level pressure** is the waves' own ([WaveResponse.surfacePressurePa]), carried up to the
  * map by its double Fourier series ([AtmosphereRemap.outputToGround]), on top of a zonal mean that is the
@@ -38,10 +40,9 @@ import kotlin.math.sqrt
  * the sea's ([PressureWind.surfaceWind]), so over the open sea its zonal mean is the belts exactly.
  *
  * **The vertical motion at the layer's top** ([boundaryLayerOmega]) is the surface wind's own mass
- * convergence over the model's lowest layer plus the terrain's lift under it: one boundary layer,
- * so the pressure, the wind and the vertical motion cannot disagree.
- *
- * Nothing here reads the rain, so nothing here is iterated with the march.
+ * convergence over the model's lowest layer plus the terrain's lift under it: one boundary layer
+ * under one drag ([surfaceDragPerSecond]), the model's lowest level's and the surface wind's, so
+ * the pressure, the wind and the vertical motion cannot disagree.
  */
 internal object BoundaryLayer {
 
@@ -107,15 +108,86 @@ internal object BoundaryLayer {
     }
 
     /**
+     * The surface's drag coefficient over the sea at 10 m, Large and Pond's 1.2e-3, as the ocean's
+     * stress takes it ([WaveDamping.SURFACE_DRAG_COEFFICIENT]).
+     */
+    const val SEA_DRAG_COEFFICIENT = WaveDamping.SURFACE_DRAG_COEFFICIENT
+
+    /**
+     * The surface's drag coefficient over land at 10 m: the neutral logarithmic profile over
+     * FAO-56's reference surface, `(k / ln((z - d) / z_om))^2` with its grass of 0.12 m, the
+     * displacement `d = 2/3 h`, the momentum roughness `z_om = 0.123 h` and von Karman's `k` of
+     * 0.41 (Allen and others 1998, equation 4 and its Box 4), read at the 10 m the sea's figure is
+     * stated at. About 4.0e-3, 3.3 times the sea's: short grass, the smoothest land, so a floor on
+     * the land's drag and not its mean.
+     */
+    val LAND_DRAG_COEFFICIENT: Double = run {
+        val displacementM = 2.0 / 3.0 * FAO_GRASS_HEIGHT_M
+        val roughnessM = FAO_ROUGHNESS_PER_HEIGHT * FAO_GRASS_HEIGHT_M
+        val profile = VON_KARMAN / ln((DRAG_HEIGHT_M - displacementM) / roughnessM)
+        profile * profile
+    }
+
+    /** FAO-56's reference grass height, its momentum roughness per height and von Karman's constant. */
+    private const val FAO_GRASS_HEIGHT_M = 0.12
+    private const val FAO_ROUGHNESS_PER_HEIGHT = 0.123
+    private const val VON_KARMAN = 0.41
+
+    /** The height both drag coefficients are stated at, meters. */
+    private const val DRAG_HEIGHT_M = 10.0
+
+    /**
+     * The boundary layer's thickness, pascals: the dry model's lowest layer, the mass the surface's
+     * stress acts on in both the model and the surface wind's balance.
+     */
+    const val LAYER_THICKNESS_PA = AtmosphereLevels.REFERENCE_SURFACE_PRESSURE_PA / LEVEL_COUNT
+
+    /**
+     * The bulk stress's drag on the boundary layer per meter a second of the wind's scalar speed,
+     * per second per meter a second, over land when [isLand]: `rho C_D g / dp`, the surface's
+     * stress `rho C_D s V` (Large and Pond's form) spread over the layer's mass.
+     */
+    fun dragPerSpeed(isLand: Boolean): Double {
+        val coefficient = if (isLand) LAND_DRAG_COEFFICIENT else SEA_DRAG_COEFFICIENT
+        return PressureWind.AIR_DENSITY_KG_PER_M3 * coefficient * DryAir.GRAVITY_MPS2 / LAYER_THICKNESS_PA
+    }
+
+    /**
+     * The one drag on the boundary layer's wind, per second, over land when [isLand], under a
+     * half-year's mean wind of [meanSpeedMps]: the surface's bulk stress `rho C_D s V` on the
+     * layer's mass, `k = rho C_D s g / dp`, with `s` the scalar speed the stress feels, the mean
+     * wind and the weather's gusts in quadrature ([TRANSIENT_WIND_MPS]), as the sea's evaporation
+     * reads it ([scalarWindAt10mMps]).
+     *
+     * This is the well-mixed layer's momentum budget (de Roode and Siebesma 2020, equations 3, 4,
+     * 8 and 10, read; the mixed layer of Stevens and others 2002), whose cross-isobaric transport
+     * is the surface stress over `rho f`, so its Ekman pumping is the stress's curl over `rho f`
+     * (their equation 7) whatever depth the layer is given. The stress is quadratic in the wind,
+     * so a fast wind is held harder than the belts' and the drag is the bulk law's own at every
+     * speed. The surface wind's balance ([PressureWind.surfaceWind], at each cell's own speed) and
+     * the dry model's lowest level ([damping], at its row's belts) both read it: one layer, one
+     * drag. At the belts' 7.5 m/s, 1.2 days over the sea and 8.5 hours over land at eight levels.
+     *
+     * Not in it: the entrainment of the free troposphere's momentum at the layer's top, their
+     * `w_e`, which de Roode and Siebesma find halves the tropics' Ekman pumping (docs/TODO.md).
+     */
+    fun surfaceDragPerSecond(isLand: Boolean, meanSpeedMps: Double = PressureWind.BELT_SPEED_MPS.toDouble()): Double =
+        dragPerSpeed(isLand) * sqrt(meanSpeedMps * meanSpeedMps + TRANSIENT_WIND_MPS * TRANSIENT_WIND_MPS)
+
+    /**
      * How much slower the 10 m wind is over land than over the sea under the same weather, as a
      * share: Archer and Jacobson's land over ocean, 3.28 over 6.64, less the part the drag balance
-     * already gives land through its larger turn, `cos(40) / cos(25)` of the sea's speed at 45
-     * degrees ([PressureWind.CROSS_ISOBAR_LAND_DEGREES]). What is left is the land's roughness
-     * holding the 10 m wind under the boundary layer's, 0.58.
+     * already gives land through its larger drag, `sqrt((f^2 + k_sea^2) / (f^2 + k_land^2))` of the
+     * sea's speed at 45 degrees ([surfaceDragPerSecond]). What is left is the land's roughness
+     * holding the 10 m wind under the boundary layer's.
      */
-    val LAND_ROUGHNESS_SHARE: Double =
-        EARTH_LAND_WIND_AT_10_M_MPS / EARTH_OCEAN_WIND_AT_10_M_MPS /
-            (cos(PressureWind.CROSS_ISOBAR_LAND_DEGREES * PI / 180.0) / cos(PressureWind.CROSS_ISOBAR_SEA_DEGREES * PI / 180.0))
+    val LAND_ROUGHNESS_SHARE: Double = run {
+        val coriolis = PressureWind.coriolisParameter(45f).toDouble()
+        val sea = surfaceDragPerSecond(isLand = false)
+        val land = surfaceDragPerSecond(isLand = true)
+        val balanceShare = sqrt((coriolis * coriolis + sea * sea) / (coriolis * coriolis + land * land))
+        EARTH_LAND_WIND_AT_10_M_MPS / EARTH_OCEAN_WIND_AT_10_M_MPS / balanceShare
+    }
 
     /**
      * The mean speed of the wind at 10 m, meters a second, for a cell whose half-year mean wind is
@@ -149,8 +221,10 @@ internal object BoundaryLayer {
         /** The surface wind, row-major on the map, meters a second. */
         val eastwardMps: FloatArray,
         val southwardMps: FloatArray,
-        /** The dry atmosphere's whole response on its own grid. */
-        val response: WaveResponse
+        /** The atmosphere's whole response on its own grid. */
+        val response: WaveResponse,
+        /** The column's latent heating it was solved under, watts per square meter on its grid, or none. */
+        val latentHeatingWPerM2: DoubleArray? = null
     ) {
         /** The sea-level pressure at a map [cell] of a map [columns] wide, pascals. */
         fun seaLevelPressurePa(cell: Int, columns: Int): Double = zonalPressurePa[cell / columns] + eddyPressurePa[cell]
@@ -172,10 +246,11 @@ internal object BoundaryLayer {
     }
 
     /**
-     * Solves both calendar halves for a world: [sea] for the land, the coast and the terrain,
-     * [zonal] and [marineFraction] for the surface temperature the energy balance gives each cell,
-     * and each half's belts on the map's rows, eastward and southward in meters a second
-     * ([julyHalfBelts], [januaryHalfBelts]). The model is factored once for both.
+     * Solves both calendar halves for a world without latent heat, the dry atmosphere the ocean's
+     * stress reads and the climate's coupling starts from: [sea] for the land, the coast and the
+     * terrain, [zonal] and [marineFraction] for the surface temperature the energy balance gives
+     * each cell, and each half's belts on the map's rows, eastward and southward in meters a second
+     * ([julyHalfBelts], [januaryHalfBelts]). Each wave is factored once for both halves and let go.
      */
     fun solve(
         config: WorldGenConfig,
@@ -184,22 +259,67 @@ internal object BoundaryLayer {
         marineFraction: FloatField,
         julyHalfBelts: PressureWind.Vectors,
         januaryHalfBelts: PressureWind.Vectors
-    ): Atmosphere {
-        val cellsAcross = config.width
-        val cellsDown = config.height
-        val coarse = SphericalGrid.forAtmosphere(config.scale)
-        val remap = AtmosphereRemap(cellsAcross, cellsDown, coarse)
-        val levels = AtmosphereLevels.equalMass(LEVEL_COUNT)
-        val state = ZonalBasicState.jablonowskiWilliamson(coarse, levels)
-        val model = StationaryWaveModel(state, damping(levels, state.surfaceDensity))
+    ): Atmosphere = Solver(config, sea, zonal, marineFraction, julyHalfBelts, januaryHalfBelts, keepFactors = false).solve(null, null)
 
-        val heightMeters = FloatArray(cellsAcross * cellsDown) { cell ->
-            if (sea.isLand[cell]) config.scale.metresAboveShoreline(sea.relativeElevation.data[cell]).coerceAtLeast(0f) else 0f
+    /**
+     * One world's boundary layer, ready to be solved for any latent heating: everything that does
+     * not depend on the rain, built once. The basic state and the drag are the same in both
+     * calendar halves, so with [keepFactors] every wave is factored once here and each solve after
+     * is a back-substitution, two a coupling lap; without it each solve factors afresh and keeps
+     * nothing (about 700 MB of factors on Earth's planet at eight levels).
+     */
+    class Solver(
+        val config: WorldGenConfig,
+        val sea: SeaLevelResult,
+        zonal: ZonalClimate,
+        marineFraction: FloatField,
+        private val julyHalfBelts: PressureWind.Vectors,
+        private val januaryHalfBelts: PressureWind.Vectors,
+        keepFactors: Boolean
+    ) {
+        private val cellsAcross = config.width
+        private val cellsDown = config.height
+        val coarse: SphericalGrid = SphericalGrid.forAtmosphere(config.scale)
+        val remap = AtmosphereRemap(cellsAcross, cellsDown, coarse)
+        val levels: AtmosphereLevels = AtmosphereLevels.equalMass(LEVEL_COUNT)
+        private val state = ZonalBasicState.jablonowskiWilliamson(coarse, levels)
+
+        /**
+         * Each coarse row's drag on the lowest level: the row's mean of the map's by area, land's and
+         * the sea's, each at the speed of its row's belts over the two halves, the root mean square
+         * (the model's basic state is the same in both).
+         */
+        val dragOfRow: DoubleArray = run {
+            val ground = FloatArray(cellsAcross * cellsDown) { cell ->
+                val row = cell / cellsAcross
+                val squared = 0.5 * (julyHalfBelts.eastwardMps[row].squared() + julyHalfBelts.southwardMps[row].squared() +
+                    januaryHalfBelts.eastwardMps[row].squared() + januaryHalfBelts.southwardMps[row].squared())
+                surfaceDragPerSecond(sea.isLand[cell], sqrt(squared)).toFloat()
+            }
+            val mean = remap.areaMean(ground)
+            DoubleArray(coarse.rows) { row ->
+                var sum = 0.0
+                for (column in 0 until coarse.columns) sum += mean[row * coarse.columns + column]
+                sum / coarse.columns
+            }
         }
-        val terrain = WaveForcing.fromGround(remap, levels, null, heightMeters) { 0.0 }.surfaceHeightMeters!!
-        val widthInRows = WaveForcing.groundWidthInRows(remap)
-        val rates = shallowRelaxationPerSecond(levels)
-        fun forcing(season: Season): WaveForcing {
+        val model = StationaryWaveModel(state, damping(levels, dragOfRow))
+        private val widthInRows = WaveForcing.groundWidthInRows(remap)
+
+        /** The terrain on the atmosphere's grid in meters, spread as the model reads it. */
+        val terrain: DoubleArray = run {
+            val heightMeters = FloatArray(cellsAcross * cellsDown) { cell ->
+                if (sea.isLand[cell]) config.scale.metresAboveShoreline(sea.relativeElevation.data[cell]).coerceAtLeast(0f) else 0f
+            }
+            WaveForcing.fromGround(remap, levels, null, heightMeters) { 0.0 }.surfaceHeightMeters!!
+        }
+
+        /**
+         * One half's surface temperature at sea level on the atmosphere's grid, degrees Celsius:
+         * the energy balance's blend of its band's land and marine columns, which the shallow
+         * heating relaxes toward and the latent heating's profile is read from.
+         */
+        private fun surfaceCoarseC(zonal: ZonalClimate, marineFraction: FloatField, season: Season): DoubleArray {
             val surfaceC = FloatArray(cellsAcross * cellsDown)
             for (row in 0 until cellsDown) {
                 val latitude = ClimateStage.latitudeOf(row, cellsDown)
@@ -210,42 +330,179 @@ internal object BoundaryLayer {
                     surfaceC[cell] = landC + (seaC - landC) * marineFraction.data[cell]
                 }
             }
-            val surfaceCoarse = remap.forcing(surfaceC, widthInRows)
+            return remap.forcing(surfaceC, widthInRows)
+        }
+
+        private val julySurfaceC = surfaceCoarseC(zonal, marineFraction, Season.JULY_HALF)
+        private val januarySurfaceC = surfaceCoarseC(zonal, marineFraction, Season.JANUARY_HALF)
+        private val shallowRates = shallowRelaxationPerSecond(levels)
+        private val factored: StationaryWaveModel.Factored? = if (keepFactors) model.factorize() else null
+
+        /**
+         * The forcing of one half: the shallow land-sea heating toward [surfaceC], plus
+         * [latentWPerM2] (the column's latent heating on the atmosphere's grid, watts per square
+         * meter, or none) spread up the column by [latentHeatingShape], and the terrain.
+         */
+        private fun forcing(surfaceC: DoubleArray, latentWPerM2: DoubleArray?): WaveForcing {
+            val latent = latentWPerM2?.let { latentHeatingKelvinPerSecond(levels, it, surfaceC) }
             val heating = Array(levels.interiorCount) { interior ->
-                DoubleArray(coarse.cellCount) { surfaceCoarse[it] * rates[interior] }
+                DoubleArray(coarse.cellCount) { cell ->
+                    surfaceC[cell] * shallowRates[interior] + (latent?.get(interior)?.get(cell) ?: 0.0)
+                }
             }
             return WaveForcing(heating, terrain)
         }
-        val (julyResponse, januaryResponse) = model.solveEach(listOf(forcing(Season.JULY_HALF), forcing(Season.JANUARY_HALF)))
 
-        fun half(response: WaveResponse, belts: PressureWind.Vectors): Half {
+        /**
+         * Both halves under the latent heating [julyLatentWPerM2] and [januaryLatentWPerM2], each
+         * the column's heating on the atmosphere's grid in watts per square meter (none for the
+         * dry atmosphere).
+         */
+        fun solve(julyLatentWPerM2: DoubleArray?, januaryLatentWPerM2: DoubleArray?): Atmosphere {
+            val forcings = listOf(forcing(julySurfaceC, julyLatentWPerM2), forcing(januarySurfaceC, januaryLatentWPerM2))
+            val responses = factored?.let { factors -> forcings.map { factors.solve(it) } } ?: model.solveEach(forcings)
+            return Atmosphere(
+                remap, levels, state.surfaceDensity, terrain,
+                half(responses[0], julyHalfBelts, julyLatentWPerM2), half(responses[1], januaryHalfBelts, januaryLatentWPerM2)
+            )
+        }
+
+        private fun half(response: WaveResponse, belts: PressureWind.Vectors, latentWPerM2: DoubleArray?): Half {
             val eddyCoarse = response.surfacePressurePa
             val eddyGround = remap.outputToGround(eddyCoarse)
             val wind = PressureWind.surfaceWind(config, sea, eddyGround, belts.eastwardMps, belts.southwardMps)
             return Half(
                 belts.eastwardMps, belts.southwardMps,
                 zonalPressurePa(cellsDown, config.scale.radiusMeters, belts.eastwardMps, belts.southwardMps),
-                eddyCoarse, eddyGround, wind.eastwardMps, wind.southwardMps, response
+                eddyCoarse, eddyGround, wind.eastwardMps, wind.southwardMps, response, latentWPerM2
             )
         }
-        return Atmosphere(
-            remap, levels, state.surfaceDensity, terrain,
-            half(julyResponse, julyHalfBelts), half(januaryResponse, januaryHalfBelts)
+    }
+
+    /**
+     * The dry model's damping: [WaveDamping.forWorlds]'s free atmosphere and mixing, the shallow
+     * relaxation's rate added to the interfaces it heats (relaxing toward the surface is a cooling
+     * toward it as much as a heating), and in place of its one surface stress the boundary layer's
+     * own drag on the lowest level, row by row ([dragOfRow], the map's [surfaceDragPerSecond] by
+     * area), so the model's lowest layer and the surface wind's balance are one layer under one drag.
+     */
+    fun damping(levels: AtmosphereLevels, dragOfRow: DoubleArray): WaveDamping {
+        val base = WaveDamping.forWorlds(levels, PressureWind.AIR_DENSITY_KG_PER_M3.toDouble())
+        return WaveDamping(
+            base.barotropicFrictionPerSecond, base.baroclinicFrictionPerSecond, base.thermalPerSecond,
+            base.mixingSquareMetersPerSecond, null, shallowRelaxationPerSecond(levels), dragOfRow
         )
     }
 
     /**
-     * The dry model's damping: [WaveDamping.forWorlds], with the shallow relaxation's rate added to
-     * the interfaces it heats, since relaxing toward the surface is a cooling toward it as much as a
-     * heating.
+     * The latent heating at each interior interface of [levels], kelvin a second, `[interface][cell]`,
+     * of a column heating [columnWPerM2] (watts per square meter, `L_v` times the condensation) over
+     * columns whose surface stands at [surfaceC] degrees Celsius at sea level: the column's mean
+     * heating rate `Q g / (c_p p_s)` spread up it by [latentHeatingShape], which holds the column's
+     * mass-weighted mean to it, so the area integral of the heating is the condensation's.
      */
-    fun damping(levels: AtmosphereLevels, surfaceDensity: Double): WaveDamping {
-        val base = WaveDamping.forWorlds(levels, surfaceDensity)
-        return WaveDamping(
-            base.barotropicFrictionPerSecond, base.baroclinicFrictionPerSecond, base.thermalPerSecond,
-            base.mixingSquareMetersPerSecond, base.levelFrictionPerSecond, shallowRelaxationPerSecond(levels)
-        )
+    fun latentHeatingKelvinPerSecond(levels: AtmosphereLevels, columnWPerM2: DoubleArray, surfaceC: DoubleArray): Array<DoubleArray> {
+        val perWatt = DryAir.GRAVITY_MPS2 / (DryAir.HEAT_CAPACITY_J_PER_KG_K * levels.surfacePressurePa)
+        val result = Array(levels.interiorCount) { DoubleArray(columnWPerM2.size) }
+        val shape = DoubleArray(levels.interiorCount)
+        for (cell in columnWPerM2.indices) {
+            latentHeatingShape(levels, surfaceC[cell], shape)
+            val columnRate = columnWPerM2[cell] * perWatt
+            for (interior in 0 until levels.interiorCount) result[interior][cell] = columnRate * shape[interior]
+        }
+        return result
     }
+
+    /**
+     * The latent heating's shape up a column whose surface stands at [surfaceC] degrees Celsius,
+     * one weight per interior interface of [levels] into [into], normalized so the column's
+     * mass-weighted mean is one (each interface standing for the mass between its levels).
+     *
+     * A half-sine in height from the cloud's base to the top of the condensing column. The base is
+     * the boundary layer's top, the model's lowest interior interface: the layer under it is the
+     * well-mixed boundary layer whose drag is the surface's ([surfaceDragPerSecond]), the
+     * subcloud layer of Stevens and others' (2002) mixed layer, which the air rises out of and
+     * condenses above, so the latent heat is released in the free troposphere and none at its
+     * base. The top is the height on the moist adiabat from the surface above which the saturated
+     * column holds [CONDENSING_TOP_SHARE] of its water ([ColumnWater.moistAdiabatHeights]), so the
+     * heating is deep over a warm column and shallow over a cold one, as the condensation it stands
+     * for is. On a column at 27 C the base is 1.3 km, the top 12.9 km and the peak 7.1 km, inside
+     * Schumacher, Houze and Kraucunas's (2004, section 3, read) heating maxima of 6.5 km for the
+     * tropics' mean stratiform share of 40% and 7.5 km at 70% (4.5 km for convective rain alone);
+     * at 10 C the top is 8.7 km and at 0 C 7.4 km.
+     *
+     * Heated at its base, the boundary layer's own top, the coupled loop does not settle: the
+     * heating there is spread over the whole lower layer the model's eight levels give it, its
+     * convergence feeds the march's column water back at a gain near one, and equatorial cells
+     * condense five kilowatts a square meter (docs/DESIGN_LEDGER.md, A1-5).
+     */
+    fun latentHeatingShape(levels: AtmosphereLevels, surfaceC: Double, into: DoubleArray) {
+        val position = ((surfaceC - SHAPE_TABLE_COLDEST_C) / SHAPE_TABLE_STEP_C).coerceIn(0.0, (SHAPE_TABLE_ROWS - 1).toDouble())
+        val below = position.toInt().coerceAtMost(SHAPE_TABLE_ROWS - 2)
+        val share = position - below
+        val table = shapeTable(levels)
+        val count = levels.interiorCount
+        for (interior in 0 until count) {
+            into[interior] = table[below * count + interior] * (1.0 - share) + table[(below + 1) * count + interior] * share
+        }
+    }
+
+    /**
+     * The share of a saturated column's water above the top of its latent heating: a thousandth.
+     * With it a column at 27 C, the warm tropical ocean's, peaks at Schumacher and others' 6.5 km
+     * (see [latentHeatingShape]); a round figure checked against theirs, not fitted to a guard.
+     */
+    const val CONDENSING_TOP_SHARE = 1.0e-3
+
+    /** The shape table's span and step in surface temperature, degrees Celsius. */
+    private const val SHAPE_TABLE_COLDEST_C = -80.0
+    private const val SHAPE_TABLE_STEP_C = 0.5
+    private const val SHAPE_TABLE_ROWS = 261
+
+    /** [latentHeatingShape]'s table for one set of levels and the levels it was built for. */
+    private class ShapeTable(val interfacePressuresPa: DoubleArray, val values: DoubleArray)
+
+    @kotlin.concurrent.Volatile
+    private var lastShapeTable: ShapeTable? = null
+
+    /** [latentHeatingShape]'s table for [levels], built once per set of levels. */
+    private fun shapeTable(levels: AtmosphereLevels): DoubleArray {
+        lastShapeTable?.let { cached -> if (cached.interfacePressuresPa.contentEquals(levels.interfacePressuresPa)) return cached.values }
+        val count = levels.interiorCount
+        val table = DoubleArray(SHAPE_TABLE_ROWS * count)
+        val pressuresKpa = DoubleArray(count) { levels.interiorPressurePa[it] / PASCALS_PER_KPA }
+        // The cloud's base: the boundary layer's top, the lowest interior interface.
+        val baseIndex = count - 1
+        for (entry in 0 until SHAPE_TABLE_ROWS) {
+            val surfaceC = SHAPE_TABLE_COLDEST_C + entry * SHAPE_TABLE_STEP_C
+            val adiabat = ColumnWater.moistAdiabatHeights(surfaceC, pressuresKpa, CONDENSING_TOP_SHARE)
+            val base = adiabat.heightsMeters[baseIndex]
+            var columnMean = 0.0
+            for (interior in 0 until count) {
+                val height = adiabat.heightsMeters[interior]
+                val weight = if (height > base && height < adiabat.topMeters) sin(PI * (height - base) / (adiabat.topMeters - base)) else 0.0
+                table[entry * count + interior] = weight
+                columnMean += weight * massShare(levels, interior)
+            }
+            if (columnMean <= 0.0) {
+                // A column too cold to condense above its boundary layer heats the interface above it alone.
+                table[entry * count + baseIndex - 1] = 1.0
+                columnMean = massShare(levels, baseIndex - 1)
+            }
+            for (interior in 0 until count) table[entry * count + interior] /= columnMean
+        }
+        lastShapeTable = ShapeTable(levels.interfacePressuresPa.copyOf(), table)
+        return table
+    }
+
+    /** The share of the column's mass interior interface [interior] of [levels] stands for: the mass between its two levels. */
+    private fun massShare(levels: AtmosphereLevels, interior: Int): Double =
+        (levels.levelPressurePa[interior + 1] - levels.levelPressurePa[interior]) / levels.surfacePressurePa
+
+    /** Pascals in a kilopascal. */
+    private const val PASCALS_PER_KPA = 1_000.0
+
+    private fun Float.squared(): Double = toDouble() * toDouble()
 
     /**
      * The rate each interior interface of [levels] relaxes toward the surface's temperature, per
@@ -274,10 +531,10 @@ internal object BoundaryLayer {
      * referred to [SEA_LEVEL_REFERENCE_PA] by area on the sphere.
      */
     fun zonalPressurePa(rows: Int, radiusMeters: Double, beltEastwardMps: FloatArray, beltSouthwardMps: FloatArray): DoubleArray {
-        val seaDrag = PressureWind.surfaceDrag(PressureWind.CROSS_ISOBAR_SEA_DEGREES).toDouble()
         val density = PressureWind.AIR_DENSITY_KG_PER_M3.toDouble()
         val northwardGradient = DoubleArray(rows) { row ->
             val coriolis = PressureWind.coriolisParameter(ClimateStage.latitudeOf(row, rows)).toDouble()
+            val seaDrag = PressureWind.beltDrag(beltEastwardMps[row], beltSouthwardMps[row])
             -density * (seaDrag * -beltSouthwardMps[row] + coriolis * beltEastwardMps[row])
         }
         val spacingMeters = radiusMeters * PI / rows
@@ -321,7 +578,25 @@ internal object BoundaryLayer {
     fun boundaryLayerOmega(atmosphere: Atmosphere, half: Half): BoundaryLayerOmega {
         val remap = atmosphere.remap
         val coarse = remap.coarse
-        val ground = SphericalGrid(remap.groundRows, remap.groundColumns, coarse.radiusMeters)
+        val convergence = convergenceOmegaPaPerSecond(atmosphere, half)
+        val (largeEast, largeNorth) = largeScaleWind(remap, half.eastwardMps, half.southwardMps)
+        val operators = SphericalOperators(coarse)
+        val slope = operators.gradient(atmosphere.surfaceHeightCoarseMeters)
+        val slopeNorth = operators.northAtCenters(slope)
+        val terrain = DoubleArray(coarse.cellCount) { cell ->
+            val climb = largeEast[cell] * slope.eastAtCenters[cell] + largeNorth[cell] * slopeNorth[cell]
+            -atmosphere.surfaceDensity * DryAir.GRAVITY_MPS2 * climb
+        }
+        return BoundaryLayerOmega(convergence, terrain)
+    }
+
+    /**
+     * [BoundaryLayerOmega.convergencePaPerSecond] alone: the surface wind's divergence on the map's
+     * grid times the layer's thickness, carried down as a forcing is.
+     */
+    fun convergenceOmegaPaPerSecond(atmosphere: Atmosphere, half: Half): DoubleArray {
+        val remap = atmosphere.remap
+        val ground = SphericalGrid(remap.groundRows, remap.groundColumns, remap.coarse.radiusMeters)
         val groundOperators = SphericalOperators(ground)
         val columns = remap.groundColumns
         // The northward wind on the map's faces between rows, the mean of the rows either side; the
@@ -336,16 +611,22 @@ internal object BoundaryLayer {
         val east = DoubleArray(half.eastwardMps.size) { half.eastwardMps[it].toDouble() }
         val divergence = groundOperators.divergence(SphericalOperators.Vector(east, northFaces))
         val convergence = remap.forcing(FloatArray(divergence.size) { divergence[it].toFloat() }, WaveForcing.groundWidthInRows(remap))
-        val (largeEast, largeNorth) = largeScaleWind(remap, half.eastwardMps, half.southwardMps)
-        val operators = SphericalOperators(coarse)
-        val slope = operators.gradient(atmosphere.surfaceHeightCoarseMeters)
-        val slopeNorth = operators.northAtCenters(slope)
         val layerPa = atmosphere.levels.thicknessPa[atmosphere.levels.levelCount - 1]
-        val terrain = DoubleArray(coarse.cellCount) { cell ->
-            val climb = largeEast[cell] * slope.eastAtCenters[cell] + largeNorth[cell] * slopeNorth[cell]
-            -atmosphere.surfaceDensity * DryAir.GRAVITY_MPS2 * climb
-        }
-        return BoundaryLayerOmega(DoubleArray(coarse.cellCount) { layerPa * convergence[it] }, terrain)
+        return DoubleArray(convergence.size) { layerPa * convergence[it] }
+    }
+
+    /**
+     * The large-scale vertical velocity at the boundary layer's top on the map, meters a second,
+     * positive up, row-major: the layer's own convergence ([convergenceOmegaPaPerSecond]) carried
+     * up, `w = -omega / (rho g)`. What the march's sinks read as the atmosphere's ascent and
+     * descent, with the ground's own climb over the terrain added cell by cell (`MoistureMarch`):
+     * the terrain's large-scale lift ([BoundaryLayerOmega.terrainPaPerSecond]) is that climb
+     * smoothed, so the ground's residual climb and it carried up would sum to the ground's whole.
+     */
+    fun groundAscentMps(atmosphere: Atmosphere, half: Half): FloatArray {
+        val omega = atmosphere.remap.outputToGround(convergenceOmegaPaPerSecond(atmosphere, half))
+        val perPascal = -1.0 / (PressureWind.AIR_DENSITY_KG_PER_M3 * DryAir.GRAVITY_MPS2)
+        return FloatArray(omega.size) { (omega[it] * perPascal).toFloat() }
     }
 
     /**

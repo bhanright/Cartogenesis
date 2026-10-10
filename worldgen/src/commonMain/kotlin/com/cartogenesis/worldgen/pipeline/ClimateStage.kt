@@ -368,49 +368,6 @@ object ClimateStage {
     private const val TRADE_BELT_EDGE_DEGREES = SurfaceBelts.TRADE_BELT_EDGE_DEGREES
     private const val WESTERLY_BELT_EDGE_DEGREES = SurfaceBelts.WESTERLY_BELT_EDGE_DEGREES
 
-    // The three bumps of [latitudeBandAt]'s rain-rate profile, each placed where the atmosphere
-    // actually puts it and each as wide as that feature really is. The ITCZ is not one of them:
-    // the march's transport gathers the trades' water into it and the convergence rains it, so a
-    // bump here would count the same rising air twice (docs/DESIGN_LEDGER.md, C1b). Read from the *thermal*
-    // equator, so the whole profile migrates with the season. A strength above zero encourages
-    // rain and below zero suppresses it; the subtropical high's strength is
-    // `ClimateConfig.subtropicalDryness`, because how arid a world's horse latitudes are is the
-    // one thing here worth a setting.
-
-    /** Descending, drying air: the horse latitudes, and every subtropical desert on Earth. */
-    private const val SUBTROPICAL_HIGH_DEGREES = 30f
-    private const val SUBTROPICAL_HIGH_WIDTH_DEGREES = 13f
-
-    /** The mid-latitude storm track, along the polar front. */
-    private const val STORM_TRACK_STRENGTH = 0.5f
-    private const val STORM_TRACK_DEGREES = 55f
-    private const val STORM_TRACK_WIDTH_DEGREES = 15f
-
-    /** The polar cell's descending air. A polar desert is a real thing, but a mild one. */
-    private const val POLAR_DRY_STRENGTH = 0.35f
-    private const val POLAR_DRY_WIDTH_DEGREES = 18f
-
-    /**
-     * The floor a circulation belt's factor on the rain's rates approaches where the
-     * subtropical high's descent outweighs the baseline: a twentieth.
-     *
-     * At the default dryness the profile goes negative across roughly 25 to 35 degrees, and the
-     * floor is what is left there. It is reached smoothly rather than by a clamp ([smoothFloor]):
-     * a clamp put a kink in the profile at the latitude where it bit, which drew the desert's
-     * edge straight along a row (docs/DESIGN_LEDGER.md, C1b). The figure itself has no Earth
-     * source; it stands until the atmosphere solves the descent it stands in for (docs/TODO.md).
-     */
-    private const val MIN_BAND = 0.05f
-
-    /**
-     * The most [seasonalBandSharpness] may sharpen a season's belts by.
-     *
-     * The ratio it computes runs away as the tilt approaches the width of the subtropical high,
-     * where the two offset bells barely overlap; four is well past any tilt a world would be given
-     * and keeps a nonsensical setting from erasing the belts entirely.
-     */
-    private const val MAX_BAND_SHARPNESS = 4f
-
     /**
      * The rain blur's radius on the ground, in kilometers: 93.75 km, one cell of a 128-wide grid
      * of the 12,000 km world, which is where it was set as a divisor of the map's width.
@@ -740,7 +697,9 @@ object ClimateStage {
         /** The glacial forcing, in degrees of global mean; zero is today's world. */
         globalCoolingC: Float = 0f,
         /** Filled with the march's water budget when handed in; see [moistureLedger]. */
-        ledger: MoistureLedger? = null
+        ledger: MoistureLedger? = null,
+        /** How the atmosphere's loop is started and relaxed; the defaults for every world. */
+        loop: CouplingStart = CouplingStart()
     ): SeasonalFields {
         val cellsAcross = config.width
         val cellsDown = config.height
@@ -807,47 +766,12 @@ object ClimateStage {
             )
         )
 
-        // The boundary layer's pressure and wind for each half-year, solved by the dry atmosphere
-        // over this world's land, sea and terrain. Null when the pressure term is off, which is
-        // what makes that setting a control rather than a near-miss: the belts are then the whole
-        // wind.
-        val atmosphere = if (climateConfig.pressureWinds) {
-            atmosphere(config, sea, zonal, marineFraction, globalCoolingC)
-        } else null
-
-        // Each half's wind in meters a second: the march carries its water along the zonal
-        // direction and across the rows at the meridional speed. The belts ride one thermal
-        // equator, in the northern hemisphere in the half about July and in the southern in the
-        // half about January.
+        // Each half's belts: the march carries its water along the zonal direction and across the
+        // rows at the meridional speed. The belts ride one thermal equator, in the northern
+        // hemisphere in the half about July and in the southern in the half about January.
         val slantRowsPerCell = slantRowsPerCell(config)
-        val julyHalfWind = seasonWind(
-            config, buildWind(cellsAcross, cellsDown, thermalEquatorDegrees(tiltDegrees, julyHalf = true), slantRowsPerCell),
-            atmosphere?.julyHalf
-        )
-        val januaryHalfWind = seasonWind(
-            config, buildWind(cellsAcross, cellsDown, thermalEquatorDegrees(tiltDegrees, julyHalf = false), slantRowsPerCell),
-            atmosphere?.januaryHalf
-        )
-
-        // The stored wind is the annual one: what the wind view means by "the prevailing wind".
-        // With the atmosphere it is the mean of the two halves' winds; without it, the belts about
-        // the geographic equator, every cell of a row the same.
-        val wind = if (atmosphere == null) {
-            buildWind(cellsAcross, cellsDown, thermalEquatorDegrees = 0f, slantRowsPerCell)
-        } else {
-            val annual = PressureWind.Vectors(
-                FloatArray(cellsAcross * cellsDown) {
-                    (julyHalfWind.totalMps.eastwardMps[it] + januaryHalfWind.totalMps.eastwardMps[it]) * 0.5f
-                },
-                FloatArray(cellsAcross * cellsDown) {
-                    (julyHalfWind.totalMps.southwardMps[it] + januaryHalfWind.totalMps.southwardMps[it]) * 0.5f
-                }
-            )
-            marchWindOf(
-                config, annual,
-                buildWind(1, cellsDown, thermalEquatorDegrees = 0f, slantRowsPerCell).zonalShareOfRow
-            )
-        }
+        val julyHalfBelts = buildWind(cellsAcross, cellsDown, thermalEquatorDegrees(tiltDegrees, julyHalf = true), slantRowsPerCell)
+        val januaryHalfBelts = buildWind(cellsAcross, cellsDown, thermalEquatorDegrees(tiltDegrees, julyHalf = false), slantRowsPerCell)
 
         // The marine inversion, a property of the season rather than of the parcel: where a cold
         // sea has put a stratus lid on the air. Null when its setting is off, so the march runs
@@ -868,6 +792,7 @@ object ClimateStage {
             waterC: FloatField,
             seaIce: BooleanArray,
             wind: SeasonWind,
+            ascentMps: FloatArray?,
             inversion: FloatField?
         ): MoistureMarch.Season {
             val totalWind = wind.totalMps
@@ -877,7 +802,7 @@ object ClimateStage {
             }
             // The wind's speed through every gust and calm, which the sea's evaporation and the
             // ground's potential read; the belts' control keeps the march's own scalar winds.
-            val solved = atmosphere != null
+            val solved = ascentMps != null
             val scalarAt10m = if (solved) FloatArray(cellsAcross * cellsDown) { cell ->
                 BoundaryLayer.scalarWindAt10mMps(totalWind.eastwardMps[cell], totalWind.southwardMps[cell], sea.isLand[cell])
             } else null
@@ -892,7 +817,7 @@ object ClimateStage {
                 southwardMps = totalWind.southwardMps,
                 scalarWindAt10mMps = scalarAt10m,
                 windAt2mMps = at2m,
-                beltRainFactorOfRow = bands(cellsDown, climateConfig, julyHalf),
+                largeScaleAscentMps = ascentMps,
                 inversionSuppression = inversion?.data,
                 extraterrestrialOfRow = DoubleArray(cellsDown) { row ->
                     SurfaceEvaporation.halfYearExtraterrestrialMjPerM2Day(
@@ -906,25 +831,76 @@ object ClimateStage {
                 config.scale.metresAboveShoreline(sea.relativeElevation.data[cell]).coerceAtLeast(0f)
             } else 0f
         }
+        // Both halves' seasons under a solved atmosphere, or under the belts alone when the
+        // pressure term is off: that setting is the control, with no pressure, no solved wind and
+        // no vertical motion, rather than a near-miss.
+        fun seasonsUnder(atmosphere: BoundaryLayer.Atmosphere?): Pair<MoistureMarch.Season, MoistureMarch.Season> {
+            val july = seasonWind(config, julyHalfBelts, atmosphere?.julyHalf)
+            val january = seasonWind(config, januaryHalfBelts, atmosphere?.januaryHalf)
+            return marchSeason(
+                true, julyHalfTemperature, julyHalfSeaSurface, julyHalfSeaIce, july,
+                atmosphere?.let { BoundaryLayer.groundAscentMps(it, it.julyHalf) }, julyHalfInversion
+            ) to marchSeason(
+                false, januaryHalfTemperature, januaryHalfSeaSurface, januaryHalfSeaIce, january,
+                atmosphere?.let { BoundaryLayer.groundAscentMps(it, it.januaryHalf) }, januaryHalfInversion
+            )
+        }
+
+        // The atmosphere over this world's land, sea and terrain, heated by the march's own
+        // condensation between its laps (AtmosphereCoupling).
+        val coupling = if (climateConfig.pressureWinds) {
+            AtmosphereCoupling(
+                BoundaryLayer.Solver(
+                    config, sea, zonal, marineFraction,
+                    beltWindOfRows(config, julyHalf = true), beltWindOfRows(config, julyHalf = false),
+                    keepFactors = true
+                ),
+                ::seasonsUnder,
+                loop.relaxation,
+                loop.depth,
+                loop.initialLatentWPerM2
+            )
+        } else null
+        val (firstJuly, firstJanuary) = coupling?.firstSeasons() ?: seasonsUnder(null)
         val marched = MoistureMarch.run(
             MoistureMarch.Inputs(
                 config = config,
                 isLand = sea.isLand,
                 relativeElevation = sea.relativeElevation.data,
                 elevationM = elevationM,
-                julyHalf = marchSeason(
-                    true, julyHalfTemperature, julyHalfSeaSurface, julyHalfSeaIce, julyHalfWind,
-                    julyHalfInversion
-                ),
-                januaryHalf = marchSeason(
-                    false, januaryHalfTemperature, januaryHalfSeaSurface, januaryHalfSeaIce,
-                    januaryHalfWind, januaryHalfInversion
-                ),
+                julyHalf = firstJuly,
+                januaryHalf = firstJanuary,
                 lidElevation = config.scale.reliefShareOfMetres(MoistureBudget.INVERSION_LID_METRES),
                 blurSigmaKm = RAIN_BLUR_SIGMA_KM
             ),
-            ledger
+            ledger,
+            coupling
         )
+        coupling?.release()
+        val atmosphere = coupling?.atmosphere
+        if (coupling != null) {
+            lastCoupled = CoupledAtmosphere(config, sea, ocean, globalCoolingC, coupling, marched)
+        }
+
+        // The stored wind is the annual one: what the wind view means by "the prevailing wind".
+        // With the atmosphere it is the mean of the two halves' winds the last lap ran on;
+        // without it, the belts about the geographic equator, every cell of a row the same.
+        val wind = if (atmosphere == null) {
+            buildWind(cellsAcross, cellsDown, thermalEquatorDegrees = 0f, slantRowsPerCell)
+        } else {
+            val annual = PressureWind.Vectors(
+                FloatArray(cellsAcross * cellsDown) {
+                    (atmosphere.julyHalf.eastwardMps[it] + atmosphere.januaryHalf.eastwardMps[it]) * 0.5f
+                },
+                FloatArray(cellsAcross * cellsDown) {
+                    (atmosphere.julyHalf.southwardMps[it] + atmosphere.januaryHalf.southwardMps[it]) * 0.5f
+                }
+            )
+            marchWindOf(
+                config, annual,
+                buildWind(1, cellsDown, thermalEquatorDegrees = 0f, slantRowsPerCell).zonalShareOfRow
+            )
+        }
 
         return SeasonalFields(
             temperature = temperature,
@@ -1183,15 +1159,6 @@ object ClimateStage {
                 temperature.data[cell] += ocean.anomaly.data[cell]
             }
         }
-    }
-
-    /**
-     * A normalised bump centred on [centreDegrees], [widthDegrees] degrees wide: 1 at the centre,
-     * falling to `1/e` one width away from it.
-     */
-    private fun bell(latitude: Float, centreDegrees: Float, widthDegrees: Float): Float {
-        val widthsFromCentre = (latitude - centreDegrees) / widthDegrees
-        return kotlin.math.exp(-(widthsFromCentre * widthsFromCentre).toDouble()).toFloat()
     }
 
     /**
@@ -1643,6 +1610,58 @@ object ClimateStage {
         return solved
     }
 
+    /**
+     * The climate's coupled atmosphere and what it was asked: the world's sea and ocean, and the
+     * march it was solved with. The factored waves are let go before this is kept.
+     */
+    internal class CoupledAtmosphere(
+        val config: WorldGenConfig,
+        val sea: SeaLevelResult,
+        val ocean: OceanResult,
+        val globalCoolingC: Float,
+        val coupling: AtmosphereCoupling,
+        val march: MoistureMarch.Result
+    )
+
+    @kotlin.concurrent.Volatile
+    private var lastCoupled: CoupledAtmosphere? = null
+
+    /**
+     * The atmosphere the climate of [sea] and [ocean] was coupled to, with its loop's history: the
+     * last one the climate solved when it was this world's, or the climate run again to make it.
+     * Null when the pressure term is off.
+     */
+    internal fun coupledAtmosphere(config: WorldGenConfig, sea: SeaLevelResult, ocean: OceanResult): CoupledAtmosphere? {
+        if (!config.climate.pressureWinds) return null
+        lastCoupled?.let { last ->
+            if (last.sea === sea && last.ocean === ocean && last.globalCoolingC == 0f && last.config == config) return last
+        }
+        seasonalFields(config, sea, ocean)
+        return lastCoupled
+    }
+
+    /**
+     * How the atmosphere's loop starts and steps: [relaxation], the acceleration's [depth] and the
+     * heating the first lap runs under ([AtmosphereCoupling]). Every world takes the defaults; the loop's tests hand others in.
+     */
+    internal class CouplingStart(
+        val relaxation: Double = AtmosphereCoupling.RELAXATION,
+        val depth: Int = AtmosphereCoupling.ACCELERATION_DEPTH,
+        val initialLatentWPerM2: Pair<DoubleArray, DoubleArray>? = null
+    )
+
+    /**
+     * The climate of [sea] and [ocean] coupled under [loop], for the loop's own tests: the coupled
+     * atmosphere it ends with. Not kept as the world's.
+     */
+    internal fun coupledAtmosphere(config: WorldGenConfig, sea: SeaLevelResult, ocean: OceanResult, loop: CouplingStart): CoupledAtmosphere? {
+        val kept = lastCoupled
+        seasonalFields(config, sea, ocean, loop = loop)
+        val made = lastCoupled
+        lastCoupled = kept
+        return made
+    }
+
     /** [atmosphere] for a world's own sea under today's energy balance. */
     internal fun atmosphere(config: WorldGenConfig, sea: SeaLevelResult): BoundaryLayer.Atmosphere =
         atmosphere(config, sea, zonalClimate(config, sea), marineAirFraction(config, sea))
@@ -1691,67 +1710,19 @@ object ClimateStage {
      *
      * Rebuilt rather than stored: only the annual wind is saved, and a guard that read the annual
      * wind would be asking a question about the year when the question is about July. It is a pure
-     * function of the configuration and the sea result ([atmosphere]), so the field it returns is
-     * the one the season's march actually followed.
+     * function of the configuration, the sea and the ocean ([coupledAtmosphere]), so the field it
+     * returns is the one the season's last lap followed.
      */
-    internal fun seasonalSurfaceWindMps(config: WorldGenConfig, sea: SeaLevelResult, season: Season): PressureWind.Vectors {
+    internal fun seasonalSurfaceWindMps(config: WorldGenConfig, sea: SeaLevelResult, ocean: OceanResult, season: Season): PressureWind.Vectors {
         val julyHalf = season == Season.JULY_HALF || season == Season.JULY
-        if (!config.climate.pressureWinds) {
+        val coupled = coupledAtmosphere(config, sea, ocean)
+        if (coupled == null) {
             val tiltDegrees = if (config.climate.seasons) config.climate.seasonalTiltDegrees else 0f
             val belts = buildWind(config.width, config.height, thermalEquatorDegrees(tiltDegrees, julyHalf), slantRowsPerCell(config))
             return beltWindMps(config, belts)
         }
-        val half = atmosphere(config, sea).half(julyHalf)
+        val half = coupled.coupling.atmosphere.half(julyHalf)
         return PressureWind.Vectors(half.eastwardMps, half.southwardMps)
-    }
-
-    /** The circulation belt each row sits in for a half-year, precomputed per row. */
-    private fun bands(cellsDown: Int, climate: ClimateConfig, julyHalf: Boolean): FloatArray =
-        FloatArray(cellsDown) { row -> seasonalBand(latitudeOf(row, cellsDown), climate, julyHalf) }
-
-    /**
-     * The belt factor the march applies at a latitude in one calendar half-year, the half about
-     * July when [julyHalf] — shifted with the thermal equator and sharpened.
-     *
-     * Exposed so a diagnostic can report the number that was actually applied rather than a copy
-     * of the formula that drifts away from it, which is what `DesertCauseTest`'s own copy had
-     * already done before seasons made the question harder.
-     */
-    internal fun seasonalBand(latitude: Float, climate: ClimateConfig, julyHalf: Boolean): Float {
-        val tiltDegrees = if (climate.seasons) climate.seasonalTiltDegrees else 0f
-        val fromThermalEquator = abs(latitude - thermalEquatorDegrees(tiltDegrees, julyHalf))
-        return latitudeBandAt(
-            fromThermalEquator,
-            climate.subtropicalDryness,
-            seasonalBandSharpness(tiltDegrees, climate.subtropicalDryness)
-        )
-    }
-
-    /**
-     * How much sharper an instantaneous circulation belt is than the annual mean of the belts.
-     *
-     * [latitudeBandAt]'s constants were measured against *annual* desert placement in a world that
-     * had no seasons, which makes them a description of the annual mean rather than of any moment
-     * in the year. Migrating the belts and averaging two marches computes that annual mean a
-     * second time, and two offset bells average to a profile roughly half as sharp as either —
-     * which lifts the horse latitudes out of the clamped, maximally arid span their deserts come
-     * from, and brings rain-shadow deserts back at the equator, precisely the regression the belt
-     * mechanism was introduced to prevent.
-     *
-     * So each season's anomaly is scaled by the factor that restores the annual mean at the
-     * subtropical high's own centre, which is the belt the deserts depend on. It is derived rather
-     * than chosen: at a tilt of zero it is exactly 1 and every band is the number it always was,
-     * which is what keeps `seasons = false` identical to the pre-seasons world down to the bit.
-     * See docs/DESIGN_LEDGER.md, A1, for what the unsharpened version measured.
-     */
-    private fun seasonalBandSharpness(tiltDegrees: Float, dryness: Float): Float {
-        val annual = bandAnomaly(SUBTROPICAL_HIGH_DEGREES, dryness)
-        val seasonal = (bandAnomaly(SUBTROPICAL_HIGH_DEGREES - tiltDegrees, dryness) +
-            bandAnomaly(SUBTROPICAL_HIGH_DEGREES + tiltDegrees, dryness)) * 0.5f
-        // Both are negative under any sane setting — the subtropics suppress rain. If a setting
-        // ever made them otherwise, leave the belts alone rather than invent a correction.
-        if (annual >= 0f || seasonal >= 0f) return 1f
-        return (annual / seasonal).coerceIn(1f, MAX_BAND_SHARPNESS)
     }
 
     /**
@@ -1764,54 +1735,6 @@ object ClimateStage {
         sea: SeaLevelResult,
         ocean: OceanResult
     ): MoistureLedger = MoistureLedger().also { seasonalFields(config, sea, ocean, ledger = it) }
-
-    /**
-     * How much the circulation belt speeds or slows the rain, at a given distance from the thermal
-     * equator: a multiplier on the rate of every sink the march charges (the column's rain, the
-     * cloud's conversion to rain and the convergence closure), 1 being an unremarkable latitude.
-     *
-     * Three bumps, each centred where the atmosphere actually puts it: the dry descending air of
-     * the horse latitudes near 30, the wet mid-latitude storm track near 55, and the polar cell's
-     * own dry descent at the pole. The march has no vertical motion of its own, so the descent is
-     * stated here, as a modulation of the rain's rates; the ascent at the ITCZ is not, because the
-     * transport gathers the trades' water there and the column's own humidity rains it.
-     *
-     * Taken from the *thermal* equator rather than the geographic one, which is what lets the
-     * whole system migrate with the season: the same row sits under the dry descending limb in
-     * one half of the year and under the storm track in the other, and that is the Mediterranean
-     * climate and the monsoon both.
-     */
-    internal fun latitudeBandAt(
-        fromThermalEquatorDegrees: Float,
-        subtropicalDryness: Float = 1.15f,
-        /** See [seasonalBandSharpness]. One leaves every band as it was. */
-        sharpness: Float = 1f
-    ): Float = smoothFloor(1f + sharpness * bandAnomaly(fromThermalEquatorDegrees, subtropicalDryness))
-
-    /**
-     * [value] where it stands well above [MIN_BAND], and a floor it approaches without a kink
-     * where it falls toward or below it: the larger root of `f^2 - value f - MIN_BAND^2 = 0`,
-     * `(value + sqrt(value^2 + 4 MIN_BAND^2)) / 2`, which is a hyperbola whose asymptotes are the
-     * value and zero. At a value of one it reads 1.0025, at zero `MIN_BAND`, at minus one 0.0025.
-     */
-    private fun smoothFloor(value: Float): Float =
-        ((value + sqrt(value * value + 4f * MIN_BAND * MIN_BAND)) * 0.5f)
-
-    /**
-     * The belts' departure from an unremarkable rain lifetime at a given distance from the
-     * thermal equator, which is what a season sharpens. The same three bumps as [latitudeBandAt],
-     * without its baseline of one and without its floor.
-     */
-    private fun bandAnomaly(fromThermalEquatorDegrees: Float, subtropicalDryness: Float): Float =
-        -subtropicalDryness * bell(
-            fromThermalEquatorDegrees,
-            SUBTROPICAL_HIGH_DEGREES,
-            SUBTROPICAL_HIGH_WIDTH_DEGREES
-        ) +
-            STORM_TRACK_STRENGTH *
-            bell(fromThermalEquatorDegrees, STORM_TRACK_DEGREES, STORM_TRACK_WIDTH_DEGREES) -
-            POLAR_DRY_STRENGTH *
-            bell(fromThermalEquatorDegrees, POLE_DEGREES, POLAR_DRY_WIDTH_DEGREES)
 
     /**
      * Biomes from six numbers rather than two.

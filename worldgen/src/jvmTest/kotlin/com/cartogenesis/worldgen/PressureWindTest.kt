@@ -2,6 +2,7 @@ package com.cartogenesis.worldgen
 
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
+import com.cartogenesis.worldgen.pipeline.BoundaryLayer
 import com.cartogenesis.worldgen.pipeline.ClimateStage
 import com.cartogenesis.worldgen.pipeline.PressureWind
 import com.cartogenesis.worldgen.pipeline.Season
@@ -154,18 +155,21 @@ class PressureWindTest : BorrowsSharedWorlds() {
     }
 
     @Test
-    fun `the Rossby radius and the Ekman turn are the figures they are derived from`() {
+    fun `the Rossby radius and the boundary layer's drag are the figures they are derived from`() {
         val rossbyKm = PressureWind.rossbyRadiusKm()
-        val seaTurnAt45 =
-            PressureWind.crossIsobarDegreesAt(45f, PressureWind.CROSS_ISOBAR_SEA_DEGREES)
-        val landTurnAt45 =
-            PressureWind.crossIsobarDegreesAt(45f, PressureWind.CROSS_ISOBAR_LAND_DEGREES)
-        val seaTurnAt15 =
-            PressureWind.crossIsobarDegreesAt(15f, PressureWind.CROSS_ISOBAR_SEA_DEGREES)
+        val seaTurnAt45 = PressureWind.crossIsobarDegreesAt(45f, isLand = false)
+        val landTurnAt45 = PressureWind.crossIsobarDegreesAt(45f, isLand = true)
+        val seaTurnAt15 = PressureWind.crossIsobarDegreesAt(15f, isLand = false)
+        val seaDrag = PressureWind.surfaceDrag(isLand = false)
+        val landDrag = PressureWind.surfaceDrag(isLand = true)
+        // The surface's bulk stress on the layer's mass at the belts' 7.5 m/s and the weather's
+        // gusts, from its figures written out here.
+        val gusts = BoundaryLayer.TRANSIENT_WIND_MPS
+        val stressRate = 1.225 * 1.2e-3 * sqrt(7.5 * 7.5 + gusts * gusts) * 9.80665 / (100_000.0 / BoundaryLayer.LEVEL_COUNT)
         println(
-            ("PRESSURE WIND: Rossby radius %.0f km, cross-isobar turn at 45 deg %.1f over sea and " +
-                "%.1f over land, at 15 deg %.1f over sea")
-                .format(rossbyKm, seaTurnAt45, landTurnAt45, seaTurnAt15)
+            ("PRESSURE WIND: Rossby radius %.0f km; the layer's drag %.2f days over sea and %.1f hours over land; " +
+                "cross-isobar turn at 45 deg %.1f over sea and %.1f over land, at 15 deg %.1f over sea")
+                .format(rossbyKm, 1 / seaDrag / 86_400, 1 / landDrag / 3_600, seaTurnAt45, landTurnAt45, seaTurnAt15)
         )
         assertTrue(
             rossbyKm > 900.0 && rossbyKm < 1_050.0,
@@ -173,14 +177,12 @@ class PressureWindTest : BorrowsSharedWorlds() {
                 "tropopause give"
         )
         assertTrue(
-            abs(seaTurnAt45 - PressureWind.CROSS_ISOBAR_SEA_DEGREES) < 0.1f &&
-                abs(landTurnAt45 - PressureWind.CROSS_ISOBAR_LAND_DEGREES) < 0.1f,
-            "the drag does not deliver its own angle at the latitude it was derived at: " +
-                "$seaTurnAt45 over sea and $landTurnAt45 over land"
+            abs(seaDrag / stressRate - 1) < 1e-9,
+            "the sea's drag is $seaDrag per second, not the surface's stress on the layer, $stressRate"
         )
         assertTrue(
-            seaTurnAt15 > seaTurnAt45,
-            "the turn does not widen toward the equator, where the Coriolis force weakens"
+            landDrag > seaDrag && seaTurnAt15 > seaTurnAt45 && landTurnAt45 > seaTurnAt45,
+            "the turn does not widen over land's rougher ground and toward the equator, where the Coriolis force weakens"
         )
     }
 
@@ -190,7 +192,7 @@ class PressureWindTest : BorrowsSharedWorlds() {
         // equator the Coriolis parameter is zero and the balance has nothing left but the drag, so
         // the flow must point straight from high pressure to low.
         val turnAtEquator =
-            PressureWind.crossIsobarDegreesAt(0f, PressureWind.CROSS_ISOBAR_SEA_DEGREES)
+            PressureWind.crossIsobarDegreesAt(0f, isLand = false)
         val coriolisAtEquator = PressureWind.coriolisParameter(0f)
         println(
             "PRESSURE WIND: Coriolis at the equator %.3e per second, cross-isobar turn %.1f deg"
@@ -198,7 +200,7 @@ class PressureWindTest : BorrowsSharedWorlds() {
         )
         assertTrue(coriolisAtEquator == 0f, "the Coriolis parameter is not zero at the equator")
         assertTrue(
-            turnAtEquator == 90f,
+            turnAtEquator == 90.0,
             "the equatorial wind turns $turnAtEquator degrees across the isobars, not the 90 that " +
                 "means straight down the gradient"
         )
@@ -510,10 +512,10 @@ class PressureWindTest : BorrowsSharedWorlds() {
 
     private fun onshoreFlow(world: WorldMap, continent: Continent): Onshore {
         val julyHalf = ClimateStage.seasonalSurfaceWindMps(
-            world.config, world.sea, Season.JULY_HALF
+            world.config, world.sea, world.ocean, Season.JULY_HALF
         )
         val januaryHalf = ClimateStage.seasonalSurfaceWindMps(
-            world.config, world.sea, Season.JANUARY_HALF
+            world.config, world.sea, world.ocean, Season.JANUARY_HALF
         )
         val cellsAcross = world.width
         val cellsDown = world.height

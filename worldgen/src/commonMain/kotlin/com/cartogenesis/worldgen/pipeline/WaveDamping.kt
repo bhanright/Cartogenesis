@@ -10,6 +10,10 @@ package com.cartogenesis.worldgen.pipeline
  * - **Extra friction or cooling at chosen levels**, [levelFrictionPerSecond] (one rate per level, the
  *   boundary layer's surface drag on the lowest) and [interfaceThermalPerSecond] (one per interior
  *   interface). These are not modal; [VerticalModes.rateOnMode] reports what they add to each mode.
+ * - **The surface's drag row by row**, [lowestLevelDragOfRow]: a rate on the lowest level's wind for
+ *   each row of the grid, the row's own mix of land's drag and the sea's (`BoundaryLayer`), added on
+ *   top of [levelFrictionPerSecond]. A rate that varies along a row would couple the zonal waves;
+ *   one per row keeps each wave its own system.
  * - **Mixing**, [mixingSquareMetersPerSecond]: Laplacian diffusion of vorticity, divergence and
  *   temperature, the scale-selective damping that keeps a critical line's response finite.
  *
@@ -26,7 +30,8 @@ class WaveDamping(
     val thermalPerSecond: Double,
     val mixingSquareMetersPerSecond: Double,
     val levelFrictionPerSecond: DoubleArray? = null,
-    val interfaceThermalPerSecond: DoubleArray? = null
+    val interfaceThermalPerSecond: DoubleArray? = null,
+    val lowestLevelDragOfRow: DoubleArray? = null
 ) {
     /** The momentum damping on [modes]' levels, `[level][level]`. */
     fun momentumMatrix(modes: VerticalModes): Array<DoubleArray> {
@@ -57,7 +62,8 @@ class WaveDamping(
         thermalPerSecond * factor,
         mixingSquareMetersPerSecond * factor,
         levelFrictionPerSecond?.let { rates -> DoubleArray(rates.size) { rates[it] * factor } },
-        interfaceThermalPerSecond?.let { rates -> DoubleArray(rates.size) { rates[it] * factor } }
+        interfaceThermalPerSecond?.let { rates -> DoubleArray(rates.size) { rates[it] * factor } },
+        lowestLevelDragOfRow?.let { rates -> DoubleArray(rates.size) { rates[it] * factor } }
     )
 
     companion object {

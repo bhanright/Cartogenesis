@@ -57,18 +57,27 @@ import kotlin.math.exp
  *   (2004) relation over the tropical oceans, `P = exp(11.4 (r - 0.522))` mm a day for monthly
  *   means ([columnRainMmPerDay]). It is the rate that sets the atmosphere's turnover: nothing
  *   here states a lifetime, and the one the world ends with is diagnosed (`RainAgainstEarthTest`).
- * - **Condensate.** Air carried up the ground condenses at Smith and Barstad's (2004) source,
- *   `C_w w` with `w` the wind's climb over the ground, on the saturated share of the column (its
- *   water over what it holds when its surface air saturates, [HOLDABLE_SHARE]); what the column
- *   cannot hold at all condenses too. The cloud turns to falling hydrometeors and falls out over
- *   their two delays, and evaporates again where the air descends before it has fallen. `C_w` is
- *   thermodynamics ([ColumnWater.upliftCondensationKgPerM3]), so the climb's rain has no strength
- *   of its own to set.
+ * - **Condensate.** Rising air condenses at Smith and Barstad's (2004) source, `C_w w`, on the
+ *   saturated share of the column (its water over what it holds when its surface air saturates,
+ *   [HOLDABLE_SHARE]); what the column cannot hold at all condenses too. The rise `w` is the
+ *   atmosphere's own vertical motion at the boundary layer's top ([Season.largeScaleAscentMps]) and
+ *   the wind's climb over the ground, summed before anything condenses, so a climb inside a large
+ *   descent is first spent against it. The cloud turns to falling hydrometeors and falls out over
+ *   their two delays. `C_w` is thermodynamics ([ColumnWater.upliftCondensationKgPerM3]), so neither
+ *   the climb's rain nor the ascent's has a strength of its own to set.
  * - **Convergence**, a closure switched off by default (`ClimateConfig.convergenceRain`).
  *
- * The circulation belts' descent and the marine inversion's lid slow every one of them: the
- * column's rain, the cloud's conversion to rain and the convergence closure. They delete no water:
- * what they hold back is carried on, and cloud that is not rained evaporates in the lee.
+ * **Descent** warms the air at the same `C_w |w|` and takes back water at that rate: first the
+ * cloud it carries, then the column's rain as it falls, never past what the column holds before
+ * its surface air saturates. That is the subtropics' dryness where the atmosphere sinks, from the
+ * solved subsidence and from nothing else. The marine inversion's lid slows the column's rain, the
+ * cloud's conversion to rain and the convergence closure on the land under it. None of them
+ * deletes water: what they hold back is carried on.
+ *
+ * **What condenses** is counted apart from what falls ([Result.julyHalfCondensationMm]): the
+ * column's rain and the convergence closure's, which leave the vapor where they fall, and the
+ * cloud's growth less its evaporation. The cloud is carried, so its rain falls downwind of where it
+ * condensed; the latent heat is released where it condenses, and that is what the atmosphere reads.
  *
  * # The sources
  *
@@ -80,7 +89,9 @@ import kotlin.math.exp
  *
  * # One season at a time, coupled through the year's rain
  *
- * Each half-year is marched on its own wind and temperatures. The ground's return couples them:
+ * Each half-year is marched on its own wind and temperatures. With a [Coupling] the atmosphere is
+ * solved again between laps from each half's condensation, and the laps run until its heating has
+ * settled too. The ground's return couples the halves:
  * it is Budyko's share of the cell's **annual** rain, after the blur, against the annual
  * potential evaporation, which is what the rivers and lakes read too. The laps run both seasons
  * in step and update the return between laps until the year's rain stops moving
@@ -158,7 +169,7 @@ object MoistureMarch {
      * until the year's land rain moves by less than [CONVERGED_SHARE]. Twenty is a
      * ceiling the standard worlds stop well short of (docs/DESIGN_LEDGER.md, C1b2).
      */
-    const val MAX_LAPS = 20
+    const val MAX_LAPS = 40
 
     /**
      * When the year's rain has stopped moving: the land's mean change of annual rain from one lap
@@ -203,8 +214,11 @@ object MoistureMarch {
         val scalarWindAt10mMps: FloatArray? = null,
         /** The wind at 2 m over FAO-56's grass, meters a second; null for its 2 m/s station mean. */
         val windAt2mMps: FloatArray? = null,
-        /** The belts' rain factor per row: [ClimateStage.seasonalBand]. */
-        val beltRainFactorOfRow: FloatArray,
+        /**
+         * The atmosphere's vertical velocity at the boundary layer's top, meters a second, positive
+         * up ([BoundaryLayer.groundAscentMps]); null for the belts' control, which has none.
+         */
+        val largeScaleAscentMps: FloatArray?,
         /** The marine inversion's hold on each land cell's rain, 0..1, or null when it is off. */
         val inversionSuppression: FloatArray?,
         /** The half-year's mean sun at the top of the air, per row, MJ m⁻² day⁻¹. */
@@ -240,15 +254,42 @@ object MoistureMarch {
         /** The year's open-water evaporation at every cell. */
         val openWaterEvaporationMm: FloatField,
         /** How many laps the march ran before the year's rain settled. */
-        val laps: Int
+        val laps: Int,
+        /**
+         * Each half's net condensation on the last lap, millimeters a year of water, row-major,
+         * not blurred: what the latent heat is released from. Negative where more cloud evaporates
+         * than condenses.
+         */
+        val julyHalfCondensationMm: FloatArray,
+        val januaryHalfCondensationMm: FloatArray,
+        /** The land's mean change of annual rain after each lap, as a share of its mean rain ([CONVERGED_SHARE]). */
+        val landRainChanges: List<Double>
     )
+
+    /**
+     * The atmosphere solved again between laps from the march's condensation (`AtmosphereCoupling`).
+     * The march asks it after every lap whether its heating has settled ([settledAfter]) and, when
+     * the laps go on, for the next lap's seasons ([nextSeasons]).
+     */
+    interface Coupling {
+        /**
+         * Whether the heating the last lap's atmosphere was solved under stands within
+         * [CONVERGED_SHARE] of the latent heat of that lap's condensation, [julyHalfCondensationMm]
+         * and [januaryHalfCondensationMm] (millimeters a year, row-major): the loop's unrelaxed
+         * residual.
+         */
+        fun settledAfter(julyHalfCondensationMm: FloatArray, januaryHalfCondensationMm: FloatArray): Boolean
+
+        /** The two halves' seasons under the atmosphere solved from the heating [settledAfter] last read. */
+        fun nextSeasons(): Pair<Season, Season>
+    }
 
     /**
      * Marches both seasons until the year's rain settles and returns it, blurred, with the
      * potential evaporation it was coupled to. [ledger], when handed in, is filled with every
      * term; nothing the march computes depends on it.
      */
-    internal fun run(inputs: Inputs, ledger: MoistureLedger? = null): Result {
+    internal fun run(inputs: Inputs, ledger: MoistureLedger? = null, coupling: Coupling? = null): Result {
         val config = inputs.config
         val cellsAcross = config.width
         val cellsDown = config.height
@@ -264,6 +305,7 @@ object MoistureMarch {
         ledger?.millimetersPerYearPerUnit = grid.millimetersPerYearPerUnit
 
         var lap = 0
+        val landRainChanges = mutableListOf<Double>()
         while (true) {
             val laps = Array(2) { season -> ledger?.let { MoistureLedger.Lap(season == 0, lap) } }
             // The two seasons share nothing inside a lap but the ground's return, which was set
@@ -290,8 +332,14 @@ object MoistureMarch {
             lap++
             val change = landChangeShare(inputs.isLand, annualRain.data, previousRain, grid)
             ledger?.settling?.add(change)
-            val settled = lap >= MIN_LAPS && change < CONVERGED_SHARE
+            landRainChanges.add(change)
+            val heatingSettled = coupling?.settledAfter(july.condensationRowMajor(), january.condensationRowMajor()) ?: true
+            val settled = lap >= MIN_LAPS && change < CONVERGED_SHARE && heatingSettled
             if (settled || lap >= MAX_LAPS) break
+            coupling?.nextSeasons()?.let { (nextJuly, nextJanuary) ->
+                july.reseason(nextJuly)
+                january.reseason(nextJanuary)
+            }
 
             // The ground's return for the next lap, from this lap's year.
             parallelChunks(0, cellsDown) { startRow, endRow ->
@@ -358,7 +406,7 @@ object MoistureMarch {
             ledger.surfaceResidualMm = residual
             ledger.returnRainMm = returnedRain
         }
-        return Result(julyRain, januaryRain, landOrigin, potential, openWater, lapsRun)
+        return Result(julyRain, januaryRain, landOrigin, potential, openWater, lapsRun, july.condensationRowMajor(), january.condensationRowMajor(), landRainChanges)
     }
 
     /**
@@ -518,7 +566,7 @@ object MoistureMarch {
      */
     private class SeasonMarch(
         val inputs: Inputs,
-        val season: Season,
+        var season: Season,
         val grid: Grid,
         keepCells: Boolean
     ) {
@@ -542,13 +590,14 @@ object MoistureMarch {
         val stretch = FloatArray(cellCount)
 
         /**
-         * Smith and Barstad's (2004) uplift source at each land cell, kilograms per square meter
-         * per second: `C_w (u dh/dx + v dh/dy)`, the condensation of saturated air carried up the
-         * ground at the wind's vertical speed, negative where it descends.
+         * Smith and Barstad's (2004) uplift source at each cell, kilograms per square meter per
+         * second: `C_w w`, the condensation of saturated air rising at `w`, the atmosphere's
+         * ascent plus the wind's climb over the ground, `u dh/dx + v dh/dy`; negative where it
+         * descends.
          */
         val upliftCondensationRate = FloatArray(cellCount)
 
-        /** The belts' descent and the inversion's lid together, 0..1: what slows every sink. */
+        /** The marine inversion's lid, 0..1: what slows every sink on the land under it. */
         val suppression = FloatArray(cellCount)
         val convergenceShare = FloatArray(cellCount)
         val faceShare = FloatArray(cellCount)
@@ -563,6 +612,7 @@ object MoistureMarch {
         // This lap's results, column-major.
         val rainMm = FloatArray(cellCount)
         val landRainMm = FloatArray(cellCount)
+        val condensationMm = FloatArray(cellCount)
         val humidity = FloatArray(cellCount)
         val sourceMm = FloatArray(cellCount)
 
@@ -603,6 +653,28 @@ object MoistureMarch {
 
         init {
             precompute()
+            precomputePotentialTerms()
+            for (row in 0 until cellsDown) {
+                val east = index(row, 0)
+                val west = index(row, cellsAcross - 1)
+                eastParcel.vapor[row] = if (direction[east] > 0) INITIAL_HUMIDITY * saturatedMm[east] / stretch[east] else 0.0
+                westParcel.vapor[row] = if (direction[west] < 0) INITIAL_HUMIDITY * saturatedMm[west] / stretch[west] else 0.0
+            }
+        }
+
+        /**
+         * Marches the next lap under [next], the same half-year's air under a newly solved
+         * atmosphere: every field the wind and the vertical motion set is built again, and the
+         * water in flight, the bank and the ground's return are kept.
+         */
+        fun reseason(next: Season) {
+            season = next
+            precompute()
+            precomputePotentialTerms()
+        }
+
+        /** The land's FAO-56 terms from this season's air and wind, built once per season. */
+        private fun precomputePotentialTerms() {
             parallelChunks(0, cellsDown) { startRow, endRow ->
                 for (row in startRow until endRow) {
                     val sun = season.extraterrestrialOfRow[row]
@@ -618,12 +690,6 @@ object MoistureMarch {
                         potentialPerHumidity[cell] = terms.perHumidity.toFloat()
                     }
                 }
-            }
-            for (row in 0 until cellsDown) {
-                val east = index(row, 0)
-                val west = index(row, cellsAcross - 1)
-                eastParcel.vapor[row] = if (direction[east] > 0) INITIAL_HUMIDITY * saturatedMm[east] / stretch[east] else 0.0
-                westParcel.vapor[row] = if (direction[west] < 0) INITIAL_HUMIDITY * saturatedMm[west] / stretch[west] else 0.0
             }
         }
 
@@ -662,8 +728,7 @@ object MoistureMarch {
                                 surfaceHumidity, airHumidity, massFlux
                             ).toFloat()
                         }
-                        val lid = if (inputs.isLand[cell]) lidFactor(cell) else 1.0
-                        suppression[here] = (season.beltRainFactorOfRow[row] * lid).toFloat()
+                        suppression[here] = (if (inputs.isLand[cell]) lidFactor(cell) else 1.0).toFloat()
                     }
                 }
             }
@@ -677,10 +742,12 @@ object MoistureMarch {
                     }
                 }
             }
-            // The climb: the ground's slope along the wind, centered differences on the ground's
-            // own lengths, times the saturated air's condensation per meter of rise.
+            // The rise: the atmosphere's ascent at the layer's top, plus on land the ground's slope
+            // along the wind (centered differences on the ground's own lengths), summed before it
+            // is turned into condensation by the saturated air's yield per meter of rise.
             val cellHeightM = config.cellHeightKm * METERS_PER_KM
             val lapseRate = climate.lapseRateCPerKm.toDouble()
+            val ascent = season.largeScaleAscentMps
             parallelChunks(0, cellsDown) { startRow, endRow ->
                 for (row in startRow until endRow) {
                     val cellWidthM = config.cellWidthKm * METERS_PER_KM * grid.cosRow[row]
@@ -688,14 +755,16 @@ object MoistureMarch {
                     val south = if (row < cellsDown - 1) row + 1 else row
                     for (column in 0 until cellsAcross) {
                         val cell = row * cellsAcross + column
-                        if (!inputs.isLand[cell]) continue
-                        val east = row * cellsAcross + (column + 1) % cellsAcross
-                        val west = row * cellsAcross + (column + cellsAcross - 1) % cellsAcross
-                        val slopeEast = (inputs.elevationM[east] - inputs.elevationM[west]) / (2.0 * cellWidthM)
-                        val slopeSouth = (inputs.elevationM[south * cellsAcross + column] -
-                            inputs.elevationM[north * cellsAcross + column]) / ((south - north) * cellHeightM)
-                        val upward = season.eastwardMps[cell] * slopeEast + season.southwardMps[cell] * slopeSouth
-                        upliftCondensationRate[index(row, column)] = (ColumnWater.upliftCondensationKgPerM3(
+                        var upward = ascent?.get(cell)?.toDouble() ?: 0.0
+                        if (inputs.isLand[cell]) {
+                            val east = row * cellsAcross + (column + 1) % cellsAcross
+                            val west = row * cellsAcross + (column + cellsAcross - 1) % cellsAcross
+                            val slopeEast = (inputs.elevationM[east] - inputs.elevationM[west]) / (2.0 * cellWidthM)
+                            val slopeSouth = (inputs.elevationM[south * cellsAcross + column] -
+                                inputs.elevationM[north * cellsAcross + column]) / ((south - north) * cellHeightM)
+                            upward += season.eastwardMps[cell] * slopeEast + season.southwardMps[cell] * slopeSouth
+                        }
+                        upliftCondensationRate[index(row, column)] = if (upward == 0.0) 0f else (ColumnWater.upliftCondensationKgPerM3(
                             season.airTemperatureC[cell].toDouble(), lapseRate
                         ) * upward).toFloat()
                     }
@@ -925,6 +994,10 @@ object MoistureMarch {
             // its saturated water before its surface air saturates.
             val holdable = HOLDABLE_SHARE * saturated
             val uplift = upliftCondensationRate[here].toDouble()
+            // What the descent may still take back after the cloud, column water this crossing.
+            var descentLeft = 0.0
+            // Vapor turned to condensate here less condensate turned back, column water.
+            var condensedHere = 0.0
             if (vapor > holdable) {
                 val condensed = vapor - holdable
                 val condensedLand = condensed * (vaporLand / vapor)
@@ -932,6 +1005,7 @@ object MoistureMarch {
                 cloudLand += condensedLand
                 vapor = holdable
                 vaporLand -= condensedLand
+                condensedHere += condensed
                 if (entry != null) entry.condensed += condensed / toColumnWater
             }
             if (uplift > 0.0 && vapor > 0.0 && holdable > 0.0) {
@@ -945,16 +1019,23 @@ object MoistureMarch {
                 cloudLand += condensedLand
                 vapor -= condensed
                 vaporLand -= condensedLand
+                condensedHere += condensed
                 if (entry != null) entry.condensed += condensed / toColumnWater
-            } else if (uplift < 0.0 && cloud > 0.0) {
-                // Descending air warms and evaporates the cloud it carries, at the same rate.
-                val evaporated = minOf(cloud, -uplift * seconds, (holdable - vapor).coerceAtLeast(0.0))
-                val evaporatedLand = evaporated * (cloudLand / cloud)
-                cloud -= evaporated
-                cloudLand -= evaporatedLand
-                vapor += evaporated
-                vaporLand += evaporatedLand
-                if (entry != null) entry.reevaporated += evaporated / toColumnWater
+            } else if (uplift < 0.0) {
+                // Descending air warms and takes back water at the same rate: the cloud it carries
+                // first, then (below) the column's rain as it falls through it.
+                descentLeft = -uplift * seconds
+                if (cloud > 0.0) {
+                    val evaporated = minOf(cloud, descentLeft, (holdable - vapor).coerceAtLeast(0.0))
+                    val evaporatedLand = evaporated * (cloudLand / cloud)
+                    cloud -= evaporated
+                    cloudLand -= evaporatedLand
+                    vapor += evaporated
+                    vaporLand += evaporatedLand
+                    descentLeft -= evaporated
+                    condensedHere -= evaporated
+                    if (entry != null) entry.reevaporated += evaporated / toColumnWater
+                }
             }
 
             // The convergence closure, when switched on.
@@ -966,11 +1047,19 @@ object MoistureMarch {
             val vaporShareLand = if (vapor > 0.0) (vaporLand / vapor).coerceIn(0.0, 1.0) else 0.0
             vapor -= convergenceRain
 
-            // The column's own rain at its relative humidity.
+            // The column's own rain at its relative humidity, less what the descent takes back as it
+            // falls, up to what the column holds before its surface air saturates.
             val afterRain = columnAfterRainMm(vapor, saturated, seconds, slowing)
-            val columnRain = vapor - afterRain
+            var columnRain = vapor - afterRain
             vapor = afterRain
+            if (descentLeft > 0.0 && columnRain > 0.0) {
+                val takenBack = minOf(columnRain, descentLeft, (holdable - vapor).coerceAtLeast(0.0))
+                columnRain -= takenBack
+                vapor += takenBack
+                if (entry != null) entry.reevaporated += takenBack / toColumnWater
+            }
             vaporLand = vapor * vaporShareLand
+            condensedHere += columnRain + convergenceRain
             val vaporLandRained = (columnRain + convergenceRain) * vaporShareLand
 
             // The cloud turns to hydrometeors and they fall: Smith and Barstad's two delays in
@@ -1022,6 +1111,7 @@ object MoistureMarch {
             val rate = SECONDS_PER_YEAR / seconds
             rainMm[here] = (rainedTotal * rate).toFloat()
             landRainMm[here] = (landRained * rate).toFloat()
+            condensationMm[here] = (condensedHere * rate).toFloat()
             humidity[here] = if (saturated > 0.0) (vapor / saturated).toFloat() else 1f
             sourceMm[here] = (added * rate).toFloat()
             cells?.let { record ->
@@ -1102,6 +1192,9 @@ object MoistureMarch {
         }
 
         fun rainMmRowMajor(cell: Int): Float = rainMm[index(cell / cellsAcross, cell % cellsAcross)]
+
+        /** This lap's net condensation, millimeters a year, row-major. */
+        fun condensationRowMajor(): FloatArray = FloatArray(cellCount) { condensationMm[index(it / cellsAcross, it % cellsAcross)] }
         fun landRainMmRowMajor(cell: Int): Float = landRainMm[index(cell / cellsAcross, cell % cellsAcross)]
         fun sourceMmRowMajor(cell: Int): Float = sourceMm[index(cell / cellsAcross, cell % cellsAcross)]
         fun groundReturnMmRowMajor(cell: Int): Float =

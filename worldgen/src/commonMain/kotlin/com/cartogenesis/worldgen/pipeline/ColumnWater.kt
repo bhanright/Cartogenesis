@@ -91,6 +91,64 @@ internal object ColumnWater {
         return saturatedColumnTable[below] * (1.0 - share) + saturatedColumnTable[below + 1] * share
     }
 
+    /**
+     * Where the moist adiabat from a surface at [surfaceTemperatureC] stands: [heightsMeters] the
+     * height at which it reaches each of the pressures asked, and [topMeters] the height above which
+     * its saturated column holds the share asked of its water.
+     */
+    class Adiabat(val heightsMeters: DoubleArray, val topMeters: Double)
+
+    /**
+     * The [Adiabat] of a surface at [surfaceTemperatureC] for [pressuresKpa] (each under the
+     * standard sea level's) and [shareAbove]: the column climbed as [integratedSaturatedColumnMm]
+     * climbs it, in the same steps to the same top, each pressure's height read by the logarithm of
+     * the pressure between the steps either side, a pressure the climb never reaches standing at
+     * its top.
+     */
+    internal fun moistAdiabatHeights(surfaceTemperatureC: Double, pressuresKpa: DoubleArray, shareAbove: Double): Adiabat {
+        val steps = (COLUMN_TOP_M / COLUMN_STEP_M).toInt()
+        val heights = DoubleArray(steps + 1)
+        val pressures = DoubleArray(steps + 1)
+        val water = DoubleArray(steps)
+        var kelvin = surfaceTemperatureC + KELVIN_AT_ZERO_C
+        var pressureKpa = SEA_LEVEL_PRESSURE_KPA
+        pressures[0] = pressureKpa
+        for (step in 0 until steps) {
+            val lapse = moistAdiabaticLapseKPerM(kelvin - KELVIN_AT_ZERO_C, pressureKpa)
+            val midKelvin = kelvin - lapse * COLUMN_STEP_M * 0.5
+            val midPressure = pressureKpa * exp(-STANDARD_GRAVITY_MPS2 * COLUMN_STEP_M * 0.5 / (DRY_AIR_GAS_CONSTANT_J_PER_KG_K * kelvin))
+            val midCelsius = midKelvin - KELVIN_AT_ZERO_C
+            water[step] = saturationVaporPressureKpa(midCelsius) * PASCALS_PER_KPA / (WATER_VAPOR_GAS_CONSTANT_J_PER_KG_K * midKelvin) * COLUMN_STEP_M
+            kelvin -= moistAdiabaticLapseKPerM(midCelsius, midPressure) * COLUMN_STEP_M
+            pressureKpa *= exp(-STANDARD_GRAVITY_MPS2 * COLUMN_STEP_M / (DRY_AIR_GAS_CONSTANT_J_PER_KG_K * midKelvin))
+            heights[step + 1] = (step + 1) * COLUMN_STEP_M
+            pressures[step + 1] = pressureKpa
+        }
+        val total = water.sum()
+        var below = 0.0
+        var top = COLUMN_TOP_M
+        for (step in 0 until steps) {
+            if (below + water[step] >= (1.0 - shareAbove) * total) {
+                top = heights[step] + COLUMN_STEP_M * ((1.0 - shareAbove) * total - below) / water[step]
+                break
+            }
+            below += water[step]
+        }
+        val result = DoubleArray(pressuresKpa.size) { index ->
+            val target = pressuresKpa[index]
+            var height = COLUMN_TOP_M
+            for (step in 0 until steps) {
+                if (pressures[step + 1] <= target) {
+                    val share = kotlin.math.ln(pressures[step] / target) / kotlin.math.ln(pressures[step] / pressures[step + 1])
+                    height = heights[step] + share.coerceIn(0.0, 1.0) * COLUMN_STEP_M
+                    break
+                }
+            }
+            if (target >= SEA_LEVEL_PRESSURE_KPA) 0.0 else height
+        }
+        return Adiabat(result, top)
+    }
+
     /** The saturated column summed up the moist adiabat from one surface temperature, mm. */
     internal fun integratedSaturatedColumnMm(surfaceTemperatureC: Double): Double {
         var kelvin = surfaceTemperatureC + KELVIN_AT_ZERO_C

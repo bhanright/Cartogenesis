@@ -231,7 +231,7 @@ class MoistureClosureTest : BorrowsSharedWorlds() {
             seaIce = BooleanArray(cells) { true },
             eastwardMps = FloatArray(cells) { cell -> if ((cell / config.width) % 7 < 4) 7.5f else -7.5f },
             southwardMps = FloatArray(cells) { cell -> if ((cell / config.width) % 2 == 0) 1.5f else -0.5f },
-            beltRainFactorOfRow = FloatArray(config.height) { 1f },
+            largeScaleAscentMps = null,
             inversionSuppression = null,
             extraterrestrialOfRow = DoubleArray(config.height) { 10.0 }
         )

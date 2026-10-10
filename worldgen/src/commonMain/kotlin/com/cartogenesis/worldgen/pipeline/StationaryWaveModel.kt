@@ -194,7 +194,11 @@ class StationaryWaveModel(
     private val thermalDamping = damping.thermalMatrix(basicState.modes)
     private val firstWave = if (solveZonalMean) 0 else 1
 
+    /** The surface's drag on the lowest level, per row, per second, or none. */
+    private val dragOfRow: DoubleArray? = damping.lowestLevelDragOfRow
+
     init {
+        require(dragOfRow == null || dragOfRow.size == grid.rows) { "one surface drag per row of ${grid.rows}" }
         require(highestZonalWave in firstWave until grid.columns / 2) { "zonal waves up to $highestZonalWave on ${grid.columns} columns" }
         require(zonalMeanPinRow in 0 until grid.rows) { "the zonal mean's pin on row $zonalMeanPinRow of ${grid.rows}" }
     }
@@ -492,6 +496,7 @@ class StationaryWaveModel(
                 val advection = if (other == level) m * wind / (radius * cosine) else 0.0
                 add(equation, row, eastSlot(other), momentumDamping[level][other], advection)
             }
+            if (dragOfRow != null && level == levelCount - 1) add(equation, row, eastSlot(level), dragOfRow[row], 0.0)
             val coriolis = -0.5 * (basicState.coriolisAtRows[row] + basicState.relativeVorticity[level][row])
             addNorthAtFace(equation, row, level, coriolis, 0.0)
             addNorthAtFace(equation, row + 1, level, coriolis, 0.0)
@@ -526,6 +531,10 @@ class StationaryWaveModel(
             for (other in 0 until levelCount) {
                 val advection = if (other == level) m * wind / (radius * faceCosine) else 0.0
                 add(equation, row, northSlot(other), momentumDamping[level][other], advection)
+            }
+            // The face between two rows takes the mean of their drags.
+            if (dragOfRow != null && level == levelCount - 1) {
+                add(equation, row, northSlot(level), 0.5 * (dragOfRow[row] + dragOfRow[row + 1]), 0.0)
             }
             val coriolis = 0.5 * (basicState.coriolisAtFaces[face] + 2.0 * wind * grid.sinFace[face] / (faceCosine * radius))
             add(equation, row, eastSlot(level), coriolis, 0.0)

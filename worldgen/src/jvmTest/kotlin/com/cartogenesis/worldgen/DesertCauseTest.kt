@@ -2,6 +2,7 @@ package com.cartogenesis.worldgen
 
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.pipeline.Biome
+import com.cartogenesis.worldgen.pipeline.BoundaryLayer
 import com.cartogenesis.worldgen.pipeline.ClimateStage
 import kotlin.math.abs
 import kotlin.test.Test
@@ -14,9 +15,10 @@ import kotlin.test.Test
  * falls in that band on two seeds, but only 53% and 43% on two others — and the question this
  * answers is what the misplaced ones have in common.
  *
- * Three candidates, and they are distinguishable. A desert can be dry because its row is dry (the
- * latitude bands), because the air reaching it crossed a mountain (rain shadow), or because the
- * air reaching it crossed a great deal of land and had nothing left (continentality). Each cell is
+ * Three candidates, and they are distinguishable. A desert can be dry because the atmosphere sinks
+ * over it (the solved descent at the boundary layer's top), because the air reaching it crossed a
+ * mountain (rain shadow), or because the air reaching it crossed a great deal of land and had
+ * nothing left (continentality). Each cell is
  * measured for all three, and the misplaced deserts are compared against the correctly placed ones.
  */
 class DesertCauseTest {
@@ -29,6 +31,7 @@ class DesertCauseTest {
             )
             val w = world.width
             val h = world.height
+            val ascentMmPerS = yearAscentMmPerS(world)
 
             // How far the air travelled over land before arriving, and the greatest climb it made
             // on the way. Both are walked along one direction per row, the annual zonal wind read
@@ -73,7 +76,7 @@ class DesertCauseTest {
                 }
                 override fun toString(): String =
                     if (count == 0) "$name: none"
-                    else "%s: %d cells, fetch %.0f, upwind climb %.3f, band factor %.2f".format(
+                    else "%s: %d cells, fetch %.0f, upwind climb %.3f, ascent %.2f mm/s".format(
                         name, count, fetchTotal.toDouble() / count,
                         climbTotal / count, bandTotal / count
                     )
@@ -85,10 +88,10 @@ class DesertCauseTest {
 
             for (y in 0 until h) {
                 val lat = abs(latitudeOfRow(y, h))
-                val band = bandFactor(lat, world.config)
                 for (x in 0 until w) {
                     val i = y * w + x
                     if (!world.sea.isLand[i]) continue
+                    val band = ascentMmPerS[i]
                     val group = when {
                         world.climate.biome[i] != Biome.DESERT -> other
                         lat in 15f..45f -> placed
@@ -107,14 +110,15 @@ class DesertCauseTest {
         90f - 180f * (y + 0.5f) / height
 
     /**
-     * The belt factor a cell's rain actually saw, averaged over the year.
-     *
-     * Calls the stage's own function rather than restating it. The copy that used to live here
-     * had drifted — it still carried a subtropical dryness of 0.55 against the 1.15 the stage
-     * uses — and a diagnostic that reports a number the pipeline never applied is worse than no
-     * diagnostic, since the misplaced deserts were diagnosed against it.
+     * The vertical velocity at the boundary layer's top a cell's rain actually saw, the mean of the
+     * two halves', millimeters a second, positive up: the coupled atmosphere's own
+     * ([BoundaryLayer.groundAscentMps]), read from the stage rather than restated.
      */
-    private fun bandFactor(lat: Float, config: WorldGenConfig): Float =
-        (ClimateStage.seasonalBand(lat, config.climate, julyHalf = true) +
-            ClimateStage.seasonalBand(lat, config.climate, julyHalf = false)) * 0.5f
+    private fun yearAscentMmPerS(world: com.cartogenesis.worldgen.model.WorldMap): FloatArray {
+        val coupled = ClimateStage.coupledAtmosphere(world.config, world.sea, world.ocean) ?: return FloatArray(world.width * world.height)
+        val atmosphere = coupled.coupling.atmosphere
+        val july = BoundaryLayer.groundAscentMps(atmosphere, atmosphere.julyHalf)
+        val january = BoundaryLayer.groundAscentMps(atmosphere, atmosphere.januaryHalf)
+        return FloatArray(july.size) { (july[it] + january[it]) * 500f }
+    }
 }

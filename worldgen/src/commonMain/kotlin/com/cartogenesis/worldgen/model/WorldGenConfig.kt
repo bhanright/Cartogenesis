@@ -1906,14 +1906,6 @@ data class ClimateConfig(
      */
     val rainShadowScale: Float = 1f,
     /**
-     * How strongly the descending air of the horse latitudes suppresses rain, near 30 degrees.
-     *
-     * This is what decides how much desert a world has: it lengthens the rain's lifetime under the
-     * descending air, which is how arid the subtropics themselves get, where the ground's return
-     * and the rain shadows decide where else a desert sits.
-     */
-    val subtropicalDryness: Float = 1.15f,
-    /**
      * Whether the air the wind gathers into a cell rains what it brought, at the rate it gathers
      * it, on top of the column's lifetime and saturation.
      *

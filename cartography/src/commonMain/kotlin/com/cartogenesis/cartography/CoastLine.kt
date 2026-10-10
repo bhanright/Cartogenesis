@@ -97,16 +97,16 @@ class CoastLine(
     ): Float {
         val west = blockColumn.mod(cellsAcross)
         val east = (blockColumn + 1).mod(cellsAcross)
-        val corners = intArrayOf(
-            blockRow * cellsAcross + west,
-            blockRow * cellsAcross + east,
-            (blockRow + 1) * cellsAcross + east,
-            (blockRow + 1) * cellsAcross + west
-        )
-        var pattern = 0
-        for (corner in 0 until CORNERS) if (banks[corners[corner]]) pattern = pattern or (1 shl corner)
+        val northWest = blockRow * cellsAcross + west
+        val northEast = blockRow * cellsAcross + east
+        val southEast = (blockRow + 1) * cellsAcross + east
+        val southWest = (blockRow + 1) * cellsAcross + west
+        // Clockwise from the north-west, the bit order of Shoreline.SEGMENTS.
+        val pattern = (if (banks[northWest]) 1 else 0) or (if (banks[northEast]) 2 else 0) or
+            (if (banks[southEast]) 4 else 0) or (if (banks[southWest]) 8 else 0)
         val sides = Shoreline.SEGMENTS[pattern]
         if (sides.isEmpty()) return Float.POSITIVE_INFINITY
+        val corners = intArrayOf(northWest, northEast, southEast, southWest)
         var nearest = Float.POSITIVE_INFINITY
         var slot = 0
         while (slot < sides.size) {
@@ -157,7 +157,6 @@ class CoastLine(
         const val HALFWAY = 0.5f
 
         private const val HALF_A_CELL = 0.5f
-        private const val CORNERS = 4
 
         /**
          * The coast of [world], round the banks the drawing draws it round ([NarrowSea.banks]),

@@ -114,13 +114,13 @@ internal object GeometryExpectations {
     /**
      * The four standard worlds at 512 rows of square cells, 1024 by 512. Re-recorded at L1, whose
      * rifts are Earth's half-grabens and whose closed basins hold a lake in each hollow, and again
-     * at its review round, whose joins are relay ramps (docs/DESIGN_LEDGER.md, L1).
+     * at its review round, whose joins are relay ramps (docs/DESIGN_LEDGER.md, L1). Re-recorded at
+     * G2, which inks the coast on every side and draws it where the ground puts the waterline
+     * (docs/DESIGN_LEDGER.md, G2).
      */
     fun at512(expected: Expectations) = with(expected) {
-        known("7/coast as inked/FACING", "1@(-1,-1)=2.649")
-        known("42/coast as inked/FACING", "1@(-1,-1)=3.897")
-        known("1234/coast as inked/FACING", "1@(-1,-1)=3.601")
-        known("99/coast as inked/FACING", "1@(-1,-1)=3.735")
+        known("7/coast as drawn/ARCS", "1@(447,267)=123.5")
+        known("99/coast as drawn/ARCS", "1@(518,160)=124.1")
         insufficient("coast", Detector.ISOTROPY, 7L, 42L, 1234L, 99L)
         insufficient("coast", Detector.RECTANGLE, 7L, 1234L)
         insufficient("coast", Detector.ORIENTATION, 7L, 42L, 1234L, 99L)

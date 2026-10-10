@@ -154,15 +154,22 @@ worth stating: with the hairline fixed, the range a sheet can show shrinks with 
 6.1x at 2048, 3.1x at 1024 and only 1.5x at 512, so on a phone-sized map a trunk and a headwater
 are nearly the same line, because the headwater is already the finest mark there is.
 
-**The coast is a line, not a staircase of cells.** The raster inks the landward cell of every
-land–water pair, which is right at one pixel to the cell and wrong at any other size: shrink it and
-the line thins to nothing, enlarge it and the reader is looking at the grid. So the same boundary is
-also traced off the land mask by marching squares — every vertex halfway between one land cell and
-one water cell, so it runs exactly where the raster inks — and stroked over the fill at 0.05% of the
-sheet's width, one pixel at 2048. Where four cells meet in a checkerboard the contour is closed so
-that land touching corner to corner stays one coast, which is the same assumption the flow routing
-makes when it lets a river run diagonally across an isthmus a cell wide. On 718106 at 2048 the trace
-is 83,551 vertices and takes 17–35 ms against the raster's 148–236 ms.
+**The coast is a line, not a staircase of cells.** A shoreline is where the ground crosses the
+waterline, and between two cells, one above the water and one below it, that is where the straight
+line through their two altitudes reaches zero: the shoreline is the height field's own level line,
+traced by marching squares with each crossing placed by the ground, and not the edge of the land
+mask, which runs along the grid's rows and columns. Both drawings of the coast are taken from it.
+The raster inks every cell, land and water alike, by its distance on the sheet from that line, full
+on the line and nothing a cell away, so the ink is centred on the waterline and a shore facing west
+takes as much of it as one facing east; the overlay traces the same line, smooths it along its own
+length with a Gaussian of half a cell, which keeps every vertex within 0.40 of a cell of the
+waterline, and strokes it over the fill at 0.05% of the sheet's width, one pixel at 2048. Where the
+mask and the ground disagree — land the mask keeps below the waterline, a channel too narrow for a
+coast — the ground cannot place the shore and the crossing is halfway between the two cells. Where
+four cells meet in a checkerboard the contour is closed so that land touching corner to corner stays
+one coast, which is the same assumption the flow routing makes when it lets a river run diagonally
+across an isthmus a cell wide. Until G2 the raster inked a land cell only where water lay east or
+south of it and the overlay ran along the half-cell lattice (docs/DESIGN_LEDGER.md, G2).
 
 **A map draws as much river as a published map at its scale draws, and no more.** How much that is
 is an Earth figure and not a share of what the generator traced. Natural Earth's river layer, the

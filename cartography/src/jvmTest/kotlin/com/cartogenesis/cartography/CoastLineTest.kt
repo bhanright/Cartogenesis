@@ -1,9 +1,13 @@
 package com.cartogenesis.cartography
 
+import com.cartogenesis.cartography.geometry.Arcs
 import com.cartogenesis.cartography.geometry.Contours
 import com.cartogenesis.cartography.geometry.FacingShares
 import com.cartogenesis.cartography.geometry.GridFrame
+import com.cartogenesis.cartography.geometry.IsotropicNoise
+import com.cartogenesis.cartography.geometry.MapLayers
 import com.cartogenesis.cartography.geometry.Outcome
+import com.cartogenesis.cartography.geometry.Outline
 import com.cartogenesis.worldgen.BorrowsSharedWorlds
 import com.cartogenesis.worldgen.SharedWorlds
 import com.cartogenesis.worldgen.model.WorldGenConfig
@@ -16,6 +20,7 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.sin
+import kotlin.math.sqrt
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -59,6 +64,15 @@ class CoastLineTest : BorrowsSharedWorlds() {
 
         /** The planes' bearings, every seven and a half degrees round a half turn. */
         const val PLANE_BEARINGS = 24
+
+        /**
+         * The natural shorelines: four fields of the geometry guard's isotropic noise, waves from
+         * two cells to [NATURAL_LONGEST_CELLS], [NATURAL_COVER] of each above the waterline. About
+         * 133,000 cell widths of shore, where a world at 512 rows carries 6,000 to 7,000.
+         */
+        val NATURAL_SEEDS = listOf(1L, 2L, 3L, 4L)
+        const val NATURAL_LONGEST_CELLS = 120.0
+        const val NATURAL_COVER = 0.4
     }
 
     private fun world(seed: Long): WorldMap = SharedWorlds.world(WorldGenConfig.forRows(seed = seed, rows = ROWS))
@@ -111,6 +125,62 @@ class CoastLineTest : BorrowsSharedWorlds() {
         println("COAST on a plane at $PLANE_BEARINGS bearings: the ink is out by $worstInk at worst; the smoothed line stands $worstShift pixels off the shoreline at worst")
         assertTrue(worstInk <= INK_AGREEMENT, "the ink on a plane is out by $worstInk from the pen at the true distance")
         assertTrue(worstShift <= 1e-3f, "smoothing moved a straight shoreline by $worstShift pixels")
+    }
+
+    /**
+     * The drawn coast's operator — the shoreline placed by the ground, smoothed along its length
+     * and simplified for the census's pane — fits no circular arc to a natural shoreline, the
+     * geometry guard's own natural control ([IsotropicNoise] of Hurst 0.75 down to two cells), and
+     * still finds the stamped disc laid among them. So an arc the census finds on a world's drawn
+     * coast is the ground's roundness and not the smoothing's (`GeometryFindings.COAST_ARC`).
+     */
+    @Test
+    fun `the drawn coast's operator fits no arc to a natural shoreline, and finds a stamped disc`() {
+        val config = WorldGenConfig.forRows(seed = 0L, rows = ROWS)
+        val frame = GridFrame.of(config)
+        val geometry = SheetGeometry.of(config.scale, frame.cellsAcross, frame.cellsDown)
+        val pane = MapSheet.onScreen(MapLayers.PANE_PIXELS_ACROSS / geometry.widthPixels)
+        var natural = 0
+        var lengthCellWidths = 0.0
+        for (seed in NATURAL_SEEDS) {
+            val noise = IsotropicNoise(seed, 2.0 * frame.cellWidthKm, NATURAL_LONGEST_CELLS * frame.cellWidthKm)
+            val values = FloatArray(frame.cellCount) { cell ->
+                noise.at((frame.columnOf(cell) + 0.5) * frame.cellWidthKm, (frame.rowOf(cell) + 0.5) * frame.cellHeightKm).toFloat()
+            }
+            val level = values.sorted()[((1.0 - NATURAL_COVER) * (values.size - 1)).toInt()]
+            val metres = FloatArray(values.size) { values[it] - level }
+            val drawn = drawnOutlines(metres, frame, geometry, pane)
+            lengthCellWidths += drawn.sumOf { it.lengthKm() } / frame.cellWidthKm
+            natural += Arcs.perLine(Arcs.measure(drawn, frame), drawn.size).sum()
+        }
+        // A disc of land on the ground, its altitude falling away from its centre as a cone does.
+        val radiusCells = 2 * Arcs.MINIMUM_RADIUS_CELLS
+        val cone = FloatArray(frame.cellCount) { cell ->
+            val dx = frame.columnOf(cell) + 0.5 - frame.cellsAcross / 2
+            val dy = frame.rowOf(cell) + 0.5 - frame.cellsDown / 2
+            (radiusCells - sqrt(dx * dx + dy * dy)).toFloat()
+        }
+        val disc = drawnOutlines(cone, frame, geometry, pane)
+        val discArcs = Arcs.perLine(Arcs.measure(disc, frame), disc.size).sum()
+        println("COAST natural shorelines drawn by the coast's operator over ${NATURAL_SEEDS.size} fields, %.0f cell widths: %d arcs; a stamped disc of %.0f cells: %d".format(
+            lengthCellWidths, natural, radiusCells, discArcs))
+        assertEquals(0, natural, "the drawn coast's operator fits $natural arcs to natural shorelines")
+        assertTrue(discArcs > 0, "the stamped disc drawn the same way shows no arc, so the clause cannot see one")
+    }
+
+    /** The shoreline of [metres] as the overlay draws it for [pane], as the census's outlines. */
+    private fun drawnOutlines(metres: FloatArray, frame: GridFrame, geometry: SheetGeometry, pane: MapSheet): List<Outline> {
+        val banks = BooleanArray(metres.size) { metres[it] >= 0f }
+        return Shoreline.of(CoastLine(banks, metres, frame.cellsAcross, frame.cellsDown), geometry, pane).map { line ->
+            val count = line.size / 2
+            val ring = count > 2 && line[0] == line[line.size - 2] && line[1] == line[line.size - 1]
+            val kept = if (ring) count - 1 else count
+            Outline(
+                DoubleArray(kept) { line[it * 2].toDouble() * frame.cellWidthKm },
+                DoubleArray(kept) { line[it * 2 + 1].toDouble() * frame.cellHeightKm },
+                closed = ring, belt = false
+            )
+        }
     }
 
     // ---- on the standard worlds ----------------------------------------------------------------

@@ -181,9 +181,11 @@ class GeneralisationRenderTest {
         val map = WorldGenerationEngine.generateBlocking(config)
         val options = RenderOptions()
 
-        // Once to let the JIT see it, then measured.
+        // Once to let the JIT see it, then measured. The trace is the drawn coast at full detail:
+        // the shoreline placed between cells by the ground, traced, smoothed along its length and
+        // simplified to half a pixel.
         MapRasterizer.rasterize(map, options)
-        Shoreline.trace(map.sea.isLand, map.width, map.height)
+        Shoreline.of(map, MapSheet.UNGENERALISED)
 
         var rasterMs = 0L
         repeat(3) { rasterMs += measureTimeMillis { MapRasterizer.rasterize(map, options) } }
@@ -193,8 +195,7 @@ class GeneralisationRenderTest {
         var vertices = 0
         repeat(3) {
             traceMs += measureTimeMillis {
-                vertices = Shoreline.trace(map.sea.isLand, map.width, map.height)
-                    .sumOf { it.size / 2 }
+                vertices = Shoreline.of(map, MapSheet.UNGENERALISED).sumOf { it.size / 2 }
             }
         }
         traceMs /= 3

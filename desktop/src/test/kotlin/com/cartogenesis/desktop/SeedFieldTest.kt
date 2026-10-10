@@ -47,7 +47,7 @@ class SeedFieldTest {
     @OptIn(ExperimentalTestApi::class)
     @Test
     fun `a typed seed applies on Enter and on Go, and never on losing focus`() {
-        runDesktopComposeUiTest(width = WIDTH, height = HEIGHT, testTimeout = WORLD_TEST_TIMEOUT) {
+        runDesktopComposeUiTest(width = WIDTH, height = HEIGHT) {
             setContent { CartogenesisTheme(dark = false) { CartogenesisApp(SmallWorldPlatform()) } }
 
             onNodeWithText("Generate").performClick()

@@ -61,7 +61,7 @@ class PhoneAtlasTest {
     @OptIn(ExperimentalTestApi::class)
     @Test
     fun `the atlas on a phone carries a way back to the map`() {
-        runDesktopComposeUiTest(width = PHONE_WIDTH, height = PHONE_HEIGHT, testTimeout = WORLD_TEST_TIMEOUT) {
+        runDesktopComposeUiTest(width = PHONE_WIDTH, height = PHONE_HEIGHT) {
             setContent {
                 val platform = PhonePlatform()
                 CartogenesisTheme(dark = false, coarsePointer = platform.coarsePointer) {
@@ -150,7 +150,7 @@ class PhoneAtlasTest {
     @OptIn(ExperimentalTestApi::class)
     @Test
     fun `the library on a phone carries a way back to the map`() {
-        runDesktopComposeUiTest(width = PHONE_WIDTH, height = PHONE_HEIGHT, testTimeout = WORLD_TEST_TIMEOUT) {
+        runDesktopComposeUiTest(width = PHONE_WIDTH, height = PHONE_HEIGHT) {
             setContent {
                 val platform = PhonePlatform()
                 CartogenesisTheme(dark = false, coarsePointer = platform.coarsePointer) {
@@ -183,7 +183,7 @@ class PhoneAtlasTest {
     @OptIn(ExperimentalTestApi::class)
     @Test
     fun `a wide window draws no map toolbar over the atlas either`() {
-        runDesktopComposeUiTest(width = WIDE_WIDTH, height = WIDE_HEIGHT, testTimeout = WORLD_TEST_TIMEOUT) {
+        runDesktopComposeUiTest(width = WIDE_WIDTH, height = WIDE_HEIGHT) {
             setContent {
                 CartogenesisTheme(dark = false) { CartogenesisApp(DesktopAt512()) }
             }
@@ -263,7 +263,7 @@ class PhoneAtlasTest {
     @OptIn(ExperimentalTestApi::class)
     private fun libraryHeadingContrast(choice: ThemeChoice, dark: Boolean): Double {
         var ratio = 0.0
-        runDesktopComposeUiTest(width = PHONE_WIDTH, height = PHONE_HEIGHT, testTimeout = WORLD_TEST_TIMEOUT) {
+        runDesktopComposeUiTest(width = PHONE_WIDTH, height = PHONE_HEIGHT) {
             val platform = PhonePlatform()
             setContent {
                 CartogenesisTheme(
@@ -286,7 +286,7 @@ class PhoneAtlasTest {
     @OptIn(ExperimentalTestApi::class)
     private fun realmPageContrast(choice: ThemeChoice): Double {
         var ratio = 0.0
-        runDesktopComposeUiTest(width = PHONE_WIDTH, height = PHONE_HEIGHT, testTimeout = WORLD_TEST_TIMEOUT) {
+        runDesktopComposeUiTest(width = PHONE_WIDTH, height = PHONE_HEIGHT) {
             val platform = PhonePlatform()
             setContent {
                 CartogenesisTheme(
@@ -333,7 +333,7 @@ class PhoneAtlasTest {
     @Test
     fun `a phone can turn the graticule on and see it`() {
         val dir = File("build/screens").apply { mkdirs() }
-        runDesktopComposeUiTest(width = PHONE_WIDTH, height = PHONE_HEIGHT, testTimeout = WORLD_TEST_TIMEOUT) {
+        runDesktopComposeUiTest(width = PHONE_WIDTH, height = PHONE_HEIGHT) {
             val platform = PhonePlatform()
             setContent {
                 CartogenesisTheme(dark = false, coarsePointer = platform.coarsePointer) {

@@ -207,7 +207,7 @@ class ChromeGalleryTest {
         val item = "Report a bug…"
 
         var strip: Shot? = null
-        runDesktopComposeUiTest(width = WIDTH, height = HEIGHT, testTimeout = WORLD_TEST_TIMEOUT) {
+        runDesktopComposeUiTest(width = WIDTH, height = HEIGHT) {
             setContent { CartogenesisTheme(dark = false) { CartogenesisApp(ChromePlatform()) } }
             waitForIdle()
             onNodeWithText("Help").performClick()
@@ -216,7 +216,7 @@ class ChromeGalleryTest {
         }
 
         var sheet: Shot? = null
-        runDesktopComposeUiTest(width = PHONE_WIDTH, height = PHONE_HEIGHT, testTimeout = WORLD_TEST_TIMEOUT) {
+        runDesktopComposeUiTest(width = PHONE_WIDTH, height = PHONE_HEIGHT) {
             val platform = TouchPlatform()
             setContent {
                 CartogenesisTheme(dark = false, coarsePointer = platform.coarsePointer) {
@@ -403,7 +403,7 @@ class ChromeGalleryTest {
     fun `the phone's folded menu offers every item the three menus do`() {
         val strip = listOf("File", "View", "Help").flatMap { title ->
             var items: List<String> = emptyList()
-            runDesktopComposeUiTest(width = WIDTH, height = HEIGHT, testTimeout = WORLD_TEST_TIMEOUT) {
+            runDesktopComposeUiTest(width = WIDTH, height = HEIGHT) {
                 setContent { CartogenesisTheme(dark = false) { CartogenesisApp(ChromePlatform()) } }
                 waitForIdle()
                 // The strip's title and nothing else: the toolbar's view menu reads "View" too,
@@ -418,7 +418,7 @@ class ChromeGalleryTest {
             items
         }
         var folded: List<String> = emptyList()
-        runDesktopComposeUiTest(width = PHONE_WIDTH, height = PHONE_HEIGHT, testTimeout = WORLD_TEST_TIMEOUT) {
+        runDesktopComposeUiTest(width = PHONE_WIDTH, height = PHONE_HEIGHT) {
             val platform = TouchPlatform()
             setContent {
                 CartogenesisTheme(dark = false, coarsePointer = platform.coarsePointer) {
@@ -682,7 +682,7 @@ class ChromeGalleryTest {
             "the desk" to (WIDTH to HEIGHT),
             "a phone" to (390 to 844)
         ).forEach { (where, size) ->
-            runDesktopComposeUiTest(width = size.first, height = size.second, testTimeout = WORLD_TEST_TIMEOUT) {
+            runDesktopComposeUiTest(width = size.first, height = size.second) {
                 val platform = if (size.first < 700) TouchPlatform() else ChromePlatform()
                 setContent {
                     CartogenesisTheme(dark = false, coarsePointer = platform.coarsePointer) {
@@ -743,7 +743,7 @@ class ChromeGalleryTest {
     @OptIn(ExperimentalTestApi::class)
     private fun shootChrome(choice: ThemeChoice, opened: Opened, dark: Boolean = false): Shot {
         var shot: Shot? = null
-        runDesktopComposeUiTest(width = WIDTH, height = HEIGHT, testTimeout = WORLD_TEST_TIMEOUT) {
+        runDesktopComposeUiTest(width = WIDTH, height = HEIGHT) {
             setContent {
                 // `dark` is consulted only by ThemeChoice.SYSTEM. It is passed rather than left to
                 // its default so that a shot of SYSTEM is the same picture on a machine set to dark
@@ -805,7 +805,7 @@ class ChromeGalleryTest {
         style: String? = null
     ): Shot {
         var shot: Shot? = null
-        runDesktopComposeUiTest(width = WIDTH, height = HEIGHT, testTimeout = WORLD_TEST_TIMEOUT) {
+        runDesktopComposeUiTest(width = WIDTH, height = HEIGHT) {
             val platform = ChromePlatform()
             setContent {
                 CartogenesisTheme(dark = dark, choice = choice) { CartogenesisApp(platform) }
@@ -861,7 +861,7 @@ class ChromeGalleryTest {
     ): Pair<Shot, Shot> {
         var down: Shot? = null
         var up: Shot? = null
-        runDesktopComposeUiTest(width = width, height = height, testTimeout = WORLD_TEST_TIMEOUT) {
+        runDesktopComposeUiTest(width = width, height = height) {
             val platform = TouchPlatform()
             setContent {
                 CartogenesisTheme(
@@ -906,7 +906,7 @@ class ChromeGalleryTest {
     ): Pair<Shot, Shot> {
         var idle: Shot? = null
         var busy: Shot? = null
-        runDesktopComposeUiTest(width = width, height = height, testTimeout = WORLD_TEST_TIMEOUT) {
+        runDesktopComposeUiTest(width = width, height = height) {
             val platform = if (compact) TouchPlatform() else ChromePlatform()
             setContent {
                 CartogenesisTheme(dark = false, coarsePointer = platform.coarsePointer) {
@@ -953,7 +953,7 @@ class ChromeGalleryTest {
     @OptIn(ExperimentalTestApi::class)
     private fun textsInWideWindow(): List<String> {
         var found: List<String> = emptyList()
-        runDesktopComposeUiTest(width = WIDTH, height = HEIGHT, testTimeout = WORLD_TEST_TIMEOUT) {
+        runDesktopComposeUiTest(width = WIDTH, height = HEIGHT) {
             setContent { CartogenesisTheme(dark = false) { CartogenesisApp(ChromePlatform()) } }
             waitForIdle()
             unrollEverySection()
@@ -966,7 +966,7 @@ class ChromeGalleryTest {
     @OptIn(ExperimentalTestApi::class)
     private fun textsInPhoneSheet(): List<String> {
         var found: List<String> = emptyList()
-        runDesktopComposeUiTest(width = PHONE_WIDTH, height = PHONE_HEIGHT, testTimeout = WORLD_TEST_TIMEOUT) {
+        runDesktopComposeUiTest(width = PHONE_WIDTH, height = PHONE_HEIGHT) {
             val platform = TouchPlatform()
             setContent {
                 CartogenesisTheme(dark = false, coarsePointer = platform.coarsePointer) {

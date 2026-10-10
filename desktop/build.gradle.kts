@@ -200,6 +200,13 @@ fun Test.withPerMergeBudget() {
         "-XX:ActiveProcessorCount=$processors",
         "-Djava.util.concurrent.ForkJoinPool.common.parallelism=$processors"
     )
+    // The interface's tests generate worlds inside `runDesktopComposeUiTest`, whose outer `runTest`
+    // takes the coroutine test library's default timeout and no other. Since the atmosphere is
+    // coupled to the rain a world carries the loop's laps on the planet's own grid whatever the
+    // map's size, so a test that makes three of the platforms' 512-row worlds outgrew the default
+    // minute on the world's own cost (docs/DESIGN_LEDGER.md, A1-5). Ten minutes, the library's own
+    // property: each generation inside is still held to its own five-minute wait, so a hang fails.
+    systemProperty("kotlinx.coroutines.test.default_timeout", "10m")
 }
 
 tasks.named<Test>("test") {

@@ -866,21 +866,18 @@ object ClimateStage {
                 loop.initialLatentWPerM2
             )
         } else null
-        val (firstJuly, firstJanuary) = coupling?.firstSeasons() ?: seasonsUnder(null)
         val marched = MoistureMarch.run(
             MoistureMarch.Inputs(
                 config = config,
                 isLand = sea.isLand,
                 relativeElevation = sea.relativeElevation.data,
                 elevationM = elevationM,
-                julyHalf = firstJuly,
-                januaryHalf = firstJanuary,
                 lidElevation = config.scale.reliefShareOfMetres(MoistureBudget.INVERSION_LID_METRES),
                 blurSigmaKm = RAIN_BLUR_SIGMA_KM
             ),
             ledger,
             coupling
-        )
+        ) { coupling?.firstSeasons() ?: seasonsUnder(null) }
         coupling?.release()
         val atmosphere = coupling?.atmosphere
         if (coupling != null) {

@@ -242,13 +242,11 @@ class MoistureClosureTest : BorrowsSharedWorlds() {
                 isLand = BooleanArray(cells),
                 relativeElevation = FloatArray(cells) { -0.5f },
                 elevationM = FloatArray(cells),
-                julyHalf = season(),
-                januaryHalf = season(),
                 lidElevation = 0f,
                 blurSigmaKm = 0.0
             ),
             ledger
-        )
+        ) { season() to season() }
         assertTrue(result.julyHalfRainMm.data.all { it.isFinite() && it >= 0f }, "the rain is not finite and positive")
         ledger.laps.forEach { lap ->
             assertEquals(0.0, lap.sources, 0.0, "a world with no source evaporated something")

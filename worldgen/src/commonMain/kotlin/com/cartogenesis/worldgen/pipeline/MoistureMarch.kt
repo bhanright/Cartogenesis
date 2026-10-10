@@ -231,7 +231,10 @@ object MoistureMarch {
         val extraterrestrialOfRow: DoubleArray
     )
 
-    /** What the march reads beyond the two seasons. */
+    /**
+     * What the march reads beyond the two seasons. [run] builds the seasons itself, so that a
+     * coupled run's first seasons are not held here for its every lap.
+     */
     class Inputs(
         val config: WorldGenConfig,
         val isLand: BooleanArray,
@@ -239,10 +242,6 @@ object MoistureMarch {
         val relativeElevation: FloatArray,
         /** Height above the sea in meters at land cells, zero at sea. */
         val elevationM: FloatArray,
-        /** April to September, the calendar's half about July. */
-        val julyHalf: Season,
-        /** October to March, the half about January. */
-        val januaryHalf: Season,
         /** The relief share of the inversion's lid, `SeaLevelResult.relativeElevation` units. */
         val lidElevation: Float,
         /** The blur's width on the ground, the standard deviation of its Gaussian, kilometers. */
@@ -295,15 +294,25 @@ object MoistureMarch {
      * potential evaporation it was coupled to. [ledger], when handed in, is filled with every
      * term; nothing the march computes depends on it.
      */
-    internal fun run(inputs: Inputs, ledger: MoistureLedger? = null, coupling: Coupling? = null): Result {
+    internal fun run(
+        inputs: Inputs,
+        ledger: MoistureLedger? = null,
+        coupling: Coupling? = null,
+        /**
+         * The two seasons the first lap reads, April to September about July and October to March
+         * about January: built inside the march and held by no frame of it or its caller once the
+         * marches are set up, so a coupled run's first seasons are let go after its first lap.
+         */
+        firstSeasons: () -> Pair<Season, Season>
+    ): Result {
         val config = inputs.config
         val cellsAcross = config.width
         val cellsDown = config.height
         val cellCount = cellsAcross * cellsDown
         val grid = Grid(config)
-        val july = SeasonMarch(inputs, inputs.julyHalf, grid, keepCells = ledger != null)
-        val january = SeasonMarch(inputs, inputs.januaryHalf, grid, keepCells = ledger != null)
-        val seasons = arrayOf(july, january)
+        val seasons = startMarches(inputs, grid, keepCells = ledger != null, firstSeasons)
+        val july = seasons[0]
+        val january = seasons[1]
 
         val annualRain = FloatField(cellsAcross, cellsDown)
         val previousRain = FloatArray(cellCount)
@@ -570,9 +579,15 @@ object MoistureMarch {
      * One season's march: its precomputed fields, column-major so a column's rows are adjacent
      * in memory, and its state between laps.
      */
+    /** Both seasons' marches under [firstSeasons], July's then January's. */
+    private fun startMarches(inputs: Inputs, grid: Grid, keepCells: Boolean, firstSeasons: () -> Pair<Season, Season>): Array<SeasonMarch> {
+        val (julyHalf, januaryHalf) = firstSeasons()
+        return arrayOf(SeasonMarch(inputs, julyHalf, grid, keepCells), SeasonMarch(inputs, januaryHalf, grid, keepCells))
+    }
+
     private class SeasonMarch(
         val inputs: Inputs,
-        var season: Season,
+        season: Season,
         val grid: Grid,
         keepCells: Boolean
     ) {
@@ -580,6 +595,14 @@ object MoistureMarch {
         val cellsDown = grid.cellsDown
         val cellCount = cellsAcross * cellsDown
         val config = inputs.config
+
+        // What the ledger and the last potentials read of the season's air. The rest of a season,
+        // its wind and its ascent, is let go once each lap's fields are built from it, so a
+        // coupled lap's next seasons are not built beside the last ones.
+        private var airTemperatureC: FloatArray = season.airTemperatureC
+        private var seaSurfaceC: FloatArray = season.seaSurfaceC
+        private var windAt2mMps: FloatArray? = season.windAt2mMps
+        private var extraterrestrialOfRow: DoubleArray = season.extraterrestrialOfRow
 
         // Column-major: cell (row, column) is column * cellsDown + row.
         val direction = ByteArray(cellCount)
@@ -658,7 +681,7 @@ object MoistureMarch {
             if (keepCells) MoistureLedger.Cells(cellsAcross, cellsDown) else null
 
         init {
-            precompute()
+            precompute(season)
             precomputePotentialTerms()
             for (row in 0 until cellsDown) {
                 val east = index(row, 0)
@@ -674,8 +697,11 @@ object MoistureMarch {
          * water in flight, the bank and the ground's return are kept.
          */
         fun reseason(next: Season) {
-            season = next
-            precompute()
+            airTemperatureC = next.airTemperatureC
+            seaSurfaceC = next.seaSurfaceC
+            windAt2mMps = next.windAt2mMps
+            extraterrestrialOfRow = next.extraterrestrialOfRow
+            precompute(next)
             precomputePotentialTerms()
             // A row's parcel in flight into the lap's first column, where the new wind no longer
             // marches it in that sweep, waits in the bank there for the sweep that does, all of its
@@ -697,12 +723,12 @@ object MoistureMarch {
         private fun precomputePotentialTerms() {
             parallelChunks(0, cellsDown) { startRow, endRow ->
                 for (row in startRow until endRow) {
-                    val sun = season.extraterrestrialOfRow[row]
+                    val sun = extraterrestrialOfRow[row]
                     for (column in 0 until cellsAcross) {
                         val cell = row * cellsAcross + column
                         if (!inputs.isLand[cell]) continue
                         val terms = SurfaceEvaporation.referenceTerms(
-                            season.airTemperatureC[cell].toDouble(), sun, inputs.elevationM[cell].toDouble(),
+                            airTemperatureC[cell].toDouble(), sun, inputs.elevationM[cell].toDouble(),
                             windAt2m(cell)
                         )
                         potentialConstant[cell] = terms.constant.toFloat()
@@ -717,9 +743,9 @@ object MoistureMarch {
 
         /** The wind at 2 m over [cell] (row-major), meters a second. */
         private fun windAt2m(cell: Int): Double =
-            season.windAt2mMps?.let { it[cell].toDouble() } ?: SurfaceEvaporation.LAND_WIND_AT_2_M_MPS
+            windAt2mMps?.let { it[cell].toDouble() } ?: SurfaceEvaporation.LAND_WIND_AT_2_M_MPS
 
-        private fun precompute() {
+        private fun precompute(season: Season) {
             val climate = config.climate
             val referenceMassFlux = transferMassFlux(TRANSPORT_SPEED_MPS)
             val slowest = TRANSPORT_SPEED_MPS * SLOWEST_SPEED_SHARE
@@ -748,7 +774,7 @@ object MoistureMarch {
                                 surfaceHumidity, airHumidity, massFlux
                             ).toFloat()
                         }
-                        suppression[here] = (if (inputs.isLand[cell]) lidFactor(cell) else 1.0).toFloat()
+                        suppression[here] = (if (inputs.isLand[cell]) lidFactor(cell, season.inversionSuppression) else 1.0).toFloat()
                     }
                 }
             }
@@ -821,8 +847,8 @@ object MoistureMarch {
             PressureWind.AIR_DENSITY_KG_PER_M3 * SurfaceEvaporation.evaporationTransferCoefficient(windMps) * windMps
 
         /** The marine inversion's hold on a land cell's rain, as [MoistureBudget] defines it. */
-        private fun lidFactor(cell: Int): Double {
-            val suppressionOfCell = season.inversionSuppression ?: return 1.0
+        private fun lidFactor(cell: Int, inversionSuppression: FloatArray?): Double {
+            val suppressionOfCell = inversionSuppression ?: return 1.0
             val lid = inputs.lidElevation
             val aboveLid =
                 if (lid <= 0f) 1.0 else (inputs.relativeElevation[cell] / lid).toDouble().coerceIn(0.0, 1.0)
@@ -1139,7 +1165,7 @@ object MoistureMarch {
                 record.rain.data[cell] = rainMm[here]
                 record.columnWater.data[cell] = vapor.toFloat()
                 record.saturatedColumn.data[cell] = saturated.toFloat()
-                if (kind == OPEN_SEA) record.seaMinusAirC.data[cell] = season.seaSurfaceC[cell] - season.airTemperatureC[cell]
+                if (kind == OPEN_SEA) record.seaMinusAirC.data[cell] = seaSurfaceC[cell] - airTemperatureC[cell]
                 if (kind == LAND) record.groundReturn.data[cell] = (added * rate).toFloat()
                 if (kind == OPEN_SEA) record.seaEvaporation.data[cell] = (added * rate).toFloat()
                 record.convergenceRain.data[cell] = (convergenceRain * rate).toFloat()
@@ -1194,10 +1220,10 @@ object MoistureMarch {
         fun finishPotentials() {
             parallelChunks(0, cellsDown) { startRow, endRow ->
                 for (row in startRow until endRow) {
-                    val sun = season.extraterrestrialOfRow[row]
+                    val sun = extraterrestrialOfRow[row]
                     for (column in 0 until cellsAcross) {
                         val cell = row * cellsAcross + column
-                        val airC = season.airTemperatureC[cell].toDouble()
+                        val airC = airTemperatureC[cell].toDouble()
                         val elevation = inputs.elevationM[cell].toDouble()
                         val humidity = humidity[index(row, column)].toDouble()
                         if (!inputs.isLand[cell]) {

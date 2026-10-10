@@ -68,9 +68,14 @@ internal class AtmosphereCoupling(
     /** The heating the last lap's condensation asks for, both halves as [given]. */
     private var target: DoubleArray? = null
 
+    /**
+     * The atmosphere the last lap ran under; let go while the next is solved, so the two are not
+     * held side by side.
+     */
+    private var current: BoundaryLayer.Atmosphere? = solver.solve(initialLatentWPerM2?.first, initialLatentWPerM2?.second)
+
     /** The atmosphere the last lap ran under. */
-    var atmosphere: BoundaryLayer.Atmosphere = solver.solve(initialLatentWPerM2?.first, initialLatentWPerM2?.second)
-        private set
+    val atmosphere: BoundaryLayer.Atmosphere get() = checkNotNull(current) { "the atmosphere is being solved" }
 
     /** The heating the current atmosphere was solved under, each half's, watts per square meter. */
     val julyLatentWPerM2: DoubleArray get() = given.copyOfRange(0, cellCount)
@@ -110,12 +115,14 @@ internal class AtmosphereCoupling(
     }
 
     override fun nextSeasons(): Pair<MoistureMarch.Season, MoistureMarch.Season> {
-        val current = checkNotNull(solver) { "the coupling has been released" }
+        val solving = checkNotNull(solver) { "the coupling has been released" }
         val seasons = checkNotNull(seasonsOf) { "the coupling has been released" }
         val asked = checkNotNull(target) { "no lap has been read" }
         given = nextHeating(given, asked)
-        atmosphere = current.solve(julyLatentWPerM2, januaryLatentWPerM2)
-        return seasons(atmosphere)
+        current = null
+        val solved = solving.solve(julyLatentWPerM2, januaryLatentWPerM2)
+        current = solved
+        return seasons(solved)
     }
 
     /**

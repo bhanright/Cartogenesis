@@ -393,8 +393,8 @@ internal object BoundaryLayer {
      *
      * All or none, not as many as the share holds: the share is of the heap's ceiling, not of what
      * the world beside the loop leaves free, and keeping the 64 waves an eighth of a test worker's
-     * 3.5 GB holds (448 MB) ran the deep tier's worlds of 1,024 rows out of heap in fourteen tests
-     * where keeping none had passed them.
+     * 3.5 GB holds (448 MB) ran the deep tier's worlds of 1,024 rows out of heap in fourteen tests,
+     * against four with none kept.
      */
     fun wavesToKeep(config: WorldGenConfig): Int {
         val coarse = SphericalGrid.forAtmosphere(config.scale)

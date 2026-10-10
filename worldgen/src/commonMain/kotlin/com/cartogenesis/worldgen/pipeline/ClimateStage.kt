@@ -706,7 +706,7 @@ object ClimateStage {
         val climateConfig = config.climate
         // The last coupled atmosphere is another world's or another run's, and the dry one the
         // ocean's stress has already read: let both go before this run's waves and march are held,
-        // rather than beside them: held, they ran the deep tier's 1,024-row worlds out of heap.
+        // rather than beside them.
         lastCoupled = null
         lastAtmosphere = null
 

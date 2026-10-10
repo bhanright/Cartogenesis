@@ -260,28 +260,32 @@ extra["deepStagesLimited"] = deepStagesAsked != null
 /*
  * The cache's two clearing tasks run `WorldCacheMaintenance` on `:worldgen`'s test classpath, as
  * `applyPinRecords` runs its rewriter, so that where the cache is and what is stale are decided by
- * the one code the tests guard (`WorldDiskCacheTest`).
+ * the one code the tests guard (`WorldDiskCacheTest`). They belong to `:worldgen`, whose classpath
+ * only its own tasks may resolve; `./gradlew clearWorldCache` finds them by name.
  */
 fun JavaExec.maintainWorldCache(action: String) {
     group = "verification"
-    classpath = project(":worldgen").tasks.named<Test>("jvmTest").get().classpath
+    classpath = project.tasks.named<Test>("jvmTest").get().classpath
     mainClass.set("com.cartogenesis.worldgen.WorldCacheMaintenance")
     args(action)
     systemProperties(worldCacheSystemProperties)
 }
 
-tasks.register<JavaExec>("clearWorldCache") {
-    description = "Deletes every world the test tiers have cached on disk, for every checkout on the machine."
-    maintainWorldCache("clear")
-    // Where this checkout kept its own cache before it was shared; `clean` does not reach the
-    // root project's build directory.
-    val perCheckoutCache = layout.buildDirectory.dir("world-cache")
-    doLast { perCheckoutCache.get().asFile.deleteRecursively() }
-}
+// Where this checkout kept its own cache before it was shared; `clean` does not reach the root
+// project's build directory.
+val perCheckoutWorldCache = layout.buildDirectory.dir("world-cache")
 
-tasks.register<JavaExec>("clearWorldCacheStale") {
-    description = "Deletes the cached worlds of every generator unused for -PworldCacheStaleDays (3 unless given)."
-    maintainWorldCache("stale")
+project(":worldgen") {
+    tasks.register<JavaExec>("clearWorldCache") {
+        description = "Deletes every world the test tiers have cached on disk, for every checkout on the machine."
+        maintainWorldCache("clear")
+        doLast { perCheckoutWorldCache.get().asFile.deleteRecursively() }
+    }
+
+    tasks.register<JavaExec>("clearWorldCacheStale") {
+        description = "Deletes the cached worlds of every generator unused for -PworldCacheStaleDays (3 unless given)."
+        maintainWorldCache("stale")
+    }
 }
 
 subprojects {

@@ -37,7 +37,7 @@ import kotlin.math.sqrt
 internal class AtmosphereCoupling(
     solver: BoundaryLayer.Solver,
     /** The two half-years' seasons the march reads under a solved atmosphere. */
-    private val seasonsOf: (BoundaryLayer.Atmosphere) -> Pair<MoistureMarch.Season, MoistureMarch.Season>,
+    seasonsOf: (BoundaryLayer.Atmosphere) -> Pair<MoistureMarch.Season, MoistureMarch.Season>,
     /** Walker and Ni's mixing `beta`: the share of the residual each lap's heating moves by. */
     val relaxation: Double = RELAXATION,
     /** How many earlier laps the acceleration combines; zero for the plain relaxed iteration. */
@@ -51,6 +51,12 @@ internal class AtmosphereCoupling(
 ) : MoistureMarch.Coupling {
 
     private var solver: BoundaryLayer.Solver? = solver
+
+    /**
+     * Held until [release]: it closes over the climate run's seasonal fields, a few dozen of the
+     * map's fields, which a kept coupling would otherwise hold into the next world.
+     */
+    private var seasonsOf: ((BoundaryLayer.Atmosphere) -> Pair<MoistureMarch.Season, MoistureMarch.Season>)? = seasonsOf
     private val remap = solver.remap
     private val coarse = remap.coarse
     private val cellCount = coarse.cellCount
@@ -91,7 +97,8 @@ internal class AtmosphereCoupling(
     private val weight = DoubleArray(2 * cellCount) { sqrt(coarse.cellAreaSquareMeters[(it % cellCount) / coarse.columns]) }
 
     /** The two seasons the first lap runs under. */
-    fun firstSeasons(): Pair<MoistureMarch.Season, MoistureMarch.Season> = seasonsOf(atmosphere)
+    fun firstSeasons(): Pair<MoistureMarch.Season, MoistureMarch.Season> =
+        checkNotNull(seasonsOf) { "the coupling has been released" }(atmosphere)
 
     override fun settledAfter(julyHalfCondensationMm: FloatArray, januaryHalfCondensationMm: FloatArray): Boolean {
         val asked = latentHeatingOf(julyHalfCondensationMm) + latentHeatingOf(januaryHalfCondensationMm)
@@ -104,15 +111,22 @@ internal class AtmosphereCoupling(
 
     override fun nextSeasons(): Pair<MoistureMarch.Season, MoistureMarch.Season> {
         val current = checkNotNull(solver) { "the coupling has been released" }
+        val seasons = checkNotNull(seasonsOf) { "the coupling has been released" }
         val asked = checkNotNull(target) { "no lap has been read" }
         given = nextHeating(given, asked)
         atmosphere = current.solve(julyLatentWPerM2, januaryLatentWPerM2)
-        return seasonsOf(atmosphere)
+        return seasons(atmosphere)
     }
 
-    /** Lets the factored waves go once the march is done; the atmosphere and the history are kept. */
+    /**
+     * Lets the factored waves and the seasons' fields go once the march is done, and the
+     * acceleration's earlier laps; the atmosphere and the residuals are kept.
+     */
     fun release() {
         solver = null
+        seasonsOf = null
+        givenHistory.clear()
+        targetHistory.clear()
     }
 
     /**

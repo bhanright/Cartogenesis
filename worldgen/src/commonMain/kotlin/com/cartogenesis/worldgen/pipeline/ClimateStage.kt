@@ -704,9 +704,11 @@ object ClimateStage {
         val cellsAcross = config.width
         val cellsDown = config.height
         val climateConfig = config.climate
-        // The last coupled atmosphere is another world's or another run's: let it go before this
-        // run's factored waves and march are held, rather than beside them.
+        // The last coupled atmosphere is another world's or another run's, and the dry one the
+        // ocean's stress has already read: let both go before this run's waves and march are held,
+        // rather than beside them: held, they ran the deep tier's 1,024-row worlds out of heap.
         lastCoupled = null
+        lastAtmosphere = null
 
         // One knob, used by the belts below. Switching seasons off is exactly a tilt of zero: the
         // rain belts then stop migrating and the planet's axis stands upright, so the energy
@@ -1576,8 +1578,8 @@ object ClimateStage {
     }
 
     /**
-     * The boundary layer's last answer and what it was asked: the ocean's stress and the climate
-     * read the same world's atmosphere one after the other, and it is the same one.
+     * The boundary layer's last answer and what it was asked: the ocean's stress reads the dry
+     * atmosphere of a world's sea, and the guards ask for the same one after it.
      */
     private class SolvedAtmosphere(
         val config: WorldGenConfig,
@@ -1591,9 +1593,9 @@ object ClimateStage {
 
     /**
      * The boundary layer of [sea] under the energy balance [zonal] (solved at [globalCoolingC]) and
-     * [marineFraction], both halves ([BoundaryLayer.solve]). The last one solved is kept: it is a
-     * pure function of the configuration, the sea result and the cooling, and the ocean's stress
-     * and the climate ask for the same one in turn.
+     * [marineFraction], both halves ([BoundaryLayer.solve]). The last one solved is kept until the
+     * climate runs: it is a pure function of the configuration, the sea result and the cooling, and
+     * the ocean's stress and the guards ask for the same one in turn.
      */
     internal fun atmosphere(
         config: WorldGenConfig,

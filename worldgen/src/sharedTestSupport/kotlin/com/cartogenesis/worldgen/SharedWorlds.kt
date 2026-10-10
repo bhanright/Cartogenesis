@@ -17,9 +17,9 @@ import org.junit.runners.model.Statement
  * function of its [WorldGenConfig] when it is generated fresh on the processor with nobody watching
  * its progress, so a test that asks for one of those can be handed the one already made.
  *
- * Beneath the worlds a worker holds is [WorldDiskCache], which the build points at a directory under
- * `build/`: a world not held here is read from there if any worker of this run or of an earlier one
- * made it with the same generator, and stored there when it is made.
+ * Beneath the worlds a worker holds is [WorldDiskCache], one directory every checkout on the machine
+ * shares: a world not held here is read from there if any worker of this run, of an earlier one or of
+ * another checkout made it with the same generator, and stored there when it is made.
  *
  * What is lent is only that: [world] takes a config and nothing else. A test whose subject is
  * generation itself — determinism, reuse through `previous`, an accelerator, stopping, progress,

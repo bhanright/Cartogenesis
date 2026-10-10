@@ -113,3 +113,18 @@ always. Without it, every deep class runs. What to name, by where the change is:
 
 Any change to the generator's code also empties the world cache for the next run (its key is a hash
 of the compiled classes), so the first everyday run after one generates its standard worlds afresh.
+
+The world cache is one directory for every checkout and worktree on the machine,
+`~/.cartogenesis/world-cache`, so a worktree on a commit another has already tested reads its worlds
+rather than generating them. Its key keeps different code apart, and worktrees with different code
+may run their tiers at the same time (docs/DESIGN_LEDGER.md, WC1). The settings:
+
+| Gradle property | Default | What it sets |
+|---|---|---|
+| `-PworldCacheDirectory=<path>` | the environment's `CARTOGENESIS_WORLD_CACHE`, else `~/.cartogenesis/world-cache` | where the cache lives |
+| `-PworldCacheGigabytes=<n>` | 20 | the cap over every checkout's code together; past it the least recently used worlds go, the running code's standard worlds last |
+| `-PworldCacheStaleDays=<n>` | 3 | at a test JVM's first use of the cache, every other code's worlds unused this long go |
+| `-PworldCache=off` | on | generates every world, for a run that should not trust the cache |
+
+`./gradlew clearWorldCache` empties the shared cache (and the `build/world-cache` a checkout kept
+before it was shared); `./gradlew clearWorldCacheStale` removes only the stale code's worlds.

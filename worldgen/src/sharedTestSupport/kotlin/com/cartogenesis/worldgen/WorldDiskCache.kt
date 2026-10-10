@@ -68,8 +68,9 @@ class WorldDiskCache(
 
     /**
      * This generator's directory. Made at the cache's first use, which is also when the other
-     * generators' stale directories are removed; made first, so that another cache pruning at the
-     * same moment sees this one in use.
+     * generators' stale directories are removed. A prune elsewhere that takes it anyway — its worlds
+     * all older than the stale age, and this JVM not yet reading them — costs generations only: a
+     * read finds nothing, and a store makes the directory again.
      */
     private val generatorDirectory: File by lazy {
         File(directory, generatorFingerprint()).also { own ->

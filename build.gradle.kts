@@ -165,20 +165,48 @@ val recordingPins = providers.gradleProperty("record").map { it != "false" }.get
 
 /*
  * The test tiers' world cache (`WorldDiskCache` in the shared test support): every world a test
- * borrows from `SharedWorlds` is kept here once made, keyed by its settings and a hash of the
- * generator's compiled classes, and read back by any later worker or run instead of being generated
- * again. One directory for the three modules that generate worlds, since they ask for the same
- * standard ones. Under `build/`, so it is never committed and a clean removes it.
+ * borrows from `SharedWorlds` is kept there once made, keyed by its settings and a hash of the
+ * generator's compiled classes, and read back by any later worker, run or checkout instead of being
+ * generated again. One directory for every checkout and worktree on the machine and the three
+ * modules that generate worlds: `.cartogenesis/world-cache` under the user's home, unless
+ * `-PworldCacheDirectory` or else the environment variable `CARTOGENESIS_WORLD_CACHE` names another
+ * (`WorldDiskCache.sharedDirectory`, which the test JVMs resolve). Outside every checkout, so it is
+ * never committed; each checkout keeping its own filled each to the cap.
  *
- * The cap is 20 GB unless `-PworldCacheGigabytes` says otherwise. Measured on the tiers at T1: the
- * everyday tier's 13 standard worlds take 0.75 GB, and the deep tier's 194 more 16.2 GB, 6.8 GB of
- * that its 21 worlds of 1,024 rows. Past the cap the least recently used variants go first and the
- * standard worlds last, so a deep run never costs the next everyday run its worlds. `-PworldCache=off` generates every
- * world as before, for a run that should not trust the cache; `clearWorldCache` empties it.
+ * Kept small two ways, both shared by every checkout. At a cache's first use in a test JVM, every
+ * generator's directory nothing has used for `-PworldCacheStaleDays` goes: code since changed, whose
+ * worlds no checkout will ask for again. And past `-PworldCacheGigabytes` the least recently used
+ * worlds go, of any generator, but the running generator's standard worlds last, so a deep run
+ * never costs the next everyday run of its code its worlds. `-PworldCache=off` generates every world
+ * as before, for a run that should not trust the cache; `clearWorldCache` empties it, and
+ * `clearWorldCacheStale` removes only what a first use would.
  */
-val worldCacheDirectory = layout.buildDirectory.dir("world-cache").get().asFile
 val worldCacheOn = providers.gradleProperty("worldCache").map { it != "off" }.getOrElse(true)
-val worldCacheBytes = providers.gradleProperty("worldCacheGigabytes").map { it.toLong() }.getOrElse(20L) * 1_000_000_000L
+
+/**
+ * One generator's both tiers with room for the standard worlds of four more checkouts' code.
+ * Measured on the tiers at T1: the everyday tier's 13 standard worlds take 0.75 GB, and the deep
+ * tier's 194 more 16.2 GB, 6.8 GB of that its 21 worlds of 1,024 rows; 16.95 + 4 x 0.75 = 19.95.
+ */
+val defaultWorldCacheGigabytes = 20L
+
+/**
+ * Long enough that a checkout left over a weekend finds its worlds on its next run; short enough that
+ * a day of commits, each a new generator with its own 0.75 GB of standard worlds, is gone in three.
+ */
+val defaultWorldCacheStaleDays = 3L
+
+val worldCacheGigabytes =
+    providers.gradleProperty("worldCacheGigabytes").map { it.toLong() }.getOrElse(defaultWorldCacheGigabytes)
+val worldCacheStaleDays =
+    providers.gradleProperty("worldCacheStaleDays").map { it.toLong() }.getOrElse(defaultWorldCacheStaleDays)
+
+/** What the test JVMs and the cache's maintenance are told; the directory only when the build names one. */
+val worldCacheSystemProperties: Map<String, String> = buildMap {
+    put("cartogenesis.worldCache.capacityBytes", (worldCacheGigabytes * 1_000_000_000L).toString())
+    put("cartogenesis.worldCache.staleAfterDays", worldCacheStaleDays.toString())
+    providers.gradleProperty("worldCacheDirectory").orNull?.let { put("cartogenesis.worldCache.directory", file(it).absolutePath) }
+}
 
 /*
  * The deep tier's stages, and what each one reaches downstream (docs/PIPELINE.md). The everyday tier
@@ -229,17 +257,37 @@ val deepStagesAsked: Set<String>? = providers.gradleProperty("stages").orNull?.l
 extra["deepStages"] = deepStagesAsked ?: pipelineReach.keys
 extra["deepStagesLimited"] = deepStagesAsked != null
 
-tasks.register<Delete>("clearWorldCache") {
+/*
+ * The cache's two clearing tasks run `WorldCacheMaintenance` on `:worldgen`'s test classpath, as
+ * `applyPinRecords` runs its rewriter, so that where the cache is and what is stale are decided by
+ * the one code the tests guard (`WorldDiskCacheTest`).
+ */
+fun JavaExec.maintainWorldCache(action: String) {
     group = "verification"
-    description = "Deletes every world the test tiers have cached on disk."
-    delete(worldCacheDirectory)
+    classpath = project(":worldgen").tasks.named<Test>("jvmTest").get().classpath
+    mainClass.set("com.cartogenesis.worldgen.WorldCacheMaintenance")
+    args(action)
+    systemProperties(worldCacheSystemProperties)
+}
+
+tasks.register<JavaExec>("clearWorldCache") {
+    description = "Deletes every world the test tiers have cached on disk, for every checkout on the machine."
+    maintainWorldCache("clear")
+    // Where this checkout kept its own cache before it was shared; `clean` does not reach the
+    // root project's build directory.
+    val perCheckoutCache = layout.buildDirectory.dir("world-cache")
+    doLast { perCheckoutCache.get().asFile.deleteRecursively() }
+}
+
+tasks.register<JavaExec>("clearWorldCacheStale") {
+    description = "Deletes the cached worlds of every generator unused for -PworldCacheStaleDays (3 unless given)."
+    maintainWorldCache("stale")
 }
 
 subprojects {
     if (worldCacheOn) {
         tasks.withType<Test>().configureEach {
-            systemProperty("cartogenesis.worldCache.directory", worldCacheDirectory.absolutePath)
-            systemProperty("cartogenesis.worldCache.capacityBytes", worldCacheBytes.toString())
+            systemProperties(worldCacheSystemProperties)
         }
     }
 

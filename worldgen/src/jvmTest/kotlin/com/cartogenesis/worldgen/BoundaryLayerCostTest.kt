@@ -50,8 +50,8 @@ class BoundaryLayerCostTest {
 
         const val ROWS = 1024
 
-        /** The coupled loop's laps a climate run on the standard worlds (`AtmosphereCouplingTest`). */
-        const val LAPS_PER_CLIMATE = 17
+        /** The coupled loop's laps a climate run, 13 to 18 on the standard worlds at 512 and 1,024 rows (`AtmosphereCouplingTest`). */
+        const val LAPS_PER_CLIMATE = 16
     }
 
     @Test
@@ -152,7 +152,7 @@ class BoundaryLayerCostTest {
                 "%.2f%% of a %.1f s world in all and %.2f%% on the map's cells")
                 .format(ROWS, factorMs, downMs, solveMs, upMs, ascentMs, laps, LAPS_PER_CLIMATE, wholeShare * 100, worldSeconds, perCellShare * 100)
         )
-        KnownFailures.expect("A1-5: the coupled loop's per-cell work is over a hundredth of a world", "0.0%") {
+        KnownFailures.expect("A1-5: the coupled loop's per-cell work is over a hundredth of a world", "10%") {
             if (perCellShare >= WORTH_A_DEVICE_SHARE) {
                 throw RecordedViolation(
                     "the coupled loop's per-cell work takes %.2f%% of a world, over the hundredth rule 8 allows without a graphics path".format(perCellShare * 100),

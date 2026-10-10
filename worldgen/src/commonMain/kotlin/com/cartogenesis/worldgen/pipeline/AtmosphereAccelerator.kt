@@ -13,9 +13,11 @@ package com.cartogenesis.worldgen.pipeline
  * answer by a test in the manner of `GpuOceanTest`, within the rounding of single precision over the
  * sums each output is.
  *
- * Not yet called by the engine: nothing in the pipeline carries a field to the atmosphere's grid
- * until the dry model is built (docs/TODO.md), and until then the seam and its kernels are held to
- * the processor by their test alone.
+ * Not yet called by the engine, though the boundary layer and the coupled loop carry fields both
+ * ways every lap: with an upload and a readback a call the card was measured no faster than the
+ * processor (docs/DESIGN_LEDGER.md, A1-2), and the loop's per-cell work wants its fields kept on the
+ * device between laps first (docs/TODO.md). Until then the seam and its kernels are held to the
+ * processor by their test alone.
  */
 interface AtmosphereAccelerator {
 

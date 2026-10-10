@@ -169,9 +169,9 @@ object MoistureMarch {
      * until the year's land rain moves by less than [CONVERGED_SHARE], and with a [Coupling] until
      * the atmosphere's heating has settled too.
      *
-     * Forty, a ceiling and not a count: the coupled loop settles in 13 to 17 laps on the standard
-     * worlds at 512 and 1,024 rows, and the plain iteration it is accelerated from in 24 to more
-     * than forty (docs/DESIGN_LEDGER.md, A1-5). A loop that reaches the ceiling has a feedback at or
+     * Forty, a ceiling and not a count: the coupled loop settles in 13 to 18 laps on the standard
+     * worlds at 512 and 1,024 rows, and the plain iteration it is accelerated from in 12 to 29, or
+     * not within forty on one world in four (docs/DESIGN_LEDGER.md, A1-5). A loop that reaches the ceiling has a feedback at or
      * over one, which more laps would not settle; it stops with the last lap's rain, and
      * `AtmosphereCouplingTest` holds the standard worlds short of it.
      */

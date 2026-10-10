@@ -23,9 +23,10 @@ import kotlin.math.sqrt
  *
  * **The step.** The plain iteration `Q <- g(Q)` steps by the loop's own feedback along each of its
  * eigenvalues `mu`, and relaxing it by `theta` steps by `1 - theta + theta mu`, which shrinks a step
- * only while every `mu` stands below one and cannot stabilize one above it. The loop's slowest
- * feedback was measured at 0.93 to 0.95 a lap (docs/DESIGN_LEDGER.md, A1-5): below one, so it
- * converges, but over fifty laps to the bound. So the step is Anderson's (1965) acceleration as
+ * only while every `mu` stands below one and cannot stabilize one above it. The plain iteration's
+ * slowest lap-to-lap ratio, the loop's feedback, was measured at 0.65 to 1.00 on the standard
+ * worlds (docs/DESIGN_LEDGER.md, A1-5): it settled three of them in 12 to 29 laps and not the
+ * fourth in forty, whose feedback stands at one. So the step is Anderson's (1965) acceleration as
  * Walker and Ni (2011, read) state it, their Algorithm AA in the unconstrained form of their section
  * 3 with [ACCELERATION_DEPTH] earlier laps: the next heating is the combination of the last laps'
  * whose residuals cancel best, by least squares, which on a linear loop is GMRES on its residual

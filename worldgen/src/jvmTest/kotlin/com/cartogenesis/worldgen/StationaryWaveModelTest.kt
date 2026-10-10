@@ -167,12 +167,15 @@ class StationaryWaveModelTest {
         val doubled = factored.solve(both.scaledBy(2.0))
         val sum = factored.solve(heatOnly).surfacePressurePa.zip(factored.solve(mountainOnly).surfacePressurePa) { a, b -> a + b }
         val oneShot = model.solve(both)
+        // Some waves kept and the rest factored at the call: the same numbers in the same order.
+        val partlyKept = model.factorize(keptWaves = model.waves.count() / 3).solveEach(listOf(both, heatOnly))[0]
+        val partly = single.surfacePressurePa.indices.maxOf { abs(partlyKept.surfacePressurePa[it] - single.surfacePressurePa[it]) }
         val largest = single.surfacePressurePa.maxOf { abs(it) }
         val doubling = single.surfacePressurePa.indices.maxOf { abs(doubled.surfacePressurePa[it] - 2 * single.surfacePressurePa[it]) } / largest
         val superposition = single.surfacePressurePa.indices.maxOf { abs(sum[it] - single.surfacePressurePa[it]) } / largest
         val refactored = single.surfacePressurePa.indices.maxOf { abs(oneShot.surfacePressurePa[it] - single.surfacePressurePa[it]) } / largest
         println("LINEARITY: doubling %.1e, superposition %.1e, factored once against factored per solve %.1e, of the largest surface pressure %.0f Pa".format(doubling, superposition, refactored, largest))
-        assertTrue(doubling < 1e-12 && superposition < 1e-12 && refactored == 0.0, "doubling $doubling, superposition $superposition, refactored $refactored")
+        assertTrue(doubling < 1e-12 && superposition < 1e-12 && refactored == 0.0 && partly == 0.0, "doubling $doubling, superposition $superposition, refactored $refactored, partly kept $partly")
     }
 
     @Test

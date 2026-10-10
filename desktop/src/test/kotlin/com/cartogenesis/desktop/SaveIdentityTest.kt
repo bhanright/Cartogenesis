@@ -50,7 +50,7 @@ class SaveIdentityTest {
     @Test
     fun `Save files the world on screen under its own settings, and a new world under a new document`() {
         val library = RecordingLibrary()
-        runDesktopComposeUiTest(width = WIDTH, height = HEIGHT) {
+        runDesktopComposeUiTest(width = WIDTH, height = HEIGHT, testTimeout = WORLD_TEST_TIMEOUT) {
             setContent { CartogenesisTheme(dark = false) { CartogenesisApp(RecordingPlatform(library)) } }
 
             onNodeWithText("Generate").performClick()

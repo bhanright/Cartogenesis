@@ -212,33 +212,61 @@ class StationaryWaveModel(
     private fun verticalMotionSlot(interior: Int) = 3 * levelCount + interior
 
     /**
-     * Every wave's system factored, ready for any number of forcings at a back-substitution each.
-     * The factors take `(waves) * rows * 3 * blockSize^2` complex numbers: about 160 MB on Earth's
-     * planet at four levels, so a caller that solves once should call [solve] instead.
+     * Some or all of the waves' systems factored, ready for any number of forcings: a kept wave
+     * back-substitutes, any other is assembled and factored afresh at each call, both halves of a
+     * pair in one factoring ([solveEach]), as [StationaryWaveModel.solveEach] does. The two compute
+     * the same numbers in the same order, so how many waves are kept moves the cost and never the
+     * answer. The factors take `rows * 3 * blockSize^2` complex numbers a kept wave: about 7 MB on
+     * Earth's planet at eight levels, so all a hundred of its waves 700 MB.
      */
-    inner class Factored internal constructor(private val systems: Array<ComplexBlockTridiagonal>, private val rowScales: Array<DoubleArray>) {
-        /** The response to [forcing], by back-substitution in every wave. */
-        fun solve(forcing: WaveForcing): WaveResponse {
-            val spectra = ForcingSpectra(forcing)
-            val solutionReal = Array(waves.count()) { DoubleArray(grid.rows * blockSize) }
-            val solutionImaginary = Array(waves.count()) { DoubleArray(grid.rows * blockSize) }
-            parallelChunks(0, waves.count()) { start, end ->
+    inner class Factored internal constructor(private val systems: Array<ComplexBlockTridiagonal?>, private val rowScales: Array<DoubleArray?>) {
+        /** How many waves' factors are kept. */
+        val keptWaves: Int = systems.count { it != null }
+
+        /** The response to [forcing]. */
+        fun solve(forcing: WaveForcing): WaveResponse = solveEach(listOf(forcing)).single()
+
+        /** The responses to every one of [forcings], each wave factored at most once for all of them. */
+        fun solveEach(forcings: List<WaveForcing>): List<WaveResponse> {
+            val spectra = forcings.map { ForcingSpectra(it) }
+            val count = waves.count()
+            val solutionReal = Array(forcings.size) { Array(count) { DoubleArray(grid.rows * blockSize) } }
+            val solutionImaginary = Array(forcings.size) { Array(count) { DoubleArray(grid.rows * blockSize) } }
+            parallelChunks(0, count) { start, end ->
+                // One scratch system per worker for the waves whose factors are not kept.
+                var scratch: ComplexBlockTridiagonal? = null
                 for (index in start until end) {
-                    rightHandSide(waves.first + index, spectra, rowScales[index], solutionReal[index], solutionImaginary[index])
-                    systems[index].solve(solutionReal[index], solutionImaginary[index])
+                    val wave = waves.first + index
+                    val kept = systems[index]
+                    val system: ComplexBlockTridiagonal
+                    val scales: DoubleArray
+                    if (kept != null) {
+                        system = kept
+                        scales = rowScales[index]!!
+                    } else {
+                        system = scratch ?: ComplexBlockTridiagonal(grid.rows, blockSize).also { scratch = it }
+                        system.clear()
+                        scales = assemble(wave, system)
+                        system.factorize()
+                    }
+                    for (which in forcings.indices) {
+                        rightHandSide(wave, spectra[which], scales, solutionReal[which][index], solutionImaginary[which][index])
+                        system.solve(solutionReal[which][index], solutionImaginary[which][index])
+                    }
                 }
             }
-            return response(solutionReal, solutionImaginary, spectra)
+            return forcings.indices.map { response(solutionReal[it], solutionImaginary[it], spectra[it]) }
         }
     }
 
-    /** Factors every wave's system once (see [Factored]). */
-    fun factorize(): Factored {
+    /** Factors the first [keptWaves] waves' systems once and keeps them (see [Factored]); all of them by default. */
+    fun factorize(keptWaves: Int = waves.count()): Factored {
         val count = waves.count()
+        val kept = keptWaves.coerceIn(0, count)
         val systems = arrayOfNulls<ComplexBlockTridiagonal>(count)
         val scales = arrayOfNulls<DoubleArray>(count)
         // In chunks of waves, one per worker: `parallelFor` keeps a hundred items on one thread.
-        parallelChunks(0, count) { start, end ->
+        parallelChunks(0, kept) { start, end ->
             for (index in start until end) {
                 val system = ComplexBlockTridiagonal(grid.rows, blockSize)
                 scales[index] = assemble(waves.first + index, system)
@@ -246,8 +274,7 @@ class StationaryWaveModel(
                 systems[index] = system
             }
         }
-        @Suppress("UNCHECKED_CAST")
-        return Factored(systems as Array<ComplexBlockTridiagonal>, scales as Array<DoubleArray>)
+        return Factored(systems, scales)
     }
 
     /** The response to [forcing], each wave assembled, factored and solved in turn and then let go. */

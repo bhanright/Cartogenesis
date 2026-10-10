@@ -11,8 +11,8 @@ import kotlin.math.sqrt
  * net condensation is carried down to the atmosphere's grid ([AtmosphereRemap.forcing], which keeps
  * its area integral), times the latent heat it releases, `L_v`; that is the heating `g(Q)` the lap's
  * water asks for, when the lap ran under the heating `Q`. The atmosphere is solved under the next
- * heating ([BoundaryLayer.Solver], every wave factored once for the whole loop and back-substituted
- * twice a lap where the heap holds the factors, factored afresh each lap where it does not), and its
+ * heating ([BoundaryLayer.Solver], each wave factored once for the whole loop and back-substituted
+ * twice a lap where the heap holds its factors, factored afresh each lap where it does not), and its
  * seasons are handed to the next lap ([seasonsOf]).
  *
  * **Settled** when the heating the last lap ran under stands within [MoistureMarch.CONVERGED_SHARE]

@@ -108,7 +108,7 @@ class BoundaryLayerCostTest {
         val marine = ClimateStage.marineAirFraction(config, sea)
         val belts = listOf(ClimateStage.beltWindOfRows(config, true), ClimateStage.beltWindOfRows(config, false))
         val factoredAt = System.nanoTime()
-        val solver = BoundaryLayer.Solver(config, sea, zonal, marine, belts[0], belts[1], keepFactors = true)
+        val solver = BoundaryLayer.Solver(config, sea, zonal, marine, belts[0], belts[1], keptWaves = Int.MAX_VALUE)
         val factorMs = (System.nanoTime() - factoredAt) / 1e6
         val coupling = AtmosphereCoupling(solver, { _ -> error("not marched") })
         val condensation = FloatArray(config.width * config.height) { cell ->

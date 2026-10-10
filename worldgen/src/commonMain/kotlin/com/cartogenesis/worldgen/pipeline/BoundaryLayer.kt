@@ -261,15 +261,15 @@ internal object BoundaryLayer {
         marineFraction: FloatField,
         julyHalfBelts: PressureWind.Vectors,
         januaryHalfBelts: PressureWind.Vectors
-    ): Atmosphere = Solver(config, sea, zonal, marineFraction, julyHalfBelts, januaryHalfBelts, keepFactors = false).solve(null, null)
+    ): Atmosphere = Solver(config, sea, zonal, marineFraction, julyHalfBelts, januaryHalfBelts, keptWaves = 0).solve(null, null)
 
     /**
      * One world's boundary layer, ready to be solved for any latent heating: everything that does
      * not depend on the rain, built once. The basic state and the drag are the same in both
-     * calendar halves, so with [keepFactors] every wave is factored once here and each solve after
-     * is a back-substitution, two a coupling lap; without it each solve factors afresh, both halves
-     * at once, and keeps nothing (about 700 MB of factors on Earth's planet at eight levels;
-     * [keepsFactors] decides). The answer is the same to the bit either way.
+     * calendar halves, so the first [keptWaves] waves are factored once here and back-substitute
+     * at each solve after, two a coupling lap, and the others are factored afresh at each solve,
+     * both halves at once (every wave's factors are about 700 MB on Earth's planet at eight levels;
+     * [wavesToKeep] decides). The answer is the same to the bit however many are kept.
      */
     class Solver(
         val config: WorldGenConfig,
@@ -278,7 +278,7 @@ internal object BoundaryLayer {
         marineFraction: FloatField,
         private val julyHalfBelts: PressureWind.Vectors,
         private val januaryHalfBelts: PressureWind.Vectors,
-        keepFactors: Boolean
+        keptWaves: Int
     ) {
         private val cellsAcross = config.width
         private val cellsDown = config.height
@@ -339,7 +339,7 @@ internal object BoundaryLayer {
         private val julySurfaceC = surfaceCoarseC(zonal, marineFraction, Season.JULY_HALF)
         private val januarySurfaceC = surfaceCoarseC(zonal, marineFraction, Season.JANUARY_HALF)
         private val shallowRates = shallowRelaxationPerSecond(levels)
-        private val factored: StationaryWaveModel.Factored? = if (keepFactors) model.factorize() else null
+        private val factored: StationaryWaveModel.Factored = model.factorize(keptWaves)
 
         /**
          * The forcing of one half: the shallow land-sea heating toward [surfaceC], plus
@@ -363,7 +363,7 @@ internal object BoundaryLayer {
          */
         fun solve(julyLatentWPerM2: DoubleArray?, januaryLatentWPerM2: DoubleArray?): Atmosphere {
             val forcings = listOf(forcing(julySurfaceC, julyLatentWPerM2), forcing(januarySurfaceC, januaryLatentWPerM2))
-            val responses = factored?.let { factors -> forcings.map { factors.solve(it) } } ?: model.solveEach(forcings)
+            val responses = factored.solveEach(forcings)
             return Atmosphere(
                 remap, levels, state.surfaceDensity, terrain,
                 half(responses[0], julyHalfBelts, julyLatentWPerM2), half(responses[1], januaryHalfBelts, januaryLatentWPerM2),
@@ -384,26 +384,28 @@ internal object BoundaryLayer {
     }
 
     /**
-     * Whether a world's coupled loop keeps every wave's factors between its laps: when they take no
+     * How many waves' factors a world's coupled loop keeps between its laps: as many as take no
      * more than [FACTORS_SHARE_OF_HEAP] of the most heap the platform gives
-     * ([com.cartogenesis.worldgen.concurrent.maximumHeapBytes]). Kept, each lap back-substitutes;
-     * not kept, each lap factors afresh. The two compute the same numbers in the same order, so the
-     * choice moves the cost of a world and never the world (`StationaryWaveModelTest`).
+     * ([com.cartogenesis.worldgen.concurrent.maximumHeapBytes]), every wave in a large heap. A kept
+     * wave back-substitutes each lap; any other factors afresh. The two compute the same numbers in
+     * the same order ([StationaryWaveModel.Factored]), so the count moves the cost of a world and
+     * never the world (`StationaryWaveModelTest`).
      */
-    fun keepsFactors(config: WorldGenConfig): Boolean {
+    fun wavesToKeep(config: WorldGenConfig): Int {
         val coarse = SphericalGrid.forAtmosphere(config.scale)
         val blockSize = 4 * LEVEL_COUNT - 1
         val waves = coarse.columns / 3
-        val bytes = waves.toLong() * coarse.rows * FACTOR_BLOCKS_PER_ROW * blockSize * blockSize * COMPLEX_BYTES
-        return bytes <= com.cartogenesis.worldgen.concurrent.maximumHeapBytes() / FACTORS_SHARE_OF_HEAP
+        val bytesPerWave = coarse.rows.toLong() * FACTOR_BLOCKS_PER_ROW * blockSize * blockSize * COMPLEX_BYTES
+        val budget = com.cartogenesis.worldgen.concurrent.maximumHeapBytes() / FACTORS_SHARE_OF_HEAP
+        return (budget / bytesPerWave).coerceIn(0L, waves.toLong()).toInt()
     }
 
     /**
-     * The share of the heap the factors may take, as its inverse: an eighth. The factors are about
-     * 700 MB on Earth's planet at eight levels, so a heap of 5.6 GB or more keeps them, the
-     * application's (three quarters of the machine's memory); the test workers' 3 to 4 GB, which
-     * hold a world of 1,024 rows, its march and a drawing beside them, ran out of heap with the
-     * factors kept at a quarter, and they and the interface's half a gigabyte factor each lap.
+     * The share of the heap the factors may take, as its inverse: an eighth. Every wave's factors
+     * are about 700 MB on Earth's planet at eight levels, kept whole in a heap of 5.6 GB or more,
+     * the application's (three quarters of the machine's memory); the test workers' 3 to 4 GB,
+     * which hold a world of 1,024 rows, its march and a drawing beside them, ran out of heap with
+     * every wave kept at a quarter, and keep half of them at an eighth.
      */
     const val FACTORS_SHARE_OF_HEAP = 8L
 

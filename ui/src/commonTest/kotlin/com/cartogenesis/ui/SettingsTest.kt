@@ -257,7 +257,7 @@ class SettingsTest {
         /** The world `GenerationProgressTest` generates, for the same reason: every stage runs. */
         val SMALL_WORLD = WorldGenConfig(seed = 42L, width = 128, height = 128)
 
-        /** `GenerationProgressTest`'s allowance for one 128-cell generation in the browser. */
-        val LONGEST_WAIT = 210.seconds
+        /** `GenerationProgressTest`'s allowance for one 128-cell generation. */
+        val LONGEST_WAIT = WORLD_TEST_TIMEOUT
     }
 }

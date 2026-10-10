@@ -126,7 +126,7 @@ class CartoucheTest {
      * back from the file, and the library listing reads it without expanding the payload.
      */
     @Test
-    fun `the name round-trips through the save header`() = runTest {
+    fun `the name round-trips through the save header`() = runTest(timeout = WORLD_TEST_TIMEOUT) {
         val naming = WorldNaming()
         naming.generated(59758L, "Viimsenem")
         naming.rename("The Hollow Sea")

@@ -856,7 +856,7 @@ object ClimateStage {
                 BoundaryLayer.Solver(
                     config, sea, zonal, marineFraction,
                     beltWindOfRows(config, julyHalf = true), beltWindOfRows(config, julyHalf = false),
-                    keepFactors = BoundaryLayer.keepsFactors(config)
+                    keptWaves = BoundaryLayer.wavesToKeep(config)
                 ),
                 ::seasonsUnder,
                 loop.relaxation,

@@ -93,6 +93,14 @@
   Earth's open lowland basins are filled to (the West Siberian, the Amazon). A fill to that grade
   would have to be blended out over the margin, or the coast would follow the craton profile's
   contour. 2026-10-10, H1.
+- **Two misses H1's ground exposed, recorded rather than fixed (H1).** `GeographyAuditTest`'s
+  pooled tropical band: desert covers 0.71 of the world's own share between 0 and 15 degrees
+  against Earth's 0.27 and its bar of twice that, seed 42 reading 1.25; the horse latitudes' clause
+  holds. The climate is not this chunk's, and the cause is not isolated. And `LakeBodyTest`: seed
+  42 at 512 rows holds a three-cell lake (lake 15) whose surface stands at the ground of the one
+  cell between its two hollows, to the sixth place, and the river stage leaves that cell dry, so
+  the lake is two pieces at one level; the pocket rule's tie at the saddle is the river stage's
+  (`LakePockets`). 2026-10-10, H1.
 - **The Earth-sized planet's physical known failures (K2).** Recorded, each with its figure, where
   a guard set on the 12,000 km planet's worlds reads the Earth-sized planet's and misses Earth's
   figure: `CurrentFeedsRainTest` (seed 7's sample cold coast is shorter than the sample asks, and

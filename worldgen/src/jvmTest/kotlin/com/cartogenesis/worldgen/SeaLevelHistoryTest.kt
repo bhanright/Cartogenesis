@@ -160,16 +160,13 @@ class SeaLevelHistoryTest : BorrowsSharedWorlds() {
         // Recorded at K2, where seed 42's lowstand drowned no valley, and armed again at H1, on
         // whose ground every seed's does (docs/DESIGN_LEDGER.md, K2 and H1).
         assertTrue(shortfalls.isEmpty(), shortfalls.joinToString("; "))
-        // Recorded with the clause above (docs/DESIGN_LEDGER.md, K2; docs/TODO.md).
-        KnownFailures.expect("K2: on the Earth-sized planet the lowstand leaves too few drowned valleys pooled", "1.06x") {
-            if (!(pooledEstuaries.size == seeds.size && meanGain >= estuaryGain)) {
-                throw RecordedViolation(
-                    "pooled over ${pooledEstuaries.size} seeds the lowstand leaves ${meanGain}x the estuary mouths, " +
-                        "not the ${estuaryGain}x a drowned valley owes",
-                    "%.2fx".format(meanGain)
-                )
-            }
-        }
+        // Recorded with the clause above at K2 at 1.06x, and armed again at H1 at 1.55x
+        // (docs/DESIGN_LEDGER.md, K2 and H1).
+        assertTrue(
+            pooledEstuaries.size == seeds.size && meanGain >= estuaryGain,
+            "pooled over ${pooledEstuaries.size} seeds the lowstand leaves ${meanGain}x the estuary mouths, " +
+                "not the ${estuaryGain}x a drowned valley owes"
+        )
 
         // The other half of ground rule 2: the world without the lowstand has to fail a bar the
         // world with it clears, or this guard is measuring nothing.

@@ -226,15 +226,12 @@ class CurrentFeedsRainTest : BorrowsSharedWorlds() {
         // tenths of a percent wetter with the coupling on, and on Fix 3b's terrain it came out drier
         // (docs/DESIGN_LEDGER.md, Fix 2 and Fix 3b).
         assertTrue(coldOn < coldOff, "cold-current coast should get drier with the coupling on: off=$coldOff, on=$coldOn")
-        // Recorded at K2: on the Earth-sized planet the warm sample coast comes out half a percent
-        // drier with the coupling on (docs/DESIGN_LEDGER.md, K2).
-        KnownFailures.expect("K2: the warm sample coast on the Earth-sized planet dries with the coupling on", "off 1998, on 1988") {
-            if (warmOn < warmOff * 0.999) {
-                throw RecordedViolation(
-                    "warm-current coast should not get drier with the coupling on: off=$warmOff, on=$warmOn",
-                    "off %.0f, on %.0f".format(warmOff, warmOn)
-                )
-            }
-        }
+        // Recorded at K2, where the warm sample coast came out half a percent drier with the
+        // coupling on, and armed again at H1, where it comes out 0.2% wetter (docs/DESIGN_LEDGER.md,
+        // K2 and H1).
+        assertTrue(
+            warmOn >= warmOff * 0.999,
+            "warm-current coast should not get drier with the coupling on: off=$warmOff, on=$warmOn"
+        )
     }
 }

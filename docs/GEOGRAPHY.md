@@ -252,8 +252,12 @@ mixture of continental and oceanic crust, blurred across a 300 km margin — the
 the mixture runs from nine tenths continental to a tenth, the same on the ground whichever way the
 margin faces — so the band between the two is a shelf, a slope and a rise rather than a step, and
 Airy isostasy turns the mixture into an
-altitude: a standard continental column floats at Earth's mean land elevation of 840 m and the sea
-floor at the depth its own age puts it. Everything follows from those two numbers. The
+altitude: a standard continental column floats where Earth's continental platform stands — 374 m,
+the mean of the ice-free continents' land under 2 km and their shelves to 500 m in NOAA's ETOPO5 —
+and the sea floor at the depth its own age puts it. Everything follows from those two numbers. (It
+was Earth's mean land elevation, 840 m, until H1; that figure includes the orogens and
+Antarctica's ice, which this generator lays on the column as belts and sheets of its own, so it
+counted them twice. The finished world's mean land elevation is what is held to the 840 now.) The
 hypsometric curve has two modes with a trough between them where the continental slope is, which
 is what Earth's has and what this generator did not have before S2 — its curve was one peak
 straddling the shoreline, because the height field was renormalised to its own extremes after every
@@ -268,11 +272,28 @@ rifted crust at 30, so the crust thickens inland from its own edge over the 200 
 margin takes to thin. Both the thickness and the relief the base noise carries on it now follow
 that profile — the craton stands 44.6 km thick and as flat as the West Siberian Plain, the crust's
 outer edge 32.6 km and as varied as an Atlantic margin — and the thickness half of it is
-mass-neutral, so the average column is still 41 km and the datum is still Earth's 840 m of
+mass-neutral, so the average column is still 41 km and the datum is still the platform's
 freeboard. What changes is where a continent drowns. With one thickness and one spread everywhere,
 isostasy put a continent under water wherever the noise happened to dip, which drew flooded
-interiors and inland seas; now four fifths of the drowned continental crust lies within 500 km of
-the crust's own edge, which is a shelf.
+interiors and inland seas; on the 12,000 km planet four fifths of the drowned continental crust
+then lay within 500 km of the crust's own edge, which is a shelf. On the Earth-sized planet the
+continents are three times as wide against the same margins, and what drowns beyond 800 km of the
+edge is the open sags of the base relief inside the largest of them; that is H1's recorded miss.
+
+**The sea stands where Earth's does on its continents, and the hollows are full.** Earth's
+continental crust covers 41.2% of the surface and its land 29.2% (Cogley 1984), so the sea drowns
+29% of the crust, and the land is the crust above that line. The land's hypsometry is set by
+nothing else: where the cut stands on the platform, and how the platform is spread about it. Since
+H1 the submerged share is Earth's 29% rather than the fifth S2 measured the 12,000 km planet's
+crust drowning at its datum, and the Earth-sized planet's platform — its land under 2 km and its
+water to 500 m, belts left out — then stands at a mean of 380 to 390 m about the sea with a spread
+of 500 m, against Earth's 374 and 503 read the same way in ETOPO5. The platform's closed hollows,
+the sags of its base relief with no outlet lower than their rim, are filled to their spill level
+first, because a closed basin on a continent takes its catchment's sediment until it overflows
+(Bohacs's overfilled basin); only a sag open to the sea by lower ground stays as deep as it is.
+Measured at 1,024 rows on seeds 42, 969495 and 7: land under 200 m 24, 26 and 23% against
+Earth's 25, under 500 m 50, 53 and 45% against ETOPO5's 54, 1-2 km 17, 11 and 14% against 15.
+The 500 m to 1 km band is still 21 to 28% against 20 (`TODO.md`).
 
 **Cell-scale texture is proportional to relief, so plains are born smooth.** The base relief is
 split at 200 km. Everything broader is the shape of the country and carries the crust's own

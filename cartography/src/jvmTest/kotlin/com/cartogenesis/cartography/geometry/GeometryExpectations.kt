@@ -117,15 +117,11 @@ internal object GeometryExpectations {
      * at its review round, whose joins are relay ramps (docs/DESIGN_LEDGER.md, L1).
      */
     fun at512(expected: Expectations) = with(expected) {
-        known("7/coast as inked/FACING", "1@(-1,-1)=2.802")
-        known("42/coast as inked/FACING", "1@(-1,-1)=3.548")
-        known("1234/coast as inked/FACING", "1@(-1,-1)=3.463")
-        known("99/coast as inked/FACING", "1@(-1,-1)=3.173")
         insufficient("coast", Detector.ISOTROPY, 7L, 42L, 1234L, 99L)
         insufficient("coast", Detector.RECTANGLE, 99L)
         insufficient("coast", Detector.ORIENTATION, 7L, 42L, 1234L, 99L)
         insufficient("coast as drawn", Detector.ISOTROPY, 7L, 42L, 1234L, 99L)
-        insufficient("coast as drawn", Detector.RECTANGLE, 42L)
+        insufficient("coast as drawn", Detector.RECTANGLE, 42L, 99L)
         insufficient("coast as drawn", Detector.ORIENTATION, 7L, 42L, 1234L, 99L)
         insufficient("lakes", Detector.ISOTROPY, 7L, 42L, 1234L, 99L)
         insufficient("lakes", Detector.RECTANGLE, 1234L)

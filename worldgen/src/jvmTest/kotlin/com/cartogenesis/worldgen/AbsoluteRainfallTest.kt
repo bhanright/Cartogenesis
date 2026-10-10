@@ -136,7 +136,7 @@ class AbsoluteRainfallTest : BorrowsSharedWorlds() {
         // colder config is not the arid one this clause was written for, and neither measure tells
         // the two apart. On Earth the last glacial maximum's deserts were wider than today's
         // (docs/DESIGN_LEDGER.md, C1b; docs/TODO.md).
-        KnownFailures.expect("C1b: a world six degrees colder is no drier on the conserving march", "old 0.48x, absolute 0.72x") {
+        KnownFailures.expect("C1b: a world six degrees colder is no drier on the conserving march", "old 0.43x, absolute 0.70x") {
             if (!(oldRatio < newRatio * 0.75f && newRatio >= 1.5f)) {
                 throw RecordedViolation(
                     "the old per-world normalization should have hidden most of the arid/lush difference, " +

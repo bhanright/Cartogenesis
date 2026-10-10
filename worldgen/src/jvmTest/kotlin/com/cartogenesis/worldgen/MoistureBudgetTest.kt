@@ -238,16 +238,13 @@ class MoistureBudgetTest : BorrowsSharedWorlds() {
         // over-rains the ocean's wettest band, and the closure, which would take water from it to
         // rain where the air converges, stands nearer GPCP's; it stays off, an assumed closure, as
         // the brief has it (docs/TODO.md, "The convergence closure after C1b2").
-        KnownFailures.expect("C1b2: the convergence closure stands nearer GPCP's band than the shipped march", "3453 against 4365") {
-            if (abs(ln(shipped / GPCP_OCEAN_PEAK_MM)) > abs(ln(withClosure / GPCP_OCEAN_PEAK_MM))) {
-                throw RecordedViolation(
-                    ("the convergence closure now stands nearer GPCP's equatorial band (%.0f mm) than the shipped " +
-                        "march (%.0f), against %.0f: the reason it is off has changed")
-                        .format(withClosure, shipped, GPCP_OCEAN_PEAK_MM),
-                    "%.0f against %.0f".format(withClosure, shipped)
-                )
-            }
-        }
+        // Armed at A1-4, whose ground and rain read it again (docs/DESIGN_LEDGER.md, A1-4).
+        assertTrue(
+            abs(ln(shipped / GPCP_OCEAN_PEAK_MM)) <= abs(ln(withClosure / GPCP_OCEAN_PEAK_MM)),
+            ("the convergence closure now stands nearer GPCP's equatorial band (%.0f mm) than the shipped " +
+                "march (%.0f), against %.0f: the reason it is off has changed")
+                .format(withClosure, shipped, GPCP_OCEAN_PEAK_MM)
+        )
         // Recorded at C1b at twice GPCP's band; armed at C1b2, where the closure takes 1.21 of it.
         if (withClosure > GPCP_OCEAN_PEAK_MM * EARTH_TOLERANCE) {
             throw AssertionError(

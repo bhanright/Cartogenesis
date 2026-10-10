@@ -165,15 +165,12 @@ class SeaLevelHistoryTest : BorrowsSharedWorlds() {
         // the sphere moved the ground back over it (docs/DESIGN_LEDGER.md, A1-2).
         assertTrue(shortfalls.isEmpty(), shortfalls.joinToString("; "))
         // Recorded with the clause above (docs/DESIGN_LEDGER.md, K2; docs/TODO.md).
-        KnownFailures.expect("K2: on the Earth-sized planet the lowstand leaves too few drowned valleys pooled", "1.38x") {
-            if (!(pooledEstuaries.size == seeds.size && meanGain >= estuaryGain)) {
-                throw RecordedViolation(
-                    "pooled over ${pooledEstuaries.size} seeds the lowstand leaves ${meanGain}x the estuary mouths, " +
-                        "not the ${estuaryGain}x a drowned valley owes",
-                    "%.2fx".format(meanGain)
-                )
-            }
-        }
+        // Armed at A1-4, whose ground and rain read it again (docs/DESIGN_LEDGER.md, A1-4).
+        assertTrue(
+            pooledEstuaries.size == seeds.size && meanGain >= estuaryGain,
+            "pooled over ${pooledEstuaries.size} seeds the lowstand leaves ${meanGain}x the estuary mouths, " +
+                "not the ${estuaryGain}x a drowned valley owes"
+        )
 
         // The other half of ground rule 2: the world without the lowstand has to fail a bar the
         // world with it clears, or this guard is measuring nothing.
@@ -229,15 +226,12 @@ class SeaLevelHistoryTest : BorrowsSharedWorlds() {
         // Recorded at C1b: on seed 1234 one body of 370 cells, under the Caspian's cap, is water
         // the ocean cannot reach after the cut, and six river mouths end in it. Which stage leaves it was not traced
         // (docs/DESIGN_LEDGER.md, C1b; docs/TODO.md).
-        KnownFailures.expect("C1b: a pocket of water the ocean cannot reach survives the cut on seed 1234", "seed 1234: 1 pockets of 363 cells; seed 1234: 5 river mouths in them") {
-            if (survivors.isNotEmpty()) {
-                throw RecordedViolation(
-                    "pockets of water the ocean cannot reach survived the cut — every body no larger than " +
-                        "the Caspian has to be gone: ${survivors.joinToString("; ")}",
-                    survivors.joinToString("; ")
-                )
-            }
-        }
+        // Armed at A1-4, whose ground and rain read it again (docs/DESIGN_LEDGER.md, A1-4).
+        assertTrue(
+            survivors.isEmpty(),
+            "pockets of water the ocean cannot reach survived the cut — every body no larger than " +
+                "the Caspian has to be gone: ${survivors.joinToString("; ")}"
+        )
         assertTrue(
             controlPockets > 0 && controlMouths > 0,
             "the control was expected to leave water the ocean cannot reach ($controlPockets " +

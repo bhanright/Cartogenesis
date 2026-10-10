@@ -102,7 +102,7 @@ class CoastContrastTest : BorrowsSharedWorlds() {
                 .format(west.meanC, west.coasts, east.meanC, east.coasts)
         )
         val signature = "x%.2f".format(west.meanC / EARTH_JULY_WEST_MID_C)
-        KnownFailures.expect("A1-1: a summer's contrast across a west coast is under Earth's", "x0.46") {
+        KnownFailures.expect("A1-1: a summer's contrast across a west coast is under Earth's", "x0.47") {
             if (west.meanC !in EARTH_JULY_WEST_LOW_C..EARTH_JULY_WEST_HIGH_C) {
                 throw RecordedViolation(
                     "the summer's west-coast contrast is %+.1f C, outside Earth's %.0f to %.0f"

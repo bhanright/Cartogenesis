@@ -262,7 +262,7 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
         val pooledDepth = depthShares.average()
         // Recorded since Fix 3b: see [NOTCH_SHORT_ON_THE_LAWS_TERRAIN].
         // Re-recorded on square cells at Q2 (docs/DESIGN_LEDGER.md, Q2). Re-recorded at L1, whose rifts are Earth's half-grabens and the same at every grid (docs/DESIGN_LEDGER.md, L1).
-        KnownFailures.expect(NOTCH_SHORT_ON_THE_LAWS_TERRAIN, "82.8% as deep as the control's") {
+        KnownFailures.expect(NOTCH_SHORT_ON_THE_LAWS_TERRAIN, "99.7% as deep as the control's") {
             if (pooledDepth >= 0.5) {
                 throw RecordedViolation(
                     "the fill still stands ${"%.1f".format(pooledDepth * 100)}% as deep over the land as the " +
@@ -489,7 +489,7 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
         // world's water is halved (docs/DESIGN_LEDGER.md, K2).
         // Recorded at A1-4, whose wetter land fills seed 718106's largest lake past the Caspian's
         // share again (docs/TODO.md).
-        KnownFailures.expect("A1-4: seed 718106 keeps a lake over the Caspian's share", "seed 718106's largest lake 2.09x the Caspian") {
+        KnownFailures.expect("A1-4: seed 718106 keeps a lake over the Caspian's share", "seed 718106's largest lake 1.91x the Caspian") {
             if (overCaspian.isNotEmpty()) {
                 throw RecordedViolation(
                     "a lake is over the Caspian's share of the map: ${overCaspian.joinToString("; ")}",
@@ -505,7 +505,7 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
         // Recorded at A1-1, whose calendar seasons moved seed 99's ground: its largest lake does not
         // fall with its outlet and its world keeps 0.70 of its water (docs/TODO.md).
         val signature = notHalved.joinToString("; ")
-        KnownFailures.expect("A1-1: an over-large lake does not fall with its outlet", "seed 718106's water 1.6709% to 1.4524%; seed 7's water 1.5951% to 0.9514%") {
+        KnownFailures.expect("A1-1: an over-large lake does not fall with its outlet", "seed 718106's largest lake 0.4568% to 0.4753%; seed 718106's water 1.7289% to 1.4783%; seed 7's water 1.6766% to 1.2983%; seed 42's water 2.2594% to 1.1875%") {
             if (notHalved.isNotEmpty()) {
                 throw RecordedViolation(
                     "an over-large lake did not fall, or its world kept more than half its water: $signature",

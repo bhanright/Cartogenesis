@@ -106,14 +106,8 @@ class RainGeometryTest : BorrowsSharedWorlds() {
         // runs 734 km along 42.6 N across a continent's interior, where the rain falls from 1,274 to
         // 37 mm over twelve rows at every one of its columns; the other two seeds' edges shortened
         // (docs/TODO.md, "A dry edge along a row on seed 969495").
-        KnownFailures.expect("A1-2: seed 969495's 250 mm isohyet runs along a row", "633 km against 487") {
-            if (dryEdge.average() > MAIN_DRY_ROW_EDGE_KM.average()) {
-                throw RecordedViolation(
-                    "the 250 mm isohyet's straightest edge along a row: %.2f pooled against main's %.2f".format(dryEdge.average(), MAIN_DRY_ROW_EDGE_KM.average()),
-                    "%.0f km against %.0f".format(dryEdge.average(), MAIN_DRY_ROW_EDGE_KM.average())
-                )
-            }
-        }
+        // Armed at A1-5, whose rain from the solved vertical motion bends that edge (docs/DESIGN_LEDGER.md, A1-5).
+        noWorse("the 250 mm isohyet's straightest edge along a row", dryEdge, MAIN_DRY_ROW_EDGE_KM)
     }
 
 

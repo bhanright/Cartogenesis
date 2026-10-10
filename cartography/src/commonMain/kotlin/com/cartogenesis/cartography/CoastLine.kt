@@ -199,5 +199,24 @@ class CoastLine(
          */
         fun inkAtDistance(distancePixels: Float, reachPixels: Float): Float =
             1f - Engraving.smoothstep(0f, reachPixels, distancePixels)
+
+        /**
+         * The marching squares' table the coast is traced with ([Shoreline.SEGMENTS]), flattened
+         * for a device: four entries for each of the sixteen patterns of bank corners, the sides
+         * of its first segment and then its second, -1 where it has none. Handed to the shader
+         * rather than written into it, so the two paths cannot resolve a checkerboard differently.
+         */
+        fun segmentTable(): IntArray = IntArray(PATTERNS * SIDES_PER_PATTERN) { entry ->
+            Shoreline.SEGMENTS[entry / SIDES_PER_PATTERN].getOrElse(entry % SIDES_PER_PATTERN) { NO_SIDE }
+        }
+
+        /** Every pattern of four corners, each bank or water. */
+        const val PATTERNS = 16
+
+        /** Two segments at most in a block, each a pair of sides. */
+        const val SIDES_PER_PATTERN = 4
+
+        /** [segmentTable]'s entry where a pattern has no segment. */
+        const val NO_SIDE = -1
     }
 }

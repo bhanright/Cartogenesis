@@ -2,6 +2,7 @@ package com.cartogenesis.cartography
 
 import com.cartogenesis.worldgen.model.WorldMap
 import kotlin.math.PI
+import kotlin.math.ceil
 import kotlin.math.exp
 import kotlin.math.max
 import kotlin.math.min
@@ -135,17 +136,22 @@ object Shoreline {
     }
 
     /**
-     * [line] smoothed along its own length: each vertex moved to the mean of the line's vertices
-     * about it, weighted by a Gaussian of [sigma] in the distance along the line and by the length
-     * of line each vertex stands for. Isotropic by construction, since nothing in it knows which
-     * way the grid runs; what it takes out are the bends a trace makes at every cell it crosses.
+     * [line] smoothed along its own length: each vertex moved to the mean of the line about it,
+     * every point of every segment weighted by a Gaussian of [sigma] in its distance along the
+     * line from the vertex. Isotropic by construction, since nothing in it knows which way the grid
+     * runs; what it takes out are the bends a trace makes at every cell it crosses. The vertices
+     * stay the line's own, one for one, so a later simplification still picks among them.
      *
-     * Every vertex is a weighted mean of points no further along the line than three [sigma], so
-     * it moves at most as far as their mean distance along the line, which for the whole Gaussian
-     * is `sigma * sqrt(2 / pi)` ([largestShiftOf]): the most a straight line folded back on itself
-     * can be pulled, and more than any coast bends. A ring ([line] repeating its first point as its
-     * last) is smoothed round its seam and still closes; an open chain keeps its two ends where they
-     * were, the window narrowing toward them so the line still reaches the edge it ran off.
+     * The mean is over the line itself, integrated in pieces no longer than an eighth of [sigma],
+     * and not over its vertices alone: a vertex is then moved at most as far as the mean distance
+     * along the line under the Gaussian, `sigma * sqrt(2 / pi)` ([largestShiftOf]), which it reaches
+     * only where the line runs straight out and straight back. Weighting the vertices instead lets
+     * a sparse trace move one further, since a neighbour a whole sigma away can carry as much
+     * weight as the vertex itself.
+     *
+     * A ring ([line] repeating its first point as its last) is smoothed round its seam and still
+     * closes; an open chain keeps its two ends where they were, the window narrowing toward them so
+     * the line still reaches the edge it ran off.
      */
     fun smoothedAlongTheCurve(line: FloatArray, sigma: Float): FloatArray {
         val count = line.size / 2
@@ -154,46 +160,53 @@ object Shoreline {
         // A ring's repeated last point is its first; it is smoothed once and copied back.
         val distinct = if (ring) count - 1 else count
         if (distinct < 3) return line
-        val stepLength = FloatArray(distinct) { vertex ->
-            val next = if (vertex + 1 < distinct) vertex + 1 else if (ring) 0 else vertex
-            lengthOf(line[next * 2] - line[vertex * 2], line[next * 2 + 1] - line[vertex * 2 + 1])
-        }
-        // The length of line each vertex stands for: half the step on either side of it.
-        fun share(vertex: Int): Float {
-            val before = if (vertex > 0) stepLength[vertex - 1] else if (ring) stepLength[distinct - 1] else 0f
-            return (before + stepLength[vertex]) / 2f
+        val segments = if (ring) distinct else distinct - 1
+        val stepLength = FloatArray(segments) { segment ->
+            val next = (segment + 1) % distinct
+            lengthOf(line[next * 2] - line[segment * 2], line[next * 2 + 1] - line[segment * 2 + 1])
         }
         val alongFromStart = FloatArray(distinct)
         for (vertex in 1 until distinct) alongFromStart[vertex] = alongFromStart[vertex - 1] + stepLength[vertex - 1]
-        val totalLength = alongFromStart[distinct - 1] + if (ring) stepLength[distinct - 1] else 0f
+        val totalLength = stepLength.sum()
 
         val smoothed = line.copyOf()
         for (vertex in 0 until distinct) {
-            // An open chain's window is cut to the line left on the shorter side, both sides alike.
+            // An open chain's window is cut to the line left on the shorter side, both sides alike;
+            // a ring's to half its length each way, so no stretch of it is counted twice.
             val width = if (ring) sigma else min(sigma, min(alongFromStart[vertex], totalLength - alongFromStart[vertex]) / WINDOW_SIGMAS)
             if (width <= 0f) continue
-            val reach = WINDOW_SIGMAS * width
-            var weightSum = share(vertex)
-            var sumX = line[vertex * 2] * weightSum
-            var sumY = line[vertex * 2 + 1] * weightSum
+            val reach = if (ring) min(WINDOW_SIGMAS * width, totalLength / 2f) else WINDOW_SIGMAS * width
+            val pieceLength = width / PIECES_PER_SIGMA
+            var weightSum = 0.0
+            var sumX = 0.0
+            var sumY = 0.0
             for (direction in intArrayOf(-1, 1)) {
-                var other = vertex
-                var along = 0f
-                while (true) {
-                    val step = if (direction > 0) stepLength[other] else stepLength[if (other > 0) other - 1 else distinct - 1]
-                    other += direction
-                    if (ring) other = other.mod(distinct) else if (other < 0 || other >= distinct) break
-                    along += step
-                    if (along > reach || other == vertex || along > totalLength / 2f && ring) break
-                    val weight = exp(-(along * along) / (2f * width * width)) * share(other)
-                    weightSum += weight
-                    sumX += line[other * 2] * weight
-                    sumY += line[other * 2 + 1] * weight
+                var from = vertex
+                var travelled = 0f
+                while (travelled < reach) {
+                    val to = if (ring) (from + direction).mod(distinct) else from + direction
+                    if (to < 0 || to >= distinct) break
+                    val segmentLength = stepLength[if (direction > 0) from else to]
+                    val counted = min(segmentLength, reach - travelled)
+                    if (segmentLength > 0f) {
+                        val pieces = ceil(counted / pieceLength).toInt().coerceAtLeast(1)
+                        for (piece in 0 until pieces) {
+                            val alongSegment = (piece + HALF) * counted / pieces
+                            val alongLine = travelled + alongSegment
+                            val weight = exp(-(alongLine * alongLine) / (2.0 * width * width)) * (counted / pieces)
+                            val share = alongSegment / segmentLength
+                            weightSum += weight
+                            sumX += weight * (line[from * 2] + share * (line[to * 2] - line[from * 2]))
+                            sumY += weight * (line[from * 2 + 1] + share * (line[to * 2 + 1] - line[from * 2 + 1]))
+                        }
+                    }
+                    travelled += segmentLength
+                    from = to
                 }
             }
-            if (weightSum > 0f) {
-                smoothed[vertex * 2] = sumX / weightSum
-                smoothed[vertex * 2 + 1] = sumY / weightSum
+            if (weightSum > 0.0) {
+                smoothed[vertex * 2] = (sumX / weightSum).toFloat()
+                smoothed[vertex * 2 + 1] = (sumY / weightSum).toFloat()
             }
         }
         if (ring) {
@@ -206,20 +219,31 @@ object Shoreline {
     /**
      * The furthest [smoothedAlongTheCurve] at [sigma] moves a vertex: the mean distance along the
      * line under the Gaussian, `sigma * sqrt(2 / pi)`, which a vertex reaches only where the line
-     * runs straight out and straight back.
+     * runs straight out and straight back. The window's cut at three sigmas only lowers it.
      */
     fun largestShiftOf(sigma: Float): Float = sigma * sqrt(2f / PI.toFloat())
 
     /**
      * How far along the line [smoothedAlongTheCurve] spreads a vertex, as a share of one cell's
      * longer side on the sheet. Half a cell takes out the bend a trace makes at every edge it
-     * crosses, which is a cell's length of line, and holds every vertex within
+     * crosses, which is a cell's length of line or less, and holds every vertex within
      * `0.5 * sqrt(2 / pi)`, 0.40 of a cell, of the shoreline it was traced on.
      */
     const val SMOOTHING_SIGMA_CELLS = 0.5f
 
-    /** How many of the Gaussian's [SMOOTHING_SIGMA_CELLS] its window reaches each way. */
+    /**
+     * How many of the Gaussian's sigmas its window reaches each way: past three the weight left is
+     * under three thousandths of the whole, and cutting it there only shortens the reach.
+     */
     private const val WINDOW_SIGMAS = 3f
+
+    /**
+     * How finely the line is integrated, in pieces to a sigma: at eight the midpoint rule's error
+     * on a Gaussian's mass and first moment is under a part in a thousand.
+     */
+    private const val PIECES_PER_SIGMA = 8f
+
+    private const val HALF = 0.5f
 
     /**
      * The whole coast of [world], traced where [CoastLine] puts the shoreline, smoothed along its

@@ -1,5 +1,6 @@
 package com.cartogenesis.desktop
 
+import com.cartogenesis.cartography.CoastLine
 import com.cartogenesis.cartography.EngravingPlan
 import com.cartogenesis.cartography.RasterAccelerator
 import com.cartogenesis.cartography.RasterRecipe
@@ -245,6 +246,10 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
         GL43C.glUniform1f(uniform("uIsobathFlattest"), recipe.isobathFlattestSlope)
         GL43C.glUniform1i(uniform("uIsobathStencil"), recipe.isobathSlopeStencil)
         GL43C.glUniform1f(uniform("uCoastlineStrength"), recipe.coastlineStrength)
+        GL43C.glUniform1f(uniform("uCoastReach"), CoastLine.reachPixels(recipe.pixelsPerCellAcross, recipe.pixelsPerCellDown))
+        GL43C.glUniform1f(uniform("uHighestLandMetres"), recipe.highestLandMetres)
+        GL43C.glUniform1f(uniform("uDeepestOceanMetres"), recipe.deepestOceanMetres)
+        GL43C.glUniform1iv(uniform("uCoastSegments"), CoastLine.segmentTable())
         GL43C.glUniform1f(uniform("uReliefStrength"), recipe.reliefStrength)
         GL43C.glUniform1f(uniform("uInkGain"), recipe.inkGain)
         GL43C.glUniform1i(uniform("uRealmSet"), recipe.realmSetSize)
@@ -447,6 +452,13 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
             uniform float uIsobathFlattest;
             uniform int uIsobathStencil;
             uniform float uCoastlineStrength;
+            // CoastLine: how far from the shoreline its ink reaches on the sheet, the metres the
+            // elevation's two halves stand for, and the marching squares' table the line is traced
+            // with, all handed in from the processor's own figures.
+            uniform float uCoastReach;
+            uniform float uHighestLandMetres;
+            uniform float uDeepestOceanMetres;
+            uniform int uCoastSegments[64];
             uniform float uReliefStrength;
             uniform float uInkGain;
 
@@ -638,6 +650,98 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
             /* What the coast is inked round: land, and sea too narrow to have a coast of its own. */
             bool isBank(int i) {
                 return landByte(i) != 0u;
+            }
+
+            /*
+             * CoastLine, line for line: the shoreline between two cells where the straight line
+             * through their altitudes reaches zero, each read off its own half of the ruler, and
+             * halfway where the two do not straddle the waterline.
+             */
+            float cellMetres(int i) {
+                precise float metres = elevation[i] * (isLand(i) ? uHighestLandMetres : uDeepestOceanMetres);
+                return metres;
+            }
+
+            float shareTowardWater(int bank, int water) {
+                float bankMetres = cellMetres(bank);
+                float waterMetres = cellMetres(water);
+                if (bankMetres >= 0.0 && waterMetres < 0.0) {
+                    precise float share = bankMetres / (bankMetres - waterMetres);
+                    return share;
+                }
+                return 0.5;
+            }
+
+            float towardSecond(int first, int second) {
+                if (isBank(first)) return shareTowardWater(first, second);
+                precise float share = 1.0 - shareTowardWater(second, first);
+                return share;
+            }
+
+            /* CoastLine.crossingX and crossingY: where the line crosses one side of a block. */
+            vec2 coastCrossing(int blockColumn, int blockRow, ivec4 corners, int side) {
+                precise float west = float(blockColumn) + 0.5;
+                precise float north = float(blockRow) + 0.5;
+                precise vec2 point;
+                if (side == 0) point = vec2(west + towardSecond(corners.x, corners.y), north);
+                else if (side == 2) point = vec2(west + towardSecond(corners.w, corners.z), north + 1.0);
+                else if (side == 1) point = vec2(west + 1.0, north + towardSecond(corners.y, corners.z));
+                else point = vec2(west, north + towardSecond(corners.x, corners.w));
+                return point;
+            }
+
+            /* Shoreline.distanceToSegment. */
+            float distanceToSegment(float x, float y, vec2 from, vec2 to) {
+                precise float runX = to.x - from.x;
+                precise float runY = to.y - from.y;
+                precise float lengthSquared = runX * runX + runY * runY;
+                precise float along = lengthSquared < 1e-12
+                    ? 0.0
+                    : clamp(((x - from.x) * runX + (y - from.y) * runY) / lengthSquared, 0.0, 1.0);
+                precise float awayX = x - (from.x + along * runX);
+                precise float awayY = y - (from.y + along * runY);
+                return sqrt(awayX * awayX + awayY * awayY);
+            }
+
+            /*
+             * CoastLine.inkAt: the ink a cell takes from the distance on the sheet between its
+             * centre and the shoreline, over the blocks of four cells that can hold a piece of it
+             * within uCoastReach, wrapping east-west and stopping at the northern and southern rows.
+             */
+            float coastInk(int x, int y) {
+                precise float pointX = (float(x) + 0.5) * float(uPixelsAcross);
+                precise float pointY = (float(y) + 0.5) * float(uPixelsDown);
+                int extraColumns = int(ceil(uCoastReach / float(uPixelsAcross))) - 1;
+                int extraRows = int(ceil(uCoastReach / float(uPixelsDown))) - 1;
+                vec2 pixelsPerCell = vec2(float(uPixelsAcross), float(uPixelsDown));
+                float nearest = uCoastReach;
+                for (int blockRow = y - 1 - extraRows; blockRow <= y + extraRows; blockRow++) {
+                    if (blockRow < 0 || blockRow >= uHeight - 1) continue;
+                    for (int blockColumn = x - 1 - extraColumns; blockColumn <= x + extraColumns; blockColumn++) {
+                        int west = ((blockColumn % uWidth) + uWidth) % uWidth;
+                        int east = (((blockColumn + 1) % uWidth) + uWidth) % uWidth;
+                        ivec4 corners = ivec4(
+                            blockRow * uWidth + west,
+                            blockRow * uWidth + east,
+                            (blockRow + 1) * uWidth + east,
+                            (blockRow + 1) * uWidth + west
+                        );
+                        int pattern = (isBank(corners.x) ? 1 : 0) | (isBank(corners.y) ? 2 : 0) |
+                            (isBank(corners.z) ? 4 : 0) | (isBank(corners.w) ? 8 : 0);
+                        for (int slot = 0; slot < 4; slot += 2) {
+                            int fromSide = uCoastSegments[pattern * 4 + slot];
+                            if (fromSide < 0) break;
+                            int toSide = uCoastSegments[pattern * 4 + slot + 1];
+                            precise vec2 from = coastCrossing(blockColumn, blockRow, corners, fromSide) * pixelsPerCell;
+                            precise vec2 to = coastCrossing(blockColumn, blockRow, corners, toSide) * pixelsPerCell;
+                            nearest = min(nearest, distanceToSegment(pointX, pointY, from, to));
+                        }
+                    }
+                }
+                // Engraving.smoothstep, written out so the fall is the processor's to the letter.
+                precise float t = clamp(nearest / uCoastReach, 0.0, 1.0);
+                precise float ink = 1.0 - t * t * (3.0 - 2.0 * t);
+                return ink;
             }
 
             int biomeAt(int i) {
@@ -1049,10 +1153,12 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
                     }
                 }
 
-                if (uShowCoastline != 0 && isBank(i)) {
-                    bool right = isBank(y * uWidth + (x + 1) % uWidth);
-                    bool down = y + 1 < uHeight ? isBank((y + 1) * uWidth + x) : true;
-                    if (!right || !down) colour = blend(colour, uCoastline, uCoastlineStrength);
+                if (uShowCoastline != 0) {
+                    float ink = coastInk(x, y);
+                    if (ink > 0.0) {
+                        precise float share = uCoastlineStrength * ink;
+                        colour = blend(colour, uCoastline, share);
+                    }
                 }
 
                 if (uShowBorders != 0 && land) {

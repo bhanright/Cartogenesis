@@ -8,6 +8,7 @@ import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.River
 import java.util.Locale
 import kotlin.math.abs
+import kotlin.math.floor
 import kotlin.math.roundToInt
 import kotlin.system.measureTimeMillis
 import kotlin.test.Test
@@ -164,18 +165,22 @@ class GeneralisationTest : BorrowsSharedWorlds() {
                 val vertexX = line[at]
                 val vertexY = line[at + 1]
                 // A vertex lies on a cell edge between two centres: across a row edge its x is a
-                // centre's and its y between two, across a column edge the other way round. A
-                // vertex the ground puts on a centre fits both readings, and the one whose two
-                // cells differ is the edge it was traced on.
-                val rowEdge = cellAt(map, vertexX, vertexY - 0.5f) to cellAt(map, vertexX, vertexY + 0.5f)
-                val columnEdge = cellAt(map, vertexX - 0.5f, vertexY) to cellAt(map, vertexX + 0.5f, vertexY)
-                val onARowEdge = abs(vertexX - vertexX.toInt() - 0.5f) < ON_A_CELL_CENTRE &&
-                    land[rowEdge.first] != land[rowEdge.second]
-                val (first, second) = if (onARowEdge) rowEdge else columnEdge
-                assertTrue(
-                    land[first] != land[second],
-                    "a coast vertex at $vertexX, $vertexY has the same ground on both sides of it"
-                )
+                // centre's and its y between two, across a column edge the other way round. Where
+                // the ground stands exactly at the waterline the vertex is on the bank's own centre,
+                // with its water on any side; the edge it was traced on is the one whose two cells
+                // differ, each pair listed north or west first.
+                val xOnACentre = abs(vertexX - floor(vertexX) - 0.5f) < ON_A_CELL_CENTRE
+                val yOnACentre = abs(vertexY - floor(vertexY) - 0.5f) < ON_A_CELL_CENTRE
+                val edges = ArrayList<Triple<Int, Int, Boolean>>()
+                if (xOnACentre) edges.add(Triple(cellAt(map, vertexX, vertexY - 0.5f), cellAt(map, vertexX, vertexY + 0.5f), true))
+                if (yOnACentre) edges.add(Triple(cellAt(map, vertexX - 0.5f, vertexY), cellAt(map, vertexX + 0.5f, vertexY), false))
+                if (xOnACentre && yOnACentre) {
+                    edges.add(Triple(cellAt(map, vertexX, vertexY - 1f), cellAt(map, vertexX, vertexY), true))
+                    edges.add(Triple(cellAt(map, vertexX - 1f, vertexY), cellAt(map, vertexX, vertexY), false))
+                }
+                val edge = edges.firstOrNull { land[it.first] != land[it.second] }
+                assertTrue(edge != null, "a coast vertex at $vertexX, $vertexY has the same ground on both sides of it")
+                val (first, _, onARowEdge) = edge!!
                 val nearest = cellAt(map, vertexX, vertexY)
                 if (withCoast[nearest] == withoutCoast[nearest]) {
                     // `first` is north of `second` across a row edge and west of it across a

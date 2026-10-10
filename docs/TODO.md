@@ -101,6 +101,12 @@
   cell between its two hollows, to the sixth place, and the river stage leaves that cell dry, so
   the lake is two pieces at one level; the pocket rule's tie at the saddle is the river stage's
   (`LakePockets`). 2026-10-10, H1.
+- **The platform's basin fill has no device path (H1).** `PlateStage.fillContinentalBasins` is a
+  priority flood over the whole grid, run once per world on the processor, like every depression
+  fill in the pipeline (`FlowRouting.fillDepressions` has none either). A priority flood is
+  sequential by construction; a device path would be a parallel fill (an iterative minimum-spill
+  relaxation, held to the processor's answer), and its cost on the processor was not measured
+  apart from the plate stage. 2026-10-10, H1.
 - **The Earth-sized planet's physical known failures (K2).** Recorded, each with its figure, where
   a guard set on the 12,000 km planet's worlds reads the Earth-sized planet's and misses Earth's
   figure: `CurrentFeedsRainTest` (seed 7's sample cold coast is shorter than the sample asks, and

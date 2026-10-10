@@ -439,22 +439,17 @@ class ClimateFedErosionTest {
         // ranks against the rain, so neither figure says what the rain cut (docs/DESIGN_LEDGER.md,
         // Fix 2). Taking the erosion itself, the uplift added back, is the re-derivation B-I2 asks.
         // Re-recorded on square cells at Q2 (docs/DESIGN_LEDGER.md, Q2). Re-recorded at L1, whose rifts are Earth's half-grabens and the same at every grid (docs/DESIGN_LEDGER.md, L1).
-        KnownFailures.expect(
-            "B-I2: the rain-dissection pin was set on rounds without the uplift",
-            "; seed 42's flat-rain control at -0.010, seed 1234's flat-rain control at -0.003"
-        ) {
-            if (underThePin.isNotEmpty() || uncontrolled.isNotEmpty()) {
-                val found = underThePin.joinToString { (seed, fed) -> String.format(Locale.ROOT, "seed %d at %.3f", seed, fed) } +
-                    "; " + uncontrolled.joinToString { (seed, flat) ->
-                        String.format(Locale.ROOT, "seed %d's flat-rain control at %.3f", seed, flat)
-                    }
-                throw RecordedViolation(
-                    "rainfall and incision rank together at only $found, under the pin of $DISSECTION_CORRELATION " +
-                        "or against a control that does not correlate at all",
-                    found
-                )
+        // Armed at H1, on whose ground every seed's flat-rain control correlates and every fed
+        // figure clears the pin (docs/DESIGN_LEDGER.md, H1).
+        val found = underThePin.joinToString { (seed, fed) -> String.format(Locale.ROOT, "seed %d at %.3f", seed, fed) } +
+            "; " + uncontrolled.joinToString { (seed, flat) ->
+                String.format(Locale.ROOT, "seed %d's flat-rain control at %.3f", seed, flat)
             }
-        }
+        assertTrue(
+            underThePin.isEmpty() && uncontrolled.isEmpty(),
+            "rainfall and incision rank together at only $found, under the pin of $DISSECTION_CORRELATION " +
+                "or against a control that does not correlate at all"
+        )
     }
 
     /**

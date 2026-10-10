@@ -262,7 +262,7 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
         val pooledDepth = depthShares.average()
         // Recorded since Fix 3b: see [NOTCH_SHORT_ON_THE_LAWS_TERRAIN].
         // Re-recorded on square cells at Q2 (docs/DESIGN_LEDGER.md, Q2). Re-recorded at L1, whose rifts are Earth's half-grabens and the same at every grid (docs/DESIGN_LEDGER.md, L1).
-        KnownFailures.expect(NOTCH_SHORT_ON_THE_LAWS_TERRAIN, "67.5% as deep as the control's") {
+        KnownFailures.expect(NOTCH_SHORT_ON_THE_LAWS_TERRAIN, "76.2% as deep as the control's") {
             if (pooledDepth >= 0.5) {
                 throw RecordedViolation(
                     "the fill still stands ${"%.1f".format(pooledDepth * 100)}% as deep over the land as the " +

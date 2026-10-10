@@ -147,7 +147,7 @@ class GroundTextureTest : BorrowsSharedWorlds() {
         // Earth-sized planet's 512 rows are 39 km cells, which hold fewer channel cells to a
         // square kilometer (docs/DESIGN_LEDGER.md, K2).
         KnownFailures.expect(
-            "K2: the drainage density at 512 rows is read on cells of 39 km, against a figure taken on 23 km cells", "0.0067"
+            "K2: the drainage density at 512 rows is read on cells of 39 km, against a figure taken on 23 km cells", "0.0059"
         ) {
             if (pooledDensity !in (MAIN_DRAINAGE_DENSITY_KM_PER_KM2 / DRAINAGE_DENSITY_ALLOWANCE)..
                     (MAIN_DRAINAGE_DENSITY_KM_PER_KM2 * DRAINAGE_DENSITY_ALLOWANCE)
@@ -233,7 +233,7 @@ class GroundTextureTest : BorrowsSharedWorlds() {
         // [LAW_SETS_EVERY_CUT]. The record is not re-taken on the world it would have to pass.
         // Re-recorded on square cells at Q2, the box 94 km both ways (docs/DESIGN_LEDGER.md, Q2).
         // Re-recorded at L1, whose rifts are Earth's half-grabens and the same at every grid (docs/DESIGN_LEDGER.md, L1).
-        KnownFailures.expect(LAW_SETS_EVERY_CUT, "lowest quarter 103.5 m") {
+        KnownFailures.expect(LAW_SETS_EVERY_CUT, "lowest quarter 79.5 m") {
             if (pooledLowest > RECORDED_LOWEST_QUARTER_TEXTURE_METRES + RECORDED_TO_THE_TENTH_METRE) {
                 throw RecordedViolation(
                     "the lowest quarter of the land departs from its own smoothed self by" +
@@ -313,7 +313,7 @@ class GroundTextureTest : BorrowsSharedWorlds() {
         )
         // Recorded at K2: the Earth-sized planet's continents are flooded rather than shelved
         // (docs/DESIGN_LEDGER.md, K2; docs/TODO.md).
-        KnownFailures.expect("K2: the Earth-sized planet's continents are flooded rather than shelved", "0.465") {
+        KnownFailures.expect("K2: the Earth-sized planet's continents are flooded rather than shelved", "0.394") {
             if (pooled < MARGINAL_SHARE_OF_DROWNED_CRUST) {
                 throw RecordedViolation(
                     "only ${"%.3f".format(pooled)} of the drowned continental crust lies within" +

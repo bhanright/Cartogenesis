@@ -137,17 +137,14 @@ class ReceiverClampTest {
             "CLAMP with the rule off: $loose; with it on: $tight; channel cells drawn under water " +
                 "$pondedWithout without it and $pondedWith with it, pooled"
         )
-        // Recorded at K2: on the Earth-sized planet the clamped incision leaves a channel cell below
-        // its receiver, which the FastScape bound says it cannot (docs/DESIGN_LEDGER.md, K2; docs/TODO.md).
-        KnownFailures.expect("K2: the clamped incision leaves a channel cell below its receiver on the Earth-sized planet", "seed 7: 1") {
-            if (holesWith.isNotEmpty()) {
-                throw RecordedViolation(
-                    "the incision put channel cells below the cell they drain into over the twelve rounds, " +
-                        "where the FastScape bound says none: " + holesWith.joinToString("; "),
-                    holesWith.joinToString("; ")
-                )
-            }
-        }
+        // Recorded at K2, where seed 7 left one channel cell below its receiver, and armed again at
+        // H1, whose ground leaves none (docs/DESIGN_LEDGER.md, K2 and H1). The cell was not traced
+        // to a numerical cause: what H1 changed is the ground, not the incision (docs/TODO.md).
+        assertTrue(
+            holesWith.isEmpty(),
+            "the incision put channel cells below the cell they drain into over the twelve rounds, " +
+                "where the FastScape bound says none: " + holesWith.joinToString("; ")
+        )
         assertTrue(
             holesWithout > 0,
             "without the rule the incision left no channel cell below its receiver, pooled over the seeds, so " +

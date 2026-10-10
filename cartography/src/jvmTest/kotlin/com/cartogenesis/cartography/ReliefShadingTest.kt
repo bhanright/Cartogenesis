@@ -396,7 +396,7 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
         // Recorded at K2: the gallery's world on the 12,000 km planet under K2's physics is other
         // ground than the one the declared figure was read off; it is the drawing's to re-derive,
         // with its other constants, for the Earth-sized default (docs/TODO.md).
-        KnownFailures.expect("K2: the relief's ordinary ground was read off the gallery's ground before K2", "0.9106") {
+        KnownFailures.expect("K2: the relief's ordinary ground was read off the gallery's ground before K2", "0.9216") {
             if (kotlin.math.abs(declaredGround - ReliefShading.ordinaryGround) > MAX_GROUND_DRIFT) {
                 val found = "%.4f".format(declaredGround)
                 throw RecordedViolation(
@@ -645,7 +645,7 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
         )
         // Recorded at K2: the gallery's ground moved with K2's figures, and re-deriving a drawing
         // constant on it is the drawing's chunk (docs/TODO.md).
-        KnownFailures.expect("K2: the exaggeration was read off the gallery's ground before K2", "41.00") {
+        KnownFailures.expect("K2: the exaggeration was read off the gallery's ground before K2", "39.25") {
             if (kotlin.math.abs(declared - steepestClear) > EXAGGERATION_SWEEP_STEP / 2) {
                 throw RecordedViolation(
                     "the steepest exaggeration that pins no face of the cone is %.2f, not the declared %.4f"
@@ -681,7 +681,7 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
         println("RELIEF the tenth percentile of the land slope is %.4f; the floor is %.2f".format(tenth, EngravingPlan.SLOPE_FLOOR))
         // Recorded at K2, for the reason the ordinary ground's clause gives: the floor was read off
         // the gallery's ground before K2's physics moved it (docs/TODO.md).
-        KnownFailures.expect("K2: the engraving's slope floor was read off the gallery's ground before K2", "0.05") {
+        KnownFailures.expect("K2: the engraving's slope floor was read off the gallery's ground before K2", "0.04") {
             if (LandSlopes.hundredths(EngravingPlan.SLOPE_FLOOR) != LandSlopes.hundredths(tenth)) {
                 throw RecordedViolation(
                     "the tenth percentile of seed 234475's land slope at 512 rows is $tenth; the floor is ${EngravingPlan.SLOPE_FLOOR}",

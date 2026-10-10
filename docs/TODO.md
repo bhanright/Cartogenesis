@@ -105,10 +105,49 @@
   box 94 km in half-width, cannot tell the texture rule from the grid on 39 km cells, where the
   control with the rule off already reads inside the record. Whether the everyday tier should be 1,024 rows on
   the Earth-sized planet is a budget question. 2026-10-08, K2.
-- **The Earth-sized planet has half Earth's lowlands (K2).** Seed 42 at 1,024 rows holds 12.8% of
-  its land under 200 m, 19.9% at 200-500 m and 32.6% at 500 m-1 km, where Earth's hypsometry gives
-  25, 22 and 22; the 1-2 km band is 27.7% against 19. The plains stand too high, and the lowstand,
-  the deltas and the margins are the stages to read. 2026-10-08, K2.
+- ~~**The Earth-sized planet has half Earth's lowlands (K2).**~~ Answered by H1, 2026-10-10: the
+  cause was where the sea stood on the platform, not the lowstand, the deltas or the margins. The
+  crust was drawn for S2's submerged fifth and the platform floated at Earth's mean land elevation,
+  so the land was the platform's whole hump, centred 600 to 700 m above the sea. With Earth's
+  submerged share (0.29), the platform's freeboard (374 m) and the closed sags filled to their
+  spill, seed 42 at 1,024 rows holds 24.2% of its land under 200 m, 26.2% at 200-500 m, 25.9% at
+  500 m-1 km and 16.6% at 1-2 km (docs/DESIGN_LEDGER.md, H1). `HypsometryTest` holds the bands.
+- **The platform still stands in the 500 m to 1 km band more than Earth's (H1).** Pooled over the
+  standard worlds at 512 rows the band holds 0.276 of the land against ETOPO5's 0.196 and the 0.029
+  Earth's continents allow a world of seven; at 1,024 rows seeds 42, 969495 and 7 read 0.259, 0.212
+  and 0.283, which is Africa's figure rather than the world's. The other three bands are inside
+  Earth's. Not isolated: the craton's tilt lifts the interior about 180 m above the mean column
+  (with the tilt taken out the band reads 0.228 on seed 42), and the hydraulic rounds lower the
+  platform by about 190 m in the few million years they stand for, where Earth's platforms have had
+  hundreds of millions. `HypsometryTest` runs it as a known failure. 2026-10-10, H1.
+- **The drowned crust lies in the interiors of the largest continents (H1).** With Earth's
+  submerged share the sea drowns 29% of the continental crust, and on the Earth-sized planet's
+  widest continents part of that is the open sags of the base relief more than 800 km from the
+  crust's edge: 0.65, 0.45 and 0.36 of the drowned crust lies within 800 km of it on seeds 42, 7
+  and 969495 at 1,024 rows (`GroundTextureTest`'s measure, on its own seeds at 512 rows, is recorded), against Earth's 0.80 (main read 0.67, 0.60 and 0.52 with a
+  fifth drowned). The shallow water as a whole is Earth's (0.28 of the land's area under 500 m
+  against ETOPO5's 0.25), so what is wrong is where it lies. Closed sags are filled to their spill
+  since H1; a sag open to the sea by ground lower than its rim is not. Two causes are named and
+  neither is H1's to change: the continents are whole Voronoi plates, compact where Earth's are
+  ragged and fringed with microcontinents (the plate partition entry above), and nothing fills an
+  open sag on a platform that floats above the sea to the grade its rivers would build, which
+  Earth's open lowland basins are filled to (the West Siberian, the Amazon). A fill to that grade
+  would have to be blended out over the margin, or the coast would follow the craton profile's
+  contour. 2026-10-10, H1.
+- **Two misses H1's ground exposed, recorded rather than fixed (H1).** `GeographyAuditTest`'s
+  pooled tropical band: desert covers 0.71 of the world's own share between 0 and 15 degrees
+  against Earth's 0.27 and its bar of twice that, seed 42 reading 1.25; the horse latitudes' clause
+  holds. The climate is not this chunk's, and the cause is not isolated. And `LakeBodyTest`: seed
+  42 at 512 rows holds a three-cell lake (lake 15) whose surface stands at the ground of the one
+  cell between its two hollows, to the sixth place, and the river stage leaves that cell dry, so
+  the lake is two pieces at one level; the pocket rule's tie at the saddle is the river stage's
+  (`LakePockets`). 2026-10-10, H1.
+- **The platform's basin fill has no device path (H1).** `PlateStage.fillContinentalBasins` is a
+  priority flood over the whole grid, run once per world on the processor, like every depression
+  fill in the pipeline (`FlowRouting.fillDepressions` has none either). A priority flood is
+  sequential by construction; a device path would be a parallel fill (an iterative minimum-spill
+  relaxation, held to the processor's answer), and its cost on the processor was not measured
+  apart from the plate stage. 2026-10-10, H1.
 - **The Earth-sized planet's physical known failures (K2).** Recorded, each with its figure, where
   a guard set on the 12,000 km planet's worlds reads the Earth-sized planet's and misses Earth's
   figure: `CurrentFeedsRainTest` (seed 7's sample cold coast is shorter than the sample asks, and
@@ -132,7 +171,13 @@
   `RibbonLandTest`'s strip is a share of the map's width (`w / 170`, 71 km of half-width on the
   12,000 km planet and 236 km on Earth's), so the case runs on the calibration planet until the
   strip is a width on the ground and the Earth-sized world is held to Earth's 0.7 to 1.0% of land.
-  2026-10-08, K2.
+  2026-10-08, K2. **H1's ground clears nine of these, and they are armed:** `CurrentFeedsRainTest`'s
+  cold and warm sample coasts, `GlaciationCombTest`'s straight lake, `IsostasyTest`'s moat (62 m of 239, on
+  a thinner sheet rather than a deeper moat) and its foreland, `ReceiverClampTest` (no cell is
+  left below its receiver now, but the cell K2 found was never traced, so the defect may stand
+  elsewhere), `SeaLevelHistoryTest`'s seed 42 and its pooled estuaries (1.55x), and `LakeWaterBalanceTest`'s dry basin on the
+  re-picked sample. The drowned crust is worse (0.394 at 512 rows) and is H1's entry above; the
+  rest stand. 2026-10-10, H1.
 - **The hotspot trails' plate turns are drawn from one measured turn (K2).** A plate turns at each
   of the planet's reorganizations by an angle drawn uniformly up to the Hawaiian-Emperor bend's 60
   degrees either way (`PlateStage.plateTurnRadians`): Earth gives the Pacific's turn well

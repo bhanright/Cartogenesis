@@ -215,6 +215,7 @@ val deepClassesByStage: Map<String, List<String>> = mapOf(
         "com.cartogenesis.worldgen.GroundTextureTest.a belt's flank is dissected, and is a plane at S1's critical slope",
         "com.cartogenesis.worldgen.GroundTextureTest.the ground's texture follows its relief",
         "com.cartogenesis.worldgen.GroundTextureTest.a continent drowns at its rim",
+        "com.cartogenesis.worldgen.HypsometryTest.the guards fail on the platform before H1",
         "com.cartogenesis.worldgen.RiftSegmentationTest.the unsegmented rift fails every one of those",
         "com.cartogenesis.worldgen.TectonicHistoryTest.zero epochs is read as one, and a second epoch changes the ground",
         "com.cartogenesis.worldgen.TectonicHistoryTest.an old belt stands far from any present boundary",

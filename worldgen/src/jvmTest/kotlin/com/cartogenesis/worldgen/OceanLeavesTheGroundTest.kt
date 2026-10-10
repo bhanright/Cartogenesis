@@ -41,7 +41,10 @@ class OceanLeavesTheGroundTest : BorrowsSharedWorlds() {
      * weather noise K1 made square on the ground, and the sea stage carries the ice's scour, which
      * K1 made square too. K2 re-took every one of them, terrain included: the default planet became
      * Earth's, 40,075 km round, so every lattice on the ground is another count of cycles and the
-     * plates are fifteen. An ocean change that leaks into the ground moves them.
+     * plates are fifteen. H1 re-took the plates', the erosion's and the sea's, the terrain and the
+     * partition holding: Earth's submerged share draws more of the plates as continents, and the
+     * platform floats at its own freeboard with its closed sags filled. An ocean change that leaks
+     * into the ground moves them.
      * A chunk meant to move the ground re-takes them here, as the render records are re-taken.
      * At [SharedWorlds.DETAIL_ROWS], whose standard worlds the detail guards generate anyway, so
      * the pin costs a digest and no generation.
@@ -61,23 +64,23 @@ class OceanLeavesTheGroundTest : BorrowsSharedWorlds() {
         val GROUND_AT_512_ROWS: Map<String, Long> = mapOf(
             "terrain.normals" to 6074751788244030761L,
             "terrain.height" to 7240865613227243168L,
-            "plates.plates" to -8565988885517275170L,
+            "plates.plates" to 776939297823223148L,
             "plates.plateId" to -7659896205567335042L,
             "plates.boundaryDistance" to 6559268612307642171L,
             "plates.nearestBoundaryType" to -4092876749757560349L,
-            "plates.nearestBoundaryClass" to 8537704601329378444L,
-            "plates.height" to 6687649860481647278L,
-            "plates.seafloorAgeMyr" to -5558611328326441912L,
-            "plates.seafloorHalfSpreadingRateKmPerMyr" to 2092863834869833716L,
-            "plates.continentalShare" to 5707884443378334786L,
-            "plates.upliftRateMmPerYear" to -1700415688480725156L,
-            "plates.crustAge" to 8840618518047909851L,
-            "erosion.height" to -764119881059144335L,
+            "plates.nearestBoundaryClass" to 7713555141834102212L,
+            "plates.height" to 314563462034363976L,
+            "plates.seafloorAgeMyr" to 6444177982951830066L,
+            "plates.seafloorHalfSpreadingRateKmPerMyr" to 668069306375862003L,
+            "plates.continentalShare" to -8606387063464998658L,
+            "plates.upliftRateMmPerYear" to -9204950406715247596L,
+            "plates.crustAge" to 5808649867131644059L,
+            "erosion.height" to 3654058399982756058L,
             "erosion.sweptOnDevice" to -358906410940142731L,
-            "sea.shorelineHeight" to 8930012999547282008L,
-            "sea.isLand" to 8576149400318180388L,
-            "sea.relativeElevation" to -5882165350155285745L,
-            "sea.landCellCount" to -819146187983780767L
+            "sea.shorelineHeight" to 5599560900329452601L,
+            "sea.isLand" to -8032093214884974345L,
+            "sea.relativeElevation" to -3502763796840067804L,
+            "sea.landCellCount" to -1146161019943594873L
         )
     }
 }

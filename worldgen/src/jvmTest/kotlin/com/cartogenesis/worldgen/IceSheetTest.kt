@@ -78,7 +78,7 @@ class IceSheetTest : BorrowsSharedWorlds() {
         KnownFailures.expect(
             THIN_SHEETS_ON_HIGH_GROUND,
             // Re-recorded at L1, whose rifts are Earth's half-grabens and the same at every grid (docs/DESIGN_LEDGER.md, L1).
-            "seed 718106 at 1156 m over 627 km, seed 59758 at 1534 m over 548 km, seed 7 at 1339 m over 648 km"
+            "seed 718106 at 1192 m over 560 km, seed 59758 at 1348 m over 692 km, seed 7 at 900 m over 627 km"
         ) {
             if (thin.isNotEmpty()) {
                 throw RecordedViolation(
@@ -212,7 +212,7 @@ class IceSheetTest : BorrowsSharedWorlds() {
         // (docs/DESIGN_LEDGER.md, Q2).
         // Recorded at K2: on the Earth-sized planet seed 7's sheet flows outward a hair short of
         // the bar (docs/DESIGN_LEDGER.md, K2).
-        KnownFailures.expect("K2: a sheet on the Earth-sized planet flows outward short of what its dome owes", "seed 7: 66.1% of the ice near the dome flows outward at a mean 68.3 degrees off radial, where a flow that knows its dome owes 67% and 67.5 degrees against an indifferent bearing's 50% and 90") {
+        KnownFailures.expect("K2: a sheet on the Earth-sized planet flows outward short of what its dome owes", "seed 7: 66.4% of the ice near the dome flows outward at a mean 64.4 degrees off radial, where a flow that knows its dome owes 67% and 67.5 degrees against an indifferent bearing's 50% and 90; seed 878210: 72.1% of the ice near the dome flows outward at a mean 69.6 degrees off radial, where a flow that knows its dome owes 67% and 67.5 degrees against an indifferent bearing's 50% and 90") {
             if (failures.isNotEmpty()) {
                 throw RecordedViolation(
                     "the sheet is not flowing down its own surface:\n" + failures.joinToString("\n"),

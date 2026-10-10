@@ -394,7 +394,7 @@ object MapRasterizer {
             pixels[cell] = color
         }
 
-        if (options.showCoastline) drawCoastline(world, style, pixels)
+        if (options.showCoastline) drawCoastline(world, sheet, style, pixels)
         if (options.bordersVisible) drawBorders(world, style, plan, pixels)
         return pixels
     }
@@ -591,7 +591,7 @@ object MapRasterizer {
             if (options.showCoastline) {
                 // Round the open sea: a channel too narrow for two shores is drawn as the water
                 // it is, and the coast runs across its mouth. See [NarrowSea].
-                Shoreline.of(NarrowSea.banks(world), geometry, sheet)
+                Shoreline.of(CoastLine.of(world), geometry, sheet)
             } else {
                 emptyList()
             }
@@ -1203,29 +1203,16 @@ object MapRasterizer {
     }
 
     /**
-     * Inks the landward cell of every shore that faces open sea, round the same banks the traced
-     * coast runs round ([NarrowSea.banks]): a channel too narrow for two shores is left as water,
-     * and only its cell at the mouth, where the coast crosses it, takes the ink.
+     * Inks every cell, land and water alike, by its distance on the sheet to the shoreline
+     * [CoastLine] traces round the open sea ([NarrowSea.banks]): a channel too narrow for two
+     * shores is left as water, and the line runs across its mouth.
      */
-    private fun drawCoastline(world: WorldMap, style: MapStyle, pixels: IntArray) {
+    private fun drawCoastline(world: WorldMap, sheet: SheetGeometry, style: MapStyle, pixels: IntArray) {
         val cellsAcross = world.width
-        val cellsDown = world.height
-        val banks = NarrowSea.banks(world)
-        for (row in 0 until cellsDown) {
-            for (column in 0 until cellsAcross) {
-                val cell = row * cellsAcross + column
-                if (!banks[cell]) continue
-                val toTheEast = banks[row * cellsAcross + (column + 1) % cellsAcross]
-                // The southern edge of the sheet has no cell beyond it, and a pole is not a coast:
-                // taken as land, so the bottom row is never inked along its whole width.
-                val toTheSouth =
-                    if (row + 1 < cellsDown) banks[(row + 1) * cellsAcross + column] else true
-                if (!toTheEast || !toTheSouth) {
-                    pixels[cell] = MapPalette.blend(
-                        pixels[cell], style.coastline, style.coastlineStrength
-                    )
-                }
-            }
+        val coast = CoastLine.of(world)
+        for (cell in pixels.indices) {
+            val ink = coast.inkAt(cell % cellsAcross, cell / cellsAcross, sheet.pixelsPerCellAcross, sheet.pixelsPerCellDown)
+            if (ink > 0f) pixels[cell] = MapPalette.blend(pixels[cell], style.coastline, style.coastlineStrength * ink)
         }
     }
 

@@ -52,8 +52,8 @@ internal object Isostasy {
      *
      * `buoyancy` is the air-equivalent height a column gains from being hot rather than from being
      * thick. Continental crust gets none; oceanic crust gets whatever amount puts a column of its
-     * own age at the depth Parsons and Sclater's curve says floor of that age lies at — 2,357 m
-     * of buoyancy at a spreading ridge, falling as the root of the age to nothing on the oldest
+     * own age at the depth Parsons and Sclater's curve says floor of that age lies at — 2,823 m
+     * of buoyancy at a spreading ridge, falling as the root of the age to 266 m on the oldest
      * floor there is. See [IsostasyConfig.seafloorRidgeDepthMetres].
      *
      * Reading the depth-age curve backwards through Airy rather than writing it onto the map is
@@ -120,8 +120,8 @@ internal object Isostasy {
          * The heat in sea floor of [ageMyr], as the air-equivalent metres of buoyancy it is worth.
          *
          * Solved rather than declared: it is whatever makes an oceanic column of that age float at
-         * [seafloorDepthMetres]. At the ridge it comes to 2,357 m and on the oldest floor to a
-         * little under nothing, which is the same statement as the curve it was read out of.
+         * [seafloorDepthMetres]. At the ridge it comes to 2,823 m and on the oldest floor to 266 m,
+         * which is the same statement as the curve it was read out of.
          */
         fun oceanicThermalBuoyancyMetres(ageMyr: Float): Float =
             (seafloorDepthMetres(ageMyr) * (mantleDensity - waterDensity) - datum -
@@ -164,11 +164,11 @@ internal object Isostasy {
          * What a cold oceanic column would float at, in metres — the depth the sea floor would
          * reach if the heat ran all the way out of it.
          *
-         * Reported rather than used, and it is the check on the whole scheme: -5,926 m, against
+         * Reported rather than used, and it is the check on the whole scheme: -6,604 m, against
          * Parsons and Sclater's cold asymptote of -6,400 measured on Earth's oldest floor. The two
-         * agree to within 8%, which is as close as two independent readings of the same physics
-         * come, and it is why the thermal buoyancy above is a measurement rather than a free
-         * parameter.
+         * agree to within 3% (8% while the datum was Earth's mean land elevation, before H1), which
+         * is as close as two independent readings of the same physics come, and it is why the
+         * thermal buoyancy above is a measurement rather than a free parameter.
          */
         val coldOceanicFloorMetres: Float
             get() = (datum + oceanicBuoyantMass) / (mantleDensity - waterDensity)

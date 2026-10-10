@@ -472,7 +472,7 @@ class MeridionalWindTest : BorrowsSharedWorlds() {
         )
         // Recorded at K2: on the Earth-sized planet seed 9 is another world and its monsoon coast
         // a sliver (docs/DESIGN_LEDGER.md, K2).
-        KnownFailures.expect("K2: seed 9's monsoon coast on the Earth-sized planet is under the share the clause asks", "0.10%") {
+        KnownFailures.expect("K2: seed 9's monsoon coast on the Earth-sized planet is under the share the clause asks", "0.11%") {
             if (figures[1] < MIN_SHARE) {
                 throw RecordedViolation(
                     "seed $MONSOON_SEED's monsoon coast covers only ${"%.2f".format(figures[1] * 100)}% of land",

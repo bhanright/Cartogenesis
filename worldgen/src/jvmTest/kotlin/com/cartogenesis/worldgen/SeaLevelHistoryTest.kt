@@ -157,13 +157,9 @@ class SeaLevelHistoryTest : BorrowsSharedWorlds() {
         // explicit update seeds 7 and 1234 fell short; docs/DESIGN_LEDGER.md, Fix 3 and Fix 3b),
         // run as a known failure on square cells from Q2 at 1.47, and armed again at L1, whose
         // rifts took it to 1.58 (2.07, 1.46 and 1.22 on seeds 7, 42 and 1234).
-        // Recorded at K2: on the Earth-sized planet seed 42's lowstand drowns no valley
-        // (docs/DESIGN_LEDGER.md, K2; docs/TODO.md).
-        KnownFailures.expect("K2: on the Earth-sized planet a seed's lowstand drowns no valley", "seed 42 105 against 116") {
-            if (shortfalls.isNotEmpty()) {
-                throw RecordedViolation(shortfalls.joinToString("; "), figures.joinToString("; "))
-            }
-        }
+        // Recorded at K2, where seed 42's lowstand drowned no valley, and armed again at H1, on
+        // whose ground every seed's does (docs/DESIGN_LEDGER.md, K2 and H1).
+        assertTrue(shortfalls.isEmpty(), shortfalls.joinToString("; "))
         // Recorded with the clause above (docs/DESIGN_LEDGER.md, K2; docs/TODO.md).
         KnownFailures.expect("K2: on the Earth-sized planet the lowstand leaves too few drowned valleys pooled", "1.06x") {
             if (!(pooledEstuaries.size == seeds.size && meanGain >= estuaryGain)) {

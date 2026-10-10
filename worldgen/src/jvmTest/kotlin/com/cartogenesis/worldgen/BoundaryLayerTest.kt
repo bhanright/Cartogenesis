@@ -16,6 +16,7 @@ import kotlin.math.abs
 import kotlin.math.ln
 import kotlin.math.sin
 import kotlin.math.sqrt
+import kotlin.math.tan
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -28,9 +29,11 @@ import kotlin.test.assertTrue
  *   ([PressureWind.surfaceWind]) of the sea-level pressure carried up and the belts' zonal mean.
  * - **The vertical motion is the wind's.** The layer's mass convergence integrates to nothing
  *   over the sphere, as the divergence theorem asks; and in the middle latitudes it follows the
- *   pressure as Ekman's balance has it, ascent in the lows and descent in the highs.
- * - **The dry model's own vertical motion** at the same interface is printed against it: the
- *   model's lowest layer is the same boundary layer under its own drag (docs/TODO.md).
+ *   pressure as the drag balance has it, Ekman's ascent in the lows and descent in the highs with
+ *   the beta term beside it.
+ * - **One layer, one drag.** The dry model's own vertical motion at the same interface agrees with
+ *   it in size, and in pattern in the subtropics: the model's lowest layer is the same boundary
+ *   layer under the same drag ([BoundaryLayer.surfaceDragPerSecond]).
  * - **No trace of the coarse grid** (conventions rule 13) in the pressure or the vertical motion
  *   carried up ([CoarsePeriod]).
  * - **The jets** of the prescribed basic state against the energy balance's own temperature
@@ -56,13 +59,35 @@ class BoundaryLayerTest : BorrowsSharedWorlds() {
         const val MASS_TOLERANCE = 1e-9
 
         /**
-         * The least correlation between the layer's eddy vertical motion and minus the eddy
-         * pressure's Laplacian, 35 to 65 degrees: Ekman's convergence is `k/f^2` of the Laplacian
-         * over the open sea, and the one other term of the drag balance's divergence, the
-         * geostrophic wind's `-beta v / f`, is `beta L / k`, about 0.4 of it at the deformation
-         * radius on Earth. A correlation over a half says the Ekman term leads.
+         * The least correlation between the layer's eddy vertical motion, 35 to 65 degrees, and the
+         * drag balance's own of the eddy pressure solved on the atmosphere's grid with each row's
+         * mean drag: what is left between them is the coast's drag (land's is 3.3 times the sea's,
+         * where the row's mean stands between), the stress's growth with a fast wind, and the
+         * spread of the ground's convergence carried down. Over a half says the balance leads.
          */
-        const val EKMAN_CORRELATION = 0.5
+        const val BALANCE_CORRELATION = 0.5
+
+        /**
+         * How far the model's convergence at the layer's top may stand from the diagnosed layer's
+         * in size (root mean square), as a factor either way: the model's lowest level takes its
+         * row's mean drag where the diagnosed layer takes each cell's, and Ekman's pumping goes as
+         * the drag, `k / f^2`, so with land's drag 3.3 times the sea's a cell pumps from 0.57 to 1.9
+         * times what its row's mean drag would under a row a third land: a factor of two.
+         */
+        const val DRAG_AGREEMENT_FACTOR = 2.0
+
+        /**
+         * The least correlation of the two in the subtropics, 5 to 35 degrees, where the basic
+         * state's surface wind is weak and the drag balance is most of the lowest level's balance;
+         * in the middle latitudes the model's lowest level carries the basic state's westerlies'
+         * advection, `m U / (a cos)`, as large as the drag for the waves the terrain makes, which
+         * the diagnosed layer does not, and the correlation there is printed. A half, as the
+         * drag-balance clause's: the shared balance leads.
+         */
+        const val DRAG_AGREEMENT_CORRELATION = 0.5
+
+        /** The subtropics the drag clause reads, degrees from the equator, to the middle latitudes' start. */
+        const val SUBTROPICS_FROM_DEGREES = 5.0
 
         /** The middle latitudes the Ekman clause reads, degrees from the equator. */
         const val MIDDLE_FROM_DEGREES = 35.0
@@ -129,16 +154,13 @@ class BoundaryLayerTest : BorrowsSharedWorlds() {
     }
 
     @Test
-    fun `the layer's vertical motion is the wind's convergence, and follows the pressure as Ekman's balance does`() {
-        var correlationSum = 0.0
-        var correlationCount = 0
-        var worstMass = 0.0
+    fun `the layer's vertical motion is the wind's convergence, and follows the pressure as the drag balance does`() {
         var lowestCorrelation = 1.0
+        var worstMass = 0.0
         for (seed in seeds) {
             val world = world(seed)
             val atmosphere = ClimateStage.atmosphere(world.config, world.sea)
             val grid = atmosphere.remap.coarse
-            val operators = SphericalOperators(grid)
             for ((name, half) in listOf("July" to atmosphere.julyHalf, "January" to atmosphere.januaryHalf)) {
                 val omega = BoundaryLayer.boundaryLayerOmega(atmosphere, half)
                 var net = 0.0
@@ -149,45 +171,154 @@ class BoundaryLayerTest : BorrowsSharedWorlds() {
                     size += abs(omega.convergencePaPerSecond[cell]) * area
                 }
                 worstMass = maxOf(worstMass, abs(net) / size)
-                val laplacian = operators.laplacian(half.eddyPressureCoarsePa)
-                val ekman = correlation(grid, omega.convergencePaPerSecond, DoubleArray(grid.cellCount) { -laplacian[it] })
-                val model = half.response.verticalMotion[atmosphere.levels.interiorCount - 1]
-                val modelConvergence = DoubleArray(grid.cellCount) { model[it] - half.response.surfaceVerticalMotion[it] }
-                val againstModel = correlation(grid, omega.convergencePaPerSecond, modelConvergence)
-                val ratio = regression(grid, omega.convergencePaPerSecond, modelConvergence)
-                println(("BOUNDARY LAYER seed %d %s, %.0f to %.0f degrees: the layer's convergence against minus the pressure's " +
-                    "Laplacian r = %.3f; the dry model's own convergence at the layer's top against it r = %.3f, %.2f of its size")
-                    .format(seed, name, MIDDLE_FROM_DEGREES, MIDDLE_TO_DEGREES, ekman, againstModel, ratio))
-                correlationSum += ekman
-                correlationCount++
-                lowestCorrelation = minOf(lowestCorrelation, ekman)
+                val balance = balanceConvergence(atmosphere, half)
+                val (xy, xx, yy) = moments(grid, omega.convergencePaPerSecond, balance, MIDDLE_FROM_DEGREES, MIDDLE_TO_DEGREES)
+                val correlation = xy / sqrt(xx * yy)
+                println("BOUNDARY LAYER seed %d %s, %.0f to %.0f degrees: the layer's convergence against the drag balance of the eddy pressure on the atmosphere's grid r = %.3f"
+                    .format(seed, name, MIDDLE_FROM_DEGREES, MIDDLE_TO_DEGREES, correlation))
+                lowestCorrelation = minOf(lowestCorrelation, correlation)
             }
         }
-        println("BOUNDARY LAYER mass left over the sphere, worst %.2e of the convergence's size; Ekman's correlation mean %.3f, lowest %.3f (bar %.2f)"
-            .format(worstMass, correlationSum / correlationCount, lowestCorrelation, EKMAN_CORRELATION))
+        println("BOUNDARY LAYER mass left over the sphere, worst %.2e of the convergence's size; the balance's lowest correlation %.3f (bar %.2f)"
+            .format(worstMass, lowestCorrelation, BALANCE_CORRELATION))
         assertTrue(worstMass < MASS_TOLERANCE, "the layer's convergence leaves $worstMass of itself over the sphere")
-        assertTrue(lowestCorrelation > EKMAN_CORRELATION, "the layer's vertical motion follows the pressure's Laplacian at r = $lowestCorrelation")
+        assertTrue(lowestCorrelation > BALANCE_CORRELATION, "the layer's vertical motion follows the pressure's drag balance at r = $lowestCorrelation")
     }
 
-    /** The eddies of [first] (each row's mean removed) against [second], by area, in the middle latitudes. */
-    private fun correlation(grid: SphericalGrid, first: DoubleArray, second: DoubleArray): Double {
-        val (xy, xx, yy) = moments(grid, first, second)
-        return xy / sqrt(xx * yy)
+    /**
+     * The drag balance's vertical motion at the layer's top from the eddy pressure on the
+     * atmosphere's grid, pascals a second, positive down: the balance of [PressureWind.surfaceWind]
+     * with each row's own drag ([BoundaryLayer.Atmosphere.dragOfRow]) solved at the coarse centers,
+     * its divergence by the sphere's operators, times the layer's thickness.
+     */
+    private fun balanceConvergence(atmosphere: BoundaryLayer.Atmosphere, half: BoundaryLayer.Half): DoubleArray {
+        val grid = atmosphere.remap.coarse
+        val operators = SphericalOperators(grid)
+        val gradient = operators.gradient(half.eddyPressureCoarsePa)
+        val north = operators.northAtCenters(gradient)
+        val density = PressureWind.AIR_DENSITY_KG_PER_M3.toDouble()
+        val east = DoubleArray(grid.cellCount)
+        val northward = DoubleArray(grid.cellCount)
+        for (cell in 0 until grid.cellCount) {
+            val row = cell / grid.columns
+            val drag = atmosphere.dragOfRow[row]
+            val coriolis = 2 * WorldScale.ROTATION_RATE_PER_S * sin(grid.latitudeRadians[row])
+            val accelerationEast = -gradient.eastAtCenters[cell] / density
+            val accelerationNorth = -north[cell] / density
+            val inverse = 1.0 / (drag * drag + coriolis * coriolis)
+            east[cell] = (drag * accelerationEast + coriolis * accelerationNorth) * inverse
+            northward[cell] = (drag * accelerationNorth - coriolis * accelerationEast) * inverse
+        }
+        val faces = DoubleArray((grid.rows + 1) * grid.columns)
+        for (face in 1 until grid.rows) {
+            for (column in 0 until grid.columns) {
+                faces[face * grid.columns + column] = 0.5 * (northward[(face - 1) * grid.columns + column] + northward[face * grid.columns + column])
+            }
+        }
+        val divergence = operators.divergence(SphericalOperators.Vector(east, faces))
+        val layerPa = atmosphere.levels.thicknessPa[atmosphere.levels.levelCount - 1]
+        return DoubleArray(grid.cellCount) { layerPa * divergence[it] }
     }
 
-    /** The regression of [second] on [first]'s eddies, in the middle latitudes. */
-    private fun regression(grid: SphericalGrid, first: DoubleArray, second: DoubleArray): Double {
-        val (xy, xx, _) = moments(grid, first, second)
-        return xy / xx
+    /**
+     * The model's lowest layer and the diagnosed one are one layer under one drag: the dry model's
+     * own convergence at the layer's top, its lowest interior `omega` less the ground's, against the
+     * diagnosed layer's ([BoundaryLayer.boundaryLayerOmega]). Held in size, the model's root mean
+     * square over the diagnosed one's within [DRAG_AGREEMENT_FACTOR] either way in the subtropics
+     * and the middle latitudes (not the regression, which a correlation under one shrinks), and in
+     * pattern where the drag balance is most of the lowest level's balance, the subtropics. Shown
+     * failing on a diagnosed layer twice the model's lowest layer, its pumping twice the model's for
+     * the same drag. A1-4's two drags, the stress's on the model and the surface's turn on the
+     * diagnosed layer, are printed beside it: the convergence's size moves less than their ratio,
+     * since the beta term `-beta v / f`, which no drag sets, is as large as Ekman's at the
+     * deformation radius under the stress's drag.
+     */
+    @Test
+    fun `the dry model's lowest layer and the diagnosed boundary layer are one layer under one drag`() {
+        var failures = 0
+        var controlFailures = 0
+        for (seed in seeds) {
+            val world = world(seed)
+            val atmosphere = ClimateStage.atmosphere(world.config, world.sea)
+            val grid = atmosphere.remap.coarse
+            for ((name, half) in listOf("July" to atmosphere.julyHalf, "January" to atmosphere.januaryHalf)) {
+                val model = half.response.verticalMotion[atmosphere.levels.interiorCount - 1]
+                val modelConvergence = DoubleArray(grid.cellCount) { model[it] - half.response.surfaceVerticalMotion[it] }
+                val diagnosed = BoundaryLayer.convergenceOmegaPaPerSecond(atmosphere, half)
+                val turned = BoundaryLayer.convergenceOmegaPaPerSecond(atmosphere, turnedHalf(world, half))
+                val control = DoubleArray(diagnosed.size) { 2 * diagnosed[it] }
+                for ((from, to) in listOf(SUBTROPICS_FROM_DEGREES to MIDDLE_FROM_DEGREES, MIDDLE_FROM_DEGREES to MIDDLE_TO_DEGREES)) {
+                    val (xy, xx, yy) = moments(grid, diagnosed, modelConvergence, from, to)
+                    val size = sqrt(yy / xx)
+                    val correlation = xy / sqrt(xx * yy)
+                    val regression = xy / xx
+                    val (_, controlXx, controlYy) = moments(grid, control, modelConvergence, from, to)
+                    val controlSize = sqrt(controlYy / controlXx)
+                    val (turnedXy, turnedXx, turnedYy) = moments(grid, turned, modelConvergence, from, to)
+                    val turnedSize = sqrt(turnedYy / turnedXx)
+                    val turnedRegression = turnedXy / turnedXx
+                    val subtropics = from == SUBTROPICS_FROM_DEGREES
+                    val holds = abs(ln(size)) < ln(DRAG_AGREEMENT_FACTOR) && (!subtropics || correlation > DRAG_AGREEMENT_CORRELATION)
+                    if (!holds) failures++
+                    if (abs(ln(controlSize)) >= ln(DRAG_AGREEMENT_FACTOR)) controlFailures++
+                    println(("BOUNDARY LAYER DRAG seed %d %s, %.0f to %.0f degrees: the model's convergence against the diagnosed layer's " +
+                        "%.2f of its root mean square at r = %.3f, regression %.2f; under A1-4's two drags %.2f, regression %.2f; " +
+                        "against a layer twice as thick %.2f")
+                        .format(seed, name, from, to, size, correlation, regression, turnedSize, turnedRegression, controlSize))
+                }
+            }
+        }
+        println("BOUNDARY LAYER DRAG $failures of ${seeds.size * 4} readings outside x%.1f in size or under r = %.2f in the subtropics; the control fails $controlFailures"
+            .format(DRAG_AGREEMENT_FACTOR, DRAG_AGREEMENT_CORRELATION))
+        assertTrue(controlFailures > 0, "a diagnosed layer twice the model's passes the clause, so it cannot tell the layers apart")
+        assertTrue(failures == 0, "$failures readings of the model's and the diagnosed layer's convergence disagree")
     }
 
-    private fun moments(grid: SphericalGrid, first: DoubleArray, second: DoubleArray): Triple<Double, Double, Double> {
+    /**
+     * [half] with its surface wind made again as A1-4 made it: the same pressure's balance with a
+     * drag that turns the wind 25 degrees over the sea and 40 over land at 45 degrees, `f(45) tan`,
+     * 5.8 and 3.2 hours, where the dry model's lowest level was held by the stress's 1.4 days.
+     */
+    private fun turnedHalf(world: WorldMap, half: BoundaryLayer.Half): BoundaryLayer.Half {
+        val columns = world.width
+        val rows = world.height
+        val grid = SphericalGrid.forGround(columns, rows, world.config.scale)
+        val operators = SphericalOperators(grid)
+        val gradient = operators.gradient(DoubleArray(columns * rows) { half.eddyPressurePa[it].toDouble() })
+        val north = operators.northAtCenters(gradient)
+        val coriolisAt45 = PressureWind.coriolisParameter(45f).toDouble()
+        val seaDrag = coriolisAt45 * tan(25 * PI / 180)
+        val landDrag = coriolisAt45 * tan(40 * PI / 180)
+        val density = PressureWind.AIR_DENSITY_KG_PER_M3.toDouble()
+        val east = FloatArray(columns * rows)
+        val south = FloatArray(columns * rows)
+        for (row in 0 until rows) {
+            val coriolis = PressureWind.coriolisParameter(ClimateStage.latitudeOf(row, rows)).toDouble()
+            val beltEast = half.beltEastwardMps[row].toDouble()
+            val beltNorth = -half.beltSouthwardMps[row].toDouble()
+            for (column in 0 until columns) {
+                val cell = row * columns + column
+                val accelerationEast = -gradient.eastAtCenters[cell] / density + seaDrag * beltEast - coriolis * beltNorth
+                val accelerationNorth = -north[cell] / density + seaDrag * beltNorth + coriolis * beltEast
+                val drag = if (world.sea.isLand[cell]) landDrag else seaDrag
+                val inverse = 1.0 / (drag * drag + coriolis * coriolis)
+                east[cell] = ((drag * accelerationEast + coriolis * accelerationNorth) * inverse).toFloat()
+                south[cell] = (-(drag * accelerationNorth - coriolis * accelerationEast) * inverse).toFloat()
+            }
+        }
+        return BoundaryLayer.Half(
+            half.beltEastwardMps, half.beltSouthwardMps, half.zonalPressurePa, half.eddyPressureCoarsePa,
+            half.eddyPressurePa, east, south, half.response
+        )
+    }
+
+    private fun moments(grid: SphericalGrid, first: DoubleArray, second: DoubleArray, fromDegrees: Double, toDegrees: Double): Triple<Double, Double, Double> {
         var xy = 0.0
         var xx = 0.0
         var yy = 0.0
         for (row in 0 until grid.rows) {
             val latitude = abs(grid.latitudeRadians[row] * 180 / PI)
-            if (latitude < MIDDLE_FROM_DEGREES || latitude > MIDDLE_TO_DEGREES) continue
+            if (latitude < fromDegrees || latitude > toDegrees) continue
             var firstMean = 0.0
             var secondMean = 0.0
             for (column in 0 until grid.columns) {

@@ -72,6 +72,13 @@ class RainAgainstEarthTest : BorrowsSharedWorlds() {
          * by is ten degrees; fifteen is the two with room for a world whose continents pull it.
          */
         const val ITCZ_FROM_EQUATOR_DEGREES = 15.0
+
+        /**
+         * GPCP's ocean zonal-mean rain at its wettest, 8 mm a day near 7 N (Adler and others, GPCP
+         * version 2), millimeters a year, as `MoistureBudgetTest` reads it; read here in two-degree
+         * bands of open ocean, the mean of the seeds' wettest.
+         */
+        const val GPCP_OCEAN_PEAK_MM = 8.0 * 365.25
         const val ZONAL_BAND_DEGREES = 2
         const val TROPICS_SEARCH_DEGREES = 30
     }
@@ -160,12 +167,10 @@ class RainAgainstEarthTest : BorrowsSharedWorlds() {
             "EARTH diagnosed, pooled: the atmosphere holds %.1f mm (Earth %.1f) and turns it over in %.1f days (Earth %.1f)"
                 .format(pooled.columnWater / pooled.allArea, EARTH_COLUMN_WATER_MM, days, EARTH_RESIDENCE_DAYS)
         )
-        // The land's return stood inside Earth's and was held there until A1-4, where the solved wind
-        // left the land wetter and the ground's Budyko share of its rain smaller (docs/TODO.md, "The
-        // rain after the boundary layer").
-        KnownFailures.expect("A1-4: the land gives back less of its rain than Earth's", "x0.80") {
-            nearEarth("land's return over its rain", pooled.landReturn / pooled.landRain, EARTH_LAND_RETURN_SHARE)
-        }
+        // The land's return stood inside Earth's until A1-4, where the solved wind left the land
+        // wetter and the ground's Budyko share of its rain smaller; armed again at A1-5, the rain
+        // from the solved vertical motion (docs/DESIGN_LEDGER.md).
+        nearEarth("land's return over its rain", pooled.landReturn / pooled.landRain, EARTH_LAND_RETURN_SHARE)
         // The sea evaporates less than Earth's, and the rain with it, for the causes docs/TODO.md's
         // "The march's misses against Earth, after C1b2" measures: the marine air stands at the
         // sea's own temperature and the wind at one speed.
@@ -181,7 +186,8 @@ class RainAgainstEarthTest : BorrowsSharedWorlds() {
     }
 
     @Test
-    fun `the year's wettest band of ocean sits near the equator`() {
+    fun `the year's wettest band of ocean sits near the equator, and rains as GPCP's does`() {
+        var pooledPeak = 0.0
         seeds.forEach { seed ->
             val world = SharedWorlds.world(WorldGenConfig.forRows(seed, ROWS))
             var wettest = 0.0
@@ -211,6 +217,11 @@ class RainAgainstEarthTest : BorrowsSharedWorlds() {
                 abs(wettestLatitude) <= ITCZ_FROM_EQUATOR_DEGREES,
                 "seed $seed: the year's wettest ocean band sits at $wettestLatitude degrees"
             )
+            pooledPeak += wettest / seeds.size
+        }
+        // The band's rain against GPCP's, since A1-5 rains it from the solved ascent.
+        KnownFailures.expect("A1-5: the ocean's wettest band rains less than GPCP's", "x0.50") {
+            nearEarth("the ocean's wettest two degrees, mm", pooledPeak, GPCP_OCEAN_PEAK_MM)
         }
     }
 

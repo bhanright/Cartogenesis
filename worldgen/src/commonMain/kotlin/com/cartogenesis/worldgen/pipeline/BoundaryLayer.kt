@@ -240,7 +240,9 @@ internal object BoundaryLayer {
         val surfaceDensity: Double,
         val surfaceHeightCoarseMeters: DoubleArray,
         val julyHalf: Half,
-        val januaryHalf: Half
+        val januaryHalf: Half,
+        /** The drag on the model's lowest level on each of its rows, per second ([Solver.dragOfRow]). */
+        val dragOfRow: DoubleArray
     ) {
         fun half(julyHalf: Boolean): Half = if (julyHalf) this.julyHalf else januaryHalf
     }
@@ -363,7 +365,8 @@ internal object BoundaryLayer {
             val responses = factored?.let { factors -> forcings.map { factors.solve(it) } } ?: model.solveEach(forcings)
             return Atmosphere(
                 remap, levels, state.surfaceDensity, terrain,
-                half(responses[0], julyHalfBelts, julyLatentWPerM2), half(responses[1], januaryHalfBelts, januaryLatentWPerM2)
+                half(responses[0], julyHalfBelts, julyLatentWPerM2), half(responses[1], januaryHalfBelts, januaryLatentWPerM2),
+                dragOfRow
             )
         }
 

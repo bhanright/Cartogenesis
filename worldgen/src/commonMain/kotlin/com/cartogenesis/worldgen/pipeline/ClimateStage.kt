@@ -704,6 +704,9 @@ object ClimateStage {
         val cellsAcross = config.width
         val cellsDown = config.height
         val climateConfig = config.climate
+        // The last coupled atmosphere is another world's or another run's: let it go before this
+        // run's factored waves and march are held, rather than beside them.
+        lastCoupled = null
 
         // One knob, used by the belts below. Switching seasons off is exactly a tilt of zero: the
         // rain belts then stop migrating and the planet's axis stands upright, so the energy

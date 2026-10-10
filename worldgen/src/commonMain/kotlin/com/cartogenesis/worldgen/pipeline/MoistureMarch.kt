@@ -166,8 +166,14 @@ object MoistureMarch {
      * The most laps of both seasons round the planet. The first starts from air at four fifths of
      * its saturated column over dry ground and leaves a year's rain for the second's ground to
      * give back; each later one carries the return a lap further toward the year it belongs to,
-     * until the year's land rain moves by less than [CONVERGED_SHARE]. Twenty is a
-     * ceiling the standard worlds stop well short of (docs/DESIGN_LEDGER.md, C1b2).
+     * until the year's land rain moves by less than [CONVERGED_SHARE], and with a [Coupling] until
+     * the atmosphere's heating has settled too.
+     *
+     * Forty, a ceiling and not a count: the coupled loop settles in 13 to 17 laps on the standard
+     * worlds at 512 and 1,024 rows, and the plain iteration it is accelerated from in 24 to more
+     * than forty (docs/DESIGN_LEDGER.md, A1-5). A loop that reaches the ceiling has a feedback at or
+     * over one, which more laps would not settle; it stops with the last lap's rain, and
+     * `AtmosphereCouplingTest` holds the standard worlds short of it.
      */
     const val MAX_LAPS = 40
 
@@ -671,6 +677,20 @@ object MoistureMarch {
             season = next
             precompute()
             precomputePotentialTerms()
+            // A row's parcel in flight into the lap's first column, where the new wind no longer
+            // marches it in that sweep, waits in the bank there for the sweep that does, all of its
+            // water: a parcel arriving at a cell of the other sweep would be cleared.
+            for (row in 0 until cellsDown) {
+                bankParcelIfTurned(eastParcel, row, index(row, 0), 1)
+                bankParcelIfTurned(westParcel, row, index(row, cellsAcross - 1), -1)
+            }
+        }
+
+        private fun bankParcelIfTurned(parcel: RowState, row: Int, first: Int, sweep: Int) {
+            if (direction[first].toInt() == sweep) return
+            bank[first] += parcel.vapor[row] + parcel.cloud[row] + parcel.falling[row]
+            bankLand[first] += parcel.vaporLand[row] + parcel.cloudLand[row] + parcel.fallingLand[row]
+            parcel.clear(row)
         }
 
         /** The land's FAO-56 terms from this season's air and wind, built once per season. */

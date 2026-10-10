@@ -2,6 +2,7 @@ package com.cartogenesis.worldgen
 
 import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.WorldGenConfig
+import com.cartogenesis.worldgen.pipeline.AtmosphereCoupling
 import com.cartogenesis.worldgen.pipeline.BoundaryLayer
 import com.cartogenesis.worldgen.pipeline.ClimateStage
 import com.cartogenesis.worldgen.pipeline.PressureWind
@@ -39,14 +40,18 @@ class BoundaryLayerCostTest {
         const val WORTH_A_DEVICE_SHARE = 0.01
 
         /**
-         * Boundary layers a default world solves: the provisional weather the hydraulic rounds cut
-         * with, twice (`HydraulicErosion.provisionalWeather`), the glaciation's provisional snow
-         * balance, and the finished climate, whose sea the ocean's stress reads first and the
-         * climate then takes from `ClimateStage.atmosphere`'s last answer. Four.
+         * Boundary layers a default world solves dry: the ocean's stress's, once. The climate runs,
+         * the provisional weather the hydraulic rounds cut with twice
+         * (`HydraulicErosion.provisionalWeather`), the glaciation's provisional snow balance and the
+         * finished climate, each factor one and couple it to their march.
          */
-        const val BOUNDARY_LAYERS_PER_WORLD = 4
+        const val BOUNDARY_LAYERS_PER_WORLD = 1
+        const val COUPLED_CLIMATES_PER_WORLD = 4
 
         const val ROWS = 1024
+
+        /** The coupled loop's laps a climate run on the standard worlds (`AtmosphereCouplingTest`). */
+        const val LAPS_PER_CLIMATE = 17
     }
 
     @Test
@@ -86,6 +91,75 @@ class BoundaryLayerCostTest {
             ("the boundary layer's per-cell work takes %.2f%% of a world, above the %.0f%% at which rule 8 asks " +
                 "for a graphics path rather than a measurement").format(groundShare * 100, WORTH_A_DEVICE_SHARE * 100)
         )
+    }
+
+    /**
+     * What one lap of the coupled loop costs the atmosphere at the application's grid, and its
+     * part per map cell: both halves' condensation carried down as heating, both solved by
+     * back-substitution, each half's pressure carried up and balanced, its convergence carried down
+     * and its ascent carried up. A report and a recorded figure: the loop's laps a climate run come
+     * from `AtmosphereCouplingTest` and are given here as [LAPS_PER_CLIMATE].
+     */
+    @Test
+    fun `a coupling lap's per-cell work, against a world`() {
+        val config = WorldGenConfig.forRows(7L, 512).atResolution(2 * ROWS, ROWS)
+        val sea = madeSea(config.width, config.height)
+        val zonal = ClimateStage.zonalClimate(config, sea)
+        val marine = ClimateStage.marineAirFraction(config, sea)
+        val belts = listOf(ClimateStage.beltWindOfRows(config, true), ClimateStage.beltWindOfRows(config, false))
+        val factoredAt = System.nanoTime()
+        val solver = BoundaryLayer.Solver(config, sea, zonal, marine, belts[0], belts[1], keepFactors = true)
+        val factorMs = (System.nanoTime() - factoredAt) / 1e6
+        val coupling = AtmosphereCoupling(solver, { _ -> error("not marched") })
+        val condensation = FloatArray(config.width * config.height) { cell ->
+            if (sea.isLand[cell]) 1_000f + 500f * sin(cell * 0.01).toFloat() else 1_200f
+        }
+        var downMs = 0.0
+        var solveMs = 0.0
+        var upMs = 0.0
+        var ascentMs = 0.0
+        repeat(WARM_UP_RUNS + MEASURED_RUNS) { run ->
+            val started = System.nanoTime()
+            val july = coupling.latentHeatingOf(condensation)
+            val january = coupling.latentHeatingOf(condensation)
+            val carriedDown = System.nanoTime()
+            val responses = solver.solve(july, january)
+            val solved = System.nanoTime()
+            for (half in listOf(responses.julyHalf, responses.januaryHalf)) {
+                val ground = responses.remap.outputToGround(half.eddyPressureCoarsePa)
+                PressureWind.surfaceWind(config, sea, ground, half.beltEastwardMps, half.beltSouthwardMps)
+            }
+            val balanced = System.nanoTime()
+            BoundaryLayer.groundAscentMps(responses, responses.julyHalf)
+            BoundaryLayer.groundAscentMps(responses, responses.januaryHalf)
+            val ascended = System.nanoTime()
+            if (run >= WARM_UP_RUNS) {
+                downMs += (carriedDown - started) / 1e6 / MEASURED_RUNS
+                // The solve carries up and balances once itself; what is left is the back-substitution.
+                solveMs += ((solved - carriedDown) - (balanced - solved)) / 1e6 / MEASURED_RUNS
+                upMs += (balanced - solved) / 1e6 / MEASURED_RUNS
+                ascentMs += (ascended - balanced) / 1e6 / MEASURED_RUNS
+            }
+        }
+        val worldSeconds = GenerationTime.secondsAt(ROWS)
+        val perCellMs = downMs + upMs + ascentMs
+        val laps = COUPLED_CLIMATES_PER_WORLD * LAPS_PER_CLIMATE
+        val perCellShare = perCellMs * laps / 1000.0 / worldSeconds
+        val wholeShare = ((perCellMs + solveMs) * laps + factorMs * COUPLED_CLIMATES_PER_WORLD) / 1000.0 / worldSeconds
+        println(
+            ("COUPLING COST at %d rows: factoring %.0f ms; a lap %.0f ms carrying the heating down, %.0f ms back-substituting, " +
+                "%.0f ms carrying the pressure up and balancing it, %.0f ms the ascent; %d laps a world (%d a climate run), " +
+                "%.2f%% of a %.1f s world in all and %.2f%% on the map's cells")
+                .format(ROWS, factorMs, downMs, solveMs, upMs, ascentMs, laps, LAPS_PER_CLIMATE, wholeShare * 100, worldSeconds, perCellShare * 100)
+        )
+        KnownFailures.expect("A1-5: the coupled loop's per-cell work is over a hundredth of a world", "0.0%") {
+            if (perCellShare >= WORTH_A_DEVICE_SHARE) {
+                throw RecordedViolation(
+                    "the coupled loop's per-cell work takes %.2f%% of a world, over the hundredth rule 8 allows without a graphics path".format(perCellShare * 100),
+                    "%.0f%%".format(perCellShare * 100)
+                )
+            }
+        }
     }
 
     /** A continent of a third of the longitudes from 60 S to 60 N, with a ridge in it. */

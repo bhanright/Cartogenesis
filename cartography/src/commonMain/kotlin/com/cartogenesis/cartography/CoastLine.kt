@@ -17,9 +17,9 @@ import kotlin.math.min
  * north or west bare, and the overlay ran along the half-cell lattice, so every coast on the map
  * was a staircase of the grid's own edges (docs/DESIGN_LEDGER.md, G2).
  *
- * The line is marching squares over the lattice of cell centres, round [banks]: land, and sea too
+ * The line is marching squares over the lattice of cell centers, round [banks]: land, and sea too
  * narrow for a coast of its own ([NarrowSea]). Where a bank cell stands at or above the waterline
- * and its water neighbour below it, the crossing is where the straight line between the two
+ * and its water neighbor below it, the crossing is where the straight line between the two
  * altitudes reaches zero ([shareTowardWater]); that is the field's own contour to within the
  * interpolation, which is exact on a uniform slope. Where the two disagree with the mask — a
  * channel too narrow for a coast is a bank whose floor lies below the water, and land the mask
@@ -27,26 +27,26 @@ import kotlin.math.min
  * the crossing is halfway, as it always was. Checkerboards keep the land connected across the
  * diagonal, as the flow routing assumes.
  *
- * [metres] is each cell's altitude in metres, read off the half of the ruler its own side of the
+ * [meters] is each cell's altitude in meters, read off the half of the ruler its own side of the
  * shoreline uses, row-major, one entry a cell; [banks] is the mask the coast runs round.
  */
 class CoastLine(
     val banks: BooleanArray,
-    val metres: FloatArray,
+    val meters: FloatArray,
     val cellsAcross: Int,
     val cellsDown: Int
 ) {
     init {
-        require(banks.size == cellsAcross * cellsDown && metres.size == banks.size) {
-            "a coast of ${banks.size} and ${metres.size} cells on a $cellsAcross x $cellsDown grid"
+        require(banks.size == cellsAcross * cellsDown && meters.size == banks.size) {
+            "a coast of ${banks.size} and ${meters.size} cells on a $cellsAcross x $cellsDown grid"
         }
     }
 
     /**
      * Where the shoreline crosses the edge from bank cell [bank] to water cell [water], as a share
-     * of the way from the bank's centre to the water's: see [shareTowardWater].
+     * of the way from the bank's center to the water's: see [shareTowardWater].
      */
-    fun crossingShare(bank: Int, water: Int): Float = shareTowardWater(metres[bank], metres[water])
+    fun crossingShare(bank: Int, water: Int): Float = shareTowardWater(meters[bank], meters[water])
 
     /**
      * How strongly cell ([column], [row]) takes the coast's ink, 0 to 1: full on the line and
@@ -62,10 +62,10 @@ class CoastLine(
     }
 
     /**
-     * The distance on the sheet from cell ([column], [row])'s centre to the line, or [reachPixels]
+     * The distance on the sheet from cell ([column], [row])'s center to the line, or [reachPixels]
      * where the line is no nearer than that. Only the blocks of four cells that can hold a piece of
      * line within the reach are searched: those whose span comes within it, which on cells as wide
-     * on the sheet as they are tall are the four that meet at the centre.
+     * on the sheet as they are tall are the four that meet at the center.
      */
     internal fun nearestPixels(column: Int, row: Int, pixelsAcross: Int, pixelsDown: Int, reachPixels: Float): Float {
         val pointX = (column + HALF_A_CELL) * pixelsAcross
@@ -84,7 +84,7 @@ class CoastLine(
 
     /**
      * The distance on the sheet from ([pointX], [pointY]) to the line's segments inside the block
-     * whose north-west corner is the centre of cell ([blockColumn], [blockRow]), or infinity where
+     * whose north-west corner is the center of cell ([blockColumn], [blockRow]), or infinity where
      * the line does not cross it. [blockColumn] may run off either side of the grid; the block it
      * names is the one round the seam, placed where it was asked for.
      */
@@ -148,13 +148,13 @@ class CoastLine(
 
     /**
      * Where the line crosses the edge from cell [first] to cell [second], as a share of the way
-     * from the first's centre: the crossing measured from whichever of the two is the bank.
+     * from the first's center: the crossing measured from whichever of the two is the bank.
      */
     private fun towardSecond(first: Int, second: Int): Float =
         if (banks[first]) crossingShare(first, second) else 1f - crossingShare(second, first)
 
     companion object {
-        /** Halfway between two cell centres: where the line crosses when the ground cannot say. */
+        /** Halfway between two cell centers: where the line crosses when the ground cannot say. */
         const val HALFWAY = 0.5f
 
         private const val HALF_A_CELL = 0.5f
@@ -167,22 +167,22 @@ class CoastLine(
             val isLand = world.sea.isLand
             val relative = world.sea.relativeElevation.data
             val scale = world.config.scale
-            val metres = FloatArray(relative.size) { cell ->
+            val meters = FloatArray(relative.size) { cell ->
                 if (isLand[cell]) scale.metresAboveShoreline(relative[cell])
                 else scale.metresBelowShoreline(relative[cell])
             }
-            return CoastLine(NarrowSea.banks(world), metres, world.width, world.height)
+            return CoastLine(NarrowSea.banks(world), meters, world.width, world.height)
         }
 
         /**
-         * Where the waterline crosses between a bank cell [bankMetres] above it and a water cell
-         * [waterMetres] below it, as a share of the way from the bank's centre to the water's: the
-         * zero of the straight line through the two altitudes, 0 on the bank's centre and short of
+         * Where the waterline crosses between a bank cell [bankMeters] above it and a water cell
+         * [waterMeters] below it, as a share of the way from the bank's center to the water's: the
+         * zero of the straight line through the two altitudes, 0 on the bank's center and short of
          * 1. [HALFWAY] where the two do not straddle the waterline, which the mask can ask for and
          * the ground cannot answer.
          */
-        fun shareTowardWater(bankMetres: Float, waterMetres: Float): Float =
-            if (bankMetres >= 0f && waterMetres < 0f) bankMetres / (bankMetres - waterMetres) else HALFWAY
+        fun shareTowardWater(bankMeters: Float, waterMeters: Float): Float =
+            if (bankMeters >= 0f && waterMeters < 0f) bankMeters / (bankMeters - waterMeters) else HALFWAY
 
         /**
          * How far from the line the coast's ink reaches, in pixels of the sheet: one cell, taken
@@ -195,7 +195,7 @@ class CoastLine(
         /**
          * The ink a cell takes at [distancePixels] from the line: full on it, nothing at
          * [reachPixels], and a smoothstep between, whose fall is symmetric about the half so the
-         * ink's weight across the line is centred on it.
+         * ink's weight across the line is centered on it.
          */
         fun inkAtDistance(distancePixels: Float, reachPixels: Float): Float =
             1f - Engraving.smoothstep(0f, reachPixels, distancePixels)

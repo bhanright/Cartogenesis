@@ -15,10 +15,10 @@ import kotlin.math.sqrt
  * else: shrink it and the line thins to nothing, enlarge it and the reader is looking at the grid
  * rather than at the country. A coast is a line, and a line survives being scaled. So the same
  * shoreline the raster inks ([CoastLine]) is traced as polylines, smoothed along its own length,
- * generalised for the scale it will be seen at, and stroked over the raster; the fill underneath
+ * generalized for the scale it will be seen at, and stroked over the raster; the fill underneath
  * stays the raster's.
  *
- * The trace is marching squares over the grid of cell centres. Each vertex lies on the edge between
+ * The trace is marching squares over the grid of cell centers. Each vertex lies on the edge between
  * a cell of the mask and one outside it, where [CoastLine] puts the waterline: between the two by
  * their altitudes, so the line follows the ground between cells rather than the grid's edges.
  * Traced without a [CoastLine], every vertex lies halfway, on the half-cell lattice: the line the
@@ -32,7 +32,7 @@ import kotlin.math.sqrt
 object Shoreline {
 
     /**
-     * The coastline of [isLand] as polylines in cell coordinates, where cell `(i, j)`'s centre is
+     * The coastline of [isLand] as polylines in cell coordinates, where cell `(i, j)`'s center is
      * at `(i + 0.5, j + 0.5)` — the frame [MapRasterizer.overlay] draws rivers in.
      *
      * Each polyline is `x, y, x, y, …`. A ring closes on itself, repeating its first point as its
@@ -146,7 +146,7 @@ object Shoreline {
      * and not over its vertices alone: a vertex is then moved at most as far as the mean distance
      * along the line under the Gaussian, `sigma * sqrt(2 / pi)` ([largestShiftOf]), which it reaches
      * only where the line runs straight out and straight back. Weighting the vertices instead lets
-     * a sparse trace move one further, since a neighbour a whole sigma away can carry as much
+     * a sparse trace move one further, since a neighbor a whole sigma away can carry as much
      * weight as the vertex itself.
      *
      * A ring ([line] repeating its first point as its last) is smoothed round its seam and still
@@ -247,17 +247,17 @@ object Shoreline {
 
     /**
      * The whole coast of [world], traced where [CoastLine] puts the shoreline, smoothed along its
-     * length and generalised for [sheet], as polylines in cell coordinates: what the overlay strokes.
+     * length and generalized for [sheet], as polylines in cell coordinates: what the overlay strokes.
      */
     fun of(world: WorldMap, sheet: MapSheet): List<FloatArray> =
         of(CoastLine.of(world), SheetGeometry.of(world), sheet)
 
     /**
      * The coast [coast] describes, on a grid of [geometry]'s cells, traced, smoothed along its
-     * length by [SMOOTHING_SIGMA_CELLS] of a cell and generalised for [sheet], as polylines in cell
+     * length by [SMOOTHING_SIGMA_CELLS] of a cell and generalized for [sheet], as polylines in cell
      * coordinates.
      *
-     * Smoothed and generalised on the sheet rather than on the grid: each line is carried onto the
+     * Smoothed and generalized on the sheet rather than on the grid: each line is carried onto the
      * true-shape sheet, smoothed and simplified there, and carried back. A cell is not the same size
      * both ways on the ground, and a tolerance of so many cells would give away twice as much of a
      * coast running north-south as of one running east-west; a pixel of the sheet is the same
@@ -351,7 +351,7 @@ object Shoreline {
     /**
      * Below this squared length a segment is treated as a point, in the coordinates' units squared.
      *
-     * A millionth of a millionth. A crossing lies strictly short of the water cell's centre, so two
+     * A millionth of a millionth. A crossing lies strictly short of the water cell's center, so two
      * vertices of one trace never coincide, and nothing legitimate comes near this. It exists only
      * so the projection below cannot divide by zero.
      */
@@ -390,8 +390,8 @@ object Shoreline {
 
         /**
          * Where the crossing of one side of a block sits, in cell coordinates. A block spans the
-         * centres of the four cells at ([blockColumn], [blockRow]) and their east, south and
-         * south-east neighbours, so its north-west corner is at `blockColumn + 0.5`; a crossing is
+         * centers of the four cells at ([blockColumn], [blockRow]) and their east, south and
+         * south-east neighbors, so its north-west corner is at `blockColumn + 0.5`; a crossing is
          * on the side itself, where [crossings] puts it, or at its midpoint.
          */
         fun pointX(blockColumn: Int, blockRow: Int, side: Int): Float {

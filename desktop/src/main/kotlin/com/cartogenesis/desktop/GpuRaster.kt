@@ -247,8 +247,8 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
         GL43C.glUniform1i(uniform("uIsobathStencil"), recipe.isobathSlopeStencil)
         GL43C.glUniform1f(uniform("uCoastlineStrength"), recipe.coastlineStrength)
         GL43C.glUniform1f(uniform("uCoastReach"), CoastLine.reachPixels(recipe.pixelsPerCellAcross, recipe.pixelsPerCellDown))
-        GL43C.glUniform1f(uniform("uHighestLandMetres"), recipe.highestLandMetres)
-        GL43C.glUniform1f(uniform("uDeepestOceanMetres"), recipe.deepestOceanMetres)
+        GL43C.glUniform1f(uniform("uHighestLandMeters"), recipe.highestLandMeters)
+        GL43C.glUniform1f(uniform("uDeepestOceanMeters"), recipe.deepestOceanMeters)
         GL43C.glUniform1iv(uniform("uCoastSegments"), CoastLine.segmentTable())
         GL43C.glUniform1f(uniform("uReliefStrength"), recipe.reliefStrength)
         GL43C.glUniform1f(uniform("uInkGain"), recipe.inkGain)
@@ -452,12 +452,12 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
             uniform float uIsobathFlattest;
             uniform int uIsobathStencil;
             uniform float uCoastlineStrength;
-            // CoastLine: how far from the shoreline its ink reaches on the sheet, the metres the
+            // CoastLine: how far from the shoreline its ink reaches on the sheet, the meters the
             // elevation's two halves stand for, and the marching squares' table the line is traced
             // with, all handed in from the processor's own figures.
             uniform float uCoastReach;
-            uniform float uHighestLandMetres;
-            uniform float uDeepestOceanMetres;
+            uniform float uHighestLandMeters;
+            uniform float uDeepestOceanMeters;
             uniform int uCoastSegments[64];
             uniform float uReliefStrength;
             uniform float uInkGain;
@@ -657,16 +657,16 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
              * through their altitudes reaches zero, each read off its own half of the ruler, and
              * halfway where the two do not straddle the waterline.
              */
-            float cellMetres(int i) {
-                precise float metres = elevation[i] * (isLand(i) ? uHighestLandMetres : uDeepestOceanMetres);
-                return metres;
+            float cellMeters(int i) {
+                precise float meters = elevation[i] * (isLand(i) ? uHighestLandMeters : uDeepestOceanMeters);
+                return meters;
             }
 
             float shareTowardWater(int bank, int water) {
-                float bankMetres = cellMetres(bank);
-                float waterMetres = cellMetres(water);
-                if (bankMetres >= 0.0 && waterMetres < 0.0) {
-                    precise float share = bankMetres / (bankMetres - waterMetres);
+                float bankMeters = cellMeters(bank);
+                float waterMeters = cellMeters(water);
+                if (bankMeters >= 0.0 && waterMeters < 0.0) {
+                    precise float share = bankMeters / (bankMeters - waterMeters);
                     return share;
                 }
                 return 0.5;
@@ -705,7 +705,7 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
 
             /*
              * CoastLine.inkAt: the ink a cell takes from the distance on the sheet between its
-             * centre and the shoreline, over the blocks of four cells that can hold a piece of it
+             * center and the shoreline, over the blocks of four cells that can hold a piece of it
              * within uCoastReach, wrapping east-west and stopping at the northern and southern rows.
              */
             float coastInk(int x, int y) {

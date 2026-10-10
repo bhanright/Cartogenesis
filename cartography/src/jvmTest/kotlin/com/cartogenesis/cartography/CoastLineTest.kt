@@ -30,7 +30,7 @@ import kotlin.test.assertTrue
  * (docs/DESIGN_LEDGER.md, G2).
  *
  * The field's shoreline here is traced by the geometry census's own tracer ([Contours.ofField]) on
- * the cells' altitudes in metres, which shares no code with the drawing's [CoastLine]: the two
+ * the cells' altitudes in meters, which shares no code with the drawing's [CoastLine]: the two
  * agree only if the drawing puts its line where the ground crosses the waterline. Where the mask
  * the coast is drawn round and the sign of the ground disagree — a channel too narrow for a coast,
  * which is a bank with its floor under water — the ground cannot say where the shore is, and those
@@ -96,16 +96,16 @@ class CoastLineTest : BorrowsSharedWorlds() {
             for (step in 0 until PLANE_BEARINGS) {
                 val bearing = Math.PI * step / PLANE_BEARINGS + 0.01
                 // The plane rises along the unit normal (normalX, normalY) on the sheet, through the
-                // middle of the grid: land where it is above zero, a metre for each pixel.
+                // middle of the grid: land where it is above zero, a meter for each pixel.
                 val normalX = cos(bearing)
                 val normalY = sin(bearing)
                 val middleX = across * pixelsAcross / 2.0
                 val middleY = down * pixelsDown / 2.0
                 fun height(column: Int, row: Int): Double =
                     ((column + 0.5) * pixelsAcross - middleX) * normalX + ((row + 0.5) * pixelsDown - middleY) * normalY
-                val metres = FloatArray(across * down) { height(it % across, it / across).toFloat() }
-                val banks = BooleanArray(metres.size) { metres[it] >= 0f }
-                val coast = CoastLine(banks, metres, across, down)
+                val meters = FloatArray(across * down) { height(it % across, it / across).toFloat() }
+                val banks = BooleanArray(meters.size) { meters[it] >= 0f }
+                val coast = CoastLine(banks, meters, across, down)
                 // Clear of the seam, where the plane is cut, and of the edges, where there is no block.
                 for (row in 2 until down - 2) for (column in 4 until across - 4) {
                     val truth = abs(height(column, row)).toFloat()
@@ -148,12 +148,12 @@ class CoastLineTest : BorrowsSharedWorlds() {
                 noise.at((frame.columnOf(cell) + 0.5) * frame.cellWidthKm, (frame.rowOf(cell) + 0.5) * frame.cellHeightKm).toFloat()
             }
             val level = values.sorted()[((1.0 - NATURAL_COVER) * (values.size - 1)).toInt()]
-            val metres = FloatArray(values.size) { values[it] - level }
-            val drawn = drawnOutlines(metres, frame, geometry, pane)
+            val meters = FloatArray(values.size) { values[it] - level }
+            val drawn = drawnOutlines(meters, frame, geometry, pane)
             lengthCellWidths += drawn.sumOf { it.lengthKm() } / frame.cellWidthKm
             natural += Arcs.perLine(Arcs.measure(drawn, frame), drawn.size).sum()
         }
-        // A disc of land on the ground, its altitude falling away from its centre as a cone does.
+        // A disc of land on the ground, its altitude falling away from its center as a cone does.
         val radiusCells = 2 * Arcs.MINIMUM_RADIUS_CELLS
         val cone = FloatArray(frame.cellCount) { cell ->
             val dx = frame.columnOf(cell) + 0.5 - frame.cellsAcross / 2
@@ -168,10 +168,10 @@ class CoastLineTest : BorrowsSharedWorlds() {
         assertTrue(discArcs > 0, "the stamped disc drawn the same way shows no arc, so the clause cannot see one")
     }
 
-    /** The shoreline of [metres] as the overlay draws it for [pane], as the census's outlines. */
-    private fun drawnOutlines(metres: FloatArray, frame: GridFrame, geometry: SheetGeometry, pane: MapSheet): List<Outline> {
-        val banks = BooleanArray(metres.size) { metres[it] >= 0f }
-        return Shoreline.of(CoastLine(banks, metres, frame.cellsAcross, frame.cellsDown), geometry, pane).map { line ->
+    /** The shoreline of [meters] as the overlay draws it for [pane], as the census's outlines. */
+    private fun drawnOutlines(meters: FloatArray, frame: GridFrame, geometry: SheetGeometry, pane: MapSheet): List<Outline> {
+        val banks = BooleanArray(meters.size) { meters[it] >= 0f }
+        return Shoreline.of(CoastLine(banks, meters, frame.cellsAcross, frame.cellsDown), geometry, pane).map { line ->
             val count = line.size / 2
             val ring = count > 2 && line[0] == line[line.size - 2] && line[1] == line[line.size - 1]
             val kept = if (ring) count - 1 else count
@@ -187,7 +187,7 @@ class CoastLineTest : BorrowsSharedWorlds() {
 
     /**
      * Every cell's ink is the pen's at its distance on the sheet from the field's shoreline, so the
-     * line the raster draws is centred on the ground's own waterline. The control, the raster's
+     * line the raster draws is centered on the ground's own waterline. The control, the raster's
      * old operator, inks whole land cells and so stands a whole half cell off the line on average.
      */
     @Test
@@ -307,7 +307,7 @@ class CoastLineTest : BorrowsSharedWorlds() {
 
     /**
      * The ground's own shoreline on [map], traced by the census's tracer on the cells' altitudes in
-     * metres over the blocks whose four cells agree with the mask the coast is drawn round, and
+     * meters over the blocks whose four cells agree with the mask the coast is drawn round, and
      * held as segments on the sheet, bucketed by cell for the distance from a point.
      */
     private inner class FieldShoreline(map: WorldMap) {
@@ -323,14 +323,14 @@ class CoastLineTest : BorrowsSharedWorlds() {
         init {
             val scale = map.config.scale
             val relative = map.sea.relativeElevation.data
-            val metres = FloatArray(relative.size) { cell ->
+            val meters = FloatArray(relative.size) { cell ->
                 if (map.sea.isLand[cell]) relative[cell] * scale.highestLandMetres else relative[cell] * scale.deepestOceanMetres
             }
             val banks = NarrowSea.banks(map)
-            agrees = BooleanArray(metres.size) { banks[it] == (metres[it] >= 0f) }
+            agrees = BooleanArray(meters.size) { banks[it] == (meters[it] >= 0f) }
             disagreeing = agrees.count { !it }
             val frame = GridFrame.of(map.config)
-            for (outline in Contours.ofField(metres, 0f, frame, agrees)) {
+            for (outline in Contours.ofField(meters, 0f, frame, agrees)) {
                 val (xCells, yCells) = outline.inCells(frame)
                 val last = if (outline.closed) outline.vertexCount else outline.vertexCount - 1
                 for (vertex in 0 until last) {
@@ -374,13 +374,13 @@ class CoastLineTest : BorrowsSharedWorlds() {
             return nearest
         }
 
-        /** The distance on the sheet from cell ([column], [row])'s centre to the shoreline. */
+        /** The distance on the sheet from cell ([column], [row])'s center to the shoreline. */
         fun distancePixels(column: Int, row: Int): Float =
             distanceFrom((column + 0.5f) * sheet.pixelsPerCellAcross, (row + 0.5f) * sheet.pixelsPerCellDown)
 
         /**
          * How far each vertex of [lines], in cell coordinates, stands from the shoreline, over the
-         * vertices whose neighbourhood agrees with the mask.
+         * vertices whose neighborhood agrees with the mask.
          */
         fun strays(lines: List<FloatArray>, sheet: SheetGeometry): Strays {
             val distances = ArrayList<Float>()

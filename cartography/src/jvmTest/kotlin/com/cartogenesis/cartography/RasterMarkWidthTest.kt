@@ -143,8 +143,8 @@ class RasterMarkWidthTest : BorrowsSharedWorlds() {
         /**
          * The width the coast's mark usually has on a sheet drawn a cell to a pixel: two pixels.
          * Its ink reaches a cell either side of the shoreline ([CoastLine.reachPixels]), so a
-         * shoreline running between two cell centres inks both, and only one where it runs through
-         * a centre, which leaves the cells either side exactly a cell off it and bare.
+         * shoreline running between two cell centers inks both, and only one where it runs through
+         * a center, which leaves the cells either side exactly a cell off it and bare.
          */
         const val MARK_PIXELS = 2
 

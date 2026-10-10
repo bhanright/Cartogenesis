@@ -164,17 +164,17 @@ class GeneralisationTest : BorrowsSharedWorlds() {
             while (at < line.size) {
                 val vertexX = line[at]
                 val vertexY = line[at + 1]
-                // A vertex lies on a cell edge between two centres: across a row edge its x is a
-                // centre's and its y between two, across a column edge the other way round. Where
-                // the ground stands exactly at the waterline the vertex is on the bank's own centre,
+                // A vertex lies on a cell edge between two centers: across a row edge its x is a
+                // center's and its y between two, across a column edge the other way round. Where
+                // the ground stands exactly at the waterline the vertex is on the bank's own center,
                 // with its water on any side; the edge it was traced on is the one whose two cells
                 // differ, each pair listed north or west first.
-                val xOnACentre = abs(vertexX - floor(vertexX) - 0.5f) < ON_A_CELL_CENTRE
-                val yOnACentre = abs(vertexY - floor(vertexY) - 0.5f) < ON_A_CELL_CENTRE
+                val xOnACenter = abs(vertexX - floor(vertexX) - 0.5f) < ON_A_CELL_CENTRE
+                val yOnACenter = abs(vertexY - floor(vertexY) - 0.5f) < ON_A_CELL_CENTRE
                 val edges = ArrayList<Triple<Int, Int, Boolean>>()
-                if (xOnACentre) edges.add(Triple(cellAt(map, vertexX, vertexY - 0.5f), cellAt(map, vertexX, vertexY + 0.5f), true))
-                if (yOnACentre) edges.add(Triple(cellAt(map, vertexX - 0.5f, vertexY), cellAt(map, vertexX + 0.5f, vertexY), false))
-                if (xOnACentre && yOnACentre) {
+                if (xOnACenter) edges.add(Triple(cellAt(map, vertexX, vertexY - 0.5f), cellAt(map, vertexX, vertexY + 0.5f), true))
+                if (yOnACenter) edges.add(Triple(cellAt(map, vertexX - 0.5f, vertexY), cellAt(map, vertexX + 0.5f, vertexY), false))
+                if (xOnACenter && yOnACenter) {
                     edges.add(Triple(cellAt(map, vertexX, vertexY - 1f), cellAt(map, vertexX, vertexY), true))
                     edges.add(Triple(cellAt(map, vertexX - 1f, vertexY), cellAt(map, vertexX, vertexY), false))
                 }

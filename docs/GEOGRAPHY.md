@@ -160,7 +160,7 @@ line through their two altitudes reaches zero: the shoreline is the height field
 traced by marching squares with each crossing placed by the ground, and not the edge of the land
 mask, which runs along the grid's rows and columns. Both drawings of the coast are taken from it.
 The raster inks every cell, land and water alike, by its distance on the sheet from that line, full
-on the line and nothing a cell away, so the ink is centred on the waterline and a shore facing west
+on the line and nothing a cell away, so the ink is centered on the waterline and a shore facing west
 takes as much of it as one facing east; the overlay traces the same line, smooths it along its own
 length with a Gaussian of half a cell, which keeps every vertex within 0.40 of a cell of the
 waterline, and strokes it over the fill at 0.05% of the sheet's width, one pixel at 2048. Where the

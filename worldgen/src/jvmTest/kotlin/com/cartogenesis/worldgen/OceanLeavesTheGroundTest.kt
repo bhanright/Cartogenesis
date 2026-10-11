@@ -77,19 +77,19 @@ class OceanLeavesTheGroundTest : BorrowsSharedWorlds() {
             "plates.plateId" to -7659896205567335042L,
             "plates.boundaryDistance" to 6559268612307642171L,
             "plates.nearestBoundaryType" to -4092876749757560349L,
-            "plates.nearestBoundaryClass" to 8537704601329378444L,
-            "plates.height" to 6687649860481647278L,
-            "plates.seafloorAgeMyr" to -5558611328326441912L,
-            "plates.seafloorHalfSpreadingRateKmPerMyr" to 2092863834869833716L,
-            "plates.continentalShare" to 5707884443378334786L,
-            "plates.upliftRateMmPerYear" to -1700415688480725156L,
-            "plates.crustAge" to 8840618518047909851L,
-            "erosion.height" to 424537893365974125L,
+            "plates.nearestBoundaryClass" to 7713555141834102212L,
+            "plates.height" to 314563462034363976L,
+            "plates.seafloorAgeMyr" to 6444177982951830066L,
+            "plates.seafloorHalfSpreadingRateKmPerMyr" to 668069306375862003L,
+            "plates.continentalShare" to -8606387063464998658L,
+            "plates.upliftRateMmPerYear" to -9204950406715247596L,
+            "plates.crustAge" to 5808649867131644059L,
+            "erosion.height" to 7664879216374273901L,
             "erosion.sweptOnDevice" to -358906410940142731L,
-            "sea.shorelineHeight" to -6560826777609224278L,
-            "sea.isLand" to -4568625188585807751L,
-            "sea.relativeElevation" to -8095792413560435193L,
-            "sea.landCellCount" to -5173831719124787021L
+            "sea.shorelineHeight" to -1472296860660524362L,
+            "sea.isLand" to 2151985804672966035L,
+            "sea.relativeElevation" to -6812022605434427169L,
+            "sea.landCellCount" to -6722596466573334982L
         )
     }
 }

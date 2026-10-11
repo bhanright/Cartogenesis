@@ -171,6 +171,13 @@ internal object GeometryFindings {
     /** Biome edges double back in long straight hairpins. */
     const val BIOME_EDGE_HAIRPINS = "biome edges double back in straight hairpins"
 
+    /**
+     * A biome edge runs straight along a row: at 512 rows on H1's ground under the coupled climate,
+     * 63 steps east-west on 7 at (825, 133) and 75 on 99 at (230, 60), against the smooth natural
+     * bar of 60.9. Not traced (docs/TODO.md).
+     */
+    const val BIOME_EDGE_ALONG_ROWS = "a biome edge runs straight along a row"
+
     /** The peoples' borders run along grid lines and turn square, following ice and biome edges. */
     const val PEOPLES_BORDERS_ON_THE_GRID = "peoples' borders run along grid lines"
 

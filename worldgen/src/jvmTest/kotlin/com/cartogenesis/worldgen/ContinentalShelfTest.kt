@@ -144,13 +144,9 @@ class ContinentalShelfTest : BorrowsSharedWorlds() {
             }
         }
         // Recorded at A1-4: the provisional climates' new wind moved the ground the erosion cut, and
-        // seed 42's east- and west-facing shelf holds 88% of its band (docs/TODO.md).
-        KnownFailures.expect(
-            "A1-4: seed 42's shelf off east- and west-facing coasts falls short",
-            "seed 42: the shelf's plateau holds 90% of its band off north- and south-facing coasts and 87% off east- and west-facing ones"
-        ) {
-            if (failures.isNotEmpty()) throw RecordedViolation(failures.joinToString(System.lineSeparator()), failures.joinToString("; "))
-        }
+        // seed 42's east- and west-facing shelf held 88% of its band. Armed again when H1's ground
+        // came under the coupled climate, whose shelves clear it (docs/DESIGN_LEDGER.md, M1).
+        assertTrue(failures.isEmpty(), failures.joinToString(System.lineSeparator()))
     }
 
     private class Facing(val northSouth: Double, val northSouthCells: Int, val eastWest: Double, val eastWestCells: Int)

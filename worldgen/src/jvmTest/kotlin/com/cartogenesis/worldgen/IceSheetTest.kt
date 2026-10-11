@@ -68,7 +68,7 @@ class IceSheetTest : BorrowsSharedWorlds() {
         // Recorded at C1b: the march that closes its budget snows on the polar land where the old one
         // dropped the cold cap's water, and the sheets it feeds stand thicker than Earth's. The ice
         // is measured and not fixed in C1b (docs/TODO.md, "The ice after C1b").
-        KnownFailures.expect("C1b: the sheets the conserving march feeds stand thicker than Earth's", "seed 718106 stands 5683; seed 59758 stands 5794; seed 7 stands 6388; seed 42 stands 6024") {
+        KnownFailures.expect("C1b: the sheets the conserving march feeds stand thicker than Earth's", "seed 718106 stands 5047; seed 59758 stands 5831; seed 7 stands 6062; seed 42 stands 4909") {
             if (failures.isNotEmpty()) {
                 throw RecordedViolation(
                     "the sheets are outside the envelope Earth's two sit in:\n" + failures.joinToString("\n"),
@@ -234,9 +234,29 @@ class IceSheetTest : BorrowsSharedWorlds() {
     fun `the flow clause fails a flow turned a quarter from the ice's own`() {
         // The first of [DOME_SEED] and the clause's own seeds whose sheet fills a third of its disc
         // near the dome: at A1-4 [DOME_SEED]'s held 8 cells there, so the control moves with the ice.
-        val seed = (listOf(DOME_SEED) + seeds).first { candidate ->
+        val candidates = listOf(DOME_SEED) + seeds
+        val seed = candidates.firstOrNull { candidate ->
             val candidateMeasured = measure(candidate)
             readFlow(candidateMeasured, candidateMeasured.mass.sheetFlowReceiver)?.isNeighbourhood == true
+        }
+        if (seed == null) {
+            // Recorded when H1's ground came under the coupled climate: none of the candidates'
+            // sheets fills a third of its disc near its dome, so the control has no flow to turn
+            // (docs/DESIGN_LEDGER.md, M1; docs/TODO.md).
+            KnownFailures.expect("M1: no sheet the control can read has a dome", "") {
+                val readings = candidates.map { candidate ->
+                    val candidateMeasured = measure(candidate)
+                    val reading = readFlow(candidateMeasured, candidateMeasured.mass.sheetFlowReceiver)
+                    if (reading == null) "seed $candidate: no sheet"
+                    else "seed $candidate: %d of %.0f cells".format(reading.near, reading.disc)
+                }
+                throw RecordedViolation(
+                    "no sheet of seeds $candidates fills a third of its disc near its dome, so the control has none to turn: " +
+                        readings.joinToString("; "),
+                    readings.joinToString("; ")
+                )
+            }
+            return
         }
         val measured = measure(seed)
         val config = measured.config

@@ -40,7 +40,7 @@ class HypsometryTest : BorrowsSharedWorlds() {
         val complaints = bandComplaints(pooled)
         // Recorded at H1: the platform's interior still stands in the 500 m to 1 km band more
         // than Earth's does (docs/DESIGN_LEDGER.md, H1; docs/TODO.md).
-        KnownFailures.expect(PLATFORM_HUMP, "500 m-1 km 0.276") {
+        KnownFailures.expect(PLATFORM_HUMP, "500 m-1 km 0.266") {
             val hump = complaints[MIDDLE_BAND]
             if (hump != null) throw RecordedViolation("the land is not spread over altitude as Earth's is: $hump", BAND_NAMES[MIDDLE_BAND] + " %.3f".format(Locale.ROOT, pooled.bandShares[MIDDLE_BAND]))
         }

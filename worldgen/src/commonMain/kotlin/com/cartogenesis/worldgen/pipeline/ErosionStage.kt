@@ -19,14 +19,7 @@ data class ErosionResult(
      * machine. Not saved: it is a fact about one run, not about the world.
      */
     val sweptOnDevice: Boolean = false
-) {
-    /**
-     * Where the last provisional climate the hydraulic rounds cut with settled, for the ice's
-     * provisional climate to start from ([ClimateStage.WarmStart]). Not part of the world's identity
-     * and not saved.
-     */
-    internal var climateStart: ClimateStage.WarmStart? = null
-}
+)
 
 /**
  * Step 4: wear the terrain down.
@@ -146,16 +139,15 @@ object ErosionStage {
         val sweepsPerRound =
             (sweepsFor(config) / erosion.hydraulicRounds.coerceAtLeast(1)).coerceAtLeast(1)
 
-        var climateStart: ClimateStage.WarmStart? = null
         return ErosionResult(
             HydraulicErosion.apply(
                 config, weathered.height, config.seaLevel, upliftRateMmPerYear, onRound, log,
-                receiverClamp, weightSums, shieldCut, incisionWatch, onClimateStart = { climateStart = it }
+                receiverClamp, weightSums, shieldCut, incisionWatch
             ) { field ->
                 thermalErosion(config, field, accelerator, sweepsPerRound).height
             },
             sweptOnDevice = weathered.sweptOnDevice
-        ).also { it.climateStart = climateStart }
+        )
     }
 
     /**

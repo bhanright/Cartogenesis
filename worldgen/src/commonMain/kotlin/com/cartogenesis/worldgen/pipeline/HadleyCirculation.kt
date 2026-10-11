@@ -279,7 +279,10 @@ internal class HadleyCirculation private constructor(
          * candidate's summer cell closed first; at the equator, Held and Hou's cells, mirror images
          * about it.
          */
-        fun solve(): Cells {
+        fun solve(): Cells = checkNotNull(solveOrNull()) { "no equal-area cells for a heating at ${asin(heatingSine) / DEGREES} degrees" }
+
+        /** [solve], or null where the cells do not close short of the poles. */
+        fun solveOrNull(): Cells? {
             require(heatingSine >= 0.0) { "a northern heating; mirror a southern one" }
             val ascent = if (heatingSine < SYMMETRIC_SINE) 0.0 else {
                 var low = heatingSine + SINE_STEP
@@ -295,10 +298,10 @@ internal class HadleyCirculation private constructor(
                     low = high
                     lowResidual = highResidual
                 }
-                checkNotNull(found) { "no equal-area cells for a heating at ${asin(heatingSine) / DEGREES} degrees" }
+                found ?: return null
             }
-            val (summer, theta) = checkNotNull(summerCell(ascent)) { "no summer cell" }
-            val winter = if (ascent == 0.0) -summer else checkNotNull(winterEdge(ascent, theta)) { "no winter cell" }
+            val (summer, theta) = summerCell(ascent) ?: return null
+            val winter = if (ascent == 0.0) -summer else winterEdge(ascent, theta) ?: return null
             return Cells(this, ascent, theta, winter, summer, mirrored = false)
         }
 
@@ -483,9 +486,37 @@ internal class HadleyCirculation private constructor(
 
         /** The cells for a heating at [heatingLatitudeDegrees] on a planet of [radiusMeters]. */
         fun cellsFor(heatingLatitudeDegrees: Double, radiusMeters: Double): Cells {
-            val northern = EqualArea(sin(abs(heatingLatitudeDegrees) * DEGREES), amcScale(radiusMeters), EQUILIBRIUM_CONTRAST_SHARE).solve()
+            lastCells?.let { (heating, radius, cells) -> if (heating == heatingLatitudeDegrees && radius == radiusMeters) return cells }
+            return solvedCells(heatingLatitudeDegrees, radiusMeters).also { lastCells = Triple(heatingLatitudeDegrees, radiusMeters, it) }
+        }
+
+        /**
+         * The last cells solved and what they were solved for: a climate run asks for each half's
+         * twice, the ocean's stress and the climate, and the cells are a pure function of the two.
+         */
+        @kotlin.concurrent.Volatile
+        private var lastCells: Triple<Double, Double, Cells>? = null
+
+        private fun solvedCells(heatingLatitudeDegrees: Double, radiusMeters: Double): Cells {
+            val scale = amcScale(radiusMeters)
+            fun cellsAt(degrees: Double) = EqualArea(sin(degrees * DEGREES), scale, EQUILIBRIUM_CONTRAST_SHARE).solveOrNull()
+            val northern = cellsAt(abs(heatingLatitudeDegrees)) ?: run {
+                // A heating so far from the equator (a planet tilted far past Earth's, its summer pole
+                // the warmest) that the cells reach a pole first: held at the farthest heating whose
+                // cells close, found by bisection, so the circulation stays defined at every tilt.
+                var closes = 0.0
+                var fails = abs(heatingLatitudeDegrees)
+                repeat(FARTHEST_HEATING_BISECTIONS) {
+                    val middle = 0.5 * (closes + fails)
+                    if (cellsAt(middle) != null) closes = middle else fails = middle
+                }
+                checkNotNull(cellsAt(closes))
+            }
             return if (heatingLatitudeDegrees < 0.0) northern.mirrored() else northern
         }
+
+        /** Halvings of the search for the farthest heating whose cells close: twenty, about 1e-4 degrees. */
+        private const val FARTHEST_HEATING_BISECTIONS = 20
 
         /**
          * The latitude the half-year [season]'s marine air is warmest at in [zonal], degrees: the

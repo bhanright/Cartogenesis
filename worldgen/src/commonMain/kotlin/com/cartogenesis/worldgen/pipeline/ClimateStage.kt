@@ -503,19 +503,16 @@ object ClimateStage {
      * the atmosphere's grid, watts per square meter, as the last run's condensation asked for it,
      * and the march's ground return ([MoistureMarch.StartState]).
      *
-     * A generation runs the climate four times over nearly the same world: the erosion's provisional
-     * weather twice, the ice's provisional snow balance and the finished climate, each on the ground
-     * and coast the stage before it left. Each run's loop is the same fixed point, the heating its own
-     * condensation asks for and the year its own ground returns, so starting it where the last run
-     * settled moves where it starts and not where it settles: the loop's own test, `|g(Q) - Q|` and
-     * the land's rain, both under [MoistureMarch.CONVERGED_SHARE], still decides when it stops, and
-     * the answer stands within that share of a cold start's (docs/DESIGN_LEDGER.md, A1-6a).
-     *
-     * Carried on the result each run reads its world from ([SeaLevelResult.climateStart],
-     * [ErosionResult.climateStart]), not held by this object between runs, so a world is a function
-     * of its configuration and the stage results it is built from, however the engine reaches them:
-     * a reused stage hands on the start the fresh one made. Not saved: a world read from a file and
-     * changed in a later stage starts that stage's climate cold (docs/TODO.md).
+     * The erosion's halfway weather starts from its opening weather (`HydraulicErosion`): the same
+     * stage's two runs over nearly the same ground, always made together, so the world is the same
+     * function of its configuration however the engine reaches it. Each run's loop is a fixed point,
+     * the heating its own condensation asks for and the year its own ground returns, so starting it
+     * where the last run settled moves where it starts and not where it settles: the loop's own test,
+     * `|g(Q) - Q|` and the land's rain, still decides when it stops. The answer stands within the
+     * loop's own spread of a cold start's, about two percent of the rain's root mean square
+     * (docs/DESIGN_LEDGER.md, A1-6a). The ice's and the finished climate start cold: a world read from
+     * a file or rebuilt from a stored terrain reruns them without the earlier runs, and must make
+     * the same world (docs/TODO.md).
      */
     internal class WarmStart(
         val julyLatentWPerM2: DoubleArray,
@@ -599,18 +596,7 @@ object ClimateStage {
         ocean: OceanResult,
         /** See `GlaciationConfig.glacialMaximumC`: the ice that carved the ground is not today's. */
         globalCoolingC: Float = config.glaciation.glacialMaximumC
-    ): FloatField = provisionalSnowBalanceAndStart(config, sea, ocean, globalCoolingC).first
-
-    /**
-     * [provisionalSnowBalance] and where its climate's loop ended, which the engine hands the finished
-     * climate to start from ([WarmStart]).
-     */
-    internal fun provisionalSnowBalanceAndStart(
-        config: WorldGenConfig,
-        sea: SeaLevelResult,
-        ocean: OceanResult,
-        globalCoolingC: Float = config.glaciation.glacialMaximumC
-    ): Pair<FloatField, WarmStart?> {
+    ): FloatField {
         val fields = seasonalFields(config, sea, ocean, globalCoolingC)
         return SnowBalance.field(
             sea.isLand,
@@ -618,7 +604,7 @@ object ClimateStage {
             fields.januaryHalfTemperature,
             fields.julyHalfPrecipitationMm,
             fields.januaryHalfPrecipitationMm
-        ) to fields.warmStart
+        )
     }
 
     internal fun generateWithSeasonalMm(

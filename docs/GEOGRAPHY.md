@@ -1454,16 +1454,15 @@ cells take 1,228, 1,592 and 1,305 mm, because then the polar ocean evaporates li
 
 Temperature and rainfall are computed twice, for the calendar's two half-years, April to September
 and October to March, each one moment of the planet, and biomes are read off each cell's warmer and
-cooler half instead of the annual figures alone. Rainfall's seasons are one setting —
-`ClimateConfig.seasonalTiltDegrees`, the degrees the thermal equator migrates toward whichever
-hemisphere is in summer — carried by the wind belts and the rain belts alike; temperature's are the
-same number read as the planet's axial tilt, so switching seasons off stands the axis upright and
-there is no seasonal forcing for the energy balance to answer.
+cooler half instead of the annual figures alone. The seasons are one setting,
+`ClimateConfig.seasonalTiltDegrees`, read as the planet's axial tilt: the energy balance answers it,
+and each half's circulation follows the energy balance's own heating (below), so switching seasons
+off stands the axis upright and leaves no seasonal forcing for either to answer.
 
 - **The halves are the calendar's, and a place's summer is its warmer half.** Until A1-1 each band
   took its own warmest half-year, so the march's warm half was every hemisphere's summer at once and
-  its thermal equator stood ten degrees into both hemispheres together. Now the belts ride one
-  thermal equator, in the north from April to September and in the south from October to March,
+  its thermal equator stood ten degrees into both hemispheres together. Now each half has one
+  circulation, rising in the north from April to September and in the south from October to March,
   and the winter hemisphere's trades cross the equator to it. The biome stage still applies one
   rule to both hemispheres: a cell's summer rain is the rain of whichever half is warmer there, Peel
   and others' rule, read on the cell's own temperatures so that the switch follows the thermal
@@ -1505,7 +1504,17 @@ there is no seasonal forcing for the energy balance to answer.
   high sits over a west-facing coast all summer and the westerlies swing back over it in winter; a
   monsoon forest is the opposite, a drenching wet season and a dry winter. Savanna is now decided
   the same way, on the lopsidedness of the year rather than on the annual total alone.
-- **The desert belt migrates, and the instantaneous belts are sharper than their mean.** The
+- **The rising branch migrates and the subtropical edges much less.** Since A1-6a each half's
+  zonal-mean circulation is Lindzen and Hou's (1988) for a heating off the equator: two Hadley
+  cells about a rising branch that stands poleward of the season's heating, the energy balance's
+  warmest marine air, with a strong cross-equatorial winter cell and a weak summer cell, and the
+  cells' poleward edges moving by about half as much as the rising branch. Its strength is the
+  atmosphere's radiative loss, its lower branch the troposphere's lower half, and its surface wind
+  the boundary layer's momentum balance under eddies that hold Earth's annual zonal-mean wind; the
+  sea-level pressure's zonal mean is that wind's drag balance. Where this stands against Earth's
+  ridges, ITCZ and cells is in the ledger's A1-6a row and `MeanCirculationEarthTest`.
+- **The desert belt migrates, and the instantaneous belts are sharper than their mean.** Until
+  A1-6a the belts rode the thermal equator ten degrees each way; what follows is that history. The
   subtropical high rides the thermal equator, so the dry belt sits some ten degrees poleward in
   summer and the same distance equatorward in winter. Averaging two offset marches, though, is a
   second computation of the annual mean, and it flattened a profile whose constants were already

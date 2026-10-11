@@ -140,6 +140,15 @@ class HadleyCirculationTest {
     }
 
     @Test
+    fun `a heating near the pole holds the cells at the farthest that close`() {
+        // A planet tilted far past Earth's has its summer pole warmest; the equal-area cells for a
+        // heating there reach a pole first, and the circulation is held where they still close.
+        val cells = HadleyCirculation.cellsFor(85.0, EARTH_RADIUS_M)
+        println("HADLEY heating 85 N held: rises at %.1f, edges %.1f and %.1f".format(cells.ascentLatitudeDegrees, cells.winterEdgeDegrees, cells.summerEdgeDegrees))
+        assertTrue(cells.winterEdgeDegrees > -90.0 && cells.summerEdgeDegrees < 90.0 && cells.ascentLatitudeDegrees > 0.0)
+    }
+
+    @Test
     fun `a smaller planet's cells reach farther`() {
         // The thermal Rossby number goes as the inverse square of the radius at the same spin.
         val earth = HadleyCirculation.cellsFor(0.0, EARTH_RADIUS_M)

@@ -37,10 +37,10 @@ data class SeaLevelResult(
     val landCellCount: Int
 ) {
     /**
-     * Where the climate this world's stages last ran over this sea settled, for the next run of the
-     * world's climate to start from ([ClimateStage.WarmStart]): the ice's provisional climate's
-     * once the ice is carved, or the erosion's, set by the engine. Not part of the world's identity
-     * (not in [equals]) and not saved.
+     * Where an earlier climate of this world settled, for the climate run over this sea to start from
+     * ([ClimateStage.WarmStart]): set by the erosion's halfway weather on the provisional sea it cuts,
+     * from its opening weather, and on no stage's result. Not part of the world's identity (not in
+     * [equals]) and not saved.
      */
     internal var climateStart: ClimateStage.WarmStart? = null
 }

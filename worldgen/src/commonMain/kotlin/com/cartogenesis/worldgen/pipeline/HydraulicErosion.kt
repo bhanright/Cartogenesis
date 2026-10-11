@@ -615,8 +615,6 @@ internal object HydraulicErosion {
         shieldCut: Boolean = true,
         /** Handed every cell's cut and every round's result; see [IncisionWatch]. */
         incisionWatch: IncisionWatch? = null,
-        /** Handed where the last provisional climate settled, for the next stage's climate to start from. */
-        onClimateStart: ((ClimateStage.WarmStart?) -> Unit)? = null,
         relax: suspend (FloatField) -> FloatField
     ): FloatField {
         val erosion = config.erosion
@@ -655,7 +653,6 @@ internal object HydraulicErosion {
         // once per land cell per round and a field load there is not free.
         var rainfallMm = opening.rainfallMm
         var vegetationDensity = opening.vegetationDensity
-        onClimateStart?.invoke(opening.climateStart)
         // Filled at the top of every round by [normaliseOverLand] and [shieldingOverLand], once
         // that round's shoreline is known. Allocated here so the rounds share them.
         val runoff = FloatArray(cellsAcross * cellsDown)
@@ -787,7 +784,6 @@ internal object HydraulicErosion {
                 val refreshed = provisionalWeather(config, working, provisionalSeaLevel, round, opening.climateStart)
                 rainfallMm = refreshed.rainfallMm
                 vegetationDensity = refreshed.vegetationDensity
-                onClimateStart?.invoke(refreshed.climateStart)
             }
 
             // The rock rises first, before the water is routed over it: a round is a span of time,

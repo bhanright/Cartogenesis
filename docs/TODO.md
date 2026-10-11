@@ -9,14 +9,17 @@
   950,000 cells of catchment runs down the valley beside it. The cause is the plate stage, the
   partition's straight edge with the rift's profile laid along it; the climate draws nothing of it.
   2026-10-11, A1-6a.
-- **A world read from a file and changed in a later stage starts that stage's climate cold
-  (A1-6a).** Each climate run in a generation starts from where the run before it settled
-  (`ClimateStage.WarmStart`), carried on the erosion's and the sea's results in memory and not
-  saved. A world loaded from a save and changed in a setting the climate or the ice reads runs that
-  climate from a cold start, which settles within the loop's own share (`CONVERGED_SHARE`) of the
-  warm one but not to its bits, so it is not the world a fresh generation makes. Saving the start
-  (the two halves' heating on the atmosphere's grid and the ground's return, about 18 MB a world at
-  1,024 rows) would close it. 2026-10-11, A1-6a.
+- **Only the erosion's halfway weather starts warm (A1-6a).** A climate run started where the
+  run before it settled (`ClimateStage.WarmStart`) takes fewer laps, but settles within the loop's
+  own spread of a cold start, about two percent of the rain's root mean square, not to its bits.
+  Chained through the ice's provisional climate to the finished one, carried on the erosion's and
+  the sea's results in memory, it took a world's four runs from A1-5's 13, 13, 9 and 13 laps to 10, 7, 6
+  and 9 laps on seed 7 at 1,024 rows, but a world rebuilt as if read from a file
+  (`IncrementalReuseTest`) or from a stored terrain (`TerrainSnapshotTest`) reran those climates
+  cold and was no longer the world a fresh generation makes, so the chain stops inside the erosion
+  stage, which always runs both of its climates. Saving the start with the stage results (the two
+  halves' heating on the atmosphere's grid, the ground's return and the bank, about 34 MB a world
+  at 1,024 rows) would let the chain run whole. 2026-10-11, A1-6a.
 - **`GroundFiguresTest` fails on main at 4c7f3a4a.** Its case *no figure in the source is counted
   in cycles round the map or as a share of it* names `Shoreline.kt:179` (`:cartography`, G2's
   drawn coast), `width / PIECES_PER_SIGMA`, as dividing the grid. Seen on both everyday runs of

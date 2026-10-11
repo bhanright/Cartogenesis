@@ -338,7 +338,7 @@ class LakeWaterBalanceTest : BorrowsSharedWorlds() {
         // Recorded on H1's ground under the coupled climate: H1's wet sample, scanned on main's
         // climate, falls below its spill under the coupled rain, and the scan that re-picks it is a
         // run of its own (docs/DESIGN_LEDGER.md, M1; docs/TODO.md).
-        KnownFailures.expect("M1: H1's wet basin sample falls below its spill under the coupled rain", "2560 of 3440 cells") {
+        KnownFailures.expect("M1: H1's wet basin sample falls below its spill under the coupled rain", "2352 of 4907 cells") {
             if (stillWet != basin.size) {
                 throw RecordedViolation(
                     "a wet basin must stay full to its spill: $stillWet of ${basin.size} cells",

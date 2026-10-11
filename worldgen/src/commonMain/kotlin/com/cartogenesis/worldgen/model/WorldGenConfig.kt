@@ -1971,11 +1971,13 @@ data class ClimateConfig(
     /**
      * How far the thermal equator migrates toward the summer hemisphere, in degrees of latitude.
      *
-     * Everything seasonal follows from this one number. It carries the wind belts and the rain
-     * belts, so the horse latitudes and the ITCZ march up and down the map over the year the way
-     * they do on Earth; and it is what the planet's axial tilt is read off, so it decides the
-     * sunlight the energy balance receives in each half of the year as well
-     * ([com.cartogenesis.worldgen.pipeline.EnergyBalance.obliquityDegrees]). Ten degrees is the
+     * Everything seasonal follows from this one number. It is what the planet's axial tilt is read
+     * off, so it decides the sunlight the energy balance receives in each half of the year
+     * ([com.cartogenesis.worldgen.pipeline.EnergyBalance.obliquityDegrees]), and since A1-6a each
+     * half's mean circulation stands where that sunlight leaves the warmest marine air
+     * ([com.cartogenesis.worldgen.pipeline.HadleyCirculation]), so the horse latitudes and the ITCZ
+     * march up and down the map over the year by what the energy balance answers and not by this
+     * number directly. The ocean's wind stress still migrates its belts by it. Ten degrees is the
      * modest, oceanic figure and is Earth's own zonal-mean migration, which is why it corresponds
      * to Earth's own 23.44-degree tilt; the great continents swing further than that, which is the
      * coastline's business rather than this one's.
@@ -2001,6 +2003,10 @@ data class ClimateConfig(
      * crosses over a tropical coast, the trades there reverse, and air that spent the winter
      * blowing out to sea spends the summer coming in off it. The ocean's stress reads the same
      * slope as the belts' meridional wind ([com.cartogenesis.worldgen.pipeline.SurfaceBelts]).
+     *
+     * Since A1-6a the climate's Hadley cells carry their own lower branch, their mass balance's and
+     * not this share ([com.cartogenesis.worldgen.pipeline.HadleyCirculation]); the share is the
+     * Ferrel and polar cells' legs poleward of them, and the ocean's stress's slope throughout.
      *
      * A slope on the ground and not a count of rows, so it means one direction on any grid; the
      * march spends it as `share × cellWidth / cellHeight` rows a cell, 0.3 on an N by N grid, the

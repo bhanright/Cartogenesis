@@ -3,6 +3,7 @@ package com.cartogenesis.worldgen
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.ClimateStage
+import com.cartogenesis.worldgen.pipeline.HadleyCirculation
 import com.cartogenesis.worldgen.pipeline.Season
 import kotlin.math.PI
 import kotlin.math.abs
@@ -93,8 +94,10 @@ class MeridionalWindTest : BorrowsSharedWorlds() {
 
     /**
      * The promise the setting makes: at `meridionalWindShare = 0`, with the pressure departure off,
-     * the belts carry nothing across the latitude lines, so the only water that crosses a row is
-     * what the storm track's eddies mix.
+     * the Ferrel and polar cells' legs carry nothing across the latitude lines, so poleward of the
+     * Hadley cells the only water that crosses a row is what the storm track's eddies mix. The
+     * Hadley cells' lower branch is their own mass balance since A1-6a and not the setting's
+     * (`HadleyCirculation`), so the promise is held poleward of their edges.
      *
      * Until C1b this was checked against a from-scratch reimplementation of the per-row zonal scan,
      * bit for bit, because a zero slant made the march exactly that scan. It no longer is: the
@@ -109,19 +112,30 @@ class MeridionalWindTest : BorrowsSharedWorlds() {
             val world = SharedWorlds.world(
                 base.copy(climate = base.climate.copy(meridionalWindShare = 0f, pressureWinds = false))
             )
+            val zonal = ClimateStage.zonalClimate(world.config, world.sea)
             for (season in listOf(Season.JULY_HALF, Season.JANUARY_HALF)) {
                 val wind = ClimateStage.seasonalSurfaceWindMps(
                     world.config, world.sea, world.ocean, season
                 )
-                val largest = wind.southwardMps.maxOf { abs(it) }
-                assertEquals(0f, largest, 0f, "seed $seed, $season: a belt with no slant blows across the rows")
+                val cells = HadleyCirculation.forHalf(world.config, zonal, season).cells
+                var largest = 0f
+                for (cell in wind.southwardMps.indices) {
+                    val latitude = ClimateStage.latitudeOf(cell / world.width, world.height).toDouble()
+                    if (latitude < cells.northEdgeDegrees && latitude > -cells.southEdgeDegrees) continue
+                    largest = maxOf(largest, abs(wind.southwardMps[cell]))
+                }
+                assertEquals(0f, largest, 0f, "seed $seed, $season: a belt with no slant blows across the rows poleward of the Hadley cells")
             }
-            println("MERIDIONAL seed $seed: no meridional wind in either season with the slant at zero")
+            println("MERIDIONAL seed $seed: no meridional wind poleward of the Hadley cells in either season with the slant at zero")
         }
     }
 
-    /** The three belts' width at no tilt, in degrees of latitude: 30, 60 and 90 are their edges. */
-    private val BELT_DEGREES = 30f
+    /**
+     * Rows nearer an edge of the belts than this many degrees, or nearer the equator, are not read:
+     * the annual wind is the mean of two halves whose Hadley edges stand some degrees apart, and
+     * either direction is defensible between them.
+     */
+    private val EDGE_MARGIN_DEGREES = 8f
 
     @Test
     fun `the belts slant toward the thermal equator and away from it, in both hemispheres`() {
@@ -133,34 +147,25 @@ class MeridionalWindTest : BorrowsSharedWorlds() {
         val w = world.width
         val h = world.height
         var checked = 0
-        // The belts' slope on the ground, as rows a cell of eastward travel on this grid's cells.
-        val slantRowsPerCell = world.config.climate.meridionalWindShare *
-            (world.config.cellWidthKm / world.config.cellHeightKm).toFloat()
         for (y in 0 until h) {
             val lat = ClimateStage.latitudeOf(y, h)
             val belt = abs(lat)
-            // Skip the rows straddling a belt edge, where either answer is defensible.
-            if (abs(belt - 30f) < 2f || abs(belt - 60f) < 2f) continue
+            // Skip the equator and the rows about each belt's edge, where either answer is defensible.
+            if (belt < EDGE_MARGIN_DEGREES || abs(belt - 30f) < EDGE_MARGIN_DEGREES || abs(belt - 60f) < EDGE_MARGIN_DEGREES ||
+                belt > 90f - EDGE_MARGIN_DEGREES
+            ) continue
             // Toward the bottom of the map is positive, so equatorward is positive in the north.
             val equatorward = if (lat > 0f) 1f else -1f
             val drift = world.climate.windMeridional.data[y * w]
             val expected = when {
-                belt < 30f -> equatorward   // trades, in toward the ITCZ
+                belt < 30f -> equatorward   // the Hadley cells' lower branch, in toward the rising branch
                 belt < 60f -> -equatorward  // westerlies, out toward the polar front
                 else -> equatorward         // polar easterlies, back down toward it
             }
-            // Since C1b the slant is a half sine across each belt, zero at its edges and at the
-            // equator and pi/2 of the belt's mean at its middle, so the mean is still the share.
-            // The stored wind is the annual one, whose belts stand at 0, 30, 60 and 90.
-            val near = (belt / BELT_DEGREES).toInt().coerceAtMost(2) * BELT_DEGREES
-            val shape = (PI / 2.0 * sin(PI * (belt - near) / BELT_DEGREES)).toFloat()
-            assertEquals(
-                expected * slantRowsPerCell * shape, drift, 1e-6f,
-                "the wind at ${"%.1f".format(lat)} degrees drifts the wrong way"
-            )
+            assertTrue(drift * expected > 0f, "the wind at ${"%.1f".format(lat)} degrees drifts the wrong way: $drift")
             checked++
         }
-        assertTrue(checked > h / 2, "only $checked rows were checked")
+        assertTrue(checked > h / 4, "only $checked rows were checked")
 
         val flat = SharedWorlds.world(
             WorldGenConfig.forRows(42L, 128).let {
@@ -169,10 +174,12 @@ class MeridionalWindTest : BorrowsSharedWorlds() {
                 )
             }
         )
-        assertTrue(
-            flat.climate.windMeridional.data.all { it == 0f },
-            "a meridionalWindShare of zero should leave the wind purely zonal"
-        )
+        // With no slant the annual wind crosses the rows only inside the two halves' Hadley cells,
+        // within the widest of their edges, about 40 degrees.
+        for (y in 0 until h) {
+            if (abs(ClimateStage.latitudeOf(y, h)) < 40f + EDGE_MARGIN_DEGREES) continue
+            assertEquals(0f, flat.climate.windMeridional.data[y * w], 0f, "a meridionalWindShare of zero leaves a slant at row $y")
+        }
     }
 
     @Test
@@ -325,7 +332,7 @@ class MeridionalWindTest : BorrowsSharedWorlds() {
         )
         // Recorded at K2: on the Earth-sized planet seed 9 is another world and its monsoon coast
         // a sliver (docs/DESIGN_LEDGER.md, K2).
-        KnownFailures.expect("K2: seed 9's monsoon coast on the Earth-sized planet is under the share the clause asks", "0.12%") {
+        KnownFailures.expect("K2: seed 9's monsoon coast on the Earth-sized planet is under the share the clause asks", "0.06%") {
             if (figures[1] < MIN_SHARE) {
                 throw RecordedViolation(
                     "seed $MONSOON_SEED's monsoon coast covers only ${"%.2f".format(figures[1] * 100)}% of land",

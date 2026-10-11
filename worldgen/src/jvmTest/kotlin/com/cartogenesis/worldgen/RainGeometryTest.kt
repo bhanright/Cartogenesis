@@ -102,17 +102,13 @@ class RainGeometryTest : BorrowsSharedWorlds() {
         noWorse("the April-September half's largest row step", summer, MAIN_SUMMER_STEP)
         noWorse("the October-March half's largest row step", winter, MAIN_WINTER_STEP)
         // Recorded on H1's ground under the coupled climate, where the deserts' edges along a row
-        // pool longer than the tree before the climate's chunks drew them; not traced
-        // (docs/DESIGN_LEDGER.md, M1; docs/TODO.md).
-        KnownFailures.expect("M1: the desert's edge runs longer along a row on H1's ground", "365.68") {
-            if (desertEdge.average() > MAIN_DESERT_ROW_EDGE_KM.average()) {
-                throw RecordedViolation(
-                    "the desert's straightest edge along a row: %.2f pooled against main's %.2f"
-                        .format(desertEdge.average(), MAIN_DESERT_ROW_EDGE_KM.average()),
-                    "%.2f".format(desertEdge.average())
-                )
-            }
-        }
+        // pooled longer than the tree before the climate's chunks drew them (docs/DESIGN_LEDGER.md,
+        // M1). Armed at A1-6a, whose circulation's deserts end along a row at 255 to 303 km.
+        assertTrue(
+            desertEdge.average() <= MAIN_DESERT_ROW_EDGE_KM.average(),
+            "the desert's straightest edge along a row: %.2f pooled against main's %.2f"
+                .format(desertEdge.average(), MAIN_DESERT_ROW_EDGE_KM.average())
+        )
         // Recorded at A1-2: with the pressure smoothed on the sphere, seed 969495's 250 mm isohyet
         // runs 734 km along 42.6 N across a continent's interior, where the rain falls from 1,274 to
         // 37 mm over twelve rows at every one of its columns; the other two seeds' edges shortened
@@ -163,7 +159,7 @@ class RainGeometryTest : BorrowsSharedWorlds() {
             )
             if (found.alongRowKm > bar) over += "%d %.0f km at %.0f".format(seed, found.alongRowKm, found.rowLatitude)
         }
-        KnownFailures.expect("C1b2: fronts along the belts' factor", "42 1409 km at -43; 969495 1023 km at -15; 7 2842 km at 44") {
+        KnownFailures.expect("C1b2: fronts along the belts' factor", "42 2471 km at -34; 969495 1402 km at 63; 7 1499 km at 6") {
             if (over.isNotEmpty()) {
                 throw RecordedViolation(
                     "fronts hold a row for longer than a quarter of the weather's wavelength: " + over.joinToString("; "),

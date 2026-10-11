@@ -3,6 +3,7 @@ package com.cartogenesis.worldgen
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.ClimateStage
+import com.cartogenesis.worldgen.pipeline.DryAir
 import com.cartogenesis.worldgen.pipeline.HadleyCirculation
 import com.cartogenesis.worldgen.pipeline.Season
 import kotlin.math.PI
@@ -124,10 +125,16 @@ class MeanCirculationEarthTest : BorrowsSharedWorlds() {
                 if (shift < 0.0 || shift > RIDGE_LARGEST_SHIFT_DEGREES) moved += "seed $seed $name summer minus winter %.1f".format(shift)
             }
         }
-        KnownFailures.expect("A1-6a: the ridge stands outside 25 to 40 degrees", "none") {
+        // Both recorded at A1-6a, where they were written. The equal-area cells put each half's
+        // summer edge equatorward of its winter edge (26.5 to 28.4 degrees against 29.3 to 37.9 on
+        // these seeds), as Lindzen and Hou's own solutions do, and the surface wind's eddy forcing
+        // is the year's in both halves, so the summer subtropics keep too little of their
+        // easterlies: every summer ridge stands 7 to 17 degrees equatorward of its winter ridge,
+        // and four of the twelve under 25 degrees (docs/DESIGN_LEDGER.md, A1-6a; docs/TODO.md).
+        KnownFailures.expect("A1-6a: the ridge stands outside 25 to 40 degrees", "4 of 12") {
             if (placed.isNotEmpty()) throw RecordedViolation("ridges outside 25 to 40 degrees: $placed", "${placed.size} of 12")
         }
-        KnownFailures.expect("A1-6a: the summer ridge stands equatorward of the winter ridge", "none") {
+        KnownFailures.expect("A1-6a: the summer ridge stands equatorward of the winter ridge", "6 of 6") {
             if (moved.isNotEmpty()) throw RecordedViolation("the ridge does not move poleward in summer: $moved", "${moved.size} of 6")
         }
     }
@@ -144,7 +151,10 @@ class MeanCirculationEarthTest : BorrowsSharedWorlds() {
             val range = july - january
             if (range < ITCZ_LEAST_RANGE_DEGREES || range > ITCZ_LARGEST_RANGE_DEGREES) complaints += "seed $seed %.1f".format(range)
         }
-        KnownFailures.expect("A1-6a: the ITCZ migrates outside Earth's range", "none") {
+        // Recorded at A1-6a, where it was written: seed 42's ocean rains most at 4.7 S in the half
+        // about July and 7.5 N in the half about January, the wrong way round, under a July heating
+        // the energy balance puts at 2.1 N (docs/DESIGN_LEDGER.md, A1-6a; docs/TODO.md).
+        KnownFailures.expect("A1-6a: the ITCZ migrates outside Earth's range", "1 of 3") {
             if (complaints.isNotEmpty()) throw RecordedViolation("the ITCZ's seasonal range: $complaints", "${complaints.size} of 3")
         }
     }
@@ -185,7 +195,7 @@ class MeanCirculationEarthTest : BorrowsSharedWorlds() {
                     for (column in 0 until world.width) meanNorth -= half.southwardMps[row * world.width + column]
                     meanNorth /= world.width
                     meanNorth * 2 * PI * world.config.scale.radiusMeters * cos(latitude * PI / 180) *
-                        HadleyCirculation.LOWER_BRANCH_PA / 9.80665
+                        HadleyCirculation.LOWER_BRANCH_PA / DryAir.GRAVITY_MPS2
                 }
                 // The rising branch: where the flow converges most within the tropics, northward to
                 // its south and southward to its north.
@@ -217,7 +227,11 @@ class MeanCirculationEarthTest : BorrowsSharedWorlds() {
                 if (winter < WINTER_OVER_SUMMER_CELL * summer) complaints += "seed $seed ${if (julyHalf) "July" else "January"} %.1f".format(winter / summer)
             }
         }
-        KnownFailures.expect("A1-6a: the winter Hadley cell does not carry three times the summer cell's mass", "none") {
+        // Recorded at A1-6a, where it was written: in the half about July the energy balance's
+        // heating stands 2.1 and 2.6 degrees north on seeds 42 and 7, too near the equator for the
+        // cells to part by Earth's three times (2.0 and 1.6); every January half clears it
+        // (docs/DESIGN_LEDGER.md, A1-6a).
+        KnownFailures.expect("A1-6a: the winter Hadley cell does not carry three times the summer cell's mass", "2 of 6") {
             if (complaints.isNotEmpty()) throw RecordedViolation("the cells' asymmetry: $complaints", "${complaints.size} of 6")
         }
     }

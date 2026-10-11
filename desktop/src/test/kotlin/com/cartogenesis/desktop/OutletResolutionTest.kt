@@ -211,16 +211,13 @@ class OutletResolutionTest {
         // against Earth, after C1b").
         // Armed at C1b2, whose land rains less (docs/DESIGN_LEDGER.md, C1b2). Recorded at A1-5:
         // seed 42's largest lake at 256 and 1,024 rows stands over 1.5 times the share under the
-        // rain from the solved vertical motion (docs/TODO.md).
-        KnownFailures.expect("A1-5: the pooled largest lake stands over the Caspian's share", "1.39x") {
-            if (pooledLargest >= caspianShare) {
-                throw RecordedViolation(
-                    "the largest lake pooled over ${largestLandLakeShares.size} worlds is " +
-                        "${"%.2f".format(pooledLargest / caspianShare)}x the Caspian's share of land: $overLarge",
-                    "%.2fx".format(pooledLargest / caspianShare)
-                )
-            }
-        }
+        // rain from the solved vertical motion. Armed at A1-6a, whose circulation's rain leaves the
+        // pool at 0.15% of the land against the share's 0.25% (docs/DESIGN_LEDGER.md, A1-6a).
+        assertTrue(
+            pooledLargest < caspianShare,
+            "the largest lake pooled over ${largestLandLakeShares.size} worlds is " +
+                "${"%.2f".format(pooledLargest / caspianShare)}x the Caspian's share of land: $overLarge"
+        )
         println(
             "OUTLET SCALE FINDING basins below the sea-level cut at or over the Caspian's share " +
                 "of their land: $overLargeDrowned"

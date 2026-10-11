@@ -184,11 +184,11 @@ data class ClimateResult(
  *
  * Run twice over, for the calendar's two half-years, April to September and October to March:
  * each is one moment of the planet, one hemisphere's summer and the other's winter. The whole of
- * the seasonal machinery is one number — [ClimateConfig.seasonalTiltDegrees], the distance the
- * thermal equator migrates into the summer hemisphere — applied to the obliquity the energy
- * balance's sun is computed at and to the latitude the wind belts and the rain belts are read
- * off. The annual fields are kept as they were, so every stage downstream of this one sees
- * exactly what it saw before seasons existed.
+ * the seasonal machinery is one number, [ClimateConfig.seasonalTiltDegrees], read as the obliquity
+ * the energy balance's sun is computed at. Each half's mean circulation stands where that half's
+ * heating does ([HadleyCirculation]), so the wind and rain belts follow the energy balance and
+ * not the number directly. The annual fields are kept as they were, so every stage downstream of
+ * this one sees exactly what it saw before seasons existed.
  */
 object ClimateStage {
 

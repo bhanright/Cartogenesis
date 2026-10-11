@@ -262,7 +262,7 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
         val pooledDepth = depthShares.average()
         // Recorded since Fix 3b: see [NOTCH_SHORT_ON_THE_LAWS_TERRAIN].
         // Re-recorded on square cells at Q2 (docs/DESIGN_LEDGER.md, Q2). Re-recorded at L1, whose rifts are Earth's half-grabens and the same at every grid (docs/DESIGN_LEDGER.md, L1).
-        KnownFailures.expect(NOTCH_SHORT_ON_THE_LAWS_TERRAIN, "84.5% as deep as the control's") {
+        KnownFailures.expect(NOTCH_SHORT_ON_THE_LAWS_TERRAIN, "75.6% as deep as the control's") {
             if (pooledDepth >= 0.5) {
                 throw RecordedViolation(
                     "the fill still stands ${"%.1f".format(pooledDepth * 100)}% as deep over the land as the " +
@@ -487,16 +487,13 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
         // Armed at K2, whose lakes take Budyko's share of their catchment's rain rather than a
         // fixed third of it: every world's largest lake is under the Caspian's share and every
         // world's water is halved (docs/DESIGN_LEDGER.md, K2).
-        // Recorded at A1-4, whose wetter land fills seed 718106's largest lake past the Caspian's
-        // share again (docs/TODO.md).
-        KnownFailures.expect("A1-4: seed 718106 keeps a lake over the Caspian's share", "seed 718106's largest lake 2.55x the Caspian") {
-            if (overCaspian.isNotEmpty()) {
-                throw RecordedViolation(
-                    "a lake is over the Caspian's share of the map: ${overCaspian.joinToString("; ")}",
-                    overCaspian.joinToString("; ")
-                )
-            }
-        }
+        // Recorded at A1-4, whose wetter land filled seed 718106's largest lake past the Caspian's
+        // share again. Armed at A1-6a, under whose circulation every world's largest lake is under
+        // it, seed 42's the largest at 0.1376% of the land against 0.2491% (docs/DESIGN_LEDGER.md, A1-6a).
+        assertTrue(
+            overCaspian.isEmpty(),
+            "a lake is over the Caspian's share of the map: ${overCaspian.joinToString("; ")}"
+        )
         // Recorded at C1b: the land rains more than Earth's and returns less of it, so two seeds
         // start with a lake over the Caspian's share again, and the notch takes their worlds' water
         // to 0.68 and 0.76 of the control rather than under half (docs/DESIGN_LEDGER.md, C1b;

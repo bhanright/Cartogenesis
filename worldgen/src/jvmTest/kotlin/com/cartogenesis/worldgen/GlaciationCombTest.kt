@@ -168,7 +168,7 @@ class GlaciationCombTest : BorrowsSharedWorlds() {
         // H1, on whose ground seed 42 had none on main's climate (docs/DESIGN_LEDGER.md, H1).
         // Recorded on H1's ground under the coupled climate: one such lake on seed 42 at 1,024 rows,
         // a rule 13 finding, not traced (docs/DESIGN_LEDGER.md, M1; docs/TODO.md).
-        KnownFailures.expect("M1: an ice-made lake is a straight one-cell line on H1's ground under the coupled climate", "seed 42 at 1024 has 1") {
+        KnownFailures.expect("M1: an ice-made lake is a straight one-cell line on H1's ground under the coupled climate", "seed 7 at 1024 has 1") {
             if (straight.isNotEmpty()) {
                 throw RecordedViolation(
                     signature + " lakes that are a straight one-cell line along a D8 bearing — a" +
@@ -187,7 +187,7 @@ class GlaciationCombTest : BorrowsSharedWorlds() {
         // again at K1, whose square weather and scour moved it back under (docs/DESIGN_LEDGER.md,
         // L1 and K1). Recorded at C1b, whose snow makes the ice larger and thicker: it adds 2.9 to
         // 3.1% on all three (docs/DESIGN_LEDGER.md, C1b; docs/TODO.md, "The ice after C1b").
-        KnownFailures.expect("C1b: the larger ice adds a comb of grid-bearing bars to the standing water", "[718106 at 8.34%, 42 at 2.57%]") {
+        KnownFailures.expect("C1b: the larger ice adds a comb of grid-bearing bars to the standing water", "[718106 at 8.92%, 42 at 5.08%]") {
             if (over.isNotEmpty()) {
                 throw RecordedViolation(
                     "the ice puts ${ICE_COMB_BAR * 100}% or more of these worlds' standing water into thin" +

@@ -242,7 +242,7 @@ class MoistureBudgetTest : BorrowsSharedWorlds() {
         // Recorded at A1-5: the shipped march's wettest ocean band falls to half of GPCP's under
         // the rain from the solved ascent, and the closure, on top of it, stands nearer; it stays
         // off, since it would rain the convergence the ascent already condenses (docs/TODO.md).
-        KnownFailures.expect("A1-5: the convergence closure stands nearer GPCP's band than the shipped march", "1693 against 1327") {
+        KnownFailures.expect("A1-5: the convergence closure stands nearer GPCP's band than the shipped march", "1490 against 1075") {
             if (abs(ln(shipped / GPCP_OCEAN_PEAK_MM)) > abs(ln(withClosure / GPCP_OCEAN_PEAK_MM))) {
                 throw RecordedViolation(
                     ("the convergence closure now stands nearer GPCP's equatorial band (%.0f mm) than the shipped " +

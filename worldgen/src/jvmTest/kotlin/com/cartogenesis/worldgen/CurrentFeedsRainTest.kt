@@ -136,8 +136,9 @@ class CurrentFeedsRainTest : BorrowsSharedWorlds() {
         // and the clauses that read one wait for it (docs/TODO.md). Armed again at H1, whose
         // continents gave the sample its coast back on main's climate; on H1's ground under the
         // coupled climate the coast is back but 78 km of it, short of the floor
-        // (docs/DESIGN_LEDGER.md, H1 and M1; docs/TODO.md).
-        KnownFailures.expect("M1: seed 7's cold-current coast is shorter than the sample asks", "78 km") {
+        // (docs/DESIGN_LEDGER.md, H1 and M1; docs/TODO.md). Re-recorded at A1-6a, whose rain moved
+        // the ground again and leaves none of this coast 0.8 C under its latitude's mean.
+        KnownFailures.expect("M1: seed 7's cold-current coast is shorter than the sample asks", "0 km") {
             if (coldCoastKm < COLD_COAST_FLOOR_KM) {
                 throw RecordedViolation(
                     "only %.0f km of seed $SEED's west coast at 27-33 S sits 0.8 C under its latitude's mean, where the sample asks %.0f"

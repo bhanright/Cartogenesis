@@ -139,7 +139,12 @@ class AtmosphereCouplingTest : BorrowsSharedWorlds() {
                 restarted.coupling.julyLatentWPerM2 + restarted.coupling.januaryLatentWPerM2,
                 settled.coupling.atmosphere.remap.coarse
             )
-            val bound = (settled.coupling.residuals.last() + restarted.coupling.residuals.last()) / (1 - feedback)
+            // The contraction's bound holds only for a feedback under one. A median ratio at or over
+            // one is the plain iteration not contracting on that world, where the bound says nothing
+            // and the world is printed and not counted (seed 99 at 1.008, A1-6a's ledger row).
+            val bound = if (feedback < 1.0) {
+                (settled.coupling.residuals.last() + restarted.coupling.residuals.last()) / (1 - feedback)
+            } else Double.POSITIVE_INFINITY
             if (distance > bound) outside++
             println(("COUPLING seed %d: the plain iteration %d laps, its residual %.4f at the last, its median ratio over the last %d laps %.3f " +
                 "(the loop's feedback); started from %.0f times the settled heating, %d laps, settled %.4f from the first answer against a bound of %.4f")

@@ -500,16 +500,13 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
         // docs/TODO.md, "The march's misses against Earth, after C1b").
         // Armed at C1b2, whose land rains less (docs/DESIGN_LEDGER.md, C1b2).
         // Recorded at A1-1, whose calendar seasons moved seed 99's ground: its largest lake does not
-        // fall with its outlet and its world keeps 0.70 of its water (docs/TODO.md).
-        val signature = notHalved.joinToString("; ")
-        KnownFailures.expect("A1-1: an over-large lake does not fall with its outlet", "seed 718106's largest lake 0.6310% to 0.6349%; seed 718106's water 2.0293% to 1.9446%") {
-            if (notHalved.isNotEmpty()) {
-                throw RecordedViolation(
-                    "an over-large lake did not fall, or its world kept more than half its water: $signature",
-                    signature
-                )
-            }
-        }
+        // fall with its outlet and its world keeps 0.70 of its water (docs/TODO.md). Armed at A1-6a,
+        // where no seed starts with an over-large lake, so the clause holds over none; the clause
+        // below records that it is read on none (docs/DESIGN_LEDGER.md, A1-6a).
+        assertTrue(
+            notHalved.isEmpty(),
+            "an over-large lake did not fall, or its world kept more than half its water: ${notHalved.joinToString("; ")}"
+        )
         // Recorded at L1, where only seed 718106 started over-large; armed again at its review round,
         // whose rift joins are relay ramps: seed 43's largest lake starts at 0.392% of its land, over
         // the Caspian's 0.249%, beside 718106's 0.975% (docs/DESIGN_LEDGER.md, L1).
@@ -521,8 +518,9 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
         // (docs/TODO.md, "The march's misses against Earth, after C1b2").
         // Armed at A1-4, whose wetter land gives two seeds or more an over-large lake to begin with (docs/DESIGN_LEDGER.md, A1-4).
         // Recorded on H1's ground under the coupled climate, whose filled sags leave one seed so
-        // (docs/DESIGN_LEDGER.md, M1; docs/TODO.md).
-        KnownFailures.expect("M1: one seed starts with an over-large lake on H1's ground", "1 of 6") {
+        // (docs/DESIGN_LEDGER.md, M1; docs/TODO.md). Re-recorded at A1-6a, under whose rain no seed
+        // starts with a lake over the Caspian's share, the largest seed 42's at 0.19% of its land.
+        KnownFailures.expect("M1: one seed starts with an over-large lake on H1's ground", "0 of 6") {
             if (overLarge < 2) {
                 throw RecordedViolation(
                     "only $overLarge of ${seeds.size} seeds had an over-large lake to begin with, so this guard proves little",
@@ -551,7 +549,8 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
         // Recorded on H1's ground under the coupled climate: seeds 42 and 99 keep drowned basins of
         // 2.7% and 2.4% of their land, the interiors H1's Earth share drowns (docs/TODO.md, "The
         // drowned crust lies in the interiors of the largest continents"; docs/DESIGN_LEDGER.md, M1).
-        KnownFailures.expect("M1: the drowned interiors H1's ground keeps are larger than the Caspian", "3.96x") {
+        // Re-recorded at A1-6a, 3.96 to 3.24 times, seeds 42 and 99 at 1.83% and 2.94% of their land.
+        KnownFailures.expect("M1: the drowned interiors H1's ground keeps are larger than the Caspian", "3.24x") {
             if (pooledDrowned >= caspianShare * drownedChaos) {
                 throw RecordedViolation(
                     "these worlds keep a basin below the sea-level cut holding more water than the " +

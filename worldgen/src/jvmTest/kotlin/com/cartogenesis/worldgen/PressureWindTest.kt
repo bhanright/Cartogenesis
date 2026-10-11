@@ -327,7 +327,7 @@ class PressureWindTest : BorrowsSharedWorlds() {
         // edge, so where a subtropical coast stands near an edge the belts alone turn its wind
         // between the halves of the year (docs/TODO.md, "The march's misses against Earth, after
         // C1b2").
-        KnownFailures.expect("C1b2: the belts alone reverse the subtropical coasts", "+0.83 against -0.19") {
+        KnownFailures.expect("C1b2: the belts alone reverse the subtropical coasts", "+1.07 against -0.18") {
             if (!(controlWinter > -ONSHORE_BAR_MPS || controlSummer < ONSHORE_BAR_MPS)) {
                 throw RecordedViolation(
                     ("the belts alone already reverse these coasts between the seasons, %+.2f m/s in " +

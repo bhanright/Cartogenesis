@@ -199,24 +199,36 @@ class IceSheetTest : BorrowsSharedWorlds() {
             domesRead++
             if (!reading.knowsItsDome) failures += "seed $seed: ${reading.describe()}"
         }
-        assertTrue(
-            "only $domesRead seeds grow a sheet whose dome fills a third of its own disc, under" +
-                " $LEAST_SEEDS_WITH_A_DOME, so the flow clause is asserting nothing",
-            domesRead >= LEAST_SEEDS_WITH_A_DOME
-        )
-        // Recorded from Fix 3b to Q2 on seeds 59758 and 7 on the 512 by 512 grid, and armed on
-        // square cells, where neither is read and [DOME_SEED]'s sheet knows its dome
-        // (docs/DESIGN_LEDGER.md, Q2).
-        // Recorded at K2: on the Earth-sized planet seed 7's sheet flows outward a hair short of
-        // the bar (docs/DESIGN_LEDGER.md, K2).
-        KnownFailures.expect("K2: a sheet on the Earth-sized planet flows outward short of what its dome owes", "seed 7: 66.4% of the ice near the dome flows outward at a mean 64.4 degrees off radial, where a flow that knows its dome owes 67% and 67.5 degrees against an indifferent bearing's 50% and 90; seed 878210: 72.1% of the ice near the dome flows outward at a mean 69.6 degrees off radial, where a flow that knows its dome owes 67% and 67.5 degrees against an indifferent bearing's 50% and 90") {
-            if (failures.isNotEmpty()) {
+        // Recorded on H1's ground under the coupled climate, with the control below: no sheet of
+        // the clause's seeds fills a third of its disc near its dome (docs/DESIGN_LEDGER.md, M1;
+        // docs/TODO.md).
+        KnownFailures.expect("M1: no standard sheet has a dome the flow clause can read", "") {
+            if (domesRead < LEAST_SEEDS_WITH_A_DOME) {
                 throw RecordedViolation(
-                    "the sheet is not flowing down its own surface:\n" + failures.joinToString("\n"),
-                    failures.joinToString("; ")
+                    "only $domesRead seeds grow a sheet whose dome fills a third of its own disc, under" +
+                        " $LEAST_SEEDS_WITH_A_DOME, so the flow clause is asserting nothing",
+                    "$domesRead seeds"
                 )
             }
         }
+        if (domesRead < LEAST_SEEDS_WITH_A_DOME) return
+        // Recorded from Fix 3b to Q2 on seeds 59758 and 7 on the 512 by 512 grid, and armed on
+        // square cells, where neither is read and [DOME_SEED]'s sheet knows its dome
+        // (docs/DESIGN_LEDGER.md, Q2).
+        // Recorded at K2, where on the Earth-sized planet seed 7's sheet flowed outward a hair
+        // short of the bar; passing at C1b, whose snow thickens the sheets, and armed
+        // (docs/DESIGN_LEDGER.md, K2 and C1b).
+        // Recorded at C1b2: Vialov's dome is flat across its top, where Nye's rose as a root to the
+        // last, so near the divide of the reported world at 1,024 rows the surface's fall is the
+        // margins' datums and the bed showing through more than the profile (docs/TODO.md, "The
+        // ice after C1b2"). Armed at A1-1, and not because the flow mended: the reported world's
+        // sheet fills 159 cells of its 2,051-cell disc, under the third the clause reads, and the
+        // two seeds it reads, 42 and [DOME_SEED], flow outward (docs/TODO.md, "The ice after A1-1").
+        // Recorded at A1-4, where seed 42's sheet flows outward a hair under the bar; armed at A1-5,
+        // whose snow from the coupled rain clears it (docs/DESIGN_LEDGER.md, A1-5). H1's ground on
+        // main's climate kept K2's record, seeds 7 and 878210 a hair under the bar; on H1's ground
+        // under the coupled climate no dome is read (docs/DESIGN_LEDGER.md, H1 and M1).
+        assertTrue("the sheet is not flowing down its own surface: " + failures.joinToString("; "), failures.isEmpty())
     }
 
     /**

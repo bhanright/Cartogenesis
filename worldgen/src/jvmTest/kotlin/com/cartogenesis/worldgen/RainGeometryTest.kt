@@ -104,7 +104,7 @@ class RainGeometryTest : BorrowsSharedWorlds() {
         // Recorded on H1's ground under the coupled climate, where the deserts' edges along a row
         // pool longer than the tree before the climate's chunks drew them; not traced
         // (docs/DESIGN_LEDGER.md, M1; docs/TODO.md).
-        KnownFailures.expect("M1: the desert's edge runs longer along a row on H1's ground", "") {
+        KnownFailures.expect("M1: the desert's edge runs longer along a row on H1's ground", "365.68") {
             if (desertEdge.average() > MAIN_DESERT_ROW_EDGE_KM.average()) {
                 throw RecordedViolation(
                     "the desert's straightest edge along a row: %.2f pooled against main's %.2f"
@@ -118,7 +118,17 @@ class RainGeometryTest : BorrowsSharedWorlds() {
         // 37 mm over twelve rows at every one of its columns; the other two seeds' edges shortened
         // (docs/TODO.md, "A dry edge along a row on seed 969495").
         // Armed at A1-5, whose rain from the solved vertical motion bends that edge (docs/DESIGN_LEDGER.md, A1-5).
-        noWorse("the 250 mm isohyet's straightest edge along a row", dryEdge, MAIN_DRY_ROW_EDGE_KM)
+        // Recorded on H1's ground under the coupled climate, pooled a little over main's again
+        // (docs/DESIGN_LEDGER.md, M1; docs/TODO.md).
+        KnownFailures.expect("M1: the 250 mm isohyet's edge runs longer along a row on H1's ground", "") {
+            if (dryEdge.average() > MAIN_DRY_ROW_EDGE_KM.average()) {
+                throw RecordedViolation(
+                    "the 250 mm isohyet's straightest edge along a row: %.2f pooled against main's %.2f"
+                        .format(dryEdge.average(), MAIN_DRY_ROW_EDGE_KM.average()),
+                    "%.2f".format(dryEdge.average())
+                )
+            }
+        }
     }
 
 

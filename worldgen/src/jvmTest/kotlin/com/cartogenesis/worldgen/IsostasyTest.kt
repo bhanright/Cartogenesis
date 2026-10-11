@@ -455,7 +455,7 @@ class IsostasyTest : BorrowsSharedWorlds() {
             upliftRates.map { rate -> syntheticBelt(rate, 1e-6f) } to
                 erodibilities.map { erodibility -> syntheticBelt(0.0375f, erodibility) }
         } catch (noGrid: IllegalArgumentException) {
-            KnownFailures.expect("M1: the coupled atmosphere has no grid for a world 200 km across", "") {
+            KnownFailures.expect("M1: the coupled atmosphere has no grid for a world 200 km across", "a spherical grid needs two rows and two columns, got 1 by 2") {
                 throw RecordedViolation("the synthetic belt's world cannot be generated: ${noGrid.message}", noGrid.message ?: "")
             }
             return
@@ -688,7 +688,7 @@ class IsostasyTest : BorrowsSharedWorlds() {
         // denudation this is derived from (docs/DESIGN_LEDGER.md, Fix 3 and Fix 3b). Recorded on
         // H1's ground under the coupled climate, whose rain takes more off the belts: the setting is
         // the generator's to re-derive, not this merge's (docs/DESIGN_LEDGER.md, M1; docs/TODO.md).
-        KnownFailures.expect("M1: the collision rate trails this model's denudation under the coupled climate", "") {
+        KnownFailures.expect("M1: the collision rate trails this model's denudation under the coupled climate", "0.761 implied") {
             if (abs(implied - tectonics.collisionUpliftMmPerYear) > UPLIFT_RATE_TOLERANCE_MM_PER_YEAR) {
                 throw RecordedViolation(
                     "the collision uplift rate is not Earth's surface uplift plus what this model's own rivers take off a " +

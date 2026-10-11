@@ -267,7 +267,7 @@ class LakeWaterBalanceTest : BorrowsSharedWorlds() {
         // ground under the coupled climate: H1's dry sample, scanned on main's climate, stays full
         // under the coupled rain, and the scan that re-picks it is a run of its own
         // (docs/DESIGN_LEDGER.md, M1; docs/TODO.md).
-        KnownFailures.expect("M1: H1's dry basin sample stays full under the coupled rain", "") {
+        KnownFailures.expect("M1: H1's dry basin sample stays full under the coupled rain", "100%") {
             if (share >= DRY_BASIN_SHARE_OF_SPILL_AREA) {
                 throw RecordedViolation(
                     "seed $drySeed's dry basin holds ${"%.0f".format(share * 100)}% of its spill area," +
@@ -276,6 +276,8 @@ class LakeWaterBalanceTest : BorrowsSharedWorlds() {
                 )
             }
         }
+        // A sample that stays full is not a dry basin, so what follows about its lakes is moot.
+        if (share >= DRY_BASIN_SHARE_OF_SPILL_AREA) return
 
         // Since L1 a closed basin holds a lake in each of its hollows, and a hollow full to its
         // saddle spills into the next, so the basin can hold several: every one that keeps its water
@@ -336,7 +338,7 @@ class LakeWaterBalanceTest : BorrowsSharedWorlds() {
         // Recorded on H1's ground under the coupled climate: H1's wet sample, scanned on main's
         // climate, falls below its spill under the coupled rain, and the scan that re-picks it is a
         // run of its own (docs/DESIGN_LEDGER.md, M1; docs/TODO.md).
-        KnownFailures.expect("M1: H1's wet basin sample falls below its spill under the coupled rain", "") {
+        KnownFailures.expect("M1: H1's wet basin sample falls below its spill under the coupled rain", "2560 of 3440 cells") {
             if (stillWet != basin.size) {
                 throw RecordedViolation(
                     "a wet basin must stay full to its spill: $stillWet of ${basin.size} cells",

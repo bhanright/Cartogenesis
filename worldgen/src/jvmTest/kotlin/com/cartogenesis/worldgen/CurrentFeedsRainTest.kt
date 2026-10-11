@@ -205,13 +205,11 @@ class CurrentFeedsRainTest : BorrowsSharedWorlds() {
         // drier with the currents on (docs/DESIGN_LEDGER.md, K2), 3.3% drier at C1b; armed at A1-2,
         // whose pressure wind on the sphere leaves it no drier.
         // Recorded at A1-4: the warm sample coast came out 2.5% drier with the currents on (docs/TODO.md).
-        KnownFailures.expect("A1-4: the warm-current coast is drier with the currents on", "off 40.6 on 39.6") {
-            if (!(warmOn >= warmOff * 0.999)) {
-                throw RecordedViolation(
-                    "warm-current coast should not get drier with the currents on: off=$warmOff, on=$warmOn",
-                    "off %.1f on %.1f".format(warmOff, warmOn)
-                )
-            }
-        }
+        // Armed again at H1, where on main's climate it came out 0.2% wetter, and on H1's ground
+        // under the coupled climate (docs/DESIGN_LEDGER.md, H1 and M1).
+        assertTrue(
+            warmOn >= warmOff * 0.999,
+            "warm-current coast should not get drier with the currents on: off=$warmOff, on=$warmOn"
+        )
     }
 }

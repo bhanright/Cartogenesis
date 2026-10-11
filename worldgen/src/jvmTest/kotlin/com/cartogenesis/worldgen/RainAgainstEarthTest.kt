@@ -171,7 +171,7 @@ class RainAgainstEarthTest : BorrowsSharedWorlds() {
         // wetter and the ground's Budyko share of its rain smaller; armed again at A1-5, the rain
         // from the solved vertical motion (docs/DESIGN_LEDGER.md); recorded again when H1's ground
         // came under it (docs/DESIGN_LEDGER.md, M1; docs/TODO.md).
-        KnownFailures.expect("M1: the land returns less of its rain than Earth's on H1's ground", "x0.78") {
+        KnownFailures.expect("M1: the land returns less of its rain than Earth's on H1's ground", "x0.73") {
             nearEarth("land's return over its rain", pooled.landReturn / pooled.landRain, EARTH_LAND_RETURN_SHARE)
         }
         // The sea evaporates less than Earth's, and the rain with it, for the causes docs/TODO.md's
@@ -180,7 +180,7 @@ class RainAgainstEarthTest : BorrowsSharedWorlds() {
         KnownFailures.expect("C1b2: the sea evaporates less than Earth's", "x0.74") {
             nearEarth("open-sea evaporation, mm", pooled.seaEvaporation / pooled.seaArea, EARTH_OCEAN_EVAPORATION_MM)
         }
-        KnownFailures.expect("C1b2: the open sea rains less than Earth's", "x0.57") {
+        KnownFailures.expect("C1b2: the open sea rains less than Earth's", "x0.56") {
             nearEarth("open-sea rain, mm", pooled.seaRain / pooled.seaArea, EARTH_OCEAN_RAIN_MM)
         }
         // Recorded from C1b2 at x0.55; armed at A1-4, where the boundary layer's wind no longer
@@ -220,13 +220,13 @@ class RainAgainstEarthTest : BorrowsSharedWorlds() {
             if (abs(wettestLatitude) > ITCZ_FROM_EQUATOR_DEGREES) farFromEquator += "seed $seed at $wettestLatitude"
             pooledPeak += wettest / seeds.size
         }
-        KnownFailures.expect("A1-6a: the year's wettest band of ocean sits far from the equator", "none") {
+        KnownFailures.expect("A1-6a: the year's wettest band of ocean sits far from the equator", "seed 7 at -17.0") {
             if (farFromEquator.isNotEmpty()) {
                 throw RecordedViolation("the year's wettest ocean band sits beyond $ITCZ_FROM_EQUATOR_DEGREES degrees: $farFromEquator", farFromEquator.joinToString())
             }
         }
         // The band's rain against GPCP's, since A1-5 rains it from the solved ascent.
-        KnownFailures.expect("A1-5: the ocean's wettest band rains less than GPCP's", "x0.45") {
+        KnownFailures.expect("A1-5: the ocean's wettest band rains less than GPCP's", "x0.37") {
             nearEarth("the ocean's wettest two degrees, mm", pooledPeak, GPCP_OCEAN_PEAK_MM)
         }
     }

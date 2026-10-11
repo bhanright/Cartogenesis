@@ -1,5 +1,21 @@
 # To do
 
+- **The wave model's basic state keeps westerlies at the ground in the tropics in both halves
+  (A1-6a).** `ZonalBasicState.jablonowskiWilliamson` blows westerly at every level and latitude,
+  where the half-years' zonal-mean surface wind (`HadleyCirculation`) is easterly in the trades.
+  Not corrected here, for two reasons. No seasonal state's vertical structure was read: the
+  circulation gives the surface wind and the jets above are Jablonowski and Williamson's, and
+  joining the two needs the depth of the trades and of the monsoon westerlies, which no source read
+  states. And a basic state per half is a factorization per half: two sets of every wave's factors,
+  1.4 GB kept at eight levels against the 700 MB the application keeps today, and a second 233 ms
+  factoring a climate run. It waits for the chunk that makes the jets the energy balance's own.
+  2026-10-11, A1-6a.
+- **The eddies' momentum forcing of the surface wind is the same in both halves (A1-6a).**
+  `HadleyCirculation.windMps` holds the zonal wind by `k u = f v + F`, with `F` the forcing that
+  keeps Earth's annual zonal-mean surface wind against the two halves' mean meridional wind. Earth's
+  eddy forcing has its own seasons, which no source read here gives; with `F` fixed, each half's
+  zonal wind departs from the annual one only by the Coriolis force on its departure of meridional
+  flow, so the summer subtropics lose most of their easterlies. 2026-10-11, A1-6a.
 - **A rift drawn as a straight line down seed 42's southern continent (A1-6a, rule 13).** M1's
   atlas of seed 42 at 1,024 rows shows a nearly straight north-south line from about 30 S to 85 S
   near column 1,400. It is a continental rift (`BoundaryClass.CONTINENTAL_RIFT`) on a plate

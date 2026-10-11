@@ -472,8 +472,8 @@ object ClimateStage {
          * read, which is why it stops here rather than going on to [ClimateResult] and the save.
          */
         val landOriginPrecipitationMm: FloatField,
-        /** Where this run's loop ended, for a later run of the same world to start from ([WarmStart]). */
-        val warmStart: WarmStart? = null
+        /** Where this run's loop settled, for a later run of the same world to start from ([WarmStart]). */
+        val settled: WarmStart? = null
     )
 
     /**
@@ -570,7 +570,8 @@ object ClimateStage {
         val landOriginPrecipitationMm: FloatField,
         val potentialEvapotranspirationMm: FloatField,
         val openWaterEvaporationMm: FloatField,
-        val warmStart: WarmStart?
+        /** Where the run's loop settled ([WarmStart]). */
+        val settled: WarmStart?
     )
 
     /**
@@ -610,13 +611,15 @@ object ClimateStage {
     internal fun generateWithSeasonalMm(
         config: WorldGenConfig,
         sea: SeaLevelResult,
-        ocean: OceanResult
+        ocean: OceanResult,
+        /** Where an earlier climate of this world settled, for this run's loop to start from ([WarmStart]); cold when none. */
+        warmStart: WarmStart? = null
     ): Generated {
         val cellsAcross = config.width
         val cellsDown = config.height
         val cellCount = cellsAcross * cellsDown
 
-        val fields = seasonalFields(config, sea, ocean)
+        val fields = seasonalFields(config, sea, ocean, warmStart = warmStart)
         val temperature = fields.temperature
         val summerTemperature = fields.summerTemperature
         val winterTemperature = fields.winterTemperature
@@ -715,7 +718,7 @@ object ClimateStage {
             julyHalfPrecipitationMm = julyHalfPrecipitationMm,
             januaryHalfPrecipitationMm = januaryHalfPrecipitationMm,
             landOriginPrecipitationMm = fields.landOriginPrecipitationMm,
-            warmStart = fields.warmStart
+            settled = fields.settled
         )
     }
 
@@ -741,7 +744,9 @@ object ClimateStage {
         /** Filled with the march's water budget when handed in; see [moistureLedger]. */
         ledger: MoistureLedger? = null,
         /** How the atmosphere's loop is started and relaxed; the defaults for every world. */
-        loop: CouplingStart = CouplingStart()
+        loop: CouplingStart = CouplingStart(),
+        /** Where an earlier climate of this world settled ([WarmStart]); cold when none. */
+        warmStart: WarmStart? = null
     ): SeasonalFields {
         val runStarted = TimeSource.Monotonic.markNow()
         val cellsAcross = config.width
@@ -898,7 +903,7 @@ object ClimateStage {
 
         // Where the last run of this world settled, when the stage before this one ran the climate
         // and it can be read on this grid: the loop starts there (WarmStart).
-        val start = sea.climateStart?.takeIf { it.march.isLand.size == cellsAcross * cellsDown }
+        val start = warmStart?.takeIf { it.march.isLand.size == cellsAcross * cellsDown }
         val coarseCells = SphericalGrid.forAtmosphere(config.scale).cellCount
         val startHeating = start?.takeIf { it.julyLatentWPerM2.size == coarseCells }
             ?.let { it.julyLatentWPerM2 to it.januaryLatentWPerM2 }
@@ -992,7 +997,7 @@ object ClimateStage {
             landOriginPrecipitationMm = marched.landOriginRainMm,
             potentialEvapotranspirationMm = marched.potentialEvapotranspirationMm,
             openWaterEvaporationMm = marched.openWaterEvaporationMm,
-            warmStart = endStart
+            settled = endStart
         )
     }
 

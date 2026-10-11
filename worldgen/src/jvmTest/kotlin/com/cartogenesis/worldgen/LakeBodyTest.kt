@@ -77,13 +77,9 @@ class LakeBodyTest : BorrowsSharedWorlds() {
         // ground left none; recorded again at A1-5, whose rain left one on seed 99, and at H1,
         // where on main's climate seed 42 holds a three-cell lake whose surface stands at the
         // ground of the one cell between its two hollows, to the sixth place. On H1's ground under
-        // the coupled climate it is one lake of eight cells on seed 42, not traced to either cause
-        // (docs/DESIGN_LEDGER.md, H1 and M1; docs/TODO.md).
-        KnownFailures.expect("M1: a lake in two pieces on H1's ground under the coupled rain", "seed 42: [lake 190 in 2 pieces]") {
-            if (pieceFailures.isNotEmpty()) {
-                throw RecordedViolation("a body of water holds more than one piece: $pieceFailures", pieceFailures.joinToString("; "))
-            }
-        }
+        // the coupled climate it is one lake of eight cells on seed 42, not traced to either cause;
+        // armed at A1-6a, whose circulation leaves none (docs/DESIGN_LEDGER.md, H1, M1 and A1-6a).
+        assertTrue(pieceFailures.isEmpty(), "a body of water holds more than one piece: $pieceFailures")
         assertTrue(failures.isEmpty(), "a body of water holds more than one level: $failures")
     }
 
@@ -144,7 +140,7 @@ class LakeBodyTest : BorrowsSharedWorlds() {
         // pass's ground leaves none (docs/DESIGN_LEDGER.md, A1-1). Recorded when H1's ground came
         // under the coupled climate: a basin of six cells on seed 1234 in dry country, its excess
         // under two of the float's last places at the map's largest runoff (docs/TODO.md).
-        KnownFailures.expect("M1: a closed basin's pockets are handed more rain than reaches it", "seed 1234: a basin of 6 cells handed 45.2771 of its catchment (0.760875 of 0.0168049 mm-cells; the largest runoff carried on the map 5.73998e+06)") {
+        KnownFailures.expect("M1: a closed basin's pockets are handed more rain than reaches it", "seed 1234: a basin of 9 cells handed 3298.0802 of its catchment (1212.72 of 0.367706 mm-cells; the largest runoff carried on the map 5.69916e+06); seed 1234: a basin of 7 cells handed 105061.0644 of its catchment (0.941685 of 8.96322e-06 mm-cells; the largest runoff carried on the map 5.69916e+06); seed 99: a basin of 128 cells handed 0.9908 of its catchment (34.4840 of 34.8026 mm-cells; the largest runoff carried on the map 1.85260e+06)") {
             if (failures.isNotEmpty()) throw RecordedViolation("rain counted twice or lost: $failures", failures.joinToString("; "))
         }
     }

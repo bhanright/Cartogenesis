@@ -52,8 +52,10 @@ class OceanLeavesTheGroundTest : BorrowsSharedWorlds() {
      * atmosphere's vertical motion's. H1 re-took the plates', the erosion's and the sea's, the
      * terrain and the partition holding: Earth's submerged share draws more of the plates as
      * continents, and the platform floats at its own freeboard with its closed sags filled; the
-     * merge of H1 with the climate above re-took the same three. An ocean change that leaks into
-     * the ground moves them.
+     * merge of H1 with the climate above re-took the same three. A1-6a re-took the erosion's and
+     * the sea's: the provisional climate's circulation became Lindzen and Hou's, and the erosion's
+     * halfway weather starts where its opening weather settled. An ocean change that leaks into the
+     * ground moves them.
      * A chunk meant to move the ground re-takes them here, as the render records are re-taken.
      * At [SharedWorlds.DETAIL_ROWS], whose standard worlds the detail guards generate anyway, so
      * the pin costs a digest and no generation.
@@ -84,12 +86,12 @@ class OceanLeavesTheGroundTest : BorrowsSharedWorlds() {
             "plates.continentalShare" to -8606387063464998658L,
             "plates.upliftRateMmPerYear" to -9204950406715247596L,
             "plates.crustAge" to 5808649867131644059L,
-            "erosion.height" to 7664879216374273901L,
+            "erosion.height" to -5170970084745686372L,
             "erosion.sweptOnDevice" to -358906410940142731L,
-            "sea.shorelineHeight" to -1472296860660524362L,
-            "sea.isLand" to 2151985804672966035L,
-            "sea.relativeElevation" to -6812022605434427169L,
-            "sea.landCellCount" to -6722596466573334982L
+            "sea.shorelineHeight" to -2971665513930893607L,
+            "sea.isLand" to 8129303181879111795L,
+            "sea.relativeElevation" to -6441335138618960723L,
+            "sea.landCellCount" to 9182787366604128620L
         )
     }
 }

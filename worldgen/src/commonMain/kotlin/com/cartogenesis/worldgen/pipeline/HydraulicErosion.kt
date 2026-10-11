@@ -423,8 +423,7 @@ internal object HydraulicErosion {
         val rainfall = FloatArray(cellCount) { Runoff.FLOOR_MM }
         if (cut.landCellCount == 0) return Weather(rainfall, FloatArray(cellCount), climateStart)
 
-        cut.climateStart = climateStart
-        val generated = ClimateStage.generateWithSeasonalMm(config, cut, OceanStage.withoutCurrents(config, cut))
+        val generated = ClimateStage.generateWithSeasonalMm(config, cut, OceanStage.withoutCurrents(config, cut), climateStart)
         val climate = generated.result
         val annualMm = climate.precipitationMm.data
 
@@ -446,7 +445,7 @@ internal object HydraulicErosion {
         // Zero everywhere when the vegetation section is switched off, because that is the field
         // the climate stage hands back then — and a density of zero is a shielding factor of one,
         // so switching the cover off leaves the incision exactly as bare rock's.
-        return Weather(rainfall, climate.vegetationDensity.data, generated.warmStart)
+        return Weather(rainfall, climate.vegetationDensity.data, generated.settled)
     }
 
     /**

@@ -1,5 +1,55 @@
 # To do
 
+- **`GroundFiguresTest` fails on main at 4c7f3a4a.** Its case *no figure in the source is counted
+  in cycles round the map or as a share of it* names `Shoreline.kt:179` (`:cartography`, G2's
+  drawn coast), `width / PIECES_PER_SIGMA`, as dividing the grid. Seen on both everyday runs of
+  `:worldgen:jvmTest` in WC1, which changed no generator or drawing code; whether the figure is a
+  length on the ground the scan misreads or one in cells is not checked. 2026-10-10, WC1.
+- **Two evictions at once may let go of more than the cap asks.** Each process lists the shared
+  world cache, sums it and deletes from the oldest without a lock over the whole directory, so two
+  stores that finish together can each delete for the same excess. It costs generations only, never
+  a wrong or partial world; a lock over eviction would close it if it is ever seen. 2026-10-10, WC1.
+- **The geometry census's clauses at Earth's size that are the ground's, not the drawing's (G2).**
+  G2 traced every clause the census makes on a drawn layer at the default planet (seeds 42 and
+  969495 at 1,024 rows) to the operator that makes it; these five are in the fields, and the
+  drawing only shows them:
+  - **969495's isobath facet**, 55.5 cell widths (1,085 km) at 116.7 degrees about (105, 940): the
+    5,000 m level line runs straight across plate 13, 145 to 183 cell widths from any boundary, on
+    a floor rising about 600 m across ten cells. The drawn isobath is the floor's own level set,
+    inked per cell from the cell's depth (`Isobaths.ink`), so the straight run is the sea floor's;
+    which part of the plate stage's depth (the age-depth curve, the ridge geometry) rules it is not
+    isolated.
+  - **969495's plate-boundary facet**, 53.7 cell widths at 45.0 degrees about (1675, 527): the
+    partition's own straight boundary.
+  - **The sea temperature anomaly's aligned sides on both worlds**, 101 steps along row 529 on 42
+    and 73 along row 503 on 969495: within three degrees of the equator the anomaly varies by
+    under 0.05 C over 80 columns and by 0.5 C over three rows, a band along the rows that the
+    ocean stage makes and the currents view colors cell by cell.
+  - **42's terrain contours and ice surface, one arc**, 139 degrees of a circle 16.5 cells round
+    about (1153, 1001): the ice sheet's surface wrapping an ice-free hollow (row 1001 carries no
+    ice from column 1139 to 1155, on ground 259 to 1,406 m high); the map draws no contour on land
+    and the census's terrain contours read the ice's surface over the sheet, so this is
+    `IceSheet`'s shape.
+  - **Round coasts the littoral grading makes**, now that the drawn coast no longer hides them under
+    the grid's staircase: the drawn coast's arc on 7 and 99 at 512 rows and on 42 at Earth's size,
+    124 degrees of circles 12.0 to 12.1 cells round, at the arc detector's floors (`Arcs`: a third
+    of a turn, twelve cells, a quarter of a cell rms). With `SeaConfig.littoralDepositionalShare`
+    at zero, 7's and 42's are gone, the grading's curvature flow having rounded those headlands;
+    99's stays, its cause not isolated. The drawing fits no arc to the census's natural shorelines
+    (`CoastLineTest`). 2026-10-09, G2.
+- **The narrow sea is decided by a square window (G2).** `NarrowSea.mask` calls a sea cell open
+  only where it lies in an all-sea block as many cells across and down as a pen's width needs, two
+  by two on the Earth-sized planet's 512- and 1,024-row grids, which is a thresholded square window
+  of the kind rule 13 names. At two cells the square and a disc differ by a cell's corners, and the
+  geometry census sees no clause on the coast it shapes; a disc on the ground, or the Euclidean
+  distance the shore distance already solves, would remove the rule's exception. 2026-10-09, G2.
+- **The level-0 contour still inks the sea beside the coast (Audit III F-C4).** `Isobaths.ink`
+  treats depth zero as a contour like any other, so 3,045 of 5,164 sea cells beside land on the
+  gallery's world take contour ink past a tenth and the coast is drawn twice, the second time in
+  the isobaths' cell staircase; `IsobathTest` keeps it as a known failure. Since G2 the coast's own
+  ink reaches the sea cells beside the shore too, so the two inks lie on the same cells; the fix is
+  still to start the contours at the first interval, in the shader's copy as well. Out of G2's
+  scope, which was the census's clauses. 2026-10-09, G2.
 - **The atlas overhaul: what the Earth-sized planet left for the realms, peoples and landmarks
   (K2).** K2 moved the default planet to Earth's 40,075 km and the geography with it; the atlas was
   out of its scope and was only kept from crashing or hanging. What the overhaul must revisit:
@@ -66,10 +116,49 @@
   box 94 km in half-width, cannot tell the texture rule from the grid on 39 km cells, where the
   control with the rule off already reads inside the record. Whether the everyday tier should be 1,024 rows on
   the Earth-sized planet is a budget question. 2026-10-08, K2.
-- **The Earth-sized planet has half Earth's lowlands (K2).** Seed 42 at 1,024 rows holds 12.8% of
-  its land under 200 m, 19.9% at 200-500 m and 32.6% at 500 m-1 km, where Earth's hypsometry gives
-  25, 22 and 22; the 1-2 km band is 27.7% against 19. The plains stand too high, and the lowstand,
-  the deltas and the margins are the stages to read. 2026-10-08, K2.
+- ~~**The Earth-sized planet has half Earth's lowlands (K2).**~~ Answered by H1, 2026-10-10: the
+  cause was where the sea stood on the platform, not the lowstand, the deltas or the margins. The
+  crust was drawn for S2's submerged fifth and the platform floated at Earth's mean land elevation,
+  so the land was the platform's whole hump, centred 600 to 700 m above the sea. With Earth's
+  submerged share (0.29), the platform's freeboard (374 m) and the closed sags filled to their
+  spill, seed 42 at 1,024 rows holds 24.2% of its land under 200 m, 26.2% at 200-500 m, 25.9% at
+  500 m-1 km and 16.6% at 1-2 km (docs/DESIGN_LEDGER.md, H1). `HypsometryTest` holds the bands.
+- **The platform still stands in the 500 m to 1 km band more than Earth's (H1).** Pooled over the
+  standard worlds at 512 rows the band holds 0.276 of the land against ETOPO5's 0.196 and the 0.029
+  Earth's continents allow a world of seven; at 1,024 rows seeds 42, 969495 and 7 read 0.259, 0.212
+  and 0.283, which is Africa's figure rather than the world's. The other three bands are inside
+  Earth's. Not isolated: the craton's tilt lifts the interior about 180 m above the mean column
+  (with the tilt taken out the band reads 0.228 on seed 42), and the hydraulic rounds lower the
+  platform by about 190 m in the few million years they stand for, where Earth's platforms have had
+  hundreds of millions. `HypsometryTest` runs it as a known failure. 2026-10-10, H1.
+- **The drowned crust lies in the interiors of the largest continents (H1).** With Earth's
+  submerged share the sea drowns 29% of the continental crust, and on the Earth-sized planet's
+  widest continents part of that is the open sags of the base relief more than 800 km from the
+  crust's edge: 0.65, 0.45 and 0.36 of the drowned crust lies within 800 km of it on seeds 42, 7
+  and 969495 at 1,024 rows (`GroundTextureTest`'s measure, on its own seeds at 512 rows, is recorded), against Earth's 0.80 (main read 0.67, 0.60 and 0.52 with a
+  fifth drowned). The shallow water as a whole is Earth's (0.28 of the land's area under 500 m
+  against ETOPO5's 0.25), so what is wrong is where it lies. Closed sags are filled to their spill
+  since H1; a sag open to the sea by ground lower than its rim is not. Two causes are named and
+  neither is H1's to change: the continents are whole Voronoi plates, compact where Earth's are
+  ragged and fringed with microcontinents (the plate partition entry above), and nothing fills an
+  open sag on a platform that floats above the sea to the grade its rivers would build, which
+  Earth's open lowland basins are filled to (the West Siberian, the Amazon). A fill to that grade
+  would have to be blended out over the margin, or the coast would follow the craton profile's
+  contour. 2026-10-10, H1.
+- **Two misses H1's ground exposed, recorded rather than fixed (H1).** `GeographyAuditTest`'s
+  pooled tropical band: desert covers 0.71 of the world's own share between 0 and 15 degrees
+  against Earth's 0.27 and its bar of twice that, seed 42 reading 1.25; the horse latitudes' clause
+  holds. The climate is not this chunk's, and the cause is not isolated. And `LakeBodyTest`: seed
+  42 at 512 rows holds a three-cell lake (lake 15) whose surface stands at the ground of the one
+  cell between its two hollows, to the sixth place, and the river stage leaves that cell dry, so
+  the lake is two pieces at one level; the pocket rule's tie at the saddle is the river stage's
+  (`LakePockets`). 2026-10-10, H1.
+- **The platform's basin fill has no device path (H1).** `PlateStage.fillContinentalBasins` is a
+  priority flood over the whole grid, run once per world on the processor, like every depression
+  fill in the pipeline (`FlowRouting.fillDepressions` has none either). A priority flood is
+  sequential by construction; a device path would be a parallel fill (an iterative minimum-spill
+  relaxation, held to the processor's answer), and its cost on the processor was not measured
+  apart from the plate stage. 2026-10-10, H1.
 - **The Earth-sized planet's physical known failures (K2).** Recorded, each with its figure, where
   a guard set on the 12,000 km planet's worlds reads the Earth-sized planet's and misses Earth's
   figure (C1b's worlds pass and arm six: the cold coast, the dome flow, the clamp, the
@@ -95,7 +184,13 @@
   `RibbonLandTest`'s strip is a share of the map's width (`w / 170`, 71 km of half-width on the
   12,000 km planet and 236 km on Earth's), so the case runs on the calibration planet until the
   strip is a width on the ground and the Earth-sized world is held to Earth's 0.7 to 1.0% of land.
-  2026-10-08, K2.
+  2026-10-08, K2. **H1's ground clears nine of these, and they are armed:** `CurrentFeedsRainTest`'s
+  cold and warm sample coasts, `GlaciationCombTest`'s straight lake, `IsostasyTest`'s moat (62 m of 239, on
+  a thinner sheet rather than a deeper moat) and its foreland, `ReceiverClampTest` (no cell is
+  left below its receiver now, but the cell K2 found was never traced, so the defect may stand
+  elsewhere), `SeaLevelHistoryTest`'s seed 42 and its pooled estuaries (1.55x), and `LakeWaterBalanceTest`'s dry basin on the
+  re-picked sample. The drowned crust is worse (0.394 at 512 rows) and is H1's entry above; the
+  rest stand. 2026-10-10, H1.
 - **The hotspot trails' plate turns are drawn from one measured turn (K2).** A plate turns at each
   of the planet's reorganizations by an angle drawn uniformly up to the Hawaiian-Emperor bend's 60
   degrees either way (`PlateStage.plateTurnRadians`): Earth gives the Pacific's turn well

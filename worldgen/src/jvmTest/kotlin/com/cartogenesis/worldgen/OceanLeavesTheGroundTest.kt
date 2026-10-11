@@ -49,7 +49,11 @@ class OceanLeavesTheGroundTest : BorrowsSharedWorlds() {
      * takes its share of the sun. A1-2 re-took the same two: the provisional climate's pressure wind
      * is smoothed and differentiated on the sphere. A1-4 and A1-5 re-took the same two: the
      * provisional climate's wind became the boundary layer's, and then its rain the coupled
-     * atmosphere's vertical motion's. An ocean change that leaks into the ground moves them.
+     * atmosphere's vertical motion's. H1 re-took the plates', the erosion's and the sea's, the
+     * terrain and the partition holding: Earth's submerged share draws more of the plates as
+     * continents, and the platform floats at its own freeboard with its closed sags filled; the
+     * merge of H1 with the climate above re-took the same three. An ocean change that leaks into
+     * the ground moves them.
      * A chunk meant to move the ground re-takes them here, as the render records are re-taken.
      * At [SharedWorlds.DETAIL_ROWS], whose standard worlds the detail guards generate anyway, so
      * the pin costs a digest and no generation.
@@ -69,7 +73,7 @@ class OceanLeavesTheGroundTest : BorrowsSharedWorlds() {
         val GROUND_AT_512_ROWS: Map<String, Long> = mapOf(
             "terrain.normals" to 6074751788244030761L,
             "terrain.height" to 7240865613227243168L,
-            "plates.plates" to -8565988885517275170L,
+            "plates.plates" to 776939297823223148L,
             "plates.plateId" to -7659896205567335042L,
             "plates.boundaryDistance" to 6559268612307642171L,
             "plates.nearestBoundaryType" to -4092876749757560349L,

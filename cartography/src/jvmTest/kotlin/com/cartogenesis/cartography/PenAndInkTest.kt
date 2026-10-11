@@ -366,11 +366,12 @@ class PenAndInkTest : BorrowsSharedWorlds() {
         // Armed again on square cells at the re-derived exaggeration; it ran as a known failure
         // from Fix 3b, 31.8 to 31.9 degrees on the 512 by 512 grid (docs/DESIGN_LEDGER.md, Q4). 29.6
         // at L1, and 30.0 at its review round, where the exaggeration was re-derived to 37.25.
-        // Recorded again at K2, whose physics moved the gallery's ground on the 12,000 km planet, and
-        // armed again at C1b, whose climate moved it back under.
+        // Recorded again at K2, whose physics moved the gallery's ground on the 12,000 km planet,
+        // and armed again at H1, whose platform reads 28.9 degrees there (docs/DESIGN_LEDGER.md, H1).
         assertTrue(
             engravedError.meanDegrees <= MAX_MEAN_ASPECT_ERROR_DEGREES,
-            "the ink runs %.1f degrees from the aspect on average, past %.1f".format(engravedError.meanDegrees, MAX_MEAN_ASPECT_ERROR_DEGREES)
+            "the ink runs %.1f degrees from the aspect on average, past %.1f"
+                .format(engravedError.meanDegrees, MAX_MEAN_ASPECT_ERROR_DEGREES)
         )
         assertTrue(
             combError.meanDegrees > MAX_MEAN_ASPECT_ERROR_DEGREES,

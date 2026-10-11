@@ -7,6 +7,7 @@ import java.io.BufferedOutputStream
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.io.File
+import java.io.FileNotFoundException
 import java.io.IOException
 import java.nio.channels.FileChannel
 import java.nio.file.Files
@@ -15,42 +16,68 @@ import java.nio.file.StandardOpenOption
 import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
 import java.util.zip.ZipFile
+import kotlin.system.exitProcess
 import kotlinx.serialization.json.Json
 
 /**
- * Generated worlds kept on disk between test workers and between runs.
+ * Generated worlds kept on disk between test workers, between runs, and between the checkouts and
+ * worktrees of one machine.
  *
  * The per-merge tier made 274 worlds on its last run before this existed, 208 of them distinct: the
  * workers side by side each made their own, and nothing outlived the run. A world is a pure function
  * of its settings and of the generator's code, so it is stored under both: a directory per
  * [generatorFingerprint], a hash of the generator's compiled classes, and in it a file per seed, grid
  * and hash of the full settings. Any change to the generator lands in a new directory and so misses
- * every world made before it; the old directories are the first to go when the cache is full.
+ * every world made before it, and two checkouts of the same code share every world.
  *
- * A file is written whole to a temporary name and renamed into place, so no reader ever sees half of
- * one. Two workers that want the same world at once take a lock on it: the first generates, and the
- * second waits and reads what the first wrote, rather than spending the same minutes beside it.
+ * One [directory] serves every checkout on the machine ([sharedDirectory]), so worktrees with
+ * different code use it at once, and nothing one does may cost another a world it is reading:
+ * - A file is written whole to a temporary name and renamed into place, so no reader ever sees half
+ *   of one. Two writers of the same world, in one JVM or two, take a lock on it: the first
+ *   generates, and the second waits and reads what the first wrote.
+ * - A reader opens the file before anything else and reads from that handle, so a deletion cannot
+ *   cut it short: Windows refuses to delete a file `FileInputStream` holds open, and elsewhere the
+ *   deletion takes only the name. A file gone before the reader opened it is a miss like any other.
+ * - Nothing deletes a lock file but the removal of a whole generator's directory, which waits until
+ *   nothing in it has been touched for [staleAfterMillis]: a lock file deleted while a writer held
+ *   it would let a second writer lock a new file of the same name and generate beside the first.
  *
  * Each file carries the digests [ReachableState] took of the fresh world, and every read checks the
  * world it read against them, so a round trip that was not exact fails the borrowing test rather
  * than handing it a different world. A file that cannot be read at all — cut short, or written by a
  * different layout — is deleted and the world generated again.
  *
- * The files together are held under [capacityBytes]. Past it the least recently used variant goes
- * first — a seed with a setting moved, which one deep class asks for — and a standard world, a seed
- * at its default settings that every everyday run reads, only when no variant is left: the deep tier
- * makes far more worlds than the cache holds, and must not push out the ones the next everyday run
- * needs.
+ * Kept small two ways. At its first use a cache removes every other generator's directory in which
+ * nothing has been read, written or locked for [staleAfterMillis]: the code of a commit since
+ * changed, whose worlds nobody will ask for again. And the files of every generator together are
+ * held under [capacityBytes], the least recently used going first. A world's use is its file's
+ * modification time, set on every hit, since the file system's own access time is not kept on
+ * every machine. The one exception to recency is this generator's standard worlds — a seed at its
+ * default settings, which every everyday run reads — which go only when nothing else is left: the
+ * deep tier makes far more worlds than the cache holds, and must not push out the ones the next
+ * everyday run of the same code needs.
  */
 class WorldDiskCache(
-    private val directory: File,
+    val directory: File,
     private val capacityBytes: Long,
+    private val staleAfterMillis: Long,
     generatorFingerprint: () -> String = ::compiledGeneratorFingerprint
 ) {
     /** A world and where it came from, for the lender's report. */
     class Obtained(val world: WorldMap, val readFromDisk: Boolean)
 
-    private val generatorDirectory: File by lazy { File(directory, generatorFingerprint()) }
+    /**
+     * This generator's directory. Made at the cache's first use, which is also when the other
+     * generators' stale directories are removed. A prune elsewhere that takes it anyway — its worlds
+     * all older than the stale age, and this JVM not yet reading them — costs generations only: a
+     * read finds nothing, and a store makes the directory again.
+     */
+    private val generatorDirectory: File by lazy {
+        File(directory, generatorFingerprint()).also { own ->
+            own.mkdirs()
+            removeStaleGenerators(directory, staleAfterMillis, keep = own)
+        }
+    }
 
     /** The world [config] makes: read from disk if it is there, otherwise [generate]d and stored. */
     fun obtain(config: WorldGenConfig, generate: (WorldGenConfig) -> WorldMap): Obtained {
@@ -58,9 +85,11 @@ class WorldDiskCache(
         readIfPresent(file, config)?.let { return Obtained(it, readFromDisk = true) }
         synchronized(monitors.computeIfAbsent(file.absolutePath) { Any() }) {
             generatorDirectory.mkdirs()
-            val lockFile = File(generatorDirectory, file.name + LOCK_SUFFIX).toPath()
-            FileChannel.open(lockFile, StandardOpenOption.CREATE, StandardOpenOption.WRITE).use { channel ->
+            val lockFile = File(generatorDirectory, file.name + LOCK_SUFFIX)
+            FileChannel.open(lockFile.toPath(), StandardOpenOption.CREATE, StandardOpenOption.WRITE).use { channel ->
                 channel.lock().use {
+                    // A generation under way is a use of its directory, so no prune takes its lock.
+                    lockFile.setLastModified(System.currentTimeMillis())
                     // Another worker may have made it while this one waited for the lock.
                     readIfPresent(file, config)?.let { return Obtained(it, readFromDisk = true) }
                     val world = generate(config)
@@ -81,11 +110,10 @@ class WorldDiskCache(
 
     /**
      * The digests stored beside [config]'s world, taken from it fresh off the generator, or null if
-     * the cache holds no readable copy. Reads the header only.
+     * the cache holds no readable copy. Reads the header only, and is not a use of the world.
      */
     fun storedDigests(config: WorldGenConfig): Map<String, Long>? {
         val file = fileFor(config)
-        if (!file.isFile) return null
         return try {
             DataInputStream(BufferedInputStream(file.inputStream(), BUFFER_BYTES)).use { input ->
                 if (input.readLong() != MAGIC || input.readInt() != LAYOUT_VERSION) return null
@@ -100,9 +128,17 @@ class WorldDiskCache(
     }
 
     private fun readIfPresent(file: File, config: WorldGenConfig): WorldMap? {
-        if (!file.isFile) return null
+        // Absent, or evicted by another process since this one looked: a miss either way.
+        val opened = try {
+            file.inputStream()
+        } catch (absent: FileNotFoundException) {
+            return null
+        }
+        // Marked as used before it is read, so an eviction or a prune that lists the files while
+        // this read is under way sees it as the newest there is.
+        file.setLastModified(System.currentTimeMillis())
         val stored = try {
-            DataInputStream(BufferedInputStream(file.inputStream(), BUFFER_BYTES)).use { input ->
+            DataInputStream(BufferedInputStream(opened, BUFFER_BYTES)).use { input ->
                 if (input.readLong() != MAGIC || input.readInt() != LAYOUT_VERSION) {
                     throw IOException("not a world file of this layout")
                 }
@@ -127,8 +163,6 @@ class WorldDiskCache(
                 "world file's round trip is not exact; clear the cache with " +
                 "`./gradlew clearWorldCache` and fix WorldFile before relying on it."
         }
-        // Reading counts as use, so the worlds read most stay longest.
-        file.setLastModified(System.currentTimeMillis())
         return world
     }
 
@@ -167,26 +201,26 @@ class WorldDiskCache(
 
     /**
      * Deletes the least recently used world files, in every generator's directory, until those left
-     * fit [capacityBytes], and any temporary file a worker that died mid-write left behind.
+     * fit [capacityBytes], and any temporary file a worker that died mid-write left behind. Lock
+     * files and directories stay: they go with their generator, by age ([removeStaleGenerators]).
      */
     private fun evictBeyondCapacity(keep: File) {
         val now = System.currentTimeMillis()
         val files = directory.walkTopDown().filter { it.isFile }.toList()
         files.filter { it.name.endsWith(TEMPORARY_SUFFIX) && now - it.lastModified() > ABANDONED_AFTER_MILLIS }
             .forEach { it.delete() }
-        val worlds = files.filter { it.name.endsWith(SUFFIX) && it.isFile }
-            .sortedWith(compareBy<File>({ "-$PLAIN-" in it.name }, { it.lastModified() }))
-        var total = worlds.sumOf { it.length() }
+        // Each file's use and length read once: other processes touch them while this one sorts.
+        class Held(val file: File, val lastUsedMillis: Long, val bytes: Long, val ownStandard: Boolean)
+        val worlds = files.filter { it.name.endsWith(SUFFIX) }
+            .map { Held(it, it.lastModified(), it.length(), it.parentFile.name == generatorDirectory.name && "-$PLAIN-" in it.name) }
+            .sortedWith(compareBy<Held>({ it.ownStandard }, { it.lastUsedMillis }))
+        var total = worlds.sumOf { it.bytes }
         for (oldest in worlds) {
             if (total <= capacityBytes) break
-            if (oldest == keep) continue
-            val length = oldest.length()
+            if (oldest.file == keep) continue
             // On Windows a file another worker is reading cannot be deleted; it goes next time.
-            if (oldest.delete()) total -= length
+            if (oldest.file.delete()) total -= oldest.bytes
         }
-        directory.listFiles()?.filter { it.isDirectory && it.listFiles()?.none { file -> file.name.endsWith(SUFFIX) } == true }
-            ?.filter { it != generatorDirectory }
-            ?.forEach { it.deleteRecursively() }
     }
 
     companion object {
@@ -213,6 +247,20 @@ class WorldDiskCache(
 
         private const val BUFFER_BYTES = 1 shl 20
 
+        const val MILLIS_PER_DAY = 24 * 60 * 60 * 1000L
+
+        /** The build's `-PworldCacheDirectory`, passed on only when it is given. */
+        const val DIRECTORY_PROPERTY = "cartogenesis.worldCache.directory"
+
+        /** The environment's choice of directory, read when the build names none. */
+        const val DIRECTORY_ENVIRONMENT = "CARTOGENESIS_WORLD_CACHE"
+
+        /** Where the cache lives under the user's home when nothing else is named. */
+        const val DEFAULT_UNDER_HOME = ".cartogenesis/world-cache"
+
+        private const val CAPACITY_PROPERTY = "cartogenesis.worldCache.capacityBytes"
+        private const val STALE_DAYS_PROPERTY = "cartogenesis.worldCache.staleAfterDays"
+
         /** Every setting written out, defaults included, so that the hash reads them all. */
         private val settingsFormat = Json { encodeDefaults = true }
 
@@ -222,13 +270,80 @@ class WorldDiskCache(
         fun settingsHash(config: WorldGenConfig): String = sha256Hex(settingsJson(config).toByteArray()).take(16)
 
         /**
+         * The directory every checkout on the machine shares: [configured] (the build's
+         * `-PworldCacheDirectory`) if given, else [environment] (`CARTOGENESIS_WORLD_CACHE`), else
+         * `.cartogenesis/world-cache` under [userHome]. A blank value counts as not given.
+         */
+        fun sharedDirectory(configured: String?, environment: String?, userHome: String): File =
+            configured?.takeIf { it.isNotBlank() }?.let(::File)
+                ?: environment?.takeIf { it.isNotBlank() }?.let(::File)
+                ?: File(userHome, DEFAULT_UNDER_HOME)
+
+        /** The shared directory as this JVM's properties and environment name it. */
+        fun configuredDirectory(): File =
+            sharedDirectory(System.getProperty(DIRECTORY_PROPERTY), System.getenv(DIRECTORY_ENVIRONMENT), System.getProperty("user.home"))
+
+        /**
          * The cache the build configured, or null when it configured none: a test run from an
-         * IDE without the build's properties generates every world as before.
+         * IDE without the build's properties, or with `-PworldCache=off`, generates every world as
+         * before.
          */
         fun fromSystemProperties(): WorldDiskCache? {
-            val directory = System.getProperty("cartogenesis.worldCache.directory") ?: return null
-            val capacity = System.getProperty("cartogenesis.worldCache.capacityBytes")?.toLong() ?: return null
-            return WorldDiskCache(File(directory), capacity)
+            val capacity = System.getProperty(CAPACITY_PROPERTY)?.toLong() ?: return null
+            val staleAfterMillis = configuredStaleAfterMillis() ?: return null
+            return WorldDiskCache(configuredDirectory(), capacity, staleAfterMillis)
+        }
+
+        /** The build's `-PworldCacheStaleDays`, in milliseconds, or null when the build passed none. */
+        fun configuredStaleAfterMillis(): Long? = System.getProperty(STALE_DAYS_PROPERTY)?.toLong()?.times(MILLIS_PER_DAY)
+
+        /**
+         * Removes every generator's directory under [directory] but [keep] in which no file has been
+         * touched for [staleAfterMillis] — no world read or written, no generation locked — and an
+         * empty one whose own time is that old. Returns the directories it removed; one holding a
+         * file another process has open stays in part, and goes at a later start.
+         */
+        fun removeStaleGenerators(
+            directory: File,
+            staleAfterMillis: Long,
+            keep: File? = null,
+            nowMillis: Long = System.currentTimeMillis()
+        ): List<File> {
+            val generators = directory.listFiles()?.filter { it.isDirectory && it.name != keep?.name } ?: return emptyList()
+            return generators.filter { generator ->
+                val lastUsedMillis = generator.walkTopDown().filter { it.isFile }.maxOfOrNull { it.lastModified() }
+                    ?: generator.lastModified()
+                nowMillis - lastUsedMillis > staleAfterMillis
+            }.onEach { it.deleteRecursively() }
+        }
+    }
+}
+
+/**
+ * The build's `clearWorldCache` (`clear`) and `clearWorldCacheStale` (`stale`): the shared directory
+ * as the build and environment name it ([WorldDiskCache.configuredDirectory]), emptied, or rid of
+ * what a cache's first use would prune.
+ */
+object WorldCacheMaintenance {
+    @JvmStatic
+    fun main(arguments: Array<String>) {
+        val directory = WorldDiskCache.configuredDirectory()
+        when (arguments.singleOrNull()) {
+            "clear" -> {
+                directory.deleteRecursively()
+                val left = directory.walkTopDown().count { it.isFile }
+                println("World cache at $directory cleared" + if (left > 0) "; $left files a running test holds open stay" else "")
+            }
+            "stale" -> {
+                val staleAfterMillis = WorldDiskCache.configuredStaleAfterMillis()
+                    ?: error("the build passes the stale age; run this through ./gradlew clearWorldCacheStale")
+                val removed = WorldDiskCache.removeStaleGenerators(directory, staleAfterMillis)
+                println("World cache at $directory: removed ${removed.size} generators' directories unused for ${staleAfterMillis / WorldDiskCache.MILLIS_PER_DAY} days")
+            }
+            else -> {
+                System.err.println("usage: clear | stale")
+                exitProcess(2)
+            }
         }
     }
 }

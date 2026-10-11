@@ -102,9 +102,11 @@ class IsostasyTest : BorrowsSharedWorlds() {
         // `cratonThickeningKm` lifts a craton this far above the rim of its own continent.
         val perKilometre = (isostasy.mantleDensity - isostasy.continentalCrustDensity) /
             isostasy.mantleDensity * 1_000f
-        val half = isostasy.cratonThickeningKm / 2f
+        // Measured upward from the standard column, so both columns stand in air: since H1 the
+        // standard column floats at 374 m, and a column 6 km thinner stands under water, where the
+        // water's own load adds to the swing and the arithmetic is no longer the crust's alone.
         val tiltMetres =
-            columns.altitudeMetres(1f, 0f, half) - columns.altitudeMetres(1f, 0f, -half)
+            columns.altitudeMetres(1f, 0f, isostasy.cratonThickeningKm) - columns.altitudeMetres(1f, 0f, 0f)
         println(
             "ISOSTASY craton profile %.0f m per km of crust, %.0f m of tilt across %.1f km"
                 .format(perKilometre, tiltMetres, isostasy.cratonThickeningKm)
@@ -791,24 +793,19 @@ class IsostasyTest : BorrowsSharedWorlds() {
         // Re-recorded at Q2 in kilometers, on square cells: the same bin, 1,125 to 1,313 km, 480 m.
         // And at 256 rows at Q2b, the same bin again: the belt rebounds 603 m there against 412 at
         // 512 rows, so its moat lies 721 m under it (docs/DESIGN_LEDGER.md, Q2b).
-        KnownFailures.expect(
-            FORELAND_AT_THE_EDGE_OF_THE_COLLISION,
-            // Re-recorded at L1, whose rifts are Earth's half-grabens and the same at every grid (docs/DESIGN_LEDGER.md, L1).
-            "moat at 1125-1313 km, 1058 m under the belt, rising 0 m beyond it"
-        ) {
-            if (beyondTheMoat - inTheForeland < MIN_FOREBULGE_METRES) {
-                throw RecordedViolation(
-                    "the ground beyond the moat does not come back up, so what was measured is a slope" +
-                        " away from the belt and not a trough — and a trough with a rise beyond it is the" +
-                        " one thing no uniform bend can make",
-                    String.format(
-                        java.util.Locale.ROOT, "moat at %.0f-%.0f km, %.0f m under the belt, rising %.0f m beyond it",
-                        moatBin * FLEXURE_BIN_KM, (moatBin + 1) * FLEXURE_BIN_KM,
-                        overTheBelt - inTheForeland, beyondTheMoat - inTheForeland
-                    )
-                )
-            }
-        }
+        // Re-recorded at L1. Armed again at H1, where seed 42's collision is another collision (more
+        // of its plates are continents) and its moat lies at 750-938 km, 1,140 m under the belt,
+        // with the ground rising 10 m beyond it (docs/DESIGN_LEDGER.md, H1).
+        assertTrue(
+            "the ground beyond the moat does not come back up, so what was measured is a slope" +
+                " away from the belt and not a trough — and a trough with a rise beyond it is the" +
+                " one thing no uniform bend can make: " + String.format(
+                    java.util.Locale.ROOT, "moat at %.0f-%.0f km, %.0f m under the belt, rising %.0f m beyond it",
+                    moatBin * FLEXURE_BIN_KM, (moatBin + 1) * FLEXURE_BIN_KM,
+                    overTheBelt - inTheForeland, beyondTheMoat - inTheForeland
+                ),
+            beyondTheMoat - inTheForeland >= MIN_FOREBULGE_METRES
+        )
     }
 
     /**
@@ -934,18 +931,15 @@ class IsostasyTest : BorrowsSharedWorlds() {
                 " of it a plate of this stiffness lets through",
             realised in (airyRatio * CAP_SHARE_OF_AIRY_FLOOR)..airyRatio.toDouble()
         )
-        // Recorded at K2: the Earth-sized planet's moat is shallower than a fifth of Airy's share
-        // (docs/DESIGN_LEDGER.md, K2; docs/TODO.md).
-        KnownFailures.expect("K2: the moat round the Earth-sized planet's ice is shallower than its share of Airy's", "moat 69 m of 433") {
-            if (deepestMoat !in (thickest * airyRatio * MOAT_SHARE_OF_AIRY_FLOOR)..(thickest * airyRatio).toDouble()) {
-                throw RecordedViolation(
-                    "the moat round the ice is ${"%.0f".format(deepestMoat)} m deep, which is not between" +
-                        " a fifth and the whole of the ${"%.0f".format(thickest * airyRatio)} m the" +
-                        " thickest ice on this world floats out at",
-                    "moat ${"%.0f".format(deepestMoat)} m of ${"%.0f".format(thickest * airyRatio)}"
-                )
-            }
-        }
+        // Recorded at K2 at 69 m of 433, and armed again at H1 at 62 m of 239: the moat is about as
+        // deep as it was, and what moved is seed 7's thickest ice, 860 m against 1,558, so this
+        // passes on a smaller sheet rather than a deeper moat (docs/DESIGN_LEDGER.md, K2 and H1).
+        assertTrue(
+            "the moat round the ice is ${"%.0f".format(deepestMoat)} m deep, which is not between" +
+                " a fifth and the whole of the ${"%.0f".format(thickest * airyRatio)} m the" +
+                " thickest ice on this world floats out at",
+            deepestMoat in (thickest * airyRatio * MOAT_SHARE_OF_AIRY_FLOOR)..(thickest * airyRatio).toDouble()
+        )
     }
 
     /**
@@ -1017,18 +1011,15 @@ class IsostasyTest : BorrowsSharedWorlds() {
          * How far the sea-level cut may land from the level isostasy puts the shoreline at, in
          * metres.
          *
-         * A thousand, and it is a regression pin rather than a derivation: set above the residuals
-         * this generator produces, which the case prints, and below the control's, which misses by
-         * about three times as much. What the residual itself is, is a statement about this
-         * generator: the crust puts more of the world above the isostatic datum than the slider
-         * asks for, so the sea-level cut has to come up to meet it, because this generator's
-         * continents drown a smaller share of their own crust than Earth's 29%, for the two reasons
-         * `TectonicsConfig.continentalCrustSubmergedShare` sets out; closing it is a change to what
-         * a continental interior looks like rather than to the aim. The figures each chunk measured
-         * are in docs/DESIGN_LEDGER.md, and four sets of them disagree (Audit III's A-F-DOC-1),
-         * which is why none is quoted here.
+         * A regression pin rather than a derivation: set above the residuals this generator
+         * produces, which the case prints, and below the control's. Three hundred since H1, where
+         * Earth's submerged share and the platform's own freeboard put the cut -169 to +133 m from
+         * the datum on these seeds at 256 rows and the control +424 to +572; it was a thousand while
+         * the cut stood hundreds of metres above the datum on every seed (docs/DESIGN_LEDGER.md,
+         * H1). What is left of the residual is the coarseness of whole plates: the crust is drawn a
+         * plate at a time, so it lands within half a plate of the share the slider asks for.
          */
-        const val SHORELINE_RESIDUAL_BAR_METRES = 1_000.0
+        const val SHORELINE_RESIDUAL_BAR_METRES = 300.0
 
         /**
          * What the control tells the plate stage a continent drowns, against Earth's 29%.
@@ -1064,10 +1055,6 @@ class IsostasyTest : BorrowsSharedWorlds() {
          */
         const val UPLIFT_RATE_TOLERANCE_MM_PER_YEAR = 0.02
 
-
-        /** The known failure the forebulge clause records. See docs/DESIGN_LEDGER.md, Fix 2. */
-        const val FORELAND_AT_THE_EDGE_OF_THE_COLLISION =
-            "the plates: on the ground's ruler seed 42's foreland falls to the edge of the collision's own ground"
 
         /** Millimetres in a metre, for the denudation rate above. */
         const val METRES_TO_MILLIMETRES = 1_000.0

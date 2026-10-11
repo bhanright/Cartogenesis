@@ -26,6 +26,7 @@ class LakeBodyTest : BorrowsSharedWorlds() {
     @Test
     fun `every lake is one body of water at one level`() {
         val failures = ArrayList<String>()
+        val pieceFailures = ArrayList<String>()
         SharedWorlds.STANDARD_SEEDS.forEach { seed ->
             val world = SharedWorlds.world(WorldGenConfig.forRows(seed, SharedWorlds.DETAIL_ROWS))
             val lakes = world.rivers.lakes
@@ -69,16 +70,18 @@ class LakeBodyTest : BorrowsSharedWorlds() {
                         split.take(6).map { "lake $it: ${pieces[it]} pieces of ${lakes.lakes[it].cellCount} cells" },
                         touching.size)
             )
-            if (split.isNotEmpty()) failures += "seed $seed: ${split.map { "lake $it in ${pieces[it]} pieces" }}"
+            if (split.isNotEmpty()) pieceFailures += "seed $seed: ${split.map { "lake $it in ${pieces[it]} pieces" }}"
             if (touching.isNotEmpty()) failures += "seed $seed: lakes at two levels touching ${touching.take(6)}"
         }
-        // Recorded at C1b2: the march's new rain left two lakes of two pieces each, a lake rule
-        // the rain only exposed; armed at A1-1, whose ground leaves none; recorded again at A1-5,
-        // whose rain from the solved vertical motion leaves one on seed 99 (docs/TODO.md).
-        val signature = failures.joinToString("; ")
-        KnownFailures.expect("A1-5: a lake in two pieces", "seed 99: [lake 17 in 2 pieces]") {
-            if (failures.isNotEmpty()) throw RecordedViolation("a body of water holds more than one level: $failures", signature)
+        // Recorded at H1: on H1's ground seed 42 holds a three-cell lake whose surface stands at
+        // the ground of the one cell between its two hollows, to the sixth place, and that cell is
+        // left dry (docs/DESIGN_LEDGER.md, H1; docs/TODO.md).
+        KnownFailures.expect("H1: a lake whose surface is its saddle's level is drawn in two pieces", "seed 42: [lake 15 in 2 pieces]") {
+            if (pieceFailures.isNotEmpty()) {
+                throw RecordedViolation("a body of water holds more than one piece: $pieceFailures", pieceFailures.joinToString("; "))
+            }
         }
+        assertTrue(failures.isEmpty(), "a body of water holds more than one level: $failures")
     }
 
     /**

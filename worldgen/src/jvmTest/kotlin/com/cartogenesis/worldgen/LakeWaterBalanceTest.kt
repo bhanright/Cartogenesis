@@ -98,8 +98,18 @@ class LakeWaterBalanceTest : BorrowsSharedWorlds() {
     // The same scan: seed 27's, 1,723 cells at 40 mm, 22% of it still wet, is the largest the
     // balance empties. Seed 36's is larger at 6,907 cells and 254 mm and keeps 64%, seed 23's at
     // 3,697 cells keeps 98%, and seeds 3 and 1 (1,858 and 1,424 cells) keep 49% and 47%.
-    private val drySeed = 27L
-    private val wetSeed = 37L
+    //
+    // Re-picked for both cases at H1, whose platform fills its closed sags to their spill and
+    // floats nearer the sea, so every interior hollow is another hollow: seed 37's largest wet
+    // basin is 63 cells and seed 27's dry one keeps 64%. The same scan over 1..48 on the 12,000 km
+    // planet, outlet notch off and one epoch: the dry sample is seed 1's, 1,748 cells at 120 mm,
+    // 37% still wet in two lakes, both endorheic, the largest the balance empties (seed 36's is
+    // larger at 5,604 cells and keeps 55%, seeds 3 and 12's at 4,521 and 2,840 keep all of theirs,
+    // and seed 27's at 2,631 keeps 64%); the wet sample is seed 10's, 3,991 cells at 583 mm, full
+    // and on its spill, the largest the balance leaves full (seed 9's at 2,260 cells closes to
+    // 65%, and seeds 39, 42, 46 and 14 stay full at 1,050 to 1,533 cells).
+    private val drySeed = 1L
+    private val wetSeed = 10L
 
     /**
      * How much of its spill-level footprint the dry basin may still hold once the balance has
@@ -270,9 +280,11 @@ class LakeWaterBalanceTest : BorrowsSharedWorlds() {
             if (id >= 0) on.rivers.lakes.lakes[id] else null
         }.distinct()
         println("BALANCE seed $drySeed dry basin: ${lakes.size} lakes, ${lakes.count { it.endorheic }} of them endorheic")
-        // Recorded at K2, where the dry basin's one lake spilled into a lower hollow that kept no
-        // water; passing at C1b, whose wetter basin keeps an endorheic lake, and armed
-        // (docs/DESIGN_LEDGER.md, K2 and C1b).
+        // Recorded at K2, whose lakes take Budyko's share of their catchment's rain: seed 27's dry
+        // basin's one lake filled its hollow and spilled into a lower one that kept no water.
+        // Passing at C1b, whose wetter basin keeps an endorheic lake, and armed; armed again at H1
+        // on the re-picked sample, whose two lakes are both endorheic (docs/DESIGN_LEDGER.md, K2,
+        // C1b and H1).
         assertTrue(
             lakes.isEmpty() || lakes.any { it.endorheic },
             "the dry basin keeps water and none of its lakes is marked endorheic"

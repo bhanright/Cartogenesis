@@ -164,15 +164,23 @@ worth stating: with the hairline fixed, the range a sheet can show shrinks with 
 6.1x at 2048, 3.1x at 1024 and only 1.5x at 512, so on a phone-sized map a trunk and a headwater
 are nearly the same line, because the headwater is already the finest mark there is.
 
-**The coast is a line, not a staircase of cells.** The raster inks the landward cell of every
-land–water pair, which is right at one pixel to the cell and wrong at any other size: shrink it and
-the line thins to nothing, enlarge it and the reader is looking at the grid. So the same boundary is
-also traced off the land mask by marching squares — every vertex halfway between one land cell and
-one water cell, so it runs exactly where the raster inks — and stroked over the fill at 0.05% of the
-sheet's width, one pixel at 2048. Where four cells meet in a checkerboard the contour is closed so
-that land touching corner to corner stays one coast, which is the same assumption the flow routing
-makes when it lets a river run diagonally across an isthmus a cell wide. On 718106 at 2048 the trace
-is 83,551 vertices and takes 17–35 ms against the raster's 148–236 ms.
+**The coast is a line, not a staircase of cells.** A shoreline is where the ground crosses the
+waterline, and between two cells, one above the water and one below it, that is where the straight
+line through their two altitudes reaches zero: the shoreline is the height field's own level line,
+traced by marching squares with each crossing placed by the ground, and not the edge of the land
+mask, which runs along the grid's rows and columns. Both drawings of the coast are taken from it.
+The raster inks every cell, land and water alike, by its distance on the sheet from that line, full
+on the line and nothing a cell away, so the ink is centered on the waterline and a shore facing west
+takes as much of it as one facing east; the overlay traces the same line, smooths it along its own
+length with a Gaussian of half a cell, which keeps every vertex within 0.40 of a cell of the
+waterline, and strokes it over the fill at 0.05% of the sheet's width, one pixel at 2048. Where the
+mask and the ground disagree — a channel too narrow for a coast, whose floor is under water and
+across whose mouth the coast is drawn — the ground cannot place the shore and the crossing is
+halfway between the two cells. Where
+four cells meet in a checkerboard the contour is closed so that land touching corner to corner stays
+one coast, which is the same assumption the flow routing makes when it lets a river run diagonally
+across an isthmus a cell wide. Until G2 the raster inked a land cell only where water lay east or
+south of it and the overlay ran along the half-cell lattice (docs/DESIGN_LEDGER.md, G2).
 
 **A map draws as much river as a published map at its scale draws, and no more.** How much that is
 is an Earth figure and not a share of what the generator traced. Natural Earth's river layer, the
@@ -262,8 +270,12 @@ mixture of continental and oceanic crust, blurred across a 300 km margin — the
 the mixture runs from nine tenths continental to a tenth, the same on the ground whichever way the
 margin faces — so the band between the two is a shelf, a slope and a rise rather than a step, and
 Airy isostasy turns the mixture into an
-altitude: a standard continental column floats at Earth's mean land elevation of 840 m and the sea
-floor at the depth its own age puts it. Everything follows from those two numbers. The
+altitude: a standard continental column floats where Earth's continental platform stands — 374 m,
+the mean of the ice-free continents' land under 2 km and their shelves to 500 m in NOAA's ETOPO5 —
+and the sea floor at the depth its own age puts it. Everything follows from those two numbers. (It
+was Earth's mean land elevation, 840 m, until H1; that figure includes the orogens and
+Antarctica's ice, which this generator lays on the column as belts and sheets of its own, so it
+counted them twice. The finished world's mean land elevation is what is held to the 840 now.) The
 hypsometric curve has two modes with a trough between them where the continental slope is, which
 is what Earth's has and what this generator did not have before S2 — its curve was one peak
 straddling the shoreline, because the height field was renormalised to its own extremes after every
@@ -278,11 +290,28 @@ rifted crust at 30, so the crust thickens inland from its own edge over the 200 
 margin takes to thin. Both the thickness and the relief the base noise carries on it now follow
 that profile — the craton stands 44.6 km thick and as flat as the West Siberian Plain, the crust's
 outer edge 32.6 km and as varied as an Atlantic margin — and the thickness half of it is
-mass-neutral, so the average column is still 41 km and the datum is still Earth's 840 m of
+mass-neutral, so the average column is still 41 km and the datum is still the platform's
 freeboard. What changes is where a continent drowns. With one thickness and one spread everywhere,
 isostasy put a continent under water wherever the noise happened to dip, which drew flooded
-interiors and inland seas; now four fifths of the drowned continental crust lies within 500 km of
-the crust's own edge, which is a shelf.
+interiors and inland seas; on the 12,000 km planet four fifths of the drowned continental crust
+then lay within 500 km of the crust's own edge, which is a shelf. On the Earth-sized planet the
+continents are three times as wide against the same margins, and what drowns beyond 800 km of the
+edge is the open sags of the base relief inside the largest of them; that is H1's recorded miss.
+
+**The sea stands where Earth's does on its continents, and the hollows are full.** Earth's
+continental crust covers 41.2% of the surface and its land 29.2% (Cogley 1984), so the sea drowns
+29% of the crust, and the land is the crust above that line. The land's hypsometry is set by
+nothing else: where the cut stands on the platform, and how the platform is spread about it. Since
+H1 the submerged share is Earth's 29% rather than the fifth S2 measured the 12,000 km planet's
+crust drowning at its datum, and the Earth-sized planet's platform — its land under 2 km and its
+water to 500 m, belts left out — then stands at a mean of 380 to 390 m about the sea with a spread
+of 500 m, against Earth's 374 and 503 read the same way in ETOPO5. The platform's closed hollows,
+the sags of its base relief with no outlet lower than their rim, are filled to their spill level
+first, because a closed basin on a continent takes its catchment's sediment until it overflows
+(Bohacs's overfilled basin); only a sag open to the sea by lower ground stays as deep as it is.
+Measured at 1,024 rows on seeds 42, 969495 and 7: land under 200 m 24, 26 and 23% against
+Earth's 25, under 500 m 50, 53 and 45% against ETOPO5's 54, 1-2 km 17, 11 and 14% against 15.
+The 500 m to 1 km band is still 21 to 28% against 20 (`TODO.md`).
 
 **Cell-scale texture is proportional to relief, so plains are born smooth.** The base relief is
 split at 200 km. Everything broader is the shape of the country and carries the crust's own

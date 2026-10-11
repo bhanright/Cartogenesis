@@ -80,9 +80,11 @@ internal enum class LineClass(val label: String) {
  *
  *  - **coast**: the land mask, `SeaLevelResult.isLand`.
  *  - **coast as drawn**: the pane's generalised shoreline, [Shoreline.of] round
- *    [NarrowSea.banks] on a 900-pixel pane's sheet, which is what the overlay strokes.
+ *    [NarrowSea.banks] where [com.cartogenesis.cartography.CoastLine] puts the waterline, on a
+ *    900-pixel pane's sheet, which is what the overlay strokes.
  *  - **coast as inked**: the raster's own coast line, read off the rendering, for which way the
- *    shores it draws face ([FacingShares]); its shapes are the coast's and are read there.
+ *    shores it draws face ([FacingShares]); its shapes are the shoreline's, which the coast as
+ *    drawn traces, and are read there.
  *  - **lakes**: every cell `LakeResult.lakeId` names, and **lakes' open water**, the part a drawn
  *    river stops at (`LakeResult.openWater`).
  *  - **river courses**: every traced course, drawn where it is on land and not in open lake water
@@ -290,7 +292,7 @@ internal object MapLayers {
 
     /** The pane's stroked coast, in kilometres; a ring the tracer closed by repeating its start is closed. */
     private fun shorelineAsDrawn(world: WorldMap, frame: GridFrame, sheet: MapSheet): List<Outline> =
-        Shoreline.of(NarrowSea.banks(world), SheetGeometry.of(world), sheet).map { line ->
+        Shoreline.of(world, sheet).map { line ->
             val count = line.size / 2
             val repeats = count > 2 && line[0] == line[line.size - 2] && line[1] == line[line.size - 1]
             val kept = if (repeats) count - 1 else count

@@ -821,6 +821,12 @@ class DeltaOutlineTest {
          * a lacustrine fan takes is forty-nine cells on a side rather than thirteen: see the
          * ledger's 2048 figures.
          *
+         * Re-pinned at H1 by the same rule, when the platform the deltas build on came down to the
+         * sea: on these two worlds at 1,024 rows the square fans' worst is now 0.93% and the curved
+         * ones' 0.6%, so the midpoint is 0.75%. The two populations stand closer than they did,
+         * 1.25 times either side; why the square fans' straight runs shrank was not isolated
+         * (docs/DESIGN_LEDGER.md, H1).
+         *
          * So it is a regression pin between a defect and its fix, and not the bar rule 13 asks for,
          * which is derived from the isotropy of natural outlines; and it reads axis-aligned runs
          * only, so a straight edge along a diagonal is invisible to it. The derived bar, in every

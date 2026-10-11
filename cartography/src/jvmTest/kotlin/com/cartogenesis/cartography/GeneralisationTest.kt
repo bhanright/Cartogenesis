@@ -1,7 +1,5 @@
 package com.cartogenesis.cartography
 
-import com.cartogenesis.cartography.geometry.KnownFailures
-import com.cartogenesis.cartography.geometry.RecordedViolation
 import com.cartogenesis.worldgen.BorrowsSharedWorlds
 import com.cartogenesis.worldgen.SharedWorlds
 import com.cartogenesis.worldgen.model.WorldGenConfig
@@ -10,6 +8,7 @@ import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.River
 import java.util.Locale
 import kotlin.math.abs
+import kotlin.math.floor
 import kotlin.math.roundToInt
 import kotlin.system.measureTimeMillis
 import kotlin.test.Test
@@ -83,9 +82,6 @@ class GeneralisationTest : BorrowsSharedWorlds() {
         const val SOUTH = 1
         const val WEST = 2
         const val NORTH = 3
-
-        /** The known failures these clauses record, by the audit finding each is. */
-        const val COAST_INKED_EAST_AND_SOUTH = "Audit III F-D2: the raster coast inks east- and south-facing shores only"
     }
 
     private fun world(seed: Long): WorldMap = SharedWorlds.world(
@@ -141,55 +137,59 @@ class GeneralisationTest : BorrowsSharedWorlds() {
     }
 
     /**
-     * The traced coast runs between a land cell and a water cell at every vertex, and the raster
-     * inks the land cell of that pair: `Shoreline` says the two "agree wherever both are drawn".
+     * The traced coast runs between a bank cell and a water cell at every vertex, and the raster
+     * inks the cell nearest each vertex, whichever side of the line it is on and whichever way the
+     * shore faces: the overlay and the raster are drawn from one shoreline ([CoastLine]).
      *
      * What the raster inks is read off the rendering, the fantasy view drawn with its coast and
      * without, rather than off the land mask, which is where the traced line comes from and so
-     * could only agree with it. The raster inks a land cell only where water lies east or south of
-     * it (Audit III, F-D2), so today the landward cell of every west- and north-facing pair is left
-     * bare; the clause is kept running as a known failure under that finding, by the facings the
-     * bare cells face.
+     * could only agree with it. Until G2 the raster inked a land cell only where water lay east or
+     * south of it (Audit III, F-D2), which left the land cell of every west- and north-facing pair
+     * bare; the nearest cell lies within half a cell of the line, where the ink is half its strength.
      */
     @Test
-    fun `every traced vertex sits on the boundary the raster inks`() {
+    fun `every traced vertex lies on the raster's ink`() {
         val map = world(42L)
         // What the coast is drawn round, trace and raster alike: land, and sea too narrow for a
         // shore of its own.
-        val land = NarrowSea.banks(map)
+        val coast = CoastLine.of(map)
+        val land = coast.banks
         val withCoast = MapRasterizer.rasterize(map, RenderOptions(view = MapView.FANTASY, showCoastline = true))
         val withoutCoast = MapRasterizer.rasterize(map, RenderOptions(view = MapView.FANTASY, showCoastline = false))
         var checked = 0
-        // How many vertices leave their land cell bare, by where the water lies from it.
+        // How many vertices leave their nearest cell bare, by where the water lies from the bank.
         val bareByFacing = IntArray(FACINGS.size)
-        Shoreline.trace(land, map.width, map.height).forEach { line ->
+        Shoreline.trace(land, map.width, map.height, coast).forEach { line ->
             var at = 0
             while (at < line.size) {
                 val vertexX = line[at]
                 val vertexY = line[at + 1]
-                // A vertex is halfway along a cell edge: one coordinate lands on a cell centre and
-                // the other between two of them, and those two are the pair the coast divides.
-                val across = abs(vertexX - vertexX.toInt() - 0.5f) < ON_A_CELL_CENTRE
-                val (first, second) =
-                    if (across) {
-                        cellAt(map, vertexX, vertexY - 0.5f) to
-                            cellAt(map, vertexX, vertexY + 0.5f)
-                    } else {
-                        cellAt(map, vertexX - 0.5f, vertexY) to
-                            cellAt(map, vertexX + 0.5f, vertexY)
-                    }
-                assertTrue(
-                    land[first] != land[second],
-                    "a coast vertex at $vertexX, $vertexY has the same ground on both sides of it"
-                )
-                val landward = if (land[first]) first else second
-                if (withCoast[landward] == withoutCoast[landward]) {
+                // A vertex lies on a cell edge between two centers: across a row edge its x is a
+                // center's and its y between two, across a column edge the other way round. Where
+                // the ground stands exactly at the waterline the vertex is on the bank's own center,
+                // with its water on any side; the edge it was traced on is the one whose two cells
+                // differ, each pair listed north or west first.
+                val xOnACenter = abs(vertexX - floor(vertexX) - 0.5f) < ON_A_CELL_CENTRE
+                val yOnACenter = abs(vertexY - floor(vertexY) - 0.5f) < ON_A_CELL_CENTRE
+                val edges = ArrayList<Triple<Int, Int, Boolean>>()
+                if (xOnACenter) edges.add(Triple(cellAt(map, vertexX, vertexY - 0.5f), cellAt(map, vertexX, vertexY + 0.5f), true))
+                if (yOnACenter) edges.add(Triple(cellAt(map, vertexX - 0.5f, vertexY), cellAt(map, vertexX + 0.5f, vertexY), false))
+                if (xOnACenter && yOnACenter) {
+                    edges.add(Triple(cellAt(map, vertexX, vertexY - 1f), cellAt(map, vertexX, vertexY), true))
+                    edges.add(Triple(cellAt(map, vertexX - 1f, vertexY), cellAt(map, vertexX, vertexY), false))
+                }
+                val edge = edges.firstOrNull { land[it.first] != land[it.second] }
+                assertTrue(edge != null, "a coast vertex at $vertexX, $vertexY has the same ground on both sides of it")
+                val (first, _, onARowEdge) = edge!!
+                val nearest = cellAt(map, vertexX, vertexY)
+                if (withCoast[nearest] == withoutCoast[nearest]) {
                     // `first` is north of `second` across a row edge and west of it across a
-                    // column edge, so the water's side follows from which of the two is land.
+                    // column edge, so the water's side follows from which of the two is the bank.
+                    val bankFirst = land[first]
                     val facing = when {
-                        across && landward == first -> SOUTH
-                        across -> NORTH
-                        landward == first -> EAST
+                        onARowEdge && bankFirst -> SOUTH
+                        onARowEdge -> NORTH
+                        bankFirst -> EAST
                         else -> WEST
                     }
                     bareByFacing[facing]++
@@ -198,20 +198,15 @@ class GeneralisationTest : BorrowsSharedWorlds() {
                 at += 2
             }
         }
-        val bare = FACINGS.indices.filter { bareByFacing[it] > 0 }
         println(
-            "SCALE checked $checked coast vertices at $ROWS rows; the land cell left uninked by the raster, " +
+            "SCALE checked $checked coast vertices at $ROWS rows; the nearest cell left uninked by the raster, " +
                 "by the water's side: " + FACINGS.indices.joinToString { "${FACINGS[it]} ${bareByFacing[it]}" }
         )
-        KnownFailures.expect(COAST_INKED_EAST_AND_SOUTH, "uninked where the water lies west and north") {
-            if (bare.isNotEmpty()) {
-                throw RecordedViolation(
-                    "the raster leaves the land cell of ${bareByFacing.sum()} of $checked coast vertices uninked: " +
-                        FACINGS.indices.joinToString { "${FACINGS[it]} ${bareByFacing[it]}" },
-                    "uninked where the water lies " + bare.joinToString(" and ") { FACINGS[it] }
-                )
-            }
-        }
+        assertEquals(
+            0, bareByFacing.sum(),
+            "the raster leaves the nearest cell of ${bareByFacing.sum()} of $checked coast vertices uninked: " +
+                FACINGS.indices.joinToString { "${FACINGS[it]} ${bareByFacing[it]}" }
+        )
     }
 
     @Test
@@ -220,7 +215,7 @@ class GeneralisationTest : BorrowsSharedWorlds() {
         val counts = listOf(AT_FIT, AT_FOUR_TIMES, 1f).map { pixelsPerSheetPixel ->
             val sheet = if (pixelsPerSheetPixel == 1f) MapSheet.UNGENERALISED
             else MapSheet.onScreen(pixelsPerSheetPixel)
-            sheet to Shoreline.of(map.sea.isLand, SheetGeometry.of(map), sheet)
+            sheet to Shoreline.of(map, sheet)
                 .sumOf { it.size / 2 }
         }
         counts.forEach { (sheet, vertices) ->

@@ -565,6 +565,9 @@ object PlateStage {
         // may be filled in any order.
         val datumMetres = FloatArray(cellsAcross * cellsDown)
         val shapeMetres = FloatArray(cellsAcross * cellsDown)
+        // The belts' share of [shapeMetres], kept apart so the platform under them can be filled
+        // without filling them: see [fillContinentalBasins].
+        val beltMetres = FloatArray(cellsAcross * cellsDown)
         parallelChunks(0, cellsDown) { startRow, endRow ->
             for (row in startRow until endRow) {
                 for (column in 0 until cellsAcross) {
@@ -607,8 +610,8 @@ object PlateStage {
                     // The base noise is a standard score, so multiplying by a deviation in metres
                     // is all there is to it, and its mean of zero is what keeps it from moving the
                     // level the crust floats at.
-                    shapeMetres[cell] = shapeNoise.data[cell] * reliefMetres +
-                        (uplift.data[cell] + detail) * beltReliefMetres
+                    beltMetres[cell] = (uplift.data[cell] + detail) * beltReliefMetres
+                    shapeMetres[cell] = shapeNoise.data[cell] * reliefMetres + beltMetres[cell]
                 }
             }
         }
@@ -630,7 +633,8 @@ object PlateStage {
                     .toFloat()
             }
 
-        // Second pass: the texture, and the field.
+        // Second pass: the texture, and the platform the belts stand on.
+        val textureMetres = FloatArray(cellsAcross * cellsDown)
         parallelChunks(0, cellsDown) { startRow, endRow ->
             for (row in startRow until endRow) {
                 for (column in 0 until cellsAcross) {
@@ -640,13 +644,28 @@ object PlateStage {
                     // `TectonicsConfig.textureReliefThresholdMetres`.
                     val relief = localReliefMetres[cell]
                     val dissected = relief * relief / (relief + textureReliefThresholdMetres)
-                    val textureMetres = textureNoise[cell] * dissected * textureShareOfRelief
-                    height.data[cell] =
-                        scale.fieldAtAltitude(
-                            elevationLimit.applyTo(
-                                datumMetres[cell] + shapeMetres[cell] + textureMetres
-                            )
-                        )
+                    textureMetres[cell] = textureNoise[cell] * dissected * textureShareOfRelief
+                }
+            }
+        }
+        val filledPlatform =
+            if (isostatic && tectonics.basinFill) {
+                val platformMetres = FloatArray(cellsAcross * cellsDown) {
+                    datumMetres[it] + (shapeMetres[it] - beltMetres[it]) + textureMetres[it]
+                }
+                fillContinentalBasins(config, platformMetres, continentalShare.data)
+            } else null
+        parallelChunks(0, cellsDown) { startRow, endRow ->
+            for (row in startRow until endRow) {
+                for (column in 0 until cellsAcross) {
+                    val cell = row * cellsAcross + column
+                    val metres =
+                        if (filledPlatform == null) {
+                            datumMetres[cell] + shapeMetres[cell] + textureMetres[cell]
+                        } else {
+                            filledPlatform[cell] + beltMetres[cell]
+                        }
+                    height.data[cell] = scale.fieldAtAltitude(elevationLimit.applyTo(metres))
                 }
             }
         }
@@ -768,6 +787,49 @@ object PlateStage {
             if (distance >= JumpFloodDistance.INFINITE) 1f
             else 1f - exp(-distance * kilometresPerCellWidth / reachKm)
         }
+    }
+
+    /**
+     * The continental platform with every closed hollow in it filled to the level it spills at, in
+     * metres; cells that are not mostly continental crust, and every cell no hollow holds, come
+     * back as they were.
+     *
+     * A priority flood (Barnes, Lehman and Mulla 2014) seeded from the ocean floor at its own level,
+     * so a hollow open to the sea by ground lower than its rim is not a hollow, and stays as deep as
+     * it is.
+     */
+    internal fun fillContinentalBasins(
+        config: WorldGenConfig,
+        platformMetres: FloatArray,
+        continentalShare: FloatArray
+    ): FloatArray {
+        val cellsAcross = config.width
+        val cellsDown = config.height
+        val scale = config.scale
+        val filled = platformMetres.copyOf()
+        val visited = BooleanArray(filled.size)
+        val heap = LongMinHeap(cellsAcross * 4)
+        for (cell in filled.indices) {
+            if (continentalShare[cell] >= 0.5f) continue
+            visited[cell] = true
+            var touchesContinent = false
+            FlowRouting.forEachNeighbour(cellsAcross, cellsDown, cell % cellsAcross, cell / cellsAcross) {
+                if (continentalShare[it] >= 0.5f) touchesContinent = true
+            }
+            if (touchesContinent) heap.push(FlowRouting.encode(scale.fieldAtAltitude(filled[cell]), cell))
+        }
+        while (!heap.isEmpty()) {
+            val cell = FlowRouting.decodeIndex(heap.pop())
+            val level = filled[cell]
+            FlowRouting.forEachNeighbour(cellsAcross, cellsDown, cell % cellsAcross, cell / cellsAcross) { neighbour ->
+                if (!visited[neighbour]) {
+                    visited[neighbour] = true
+                    if (filled[neighbour] < level) filled[neighbour] = level
+                    heap.push(FlowRouting.encode(scale.fieldAtAltitude(filled[neighbour]), neighbour))
+                }
+            }
+        }
+        return filled
     }
 
     /**

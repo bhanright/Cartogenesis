@@ -46,7 +46,7 @@ internal object PressureWind {
      * are textbook standards — a stratification of `1.0e-2` and a tropopause at 10 km.
      */
     private const val BUOYANCY_FREQUENCY_PER_S = 1.0e-2
-    private const val TROPOPAUSE_DEPTH_M = 10_000.0
+    internal const val TROPOPAUSE_DEPTH_M = 10_000.0
 
     /** Where the Rossby radius is evaluated: the middle of the mid-latitudes. */
     private const val ROSSBY_REFERENCE_LATITUDE_DEGREES = 45.0

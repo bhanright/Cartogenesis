@@ -9,9 +9,10 @@ import kotlin.math.cos
  * The zonal-mean surface wind of the year: the three circulation belts as one vector in meters a
  * second, eastward and northward, at a latitude.
  *
- * One copy of the belts for everything that reads them. [ClimateStage]'s march takes its belt edges
- * from here, and its slant is the same slope ([meridionalShare]); the ocean's stress takes the whole
- * vector ([windMps]).
+ * The year's mean profile, which the ocean's stress takes whole ([windMps]) and whose mean square the
+ * boundary layer's weather is measured against ([BoundaryLayer.TRANSIENT_WIND_MPS]). Each half-year's
+ * surface wind is the climate's own circulation ([HadleyCirculation]), whose westerlies and polar
+ * easterlies keep this profile's shape and speed poleward of the Hadley cells.
  *
  * **Zonal.** A cosine in each belt: the trades westward, strongest at the equator and falling to
  * nothing at [TRADE_BELT_EDGE_DEGREES]; the westerlies eastward, strongest at

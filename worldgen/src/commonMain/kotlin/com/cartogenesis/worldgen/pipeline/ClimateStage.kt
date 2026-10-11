@@ -363,13 +363,6 @@ object ClimateStage {
     private const val MARINE_REACH_KM = 350f
 
     /**
-     * The belts' edges, in degrees from the thermal equator: one copy, [SurfaceBelts]', which the
-     * ocean's stress reads too, because it is the same circulation.
-     */
-    private const val TRADE_BELT_EDGE_DEGREES = SurfaceBelts.TRADE_BELT_EDGE_DEGREES
-    private const val WESTERLY_BELT_EDGE_DEGREES = SurfaceBelts.WESTERLY_BELT_EDGE_DEGREES
-
-    /**
      * The rain blur's radius on the ground, in kilometers: 93.75 km, one cell of a 128-wide grid
      * of the 12,000 km world, which is where it was set as a divisor of the map's width.
      *
@@ -774,10 +767,9 @@ object ClimateStage {
         lastCoupled = null
         lastAtmosphere = null
 
-        // One knob, used by the belts below. Switching seasons off is exactly a tilt of zero: the
-        // rain belts then stop migrating and the planet's axis stands upright, so the energy
-        // balance has no seasonal forcing either and both seasonal fields collapse onto the annual
-        // one.
+        // One knob, the planet's tilt. Switching seasons off is exactly a tilt of zero: the axis
+        // stands upright, so the energy balance has no seasonal forcing, both seasonal fields
+        // collapse onto the annual one, and the circulation's heating stays on the equator.
         val tiltDegrees =
             if (climateConfig.seasons) climateConfig.seasonalTiltDegrees else 0f
 
@@ -835,12 +827,15 @@ object ClimateStage {
             )
         )
 
-        // Each half's belts: the march carries its water along the zonal direction and across the
-        // rows at the meridional speed. The belts ride one thermal equator, in the northern
-        // hemisphere in the half about July and in the southern in the half about January.
-        val slantRowsPerCell = slantRowsPerCell(config)
-        val julyHalfBelts = buildWind(cellsAcross, cellsDown, thermalEquatorDegrees(tiltDegrees, julyHalf = true), slantRowsPerCell)
-        val januaryHalfBelts = buildWind(cellsAcross, cellsDown, thermalEquatorDegrees(tiltDegrees, julyHalf = false), slantRowsPerCell)
+        // Each half's zonal-mean circulation: the Hadley cells about the rising branch the season's
+        // heating sets, and the eddy-driven belts poleward of them (HadleyCirculation). Its wind on
+        // each row is the zonal mean the march's wind and the boundary layer's pressure stand on.
+        val julyCirculation = HadleyCirculation.forHalf(config, zonal, Season.JULY_HALF)
+        val januaryCirculation = HadleyCirculation.forHalf(config, zonal, Season.JANUARY_HALF)
+        val julyHalfRows = HadleyCirculation.windOfRows(julyCirculation, januaryCirculation, cellsDown)
+        val januaryHalfRows = HadleyCirculation.windOfRows(januaryCirculation, julyCirculation, cellsDown)
+        val julyHalfBelts = buildWind(config, cellsAcross, julyHalfRows)
+        val januaryHalfBelts = buildWind(config, cellsAcross, januaryHalfRows)
 
         // The marine inversion, a property of the season rather than of the parcel: where a cold
         // sea has put a stratus lid on the air. Null when its setting is off, so the march runs
@@ -848,10 +843,10 @@ object ClimateStage {
         val seaSurfaceAnomalyC =
             if (climateConfig.marineInversion && config.ocean.enabled) ocean.anomaly else null
         val julyHalfInversion = MoistureBudget.inversionSuppression(
-            config, sea, seaSurfaceAnomalyC, thermalEquatorDegrees(tiltDegrees, julyHalf = true)
+            config, sea, seaSurfaceAnomalyC, julyCirculation.ascentLatitudeDegrees.toFloat()
         )
         val januaryHalfInversion = MoistureBudget.inversionSuppression(
-            config, sea, seaSurfaceAnomalyC, thermalEquatorDegrees(tiltDegrees, julyHalf = false)
+            config, sea, seaSurfaceAnomalyC, januaryCirculation.ascentLatitudeDegrees.toFloat()
         )
 
         val obliquityDegrees = EnergyBalance.obliquityDegrees(tiltDegrees).toDouble()
@@ -928,7 +923,7 @@ object ClimateStage {
             AtmosphereCoupling(
                 BoundaryLayer.Solver(
                     config, sea, zonal, marineFraction,
-                    beltWindOfRows(config, julyHalf = true), beltWindOfRows(config, julyHalf = false),
+                    julyHalfRows, januaryHalfRows,
                     keptWaves = BoundaryLayer.wavesToKeep(config)
                 ),
                 ::seasonsUnder,
@@ -966,9 +961,13 @@ object ClimateStage {
 
         // The stored wind is the annual one: what the wind view means by "the prevailing wind".
         // With the atmosphere it is the mean of the two halves' winds the last lap ran on;
-        // without it, the belts about the geographic equator, every cell of a row the same.
+        // without it, the mean of the two halves' circulations, every cell of a row the same.
+        val annualRows = PressureWind.Vectors(
+            FloatArray(cellsDown) { (julyHalfRows.eastwardMps[it] + januaryHalfRows.eastwardMps[it]) * 0.5f },
+            FloatArray(cellsDown) { (julyHalfRows.southwardMps[it] + januaryHalfRows.southwardMps[it]) * 0.5f }
+        )
         val wind = if (atmosphere == null) {
-            buildWind(cellsAcross, cellsDown, thermalEquatorDegrees = 0f, slantRowsPerCell)
+            buildWind(config, cellsAcross, annualRows)
         } else {
             val annual = PressureWind.Vectors(
                 FloatArray(cellsAcross * cellsDown) {
@@ -980,7 +979,7 @@ object ClimateStage {
             )
             marchWindOf(
                 config, annual,
-                buildWind(1, cellsDown, thermalEquatorDegrees = 0f, slantRowsPerCell).zonalShareOfRow
+                buildWind(config, 1, annualRows).zonalShareOfRow
             )
         }
 
@@ -1468,16 +1467,6 @@ object ClimateStage {
     )
 
     /**
-     * The belts' slope, `ClimateConfig.meridionalWindShare`, as the march spends it: rows per cell
-     * of zonal travel, `share × cellWidth / cellHeight`. Computed in double and rounded once, so on
-     * an N by N grid, whose cells are exactly twice as wide as they are tall, 0.15 is the float 0.3
-     * the setting held when it was counted in rows.
-     */
-    private fun slantRowsPerCell(config: WorldGenConfig): Float =
-        (config.climate.meridionalWindShare.toDouble() *
-            (config.scale.cellWidthKm(config.width) / config.scale.cellHeightKm(config.height))).toFloat()
-
-    /**
      * The most a wind may slant, in rows per cell of zonal travel.
      *
      * A cap on the **length of the march's step**, and that is the only thing it can honestly be.
@@ -1503,107 +1492,23 @@ object ClimateStage {
             .toFloat()
 
     /**
-     * The shape of a belt's meridional wind across it, as a multiple of the belt's mean: a half
-     * sine between the two latitudes where it is zero, `pi/2` at the middle, so the mean over each
-     * stretch is the mean `ClimateConfig.meridionalWindShare` states.
-     *
-     * Zero at every edge of a belt, the thermal equator, the subtropical high and the polar front,
-     * all measured from the thermal equator, because an edge is where two cells' surface legs meet
-     * or part, and a wind that kept its strength up to the edge and reversed there would pile the
-     * water carried on it into the one row beside a converging edge and empty the row beside a
-     * diverging one. Not zero at the geographic equator: each half-year is one moment of the
-     * planet, so the winter hemisphere's trades blow across the equator to a thermal equator
-     * standing in the summer hemisphere, which is the cross-equatorial leg of Earth's winter Hadley
-     * cell.
-     *
-     * [latitude] is the row's latitude in degrees and [thermalEquatorDegrees] the latitude the
-     * season's thermal equator stands at.
+     * A wind of rows on the map, [rows] (each row's eastward and southward wind in meters a second,
+     * the zonal-mean circulation's), as the march's direction and slant on every one of
+     * [cellsAcross] cells of each row: the zonal direction its sign, the slant the meridional wind's
+     * rows per cell of the belts' speed, so that [beltWindMps] gives the wind back exactly.
      */
-    private fun meridionalProfile(latitude: Float, thermalEquatorDegrees: Float): Float {
-        val fromThermalEquator = latitude - thermalEquatorDegrees
-        val beltDegrees = abs(fromThermalEquator)
-        // The pole on this row's side of the thermal equator, in degrees from it.
-        val poleDegrees = if (fromThermalEquator >= 0f) {
-            POLE_DEGREES - thermalEquatorDegrees
-        } else {
-            POLE_DEGREES + thermalEquatorDegrees
-        }
-        val zeros = floatArrayOf(
-            0f,
-            TRADE_BELT_EDGE_DEGREES.coerceAtMost(poleDegrees),
-            WESTERLY_BELT_EDGE_DEGREES.coerceAtMost(poleDegrees),
-            poleDegrees
-        )
-        for (segment in 0 until zeros.size - 1) {
-            val near = zeros[segment]
-            val far = zeros[segment + 1]
-            if (beltDegrees < near || beltDegrees >= far || far <= near) continue
-            return (PI / 2.0 * sin(PI * (beltDegrees - near) / (far - near))).toFloat()
-        }
-        return 0f
-    }
-
-    /**
-     * The latitude a half-year's thermal equator stands at, in degrees: [tiltDegrees] into the
-     * northern hemisphere in the half about July ([julyHalf]), as far into the southern in the
-     * half about January.
-     */
-    internal fun thermalEquatorDegrees(tiltDegrees: Float, julyHalf: Boolean): Float =
-        if (julyHalf) tiltDegrees else -tiltDegrees
-
-    /**
-     * Simplified three-cell circulation: polar easterlies, mid-latitude westerlies, and tropical
-     * trade winds blowing east to west — each of them slanted across the latitude lines.
-     *
-     * The belts ride the thermal equator at [thermalEquatorDegrees], so in a hemisphere's summer
-     * they sit that far poleward of their annual position and in its winter as far equatorward.
-     * That migration is what puts a west coast at 35 degrees under the westerlies in winter and
-     * under the trades in summer, which is the Mediterranean climate in one sentence.
-     *
-     * The slant is the other half of a circulation cell, and the half that makes a monsoon. Each
-     * cell has air rising at one edge and sinking at the other, and the surface leg runs between
-     * them: the trades spiral in toward the thermal equator, the westerlies carry poleward toward
-     * the polar front, the polar easterlies run back down. Which way that is has to be measured
-     * from the *thermal* equator and not the geographic one, because in summer the thermal equator
-     * migrates over the tropics, and a row it has crossed finds its trades reversed — blowing away
-     * from the equator, up onto whatever land lies poleward of it. That reversal is the monsoon,
-     * and it is not available to a belt model that reads its direction off `|latitude|`.
-     */
-    private fun buildWind(
-        cellsAcross: Int,
-        cellsDown: Int,
-        thermalEquatorDegrees: Float,
-        slantRowsPerCell: Float
-    ): WindField {
+    private fun buildWind(config: WorldGenConfig, cellsAcross: Int, rows: PressureWind.Vectors): WindField {
+        val cellsDown = rows.eastwardMps.size
+        val cellWidthOverHeight = (config.scale.cellWidthKm(config.width) / config.scale.cellHeightKm(config.height)).toFloat()
         val zonal = IntArray(cellsAcross * cellsDown)
         val meridional = FloatArray(cellsAcross * cellsDown)
         val zonalShareOfRow = FloatArray(cellsDown)
         for (row in 0 until cellsDown) {
-            val latitude = latitudeOf(row, cellsDown)
-            // Signed distance from the thermal equator, positive to its north.
-            val fromThermalEquator = latitude - thermalEquatorDegrees
-            val beltDegrees = abs(fromThermalEquator)
-            // Away from the thermal equator, as a step in map coordinates: rows grow southward,
-            // so north of it is the smaller row number.
-            val outward = if (fromThermalEquator >= 0f) -1f else 1f
-            val zonalDirection = when {
-                beltDegrees < TRADE_BELT_EDGE_DEGREES -> -1   // trade winds
-                beltDegrees < WESTERLY_BELT_EDGE_DEGREES -> 1 // westerlies
-                else -> -1                                    // polar easterlies
-            }
-            val slant = when {
-                // The Hadley cell's surface leg, in toward the ITCZ.
-                beltDegrees < TRADE_BELT_EDGE_DEGREES -> -outward
-                // The Ferrel cell's, out toward the polar front.
-                beltDegrees < WESTERLY_BELT_EDGE_DEGREES -> outward
-                // The polar cell's, back down toward it.
-                else -> -outward
-            } * slantRowsPerCell * meridionalProfile(latitude, thermalEquatorDegrees)
-            // The belts' zonal wind itself, measured from the thermal equator as the direction is,
-            // and continuous through zero at each edge where the direction steps.
-            zonalShareOfRow[row] = SurfaceBelts.zonalShare(beltDegrees)
+            val eastward = rows.eastwardMps[row]
+            val slant = rows.southwardMps[row] / PressureWind.BELT_SPEED_MPS * cellWidthOverHeight
+            zonalShareOfRow[row] = eastward / PressureWind.BELT_SPEED_MPS
             for (column in 0 until cellsAcross) {
-                zonal[row * cellsAcross + column] = zonalDirection
+                zonal[row * cellsAcross + column] = if (eastward >= 0f) 1 else -1
                 meridional[row * cellsAcross + column] = slant
             }
         }
@@ -1651,14 +1556,23 @@ object ClimateStage {
     }
 
     /**
-     * A half-year's belts on each row of the map, metres a second, eastward and southward: the
-     * zonal-mean surface wind the boundary layer's pressure is built from ([BoundaryLayer]).
+     * The latitude a half-year's Hadley cells rise at over the world of [config] and [sea], degrees:
+     * the circulation's thermal equator, which the marine inversion's stratus belt is placed from.
      */
-    internal fun beltWindOfRows(config: WorldGenConfig, julyHalf: Boolean): PressureWind.Vectors {
-        val climateConfig = config.climate
-        val tiltDegrees = if (climateConfig.seasons) climateConfig.seasonalTiltDegrees else 0f
-        val belts = buildWind(1, config.height, thermalEquatorDegrees(tiltDegrees, julyHalf), slantRowsPerCell(config))
-        return beltWindMps(config, belts)
+    internal fun ascentLatitudeDegrees(config: WorldGenConfig, sea: SeaLevelResult, julyHalf: Boolean): Float =
+        HadleyCirculation.forHalf(config, zonalClimate(config, sea), if (julyHalf) Season.JULY_HALF else Season.JANUARY_HALF)
+            .ascentLatitudeDegrees.toFloat()
+
+    /**
+     * A half-year's zonal-mean surface wind on each row of the map, meters a second, eastward and
+     * southward, under the energy balance [zonal]: the circulation the boundary layer's pressure is
+     * built from ([HadleyCirculation], [BoundaryLayer]).
+     */
+    internal fun beltWindOfRows(config: WorldGenConfig, zonal: ZonalClimate, julyHalf: Boolean): PressureWind.Vectors {
+        val july = HadleyCirculation.forHalf(config, zonal, Season.JULY_HALF)
+        val january = HadleyCirculation.forHalf(config, zonal, Season.JANUARY_HALF)
+        return if (julyHalf) HadleyCirculation.windOfRows(july, january, config.height)
+        else HadleyCirculation.windOfRows(january, july, config.height)
     }
 
     /**
@@ -1693,7 +1607,7 @@ object ClimateStage {
         }
         val solved = BoundaryLayer.solve(
             config, sea, zonal, marineFraction,
-            beltWindOfRows(config, julyHalf = true), beltWindOfRows(config, julyHalf = false)
+            beltWindOfRows(config, zonal, julyHalf = true), beltWindOfRows(config, zonal, julyHalf = false)
         )
         lastAtmosphere = SolvedAtmosphere(config, sea, globalCoolingC, solved)
         return solved
@@ -1806,8 +1720,7 @@ object ClimateStage {
         val julyHalf = season == Season.JULY_HALF || season == Season.JULY
         val coupled = coupledAtmosphere(config, sea, ocean)
         if (coupled == null) {
-            val tiltDegrees = if (config.climate.seasons) config.climate.seasonalTiltDegrees else 0f
-            val belts = buildWind(config.width, config.height, thermalEquatorDegrees(tiltDegrees, julyHalf), slantRowsPerCell(config))
+            val belts = buildWind(config, config.width, beltWindOfRows(config, zonalClimate(config, sea), julyHalf))
             return beltWindMps(config, belts)
         }
         val half = coupled.coupling.atmosphere.half(julyHalf)

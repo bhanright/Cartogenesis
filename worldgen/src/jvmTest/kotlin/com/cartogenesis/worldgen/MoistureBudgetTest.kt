@@ -400,17 +400,12 @@ class MoistureBudgetTest : BorrowsSharedWorlds() {
      * a claim, so that a term that is not biting can be told from a term that is not there.
      */
     private fun reportLidStrength(seed: Long, world: WorldMap, coast: ColdCoast): Float {
-        val tilt = if (world.config.climate.seasons) {
-            world.config.climate.seasonalTiltDegrees
-        } else {
-            0f
-        }
         var strongest = 0f
         listOf(true, false).forEach { julyHalf ->
             val field = MoistureBudget.inversionSuppression(
                 world.config, world.sea,
                 if (world.config.ocean.enabled) world.ocean.anomaly else null,
-                ClimateStage.thermalEquatorDegrees(tilt, julyHalf)
+                ClimateStage.ascentLatitudeDegrees(world.config, world.sea, julyHalf)
             ) ?: return@forEach
             var sum = 0.0
             var peak = 0f

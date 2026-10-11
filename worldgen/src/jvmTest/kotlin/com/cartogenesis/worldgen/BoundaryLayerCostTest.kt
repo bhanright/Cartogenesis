@@ -64,7 +64,7 @@ class BoundaryLayerCostTest {
         val sea = madeSea(config.width, config.height)
         val zonal = ClimateStage.zonalClimate(config, sea)
         val marine = ClimateStage.marineAirFraction(config, sea)
-        val belts = listOf(ClimateStage.beltWindOfRows(config, true), ClimateStage.beltWindOfRows(config, false))
+        val belts = listOf(ClimateStage.beltWindOfRows(config, zonal, true), ClimateStage.beltWindOfRows(config, zonal, false))
         var wholeMs = 0.0
         var groundMs = 0.0
         repeat(WARM_UP_RUNS + MEASURED_RUNS) { run ->
@@ -110,7 +110,7 @@ class BoundaryLayerCostTest {
         val sea = madeSea(config.width, config.height)
         val zonal = ClimateStage.zonalClimate(config, sea)
         val marine = ClimateStage.marineAirFraction(config, sea)
-        val belts = listOf(ClimateStage.beltWindOfRows(config, true), ClimateStage.beltWindOfRows(config, false))
+        val belts = listOf(ClimateStage.beltWindOfRows(config, zonal, true), ClimateStage.beltWindOfRows(config, zonal, false))
         val factoredAt = System.nanoTime()
         val solver = BoundaryLayer.Solver(config, sea, zonal, marine, belts[0], belts[1], keptWaves = Int.MAX_VALUE)
         val factorMs = (System.nanoTime() - factoredAt) / 1e6

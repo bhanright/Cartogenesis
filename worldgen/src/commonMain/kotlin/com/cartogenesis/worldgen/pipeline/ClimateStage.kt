@@ -185,9 +185,10 @@ data class ClimateResult(
  * Run twice over, for the calendar's two half-years, April to September and October to March:
  * each is one moment of the planet, one hemisphere's summer and the other's winter. The whole of
  * the seasonal machinery is one number, [ClimateConfig.seasonalTiltDegrees], read as the obliquity
- * the energy balance's sun is computed at. Each half's mean circulation stands where that half's
- * heating does ([HadleyCirculation]), so the wind and rain belts follow the energy balance and
- * not the number directly. The annual fields are kept as they were, so every stage downstream of
+ * the energy balance's sun is computed at. Each half's mean circulation is heated about that
+ * half's energy flux equator and ends where its own temperature gradient turns the troposphere
+ * unstable ([HadleyCirculation]), so the wind and rain belts follow the energy balance and not the
+ * number directly. The annual fields are kept as they were, so every stage downstream of
  * this one sees exactly what it saw before seasons existed.
  */
 object ClimateStage {
@@ -818,9 +819,9 @@ object ClimateStage {
             )
         )
 
-        // Each half's zonal-mean circulation: the Hadley cells about the rising branch the season's
-        // heating sets, and the eddy-driven belts poleward of them (HadleyCirculation). Its wind on
-        // each row is the zonal mean the march's wind and the boundary layer's pressure stand on.
+        // Each half's zonal-mean circulation: the Hadley cells heated about the season's energy flux
+        // equator, and the eddy-driven belts poleward of them (HadleyCirculation). Its wind on each
+        // row is the zonal mean the march's wind and the boundary layer's pressure stand on.
         val julyCirculation = HadleyCirculation.forHalf(config, zonal, Season.JULY_HALF)
         val januaryCirculation = HadleyCirculation.forHalf(config, zonal, Season.JANUARY_HALF)
         val julyHalfRows = HadleyCirculation.windOfRows(julyCirculation, cellsDown)

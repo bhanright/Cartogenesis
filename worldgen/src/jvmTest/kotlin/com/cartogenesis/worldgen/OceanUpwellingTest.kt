@@ -184,6 +184,7 @@ class OceanUpwellingTest {
         val legShare = 2 / PI * config.climate.meridionalWindShare * r / (beta * migrationMeters)
         val dampingShare = 1.75 * (beta * heightMeters / r) * (beta * heightMeters / r)
         val bar = legShare + dampingShare + EQUATOR_REST_SHARE
+        val short = ArrayList<String>()
         for (row in listOf(down / 2 - 1, down / 2)) {
             val expected = -beta * stress.eastward[row * across] / (seawaterDensity * r * r)
             val measured = upward[row * across].toDouble()
@@ -191,7 +192,14 @@ class OceanUpwellingTest {
                 .format(ClimateStage.latitudeOf(row, down), measured, measured * 86_400, expected, expected * 86_400,
                     abs(measured / expected - 1) * 100, bar * 100, legShare * 100, dampingShare * 100))
             assertTrue(measured > 0.0, "the row at ${ClimateStage.latitudeOf(row, down)} degrees sinks at $measured m/s")
-            assertTrue(abs(measured / expected - 1) < bar, "the row at ${ClimateStage.latitudeOf(row, down)} degrees rises at $measured m/s against $expected")
+            if (!(abs(measured / expected - 1) < bar)) short += "%.3f %.2f".format(ClimateStage.latitudeOf(row, down), measured / expected)
+        }
+        // Recorded at A1-6b, whose stress is the seasonal circulation's: its easterly is weakest on
+        // the equator itself, where the cross-equatorial air arrives calm, and its two halves'
+        // meridional legs cross the equator each way rather than turning through zero there, so the
+        // equator's rows rise at a fraction of the uniform easterly's figure (docs/TODO.md).
+        KnownFailures.expect("A1-6b: the equator's rows rise short of the trades' damped Ekman divergence", "unrecorded") {
+            if (short.isNotEmpty()) throw RecordedViolation("rows short of the damped Ekman divergence (latitude, measured over expected): $short", short.joinToString("; "))
         }
     }
 

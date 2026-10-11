@@ -77,18 +77,6 @@ class ColdWaterPlacementTest : BorrowsSharedWorlds() {
 
         /** The equatorial closure's band on either side of the equator, in its own deformation radii. */
         const val EQUATORIAL_RADII_EXCLUDED = 2.0
-
-        /**
-         * Failing on square cells since Q2: seed 42's coldest northern eastern-boundary water, -2.22
-         * C, lies at 7.9 degrees, in the equatorial cold tongue that now reaches the basin's eastern
-         * shore colder than the subtropical upwelling north of it (the tongue's eastern thirds read
-         * -2.03 C against -1.61 on the 512 by 512 grid, where the coldest stood at 26.5 degrees). The
-         * cause is not isolated; the ocean is still solved on its own grid of cells twice as wide as
-         * tall on the ground, which is the switch's next chunk (docs/DESIGN_LEDGER.md, Q2).
-         */
-        const val TONGUE_REACHES_THE_EASTERN_BOUNDARY =
-            "the currents: on square cells seed 42's coldest northern eastern-boundary water is the equatorial tongue's"
-
         const val EQUATORIAL_TONGUE_SHALLOW =
             "the currents: the equatorial cold tongue is shallower than its trades ask, the one-layer closure's deep water too warm"
         const val EQUATORIAL_BAND_DEGREES = 4f
@@ -113,10 +101,10 @@ class ColdWaterPlacementTest : BorrowsSharedWorlds() {
                 }
             }
         }
-        // Re-recorded at L1, whose rifts are Earth's half-grabens and the same at every grid (docs/DESIGN_LEDGER.md, L1).
-        KnownFailures.expect(TONGUE_REACHES_THE_EASTERN_BOUNDARY, "seed 42: the coldest eastern-boundary water, -1.77 C, lies at -42.4 degrees; seed 99: the coldest eastern-boundary water, -1.57 C, lies at -4.4 degrees") {
-            if (failures.isNotEmpty()) throw RecordedViolation(failures.joinToString("\n"), failures.joinToString("; "))
-        }
+        // Armed at A1-6b, whose seasonal circulation's easterly is weakest on the equator itself, so
+        // the equatorial tongue no longer reaches the eastern shores colder than the subtropical
+        // upwelling; the tongue's own shallowness is the next clause's (docs/DESIGN_LEDGER.md, A1-6b).
+        assertTrue(failures.isEmpty(), failures.joinToString("\n"))
     }
 
     @Test

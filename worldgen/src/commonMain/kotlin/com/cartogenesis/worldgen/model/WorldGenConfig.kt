@@ -2001,12 +2001,12 @@ data class ClimateConfig(
      * march that component is what turns a row-by-row scan into a diagonal one, and with the belts
      * migrating over the year it is the whole of the monsoon — in summer the thermal equator
      * crosses over a tropical coast, the trades there reverse, and air that spent the winter
-     * blowing out to sea spends the summer coming in off it. The ocean's stress reads the same
-     * slope as the belts' meridional wind ([com.cartogenesis.worldgen.pipeline.SurfaceBelts]).
+     * blowing out to sea spends the summer coming in off it.
      *
-     * Since A1-6a the climate's Hadley cells carry their own lower branch, their mass balance's and
-     * not this share ([com.cartogenesis.worldgen.pipeline.HadleyCirculation]); the share is the
-     * Ferrel and polar cells' legs poleward of them, and the ocean's stress's slope throughout.
+     * The climate's Hadley cells carry their own lower branch, their mass balance's and not this
+     * share ([com.cartogenesis.worldgen.pipeline.HadleyCirculation]); the share is the Ferrel and
+     * polar cells' legs poleward of them, poleward under the westerlies and back under the polar
+     * easterlies, and the ocean's stress reads the circulation whole.
      *
      * A slope on the ground and not a count of rows, so it means one direction on any grid; the
      * march spends it as `share × cellWidth / cellHeight` rows a cell, 0.3 on an N by N grid, the

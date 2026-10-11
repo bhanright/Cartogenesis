@@ -308,16 +308,13 @@ class PressureWindTest : BorrowsSharedWorlds() {
         )
         // Recorded at A1-5: the boundary layer's single drag and the latent heat leave the summer's
         // inflow under the bar, the equatorial continent of seed 1234 blowing off its coasts in
-        // both halves (docs/TODO.md).
-        KnownFailures.expect("A1-5: the warm half barely blows onto the subtropical coasts", "+0.06") {
-            if (summer <= ONSHORE_BAR_MPS) {
-                throw RecordedViolation(
-                    ("the warm half blows %+.2f m/s onto the subtropical continents' equatorward and " +
-                        "eastern coasts, which is not onshore").format(summer),
-                    "%+.2f".format(summer)
-                )
-            }
-        }
+        // both halves (docs/TODO.md). Armed on H1's ground under the coupled climate, whose coasts
+        // clear it (docs/DESIGN_LEDGER.md, M1).
+        assertTrue(
+            summer > ONSHORE_BAR_MPS,
+            ("the warm half blows %+.2f m/s onto the subtropical continents' equatorward and " +
+                "eastern coasts, which is not onshore").format(summer)
+        )
         // A known failure on square cells from Q2 to L1, armed at K2, where the Earth-sized
         // planet's cold half blows off these coasts again (docs/DESIGN_LEDGER.md, Q2 and K2).
         assertTrue(

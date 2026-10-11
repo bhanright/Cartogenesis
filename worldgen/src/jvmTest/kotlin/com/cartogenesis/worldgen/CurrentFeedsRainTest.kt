@@ -133,8 +133,11 @@ class CurrentFeedsRainTest : BorrowsSharedWorlds() {
         // coasts are drawn on, and armed (docs/DESIGN_LEDGER.md, K2 and C1b).
         // Recorded at A1-5: the ocean's stress from the boundary layer's single drag leaves this
         // coast's water short of 0.8 C under its latitude's mean, so the sample has no cold coast
-        // and the clauses that read one wait for it (docs/TODO.md).
-        KnownFailures.expect("A1-5: seed 7's cold-current coast is gone", "78 km") {
+        // and the clauses that read one wait for it (docs/TODO.md). Armed again at H1, whose
+        // continents gave the sample its coast back on main's climate; on H1's ground under the
+        // coupled climate the coast is back but 78 km of it, short of the floor
+        // (docs/DESIGN_LEDGER.md, H1 and M1; docs/TODO.md).
+        KnownFailures.expect("M1: seed 7's cold-current coast is shorter than the sample asks", "78 km") {
             if (coldCoastKm < COLD_COAST_FLOOR_KM) {
                 throw RecordedViolation(
                     "only %.0f km of seed $SEED's west coast at 27-33 S sits 0.8 C under its latitude's mean, where the sample asks %.0f"
@@ -195,15 +198,9 @@ class CurrentFeedsRainTest : BorrowsSharedWorlds() {
         // tenths of a percent wetter with the currents on, and on Fix 3b's terrain it came out drier
         // (docs/DESIGN_LEDGER.md, Fix 2 and Fix 3b).
         // Recorded at A1-4: the cold sample coast came out 9% wetter with the currents on, where the
-        // atmosphere does not see the sea's anomaly (docs/TODO.md).
-        KnownFailures.expect("A1-4: the cold-current coast is wetter with the currents on", "off 459 on 501") {
-            if (!(coldOn < coldOff)) {
-                throw RecordedViolation(
-                    "cold-current coast should get drier with the currents on: off=$coldOff, on=$coldOn",
-                    "off %.0f on %.0f".format(coldOff, coldOn)
-                )
-            }
-        }
+        // atmosphere does not see the sea's anomaly (docs/TODO.md). Armed again on H1's ground under
+        // the coupled climate (docs/DESIGN_LEDGER.md, M1).
+        assertTrue(coldOn < coldOff, "cold-current coast should get drier with the currents on: off=$coldOff, on=$coldOn")
         // Recorded at K2: on the Earth-sized planet the warm sample coast came out half a percent
         // drier with the currents on (docs/DESIGN_LEDGER.md, K2), 3.3% drier at C1b; armed at A1-2,
         // whose pressure wind on the sphere leaves it no drier.

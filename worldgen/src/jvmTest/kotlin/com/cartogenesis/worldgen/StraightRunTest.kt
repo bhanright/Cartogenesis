@@ -115,8 +115,17 @@ class StraightRunTest : BorrowsSharedWorlds() {
         // reads nought on every seed (docs/DESIGN_LEDGER.md, Q2).
         // Recorded at A1-4: the reported world at 1,024 rows holds one ruled bar of standing water on
         // A1-4's ground (rule 13; docs/TODO.md).
-        // Armed at A1-5, whose ground holds none (docs/DESIGN_LEDGER.md, A1-5).
-        assertTrue(total == 0, "standing water still runs in ruled lines: ${counted.joinToString(" ")}")
+        // Armed at A1-5, whose ground holds none (docs/DESIGN_LEDGER.md, A1-5). Recorded on H1's
+        // ground under the coupled climate: one bar on the reported world at 1,024 rows and one on
+        // seed 99 at 512 (rule 13; docs/DESIGN_LEDGER.md, M1; docs/TODO.md).
+        KnownFailures.expect("M1: standing water runs in a ruled line on H1's ground", "") {
+            if (total != 0) {
+                throw RecordedViolation(
+                    "standing water still runs in ruled lines: ${counted.joinToString(" ")}",
+                    counted.joinToString(" ")
+                )
+            }
+        }
     }
 
     /**

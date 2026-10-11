@@ -616,15 +616,12 @@ class SnowBalanceTest : BorrowsSharedWorlds() {
             )
         }
         // Recorded at A1-2: the pressure wind on the sphere moved seed 1234's band under a thousand
-        // cells too, so the claim is read on seeds 7 and 42 alone (docs/TODO.md).
-        KnownFailures.expect("A1-2: only two seeds carry a marginal band", "1") {
-            if (seeds.size - unmeasured.size < LEAST_SEEDS_WITH_A_MARGIN) {
-                throw RecordedViolation(
-                    "only ${seeds.size - unmeasured.size} seeds carry a marginal band, under $LEAST_SEEDS_WITH_A_MARGIN",
-                    "${seeds.size - unmeasured.size}"
-                )
-            }
-        }
+        // cells too, so the claim is read on seeds 7 and 42 alone (docs/TODO.md). Armed on H1's
+        // ground under the coupled climate, where enough seeds carry one (docs/DESIGN_LEDGER.md, M1).
+        assertTrue(
+            "only ${seeds.size - unmeasured.size} seeds carry a marginal band, under $LEAST_SEEDS_WITH_A_MARGIN",
+            seeds.size - unmeasured.size >= LEAST_SEEDS_WITH_A_MARGIN
+        )
         // Recorded at C1b2, where on seed 1234 the annual mean separated the marginal band's
         // quarters by 57.5 points against the balance's 46.4; armed at A1-1, where the balance
         // separates them by 74.2 against the mean's 54.6 (docs/DESIGN_LEDGER.md, C1b2 and A1-1).

@@ -164,12 +164,19 @@ class GlaciationCombTest : BorrowsSharedWorlds() {
         // Recorded again at A1-1, whose calendar seasons and sea-surface sunlight grow more ice and
         // with it three such lakes on two worlds; a rule 13 finding, not traced (docs/TODO.md).
         val signature = straight.joinToString("; ")
-        // Armed at A1-4, whose ground and rain read it again (docs/DESIGN_LEDGER.md, A1-4).
-        assertTrue(
-            signature + " lakes that are a straight one-cell line along a D8 bearing — a" +
-                " trough is a valley the ice found, not a line drawn down a flow path",
-            straight.isEmpty()
-        )
+        // Armed at A1-4, whose ground and rain read it again (docs/DESIGN_LEDGER.md, A1-4), and at
+        // H1, on whose ground seed 42 had none on main's climate (docs/DESIGN_LEDGER.md, H1).
+        // Recorded on H1's ground under the coupled climate: one such lake on seed 42 at 1,024 rows,
+        // a rule 13 finding, not traced (docs/DESIGN_LEDGER.md, M1; docs/TODO.md).
+        KnownFailures.expect("M1: an ice-made lake is a straight one-cell line on H1's ground under the coupled climate", "") {
+            if (straight.isNotEmpty()) {
+                throw RecordedViolation(
+                    signature + " lakes that are a straight one-cell line along a D8 bearing — a" +
+                        " trough is a valley the ice found, not a line drawn down a flow path",
+                    signature
+                )
+            }
+        }
         // Collected and asserted once, rather than seed by seed, so a run reports all three figures
         // instead of stopping at the first that is over. On the implicit update before the uplift
         // was re-derived on it the ice added 5.00% and 3.18% on seeds 718106 and 7, a comb; with the

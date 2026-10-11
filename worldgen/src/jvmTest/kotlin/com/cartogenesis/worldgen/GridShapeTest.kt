@@ -169,15 +169,12 @@ class GridShapeTest : BorrowsSharedWorlds() {
         // (docs/TODO.md, "The march's misses against Earth, after C1b2").
         // Armed at A1-4, whose ground and rain read it again (docs/DESIGN_LEDGER.md, A1-4). Recorded
         // at A1-5: the doubled slant moves one band's rain past the spread and no band's desert, the
-        // deserts now the solved descent's (docs/TODO.md).
-        KnownFailures.expect("A1-5: the doubled slant moves no band's desert", "deserts []") {
-            if (!(misses.desert.isNotEmpty() && misses.rain.isNotEmpty())) {
-                throw RecordedViolation(
-                    "a slant twice as steep should move both past the spread: deserts ${misses.desert}; land rain ${misses.rain}",
-                    "deserts ${misses.desert}"
-                )
-            }
-        }
+        // deserts now the solved descent's (docs/TODO.md). Armed on H1's ground under the coupled
+        // climate, where it moves both (docs/DESIGN_LEDGER.md, M1).
+        assertTrue(
+            misses.desert.isNotEmpty() && misses.rain.isNotEmpty(),
+            "a slant twice as steep should move both past the spread: deserts ${misses.desert}; land rain ${misses.rain}"
+        )
     }
 
     private companion object {

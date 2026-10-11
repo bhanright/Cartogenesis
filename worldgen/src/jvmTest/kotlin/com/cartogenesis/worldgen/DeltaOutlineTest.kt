@@ -827,13 +827,17 @@ class DeltaOutlineTest {
          * 1.25 times either side; why the square fans' straight runs shrank was not isolated
          * (docs/DESIGN_LEDGER.md, H1).
          *
+         * Re-derived by the same rule when H1's ground came under the coupled climate: the square
+         * fans' worst is 1.08% and the curved ones' 0.3%, and 0.57% is the midpoint, 1.9 times
+         * under the one and over the other (docs/DESIGN_LEDGER.md, M1).
+         *
          * So it is a regression pin between a defect and its fix, and not the bar rule 13 asks for,
          * which is derived from the isotropy of natural outlines; and it reads axis-aligned runs
          * only, so a straight edge along a diagonal is invisible to it. The derived bar, in every
          * bearing, is the geometry guard's (`GeometryGuardTest` in `:cartography`, whose layers
          * include the delta lobes and the lake fans this measures).
          */
-        const val STRAIGHT_BAR = 0.011
+        const val STRAIGHT_BAR = 0.0057
 
         /** The least a rim's longest radius may exceed its shortest. */
         const val RATIO_BAR = 1.5

@@ -2,6 +2,7 @@ package com.cartogenesis.worldgen.pipeline
 
 import kotlin.math.abs
 import kotlin.math.sqrt
+import kotlin.time.TimeSource
 
 /**
  * The atmosphere and the rain, solved together: the latent heat of each lap's condensation heats
@@ -94,6 +95,15 @@ internal class AtmosphereCoupling(
      */
     val targetChanges = mutableListOf<Double>()
 
+    /**
+     * What each lap between the march's laps cost, milliseconds: carrying its condensation down as
+     * heating ([heatingMillis]), solving the atmosphere under the next heating ([solveMillis]) and
+     * building the march's seasons on it ([seasonsMillis]). A report for the cost guards.
+     */
+    val heatingMillis = mutableListOf<Double>()
+    val solveMillis = mutableListOf<Double>()
+    val seasonsMillis = mutableListOf<Double>()
+
     /** The earlier laps' heatings given and asked for, oldest first, for the acceleration. */
     private val givenHistory = ArrayDeque<DoubleArray>()
     private val targetHistory = ArrayDeque<DoubleArray>()
@@ -106,7 +116,9 @@ internal class AtmosphereCoupling(
         checkNotNull(seasonsOf) { "the coupling has been released" }(atmosphere)
 
     override fun settledAfter(julyHalfCondensationMm: FloatArray, januaryHalfCondensationMm: FloatArray): Boolean {
+        val started = TimeSource.Monotonic.markNow()
         val asked = latentHeatingOf(julyHalfCondensationMm) + latentHeatingOf(januaryHalfCondensationMm)
+        heatingMillis.add(started.elapsedNow().inWholeMicroseconds / 1_000.0)
         target?.let { previous -> targetChanges.add(eddyShare(asked, previous)) }
         target = asked
         val residual = eddyShare(asked, given)
@@ -118,11 +130,16 @@ internal class AtmosphereCoupling(
         val solving = checkNotNull(solver) { "the coupling has been released" }
         val seasons = checkNotNull(seasonsOf) { "the coupling has been released" }
         val asked = checkNotNull(target) { "no lap has been read" }
+        val started = TimeSource.Monotonic.markNow()
         given = nextHeating(given, asked)
         current = null
         val solved = solving.solve(julyLatentWPerM2, januaryLatentWPerM2)
         current = solved
-        return seasons(solved)
+        val seasonsStarted = TimeSource.Monotonic.markNow()
+        solveMillis.add((seasonsStarted - started).inWholeMicroseconds / 1_000.0)
+        val next = seasons(solved)
+        seasonsMillis.add(seasonsStarted.elapsedNow().inWholeMicroseconds / 1_000.0)
+        return next
     }
 
     /**

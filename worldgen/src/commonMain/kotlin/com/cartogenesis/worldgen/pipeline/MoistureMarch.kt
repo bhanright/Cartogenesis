@@ -7,6 +7,7 @@ import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.exp
+import kotlin.time.TimeSource
 
 /**
  * The rain: water carried along the wind in kilograms per square meter, taken up from the sea and
@@ -268,7 +269,13 @@ object MoistureMarch {
         val julyHalfCondensationMm: FloatArray,
         val januaryHalfCondensationMm: FloatArray,
         /** The land's mean change of annual rain after each lap, as a share of its mean rain ([CONVERGED_SHARE]). */
-        val landRainChanges: List<Double>
+        val landRainChanges: List<Double>,
+        /**
+         * Each lap's own time in milliseconds: both seasons marched, the year's rain and potential
+         * gathered and the ground's return set, without the coupling's solve between laps. A
+         * report for the cost guards; nothing reads it.
+         */
+        val lapMillis: List<Double> = emptyList()
     )
 
     /**
@@ -321,7 +328,9 @@ object MoistureMarch {
 
         var lap = 0
         val landRainChanges = mutableListOf<Double>()
+        val lapMillis = mutableListOf<Double>()
         while (true) {
+            val lapStarted = TimeSource.Monotonic.markNow()
             val laps = Array(2) { season -> ledger?.let { MoistureLedger.Lap(season == 0, lap) } }
             // The two seasons share nothing inside a lap but the ground's return, which was set
             // before it began, so they march side by side.
@@ -348,10 +357,16 @@ object MoistureMarch {
             val change = landChangeShare(inputs.isLand, annualRain.data, previousRain, grid)
             ledger?.settling?.add(change)
             landRainChanges.add(change)
+            var lapElapsed = lapStarted.elapsedNow()
             val heatingSettled = coupling?.settledAfter(july.condensationRowMajor(), january.condensationRowMajor()) ?: true
             val settled = lap >= MIN_LAPS && change < CONVERGED_SHARE && heatingSettled
-            if (settled || lap >= MAX_LAPS) break
-            coupling?.nextSeasons()?.let { (nextJuly, nextJanuary) ->
+            if (settled || lap >= MAX_LAPS) {
+                lapMillis.add(lapElapsed.inWholeMicroseconds / 1_000.0)
+                break
+            }
+            val nextSeasons = coupling?.nextSeasons()
+            val returnStarted = TimeSource.Monotonic.markNow()
+            nextSeasons?.let { (nextJuly, nextJanuary) ->
                 july.reseason(nextJuly)
                 january.reseason(nextJanuary)
             }
@@ -365,6 +380,8 @@ object MoistureMarch {
                     january.setGroundReturn(cell, annualRain.data[cell], annualPotential[cell], returning)
                 }
             }
+            lapElapsed += returnStarted.elapsedNow()
+            lapMillis.add(lapElapsed.inWholeMicroseconds / 1_000.0)
         }
         val lapsRun = lap
         ledger?.lapsRun = lapsRun
@@ -421,7 +438,7 @@ object MoistureMarch {
             ledger.surfaceResidualMm = residual
             ledger.returnRainMm = returnedRain
         }
-        return Result(julyRain, januaryRain, landOrigin, potential, openWater, lapsRun, july.condensationRowMajor(), january.condensationRowMajor(), landRainChanges)
+        return Result(julyRain, januaryRain, landOrigin, potential, openWater, lapsRun, july.condensationRowMajor(), january.condensationRowMajor(), landRainChanges, lapMillis)
     }
 
     /**

@@ -212,7 +212,7 @@ class OutletResolutionTest {
         // Armed at C1b2, whose land rains less (docs/DESIGN_LEDGER.md, C1b2). Recorded at A1-5:
         // seed 42's largest lake at 256 and 1,024 rows stands over 1.5 times the share under the
         // rain from the solved vertical motion (docs/TODO.md).
-        KnownFailures.expect("A1-5: the pooled largest lake stands over the Caspian's share", "1.05x") {
+        KnownFailures.expect("A1-5: the pooled largest lake stands over the Caspian's share", "1.39x") {
             if (pooledLargest >= caspianShare) {
                 throw RecordedViolation(
                     "the largest lake pooled over ${largestLandLakeShares.size} worlds is " +

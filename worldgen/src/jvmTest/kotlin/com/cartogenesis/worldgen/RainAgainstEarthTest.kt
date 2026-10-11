@@ -191,6 +191,7 @@ class RainAgainstEarthTest : BorrowsSharedWorlds() {
     @Test
     fun `the year's wettest band of ocean sits near the equator, and rains as GPCP's does`() {
         var pooledPeak = 0.0
+        val farFromEquator = ArrayList<String>()
         seeds.forEach { seed ->
             val world = SharedWorlds.world(WorldGenConfig.forRows(seed, ROWS))
             var wettest = 0.0
@@ -216,11 +217,13 @@ class RainAgainstEarthTest : BorrowsSharedWorlds() {
                 band += ZONAL_BAND_DEGREES
             }
             println("ITCZ seed %d: wettest ocean %.0f mm at %.0f degrees; %s".format(seed, wettest, wettestLatitude, profile))
-            assertTrue(
-                abs(wettestLatitude) <= ITCZ_FROM_EQUATOR_DEGREES,
-                "seed $seed: the year's wettest ocean band sits at $wettestLatitude degrees"
-            )
+            if (abs(wettestLatitude) > ITCZ_FROM_EQUATOR_DEGREES) farFromEquator += "seed $seed at $wettestLatitude"
             pooledPeak += wettest / seeds.size
+        }
+        KnownFailures.expect("A1-6a: the year's wettest band of ocean sits far from the equator", "none") {
+            if (farFromEquator.isNotEmpty()) {
+                throw RecordedViolation("the year's wettest ocean band sits beyond $ITCZ_FROM_EQUATOR_DEGREES degrees: $farFromEquator", farFromEquator.joinToString())
+            }
         }
         // The band's rain against GPCP's, since A1-5 rains it from the solved ascent.
         KnownFailures.expect("A1-5: the ocean's wettest band rains less than GPCP's", "x0.45") {

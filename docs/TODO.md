@@ -15,6 +15,16 @@
   half about July (3.0 to 4.8 south in January), so the July winter cell carries 1.6 to 3.4 times
   the summer cell's mass where Earth's carries about five; why the energy balance's July heating
   stands so near the equator is not traced. 2026-10-11, A1-6a.
+- **The rain ends along a row at the polar front (A1-6a, rule 13).** The circulation's Ferrel and
+  polar legs meet at `SurfaceBelts.WESTERLY_BELT_EDGE_DEGREES` in both halves of the year
+  (`HadleyCirculation.northwardMps`; the front does not migrate), so the moist westerlies and the
+  dry polar air meet on one latitude all year. In the renders at 1,024 rows the annual rain steps
+  from wet to dry within about a degree at 60 to 61 S across both of seed 42's southern continents
+  and at 62 to 63 N across seed 969495's northern one (`RainGeometryTest`'s longest front there,
+  1,402 km along 62.8 N); M1's belts, at 50 and 70 in alternate halves, drew such an edge at 70 N
+  on 969495 and none at 60 S on 42. Seed 42's longest front, 2,471 km along 34.4 S, stands three
+  degrees poleward of its July winter cell's edge (31.3 S); not traced. A front that moves with the cells' edges, or the eddies' own mixing across
+  it, would soften the step; neither is done. 2026-10-11, A1-6a.
 - **The census on the circulation's ice (A1-6a).** The geometry census's known instances went
   from M1's twelve to seventeen: new are seed 1234's ice surface and terrain contours (four and two
   facets about (55, 498), three and two arcs of 173.5 degrees about (134, 488) and (544, 33) at 512

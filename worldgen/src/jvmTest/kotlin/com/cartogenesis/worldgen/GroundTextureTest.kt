@@ -151,9 +151,9 @@ class GroundTextureTest : BorrowsSharedWorlds() {
         // Recorded at K2. The density is kilometers of channel cell per square kilometer, a figure
         // of the cell it is counted on: the tree before S2 measured it on 23 km cells, and the
         // Earth-sized planet's 512 rows are 39 km cells, which hold fewer channel cells to a
-        // square kilometer (docs/DESIGN_LEDGER.md, K2).
+        // square kilometer (docs/DESIGN_LEDGER.md, K2). Re-recorded at A1-6a, 0.0048 to 0.0050.
         KnownFailures.expect(
-            "K2: the drainage density at 512 rows is read on cells of 39 km, against a figure taken on 23 km cells", "0.0048"
+            "K2: the drainage density at 512 rows is read on cells of 39 km, against a figure taken on 23 km cells", "0.0050"
         ) {
             if (pooledDensity !in (MAIN_DRAINAGE_DENSITY_KM_PER_KM2 / DRAINAGE_DENSITY_ALLOWANCE)..
                     (MAIN_DRAINAGE_DENSITY_KM_PER_KM2 * DRAINAGE_DENSITY_ALLOWANCE)

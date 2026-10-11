@@ -332,17 +332,14 @@ class PressureWindTest : BorrowsSharedWorlds() {
         // Recorded at C1b2: the belts' zonal wind is continuous now, falling to nothing at each
         // edge, so where a subtropical coast stands near an edge the belts alone turn its wind
         // between the halves of the year (docs/TODO.md, "The march's misses against Earth, after
-        // C1b2").
-        KnownFailures.expect("C1b2: the belts alone reverse the subtropical coasts", "+1.07 against -0.18") {
-            if (!(controlWinter > -ONSHORE_BAR_MPS || controlSummer < ONSHORE_BAR_MPS)) {
-                throw RecordedViolation(
-                    ("the belts alone already reverse these coasts between the seasons, %+.2f m/s in " +
-                        "summer against %+.2f in winter, so the pressure term is not what does it")
-                        .format(controlSummer, controlWinter),
-                    "%+.2f against %+.2f".format(controlSummer, controlWinter)
-                )
-            }
-        }
+        // C1b2"). Armed at A1-6a, whose circulation alone blows onto these coasts in both halves,
+        // +0.33 m/s in summer and +0.95 in winter (docs/DESIGN_LEDGER.md, A1-6a).
+        assertTrue(
+            controlWinter > -ONSHORE_BAR_MPS || controlSummer < ONSHORE_BAR_MPS,
+            ("the belts alone already reverse these coasts between the seasons, %+.2f m/s in " +
+                "summer against %+.2f in winter, so the pressure term is not what does it")
+                .format(controlSummer, controlWinter)
+        )
     }
 
     @Test

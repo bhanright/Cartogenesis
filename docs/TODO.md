@@ -1,5 +1,41 @@
 # To do
 
+- **The seasonal circulation against Earth (A1-6a).** `MeanCirculationEarthTest` holds three
+  known failures on seeds 42, 969495 and 7 at 1,024 rows. *The ridge*: every summer ridge stands 7
+  to 17 degrees equatorward of its winter ridge, where Earth's moves a few degrees poleward in
+  summer, and four of the twelve stand under 25 degrees (22.2 to 24.7, each a July northern ridge
+  but 969495's January southern one). Two causes are in the code and neither is isolated: the
+  equal-area cells' summer edge stands equatorward of their winter edge (26.5 to 28.4 against
+  29.3 to 37.9), as in Lindzen and Hou's (1988) own solutions, and the eddy forcing is the year's in
+  both halves (the entry below). *The ITCZ*: the ocean's wettest row in the half about July is
+  south of the equator on all three seeds (4.7, 5.9 and 9.1 S) while the circulation rises at 10.3
+  to 16.4 N; seed 42's January row stands at 7.5 N, the wrong way round. The march's rain does not
+  follow the boundary layer's ascent across the equator in the northern summer; not traced.
+  *The cells*: the energy balance's warmest marine air stands only 2.1 to 4.0 degrees north in the
+  half about July (3.0 to 4.8 south in January), so the July winter cell carries 1.6 to 3.4 times
+  the summer cell's mass where Earth's carries about five; why the energy balance's July heating
+  stands so near the equator is not traced. 2026-10-11, A1-6a.
+- **The census on the circulation's ice (A1-6a).** The geometry census's known instances went
+  from M1's twelve to seventeen: new are seed 1234's ice surface and terrain contours (four and two
+  facets about (55, 498), three and two arcs of 173.5 degrees about (134, 488) and (544, 33) at 512
+  rows), seed 42's ice-surface arc (123.8 degrees about (914, 20)) and a right angle in seed 42's
+  peoples' borders at (656, 460); gone are the creases in seed 7's ice, biome edges and peoples'
+  borders and in seed 42's ice, seed 7's three ice arcs (one new at (788, 27)), and seed 99's ice arc and aligned
+  biome edge. The ice's are `IceSheet`'s shape on the snow the new circulation
+  brings; the right angle is not traced. 2026-10-11, A1-6a.
+- **The monsoon's summer inflow is calm under the seasonal circulation (A1-6a).**
+  `PressureWindTest`'s subtropical continents take -0.05 m/s onto their equatorward and eastern
+  coasts in the warm half, pooled over four seeds, against the 0.1 m/s bar, where M1 cleared it;
+  the cold half blows off them at -0.11. Recorded; it is likely the summer subtropics' lost
+  easterlies (the eddy-forcing entry below), not shown. 2026-10-11, A1-6a.
+- **Seed 7's cold-current coast is gone (A1-6a).** `CurrentFeedsRainTest`'s west coast at 27 to
+  33 S keeps no cell 0.8 C under its latitude's mean (78 km at M1); the ocean's stress still reads
+  the translated belts (`OceanStage.annualStress`), so what moved is the ground the rain eroded.
+  Re-recorded. 2026-10-11, A1-6a.
+- **Seed 42's ice sheet flows outward a hair under the bar (A1-6a).** `IceSheetTest`'s flow
+  clause reads seed 42's dome again (187 cells of its 513-cell disc), and 63.1% of it flows outward
+  at 67.7 degrees off radial against the 67% and 67.5 the clause asks; recorded, as at A1-4.
+  2026-10-11, A1-6a.
 - **The wave model's basic state keeps westerlies at the ground in the tropics in both halves
   (A1-6a).** `ZonalBasicState.jablonowskiWilliamson` blows westerly at every level and latitude,
   where the half-years' zonal-mean surface wind (`HadleyCirculation`) is easterly in the trades.

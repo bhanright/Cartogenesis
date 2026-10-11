@@ -142,7 +142,7 @@ class RainGeometryTest : BorrowsSharedWorlds() {
             )
             if (found.alongRowKm > bar) over += "%d %.0f km at %.0f".format(seed, found.alongRowKm, found.rowLatitude)
         }
-        KnownFailures.expect("C1b2: fronts along the belts' factor", "42 2369 km at 7; 969495 3349 km at 44; 7 1477 km at 42") {
+        KnownFailures.expect("C1b2: fronts along the belts' factor", "42 1409 km at -43; 969495 1023 km at -15; 7 2842 km at 44") {
             if (over.isNotEmpty()) {
                 throw RecordedViolation(
                     "fronts hold a row for longer than a quarter of the weather's wavelength: " + over.joinToString("; "),

@@ -402,7 +402,7 @@ class SnowBalanceTest : BorrowsSharedWorlds() {
         // 8.2 to 9.3% of the land of seeds 42, 969495 and 7 at 1,024 rows against Earth's 10.1
         // (docs/TODO.md, "The ice after A1-1").
         val signature = "%.2f%%".format(shareOn)
-        KnownFailures.expect("A1-1: the ice covers more than twice Earth's share of the land's cells", "25.82%") {
+        KnownFailures.expect("A1-1: the ice covers more than twice Earth's share of the land's cells", "25.56%") {
             if (shareOn > EARTH_ICE_SHARE * 2) {
                 throw RecordedViolation("ice covers $signature of land, more than twice Earth's ${EARTH_ICE_SHARE}%", signature)
             }

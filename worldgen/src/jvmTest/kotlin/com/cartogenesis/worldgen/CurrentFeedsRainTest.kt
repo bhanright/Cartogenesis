@@ -134,7 +134,7 @@ class CurrentFeedsRainTest : BorrowsSharedWorlds() {
         // Recorded at A1-5: the ocean's stress from the boundary layer's single drag leaves this
         // coast's water short of 0.8 C under its latitude's mean, so the sample has no cold coast
         // and the clauses that read one wait for it (docs/TODO.md).
-        KnownFailures.expect("A1-5: seed 7's cold-current coast is gone", "0 km") {
+        KnownFailures.expect("A1-5: seed 7's cold-current coast is gone", "78 km") {
             if (coldCoastKm < COLD_COAST_FLOOR_KM) {
                 throw RecordedViolation(
                     "only %.0f km of seed $SEED's west coast at 27-33 S sits 0.8 C under its latitude's mean, where the sample asks %.0f"

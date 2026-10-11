@@ -139,10 +139,9 @@ class LakeBodyTest : BorrowsSharedWorlds() {
         // the rain reaching it, a fault of the basins' own accounting the ground exposed; its last
         // pass's ground leaves none (docs/DESIGN_LEDGER.md, A1-1). Recorded when H1's ground came
         // under the coupled climate: a basin of six cells on seed 1234 in dry country, its excess
-        // under two of the float's last places at the map's largest runoff (docs/TODO.md).
-        KnownFailures.expect("M1: a closed basin's pockets are handed more rain than reaches it", "seed 1234: a basin of 9 cells handed 3298.0802 of its catchment (1212.72 of 0.367706 mm-cells; the largest runoff carried on the map 5.69916e+06); seed 1234: a basin of 7 cells handed 105061.0644 of its catchment (0.941685 of 8.96322e-06 mm-cells; the largest runoff carried on the map 5.69916e+06); seed 99: a basin of 128 cells handed 0.9908 of its catchment (34.4840 of 34.8026 mm-cells; the largest runoff carried on the map 1.85260e+06)") {
-            if (failures.isNotEmpty()) throw RecordedViolation("rain counted twice or lost: $failures", failures.joinToString("; "))
-        }
+        // under two of the float's last places at the map's largest runoff (docs/TODO.md). Armed
+        // at A1-6b, whose ground leaves every basin's excess inside the summing order's room.
+        assertTrue(failures.isEmpty(), "rain counted twice or lost: $failures")
     }
 
     private companion object {

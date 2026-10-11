@@ -170,10 +170,9 @@ class RainAgainstEarthTest : BorrowsSharedWorlds() {
         // The land's return stood inside Earth's until A1-4, where the solved wind left the land
         // wetter and the ground's Budyko share of its rain smaller; armed again at A1-5, the rain
         // from the solved vertical motion (docs/DESIGN_LEDGER.md); recorded again when H1's ground
-        // came under it (docs/DESIGN_LEDGER.md, M1; docs/TODO.md).
-        KnownFailures.expect("M1: the land returns less of its rain than Earth's on H1's ground", "x0.73") {
-            nearEarth("land's return over its rain", pooled.landReturn / pooled.landRain, EARTH_LAND_RETURN_SHARE)
-        }
+        // came under it (docs/DESIGN_LEDGER.md, M1; docs/TODO.md); armed at A1-6b, x0.84, under
+        // the seasonal circulation's rain.
+        nearEarth("land's return over its rain", pooled.landReturn / pooled.landRain, EARTH_LAND_RETURN_SHARE)
         // The sea evaporates less than Earth's, and the rain with it, for the causes docs/TODO.md's
         // "The march's misses against Earth, after C1b2" measures: the marine air stands at the
         // sea's own temperature and the wind at one speed.
@@ -220,15 +219,12 @@ class RainAgainstEarthTest : BorrowsSharedWorlds() {
             if (abs(wettestLatitude) > ITCZ_FROM_EQUATOR_DEGREES) farFromEquator += "seed $seed at $wettestLatitude"
             pooledPeak += wettest / seeds.size
         }
-        KnownFailures.expect("A1-6a: the year's wettest band of ocean sits far from the equator", "seed 7 at -17.0") {
-            if (farFromEquator.isNotEmpty()) {
-                throw RecordedViolation("the year's wettest ocean band sits beyond $ITCZ_FROM_EQUATOR_DEGREES degrees: $farFromEquator", farFromEquator.joinToString())
-            }
-        }
-        // The band's rain against GPCP's, since A1-5 rains it from the solved ascent.
-        KnownFailures.expect("A1-5: the ocean's wettest band rains less than GPCP's", "x0.37") {
-            nearEarth("the ocean's wettest two degrees, mm", pooledPeak, GPCP_OCEAN_PEAK_MM)
-        }
+        // Recorded at A1-6a, seed 7's at 17 S; armed at A1-6b, whose cells rise in the summer
+        // hemisphere's tropics (docs/DESIGN_LEDGER.md, A1-6b).
+        assertTrue(farFromEquator.isEmpty(), "the year's wettest ocean band sits beyond $ITCZ_FROM_EQUATOR_DEGREES degrees: $farFromEquator")
+        // The band's rain against GPCP's, since A1-5 rains it from the solved ascent; recorded at
+        // x0.37 until A1-6b, whose ITCZ rains the summer hemisphere's tropics (x0.91).
+        nearEarth("the ocean's wettest two degrees, mm", pooledPeak, GPCP_OCEAN_PEAK_MM)
     }
 
     private val DAYS_PER_YEAR = MoistureMarch.SECONDS_PER_YEAR / 86_400.0

@@ -3,10 +3,13 @@ package com.cartogenesis.worldgen
 import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldScale
+import com.cartogenesis.worldgen.pipeline.BoundaryLayer
 import com.cartogenesis.worldgen.pipeline.ClimateStage
 import com.cartogenesis.worldgen.pipeline.OceanCirculation
 import com.cartogenesis.worldgen.pipeline.OceanStage
+import com.cartogenesis.worldgen.pipeline.PressureWind
 import com.cartogenesis.worldgen.pipeline.SeaLevelResult
+import com.cartogenesis.worldgen.pipeline.SurfaceBelts
 import kotlin.math.E
 import kotlin.math.abs
 import kotlin.test.Test
@@ -46,7 +49,8 @@ class OceanPlanetSizeTest {
         }
         val sea = SeaLevelResult(0.5f, isLand, FloatField(across, down), isLand.count { it })
         val zonal = ClimateStage.zonalClimate(config, sea)
-        val solved = OceanStage.circulate(config, sea, zonal) { stencil, values, passes ->
+        val (stressAcross, stressDown) = OceanStage.solveGrid(config.scale)
+        val solved = OceanStage.circulateUnder(config, sea, zonal, beltsStress(stressAcross, stressDown)) { stencil, values, passes ->
             OceanCirculation.relax(stencil, values, passes); values
         }
         val gridAcross = solved.cellsAcross
@@ -74,6 +78,22 @@ class OceanPlanetSizeTest {
         assertTrue(radius.interiorNorthwardMps < 0.0, "the subtropical interior does not flow equatorward")
         assertTrue(abs(layerRatio - 2.0) < 2.0 * ONE_PERCENT, "the Stommel layer went x$layerRatio with the radius, where r/β doubles")
         assertTrue(abs(interiorRatio - 1.0) < ONE_PERCENT, "the Sverdrup interior went x$interiorRatio with the radius, where curl/(ρβ) holds")
+    }
+
+    /**
+     * Earth's annual zonal-mean surface wind ([SurfaceBelts.zonalShare]) as a stress on the solve
+     * grid, `rho C_D |U| U`: the same at every latitude whatever the radius. The climate's own
+     * circulation would not do, since its eddy-driven belts have a width on the ground and stand at
+     * other latitudes on a planet of another radius.
+     */
+    private fun beltsStress(across: Int, down: Int): OceanStage.Stress {
+        val eastward = DoubleArray(across * down)
+        for (row in 0 until down) {
+            val wind = PressureWind.BELT_SPEED_MPS * SurfaceBelts.zonalShare(ClimateStage.latitudeOf(row, down)).toDouble()
+            val stress = PressureWind.AIR_DENSITY_KG_PER_M3 * BoundaryLayer.SEA_DRAG_COEFFICIENT * abs(wind) * wind
+            for (column in 0 until across) eastward[row * across + column] = stress
+        }
+        return OceanStage.Stress(eastward, DoubleArray(across * down))
     }
 
     private companion object {

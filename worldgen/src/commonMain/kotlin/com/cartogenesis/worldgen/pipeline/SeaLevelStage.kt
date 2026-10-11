@@ -35,7 +35,15 @@ data class SeaLevelResult(
     val relativeElevation: FloatField,
     /** How many entries of [isLand] are true. */
     val landCellCount: Int
-)
+) {
+    /**
+     * Where the climate this world's stages last ran over this sea settled, for the next run of the
+     * world's climate to start from ([ClimateStage.WarmStart]): the ice's provisional climate's
+     * once the ice is carved, or the erosion's, set by the engine. Not part of the world's identity
+     * (not in [equals]) and not saved.
+     */
+    internal var climateStart: ClimateStage.WarmStart? = null
+}
 
 /**
  * Step 3 of the pipeline: choose the height the shoreline sits at, and split the world around it.

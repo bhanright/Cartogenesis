@@ -275,7 +275,51 @@ object MoistureMarch {
          * gathered and the ground's return set, without the coupling's solve between laps. A
          * report for the cost guards; nothing reads it.
          */
-        val lapMillis: List<Double> = emptyList()
+        val lapMillis: List<Double> = emptyList(),
+        /** Where the march ended: the ground's return each half ran its last lap with. */
+        val endState: StartState? = null
+    )
+
+    /**
+     * A march's ground return, for a later march of the same world on the same grid to start from
+     * rather than from dry ground: each half's return in millimeters a second at every cell,
+     * row-major, and the land it was set over.
+     *
+     * The return is the march's slow part: the first lap leaves a year's rain for the second's
+     * ground to give back, and each later lap carries it a lap further toward the year it belongs
+     * to. The worlds a generation marches in turn (the erosion's two provisional climates, the ice's
+     * and the finished one) differ in their ground and their coast by a little, so a return set
+     * over the last one's land is near the next one's year where the two are land, and the march
+     * still settles on its own year: only where it starts moves ([AtmosphereCoupling]'s warm start).
+     */
+    class StartState(
+        val isLand: BooleanArray,
+        val julyHalfReturnMmPerSecond: FloatArray,
+        val januaryHalfReturnMmPerSecond: FloatArray,
+        /** Each half's water in flight as the last lap ended ([WaterInFlight]). */
+        val julyHalfWater: WaterInFlight,
+        val januaryHalfWater: WaterInFlight
+    )
+
+    /**
+     * A half's water in flight at the end of a lap, which the next lap starts from: the bank at every
+     * cell, kilograms a square meter of column water in the march's own units (row-major), which
+     * holds what the westward sweep's faces moved between rows; and each row's parcel arriving at the
+     * map's first column in each sweep, vapor, cloud and falling water.
+     *
+     * Started cold, the first lap marches with an empty bank and its rows exchange nothing they did
+     * not exchange within the lap, so it condenses a quarter differently from the settled lap
+     * whatever the heating it runs under (docs/DESIGN_LEDGER.md, A1-6a). The land-origin parts are
+     * not carried: they start at none, as a cold march's do, and only the recycling's share reads them.
+     */
+    class WaterInFlight(
+        val bank: FloatArray,
+        val eastwardVapor: DoubleArray,
+        val eastwardCloud: DoubleArray,
+        val eastwardFalling: DoubleArray,
+        val westwardVapor: DoubleArray,
+        val westwardCloud: DoubleArray,
+        val westwardFalling: DoubleArray
     )
 
     /**
@@ -310,6 +354,8 @@ object MoistureMarch {
          * about January: built inside the march and held by no frame of it or its caller once the
          * marches are set up, so a coupled run's first seasons are let go after its first lap.
          */
+        /** The ground's return to start from, from an earlier march of this world's grid; dry ground when none. */
+        start: StartState? = null,
         firstSeasons: () -> Pair<Season, Season>
     ): Result {
         val config = inputs.config
@@ -320,6 +366,13 @@ object MoistureMarch {
         val seasons = startMarches(inputs, grid, keepCells = ledger != null, firstSeasons)
         val july = seasons[0]
         val january = seasons[1]
+        if (start != null) {
+            require(start.isLand.size == cellCount) { "a start from a grid of ${start.isLand.size} cells" }
+            july.startReturnFrom(start.isLand, start.julyHalfReturnMmPerSecond)
+            january.startReturnFrom(start.isLand, start.januaryHalfReturnMmPerSecond)
+            july.startWaterFrom(start.julyHalfWater)
+            january.startWaterFrom(start.januaryHalfWater)
+        }
 
         val annualRain = FloatField(cellsAcross, cellsDown)
         val previousRain = FloatArray(cellCount)
@@ -438,7 +491,17 @@ object MoistureMarch {
             ledger.surfaceResidualMm = residual
             ledger.returnRainMm = returnedRain
         }
-        return Result(julyRain, januaryRain, landOrigin, potential, openWater, lapsRun, july.condensationRowMajor(), january.condensationRowMajor(), landRainChanges, lapMillis)
+        val endState = StartState(
+            inputs.isLand.copyOf(),
+            FloatArray(cellCount) { july.groundReturnRateRowMajor(it) },
+            FloatArray(cellCount) { january.groundReturnRateRowMajor(it) },
+            july.waterInFlight(),
+            january.waterInFlight()
+        )
+        return Result(
+            julyRain, januaryRain, landOrigin, potential, openWater, lapsRun, july.condensationRowMajor(), january.condensationRowMajor(),
+            landRainChanges, lapMillis, endState
+        )
     }
 
     /**
@@ -885,6 +948,52 @@ object MoistureMarch {
             returnRain[cell] = annualRainMm
             returnPotential[cell] = annualPotentialMm
         }
+
+        /**
+         * Starts this season's ground return from [rates] (millimeters a second, row-major) where
+         * the ground is land now and was under [previousLand]; elsewhere the first lap's ground is
+         * dry, as with no start.
+         */
+        fun startReturnFrom(previousLand: BooleanArray, rates: FloatArray) {
+            for (cell in 0 until cellCount) {
+                if (inputs.isLand[cell] && previousLand[cell]) {
+                    groundReturnRate[index(cell / cellsAcross, cell % cellsAcross)] = rates[cell]
+                }
+            }
+        }
+
+        /**
+         * Starts this season's water in flight from [start], a march's end on the same grid: the bank
+         * at every cell and each row's arriving parcels, their land-origin parts at none.
+         */
+        fun startWaterFrom(start: WaterInFlight) {
+            for (cell in 0 until cellCount) bank[index(cell / cellsAcross, cell % cellsAcross)] = start.bank[cell].toDouble()
+            for (row in 0 until cellsDown) {
+                eastParcel.clear(row)
+                westParcel.clear(row)
+                eastParcel.vapor[row] = start.eastwardVapor[row]
+                eastParcel.cloud[row] = start.eastwardCloud[row]
+                eastParcel.falling[row] = start.eastwardFalling[row]
+                westParcel.vapor[row] = start.westwardVapor[row]
+                westParcel.cloud[row] = start.westwardCloud[row]
+                westParcel.falling[row] = start.westwardFalling[row]
+                // A parcel this world's wind does not march in from the first column waits in the
+                // bank there, as between two laps ([reseason]).
+                bankParcelIfTurned(eastParcel, row, index(row, 0), 1)
+                bankParcelIfTurned(westParcel, row, index(row, cellsAcross - 1), -1)
+            }
+            bankLand.fill(0.0)
+        }
+
+        /** This season's water in flight now, for a later march to start from ([WaterInFlight]). */
+        fun waterInFlight(): WaterInFlight = WaterInFlight(
+            FloatArray(cellCount) { bank[index(it / cellsAcross, it % cellsAcross)].toFloat() },
+            eastParcel.vapor.copyOf(), eastParcel.cloud.copyOf(), eastParcel.falling.copyOf(),
+            westParcel.vapor.copyOf(), westParcel.cloud.copyOf(), westParcel.falling.copyOf()
+        )
+
+        /** The ground's return at [cell] (row-major), millimeters a second. */
+        fun groundReturnRateRowMajor(cell: Int): Float = groundReturnRate[index(cell / cellsAcross, cell % cellsAcross)]
 
         fun lap(entry: MoistureLedger.Lap?) {
             if (entry != null) {

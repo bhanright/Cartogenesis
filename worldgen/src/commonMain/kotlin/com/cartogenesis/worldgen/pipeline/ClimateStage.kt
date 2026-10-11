@@ -14,6 +14,7 @@ import kotlin.math.PI
 import kotlin.math.exp
 import kotlin.math.sin
 import kotlin.math.sqrt
+import kotlin.time.TimeSource
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -477,7 +478,56 @@ object ClimateStage {
          * millimetres: the numerator of the continental recycling ratio. Measured rather than
          * read, which is why it stops here rather than going on to [ClimateResult] and the save.
          */
-        val landOriginPrecipitationMm: FloatField
+        val landOriginPrecipitationMm: FloatField,
+        /** Where this run's loop ended, for a later run of the same world to start from ([WarmStart]). */
+        val warmStart: WarmStart? = null
+    )
+
+    /**
+     * One climate run's cost: its whole time and laps, whether it started from an earlier run's
+     * settled state ([WarmStart]), and each lap's parts in milliseconds ([MoistureMarch.Result.lapMillis],
+     * [AtmosphereCoupling.heatingMillis], [AtmosphereCoupling.solveMillis], [AtmosphereCoupling.seasonsMillis]).
+     */
+    internal class ClimateRun(
+        val millis: Double,
+        val laps: Int,
+        val warmStarted: Boolean,
+        val marchLapMillis: List<Double>,
+        val heatingMillis: List<Double>,
+        val solveMillis: List<Double>,
+        val seasonsMillis: List<Double>
+    )
+
+    /**
+     * Handed every climate run's cost as it ends, for the cost guard (`BoundaryLayerCostTest`), which
+     * counts a world's runs; nothing in the pipeline sets it.
+     */
+    @kotlin.concurrent.Volatile
+    internal var runListener: ((ClimateRun) -> Unit)? = null
+
+    /**
+     * Where a climate run's coupled loop may start other than cold: each half's latent heating on
+     * the atmosphere's grid, watts per square meter, as the last run's condensation asked for it,
+     * and the march's ground return ([MoistureMarch.StartState]).
+     *
+     * A generation runs the climate four times over nearly the same world: the erosion's provisional
+     * weather twice, the ice's provisional snow balance and the finished climate, each on the ground
+     * and coast the stage before it left. Each run's loop is the same fixed point, the heating its own
+     * condensation asks for and the year its own ground returns, so starting it where the last run
+     * settled moves where it starts and not where it settles: the loop's own test, `|g(Q) - Q|` and
+     * the land's rain, both under [MoistureMarch.CONVERGED_SHARE], still decides when it stops, and
+     * the answer stands within that share of a cold start's (docs/DESIGN_LEDGER.md, A1-6a).
+     *
+     * Carried on the result each run reads its world from ([SeaLevelResult.climateStart],
+     * [ErosionResult.climateStart]), not held by this object between runs, so a world is a function
+     * of its configuration and the stage results it is built from, however the engine reaches them:
+     * a reused stage hands on the start the fresh one made. Not saved: a world read from a file and
+     * changed in a later stage starts that stage's climate cold (docs/TODO.md).
+     */
+    internal class WarmStart(
+        val julyLatentWPerM2: DoubleArray,
+        val januaryLatentWPerM2: DoubleArray,
+        val march: MoistureMarch.StartState
     )
 
     /**
@@ -529,7 +579,8 @@ object ClimateStage {
         val wind: WindField,
         val landOriginPrecipitationMm: FloatField,
         val potentialEvapotranspirationMm: FloatField,
-        val openWaterEvaporationMm: FloatField
+        val openWaterEvaporationMm: FloatField,
+        val warmStart: WarmStart?
     )
 
     /**
@@ -555,7 +606,18 @@ object ClimateStage {
         ocean: OceanResult,
         /** See `GlaciationConfig.glacialMaximumC`: the ice that carved the ground is not today's. */
         globalCoolingC: Float = config.glaciation.glacialMaximumC
-    ): FloatField {
+    ): FloatField = provisionalSnowBalanceAndStart(config, sea, ocean, globalCoolingC).first
+
+    /**
+     * [provisionalSnowBalance] and where its climate's loop ended, which the engine hands the finished
+     * climate to start from ([WarmStart]).
+     */
+    internal fun provisionalSnowBalanceAndStart(
+        config: WorldGenConfig,
+        sea: SeaLevelResult,
+        ocean: OceanResult,
+        globalCoolingC: Float = config.glaciation.glacialMaximumC
+    ): Pair<FloatField, WarmStart?> {
         val fields = seasonalFields(config, sea, ocean, globalCoolingC)
         return SnowBalance.field(
             sea.isLand,
@@ -563,7 +625,7 @@ object ClimateStage {
             fields.januaryHalfTemperature,
             fields.julyHalfPrecipitationMm,
             fields.januaryHalfPrecipitationMm
-        )
+        ) to fields.warmStart
     }
 
     internal fun generateWithSeasonalMm(
@@ -673,7 +735,8 @@ object ClimateStage {
             winterPrecipitationMm = winterPrecipitationMm,
             julyHalfPrecipitationMm = julyHalfPrecipitationMm,
             januaryHalfPrecipitationMm = januaryHalfPrecipitationMm,
-            landOriginPrecipitationMm = fields.landOriginPrecipitationMm
+            landOriginPrecipitationMm = fields.landOriginPrecipitationMm,
+            warmStart = fields.warmStart
         )
     }
 
@@ -701,6 +764,7 @@ object ClimateStage {
         /** How the atmosphere's loop is started and relaxed; the defaults for every world. */
         loop: CouplingStart = CouplingStart()
     ): SeasonalFields {
+        val runStarted = TimeSource.Monotonic.markNow()
         val cellsAcross = config.width
         val cellsDown = config.height
         val climateConfig = config.climate
@@ -851,6 +915,13 @@ object ClimateStage {
             )
         }
 
+        // Where the last run of this world settled, when the stage before this one ran the climate
+        // and it can be read on this grid: the loop starts there (WarmStart).
+        val start = sea.climateStart?.takeIf { it.march.isLand.size == cellsAcross * cellsDown }
+        val coarseCells = SphericalGrid.forAtmosphere(config.scale).cellCount
+        val startHeating = start?.takeIf { it.julyLatentWPerM2.size == coarseCells }
+            ?.let { it.julyLatentWPerM2 to it.januaryLatentWPerM2 }
+
         // The atmosphere over this world's land, sea and terrain, heated by the march's own
         // condensation between its laps (AtmosphereCoupling).
         val coupling = if (climateConfig.pressureWinds) {
@@ -863,7 +934,7 @@ object ClimateStage {
                 ::seasonsUnder,
                 loop.relaxation,
                 loop.depth,
-                loop.initialLatentWPerM2
+                loop.initialLatentWPerM2 ?: startHeating
             )
         } else null
         val marched = MoistureMarch.run(
@@ -876,10 +947,19 @@ object ClimateStage {
                 blurSigmaKm = RAIN_BLUR_SIGMA_KM
             ),
             ledger,
-            coupling
+            coupling,
+            start?.march
         ) { coupling?.firstSeasons() ?: seasonsUnder(null) }
         coupling?.release()
         val atmosphere = coupling?.atmosphere
+        val endStart = marched.endState?.let { march ->
+            val noHeating = DoubleArray(coarseCells)
+            WarmStart(
+                coupling?.julyTargetWPerM2 ?: coupling?.julyLatentWPerM2 ?: noHeating,
+                coupling?.januaryTargetWPerM2 ?: coupling?.januaryLatentWPerM2 ?: noHeating,
+                march
+            )
+        }
         if (coupling != null) {
             lastCoupled = CoupledAtmosphere(config, sea, ocean, globalCoolingC, coupling, marched)
         }
@@ -904,6 +984,12 @@ object ClimateStage {
             )
         }
 
+        runListener?.invoke(
+            ClimateRun(
+                runStarted.elapsedNow().inWholeMicroseconds / 1_000.0, marched.laps, start != null, marched.lapMillis,
+                coupling?.heatingMillis.orEmpty(), coupling?.solveMillis.orEmpty(), coupling?.seasonsMillis.orEmpty()
+            )
+        )
         return SeasonalFields(
             temperature = temperature,
             summerTemperature = summerTemperature,
@@ -920,7 +1006,8 @@ object ClimateStage {
             wind = wind,
             landOriginPrecipitationMm = marched.landOriginRainMm,
             potentialEvapotranspirationMm = marched.potentialEvapotranspirationMm,
-            openWaterEvaporationMm = marched.openWaterEvaporationMm
+            openWaterEvaporationMm = marched.openWaterEvaporationMm,
+            warmStart = endStart
         )
     }
 

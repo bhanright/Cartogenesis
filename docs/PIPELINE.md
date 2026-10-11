@@ -50,6 +50,13 @@ then runs a provisional copy of that later stage, and nothing outside the stage 
   march: between the march's laps the latent heat of each lap's condensation heats the atmosphere,
   whose wind and vertical motion the next lap reads (`AtmosphereCoupling`), until both the heating and
   the land's rain settle. Every climate run in a generation, the provisional ones included, couples.
+- **Each climate run starts where the one before it settled.** The four climate runs of a
+  generation (the erosion's opening and halfway weather, the ice's snow balance, the finished
+  climate) each start their coupled loop from the last run's settled heating and the march's ground
+  return and water in flight (`ClimateStage.WarmStart`), carried on the erosion's and the sea's
+  results in memory and not saved; the loop's own test still decides when each stops. A reused
+  stage hands on the start its fresh run made, so reuse and a fresh generation agree; a world read
+  from a file starts a re-run climate cold (docs/TODO.md).
 - **Both provisional climates have the currents off.** The real ocean exists only from stage 5 on;
   erosion and glaciation never see it.
 - **Isostasy is solved three times.** Plates (`Isostasy.Columns`), erosion and glaciation

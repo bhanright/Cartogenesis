@@ -266,6 +266,8 @@ object WorldGenerationEngine {
             // stored and already the thing every later stage reads.
             ?: run {
                 val cut = SeaLevelStage.apply(erosion.height, config)
+                // The provisional climate starts where the erosion's last one settled (WarmStart).
+                cut.climateStart = erosion.climateStart
                 // The provisional climate. Ice is a mass balance, and a mass balance needs the
                 // rainfall as well as the temperature, so the ice cannot be decided from latitude
                 // and altitude alone: the whole climate stage runs here, on the terrain as it
@@ -281,14 +283,14 @@ object WorldGenerationEngine {
                     if (config.glaciation.enabled && config.climate.snowBalance &&
                         cut.landCellCount > 0
                     ) {
-                        ClimateStage.provisionalSnowBalance(
+                        ClimateStage.provisionalSnowBalanceAndStart(
                             config, cut, OceanStage.withoutCurrents(config, cut)
                         )
                     } else null
-                if (capture == null) {
-                    GlaciationStage.apply(config, cut, provisional, iceAccelerator)
+                val iced = if (capture == null) {
+                    GlaciationStage.apply(config, cut, provisional?.first, iceAccelerator)
                 } else {
-                    GlaciationStage.apply(config, cut, provisional, iceAccelerator) { mass ->
+                    GlaciationStage.apply(config, cut, provisional?.first, iceAccelerator) { mass ->
                         capture.ice = IceLayers(
                             frozen = mass.frozen,
                             valleyGlacier = mass.valleyGlacier,
@@ -301,6 +303,10 @@ object WorldGenerationEngine {
                         )
                     }
                 }
+                // The finished climate starts where the ice's provisional one settled, or where the
+                // erosion's did when the ice ran none (WarmStart).
+                iced.climateStart = provisional?.second ?: erosion.climateStart
+                iced
             }
 
         report(GenerationStage.OCEAN)

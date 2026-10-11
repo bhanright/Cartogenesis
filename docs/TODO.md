@@ -1,5 +1,22 @@
 # To do
 
+- **A rift drawn as a straight line down seed 42's southern continent (A1-6a, rule 13).** M1's
+  atlas of seed 42 at 1,024 rows shows a nearly straight north-south line from about 30 S to 85 S
+  near column 1,400. It is a continental rift (`BoundaryClass.CONTINENTAL_RIFT`) on a plate
+  boundary that drifts only from column 1,396 to 1,438 over rows 696 to 990, about 5,900 km on a
+  bearing within five degrees of the meridian: the plates' height steps by 0.04 to 0.08 of the
+  field across it on every row, the eroded relief keeps the step, and a trunk river of about
+  950,000 cells of catchment runs down the valley beside it. The cause is the plate stage, the
+  partition's straight edge with the rift's profile laid along it; the climate draws nothing of it.
+  2026-10-11, A1-6a.
+- **A world read from a file and changed in a later stage starts that stage's climate cold
+  (A1-6a).** Each climate run in a generation starts from where the run before it settled
+  (`ClimateStage.WarmStart`), carried on the erosion's and the sea's results in memory and not
+  saved. A world loaded from a save and changed in a setting the climate or the ice reads runs that
+  climate from a cold start, which settles within the loop's own share (`CONVERGED_SHARE`) of the
+  warm one but not to its bits, so it is not the world a fresh generation makes. Saving the start
+  (the two halves' heating on the atmosphere's grid and the ground's return, about 18 MB a world at
+  1,024 rows) would close it. 2026-10-11, A1-6a.
 - **`GroundFiguresTest` fails on main at 4c7f3a4a.** Its case *no figure in the source is counted
   in cycles round the map or as a share of it* names `Shoreline.kt:179` (`:cartography`, G2's
   drawn coast), `width / PIECES_PER_SIGMA`, as dividing the grid. Seen on both everyday runs of

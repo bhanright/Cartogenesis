@@ -50,8 +50,12 @@ class BoundaryLayerCostTest {
 
         const val ROWS = 1024
 
-        /** The coupled loop's laps a climate run, 13 to 18 on the standard worlds at 512 and 1,024 rows (`AtmosphereCouplingTest`). */
-        const val LAPS_PER_CLIMATE = 16
+        /**
+         * The coupled loop's laps a climate run: 32 over a world's four runs on seed 7 at 1,024 rows,
+         * the first cold and the others starting where the run before settled (the world clause
+         * below, docs/DESIGN_LEDGER.md, A1-6a).
+         */
+        const val LAPS_PER_CLIMATE = 8
     }
 
     @Test
@@ -152,7 +156,7 @@ class BoundaryLayerCostTest {
                 "%.2f%% of a %.1f s world in all and %.2f%% on the map's cells")
                 .format(ROWS, factorMs, downMs, solveMs, upMs, ascentMs, laps, LAPS_PER_CLIMATE, wholeShare * 100, worldSeconds, perCellShare * 100)
         )
-        KnownFailures.expect("A1-5: the coupled loop's per-cell work is over a hundredth of a world", "10%") {
+        KnownFailures.expect("A1-5: the coupled loop's per-cell work is over a hundredth of a world", "8%") {
             if (perCellShare >= WORTH_A_DEVICE_SHARE) {
                 throw RecordedViolation(
                     "the coupled loop's per-cell work takes %.2f%% of a world, over the hundredth rule 8 allows without a graphics path".format(perCellShare * 100),
@@ -160,6 +164,45 @@ class BoundaryLayerCostTest {
                 )
             }
         }
+    }
+
+    /**
+     * What a world's climate runs cost at the application's grid, lap by lap: each of the four runs a
+     * generation makes (the erosion's two provisional climates, the ice's and the finished one), its
+     * laps and whether it started from the run before it ([ClimateStage.WarmStart]), the march's own
+     * lap and the coupling's heating, solve and seasons between laps. A report: the per-cell clause
+     * above holds the part rule 8 asks about.
+     */
+    @Test
+    fun `a world's climate runs, lap by lap`() {
+        val config = WorldGenConfig.forRows(7L, 512).atResolution(2 * ROWS, ROWS)
+        val runs = java.util.Collections.synchronizedList(ArrayList<ClimateStage.ClimateRun>())
+        ClimateStage.runListener = { runs.add(it) }
+        val worldSeconds = try {
+            WorldGenerationEngine.generateBlocking(config)
+            runs.clear()
+            val started = System.nanoTime()
+            WorldGenerationEngine.generateBlocking(config)
+            (System.nanoTime() - started) / 1e9
+        } finally {
+            ClimateStage.runListener = null
+        }
+        fun List<Double>.meanOrZero() = if (isEmpty()) 0.0 else average()
+        for ((index, run) in runs.withIndex()) {
+            println(
+                ("CLIMATE RUN %d at %d rows: %.2f s, %d laps, %s; a lap's march %.0f ms, heating %.0f ms, solve %.0f ms, seasons %.0f ms")
+                    .format(
+                        index + 1, ROWS, run.millis / 1000, run.laps, if (run.warmStarted) "warm" else "cold",
+                        run.marchLapMillis.meanOrZero(), run.heatingMillis.meanOrZero(), run.solveMillis.meanOrZero(), run.seasonsMillis.meanOrZero()
+                    )
+            )
+        }
+        println(
+            "CLIMATE RUNS at %d rows: %d runs, %d laps, %.1f s of a %.1f s world".format(
+                ROWS, runs.size, runs.sumOf { it.laps }, runs.sumOf { it.millis } / 1000, worldSeconds
+            )
+        )
+        assertTrue(runs.size == COUPLED_CLIMATES_PER_WORLD, "a world ran ${runs.size} climates, not $COUPLED_CLIMATES_PER_WORLD")
     }
 
     /** A continent of a third of the longitudes from 60 S to 60 N, with a ridge in it. */

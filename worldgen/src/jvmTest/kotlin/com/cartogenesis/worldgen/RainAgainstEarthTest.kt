@@ -171,16 +171,16 @@ class RainAgainstEarthTest : BorrowsSharedWorlds() {
         // wetter and the ground's Budyko share of its rain smaller; armed again at A1-5, the rain
         // from the solved vertical motion (docs/DESIGN_LEDGER.md); recorded again when H1's ground
         // came under it (docs/DESIGN_LEDGER.md, M1; docs/TODO.md).
-        KnownFailures.expect("M1: the land returns less of its rain than Earth's on H1's ground", "") {
+        KnownFailures.expect("M1: the land returns less of its rain than Earth's on H1's ground", "x0.78") {
             nearEarth("land's return over its rain", pooled.landReturn / pooled.landRain, EARTH_LAND_RETURN_SHARE)
         }
         // The sea evaporates less than Earth's, and the rain with it, for the causes docs/TODO.md's
         // "The march's misses against Earth, after C1b2" measures: the marine air stands at the
         // sea's own temperature and the wind at one speed.
-        KnownFailures.expect("C1b2: the sea evaporates less than Earth's", "x0.73") {
+        KnownFailures.expect("C1b2: the sea evaporates less than Earth's", "x0.74") {
             nearEarth("open-sea evaporation, mm", pooled.seaEvaporation / pooled.seaArea, EARTH_OCEAN_EVAPORATION_MM)
         }
-        KnownFailures.expect("C1b2: the open sea rains less than Earth's", "x0.60") {
+        KnownFailures.expect("C1b2: the open sea rains less than Earth's", "x0.57") {
             nearEarth("open-sea rain, mm", pooled.seaRain / pooled.seaArea, EARTH_OCEAN_RAIN_MM)
         }
         // Recorded from C1b2 at x0.55; armed at A1-4, where the boundary layer's wind no longer

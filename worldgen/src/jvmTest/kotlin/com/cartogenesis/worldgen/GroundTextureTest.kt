@@ -140,7 +140,7 @@ class GroundTextureTest : BorrowsSharedWorlds() {
         // Recorded when H1's ground came under the coupled climate: its filled sags are plains at
         // their spill level, and under the coupled rain seeds 42, 99 and 718106 hold lakes over 2.6
         // to 4.1% of their land (docs/DESIGN_LEDGER.md, M1; docs/TODO.md).
-        KnownFailures.expect("M1: lakes cover more of H1's land under the coupled rain than Earth's allowance", "") {
+        KnownFailures.expect("M1: lakes cover more of H1's land under the coupled rain than Earth's allowance", "0.0238") {
             if (pooledLakes > earthLakeShare * LAKE_SHARE_ALLOWANCE) {
                 throw RecordedViolation(
                     "lakes cover ${"%.4f".format(pooledLakes)} of the land, more than half again Earth's" +
@@ -154,7 +154,7 @@ class GroundTextureTest : BorrowsSharedWorlds() {
         // Earth-sized planet's 512 rows are 39 km cells, which hold fewer channel cells to a
         // square kilometer (docs/DESIGN_LEDGER.md, K2).
         KnownFailures.expect(
-            "K2: the drainage density at 512 rows is read on cells of 39 km, against a figure taken on 23 km cells", "0.0054"
+            "K2: the drainage density at 512 rows is read on cells of 39 km, against a figure taken on 23 km cells", "0.0048"
         ) {
             if (pooledDensity !in (MAIN_DRAINAGE_DENSITY_KM_PER_KM2 / DRAINAGE_DENSITY_ALLOWANCE)..
                     (MAIN_DRAINAGE_DENSITY_KM_PER_KM2 * DRAINAGE_DENSITY_ALLOWANCE)

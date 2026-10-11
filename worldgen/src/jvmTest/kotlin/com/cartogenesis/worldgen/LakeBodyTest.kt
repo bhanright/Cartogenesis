@@ -144,7 +144,7 @@ class LakeBodyTest : BorrowsSharedWorlds() {
         // pass's ground leaves none (docs/DESIGN_LEDGER.md, A1-1). Recorded when H1's ground came
         // under the coupled climate: a basin of six cells on seed 1234 in dry country, its excess
         // under two of the float's last places at the map's largest runoff (docs/TODO.md).
-        KnownFailures.expect("M1: a closed basin's pockets are handed more rain than reaches it", "") {
+        KnownFailures.expect("M1: a closed basin's pockets are handed more rain than reaches it", "seed 1234: a basin of 6 cells handed 45.2771 of its catchment (0.760875 of 0.0168049 mm-cells; the largest runoff carried on the map 5.73998e+06)") {
             if (failures.isNotEmpty()) throw RecordedViolation("rain counted twice or lost: $failures", failures.joinToString("; "))
         }
     }

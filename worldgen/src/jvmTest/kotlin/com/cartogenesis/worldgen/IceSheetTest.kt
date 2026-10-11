@@ -243,7 +243,7 @@ class IceSheetTest : BorrowsSharedWorlds() {
             // Recorded when H1's ground came under the coupled climate: none of the candidates'
             // sheets fills a third of its disc near its dome, so the control has no flow to turn
             // (docs/DESIGN_LEDGER.md, M1; docs/TODO.md).
-            KnownFailures.expect("M1: no sheet the control can read has a dome", "") {
+            KnownFailures.expect("M1: no sheet the control can read has a dome", "seed 17: 31 of 513 cells; seed 718106: 96 of 513 cells; seed 59758: 41 of 513 cells; seed 7: 130 of 513 cells; seed 42: 109 of 513 cells") {
                 val readings = candidates.map { candidate ->
                     val candidateMeasured = measure(candidate)
                     val reading = readFlow(candidateMeasured, candidateMeasured.mass.sheetFlowReceiver)

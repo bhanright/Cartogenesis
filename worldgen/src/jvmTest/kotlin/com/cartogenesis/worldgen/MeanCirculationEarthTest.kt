@@ -10,6 +10,7 @@ import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.test.Test
+import kotlin.test.assertTrue
 
 /**
  * The climate's zonal-mean circulation against Earth's, on the standard seeds at the application's
@@ -30,6 +31,18 @@ import kotlin.test.Test
  *   and the land beside it between 20 N and 8 S. The ocean's wettest row within 30 degrees stands
  *   farther north in the half about July than in the half about January, by [ITCZ_LEAST_RANGE_DEGREES]
  *   to [ITCZ_LARGEST_RANGE_DEGREES], the open ocean's range to the monsoon sector's.
+ * - **The ITCZ in each half.** The same: in the half about July the ocean's wettest row stands between
+ *   [ITCZ_JULY_SOUTHERNMOST] and [ITCZ_JULY_NORTHERNMOST] (the open ocean's boreal-winter 2 N to the
+ *   monsoon sector's 20 N), and in the half about January between [ITCZ_JANUARY_SOUTHERNMOST] and
+ *   [ITCZ_JANUARY_NORTHERNMOST] (the monsoon sector's 8 S to the open ocean's 2 N).
+ * - **The eddy-driven jet.** The zonal-mean surface westerlies at their strongest. Ceppi and Hartmann
+ *   (2013, J. Climate 26, read) find the Southern Hemisphere's centered "near 50S" in both seasons in
+ *   the NCEP reanalysis (at 850 hPa, nearly unchanged at the surface); Barnes and Polvani's (2013,
+ *   J. Climate 26, read) CMIP5 historical runs put the North Atlantic's at 46.9 N and the North
+ *   Pacific's at 42.3 N, farther equatorward in winter than in summer. Each half's jet stands within
+ *   five degrees of the span Earth's jets cover, [JET_NEAREST_DEGREES] to [JET_FARTHEST_DEGREES], and
+ *   each hemisphere's summer jet stands poleward of its winter jet by no more than
+ *   [RIDGE_LARGEST_SHIFT_DEGREES], as its ridge does.
  * - **The cells.** The ECMWF solstitial mean meridional streamfunction (MIT 12.810 lecture notes on
  *   the Hadley cell, 2023, read): the cross-equatorial winter cells' contours reach 20 and 24 times
  *   1e10 kg/s, the summer cells' 4. In each half the lower branch's greatest mass flux toward the
@@ -49,6 +62,19 @@ class MeanCirculationEarthTest : BorrowsSharedWorlds() {
         /** The search for the ridge, degrees from the equator: the subtropics and the middle latitudes. */
         const val RIDGE_SEARCH_NEAREST = 15f
         const val RIDGE_SEARCH_FARTHEST = 50f
+
+        const val ITCZ_JULY_SOUTHERNMOST = 2.0
+        const val ITCZ_JULY_NORTHERNMOST = 20.0
+        const val ITCZ_JANUARY_SOUTHERNMOST = -8.0
+        const val ITCZ_JANUARY_NORTHERNMOST = 2.0
+
+        /** Earth's eddy-driven jets span 42.3 to 50 degrees; five either way. */
+        const val JET_NEAREST_DEGREES = 42.3 - 5.0
+        const val JET_FARTHEST_DEGREES = 50.0 + 5.0
+
+        /** The jet is sought between the subtropics and the polar cap, degrees from the equator. */
+        const val JET_SEARCH_NEAREST = 25f
+        const val JET_SEARCH_FARTHEST = 70f
 
         const val ITCZ_LEAST_RANGE_DEGREES = 9.0 - 2.0
         const val ITCZ_LARGEST_RANGE_DEGREES = 20.0 + 8.0
@@ -136,6 +162,64 @@ class MeanCirculationEarthTest : BorrowsSharedWorlds() {
         }
         KnownFailures.expect("A1-6a: the summer ridge stands equatorward of the winter ridge", "6 of 6") {
             if (moved.isNotEmpty()) throw RecordedViolation("the ridge does not move poleward in summer: $moved", "${moved.size} of 6")
+        }
+    }
+
+    @Test
+    fun `the eddy-driven jet stands where Earth's do and moves poleward in summer`() {
+        val placed = ArrayList<String>()
+        val moved = ArrayList<String>()
+        for (seed in SEEDS) {
+            val world = world(seed)
+            val atmosphere = checkNotNull(ClimateStage.coupledAtmosphere(world.config, world.sea, world.ocean)).coupling.atmosphere
+            fun jet(julyHalf: Boolean, north: Boolean): Double {
+                val half = atmosphere.half(julyHalf)
+                var best = -1
+                var bestWind = Double.NEGATIVE_INFINITY
+                for (row in 0 until world.height) {
+                    val latitude = ClimateStage.latitudeOf(row, world.height)
+                    if ((latitude > 0f) != north || abs(latitude) < JET_SEARCH_NEAREST || abs(latitude) > JET_SEARCH_FARTHEST) continue
+                    var sum = 0.0
+                    for (column in 0 until world.width) sum += half.eastwardMps[row * world.width + column]
+                    if (sum > bestWind) { bestWind = sum; best = row }
+                }
+                return abs(ClimateStage.latitudeOf(best, world.height).toDouble())
+            }
+            val julyNorth = jet(julyHalf = true, north = true)
+            val julySouth = jet(julyHalf = true, north = false)
+            val januaryNorth = jet(julyHalf = false, north = true)
+            val januarySouth = jet(julyHalf = false, north = false)
+            println(
+                "MEAN CIRCULATION seed %d jet: July half %.1f N and %.1f S, January half %.1f N and %.1f S"
+                    .format(seed, julyNorth, julySouth, januaryNorth, januarySouth)
+            )
+            for ((name, latitude) in listOf(
+                "July north" to julyNorth, "July south" to julySouth, "January north" to januaryNorth, "January south" to januarySouth
+            )) {
+                if (latitude < JET_NEAREST_DEGREES || latitude > JET_FARTHEST_DEGREES) placed += "seed $seed $name %.1f".format(latitude)
+            }
+            for ((name, shift) in listOf("north" to julyNorth - januaryNorth, "south" to januarySouth - julySouth)) {
+                if (shift < 0.0 || shift > RIDGE_LARGEST_SHIFT_DEGREES) moved += "seed $seed $name summer minus winter %.1f".format(shift)
+            }
+        }
+        assertTrue(placed.isEmpty(), "jets outside $JET_NEAREST_DEGREES to $JET_FARTHEST_DEGREES degrees: $placed")
+        assertTrue(moved.isEmpty(), "the jet does not move poleward in summer: $moved")
+    }
+
+    @Test
+    fun `the ITCZ stands in the summer hemisphere in each half`() {
+        val complaints = ArrayList<String>()
+        for (seed in SEEDS) {
+            val world = world(seed)
+            val march = checkNotNull(ClimateStage.coupledAtmosphere(world.config, world.sea, world.ocean)).march
+            val july = wettestOceanRow(world, march.julyHalfRainMm.data).toDouble()
+            val january = wettestOceanRow(world, march.januaryHalfRainMm.data).toDouble()
+            println("MEAN CIRCULATION seed %d ITCZ by half: July %.1f, January %.1f".format(seed, july, january))
+            if (july < ITCZ_JULY_SOUTHERNMOST || july > ITCZ_JULY_NORTHERNMOST) complaints += "seed $seed July %.1f".format(july)
+            if (january < ITCZ_JANUARY_SOUTHERNMOST || january > ITCZ_JANUARY_NORTHERNMOST) complaints += "seed $seed January %.1f".format(january)
+        }
+        KnownFailures.expect("A1-6b: the ITCZ stands outside Earth's positions in a half", "unrecorded") {
+            if (complaints.isNotEmpty()) throw RecordedViolation("the ITCZ outside Earth's positions: $complaints", complaints.joinToString("; "))
         }
     }
 

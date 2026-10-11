@@ -36,7 +36,11 @@ internal object RainFronts {
     /** The longest straight front along a row and down a column, kilometers, and where the first lies. */
     class Longest(val alongRowKm: Double, val downColumnKm: Double, val rowLatitude: Float, val rowColumn: Int)
 
-    fun longest(world: WorldMap, rain: FloatArray): Longest {
+    /**
+     * The longest fronts of [rain] (millimeters a year, row-major) over [world]'s land, the run along
+     * a row sought only on rows between [nearestDegrees] and [farthestDegrees] from the equator.
+     */
+    fun longest(world: WorldMap, rain: FloatArray, nearestDegrees: Float = 0f, farthestDegrees: Float = MAX_LATITUDE): Longest {
         val across = world.width
         val down = world.height
         val land = world.sea.isLand
@@ -50,7 +54,7 @@ internal object RainFronts {
         var alongRowLatitude = 0f
         var alongRowColumn = -1
         for (row in rowsAcrossBlur until down - rowsAcrossBlur) {
-            if (abs(latitude(row)) > MAX_LATITUDE) continue
+            if (abs(latitude(row)) > farthestDegrees || abs(latitude(row)) < nearestDegrees) continue
             val cellKm = world.config.cellWidthKm * cos(latitude(row) * PI / 180.0)
             var run = 0
             for (column in 0 until across) {

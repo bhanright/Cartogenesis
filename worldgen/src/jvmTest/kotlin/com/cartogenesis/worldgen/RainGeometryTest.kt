@@ -48,6 +48,14 @@ class RainGeometryTest : BorrowsSharedWorlds() {
         /** The fewest land columns a row boundary must cross before its step counts. */
         const val MIN_COLUMNS = 20
 
+        /**
+         * Where the polar front is sought, degrees from the equator: the Ferrel and polar legs' meeting
+         * stands 30 degrees of Earth's annual belts poleward of the Hadley cells' edges, 25 to 35, and
+         * the band is that span, 55 to 65, and five degrees beyond it, short of [MAX_LATITUDE].
+         */
+        const val POLAR_FRONT_NEAREST = 55f
+        const val POLAR_FRONT_FARTHEST = 70f
+
         /** The 250 mm isohyet, the desert's own line in Koppen's simplest form. */
         const val DRY_MM = 250f
 
@@ -164,6 +172,33 @@ class RainGeometryTest : BorrowsSharedWorlds() {
                 )
             }
         }
+    }
+
+    /**
+     * The rain draws no straight line where the westerlies meet the polar easterlies: no front of the
+     * annual rain over land between [POLAR_FRONT_NEAREST] and [POLAR_FRONT_FARTHEST] degrees runs
+     * straight along a row for longer than the weather's own bend, a quarter of its wavelength, the
+     * bar of the clause above.
+     *
+     * **Shown failing on A1-6a's tree** (738ccec3), whose Ferrel and polar legs met on one latitude in
+     * both halves and whose march held water back where the zonal wind reversed: the rain stepped
+     * from wet to dry within a degree along 60 to 63 degrees (docs/DESIGN_LEDGER.md, A1-6b, for the
+     * figures).
+     */
+    @Test
+    fun `the rain draws no straight front along the polar front at 1,024 rows`() {
+        val bar = ClimateStage.WEATHER_NOISE_WAVELENGTH_KM / 4.0
+        val over = ArrayList<String>()
+        seeds.forEach { seed ->
+            val world = SharedWorlds.world(WorldGenConfig.forRows(seed, ROWS))
+            val found = RainFronts.longest(world, world.climate.precipitationMm.data, POLAR_FRONT_NEAREST, POLAR_FRONT_FARTHEST)
+            println(
+                "POLAR FRONT seed %d: the longest straight front along a row at %.0f to %.0f degrees %.0f km at %.1f; bar %.0f"
+                    .format(seed, POLAR_FRONT_NEAREST, POLAR_FRONT_FARTHEST, found.alongRowKm, found.rowLatitude, bar)
+            )
+            if (found.alongRowKm > bar) over += "%d %.0f km at %.1f".format(seed, found.alongRowKm, found.rowLatitude)
+        }
+        assertTrue(over.isEmpty(), "fronts hold a row at the polar front for longer than a quarter of the weather's wavelength: $over")
     }
 
     /** The largest row step of [rain] over land within [MAX_LATITUDE], over the median step. */

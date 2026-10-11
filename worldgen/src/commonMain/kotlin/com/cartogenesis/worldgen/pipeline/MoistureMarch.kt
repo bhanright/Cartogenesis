@@ -42,16 +42,34 @@ import kotlin.time.TimeSource
  * A column-by-column march has to run one way. A cell whose wind blows east is marched by the
  * eastward sweep and one whose wind blows west by the westward one; every cell belongs to exactly
  * one. Water that crosses from one sweep's cell into the other's where two zonal winds meet head
- * on is **banked** at the receiving cell and taken up by the other sweep when it reaches it. So is
- * what a row sends through a face into a row of the other sweep: each row's outflow through such a
- * face is solved in its own sweep's system, implicitly, beside the inflow its own sweep's rows give
- * it in the same column, and what leaves is banked at the receiving cell, the eastward sweep's for
- * the westward one this lap and the westward sweep's for the eastward one the next. A row's outflow
- * is then the one the same face would carry between two rows of one sweep, so a reversal of the
- * zonal wind is no line the water can see. Solving the other sweep's row in the same system instead,
- * as water fixed at what it left the column with, capped what it could send at what it carried
- * along the row, so water piled up on the upwind side of every reversal and the downwind side went
- * dry (docs/DESIGN_LEDGER.md, A1-6b).
+ * on is **banked** at the receiving cell and taken up by the other sweep when it reaches it, its cloud
+ * and falling water with it, to fall over their own delays there; rained out at the turn instead,
+ * they drew a wet line wherever the zonal wind reversed. So is
+ * what the mean wind carries through a face into a row of the other sweep: each row's outflow
+ * through such a face is solved in its own sweep's system, implicitly, beside the inflow its own
+ * sweep's rows give it in the same column, and banked at the receiving cell, the eastward sweep's
+ * for the westward one this lap and the westward sweep's for the eastward one the next. That is
+ * the flux the same face would carry between two rows of one sweep. Solved instead in the westward
+ * sweep's system, with an eastward row entering it as the water it had left the column with and
+ * none of its own sweep's faces, the eastward row could send no more than it carried along the row
+ * and keep no more than it could mix back, so water piled up on the upwind side of every reversal
+ * of the zonal wind and the downwind side went dry (docs/DESIGN_LEDGER.md, A1-6b). The eddies'
+ * mixing between the two sweeps' rows is still solved that way, by the westward sweep with the
+ * eastward rows beside its own in one system: mixed a lap late in one direction, as the mean wind's
+ * outflow is, two rows that mix hard each wait on the other's last lap, and the march settled only
+ * over dozens of laps.
+ *
+ * # The sweeps are held
+ *
+ * Which sweep marches a cell is its first lap's wind's to say, and the coupled laps after it keep
+ * that partition: a cell whose wind later turns against its sweep is carried along it at the
+ * march's least speed, as calm. Where the zonal wind is weak, near every reversal, the solved
+ * atmosphere's lap-to-lap changes turned ten thousand cells a lap from one sweep to the other, and
+ * the march's answer stepped with each turn, so the coupled loop never settled: its residual hung
+ * at a third of the heating over forty laps on seed 42 at 1,024 rows. Held, the march's answer
+ * moves with the wind's speed alone and the loop settles in eleven laps. A cell's zonal flux is its
+ * speed along its sweep, so as its wind turns against the sweep that flux falls to nothing before
+ * the turn and not after it (docs/DESIGN_LEDGER.md, A1-6b).
  *
  * # The sinks
  *
@@ -307,7 +325,7 @@ object MoistureMarch {
     /**
      * A half's water in flight at the end of a lap, which the next lap starts from: the bank at every
      * cell, kilograms a square meter of column water in the march's own units (row-major), which
-     * holds what the westward sweep's rows sent into the eastward sweep's; and each row's parcel arriving at the
+     * holds what the westward sweep's faces moved between rows; and each row's parcel arriving at the
      * map's first column in each sweep, vapor, cloud and falling water.
      *
      * Started cold, the first lap marches with an empty bank and its rows exchange nothing they did
@@ -419,6 +437,10 @@ object MoistureMarch {
             if (settled || lap >= MAX_LAPS) {
                 lapMillis.add(lapElapsed.inWholeMicroseconds / 1_000.0)
                 break
+            }
+            if (lap == 1) {
+                july.holdSweeps()
+                january.holdSweeps()
             }
             val nextSeasons = coupling?.nextSeasons()
             val returnStarted = TimeSource.Monotonic.markNow()
@@ -653,9 +675,10 @@ object MoistureMarch {
     private const val OPEN_SEA: Byte = 1
     private const val SEA_ICE: Byte = 2
 
-    /** How a row takes part in one sweep's column: marched, or the other sweep's. */
+    /** How a row takes part in one sweep's column: marched, solved for its faces only, or not at all. */
     private const val OUTSIDE: Byte = 0
     private const val MARCHED: Byte = 1
+    private const val ACROSS: Byte = 2
 
     /**
      * One season's march: its precomputed fields, column-major so a column's rows are adjacent
@@ -688,6 +711,14 @@ object MoistureMarch {
 
         // Column-major: cell (row, column) is column * cellsDown + row.
         val direction = ByteArray(cellCount)
+
+        /** Whether [direction] is held at the first lap's (see the class comment). */
+        private var sweepsHeld = false
+
+        /** Holds every cell in the sweep it marched in this lap, through the laps after it. */
+        fun holdSweeps() {
+            sweepsHeld = true
+        }
         val surface = ByteArray(cellCount)
         val saturatedMm = FloatArray(cellCount)
 
@@ -727,6 +758,10 @@ object MoistureMarch {
         val humidity = FloatArray(cellCount)
         val sourceMm = FloatArray(cellCount)
 
+        /** The parcel each cell sent on, column-major, for the westward sweep's faces to read. */
+        val sentParcel = DoubleArray(cellCount)
+        val sentParcelLand = DoubleArray(cellCount)
+
         // Potential evaporation from the last lap's air, row-major, and its terms in the air's
         // humidity at each land cell, built once.
         val potentialMm = FloatArray(cellCount)
@@ -742,6 +777,12 @@ object MoistureMarch {
         val bank = DoubleArray(cellCount)
         val bankLand = DoubleArray(cellCount)
 
+        /** The cloud and the falling water banked where the wind turns, with their land-origin parts, parcel units. */
+        val bankCloud = DoubleArray(cellCount)
+        val bankCloudLand = DoubleArray(cellCount)
+        val bankFalling = DoubleArray(cellCount)
+        val bankFallingLand = DoubleArray(cellCount)
+
         // Working space for one column's solve.
         val role = ByteArray(cellsDown)
         val water = DoubleArray(cellsDown)
@@ -752,11 +793,13 @@ object MoistureMarch {
         val sweepUpper = DoubleArray(cellsDown)
         val sweepSolved = DoubleArray(cellsDown)
         val sweepSolvedLand = DoubleArray(cellsDown)
+        val acrossBefore = DoubleArray(cellsDown)
+        val acrossBeforeLand = DoubleArray(cellsDown)
 
         /**
-         * Each marched row's outflow, per unit of its solved parcel, through its face with the row
-         * above and the row below where that row is the other sweep's: what [solveFaces] hands to
-         * the bank there.
+         * Each marched row's outflow by the mean wind, per unit of its solved parcel, through its
+         * face with a row of the other sweep above or below: what [solveFaces] hands to the bank
+         * there.
          */
         val sentAbove = DoubleArray(cellsDown)
         val sentBelow = DoubleArray(cellsDown)
@@ -839,8 +882,9 @@ object MoistureMarch {
                         val cell = row * cellsAcross + column
                         val here = index(row, column)
                         val eastward = season.eastwardMps[cell].toDouble()
-                        direction[here] = if (eastward >= 0.0) 1 else -1
-                        stretch[here] = (TRANSPORT_SPEED_MPS / maxOf(abs(eastward), slowest)).toFloat()
+                        if (!sweepsHeld) direction[here] = if (eastward >= 0.0) 1 else -1
+                        // The speed along the cell's sweep, its whole speed until the sweeps are held.
+                        stretch[here] = (TRANSPORT_SPEED_MPS / maxOf(eastward * direction[here], slowest)).toFloat()
                         surface[here] = when {
                             inputs.isLand[cell] -> LAND
                             season.seaIce[cell] -> SEA_ICE
@@ -972,6 +1016,10 @@ object MoistureMarch {
          */
         fun startWaterFrom(start: WaterInFlight) {
             for (cell in 0 until cellCount) bank[index(cell / cellsAcross, cell % cellsAcross)] = start.bank[cell].toDouble()
+            bankCloud.fill(0.0)
+            bankCloudLand.fill(0.0)
+            bankFalling.fill(0.0)
+            bankFallingLand.fill(0.0)
             for (row in 0 until cellsDown) {
                 eastParcel.clear(row)
                 westParcel.clear(row)
@@ -991,7 +1039,10 @@ object MoistureMarch {
 
         /** This season's water in flight now, for a later march to start from ([WaterInFlight]). */
         fun waterInFlight(): WaterInFlight = WaterInFlight(
-            FloatArray(cellCount) { bank[index(it / cellsAcross, it % cellsAcross)].toFloat() },
+            FloatArray(cellCount) {
+                val here = index(it / cellsAcross, it % cellsAcross)
+                (bank[here] + bankCloud[here] + bankFalling[here]).toFloat()
+            },
             eastParcel.vapor.copyOf(), eastParcel.cloud.copyOf(), eastParcel.falling.copyOf(),
             westParcel.vapor.copyOf(), westParcel.cloud.copyOf(), westParcel.falling.copyOf()
         )
@@ -1013,16 +1064,15 @@ object MoistureMarch {
             }
         }
 
-        private fun storage(): Double = eastParcel.total() + westParcel.total() + bank.sum()
-        private fun landStorage(): Double = eastParcel.totalLand() + westParcel.totalLand() + bankLand.sum()
+        private fun storage(): Double = eastParcel.total() + westParcel.total() + bank.sum() + bankCloud.sum() + bankFalling.sum()
+        private fun landStorage(): Double =
+            eastParcel.totalLand() + westParcel.totalLand() + bankLand.sum() + bankCloudLand.sum() + bankFallingLand.sum()
 
         /**
-         * The faces of one column, solved: every row this sweep marches, as one tridiagonal system
-         * in the parcels (see the class comment). [water] holds the parcels going in and comes out
-         * with them solved; [waterLand] the same for the land-origin part, which the same matrix
-         * moves. A face to a row of the other sweep takes the marched row's outflow through it,
-         * implicitly in the marched row's own equation, and its rate per unit of that row's parcel
-         * is left in [sentAbove] or [sentBelow] for the bank.
+         * The faces of one column, solved: every row this sweep marches, and in the westward
+         * sweep every eastward row beside one of them, as one tridiagonal system in the parcels
+         * (see the class comment). [water] holds the parcels going in and comes out with them
+         * solved; [waterLand] the same for the land-origin part, which the same matrix moves.
          */
         private fun solveFaces(base: Int) {
             for (row in 0 until cellsDown) {
@@ -1035,26 +1085,35 @@ object MoistureMarch {
             for (face in 0 until cellsDown - 1) {
                 val above = face
                 val below = face + 1
-                val marchedAbove = role[above] == MARCHED
-                val marchedBelow = role[below] == MARCHED
-                if (!marchedAbove && !marchedBelow) continue
+                val roleAbove = role[above]
+                val roleBelow = role[below]
+                // A face is solved when a marched row is on either side of it; between two rows
+                // of the other sweep it is that sweep's.
+                if (roleAbove != MARCHED && roleBelow != MARCHED) continue
                 val stretchAbove = stretch[base + above].toDouble()
                 val stretchBelow = stretch[base + below].toDouble()
-                val mixing = grid.faceMixing[face]
                 val advection = faceShare[base + face].toDouble()
-                // Out of the row above, into the row below, as coefficients on each row's parcel.
-                val fromAbove = mixing * stretchAbove + (if (advection > 0.0) advection * stretchAbove else 0.0)
-                val fromBelow = mixing * stretchBelow + (if (advection < 0.0) -advection * stretchBelow else 0.0)
-                if (marchedAbove) diagonal[above] += fromAbove
-                if (marchedBelow) diagonal[below] += fromBelow
-                when {
-                    marchedAbove && marchedBelow -> {
-                        upper[above] -= fromBelow
-                        lower[below] -= fromAbove
-                    }
-                    marchedAbove -> sentBelow[above] = fromAbove
-                    else -> sentAbove[below] = fromBelow
+                // The mean wind out of a marched row into the other sweep's row beside it,
+                // implicit in the marched row's own equation and handed to the bank.
+                if (roleAbove == MARCHED && roleBelow != MARCHED && advection > 0.0) {
+                    sentBelow[above] = advection * stretchAbove
+                    diagonal[above] += sentBelow[above]
                 }
+                if (roleBelow == MARCHED && roleAbove != MARCHED && advection < 0.0) {
+                    sentAbove[below] = -advection * stretchBelow
+                    diagonal[below] += sentAbove[below]
+                }
+                if (roleAbove == OUTSIDE || roleBelow == OUTSIDE) continue
+                val mixing = grid.faceMixing[face]
+                // Out of the row above, into the row below, as coefficients on each row's parcel:
+                // the eddies' mixing, and the mean wind's where both rows are this sweep's.
+                val oneSweep = roleAbove == MARCHED && roleBelow == MARCHED
+                val fromAbove = mixing * stretchAbove + (if (oneSweep && advection > 0.0) advection * stretchAbove else 0.0)
+                val fromBelow = mixing * stretchBelow + (if (oneSweep && advection < 0.0) -advection * stretchBelow else 0.0)
+                diagonal[above] += fromAbove
+                diagonal[below] += fromBelow
+                upper[above] -= fromBelow
+                lower[below] -= fromAbove
             }
             // The Thomas algorithm, which needs no pivoting on a diagonally dominant M-matrix.
             var previousUpper = 0.0
@@ -1081,11 +1140,22 @@ object MoistureMarch {
             val base = column * cellsDown
             val parcel = if (sweep > 0) eastParcel else westParcel
 
-            // What arrives: the row's parcel from the column behind and whatever was banked here.
+            // What arrives: the row's parcel from the column behind and whatever was banked here;
+            // and, in the westward sweep, the eastward rows beside them as they left this column.
             for (row in 0 until cellsDown) {
                 val here = base + row
                 if (direction[here].toInt() == sweep) {
                     role[row] = MARCHED
+                    // A bank the westward sweep's faces drew on can hold less than nothing; what
+                    // the parcel cannot pay of it waits there for the next lap's.
+                    parcel.cloud[row] += bankCloud[here]
+                    parcel.cloudLand[row] += bankCloudLand[here]
+                    parcel.falling[row] += bankFalling[here]
+                    parcel.fallingLand[row] += bankFallingLand[here]
+                    bankCloud[here] = 0.0
+                    bankCloudLand[here] = 0.0
+                    bankFalling[here] = 0.0
+                    bankFallingLand[here] = 0.0
                     val arriving = parcel.vapor[row] + bank[here]
                     val arrivingLand = parcel.vaporLand[row] + bankLand[here]
                     water[row] = arriving.coerceAtLeast(0.0)
@@ -1098,8 +1168,24 @@ object MoistureMarch {
                     waterLand[row] = 0.0
                 }
             }
+            if (sweep < 0) {
+                for (row in 0 until cellsDown) {
+                    if (role[row] != OUTSIDE) continue
+                    val besideMarched = (row > 0 && role[row - 1] == MARCHED) ||
+                        (row < cellsDown - 1 && role[row + 1] == MARCHED)
+                    if (!besideMarched) continue
+                    role[row] = ACROSS
+                    // What the eastward row will bring here, net of what it already owes here.
+                    val bringing = (sentParcel[base + row] + bank[base + row]).coerceAtLeast(0.0)
+                    water[row] = bringing
+                    waterLand[row] = (sentParcelLand[base + row] + bankLand[base + row]).coerceIn(0.0, bringing)
+                    acrossBefore[row] = water[row]
+                    acrossBeforeLand[row] = waterLand[row]
+                }
+            }
             solveFaces(base)
-            // What the marched rows sent into the other sweep's rows waits in those rows' bank.
+            // What the marched rows' mean wind sent into the other sweep's rows waits in those
+            // rows' bank: the westward sweep's this lap, the eastward sweep's the next.
             for (row in 0 until cellsDown) {
                 if (role[row] != MARCHED) continue
                 if (sentAbove[row] > 0.0) {
@@ -1109,6 +1195,14 @@ object MoistureMarch {
                 if (sentBelow[row] > 0.0) {
                     bank[base + row + 1] += sentBelow[row] * water[row]
                     bankLand[base + row + 1] += sentBelow[row] * waterLand[row]
+                }
+            }
+            // What the solve's mixing gave or took from the eastward rows waits in their bank.
+            if (sweep < 0) {
+                for (row in 0 until cellsDown) {
+                    if (role[row] != ACROSS) continue
+                    bank[base + row] += water[row] - acrossBefore[row]
+                    bankLand[base + row] += waterLand[row] - acrossBeforeLand[row]
                 }
             }
 
@@ -1252,20 +1346,12 @@ object MoistureMarch {
             cloudLand = cloud * condensateShareLand
             fallingLand = falling * condensateShareLand
 
-            // Condensate the wind does not carry on, where it turns, falls here.
             val downwind = downwindBase + row
             val carriedOn = direction[downwind].toInt() == sweep
-            var turnedRain = 0.0
-            var turnedLandRain = 0.0
-            if (!carriedOn) {
-                turnedRain = cloud + falling
-                turnedLandRain = cloudLand + fallingLand
-                cloud = 0.0; cloudLand = 0.0; falling = 0.0; fallingLand = 0.0
-            }
 
-            val rainedCondensate = condensateRain + turnedRain
+            val rainedCondensate = condensateRain
             val rainedTotal = columnRain + convergenceRain + rainedCondensate
-            val landRained = vaporLandRained + condensateLandRain + turnedLandRain
+            val landRained = vaporLandRained + condensateLandRain
             if (entry != null) {
                 val perParcel = 1.0 / toColumnWater
                 entry.rain[MoistureLedger.Sink.COLUMN.ordinal][surfaceIndex] += columnRain * perParcel
@@ -1300,18 +1386,25 @@ object MoistureMarch {
             val perParcel = 1.0 / toColumnWater
             val sent = vapor * perParcel
             val sentLand = vaporLand * perParcel
-            parcel.cloud[row] = cloud * perParcel
-            parcel.cloudLand[row] = cloudLand * perParcel
-            parcel.falling[row] = falling * perParcel
-            parcel.fallingLand[row] = fallingLand * perParcel
+            sentParcel[here] = sent
+            sentParcelLand[here] = sentLand
             if (carriedOn) {
                 parcel.vapor[row] = sent
                 parcel.vaporLand[row] = sentLand
+                parcel.cloud[row] = cloud * perParcel
+                parcel.cloudLand[row] = cloudLand * perParcel
+                parcel.falling[row] = falling * perParcel
+                parcel.fallingLand[row] = fallingLand * perParcel
             } else {
+                // Where the wind turns, the cloud and the falling water go on in the other sweep
+                // as the vapor does, and fall over their own delays there.
                 bank[downwind] += sent
                 bankLand[downwind] += sentLand
-                parcel.vapor[row] = 0.0
-                parcel.vaporLand[row] = 0.0
+                bankCloud[downwind] += cloud * perParcel
+                bankCloudLand[downwind] += cloudLand * perParcel
+                bankFalling[downwind] += falling * perParcel
+                bankFallingLand[downwind] += fallingLand * perParcel
+                parcel.clear(row)
             }
         }
 

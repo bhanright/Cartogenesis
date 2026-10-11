@@ -202,7 +202,7 @@ class IceSheetTest : BorrowsSharedWorlds() {
         // Recorded on H1's ground under the coupled climate, with the control below: no sheet of
         // the clause's seeds fills a third of its disc near its dome (docs/DESIGN_LEDGER.md, M1;
         // docs/TODO.md).
-        KnownFailures.expect("M1: no standard sheet has a dome the flow clause can read", "") {
+        KnownFailures.expect("M1: no standard sheet has a dome the flow clause can read", "0 seeds") {
             if (domesRead < LEAST_SEEDS_WITH_A_DOME) {
                 throw RecordedViolation(
                     "only $domesRead seeds grow a sheet whose dome fills a third of its own disc, under" +

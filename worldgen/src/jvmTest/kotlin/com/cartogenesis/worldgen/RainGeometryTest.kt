@@ -120,7 +120,7 @@ class RainGeometryTest : BorrowsSharedWorlds() {
         // Armed at A1-5, whose rain from the solved vertical motion bends that edge (docs/DESIGN_LEDGER.md, A1-5).
         // Recorded on H1's ground under the coupled climate, pooled a little over main's again
         // (docs/DESIGN_LEDGER.md, M1; docs/TODO.md).
-        KnownFailures.expect("M1: the 250 mm isohyet's edge runs longer along a row on H1's ground", "") {
+        KnownFailures.expect("M1: the 250 mm isohyet's edge runs longer along a row on H1's ground", "496.21") {
             if (dryEdge.average() > MAIN_DRY_ROW_EDGE_KM.average()) {
                 throw RecordedViolation(
                     "the 250 mm isohyet's straightest edge along a row: %.2f pooled against main's %.2f"

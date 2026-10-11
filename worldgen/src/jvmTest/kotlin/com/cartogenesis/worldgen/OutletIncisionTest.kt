@@ -554,7 +554,7 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
         // Recorded on H1's ground under the coupled climate: seeds 42 and 99 keep drowned basins of
         // 2.7% and 2.4% of their land, the interiors H1's Earth share drowns (docs/TODO.md, "The
         // drowned crust lies in the interiors of the largest continents"; docs/DESIGN_LEDGER.md, M1).
-        KnownFailures.expect("M1: the drowned interiors H1's ground keeps are larger than the Caspian", "") {
+        KnownFailures.expect("M1: the drowned interiors H1's ground keeps are larger than the Caspian", "3.96x") {
             if (pooledDrowned >= caspianShare * drownedChaos) {
                 throw RecordedViolation(
                     "these worlds keep a basin below the sea-level cut holding more water than the " +

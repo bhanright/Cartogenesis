@@ -460,18 +460,12 @@ object OceanStage {
     internal class Stress(val eastward: DoubleArray, val northward: DoubleArray)
 
     /**
-     * The year's wind stress on the sea, on the solve grid, `rho_air C_D |W| W`: the belts' annual
-     * wind ([SurfaceBelts], its zonal profile not migrated), its meridional leg included, turning
-     * through zero at the equator as the year's mean under the ITCZ's migration; and with
-     * `ClimateConfig.pressureWinds` on, the stress the boundary layer's own wind adds to it
-     * ([eddyStressOnMap]), read bilinearly from the map.
-     *
-     * The zonal mean keeps the belts' annual stress. The belts' zonal profile is already the
-     * annual mean's shape, so migrating it by the tilt and averaging the two halves would smooth
-     * it a second time: done, it left the westerlies' mean stress with two humps and three zeros of
-     * its curl, and the westerlies' band flowing west on two standard seeds (docs/DESIGN_LEDGER.md,
-     * 4b-1). What the land and the sea and the terrain do to the wind is averaged as stress over
-     * the two calendar halves, `|V| V` and not the stress of the mean wind. The boundary layer reads
+     * The year's wind stress on the sea, on the solve grid, `rho_air C_D |W| W`: the climate's own
+     * zonal-mean circulation in each calendar half ([HadleyCirculation], the surface wind the
+     * boundary layer's pressure is built from), its stress averaged over the two halves, `|V| V` and
+     * not the stress of the mean wind, so the trades of the winter cell and the summer cell each lay
+     * their own stress; and with `ClimateConfig.pressureWinds` on, the stress the boundary layer's
+     * own wind adds to it ([eddyStressOnMap]), read bilinearly from the map. The boundary layer reads
      * the energy balance's temperatures and no current, so the currents are not forced by a wind
      * their own warmth forced.
      */
@@ -481,19 +475,25 @@ object OceanStage {
         val eddy = if (config.climate.pressureWinds) eddyStressOnMap(config, sea) else null
         val eastward = DoubleArray(across * down)
         val northward = DoubleArray(across * down)
-        val migrationDegrees = if (config.climate.seasons) config.climate.seasonalTiltDegrees else 0f
+        val zonal = ClimateStage.zonalClimate(config, sea)
+        val halves = listOf(true, false).map { julyHalf -> ClimateStage.beltWindOfRows(config, zonal, julyHalf, down) }
+        val perHalf = PressureWind.AIR_DENSITY_KG_PER_M3 * DRAG_COEFFICIENT / halves.size
         parallelChunks(0, down) { startRow, endRow ->
             for (row in startRow until endRow) {
-                val latitude = ClimateStage.latitudeOf(row, down)
-                val belts = SurfaceBelts.windMps(latitude, config.climate.meridionalWindShare, migrationDegrees)
-                val east = belts.eastwardMps.toDouble()
-                val north = belts.northwardMps.toDouble()
-                val dragPerMeter = PressureWind.AIR_DENSITY_KG_PER_M3 * DRAG_COEFFICIENT * sqrt(east * east + north * north)
+                var rowEastward = 0.0
+                var rowNorthward = 0.0
+                for (half in halves) {
+                    val east = half.eastwardMps[row].toDouble()
+                    val north = -half.southwardMps[row].toDouble()
+                    val speed = sqrt(east * east + north * north)
+                    rowEastward += perHalf * speed * east
+                    rowNorthward += perHalf * speed * north
+                }
                 val mapRow = (row + 0.5f) * cellsDown / down - 0.5f
                 for (column in 0 until across) {
                     val cell = row * across + column
-                    eastward[cell] = dragPerMeter * east
-                    northward[cell] = dragPerMeter * north
+                    eastward[cell] = rowEastward
+                    northward[cell] = rowNorthward
                     if (eddy != null) {
                         val mapColumn = (column + 0.5f) * cellsAcross / across - 0.5f
                         eastward[cell] += sample(eddy.first, cellsAcross, cellsDown, mapColumn, mapRow)

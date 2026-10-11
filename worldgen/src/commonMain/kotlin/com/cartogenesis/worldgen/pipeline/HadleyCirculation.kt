@@ -12,113 +12,144 @@ import kotlin.math.pow
 import kotlin.math.sign
 import kotlin.math.sin
 import kotlin.math.sqrt
+import kotlin.math.tan
 
 /**
- * One calendar half-year's zonal-mean circulation at the surface: two Hadley cells about a rising
- * branch that follows the season's heating, the eddy-driven westerlies poleward of them and the
- * polar easterlies, as one wind in meters a second on each row of the map.
+ * One calendar half-year's zonal-mean circulation at the surface: two Hadley cells heated about the
+ * season's energy flux equator, the eddy-driven westerlies poleward of them and the polar
+ * easterlies, as one wind in meters a second on each row of the map.
  *
- * **The Hadley cells** are Lindzen and Hou's (1988) for a heating centered off the equator, in the
- * form Hill, Bordoni and Mitchell (2019, J. Atmos. Sci. 76, read: their equations 6, 8 and 9 and
- * section 3c) state it:
+ * **Where the cells are heated.** About the energy balance's energy flux equator for the half
+ * ([energyFluxEquatorDegrees]): the latitude where its meridional transport, the band's mean air
+ * carried down its own gradient, changes direction. A deep overturning circulation carries energy
+ * in the direction of its upper branches, away from its ascent, so the ITCZ "can be expected to lie
+ * near the energy flux equator, where the atmospheric meridional energy flux F changes sign"
+ * (Schneider, Bischoff and Haug 2014, Nature 513, read). The energy balance's tropical diffusivity
+ * stands for that circulation's transport (`EnergyBalance.DIFFUSION_TROPICS_W_PER_M2_C`), so its zero
+ * is the circulation's heating's latitude. It is the band's air, land and sea by their shares, and not the marine
+ * column alone, because the transport moves the band's heat: over the summer continents the band is
+ * warmest well poleward of the sea's warmest row (docs/DESIGN_LEDGER.md, A1-6b).
  *
- * - the radiative-convective equilibrium of the troposphere's mean potential temperature,
- *   `theta_rce / theta_0 = 1 + (Delta_h / 3)(1 - 3 (sin phi - sin phi_m)^2)`, peaking at the heating's
- *   latitude `phi_m`;
- * - the angular-momentum-conserving circulation's own temperature about the latitude it rises at,
- *   `phi_a`, `(theta - theta_a) / theta_0 = -(Omega^2 a^2 / (2 g H)) (cos^2 phi_a - cos^2 phi)^2 / cos^2 phi`;
- * - the equal-area closure: the two temperatures meet at each cell's poleward edge, and each cell
- *   conserves energy, the integral of their difference over it zero.
+ * **The cells' shape** is Lindzen and Hou's (1988) for that heating, in the form Hill, Bordoni and
+ * Mitchell (2019, J. Atmos. Sci. 76, read: their equations 6, 8 and 9 and section 3c) state it: the
+ * radiative-convective equilibrium `theta_rce / theta_0 = 1 + (Delta_h / 3)(1 - 3 (sin phi -
+ * sin phi_m)^2)` peaking at the heating's latitude `phi_m`, and the angular-momentum-conserving
+ * circulation's own temperature about its rising latitude `phi_a`, `(theta - theta_a) / theta_0 =
+ * -(Omega^2 a^2 / (2 g H)) (cos^2 phi_a - cos^2 phi)^2 / cos^2 phi` ([EqualArea]). The circulation
+ * parts where the latitude-by-latitude equilibrium stops being able to hold without a circulation,
+ * Hill, Bordoni and Mitchell's (2021, J. Atmos. Sci. 78, read) supercritical forcing extent for that
+ * heating ([EqualArea.supercriticalSine]): the equal-area model's own closure for it is "predictive
+ * but inaccurate over much of the relevant parameter space" (the same), putting it far poleward,
+ * where Earth's solstitial ascending edge sits "around 15 latitude in the summer hemisphere" and
+ * the ITCZ equatorward of it. The summer cell keeps Lindzen and Hou's energy closure, which sets
+ * `theta_a`, and the winter cell's edge their continuity of temperature ([EqualArea.risingAt]); the
+ * strongest ascent then stands just equatorward of the heating, inside the winter cell.
  *
- * Four conditions fix `phi_a`, the winter cell's edge, the summer cell's edge and `theta_a`
- * ([EqualArea]). Off the equator they are strongly unequal: the rising branch stands poleward of the
- * heating, the cross-equatorial winter cell spans both sides of the equator and the summer cell
- * shrinks, while the two poleward edges move far less than the rising branch does. Solved here on
- * Earth's figures it gives Hill and others' own `phi_a` of 21.2 N for a heating at 6 N and their
- * 61.7 S to 44.8 N for one at 23.5 N (`HadleyCirculationTest`).
+ * **The cells' edges** are where baroclinic eddies take over ([baroclinicOnsetDegrees]): the poleward
+ * extent of the Hadley cell "is set by the location where the thermally driven jet first becomes
+ * baroclinically unstable" (Lu, Vecchi and Reichler 2007, Geophys. Res. Lett. 34, read), by Held's
+ * (2000, the Woods Hole lectures, read) two-layer criterion, here read on the half's own temperature
+ * gradient. Winter's steep gradient makes the troposphere unstable near the subtropics and summer's
+ * weak one far poleward of them, so the summer cell reaches farther than the winter one, as Earth's
+ * eddy-driven summer cell does ("the summer HC is largely driven by eddies", Ceppi and Hartmann
+ * 2013, J. Climate 26, read), where Lindzen and Hou's own summer edge stands equatorward of their
+ * winter edge. Each cell keeps its axisymmetric profile, carried in the sine of latitude from its
+ * own equal-area edge to this one, and its descent is scaled so what rises in it sinks in it.
  *
- * **The heating's latitude** is the energy balance's own: where its half-year marine air is warmest
- * ([heatingLatitudeDegrees]). The marine column because the troposphere's mean temperature in the
- * tropics, which `theta_rce` stands for, is set by moist convection out of the sea's boundary layer,
- * whose maximum the rising branch follows (Hill and others' section 1, after Lindzen and Hou and
- * Emanuel 1995), and not by the land's hot dry ground.
+ * **The vertical motion** is that profile, `omega` going as `-(theta_rce - theta) / (tau S)` with
+ * `tau` the free troposphere's thermal damping, [WaveDamping.TING_YU_DAYS], and `S` the basic state's
+ * stability at mid-troposphere. Its strength is the atmosphere's energy budget: on its mean over the
+ * cells' descent the sinking air is warmed by its descent as fast as it cools by radiation,
+ * `omega = Q / S` (the radiative-subsidence balance, MIT 12.811 lecture 10 after Sobel and
+ * Bretherton 2000), at the atmosphere's mean radiative loss, [ATMOSPHERE_RADIATIVE_LOSS_W_PER_M2].
  *
- * **Not counting the energy balance's transport twice.** The energy balance already carries the
- * zonal-mean heat poleward by its diffusion, and its temperatures are after that transport. Only the
- * heating's latitude is read from it. The cells' shape and inequality come from the equilibrium
- * contrast Lindzen and Hou impose, [EQUILIBRIUM_CONTRAST_SHARE], and their strength from the
- * atmosphere's radiative loss (below), neither from the energy balance's temperatures; and the heat
- * the cells move goes nowhere: nothing here feeds the energy balance, which keeps its transport as
- * the one account of the year's heat. What the circulation adds is the motion that transport
- * implies, its ascent, its descent and its surface winds.
+ * **The lower branch is the boundary layer.** "The mass transports in the surface branches of these
+ * atmospheric meridional circulations are simply the boundary layer Ekman mass transports that
+ * balance the surface stresses" (Held 2000, lecture 1), so the cells' equatorward mass flux runs
+ * through the boundary layer's own depth, [LOWER_BRANCH_PA]: its continuity gives the surface's
+ * meridional wind, and the boundary layer's convergence carries the cells' whole ascent at its top.
  *
- * **The vertical motion** is the equal-area model's own thermodynamics in its shape: the air rises
- * where the troposphere is heated toward its equilibrium and sinks where it is cooled, `omega`
- * going as `-(theta_rce - theta) / (tau S)` with `tau` the free troposphere's thermal damping,
- * [WaveDamping.TING_YU_DAYS], and `S` the basic state's stability at mid-troposphere, so each cell's
- * ascent equals its descent by the equal-area closure. Its strength is the atmosphere's energy
- * budget and not the Newtonian relaxation's, which leaves Held and Hou's cells a fraction of Earth's
- * strength: on its mean over both cells' descent the sinking air is warmed by its descent as fast as
- * it cools by radiation, `omega = Q / S` (the radiative-subsidence balance, MIT 12.811 lecture 10
- * after Sobel and Bretherton 2000), at the atmosphere's mean radiative loss,
- * [ATMOSPHERE_RADIATIVE_LOSS_W_PER_M2]. One factor scales the whole field, so the shape and the two
- * cells' inequality are Lindzen and Hou's.
+ * **The zonal wind in the cells** is the boundary layer's zonal momentum balance, the Coriolis force
+ * on the meridional flow and that flow's own advection of zonal momentum against the surface's drag
+ * at the wind's own speed, `(v / a) du/dphi = (f + u tan(phi) / a) v - k u`, marched along the flow
+ * from each cell's edge, where the air is still, to the rising branch ([cellEastward]). The trades
+ * are the Coriolis force on the inflow; the air crossing the equator carries its easterly momentum
+ * with it and turns westerly beyond, the summer monsoon's southwesterly.
  *
- * **The lower branch** is the lower half of the troposphere, [LOWER_BRANCH_PA], the two models'
- * equatorward level: its continuity gives the surface's meridional wind, toward the rising branch from
- * both sides and zero at the cells' edges. The boundary layer reads that wind, and its convergence
- * over the boundary layer's own depth is the boundary layer's ascent (`BoundaryLayer`), a quarter of
- * the mid-troposphere's as the lower branch's linear profile of `omega` gives it; no other Hadley
- * vertical motion is added.
- *
- * **Poleward of the cells** the Ferrel and polar cells' surface legs are the belts' meridional legs
- * ([ClimateConfig.meridionalWindShare]) between each cell's edge and [SurfaceBelts.WESTERLY_BELT_EDGE_DEGREES]
- * and beyond it; the polar front does not migrate.
- *
- * **The surface's zonal wind** is the boundary layer's zonal momentum balance, `k u = f v + F`: the
- * surface's drag at the wind's own speed ([BoundaryLayer.surfaceDragPerSecond]) against the Coriolis
- * force on the meridional flow and the eddies' momentum forcing `F`. An axisymmetric model has no
- * eddies, and without them the surface wind at the equator, where `f` vanishes, is calm in every
- * season, where Earth's zonal-mean wind there is easterly all year. So `F` is the forcing that holds
- * Earth's annual zonal-mean surface wind ([SurfaceBelts.zonalShare] of [PressureWind.BELT_SPEED_MPS],
- * the profile the ocean's stress reads) against the two halves' mean meridional wind, taken the same
- * in both halves (docs/TODO.md): each half's zonal wind departs from Earth's annual one by the
- * Coriolis force on its own departure of meridional flow, easterly where the winter cell's air flows
- * toward the equator and westerly where it has crossed it, the summer monsoon's southwesterly.
+ * **Poleward of the cells** the surface wind is the eddies' ([Belt]). "Understanding the
+ * distribution of surface winds and surface stresses is equivalent (outside of the deep tropics) to
+ * understanding the convergence of the eddy fluxes of angular momentum" (Held 2000, lecture 1), and
+ * the eddies converge westerly momentum into the baroclinic zone they grow in: a westerly belt from
+ * the cell's edge, where the surface wind turns, to the polar front, with Earth's annual belts' width
+ * ([SurfaceBelts]), and Earth's polar easterlies beyond it. Its strength is the hemisphere's
+ * angular-momentum balance: what the trades take from the ground the westerlies give back, the
+ * surface's torque over the hemisphere zero ([westerlyPeakMps]). The Ferrel and polar cells' legs
+ * are the slope [ClimateConfig.meridionalWindShare] on that wind, poleward under the westerlies and
+ * back under the polar easterlies, so the polar front moves with the jet and the meridional wind
+ * passes through zero at it.
  *
  * The sea-level pressure's zonal mean is this wind's drag balance ([BoundaryLayer.zonalPressurePa]):
- * a trough under the rising branch and ridges in the subtropics.
+ * a trough under the rising branch, ridges where the trades meet the westerlies at the cells' edges,
+ * and the subpolar trough at the polar front.
+ *
+ * **Not counting the energy balance's transport twice.** The energy balance carries the zonal-mean
+ * heat poleward by its diffusion and its temperatures are after that transport. The circulation
+ * reads from them only where the transport parts and where the gradient it leaves turns the
+ * troposphere unstable, and feeds nothing back.
  */
 internal class HadleyCirculation private constructor(
-    /** The heating's latitude, `phi_m`, degrees. */
+    /** The energy flux equator, `phi_m`, degrees: the heating's latitude. */
     val heatingLatitudeDegrees: Double,
-    /** The cells' edges and the rising branch ([EqualArea]). */
+    /** The axisymmetric cells for the heating ([EqualArea.risingAt]), whose profile each cell carries. */
     val cells: Cells,
+    /** The cells' northern edge, degrees north, where baroclinic eddies take over ([baroclinicOnsetDegrees]). */
+    val northEdgeDegrees: Double,
+    /** The cells' southern edge, degrees south, positive. */
+    val southEdgeDegrees: Double,
     private val radiusMeters: Double,
     private val meridionalShare: Double
 ) {
     /** The latitude the two cells rise at, degrees. */
     val ascentLatitudeDegrees: Double get() = cells.ascentLatitudeDegrees
 
-    /** The winter cell's and the summer cell's poleward edges, degrees. */
-    val winterEdgeDegrees: Double get() = cells.winterEdgeDegrees
-    val summerEdgeDegrees: Double get() = cells.summerEdgeDegrees
+    /** The winter cell's and the summer cell's poleward edges, degrees, signed: the winter one opposite the heating. */
+    val winterEdgeDegrees: Double get() = if (heatingLatitudeDegrees >= 0.0) -southEdgeDegrees else northEdgeDegrees
+    val summerEdgeDegrees: Double get() = if (heatingLatitudeDegrees >= 0.0) northEdgeDegrees else -southEdgeDegrees
 
     /** The mid-troposphere vertical motion per unit of `(theta_rce - theta) / theta_0`, pascals a second. */
     private val omegaPerContrast: Double = -MID_TROPOSPHERE_KELVIN / (THERMAL_DAMPING_SECONDS * MID_TROPOSPHERE_STABILITY)
 
+    private val lowSine = -sin(southEdgeDegrees * DEGREES)
+    private val highSine = sin(northEdgeDegrees * DEGREES)
+    private val ascentSine = sin(ascentLatitudeDegrees * DEGREES)
+
     /** The cells' sines, south edge to north edge, at [PROFILE_POINTS] points. */
-    private val profileSines = DoubleArray(PROFILE_POINTS) { cells.lowSine + (cells.highSine - cells.lowSine) * it / (PROFILE_POINTS - 1) }
+    private val profileSines = DoubleArray(PROFILE_POINTS) { lowSine + (highSine - lowSine) * it / (PROFILE_POINTS - 1) }
+
+    /**
+     * The axisymmetric cells' sine a sine of these cells stands for: each cell's profile carried
+     * linearly in the sine from its own equal-area edge to this one's, the rising branch held.
+     */
+    private fun axisymmetricSine(sine: Double): Double =
+        if (sine >= ascentSine) ascentSine + (sine - ascentSine) * (cells.highSine - ascentSine) / (highSine - ascentSine)
+        else ascentSine - (ascentSine - sine) * (ascentSine - cells.lowSine) / (ascentSine - lowSine)
 
     /**
      * The vertical motion at each of [profileSines], pascals a second, positive down: the equal-area
      * model's own, rising where the troposphere is heated toward its equilibrium and sinking where it
-     * is cooled, scaled so its mean descent is the radiative-subsidence balance's
-     * ([RADIATIVE_SUBSIDENCE_PA_PER_S]). One factor on the whole field, so each cell's ascent still
-     * equals its descent by the equal-area closure.
+     * is cooled, each cell's descent scaled so the cell closes, and the whole scaled so its mean
+     * descent is the radiative-subsidence balance's ([RADIATIVE_SUBSIDENCE_PA_PER_S]).
      */
     private val verticalMotion: DoubleArray = run {
-        val relaxed = DoubleArray(PROFILE_POINTS) { omegaPerContrast * cells.contrast(profileSines[it]) }
+        val relaxed = DoubleArray(PROFILE_POINTS) { omegaPerContrast * cells.contrast(axisymmetricSine(profileSines[it])) }
+        for (northCell in listOf(false, true)) {
+            val inCell: (Double) -> Boolean = { sine -> if (northCell) sine > ascentSine else sine < ascentSine }
+            val rising = integral(DoubleArray(PROFILE_POINTS) { minOf(0.0, relaxed[it]) }, inCell)
+            val sinking = integral(DoubleArray(PROFILE_POINTS) { maxOf(0.0, relaxed[it]) }, inCell)
+            if (sinking <= 0.0) continue
+            val closing = -rising / sinking
+            for (point in 0 until PROFILE_POINTS) if (inCell(profileSines[point]) && relaxed[point] > 0.0) relaxed[point] *= closing
+        }
         val sinking = DoubleArray(PROFILE_POINTS) { maxOf(0.0, relaxed[it]) }
         val sinkingShare = DoubleArray(PROFILE_POINTS) { if (relaxed[it] > 0.0) 1.0 else 0.0 }
         val meanDescent = integral(sinking) { true } / integral(sinkingShare) { true }
@@ -149,12 +180,56 @@ internal class HadleyCirculation private constructor(
         for (point in 0 until PROFILE_POINTS) cumulative[point] -= remainder * point / (PROFILE_POINTS - 1)
     }
 
+    /** The boundary layer's meridional wind at each of [profileSines], meters a second, northward. */
+    private val cellNorthward = DoubleArray(PROFILE_POINTS) { point ->
+        val cosine = sqrt(1.0 - profileSines[point] * profileSines[point])
+        if (cosine <= 0.0) 0.0 else radiusMeters / LOWER_BRANCH_PA * risenFromSouth[point] / cosine
+    }
+
+    /**
+     * The boundary layer's zonal wind at each of [profileSines], meters a second, eastward: its zonal
+     * momentum balance, `(v / a) du/dphi = (f + u tan(phi) / a) v - k u`, marched along the
+     * meridional flow from each edge, where the air is still, to the rising branch, each step implicit
+     * in the drag so the march holds where the flow slows to nothing; at the rising branch the flow
+     * has stopped and the wind with it.
+     */
+    private val cellEastward: DoubleArray = DoubleArray(PROFILE_POINTS).also { eastward ->
+        val rising = ((ascentSine - lowSine) / (highSine - lowSine) * (PROFILE_POINTS - 1)).toInt().coerceIn(0, PROFILE_POINTS - 1)
+        for (point in 1..rising) eastward[point] = boundaryLayerStep(eastward[point - 1], point - 1, point)
+        for (point in PROFILE_POINTS - 2 downTo rising + 1) eastward[point] = boundaryLayerStep(eastward[point + 1], point + 1, point)
+    }
+
+    /** One implicit step of [cellEastward]'s march from the point [from], whose wind is [eastwardFrom], to [to]. */
+    private fun boundaryLayerStep(eastwardFrom: Double, from: Int, to: Int): Double {
+        val latitude = asin(profileSines[to])
+        val step = latitude - asin(profileSines[from])
+        val coriolis = PressureWind.coriolisParameter((latitude / DEGREES).toFloat()).toDouble()
+        val northward = cellNorthward[to]
+        // Air still, or turned back against the march by the tabulation's last digits: no flow to
+        // carry momentum along, and the local balance with no meridional flow is calm.
+        if (northward * step <= 0.0) return 0.0
+        val perSpeed = BoundaryLayer.dragPerSpeed(isLand = false)
+        val gustsSquared = BoundaryLayer.TRANSIENT_WIND_MPS * BoundaryLayer.TRANSIENT_WIND_MPS
+        var eastward = eastwardFrom
+        repeat(DRAG_PASSES) {
+            val drag = perSpeed * sqrt(eastward * eastward + northward * northward + gustsSquared)
+            eastward = (eastwardFrom + step * radiusMeters * coriolis) /
+                (1.0 - step * tan(latitude) + step * radiusMeters * drag / northward)
+        }
+        return eastward
+    }
+
     /** [values] at the sine [sine] inside the cells, linearly between [profileSines]. */
     private fun interpolate(values: DoubleArray, sine: Double): Double {
-        val position = (sine - cells.lowSine) / (cells.highSine - cells.lowSine) * (PROFILE_POINTS - 1)
+        val position = (sine - lowSine) / (highSine - lowSine) * (PROFILE_POINTS - 1)
         val below = position.toInt().coerceIn(0, PROFILE_POINTS - 2)
         val share = position - below
         return values[below] * (1.0 - share) + values[below + 1] * share
+    }
+
+    private fun inCells(latitudeDegrees: Double): Boolean {
+        val sine = sin(latitudeDegrees * DEGREES)
+        return sine > lowSine && sine < highSine
     }
 
     /**
@@ -172,33 +247,101 @@ internal class HadleyCirculation private constructor(
      */
     fun cellNorthwardMps(latitudeDegrees: Double): Double {
         if (!inCells(latitudeDegrees)) return 0.0
-        val integral = interpolate(risenFromSouth, sin(latitudeDegrees * DEGREES))
-        return radiusMeters / LOWER_BRANCH_PA * integral / cos(latitudeDegrees * DEGREES)
-    }
-
-    private fun inCells(latitudeDegrees: Double): Boolean {
-        val sine = sin(latitudeDegrees * DEGREES)
-        return sine > cells.lowSine && sine < cells.highSine
+        return interpolate(cellNorthward, sin(latitudeDegrees * DEGREES))
     }
 
     /**
-     * The surface's meridional wind at [latitudeDegrees], meters a second, northward: the Hadley
-     * cells' lower branch inside them, the Ferrel and polar cells' legs outside.
+     * The eddy-driven belts of one hemisphere poleward of the cells' edge [edgeDegrees] (degrees from
+     * the equator): a westerly belt of Earth's annual width, [WESTERLY_HALF_WIDTH_M] either side of its
+     * jet on the ground, from the edge to the polar front, and Earth's polar easterlies from the front
+     * to the pole, each a cosine as [SurfaceBelts.zonalShare]'s are. On a planet too small for the belt
+     * to fit, the belt fills what is left and the polar easterlies go.
      */
-    fun northwardMps(latitudeDegrees: Double): Double {
-        if (inCells(latitudeDegrees)) return cellNorthwardMps(latitudeDegrees)
-        val fromEquator = abs(latitudeDegrees)
-        val edge = if (latitudeDegrees >= 0.0) cells.northEdgeDegrees else cells.southEdgeDegrees
-        val poleward = if (latitudeDegrees >= 0.0) 1.0 else -1.0
-        val legSpeed = meridionalShare * PressureWind.BELT_SPEED_MPS * PI / 2
-        val front = SurfaceBelts.WESTERLY_BELT_EDGE_DEGREES.toDouble()
-        return if (fromEquator < front && edge < front) {
-            poleward * legSpeed * sin(PI * (fromEquator - edge) / (front - edge))
-        } else {
-            val polarEdge = maxOf(front, edge)
-            -poleward * legSpeed * sin(PI * (fromEquator - polarEdge) / (POLE_DEGREES - polarEdge))
+    inner class Belt(val edgeDegrees: Double) {
+        private val halfWidthDegrees = minOf(WESTERLY_HALF_WIDTH_M / radiusMeters / DEGREES, (POLE_DEGREES - edgeDegrees) / 2)
+
+        /** The eddy-driven jet, degrees from the equator: where the westerlies blow hardest. */
+        val jetDegrees: Double = edgeDegrees + halfWidthDegrees
+
+        /** The polar front, degrees from the equator: where the westerlies give way to the polar easterlies. */
+        val frontDegrees: Double = edgeDegrees + 2 * halfWidthDegrees
+
+        /** The belts' zonal wind at [fromEquatorDegrees], meters a second, eastward, under a westerly peak of [westerlyPeakMps]. */
+        fun eastwardMps(fromEquatorDegrees: Double, westerlyPeakMps: Double): Double = when {
+            fromEquatorDegrees < edgeDegrees -> 0.0
+            fromEquatorDegrees <= frontDegrees -> westerlyPeakMps * cos(PI / 2 * (fromEquatorDegrees - jetDegrees) / halfWidthDegrees)
+            else -> {
+                val centre = 0.5 * (frontDegrees + POLE_DEGREES)
+                val polarHalfWidth = 0.5 * (POLE_DEGREES - frontDegrees)
+                -POLAR_EASTERLY_PEAK_MPS * cos(PI / 2 * (fromEquatorDegrees - centre) / polarHalfWidth)
+            }
         }
     }
+
+    /** The two hemispheres' eddy-driven belts. */
+    val northBelt: Belt = Belt(northEdgeDegrees)
+    val southBelt: Belt = Belt(southEdgeDegrees)
+
+    /**
+     * The surface wind at [latitudeDegrees] under the westerly peaks [northPeakMps] and
+     * [southPeakMps], meters a second, eastward and northward.
+     */
+    private fun windMps(latitudeDegrees: Double, northPeakMps: Double, southPeakMps: Double): Pair<Double, Double> {
+        if (inCells(latitudeDegrees)) {
+            val sine = sin(latitudeDegrees * DEGREES)
+            return interpolate(cellEastward, sine) to interpolate(cellNorthward, sine)
+        }
+        val north = latitudeDegrees >= 0.0
+        val eastward = if (north) northBelt.eastwardMps(latitudeDegrees, northPeakMps) else southBelt.eastwardMps(-latitudeDegrees, southPeakMps)
+        return eastward to (if (north) 1.0 else -1.0) * meridionalShare * eastward
+    }
+
+    /**
+     * The surface's torque on the atmosphere over one hemisphere under a westerly peak of [peakMps],
+     * in units proportional to newton meters: the bulk stress `c s u` (the boundary layer's drag per
+     * unit of speed, [BoundaryLayer.dragPerSpeed], with the weather's gusts in the speed) times the
+     * arm `a cos(phi)` and the circle `2 pi a cos(phi)`, summed over latitude.
+     */
+    private fun hemisphereTorque(north: Boolean, peakMps: Double): Double {
+        val perSpeed = BoundaryLayer.dragPerSpeed(isLand = false)
+        val gustsSquared = BoundaryLayer.TRANSIENT_WIND_MPS * BoundaryLayer.TRANSIENT_WIND_MPS
+        var sum = 0.0
+        for (step in 0 until TORQUE_STEPS) {
+            val fromEquator = (step + 0.5) * POLE_DEGREES / TORQUE_STEPS
+            val (eastward, northward) = windMps(if (north) fromEquator else -fromEquator, peakMps, peakMps)
+            val cosine = cos(fromEquator * DEGREES)
+            sum += perSpeed * sqrt(eastward * eastward + northward * northward + gustsSquared) * eastward * cosine * cosine
+        }
+        return sum
+    }
+
+    /**
+     * The westerly peak in one hemisphere, meters a second: the one at which the surface's torque
+     * over the hemisphere is zero, what the trades and the polar easterlies take from the ground
+     * given back under the westerlies, by bisection (the torque rises with the peak). Zero where the
+     * hemisphere's easterlies take nothing to give back.
+     */
+    private fun westerlyPeakMps(north: Boolean): Double {
+        if (hemisphereTorque(north, 0.0) >= 0.0) return 0.0
+        if (hemisphereTorque(north, LARGEST_WESTERLY_PEAK_MPS) < 0.0) return LARGEST_WESTERLY_PEAK_MPS
+        var low = 0.0
+        var high = LARGEST_WESTERLY_PEAK_MPS
+        repeat(PEAK_BISECTIONS) {
+            val middle = 0.5 * (low + high)
+            if (hemisphereTorque(north, middle) < 0.0) low = middle else high = middle
+        }
+        return 0.5 * (low + high)
+    }
+
+    /** The westerlies' peak in the northern and the southern hemisphere, meters a second. */
+    val northWesterlyPeakMps: Double = westerlyPeakMps(north = true)
+    val southWesterlyPeakMps: Double = westerlyPeakMps(north = false)
+
+    /** The surface wind at [latitudeDegrees], meters a second, eastward and northward. */
+    fun windMps(latitudeDegrees: Double): Pair<Double, Double> = windMps(latitudeDegrees, northWesterlyPeakMps, southWesterlyPeakMps)
+
+    /** The surface's meridional wind at [latitudeDegrees], meters a second, northward. */
+    fun northwardMps(latitudeDegrees: Double): Double = windMps(latitudeDegrees).second
 
     /**
      * Lindzen and Hou's equal-area model for a heating at `sin phi_m` [heatingSine] at or north of the
@@ -280,6 +423,39 @@ internal class HadleyCirculation private constructor(
          * about it.
          */
         fun solve(): Cells = checkNotNull(solveOrNull()) { "no equal-area cells for a heating at ${asin(heatingSine) / DEGREES} degrees" }
+
+        /**
+         * The sine of the latitude the equilibrium [equilibrium] stops being able to hold without a
+         * circulation in the summer hemisphere: Hill, Bordoni and Mitchell's (2021, J. Atmos. Sci. 78,
+         * read) supercritical forcing extent, where its gradient wind's absolute vorticity changes
+         * sign, the root of their equation 10, `(1 + 2 Ro / sin phi_m) s^3 - (3/2) Ro s^2 - (1/2) Ro = 0`,
+         * with the thermal Rossby number `Ro = (g H / (Omega a)^2) Delta_h sin phi_m`. A large-scale
+         * circulation "must exist spanning at minimum all such latitudes". At the equator it is the
+         * equator.
+         */
+        fun supercriticalSine(): Double {
+            if (heatingSine < SYMMETRIC_SINE) return 0.0
+            val rossby = contrastShare * heatingSine / (2.0 * amcScale)
+            fun cubic(sine: Double) = (1.0 + 2.0 * rossby / heatingSine) * sine * sine * sine - 1.5 * rossby * sine * sine - 0.5 * rossby
+            // Negative at zero and positive at one, and rising between: one root.
+            return bisect(0.0, 1.0, ::cubic)
+        }
+
+        /**
+         * The cells rising at the heating's supercritical forcing extent ([supercriticalSine]): the
+         * summer cell closed by Lindzen and Hou's own two conditions, its temperature meeting the
+         * equilibrium's at its edge and its energy closing, which sets the rising branch's temperature;
+         * the winter cell's edge where the circulated temperature falls back under the equilibrium's
+         * ([winterEdge]). At the equator, Held and Hou's cells. Null where they do not close short of
+         * the poles.
+         */
+        fun risingAt(): Cells? {
+            require(heatingSine >= 0.0) { "a northern heating; mirror a southern one" }
+            val ascent = supercriticalSine()
+            val (summer, theta) = summerCell(ascent) ?: return null
+            val winter = if (ascent == 0.0) -summer else winterEdge(ascent, theta) ?: return null
+            return Cells(this, ascent, theta, winter, summer, mirrored = false)
+        }
 
         /** [solve], or null where the cells do not close short of the poles. */
         fun solveOrNull(): Cells? {
@@ -376,35 +552,12 @@ internal class HadleyCirculation private constructor(
     }
 
     companion object {
-        /**
-         * The surface wind of the half-year [half] at [latitudeDegrees], meters a second, eastward and
-         * northward, with [other] the other half: the meridional wind its own ([northwardMps]), the
-         * zonal wind from the boundary layer's momentum balance `k u = f v + F`, `F` the eddies'
-         * forcing that holds Earth's annual zonal-mean wind against the two halves' mean meridional
-         * wind (see the class). `k = c sqrt(u^2 + v^2 + U_t^2)` makes `u` the root of a quadratic in
-         * `u^2`, solved exactly.
-         */
-        fun windMps(half: HadleyCirculation, other: HadleyCirculation, latitudeDegrees: Double): Pair<Double, Double> {
-            val north = half.northwardMps(latitudeDegrees)
-            val meanNorth = 0.5 * (north + other.northwardMps(latitudeDegrees))
-            val annualEast = PressureWind.BELT_SPEED_MPS * SurfaceBelts.zonalShare(latitudeDegrees.toFloat()).toDouble()
-            val coriolis = PressureWind.coriolisParameter(latitudeDegrees.toFloat()).toDouble()
-            val perSpeed = BoundaryLayer.dragPerSpeed(isLand = false)
-            val gustsSquared = BoundaryLayer.TRANSIENT_WIND_MPS * BoundaryLayer.TRANSIENT_WIND_MPS
-            val annualDrag = perSpeed * sqrt(annualEast * annualEast + meanNorth * meanNorth + gustsSquared)
-            val eddyForcing = annualDrag * annualEast - coriolis * meanNorth
-            val pull = (coriolis * north + eddyForcing) / perSpeed
-            val rest = north * north + gustsSquared
-            val squared = 2.0 * pull * pull / (rest + sqrt(rest * rest + 4.0 * pull * pull))
-            return sign(pull) * sqrt(squared) to north
-        }
-
-        /** [windMps] on every one of [rows] rows of the map, eastward and southward, meters a second. */
-        fun windOfRows(half: HadleyCirculation, other: HadleyCirculation, rows: Int): PressureWind.Vectors {
+        /** [HadleyCirculation.windMps] on every one of [rows] rows of the map, eastward and southward, meters a second. */
+        fun windOfRows(half: HadleyCirculation, rows: Int): PressureWind.Vectors {
             val eastward = FloatArray(rows)
             val southward = FloatArray(rows)
             for (row in 0 until rows) {
-                val (east, north) = windMps(half, other, ClimateStage.latitudeOf(row, rows).toDouble())
+                val (east, north) = half.windMps(ClimateStage.latitudeOf(row, rows).toDouble())
                 eastward[row] = east.toFloat()
                 southward[row] = (-north).toFloat()
             }
@@ -431,16 +584,22 @@ internal class HadleyCirculation private constructor(
         val THERMAL_DAMPING_SECONDS: Double = WaveDamping.TING_YU_DAYS * WaveDamping.SECONDS_PER_DAY
 
         /**
-         * The depth of the cells' lower branch, pascals: the lower half of the troposphere, Held and
-         * Hou's and Lindzen and Hou's two levels, the equatorward flow at the surface and the poleward
-         * at the tropopause, each standing for half the column's mass. The surface's meridional wind
-         * is the lower half's mean, and the boundary layer's top, a quarter of the way up it, takes a
-         * quarter of the mid-troposphere's vertical motion through the layer's own convergence.
+         * The depth of the cells' lower branch, pascals: the boundary layer's, [BoundaryLayer.LAYER_THICKNESS_PA],
+         * whose Ekman transport the surface branch is (Held 2000, lecture 1). Its mean wind is the
+         * surface's meridional wind, and its convergence carries the cells' ascent at its top.
          */
-        val LOWER_BRANCH_PA: Double = AtmosphereLevels.REFERENCE_SURFACE_PRESSURE_PA / 2
+        const val LOWER_BRANCH_PA: Double = BoundaryLayer.LAYER_THICKNESS_PA
 
         /** Points the cells' vertical motion is tabulated at between their edges: a few hundredths of a degree apart. */
         private const val PROFILE_POINTS = 4_001
+
+        /**
+         * Passes of the drag at each step of the boundary layer's march: the drag is the wind's own
+         * speed's, so the step is solved for it by fixed point; a step is a hundredth of a degree,
+         * over which the wind moves by a few millimeters a second, and the second pass moves the
+         * wind by less than a part in a million.
+         */
+        private const val DRAG_PASSES = 3
 
         /** The mid-troposphere where the cells' vertical motion is read, pascals: 500 hPa. */
         private const val MID_TROPOSPHERE_PA = 50_000.0
@@ -466,6 +625,30 @@ internal class HadleyCirculation private constructor(
         val RADIATIVE_SUBSIDENCE_PA_PER_S: Double = ATMOSPHERE_RADIATIVE_LOSS_W_PER_M2 * DryAir.GRAVITY_MPS2 /
             (DryAir.HEAT_CAPACITY_J_PER_KG_K * AtmosphereLevels.REFERENCE_SURFACE_PRESSURE_PA) / MID_TROPOSPHERE_STABILITY
 
+        /**
+         * The westerly belt's half-width on the ground, meters: Earth's annual belts' from the trades'
+         * edge to the westerlies' center, [SurfaceBelts.TRADE_BELT_EDGE_DEGREES] to
+         * [SurfaceBelts.WESTERLY_BELT_CENTRE_DEGREES], on Earth's radius. A length and not an angle,
+         * since the eddies that drive the belt have their own size on the ground.
+         */
+        val WESTERLY_HALF_WIDTH_M: Double = (SurfaceBelts.WESTERLY_BELT_CENTRE_DEGREES - SurfaceBelts.TRADE_BELT_EDGE_DEGREES) *
+            DEGREES * WorldScale.EARTH_EQUATOR_KM * 1_000.0 / (2.0 * PI)
+
+        /** Earth's polar easterlies at their strongest, meters a second: [SurfaceBelts.POLAR_EASTERLY_STRENGTH] of the belts' speed. */
+        val POLAR_EASTERLY_PEAK_MPS: Double = SurfaceBelts.POLAR_EASTERLY_STRENGTH.toDouble() * PressureWind.BELT_SPEED_MPS
+
+        /** Steps the hemisphere's torque is summed over: a fortieth of a degree each, finer than the map's rows. */
+        private const val TORQUE_STEPS = 3_600
+
+        /**
+         * The strongest westerly peak the torque's balance is sought below, meters a second: a ceiling
+         * and not a figure, ten times Earth's.
+         */
+        private const val LARGEST_WESTERLY_PEAK_MPS = 75.0
+
+        /** Halvings of the westerly peak's bracket: forty take seventy-five meters a second below a micrometer a second. */
+        private const val PEAK_BISECTIONS = 40
+
         /** The step the edges are bracketed at in the sine of latitude, a thousandth (about 0.06 degrees). */
         private const val SINE_STEP = 1.0e-3
 
@@ -484,10 +667,22 @@ internal class HadleyCirculation private constructor(
             return spin * spin * radiusMeters * radiusMeters / (2.0 * DryAir.GRAVITY_MPS2 * TROPOSPHERE_DEPTH_M)
         }
 
-        /** The cells for a heating at [heatingLatitudeDegrees] on a planet of [radiusMeters]. */
-        fun cellsFor(heatingLatitudeDegrees: Double, radiusMeters: Double): Cells {
+        /**
+         * Lindzen and Hou's own cells for a heating at [heatingLatitudeDegrees] on a planet of
+         * [radiusMeters], their rising branch by their four conditions ([EqualArea.solve]): the source
+         * model, against which `HadleyCirculationTest` holds Hill and others' figures.
+         */
+        fun cellsFor(heatingLatitudeDegrees: Double, radiusMeters: Double): Cells =
+            heldWhereTheyClose(heatingLatitudeDegrees, radiusMeters) { it.solveOrNull() }
+
+        /**
+         * The cells rising at a heating at [heatingLatitudeDegrees] on a planet of [radiusMeters]
+         * ([EqualArea.risingAt]): the circulation's own.
+         */
+        fun cellsRisingAt(heatingLatitudeDegrees: Double, radiusMeters: Double): Cells {
             lastCells?.let { (heating, radius, cells) -> if (heating == heatingLatitudeDegrees && radius == radiusMeters) return cells }
-            return solvedCells(heatingLatitudeDegrees, radiusMeters).also { lastCells = Triple(heatingLatitudeDegrees, radiusMeters, it) }
+            return heldWhereTheyClose(heatingLatitudeDegrees, radiusMeters) { it.risingAt() }
+                .also { lastCells = Triple(heatingLatitudeDegrees, radiusMeters, it) }
         }
 
         /**
@@ -497,13 +692,16 @@ internal class HadleyCirculation private constructor(
         @kotlin.concurrent.Volatile
         private var lastCells: Triple<Double, Double, Cells>? = null
 
-        private fun solvedCells(heatingLatitudeDegrees: Double, radiusMeters: Double): Cells {
+        /**
+         * [solveCells] for the northern heating as far from the equator as [heatingLatitudeDegrees],
+         * mirrored for a southern one; for a heating so far from the equator (a planet tilted far past
+         * Earth's, its summer pole the warmest) that the cells reach a pole first, held at the farthest
+         * heating whose cells close, found by bisection, so the circulation stays defined at every tilt.
+         */
+        private fun heldWhereTheyClose(heatingLatitudeDegrees: Double, radiusMeters: Double, solveCells: (EqualArea) -> Cells?): Cells {
             val scale = amcScale(radiusMeters)
-            fun cellsAt(degrees: Double) = EqualArea(sin(degrees * DEGREES), scale, EQUILIBRIUM_CONTRAST_SHARE).solveOrNull()
+            fun cellsAt(degrees: Double) = solveCells(EqualArea(sin(degrees * DEGREES), scale, EQUILIBRIUM_CONTRAST_SHARE))
             val northern = cellsAt(abs(heatingLatitudeDegrees)) ?: run {
-                // A heating so far from the equator (a planet tilted far past Earth's, its summer pole
-                // the warmest) that the cells reach a pole first: held at the farthest heating whose
-                // cells close, found by bisection, so the circulation stays defined at every tilt.
                 var closes = 0.0
                 var fails = abs(heatingLatitudeDegrees)
                 repeat(FARTHEST_HEATING_BISECTIONS) {
@@ -519,39 +717,103 @@ internal class HadleyCirculation private constructor(
         private const val FARTHEST_HEATING_BISECTIONS = 20
 
         /**
-         * The latitude the half-year [season]'s marine air is warmest at in [zonal], degrees: the
+         * The energy balance [zonal]'s energy flux equator in the half-year [season], degrees: the
+         * latitude where its meridional transport changes direction, which is where the band's mean air
+         * ([ZonalClimate.bandC]) is warmest, since the transport runs down that air's gradient; the
          * warmest band, refined by the parabola through it and its two neighbors.
          */
-        fun heatingLatitudeDegrees(zonal: ZonalClimate, season: Season): Double {
-            val marine = zonal.sea.at(season)
+        fun energyFluxEquatorDegrees(zonal: ZonalClimate, season: Season): Double {
+            val band = zonal.bandC(season)
             var warmest = 0
-            for (band in marine.indices) if (marine[band] > marine[warmest]) warmest = band
+            for (index in band.indices) if (band[index] > band[warmest]) warmest = index
             val latitude = EnergyBalance.latitudeOfBand(warmest).toDouble()
-            if (warmest == 0 || warmest == marine.size - 1) return latitude
-            val north = marine[warmest - 1].toDouble()
-            val here = marine[warmest].toDouble()
-            val south = marine[warmest + 1].toDouble()
+            if (warmest == 0 || warmest == band.size - 1) return latitude
+            val north = band[warmest - 1].toDouble()
+            val here = band[warmest].toDouble()
+            val south = band[warmest + 1].toDouble()
             val curvature = north - 2.0 * here + south
             if (curvature >= 0.0) return latitude
             // The parabola's vertex, in bands toward the south; bands run north to south, so a step
             // toward the south is a fall in latitude.
             val southwardBands = 0.5 * (north - south) / curvature
-            return latitude - southwardBands * EnergyBalance.POLE_TO_POLE_DEGREES / marine.size
+            return latitude - southwardBands * EnergyBalance.POLE_TO_POLE_DEGREES / band.size
         }
 
+        /**
+         * Where the troposphere of the energy balance [zonal] first turns baroclinically unstable in
+         * the half-year [season], degrees from the equator in the northern hemisphere when [north] or
+         * the southern, searching poleward from [fromDegrees]; null where it never does short of
+         * [LARGEST_ONSET_DEGREES].
+         *
+         * Held's (2000, lecture 6, read) two-layer criterion: two layers of equal depth `H / 2` are
+         * unstable where the interface between them slopes by more than `beta (H / 2) / f`, and the
+         * interface lies along the isentropes, whose slope is `(d theta / dy) / (d theta / dz)`. So the
+         * troposphere is unstable where `2 f (d theta / dy) / (beta H d theta / dz)` reaches one,
+         * `2 tan(phi) (d theta / d phi) / (theta N^2 H / g)` on the sphere. The gradient is the band's
+         * mean air's ([ZonalClimate.bandC]) in the half, the stratification and depth the repository's
+         * ([PressureWind.BUOYANCY_FREQUENCY_PER_S], [PressureWind.TROPOPAUSE_DEPTH_M]).
+         */
+        fun baroclinicOnsetDegrees(zonal: ZonalClimate, season: Season, north: Boolean, fromDegrees: Double): Double? {
+            val band = zonal.bandC(season)
+            fun airC(fromEquator: Double) = zonal.bandValueAt(band, (if (north) fromEquator else -fromEquator).toFloat()).toDouble()
+            val stratification = PressureWind.BUOYANCY_FREQUENCY_PER_S * PressureWind.BUOYANCY_FREQUENCY_PER_S *
+                PressureWind.TROPOPAUSE_DEPTH_M / DryAir.GRAVITY_MPS2
+            fun supercriticality(fromEquator: Double): Double {
+                val polewardDrop = (airC(fromEquator - GRADIENT_HALF_SPAN_DEGREES) - airC(fromEquator + GRADIENT_HALF_SPAN_DEGREES)) /
+                    (2.0 * GRADIENT_HALF_SPAN_DEGREES * DEGREES)
+                val kelvin = airC(fromEquator) + ColumnWater.KELVIN_AT_ZERO_C
+                return 2.0 * tan(fromEquator * DEGREES) * polewardDrop / (kelvin * stratification)
+            }
+            var previous = maxOf(fromDegrees, ONSET_STEP_DEGREES)
+            var previousValue = supercriticality(previous)
+            if (previousValue >= 1.0) return previous
+            while (previous + ONSET_STEP_DEGREES <= LARGEST_ONSET_DEGREES) {
+                val next = previous + ONSET_STEP_DEGREES
+                val nextValue = supercriticality(next)
+                if (nextValue >= 1.0) return previous + (next - previous) * (1.0 - previousValue) / (nextValue - previousValue)
+                previous = next
+                previousValue = nextValue
+            }
+            return null
+        }
+
+        /** The half-span the band's gradient is taken across, degrees: two thirds of a band of the energy balance's. */
+        private const val GRADIENT_HALF_SPAN_DEGREES = 0.5
+
+        /** The step the onset is searched at, degrees: a quarter, finer than the energy balance's bands. */
+        private const val ONSET_STEP_DEGREES = 0.25
+
+        /** The farthest latitude the onset is sought at, degrees: past it a row is no longer the circulation's. */
+        private const val LARGEST_ONSET_DEGREES = 80.0
+
         /** [season]'s circulation over the world [config] describes, under the energy balance [zonal]. */
-        fun forHalf(config: WorldGenConfig, zonal: ZonalClimate, season: Season): HadleyCirculation =
-            forHeating(heatingLatitudeDegrees(zonal, season), config.scale.radiusMeters, config.climate.meridionalWindShare.toDouble())
+        fun forHalf(config: WorldGenConfig, zonal: ZonalClimate, season: Season): HadleyCirculation {
+            val heating = energyFluxEquatorDegrees(zonal, season)
+            val radiusMeters = config.scale.radiusMeters
+            val cells = cellsRisingAt(heating, radiusMeters)
+            val ascent = cells.ascentLatitudeDegrees
+            // Each edge is sought poleward of the rising branch, so the summer cell is never empty.
+            val north = baroclinicOnsetDegrees(zonal, season, north = true, fromDegrees = maxOf(ascent, 0.0) + ONSET_STEP_DEGREES)
+                ?: cells.northEdgeDegrees
+            val south = baroclinicOnsetDegrees(zonal, season, north = false, fromDegrees = maxOf(-ascent, 0.0) + ONSET_STEP_DEGREES)
+                ?: cells.southEdgeDegrees
+            return HadleyCirculation(heating, cells, north, south, radiusMeters, config.climate.meridionalWindShare.toDouble())
+        }
 
         /**
-         * The circulation for a heating at [heatingLatitudeDegrees] on a planet of [radiusMeters], the
-         * eddy-driven belts' meridional legs at [meridionalShare] of their speed.
+         * The circulation for a heating at [heatingLatitudeDegrees] on a planet of [radiusMeters], its
+         * edges at [northEdgeDegrees] north and [southEdgeDegrees] south (the axisymmetric cells' own
+         * unless given), the eddy-driven belts' meridional legs at [meridionalShare] of their speed.
          */
         fun forHeating(
             heatingLatitudeDegrees: Double,
             radiusMeters: Double,
-            meridionalShare: Double = ClimateConfig().meridionalWindShare.toDouble()
-        ): HadleyCirculation =
-            HadleyCirculation(heatingLatitudeDegrees, cellsFor(heatingLatitudeDegrees, radiusMeters), radiusMeters, meridionalShare)
+            meridionalShare: Double = ClimateConfig().meridionalWindShare.toDouble(),
+            northEdgeDegrees: Double = cellsRisingAt(heatingLatitudeDegrees, radiusMeters).northEdgeDegrees,
+            southEdgeDegrees: Double = cellsRisingAt(heatingLatitudeDegrees, radiusMeters).southEdgeDegrees
+        ): HadleyCirculation = HadleyCirculation(
+            heatingLatitudeDegrees, cellsRisingAt(heatingLatitudeDegrees, radiusMeters), northEdgeDegrees, southEdgeDegrees,
+            radiusMeters, meridionalShare
+        )
     }
 }

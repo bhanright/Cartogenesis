@@ -53,8 +53,27 @@ class ZonalClimate internal constructor(
      * the mixed layer's temperature in the months it is open to the air. The freezing point where
      * the sea never thaws, the limit the mean approaches as the open season shrinks to nothing.
      */
-    internal val waterOpenC: FloatArray
+    internal val waterOpenC: FloatArray,
+    /**
+     * Per band, the share of it that is land, the weight its land column carries in the band's
+     * mean ([bandC]), as [EnergyBalance.solve] was handed it.
+     */
+    internal val landShare: FloatArray
 ) {
+
+    /**
+     * The band's own mean air temperature in [season], per band, degrees Celsius: the land and the
+     * marine column by their shares, the temperature the meridional transport moves heat down the
+     * gradient of ([EnergyBalance.diffusivityAt]).
+     */
+    internal fun bandC(season: Season): FloatArray {
+        val landColumn = land.at(season)
+        val seaColumn = sea.at(season)
+        return FloatArray(landColumn.size) { band -> landShare[band] * landColumn[band] + (1f - landShare[band]) * seaColumn[band] }
+    }
+
+    /** A band array at [latitudeDegrees], as [landC] reads its own. */
+    internal fun bandValueAt(bandValues: FloatArray, latitudeDegrees: Float): Float = interpolate(bandValues, latitudeDegrees)
 
     /** The share of the year the sea at [latitudeDegrees] is open water, interpolated between band centres. */
     internal fun openWaterShare(latitudeDegrees: Float): Float = interpolate(waterOpenShare, latitudeDegrees)
@@ -896,7 +915,8 @@ object EnergyBalance {
             globalMeanC = lastYearMeanC.toFloat(),
             spinUpResidualC = (lastYearMeanC - previousYearMeanC).toFloat(),
             waterOpenShare = waterOpenShare,
-            waterOpenC = waterOpenC
+            waterOpenC = waterOpenC,
+            landShare = landFraction.copyOf()
         )
     }
 

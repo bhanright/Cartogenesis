@@ -117,7 +117,7 @@ class MeridionalWindTest : BorrowsSharedWorlds() {
                 val wind = ClimateStage.seasonalSurfaceWindMps(
                     world.config, world.sea, world.ocean, season
                 )
-                val cells = HadleyCirculation.forHalf(world.config, zonal, season).cells
+                val cells = HadleyCirculation.forHalf(world.config, zonal, season)
                 var largest = 0f
                 for (cell in wind.southwardMps.indices) {
                     val latitude = ClimateStage.latitudeOf(cell / world.width, world.height).toDouble()

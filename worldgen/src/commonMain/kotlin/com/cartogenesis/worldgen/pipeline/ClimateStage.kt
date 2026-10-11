@@ -823,8 +823,8 @@ object ClimateStage {
         // each row is the zonal mean the march's wind and the boundary layer's pressure stand on.
         val julyCirculation = HadleyCirculation.forHalf(config, zonal, Season.JULY_HALF)
         val januaryCirculation = HadleyCirculation.forHalf(config, zonal, Season.JANUARY_HALF)
-        val julyHalfRows = HadleyCirculation.windOfRows(julyCirculation, januaryCirculation, cellsDown)
-        val januaryHalfRows = HadleyCirculation.windOfRows(januaryCirculation, julyCirculation, cellsDown)
+        val julyHalfRows = HadleyCirculation.windOfRows(julyCirculation, cellsDown)
+        val januaryHalfRows = HadleyCirculation.windOfRows(januaryCirculation, cellsDown)
         val julyHalfBelts = buildWind(config, cellsAcross, julyHalfRows)
         val januaryHalfBelts = buildWind(config, cellsAcross, januaryHalfRows)
 
@@ -1555,15 +1555,13 @@ object ClimateStage {
             .ascentLatitudeDegrees.toFloat()
 
     /**
-     * A half-year's zonal-mean surface wind on each row of the map, meters a second, eastward and
-     * southward, under the energy balance [zonal]: the circulation the boundary layer's pressure is
-     * built from ([HadleyCirculation], [BoundaryLayer]).
+     * A half-year's zonal-mean surface wind on each of [rows] rows (the map's unless given), meters a
+     * second, eastward and southward, under the energy balance [zonal]: the circulation the boundary
+     * layer's pressure is built from ([HadleyCirculation], [BoundaryLayer]).
      */
-    internal fun beltWindOfRows(config: WorldGenConfig, zonal: ZonalClimate, julyHalf: Boolean): PressureWind.Vectors {
-        val july = HadleyCirculation.forHalf(config, zonal, Season.JULY_HALF)
-        val january = HadleyCirculation.forHalf(config, zonal, Season.JANUARY_HALF)
-        return if (julyHalf) HadleyCirculation.windOfRows(july, january, config.height)
-        else HadleyCirculation.windOfRows(january, july, config.height)
+    internal fun beltWindOfRows(config: WorldGenConfig, zonal: ZonalClimate, julyHalf: Boolean, rows: Int = config.height): PressureWind.Vectors {
+        val season = if (julyHalf) Season.JULY_HALF else Season.JANUARY_HALF
+        return HadleyCirculation.windOfRows(HadleyCirculation.forHalf(config, zonal, season), rows)
     }
 
     /**

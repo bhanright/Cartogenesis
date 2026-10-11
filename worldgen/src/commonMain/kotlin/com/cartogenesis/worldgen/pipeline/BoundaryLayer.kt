@@ -341,19 +341,38 @@ internal object BoundaryLayer {
         private val shallowRates = shallowRelaxationPerSecond(levels)
         private val factored: StationaryWaveModel.Factored = model.factorize(keptWaves)
 
+        /** Each half's latent heating's shape up every column, `[interface][cell]`, from its surface ([latentHeatingShape]). */
+        private val julyLatentShape = latentHeatingShapes(levels, julySurfaceC)
+        private val januaryLatentShape = latentHeatingShapes(levels, januarySurfaceC)
+
         /**
-         * The forcing of one half: the shallow land-sea heating toward [surfaceC], plus
-         * [latentWPerM2] (the column's latent heating on the atmosphere's grid, watts per square
-         * meter, or none) spread up the column by [latentHeatingShape], and the terrain.
+         * The dry part of each half's forcing, the shallow land-sea heating toward its surface and the
+         * terrain, solved once: it is the same at every lap, and the model is linear, so each lap
+         * solves its latent heating alone and adds it ([StationaryWaveModel.Solution.plus]).
          */
-        private fun forcing(surfaceC: DoubleArray, latentWPerM2: DoubleArray?): WaveForcing {
-            val latent = latentWPerM2?.let { latentHeatingKelvinPerSecond(levels, it, surfaceC) }
+        private val drySolutions: List<StationaryWaveModel.Solution> by lazy {
+            factored.solveSpectra(listOf(dryForcing(julySurfaceC), dryForcing(januarySurfaceC)))
+        }
+
+        /** The shallow land-sea heating toward [surfaceC] and the terrain. */
+        private fun dryForcing(surfaceC: DoubleArray): WaveForcing {
             val heating = Array(levels.interiorCount) { interior ->
-                DoubleArray(coarse.cellCount) { cell ->
-                    surfaceC[cell] * shallowRates[interior] + (latent?.get(interior)?.get(cell) ?: 0.0)
-                }
+                DoubleArray(coarse.cellCount) { cell -> surfaceC[cell] * shallowRates[interior] }
             }
             return WaveForcing(heating, terrain)
+        }
+
+        /**
+         * The latent heating of a column heating [latentWPerM2] (watts per square meter on the
+         * atmosphere's grid), spread up each column by its half's [shape]: the column's mean heating
+         * rate `Q g / (c_p p_s)` times the shape, as [latentHeatingKelvinPerSecond] gives it.
+         */
+        private fun latentForcing(latentWPerM2: DoubleArray, shape: Array<DoubleArray>): WaveForcing {
+            val perWatt = DryAir.GRAVITY_MPS2 / (DryAir.HEAT_CAPACITY_J_PER_KG_K * levels.surfacePressurePa)
+            val heating = Array(levels.interiorCount) { interior ->
+                DoubleArray(coarse.cellCount) { cell -> latentWPerM2[cell] * perWatt * shape[interior][cell] }
+            }
+            return WaveForcing(heating, null)
         }
 
         /**
@@ -362,11 +381,19 @@ internal object BoundaryLayer {
          * dry atmosphere).
          */
         fun solve(julyLatentWPerM2: DoubleArray?, januaryLatentWPerM2: DoubleArray?): Atmosphere {
-            val forcings = listOf(forcing(julySurfaceC, julyLatentWPerM2), forcing(januarySurfaceC, januaryLatentWPerM2))
-            val responses = factored.solveEach(forcings)
+            val dry = drySolutions
+            val latent = if (julyLatentWPerM2 == null && januaryLatentWPerM2 == null) null
+            else factored.solveSpectra(
+                listOf(
+                    latentForcing(julyLatentWPerM2 ?: DoubleArray(coarse.cellCount), julyLatentShape),
+                    latentForcing(januaryLatentWPerM2 ?: DoubleArray(coarse.cellCount), januaryLatentShape)
+                )
+            )
+            val july = if (latent == null) dry[0] else dry[0] + latent[0]
+            val january = if (latent == null) dry[1] else dry[1] + latent[1]
             return Atmosphere(
                 remap, levels, state.surfaceDensity, terrain,
-                half(responses[0], julyHalfBelts, julyLatentWPerM2), half(responses[1], januaryHalfBelts, januaryLatentWPerM2),
+                half(july.response(), julyHalfBelts, julyLatentWPerM2), half(january.response(), januaryHalfBelts, januaryLatentWPerM2),
                 dragOfRow
             )
         }
@@ -448,6 +475,20 @@ internal object BoundaryLayer {
             latentHeatingShape(levels, surfaceC[cell], shape)
             val columnRate = columnWPerM2[cell] * perWatt
             for (interior in 0 until levels.interiorCount) result[interior][cell] = columnRate * shape[interior]
+        }
+        return result
+    }
+
+    /**
+     * [latentHeatingShape] for every column of [surfaceC] (degrees Celsius at sea level, on the
+     * atmosphere's grid), `[interface][cell]`: fixed for a half-year, so built once per world.
+     */
+    fun latentHeatingShapes(levels: AtmosphereLevels, surfaceC: DoubleArray): Array<DoubleArray> {
+        val result = Array(levels.interiorCount) { DoubleArray(surfaceC.size) }
+        val shape = DoubleArray(levels.interiorCount)
+        for (cell in surfaceC.indices) {
+            latentHeatingShape(levels, surfaceC[cell], shape)
+            for (interior in 0 until levels.interiorCount) result[interior][cell] = shape[interior]
         }
         return result
     }

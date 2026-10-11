@@ -103,18 +103,37 @@ class WaveForcing(
  * - [surfacePressurePa], `[cell]`: `rho_s` times the geopotential carried hydrostatically from the
  *   lowest level to the ground at the lowest interface's temperature. With the zonal mean solved its
  *   area mean is zero, so the waves move no mass.
+ *
+ * Only [surfacePressurePa] is made when the response is: it is all the coupled loop's laps read
+ * (the boundary layer's wind and ascent are diagnosed from it on the map), and it needs two of the
+ * levels' fields. The others are each the inverse transform of every level and interface, made from
+ * the solved spectra the first time any of them is read and kept, to the same bit as made at once.
  */
-class WaveResponse(
+class WaveResponse internal constructor(
     val grid: SphericalGrid,
     val levels: AtmosphereLevels,
-    val eastward: Array<DoubleArray>,
-    val northwardAtFaces: Array<DoubleArray>,
-    val geopotential: Array<DoubleArray>,
-    val verticalMotion: Array<DoubleArray>,
-    val temperature: Array<DoubleArray>,
-    val surfaceVerticalMotion: DoubleArray,
-    val surfacePressurePa: DoubleArray
+    val surfacePressurePa: DoubleArray,
+    fields: () -> Fields
 ) {
+    /** Every field but the surface pressure, as [WaveResponse] lists them. */
+    class Fields(
+        val eastward: Array<DoubleArray>,
+        val northwardAtFaces: Array<DoubleArray>,
+        val geopotential: Array<DoubleArray>,
+        val verticalMotion: Array<DoubleArray>,
+        val temperature: Array<DoubleArray>,
+        val surfaceVerticalMotion: DoubleArray
+    )
+
+    private val made: Fields by lazy(fields)
+
+    val eastward: Array<DoubleArray> get() = made.eastward
+    val northwardAtFaces: Array<DoubleArray> get() = made.northwardAtFaces
+    val geopotential: Array<DoubleArray> get() = made.geopotential
+    val verticalMotion: Array<DoubleArray> get() = made.verticalMotion
+    val temperature: Array<DoubleArray> get() = made.temperature
+    val surfaceVerticalMotion: DoubleArray get() = made.surfaceVerticalMotion
+
     /** [level]'s northward wind at the row centers, the mean of each cell's two faces. */
     fun northwardAtCenters(level: Int): DoubleArray =
         SphericalOperators(grid).northAtCenters(SphericalOperators.Vector(eastward[level], northwardAtFaces[level]))
@@ -227,11 +246,13 @@ class StationaryWaveModel(
         fun solve(forcing: WaveForcing): WaveResponse = solveEach(listOf(forcing)).single()
 
         /** The responses to every one of [forcings], each wave factored at most once for all of them. */
-        fun solveEach(forcings: List<WaveForcing>): List<WaveResponse> {
+        fun solveEach(forcings: List<WaveForcing>): List<WaveResponse> = solveSpectra(forcings).map { response(it) }
+
+        /** The solved spectra of every one of [forcings] ([solveEach] before the fields are made). */
+        fun solveSpectra(forcings: List<WaveForcing>): List<Solution> {
             val spectra = forcings.map { ForcingSpectra(it) }
             val count = waves.count()
-            val solutionReal = Array(forcings.size) { Array(count) { DoubleArray(grid.rows * blockSize) } }
-            val solutionImaginary = Array(forcings.size) { Array(count) { DoubleArray(grid.rows * blockSize) } }
+            val solutions = spectra.map { Solution(it) }
             parallelChunks(0, count) { start, end ->
                 // One scratch system per worker for the waves whose factors are not kept.
                 var scratch: ComplexBlockTridiagonal? = null
@@ -249,14 +270,46 @@ class StationaryWaveModel(
                         scales = assemble(wave, system)
                         system.factorize()
                     }
-                    for (which in forcings.indices) {
-                        rightHandSide(wave, spectra[which], scales, solutionReal[which][index], solutionImaginary[which][index])
-                        system.solve(solutionReal[which][index], solutionImaginary[which][index])
+                    for (solution in solutions) {
+                        rightHandSide(wave, solution.terrain, scales, solution.real[index], solution.imaginary[index])
+                        system.solve(solution.real[index], solution.imaginary[index])
                     }
                 }
             }
-            return forcings.indices.map { response(solutionReal[it], solutionImaginary[it], spectra[it]) }
+            return solutions
         }
+    }
+
+    /**
+     * One forcing's solved waves, spectrum by spectrum: `[wave index][row * blockSize + slot]`, real
+     * and imaginary, before any field is made from them, with the forcing's own spectra for the
+     * terrain's lift at the ground ([terrain]).
+     *
+     * The model is linear, so two forcings' solutions add to the solution of their sum ([plus]): the
+     * fixed part of a forcing, the land and sea and the terrain, is solved once and each changing
+     * part added to it, which moves the answer by rounding only.
+     */
+    inner class Solution internal constructor(
+        internal val real: Array<DoubleArray>,
+        internal val imaginary: Array<DoubleArray>,
+        internal val terrain: ForcingSpectra
+    ) {
+        internal constructor(terrain: ForcingSpectra) : this(
+            Array(waves.count()) { DoubleArray(grid.rows * blockSize) },
+            Array(waves.count()) { DoubleArray(grid.rows * blockSize) },
+            terrain
+        )
+
+        /** This solution and [other]'s summed: the solution of the two forcings together. */
+        operator fun plus(other: Solution): Solution {
+            require(!(terrain.hasHeight && other.terrain.hasHeight)) { "two terrains in one sum" }
+            val sumReal = Array(real.size) { index -> DoubleArray(real[index].size) { real[index][it] + other.real[index][it] } }
+            val sumImaginary = Array(imaginary.size) { index -> DoubleArray(imaginary[index].size) { imaginary[index][it] + other.imaginary[index][it] } }
+            return Solution(sumReal, sumImaginary, if (other.terrain.hasHeight) other.terrain else terrain)
+        }
+
+        /** The fields of this solution on the grid ([WaveResponse]). */
+        fun response(): WaveResponse = this@StationaryWaveModel.response(this)
     }
 
     /** Factors the first [keptWaves] waves' systems once and keeps them (see [Factored]); all of them by default. */
@@ -286,30 +339,10 @@ class StationaryWaveModel(
      * no more than one wave's factors per worker are held at once (the whole set is about 700 MB
      * on Earth's planet at eight levels).
      */
-    fun solveEach(forcings: List<WaveForcing>): List<WaveResponse> {
-        val spectra = forcings.map { ForcingSpectra(it) }
-        val count = waves.count()
-        val solutionReal = Array(forcings.size) { Array(count) { DoubleArray(grid.rows * blockSize) } }
-        val solutionImaginary = Array(forcings.size) { Array(count) { DoubleArray(grid.rows * blockSize) } }
-        parallelChunks(0, count) { start, end ->
-            // One system per worker, cleared for each of its waves.
-            val system = ComplexBlockTridiagonal(grid.rows, blockSize)
-            for (index in start until end) {
-                val wave = waves.first + index
-                system.clear()
-                val scales = assemble(wave, system)
-                system.factorize()
-                for (which in forcings.indices) {
-                    rightHandSide(wave, spectra[which], scales, solutionReal[which][index], solutionImaginary[which][index])
-                    system.solve(solutionReal[which][index], solutionImaginary[which][index])
-                }
-            }
-        }
-        return forcings.indices.map { response(solutionReal[it], solutionImaginary[it], spectra[it]) }
-    }
+    fun solveEach(forcings: List<WaveForcing>): List<WaveResponse> = factorize(keptWaves = 0).solveEach(forcings)
 
     /** The forcing's zonal spectra row by row: raw transform coefficients, `sum_c x_c exp(-2 pi i m c / N)`. */
-    private inner class ForcingSpectra(forcing: WaveForcing) {
+    internal inner class ForcingSpectra(forcing: WaveForcing) {
         val heatingReal: Array<DoubleArray>
         val heatingImaginary: Array<DoubleArray>
         val heightReal: DoubleArray
@@ -616,10 +649,16 @@ class StationaryWaveModel(
         }
     }
 
-    /** The solved waves back on the grid. */
-    private fun response(solutionReal: Array<DoubleArray>, solutionImaginary: Array<DoubleArray>, spectra: ForcingSpectra): WaveResponse {
+    /**
+     * The solved waves back on the grid: the surface pressure at once, from the two lowest levels'
+     * geopotential, and every other field when first read ([WaveResponse]).
+     */
+    private fun response(solution: Solution): WaveResponse {
         val columns = grid.columns
         val rows = grid.rows
+        val solutionReal = solution.real
+        val solutionImaginary = solution.imaginary
+        val spectra = solution.terrain
         fun field(slot: Int): DoubleArray {
             val result = DoubleArray(grid.cellCount)
             parallelChunks(0, rows) { startRow, endRow ->
@@ -647,22 +686,50 @@ class StationaryWaveModel(
             }
             return result
         }
-        val eastward = Array(levelCount) { field(eastSlot(it)) }
-        val geopotential = Array(levelCount) { field(geopotentialSlot(it)) }
-        val verticalMotion = Array(interiorCount) { field(verticalMotionSlot(it)) }
-        val northwardAtFaces = Array(levelCount) { level ->
-            val rowField = field(northSlot(level))
-            val faces = DoubleArray((rows + 1) * columns)
-            for (face in 1 until rows) rowField.copyInto(faces, face * columns, (face - 1) * columns, face * columns)
-            // The polar faces: the odd waves of the next face in, a regular vector's part there.
-            if (!polarWindHeldAtZero) {
-                faces.polarFace(0, rowField, 0)
-                faces.polarFace(rows, rowField, rows - 2)
+        val bottom = levelCount - 1
+        val lowest = field(geopotentialSlot(bottom))
+        val aboveLowest = field(geopotentialSlot(bottom - 1))
+        // The rigid lid fixes the geopotential only up to a constant: with the zonal mean solved, take
+        // the one under which the waves move no mass, the surface pressure's area mean zero.
+        val offset = if (solveZonalMean) {
+            var weighted = 0.0
+            var area = 0.0
+            for (cell in 0 until grid.cellCount) {
+                val cellArea = grid.cellAreaSquareMeters[cell / columns]
+                weighted += groundGeopotential(aboveLowest[cell], lowest[cell]) * cellArea
+                area += cellArea
             }
-            faces
+            weighted / area
+        } else 0.0
+        if (solveZonalMean) {
+            for (cell in 0 until grid.cellCount) {
+                lowest[cell] -= offset
+                aboveLowest[cell] -= offset
+            }
         }
-        val groundOmega = run {
-            val result = DoubleArray(grid.cellCount)
+        val surfacePressure = DoubleArray(grid.cellCount) { basicState.surfaceDensity * groundGeopotential(aboveLowest[it], lowest[it]) }
+        return WaveResponse(grid, levels, surfacePressure) {
+            val eastward = Array(levelCount) { field(eastSlot(it)) }
+            val geopotential = Array(levelCount) { level ->
+                when (level) {
+                    bottom -> lowest
+                    bottom - 1 -> aboveLowest
+                    else -> field(geopotentialSlot(level)).also { values -> if (solveZonalMean) for (cell in values.indices) values[cell] -= offset }
+                }
+            }
+            val verticalMotion = Array(interiorCount) { field(verticalMotionSlot(it)) }
+            val northwardAtFaces = Array(levelCount) { level ->
+                val rowField = field(northSlot(level))
+                val faces = DoubleArray((rows + 1) * columns)
+                for (face in 1 until rows) rowField.copyInto(faces, face * columns, (face - 1) * columns, face * columns)
+                // The polar faces: the odd waves of the next face in, a regular vector's part there.
+                if (!polarWindHeldAtZero) {
+                    faces.polarFace(0, rowField, 0)
+                    faces.polarFace(rows, rowField, rows - 2)
+                }
+                faces
+            }
+            val groundOmega = DoubleArray(grid.cellCount)
             if (spectra.hasHeight) {
                 val real = DoubleArray(columns)
                 val imaginary = DoubleArray(columns)
@@ -676,38 +743,25 @@ class StationaryWaveModel(
                         real[columns - wave] = valueReal; imaginary[columns - wave] = -valueImaginary
                     }
                     grid.rowTransform.inverse(real, imaginary)
-                    for (column in 0 until columns) result[row * columns + column] = real[column] / columns
+                    for (column in 0 until columns) groundOmega[row * columns + column] = real[column] / columns
                 }
             }
-            result
-        }
-        if (solveZonalMean) {
-            // The rigid lid fixes the geopotential only up to a constant: take the one under which the
-            // waves move no mass, the surface pressure's area mean zero.
-            var weighted = 0.0
-            var area = 0.0
-            for (cell in 0 until grid.cellCount) {
-                val cellArea = grid.cellAreaSquareMeters[cell / columns]
-                weighted += groundGeopotential(geopotential, cell) * cellArea
-                area += cellArea
+            val temperature = Array(interiorCount) { interior ->
+                val factor = 1.0 / (DryAir.GAS_CONSTANT_J_PER_KG_K * levels.logPressureRatio[interior])
+                DoubleArray(grid.cellCount) { (geopotential[interior][it] - geopotential[interior + 1][it]) * factor }
             }
-            val offset = weighted / area
-            for (level in 0 until levelCount) for (cell in 0 until grid.cellCount) geopotential[level][cell] -= offset
+            WaveResponse.Fields(eastward, northwardAtFaces, geopotential, verticalMotion, temperature, groundOmega)
         }
-        val temperature = Array(interiorCount) { interior ->
-            val factor = 1.0 / (DryAir.GAS_CONSTANT_J_PER_KG_K * levels.logPressureRatio[interior])
-            DoubleArray(grid.cellCount) { (geopotential[interior][it] - geopotential[interior + 1][it]) * factor }
-        }
-        val surfacePressure = DoubleArray(grid.cellCount) { basicState.surfaceDensity * groundGeopotential(geopotential, it) }
-        return WaveResponse(grid, levels, eastward, northwardAtFaces, geopotential, verticalMotion, temperature, groundOmega, surfacePressure)
     }
 
-    /** The geopotential at the ground in [cell]: the lowest level's, carried down at the lowest interface's temperature. */
-    private fun groundGeopotential(geopotential: Array<DoubleArray>, cell: Int): Double {
-        val bottom = levelCount - 1
-        val lowestTemperature = (geopotential[bottom - 1][cell] - geopotential[bottom][cell]) /
-            (DryAir.GAS_CONSTANT_J_PER_KG_K * levels.logPressureRatio[bottom - 1])
-        return geopotential[bottom][cell] - DryAir.GAS_CONSTANT_J_PER_KG_K * lowestTemperature * levels.logPressureToGround
+    /**
+     * The geopotential at the ground, given the two lowest levels' geopotential in a cell,
+     * [aboveLowest] and [lowest]: the lowest level's, carried down at the lowest interface's
+     * temperature.
+     */
+    private fun groundGeopotential(aboveLowest: Double, lowest: Double): Double {
+        val lowestTemperature = (aboveLowest - lowest) / (DryAir.GAS_CONSTANT_J_PER_KG_K * levels.logPressureRatio[levelCount - 2])
+        return lowest - DryAir.GAS_CONSTANT_J_PER_KG_K * lowestTemperature * levels.logPressureToGround
     }
 
     /**

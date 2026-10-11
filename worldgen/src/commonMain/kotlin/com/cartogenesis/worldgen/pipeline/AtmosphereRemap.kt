@@ -261,8 +261,7 @@ class AtmosphereRemap(val groundColumns: Int, val groundRows: Int, val coarse: S
     }
 
     /** [field], a scalar on [coarse]'s centers, read at every ground cell's center by its double Fourier series. */
-    fun toGround(field: DoubleArray): FloatArray =
-        evaluate(coefficients(field), groundRows, groundColumns).let { values -> FloatArray(values.size) { values[it].toFloat() } }
+    fun toGround(field: DoubleArray): FloatArray = evaluateOnGround(coefficients(field))
 
     /**
      * [field], a scalar the model made on [coarse]'s centers, read at every ground cell's center
@@ -271,8 +270,7 @@ class AtmosphereRemap(val groundColumns: Int, val groundRows: Int, val coarse: S
      * what it holds there is its differences' own and not the planet's, and carried up unfiltered it
      * left the coarse grid's period down the map (docs/DESIGN_LEDGER.md, A1-4).
      */
-    fun outputToGround(field: DoubleArray): FloatArray =
-        evaluate(coefficients(smooth(field), FILTER_ORDER), groundRows, groundColumns).let { values -> FloatArray(values.size) { values[it].toFloat() } }
+    fun outputToGround(field: DoubleArray): FloatArray = evaluateOnGround(coefficients(smooth(field), FILTER_ORDER))
 
     /**
      * The tangent vector [east], [north] (both at [coarse]'s centers) at every ground cell's center:
@@ -321,15 +319,70 @@ class AtmosphereRemap(val groundColumns: Int, val groundRows: Int, val coarse: S
      * what the target holds folds onto the one it equals at the target's points.
      */
     fun evaluate(coefficients: DoubleFourierCoefficients, targetRows: Int, targetColumns: Int): DoubleArray {
-        val groundRows = targetRows
-        val groundColumns = targetColumns
+        val result = DoubleArray(targetRows * targetColumns)
+        val plan = when {
+            targetRows == coarse.rows && targetColumns == coarse.columns && coefficients.coarseRows == coarse.rows -> coarsePlan
+            targetRows == groundRows && targetColumns == groundColumns && coefficients.coarseRows == coarse.rows -> groundPlan
+            else -> EvaluationPlan(targetRows, targetColumns, coefficients.coarseRows, coefficients.zonalCount)
+        }
+        evaluateInto(coefficients, plan) { row, values ->
+            values.copyInto(result, row * targetColumns, 0, targetColumns)
+        }
+        return result
+    }
+
+    /**
+     * [evaluate] on the map's own grid, each value rounded to a float as it is written: the same
+     * numbers as [evaluate]'s rounded afterward, without the grid of doubles between. The angles and
+     * transforms are planned once for the remap ([groundPlan]), since the climate's loop carries a
+     * field up several times a lap.
+     */
+    fun evaluateOnGround(coefficients: DoubleFourierCoefficients): FloatArray {
+        val result = FloatArray(groundRows * groundColumns)
+        evaluateInto(coefficients, groundPlan) { row, values ->
+            val start = row * groundColumns
+            for (column in 0 until groundColumns) result[start + column] = values[column].toFloat()
+        }
+        return result
+    }
+
+    /** What [evaluateInto] reads for one target grid: its transforms and the angles of every wave. */
+    private class EvaluationPlan(val rows: Int, val columns: Int, val coarseRows: Int, val zonalCount: Int) {
+        val circle = 2 * rows
+        val circleTransform = ComplexFft(circle)
+        val rowTransform = ComplexFft(columns)
+
+        /** `cos` and `sin` of `k pi / circle` for meridional waves `k = -J..J`, at `k + J`. */
+        val meridionalCos = DoubleArray(2 * coarseRows + 1) { cos((it - coarseRows) * PI / circle) }
+        val meridionalSin = DoubleArray(2 * coarseRows + 1) { sin((it - coarseRows) * PI / circle) }
+
+        /** `cos` and `sin` of `m pi / columns` for zonal waves `m = 0..N/2`. */
+        val zonalCos = DoubleArray(zonalCount) { cos(it * PI / columns) }
+        val zonalSin = DoubleArray(zonalCount) { sin(it * PI / columns) }
+    }
+
+    private val coarsePlan: EvaluationPlan by lazy {
+        EvaluationPlan(coarse.rows, coarse.columns, coarse.rows, coarse.columns / 2 + 1)
+    }
+
+    private val groundPlan: EvaluationPlan by lazy {
+        EvaluationPlan(groundRows, groundColumns, coarse.rows, coarse.columns / 2 + 1)
+    }
+
+    /**
+     * The series [coefficients] read at [plan]'s grid: each target row handed to [write] as it is
+     * made, in a buffer the call reuses.
+     */
+    private fun evaluateInto(coefficients: DoubleFourierCoefficients, plan: EvaluationPlan, write: (Int, DoubleArray) -> Unit) {
+        val groundRows = plan.rows
+        val groundColumns = plan.columns
         val zonalCount = coefficients.zonalCount
         val coarseRows = coefficients.coarseRows
-        val circle = 2 * groundRows
+        require(coarseRows == plan.coarseRows && zonalCount == plan.zonalCount) { "a plan for another coarse grid" }
+        val circle = plan.circle
         // G[t][m] = sum_k c[k][m] exp(i k theta_t), theta_t = (t + 1/2) pi / H.
         val alongReal = DoubleArray(groundRows * zonalCount)
         val alongImaginary = DoubleArray(groundRows * zonalCount)
-        val circleTransform = ComplexFft(circle)
         parallelChunks(0, zonalCount) { startWave, endWave ->
             val scratch = ComplexFft.Scratch(circle)
             val real = DoubleArray(circle)
@@ -339,14 +392,15 @@ class AtmosphereRemap(val groundColumns: Int, val groundRows: Int, val coarse: S
                 imaginary.fill(0.0)
                 for (meridional in -coarseRows..coarseRows) {
                     val at = (meridional + coarseRows) * zonalCount + wavenumber
-                    val angle = meridional * PI / circle
+                    val cosine = plan.meridionalCos[meridional + coarseRows]
+                    val sine = plan.meridionalSin[meridional + coarseRows]
                     val valueReal = coefficients.real[at]
                     val valueImaginary = coefficients.imaginary[at]
                     val slot = meridional.mod(circle)
-                    real[slot] += valueReal * cos(angle) - valueImaginary * sin(angle)
-                    imaginary[slot] += valueReal * sin(angle) + valueImaginary * cos(angle)
+                    real[slot] += valueReal * cosine - valueImaginary * sine
+                    imaginary[slot] += valueReal * sine + valueImaginary * cosine
                 }
-                circleTransform.inverse(real, imaginary, scratch)
+                plan.circleTransform.inverse(real, imaginary, scratch)
                 for (row in 0 until groundRows) {
                     alongReal[row * zonalCount + wavenumber] = real[row]
                     alongImaginary[row * zonalCount + wavenumber] = imaginary[row]
@@ -354,8 +408,6 @@ class AtmosphereRemap(val groundColumns: Int, val groundRows: Int, val coarse: S
             }
         }
         // Then Re sum_m w_m G[t][m] exp(i m lambda_c), lambda_c = (c + 1/2) 2 pi / W.
-        val result = DoubleArray(groundRows * groundColumns)
-        val rowTransform = ComplexFft(groundColumns)
         val coarseColumns = coefficients.coarseColumns
         parallelChunks(0, groundRows) { startRow, endRow ->
             val scratch = ComplexFft.Scratch(groundColumns)
@@ -366,18 +418,18 @@ class AtmosphereRemap(val groundColumns: Int, val groundRows: Int, val coarse: S
                 imaginary.fill(0.0)
                 for (wavenumber in 0 until zonalCount) {
                     val weight = DoubleFourierCoefficients.zonalWeight(wavenumber, coarseColumns)
-                    val angle = wavenumber * PI / groundColumns
+                    val cosine = plan.zonalCos[wavenumber]
+                    val sine = plan.zonalSin[wavenumber]
                     val valueReal = alongReal[row * zonalCount + wavenumber] * weight
                     val valueImaginary = alongImaginary[row * zonalCount + wavenumber] * weight
                     val slot = wavenumber % groundColumns
-                    real[slot] += valueReal * cos(angle) - valueImaginary * sin(angle)
-                    imaginary[slot] += valueReal * sin(angle) + valueImaginary * cos(angle)
+                    real[slot] += valueReal * cosine - valueImaginary * sine
+                    imaginary[slot] += valueReal * sine + valueImaginary * cosine
                 }
-                rowTransform.inverse(real, imaginary, scratch)
-                for (column in 0 until groundColumns) result[row * groundColumns + column] = real[column]
+                plan.rowTransform.inverse(real, imaginary, scratch)
+                write(row, real)
             }
         }
-        return result
     }
 
     companion object {

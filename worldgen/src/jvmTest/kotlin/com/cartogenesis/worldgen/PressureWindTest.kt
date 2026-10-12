@@ -384,7 +384,7 @@ class PressureWindTest : BorrowsSharedWorlds() {
         // Recorded at C1b2: the interior's rain runs from the windward rises' to the dry plateaus'
         // more widely than Earth's interiors do (docs/TODO.md, "The march's misses against Earth,
         // after C1b2").
-        KnownFailures.expect("C1b2: the interior's rainfall spreads wider than Earth's", "2.201") {
+        KnownFailures.expect("C1b2: the interior's rainfall spreads wider than Earth's", "2.004") {
             if (!(meanWith > earthSpread / INTERIOR_SPREAD_FACTOR && meanWith < earthSpread * INTERIOR_SPREAD_FACTOR)) {
                 throw RecordedViolation(
                     ("the interior's rainfall spreads by %.3f, outside a factor of %.0f either side of " +

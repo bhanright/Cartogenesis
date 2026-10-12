@@ -114,7 +114,7 @@ class RainGeometryTest : BorrowsSharedWorlds() {
         // M1). Armed at A1-6a, whose circulation's deserts end along a row at 255 to 303 km.
         // Recorded at A1-6b: seed 969495's desert ends along a row for 611 km, the other two seeds'
         // at 223 and 348 (docs/TODO.md).
-        KnownFailures.expect("A1-6b: the deserts' edges along a row pool longer than main's", "unrecorded") {
+        KnownFailures.expect("A1-6b: the deserts' edges along a row pool longer than main's", "411 km") {
             if (desertEdge.average() > MAIN_DESERT_ROW_EDGE_KM.average()) {
                 throw RecordedViolation(
                     "the desert's straightest edge along a row: %.2f pooled against main's %.2f"
@@ -170,7 +170,7 @@ class RainGeometryTest : BorrowsSharedWorlds() {
             )
             if (found.alongRowKm > bar) over += "%d %.0f km at %.0f".format(seed, found.alongRowKm, found.rowLatitude)
         }
-        KnownFailures.expect("C1b2: fronts along the belts' factor", "42 2471 km at -34; 969495 1402 km at 63; 7 1499 km at 6") {
+        KnownFailures.expect("C1b2: fronts along the belts' factor", "42 1984 km at 13; 969495 1468 km at 13; 7 3069 km at 15") {
             if (over.isNotEmpty()) {
                 throw RecordedViolation(
                     "fronts hold a row for longer than a quarter of the weather's wavelength: " + over.joinToString("; "),
@@ -207,7 +207,7 @@ class RainGeometryTest : BorrowsSharedWorlds() {
         // Recorded at A1-6b: the front moves with the seasons and the march carries water across the
         // wind's reversal, yet the year's rain still steps along a row near 64 degrees on every seed
         // (docs/TODO.md).
-        KnownFailures.expect("A1-6b: the rain still ends along a row at the polar front", "unrecorded") {
+        KnownFailures.expect("A1-6b: the rain still ends along a row at the polar front", "42 895 km at -63.9; 969495 694 km at 67.1; 7 680 km at 63.5") {
             if (over.isNotEmpty()) {
                 throw RecordedViolation(
                     "fronts hold a row at the polar front for longer than a quarter of the weather's wavelength: " +

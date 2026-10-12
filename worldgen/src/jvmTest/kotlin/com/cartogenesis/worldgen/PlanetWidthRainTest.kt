@@ -48,7 +48,7 @@ class PlanetWidthRainTest {
         // number, which goes as the inverse square of its radius, so on the 24,000 km planet the
         // cells are narrower and the ITCZ's rain more concentrated than on the 12,000 km one
         // (docs/TODO.md).
-        KnownFailures.expect("A1-6b: the wettest land rain follows the planet's width under the cells that scale with it", "unrecorded") {
+        KnownFailures.expect("A1-6b: the wettest land rain follows the planet's width under the cells that scale with it", "the land's 99.5th percentile is 1.63 times the stock planet's on a 24000 km planet") {
             if (wrong.isNotEmpty()) {
                 throw RecordedViolation("land rain follows the planet's width:\n" + wrong.joinToString("\n"), wrong.joinToString("; "))
             }

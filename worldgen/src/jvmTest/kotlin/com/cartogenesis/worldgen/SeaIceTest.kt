@@ -170,7 +170,7 @@ class SeaIceTest : BorrowsSharedWorlds() {
         }
         // Recorded at A1-6b: seed 7's frozen cells take 255 mm with the ice off against 134 with it
         // on, x1.90, under the polar front that now moves with the seasons (docs/TODO.md).
-        KnownFailures.expect("A1-6b: with the ice off, the frozen cells take less than twice the rain", "unrecorded") {
+        KnownFailures.expect("A1-6b: with the ice off, the frozen cells take less than twice the rain", "seed 7 x1.93; seed 1234 x1.88") {
             if (lidless.isNotEmpty()) {
                 throw RecordedViolation(
                     "with the ice off the same cells take less than $ICE_OFF_WETTER_RATIO times the rain they take with it on, " +

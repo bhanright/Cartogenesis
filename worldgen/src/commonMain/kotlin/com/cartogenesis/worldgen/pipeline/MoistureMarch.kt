@@ -797,11 +797,30 @@ object MoistureMarch {
         val bank = DoubleArray(cellCount)
         val bankLand = DoubleArray(cellCount)
 
-        /** The cloud and the falling water banked where the wind turns, with their land-origin parts, parcel units. */
-        val bankCloud = DoubleArray(cellCount)
-        val bankCloudLand = DoubleArray(cellCount)
-        val bankFalling = DoubleArray(cellCount)
-        val bankFallingLand = DoubleArray(cellCount)
+        /**
+         * Each cell's place in the condensate banks below, or -1 (column-major). The cloud is banked
+         * only where a row's wind turns, into a cell whose own downwind neighbor along the row is of
+         * the other sweep, and with the sweeps held those cells are fixed and a few hundredths of the
+         * map's: banks for every cell would hold 67 MB a half-year at 1,024 rows, most of it zero.
+         */
+        private val turnSlot = IntArray(cellCount) { -1 }
+        private val turnCells: Int = run {
+            var count = 0
+            for (column in 0 until cellsAcross) {
+                for (row in 0 until cellsDown) {
+                    val here = index(row, column)
+                    val sweep = direction[here].toInt()
+                    if (direction[index(row, (column + sweep + cellsAcross) % cellsAcross)].toInt() != sweep) turnSlot[here] = count++
+                }
+            }
+            count
+        }
+
+        /** The cloud and the falling water banked where the wind turns, with their land-origin parts, parcel units, by [turnSlot]. */
+        val bankCloud = DoubleArray(turnCells)
+        val bankCloudLand = DoubleArray(turnCells)
+        val bankFalling = DoubleArray(turnCells)
+        val bankFallingLand = DoubleArray(turnCells)
 
         // Working space for one column's solve.
         val role = ByteArray(cellsDown)
@@ -1060,7 +1079,8 @@ object MoistureMarch {
         fun waterInFlight(): WaterInFlight = WaterInFlight(
             FloatArray(cellCount) {
                 val here = index(it / cellsAcross, it % cellsAcross)
-                (bank[here] + bankCloud[here] + bankFalling[here]).toFloat()
+                val slot = turnSlot[here]
+                (bank[here] + if (slot >= 0) bankCloud[slot] + bankFalling[slot] else 0.0).toFloat()
             },
             eastParcel.vapor.copyOf(), eastParcel.cloud.copyOf(), eastParcel.falling.copyOf(),
             westParcel.vapor.copyOf(), westParcel.cloud.copyOf(), westParcel.falling.copyOf()
@@ -1167,14 +1187,17 @@ object MoistureMarch {
                     role[row] = MARCHED
                     // A bank the westward sweep's faces drew on can hold less than nothing; what
                     // the parcel cannot pay of it waits there for the next lap's.
-                    parcel.cloud[row] += bankCloud[here]
-                    parcel.cloudLand[row] += bankCloudLand[here]
-                    parcel.falling[row] += bankFalling[here]
-                    parcel.fallingLand[row] += bankFallingLand[here]
-                    bankCloud[here] = 0.0
-                    bankCloudLand[here] = 0.0
-                    bankFalling[here] = 0.0
-                    bankFallingLand[here] = 0.0
+                    val slot = turnSlot[here]
+                    if (slot >= 0) {
+                        parcel.cloud[row] += bankCloud[slot]
+                        parcel.cloudLand[row] += bankCloudLand[slot]
+                        parcel.falling[row] += bankFalling[slot]
+                        parcel.fallingLand[row] += bankFallingLand[slot]
+                        bankCloud[slot] = 0.0
+                        bankCloudLand[slot] = 0.0
+                        bankFalling[slot] = 0.0
+                        bankFallingLand[slot] = 0.0
+                    }
                     val arriving = parcel.vapor[row] + bank[here]
                     val arrivingLand = parcel.vaporLand[row] + bankLand[here]
                     water[row] = arriving.coerceAtLeast(0.0)
@@ -1419,10 +1442,11 @@ object MoistureMarch {
                 // as the vapor does, and fall over their own delays there.
                 bank[downwind] += sent
                 bankLand[downwind] += sentLand
-                bankCloud[downwind] += cloud * perParcel
-                bankCloudLand[downwind] += cloudLand * perParcel
-                bankFalling[downwind] += falling * perParcel
-                bankFallingLand[downwind] += fallingLand * perParcel
+                val slot = turnSlot[downwind]
+                bankCloud[slot] += cloud * perParcel
+                bankCloudLand[slot] += cloudLand * perParcel
+                bankFalling[slot] += falling * perParcel
+                bankFallingLand[slot] += fallingLand * perParcel
                 parcel.clear(row)
             }
         }

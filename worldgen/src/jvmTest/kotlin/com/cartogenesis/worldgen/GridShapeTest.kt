@@ -173,7 +173,7 @@ class GridShapeTest : BorrowsSharedWorlds() {
         // climate, where it moves both (docs/DESIGN_LEDGER.md, M1). Recorded at A1-6b: the slant
         // now sets only the Ferrel and polar legs, the Hadley cells' meridional wind being their own
         // continuity's, and doubling it moves neither past the spread (docs/TODO.md).
-        KnownFailures.expect("A1-6b: the doubled slant reaches only the Ferrel and polar legs", "unrecorded") {
+        KnownFailures.expect("A1-6b: the doubled slant reaches only the Ferrel and polar legs", "deserts 0, land rain 0") {
             if (misses.desert.isEmpty() || misses.rain.isEmpty()) {
                 throw RecordedViolation(
                     "a slant twice as steep should move both past the spread: deserts ${misses.desert}; land rain ${misses.rain}",

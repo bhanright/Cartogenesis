@@ -102,7 +102,8 @@ class BoundaryLayerCostTest {
      * What one lap of the coupled loop costs the atmosphere at the application's grid, and its
      * part per map cell: both halves' condensation carried down as heating, both solved by
      * back-substitution, each half's pressure carried up and balanced, its convergence carried down
-     * and its ascent carried up. A report and a recorded figure: the loop's laps a climate run come
+     * and its ascent carried up, and the column's vapor-weighted wind the march carries its water on
+     * ([BoundaryLayer.columnWindMps]). A report and a recorded figure: the loop's laps a climate run come
      * from `AtmosphereCouplingTest` and are given here as [LAPS_PER_CLIMATE].
      */
     @Test
@@ -123,6 +124,7 @@ class BoundaryLayerCostTest {
         var solveMs = 0.0
         var upMs = 0.0
         var ascentMs = 0.0
+        var columnMs = 0.0
         repeat(WARM_UP_RUNS + MEASURED_RUNS) { run ->
             val started = System.nanoTime()
             val july = coupling.latentHeatingOf(condensation)
@@ -138,24 +140,28 @@ class BoundaryLayerCostTest {
             BoundaryLayer.groundAscentMps(responses, responses.julyHalf)
             BoundaryLayer.groundAscentMps(responses, responses.januaryHalf)
             val ascended = System.nanoTime()
+            BoundaryLayer.columnWindMps(responses, responses.julyHalf)
+            BoundaryLayer.columnWindMps(responses, responses.januaryHalf)
+            val carried = System.nanoTime()
             if (run >= WARM_UP_RUNS) {
                 downMs += (carriedDown - started) / 1e6 / MEASURED_RUNS
                 // The solve carries up and balances once itself; what is left is the back-substitution.
                 solveMs += ((solved - carriedDown) - (balanced - solved)) / 1e6 / MEASURED_RUNS
                 upMs += (balanced - solved) / 1e6 / MEASURED_RUNS
                 ascentMs += (ascended - balanced) / 1e6 / MEASURED_RUNS
+                columnMs += (carried - ascended) / 1e6 / MEASURED_RUNS
             }
         }
         val worldSeconds = GenerationTime.secondsAt(ROWS)
-        val perCellMs = downMs + upMs + ascentMs
+        val perCellMs = downMs + upMs + ascentMs + columnMs
         val laps = COUPLED_CLIMATES_PER_WORLD * LAPS_PER_CLIMATE
         val perCellShare = perCellMs * laps / 1000.0 / worldSeconds
         val wholeShare = ((perCellMs + solveMs) * laps + factorMs * COUPLED_CLIMATES_PER_WORLD) / 1000.0 / worldSeconds
         println(
             ("COUPLING COST at %d rows: factoring %.0f ms; a lap %.0f ms carrying the heating down, %.0f ms back-substituting, " +
-                "%.0f ms carrying the pressure up and balancing it, %.0f ms the ascent; %d laps a world (%d a climate run), " +
+                "%.0f ms carrying the pressure up and balancing it, %.0f ms the ascent, %.0f ms the column's wind; %d laps a world (%d a climate run), " +
                 "%.2f%% of a %.1f s world in all and %.2f%% on the map's cells")
-                .format(ROWS, factorMs, downMs, solveMs, upMs, ascentMs, laps, LAPS_PER_CLIMATE, wholeShare * 100, worldSeconds, perCellShare * 100)
+                .format(ROWS, factorMs, downMs, solveMs, upMs, ascentMs, columnMs, laps, LAPS_PER_CLIMATE, wholeShare * 100, worldSeconds, perCellShare * 100)
         )
         KnownFailures.expect("A1-5: the coupled loop's per-cell work is over a hundredth of a world", "6%") {
             if (perCellShare >= WORTH_A_DEVICE_SHARE) {

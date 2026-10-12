@@ -149,6 +149,10 @@ object OceanStage {
      * the open water near its latitude (see [buildAnomaly]). With `OceanConfig.enabled` off, every
      * velocity and every anomaly is zero and the temperature is the bare latitude profile.
      *
+     * The wind over the sea is the dry atmosphere's over the sea's own anomaly: the two are solved
+     * in rounds until the anomaly settles ([AIR_SEA_SETTLED_SHARE]), so the cold water the trades
+     * raise and the warm water the gyres carry heat the air the stress is read from.
+     *
      * A solve that fails, on the processor, fails the stage with an
      * [OceanCirculation.OceanSolveFailure]: the processor is the reference, and there is nothing
      * truer to fall back to.
@@ -252,7 +256,9 @@ object OceanStage {
 
         // The sea and the air over it, solved together: the first round's stress is the dry
         // atmosphere's over a sea at its latitudes' temperatures, and each round after reads the
-        // atmosphere over the sea the round before left (see [rounds]).
+        // atmosphere over the anomaly the round before left, whose shallow heating the cold water
+        // cools and the warm water heats (BoundaryLayer), each round's solves starting from the last
+        // round's answers.
         val (across, down) = solveGrid(config.scale)
         val area = rowAreas(down = config.height)
         var seaSurfaceAnomalyC: FloatArray? = null
@@ -274,14 +280,23 @@ object OceanStage {
         return checkNotNull(made)
     }
 
-    /** Hears each world's air-sea rounds' changes ([anomalyChangeShare]); for the probes and guards. */
+    /** Hears each world's air-sea rounds' changes ([anomalyChangeShare]), for the guards. */
     @kotlin.concurrent.Volatile
     internal var roundListener: ((List<Double>) -> Unit)? = null
 
-    /** The most rounds of the sea and the air over it a world solves. */
+    /**
+     * The most rounds of the sea and the air over it a world solves: a ceiling and not a count,
+     * twice the four the slowest standard world takes (`AirSeaEarthTest`).
+     */
     internal const val MAX_AIR_SEA_ROUNDS = 8
 
-    /** When the sea and the air have settled: the anomaly's change a round under this share of its size. */
+    /**
+     * When the sea and the air have settled: a round moves the anomaly by under a hundredth of its
+     * own size, about 0.006 C root mean square on the standard worlds, a fifteenth of the 0.09 to
+     * 0.14 C each row's mean anomaly stands off zero by its own construction ([buildAnomaly]). The
+     * loop's gain, each round's change over the one before, is about a tenth there, so the first
+     * feedback round moves the anomaly by 6 to 10% and the next by under 2%.
+     */
     internal const val AIR_SEA_SETTLED_SHARE = 0.01
 
     /** Each map row's area on the sphere, as `cos(latitude)`. */

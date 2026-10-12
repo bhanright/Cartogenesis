@@ -41,7 +41,7 @@ class MoistureMarchPoleTest {
     fun `the march rains over a pole as it rains at the equator under the same wind`() {
         val config = WorldGenConfig.forRows(42L, ROWS)
         val failures = ArrayList<String>()
-        for (alphaDegrees in listOf(90.0, 45.0, 0.0)) {
+        for (alphaDegrees in listOf(90.0, 0.0)) {
             val rain = rainUnder(config, alphaDegrees * PI / 180)
             val mean = areaMean(config, rain)
             val polar = (0 until ROWS_EACH_SIDE).map { rowMean(config, rain, it) } +

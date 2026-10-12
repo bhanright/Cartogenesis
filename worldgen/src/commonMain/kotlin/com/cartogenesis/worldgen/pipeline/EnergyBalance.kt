@@ -657,12 +657,15 @@ object EnergyBalance {
     private const val SEAWATER_HEAT_CAPACITY_J_PER_M3_C = 4.0e6
 
     /**
-     * Heat stored per square metre of the ocean's **mixed layer** for each degree it warms, in
-     * joules: a 50 m slab of sea water at 4.0 MJ per cubic metre per degree.
+     * Heat stored per square metre of the ocean's **mixed layer** at its full depth for each degree it
+     * warms, in joules: a 50 m slab of sea water at 4.0 MJ per cubic metre per degree, the layer's
+     * winter and the ocean's annual figure (`OceanStage.RELAXATION_SECONDS`).
      *
      * Fifty metres is the depth the seasonal cycle actually stirs: de Boyer Montegut et al. (2004)
      * put the global mean mixed layer near 60 m over the year, with a summer minimum of 20-30 m and
-     * a deep winter tail that the seasonal wave never fills.
+     * a deep winter tail that the seasonal wave never fills. The summer's shoaling is the layer's own,
+     * Kraus and Turner's depth under the heat the surface takes in ([KRAUS_TURNER_DEPTH_TIMES_FLUX]),
+     * so the open sea's capacity through a summer is the shallower layer's.
      *
      * The air that sits on it is [MARINE_AIR_HEAT_CAPACITY_J_PER_M2_C] and is a separate reservoir,
      * which is the whole point: twenty times less memory, so it swings while the water does not.

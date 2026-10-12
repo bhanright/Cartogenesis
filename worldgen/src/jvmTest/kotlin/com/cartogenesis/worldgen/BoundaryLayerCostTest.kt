@@ -40,12 +40,13 @@ class BoundaryLayerCostTest {
         const val WORTH_A_DEVICE_SHARE = 0.01
 
         /**
-         * Boundary layers a default world solves dry: the ocean's stress's, once. The climate runs,
+         * Boundary layers a default world solves dry: the ocean's stress's, once a round of the sea
+         * and the air over it, four rounds on seed 7 at 1,024 rows (`AirSeaEarthTest`). The climate runs,
          * the provisional weather the hydraulic rounds cut with twice
          * (`HydraulicErosion.provisionalWeather`), the glaciation's provisional snow balance and the
          * finished climate, each factor one and couple it to their march.
          */
-        const val BOUNDARY_LAYERS_PER_WORLD = 1
+        const val BOUNDARY_LAYERS_PER_WORLD = 4
         const val COUPLED_CLIMATES_PER_WORLD = 4
 
         const val ROWS = 1024

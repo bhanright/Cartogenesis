@@ -440,7 +440,8 @@ class RiverWidthTest {
         // above it. A hundredth of a pixel is the room that needs.
         // Recorded at A1-6b: on the seasonal circulation's ground seed 42's widest stroke at 512 is
         // 2.44 px, more than a hundredth under the full pen, its mouth's cell above carrying
-        // noticeably less than the mouth (docs/TODO.md).
+        // noticeably less than the mouth (docs/TODO.md). At A1-6c it is the 1,024 sheet's widest
+        // stroke that stands short, 4.72 px against 4.92, and 512's is full.
         val offPen = ArrayList<String>()
         listOf(512, 1024).forEachIndexed { k, side ->
             if (!(abs(spans[k].first - RiverPen.HAIRLINE_PIXELS) < 1e-4f &&
@@ -455,7 +456,7 @@ class RiverWidthTest {
         if (abs(spans[1].second - 2f * spans[0].second) >= 0.02f) {
             offPen += "the pen did not double with the sheet: %.3f px at 512, %.3f px at 1024".format(spans[0].second, spans[1].second)
         }
-        KnownFailures.expect("A1-6b: the widest drawn stroke stands more than a hundredth under the full pen", "at 512; the pen did not double with the sheet") {
+        KnownFailures.expect("A1-6b: the widest drawn stroke stands more than a hundredth under the full pen", "at 1024; the pen did not double with the sheet") {
             if (offPen.isNotEmpty()) throw RecordedViolation(offPen.joinToString("; "), offPen.joinToString("; ") { it.substringBefore(" the drawn").substringBefore(":") })
         }
         assertTrue(

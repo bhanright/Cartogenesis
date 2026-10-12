@@ -1,14 +1,14 @@
 package com.cartogenesis.worldgen
 
-import com.cartogenesis.worldgen.math.BoxBlur
-import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.ClimateStage
-import com.cartogenesis.worldgen.pipeline.MoistureBudget
+import com.cartogenesis.worldgen.pipeline.HadleyCirculation
 import com.cartogenesis.worldgen.pipeline.Season
+import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.roundToInt
+import kotlin.math.sin
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -93,191 +93,49 @@ class MeridionalWindTest : BorrowsSharedWorlds() {
     }
 
     /**
-     * The promise the setting makes: at `meridionalWindShare = 0` the diagonal march is the old per-row
-     * scan, arithmetic for arithmetic.
+     * The promise the setting makes: at `meridionalWindShare = 0`, with the pressure departure off,
+     * the Ferrel and polar cells' legs carry nothing across the latitude lines, so poleward of the
+     * Hadley cells the only water that crosses a row is what the storm track's eddies mix. The
+     * Hadley cells' lower branch is their own mass balance since A1-6a and not the setting's
+     * (`HadleyCirculation`), so the promise is held poleward of their edges.
      *
-     * This used to be checked against checksums pinned from a build without the slant, and those
-     * checksums had to be re-derived three times in one day — once for A4's normalisation change,
-     * once more where A4 merged with A6's latitude-curve exponent, and again when B3's deposition
-     * moved coastlines upstream of the march — because *any* change anywhere upstream of
-     * `buildPrecipitation`, whatever it touches, invalidates a number pinned to what the march
-     * produced on one particular build. A pinned number cannot outlive the tree it was taken from.
-     *
-     * So this asserts the claim directly instead: [referenceZonalMarch] below is a from-scratch
-     * reimplementation of the pre-A3 per-row scan, built on the *same* per-cell physics the
-     * production march uses — [ClimateStage.marchSeaStep] and [ClimateStage.marchLandStep], the
-     * functions [ClimateStage.marchRun] itself calls, factored out of it for exactly this reason —
-     * and run on the generated world's own fields (its temperature, its terrain, its currents), not
-     * on anything this test derives independently. What is left to differ between the two is only
-     * the shape of the march: one row at a time, no meridional blend, which is what
-     * `meridionalWindShare = 0` is supposed to buy. If a future chunk changes what feeds the march, both
-     * sides move together and the claim stays true by construction; if a future chunk changes the
-     * *march itself* without changing [ClimateStage.marchSeaStep]/[ClimateStage.marchLandStep] to
-     * match, this is exactly the guard that would catch it.
+     * Until C1b this was checked against a from-scratch reimplementation of the per-row zonal scan,
+     * bit for bit, because a zero slant made the march exactly that scan. It no longer is: the
+     * march carries water between rows as fluxes and the eddies stir the rows together whatever
+     * the mean wind, which is what lets water cross a belt's edge at all (`MoistureMarch`). What
+     * the setting still promises is the wind, and this holds the wind to it on both seasons.
      */
     @Test
-    fun `a wind with no slant reproduces the old zonal march exactly`() {
+    fun `a wind with no slant carries nothing across the rows`() {
         ZONAL_MARCH_SEEDS.forEach { seed ->
             val base = WorldGenConfig.forRows(seed, SharedWorlds.COARSE_ROWS)
             val world = SharedWorlds.world(
-                base.copy(
-                    climate = base.climate.copy(
-                        meridionalWindShare = 0f, pressureWinds = false
-                    )
+                base.copy(climate = base.climate.copy(meridionalWindShare = 0f, pressureWinds = false))
+            )
+            val zonal = ClimateStage.zonalClimate(world.config, world.sea)
+            for (season in listOf(Season.JULY_HALF, Season.JANUARY_HALF)) {
+                val wind = ClimateStage.seasonalSurfaceWindMps(
+                    world.config, world.sea, world.ocean, season
                 )
-            )
-
-            val referenceSummer = referenceZonalMarch(world, warm = true)
-            val referenceWinter = referenceZonalMarch(world, warm = false)
-
-            assertFieldsIdentical(
-                referenceSummer, world.climate.summerPrecipitation,
-                "seed $seed summer precipitation no longer matches the reference zonal march"
-            )
-            assertFieldsIdentical(
-                referenceWinter, world.climate.winterPrecipitation,
-                "seed $seed winter precipitation no longer matches the reference zonal march"
-            )
-            println("MERIDIONAL seed $seed matches the reference zonal march on both seasons")
+                val cells = HadleyCirculation.forHalf(world.config, zonal, season)
+                var largest = 0f
+                for (cell in wind.southwardMps.indices) {
+                    val latitude = ClimateStage.latitudeOf(cell / world.width, world.height).toDouble()
+                    if (latitude < cells.northEdgeDegrees && latitude > -cells.southEdgeDegrees) continue
+                    largest = maxOf(largest, abs(wind.southwardMps[cell]))
+                }
+                assertEquals(0f, largest, 0f, "seed $seed, $season: a belt with no slant blows across the rows poleward of the Hadley cells")
+            }
+            println("MERIDIONAL seed $seed: no meridional wind poleward of the Hadley cells in either season with the slant at zero")
         }
     }
 
     /**
-     * A from-scratch reimplementation of the march exactly as it worked before A3: one air mass
-     * per row, stepping along the row's own wind direction, with no meridional component at all —
-     * not "the production march with a zero blend", a march that has never heard of a blend.
-     *
-     * Reads the generated world's own fields — [WorldMap.sea], [WorldMap.ocean], the season's own
-     * temperature field — exactly as [ClimateStage.buildPrecipitation] does, and calls the same two
-     * per-cell functions production calls, [ClimateStage.marchSeaStep] and
-     * [ClimateStage.marchLandStep]. The wind direction and the circulation-belt factor are the two
-     * pieces of the march this function still has to compute for itself, because they are what a
-     * *row* is marked with before the march ever starts — [ClimateStage.seasonalBand] is already
-     * shared (it is `internal` for `DesertCauseTest`'s own reasons), and the direction formula is
-     * copied from `ClimateStage.buildWind`, which is three lines with no slant term to leave out.
-     *
-     * Returns the field scaled and clamped exactly as [ClimateStage.generateWithSeasonalMm] does,
-     * so it compares bit for bit against [com.cartogenesis.worldgen.pipeline.ClimateResult.summerPrecipitation]
-     * / `.winterPrecipitation` without this test needing to know anything about millimetres.
+     * Rows nearer an edge of the belts than this many degrees, or nearer the equator, are not read:
+     * the annual wind is the mean of two halves whose Hadley edges stand some degrees apart, and
+     * either direction is defensible between them.
      */
-    private fun referenceZonalMarch(world: WorldMap, warm: Boolean): FloatField {
-        val w = world.width
-        val h = world.height
-        val config = world.config
-        val cfg = config.climate
-        val tilt = if (cfg.seasons) cfg.seasonalTiltDegrees else 0f
-        // The half-year's mean rather than the warmest month: the march evaporates across a
-        // season, so it reads the season's own mean, and `ClimateResult` stores the months because
-        // those are what Koppen's gates want. Both are rebuilt here the same way
-        // `ClimateStage.seasonalFields` builds them, from the saved annual field.
-        val season = if (warm) Season.WARM_HALF else Season.COLD_HALF
-        val temperature = ClimateStage.halfYearTemperature(
-            config, world.sea, world.climate.temperature, season
-        )
-        val seaSurface = ClimateStage.seaSurfaceTemperature(
-            config, world.sea, ClimateStage.zonalClimate(config, world.sea), temperature, season
-        )
-        val precip = FloatField(w, h)
-        // The budget's lengths as shares of one cell of travel, the same conversion the production
-        // march makes once at the top of its own run. See W3 in docs/DESIGN_LEDGER.md.
-        val cellWidthKm = config.cellWidthKm.toFloat()
-        val evaporationPerCell = cellWidthKm / cfg.oceanEvaporationLengthKm
-        val seaRainPerCell =
-            cellWidthKm / (cfg.depletionLengthKm * MoistureBudget.SEA_DEPLETION_SHARE)
-        val flatRainPerCell = cellWidthKm / cfg.depletionLengthKm
-        val returnPerCell = cellWidthKm / cfg.evapotranspirationLengthKm
-        val lidElevation =
-            config.scale.reliefShareOfMetres(MoistureBudget.INVERSION_LID_METRES)
-        val millimetresPerUnit = ClimateStage.millimetresPerMarchUnit(config)
-        val inversion = MoistureBudget.inversionSuppression(
-            config, world.sea,
-            if (cfg.marineInversion && config.ocean.enabled) world.ocean.anomaly else null,
-            tilt, warm
-        )
-
-        for (y in 0 until h) {
-            val direction = zonalDirection(y, h, tilt, warm)
-            val band = ClimateStage.seasonalBand(ClimateStage.latitudeOf(y, h), cfg, warm)
-            var moisture = 0.5f
-
-            // Three laps around the cylinder, exactly as the production march does: the first two
-            // seed a realistic moisture state and a rainfall for the ground's wetness to be read
-            // off, and only the last is recorded.
-            for (lap in 0 until 3) {
-                for (step in 0 until w) {
-                    val x = if (direction > 0) step else w - 1 - step
-                    val i = y * w + x
-
-                    if (!world.sea.isLand[i]) {
-                        // The season's own sea surface — the energy balance's *water* column for
-                        // this latitude and this half of the year, plus the current anomaly — and
-                        // nothing at all where that surface froze. Both are what the production
-                        // march reads; see `ClimateStage.marchRun`.
-                        val currentAnomaly =
-                            if (config.ocean.enabled) world.ocean.anomaly.data[i] else 0f
-                        val frozen =
-                            if (warm) world.climate.summerSeaIce[i] else world.climate.winterSeaIce[i]
-                        val stepResult = if (frozen) {
-                            ClimateStage.marchSeaIceStep(flatRainPerCell, moisture)
-                        } else {
-                            ClimateStage.marchSeaStep(
-                                cfg, evaporationPerCell, seaRainPerCell, moisture,
-                                seaSurface.data[i] + currentAnomaly, currentAnomaly
-                            )
-                        }
-                        moisture = stepResult.moisture
-                        if (lap == 2) precip.data[i] = stepResult.rain
-                        continue
-                    }
-
-                    var upwindX = x - direction
-                    upwindX = ((upwindX % w) + w) % w
-                    val upwindElevation = world.sea.relativeElevation.data[y * w + upwindX]
-                    val stepResult = ClimateStage.marchLandStep(
-                        cfg, cellWidthKm, returnPerCell, moisture,
-                        world.sea.relativeElevation.data[i], upwindElevation, band,
-                        temperature.data[i],
-                        MoistureBudget.groundWetness(precip.data[i] * millimetresPerUnit),
-                        0f, inversion?.data?.get(i) ?: 0f, lidElevation
-                    )
-                    moisture = stepResult.moisture
-                    precip.data[i] = stepResult.rain
-                }
-            }
-        }
-
-        // The production blur's radius, a length on the ground read as whole cells: written as a
-        // 128th of the map's width, it was the same 93.75 km on the 12,000 km world and four cells
-        // where production's is one on the Earth-sized planet's 78 km cells at 256 rows.
-        BoxBlur.apply(precip, radius = config.cellsWithin(ClimateStage.RAIN_BLUR_RADIUS_KM).coerceAtLeast(1), passes = 2)
-        for (i in precip.data.indices) {
-            precip.data[i] =
-                (precip.data[i] * millimetresPerUnit / ClimateStage.REFERENCE_MM).coerceIn(0f, 1f)
-        }
-        return precip
-    }
-
-    /** The wind direction [ClimateStage.buildWind] gives a row, with no meridional term to compute. */
-    private fun zonalDirection(y: Int, height: Int, tilt: Float, warm: Boolean): Int {
-        val signed = ClimateStage.latitudeOf(y, height)
-        val offset = if (warm) abs(signed) - tilt else abs(signed) + tilt
-        val belt = abs(offset)
-        return when {
-            belt < 30f -> -1
-            belt < 60f -> 1
-            else -> -1
-        }
-    }
-
-    private fun assertFieldsIdentical(expected: FloatField, actual: FloatField, message: String) {
-        assertEquals(expected.data.size, actual.data.size, message)
-        for (i in expected.data.indices) {
-            assertEquals(
-                expected.data[i].toRawBits(), actual.data[i].toRawBits(),
-                "$message (cell $i: ${expected.data[i]} vs ${actual.data[i]})"
-            )
-        }
-    }
+    private val EDGE_MARGIN_DEGREES = 8f
 
     @Test
     fun `the belts slant toward the thermal equator and away from it, in both hemispheres`() {
@@ -289,29 +147,25 @@ class MeridionalWindTest : BorrowsSharedWorlds() {
         val w = world.width
         val h = world.height
         var checked = 0
-        // The belts' slope on the ground, as rows a cell of eastward travel on this grid's cells.
-        val slantRowsPerCell = world.config.climate.meridionalWindShare *
-            (world.config.cellWidthKm / world.config.cellHeightKm).toFloat()
         for (y in 0 until h) {
             val lat = ClimateStage.latitudeOf(y, h)
             val belt = abs(lat)
-            // Skip the rows straddling a belt edge, where either answer is defensible.
-            if (abs(belt - 30f) < 2f || abs(belt - 60f) < 2f) continue
+            // Skip the equator and the rows about each belt's edge, where either answer is defensible.
+            if (belt < EDGE_MARGIN_DEGREES || abs(belt - 30f) < EDGE_MARGIN_DEGREES || abs(belt - 60f) < EDGE_MARGIN_DEGREES ||
+                belt > 90f - EDGE_MARGIN_DEGREES
+            ) continue
             // Toward the bottom of the map is positive, so equatorward is positive in the north.
             val equatorward = if (lat > 0f) 1f else -1f
             val drift = world.climate.windMeridional.data[y * w]
             val expected = when {
-                belt < 30f -> equatorward   // trades, in toward the ITCZ
+                belt < 30f -> equatorward   // the Hadley cells' lower branch, in toward the rising branch
                 belt < 60f -> -equatorward  // westerlies, out toward the polar front
                 else -> equatorward         // polar easterlies, back down toward it
             }
-            assertEquals(
-                expected * slantRowsPerCell, drift, 1e-6f,
-                "the wind at ${"%.1f".format(lat)} degrees drifts the wrong way"
-            )
+            assertTrue(drift * expected > 0f, "the wind at ${"%.1f".format(lat)} degrees drifts the wrong way: $drift")
             checked++
         }
-        assertTrue(checked > h / 2, "only $checked rows were checked")
+        assertTrue(checked > h / 4, "only $checked rows were checked")
 
         val flat = SharedWorlds.world(
             WorldGenConfig.forRows(42L, 128).let {
@@ -320,10 +174,12 @@ class MeridionalWindTest : BorrowsSharedWorlds() {
                 )
             }
         )
-        assertTrue(
-            flat.climate.windMeridional.data.all { it == 0f },
-            "a meridionalWindShare of zero should leave the wind purely zonal"
-        )
+        // With no slant the annual wind crosses the rows only inside the two halves' Hadley cells,
+        // within the widest of their edges, about 40 degrees.
+        for (y in 0 until h) {
+            if (abs(ClimateStage.latitudeOf(y, h)) < 40f + EDGE_MARGIN_DEGREES) continue
+            assertEquals(0f, flat.climate.windMeridional.data[y * w], 0f, "a meridionalWindShare of zero leaves a slant at row $y")
+        }
     }
 
     @Test
@@ -409,6 +265,10 @@ class MeridionalWindTest : BorrowsSharedWorlds() {
             ("OROGRAPHY pooled: climbing %+.4f over %d cells, descending %+.4f over %d cells")
                 .format(climbedAll, pooledClimbCells, descendedAll, pooledDescendCells)
         )
+        // Recorded at C1b2: the climb's condensate reads the wind's whole vector and the column's
+        // saturated share, and the slant alone no longer wets the windward side of an east-west
+        // ridge (docs/TODO.md, "The march's misses against Earth, after C1b2"). Armed on H1's ground
+        // under the coupled climate, whose climbing slopes are the wetter (docs/DESIGN_LEDGER.md, M1).
         assertTrue(
             climbedAll > descendedAll,
             "the slant did not wet meridional windward slopes relative to lee ones over the three " +
@@ -472,7 +332,7 @@ class MeridionalWindTest : BorrowsSharedWorlds() {
         )
         // Recorded at K2: on the Earth-sized planet seed 9 is another world and its monsoon coast
         // a sliver (docs/DESIGN_LEDGER.md, K2).
-        KnownFailures.expect("K2: seed 9's monsoon coast on the Earth-sized planet is under the share the clause asks", "0.11%") {
+        KnownFailures.expect("K2: seed 9's monsoon coast on the Earth-sized planet is under the share the clause asks", "0.10%") {
             if (figures[1] < MIN_SHARE) {
                 throw RecordedViolation(
                     "seed $MONSOON_SEED's monsoon coast covers only ${"%.2f".format(figures[1] * 100)}% of land",
@@ -509,8 +369,11 @@ class MeridionalWindTest : BorrowsSharedWorlds() {
             for (x in 0 until w) {
                 val i = y * w + x
                 if (!world.sea.isLand[i]) continue
-                val summer = world.climate.summerPrecipitation.data[i]
-                val winter = world.climate.winterPrecipitation.data[i]
+                // The coast's own warm half: the calendar's half about July in the north.
+                val julyHalf = world.climate.julyHalfPrecipitation.data[i]
+                val januaryHalf = world.climate.januaryHalfPrecipitation.data[i]
+                val summer = if (lat > 0f) julyHalf else januaryHalf
+                val winter = if (lat > 0f) januaryHalf else julyHalf
                 if (summer < WET_SEASON || summer <= RATIO * winter) continue
                 if (!facesSea(world, x, y, seaward)) continue
                 mask[i] = true

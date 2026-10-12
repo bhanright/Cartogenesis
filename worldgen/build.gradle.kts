@@ -192,8 +192,17 @@ val auditOnlyClasses = listOf(
     // generation the first of them pays for and the others share.
     "com.cartogenesis.worldgen.StraightRunTest.report how straight every shore is",
     "com.cartogenesis.worldgen.ChannelInitiationCostTest",
-    "com.cartogenesis.worldgen.PressureWindCostTest",
-    "com.cartogenesis.worldgen.VegetationCostTest"
+    "com.cartogenesis.worldgen.BoundaryLayerCostTest",
+    "com.cartogenesis.worldgen.VegetationCostTest",
+    // A1-2's: what carrying fields to and from the atmosphere's grid costs against the same world.
+    "com.cartogenesis.worldgen.AtmosphereRemapCostTest",
+    // A1-3's: the stationary-wave model's benchmarks on the ladder of grids, on two to sixteen
+    // levels and with the damping halved and doubled, a printed report of a few minutes; and what
+    // its factoring and solving cost against a world, with the machine's whole pool as a world has.
+    // The benchmarks' own figures and the model's invariants run per merge in
+    // `StationaryWaveBenchmarkTest` and `StationaryWaveModelTest`.
+    "com.cartogenesis.worldgen.StationaryWaveReport",
+    "com.cartogenesis.worldgen.StationaryWaveCostTest"
 )
 
 /*
@@ -256,7 +265,14 @@ val deepClassesByStage: Map<String, List<String>> = mapOf(
         "com.cartogenesis.worldgen.OceanLeavesTheGroundTest.the ground is the same with the currents and without them"
     ),
     "climate" to listOf(
+        "com.cartogenesis.worldgen.AtmosphereCouplingTest.the plain iteration does not settle, and where the loop starts does not move where it settles",
+        "com.cartogenesis.worldgen.BoundaryLayerEarthTest",
+        "com.cartogenesis.worldgen.MeanCirculationEarthTest",
+        "com.cartogenesis.worldgen.LocalCirculationEarthTest",
+        "com.cartogenesis.worldgen.AirSeaEarthTest",
+        "com.cartogenesis.worldgen.CoastContrastTest",
         "com.cartogenesis.worldgen.CurrentFeedsRainTest",
+        "com.cartogenesis.worldgen.RainGeometryTest",
         "com.cartogenesis.worldgen.GridShapeTest",
         "com.cartogenesis.worldgen.MeridionalWindTest",
         "com.cartogenesis.worldgen.MoistureBudgetTest",

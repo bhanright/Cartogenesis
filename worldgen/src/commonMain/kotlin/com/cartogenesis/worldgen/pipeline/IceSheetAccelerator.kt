@@ -4,8 +4,8 @@ package com.cartogenesis.worldgen.pipeline
  * Somewhere other than the CPU to draw an ice sheet's profile and the flow down its surface.
  *
  * Rule 8's case exactly: both halves are per-cell arithmetic over grid-sized float buffers with no
- * iteration and no neighbourhood wider than one cell. The profile is a square root of a distance
- * field; the flow is the steepest of eight differences. At 2048 that is four million square roots
+ * iteration and no neighbourhood wider than one cell. The profile is a table read at a distance field;
+ * the flow is the steepest of eight differences. At 2048 that is thirty-two million table reads
  * and thirty-two million differences, which a card does in the time the upload takes and a CPU
  * does in tens of milliseconds — so the seam is cut from the start, as rule 8 asks, rather than
  * after somebody finds it slow.
@@ -39,9 +39,11 @@ interface IceSheetAccelerator {
      *
      * [onTheSheet] is the ice that is a *sheet*, which is not all the frozen ground: a body under
      * [IceSheet.SMALLEST_SHEET_SQUARE_KM] is an ice cap and the caller has already taken it out.
-     * [cellSpanKm] is the side of the square with a cell's own area, and it is not a detail — the
-     * the mean of the plastic curve over a cell, not its value at the cell's middle, which is the
-     * whole of why the ice does not end in a cliff. See [IceSheet.profileMetres].
+     * [domeMetresOfMargin] and [divideKmOfMargin] are each margin cell's body's Vialov dome and
+     * divide distance, read at the cell [nearestMarginCell] names, and the profile's shape is
+     * [IceSheet.VIALOV_SHAPE], read as [IceSheet.shapeAt] reads it. [cellSpanKm] is the side of the
+     * square with a cell's own area, the span the profile is averaged over; see
+     * [IceSheet.profileMetres].
      *
      * Suspending for the reason the other two seams are: WebGPU hands back promises for its
      * device and for every buffer read, and Kotlin/Wasm cannot block on one.
@@ -53,7 +55,8 @@ interface IceSheetAccelerator {
         nearestMarginCell: IntArray,
         bedRelative: FloatArray,
         onTheSheet: BooleanArray,
-        metresPerRootKilometre: Float,
+        domeMetresOfMargin: FloatArray,
+        divideKmOfMargin: FloatArray,
         metresPerFieldUnit: Float,
         cellHeightInCellWidths: Float,
         cellSpanKm: Float

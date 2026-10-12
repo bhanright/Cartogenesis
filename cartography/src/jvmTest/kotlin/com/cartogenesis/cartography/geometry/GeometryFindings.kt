@@ -171,6 +171,13 @@ internal object GeometryFindings {
     /** Biome edges double back in long straight hairpins. */
     const val BIOME_EDGE_HAIRPINS = "biome edges double back in straight hairpins"
 
+    /**
+     * A biome edge runs straight along a row: at 512 rows on H1's ground under the coupled climate,
+     * 63 steps east-west on 7 at (825, 133) and 75 on 99 at (230, 60), against the smooth natural
+     * bar of 60.9. Not traced (docs/TODO.md).
+     */
+    const val BIOME_EDGE_ALONG_ROWS = "a biome edge runs straight along a row"
+
     /** The peoples' borders run along grid lines and turn square, following ice and biome edges. */
     const val PEOPLES_BORDERS_ON_THE_GRID = "peoples' borders run along grid lines"
 
@@ -220,6 +227,15 @@ internal object GeometryFindings {
 
     /** A rainfall level line turns sharply between two long straight runs. */
     const val ISOHYET_CREASE = "an isohyet creases between straight runs"
+
+    /**
+     * A rainfall level line runs straight along a row: under A1-6b's seasonal circulation the
+     * year's rain on seeds 7 and 1234 at 512 rows, 104 to 188 cell widths along rows 1 to 3 and
+     * 507 to 511, where the rain piles onto the polar rows (docs/TODO.md, "Rain piles onto the polar
+     * rows"); at A1-6c 64 to 262 cell widths on seeds 7, 42 and 1234, traced to the ground's relief
+     * round the poles (docs/TODO.md, "The rain on the polar rows is the ground's relief round a pole").
+     */
+    const val ISOHYETS_ALONG_ROWS = "isohyets run straight along rows"
 
     /**
      * The currents view's sea temperature anomaly ran straight along rows at 512, 189 to 217

@@ -41,10 +41,25 @@ class OceanLeavesTheGroundTest : BorrowsSharedWorlds() {
      * weather noise K1 made square on the ground, and the sea stage carries the ice's scour, which
      * K1 made square too. K2 re-took every one of them, terrain included: the default planet became
      * Earth's, 40,075 km round, so every lattice on the ground is another count of cycles and the
-     * plates are fifteen. H1 re-took the plates', the erosion's and the sea's, the terrain and the
-     * partition holding: Earth's submerged share draws more of the plates as continents, and the
-     * platform floats at its own freeboard with its closed sags filled. An ocean change that leaks
-     * into the ground moves them.
+     * plates are fifteen. C1b re-took the erosion's and the sea's, the terrain and the plates
+     * holding: the erosion is fed the provisional climate's rain, which the conserving moisture march
+     * redrew, and the sea stage carries the ice its snow feeds. C1b2 re-took the same two: the march's
+     * sinks and wind moved the provisional rain, and the ice's profile is Glen's law's. A1-1 re-took
+     * the same two: the provisional climate's seasons became the calendar's and its sea surface
+     * takes its share of the sun. A1-2 re-took the same two: the provisional climate's pressure wind
+     * is smoothed and differentiated on the sphere. A1-4 and A1-5 re-took the same two: the
+     * provisional climate's wind became the boundary layer's, and then its rain the coupled
+     * atmosphere's vertical motion's. H1 re-took the plates', the erosion's and the sea's, the
+     * terrain and the partition holding: Earth's submerged share draws more of the plates as
+     * continents, and the platform floats at its own freeboard with its closed sags filled; the
+     * merge of H1 with the climate above re-took the same three. A1-6a re-took the erosion's and
+     * the sea's: the provisional climate's circulation became Lindzen and Hou's, and the erosion's
+     * halfway weather starts where its opening weather settled. A1-6b re-took the same two: the
+     * provisional climate's cells are heated about the energy flux equator and its westerlies
+     * balance the hemisphere's torque. A1-6c re-took the same two: the provisional climate's water
+     * layer shoals in summer, its sea evaporates into air under the water by Kara's difference and its
+     * march leaves each cell at its downwind face's speed. An ocean change that leaks into the
+     * ground moves them.
      * A chunk meant to move the ground re-takes them here, as the render records are re-taken.
      * At [SharedWorlds.DETAIL_ROWS], whose standard worlds the detail guards generate anyway, so
      * the pin costs a digest and no generation.
@@ -75,12 +90,12 @@ class OceanLeavesTheGroundTest : BorrowsSharedWorlds() {
             "plates.continentalShare" to -8606387063464998658L,
             "plates.upliftRateMmPerYear" to -9204950406715247596L,
             "plates.crustAge" to 5808649867131644059L,
-            "erosion.height" to 3654058399982756058L,
+            "erosion.height" to 1234942634135062095L,
             "erosion.sweptOnDevice" to -358906410940142731L,
-            "sea.shorelineHeight" to 5599560900329452601L,
-            "sea.isLand" to -8032093214884974345L,
-            "sea.relativeElevation" to -3502763796840067804L,
-            "sea.landCellCount" to -1146161019943594873L
+            "sea.shorelineHeight" to -415303709785810742L,
+            "sea.isLand" to 5944051734971170527L,
+            "sea.relativeElevation" to 5129060765357856416L,
+            "sea.landCellCount" to -5359221445845944503L
         )
     }
 }

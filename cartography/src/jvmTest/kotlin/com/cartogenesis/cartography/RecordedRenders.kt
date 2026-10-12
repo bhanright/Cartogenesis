@@ -19,17 +19,17 @@ internal object RecordedRenders {
 
     /** Every style's fantasy render of `PenAndInkTest.WORLD`, the gallery's world at 512 rows, hashed. */
     val STYLES_AT_512: Map<MapStyle, Int> = mapOf(
-        MapStyle.ATLAS to 910103127,
-        MapStyle.VELLUM to -126707164,
-        MapStyle.INK_WASH to -1072308950,
-        MapStyle.NAUTICAL to -705245981,
-        MapStyle.MIDNIGHT to -948229791,
-        MapStyle.SCHOOLROOM to 1905768767,
-        MapStyle.VERDANT to 320207095,
-        MapStyle.SCROLL to 308939951,
-        MapStyle.PEN_AND_INK to -2081395109,
-        MapStyle.MARS to -1234873537,
-        MapStyle.NATURAL to 2032915886,
-        MapStyle.CLEAR to 1809630789
+        MapStyle.ATLAS to -2061476023,
+        MapStyle.VELLUM to 552571520,
+        MapStyle.INK_WASH to 1512091941,
+        MapStyle.NAUTICAL to -1337112250,
+        MapStyle.MIDNIGHT to 2068596751,
+        MapStyle.SCHOOLROOM to -1067413272,
+        MapStyle.VERDANT to -851750690,
+        MapStyle.SCROLL to 2007425190,
+        MapStyle.PEN_AND_INK to 726534220,
+        MapStyle.MARS to -1218835262,
+        MapStyle.NATURAL to 1224594668,
+        MapStyle.CLEAR to -702054251
     )
 }

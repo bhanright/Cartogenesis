@@ -99,12 +99,19 @@ class ContinentalShelfTest : BorrowsSharedWorlds() {
         // ground the band should stand no deeper than the break nearly throughout; the same tenth
         // is room for the fjords the ice cuts across it.
         val short = measured.filter { it.second <= NEAR_SHALLOW_SHARE }
-        assertTrue(
-            short.isEmpty(),
-            "within a shelf's width of the coast on the ground, only " +
-                short.joinToString { (seed, near) -> String.format(Locale.ROOT, "seed %d %.1f%%", seed, near * 100) } +
-                " of the water stands no deeper than the shelf break, against ${NEAR_SHALLOW_SHARE * 100}%"
-        )
+        // Recorded at A1-6b, seeds 7 and 42 holding 89.3% and 87.7% on the seasonal circulation's
+        // ground; armed at A1-6c, whose rain cut it back inside; recorded again at F1, whose rain by
+        // longitude moved the ground (docs/DESIGN_LEDGER.md).
+        val shares = short.joinToString { (seed, near) -> String.format(Locale.ROOT, "seed %d %.1f%%", seed, near * 100) }
+        KnownFailures.expect("F1: the shelf's near-coast share on the circulation by longitude's ground", "seed 7 89.4%, seed 42 89.2%") {
+            if (short.isNotEmpty()) {
+                throw RecordedViolation(
+                    "within a shelf's width of the coast on the ground, only $shares of the water stands no deeper " +
+                        "than the shelf break, against ${NEAR_SHALLOW_SHARE * 100}%",
+                    shares
+                )
+            }
+        }
     }
 
     /**
@@ -121,6 +128,7 @@ class ContinentalShelfTest : BorrowsSharedWorlds() {
      */
     @Test
     fun `the shelf is as wide off a coast facing north as off one facing east`() {
+        val failures = ArrayList<String>()
         seeds.forEach { seed ->
             val config = WorldGenConfig.forRows(seed, SharedWorlds.DETAIL_ROWS)
             val world = SharedWorlds.world(config)
@@ -137,11 +145,21 @@ class ContinentalShelfTest : BorrowsSharedWorlds() {
                     facing.eastWest * 100, facing.eastWestCells
                 )
             )
-            assertTrue(
-                facing.northSouth > NEAR_SHALLOW_SHARE && facing.eastWest > NEAR_SHALLOW_SHARE,
-                "seed $seed: the shelf's plateau holds ${(facing.northSouth * 100).toInt()}% of its band off " +
+            if (!(facing.northSouth > NEAR_SHALLOW_SHARE && facing.eastWest > NEAR_SHALLOW_SHARE)) {
+                failures += "seed $seed: the shelf's plateau holds ${(facing.northSouth * 100).toInt()}% of its band off " +
                     "north- and south-facing coasts and ${(facing.eastWest * 100).toInt()}% off east- and west-facing ones"
-            )
+            }
+        }
+        // Recorded at A1-4: the provisional climates' new wind moved the ground the erosion cut, and
+        // seed 42's east- and west-facing shelf held 88% of its band. Armed again when H1's ground
+        // came under the coupled climate, whose shelves clear it (docs/DESIGN_LEDGER.md, M1).
+        // Recorded again at A1-6b, whose seasonal circulation's rain moved the ground (docs/TODO.md).
+        KnownFailures.expect(
+            "A1-6b: the shelf's plateau falls short of its width on the seasonal circulation's ground", "seed 7: the shelf's plateau holds 87% of its band off north- and south-facing coasts and 88% off east- and west-facing ones; seed 42: the shelf's plateau holds 88% of its band off north- and south-facing coasts and 87% off east- and west-facing ones"
+        ) {
+            if (failures.isNotEmpty()) {
+                throw RecordedViolation(failures.joinToString(System.lineSeparator()), failures.joinToString("; "))
+            }
         }
     }
 

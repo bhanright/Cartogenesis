@@ -28,7 +28,7 @@ import kotlin.math.sqrt
  * ### Accumulation
  *
  * The precipitation that falls as snow. The seasonal rainfall fields are half-year rates in the
- * annual-equivalent millimetres [ClimateStage.MM_SCALE] produces — the annual total is their mean —
+ * annual-equivalent millimetres the moisture march records — the annual total is their mean —
  * so each season contributes half of its own rate, and each is asked separately what fraction of
  * it fell frozen. Asking both halves rather than only the cold one is what lets a polar cell whose
  * *summer* never thaws accumulate all year, which is the Antarctic case and the reason an ice sheet
@@ -144,8 +144,9 @@ object SnowBalance {
      * Accumulation minus ablation for one cell, in millimetres of water equivalent a year.
      *
      * Positive means the cell keeps snow through the year, which is a glacier. The seasonal
-     * rainfall arguments are in [ClimateStage.MM_SCALE]'s annual-equivalent millimetres, as
-     * [ClimateResult.precipitationMm]'s two halves are.
+     * rainfall arguments are in the moisture march's annual-equivalent millimetres, as
+     * [ClimateResult.precipitationMm]'s two halves are. The two halves may come in either order,
+     * a place's own summer and winter or the calendar's two halves: the sum is symmetric in them.
      */
     fun balanceMm(
         summerC: Float,
@@ -172,23 +173,23 @@ object SnowBalance {
      */
     fun field(
         isLand: BooleanArray,
-        summerTemperature: FloatField,
-        winterTemperature: FloatField,
-        summerPrecipitationMm: FloatField,
-        winterPrecipitationMm: FloatField
+        julyHalfTemperature: FloatField,
+        januaryHalfTemperature: FloatField,
+        julyHalfPrecipitationMm: FloatField,
+        januaryHalfPrecipitationMm: FloatField
     ): FloatField {
-        val cellsAcross = summerTemperature.width
-        val cellsDown = summerTemperature.height
+        val cellsAcross = julyHalfTemperature.width
+        val cellsDown = julyHalfTemperature.height
         val balance = FloatField(cellsAcross, cellsDown)
         parallelChunks(0, cellsDown) { startRow, endRow ->
             for (row in startRow until endRow) {
                 for (cell in row * cellsAcross until (row + 1) * cellsAcross) {
                     if (!isLand[cell]) continue
                     balance.data[cell] = balanceMm(
-                        summerTemperature.data[cell],
-                        winterTemperature.data[cell],
-                        summerPrecipitationMm.data[cell],
-                        winterPrecipitationMm.data[cell]
+                        julyHalfTemperature.data[cell],
+                        januaryHalfTemperature.data[cell],
+                        julyHalfPrecipitationMm.data[cell],
+                        januaryHalfPrecipitationMm.data[cell]
                     )
                 }
             }
@@ -267,9 +268,9 @@ interface SnowBalanceAccelerator {
     suspend fun balance(
         width: Int,
         height: Int,
-        summerTemperature: FloatArray,
-        winterTemperature: FloatArray,
-        summerPrecipitationMm: FloatArray,
-        winterPrecipitationMm: FloatArray
+        julyHalfTemperature: FloatArray,
+        januaryHalfTemperature: FloatArray,
+        julyHalfPrecipitationMm: FloatArray,
+        januaryHalfPrecipitationMm: FloatArray
     ): FloatArray?
 }

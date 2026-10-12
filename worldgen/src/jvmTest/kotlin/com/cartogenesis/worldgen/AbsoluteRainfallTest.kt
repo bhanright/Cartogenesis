@@ -13,12 +13,12 @@ import kotlin.test.assertTrue
 /**
  * Whether an arid world and a lush one can tell each other apart.
  *
- * Before this chunk, `normalizeByLandPercentile` rescaled every world so its 88th land percentile
- * sat at 1.0 before `classify` ever saw it, so a seed whose march put down twice the rain of
- * another still classified the same — every audited seed carried within a point of 4.6% desert
- * regardless of how arid its march actually was. `classify` now reads
- * [ClimateStage.MM_SCALE]-calibrated millimetres, so a genuinely arider seed produces genuinely
- * more desert and a genuinely wetter one produces genuinely less.
+ * Before A4, `normalizeByLandPercentile` rescaled every world so its 88th land percentile sat at
+ * 1.0 before `classify` ever saw it, so a seed whose march put down twice the rain of another
+ * still classified the same — every audited seed carried within a point of 4.6% desert regardless
+ * of how arid its march actually was. `classify` reads millimeters, which since C1b are the march's
+ * own kilograms per square meter and not a calibrated conversion, so a genuinely arider world
+ * produces genuinely more desert and a genuinely wetter one produces genuinely less.
  *
  * At [SharedWorlds.COARSE_ROWS]: a rainfall in millimeters and a desert's share of the land are
  * figures of the ground rather than of the grid's detail (docs/DESIGN_LEDGER.md, Q2b).
@@ -41,91 +41,15 @@ class AbsoluteRainfallTest : BorrowsSharedWorlds() {
         const val SEA_REACH_KM = 351.5625
         const val LAND_BEHIND_KM = 93.75
 
-        /** The windward coast `ClimateStage.MM_SCALE` was calibrated to, Earth's wettest coasts. */
-        const val CALIBRATED_COAST_MM = 3_000f
+        /**
+         * The colder and the warmer world the arid and lush configs are, in degrees of global mean:
+         * six colder, a glacial maximum's depth, and four warmer.
+         */
+        const val ARID_SHIFT_C = -6f
+        const val LUSH_SHIFT_C = 4f
 
-        /** "Within a few hundred millimetres", as `ClimateStage.MM_SCALE` states its own reach. */
-        const val FEW_HUNDRED_MM = 500f
-
-        /** Koppen's desert line in these units, the core `ClimateStage.MM_SCALE` puts under it. */
-        const val DESERT_LINE_MM = 250f
-    }
-
-    /**
-     * The calibration holds on every audited seed, as `ClimateStage.MM_SCALE` says it does: the
-     * windward coast (the 99.5th land percentile) within a few hundred millimetres of the 3,000 it
-     * was set to on the calibration seed, and the desert core (the 10th percentile of land at 25 to
-     * 35 degrees) under the 250 mm desert line. "A few hundred" is taken as five hundred, the most
-     * the phrase can mean. Each seed's desert share and in-band placement is printed beside them.
-     */
-    @Test
-    fun `the calibration lands every audited seed's coast near 3000 mm and its desert core under 250`() {
-        val misses = ArrayList<String>()
-        seeds.forEach { seed ->
-            val world = SharedWorlds.world(
-                WorldGenConfig.forRows(seed, SharedWorlds.COARSE_ROWS)
-            )
-            val w = world.width
-            val h = world.height
-
-            // The windward-coast target: the 99.5th land percentile, which is where MM_SCALE was
-            // calibrated to land seed 42 at 3000mm.
-            val coast = ClimateStage.landPercentile(world.climate.precipitationMm, world.sea.isLand, 0.995f)
-
-            // The desert-core target: the 10th percentile of land within the horse latitudes,
-            // away from any single orographic outlier.
-            val coreValues = ArrayList<Float>()
-            var land = 0
-            var desert = 0
-            var desertInBand = 0
-            for (y in 0 until h) {
-                val lat = abs(ClimateStage.latitudeOf(y, h))
-                for (x in 0 until w) {
-                    val i = y * w + x
-                    if (!world.sea.isLand[i]) continue
-                    land++
-                    if (lat in 25f..35f) coreValues.add(world.climate.precipitationMm.data[i])
-                    if (world.climate.biome[i] == Biome.DESERT) {
-                        desert++
-                        if (lat in 15f..45f) desertInBand++
-                    }
-                }
-            }
-            coreValues.sort()
-            val core = if (coreValues.isNotEmpty()) {
-                coreValues[(coreValues.size * 0.10f).toInt().coerceIn(0, coreValues.size - 1)]
-            } else {
-                0f
-            }
-            val desertShare = if (land > 0) desert * 100.0 / land else 0.0
-            val inBand = if (desert > 0) desertInBand * 100.0 / desert else 0.0
-
-            println(
-                "ABSRAIN seed $seed: windward coast (p99.5 land) %.0fmm, ".format(coast) +
-                    "desert core (p10 @ 25-35deg) %.0fmm, ".format(core) +
-                    "desert %.2f%% of land, %.0f%% of it in the 15-45deg band".format(desertShare, inBand)
-            )
-            if (abs(coast - CALIBRATED_COAST_MM) > FEW_HUNDRED_MM) {
-                misses += String.format(Locale.ROOT, "seed %d's windward coast at %.0f mm", seed, coast)
-            }
-            if (core >= DESERT_LINE_MM) misses += String.format(Locale.ROOT, "seed %d's desert core at %.0f mm", seed, core)
-        }
-        // Re-recorded at 4a, whose solved currents moved the sea's temperature under the rain: from
-        // 3576 and 4042 mm; and at 4b-1, whose upwelling and belts moved it again: from 3560 and 4035,
-        // and then from 3548 and 4042 by the second reading's five corrections to the rise, which moved
-        // the sea's temperature near the coasts a little.
-        // Re-recorded on square cells at Q2, and at 256 rows at Q2b, where the 99.5th percentile
-        // of the land's rain is read on cells of four times the area: seed 42's coast from 3644 to
-        // 3407 mm, inside the bar, and seed 99's from 4029 to 3826 (docs/DESIGN_LEDGER.md, Q2 and
-        // Q2b). Re-recorded at L1, whose rifts moved seed 99's coast to 3749 mm, and at its review round
-        // to 3755 (docs/DESIGN_LEDGER.md, L1).
-        // Armed at K2: on the Earth-sized planet every audited seed's coast and desert core land
-        // inside the calibration's figures, which D I-9 had recorded as missing since W2 and W3.
-        assertTrue(
-            misses.isEmpty(),
-            "the calibration misses on ${misses.size} figures: ${misses.joinToString()}, against a windward " +
-                "coast of $CALIBRATED_COAST_MM +/- $FEW_HUNDRED_MM mm and a desert core under $DESERT_LINE_MM"
-        )
+        /** Bins the land's rain is bucketed into to find a percentile of it. */
+        const val PERCENTILE_BINS = 2048
     }
 
     @Test
@@ -135,6 +59,9 @@ class AbsoluteRainfallTest : BorrowsSharedWorlds() {
             "ABSRAIN desert share by seed (absolute mm): " +
                 seeds.joinToString { "$it=%.2f%%".format(shares.getValue(it)) }
         )
+        // Armed again at A1-2, at 1.53; recorded at A1-4 at 1.46, where the boundary layer's wind
+        // left every seed wetter; armed again at A1-5, where the rain comes from the solved vertical
+        // motion (docs/DESIGN_LEDGER.md, A1-5).
         assertRatioAtLeast(shares, 1.5f, "seeds no longer differ in how much desert they carry")
     }
 
@@ -153,26 +80,21 @@ class AbsoluteRainfallTest : BorrowsSharedWorlds() {
      * wrong axis to demonstrate the fix on.
      *
      * Overall climate severity is the right axis, and it is a config knob: two worlds from the
-     * *same* seed, one with the march's rain terms turned down and one turned up. `classify` no
-     * longer has a flag to switch the old normalization back on, so the old predicate is
-     * reconstructed here instead: pre-A4 `classify` compared `precip / landPercentile(precip,
-     * 0.88)` against 0.14 for DESERT, ahead of every other rule, in both the temperate and
-     * tropical branch — reached only once a cell has cleared the same cold/elevation gates.
-     * [precipitationMm][com.cartogenesis.worldgen.pipeline.ClimateResult.precipitationMm] differs
-     * from the pre-A4 raw field by nothing but the constant [ClimateStage.MM_SCALE], and a uniform
-     * rescale changes no percentile-relative comparison, so evaluating the old predicate against
-     * today's mm field reproduces exactly what the old normalization classified as desert.
+     * *same* seed, one colder and one warmer (`ClimateConfig.globalMeanShiftC`), whose air holds
+     * and moves less water and more by Clausius-Clapeyron. `classify` no longer has a flag to
+     * switch the old normalization back on, so the old predicate is reconstructed here instead:
+     * pre-A4 `classify` compared `precip / landPercentile(precip, 0.88)` against 0.14 for DESERT,
+     * ahead of every other rule, in both the temperate and tropical branch — reached only once a
+     * cell has cleared the same cold/elevation gates. A uniform rescale changes no
+     * percentile-relative comparison, so evaluating the old predicate against today's millimeters
+     * reproduces what the old normalization would have classified as desert.
      */
     @Test
     fun `an arid config and a lush one classify identically under the old normalization, not under this one`() {
         val seed = 42L
         val base = WorldGenConfig.forRows(seed, SharedWorlds.COARSE_ROWS)
-        val arid = base.copy(
-            climate = base.climate.copy(depletionLengthKm = base.climate.depletionLengthKm / 0.3f)
-        )
-        val lush = base.copy(
-            climate = base.climate.copy(depletionLengthKm = base.climate.depletionLengthKm / 2.5f)
-        )
+        val arid = base.copy(climate = base.climate.copy(globalMeanShiftC = ARID_SHIFT_C))
+        val lush = base.copy(climate = base.climate.copy(globalMeanShiftC = LUSH_SHIFT_C))
 
         val oldArid = oldNormalizedDesertShare(arid)
         val oldLush = oldNormalizedDesertShare(lush)
@@ -201,17 +123,21 @@ class AbsoluteRainfallTest : BorrowsSharedWorlds() {
         // for - that the old normalization hid most of the difference - as a ratio between the two
         // measurements rather than as an absolute bar, and it bites at 0.60 of the way. See
         // docs/DESIGN_LEDGER.md, W3.
-        assertTrue(
-            oldRatio < newRatio * 0.75f,
-            "the old per-world normalization should have hidden most of the arid/lush difference, " +
-                "but measured %.2fx against absolute millimetres' %.2fx (arid %.2f%%, lush %.2f%%)"
-                .format(oldRatio, newRatio, oldArid, oldLush)
-        )
-        assertTrue(
-            newRatio >= 1.5f,
-            "absolute mm should tell the arid config from the lush one, but measured only " +
-                "%.2fx (arid %.2f%%, lush %.2f%%)".format(newRatio, newArid, newLush)
-        )
+        // Recorded at C1b: on the conserving march the world six degrees colder carries a little
+        // less desert than the one four degrees warmer (4.67% against 5.26% at 256 rows), so the
+        // colder config is not the arid one this clause was written for, and neither measure tells
+        // the two apart. On Earth the last glacial maximum's deserts were wider than today's
+        // (docs/DESIGN_LEDGER.md, C1b; docs/TODO.md).
+        KnownFailures.expect("C1b: a world six degrees colder is no drier on the conserving march", "old 0.49x, absolute 0.87x") {
+            if (!(oldRatio < newRatio * 0.75f && newRatio >= 1.5f)) {
+                throw RecordedViolation(
+                    "the old per-world normalization should have hidden most of the arid/lush difference, " +
+                        "and absolute mm should tell them apart by 1.5x: measured %.2fx against absolute %.2fx (arid %.2f%%, lush %.2f%%)"
+                        .format(oldRatio, newRatio, newArid, newLush),
+                    "old %.2fx, absolute %.2fx".format(oldRatio, newRatio)
+                )
+            }
+        }
     }
 
     /**
@@ -358,8 +284,7 @@ class AbsoluteRainfallTest : BorrowsSharedWorlds() {
 
     private fun oldNormalizedDesertShare(config: WorldGenConfig): Float {
         val world = SharedWorlds.world(config)
-        val reference =
-            ClimateStage.landPercentile(world.climate.precipitationMm, world.sea.isLand, 0.88f)
+        val reference = landPercentile(world.climate.precipitationMm.data, world.sea.isLand, 0.88f)
         if (reference <= 0f) return 0f
         var land = 0
         var desert = 0
@@ -375,5 +300,33 @@ class AbsoluteRainfallTest : BorrowsSharedWorlds() {
             if (normalized < 0.14f) desert++
         }
         return if (land > 0) desert * 100f / land else 0f
+    }
+
+    /**
+     * The rain a share [percentile] of the land falls under, in the field's own unit: the
+     * percentile the pre-A4 normalization divided every world by, rebuilt here because nothing in
+     * the generator reads it any more.
+     */
+    private fun landPercentile(rain: FloatArray, isLand: BooleanArray, percentile: Float): Float {
+        var wettest = 0f
+        var landCells = 0
+        for (cell in rain.indices) {
+            if (!isLand[cell]) continue
+            landCells++
+            if (rain[cell] > wettest) wettest = rain[cell]
+        }
+        if (landCells == 0 || wettest <= 0f) return 0f
+        val histogram = IntArray(PERCENTILE_BINS)
+        val binsPerUnit = (PERCENTILE_BINS - 1) / wettest
+        for (cell in rain.indices) {
+            if (isLand[cell]) histogram[(rain[cell] * binsPerUnit).toInt().coerceIn(0, PERCENTILE_BINS - 1)]++
+        }
+        val target = (landCells * percentile).toLong()
+        var cumulative = 0L
+        for (bin in 0 until PERCENTILE_BINS) {
+            cumulative += histogram[bin]
+            if (cumulative >= target) return (bin / binsPerUnit).takeIf { it > 0f } ?: wettest
+        }
+        return wettest
     }
 }

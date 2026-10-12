@@ -17,13 +17,14 @@ enum class MapView(val label: String) {
     ELEVATION("Elevation"),
     BIOMES("Biomes"),
     TEMPERATURE("Temperature"),
-    // The warm and cold season of the cell's own hemisphere, not July and January, so the two
-    // halves of the map can be read against each other rather than against the calendar.
-    SUMMER_TEMPERATURE("Temperature, summer"),
-    WINTER_TEMPERATURE("Temperature, winter"),
+    // The calendar's July and January, and the rain of the half-years about them: one moment of
+    // the planet each, the northern summer beside the southern winter, as an atlas draws a season.
+    // The constants are the wire names a link carries and do not move with the labels.
+    SUMMER_TEMPERATURE("Temperature, July"),
+    WINTER_TEMPERATURE("Temperature, January"),
     RAINFALL("Rainfall"),
-    SUMMER_RAINFALL("Rainfall, summer"),
-    WINTER_RAINFALL("Rainfall, winter"),
+    SUMMER_RAINFALL("Rainfall, April to September"),
+    WINTER_RAINFALL("Rainfall, October to March"),
     // "Tectonic plates" rather than "Plates", which in a list beside Rainfall and Winds reads as a
     // count of something. The enum constant is the wire name and does not move; see docs/CONVENTIONS.md.
     PLATES("Tectonic plates"),
@@ -1082,21 +1083,21 @@ object MapRasterizer {
             MapView.TEMPERATURE -> MapPalette.temperature(world.climate.temperature.data[cell])
 
             MapView.SUMMER_TEMPERATURE ->
-                MapPalette.temperature(world.climate.summerTemperature.data[cell])
+                MapPalette.temperature(world.climate.julyTemperature.data[cell])
 
             MapView.WINTER_TEMPERATURE ->
-                MapPalette.temperature(world.climate.winterTemperature.data[cell])
+                MapPalette.temperature(world.climate.januaryTemperature.data[cell])
 
             MapView.RAINFALL ->
                 if (isLand) MapPalette.precipitation(world.climate.precipitation.data[cell])
                 else RAINFALL_SEA
 
             MapView.SUMMER_RAINFALL ->
-                if (isLand) MapPalette.precipitation(world.climate.summerPrecipitation.data[cell])
+                if (isLand) MapPalette.precipitation(world.climate.julyHalfPrecipitation.data[cell])
                 else RAINFALL_SEA
 
             MapView.WINTER_RAINFALL ->
-                if (isLand) MapPalette.precipitation(world.climate.winterPrecipitation.data[cell])
+                if (isLand) MapPalette.precipitation(world.climate.januaryHalfPrecipitation.data[cell])
                 else RAINFALL_SEA
 
             MapView.PLATES -> {

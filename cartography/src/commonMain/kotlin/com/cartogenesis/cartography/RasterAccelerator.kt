@@ -429,12 +429,12 @@ class RasterRecipe(
                 }
 
                 MapView.SUMMER_TEMPERATURE -> {
-                    scalarA = world.climate.summerTemperature.data
+                    scalarA = world.climate.julyTemperature.data
                     RasterView.TEMPERATURE
                 }
 
                 MapView.WINTER_TEMPERATURE -> {
-                    scalarA = world.climate.winterTemperature.data
+                    scalarA = world.climate.januaryTemperature.data
                     RasterView.TEMPERATURE
                 }
 
@@ -444,12 +444,12 @@ class RasterRecipe(
                 }
 
                 MapView.SUMMER_RAINFALL -> {
-                    scalarA = world.climate.summerPrecipitation.data
+                    scalarA = world.climate.julyHalfPrecipitation.data
                     RasterView.RAINFALL
                 }
 
                 MapView.WINTER_RAINFALL -> {
-                    scalarA = world.climate.winterPrecipitation.data
+                    scalarA = world.climate.januaryHalfPrecipitation.data
                     RasterView.RAINFALL
                 }
 

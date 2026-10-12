@@ -389,7 +389,9 @@ internal object HydraulicErosion {
          */
         val rainfallMm: FloatArray,
         /** Plant cover, 0 for bare ground and 1 for closed canopy. See [VEGETATION_SHIELDING]. */
-        val vegetationDensity: FloatArray
+        val vegetationDensity: FloatArray,
+        /** Where the provisional climate's loop ended, for the next run to start from ([ClimateStage.WarmStart]). */
+        val climateStart: ClimateStage.WarmStart? = null
     )
 
     /**
@@ -410,19 +412,19 @@ internal object HydraulicErosion {
         terrain: FloatField,
         provisionalSeaLevel: Float,
         /** Which round is about to cut with this, so the march sees the sea that round sees. */
-        round: Int = 0
+        round: Int = 0,
+        /** Where the last provisional climate of this world settled, or none for a cold start. */
+        climateStart: ClimateStage.WarmStart? = null
     ): Weather {
         val cellCount = config.width * config.height
         val cut = SeaLevelStage.percentileCut(
             terrain, provisionalSeaLevel, config.scale, standBelowToday(config, round)
         )
         val rainfall = FloatArray(cellCount) { Runoff.FLOOR_MM }
-        if (cut.landCellCount == 0) return Weather(rainfall, FloatArray(cellCount))
+        if (cut.landCellCount == 0) return Weather(rainfall, FloatArray(cellCount), climateStart)
 
-        val climate =
-            ClimateStage.generateWithSeasonalMm(
-                config, cut, OceanStage.withoutCurrents(config, cut)
-            ).result
+        val generated = ClimateStage.generateWithSeasonalMm(config, cut, OceanStage.withoutCurrents(config, cut), climateStart)
+        val climate = generated.result
         val annualMm = climate.precipitationMm.data
 
         // [Runoff.annualWeightMm] and its floor, which is the one every stage in the pipeline
@@ -443,7 +445,7 @@ internal object HydraulicErosion {
         // Zero everywhere when the vegetation section is switched off, because that is the field
         // the climate stage hands back then — and a density of zero is a shielding factor of one,
         // so switching the cover off leaves the incision exactly as bare rock's.
-        return Weather(rainfall, climate.vegetationDensity.data)
+        return Weather(rainfall, climate.vegetationDensity.data, generated.settled)
     }
 
     /**
@@ -778,7 +780,7 @@ internal object HydraulicErosion {
             // it and the sea as this round will take it, which is the same pair the march at the
             // top was given.
             if (round == refreshAtRound) {
-                val refreshed = provisionalWeather(config, working, provisionalSeaLevel, round)
+                val refreshed = provisionalWeather(config, working, provisionalSeaLevel, round, opening.climateStart)
                 rainfallMm = refreshed.rainfallMm
                 vegetationDensity = refreshed.vegetationDensity
             }

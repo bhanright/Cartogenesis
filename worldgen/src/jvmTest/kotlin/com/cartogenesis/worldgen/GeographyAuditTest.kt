@@ -168,8 +168,8 @@ class GeographyAuditTest : BorrowsSharedWorlds() {
     /**
      * The control the per-band guard needs: a world whose land never gives its moisture back.
      *
-     * `ClimateConfig.evapotranspirationLengthKm` is the mechanism GEOGRAPHY.md's "Where the deserts are"
-     * credits with putting the desert in the horse latitudes at all. With it at zero, orographic
+     * `ClimateConfig.groundReturn` is the mechanism GEOGRAPHY.md's "Where the deserts are"
+     * credits with putting the desert in the horse latitudes at all. With it off, orographic
      * depletion is permanent — air wrung out by one range stays wrung out for the rest of the
      * continent — so a rain shadow becomes a desert wherever it happens to fall, including on the
      * wettest rows of the map. That is exactly the defect the old in-band figure was written for,
@@ -181,7 +181,7 @@ class GeographyAuditTest : BorrowsSharedWorlds() {
         seeds.forEach { seed ->
             val base = WorldGenConfig.forRows(seed, SharedWorlds.COARSE_ROWS)
             val world = SharedWorlds.world(
-                base.copy(climate = base.climate.copy(evapotranspirationLengthKm = 0f))
+                base.copy(climate = base.climate.copy(groundReturn = false))
             )
             for (i in 0 until world.width * world.height) {
                 if (!world.sea.isLand[i]) continue
@@ -426,12 +426,16 @@ internal class DesertBands {
 
     fun assertAgainstEarth(seeds: List<Long>) {
         val reported = report(seeds, "AUDIT BAND", everyBand = false)
-        // Recorded at H1: on H1's ground, its plains lower and more of its crust under water, the
-        // pooled tropical band runs over its bar again, cause not isolated (docs/DESIGN_LEDGER.md,
-        // H1; docs/TODO.md). The horse latitudes' clause is still asserted.
+        // Every clause asserted from Fix 3b to C1b. Recorded at C1b: the conserving march puts the
+        // summer's monsoon over the subtropics and leaves the tropical interiors dry, for the
+        // causes docs/TODO.md's "The desert left the horse latitudes (C1b)" measures. Recorded on
+        // its own at H1, whose ground on the climate before C1b ran the pooled tropical band over
+        // its bar with the horse latitudes' clause asserted (docs/DESIGN_LEDGER.md, H1). On H1's
+        // ground under the coupled climate only the tropical band misses, so it is split from the
+        // rest again (docs/DESIGN_LEDGER.md, M1; docs/TODO.md).
         val tropical = reported.filter { it.contains("pooled ${names[0]} deg") }
         val complaints = reported - tropical.toSet()
-        KnownFailures.expect("H1: the pooled tropical band is over its bar on H1's ground", "AUDIT BAND pooled 0-15 deg at x0.71") {
+        KnownFailures.expect("M1: the pooled tropical band is over its bar on H1's ground under the coupled climate", "AUDIT BAND pooled 0-15 deg at x1.31") {
             if (tropical.isNotEmpty()) {
                 throw RecordedViolation(
                     "desert sits in the wrong latitudes against Earth's Koeppen BW shares: $tropical",

@@ -811,9 +811,13 @@ class DeltaOutlineTest {
          *
          * What a real delta has is none at all, so the bar is set between the two measured
          * populations rather than from a figure in the world: at 512 the square fans put 2.0% and
-         * 1.8% of their perimeter in such runs and the curved ones put 0.7% and 0.0%, and 1.2% is
+         * 1.8% of their perimeter in such runs and the curved ones put 0.7% and 0.0%, and 1.2% was
          * about the geometric midpoint — 1.7 times under the worst square and 1.7 times over the
-         * worst curve. The gap is far wider at the grid the author was looking at, where the square
+         * worst curve. Re-derived the same way at A1-2, whose pressure wind moved the ground: the
+         * square fans now put 1.1% at most and the curved ones 0.6%, and 0.8% is the midpoint, 1.4
+         * times under the one and 1.3 times over the other. Re-derived again at A1-5, whose rain moved
+         * the ground: the square fans 1.6% and the curved ones 0.81%, and 1.1% is the midpoint, 1.4
+         * times under the one and over the other. The gap is far wider at the grid the author was looking at, where the square
          * a lacustrine fan takes is forty-nine cells on a side rather than thirteen: see the
          * ledger's 2048 figures.
          *
@@ -823,13 +827,17 @@ class DeltaOutlineTest {
          * 1.25 times either side; why the square fans' straight runs shrank was not isolated
          * (docs/DESIGN_LEDGER.md, H1).
          *
+         * Re-derived by the same rule when H1's ground came under the coupled climate: the square
+         * fans' worst is 1.08% and the curved ones' 0.3%, and 0.57% is the midpoint, 1.9 times
+         * under the one and over the other (docs/DESIGN_LEDGER.md, M1).
+         *
          * So it is a regression pin between a defect and its fix, and not the bar rule 13 asks for,
          * which is derived from the isotropy of natural outlines; and it reads axis-aligned runs
          * only, so a straight edge along a diagonal is invisible to it. The derived bar, in every
          * bearing, is the geometry guard's (`GeometryGuardTest` in `:cartography`, whose layers
          * include the delta lobes and the lake fans this measures).
          */
-        const val STRAIGHT_BAR = 0.0075
+        const val STRAIGHT_BAR = 0.0057
 
         /** The least a rim's longest radius may exceed its shortest. */
         const val RATIO_BAR = 1.5

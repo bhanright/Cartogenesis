@@ -44,6 +44,11 @@ class PlanetWidthRainTest {
             if (meanRatio > meanBar || meanRatio < 1 / meanBar) wrong += "the land's mean is %.2f times the stock planet's on a %.0f km planet".format(meanRatio, widthKm)
             if (wettestRatio > wettestBar || wettestRatio < 1 / wettestBar) wrong += "the land's 99.5th percentile is %.2f times the stock planet's on a %.0f km planet".format(wettestRatio, widthKm)
         }
+        // Recorded at A1-6b: the Hadley cells' extent follows the planet's own thermal Rossby
+        // number, which goes as the inverse square of its radius, so on the 24,000 km planet the
+        // cells are narrower and the ITCZ's rain more concentrated than on the 12,000 km one.
+        // Armed at A1-6c, 1.81 times against the bar of 1.90, the sea's rain rising with the bulk
+        // formula's air below the sea (docs/DESIGN_LEDGER.md).
         assertTrue(wrong.isEmpty(), "land rain follows the planet's width:\n" + wrong.joinToString("\n"))
     }
 
@@ -70,7 +75,7 @@ class PlanetWidthRainTest {
         /** The stock planet's width, in kilometers. */
         const val STOCK_WIDTH_KM = 12_000.0
 
-        /** The percentile `ClimateStage.MM_SCALE` was calibrated at: the windward coasts. */
+        /** The windward coasts' percentile, the one the rain's old conversion was calibrated at. */
         const val WETTEST_PERCENTILE = 0.995
     }
 }

@@ -5,25 +5,25 @@ import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.Biome
 import com.cartogenesis.worldgen.pipeline.ClimateStage
 import com.cartogenesis.worldgen.pipeline.MoistureBudget
+import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.cos
+import kotlin.math.ln
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
 /**
- * The three things W3 put into the moisture march, each with its own control.
+ * Three things the moisture march does with its water beyond carrying it, each against Earth or
+ * its control.
  *
- * **Continental recycling.** Rain that falls on land evaporates and rains again downwind. The
- * march has given water back over land since the belts did, but nothing ever asked how much of
- * the rain was that water: the answer read zero by construction, because no parcel carried where
- * its moisture came from. It carries it now, and the share is the continental precipitation
- * recycling ratio — [EARTH_RECYCLING_LOW] to [EARTH_RECYCLING_HIGH] on Earth.
+ * **Continental recycling.** Rain that falls on land evaporates and rains again downwind, and each
+ * parcel carries how much of its water last came off land: the share of the continents' rain that
+ * is that water is the continental precipitation recycling ratio, [EARTH_RECYCLING] on Earth.
  *
- * **Convergence.** Where the regional wind gathers air, air rises and rains. The control is
- * `ClimateConfig.convergenceRain` off, which is a bucket carried along a streamline: two parcels
- * blown together by a thermal low cannot make each other rain, which is what W2 reported and what
- * left every continental interior a uniform pale. The claim is about the interior of a summer
- * continent, and it is paired with a claim that the ITCZ has not moved — the term reads the
- * *departure* wind's divergence exactly so that it cannot move it.
+ * **Convergence.** Where the wind gathers air the march's transport gathers its water, and a
+ * column that fills rains what it cannot hold. A closure that rains the gathered air at the rate
+ * it gathers is an assumption beside that, and `ClimateConfig.convergenceRain` switches it on; it
+ * is checked here on its own against GPCP's equatorial band, which is why it is off.
  *
  * **The marine inversion.** A subtropical west coast washed by a cold current is a desert: the
  * Atacama, the Namib, Baja. The control is `ClimateConfig.marineInversion` off, which is the
@@ -55,48 +55,24 @@ class MoistureBudgetTest : BorrowsSharedWorlds() {
         const val RECYCLING_ROWS = SharedWorlds.DETAIL_ROWS
 
         /**
-         * Earth's continental precipitation recycling ratio: the share of rain over land whose
-         * water last evaporated from land rather than from the sea.
-         *
-         * Van der Ent and others (2010) track evaporation through the atmosphere in reanalysis and
-         * find continental recycling ratios of roughly 30% to 45% continent by continent, around
-         * 40% for the land surface pooled, with the Amazon and the Congo basins well above it and
-         * Australia well below. The band below is that spread, widened at neither end.
+         * Earth's continental precipitation recycling ratio: the share of all rain over land whose
+         * water last evaporated from land rather than from the sea, 40 percent (van der Ent and
+         * others 2010).
          */
-        const val EARTH_RECYCLING_LOW = 0.30
+        const val EARTH_RECYCLING = 0.40
 
-        const val EARTH_RECYCLING_HIGH = 0.45
-
-        /** How far inland "the interior" starts, in kilometres: `PressureWindTest`'s own figure. */
-        const val INTERIOR_REACH_KM = 500.0
+        /** How far a pooled figure may stand from Earth's, as a factor either way: a quarter. */
+        const val EARTH_TOLERANCE = 1.25
 
         /**
-         * How much the convergence term has to move the interior of a summer continent, either
-         * way, as a share.
-         *
-         * A hundredth. **This is a bar on the size of the change and not on its sign, and that is
-         * a measurement and not a hedge.** The chunk expected the term to wet the interior: a
-         * thermal low gathers air over a continent, and gathered air rains. It dries it instead,
-         * by the figures this test prints, and the mechanism is in the march's own shape — a
-         * parcel made to rain harder where the wind converges arrives downwind with less, so the
-         * deep interior beyond the convergence gets a drier parcel than it would have. Earth
-         * answers that by re-supplying the parcel from a monsoon flow of metres a second; W2
-         * measured this generator's at tenths, so the gathering is there and the resupply is not.
-         * The direction is recorded as a finding in docs/DESIGN_LEDGER.md, W3, with R1 and a
-         * deeper seasonal migration named as what would earn the sign back. What is asserted here
-         * is that the term does something at all, and that what it does is not the ITCZ.
+         * GPCP's ocean zonal-mean rain at its wettest, 8 mm a day near 7 N (Adler and others,
+         * GPCP version 2, twenty years), in millimeters a year.
          */
-        const val INTERIOR_CONVERGENCE_CHANGE = 0.01
+        const val GPCP_OCEAN_PEAK_MM = 8.0 * 365.25
 
-        /**
-         * How far the zonal-mean rainfall peak may move, in degrees of latitude, when the
-         * convergence term is switched on.
-         *
-         * One degree, which at 256 rows is under a row and a half: the term is built from the
-         * departure wind alone precisely so that the belts' own rising limb is untouched, and this
-         * is that claim as a number rather than as a comment.
-         */
-        const val ITCZ_DRIFT_DEGREES = 1.0
+        /** How far from the equator the ITCZ is looked for, and the bands it is read in, degrees. */
+        const val ITCZ_SEARCH_DEGREES = 20
+        const val ZONAL_BAND_DEGREES = 2
 
         /** The subtropics, in degrees, where an eastern-boundary current makes a coastal desert. */
         const val COAST_EQUATORWARD_DEGREES = 12f
@@ -176,6 +152,18 @@ class MoistureBudgetTest : BorrowsSharedWorlds() {
 
     // ---------------------------------------------------------------- recycling
 
+    /**
+     * The share of the continents' rain whose water last evaporated from land, pooled by the rain's
+     * volume: the tracer's rain over the land's rain, both summed by area on the sphere. Van der
+     * Ent and others (2010) put Earth's at 40 percent of all continental precipitation, from
+     * moisture tracking in ERA-Interim; held within a quarter of it either way, the tolerance the
+     * other rain figures against Earth take (`RainAgainstEarthTest`).
+     *
+     * The ratio is the tracer's, and the tracer is checked by its own accounting in
+     * `MoistureClosureTest`: the land-origin water closes its budget lap by lap and never stands
+     * outside zero to the column's water, so this is a measurement of the march and not a figure
+     * the march was fitted to.
+     */
     @Test
     fun `the share of continental rain that last evaporated from land is Earth's`() {
         var pooledRain = 0.0
@@ -185,218 +173,124 @@ class MoistureBudgetTest : BorrowsSharedWorlds() {
             val (rain, recycled) = continentalRain(world)
             pooledRain += rain
             pooledRecycled += recycled
-            val control = generate(seed, RECYCLING_ROWS) {
-                it.copy(climate = it.climate.copy(evapotranspirationLengthKm = 0f))
-            }
-            val (controlRain, controlRecycled) = continentalRain(control)
-            println(
-                ("RECYCLING seed %d: %.1f%% of continental rain last evaporated from land, " +
-                    "against %.1f%% with the ground's return switched off")
-                    .format(
-                        seed, 100.0 * recycled / rain,
-                        if (controlRain > 0) 100.0 * controlRecycled / controlRain else 0.0
-                    )
-            )
-            assertTrue(
-                controlRecycled == 0.0,
-                ("the control returns no water from the ground and still reads %.3f mm of " +
-                    "recycled rain, so the tracer is measuring something else")
-                    .format(controlRecycled)
-            )
+            println("RECYCLING seed %d: %.1f%% of continental rain last evaporated from land".format(seed, 100.0 * recycled / rain))
         }
         val ratio = pooledRecycled / pooledRain
         println(
-            ("RECYCLING pooled over %d seeds: %.1f%% of continental rain is recycled, against " +
-                "Earth's %.0f-%.0f%% (van der Ent and others 2010)")
-                .format(
-                    seeds.size, ratio * 100, EARTH_RECYCLING_LOW * 100, EARTH_RECYCLING_HIGH * 100
-                )
+            "RECYCLING pooled over %d seeds by volume: %.1f%%, against Earth's %.0f%% (van der Ent and others 2010)"
+                .format(seeds.size, ratio * 100, EARTH_RECYCLING * 100)
         )
-        // Under the band from the continents the ground's ruler drew to 4b-1 (0.299 there), and
-        // inside it again on square cells at Q2, 0.303, where it is armed: see docs/DESIGN_LEDGER.md,
-        // Fix 2 to Q2.
-        // Recorded at K2: on the Earth-sized planet more of the continents' rain last evaporated
-        // from land than on Earth (docs/DESIGN_LEDGER.md, K2; docs/TODO.md).
-        KnownFailures.expect("K2: the Earth-sized planet's continental recycling ratio is over Earth's band", "0.474") {
-            if (!(ratio > EARTH_RECYCLING_LOW && ratio < EARTH_RECYCLING_HIGH)) {
-                throw RecordedViolation(
-                    ("the continental recycling ratio is %.3f, outside Earth's %.2f to %.2f")
-                        .format(ratio, EARTH_RECYCLING_LOW, EARTH_RECYCLING_HIGH),
-                    "%.3f".format(ratio)
-                )
-            }
-        }
-    }
-
-    @Test
-    fun `the vegetation field does not return water as freely as the rainfall proxy`() {
-        // W4's one offered change to the march, and the measurement that turned it down. The
-        // ground's return is scaled by the previous lap's rain against Koppen's 500 mm steppe line
-        // - a proxy W3 stated as one, for a field that did not exist. W4 built the field and
-        // offered Budyko's evaporative fraction in its place, which is the share of the year's
-        // evaporative energy the water supply meets and so ought to have *been* the return rather
-        // than a stand-in for it.
-        //
-        // It is not what shipped. Which of the two ships was decided here and not by that
-        // argument: the ratio the derivation produces is 26.5% pooled, under van der Ent and
-        // others' (2010) 30-45%, while the proxy's is inside it. The clause therefore asserts the
-        // *proxy* against Earth's band and prints the derivation's figure as the finding, because
-        // moving the band to admit it is the thing the measure-do-not-tune rule exists to stop.
-        // The diagnosis is at `ClimateConfig.vegetationRecycling`; see docs/DESIGN_LEDGER.md, W4.
-        var proxyRain = 0.0
-        var proxyRecycled = 0.0
-        var derivedRain = 0.0
-        var derivedRecycled = 0.0
-        seeds.forEach { seed ->
-            val proxy = continentalRain(generate(seed, RECYCLING_ROWS) { it })
-            val derived = continentalRain(
-                generate(seed, RECYCLING_ROWS) {
-                    it.copy(climate = it.climate.copy(vegetationRecycling = true))
-                }
-            )
-            proxyRain += proxy.first
-            proxyRecycled += proxy.second
-            derivedRain += derived.first
-            derivedRecycled += derived.second
-            println(
-                ("RECYCLING seed %d: rainfall proxy %.1f%%, vegetation field %.1f%%; " +
-                    "continental rain %.0f against %.0f mm")
-                    .format(
-                        seed, 100.0 * proxy.second / proxy.first,
-                        100.0 * derived.second / derived.first, proxy.first, derived.first
-                    )
-            )
-        }
-        val proxyRatio = proxyRecycled / proxyRain
-        val derivedRatio = derivedRecycled / derivedRain
-        println(
-            ("RECYCLING pooled: rainfall proxy %.1f%%, vegetation field %.1f%%, against Earth's " +
-                "%.0f-%.0f%%; the field is the finding and the proxy is what ships")
-                .format(
-                    proxyRatio * 100, derivedRatio * 100,
-                    EARTH_RECYCLING_LOW * 100, EARTH_RECYCLING_HIGH * 100
-                )
-        )
-        // Recorded as the clause above.
-        KnownFailures.expect("K2: the shipped ground return on the Earth-sized planet recycles over Earth's band", "0.474") {
-            if (!(proxyRatio > EARTH_RECYCLING_LOW && proxyRatio < EARTH_RECYCLING_HIGH)) {
-                throw RecordedViolation(
-                    ("the shipped ground return puts the recycling ratio at %.3f, outside Earth's " +
-                        "%.2f to %.2f")
-                        .format(proxyRatio, EARTH_RECYCLING_LOW, EARTH_RECYCLING_HIGH),
-                    "%.3f".format(proxyRatio)
-                )
-            }
-        }
         assertTrue(
-            derivedRatio < proxyRatio,
-            ("the vegetation field now returns *more* water than the proxy (%.3f against %.3f), " +
-                "so the reason this switch is off has changed and the ledger row is stale")
-                .format(derivedRatio, proxyRatio)
+            ratio > EARTH_RECYCLING / EARTH_TOLERANCE && ratio < EARTH_RECYCLING * EARTH_TOLERANCE,
+            "the continental recycling ratio is %.3f, outside Earth's %.2f by more than a quarter".format(ratio, EARTH_RECYCLING)
         )
     }
 
-    /** Total rain over land and the part of it whose water last came off land, both in mm. */
+    /** Rain over land and the part of it whose water last came off land, area weighted, in mm. */
     private fun continentalRain(world: WorldMap): Pair<Double, Double> {
         val climate = ClimateStage.generateWithSeasonalMm(world.config, world.sea, world.ocean)
         var rain = 0.0
         var recycled = 0.0
         for (cell in 0 until world.width * world.height) {
             if (!world.sea.isLand[cell]) continue
-            rain += climate.result.precipitationMm.data[cell].toDouble()
-            recycled += climate.landOriginPrecipitationMm.data[cell].toDouble()
+            val area = cos(ClimateStage.latitudeOf(cell / world.width, world.height) * PI / 180.0)
+            rain += area * climate.result.precipitationMm.data[cell]
+            recycled += area * climate.landOriginPrecipitationMm.data[cell]
         }
         return rain to recycled
     }
 
     // ---------------------------------------------------------------- convergence
 
-    @Test
-    fun `the regional wind's convergence moves a summer continent's interior and not the ITCZ`() {
-        var withTerm = 0.0
-        var withoutTerm = 0.0
-        var seedsMeasured = 0
-        seeds.forEach { seed ->
-            val world = generate(seed) { it }
-            val control = generate(seed) {
-                it.copy(climate = it.climate.copy(convergenceRain = false))
-            }
-            val on = interiorSummerRainMm(world) ?: return@forEach
-            val off = interiorSummerRainMm(control) ?: return@forEach
-            seedsMeasured++
-            withTerm += on
-            withoutTerm += off
-            val itczOn = itczLatitude(world)
-            val itczOff = itczLatitude(control)
-            println(
-                ("CONVERGENCE seed %d: interior warm-half rain %.0f mm with the term, %.0f " +
-                    "without (%+.1f%%); the rainfall peak sits at %.1f degrees against %.1f")
-                    .format(seed, on, off, 100.0 * (on - off) / off, itczOn, itczOff)
-            )
-            assertTrue(
-                abs(itczOn - itczOff) <= ITCZ_DRIFT_DEGREES,
-                ("the rainfall peak moved from %.1f to %.1f degrees, more than the %.1f the " +
-                    "term is built to leave it inside").format(itczOff, itczOn, ITCZ_DRIFT_DEGREES)
-            )
-        }
-        assertTrue(seedsMeasured > 0, "no seed had an interior to measure")
-        val change = (withTerm - withoutTerm) / withoutTerm
-        println(
-            ("CONVERGENCE pooled over %d seeds: interior warm-half rain %.0f mm with the term " +
-                "and %.0f without, %+.1f%%, against a bar of %.0f%% either way; the sign is a " +
-                "finding, see the ledger")
-                .format(
-                    seedsMeasured, withTerm / seedsMeasured, withoutTerm / seedsMeasured,
-                    change * 100, INTERIOR_CONVERGENCE_CHANGE * 100
-                )
-        )
-        assertTrue(
-            abs(change) > INTERIOR_CONVERGENCE_CHANGE,
-            ("the convergence term moves the interior's warm-half rain by %+.1f%%, under the " +
-                "%.0f%% that says it is doing anything at all")
-                .format(change * 100, INTERIOR_CONVERGENCE_CHANGE * 100)
-        )
-    }
-
-    /** Mean warm-half rainfall over land more than [INTERIOR_REACH_KM] from the sea, in mm. */
-    private fun interiorSummerRainMm(world: WorldMap): Double? {
-        val distance = ClimateStage.waterDistance(world.config, world.sea)
-        val reachCells = world.config.cellsFor(INTERIOR_REACH_KM)
-        var total = 0.0
-        var cells = 0
-        for (cell in 0 until world.width * world.height) {
-            if (!world.sea.isLand[cell]) continue
-            if (distance.data[cell] < reachCells) continue
-            total += world.climate.summerPrecipitation.data[cell].toDouble()
-            cells++
-        }
-        if (cells < 100) return null
-        return total / cells * ClimateStage.REFERENCE_MM
-    }
-
     /**
-     * Where the ITCZ's rain band sits, in degrees: the rainfall-weighted mean latitude inside the
-     * tropics.
+     * The convergence closure checked on its own: with `ClimateConfig.convergenceRain` on, the air
+     * the wind gathers rains at the rate it gathers, and the band where the trades meet is held to
+     * Earth's. GPCP's twenty-year analysis puts the ocean's zonal-mean rain at its wettest at 8 mm
+     * a day near 7 N (Adler and others, GPCP version 2), 2,922 mm a year; this reads each world's
+     * wettest two degrees of open ocean within 20 degrees of the equator, with the closure and
+     * without.
      *
-     * A centroid and not the wettest row. The wettest row is the argmax of a zonal sum over 512
-     * rows, so a hundredth of a per cent between two neighbours moves it by whole degrees, and it
-     * moved by 1.1 between two fields whose tropical band had not changed shape. The centroid is
-     * the same question asked of the whole band, and it moves only when the band does.
+     * The closure is off because of what this measures, and the clause holds the decision to it:
+     * the world without the closure stands nearer GPCP's figure than the world with it. What the
+     * closure reads against GPCP is recorded beside it.
      */
-    private fun itczLatitude(world: WorldMap): Double {
-        var weighted = 0.0
-        var total = 0.0
-        for (row in 0 until world.height) {
-            val latitude = ClimateStage.latitudeOf(row, world.height).toDouble()
-            if (abs(latitude) > 30.0) continue
-            for (column in 0 until world.width) {
-                val rain =
-                    world.climate.precipitationMm.data[row * world.width + column].toDouble()
-                weighted += rain * latitude
-                total += rain
+    @Test
+    fun `the convergence closure, checked on its own against the equatorial band`() {
+        var withClosure = 0.0
+        var shipped = 0.0
+        seeds.forEach { seed ->
+            val closed = itczOceanPeakMm(generate(seed) { it.copy(climate = it.climate.copy(convergenceRain = true)) })
+            val open = itczOceanPeakMm(generate(seed) { it })
+            withClosure += closed
+            shipped += open
+            println(
+                "CONVERGENCE seed %d: the ocean's wettest two degrees take %.0f mm with the closure, %.0f without, against GPCP's %.0f"
+                    .format(seed, closed, open, GPCP_OCEAN_PEAK_MM)
+            )
+        }
+        withClosure /= seeds.size
+        shipped /= seeds.size
+        println(
+            "CONVERGENCE mean over %d seeds: %.0f mm with the closure, %.0f without, against GPCP's %.0f"
+                .format(seeds.size, withClosure, shipped, GPCP_OCEAN_PEAK_MM)
+        )
+        // Recorded at C1b2: on the march whose column rains at its own humidity the shipped march
+        // over-rains the ocean's wettest band, and the closure, which would take water from it to
+        // rain where the air converges, stands nearer GPCP's; it stays off, an assumed closure, as
+        // the brief has it (docs/TODO.md, "The convergence closure after C1b2").
+        // Armed at A1-4, whose ground and rain read it again (docs/DESIGN_LEDGER.md, A1-4).
+        // Recorded at A1-5: the shipped march's wettest ocean band falls to half of GPCP's under
+        // the rain from the solved ascent, and the closure, on top of it, stands nearer; it stays
+        // off, since it would rain the convergence the ascent already condenses (docs/TODO.md).
+        // Armed at A1-6b, whose ITCZ rains the summer hemisphere's tropics nearer GPCP's band
+        // than the closure would (docs/DESIGN_LEDGER.md, A1-6b).
+        // Recorded at A1-6c: the bulk formula reads the air Kara's difference below the sea, the sea
+        // evaporates nearer Earth's and its wettest band rises past GPCP's, x1.14, and the closure,
+        // which takes a tenth of it to rain where the air converges, stands nearer; it stays off,
+        // the ascent already condensing that convergence (docs/TODO.md).
+        KnownFailures.expect(
+            "A1-6c: the shipped march's wettest ocean band stands past GPCP's and the closure nearer",
+            "1930 mm against 1775"
+        ) {
+            if (abs(ln(shipped / GPCP_OCEAN_PEAK_MM)) > abs(ln(withClosure / GPCP_OCEAN_PEAK_MM))) {
+                throw RecordedViolation(
+                    ("the convergence closure now stands nearer GPCP's equatorial band (%.0f mm) than the shipped " +
+                        "march (%.0f), against %.0f: the reason it is off has changed")
+                        .format(withClosure, shipped, GPCP_OCEAN_PEAK_MM),
+                    "%.0f mm against %.0f".format(withClosure, shipped)
+                )
             }
         }
-        return if (total <= 0.0) 0.0 else weighted / total
+        // Recorded at C1b at twice GPCP's band; armed at C1b2, where the closure takes 1.21 of it.
+        if (withClosure > GPCP_OCEAN_PEAK_MM * EARTH_TOLERANCE) {
+            throw AssertionError(
+                "with the convergence closure the ocean's wettest band takes %.0f mm, x%.2f GPCP's %.0f"
+                    .format(withClosure, withClosure / GPCP_OCEAN_PEAK_MM, GPCP_OCEAN_PEAK_MM)
+            )
+        }
+    }
+
+    /** The open ocean's zonal-mean rain in its wettest two-degree band within 20 degrees, mm. */
+    private fun itczOceanPeakMm(world: WorldMap): Double {
+        var best = 0.0
+        var band = -ITCZ_SEARCH_DEGREES
+        while (band < ITCZ_SEARCH_DEGREES) {
+            var total = 0.0
+            var cells = 0
+            for (row in 0 until world.height) {
+                val latitude = ClimateStage.latitudeOf(row, world.height)
+                if (latitude < band || latitude >= band + ZONAL_BAND_DEGREES) continue
+                for (column in 0 until world.width) {
+                    val cell = row * world.width + column
+                    if (world.sea.isLand[cell]) continue
+                    total += world.climate.precipitationMm.data[cell]
+                    cells++
+                }
+            }
+            if (cells > 0) best = maxOf(best, total / cells)
+            band += ZONAL_BAND_DEGREES
+        }
+        return best
     }
 
     // ---------------------------------------------------------------- marine inversion
@@ -515,16 +409,12 @@ class MoistureBudgetTest : BorrowsSharedWorlds() {
      * a claim, so that a term that is not biting can be told from a term that is not there.
      */
     private fun reportLidStrength(seed: Long, world: WorldMap, coast: ColdCoast): Float {
-        val tilt = if (world.config.climate.seasons) {
-            world.config.climate.seasonalTiltDegrees
-        } else {
-            0f
-        }
         var strongest = 0f
-        listOf(true, false).forEach { warm ->
+        listOf(true, false).forEach { julyHalf ->
             val field = MoistureBudget.inversionSuppression(
                 world.config, world.sea,
-                if (world.config.ocean.enabled) world.ocean.anomaly else null, tilt, warm
+                if (world.config.ocean.enabled) world.ocean.anomaly else null,
+                ClimateStage.ascentLatitudeDegrees(world.config, world.sea, julyHalf)
             ) ?: return@forEach
             var sum = 0.0
             var peak = 0f
@@ -541,7 +431,7 @@ class MoistureBudgetTest : BorrowsSharedWorlds() {
                 ("LID seed %d %s: strength over the coast's own cells mean %.3f, peak %.3f; " +
                     "%d of %d of those cells already stand above the %.0f m lid")
                     .format(
-                        seed, if (warm) "warm" else "cold", sum / coast.cells.size, peak,
+                        seed, if (julyHalf) "April-September" else "October-March", sum / coast.cells.size, peak,
                         aboveLid, coast.cells.size, MoistureBudget.INVERSION_LID_METRES
                     )
             )

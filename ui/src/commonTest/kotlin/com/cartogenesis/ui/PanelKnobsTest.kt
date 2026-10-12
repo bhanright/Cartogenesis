@@ -250,7 +250,7 @@ class PanelKnobsTest {
             Knobs.seasonalTiltDegrees.set(base, 18f)
         )
         assertEquals(
-            base.copy(climate = base.climate.copy(orographicStrength = 3.5f)),
+            base.copy(climate = base.climate.copy(rainShadowScale = 3.5f)),
             Knobs.rainShadow.set(base, 3.5f)
         )
         assertEquals(
@@ -321,7 +321,7 @@ class PanelKnobsTest {
         assertEquals(stock.tectonics.andeanHeight, Knobs.mountainHeight.read(stock))
         assertEquals(stock.erosion.bedrockErodibilityPerYear, Knobs.erosionStrength.read(stock))
         assertEquals(stock.climate.seasonalTiltDegrees, Knobs.seasonalTiltDegrees.read(stock))
-        assertEquals(stock.climate.orographicStrength, Knobs.rainShadow.read(stock))
+        assertEquals(stock.climate.rainShadowScale, Knobs.rainShadow.read(stock))
         assertEquals(stock.glaciation.enabled, Knobs.ice.read(stock))
         assertEquals(stock.lakes.waterBalance, Knobs.dryBasins.read(stock))
         assertEquals(RenderOptions().showCoastline, Knobs.coastline.read(RenderOptions()))
@@ -727,7 +727,7 @@ class PanelKnobsTest {
             "100%",
             Knobs.erosionStrength.show(defaults.erosion.bedrockErodibilityPerYear)
         )
-        assertEquals("100%", Knobs.rainShadow.show(defaults.climate.orographicStrength))
+        assertEquals("100%", Knobs.rainShadow.show(defaults.climate.rainShadowScale))
     }
 
     /** Zooming about a point has to leave that point where it was, or the map slides away. */

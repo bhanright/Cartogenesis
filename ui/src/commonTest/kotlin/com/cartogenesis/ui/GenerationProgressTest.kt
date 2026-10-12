@@ -77,7 +77,7 @@ class GenerationProgressTest {
      * must be to stand aside — not the first thing after the terrain stage.
      */
     @Test
-    fun `the interface is given a frame before any work starts`() = runTest {
+    fun `the interface is given a frame before any work starts`() = runTest(timeout = LONGEST_WAIT) {
         var painted = false
         var firstStage: String? = null
 
@@ -117,10 +117,10 @@ class GenerationProgressTest {
          * steps of twenty years however small the map is. On the hosted runner that generation was
          * measured at 69 s from the test's start to the framework giving up, so sixty was not a
          * hang being caught, it was the arithmetic being cut off. Three times the measured cost,
-         * so a runner half again as slow still finishes and a real hang still fails inside the
-         * five minutes the module's browser harness allows.
+         * 210 s, until the atmosphere was coupled to the rain, whose laps outgrew it
+         * ([WORLD_TEST_TIMEOUT]).
          */
-        val LONGEST_WAIT = 210.seconds
+        val LONGEST_WAIT = WORLD_TEST_TIMEOUT
 
         val STAGE_LABELS: List<String> = GenerationStage.entries.map { it.label }
     }

@@ -110,7 +110,7 @@ internal class ByteSection(
 /**
  * The per-cell arrays of a world, as a payload of chunks and back.
  *
- * Binary rather than JSON because the arrays are the file: 146 bytes a cell, which is 153 MB at
+ * Binary rather than JSON because the arrays are the file: 154 bytes a cell, which is 161 MB at
  * 1024 before compression, and JSON would roughly triple that while also having to promise that a
  * float survives a decimal round trip. Raw little-endian bits promise it by construction.
  *
@@ -167,18 +167,25 @@ internal object WorldSections {
         FloatSection("climate.temperature") { it.climate.temperature.data },
         FloatSection("climate.summerTemperature") { it.climate.summerTemperature.data },
         FloatSection("climate.winterTemperature") { it.climate.winterTemperature.data },
+        FloatSection("climate.julyTemperature") { it.climate.julyTemperature.data },
+        FloatSection("climate.januaryTemperature") { it.climate.januaryTemperature.data },
         FloatSection("climate.precipitation") { it.climate.precipitation.data },
-        FloatSection("climate.summerPrecipitation") { it.climate.summerPrecipitation.data },
-        FloatSection("climate.winterPrecipitation") { it.climate.winterPrecipitation.data },
+        FloatSection("climate.julyHalfPrecipitation") { it.climate.julyHalfPrecipitation.data },
+        FloatSection("climate.januaryHalfPrecipitation") { it.climate.januaryHalfPrecipitation.data },
         FloatSection("climate.precipitationMm") { it.climate.precipitationMm.data },
         // +1 blows east, -1 west, 0 where the belts meet.
         IntSection("climate.windDirection", { -1..1 }) { it.climate.windDirection },
-        // What each season's sea surface froze, which the moisture march reads as a lid and the
-        // biome reads as pack ice: a per-cell fact of the finished climate, as the biome is.
-        ByteSection("climate.summerSeaIce", ByteMeaning.FLAG) { flagsOf(it.climate.summerSeaIce) },
-        ByteSection("climate.winterSeaIce", ByteMeaning.FLAG) { flagsOf(it.climate.winterSeaIce) },
+        // What each calendar half's sea surface froze, which the moisture march reads as a lid and
+        // the biome reads as pack ice where it is frozen in both: a per-cell fact of the finished
+        // climate, as the biome is.
+        ByteSection("climate.julyHalfSeaIce", ByteMeaning.FLAG) { flagsOf(it.climate.julyHalfSeaIce) },
+        ByteSection("climate.januaryHalfSeaIce", ByteMeaning.FLAG) { flagsOf(it.climate.januaryHalfSeaIce) },
         FloatSection("climate.windMeridional") { it.climate.windMeridional.data },
         FloatSection("climate.vegetationDensity") { it.climate.vegetationDensity.data },
+        // The potential evaporation the march's ground return and the rivers' runoff both read,
+        // so the two add to the rain at every cell.
+        FloatSection("climate.potentialEvapotranspirationMm") { it.climate.potentialEvapotranspirationMm.data },
+        FloatSection("climate.openWaterEvaporationMm") { it.climate.openWaterEvaporationMm.data },
         ByteSection("climate.permafrost", ByteMeaning.PERMAFROST) { bytesOf(it.climate.permafrost) },
         ByteSection("climate.biome", ByteMeaning.BIOME) { biomesOf(it.climate.biome) },
         FloatSection("rivers.filledElevation") { it.rivers.filledElevation.data },
@@ -339,17 +346,21 @@ internal object WorldSections {
                 temperature = field("climate.temperature"),
                 summerTemperature = field("climate.summerTemperature"),
                 winterTemperature = field("climate.winterTemperature"),
+                julyTemperature = field("climate.julyTemperature"),
+                januaryTemperature = field("climate.januaryTemperature"),
                 precipitation = field("climate.precipitation"),
-                summerPrecipitation = field("climate.summerPrecipitation"),
-                winterPrecipitation = field("climate.winterPrecipitation"),
+                julyHalfPrecipitation = field("climate.julyHalfPrecipitation"),
+                januaryHalfPrecipitation = field("climate.januaryHalfPrecipitation"),
                 precipitationMm = field("climate.precipitationMm"),
                 windDirection = ints("climate.windDirection"),
                 windMeridional = field("climate.windMeridional"),
                 vegetationDensity = field("climate.vegetationDensity"),
                 permafrost = arrays.getValue("climate.permafrost") as ByteArray,
-                summerSeaIce = flags("climate.summerSeaIce"),
-                winterSeaIce = flags("climate.winterSeaIce"),
-                biome = arrays.getValue("climate.biome") as Array<Biome>
+                julyHalfSeaIce = flags("climate.julyHalfSeaIce"),
+                januaryHalfSeaIce = flags("climate.januaryHalfSeaIce"),
+                biome = arrays.getValue("climate.biome") as Array<Biome>,
+                potentialEvapotranspirationMm = field("climate.potentialEvapotranspirationMm"),
+                openWaterEvaporationMm = field("climate.openWaterEvaporationMm")
             ),
             rivers = RiverResult(
                 filledElevation = field("rivers.filledElevation"),

@@ -157,11 +157,19 @@ class SeaLevelHistoryTest : BorrowsSharedWorlds() {
         // explicit update seeds 7 and 1234 fell short; docs/DESIGN_LEDGER.md, Fix 3 and Fix 3b),
         // run as a known failure on square cells from Q2 at 1.47, and armed again at L1, whose
         // rifts took it to 1.58 (2.07, 1.46 and 1.22 on seeds 7, 42 and 1234).
-        // Recorded at K2, where seed 42's lowstand drowned no valley, and armed again at H1, on
-        // whose ground every seed's does (docs/DESIGN_LEDGER.md, K2 and H1).
+        // Recorded at K2: on the Earth-sized planet seed 42's lowstand drowns no valley
+        // (docs/DESIGN_LEDGER.md, K2; docs/TODO.md).
+        // Armed at C1b2, whose rain moved the ground (docs/DESIGN_LEDGER.md, C1b2).
+        // Recorded again at A1-1: its calendar seasons moved the ground once more, and seed 1234's
+        // lowstand left 109 estuary mouths against 114. Armed again at A1-2, whose pressure wind on
+        // the sphere moved the ground back over it (docs/DESIGN_LEDGER.md, A1-2). Armed as well at
+        // H1, on whose ground every seed's lowstand drowns a valley (docs/DESIGN_LEDGER.md, H1).
         assertTrue(shortfalls.isEmpty(), shortfalls.joinToString("; "))
-        // Recorded with the clause above at K2 at 1.06x, and armed again at H1 at 1.55x
-        // (docs/DESIGN_LEDGER.md, K2 and H1).
+        // Recorded with the clause above (docs/DESIGN_LEDGER.md, K2; docs/TODO.md).
+        // Armed at A1-4, whose ground and rain read it again (docs/DESIGN_LEDGER.md, A1-4); recorded
+        // at A1-5, whose rain moved the ground under it once more (docs/TODO.md). Armed again at H1
+        // at 1.55x on main's climate, and on H1's ground under the coupled climate
+        // (docs/DESIGN_LEDGER.md, H1 and M1).
         assertTrue(
             pooledEstuaries.size == seeds.size && meanGain >= estuaryGain,
             "pooled over ${pooledEstuaries.size} seeds the lowstand leaves ${meanGain}x the estuary mouths, " +
@@ -187,6 +195,7 @@ class SeaLevelHistoryTest : BorrowsSharedWorlds() {
     fun `no water is left that the ocean cannot reach, and plenty is without the rule`() {
         var controlPockets = 0
         var controlMouths = 0
+        val survivors = ArrayList<String>()
         seeds.forEach { seed ->
             val base = WorldGenConfig.forRows(seed, SharedWorlds.DETAIL_ROWS)
             val loose = Coast(
@@ -202,18 +211,12 @@ class SeaLevelHistoryTest : BorrowsSharedWorlds() {
             controlPockets += loose.pockets
             controlMouths += loose.pocketMouths
 
-            assertTrue(
-                closed.pockets == 0,
-                "seed $seed: ${closed.pockets} pockets of water the ocean cannot reach survived " +
-                    "the cut, holding ${closed.pocketCells} cells — every body no larger than the " +
-                    "Caspian has to be gone, and the ${closed.inlandSeas} larger ones are not " +
-                    "pockets but inland seas"
-            )
-            assertTrue(
-                closed.pocketMouths == 0,
-                "seed $seed: ${closed.pocketMouths} river mouths still end in water the ocean " +
-                    "cannot reach"
-            )
+            if (closed.pockets != 0) {
+                survivors += "seed $seed: ${closed.pockets} pockets of ${closed.pocketCells} cells"
+            }
+            if (closed.pocketMouths != 0) {
+                survivors += "seed $seed: ${closed.pocketMouths} river mouths in them"
+            }
             println(
                 ("SEA HISTORY seed %d: %d pockets of %d cells and %d mouths in them became land, " +
                     "%d inland seas of %d cells left as sea; land fraction %.5f -> %.5f against " +
@@ -224,6 +227,15 @@ class SeaLevelHistoryTest : BorrowsSharedWorlds() {
                 )
             )
         }
+        // Recorded at C1b: on seed 1234 one body of 370 cells, under the Caspian's cap, is water
+        // the ocean cannot reach after the cut, and six river mouths end in it. Which stage leaves it was not traced
+        // (docs/DESIGN_LEDGER.md, C1b; docs/TODO.md).
+        // Armed at A1-4, whose ground and rain read it again (docs/DESIGN_LEDGER.md, A1-4).
+        assertTrue(
+            survivors.isEmpty(),
+            "pockets of water the ocean cannot reach survived the cut — every body no larger than " +
+                "the Caspian has to be gone: ${survivors.joinToString("; ")}"
+        )
         assertTrue(
             controlPockets > 0 && controlMouths > 0,
             "the control was expected to leave water the ocean cannot reach ($controlPockets " +

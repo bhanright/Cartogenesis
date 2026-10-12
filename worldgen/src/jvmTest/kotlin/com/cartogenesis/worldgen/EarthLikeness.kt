@@ -1006,8 +1006,9 @@ internal object EarthLikeness {
      *
      * [FROZEN] is not one of UNEP's classes and is kept apart from them deliberately. Where nothing
      * evaporates the index is infinite, so a polar desert would otherwise be filed as the wettest
-     * country on the map; Thornthwaite gives it a demand of exactly zero and that is a fact about
-     * the thermometer, not about the rain.
+     * country on the map. The demand is the climate's FAO-56 reference rate, which is zero only
+     * where the sun and the air give it nothing, and that is a fact about the energy, not about
+     * the rain.
      */
     internal enum class Aridity { FROZEN, HYPER_ARID, ARID, SEMI_ARID, DRY_SUBHUMID, HUMID }
 
@@ -1122,11 +1123,7 @@ internal object EarthLikeness {
         val aridity = arrayOfNulls<Aridity>(world.width * world.height)
         for (cell in aridity.indices) {
             if (!world.sea.isLand[cell]) continue
-            val potentialEvaporation = LakeWaterBalance.potentialEvaporationMm(
-                world.climate.summerTemperature.data[cell],
-                world.climate.winterTemperature.data[cell],
-                world.config.lakes.evaporationScale
-            )
+            val potentialEvaporation = world.climate.potentialEvapotranspirationMm.data[cell]
             aridity[cell] =
                 aridityOf(world.climate.precipitationMm.data[cell], potentialEvaporation)
         }

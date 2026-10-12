@@ -1,91 +1,29 @@
 package com.cartogenesis.worldgen.pipeline
 
-import com.cartogenesis.worldgen.math.BoxBlur
-import com.cartogenesis.worldgen.model.FloatField
+import com.cartogenesis.worldgen.concurrent.parallelChunks
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldScale
 import kotlin.math.PI
 import kotlin.math.abs
-import kotlin.math.atan
-import kotlin.math.ln
+import kotlin.math.atan2
 import kotlin.math.sin
-import kotlin.math.tan
+import kotlin.math.sqrt
 
 /**
- * Surface pressure, and the wind that blows down its gradient.
+ * The surface wind that blows down the sea-level pressure's gradient, and the figures the balance
+ * is built from.
  *
- * The circulation belts in [ClimateStage] are the zonal mean of the surface wind: what is left of
- * the wind after every longitude at a latitude has been averaged together. Averaging away the
- * longitude is exactly what throws out the monsoon, because the monsoon is the departure. A
- * heated continent in summer is a *thermal low* and the sea beside it is relatively high, so the
- * surface air blows in off the water onto the land; in winter the continent is the high and the
- * air blows out over the sea and arrives on the far coast dry. That is the Asian monsoon and the
- * Siberian outflow, and neither is a function of latitude alone.
+ * The pressure is the boundary layer's ([BoundaryLayer]): the circulation's at each longitude
+ * ([LocalCirculation]) and the stationary waves the dry atmosphere solves for the land and sea and the terrain under it.
+ * [surfaceWind] balances its gradient against the Coriolis force and a linear surface drag on the
+ * map's own grid, cell by cell, with land's drag and the sea's, so the wind changes at the real
+ * coast and not at a coarse cell's edge.
  *
- * This object computes that departure in three steps, all of them per cell:
- *
- * 1. **A pressure anomaly from a temperature anomaly.** The departure of a cell's seasonal surface
- *    temperature from the mean of its own row, converted to hectopascals by the hydrostatic
- *    relation for a heated column ([HPA_PER_KELVIN]), then smoothed to the scale the atmosphere
- *    actually organises pressure on ([rossbyRadiusKm]).
- * 2. **A wind from the pressure gradient**, balancing the gradient against the Coriolis force and
- *    a linear surface drag ([surfaceWind]). Far from the equator that is the geostrophic wind
- *    turned across the isobars by the Ekman angle; at the equator, where the Coriolis parameter
- *    vanishes, the same expression becomes a straight down-gradient flow with no division by zero
- *    anywhere in between.
- * 3. **Addition to the belts**, which [ClimateStage.buildWind] does. The belts stay the zonal mean
- *    and this is the regional departure, so a world generated with [WorldGenConfig.climate]'s
- *    `pressureWinds` switched off has exactly the wind it had before this existed — which is what
- *    gives the guards on it a control.
+ * A world generated with [WorldGenConfig.climate]'s `pressureWinds` switched off has the belts
+ * alone, every cell of a row blowing the same way, which is what gives the guards on the solved
+ * wind a control.
  */
 internal object PressureWind {
-
-    /**
-     * How far the surface pressure falls, in hectopascals, for each degree Celsius a column of air
-     * is warmer than its neighbours.
-     *
-     * The hydrostatic relation, in the form Holton & Hakim state it (*An Introduction to Dynamic
-     * Meteorology*, 5th edition, the hypsometric equation and the thermal low): the thickness of
-     * the layer between two pressure surfaces is `Z = (R T / g) ln(p_surface / p_top)`, so warming
-     * the layer by one degree expands it by `(R / g) ln(p_surface / p_top)` metres. Hold the
-     * pressure at the top of the layer fixed — that is what the *level of non-divergence* means,
-     * the height near 500 hPa where the outflow aloft balances the inflow below — and that
-     * expansion has to come out of the surface pressure. Combining the two and cancelling the gas
-     * constant and gravity leaves
-     *
-     * `dp_surface/dT = -p_surface * ln(p_surface / p_top) / T`
-     *
-     * which at [SEA_LEVEL_PRESSURE_HPA], [NON_DIVERGENT_LEVEL_HPA] and [REFERENCE_COLUMN_K] is
-     * 2.48 hPa per degree. Nothing here was chosen to make a picture look right; the three numbers
-     * it is built from are the standard atmosphere's surface pressure, the standard level of
-     * non-divergence, and the standard atmosphere's mean surface temperature.
-     *
-     * Earth's own figure, for the record rather than as a bar: the Siberian high in January
-     * averages about 1035 hPa and the South Asian low in July about 995 hPa, a 40 hPa range, over
-     * a land-sea seasonal temperature contrast of about 20 degrees at those latitudes — 2.0 hPa
-     * per degree. This derivation runs 1.24 times that, because the whole of the surface anomaly
-     * is not felt through the whole depth of the column. The figure is left where the physics puts
-     * it rather than scaled down to Earth's ratio, and the guards on this chunk read the *sign* of
-     * the coast-normal wind rather than its speed for that reason.
-     */
-    val HPA_PER_KELVIN: Float = (SEA_LEVEL_PRESSURE_HPA *
-        ln(SEA_LEVEL_PRESSURE_HPA / NON_DIVERGENT_LEVEL_HPA) / REFERENCE_COLUMN_K).toFloat()
-
-    /**
-     * The angle the surface wind crosses the isobars by, over the sea, in degrees.
-     *
-     * Friction at the surface takes a bite out of the wind, the Coriolis force that was balancing
-     * the pressure gradient weakens with it, and the balance tips toward low pressure. Holton &
-     * Hakim give the observed cross-isobar angle as 10-20 degrees over the ocean and 25-45 over
-     * land; Ekman's own 1905 boundary-layer solution gives 45 degrees for the flow right at the
-     * surface, which the depth-averaged wind never reaches. The two figures here are the middle of
-     * the range this chunk was specified against — 20-30 over sea, larger over land — and of
-     * Holton & Hakim's land range.
-     */
-    const val CROSS_ISOBAR_SEA_DEGREES = 25f
-
-    /** See [CROSS_ISOBAR_SEA_DEGREES]: rougher ground, a deeper boundary layer, a bigger turn. */
-    const val CROSS_ISOBAR_LAND_DEGREES = 40f
 
     /**
      * The speed of the belts, in metres a second, so the pressure departure can be added to them.
@@ -99,21 +37,6 @@ internal object PressureWind {
      */
     const val BELT_SPEED_MPS = 7.5f
 
-    /** The standard atmosphere at sea level, in hectopascals. */
-    private const val SEA_LEVEL_PRESSURE_HPA = 1013.25
-
-    /**
-     * The level of non-divergence, in hectopascals: the height at which the outflow aloft from a
-     * thermal low balances the inflow beneath it, so that a warmed column's expansion is paid for
-     * out of the surface pressure rather than shared with the pressure above.
-     *
-     * Its ratio to the surface, `ln(1013.25 / 500)`, is a factor of [HPA_PER_KELVIN].
-     */
-    private const val NON_DIVERGENT_LEVEL_HPA = 500.0
-
-    /** The standard atmosphere's mean surface temperature, in kelvin: 15 degrees Celsius. */
-    private const val REFERENCE_COLUMN_K = 288.15
-
     /** Density of air at sea level, in kilograms per cubic metre, at the standard atmosphere. */
     internal const val AIR_DENSITY_KG_PER_M3 = 1.225f
 
@@ -122,14 +45,11 @@ internal object PressureWind {
      * depth of the troposphere in metres: the two figures the Rossby radius is built from. Both
      * are textbook standards — a stratification of `1.0e-2` and a tropopause at 10 km.
      */
-    private const val BUOYANCY_FREQUENCY_PER_S = 1.0e-2
-    private const val TROPOPAUSE_DEPTH_M = 10_000.0
+    internal const val BUOYANCY_FREQUENCY_PER_S = 1.0e-2
+    internal const val TROPOPAUSE_DEPTH_M = 10_000.0
 
     /** Where the Rossby radius is evaluated: the middle of the mid-latitudes. */
     private const val ROSSBY_REFERENCE_LATITUDE_DEGREES = 45.0
-
-    /** One hectopascal in pascals, for the one place the gradient leaves the map's own unit. */
-    private const val PASCALS_PER_HPA = 100f
 
     private const val DEGREES_TO_RADIANS = PI / 180.0
 
@@ -141,18 +61,14 @@ internal object PressureWind {
      * kilometre-scale wiggles and a bay a hundred kilometres across is warmer than the cape beside
      * it, but the atmosphere does not carry a separate low over every bay: below the deformation
      * radius a pressure anomaly cannot hold itself up against the flow that drains it, and
-     * disperses. Smoothing the anomaly at this radius before taking a gradient from it is what
-     * makes the result a synoptic weather map rather than a differentiated coastline.
+     * disperses.
      *
      * With `N = 1.0e-2` per second, `H = 10 km` and `f` at 45 degrees this is 970 km, which is the
      * thousand kilometres the chunk was specified at, derived rather than assumed. It is a length
-     * on the ground, so the same world smooths over the same distance at every grid — see
-     * `ScaleFreeTest`.
+     * on the ground, the same at every grid.
      *
-     * It is used as the box blur's *radius*, and three box passes of half-width `r` approximate a
-     * Gaussian whose standard deviation is `sqrt(3 ((2r+1)^2 - 1) / 12)`, which for any `r` worth
-     * blurring with is `r` again to within a per cent. So the smoothed field's standard deviation
-     * is this radius, not some multiple of it, and the number below means what it says.
+     * The atmosphere's grid is sized by it ([SphericalGrid.rowsForAtmosphere]), and the forcing the
+     * stationary waves read is spread to a quarter of it ([WaveForcing.GROUND_FORCING_WIDTH_METERS]).
      */
     fun rossbyRadiusKm(): Double {
         val coriolisAt45 = 2.0 * WorldScale.ROTATION_RATE_PER_S *
@@ -165,175 +81,143 @@ internal object PressureWind {
         2f * WorldScale.ROTATION_RATE_PER_S * sin(latitudeDegrees * DEGREES_TO_RADIANS).toFloat()
 
     /**
-     * The linear surface drag, in radians a second, that turns the wind across the isobars by
-     * [crossIsobarDegrees].
-     *
-     * The turn comes out of the balance in [surfaceWind] as `atan(drag / f)`, so a drag fixed at
-     * `f * tan(angle)` for one reference latitude gives that angle there and rather more of a turn
-     * toward the poles, where `f` is larger — which is the wrong way round from the observations,
-     * but only mildly so, and the alternative of scaling the drag with latitude would make the
-     * drag vanish at the equator along with `f` and take the tropical limit with it. Evaluated at
-     * [ROSSBY_REFERENCE_LATITUDE_DEGREES], the two angles give drag timescales `1/k` of 5.8 hours
-     * over sea and 3.2 over land, both inside the few hours a boundary layer takes to spin down.
+     * The drag on the boundary layer's wind over land or the sea at the belts' speed, per second:
+     * the surface's stress on the layer's mass, one law for the surface wind's balance here and the
+     * dry model's lowest level ([BoundaryLayer.surfaceDragPerSecond]).
      */
-    fun surfaceDrag(crossIsobarDegrees: Float): Float {
-        val coriolisAt45 = coriolisParameter(ROSSBY_REFERENCE_LATITUDE_DEGREES.toFloat())
-        return coriolisAt45 * tan(crossIsobarDegrees * DEGREES_TO_RADIANS).toFloat()
-    }
+    fun surfaceDrag(isLand: Boolean): Double = BoundaryLayer.surfaceDragPerSecond(isLand)
 
-    /**
-     * The surface pressure anomaly of a season, in hectopascals, one value per cell.
-     *
-     * Zero is not a pressure but the mean of the cell's own row: only the *departure* from the
-     * zonal mean can drive a wind that the belts do not already carry, and the belts are the zonal
-     * mean by construction. Warm against its row means low, cold against its row means high, which
-     * puts the thermal low over the summer continent and the thermal high over the winter one. It
-     * puts no ridge over a sea a cold current has chilled: the temperature it is given carries no
-     * current anomaly over water on either path, since the climate stage's maritime influence adds
-     * the anomaly to land cells only and the ocean's own stress reads the temperature before there
-     * is an anomaly at all. Earth's subtropical highs are not thermal lows' mirror images either;
-     * they wait on an atmosphere that is solved (docs/TODO.md, "Build the atmosphere").
-     */
-    fun pressureAnomalyHpa(config: WorldGenConfig, seasonTemperatureC: FloatField): FloatField {
-        val cellsAcross = config.width
-        val cellsDown = config.height
-        val field = FloatField(cellsAcross, cellsDown)
-
-        for (row in 0 until cellsDown) {
-            val rowStart = row * cellsAcross
-            var sum = 0.0
-            for (column in 0 until cellsAcross) sum += seasonTemperatureC.data[rowStart + column]
-            val zonalMeanC = (sum / cellsAcross).toFloat()
-            for (column in 0 until cellsAcross) {
-                field.data[rowStart + column] =
-                    -(seasonTemperatureC.data[rowStart + column] - zonalMeanC) * HPA_PER_KELVIN
-            }
-        }
-
-        smooth(config, field)
-        return field
-    }
-
-    /**
-     * Smooths a pressure field over [rossbyRadiusKm] on the ground.
-     *
-     * Two radii, not one, because a cell is not square unless the grid is: an equirectangular map
-     * is twice as wide as it is tall, so the same distance east is a different number of cells
-     * from the same distance south on any grid whose width is not twice its height.
-     */
-    fun smooth(config: WorldGenConfig, pressureHpa: FloatField) {
-        val radiusKm = rossbyRadiusKm()
-        BoxBlur.apply(
-            pressureHpa,
-            radiusAcross = config.wholeCellsFor(radiusKm),
-            radiusDown = rowsFor(config, radiusKm),
-            passes = BoxBlur.PASSES_FOR_GAUSSIAN
-        )
-    }
-
-    /** A length on the ground as a whole number of *rows*, never fewer than one. */
-    fun rowsFor(config: WorldGenConfig, kilometres: Double): Int {
-        val cellHeightKm = config.scale.cellHeightKm(config.height)
-        return kotlin.math.round(kilometres / cellHeightKm).toInt().coerceAtLeast(1)
-    }
+    /** The sea's drag under the belts' own wind on a row, [eastwardMps] by [southwardMps], per second. */
+    fun beltDrag(eastwardMps: Float, southwardMps: Float): Double =
+        BoundaryLayer.surfaceDragPerSecond(false, sqrt(eastwardMps.toDouble() * eastwardMps + southwardMps.toDouble() * southwardMps))
 
     /** A surface wind as two components in metres a second, eastward and southward, per cell. */
     class Vectors(val eastwardMps: FloatArray, val southwardMps: FloatArray)
 
     /**
-     * The surface wind the pressure field drives, in metres a second, one vector per cell.
+     * The surface wind a sea-level pressure drives, in meters a second, one vector per cell of the
+     * map: the pressure's departure from the circulation's, [eddyPressurePa] (pascals, row-major on
+     * the map), on top of the circulation's wind, [beltEastwardMps] and [beltSouthwardMps] (meters a
+     * second, row-major, one each per cell: the circulation at each longitude, [LocalCirculation]),
+     * which set the circulation's own pressure.
      *
-     * The balance solved at every cell is the momentum equation with a linear drag — the standard
-     * damped surface-layer form, and the one Gill and Matsuno use for exactly this job of getting
-     * a surface wind out of a tropical pressure field without the geostrophic relation blowing up:
+     * The balance solved at every cell is the momentum equation with a drag — the standard damped
+     * surface-layer form, and the one Gill and Matsuno use for exactly this job of getting a surface
+     * wind out of a tropical pressure field without the geostrophic relation blowing up:
      *
      * ```
-     * k u - f v = -(1/rho) dp/dx
+     * k u - f v = -(1/rho) dp/dx + F
      * k v + f u = -(1/rho) dp/dy
      * ```
      *
-     * with `f` the Coriolis parameter from latitude and `k` the drag from [surfaceDrag]. Its
-     * solution is one pair of expressions that covers the whole map:
+     * with `f` the Coriolis parameter from latitude and `k` the drag: the well-mixed layer's
+     * momentum budget under the surface's bulk stress (de Roode and Siebesma 2020, their equations
+     * 3, 4, 8 and 10, the mixed layer of Stevens and others 2002), `k = c s` with `c` the stress's
+     * drag per unit of speed ([BoundaryLayer.dragPerSpeed]) and `s` the speed the stress feels,
+     * `sqrt(|V|^2 + U_t^2)` with the weather's gusts `U_t`. The speed is the wind's own, so the
+     * balance is solved for it first: with `|G|` the acceleration's size, `|V| = |G| / sqrt(f^2 +
+     * k^2)` is a quadratic in `|V|^2`, `c^2 |V|^4 + (f^2 + c^2 U_t^2) |V|^2 - |G|^2 = 0`, whose
+     * positive root is exact. Then the solution is one pair of expressions that covers the whole map:
      *
      * ```
      * u = (k Gx + f Gy) / (k^2 + f^2)      v = (k Gy - f Gx) / (k^2 + f^2)
      * ```
      *
-     * where `G` is the acceleration the pressure gradient supplies. Where `f` is much larger than
-     * `k` — the middle and high latitudes — this is the geostrophic wind, along the isobars, with
-     * low pressure on the left in the northern hemisphere, turned toward the low by `atan(k/f)`.
-     * At the equator `f` is zero, the denominator is `k^2` rather than nothing, and what is left
-     * is a flow straight down the gradient from high to low. **That is the tropical limit, and it
-     * is why there is no division by `f` and no special case at the equator anywhere below.** It
-     * is also the physically right answer: tropical surface flow really does run down the pressure
-     * gradient into the convergence zone rather than along the isobars.
+     * where `G` is the acceleration the pressure gradient and `F` supply. Where `f` is much larger
+     * than `k` — the middle and high latitudes — this is the geostrophic wind, along the isobars,
+     * with low pressure on the left in the northern hemisphere, turned toward the low by
+     * `atan(k/f)`. At the equator `f` is zero, the denominator is `k^2` rather than nothing, and
+     * what is left is a flow straight down the gradient from high to low. **That is the tropical
+     * limit, and it is why there is no division by `f` and no special case at the equator.**
      *
-     * Over land the drag is larger ([CROSS_ISOBAR_LAND_DEGREES]), so the wind there crosses the
-     * isobars at a steeper angle and blows further into the continent's thermal low than it would
+     * **The circulation.** Its pressure gradient is the belts' own under the sea's drag at the
+     * belts' speed ([beltDrag]), `-(1/rho) dp/dy = k v + f u` ([BoundaryLayer.zonalPressurePa] and
+     * [LocalCirculation] integrate it), and `F`, the
+     * eastward push `k u - f v` the belts need, is what holds their zonal wind against the drag
+     * where no zonal pressure gradient can: on Earth that is the eddies' convergence of westerly
+     * momentum in the westerlies and its divergence from the trades, which no mean pressure
+     * carries. With both, the open sea's wind under no eddy pressure is the belts exactly, and a
+     * coast's land is slowed and turned more by its own larger drag.
+     *
+     * Over land the drag is larger ([BoundaryLayer.LAND_DRAG_COEFFICIENT]), so the wind there crosses
+     * the isobars at a steeper angle and blows further into the continent's thermal low than it would
      * over water — which is the monsoon reaching inland rather than running along the coast.
      */
     fun surfaceWind(
         config: WorldGenConfig,
         sea: SeaLevelResult,
-        pressureHpa: FloatField
+        eddyPressurePa: FloatArray,
+        beltEastwardMps: FloatArray,
+        beltSouthwardMps: FloatArray
     ): Vectors {
         val cellsAcross = config.width
         val cellsDown = config.height
         val eastward = FloatArray(cellsAcross * cellsDown)
         val southward = FloatArray(cellsAcross * cellsDown)
 
-        // Metres between the centres of neighbouring cells, along each axis. The gradient is a
-        // central difference, so the span between the two samples is two cells.
-        val metresAcross = (config.scale.cellWidthKm(cellsAcross) * 1_000.0).toFloat()
-        val metresDown = (config.scale.cellHeightKm(cellsDown) * 1_000.0).toFloat()
+        // The gradient in the sphere's own metric: east-west across a row's own ground, which is
+        // cos(latitude) of the equator's, and north-south across the pole onto the meridian
+        // opposite rather than one-sided at the outermost row (`SphericalOperators`). The northward
+        // component lives on the faces between rows; its mean over a cell's two faces is the
+        // central difference across the cell.
+        val grid = SphericalGrid.forGround(cellsAcross, cellsDown, config.scale)
+        val operators = SphericalOperators(grid)
+        val gradient = operators.gradient(DoubleArray(cellsAcross * cellsDown) { eddyPressurePa[it].toDouble() })
+        val gradientNorthward = operators.northAtCenters(gradient)
 
-        val seaDrag = surfaceDrag(CROSS_ISOBAR_SEA_DEGREES)
-        val landDrag = surfaceDrag(CROSS_ISOBAR_LAND_DEGREES)
+        val seaPerSpeed = BoundaryLayer.dragPerSpeed(isLand = false)
+        val landPerSpeed = BoundaryLayer.dragPerSpeed(isLand = true)
+        val gustsSquared = BoundaryLayer.TRANSIENT_WIND_MPS * BoundaryLayer.TRANSIENT_WIND_MPS
+        val density = AIR_DENSITY_KG_PER_M3.toDouble()
 
-        for (row in 0 until cellsDown) {
-            val coriolis = coriolisParameter(ClimateStage.latitudeOf(row, cellsDown))
-            // Rows do not wrap: the map does not join up over the poles, so the outermost row
-            // takes a one-sided difference by sampling itself on the missing side.
-            val rowNorth = (row - 1).coerceAtLeast(0)
-            val rowSouth = (row + 1).coerceAtMost(cellsDown - 1)
-            val spanDown = (rowSouth - rowNorth) * metresDown
-            for (column in 0 until cellsAcross) {
-                val cell = row * cellsAcross + column
-                // Columns wrap: the map joins up east to west.
-                val columnEast = if (column + 1 == cellsAcross) 0 else column + 1
-                val columnWest = if (column == 0) cellsAcross - 1 else column - 1
-
-                val gradientEast = (pressureHpa.data[row * cellsAcross + columnEast] -
-                    pressureHpa.data[row * cellsAcross + columnWest]) *
-                    PASCALS_PER_HPA / (2f * metresAcross)
-                // Northward, against the map's own axis: rows grow southward.
-                val gradientNorth = (pressureHpa.data[rowNorth * cellsAcross + column] -
-                    pressureHpa.data[rowSouth * cellsAcross + column]) *
-                    PASCALS_PER_HPA / spanDown
-
-                val accelerationEast = -gradientEast / AIR_DENSITY_KG_PER_M3
-                val accelerationNorth = -gradientNorth / AIR_DENSITY_KG_PER_M3
-
-                val drag = if (sea.isLand[cell]) landDrag else seaDrag
-                val inverseBalance = 1f / (drag * drag + coriolis * coriolis)
-                eastward[cell] =
-                    (drag * accelerationEast + coriolis * accelerationNorth) * inverseBalance
-                // Southward is the negative of northward, because rows grow southward.
-                southward[cell] =
-                    -(drag * accelerationNorth - coriolis * accelerationEast) * inverseBalance
+        parallelChunks(0, cellsDown) { startRow, endRow ->
+            for (row in startRow until endRow) {
+                val coriolis = coriolisParameter(ClimateStage.latitudeOf(row, cellsDown)).toDouble()
+                for (column in 0 until cellsAcross) {
+                    val cell = row * cellsAcross + column
+                    val beltEast = beltEastwardMps[cell].toDouble()
+                    val beltNorth = -beltSouthwardMps[cell].toDouble()
+                    val beltDrag = beltDrag(beltEastwardMps[cell], beltSouthwardMps[cell])
+                    val beltPush = beltDrag * beltEast - coriolis * beltNorth
+                    val zonalPressurePush = beltDrag * beltNorth + coriolis * beltEast
+                    val accelerationEast = -gradient.eastAtCenters[cell] / density + beltPush
+                    val accelerationNorth = -gradientNorthward[cell] / density + zonalPressurePush
+                    val perSpeed = if (sea.isLand[cell]) landPerSpeed else seaPerSpeed
+                    val drag = perSpeed * sqrt(balancedSpeedSquared(
+                        accelerationEast * accelerationEast + accelerationNorth * accelerationNorth,
+                        coriolis * coriolis, perSpeed, gustsSquared
+                    ) + gustsSquared)
+                    val inverseBalance = 1.0 / (drag * drag + coriolis * coriolis)
+                    eastward[cell] = ((drag * accelerationEast + coriolis * accelerationNorth) * inverseBalance).toFloat()
+                    // Southward is the negative of northward, because rows grow southward.
+                    southward[cell] = (-(drag * accelerationNorth - coriolis * accelerationEast) * inverseBalance).toFloat()
+                }
             }
         }
         return Vectors(eastward, southward)
     }
 
     /**
-     * The cross-isobar turn a given drag produces at a latitude, in degrees — the figure
-     * [surfaceDrag] was built to deliver, read back out so a guard can measure the angle the code
-     * actually applied instead of restating the formula and drifting away from it.
+     * The square of the speed `s` at which `s^2 (f^2 + c^2 (s^2 + U_t^2)) = |G|^2`, the drag balance
+     * of an acceleration of size squared [accelerationSquared] under a Coriolis parameter squared
+     * [coriolisSquared], a drag per unit of speed [perSpeed] and gusts squared [gustsSquared]:
+     * the positive root of the quadratic in `s^2`, written so it keeps its digits when the drag is
+     * weak.
      */
-    fun crossIsobarDegreesAt(latitudeDegrees: Float, crossIsobarDegrees: Float): Float {
-        val coriolis = abs(coriolisParameter(latitudeDegrees))
-        if (coriolis == 0f) return 90f
-        return (atan(surfaceDrag(crossIsobarDegrees) / coriolis) / DEGREES_TO_RADIANS).toFloat()
+    private fun balancedSpeedSquared(accelerationSquared: Double, coriolisSquared: Double, perSpeed: Double, gustsSquared: Double): Double {
+        val linear = coriolisSquared + perSpeed * perSpeed * gustsSquared
+        val quadratic = perSpeed * perSpeed
+        if (accelerationSquared == 0.0) return 0.0
+        return 2.0 * accelerationSquared / (linear + sqrt(linear * linear + 4.0 * quadratic * accelerationSquared))
+    }
+
+    /**
+     * The angle the balance in [surfaceWind] turns the wind across the isobars by at a latitude,
+     * over land when [isLand], in degrees: `atan(k / |f|)`, read back from the drag the code
+     * applies so a guard measures what is used and not a copy of it.
+     */
+    fun crossIsobarDegreesAt(latitudeDegrees: Float, isLand: Boolean): Double {
+        val coriolis = abs(coriolisParameter(latitudeDegrees).toDouble())
+        return atan2(surfaceDrag(isLand), coriolis) / DEGREES_TO_RADIANS
     }
 }

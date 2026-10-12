@@ -34,7 +34,7 @@ import kotlinx.coroutines.test.runTest
 class SavesAndExportsTest {
 
     @Test
-    fun `a save files the settings of the world on screen, not the panel's`() = runTest {
+    fun `a save files the settings of the world on screen, not the panel's`() = runTest(timeout = WORLD_TEST_TIMEOUT) {
         // After a stopped change of seed or resolution the panel holds settings the world on
         // screen was not made with. The old document() filed those, and the save reopened as
         // another world or, after a resolution change, not at all.
@@ -124,7 +124,7 @@ class SavesAndExportsTest {
      * A world as many cells tall as wide is no size's own grid, and is made again even at its rows.
      */
     @Test
-    fun `an export at the world's own size is the world on screen, and any other is made again`() = runTest {
+    fun `an export at the world's own size is the world on screen, and any other is made again`() = runTest(timeout = WORLD_TEST_TIMEOUT) {
         val onScreen = WorldGenerationEngine.generate(Knobs.atResolution(WorldGenConfig(seed = 12L), 32))
         assertEquals(64 to 32, onScreen.width to onScreen.height)
         val same = ExportSubjects.at(onScreen, 32, null, null, null)
@@ -144,7 +144,7 @@ class SavesAndExportsTest {
     }
 
     @Test
-    fun `a data sidecar says whether its world was the one on screen`() = runTest {
+    fun `a data sidecar says whether its world was the one on screen`() = runTest(timeout = WORLD_TEST_TIMEOUT) {
         val world = WorldGenerationEngine.generate(WorldGenConfig(seed = 13L, width = 32, height = 32))
         val onScreen = DataExports.write(world, DataLayer.BIOMES, NoCompression, "a test").sidecar.decodeToString()
         assertTrue("\"worldSource\": \"on screen\"" in onScreen, onScreen)

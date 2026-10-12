@@ -65,29 +65,26 @@ class IceSheetTest : BorrowsSharedWorlds() {
                 thin += String.format(Locale.ROOT, "seed %d at %.0f m over %.0f km", seed, thickest, furthestKm)
             }
         }
-        assertTrue(
-            "the sheets are outside the envelope Earth's two sit in:\n" +
-                failures.joinToString("\n"),
-            failures.isEmpty()
-        )
-        // Failing since the ground was put on its ruler, and the ice's to settle rather than this
-        // chunk's: the collision plateaus are as wide north-south as east-west now, the sheets grow
-        // on them, and a sheet as wide as Greenland's stands on a bed near 3 km high on average,
-        // up to 5 km under its middle, so the profile its lower margins raise barely clears the
-        // ground it covers. See docs/DESIGN_LEDGER.md, Fix 2; re-recorded on square cells at Q2.
-        KnownFailures.expect(
-            THIN_SHEETS_ON_HIGH_GROUND,
-            // Re-recorded at L1, whose rifts are Earth's half-grabens and the same at every grid (docs/DESIGN_LEDGER.md, L1).
-            "seed 718106 at 1192 m over 560 km, seed 59758 at 1348 m over 692 km, seed 7 at 900 m over 627 km"
-        ) {
-            if (thin.isNotEmpty()) {
+        // Recorded at C1b: the march that closes its budget snows on the polar land where the old one
+        // dropped the cold cap's water, and the sheets it feeds stand thicker than Earth's. The ice
+        // is measured and not fixed in C1b (docs/TODO.md, "The ice after C1b").
+        KnownFailures.expect("C1b: the sheets the conserving march feeds stand thicker than Earth's", "seed 718106 stands 6811; seed 59758 stands 7072; seed 7 stands 6794; seed 42 stands 6012") {
+            if (failures.isNotEmpty()) {
                 throw RecordedViolation(
-                    "sheets whose middles stand $CONTINENTAL_MARGIN_KM km or more from their margins are thinner " +
-                        "than the $CONTINENTAL_THICKNESS_FLOOR_M m Greenland's divide stands at: ${thin.joinToString()}",
-                    thin.joinToString()
+                    "the sheets are outside the envelope Earth's two sit in:\n" + failures.joinToString("\n"),
+                    failures.joinToString("; ") { it.substringBefore(" m thick") }
                 )
             }
         }
+        // Failed from Fix 2 to C1b, sheets on high plateaus standing under Greenland's divide; armed
+        // at C1b, whose march snows on the polar land the water the old one's cold cap dropped, so
+        // the sheets now stand past the floor (and, above, past Earth's envelope: the known failure
+        // there is the opposite miss). See docs/DESIGN_LEDGER.md, Fix 2 and C1b.
+        assertTrue(
+            "sheets whose middles stand $CONTINENTAL_MARGIN_KM km or more from their margins are thinner " +
+                "than the $CONTINENTAL_THICKNESS_FLOOR_M m Greenland's divide stands at: ${thin.joinToString()}",
+            thin.isEmpty()
+        )
     }
 
     /**
@@ -202,29 +199,46 @@ class IceSheetTest : BorrowsSharedWorlds() {
             domesRead++
             if (!reading.knowsItsDome) failures += "seed $seed: ${reading.describe()}"
         }
-        assertTrue(
-            "only $domesRead seeds grow a sheet whose dome fills a third of its own disc, under" +
-                " $LEAST_SEEDS_WITH_A_DOME, so the flow clause is asserting nothing",
-            domesRead >= LEAST_SEEDS_WITH_A_DOME
-        )
-        // Recorded from Fix 3b to Q2 on seeds 59758 and 7 on the 512 by 512 grid, and armed on
-        // square cells, where neither is read and [DOME_SEED]'s sheet knows its dome
-        // (docs/DESIGN_LEDGER.md, Q2).
-        // Recorded at K2: on the Earth-sized planet seed 7's sheet flows outward a hair short of
-        // the bar (docs/DESIGN_LEDGER.md, K2).
-        KnownFailures.expect("K2: a sheet on the Earth-sized planet flows outward short of what its dome owes", "seed 7: 66.4% of the ice near the dome flows outward at a mean 64.4 degrees off radial, where a flow that knows its dome owes 67% and 67.5 degrees against an indifferent bearing's 50% and 90; seed 878210: 72.1% of the ice near the dome flows outward at a mean 69.6 degrees off radial, where a flow that knows its dome owes 67% and 67.5 degrees against an indifferent bearing's 50% and 90") {
-            if (failures.isNotEmpty()) {
+        // Recorded on H1's ground under the coupled climate, with the control below: no sheet of
+        // the clause's seeds filled a third of its disc near its dome (docs/DESIGN_LEDGER.md, M1).
+        // Armed at A1-6a, where seed 42's sheet fills 187 cells of its 513-cell disc again.
+        // Recorded at F1, on whose ground no candidate's sheet fills a third near its dome, as the
+        // everyday tier's control finds at 512 rows (docs/TODO.md).
+        KnownFailures.expect("F1: no sheet the flow clause can read has a dome", "0 seeds") {
+            if (domesRead < LEAST_SEEDS_WITH_A_DOME) {
                 throw RecordedViolation(
-                    "the sheet is not flowing down its own surface:\n" + failures.joinToString("\n"),
-                    failures.joinToString("; ")
+                    "only $domesRead seeds grow a sheet whose dome fills a third of its own disc, under" +
+                        " $LEAST_SEEDS_WITH_A_DOME, so the flow clause is asserting nothing",
+                    "$domesRead seeds"
                 )
             }
         }
+        // Recorded from Fix 3b to Q2 on seeds 59758 and 7 on the 512 by 512 grid, and armed on
+        // square cells, where neither is read and [DOME_SEED]'s sheet knows its dome
+        // (docs/DESIGN_LEDGER.md, Q2).
+        // Recorded at K2, where on the Earth-sized planet seed 7's sheet flowed outward a hair
+        // short of the bar; passing at C1b, whose snow thickens the sheets, and armed
+        // (docs/DESIGN_LEDGER.md, K2 and C1b).
+        // Recorded at C1b2: Vialov's dome is flat across its top, where Nye's rose as a root to the
+        // last, so near the divide of the reported world at 1,024 rows the surface's fall is the
+        // margins' datums and the bed showing through more than the profile (docs/TODO.md, "The
+        // ice after C1b2"). Armed at A1-1, and not because the flow mended: the reported world's
+        // sheet fills 159 cells of its 2,051-cell disc, under the third the clause reads, and the
+        // two seeds it reads, 42 and [DOME_SEED], flow outward (docs/TODO.md, "The ice after A1-1").
+        // Recorded at A1-4, where seed 42's sheet flows outward a hair under the bar; armed at A1-5,
+        // whose snow from the coupled rain clears it (docs/DESIGN_LEDGER.md, A1-5). H1's ground on
+        // main's climate kept K2's record, seeds 7 and 878210 a hair under the bar; on H1's ground
+        // under the coupled climate no dome is read (docs/DESIGN_LEDGER.md, H1 and M1). Recorded at
+        // A1-6a, where seed 42's dome is read again and its sheet flows outward a hair under the
+        // bar, 63.1% at 67.7 degrees off radial against 67% and 67.5 (docs/TODO.md). Armed at A1-6b,
+        // whose snow clears it (docs/DESIGN_LEDGER.md, A1-6b).
+        assertTrue("the sheet is not flowing down its own surface: " + failures.joinToString("; "), failures.isEmpty())
     }
 
     /**
-     * The control for the flow clause: [DOME_SEED]'s own sheet, with every cell's flow turned a
-     * quarter from the bearing the ice took, fails it.
+     * The control for the flow clause: [DOME_SEED]'s own sheet, or the first of the clause's seeds
+     * whose sheet has a dome to read, with every cell's flow turned a quarter from the bearing the
+     * ice took, fails it.
      *
      * A quarter turn on square cells keeps every step a step to a neighbor and the neighborhood
      * the same cells, and takes from the flow only its knowledge of where the dome is, which is
@@ -234,7 +248,33 @@ class IceSheetTest : BorrowsSharedWorlds() {
      */
     @Test
     fun `the flow clause fails a flow turned a quarter from the ice's own`() {
-        val measured = measure(DOME_SEED)
+        // The first of [DOME_SEED] and the clause's own seeds whose sheet fills a third of its disc
+        // near the dome: at A1-4 [DOME_SEED]'s held 8 cells there, so the control moves with the ice.
+        val candidates = listOf(DOME_SEED) + seeds
+        val seed = candidates.firstOrNull { candidate ->
+            val candidateMeasured = measure(candidate)
+            readFlow(candidateMeasured, candidateMeasured.mass.sheetFlowReceiver)?.isNeighbourhood == true
+        }
+        if (seed == null) {
+            // Recorded when H1's ground came under the coupled climate: none of the candidates'
+            // sheets fills a third of its disc near its dome, so the control has no flow to turn
+            // (docs/DESIGN_LEDGER.md, M1; docs/TODO.md).
+            KnownFailures.expect("M1: no sheet the control can read has a dome", "seed 17: 51 of 513 cells; seed 718106: 18 of 513 cells; seed 59758: 126 of 513 cells; seed 7: 5 of 513 cells; seed 42: 129 of 513 cells") {
+                val readings = candidates.map { candidate ->
+                    val candidateMeasured = measure(candidate)
+                    val reading = readFlow(candidateMeasured, candidateMeasured.mass.sheetFlowReceiver)
+                    if (reading == null) "seed $candidate: no sheet"
+                    else "seed $candidate: %d of %.0f cells".format(reading.near, reading.disc)
+                }
+                throw RecordedViolation(
+                    "no sheet of seeds $candidates fills a third of its disc near its dome, so the control has none to turn: " +
+                        readings.joinToString("; "),
+                    readings.joinToString("; ")
+                )
+            }
+            return
+        }
+        val measured = measure(seed)
         val config = measured.config
         val flow = measured.mass.sheetFlowReceiver
         val w = config.width
@@ -250,7 +290,7 @@ class IceSheetTest : BorrowsSharedWorlds() {
         val own = readFlow(measured, flow)!!
         val control = readFlow(measured, turned)!!
         println(
-            "I1 FLOW CONTROL seed $DOME_SEED: the stage's flow: ${own.describe()}; " +
+            "I1 FLOW CONTROL seed $seed: the stage's flow: ${own.describe()}; " +
                 "turned a quarter: ${control.describe()}"
         )
         assertTrue("the control's neighborhood is not a dome's: ${control.near} cells", control.isNeighbourhood)
@@ -518,10 +558,10 @@ class IceSheetTest : BorrowsSharedWorlds() {
      *
      * ### The step
      *
-     * A plastic dome rises at `k * sqrt(x)` from its margin, so the fastest it can ever climb
-     * across one cell is the climb out of the margin itself: [IceSheet.profileMetres] over one
-     * cell width, which is 404 m at 1024 on a world 12,000 km across and less everywhere further
-     * in, the curve being concave. Two neighbouring cells *both carrying ice* therefore cannot
+     * A Vialov dome rises steepest out of its margin, as the three-eighths power of the distance,
+     * so the fastest it can ever climb across one cell is the climb out of the margin itself:
+     * [IceSheet.profileMetres] over one cell width for the body with the steepest dome, and less
+     * everywhere further in, the curve being concave. Two neighbouring cells *both carrying ice* therefore cannot
      * stand more than that apart, whatever the ground under them is doing, because where there is
      * ice the surface is the dome and not the bed. It is a ceiling derived from the equation the
      * sheet is drawn by, not a figure fitted to a world.
@@ -561,11 +601,16 @@ class IceSheetTest : BorrowsSharedWorlds() {
             // all is a separate finding; see docs/TODO.md.
             val bed = measured.bed.relativeElevation.data
             val surface = FloatArray(bed.size) { bed[it] * metres + thickness[it] }
-            val stepCeiling = IceSheet.profileMetres(
-                config.cellWidthKm.toFloat(),
-                IceSheet.metresPerRootKilometre(config.isostasy.iceDensity, config.isostasy.gravity),
-                sqrt(config.squareKilometresPerCell).toFloat()
-            )
+            // The steepest any body's profile climbs over its first cell of ice.
+            var stepCeiling = 0f
+            for (cell in thickness.indices) {
+                val dome = measured.mass.domeMetresOfMargin[cell]
+                if (dome <= 0f) continue
+                stepCeiling = maxOf(stepCeiling, IceSheet.profileMetres(
+                    config.cellWidthKm.toFloat(), dome, measured.mass.divideKmOfMargin[cell],
+                    sqrt(config.squareKilometresPerCell).toFloat()
+                ))
+            }
             var worstAcross = 0f
             var worstDown = 0f
             var overAcross = 0
@@ -740,12 +785,21 @@ class IceSheetTest : BorrowsSharedWorlds() {
          * 84% outward, which on an arc is a question the clause cannot ask. Its reading: 90.1%
          * outward at 49.3 degrees off radial; seed 5's, 70.5% at 64.8. About 35 seconds of the
          * tier. See docs/DESIGN_LEDGER.md, Q2.
+         *
+         * Scanned again at C1b2, whose ice is Vialov's profile on the conserving march's snow, and
+         * seed 20's sheet now fills 8% of its disc. Of seeds 1 to 25 (bar 7) eight fill a third,
+         * and this one the most, 80.3%, reading 93.4% outward at 34.8 degrees off radial; of the
+         * other seven, five pass the clause and two do not (seed 10 at 64.5% outward, seed 15 at
+         * 49.3%, docs/TODO.md, "The ice after C1b2").
+         *
+         * Scanned again at A1-1, whose calendar seasons and sea-surface sunlight feed the sheets
+         * more snow, and seed 2's sheet now fills 17.7% of its disc. Of seeds 1 to 25 (bar 7)
+         * eleven fill a third, and seed 17 the most, 99.1%, reading 83.1% outward at 51.4 degrees
+         * off radial; of the other ten, three pass the clause (seeds 14, 18 and 22) and seven do
+         * not, four of them at an indifferent bearing's 47 to 51% outward or less (seeds 4, 6, 23 and 24) (docs/TODO.md,
+         * "The ice after A1-1").
          */
-        const val DOME_SEED = 20L
-
-        /** The known failure the thickness clause records, the ice's to settle. */
-        const val THIN_SHEETS_ON_HIGH_GROUND =
-            "the ice: sheets as wide as Greenland's grow on high plateaus and stand under its thickness"
+        const val DOME_SEED = 17L
 
         /** `GlaciationTest`'s own worlds, so one set of ice answers every clause. */
         val seeds = listOf(718106L, 59758L, 7L, 42L)

@@ -18,8 +18,8 @@ engine's guards, and `IncrementalReuseTest` holds them (conventions rule 12).
 | 2 | Plates (`PlateStage.kt`, `Isostasy.kt`) | terrain `height`; `tectonics`, `isostasy`, `seaLevel`, `scale` | `height` (isostatic altitude), `upliftRateMmPerYear`, `plateId`, `boundaryDistance`, `nearestBoundaryClass`/`Type`, `seafloorAgeMyr`, `crustAge`, `continentalShare`, `plates` | Erosion (`height`, `upliftRateMmPerYear`); Landmarks (`boundaryDistance`, via the plate result); drawing: plate and boundary views (`plateId`, `boundaryDistance`, `nearestBoundaryClass`) |
 | 3 | Erosion (`ErosionStage.kt`, `HydraulicErosion.kt`, `DeltaFan.kt`) | plate `height`, `upliftRateMmPerYear`; `erosion`, `scale`, `isostasy`, `facetRouting`, `flatPotential`, `seaLevel`, `sea.lowstandMetres`; with the climate feed on, also `climate`, `ocean`, `vegetation` | `height` | Sea level (`height`); the geometry guard's deposition layers through `LayerCapture` |
 | 4 | Sea level and ice (`SeaLevelStage.kt`, `LittoralGrading.kt`, `DrownedValleys.kt`, `GlaciationStage.kt`, `IceSheet.kt`) | erosion `height`; `seaLevel`, `sea`, `facetRouting`, `flatPotential`, `glaciation`; with glaciation on, `climate` (and `ocean` with the snow balance) | `relativeElevation` (0 at the shoreline, ice troughs cut in), `isLand`, `landCellCount`, `shorelineHeight` | Every later stage (`isLand`, `relativeElevation`, `landCellCount`); drawing: the coast (`CoastLine`, also `relativeElevation` for where the shoreline lies between two cells, and `Shoreline`), relief, isobaths, the narrow sea, data export (`MapRasterizer`, `RasterAccelerator`, `NarrowSea`, `RiverSelection`, `DataExport`) |
-| 5 | Ocean (`OceanStage.kt`, `OceanCirculation.kt`, `OceanHeat.kt`, `SurfaceBelts.kt`) | sea result; `ocean`, `climate` (the wind belts) | `velocityX`, `velocityY`, `temperature`, `anomaly` (sea surface, °C) | Climate (`anomaly`: the marine inversion and the maritime temperatures); Nations (`anomaly`); drawing: currents (`velocityX/Y`) and the sea temperature anomaly view (`anomaly`) |
-| 6 | Climate (`ClimateStage.kt`, `EnergyBalance.kt`, `PressureWind.kt`, `MoistureBudget.kt`, `SnowBalance.kt`, `VegetationDensity.kt`) | sea result, ocean result; `climate`, `vegetation` | `temperature`, `summer/winterTemperature`, `precipitation` (0..1), `summer/winterPrecipitation`, `precipitationMm`, `windDirection`, `windMeridional`, `summer/winterSeaIce`, `biome`, `vegetationDensity`, `permafrost` | Rivers (`summer/winterTemperature`, `precipitationMm`); Nations (`biome`, `precipitationMm`); Cultures (`temperature`, `precipitation`, `biome`); Landmarks (`temperature`, `biome`); drawing: every climate view, the biome fill and ice (`MapRasterizer`, `RasterAccelerator`), the land tint (`ClimateTint`: `biome`, `temperature`, `precipitationMm`, `vegetationDensity`), data export (`biome`) |
+| 5 | Ocean (`OceanStage.kt`, `OceanCirculation.kt`, `OceanHeat.kt`) | sea result; `ocean`, `climate` (the seasonal circulation's wind, `HadleyCirculation` through `ClimateStage.beltWindOfRows`, and the boundary layer's wind over the ocean's own anomaly through `ClimateStage.atmosphere`) | `velocityX`, `velocityY`, `temperature`, `anomaly` (sea surface, °C) | Climate (`anomaly`: the marine inversion, the maritime temperatures and the boundary layer's shallow heating); Nations (`anomaly`); drawing: currents (`velocityX/Y`) and the sea temperature anomaly view (`anomaly`) |
+| 6 | Climate (`ClimateStage.kt`, `EnergyBalance.kt`, `HadleyCirculation.kt`, `SurfaceBelts.kt`, `BoundaryLayer.kt` and `AtmosphereCoupling.kt` with `StationaryWaveModel.kt`, `ZonalBasicState.kt`, `AtmosphereLevels.kt`, `WaveDamping.kt`, `PressureWind.kt`, `SphericalGrid.kt`, `SphericalOperators.kt` and `AtmosphereRemap.kt`, `MoistureMarch.kt`, `ColumnWater.kt`, `SurfaceEvaporation.kt`, `SphereBlur.kt`, `MoistureBudget.kt`, `SnowBalance.kt`, `VegetationDensity.kt`) | sea result, ocean result; `climate`, `vegetation` | `temperature`, `summer/winterTemperature` (each place's warmest and coldest month), `july/januaryTemperature`, `precipitation` (0..1), `julyHalf/januaryHalfPrecipitation` (April to September, October to March), `precipitationMm`, `windDirection`, `windMeridional`, `julyHalf/januaryHalfSeaIce`, `biome`, `vegetationDensity`, `permafrost`, `potentialEvapotranspirationMm`, `openWaterEvaporationMm` | Erosion's feed and Rivers (`precipitationMm` and `potentialEvapotranspirationMm` through `Runoff`, `openWaterEvaporationMm` for the lakes; `summer/winterTemperature`); Nations' runoff (`precipitationMm`, `potentialEvapotranspirationMm`); Nations (`biome`, `precipitationMm`); Cultures (`temperature`, `precipitation`, `biome`); Landmarks (`temperature`, `biome`); drawing: every climate view, the biome fill and ice (`MapRasterizer`, `RasterAccelerator`), the land tint (`ClimateTint`: `biome`, `temperature`, `precipitationMm`, `vegetationDensity`), data export (`biome`) |
 | 7 | Rivers and lakes (`RiverStage.kt`, `ChannelInitiation.kt`, `LakeWaterBalance.kt`, `RiverWidth.kt`, `FlowRouting.kt`) | sea result, climate result; `rivers`, `lakes`, `facetRouting`, `flatPotential` | `filledElevation`, `flowAccumulation`, `flowTarget`, `rivers`, `lakes` | Nations (`flowAccumulation`, through `BasinPartition`); Cultures (through `BasinPartition`); Landmarks; drawing: lakes (`MapRasterizer`, `RasterAccelerator`), the drawn rivers (`RiverSelection` chooses them, `MapRasterizer` inks them at `RiverPen`'s widths), the save (`WorldCodec`) |
 | 8 | Realms (`NationStage.kt`, `BasinPartition.kt`, `BasinRealms.kt`, `Atlas.kt`) | sea, climate, rivers and ocean results; `nations` | `nationId`, `nations`, `habitability` | Landmarks (`nationId`, `habitability`); drawing: borders and realm fills (`nationId`), data export, the interface's realm list (`nations`) |
 | 9 | Peoples (`CultureStage.kt`) | sea, climate and rivers results — not the realms; `cultures` | `cultureId`, `cultures` | drawing: peoples' borders (`cultureId`), the cartouche (`cultures`) |
@@ -43,8 +43,22 @@ then runs a provisional copy of that later stage, and nothing outside the stage 
   `GlaciationStage` decides the ice from it and carves `relativeElevation`. Glaciation also reads
   `ClimateStage.buildTemperature` directly.
 - **The ocean reads the climate's code.** `OceanStage` builds its surface temperature with
-  `ClimateStage.buildTemperature` and `zonalClimate`, and its wind stress from `SurfaceBelts`, all
-  before the real climate runs.
+  `ClimateStage.buildTemperature` and `zonalClimate`, and its wind stress from the two halves'
+  circulations (`HadleyCirculation`, their `|V| V` averaged) and the boundary layer (`ClimateStage.atmosphere`, `BoundaryLayer`), all before the real climate
+  runs. The ocean's is the dry atmosphere, without the rain's latent heat, solved in rounds with the
+  sea under it: the first round's boundary layer reads the energy balance and the sea result over a
+  sea at its latitudes' temperatures, and each round after reads the anomaly the round before left,
+  its shallow heating relaxing the lower troposphere toward the water's departure, until the anomaly
+  settles (`OceanStage`, `MAX_AIR_SEA_ROUNDS`). The climate solves its own, over the same anomaly,
+  coupled to the march: between the march's laps the latent heat of each lap's condensation heats the
+  atmosphere, whose wind and vertical motion the next lap reads (`AtmosphereCoupling`), until both the
+  heating and the land's rain settle. Every climate run in a generation, the provisional ones
+  included, couples; the provisional ones run over a still ocean, with no anomaly.
+- **The erosion's halfway weather starts where its opening weather settled.** Its coupled loop
+  starts from the opening run's settled heating and the march's ground return and water in flight
+  (`ClimateStage.WarmStart`), inside the erosion stage, which always runs both; the loop's own test
+  still decides when it stops. The ice's provisional climate and the finished one start cold, so a
+  stage rerun on a world read from a file makes the same world as a fresh generation (docs/TODO.md).
 - **Both provisional climates have the currents off.** The real ocean exists only from stage 5 on;
   erosion and glaciation never see it.
 - **Isostasy is solved three times.** Plates (`Isostasy.Columns`), erosion and glaciation
@@ -99,8 +113,8 @@ always. Without it, every deep class runs. What to name, by where the change is:
 | `ErosionStage.kt`, `HydraulicErosion.kt`, `DeltaFan.kt`, `GroundSteps.kt`, `Runoff.kt` | `erosion` |
 | Routing: `FlowRouting.kt`, `FlatRouting.kt`, `facetRouting`, `flatPotential` | `erosion` (reaches the sea level, the ice and the rivers) |
 | `SeaLevelStage.kt`, `LittoralGrading.kt`, `DrownedValleys.kt`, `WaterTopology.kt`, `GlaciationStage.kt`, `IceSheet.kt` | `sea` |
-| `OceanStage.kt`, `OceanCirculation.kt`, `OceanHeat.kt`, `SurfaceBelts.kt` | `ocean` (reaches back to erosion through the climate feed) |
-| `ClimateStage.kt`, `EnergyBalance.kt`, `PressureWind.kt`, `MoistureBudget.kt`, `SnowBalance.kt`, `VegetationDensity.kt` | `climate` (reaches back to erosion and the ice) |
+| `OceanStage.kt`, `OceanCirculation.kt`, `OceanHeat.kt` | `ocean` (reaches back to erosion through the climate feed) |
+| `ClimateStage.kt`, `EnergyBalance.kt`, `HadleyCirculation.kt`, `LocalCirculation.kt`, `SurfaceBelts.kt`, `BoundaryLayer.kt`, `AtmosphereCoupling.kt`, `StationaryWaveModel.kt`, `ZonalBasicState.kt`, `AtmosphereLevels.kt`, `WaveDamping.kt`, `math/ComplexBlockTridiagonal.kt`, `math/SymmetricEigen.kt`, `PressureWind.kt`, `SphericalGrid.kt`, `SphericalOperators.kt`, `AtmosphereRemap.kt`, `MoistureMarch.kt`, `ColumnWater.kt`, `SurfaceEvaporation.kt`, `SphereBlur.kt`, `MoistureBudget.kt`, `SnowBalance.kt`, `VegetationDensity.kt` | `climate` (reaches back to erosion and the ice) |
 | `RiverStage.kt`, `ChannelInitiation.kt`, `LakeWaterBalance.kt`, `RiverWidth.kt` | `rivers` |
 | `NationStage.kt`, `BasinPartition.kt`, `BasinRealms.kt`, `Atlas.kt`, `NameForge.kt` | `realms` (`NameForge` is read by peoples and landmarks too: add `peoples`) |
 | `CultureStage.kt` | `peoples` |
@@ -109,7 +123,15 @@ always. Without it, every deep class runs. What to name, by where the change is:
 | A default in `WorldGenConfig.kt` | the stage whose section it is: a default moves the standard worlds, so the everyday tier sees it too |
 | `:cartography`'s drawing, `:desktop`'s rendering and export | `drawing` |
 | `:desktop`'s erosion or ocean accelerator on the card | `erosion` or `ocean` (their deep classes skip without a card) |
+| `:desktop`'s atmosphere remapping on the card (`GpuAtmosphere`) | none: `GpuAtmosphereTest` is everyday, and skips without a card |
 | The shared test support (`SharedWorlds`, `WorldFile`, `WorldDiskCache`) | none: `WorldDiskCacheTest` is everyday |
+
+The dry stationary-wave model (`StationaryWaveModel.kt`, `ZonalBasicState.kt`, `AtmosphereLevels.kt`,
+`WaveDamping.kt`, with `math/ComplexBlockTridiagonal.kt` and `math/SymmetricEigen.kt`) is read by the
+boundary layer (`BoundaryLayer.kt`) since A1-4, so a change to it moves every world: it is the climate's,
+and `-Pstages=climate` (docs/DESIGN_LEDGER.md, A1-4). Its own tests are `StationaryWaveModelTest`,
+`StationaryWaveBenchmarkTest` and `BoundaryLayerTest`, everyday, and `StationaryWaveReport`,
+`StationaryWaveCostTest` and `BoundaryLayerCostTest` in the audit tier.
 
 Any change to the generator's code also empties the world cache for the next run (its key is a hash
 of the compiled classes), so the first everyday run after one generates its standard worlds afresh.

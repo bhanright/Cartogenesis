@@ -1,28 +1,44 @@
 package com.cartogenesis.worldgen.pipeline
 
 /**
- * How much water a land cell sheds in a year, in millimetres: the one weight every stage that
- * routes water routes with — the erosion rounds, the channel-initiation criterion, the drawn
- * network's discharge in `RiverStage`, and the riverine threshold `NationStage` reads off it.
+ * How much water a land cell sheds, in millimeters: two figures since C1b, for two questions.
  *
- * Four stages ask the same question of a cell and used to answer it three ways. `RiverStage` added
+ * **What the rivers carry in a year is [annualRunoffMm]**: the year's rain less what the ground
+ * gave back to the air, Budyko's share against the climate's potential evapotranspiration, the
+ * same curve and the same two fields the moisture march's ground return reads
+ * ([MoistureMarch.groundReturnMm]). So at every land cell the rain is the return plus the runoff,
+ * and water the march put back into the air is not routed down the rivers as well. The drawn
+ * network's discharge in `RiverStage`, the lakes' inflow (`LakeWaterBalance.shedding`) and the
+ * riverine threshold `NationStage` reads read it.
+ *
+ * **What cuts a channel is [annualWeightMm]**: the rainfall, with a floor, as below. The erosion
+ * rounds and the channel-initiation criterion read it, and not the annual runoff, because a
+ * channel is cut by its floods and not by its year's mean: Budyko's curve is a long-term partition
+ * of a catchment's water (Budyko 1974; McMahon and others 2013 state its limits), and in dry
+ * country, where it returns nearly all of a year's rain to the air, the rare storm still runs off
+ * and cuts, which is why drainage density peaks in semi-arid country (Langbein and Schumm 1958,
+ * GEOGRAPHY.md). The rainfall stands in for the storms, which nothing models, and the floor below
+ * for the hyper-arid upland's rare one.
+ *
+ * What follows is the storm weight's own account, from before C1b.
+ *
+ * Four stages asked the same question of a cell and used to answer it three ways. `RiverStage` added
  * a floor to a rainfall normalised to 0..1 and clamped at 1,200 mm, `ChannelInitiation` added a
  * hundred and fifty millimetres to a rainfall in millimetres, and `HydraulicErosion` took the larger
  * of the rainfall and a floor; all three meant "an arid upland still feeds the channel that leaves
  * it", and two of them named a different floor for it. There is one figure here now and the stages
  * differ only in what they divide it by, which is the part that genuinely differs.
  *
- * **Rainfall standing in for runoff, and the shortfall is the same in every consumer.** What
- * actually reaches a channel is rainfall less what the plants breathe out and the ground takes in,
- * delivered in floods rather than evenly. None of those three is modelled, here or anywhere
- * downstream of here, so every figure below is an upper bound on the water and a smooth one on a
- * quantity that is not smooth. Stated once, in the place the substitution is made.
+ * **Rainfall standing in for the storms.** What actually cuts a channel is the water a storm
+ * delivers faster than the ground takes it in, and storms are not modeled, so the weight is an
+ * upper bound on the water and a smooth one on a quantity that is not smooth. Stated once, in the
+ * place the substitution is made.
  *
  * **The two normalisations, and why each is right for its consumer.** The two stages that compare
  * the weight against a fitted or measured figure do not route [annualWeightMm] raw; each divides it
  * by a mean, and they divide by different ones on purpose. The drawn network and the realm stage
- * route it raw, because everything they do with it is a ratio within the one world — a channel's
- * width against the widest, a threshold as a share of all the land's water.
+ * route [annualRunoffMm] raw, because everything they do with it is a ratio within the one world —
+ * a channel's width against the widest, a threshold as a share of all the land's water.
  *
  * `ChannelInitiation` divides by **Earth's own mean over land**, [EARTH_MEAN_LAND_RAINFALL_MM] —
  * an absolute reference. Its threshold is an area in square kilometres read off Montgomery and
@@ -89,4 +105,17 @@ object Runoff {
     /** [annualWeightMm] as a share of Earth's land mean — the absolute form. */
     fun shareOfEarthMean(precipitationMm: Float): Float =
         annualWeightMm(precipitationMm) / EARTH_MEAN_LAND_RAINFALL_MM
+
+    /**
+     * A cell's runoff in a year, in millimeters: [precipitationMm] less what the ground gives back
+     * against [potentialMm], by Budyko's curve ([LakeWaterBalance.runoffShareOfRain]). Zero where
+     * there is no rain; all of it where nothing can evaporate. No floor: the curve gives a
+     * hyper-arid cell its own small share, and a year's discharge is water, not a storm.
+     */
+    fun annualRunoffMm(precipitationMm: Float, potentialMm: Float): Float =
+        precipitationMm.coerceAtLeast(0f) * LakeWaterBalance.runoffShareOfRain(precipitationMm, potentialMm)
+
+    /** [annualRunoffMm] at [cell] of [climate]. */
+    fun annualRunoffMm(climate: ClimateResult, cell: Int): Float =
+        annualRunoffMm(climate.precipitationMm.data[cell], climate.potentialEvapotranspirationMm.data[cell])
 }

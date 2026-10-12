@@ -7,6 +7,7 @@ import com.cartogenesis.worldgen.model.WildernessMode
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.Biome
+import com.cartogenesis.worldgen.pipeline.ClimateStage
 import com.cartogenesis.worldgen.pipeline.PlateStage
 import com.cartogenesis.worldgen.pipeline.TerrainStage
 import java.awt.BasicStroke
@@ -142,10 +143,10 @@ class DebugMapDump {
     }
 
     /**
-     * H4: seed 26's southern-hemisphere cold-current coast (see `CurrentFeedsRainTest`), before
-     * (`currentMoisture = 0`, today's field) and after (the default 0.07/deg). Annual rainfall and
-     * biome only, since the effect is on the annual march's over-sea pickup rather than anything
-     * seasonal.
+     * H4: seed 26's southern-hemisphere cold-current coast (see `CurrentFeedsRainTest`), without
+     * the ocean's currents and with them, whose sea surface the march's evaporation reads. Annual
+     * rainfall and biome only, since the effect is on the march's evaporation over the sea rather
+     * than anything seasonal.
      */
     @Test
     fun `dump the H4 current-coupled coast before and after`() {
@@ -154,7 +155,7 @@ class DebugMapDump {
         val base = WorldGenConfig.forRows(seed, 512)
         val after = WorldGenerationEngine.generateBlocking(base)
         val before = WorldGenerationEngine.generateBlocking(
-            base.copy(climate = base.climate.copy(currentMoisture = 0f))
+            base.copy(ocean = base.ocean.copy(enabled = false))
         )
         write(render(before, Mode.RAINFALL), "seed$seed-h4-before-rainfall.png")
         write(render(before, Mode.BIOME), "seed$seed-h4-before-biome.png")
@@ -333,9 +334,10 @@ class DebugMapDump {
     internal enum class Mode {
         FANTASY, ELEVATION, PLATES, BIOME, RAINFALL, TEMPERATURE, NORMALS, NATIONS, CULTURES,
         HABITABILITY,
-        // The local warm and cold season, not July and January. Side by side these are where the
-        // subtropical dry belt's migration shows: it sits some ten degrees poleward in the summer
-        // map and the same distance equatorward in the winter one.
+        // The calendar's: the rain of April to September and of October to March, and July's and
+        // January's temperature. Side by side these are where the subtropical dry belt's migration
+        // shows: it sits some ten degrees poleward in a hemisphere's summer map and the same
+        // distance equatorward in its winter one.
         SUMMER_RAINFALL, WINTER_RAINFALL, SUMMER_TEMPERATURE, WINTER_TEMPERATURE,
         // Which half of the year the rain arrives in, and the wind vector that decides it.
         SEASON_CONTRAST, WIND,
@@ -1153,19 +1155,23 @@ class DebugMapDump {
                     // and the sea beside it were the same colour, which is precisely the thing
                     // these two maps exist to let you tell apart.
                     Mode.SUMMER_RAINFALL ->
-                        if (land) grad(world.climate.summerPrecipitation.data[i], 0xE8D9A8, 0x1F4E79)
+                        if (land) grad(world.climate.julyHalfPrecipitation.data[i], 0xE8D9A8, 0x1F4E79)
                         else 0x000000
 
                     Mode.WINTER_RAINFALL ->
-                        if (land) grad(world.climate.winterPrecipitation.data[i], 0xE8D9A8, 0x1F4E79)
+                        if (land) grad(world.climate.januaryHalfPrecipitation.data[i], 0xE8D9A8, 0x1F4E79)
                         else 0x000000
 
                     // Which half of the year the rain arrives in, rather than how much of it
                     // there is: red where the warm half dominates, blue where the cold half does.
                     // A monsoon coast is a red band with the sea on its equatorward side.
                     Mode.SEASON_CONTRAST -> if (!land) 0x000000 else {
-                        val summer = world.climate.summerPrecipitation.data[i]
-                        val winter = world.climate.winterPrecipitation.data[i]
+                        // Each hemisphere's own warm half of the calendar's two.
+                        val north = ClimateStage.latitudeOf(i / world.width, world.height) > 0f
+                        val julyHalf = world.climate.julyHalfPrecipitation.data[i]
+                        val januaryHalf = world.climate.januaryHalfPrecipitation.data[i]
+                        val summer = if (north) julyHalf else januaryHalf
+                        val winter = if (north) januaryHalf else julyHalf
                         val lopsided = kotlin.math.ln(
                             ((summer + 0.02f) / (winter + 0.02f)).toDouble()
                         ).toFloat() / kotlin.math.ln(3.0).toFloat()
@@ -1178,13 +1184,13 @@ class DebugMapDump {
 
                     Mode.SUMMER_TEMPERATURE ->
                         grad(
-                            ((world.climate.summerTemperature.data[i] + 30f) / 70f).coerceIn(0f, 1f),
+                            ((world.climate.julyTemperature.data[i] + 30f) / 70f).coerceIn(0f, 1f),
                             0x3B4CC0, 0xB40426
                         )
 
                     Mode.WINTER_TEMPERATURE ->
                         grad(
-                            ((world.climate.winterTemperature.data[i] + 30f) / 70f).coerceIn(0f, 1f),
+                            ((world.climate.januaryTemperature.data[i] + 30f) / 70f).coerceIn(0f, 1f),
                             0x3B4CC0, 0xB40426
                         )
 

@@ -291,8 +291,9 @@ class WaterReceivedTest {
     /**
      * Two islands the same shape, one under 1,500 mm of rain and one under 3,000. Every cell of
      * each drains to its own coast, so the discharge the two deliver to the sea is each island's
-     * cells times its weight, and the ratio between them is the ratio [Runoff.annualWeightMm]
-     * gives the two rainfalls, which is two.
+     * cells times its weight, and the ratio between them is the ratio [Runoff.annualRunoffMm]
+     * gives the two rainfalls under the same potential evaporation, a little over two, because
+     * the wetter island gives a smaller share of its rain back.
      *
      * The discharge was weighted by `ClimateResult.precipitation`, which is clamped at 1,200 mm, so
      * both islands delivered the same water and the ratio was one: a trunk draining rainforest was
@@ -326,7 +327,8 @@ class WaterReceivedTest {
             if (receiver >= 0 && sea.isLand[receiver]) continue
             if (cell / config.width < 32) northMm += world.flowAccumulation.data[cell] else southMm += world.flowAccumulation.data[cell]
         }
-        val expected = (Runoff.annualWeightMm(3000f) / Runoff.annualWeightMm(1500f)).toDouble()
+        val potential = climate.potentialEvapotranspirationMm.data[0]
+        val expected = (Runoff.annualRunoffMm(3000f, potential) / Runoff.annualRunoffMm(1500f, potential)).toDouble()
         println("RUNOFF the 3,000 mm island delivers %.4f times the 1,500 mm one's water, against %.4f".format(southMm / northMm, expected))
         assertEquals(expected, southMm / northMm, 1e-4, "the wetter island's discharge against the drier one's")
     }

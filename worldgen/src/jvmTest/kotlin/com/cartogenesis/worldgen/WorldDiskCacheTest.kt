@@ -239,7 +239,7 @@ class WorldDiskCacheTest {
         val generating = File(directory, "second-checkout-generating")
         val java = ProcessHandle.current().info().command().orElse(File(System.getProperty("java.home"), "bin/java").path)
         val secondCheckout = ProcessBuilder(
-            java, "-Xmx512m", "-XX:ActiveProcessorCount=2", "-cp", System.getProperty("java.class.path"),
+            java, "-Xmx${SECOND_CHECKOUT_HEAP_MEGABYTES}m", "-XX:ActiveProcessorCount=2", "-cp", System.getProperty("java.class.path"),
             WorldDiskCacheSecondCheckout::class.java.name, directory.path, SHARED_CODE, generating.path
         ).redirectErrorStream(true).start()
         val output = StringBuffer()
@@ -426,12 +426,27 @@ class WorldDiskCacheTest {
         /** The code both checkouts of the two-writer guard run. */
         const val SHARED_CODE = "shared-code"
 
-        /** A JVM's start and a small world's generation take seconds; this is for a loaded machine. */
-        const val SECOND_CHECKOUT_TIMEOUT_SECONDS = 180L
+        /**
+         * The second checkout's wait: its world took 90 s on its two processors on an idle machine
+         * once the atmosphere was coupled to the rain, which is solved on the planet's own grid
+         * whatever the map's size (docs/DESIGN_LEDGER.md, A1-5 and M1); four times that, for a
+         * machine the tier's other workers load.
+         */
+        const val SECOND_CHECKOUT_TIMEOUT_SECONDS = 360L
+
+        /**
+         * The second checkout's heap: its world generated in 576 MB and ran out of 512, measured with
+         * [WorldDiskCacheSecondCheckout] on its two processors (docs/DESIGN_LEDGER.md, M1); a third
+         * over the least that held.
+         */
+        const val SECOND_CHECKOUT_HEAP_MEGABYTES = 768
     }
 }
 
-/** Small enough to generate in a second, for the tests of the cache's mechanics. */
+/**
+ * The smallest grid the tests of the cache's mechanics make. Not small in time: the coupled
+ * atmosphere is solved on the planet's own grid, so it takes a minute and a half on two processors.
+ */
 private val smallConfig = WorldGenConfig.forRows(42L, 128)
 
 /**

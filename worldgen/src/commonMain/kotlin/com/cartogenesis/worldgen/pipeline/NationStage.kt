@@ -178,11 +178,13 @@ object NationStage {
 
     /**
      * The floor under that threshold, in cells of [Runoff.FLOOR_MM]: a world with almost no rain
-     * still has a few riverine cells rather than all of them.
+     * still has a few riverine cells rather than all of them, since a threshold of nothing is
+     * passed by every cell.
      *
-     * Every cell carries at least its own floor's water, so a threshold at one cell's floor would
-     * make every cell riverine; two is the least that asks for water from above. The floor was
-     * 1e-4 of the old 0..1 weight, a fiftieth of one cell's own, and so never did what it said.
+     * Two, which asked for water from above while every cell carried at least its own floor's.
+     * Since C1b the discharge is the annual runoff, which carries no floor, and the figure is kept
+     * as it stood so a desert world's realms do not move for the change of unit
+     * (docs/DESIGN_LEDGER.md, C1b).
      */
     private const val MIN_RIVERINE_FLOOR_CELLS = 2
 
@@ -705,7 +707,7 @@ object NationStage {
     /**
      * The accumulated flow above which habitability counts a cell as being on a river — computed
      * from the rainfall rather than by re-tracing anything, and in the unit
-     * [RiverResult.flowAccumulation] is in: [Runoff.annualWeightMm], summed.
+     * [RiverResult.flowAccumulation] is in: [Runoff.annualRunoffMm], summed.
      *
      * A share of the world's own runoff, which is the rule `RiverStage` drew a channel by until R1
      * gave the channels a physical threshold. It is left here as habitability's own figure, under
@@ -722,7 +724,7 @@ object NationStage {
         var totalRunoffMm = 0.0
         for (cell in sea.isLand.indices) {
             if (sea.isLand[cell]) {
-                totalRunoffMm += Runoff.annualWeightMm(climate.precipitationMm.data[cell])
+                totalRunoffMm += Runoff.annualRunoffMm(climate, cell)
             }
         }
         return (totalRunoffMm * RIVERINE_FLOW_SHARE).toFloat()

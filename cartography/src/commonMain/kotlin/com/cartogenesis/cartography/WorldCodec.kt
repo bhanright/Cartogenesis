@@ -130,6 +130,28 @@ object WorldCodec {
     /**
      * The only version this build reads or writes.
      *
+     * 25 because `climate.subtropicalDryness` left the settings: the subtropics' dryness is the
+     * solved atmosphere's descent, not a strength a reader states, and a format-24 file's setting
+     * would be read as nothing.
+     *
+     * 24 because the climate's seasons became the calendar's: `climate.summerPrecipitation` and
+     * `climate.winterPrecipitation` became `climate.julyHalfPrecipitation` and
+     * `climate.januaryHalfPrecipitation`, the rain of April to September and of October to March,
+     * the two sea-ice masks became `climate.julyHalfSeaIce` and `climate.januaryHalfSeaIce`, and the
+     * climate gained `climate.julyTemperature` and `climate.januaryTemperature`. A format-23 file's
+     * "summer" was each hemisphere's own, so its masks and its seasonal rain would mean something
+     * else here.
+     *
+     * 23 because the moisture march began carrying water in kilograms per square meter and closing
+     * its budget: `climate.depletionLengthKm`, `climate.oceanEvaporationLengthKm`,
+     * `climate.evapotranspirationLengthKm`, `climate.currentMoisture` and
+     * `climate.vegetationRecycling` are gone, their work now physical rates in the march;
+     * `climate.groundReturn` is new, the control for the ground's return; `climate.orographicStrength`
+     * became `climate.rainShadowScale`, a multiple of the cloud's conversion to rain whose one is
+     * Earth's; and the climate gained `climate.potentialEvapotranspirationMm` and `climate.openWaterEvaporationMm`,
+     * which the rivers and lakes read so that their runoff is the rain the march's ground did not
+     * give back. A format-22 file would open with no evaporation fields at all.
+     *
      * 22 because the default planet became Earth's, 40,075 km round, and the counts and shares
      * that sized its tectonics, deltas and glaciers became Earth's figures on the ground:
      * `tectonics.plateCount` became `meanPlateAreaKm2`, `hotspotPlateFraction`
@@ -289,7 +311,7 @@ object WorldCodec {
      * every cell-valued name took a `Cells` suffix. 3 was the container below with none of that, 2
      * the JSON text that preceded it; none of them opens.
      */
-    const val FORMAT_VERSION = 22
+    const val FORMAT_VERSION = 25
 
     private val MAGIC = byteArrayOf('C'.code.toByte(), 'G'.code.toByte(), 'W'.code.toByte(), 'D'.code.toByte())
 
@@ -335,7 +357,7 @@ object WorldCodec {
      * 8192 by 4096, [LARGEST_LADDER_ROWS] rows and [COLUMNS_PER_ROW] columns for each of them.
      *
      * A count of cells rather than a side, because the grid is twice as wide as it is tall and what
-     * a save costs is its cells: 146 bytes a cell of arrays, about 4.9 GB at the top. A file
+     * a save costs is its cells: 154 bytes a cell of arrays, about 5.2 GB at the top. A file
      * claiming more is refused before anything is allocated for it. The 8192-row export is made and
      * drawn without ever being saved, so it does not need this raised.
      */

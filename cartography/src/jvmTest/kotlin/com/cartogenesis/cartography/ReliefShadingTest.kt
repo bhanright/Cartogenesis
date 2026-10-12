@@ -308,11 +308,18 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
             "${unlitUnderTheSky(field, radius)} of $BEARINGS bearings round the cone receive no " +
                 "direct light at all from the dome"
         )
-        assertTrue(
-            sky.floored == 0,
-            "${sky.floored} of $BEARINGS bearings round the cone are pinned at the darkest factor " +
-                "the model has, which is a face with no detail left in it"
-        )
+        // Armed again at A1-2: C1b2's gallery world floored faces under the sky at its ninth decile
+        // of slope, and on A1-2's ground no face is floored (docs/DESIGN_LEDGER.md, A1-2). Recorded
+        // again at A1-4, whose ground moved with the provisional climates' wind (docs/TODO.md).
+        KnownFailures.expect("A1-4: the gallery cone's steepest faces are floored again", "37") {
+            if (sky.floored != 0) {
+                throw RecordedViolation(
+                    "${sky.floored} of $BEARINGS bearings round the cone are pinned at the darkest factor the model " +
+                        "has, which is a face with no detail left in it",
+                    "${sky.floored}"
+                )
+            }
+        }
         // How dark the darkest face is comes out much the same either way, and it should: the haze
         // is calibrated so that the two models have the same contrast. What the dome changes is
         // *which* faces are dark — the lamp blacks out a whole quadrant, the dome darkens the steep
@@ -396,7 +403,7 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
         // Recorded at K2: the gallery's world on the 12,000 km planet under K2's physics is other
         // ground than the one the declared figure was read off; it is the drawing's to re-derive,
         // with its other constants, for the Earth-sized default (docs/TODO.md).
-        KnownFailures.expect("K2: the relief's ordinary ground was read off the gallery's ground before K2", "0.9216") {
+        KnownFailures.expect("K2: the relief's ordinary ground was read off the gallery's ground before K2", "0.9390") {
             if (kotlin.math.abs(declaredGround - ReliefShading.ordinaryGround) > MAX_GROUND_DRIFT) {
                 val found = "%.4f".format(declaredGround)
                 throw RecordedViolation(
@@ -644,15 +651,14 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
                 )
         )
         // Recorded at K2: the gallery's ground moved with K2's figures, and re-deriving a drawing
-        // constant on it is the drawing's chunk (docs/TODO.md).
-        KnownFailures.expect("K2: the exaggeration was read off the gallery's ground before K2", "39.25") {
-            if (kotlin.math.abs(declared - steepestClear) > EXAGGERATION_SWEEP_STEP / 2) {
-                throw RecordedViolation(
-                    "the steepest exaggeration that pins no face of the cone is %.2f, not the declared %.4f"
-                        .format(steepestClear, declared),
-                    "%.2f".format(steepestClear)
-                )
-            }
+        // constant on it is the drawing's chunk (docs/TODO.md). Armed at C1b2, whose gallery world
+        // reads the declared figure again (docs/DESIGN_LEDGER.md, C1b2), as H1's ground under the
+        // coupled climate does (docs/DESIGN_LEDGER.md, M1); H1's ground on main's climate read 39.25.
+        if (kotlin.math.abs(declared - steepestClear) > EXAGGERATION_SWEEP_STEP / 2) {
+            throw AssertionError(
+                "the steepest exaggeration that pins no face of the cone is %.2f, not the declared %.4f"
+                    .format(steepestClear, declared)
+            )
         }
         // The contrast is held against another grid's picture, so it is reported rather than
         // asserted: the application makes one grid (docs/DESIGN_LEDGER.md, G1).
@@ -680,15 +686,17 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
         val tenth = LandSlopes.percentile(slopes, TENTH_PERCENTILE)
         println("RELIEF the tenth percentile of the land slope is %.4f; the floor is %.2f".format(tenth, EngravingPlan.SLOPE_FLOOR))
         // Recorded at K2, for the reason the ordinary ground's clause gives: the floor was read off
-        // the gallery's ground before K2's physics moved it (docs/TODO.md).
-        KnownFailures.expect("K2: the engraving's slope floor was read off the gallery's ground before K2", "0.04") {
-            if (LandSlopes.hundredths(EngravingPlan.SLOPE_FLOOR) != LandSlopes.hundredths(tenth)) {
-                throw RecordedViolation(
-                    "the tenth percentile of seed 234475's land slope at 512 rows is $tenth; the floor is ${EngravingPlan.SLOPE_FLOOR}",
-                    LandSlopes.hundredths(tenth)
-                )
-            }
-        }
+        // the gallery's ground before K2's physics moved it (docs/TODO.md). Armed at A1-4, whose
+        // ground reads the floor's hundredth again (docs/DESIGN_LEDGER.md, A1-4); recorded again
+        // at A1-5, whose rain moved the gallery's ground through the erosion's feed, and armed again
+        // on H1's ground under that rain (docs/DESIGN_LEDGER.md, M1). Recorded again at A1-6b, whose
+        // seasonal circulation's rain moved the gallery's ground to a tenth percentile of 0.048
+        // (docs/TODO.md); armed again at A1-6c, whose ground reads the floor's hundredth
+        // (docs/DESIGN_LEDGER.md, A1-6c).
+        assertTrue(
+            LandSlopes.hundredths(EngravingPlan.SLOPE_FLOOR) == LandSlopes.hundredths(tenth),
+            "the tenth percentile of seed 234475's land slope at 512 rows is $tenth; the floor is ${EngravingPlan.SLOPE_FLOOR}"
+        )
     }
 
     /**

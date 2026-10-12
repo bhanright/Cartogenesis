@@ -205,6 +205,17 @@ class OutletResolutionTest {
         // A known failure from S3 to K1 (Audit III's C-I1); armed at K2, whose lakes take Budyko's
         // share of their catchment's rain rather than a fixed third of it, and whose pooled largest
         // lake is under the Caspian's share (docs/DESIGN_LEDGER.md, K2).
+        // Recorded at C1b: the land rains more than Earth's and its rain grows with the grid, and
+        // seed 59758's largest lake with it, 1.10, 3.42 and 7.16 times the Caspian's share at 256,
+        // 512 and 1,024 rows (docs/DESIGN_LEDGER.md, C1b; docs/TODO.md, "The march's misses
+        // against Earth, after C1b").
+        // Armed at C1b2, whose land rains less (docs/DESIGN_LEDGER.md, C1b2). Recorded at A1-5:
+        // seed 42's largest lake at 256 and 1,024 rows stands over 1.5 times the share under the
+        // rain from the solved vertical motion. Armed at A1-6a, whose circulation's rain leaves the
+        // pool at 0.15% of the land against the share's 0.25% (docs/DESIGN_LEDGER.md, A1-6a).
+        // Recorded at A1-6b: under the seasonal circulation's rain seed 59758's largest lake at
+        // 1,024 rows is 7.24 times the share and the pool 1.98. Armed at A1-6c, the pool 0.57 and
+        // seed 59758's largest lake 0.87 at 1,024 rows (docs/DESIGN_LEDGER.md, A1-6c).
         assertTrue(
             pooledLargest < caspianShare,
             "the largest lake pooled over ${largestLandLakeShares.size} worlds is " +

@@ -5,9 +5,11 @@ import com.cartogenesis.cartography.geometry.Contours
 import com.cartogenesis.cartography.geometry.FacingShares
 import com.cartogenesis.cartography.geometry.GridFrame
 import com.cartogenesis.cartography.geometry.IsotropicNoise
+import com.cartogenesis.cartography.geometry.KnownFailures
 import com.cartogenesis.cartography.geometry.MapLayers
 import com.cartogenesis.cartography.geometry.Outcome
 import com.cartogenesis.cartography.geometry.Outline
+import com.cartogenesis.cartography.geometry.RecordedViolation
 import com.cartogenesis.worldgen.BorrowsSharedWorlds
 import com.cartogenesis.worldgen.SharedWorlds
 import com.cartogenesis.worldgen.model.WorldGenConfig
@@ -235,6 +237,7 @@ class CoastLineTest : BorrowsSharedWorlds() {
      */
     @Test
     fun `the drawn coast keeps within the smoothing's bound of the field's own shoreline`() {
+        val short = ArrayList<String>()
         for (seed in SEEDS) {
             val map = world(seed)
             val field = FieldShoreline(map)
@@ -251,10 +254,15 @@ class CoastLineTest : BorrowsSharedWorlds() {
                     "the drawn coast strays ${drawn.describe()} pixels from the field's shoreline against a bound of %.3f; ".format(bound) +
                     "the old trace ${old.describe()}"
             )
-            assertTrue(drawn.size >= vertices * LEAST_SHARE_CHECKED, "seed $seed: only ${drawn.size} of $vertices vertices could be checked")
+            if (drawn.size < vertices * LEAST_SHARE_CHECKED) short += "seed $seed: only ${drawn.size} of $vertices vertices could be checked"
             assertTrue(drawn.max() <= bound * BOUND_QUADRATURE_ALLOWANCE, "seed $seed: the drawn coast strays ${drawn.max()} pixels, past $bound")
             assertTrue(old.max() > bound, "seed $seed: the old trace keeps within the bound too, so the clause cannot tell them apart")
         }
+        // Recorded at A1-6b: on the seasonal circulation's ground seed 7's coast has 954 of its 1,949
+        // drawn vertices where the ground and the mask agree, a hair under half; those it has keep
+        // within the bound (docs/TODO.md). Armed at F1, on whose ground half or more of every
+        // seed's drawn coast can be checked (docs/DESIGN_LEDGER.md, F1).
+        assertTrue(short.isEmpty(), short.joinToString("; "))
     }
 
     /**

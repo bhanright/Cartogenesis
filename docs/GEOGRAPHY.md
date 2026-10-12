@@ -47,7 +47,17 @@ initiates nothing of its own and is carried by the downstream rule instead. Grou
 thaws — where the warmest month of the year stays at or below freezing — starts no channel, though
 a river rising in a warmer catchment still runs across it.
 
-The runoff itself is one figure for the whole pipeline, `Runoff.annualWeightMm`: a cell's rainfall
+**Since C1b the rivers carry the rain the ground did not give back.** `Runoff.annualRunoffMm` is
+the year's rain less Budyko's evaporated share of it against the climate's FAO-56 potential
+evapotranspiration, the same curve and the same two fields the moisture march's ground return
+reads, so at every land cell the rain is the return plus the runoff, and the drawn network's
+discharge, the lakes' inflow and the realms' riverine threshold carry no water the march put back
+into the air. What cuts a channel, in the erosion rounds and the channel-head criterion, is still
+the rainfall weight below, floor and all: a channel is cut by its storms and not by its year's
+mean, and in dry country Budyko's annual curve returns nearly all of the rain that the rare storm
+still runs off with.
+
+The weight that cuts is `Runoff.annualWeightMm`: a cell's rainfall
 in millimetres a year, held at or above a floor of **60 mm** so that an arid upland still feeds the
 channel leaving it. Sixty millimetres is where UNEP's hyper-arid class ends — an aridity index,
 rainfall over potential evaporation, of 0.05 — under a potential evaporation of 1,200 mm, the scale
@@ -1280,6 +1290,20 @@ are 14/18, 8/14, 8/16, 6/14 and 3/14, 39 of 76, against 36 of 77 on origin/main.
 
 ## Where the deserts are
 
+**Since C1b the march is a budget in kilograms per square meter.** Column water is carried along
+the wind and between rows as fluxes that conserve it, taken up from the sea by the bulk formula and
+from the ground as Budyko's share of each cell's own year of rain, and rained by the column's
+8.9-day lifetime under the belts' descent, by the climb, and wherever the column holds more than
+its saturated water at its temperature (Clausius-Clapeyron up a 6.5 K/km lapse). The belts' factor
+below now modulates that lifetime and reaches its floor without a kink; the ITCZ is no longer a
+bump in it but the trades' water gathered where they meet; and the ground's return is not scaled by
+the belt, because it is the ground's own rain against its own evaporative demand. The two
+mechanisms below are what the old march did and what its successor keeps in physical form; their
+figures are the old march's. `ClimateConfig.groundReturn` off is the control for the second. On
+C1b's march the deserts do not sit in the horse latitudes yet: the subtropics take a summer
+monsoon's water and the tropical interiors are dry (`GeographyAuditTest`'s band clause is a known
+failure; docs/TODO.md, "The desert left the horse latitudes").
+
 Deserts belong to the horse latitudes, near 30 degrees, where air that rose at the equator descends
 dry. Getting them there took two mechanisms rather than a tuned constant.
 
@@ -1362,14 +1386,17 @@ Trenberth and Caron's observed 5.3, 5.0 and 3.3.
   agreeing to a tenth, which is what says the shape is right and not merely that the curve has a
   spare parameter. The water is not blended onto the land at all: it is read where the sea freezes
   and where the moisture march evaporates, and nowhere else.
-- **Each column's year is kept twice, as months and as halves.** Every threshold the biome stage
-  reads is one of Köppen's and Köppen's are monthly means — the 10 °C tree line, the −3 °C
-  continental winter, the 18 °C tropical one — so a band's stored "summer" is the warmest
-  thirty-step window of its own year and its "winter" the coldest. For a sinusoidal year a half-year
-  mean is 0.64 of the month extreme, so handing halves to those gates asks each of them a question a
-  third short of the one it was written for. But the snow balance's degree-day sum and the moisture
-  march both *integrate across* a season, and those read the warm and cold half-years' means
-  instead. Neither reading serves both.
+- **Each column's year is kept three ways: its own months, and the calendar's months and
+  halves.** Every threshold the biome stage reads is one of Köppen's and Köppen's are monthly means
+  — the 10 °C tree line, the −3 °C continental winter, the 18 °C tropical one — so a band's stored
+  "summer" is the warmest thirty-step window of its own year and its "winter" the coldest, wherever
+  the lag puts them. For a sinusoidal year a half-year mean is 0.64 of the month extreme, so handing
+  halves to those gates asks each of them a question a third short of the one it was written for.
+  Everything that is one moment of the planet reads the calendar instead: July and January for the
+  maps of a season, and April to September and October to March, the halves Peel, Finlayson and
+  McMahon (2007) draw their Köppen map's summer and winter from, for the snow balance's degree-day
+  sum and the moisture march, which *integrate across* a season. Since A1-1 those are the same
+  steps in every band, so the northern summer and the southern winter are one window.
 - **The albedo is the model's own ice.** A band whose annual mean falls below −10 °C is white
   (Budyko's and North's ice line, where snow cover becomes permanent enough to change what the
   planet reflects), ramped over 4.5 °C either side. The ice-free albedo is a least-squares fit to
@@ -1398,37 +1425,48 @@ without its mechanism: a tenth of the heat transport bakes the equator to 41 °C
 capacities and not the geography; and an upright axis has no seasons at all, to a ten-thousandth of
 a degree.
 
-**Sea ice, and why the polar ocean is a desert.** Where a season's *water* — the band's mixed layer
-plus the current anomaly the ocean stage carries — sits at or below −1.8 °C, the freezing
-point of sea water at the ocean's mean salinity, that cell is under ice for that season. The
+**Sea ice, and why the polar ocean is a desert.** Where a half-year's *water* — the band's mixed
+layer plus the current anomaly the ocean stage carries — sits at or below −1.8 °C, the freezing
+point of sea water at the ocean's mean salinity, that cell is under ice for that half. The
 freezing test reads the water and not the air above it, which in a polar winter is a dozen degrees
-colder than the sea it sits on. Two masks
-are saved, one per season: the cold season's is the winter pack and the warm season's is the
-perennial ice, which is what the map draws. The moisture march takes nothing at all from a frozen
+colder than the sea it sits on. Two masks are saved, one per calendar half, each holding one
+hemisphere's winter pack and the other's summer remnant; the perennial ice, which is what the map
+draws, is the sea frozen through its own warmest half-year, as before A1-1. Measured at A1-1 on
+seeds 7, 42 and 1234 at 256 rows, the winter pack covers 26.4, 24.3 and 31.2% of the sea and the
+perennial pack 22.2, 20.6 and 26.5%, five sixths of it, against Earth's 9 million km² at the two
+minima to 34 million at the two maxima (NSIDC: 6.5 and 15.5 in the Arctic, 2.5 and 18.5 in the
+Antarctic), a quarter. Read on the warmest month instead the share comes out near Earth's, but at
+the wrong place: the model carries no latent heat to hold a frozen sea at its melting point, so
+the pole's summer sun opens the polar sea while the sea twenty degrees from it stays frozen.
+TODO.md has it. The moisture march takes nothing at all from a frozen
 cell, because a metre of ice is a lid — and that is why polar deserts exist, and what keeps an ice
 sheet at the pole from feeding itself indefinitely.
 
 On Earth's own land fraction the model's cold-season edge lands at 60.4° N and 61.1° S against
-Earth's zonal-mean 60. On the map, measured over seeds 7, 42 and 1234 at 512: the cold season
-freezes 25–33% of the sea and reaches 55–58° of latitude, the warm season's perennial pack holds
-16–26% and reaches 62–64°, and every cell frozen in the warm season is frozen in the cold one by
-construction. The lid is worth a factor of four to seven in the rain: on seed 7 the frozen sea takes
+Earth's zonal-mean 60. On the map before A1-1, measured over seeds 7, 42 and 1234 at 512: the cold
+season froze 25–33% of the sea and reached 55–58° of latitude, and the warm half-year's pack held
+16–26%, two thirds of the winter's where Earth's minimum is a quarter of its maximum. The lid is worth a factor of four to seven in the rain: on seed 7 the frozen sea takes
 523 mm a year against 2,135 mm over the open water at the same latitudes, on seed 42 351 against
 2,508, on seed 1234 257 against 1,811. With `ClimateConfig.seaIce` off — the control — the same
 cells take 1,228, 1,592 and 1,305 mm, because then the polar ocean evaporates like any other.
 
 ## The year has two halves
 
-Temperature and rainfall are computed twice, for the local warm season and the local cold one, and
-biomes are read off all four numbers instead of two. Rainfall's seasons are one setting —
-`ClimateConfig.seasonalTiltDegrees`, the degrees the thermal equator migrates toward whichever
-hemisphere is in summer — carried by the wind belts and the rain belts alike; temperature's are the
-same number read as the planet's axial tilt, so switching seasons off stands the axis upright and
-there is no seasonal forcing for the energy balance to answer.
+Temperature and rainfall are computed twice, for the calendar's two half-years, April to September
+and October to March, each one moment of the planet, and biomes are read off each cell's warmer and
+cooler half instead of the annual figures alone. The seasons are one setting,
+`ClimateConfig.seasonalTiltDegrees`, read as the planet's axial tilt: the energy balance answers it,
+and each half's circulation follows the energy balance's own heating (below), so switching seasons
+off stands the axis upright and leaves no seasonal forcing for either to answer.
 
-- **"Summer" is local, not July.** Northern July and southern January are both stored as the warm
-  season, so one classification rule serves both hemispheres and a dry-summer coast reads the same
-  either side of the equator.
+- **The halves are the calendar's, and a place's summer is its warmer half.** Until A1-1 each band
+  took its own warmest half-year, so the march's warm half was every hemisphere's summer at once and
+  its thermal equator stood ten degrees into both hemispheres together. Now each half has one
+  circulation, rising in the north from April to September and in the south from October to March,
+  and the winter hemisphere's trades cross the equator to it. The biome stage still applies one
+  rule to both hemispheres: a cell's summer rain is the rain of whichever half is warmer there, Peel
+  and others' rule, read on the cell's own temperatures so that the switch follows the thermal
+  equator over the land and not the equator's row.
 - **The stored temperature of a season is its warmest or coldest month, and the rain's is its
   half-year.** Two different questions get asked of the same year. Köppen's thresholds are monthly
   means — the 10 °C tree line, the −3 °C continental winter — so what the biome stage reads and
@@ -1443,17 +1481,40 @@ there is no seasonal forcing for the energy balance to answer.
   annual ones bit for bit and the generator reproduces the pre-seasons world exactly.
 - **The sea barely swings, and nobody told it to.** Water's heat capacity is why a maritime climate
   has a small annual range, and since W1 that is a heat capacity in a model rather than a damping
-  factor. Measured on seed 42 at 35°, warmest month against coldest: land swings 20.6 °C through
-  the year and the marine air 10.8 °C. Earth's figures there are 8–26 over land, 7–11 for the air
-  over the ocean and 6–9 for the water beneath it. What the map stores over water is the air, which
-  is what a coast feels; the water is a degree or two steadier than that and is read where the sea
-  freezes and where the march evaporates.
+  factor. Since A1-1 the sea surface takes its own share of the sunlight's seasonal swing, 167.8 of
+  the 247.7 W/m² an ocean column absorbs (Trenberth, Fasullo and Kiehl 2009), where before all of it
+  heated the air and the air ran several degrees warmer than the water every summer, against Kara
+  and others' (2007) sea standing warmer than the air nearly everywhere. On Earth's land fraction
+  the swings at 50–60° are 35.6 °C for land, 9.3 for marine air and 7.8 for water, against
+  34–38, 8–11 and 5–8 (they were 38.7, 13.0 and 6.9). On seed 42 at 1,024 rows at 35° N, July against
+  January: land 30.1 and 2.6 °C, marine air 19.6 and 13.7, water 18.1 and 15.3. The water is still
+  too steady there, a fifty-meter layer all year where Earth's summer layer is 20–30 m (TODO.md).
+  The air over the sea carries the ocean's anomaly too, one for one as Kara and others measure it,
+  so the map's air over a cold current is cold.
+- **A summer's contrast across a coast is half of Earth's.** Read the way Earth's is, a month's
+  sea-level temperature less its latitude's mean across a coast, seeds 42, 969495 and 7 at 1,024
+  rows stand 7.6–11.5 °C across their subtropical west coasts in July against the 18–20 Nakamura and
+  Miyasaka (2004) read off the NCEP reanalysis, and 9.4–15.3 across their east coasts against
+  Earth's 2–8. The world's west coasts are no further from their sea than its east coasts, because
+  the sea off them is barely colder than its latitude: the ocean's anomaly there is a degree where
+  the California and Canary Currents' air is 6–10 under its latitude. `CoastContrastTest` records
+  it, and TODO.md says what is missing.
 - **Two new classes come out of the seasonality rather than the total.** A Mediterranean coast is
   dry in the warm half of the year and wet in the cold one, which happens where the subtropical
   high sits over a west-facing coast all summer and the westerlies swing back over it in winter; a
   monsoon forest is the opposite, a drenching wet season and a dry winter. Savanna is now decided
   the same way, on the lopsidedness of the year rather than on the annual total alone.
-- **The desert belt migrates, and the instantaneous belts are sharper than their mean.** The
+- **The rising branch migrates and the subtropical edges much less.** Since A1-6a each half's
+  zonal-mean circulation is Lindzen and Hou's (1988) for a heating off the equator: two Hadley
+  cells about a rising branch that stands poleward of the season's heating, the energy balance's
+  warmest marine air, with a strong cross-equatorial winter cell and a weak summer cell, and the
+  cells' poleward edges moving by about half as much as the rising branch. Its strength is the
+  atmosphere's radiative loss, its lower branch the troposphere's lower half, and its surface wind
+  the boundary layer's momentum balance under eddies that hold Earth's annual zonal-mean wind; the
+  sea-level pressure's zonal mean is that wind's drag balance. Where this stands against Earth's
+  ridges, ITCZ and cells is in the ledger's A1-6a row and `MeanCirculationEarthTest`.
+- **The desert belt migrates, and the instantaneous belts are sharper than their mean.** Until
+  A1-6a the belts rode the thermal equator ten degrees each way; what follows is that history. The
   subtropical high rides the thermal equator, so the dry belt sits some ten degrees poleward in
   summer and the same distance equatorward in winter. Averaging two offset marches, though, is a
   second computation of the annual mean, and it flattened a profile whose constants were already
@@ -1544,6 +1605,16 @@ pressure, and surface pressure comes from temperature:
 
 The deserts survived it: `GeographyAuditTest` reads 100% in band on all four seeds, up from
 100/99/100/98.
+
+**Since C1b the runs, the walls and the blend are gone.** Every cell is marched by the sweep its own
+wind blows in, one eastward and one westward over the whole map, and water crossing from one
+sweep's cell into the other's, through a face between rows or where two zonal winds meet, is banked
+and taken up by the other sweep. Between rows water moves as a donor-cell flux of the cell's own
+meridional wind, cut into as many sub-steps as keep every parcel positive, and the storm track's
+eddies mix the rows at the energy balance's own eddy diffusivity, so a circulation belt's edge is
+crossed. The belts' meridional wind is a half sine between its zeros, the belt edges and the
+equator, with the same mean as before. What the bullets above say of the old march's blend and
+clamp is its history (docs/DESIGN_LEDGER.md, C1b).
 
 ## Coasts and the sea beside them
 

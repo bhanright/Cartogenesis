@@ -1,5 +1,6 @@
 package com.cartogenesis.desktop
 
+import com.cartogenesis.worldgen.pipeline.IceSheet
 import com.cartogenesis.worldgen.pipeline.IceSheetAccelerator
 import org.lwjgl.opengl.GL43C
 
@@ -7,11 +8,11 @@ import org.lwjgl.opengl.GL43C
  * Draws the ice sheet's profile and the flow down its surface on the graphics card.
  *
  * Rule 8's seam for `IceSheet`, and the simplest of the three this program has: one dispatch that
- * writes the thickness from the Vialov profile, a barrier, and a second that reads the surface
+ * writes the thickness from each body's Vialov profile, a barrier, and a second that reads the surface
  * those thicknesses make and picks each cell's steepest descent. There is no iteration and no
  * convergence to lose, so unlike `GpuOcean` there is nothing here a driver could compound an error
- * through — the only difference between this and the CPU is how the two round one square root and
- * one division, which is what `GpuIceSheetTest` measures, on the fixture `IceSheetParity` builds.
+ * through — the only difference between this and the CPU is how the two round a table read, a square root
+ * and a division, which is what `GpuIceSheetTest` measures, on the fixture `IceSheetParity` builds.
  *
  * The two halves have to be separate dispatches rather than one. The flow at a cell reads its
  * neighbours' thicknesses, and a neighbour may be in another work group, so the whole grid's
@@ -33,7 +34,8 @@ class GpuIceSheet private constructor(override val name: String) : IceSheetAccel
         nearestMarginCell: IntArray,
         bedRelative: FloatArray,
         onTheSheet: BooleanArray,
-        metresPerRootKilometre: Float,
+        domeMetresOfMargin: FloatArray,
+        divideKmOfMargin: FloatArray,
         metresPerFieldUnit: Float,
         cellHeightInCellWidths: Float,
         cellSpanKm: Float
@@ -43,13 +45,15 @@ class GpuIceSheet private constructor(override val name: String) : IceSheetAccel
         if (cellCount != marginDistanceKm.size.toLong() ||
             cellCount != nearestMarginCell.size.toLong() ||
             cellCount != bedRelative.size.toLong() ||
-            cellCount != onTheSheet.size.toLong()
+            cellCount != onTheSheet.size.toLong() ||
+            cellCount != domeMetresOfMargin.size.toLong() ||
+            cellCount != divideKmOfMargin.size.toLong()
         ) return null
 
         return GlContext.run("Ice sheet profile") {
             if (profileProgram == 0 || flowProgram == 0) return@run null
 
-            val buffers = IntArray(6)
+            val buffers = IntArray(9)
             GL43C.glGenBuffers(buffers)
             try {
                 // A boolean has no storage width the card agrees on, so the mask crosses as words.
@@ -59,7 +63,11 @@ class GpuIceSheet private constructor(override val name: String) : IceSheetAccel
                 upload(buffers[BED_BINDING], BED_BINDING, bedRelative)
                 upload(buffers[SHEET_BINDING], SHEET_BINDING, sheetWords)
                 upload(buffers[OUT_BINDING], OUT_BINDING, FloatArray(marginDistanceKm.size))
-                upload(buffers[FLOW_BINDING], FLOW_BINDING, IntArray(marginDistanceKm.size))
+                // The receivers first: their binding is the dome's until the profile is done.
+                upload(buffers[FLOW_BUFFER], FLOW_BINDING, IntArray(marginDistanceKm.size))
+                upload(buffers[DOME_BINDING], DOME_BINDING, domeMetresOfMargin)
+                upload(buffers[DIVIDE_BINDING], DIVIDE_BINDING, divideKmOfMargin)
+                upload(buffers[SHAPE_BINDING], SHAPE_BINDING, IceSheet.VIALOV_SHAPE)
                 if (GL43C.glGetError() != GL43C.GL_NO_ERROR) return@run null
 
                 val groupsAcross = (cellsAcross + WORK_GROUP_SIDE - 1) / WORK_GROUP_SIDE
@@ -68,9 +76,6 @@ class GpuIceSheet private constructor(override val name: String) : IceSheetAccel
                 GL43C.glUseProgram(profileProgram)
                 GL43C.glUniform1i(uniform(profileProgram, "uWidth"), cellsAcross)
                 GL43C.glUniform1i(uniform(profileProgram, "uHeight"), cellsDown)
-                GL43C.glUniform1f(
-                    uniform(profileProgram, "uMetresPerRootKm"), metresPerRootKilometre
-                )
                 GL43C.glUniform1f(
                     uniform(profileProgram, "uMetresPerFieldUnit"), metresPerFieldUnit
                 )
@@ -84,6 +89,8 @@ class GpuIceSheet private constructor(override val name: String) : IceSheetAccel
                 GL43C.glBindBuffer(GL43C.GL_SHADER_STORAGE_BUFFER, buffers[OUT_BINDING])
                 GL43C.glGetBufferSubData(GL43C.GL_SHADER_STORAGE_BUFFER, 0L, thickness)
 
+                // The flow's receivers take the binding the dome had, which the profile is done with.
+                GL43C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, FLOW_BINDING, buffers[FLOW_BUFFER])
                 GL43C.glUseProgram(flowProgram)
                 GL43C.glUniform1i(uniform(flowProgram, "uWidth"), cellsAcross)
                 GL43C.glUniform1i(uniform(flowProgram, "uHeight"), cellsDown)
@@ -95,7 +102,7 @@ class GpuIceSheet private constructor(override val name: String) : IceSheetAccel
                 GL43C.glMemoryBarrier(GL43C.GL_BUFFER_UPDATE_BARRIER_BIT)
 
                 val receiver = IntArray(marginDistanceKm.size)
-                GL43C.glBindBuffer(GL43C.GL_SHADER_STORAGE_BUFFER, buffers[FLOW_BINDING])
+                GL43C.glBindBuffer(GL43C.GL_SHADER_STORAGE_BUFFER, buffers[FLOW_BUFFER])
                 GL43C.glGetBufferSubData(GL43C.GL_SHADER_STORAGE_BUFFER, 0L, receiver)
                 if (GL43C.glGetError() == GL43C.GL_NO_ERROR) {
                     IceSheetAccelerator.Sheet(thickness, receiver)
@@ -129,6 +136,17 @@ class GpuIceSheet private constructor(override val name: String) : IceSheetAccel
         private const val BED_BINDING = 2
         private const val SHEET_BINDING = 3
         private const val OUT_BINDING = 4
+
+        /**
+         * The profile's per-margin dome and divide distance, and the Vialov shape table both
+         * devices read. Eight bindings in all, the most a compute shader is promised.
+         */
+        private const val DOME_BINDING = 5
+        private const val DIVIDE_BINDING = 6
+        private const val SHAPE_BINDING = 7
+
+        /** Where the receivers' buffer sits among the nine; bound at [FLOW_BINDING] for the flow pass. */
+        private const val FLOW_BUFFER = 8
 
         /**
          * The receivers get a buffer of their own rather than being written back over the bed.
@@ -168,11 +186,11 @@ class GpuIceSheet private constructor(override val name: String) : IceSheetAccel
          * The thickness: the dome's surface over this cell, less the bed, and never less than
          * nothing.
          *
-         * `IceSheet.surfaceMetres` in one line, with the margin's own bed floored at the waterline
-         * for the reason that function gives. Every value the output is made from is `precise`,
-         * so a driver free to fuse the multiply and add does not walk away from the reference at
-         * the third decimal: GLSL applies the qualifier to every operation within the function
-         * that feeds a `precise` variable, so the thickness is formed in one before it is stored.
+         * `IceSheet.profile` in the same operations in the same order: the margin's body's Vialov
+         * profile, read off the shared shape table and averaged over the cell's span at eight
+         * midpoints, on the margin's own ground floored at the waterline. Every value the output is
+         * made from is `precise`, so a driver free to fuse a multiply and an add does not walk away
+         * from the reference.
          */
         private val PROFILE_SOURCE = """
             #version 430
@@ -183,12 +201,27 @@ class GpuIceSheet private constructor(override val name: String) : IceSheetAccel
             layout(std430, binding = 2) readonly buffer Bed { float bed[]; };
             layout(std430, binding = 3) readonly buffer Sheet { uint onTheSheet[]; };
             layout(std430, binding = 4) writeonly buffer Out { float thickness[]; };
+            layout(std430, binding = 5) readonly buffer Dome { float domeMetres[]; };
+            layout(std430, binding = 6) readonly buffer Divide { float divideKm[]; };
+            layout(std430, binding = 7) readonly buffer Shape { float shape[]; };
 
             uniform int uWidth;
             uniform int uHeight;
-            uniform float uMetresPerRootKm;
             uniform float uMetresPerFieldUnit;
             uniform float uCellSpanKm;
+
+            const int SHAPE_STEPS = ${IceSheet.SHAPE_STEPS};
+            const int SPAN_SAMPLES = ${IceSheet.SPAN_SAMPLES};
+
+            float shapeAt(float fromMargin) {
+                if (fromMargin <= 0.0) return 0.0;
+                if (fromMargin >= 1.0) return sqrt(fromMargin);
+                precise float position = fromMargin * float(SHAPE_STEPS);
+                int below = min(int(position), SHAPE_STEPS - 1);
+                precise float share = position - float(below);
+                precise float value = shape[below] + (shape[below + 1] - shape[below]) * share;
+                return value;
+            }
 
             void main() {
                 int x = int(gl_GlobalInvocationID.x);
@@ -196,23 +229,24 @@ class GpuIceSheet private constructor(override val name: String) : IceSheetAccel
                 if (x >= uWidth || y >= uHeight) return;
                 int cell = y * uWidth + x;
                 if (onTheSheet[cell] == 0u) { thickness[cell] = 0.0; return; }
-
-                // The mean of the plastic curve over the cell, not its value at the cell's
-                // middle: `IceSheet.profileMetres`, with the roots factored out as that function
-                // spells them, which is what keeps the two within a float's own precision.
-                float far = marginKm[cell];
-                precise float profile = 0.0;
-                if (far > 0.0) {
-                    float near = max(far - uCellSpanKm, 0.0);
-                    precise float rootFar = sqrt(far);
-                    precise float rootNear = sqrt(near);
-                    precise float mean =
-                        (near + rootNear * rootFar + far) / (rootNear + rootFar);
-                    profile = (2.0 / 3.0) * uMetresPerRootKm * mean;
-                }
                 int from = nearest[cell];
-                precise float marginBed =
-                    from < 0 ? 0.0 : max(bed[from] * uMetresPerFieldUnit, 0.0);
+                if (from < 0) { thickness[cell] = 0.0; return; }
+
+                float far = marginKm[cell];
+                float dome = domeMetres[from];
+                float divide = divideKm[from];
+                precise float profile = 0.0;
+                if (far > 0.0 && dome > 0.0 && divide > 0.0) {
+                    precise float near = max(far - uCellSpanKm, 0.0);
+                    precise float span = far - near;
+                    precise float sum = 0.0;
+                    for (int point = 0; point < SPAN_SAMPLES; ++point) {
+                        precise float distance = near + span * ((float(point) + 0.5) / float(SPAN_SAMPLES));
+                        sum += shapeAt(distance / divide);
+                    }
+                    profile = dome * (sum / float(SPAN_SAMPLES));
+                }
+                precise float marginBed = max(bed[from] * uMetresPerFieldUnit, 0.0);
                 precise float surface = marginBed + profile;
                 precise float thicknessHere = max(surface - bed[cell] * uMetresPerFieldUnit, 0.0);
                 thickness[cell] = thicknessHere;

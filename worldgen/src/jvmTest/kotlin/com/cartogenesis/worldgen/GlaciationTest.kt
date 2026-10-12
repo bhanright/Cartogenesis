@@ -157,26 +157,16 @@ class GlaciationTest : BorrowsSharedWorlds() {
         // to 1.02; on the implicit terrain the same balance leaves it at 0.86, and on square cells
         // at Q2 0.83, re-recorded (docs/DESIGN_LEDGER.md, Q2); at L1, whose closed basins hold a lake
         // in each hollow, 0.59 (docs/DESIGN_LEDGER.md, L1).
-        KnownFailures.expect(
-            "C I4: glaciated country holds no more lakes than the ice's absence leaves",
-            "cold-country lakes 0.32 to 0.50 per 10k cells, iced zone ratio 0.79"
-        ) {
-            val tripled = with.coldLakes.toLong() * without.coldLand >= 3L * without.coldLakes * with.coldLand
-            val contrasted = with.ratio >= COLD_LAKE_RATIO
-            if (!(tripled && contrasted)) {
-                val found = listOfNotNull(
-                    if (tripled) null else String.format(Locale.ROOT, "cold-country lakes %.2f to %.2f per 10k cells", without.coldDensity, with.coldDensity),
-                    if (contrasted) null else String.format(Locale.ROOT, "iced zone ratio %.2f", with.ratio)
-                ).joinToString()
-                throw RecordedViolation(
-                    ("the ice takes cold-country lakes from %.2f to %.2f per 10k cells, asked three times, " +
-                        "and the iced zone ratio to %.2f, asked %.1f").format(
-                        without.coldDensity, with.coldDensity, with.ratio, COLD_LAKE_RATIO
-                    ),
-                    found
-                )
-            }
-        }
+        // Armed at A1-6b, whose ice leaves both contrasts standing (docs/DESIGN_LEDGER.md, A1-6b).
+        val tripled = with.coldLakes.toLong() * without.coldLand >= 3L * without.coldLakes * with.coldLand
+        val contrasted = with.ratio >= COLD_LAKE_RATIO
+        assertTrue(
+            ("the ice takes cold-country lakes from %.2f to %.2f per 10k cells, asked three times, " +
+                "and the iced zone ratio to %.2f, asked %.1f").format(
+                without.coldDensity, with.coldDensity, with.ratio, COLD_LAKE_RATIO
+            ),
+            tripled && contrasted
+        )
     }
 
     private companion object {

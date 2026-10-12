@@ -161,14 +161,23 @@ class GridShapeTest : BorrowsSharedWorlds() {
             WorldGenerationEngine.generateBlocking(slantInRows),
             misses
         )
-        // Recorded at K2: on the Earth-sized planet the doubled slant moves one band's desert past
-        // the spread and no band's rain, the spreads measured on the 12,000 km planet's worlds
-        // (docs/DESIGN_LEDGER.md, K2; docs/TODO.md).
-        KnownFailures.expect("K2: the doubled slant moves the Earth-sized planet's rain less than the 12,000 km planet's spread", "deserts 1, rain 0") {
+        // Recorded at K2, where the doubled slant moved one band's desert past the spread and no
+        // band's rain; passing at C1b, whose march carries water across the rows by the
+        // slant's own flux, and armed (docs/DESIGN_LEDGER.md, K2 and C1b).
+        // Recorded at C1b2: the doubled slant moves one band's desert past the spread and no band's
+        // rain, the eddies' exchange across the rows outweighing the mean wind's slope
+        // (docs/TODO.md, "The march's misses against Earth, after C1b2").
+        // Armed at A1-4, whose ground and rain read it again (docs/DESIGN_LEDGER.md, A1-4). Recorded
+        // at A1-5: the doubled slant moves one band's rain past the spread and no band's desert, the
+        // deserts now the solved descent's (docs/TODO.md). Armed on H1's ground under the coupled
+        // climate, where it moves both (docs/DESIGN_LEDGER.md, M1). Recorded at A1-6b: the slant
+        // now sets only the Ferrel and polar legs, the Hadley cells' meridional wind being their own
+        // continuity's, and doubling it moves neither past the spread (docs/TODO.md).
+        KnownFailures.expect("A1-6b: the doubled slant reaches only the Ferrel and polar legs", "deserts 0, land rain 0") {
             if (misses.desert.isEmpty() || misses.rain.isEmpty()) {
                 throw RecordedViolation(
-                    "a slant twice as steep moved past the spread: deserts ${misses.desert}; land rain ${misses.rain}",
-                    "deserts ${misses.desert.size}, rain ${misses.rain.size}"
+                    "a slant twice as steep should move both past the spread: deserts ${misses.desert}; land rain ${misses.rain}",
+                    "deserts ${misses.desert.size}, land rain ${misses.rain.size}"
                 )
             }
         }

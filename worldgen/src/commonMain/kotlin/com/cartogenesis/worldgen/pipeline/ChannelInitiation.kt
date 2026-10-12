@@ -274,10 +274,10 @@ object ChannelInitiation {
      * the downstream rule in [channelMask] carries it — which is the Lena and the Yenisey, rivers
      * that rise where the summer thaws and run on over ground that does not.
      *
-     * **Read off the thermometer, and no longer off Thornthwaite's demand.** The demand is zero on
-     * exactly this ground, so it gave the right answer and was the tidier way to say it; but the
-     * demand that was run is [LakeWaterBalance.potentialEvaporationMm], whose last act is to
-     * multiply by `LakesConfig.evaporationScale`. That figure is a setting on how hard a lake's
+     * **Read off the thermometer, and no longer off an evaporative demand.** Thornthwaite's demand,
+     * which the lakes read until C1b, is zero on exactly this ground, so it gave the right answer
+     * and was the tidier way to say it; but the demand that was run was multiplied by
+     * `LakesConfig.evaporationScale`. That figure is a setting on how hard a lake's
      * surface evaporates, and a world that turns it off got a demand of zero everywhere: every land
      * cell read as permanently frozen, no cell anywhere passed the head test, and the map came out
      * with no channel on it at all. Seed 42 at 512 initiates 52,525 channel cells and initiated

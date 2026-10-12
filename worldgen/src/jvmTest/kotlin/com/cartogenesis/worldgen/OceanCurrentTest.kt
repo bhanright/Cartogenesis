@@ -56,7 +56,15 @@ class OceanCurrentTest : BorrowsSharedWorlds() {
             val beltsOcean = OceanStage.generate(beltsOnly, world.sea)
             failures += OceanSense.check("seed $seed at ${SharedWorlds.COARSE_ROWS} rows", world.config, world.sea, world.ocean, beltsOcean)
         }
-        assertTrue(failures.isEmpty(), failures.joinToString("\n"))
+        // Recorded at A1-6b, whose wind is the seasonal circulation's: its easterly is weakest on the
+        // equator, where the cross-equatorial air arrives calm, so its curl turns the interior east
+        // over part of the 5 to 15 degree band, a countercurrent where Earth's runs (3 to 10 N), and on
+        // three seeds the band's mean with it (docs/TODO.md).
+        val trades = failures.filter { "the trades' band flows east" in it }
+        assertTrue((failures - trades.toSet()).isEmpty(), (failures - trades.toSet()).joinToString("\n"))
+        KnownFailures.expect("A1-6b: under the circulation alone the trades' band flows east", "seed 7 at 256 rows: under the belts alone the trades' band flows east in the north (+0.0110 m/s); seed 7 at 256 rows: under the belts alone the trades' band flows east in the south (+0.0011 m/s); seed 1234 at 256 rows: under the belts alone the trades' band flows east in the north (+0.0031 m/s); seed 1234 at 256 rows: under the belts alone the trades' band flows east in the south (+0.0062 m/s); seed 99 at 256 rows: under the belts alone the trades' band flows east in the north (+0.0089 m/s)") {
+            if (trades.isNotEmpty()) throw RecordedViolation(trades.joinToString("\n"), trades.joinToString("; "))
+        }
     }
 
     /**
@@ -85,15 +93,14 @@ class OceanCurrentTest : BorrowsSharedWorlds() {
         println(
             "OCEAN pooled coastal gap %.1f%% over %d seeds".format((pooled - 1) * 100, gaps.size)
         )
-        // Recorded at K2: settlement is the realms' business, which waits for the atlas overhaul on
-        // the Earth-sized planet (docs/TODO.md, docs/DESIGN_LEDGER.md, K2).
-        KnownFailures.expect("K2: the realms' settlement on the Earth-sized planet, before the atlas overhaul", "cold coasts settled no worse than warm ones: seed 7 at -1.5%") {
-            val complaints = listOfNotNull(
-                under.takeIf { it.isNotEmpty() }?.let { "cold coasts settled no worse than warm ones: $it" },
-                "pooled %.1f%%".format((pooled - 1) * 100).takeIf { pooled <= 1.02 }
-            )
-            if (complaints.isNotEmpty()) throw RecordedViolation(complaints.joinToString("; "), complaints.joinToString("; "))
-        }
+        // Recorded at K2, when settlement waited for the atlas overhaul on the Earth-sized planet,
+        // and armed again at C1b, whose climate passes it, and on H1's ground under the coupled
+        // climate (docs/DESIGN_LEDGER.md, K2, C1b and M1).
+        val complaints = listOfNotNull(
+            under.takeIf { it.isNotEmpty() }?.let { "cold coasts settled no worse than warm ones: $it" },
+            "pooled %.1f%%".format((pooled - 1) * 100).takeIf { pooled <= 1.02 }
+        )
+        assertTrue(complaints.isEmpty(), complaints.joinToString("; "))
     }
 
     /**
@@ -283,6 +290,26 @@ internal object OceanSense {
             if (eastern >= 0.0) failures += "$label: the eastern thirds at 20-40 in the $side flow poleward (${"%+.4f".format(eastern)} m/s)"
         }
         return failures
+    }
+
+    /**
+     * A row's runs of open water between two shores at least [SHORTEST_BASIN_KM] long, each as its
+     * first column and its length in columns; none on a row with no land.
+     */
+    fun basinRuns(world: com.cartogenesis.worldgen.model.WorldMap, row: Int): List<Pair<Int, Int>> {
+        val across = world.width
+        val shortest = (SHORTEST_BASIN_KM / world.config.scale.cellWidthKm(across)).toInt()
+        val isLand = world.sea.isLand
+        val firstLand = (0 until across).firstOrNull { isLand[row * across + it] } ?: return emptyList()
+        val runs = ArrayList<Pair<Int, Int>>()
+        var offset = 1
+        while (offset <= across) {
+            if (isLand[row * across + (firstLand + offset) % across]) { offset++; continue }
+            val start = offset
+            while (offset <= across && !isLand[row * across + (firstLand + offset) % across]) offset++
+            if (offset - start >= shortest) runs += (firstLand + start) % across to offset - start
+        }
+        return runs
     }
 
     /** Mean eastward velocity over the open water between two latitudes, in meters a second. */

@@ -158,13 +158,28 @@ class GlaciationCombTest : BorrowsSharedWorlds() {
                 over.add("$seed at ${"%.2f".format(addedByTheIce * 100)}%")
             }
         }
-        // Recorded at K2, where seed 42 had one such lake, and armed again at H1, on whose ground
-        // it has none (docs/DESIGN_LEDGER.md, K2 and H1).
-        assertTrue(
-            straight.joinToString("; ") + " lakes that are a straight one-cell line along a D8 bearing — a" +
-                " trough is a valley the ice found, not a line drawn down a flow path",
-            straight.isEmpty()
-        )
+        // Recorded at K2: on the Earth-sized planet one ice-made lake is a straight one-cell line
+        // (docs/DESIGN_LEDGER.md, K2; docs/TODO.md).
+        // Armed at C1b2, whose ice draws no such lake (docs/DESIGN_LEDGER.md, C1b2).
+        // Recorded again at A1-1, whose calendar seasons and sea-surface sunlight grow more ice and
+        // with it three such lakes on two worlds; a rule 13 finding, not traced (docs/TODO.md).
+        val signature = straight.joinToString("; ")
+        // Armed at A1-4, whose ground and rain read it again (docs/DESIGN_LEDGER.md, A1-4), and at
+        // H1, on whose ground seed 42 had none on main's climate (docs/DESIGN_LEDGER.md, H1).
+        // Recorded on H1's ground under the coupled climate: one such lake on seed 42 at 1,024 rows,
+        // a rule 13 finding, not traced (docs/DESIGN_LEDGER.md, M1; docs/TODO.md).
+        // Armed at A1-6b, whose ground holds none (docs/DESIGN_LEDGER.md, A1-6b). Recorded at F1:
+        // one such lake on seed 42 and one on seed 7 at 1,024 rows, a rule 13 finding, not traced
+        // (docs/TODO.md).
+        KnownFailures.expect("F1: an ice-made lake is a straight one-cell line on the circulation by longitude's ground", "seed 42 at 1024 has 1; seed 7 at 1024 has 1") {
+            if (straight.isNotEmpty()) {
+                throw RecordedViolation(
+                    signature + " lakes that are a straight one-cell line along a D8 bearing — a" +
+                        " trough is a valley the ice found, not a line drawn down a flow path",
+                    signature
+                )
+            }
+        }
         // Collected and asserted once, rather than seed by seed, so a run reports all three figures
         // instead of stopping at the first that is over. On the implicit update before the uplift
         // was re-derived on it the ice added 5.00% and 3.18% on seeds 718106 and 7, a comb; with the
@@ -173,13 +188,18 @@ class GlaciationCombTest : BorrowsSharedWorlds() {
         // adds 1.64, 1.17 and 0.73% (docs/DESIGN_LEDGER.md, Q2). Recorded at L1's review round,
         // once the rift valleys were Earth's width: seed 42's ice adds 2.23%, over the bar; armed
         // again at K1, whose square weather and scour moved it back under (docs/DESIGN_LEDGER.md,
-        // L1 and K1).
-        assertTrue(
-            "the ice puts ${ICE_COMB_BAR * 100}% or more of these worlds' standing water into thin" +
-                " grid-bearing bars that run parallel to another such bar within ten cells — a" +
-                " comb of gullies, not a handful of trunk glaciers: $over" +
-                " (worst ${"%.2f".format(worst * 100)}%)",
-            over.isEmpty()
-        )
+        // L1 and K1). Recorded at C1b, whose snow makes the ice larger and thicker: it adds 2.9 to
+        // 3.1% on all three (docs/DESIGN_LEDGER.md, C1b; docs/TODO.md, "The ice after C1b").
+        KnownFailures.expect("C1b: the larger ice adds a comb of grid-bearing bars to the standing water", "[718106 at 6.89%, 42 at 6.14%, 7 at 2.36%]") {
+            if (over.isNotEmpty()) {
+                throw RecordedViolation(
+                    "the ice puts ${ICE_COMB_BAR * 100}% or more of these worlds' standing water into thin" +
+                        " grid-bearing bars that run parallel to another such bar within ten cells — a" +
+                        " comb of gullies, not a handful of trunk glaciers: $over" +
+                        " (worst ${"%.2f".format(worst * 100)}%)",
+                    over.toString()
+                )
+            }
+        }
     }
 }

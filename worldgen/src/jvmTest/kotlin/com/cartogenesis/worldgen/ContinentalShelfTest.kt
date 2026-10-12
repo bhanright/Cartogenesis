@@ -99,20 +99,14 @@ class ContinentalShelfTest : BorrowsSharedWorlds() {
         // ground the band should stand no deeper than the break nearly throughout; the same tenth
         // is room for the fjords the ice cuts across it.
         val short = measured.filter { it.second <= NEAR_SHALLOW_SHARE }
-        // Recorded at A1-6b: the seasonal circulation's rain moved the ground the erosion and the
-        // ice cut, and seeds 7 and 42 held 89.3% and 87.7% (docs/TODO.md).
-        KnownFailures.expect(
-            "A1-6b: the shelf's band stands deeper than its break on the seasonal circulation's ground", "seed 7 89.3%, seed 42 87.7%"
-        ) {
-            if (short.isNotEmpty()) {
-                val shares = short.joinToString { (seed, near) -> String.format(Locale.ROOT, "seed %d %.1f%%", seed, near * 100) }
-                throw RecordedViolation(
-                    "within a shelf's width of the coast on the ground, only $shares of the water stands no deeper " +
-                        "than the shelf break, against ${NEAR_SHALLOW_SHARE * 100}%",
-                    shares
-                )
-            }
-        }
+        // Recorded at A1-6b, seeds 7 and 42 holding 89.3% and 87.7% on the seasonal circulation's
+        // ground; armed at A1-6c, whose rain cut it back inside (docs/DESIGN_LEDGER.md).
+        val shares = short.joinToString { (seed, near) -> String.format(Locale.ROOT, "seed %d %.1f%%", seed, near * 100) }
+        assertTrue(
+            short.isEmpty(),
+            "within a shelf's width of the coast on the ground, only $shares of the water stands no deeper " +
+                "than the shelf break, against ${NEAR_SHALLOW_SHARE * 100}%"
+        )
     }
 
     /**
@@ -156,7 +150,7 @@ class ContinentalShelfTest : BorrowsSharedWorlds() {
         // came under the coupled climate, whose shelves clear it (docs/DESIGN_LEDGER.md, M1).
         // Recorded again at A1-6b, whose seasonal circulation's rain moved the ground (docs/TODO.md).
         KnownFailures.expect(
-            "A1-6b: the shelf's plateau falls short of its width on the seasonal circulation's ground", "seed 7: the shelf's plateau holds 87% of its band off north- and south-facing coasts and 87% off east- and west-facing ones; seed 42: the shelf's plateau holds 87% of its band off north- and south-facing coasts and 85% off east- and west-facing ones; seed 1234: the shelf's plateau holds 89% of its band off north- and south-facing coasts and 90% off east- and west-facing ones"
+            "A1-6b: the shelf's plateau falls short of its width on the seasonal circulation's ground", "seed 7: the shelf's plateau holds 88% of its band off north- and south-facing coasts and 89% off east- and west-facing ones; seed 42: the shelf's plateau holds 89% of its band off north- and south-facing coasts and 88% off east- and west-facing ones"
         ) {
             if (failures.isNotEmpty()) {
                 throw RecordedViolation(failures.joinToString(System.lineSeparator()), failures.joinToString("; "))

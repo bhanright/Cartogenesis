@@ -56,7 +56,9 @@ class OceanLeavesTheGroundTest : BorrowsSharedWorlds() {
      * the sea's: the provisional climate's circulation became Lindzen and Hou's, and the erosion's
      * halfway weather starts where its opening weather settled. A1-6b re-took the same two: the
      * provisional climate's cells are heated about the energy flux equator and its westerlies
-     * balance the hemisphere's torque. An ocean change that leaks into the
+     * balance the hemisphere's torque. A1-6c re-took the same two: the provisional climate's water
+     * layer shoals in summer, its sea evaporates into air under the water by Kara's difference and its
+     * march leaves each cell at its downwind face's speed. An ocean change that leaks into the
      * ground moves them.
      * A chunk meant to move the ground re-takes them here, as the render records are re-taken.
      * At [SharedWorlds.DETAIL_ROWS], whose standard worlds the detail guards generate anyway, so
@@ -88,12 +90,12 @@ class OceanLeavesTheGroundTest : BorrowsSharedWorlds() {
             "plates.continentalShare" to -8606387063464998658L,
             "plates.upliftRateMmPerYear" to -9204950406715247596L,
             "plates.crustAge" to 5808649867131644059L,
-            "erosion.height" to -6400707190505247806L,
+            "erosion.height" to -3309183879194690393L,
             "erosion.sweptOnDevice" to -358906410940142731L,
-            "sea.shorelineHeight" to 7221081591782996620L,
-            "sea.isLand" to 8113806961977385757L,
-            "sea.relativeElevation" to 3374044949442548893L,
-            "sea.landCellCount" to 7219478625478527768L
+            "sea.shorelineHeight" to 611478662890560851L,
+            "sea.isLand" to -8348687080038815005L,
+            "sea.relativeElevation" to -4743100979576293820L,
+            "sea.landCellCount" to -1975249105344869742L
         )
     }
 }

@@ -97,14 +97,12 @@ class PressureWindPoleTest {
         println("PRESSURE POLE fastest eddy wind over the sea poleward of 80 degrees %.2f m/s, elsewhere %.2f; with the polar rows kept row by row %.1f and %.1f"
             .format(polar, elsewhere, keptPolar, keptElsewhere))
         assertTrue(polar <= elsewhere, "the polar wind runs at $polar m/s against $elsewhere about the continent at 40 degrees")
-        KnownFailures.expect("A1-6a: the control with the polar rows kept no longer fails the polar guard", "2.4 against 2.5") {
-            if (keptPolar <= keptElsewhere) {
-                throw RecordedViolation(
-                    "the control with the polar rows kept passes, so the guard shows nothing: %.2f against %.2f m/s".format(keptPolar, keptElsewhere),
-                    "%.1f against %.1f".format(keptPolar, keptElsewhere)
-                )
-            }
-        }
+        // Recorded at A1-6a, the control passing at 2.4 against 2.5 m/s; armed at A1-6c, where it
+        // fails the guard again (docs/DESIGN_LEDGER.md).
+        assertTrue(
+            keptPolar > keptElsewhere,
+            "the control with the polar rows kept passes, so the guard shows nothing: %.2f against %.2f m/s".format(keptPolar, keptElsewhere)
+        )
     }
 
     /**

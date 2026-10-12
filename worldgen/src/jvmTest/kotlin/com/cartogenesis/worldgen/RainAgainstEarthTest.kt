@@ -173,13 +173,12 @@ class RainAgainstEarthTest : BorrowsSharedWorlds() {
         // came under it (docs/DESIGN_LEDGER.md, M1; docs/TODO.md); armed at A1-6b, x0.84, under
         // the seasonal circulation's rain.
         nearEarth("land's return over its rain", pooled.landReturn / pooled.landRain, EARTH_LAND_RETURN_SHARE)
-        // The sea evaporates less than Earth's, and the rain with it, for the causes docs/TODO.md's
-        // "The march's misses against Earth, after C1b2" measures: the marine air stands at the
-        // sea's own temperature and the wind at one speed.
-        KnownFailures.expect("C1b2: the sea evaporates less than Earth's", "x0.73") {
-            nearEarth("open-sea evaporation, mm", pooled.seaEvaporation / pooled.seaArea, EARTH_OCEAN_EVAPORATION_MM)
-        }
-        KnownFailures.expect("C1b2: the open sea rains less than Earth's", "x0.59") {
+        // Recorded from C1b2 at x0.73, the marine air standing at the sea's own temperature; armed at
+        // A1-6c, whose bulk formula reads the air Kara's difference under the sea (docs/DESIGN_LEDGER.md).
+        nearEarth("open-sea evaporation, mm", pooled.seaEvaporation / pooled.seaArea, EARTH_OCEAN_EVAPORATION_MM)
+        // The sea rains less than Earth's still: what it gives up the land and the subtropics' dry
+        // seas take (docs/TODO.md).
+        KnownFailures.expect("C1b2: the open sea rains less than Earth's", "x0.70") {
             nearEarth("open-sea rain, mm", pooled.seaRain / pooled.seaArea, EARTH_OCEAN_RAIN_MM)
         }
         // Recorded from C1b2 at x0.55; armed at A1-4, where the boundary layer's wind no longer

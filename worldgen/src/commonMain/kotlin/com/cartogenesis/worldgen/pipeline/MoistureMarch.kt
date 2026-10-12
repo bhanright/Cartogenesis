@@ -1033,8 +1033,8 @@ object MoistureMarch {
          * whose upwind face carries nothing, held its water at half the speed it leaves by and so
          * held twice the water; where a meridional wind runs along that line toward a pole, each row
          * handed the doubled water on to the next through its face and the doubling compounded row
-         * by row. Under a wind that crosses a pole without converging anywhere (Williamson and
-         * others' first test, `MoistureMarchPoleTest`) the polar rows rained four times the planet's
+         * by row. Under a wind that crosses a pole without converging anywhere, a rigid rotation
+         * about a tilted axis (`MoistureMarchPoleTest`), the polar rows rained four times the planet's
          * mean and single cells beside the line hundreds of times it (docs/DESIGN_LEDGER.md, A1-6c).
          */
         private fun leavingSpeedMps(season: Season, row: Int, column: Int): Double {

@@ -202,6 +202,10 @@ class EnergyBalanceTest {
          */
         const val LAND_TO_SEA_SWING_RATIO = 3f
 
+        /** The summer mixed layer's depth, meters: de Boyer Montegut and others' (2004) 20 to 30. */
+        const val SUMMER_MIXED_LAYER_SHALLOWEST_M = 20.0
+        const val SUMMER_MIXED_LAYER_DEEPEST_M = 30.0
+
         /**
          * Where Earth's sea ice reaches in the cold season, in degrees of latitude from the pole's
          * side, and the band the model's own ice edge is asserted within.
@@ -545,6 +549,47 @@ class EnergyBalanceTest {
             "land swings only %.2f times as far as the water (land %.1f C, water %.1f C)"
                 .format(landRange / waterRange, landRange, waterRange)
         )
+    }
+
+    /**
+     * The open sea's mixed layer is thin in summer and deep in winter. On Earth's land fraction, at 30
+     * to 45 degrees, the summer month's layer (July in the north, January in the south) stands at
+     * [SUMMER_MIXED_LAYER_SHALLOWEST_M] to [SUMMER_MIXED_LAYER_DEEPEST_M], the summer minimum of de
+     * Boyer Montegut and others' (2004) climatology as the energy balance's mixed layer cites it, and
+     * the winter month's layer at least twice as deep as the summer's. The water's swing at 35 to 45
+     * degrees is printed beside Earth's, about 8 C at 40 (the sea-surface figures above).
+     *
+     * Shown failing on the fifty-metre slab it replaced, whose layer stood at 50 m all year.
+     */
+    @Test
+    fun `the mixed layer is thin in summer and deep in winter`() {
+        val solved = EnergyBalance.solve(earthLandFraction(), EARTH_OBLIQUITY)
+        val julyDepths = checkNotNull(solved.mixedLayerJulyM)
+        val januaryDepths = checkNotNull(solved.mixedLayerJanuaryM)
+        var summer = 0.0
+        var winter = 0.0
+        var bands = 0
+        var waterSwing = 0.0
+        var swingBands = 0
+        for (band in 0 until EnergyBalance.BANDS) {
+            val latitude = EnergyBalance.latitudeOfBand(band)
+            val north = latitude > 0f
+            if (abs(latitude) in 30f..45f) {
+                summer += (if (north) julyDepths[band] else januaryDepths[band]).toDouble()
+                winter += (if (north) januaryDepths[band] else julyDepths[band]).toDouble()
+                bands++
+            }
+            if (abs(latitude) in 35f..45f) {
+                waterSwing += abs(solved.water.julyC[band] - solved.water.januaryC[band]).toDouble()
+                swingBands++
+            }
+        }
+        val summerM = summer / bands
+        val winterM = winter / bands
+        println("EBM mixed layer at 30-45 deg: summer %.1f m, winter %.1f m (Earth's summer %.0f to %.0f); the water's July-to-January swing at 35-45 deg %.1f C (Earth's about 8 at 40)"
+            .format(summerM, winterM, SUMMER_MIXED_LAYER_SHALLOWEST_M, SUMMER_MIXED_LAYER_DEEPEST_M, waterSwing / swingBands))
+        assertTrue(summerM in SUMMER_MIXED_LAYER_SHALLOWEST_M..SUMMER_MIXED_LAYER_DEEPEST_M, "the summer layer stands at %.1f m".format(summerM))
+        assertTrue(winterM >= 2 * summerM, "the winter layer, %.1f m, is not twice the summer's %.1f m".format(winterM, summerM))
     }
 
     /**

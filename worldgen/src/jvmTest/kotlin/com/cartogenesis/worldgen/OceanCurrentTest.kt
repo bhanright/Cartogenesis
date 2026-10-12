@@ -292,6 +292,26 @@ internal object OceanSense {
         return failures
     }
 
+    /**
+     * A row's runs of open water between two shores at least [SHORTEST_BASIN_KM] long, each as its
+     * first column and its length in columns; none on a row with no land.
+     */
+    fun basinRuns(world: com.cartogenesis.worldgen.model.WorldMap, row: Int): List<Pair<Int, Int>> {
+        val across = world.width
+        val shortest = (SHORTEST_BASIN_KM / world.config.scale.cellWidthKm(across)).toInt()
+        val isLand = world.sea.isLand
+        val firstLand = (0 until across).firstOrNull { isLand[row * across + it] } ?: return emptyList()
+        val runs = ArrayList<Pair<Int, Int>>()
+        var offset = 1
+        while (offset <= across) {
+            if (isLand[row * across + (firstLand + offset) % across]) { offset++; continue }
+            val start = offset
+            while (offset <= across && !isLand[row * across + (firstLand + offset) % across]) offset++
+            if (offset - start >= shortest) runs += (firstLand + start) % across to offset - start
+        }
+        return runs
+    }
+
     /** Mean eastward velocity over the open water between two latitudes, in meters a second. */
     fun meanEastward(
         config: com.cartogenesis.worldgen.model.WorldGenConfig,

@@ -284,8 +284,8 @@ class OceanUpwellingTest {
             north[cell] = -STRESS_N_PER_M2
         }
         val stress = OceanStage.Stress(east, north)
-        val on = OceanStage.circulateUnder(config, sea, zonal, stress, relax)
-        val off = OceanStage.circulateUnder(config.copy(ocean = config.ocean.copy(upwelling = false)), sea, zonal, stress, relax)
+        val on = OceanStage.circulateUnder(config, sea, zonal, stress, relax = relax)
+        val off = OceanStage.circulateUnder(config.copy(ocean = config.ocean.copy(upwelling = false)), sea, zonal, stress, relax = relax)
         var warmest = 0.0
         var worst = 0.0
         var rising = 0
@@ -353,7 +353,7 @@ class OceanUpwellingTest {
         val zonal = ClimateStage.zonalClimate(config, sea)
         val (gridAcross, gridDown) = OceanStage.solveGrid(config.scale)
         val stress = OceanStage.Stress(DoubleArray(gridAcross * gridDown), DoubleArray(gridAcross * gridDown) { -STRESS_N_PER_M2 })
-        val solved = OceanStage.circulateUnder(config, sea, zonal, stress, relax)
+        val solved = OceanStage.circulateUnder(config, sea, zonal, stress, relax = relax)
         var lowest = Double.POSITIVE_INFINITY
         var highest = Double.NEGATIVE_INFINITY
         var coldest = Double.POSITIVE_INFINITY
@@ -451,7 +451,7 @@ class OceanUpwellingTest {
         val (gridAcross, gridDown) = OceanStage.solveGrid(config.scale)
         val stress = OceanStage.Stress(DoubleArray(gridAcross * gridDown), DoubleArray(gridAcross * gridDown) { -STRESS_N_PER_M2 })
         val relax: (com.cartogenesis.worldgen.pipeline.OceanStencil, FloatArray, Int) -> FloatArray = { s, v, p -> OceanCirculation.relax(s, v, p); v }
-        val with = OceanStage.circulateUnder(config, sea, zonal, stress, relax)
+        val with = OceanStage.circulateUnder(config, sea, zonal, stress, relax = relax)
         var coldestOwnC = Double.POSITIVE_INFINITY
         var coldestC = Double.POSITIVE_INFINITY
         for (cell in with.isWater.indices) {

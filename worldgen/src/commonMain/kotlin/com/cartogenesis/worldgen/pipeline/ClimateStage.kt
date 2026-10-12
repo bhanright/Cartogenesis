@@ -916,7 +916,8 @@ object ClimateStage {
                 BoundaryLayer.Solver(
                     config, sea, zonal, marineFraction,
                     julyHalfRows, januaryHalfRows,
-                    keptWaves = BoundaryLayer.wavesToKeep(config)
+                    keptWaves = BoundaryLayer.wavesToKeep(config),
+                    seaSurfaceAnomalyC = if (config.ocean.enabled) ocean.anomaly.data else null
                 ),
                 ::seasonsUnder,
                 loop.relaxation,
@@ -1573,6 +1574,7 @@ object ClimateStage {
         val config: WorldGenConfig,
         val sea: SeaLevelResult,
         val globalCoolingC: Float,
+        val seaSurfaceAnomalyC: FloatArray?,
         val atmosphere: BoundaryLayer.Atmosphere
     )
 
@@ -1581,25 +1583,31 @@ object ClimateStage {
 
     /**
      * The boundary layer of [sea] under the energy balance [zonal] (solved at [globalCoolingC]) and
-     * [marineFraction], both halves ([BoundaryLayer.solve]). The last one solved is kept until the
-     * climate runs: it is a pure function of the configuration, the sea result and the cooling, and
-     * the ocean's stress and the guards ask for the same one in turn.
+     * [marineFraction], over a sea [seaSurfaceAnomalyC] warmer or colder than its latitudes (degrees
+     * Celsius, row-major on the map; none for a sea at its latitudes' temperatures), both halves
+     * ([BoundaryLayer.solve]). The last one solved is kept until the climate runs: it is a pure
+     * function of the configuration, the sea result, the cooling and the anomaly, and the ocean's
+     * stress and the guards ask for the same one in turn.
      */
     internal fun atmosphere(
         config: WorldGenConfig,
         sea: SeaLevelResult,
         zonal: ZonalClimate,
         marineFraction: FloatField,
-        globalCoolingC: Float = 0f
+        globalCoolingC: Float = 0f,
+        seaSurfaceAnomalyC: FloatArray? = null
     ): BoundaryLayer.Atmosphere {
         lastAtmosphere?.let { last ->
-            if (last.sea === sea && last.globalCoolingC == globalCoolingC && last.config == config) return last.atmosphere
+            if (last.sea === sea && last.globalCoolingC == globalCoolingC && last.config == config &&
+                last.seaSurfaceAnomalyC === seaSurfaceAnomalyC
+            ) return last.atmosphere
         }
         val solved = BoundaryLayer.solve(
             config, sea, zonal, marineFraction,
-            beltWindOfRows(config, zonal, julyHalf = true), beltWindOfRows(config, zonal, julyHalf = false)
+            beltWindOfRows(config, zonal, julyHalf = true), beltWindOfRows(config, zonal, julyHalf = false),
+            seaSurfaceAnomalyC
         )
-        lastAtmosphere = SolvedAtmosphere(config, sea, globalCoolingC, solved)
+        lastAtmosphere = SolvedAtmosphere(config, sea, globalCoolingC, seaSurfaceAnomalyC, solved)
         return solved
     }
 
@@ -1655,9 +1663,12 @@ object ClimateStage {
         return made
     }
 
-    /** [atmosphere] for a world's own sea under today's energy balance. */
-    internal fun atmosphere(config: WorldGenConfig, sea: SeaLevelResult): BoundaryLayer.Atmosphere =
-        atmosphere(config, sea, zonalClimate(config, sea), marineAirFraction(config, sea))
+    /**
+     * [atmosphere] for a world's own sea under today's energy balance, over a sea
+     * [seaSurfaceAnomalyC] warmer or colder than its latitudes, or none.
+     */
+    internal fun atmosphere(config: WorldGenConfig, sea: SeaLevelResult, seaSurfaceAnomalyC: FloatArray? = null): BoundaryLayer.Atmosphere =
+        atmosphere(config, sea, zonalClimate(config, sea), marineAirFraction(config, sea), seaSurfaceAnomalyC = seaSurfaceAnomalyC)
 
     /** A wind in metres a second as the march reads it: a zonal direction and a slant in rows. */
     private fun marchWindOf(

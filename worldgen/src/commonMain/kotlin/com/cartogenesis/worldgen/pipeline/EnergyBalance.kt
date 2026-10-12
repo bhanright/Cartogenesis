@@ -58,7 +58,14 @@ class ZonalClimate internal constructor(
      * Per band, the share of it that is land, the weight its land column carries in the band's
      * mean ([bandC]), as [EnergyBalance.solve] was handed it.
      */
-    internal val landShare: FloatArray
+    internal val landShare: FloatArray,
+    /**
+     * Per band, the open sea's mixed layer's mean depth over the calendar's July and January, meters
+     * ([EnergyBalance.MIXED_LAYER_DEPTH_M] in winter, Kraus and Turner's depth under the summer's
+     * heating); none where the model was built without its year.
+     */
+    internal val mixedLayerJulyM: FloatArray? = null,
+    internal val mixedLayerJanuaryM: FloatArray? = null
 ) {
 
     /**
@@ -591,8 +598,60 @@ object EnergyBalance {
      */
     private const val LAND_HEAT_CAPACITY_J_PER_M2_C = 1.7e7
 
-    /** The mixed layer's depth, in meters: see [MIXED_LAYER_HEAT_CAPACITY_J_PER_M2_C]. */
+    /**
+     * The mixed layer's depth through the winter and the year's mean, in meters: the depth the
+     * seasonal cycle stirs, which the layer reaches when the surface cools and convection mixes it
+     * down, and shoals from when the summer's heating sets in ([KRAUS_TURNER_DEPTH_TIMES_FLUX]). See
+     * [MIXED_LAYER_HEAT_CAPACITY_J_PER_M2_C].
+     */
     internal const val MIXED_LAYER_DEPTH_M = 50.0
+
+    /** Sea water's density at the surface, kilograms a cubic meter. */
+    private const val SEAWATER_DENSITY_KG_PER_M3 = 1025.0
+
+    /**
+     * Sea water's coefficient of thermal expansion, per degree: 2 x 10^-4, the value Gaspar (1985,
+     * the Naval Postgraduate School's thesis on the tropical Atlantic's equilibrium mixed layer, read)
+     * takes with Kraus and Turner's model, near warm surface water's.
+     */
+    private const val SEAWATER_EXPANSION_PER_C = 2.0e-4
+
+    /**
+     * The friction velocity's cube in the water under Earth's mean wind over the ocean, `u*^3`,
+     * meters cubed a second cubed: the surface's stress `rho_a C_D U^2` (Large and Pond's 1.2e-3 at
+     * Archer and Jacobson's 6.64 m/s, [BoundaryLayer.EARTH_OCEAN_WIND_AT_10_M_MPS]) over the water's
+     * density, to the power of three halves. About 5.0e-7.
+     */
+    private val WATER_FRICTION_VELOCITY_CUBED: Double = run {
+        val wind = BoundaryLayer.EARTH_OCEAN_WIND_AT_10_M_MPS
+        val stress = PressureWind.AIR_DENSITY_KG_PER_M3 * BoundaryLayer.SEA_DRAG_COEFFICIENT * wind * wind
+        val squared = stress / SEAWATER_DENSITY_KG_PER_M3
+        squared * kotlin.math.sqrt(squared)
+    }
+
+    /**
+     * Kraus and Turner's (1967) equilibrium depth of a mixed layer under surface heating, times that
+     * heating: meters times watts per square meter. The wind's stirring, `u*^3`, works against the
+     * buoyancy the heating puts at the surface, `alpha g Q / (rho c)`, spread over the layer, and
+     * the layer stands where the two balance, the Obukhov length `L = 2 rho c u*^3 / (alpha g Q)`
+     * (Gaspar 1985, equations 2.15 to 2.19, read: the depth the wind can mix down against a given
+     * heating, dissipation neglected as Kraus and Turner neglect it; the factor the thesis fits in
+     * place of the two runs from 0.8 to 2.6 against the tropical Atlantic's observed depths, which
+     * brackets it). [SEAWATER_HEAT_CAPACITY_J_PER_M3_C] is `rho c`. About 2,050: under the 70 to 100
+     * W/m2 a subtropical summer's sea takes in, 20 to 30 m, the summer mixed layer the climatologies
+     * give; under weak heating the depth passes [MIXED_LAYER_DEPTH_M], which bounds it.
+     */
+    private val KRAUS_TURNER_DEPTH_TIMES_FLUX: Double =
+        2.0 * SEAWATER_HEAT_CAPACITY_J_PER_M3_C * WATER_FRICTION_VELOCITY_CUBED / (SEAWATER_EXPANSION_PER_C * DryAir.GRAVITY_MPS2)
+
+    /**
+     * The thickness of the slices the water beneath the layer is kept in, meters: one, so a summer
+     * layer's depth moves by whole meters and the water it leaves behind is kept as it was left.
+     */
+    private const val MIXED_LAYER_SLICE_M = 1.0
+
+    /** Slices from the surface to [MIXED_LAYER_DEPTH_M]. */
+    private val MIXED_LAYER_SLICES: Int = (MIXED_LAYER_DEPTH_M / MIXED_LAYER_SLICE_M).toInt()
 
     /** Sea water's heat capacity per cubic meter per degree, in joules. */
     private const val SEAWATER_HEAT_CAPACITY_J_PER_M3_C = 4.0e6
@@ -872,6 +931,7 @@ object EnergyBalance {
         val lastYearLand = DoubleArray(BANDS * STEPS_PER_YEAR)
         val lastYearSeaAir = DoubleArray(BANDS * STEPS_PER_YEAR)
         val lastYearWater = DoubleArray(BANDS * STEPS_PER_YEAR)
+        val lastYearMixedM = DoubleArray(BANDS * STEPS_PER_YEAR)
         val landAnnualC = DoubleArray(BANDS)
         val seaAirAnnualC = DoubleArray(BANDS)
         var previousYearMeanC = 0.0
@@ -893,6 +953,7 @@ object EnergyBalance {
                         lastYearLand[step * BANDS + band] = landC[band]
                         lastYearSeaAir[step * BANDS + band] = seaAirC[band]
                         lastYearWater[step * BANDS + band] = waterC[band]
+                        lastYearMixedM[step * BANDS + band] = geometry.mixedSlices[band] * MIXED_LAYER_SLICE_M
                     }
                 }
             }
@@ -916,7 +977,9 @@ object EnergyBalance {
             spinUpResidualC = (lastYearMeanC - previousYearMeanC).toFloat(),
             waterOpenShare = waterOpenShare,
             waterOpenC = waterOpenC,
-            landShare = landFraction.copyOf()
+            landShare = landFraction.copyOf(),
+            mixedLayerJulyM = FloatArray(BANDS) { band -> (windowTotal(lastYearMixedM, band, JULY_FIRST_STEP, MONTH_STEPS) / MONTH_STEPS).toFloat() },
+            mixedLayerJanuaryM = FloatArray(BANDS) { band -> (windowTotal(lastYearMixedM, band, JANUARY_FIRST_STEP, MONTH_STEPS) / MONTH_STEPS).toFloat() }
         )
     }
 
@@ -1076,7 +1139,16 @@ object EnergyBalance {
         val rightHandSide = DoubleArray(BANDS)
         val bandMeanBeforeTransport = DoubleArray(BANDS)
         val meanHeatCapacity = DoubleArray(BANDS)
-        val mixedLayerHeatCapacity = DoubleArray(BANDS)
+
+        /** Each band's open-sea mixed layer's depth, whole slices of [MIXED_LAYER_SLICE_M]. */
+        val mixedSlices = IntArray(BANDS)
+
+        /**
+         * The water beneath each band's mixed layer, degrees Celsius, slice by slice down to
+         * [MIXED_LAYER_DEPTH_M], `band * MIXED_LAYER_SLICES + slice`: the layer's own temperature
+         * when it shoaled past that slice, which it takes back when it deepens through it again.
+         */
+        val beneathC = DoubleArray(BANDS * MIXED_LAYER_SLICES)
 
         /** The white share the albedo and the capacities are read off, refreshed once a year. */
         val white = DoubleArray(BANDS)
@@ -1236,6 +1308,10 @@ object EnergyBalance {
         )
         landC.copyInto(seaAirC)
         landC.copyInto(waterC)
+        for (band in 0 until BANDS) {
+            geometry.mixedSlices[band] = MIXED_LAYER_SLICES
+            geometry.beneathC.fill(waterC[band], band * MIXED_LAYER_SLICES, (band + 1) * MIXED_LAYER_SLICES)
+        }
     }
 
     /**
@@ -1330,7 +1406,14 @@ object EnergyBalance {
             // because one of them is compared against a marine-air climatology and the other
             // against a sea-surface one. Implicit in the pair, because 4.8 days of air memory
             // against a step of one day is close enough to stiff to matter.
-            val waterHeat = geometry.mixedLayerHeatCapacity[band]
+            // The open sea's layer stands at Kraus and Turner's depth for the heat the surface takes
+            // in this step, its sunlight and its exchange with the air, entraining the water beneath
+            // as it deepens and leaving its own as it shoals; a frozen share is the ice's.
+            val takenInW = geometry.waterSunThisStep[band] + SURFACE_EXCHANGE_W_PER_M2_C * (seaAir - waterC[band])
+            waterC[band] = moveMixedLayerBase(geometry, band, mixedLayerSlicesUnder(takenInW), waterC[band])
+            val white = geometry.white[band]
+            val waterHeat = SEAWATER_HEAT_CAPACITY_J_PER_M3_C * geometry.mixedSlices[band] * MIXED_LAYER_SLICE_M * (1.0 - white) +
+                FROZEN_SEA_HEAT_CAPACITY_J_PER_M2_C * white
             val water = waterC[band] + stepSeconds / waterHeat * geometry.waterSunThisStep[band]
             val exchange = stepSeconds * SURFACE_EXCHANGE_W_PER_M2_C
             val determinant =
@@ -1381,9 +1464,6 @@ object EnergyBalance {
             geometry.openSeaSurfaceShare[band] = SEA_SURFACE_SHARE_OF_ABSORBED_SUN * (1.0 - white)
             geometry.meanSeaSurfaceSun[band] = geometry.openSeaSurfaceShare[band] *
                 geometry.annualInsolation[band] * (1.0 - geometry.bandAlbedo[band])
-            geometry.mixedLayerHeatCapacity[band] = MIXED_LAYER_HEAT_CAPACITY_J_PER_M2_C +
-                (FROZEN_SEA_HEAT_CAPACITY_J_PER_M2_C - MIXED_LAYER_HEAT_CAPACITY_J_PER_M2_C) *
-                white
             // The transport moves air, so the capacity it is spread over is the air's: the
             // harmonic mean of the two columns, which is what makes the watts rather than the
             // degrees the shared quantity. The water is not in it — it takes its share of the
@@ -1394,6 +1474,38 @@ object EnergyBalance {
                     (1.0 - landShare) / MARINE_AIR_HEAT_CAPACITY_J_PER_M2_C
                 )
         }
+    }
+
+    /**
+     * The open sea's mixed layer's depth under a surface taking in [takenInW] watts per square meter,
+     * in whole slices: Kraus and Turner's depth ([KRAUS_TURNER_DEPTH_TIMES_FLUX]) while the surface
+     * heats the water, at least one slice, and [MIXED_LAYER_DEPTH_M] where that is deeper or the
+     * surface cools it, when convection mixes the layer down to the depth the seasonal cycle stirs.
+     */
+    private fun mixedLayerSlicesUnder(takenInW: Double): Int {
+        if (takenInW <= KRAUS_TURNER_DEPTH_TIMES_FLUX / MIXED_LAYER_DEPTH_M) return MIXED_LAYER_SLICES
+        val depthM = KRAUS_TURNER_DEPTH_TIMES_FLUX / takenInW
+        return kotlin.math.round(depthM / MIXED_LAYER_SLICE_M).toInt().coerceIn(1, MIXED_LAYER_SLICES)
+    }
+
+    /**
+     * Moves [band]'s mixed layer, at [layerC], to [targetSlices] and returns its temperature after:
+     * shoaling leaves the slices it gives up at the layer's temperature, and deepening mixes in the
+     * slices it takes back at the temperatures they were left at. The heat of the water down to
+     * [MIXED_LAYER_DEPTH_M] is the same before and after, so the slab's year still closes.
+     */
+    private fun moveMixedLayerBase(geometry: Geometry, band: Int, targetSlices: Int, layerC: Double): Double {
+        val slices = geometry.mixedSlices[band]
+        val base = band * MIXED_LAYER_SLICES
+        geometry.mixedSlices[band] = targetSlices
+        if (targetSlices < slices) {
+            for (slice in targetSlices until slices) geometry.beneathC[base + slice] = layerC
+            return layerC
+        }
+        if (targetSlices == slices) return layerC
+        var heat = layerC * slices
+        for (slice in slices until targetSlices) heat += geometry.beneathC[base + slice]
+        return heat / targetSlices
     }
 
     /**

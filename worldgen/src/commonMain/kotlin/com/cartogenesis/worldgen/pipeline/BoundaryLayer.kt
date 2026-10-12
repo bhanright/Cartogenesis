@@ -17,13 +17,16 @@ import kotlin.math.sqrt
  * ([SphericalGrid.forAtmosphere]). Three things force it, all departures from the zonal mean:
  *
  * - **The land and the sea.** The lower troposphere, every interface below Nakamura and Miyasaka's
- *   `sigma` of [SHALLOW_HEATING_TOP_SHARE], is relaxed toward the energy balance's own surface
- *   temperature at sea level: each cell's blend of its band's land and marine columns for the
- *   half-year ([ZonalClimate]). The rate is the energy balance's surface exchange,
- *   [EnergyBalance.SURFACE_EXCHANGE_W_PER_M2_C], over the heat capacity of the air it heats, so the
- *   relaxation is the same exchange the energy balance already spends, not a new strength. The
- *   weather noise, the altitude's lapse and the currents' anomaly are not the energy balance's and
- *   are not in it; the currents' warmth is the marine air's, a later chunk's (docs/TODO.md).
+ *   `sigma` of [SHALLOW_HEATING_TOP_SHARE], is relaxed toward the surface's temperature at sea
+ *   level: each cell's blend of its band's land and marine columns for the half-year
+ *   ([ZonalClimate]), and over the sea the water's departure from its latitude's mean, the ocean's
+ *   anomaly, which the marine air carries one for one (`ClimateStage`), so a cold eastern basin
+ *   cools the air above it and a warm western pool heats it: the east-west forcing of the Walker
+ *   circulation and of the highs over cold water. The rate is the energy balance's surface
+ *   exchange, [EnergyBalance.SURFACE_EXCHANGE_W_PER_M2_C], over the heat capacity of the air it
+ *   heats, so the relaxation is the same exchange the energy balance already spends, not a new
+ *   strength. The weather noise and the altitude's lapse are not the energy balance's and are not
+ *   in it.
  * - **The terrain**, lifting the basic state's surface wind.
  * - **The latent heat of the rain's condensation**, when the climate couples it to the march
  *   ([Solver], [AtmosphereCoupling]), spread up each column by [latentHeatingShape].
@@ -252,7 +255,9 @@ internal object BoundaryLayer {
      * stress reads and the climate's coupling starts from: [sea] for the land, the coast and the
      * terrain, [zonal] and [marineFraction] for the surface temperature the energy balance gives
      * each cell, and each half's belts on the map's rows, eastward and southward in meters a second
-     * ([julyHalfBelts], [januaryHalfBelts]). Each wave is factored once for both halves and let go.
+     * ([julyHalfBelts], [januaryHalfBelts]); and [seaSurfaceAnomalyC], the ocean's anomaly (degrees
+     * Celsius, row-major on the map), or none for a sea at its latitudes' temperatures. Each wave is
+     * factored once for both halves and let go.
      */
     fun solve(
         config: WorldGenConfig,
@@ -260,8 +265,10 @@ internal object BoundaryLayer {
         zonal: ZonalClimate,
         marineFraction: FloatField,
         julyHalfBelts: PressureWind.Vectors,
-        januaryHalfBelts: PressureWind.Vectors
-    ): Atmosphere = Solver(config, sea, zonal, marineFraction, julyHalfBelts, januaryHalfBelts, keptWaves = 0).solve(null, null)
+        januaryHalfBelts: PressureWind.Vectors,
+        seaSurfaceAnomalyC: FloatArray? = null
+    ): Atmosphere = Solver(config, sea, zonal, marineFraction, julyHalfBelts, januaryHalfBelts, keptWaves = 0, seaSurfaceAnomalyC)
+        .solve(null, null)
 
     /**
      * One world's boundary layer, ready to be solved for any latent heating: everything that does
@@ -270,6 +277,8 @@ internal object BoundaryLayer {
      * at each solve after, two a coupling lap, and the others are factored afresh at each solve,
      * both halves at once (every wave's factors are about 700 MB on Earth's planet at eight levels;
      * [wavesToKeep] decides). The answer is the same to the bit however many are kept.
+     * [seaSurfaceAnomalyC] is the ocean's anomaly the shallow heating reads over the sea, degrees
+     * Celsius, row-major on the map, or none.
      */
     class Solver(
         val config: WorldGenConfig,
@@ -278,7 +287,8 @@ internal object BoundaryLayer {
         marineFraction: FloatField,
         private val julyHalfBelts: PressureWind.Vectors,
         private val januaryHalfBelts: PressureWind.Vectors,
-        keptWaves: Int
+        keptWaves: Int,
+        seaSurfaceAnomalyC: FloatArray? = null
     ) {
         private val cellsAcross = config.width
         private val cellsDown = config.height
@@ -319,10 +329,12 @@ internal object BoundaryLayer {
 
         /**
          * One half's surface temperature at sea level on the atmosphere's grid, degrees Celsius:
-         * the energy balance's blend of its band's land and marine columns, which the shallow
-         * heating relaxes toward and the latent heating's profile is read from.
+         * the energy balance's blend of its band's land and marine columns, and over the sea the
+         * ocean's anomaly, which the shallow heating relaxes toward and the latent heating's profile
+         * is read from. Carried down by area as every forcing is ([AtmosphereRemap.forcing]), so the
+         * anomaly's heat is neither made nor lost on the way.
          */
-        private fun surfaceCoarseC(zonal: ZonalClimate, marineFraction: FloatField, season: Season): DoubleArray {
+        private fun surfaceCoarseC(zonal: ZonalClimate, marineFraction: FloatField, season: Season, seaSurfaceAnomalyC: FloatArray?): DoubleArray {
             val surfaceC = FloatArray(cellsAcross * cellsDown)
             for (row in 0 until cellsDown) {
                 val latitude = ClimateStage.latitudeOf(row, cellsDown)
@@ -331,13 +343,14 @@ internal object BoundaryLayer {
                 for (column in 0 until cellsAcross) {
                     val cell = row * cellsAcross + column
                     surfaceC[cell] = landC + (seaC - landC) * marineFraction.data[cell]
+                    if (seaSurfaceAnomalyC != null && !sea.isLand[cell]) surfaceC[cell] += seaSurfaceAnomalyC[cell]
                 }
             }
             return remap.forcing(surfaceC, widthInRows)
         }
 
-        private val julySurfaceC = surfaceCoarseC(zonal, marineFraction, Season.JULY_HALF)
-        private val januarySurfaceC = surfaceCoarseC(zonal, marineFraction, Season.JANUARY_HALF)
+        private val julySurfaceC = surfaceCoarseC(zonal, marineFraction, Season.JULY_HALF, seaSurfaceAnomalyC)
+        private val januarySurfaceC = surfaceCoarseC(zonal, marineFraction, Season.JANUARY_HALF, seaSurfaceAnomalyC)
         private val shallowRates = shallowRelaxationPerSecond(levels)
         private val factored: StationaryWaveModel.Factored = model.factorize(keptWaves)
 

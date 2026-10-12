@@ -250,7 +250,57 @@ object OceanStage {
         fillBaseTemperature(config, sea, zonal, temperature)
         if (!config.ocean.enabled) return OceanResult(velocityX, velocityY, temperature, anomaly)
 
-        return onTheMap(config, sea, zonal, circulate(config, sea, zonal, relax), temperature)
+        // The sea and the air over it, solved together: the first round's stress is the dry
+        // atmosphere's over a sea at its latitudes' temperatures, and each round after reads the
+        // atmosphere over the sea the round before left (see [rounds]).
+        val (across, down) = solveGrid(config.scale)
+        val area = rowAreas(down = config.height)
+        var seaSurfaceAnomalyC: FloatArray? = null
+        var made: OceanResult? = null
+        var lastSolved: Circulation? = null
+        val changes = ArrayList<Double>()
+        for (round in 0 until MAX_AIR_SEA_ROUNDS) {
+            val stress = annualStress(config, sea, across, down, seaSurfaceAnomalyC)
+            val solved = circulateUnder(config, sea, zonal, stress, lastSolved, relax)
+            lastSolved = solved
+            val result = onTheMap(config, sea, zonal, solved, FloatField(config.width, config.height, temperature.data.copyOf()))
+            made = result
+            val change = seaSurfaceAnomalyC?.let { anomalyChangeShare(sea, area, config.width, it, result.anomaly.data) }
+            if (change != null) changes += change
+            seaSurfaceAnomalyC = result.anomaly.data
+            if (change != null && change < AIR_SEA_SETTLED_SHARE) break
+        }
+        roundListener?.invoke(changes)
+        return checkNotNull(made)
+    }
+
+    /** Hears each world's air-sea rounds' changes ([anomalyChangeShare]); for the probes and guards. */
+    @kotlin.concurrent.Volatile
+    internal var roundListener: ((List<Double>) -> Unit)? = null
+
+    /** The most rounds of the sea and the air over it a world solves. */
+    internal const val MAX_AIR_SEA_ROUNDS = 8
+
+    /** When the sea and the air have settled: the anomaly's change a round under this share of its size. */
+    internal const val AIR_SEA_SETTLED_SHARE = 0.01
+
+    /** Each map row's area on the sphere, as `cos(latitude)`. */
+    private fun rowAreas(down: Int): DoubleArray = DoubleArray(down) { cos(ClimateStage.latitudeOf(it, down) * PI / 180.0) }
+
+    /**
+     * How far the anomaly [next] moved from [last] (both degrees Celsius, row-major on the map), as
+     * the area integral over the sea of the absolute change over that of [next]'s absolute value.
+     */
+    private fun anomalyChangeShare(sea: SeaLevelResult, rowArea: DoubleArray, cellsAcross: Int, last: FloatArray, next: FloatArray): Double {
+        var moved = 0.0
+        var size = 0.0
+        for (cell in next.indices) {
+            if (sea.isLand[cell]) continue
+            val area = rowArea[cell / cellsAcross]
+            moved += area * abs(next[cell] - last[cell])
+            size += area * abs(next[cell])
+        }
+        return if (size > 0.0) moved / size else 0.0
     }
 
     /**
@@ -282,18 +332,21 @@ object OceanStage {
         relax: (OceanStencil, FloatArray, Int) -> FloatArray
     ): Circulation {
         val (across, down) = solveGrid(config.scale)
-        return circulateUnder(config, sea, zonal, annualStress(config, sea, across, down), relax)
+        return circulateUnder(config, sea, zonal, annualStress(config, sea, across, down), relax = relax)
     }
 
     /**
      * The circulation and its heat on the solve grid under a given [stress] on that grid, the
-     * year's mean in [circulate] and whatever a guard asks for elsewhere.
+     * year's mean in [circulate] and whatever a guard asks for elsewhere. Both solves start from
+     * [startFrom]'s answers where given, an earlier round's under a stress near this one, and stop at
+     * the same tolerance either way.
      */
     internal inline fun circulateUnder(
         config: WorldGenConfig,
         sea: SeaLevelResult,
         zonal: ZonalClimate,
         stress: Stress,
+        startFrom: Circulation? = null,
         relax: (OceanStencil, FloatArray, Int) -> FloatArray
     ): Circulation {
         val (across, down) = solveGrid(config.scale)
@@ -310,7 +363,7 @@ object OceanStage {
         val flow = OceanCirculation.requireSolved(
             "the circulation",
             OceanCirculation.solve(
-                flowLevels, FloatArray(across * down), OceanCirculation.RESIDUAL_TOLERANCE, poleIsWall = true,
+                flowLevels, startFrom?.stream?.copyOf() ?: FloatArray(across * down), OceanCirculation.RESIDUAL_TOLERANCE, poleIsWall = true,
                 bodies = null, relax
             ),
             OceanCirculation.RESIDUAL_TOLERANCE
@@ -354,7 +407,7 @@ object OceanStage {
         val heat = OceanCirculation.requireSolved(
             "the sea's heat",
             OceanCirculation.solveByKrylov(
-                heatLevels, targetC.copyOf(), OceanCirculation.RESIDUAL_TOLERANCE, poleIsWall = false,
+                heatLevels, startFrom?.temperatureC?.copyOf() ?: targetC.copyOf(), OceanCirculation.RESIDUAL_TOLERANCE, poleIsWall = false,
                 OceanCirculation.waterBodies(isWater, across, down), relax = relax
             ),
             OceanCirculation.RESIDUAL_TOLERANCE
@@ -469,10 +522,16 @@ object OceanStage {
      * the energy balance's temperatures and no current, so the currents are not forced by a wind
      * their own warmth forced.
      */
-    internal fun annualStress(config: WorldGenConfig, sea: SeaLevelResult, across: Int, down: Int): Stress {
+    internal fun annualStress(
+        config: WorldGenConfig,
+        sea: SeaLevelResult,
+        across: Int,
+        down: Int,
+        seaSurfaceAnomalyC: FloatArray? = null
+    ): Stress {
         val cellsAcross = config.width
         val cellsDown = config.height
-        val eddy = if (config.climate.pressureWinds) eddyStressOnMap(config, sea) else null
+        val eddy = if (config.climate.pressureWinds) eddyStressOnMap(config, sea, seaSurfaceAnomalyC) else null
         val eastward = DoubleArray(across * down)
         val northward = DoubleArray(across * down)
         val zonal = ClimateStage.zonalClimate(config, sea)
@@ -512,8 +571,8 @@ object OceanStage {
      * its row, and the mean of the two halves. Over open sea with no eddy pressure `V` is `B` and
      * this is zero, so it is the stress of the eddies alone, with the belts' wind it rides on.
      */
-    private fun eddyStressOnMap(config: WorldGenConfig, sea: SeaLevelResult): Pair<FloatArray, FloatArray> {
-        val atmosphere = ClimateStage.atmosphere(config, sea)
+    private fun eddyStressOnMap(config: WorldGenConfig, sea: SeaLevelResult, seaSurfaceAnomalyC: FloatArray?): Pair<FloatArray, FloatArray> {
+        val atmosphere = ClimateStage.atmosphere(config, sea, seaSurfaceAnomalyC)
         val cellsAcross = config.width
         val cellCount = cellsAcross * config.height
         val eastward = FloatArray(cellCount)

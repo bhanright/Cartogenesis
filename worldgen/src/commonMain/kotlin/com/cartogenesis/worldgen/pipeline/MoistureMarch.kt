@@ -161,6 +161,22 @@ object MoistureMarch {
     const val MARINE_RELATIVE_HUMIDITY = 0.775
 
     /**
+     * How much warmer the sea's surface stands than the air the bulk formula evaporates into, on the
+     * year's mean, degrees Celsius: Kara, Hurlburt and Loh's (2007, J. Geophys. Res. 112, C05020)
+     * regressions of the sea surface on the air over Earth's open ocean, one degree bin at a time,
+     * `Tsst = 0.93 + 1.00 Tair` in ERA-40 and `0.63 + 1.00 Tair` in COADS; their mean, 0.78.
+     *
+     * The energy balance's slab cannot hold it: nothing carries heat away beneath its water, so the
+     * water's year integrates to no exchange with the air and its annual mean is the marine air's,
+     * where Earth's sea surface loses its sensible heat to the air above it all year (12 W/m2 over the
+     * ocean, Trenberth, Fasullo and Kiehl 2009, Table 2b). The march's air over the open sea is the
+     * marine column the energy balance carries, the water's own seasonal departure from it and the
+     * currents' anomaly included, less this; so the air the sea evaporates into is drier by the
+     * difference, about 5 to 6% of its water at 25 C.
+     */
+    const val SEA_OVER_MARINE_AIR_C = (0.93 + 0.63) / 2.0
+
+    /**
      * Earth's mean rain, millimeters a day: Trenberth and others' (2007) 486.9 thousand km³ a year
      * over the planet's 510.1 million km², 954 mm a year.
      */
@@ -920,9 +936,7 @@ object MoistureMarch {
                     for (row in 0 until cellsDown) {
                         val cell = row * cellsAcross + column
                         val here = index(row, column)
-                        val eastward = season.eastwardMps[cell].toDouble()
-                        // The speed along the cell's held sweep.
-                        stretch[here] = (TRANSPORT_SPEED_MPS / maxOf(eastward * direction[here], slowest)).toFloat()
+                        stretch[here] = (TRANSPORT_SPEED_MPS / maxOf(leavingSpeedMps(season, row, column), slowest)).toFloat()
                         surface[here] = when {
                             inputs.isLand[cell] -> LAND
                             season.seaIce[cell] -> SEA_ICE
@@ -933,7 +947,7 @@ object MoistureMarch {
                         if (surface[here] == OPEN_SEA) {
                             val surfaceHumidity = SurfaceEvaporation.seaSurfaceHumidity(season.seaSurfaceC[cell].toDouble())
                             val airHumidity = MARINE_RELATIVE_HUMIDITY * ColumnWater.specificHumidity(
-                                ColumnWater.saturationVaporPressureKpa(airC), ColumnWater.SEA_LEVEL_PRESSURE_KPA
+                                ColumnWater.saturationVaporPressureKpa(airC - SEA_OVER_MARINE_AIR_C), ColumnWater.SEA_LEVEL_PRESSURE_KPA
                             )
                             val massFlux = season.scalarWindAt10mMps?.let { transferMassFlux(it[cell].toDouble()) } ?: referenceMassFlux
                             seaEvaporationRate[here] = SurfaceEvaporation.bulkEvaporationKgPerM2S(
@@ -1006,6 +1020,29 @@ object MoistureMarch {
                     }
                 }
             }
+        }
+
+        /**
+         * The speed a cell's water leaves it by along its held sweep, meters a second: the zonal wind
+         * on its downwind face, the mean of its own and its downwind neighbor's along the sweep, where
+         * that neighbor is of the same sweep; its own where the wind turns there and the water is
+         * banked. The march's parcel is the flux through that face, so the column water a cell holds
+         * is the parcel over the face's speed, as an upwind finite volume's is.
+         *
+         * Read at the cell's own center instead, a cell beside a line where the zonal wind parts,
+         * whose upwind face carries nothing, held its water at half the speed it leaves by and so
+         * held twice the water; where a meridional wind runs along that line toward a pole, each row
+         * handed the doubled water on to the next through its face and the doubling compounded row
+         * by row. Under a wind that crosses a pole without converging anywhere (Williamson and
+         * others' first test, `MoistureMarchPoleTest`) the polar rows rained four times the planet's
+         * mean and single cells beside the line hundreds of times it (docs/DESIGN_LEDGER.md, A1-6c).
+         */
+        private fun leavingSpeedMps(season: Season, row: Int, column: Int): Double {
+            val sweep = direction[index(row, column)]
+            val own = season.eastwardMps[row * cellsAcross + column] * sweep.toDouble()
+            val downwindColumn = (column + sweep + cellsAcross) % cellsAcross
+            if (direction[index(row, downwindColumn)] != sweep) return own
+            return 0.5 * (own + season.eastwardMps[row * cellsAcross + downwindColumn] * sweep.toDouble())
         }
 
         /** The bulk formula's `rho C_E(U) U` at a wind of [windMps], kilograms per square meter per second. */
@@ -1416,7 +1453,7 @@ object MoistureMarch {
                 record.rain.data[cell] = rainMm[here]
                 record.columnWater.data[cell] = vapor.toFloat()
                 record.saturatedColumn.data[cell] = saturated.toFloat()
-                if (kind == OPEN_SEA) record.seaMinusAirC.data[cell] = seaSurfaceC[cell] - airTemperatureC[cell]
+                if (kind == OPEN_SEA) record.seaMinusAirC.data[cell] = (seaSurfaceC[cell] - airTemperatureC[cell] + SEA_OVER_MARINE_AIR_C).toFloat()
                 if (kind == LAND) record.groundReturn.data[cell] = (added * rate).toFloat()
                 if (kind == OPEN_SEA) record.seaEvaporation.data[cell] = (added * rate).toFloat()
                 record.convergenceRain.data[cell] = (convergenceRain * rate).toFloat()

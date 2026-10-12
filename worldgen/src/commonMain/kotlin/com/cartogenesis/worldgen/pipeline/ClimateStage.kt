@@ -828,6 +828,10 @@ object ClimateStage {
         val januaryHalfRows = HadleyCirculation.windOfRows(januaryCirculation, cellsDown)
         val julyHalfBelts = buildWind(config, cellsAcross, julyHalfRows)
         val januaryHalfBelts = buildWind(config, cellsAcross, januaryHalfRows)
+        // The same circulation at each longitude, its rising branch at the longitude's own energy
+        // flux equator (LocalCirculation): what the boundary layer's pressure and wind stand on.
+        val julyHalfLocal = if (climateConfig.pressureWinds) circulationBelts(config, sea, zonal, julyCirculation, Season.JULY_HALF) else null
+        val januaryHalfLocal = if (climateConfig.pressureWinds) circulationBelts(config, sea, zonal, januaryCirculation, Season.JANUARY_HALF) else null
 
         // The marine inversion, a property of the season rather than of the parcel: where a cold
         // sea has put a stratus lid on the air. Null when its setting is off, so the march runs
@@ -849,7 +853,8 @@ object ClimateStage {
             seaIce: BooleanArray,
             wind: SeasonWind,
             ascentMps: FloatArray?,
-            inversion: FloatField?
+            inversion: FloatField?,
+            transport: PressureWind.Vectors?
         ): MoistureMarch.Season {
             val totalWind = wind.totalMps
             // The water carries the current anomaly already, through the air it is built from.
@@ -879,7 +884,9 @@ object ClimateStage {
                     SurfaceEvaporation.halfYearExtraterrestrialMjPerM2Day(
                         latitudeOf(row, cellsDown).toDouble(), obliquityDegrees, julyHalf
                     )
-                }
+                },
+                transportEastwardMps = transport?.eastwardMps,
+                transportSouthwardMps = transport?.southwardMps
             )
         }
         val elevationM = FloatArray(cellsAcross * cellsDown) { cell ->
@@ -895,10 +902,12 @@ object ClimateStage {
             val january = seasonWind(config, januaryHalfBelts, atmosphere?.januaryHalf)
             return marchSeason(
                 true, julyHalfTemperature, julyHalfSeaSurface, julyHalfSeaIce, july,
-                atmosphere?.let { BoundaryLayer.groundAscentMps(it, it.julyHalf) }, julyHalfInversion
+                atmosphere?.let { BoundaryLayer.groundAscentMps(it, it.julyHalf) }, julyHalfInversion,
+                atmosphere?.let { BoundaryLayer.columnWindMps(it, it.julyHalf) }
             ) to marchSeason(
                 false, januaryHalfTemperature, januaryHalfSeaSurface, januaryHalfSeaIce, january,
-                atmosphere?.let { BoundaryLayer.groundAscentMps(it, it.januaryHalf) }, januaryHalfInversion
+                atmosphere?.let { BoundaryLayer.groundAscentMps(it, it.januaryHalf) }, januaryHalfInversion,
+                atmosphere?.let { BoundaryLayer.columnWindMps(it, it.januaryHalf) }
             )
         }
 
@@ -915,7 +924,7 @@ object ClimateStage {
             AtmosphereCoupling(
                 BoundaryLayer.Solver(
                     config, sea, zonal, marineFraction,
-                    julyHalfRows, januaryHalfRows,
+                    checkNotNull(julyHalfLocal), checkNotNull(januaryHalfLocal),
                     keptWaves = BoundaryLayer.wavesToKeep(config),
                     seaSurfaceAnomalyC = if (config.ocean.enabled) ocean.anomaly.data else null
                 ),
@@ -1567,6 +1576,25 @@ object ClimateStage {
     }
 
     /**
+     * A half-year's circulation at each longitude of [sea]'s map under the energy balance [zonal]
+     * ([LocalCirculation]): its surface wind and the pressure that holds it on every cell, which the
+     * boundary layer's pressure and wind stand on ([BoundaryLayer.Belts]).
+     */
+    internal fun circulationBelts(config: WorldGenConfig, sea: SeaLevelResult, zonal: ZonalClimate, julyHalf: Boolean): BoundaryLayer.Belts {
+        val season = if (julyHalf) Season.JULY_HALF else Season.JANUARY_HALF
+        return circulationBelts(config, sea, zonal, HadleyCirculation.forHalf(config, zonal, season), season)
+    }
+
+    private fun circulationBelts(
+        config: WorldGenConfig,
+        sea: SeaLevelResult,
+        zonal: ZonalClimate,
+        circulation: HadleyCirculation,
+        season: Season
+    ): BoundaryLayer.Belts = LocalCirculation.forHalf(config, zonal, sea.isLand, season, circulation)
+        .belts(config.width, config.height, config.scale.radiusMeters)
+
+    /**
      * The boundary layer's last answer and what it was asked: the ocean's stress reads the dry
      * atmosphere of a world's sea, and the guards ask for the same one after it.
      */
@@ -1606,7 +1634,7 @@ object ClimateStage {
         lastAtmosphere = null
         val solved = BoundaryLayer.solve(
             config, sea, zonal, marineFraction,
-            beltWindOfRows(config, zonal, julyHalf = true), beltWindOfRows(config, zonal, julyHalf = false),
+            circulationBelts(config, sea, zonal, julyHalf = true), circulationBelts(config, sea, zonal, julyHalf = false),
             seaSurfaceAnomalyC
         )
         lastAtmosphere = SolvedAtmosphere(config, sea, globalCoolingC, seaSurfaceAnomalyC, solved)
@@ -1966,3 +1994,4 @@ object ClimateStage {
         return KOPPEN_ARIDITY_PER_DEGREE_C * annualMeanC + concentration
     }
 }
+

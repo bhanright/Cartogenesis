@@ -90,8 +90,8 @@ class AirSeaEarthTest : BorrowsSharedWorlds() {
                     for (step in 0 until length / 3) {
                         val westCell = row * w + (start + step) % w
                         val eastCell = row * w + (start + length - 1 - step) % w
-                        west += (atmosphere.julyHalf.seaLevelPressurePa(westCell, w) + atmosphere.januaryHalf.seaLevelPressurePa(westCell, w)) / 2
-                        east += (atmosphere.julyHalf.seaLevelPressurePa(eastCell, w) + atmosphere.januaryHalf.seaLevelPressurePa(eastCell, w)) / 2
+                        west += (atmosphere.julyHalf.seaLevelPressurePa(westCell) + atmosphere.januaryHalf.seaLevelPressurePa(westCell)) / 2
+                        east += (atmosphere.julyHalf.seaLevelPressurePa(eastCell) + atmosphere.januaryHalf.seaLevelPressurePa(eastCell)) / 2
                         count++
                     }
                 }
@@ -160,8 +160,8 @@ class AirSeaEarthTest : BorrowsSharedWorlds() {
                 for (step in 0 until length / 3) {
                     val westCell = row * w + (start + step) % w
                     val eastCell = row * w + (start + length - 1 - step) % w
-                    difference += (atmosphere.julyHalf.seaLevelPressurePa(eastCell, w) + atmosphere.januaryHalf.seaLevelPressurePa(eastCell, w) -
-                        atmosphere.julyHalf.seaLevelPressurePa(westCell, w) - atmosphere.januaryHalf.seaLevelPressurePa(westCell, w)) / 2
+                    difference += (atmosphere.julyHalf.seaLevelPressurePa(eastCell) + atmosphere.januaryHalf.seaLevelPressurePa(eastCell) -
+                        atmosphere.julyHalf.seaLevelPressurePa(westCell) - atmosphere.januaryHalf.seaLevelPressurePa(westCell)) / 2
                     count++
                 }
             }

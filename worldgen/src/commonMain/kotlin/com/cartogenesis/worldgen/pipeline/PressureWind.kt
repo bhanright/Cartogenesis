@@ -96,9 +96,10 @@ internal object PressureWind {
 
     /**
      * The surface wind a sea-level pressure drives, in metres a second, one vector per cell of the
-     * map: the pressure's departure from its zonal mean, [eddyPressurePa] (pascals, row-major on
-     * the map), on top of the belts' zonal-mean wind, [beltEastwardMps] and [beltSouthwardMps]
-     * (metres a second, one each per row of the map), which set the zonal mean's own pressure.
+     * map: the pressure's departure from the circulation's, [eddyPressurePa] (pascals, row-major on
+     * the map), on top of the circulation's wind, [beltEastwardMps] and [beltSouthwardMps] (metres a
+     * second, row-major, one each per cell: the circulation at each longitude, [LocalCirculation]),
+     * which set the circulation's own pressure.
      *
      * The balance solved at every cell is the momentum equation with a drag — the standard damped
      * surface-layer form, and the one Gill and Matsuno use for exactly this job of getting a surface
@@ -129,9 +130,9 @@ internal object PressureWind {
      * what is left is a flow straight down the gradient from high to low. **That is the tropical
      * limit, and it is why there is no division by `f` and no special case at the equator.**
      *
-     * **The zonal mean.** Its pressure gradient is the belts' own under the sea's drag at the
-     * belts' speed ([beltDrag]), `-(1/rho) dp/dy = k v + f u` ([BoundaryLayer.zonalPressurePa]
-     * integrates it), and `F`, the
+     * **The circulation.** Its pressure gradient is the belts' own under the sea's drag at the
+     * belts' speed ([beltDrag]), `-(1/rho) dp/dy = k v + f u` ([BoundaryLayer.zonalPressurePa] and
+     * [LocalCirculation] integrate it), and `F`, the
      * eastward push `k u - f v` the belts need, is what holds their zonal wind against the drag
      * where no zonal pressure gradient can: on Earth that is the eddies' convergence of westerly
      * momentum in the westerlies and its divergence from the trades, which no mean pressure
@@ -172,13 +173,13 @@ internal object PressureWind {
         parallelChunks(0, cellsDown) { startRow, endRow ->
             for (row in startRow until endRow) {
                 val coriolis = coriolisParameter(ClimateStage.latitudeOf(row, cellsDown)).toDouble()
-                val beltEast = beltEastwardMps[row].toDouble()
-                val beltNorth = -beltSouthwardMps[row].toDouble()
-                val beltDrag = beltDrag(beltEastwardMps[row], beltSouthwardMps[row])
-                val beltPush = beltDrag * beltEast - coriolis * beltNorth
-                val zonalPressurePush = beltDrag * beltNorth + coriolis * beltEast
                 for (column in 0 until cellsAcross) {
                     val cell = row * cellsAcross + column
+                    val beltEast = beltEastwardMps[cell].toDouble()
+                    val beltNorth = -beltSouthwardMps[cell].toDouble()
+                    val beltDrag = beltDrag(beltEastwardMps[cell], beltSouthwardMps[cell])
+                    val beltPush = beltDrag * beltEast - coriolis * beltNorth
+                    val zonalPressurePush = beltDrag * beltNorth + coriolis * beltEast
                     val accelerationEast = -gradient.eastAtCenters[cell] / density + beltPush
                     val accelerationNorth = -gradientNorthward[cell] / density + zonalPressurePush
                     val perSpeed = if (sea.isLand[cell]) landPerSpeed else seaPerSpeed

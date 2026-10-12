@@ -651,8 +651,8 @@ object OceanStage {
     /**
      * The stress the boundary layer's wind lays on the sea beyond its belts', on the map's grid,
      * newtons a square meter, eastward then northward: for each calendar half
-     * `rho C_D (|V| V - |B| B)`, `V` the half's surface wind at the cell and `B` the half's belts on
-     * its row, and the mean of the two halves. Over open sea with no eddy pressure `V` is `B` and
+     * `rho C_D (|V| V - |B| B)`, `V` the half's surface wind at the cell and `B` the half's
+     * circulation there, and the mean of the two halves. Over open sea with no eddy pressure `V` is `B` and
      * this is zero, so it is the stress of the eddies alone, with the belts' wind it rides on.
      */
     private fun eddyStressOnMap(config: WorldGenConfig, sea: SeaLevelResult, seaSurfaceAnomalyC: FloatArray?): Pair<FloatArray, FloatArray> {
@@ -665,11 +665,11 @@ object OceanStage {
         for (half in listOf(atmosphere.julyHalf, atmosphere.januaryHalf)) {
             parallelChunks(0, config.height) { startRow, endRow ->
                 for (row in startRow until endRow) {
-                    val beltEast = half.beltEastwardMps[row].toDouble()
-                    val beltNorth = -half.beltSouthwardMps[row].toDouble()
-                    val beltSpeed = sqrt(beltEast * beltEast + beltNorth * beltNorth)
                     for (column in 0 until cellsAcross) {
                         val cell = row * cellsAcross + column
+                        val beltEast = half.beltEastwardMps[cell].toDouble()
+                        val beltNorth = -half.beltSouthwardMps[cell].toDouble()
+                        val beltSpeed = sqrt(beltEast * beltEast + beltNorth * beltNorth)
                         val east = half.eastwardMps[cell].toDouble()
                         val north = -half.southwardMps[cell].toDouble()
                         val speed = sqrt(east * east + north * north)

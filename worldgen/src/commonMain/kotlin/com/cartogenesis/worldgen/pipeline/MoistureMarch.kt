@@ -19,8 +19,8 @@ import kotlin.time.TimeSource
  *
  *     div(W V) = E - P,
  *
- * with `W` the column's water (kg m⁻², which is millimeters), `V` the surface wind, `E` what the
- * sea and the ground put in and `P` what rains. Marched column by column along each cell's own
+ * with `W` the column's water (kg m⁻², which is millimeters), `V` the column's vapor-weighted wind
+ * ([Season.transportEastwardMps]), `E` what the sea and the ground put in and `P` what rains. Marched column by column along each cell's own
  * zonal wind `u`, the steady equation is a march in space and not in time: crossing a column of
  * ground width `dx = cellWidth cos(latitude)` takes `dt = dx / |u|`, every source and sink is
  * charged over that `dt`, and what a row carries across a column's side is the mass flux
@@ -250,9 +250,12 @@ object MoistureMarch {
         /** The water's temperature at sea cells, current and all; ignored on land. */
         val seaSurfaceC: FloatArray,
         val seaIce: BooleanArray,
-        /** The zonal wind, belts and pressure departure together, meters a second, positive east. */
+        /**
+         * The surface wind, the boundary layer's, belts and pressure departure together, meters a
+         * second, positive east: what climbs the ground and what the evaporation feels.
+         */
         val eastwardMps: FloatArray,
-        /** The meridional wind, meters a second, positive toward the south (down the map). */
+        /** Its meridional part, meters a second, positive toward the south (down the map). */
         val southwardMps: FloatArray,
         /**
          * The wind's mean speed at 10 m through every gust and calm, meters a second, which the
@@ -270,8 +273,22 @@ object MoistureMarch {
         /** The marine inversion's hold on each land cell's rain, 0..1, or null when it is off. */
         val inversionSuppression: FloatArray?,
         /** The half-year's mean sun at the top of the air, per row, MJ m⁻² day⁻¹. */
-        val extraterrestrialOfRow: DoubleArray
-    )
+        val extraterrestrialOfRow: DoubleArray,
+        /**
+         * The wind the column's water travels on, meters a second, eastward and southward: the
+         * column's vapor-weighted wind ([BoundaryLayer.columnWindMps]), since the boundary layer holds
+         * under half of the column's vapor and the air above it moves otherwise. Null for the belts'
+         * control, whose water travels on the surface wind.
+         */
+        val transportEastwardMps: FloatArray? = null,
+        val transportSouthwardMps: FloatArray? = null
+    ) {
+        /** The water's eastward wind: [transportEastwardMps], or the surface's when there is none. */
+        val waterEastwardMps: FloatArray get() = transportEastwardMps ?: eastwardMps
+
+        /** The water's southward wind: [transportSouthwardMps], or the surface's when there is none. */
+        val waterSouthwardMps: FloatArray get() = transportSouthwardMps ?: southwardMps
+    }
 
     /**
      * What the march reads beyond the two seasons. [run] builds the seasons itself, so that a
@@ -720,8 +737,8 @@ object MoistureMarch {
     ): Array<SeasonMarch> {
         val (julyHalf, januaryHalf) = firstSeasons()
         return arrayOf(
-            SeasonMarch(inputs, julyHalf, grid, keepCells, sweepWinds?.first ?: julyHalf.eastwardMps),
-            SeasonMarch(inputs, januaryHalf, grid, keepCells, sweepWinds?.second ?: januaryHalf.eastwardMps)
+            SeasonMarch(inputs, julyHalf, grid, keepCells, sweepWinds?.first ?: julyHalf.waterEastwardMps),
+            SeasonMarch(inputs, januaryHalf, grid, keepCells, sweepWinds?.second ?: januaryHalf.waterEastwardMps)
         )
     }
 
@@ -962,8 +979,8 @@ object MoistureMarch {
             parallelChunks(0, cellsAcross) { startColumn, endColumn ->
                 for (column in startColumn until endColumn) {
                     for (row in 0 until cellsDown - 1) {
-                        val above = season.southwardMps[row * cellsAcross + column]
-                        val below = season.southwardMps[(row + 1) * cellsAcross + column]
+                        val above = season.waterSouthwardMps[row * cellsAcross + column]
+                        val below = season.waterSouthwardMps[(row + 1) * cellsAcross + column]
                         faceShare[index(row, column)] = ((above + below) * 0.5 * grid.faceSharePerMps[row]).toFloat()
                     }
                 }
@@ -1039,10 +1056,11 @@ object MoistureMarch {
          */
         private fun leavingSpeedMps(season: Season, row: Int, column: Int): Double {
             val sweep = direction[index(row, column)]
-            val own = season.eastwardMps[row * cellsAcross + column] * sweep.toDouble()
+            val eastward = season.waterEastwardMps
+            val own = eastward[row * cellsAcross + column] * sweep.toDouble()
             val downwindColumn = (column + sweep + cellsAcross) % cellsAcross
             if (direction[index(row, downwindColumn)] != sweep) return own
-            return 0.5 * (own + season.eastwardMps[row * cellsAcross + downwindColumn] * sweep.toDouble())
+            return 0.5 * (own + eastward[row * cellsAcross + downwindColumn] * sweep.toDouble())
         }
 
         /** The bulk formula's `rho C_E(U) U` at a wind of [windMps], kilograms per square meter per second. */

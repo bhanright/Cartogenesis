@@ -109,44 +109,37 @@ class BoundaryLayerTest : BorrowsSharedWorlds() {
     }
 
     /**
-     * The largest residual of `k u - f v + (1/rho) dp/dx - F` and `k v + f u + (1/rho) dp/dy`
-     * over the map, each over the largest of its terms there, with the pressure the zonal mean
-     * plus the eddies carried up, both differentiated on the sphere here.
+     * The largest residual of `k u - f v + (1/rho) dp/dx - F` and `k v + f u + (1/rho) dp/dy - G`
+     * over the map, each over the largest of its terms there: `p` the waves' pressure carried up,
+     * differentiated on the sphere here, and `F` and `G` the circulation's own balance at the cell,
+     * `k_b u_b - f v_b` and `k_b v_b + f u_b`, which its pressure holds ([LocalCirculation]).
      */
     private fun balanceResidual(world: WorldMap, half: BoundaryLayer.Half): Double {
         val columns = world.width
         val rows = world.height
         val grid = SphericalGrid.forGround(columns, rows, world.config.scale)
         val operators = SphericalOperators(grid)
-        val pressure = DoubleArray(columns * rows) { half.seaLevelPressurePa(it, columns) }
-        val gradient = operators.gradient(pressure)
+        val gradient = operators.gradient(DoubleArray(columns * rows) { half.eddyPressurePa[it].toDouble() })
         val gradientNorth = operators.northAtCenters(gradient)
         val density = PressureWind.AIR_DENSITY_KG_PER_M3.toDouble()
         var worst = 0.0
-        // The zonal mean's northward gradient is the trapezoid rule's between rows, so it is read at
-        // rows away from where it is integrated from; the interior rows are the clause.
         for (row in 2 until rows - 2) {
             val coriolis = PressureWind.coriolisParameter(ClimateStage.latitudeOf(row, rows)).toDouble()
-            val beltEast = half.beltEastwardMps[row].toDouble()
-            val beltNorth = -half.beltSouthwardMps[row].toDouble()
-            val beltDrag = PressureWind.beltDrag(half.beltEastwardMps[row], half.beltSouthwardMps[row])
-            val push = beltDrag * beltEast - coriolis * beltNorth
-            // The trapezoid's own zonal-mean gradient at this row: the mean of the faces either side.
-            val zonalNorth = (half.zonalPressurePa[row - 1] - half.zonalPressurePa[row + 1]) / (2 * grid.rowSpacingMeters)
-            val exactZonalNorth = -density * (beltDrag * beltNorth + coriolis * beltEast)
             for (column in 0 until columns) {
                 val cell = row * columns + column
+                val beltEast = half.beltEastwardMps[cell].toDouble()
+                val beltNorth = -half.beltSouthwardMps[cell].toDouble()
+                val beltDrag = PressureWind.beltDrag(half.beltEastwardMps[cell], half.beltSouthwardMps[cell])
+                val push = beltDrag * beltEast - coriolis * beltNorth
+                val northPush = beltDrag * beltNorth + coriolis * beltEast
                 val east = half.eastwardMps[cell].toDouble()
                 val north = -half.southwardMps[cell].toDouble()
                 // The bulk stress's drag at the cell's own speed, which the balance was solved for.
                 val drag = BoundaryLayer.surfaceDragPerSecond(world.sea.isLand[cell], sqrt(east * east + north * north))
-                // The eddies' gradient here, and the zonal mean's as the wind was built with it.
-                val eddyNorth = gradientNorth[cell] - zonalNorth
-                val pressureNorth = eddyNorth + exactZonalNorth
                 val zonalResidual = drag * east - coriolis * north + gradient.eastAtCenters[cell] / density - push
-                val meridionalResidual = drag * north + coriolis * east + pressureNorth / density
+                val meridionalResidual = drag * north + coriolis * east + gradientNorth[cell] / density - northPush
                 val scale = maxOf(abs(drag * east), abs(coriolis * north), abs(gradient.eastAtCenters[cell] / density), abs(push),
-                    abs(drag * north), abs(coriolis * east), abs(pressureNorth / density), 1e-12)
+                    abs(drag * north), abs(coriolis * east), abs(gradientNorth[cell] / density), abs(northPush), 1e-12)
                 worst = maxOf(worst, abs(zonalResidual) / scale, abs(meridionalResidual) / scale)
             }
         }
@@ -300,10 +293,10 @@ class BoundaryLayerTest : BorrowsSharedWorlds() {
         val south = FloatArray(columns * rows)
         for (row in 0 until rows) {
             val coriolis = PressureWind.coriolisParameter(ClimateStage.latitudeOf(row, rows)).toDouble()
-            val beltEast = half.beltEastwardMps[row].toDouble()
-            val beltNorth = -half.beltSouthwardMps[row].toDouble()
             for (column in 0 until columns) {
                 val cell = row * columns + column
+                val beltEast = half.beltEastwardMps[cell].toDouble()
+                val beltNorth = -half.beltSouthwardMps[cell].toDouble()
                 val accelerationEast = -gradient.eastAtCenters[cell] / density + seaDrag * beltEast - coriolis * beltNorth
                 val accelerationNorth = -north[cell] / density + seaDrag * beltNorth + coriolis * beltEast
                 val drag = if (world.sea.isLand[cell]) landDrag else seaDrag
@@ -313,7 +306,7 @@ class BoundaryLayerTest : BorrowsSharedWorlds() {
             }
         }
         return BoundaryLayer.Half(
-            half.beltEastwardMps, half.beltSouthwardMps, half.zonalPressurePa, half.eddyPressureCoarsePa,
+            half.beltEastwardMps, half.beltSouthwardMps, half.beltPressurePa, half.eddyPressureCoarsePa,
             half.eddyPressurePa, east, south, half.response
         )
     }

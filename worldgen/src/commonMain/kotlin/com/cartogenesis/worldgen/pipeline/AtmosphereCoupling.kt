@@ -71,7 +71,7 @@ internal class AtmosphereCoupling(
      */
     private val dryZonalWinds: Pair<FloatArray, FloatArray>? = initialLatentWPerM2?.let {
         val (july, january) = seasonsOf(solver.solve(null, null))
-        july.eastwardMps to january.eastwardMps
+        july.waterEastwardMps to january.waterEastwardMps
     }
 
     override fun sweepWinds(): Pair<FloatArray, FloatArray>? = dryZonalWinds

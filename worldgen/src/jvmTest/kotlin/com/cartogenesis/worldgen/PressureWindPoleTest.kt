@@ -59,8 +59,8 @@ class PressureWindPoleTest {
         var elsewhere = 0.0
         for (cell in wind.eastwardMps.indices) {
             val row = cell / columns
-            val east = (wind.eastwardMps[cell] - half.beltEastwardMps[row]).toDouble()
-            val south = (wind.southwardMps[cell] - half.beltSouthwardMps[row]).toDouble()
+            val east = (wind.eastwardMps[cell] - half.beltEastwardMps[cell]).toDouble()
+            val south = (wind.southwardMps[cell] - half.beltSouthwardMps[cell]).toDouble()
             // Over land the belts' own wind is slowed and turned too; only the sea's departure is the eddies'.
             if (sea.isLand[cell]) continue
             val speed = sqrt(east * east + south * south)

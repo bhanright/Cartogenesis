@@ -113,7 +113,7 @@ class MeanCirculationEarthTest : BorrowsSharedWorlds() {
                 val latitude = ClimateStage.latitudeOf(row, world.height)
                 if ((latitude > 0f) != north || abs(latitude) < RIDGE_SEARCH_NEAREST || abs(latitude) > RIDGE_SEARCH_FARTHEST) continue
                 var sum = 0.0
-                for (column in 0 until world.width) sum += half.seaLevelPressurePa(row * world.width + column, world.width)
+                for (column in 0 until world.width) sum += half.seaLevelPressurePa(row * world.width + column)
                 if (sum > bestPressure) { bestPressure = sum; best = row }
             }
             return ClimateStage.latitudeOf(best, world.height).toDouble()
@@ -177,7 +177,7 @@ class MeanCirculationEarthTest : BorrowsSharedWorlds() {
             val atmosphere = checkNotNull(ClimateStage.coupledAtmosphere(world.config, world.sea, world.ocean)).coupling.atmosphere
             for (julyHalf in listOf(true, false)) {
                 val half = atmosphere.half(julyHalf)
-                val pressure = FloatArray(world.width * world.height) { half.seaLevelPressurePa(it, world.width).toFloat() }
+                val pressure = FloatArray(world.width * world.height) { half.seaLevelPressurePa(it).toFloat() }
                 val highs = SubtropicalHighs.find(world, pressure, atmosphere.remap)
                 val name = if (julyHalf) "July" else "January"
                 println("MEAN CIRCULATION seed $seed $name highs: " + highs.ifEmpty { listOf("none") }.joinToString("; "))

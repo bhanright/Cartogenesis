@@ -91,7 +91,7 @@ class BoundaryLayerEarthTest : BorrowsSharedWorlds() {
             val world = world(seed)
             val atmosphere = ClimateStage.atmosphere(world.config, world.sea)
             for ((name, half) in listOf("July" to atmosphere.julyHalf, "January" to atmosphere.januaryHalf)) {
-                val pressure = FloatArray(world.width * world.height) { half.seaLevelPressurePa(it, world.width).toFloat() }
+                val pressure = FloatArray(world.width * world.height) { half.seaLevelPressurePa(it).toFloat() }
                 val cells = SubtropicalHighs.find(world, pressure, atmosphere.remap)
                 println("BOUNDARY LAYER HIGHS seed $seed $name: " + cells.ifEmpty { listOf("none") }.joinToString("; "))
             }

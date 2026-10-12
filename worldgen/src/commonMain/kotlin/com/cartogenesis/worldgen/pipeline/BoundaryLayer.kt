@@ -210,13 +210,21 @@ internal object BoundaryLayer {
     fun windAt2mMps(eastwardMps: Float, southwardMps: Float): Float =
         (scalarWindAt10mMps(eastwardMps, southwardMps, isLand = true) * FAO_TEN_METERS_TO_TWO).toFloat()
 
+    /**
+     * A half-year's circulation on the map, every array row-major, one entry per cell: the surface
+     * wind of the circulation at each longitude ([LocalCirculation]), meters a second, eastward and
+     * southward, and the sea-level pressure its drag balance holds, pascals. The stationary waves
+     * are the departures from it.
+     */
+    class Belts(val eastwardMps: FloatArray, val southwardMps: FloatArray, val pressurePa: DoubleArray)
+
     /** One calendar half-year's boundary layer. */
     class Half(
-        /** The belts' zonal-mean wind on each row of the map, meters a second, eastward and southward. */
+        /** The circulation's wind at each cell of the map, meters a second, eastward and southward ([Belts]). */
         val beltEastwardMps: FloatArray,
         val beltSouthwardMps: FloatArray,
-        /** The sea-level pressure's zonal mean on each row of the map, pascals. */
-        val zonalPressurePa: DoubleArray,
+        /** The circulation's sea-level pressure at each cell of the map, pascals ([Belts]). */
+        val beltPressurePa: DoubleArray,
         /** The waves' sea-level pressure on the atmosphere's grid, pascals, zero in each row's mean. */
         val eddyPressureCoarsePa: DoubleArray,
         /** The same carried up to the map, row-major, pascals. */
@@ -229,8 +237,8 @@ internal object BoundaryLayer {
         /** The column's latent heating it was solved under, watts per square meter on its grid, or none. */
         val latentHeatingWPerM2: DoubleArray? = null
     ) {
-        /** The sea-level pressure at a map [cell] of a map [columns] wide, pascals. */
-        fun seaLevelPressurePa(cell: Int, columns: Int): Double = zonalPressurePa[cell / columns] + eddyPressurePa[cell]
+        /** The sea-level pressure at a map [cell], pascals. */
+        fun seaLevelPressurePa(cell: Int): Double = beltPressurePa[cell] + eddyPressurePa[cell]
     }
 
     /**
@@ -254,8 +262,8 @@ internal object BoundaryLayer {
      * Solves both calendar halves for a world without latent heat, the dry atmosphere the ocean's
      * stress reads and the climate's coupling starts from: [sea] for the land, the coast and the
      * terrain, [zonal] and [marineFraction] for the surface temperature the energy balance gives
-     * each cell, and each half's belts on the map's rows, eastward and southward in meters a second
-     * ([julyHalfBelts], [januaryHalfBelts]); and [seaSurfaceAnomalyC], the ocean's anomaly (degrees
+     * each cell, and each half's circulation on the map's cells ([julyHalfBelts], [januaryHalfBelts],
+     * [Belts]); and [seaSurfaceAnomalyC], the ocean's anomaly (degrees
      * Celsius, row-major on the map), or none for a sea at its latitudes' temperatures. Each wave is
      * factored once for both halves and let go.
      */
@@ -264,8 +272,8 @@ internal object BoundaryLayer {
         sea: SeaLevelResult,
         zonal: ZonalClimate,
         marineFraction: FloatField,
-        julyHalfBelts: PressureWind.Vectors,
-        januaryHalfBelts: PressureWind.Vectors,
+        julyHalfBelts: Belts,
+        januaryHalfBelts: Belts,
         seaSurfaceAnomalyC: FloatArray? = null
     ): Atmosphere = Solver(config, sea, zonal, marineFraction, julyHalfBelts, januaryHalfBelts, keptWaves = 0, seaSurfaceAnomalyC)
         .solve(null, null)
@@ -285,8 +293,8 @@ internal object BoundaryLayer {
         val sea: SeaLevelResult,
         zonal: ZonalClimate,
         marineFraction: FloatField,
-        private val julyHalfBelts: PressureWind.Vectors,
-        private val januaryHalfBelts: PressureWind.Vectors,
+        private val julyHalfBelts: Belts,
+        private val januaryHalfBelts: Belts,
         keptWaves: Int,
         seaSurfaceAnomalyC: FloatArray? = null
     ) {
@@ -299,14 +307,13 @@ internal object BoundaryLayer {
 
         /**
          * Each coarse row's drag on the lowest level: the row's mean of the map's by area, land's and
-         * the sea's, each at the speed of its row's belts over the two halves, the root mean square
-         * (the model's basic state is the same in both).
+         * the sea's, each at the speed of its cell's circulation over the two halves, the root mean
+         * square (the model's basic state is the same in both).
          */
         val dragOfRow: DoubleArray = run {
             val ground = FloatArray(cellsAcross * cellsDown) { cell ->
-                val row = cell / cellsAcross
-                val squared = 0.5 * (julyHalfBelts.eastwardMps[row].squared() + julyHalfBelts.southwardMps[row].squared() +
-                    januaryHalfBelts.eastwardMps[row].squared() + januaryHalfBelts.southwardMps[row].squared())
+                val squared = 0.5 * (julyHalfBelts.eastwardMps[cell].squared() + julyHalfBelts.southwardMps[cell].squared() +
+                    januaryHalfBelts.eastwardMps[cell].squared() + januaryHalfBelts.southwardMps[cell].squared())
                 surfaceDragPerSecond(sea.isLand[cell], sqrt(squared)).toFloat()
             }
             val mean = remap.areaMean(ground)
@@ -411,13 +418,12 @@ internal object BoundaryLayer {
             )
         }
 
-        private fun half(response: WaveResponse, belts: PressureWind.Vectors, latentWPerM2: DoubleArray?): Half {
+        private fun half(response: WaveResponse, belts: Belts, latentWPerM2: DoubleArray?): Half {
             val eddyCoarse = response.surfacePressurePa
             val eddyGround = remap.outputToGround(eddyCoarse)
             val wind = PressureWind.surfaceWind(config, sea, eddyGround, belts.eastwardMps, belts.southwardMps)
             return Half(
-                belts.eastwardMps, belts.southwardMps,
-                zonalPressurePa(cellsDown, config.scale.radiusMeters, belts.eastwardMps, belts.southwardMps),
+                belts.eastwardMps, belts.southwardMps, belts.pressurePa,
                 eddyCoarse, eddyGround, wind.eastwardMps, wind.southwardMps, response, latentWPerM2
             )
         }
@@ -720,6 +726,116 @@ internal object BoundaryLayer {
         val omega = atmosphere.remap.outputToGround(convergenceOmegaPaPerSecond(atmosphere, half))
         val perPascal = -1.0 / (PressureWind.AIR_DENSITY_KG_PER_M3 * DryAir.GRAVITY_MPS2)
         return FloatArray(omega.size) { (omega[it] * perPascal).toFloat() }
+    }
+
+    /**
+     * The water vapor's scale height, meters: the column's water over the vapor's density at the
+     * surface, `H_v = W / rho_v,s`, over the tropical oceans in AIRS and AMSR-E's profiles of 2002 to
+     * 2009, whose "climatological value" is 2,300 m (Kanemaru and Masunaga, AGU Fall Meeting 2011,
+     * A23D-0194, read). Over the oceans of the subtropics it runs 1,500 to 2,500 m; Antofagasta's 194
+     * soundings of 2005 peak flat at 1.5 to 2.3 km (Otarola, Querel and Kerber 2011, read). The
+     * tropics' figure, since the water the column carries is the tropics' above all.
+     */
+    const val VAPOR_SCALE_HEIGHT_M = 2_300.0
+
+    /**
+     * The share of a column's water vapor in each layer of [levels], top first: the vapor's density
+     * falling as `exp(-z / H_v)` ([VAPOR_SCALE_HEIGHT_M]), each interface's height `z` the
+     * hypsometric law's on the levels' mean temperature ([ZonalBasicState.JABLONOWSKI_WILLIAMSON_TEMPERATURE]).
+     * The shares sum to one. At eight levels the boundary layer, the lowest eighth of the mass and
+     * 1.1 km deep, holds 0.38 of the column's vapor; the air above 500 hPa 0.09.
+     */
+    fun vaporShares(levels: AtmosphereLevels): DoubleArray {
+        val profile = ZonalBasicState.JABLONOWSKI_WILLIAMSON_TEMPERATURE
+        val surface = levels.surfacePressurePa
+        // The height of an interface above the ground, by the hypsometric law in ln p.
+        fun heightMeters(pressurePa: Double): Double {
+            val steps = HYPSOMETRIC_STEPS
+            val logSpan = kotlin.math.ln(surface / pressurePa)
+            var height = 0.0
+            for (step in 0 until steps) {
+                val middle = surface * kotlin.math.exp(-logSpan * (step + 0.5) / steps)
+                height += DryAir.GAS_CONSTANT_J_PER_KG_K * profile.kelvin(middle) / DryAir.GRAVITY_MPS2 * logSpan / steps
+            }
+            return height
+        }
+        // The share of the vapor above each interface; none above the model's top.
+        val above = DoubleArray(levels.interfacePressuresPa.size) { index ->
+            val pressure = levels.interfacePressuresPa[index]
+            if (pressure <= 0.0) 0.0 else kotlin.math.exp(-heightMeters(pressure) / VAPOR_SCALE_HEIGHT_M)
+        }
+        return DoubleArray(levels.levelCount) { level -> above[level + 1] - above[level] }
+    }
+
+    /** Steps of the hypsometric integral from the ground to an interface: a hundredth of its log-pressure span each. */
+    private const val HYPSOMETRIC_STEPS = 100
+
+    /**
+     * The pressure above which the cells' mass returns, pascals: the mid-troposphere, where the
+     * circulation's vertical motion is read ([HadleyCirculation]), between which and the boundary
+     * layer's top the ascent the layer's convergence sets is carried up unchanged.
+     */
+    const val UPPER_BRANCH_BASE_PA = 50_000.0
+
+    /**
+     * The column's vapor-weighted wind under [half] of [atmosphere], meters a second, eastward and
+     * southward, row-major on the map: what carries the column's water, `int q V dp / int q dp`
+     * over the model's layers, each layer's share of the vapor its [vaporShares].
+     *
+     * - **The boundary layer**, the lowest layer, blows the surface wind: the circulation, the
+     *   waves' pressure and the ground's drag under it ([PressureWind.surfaceWind]).
+     * - **Each layer above it** blows the circulation's zonal wind and the stationary waves' own
+     *   wind at that level ([WaveResponse.eastward], [WaveResponse.northwardAtCenters]), carried up
+     *   to the map as the pressure is ([AtmosphereRemap.outputToGround]): the waves are the
+     *   departures from the zonal mean at every level. The circulation's zonal wind is held up
+     *   through the vapor's depth, where the trades are deep, since the model carries no zonal mean
+     *   of its own above the boundary layer but the basic state's, Jablonowski and Williamson's
+     *   prescribed jets, which are not the trades.
+     * - **The circulation's meridional wind** is the boundary layer's alone up to
+     *   [UPPER_BRANCH_BASE_PA], since the cells' whole inflow runs in the layer and their ascent is
+     *   carried up unchanged from its top ([HadleyCirculation]); above it the same mass returns,
+     *   spread evenly over the layers there, where the column holds a tenth of its vapor.
+     */
+    fun columnWindMps(atmosphere: Atmosphere, half: Half): PressureWind.Vectors {
+        val levels = atmosphere.levels
+        val shares = vaporShares(levels)
+        val boundaryLayer = levels.levelCount - 1
+        val response = half.response
+        val coarseCells = atmosphere.remap.coarse.cellCount
+        val eddyEastward = DoubleArray(coarseCells)
+        val eddyNorthward = DoubleArray(coarseCells)
+        var freeShare = 0.0
+        var upperThicknessPa = 0.0
+        var upperShare = 0.0
+        for (level in 0 until boundaryLayer) {
+            val share = shares[level]
+            freeShare += share
+            if (levels.interfacePressuresPa[level + 1] <= UPPER_BRANCH_BASE_PA) {
+                upperThicknessPa += levels.thicknessPa[level]
+                upperShare += share
+            }
+            val eastward = response.eastward[level]
+            val northward = response.northwardAtCenters(level)
+            for (cell in 0 until coarseCells) {
+                eddyEastward[cell] += share * eastward[cell]
+                eddyNorthward[cell] += share * northward[cell]
+            }
+        }
+        val eddyEastwardGround = atmosphere.remap.outputToGround(eddyEastward)
+        val eddyNorthwardGround = atmosphere.remap.outputToGround(eddyNorthward)
+        val boundaryShare = shares[boundaryLayer]
+        // The upper branch's speed per unit of the lower branch's, against it: the same mass over its own depth.
+        val returnPerInflow = if (upperThicknessPa > 0.0) -levels.thicknessPa[boundaryLayer] / upperThicknessPa else 0.0
+        val cellCount = half.eastwardMps.size
+        val eastward = FloatArray(cellCount)
+        val southward = FloatArray(cellCount)
+        for (cell in 0 until cellCount) {
+            eastward[cell] = (boundaryShare * half.eastwardMps[cell] + freeShare * half.beltEastwardMps[cell] +
+                eddyEastwardGround[cell]).toFloat()
+            southward[cell] = (boundaryShare * half.southwardMps[cell] + upperShare * returnPerInflow * half.beltSouthwardMps[cell] -
+                eddyNorthwardGround[cell]).toFloat()
+        }
+        return PressureWind.Vectors(eastward, southward)
     }
 
     /**

@@ -100,7 +100,7 @@ class ContinentalShelfTest : BorrowsSharedWorlds() {
         // is room for the fjords the ice cuts across it.
         val short = measured.filter { it.second <= NEAR_SHALLOW_SHARE }
         // Recorded at A1-6b: the seasonal circulation's rain moved the ground the erosion and the
-        // ice cut, and seeds 7 and 42 held 89.2% and 87.6% (docs/TODO.md).
+        // ice cut, and seeds 7 and 42 held 89.3% and 87.7% (docs/TODO.md).
         KnownFailures.expect(
             "A1-6b: the shelf's band stands deeper than its break on the seasonal circulation's ground", "seed 7 89.3%, seed 42 87.7%"
         ) {

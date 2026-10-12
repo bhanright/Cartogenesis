@@ -404,7 +404,7 @@ class SnowBalanceTest : BorrowsSharedWorlds() {
         // Armed at A1-6a, whose circulation's polar land holds ice on 19.99% of the cells pooled,
         // a hair inside the bar (docs/DESIGN_LEDGER.md, A1-6a). Recorded again at A1-6b, whose
         // moving polar front and water carried across the wind's reversal snow more on the polar
-        // land: 25.28% of the cells, where by area on the sphere the ice-sheet biome holds 7.2 to
+        // land: 25.23% of the cells, where by area on the sphere the ice-sheet biome holds 7.2 to
         // 12.2% of the land of seeds 7, 42, 1234 and 99 at 512 rows against Earth's 10.1
         // (`RainAgainstEarthTest`; docs/TODO.md).
         KnownFailures.expect("A1-6b: the ice covers more than twice Earth's share of the land's cells", "25.23%") {

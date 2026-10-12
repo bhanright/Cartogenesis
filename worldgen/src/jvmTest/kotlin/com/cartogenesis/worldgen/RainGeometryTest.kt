@@ -112,8 +112,8 @@ class RainGeometryTest : BorrowsSharedWorlds() {
         // Recorded on H1's ground under the coupled climate, where the deserts' edges along a row
         // pooled longer than the tree before the climate's chunks drew them (docs/DESIGN_LEDGER.md,
         // M1). Armed at A1-6a, whose circulation's deserts end along a row at 255 to 303 km.
-        // Recorded at A1-6b: seed 969495's desert ends along a row for 611 km, the other two seeds'
-        // at 223 and 348 (docs/TODO.md).
+        // Recorded at A1-6b: seed 969495's desert ends along a row for 630 km, the other two seeds'
+        // at 254 and 304 (docs/TODO.md).
         KnownFailures.expect("A1-6b: the deserts' edges along a row pool longer than main's", "396 km") {
             if (desertEdge.average() > MAIN_DESERT_ROW_EDGE_KM.average()) {
                 throw RecordedViolation(

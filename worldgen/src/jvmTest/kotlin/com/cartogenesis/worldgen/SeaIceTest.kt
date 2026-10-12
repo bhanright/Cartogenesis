@@ -168,8 +168,8 @@ class SeaIceTest : BorrowsSharedWorlds() {
                 lidless += "seed %d x%.2f".format(seed, openRainMm / measured.rainOverIceMm)
             }
         }
-        // Recorded at A1-6b: seed 7's frozen cells take 255 mm with the ice off against 134 with it
-        // on, x1.90, under the polar front that now moves with the seasons (docs/TODO.md).
+        // Recorded at A1-6b: seed 7's frozen cells take 1.93 times their rain with the ice off and
+        // seed 1234's 1.88, under the polar front that now moves with the seasons (docs/TODO.md).
         KnownFailures.expect("A1-6b: with the ice off, the frozen cells take less than twice the rain", "seed 7 x1.93; seed 1234 x1.88") {
             if (lidless.isNotEmpty()) {
                 throw RecordedViolation(

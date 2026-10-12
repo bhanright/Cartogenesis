@@ -1,30 +1,86 @@
 # To do
 
-- **The seasonal circulation against Earth (A1-6a).** `MeanCirculationEarthTest` holds three
-  known failures on seeds 42, 969495 and 7 at 1,024 rows. *The ridge*: every summer ridge stands 7
-  to 17 degrees equatorward of its winter ridge, where Earth's moves a few degrees poleward in
-  summer, and four of the twelve stand under 25 degrees (22.2 to 24.7, each a July northern ridge
-  but 969495's January southern one). Two causes are in the code and neither is isolated: the
-  equal-area cells' summer edge stands equatorward of their winter edge (26.5 to 28.4 against
-  29.3 to 37.9), as in Lindzen and Hou's (1988) own solutions, and the eddy forcing is the year's in
-  both halves (the entry below). *The ITCZ*: the ocean's wettest row in the half about July is
-  south of the equator on all three seeds (4.7, 5.9 and 9.1 S) while the circulation rises at 10.3
-  to 16.4 N; seed 42's January row stands at 7.5 N, the wrong way round. The march's rain does not
-  follow the boundary layer's ascent across the equator in the northern summer; not traced.
-  *The cells*: the energy balance's warmest marine air stands only 2.1 to 4.0 degrees north in the
-  half about July (3.0 to 4.8 south in January), so the July winter cell carries 1.6 to 3.4 times
-  the summer cell's mass where Earth's carries about five; why the energy balance's July heating
-  stands so near the equator is not traced. 2026-10-11, A1-6a.
-- **The rain ends along a row at the polar front (A1-6a, rule 13).** The circulation's Ferrel and
-  polar legs meet at `SurfaceBelts.WESTERLY_BELT_EDGE_DEGREES` in both halves of the year
-  (`HadleyCirculation.northwardMps`; the front does not migrate), so the moist westerlies and the
-  dry polar air meet on one latitude all year. In the renders at 1,024 rows the annual rain steps
-  from wet to dry within about a degree at 60 to 61 S across both of seed 42's southern continents
-  and at 62 to 63 N across seed 969495's northern one (`RainGeometryTest`'s longest front there,
-  1,402 km along 62.8 N); M1's belts, at 50 and 70 in alternate halves, drew such an edge at 70 N
-  on 969495 and none at 60 S on 42. Seed 42's longest front, 2,471 km along 34.4 S, stands three
-  degrees poleward of its July winter cell's edge (31.3 S); not traced. A front that moves with the cells' edges, or the eddies' own mixing across
-  it, would soften the step; neither is done. 2026-10-11, A1-6a.
+- **The seasonal circulation against Earth (A1-6b).** `MeanCirculationEarthTest` on seeds 42,
+  969495 and 7 at 1,024 rows: the ridges (July 32.4 to 33.7 N and 25.8 to 27.3 S, January 25.6 to
+  27.0 N and 30.7 to 34.7 S), the ITCZ's seasonal range (18.3 to 22.3 degrees) and the eddy-driven
+  jet (41.2 to 49.8 degrees, poleward in summer) stand inside Earth's and are armed. Three clauses
+  are recorded. *The ITCZ in the half about January* stands at 8.5, 9.6 and 11.0 S, south of the
+  monsoon sector's 8 S that bounds Earth's (the July half's 9.6 to 11.3 N passes). *The cells'
+  asymmetry*: the winter cell's lower branch carries 1.7 to 2.4 times the summer cell's in every
+  half, under the three asked and Earth's about five; the summer cells reach far poleward (to 30.7
+  to 34.9 degrees, where the troposphere turns baroclinically unstable) and carry 6.8e10 to 1.1e11
+  kg/s where the winter cells carry 1.6e11 to 1.9e11. *The closed highs*: no closed high over the
+  summer hemisphere's sea on 969495 in either half nor on 7 in July; 42's July highs stand at 35.4
+  and 36.6 N at basin positions 0.95 and 0.96, Earth's place. 2026-10-11, A1-6b.
+- **The year's ocean rain is a double ITCZ (A1-6b).** The ITCZ stands near 10 degrees in the
+  summer hemisphere in each half, so the year's zonal-mean ocean rain peaks twice, at 9 to 11 N and
+  9 to 11 S (2,500 to 2,800 mm), with 185 to 291 mm at the equator between them
+  (`RainAgainstEarthTest`'s profiles at 512 rows), where Earth's annual ITCZ is one band north of the
+  equator. Over land the same shows as zonal stripes: seed 42's equatorial continent at 1,024 rows
+  is wet at about 10 N and 10 S and drier between, each band's edge running along a row for up to
+  2,000 km (the next entry). The rising branch stands at the supercritical extent, 11.3 to 13.7
+  degrees, and the ascent is narrow about it; whether the equator's own ascent, or the march's
+  concentration of rain into the strongest ascent, is short is not traced. 2026-10-11, A1-6b.
+- **Fronts along a row at the ITCZ's edges (A1-6b, rule 13).** `RainGeometryTest`'s longest
+  straight front now stands at the tropics' edge, 1,984 km at 12.9 N on 42, 1,468 km at 13.1 N on
+  969495 and 3,069 km at 14.5 N on 7 (A1-6a's 2,471 at 34.4 S, 1,402 at 62.8 N and 1,499 at 5.9 N):
+  the July half's rain ends along the poleward edge of its rising branch. Recorded. 2026-10-11, A1-6b.
+- **The rain still ends along a row at the polar front (A1-6b, rule 13).** The front now moves with
+  each half's jet (seed 42's at 62.4 N and 56.4 S in July) and the march carries water across the
+  wind's reversal, and the longest straight front at 55 to 70 degrees fell from A1-6a's 1,123 km at
+  57.6 S, 1,402 at 62.8 N and 981 at 61.8 N to 895 km at 63.9 S, 694 at 67.1 N and 680 at 63.5 N,
+  still over the 600 km bar (`RainGeometryTest`, recorded). Not traced further. 2026-10-11, A1-6b.
+- **Rain piles onto the polar rows (A1-6b, rule 13).** On seed 969495 at 1,024 rows the zonal-mean
+  rain rises from 113 mm at 83 S to 1,007 mm on the last row, a straight wet band along the map's
+  bottom edge in the rain view, fainter in A1-6a's render; on 42 it rises from 84 to 170 mm. Over
+  the last dozen rows of 969495 the solved surface wind's zonal mean blows toward the pole at 0.01
+  to 0.27 m/s, where the circulation's own meridional wind goes to nothing at the pole, so the
+  boundary layer converges water onto the pole's cells, whose zonal wind is near calm. Not traced.
+  2026-10-11, A1-6b.
+- **The equator's trades are weak under the circulation (A1-6b).** The boundary layer's zonal
+  momentum march starts each cell from rest at its edge and carries the air across the equator,
+  where it turns westerly, so the zonal-mean easterly at the equator is weak: the cold tongue's
+  east-west contrast is 0.05 to 0.10 C, against the 0.74 to 1.44 C its basins' trades ask
+  (`ColdWaterPlacementTest`, A1-6a's 1.07 to 1.83 of 2.86 to 5.43); the equator's rows rise at 0.28
+  of the trades' damped Ekman divergence (`OceanUpwellingTest`); and under the circulation alone the
+  trades' band flows east at 0.002 to 0.008 m/s, in the north on seeds 7, 1234 and 99 and in the
+  south on 1234 (`OceanCurrentTest`). All
+  recorded. 2026-10-11, A1-6b.
+- **The boundary layer's two convergences part in the subtropics (A1-6b).** `BoundaryLayerTest`'s
+  one-layer clause reads seed 99's January half at 5 to 35 degrees outside its bar under the seasonal
+  circulation; recorded, not traced. 2026-10-11, A1-6b.
+- **The ground under the seasonal circulation's rain (A1-6b).** The erosion's climate moved the
+  ground. Lakes: 2.14% of the land pooled against Earth's 1.11% at this cell area (seed 42 4.37%, a
+  lake field over its southern continent at 55 to 65 S; `GroundTextureTest`), lakes of 3.31, 3.66
+  and 1.65 times the Caspian's share on 718106, 7 and 1234 that the notch does not halve
+  (`OutletIncisionTest`), and seed 1's dry sample down to 493 cells, keeping water and no endorheic
+  lake (`LakeWaterBalanceTest`). The shelf: 89.3% and 87.7% of the water within a shelf's width of
+  seeds 7's and 42's coasts stands no deeper than the break, against 90% (`ContinentalShelfTest`).
+  The ice: 25.23% of the land's cells pooled against twice Earth's 10.1% (`SnowBalanceTest`; by
+  area 7.2 to 12.2% of the land at 512 rows), the sheets thicker (`IceSheetTest`'s thickness record,
+  6,758 to 8,739 against 5,689 and 5,702), the level slabs larger (`GlacialBasinShapeTest`, 28 to
+  60 cells against 27) and the troughs' lattice deeper (`GlaciationLatticeTest`, 43.7 to 51.9%
+  against 30.2 to 41.9). The desert's longest edge along a row pools at 411 km against main's 311,
+  969495's at 630 km (`RainGeometryTest`). All recorded. 2026-10-11, A1-6b.
+- **Controls the circulation took a lever from (A1-6b).** `GridShapeTest`'s doubled slant moves
+  neither the deserts nor the rain past the spread, since `meridionalWindShare` now sets only the
+  Ferrel and polar legs and the Hadley cells' meridional wind is their own continuity's.
+  `SeaIceTest`'s frozen cells take 1.93 and 1.88 times their rain with the ice off on seeds 7 and
+  1234, under the two asked. `PlanetWidthRainTest`'s wettest land on the 24,000 km planet is 1.63
+  times the 12,000 km planet's, over the seeds' 1.42: the cells' extent goes with the thermal Rossby
+  number, the inverse square of the radius, so the bar's premise that a planet's size moves the rain
+  no more than the seeds differ no longer holds. `CurrentFeedsRainTest`'s cold coast is back but two
+  cells long, 19.7% wetter with the currents on, and the warm coast 1.4% drier. All recorded.
+  2026-10-11, A1-6b.
+- **The acceleration saves no laps once the sweeps are held (A1-6b).** `AtmosphereCouplingTest`:
+  the plain relaxed iteration settles all four worlds in 43 laps against the accelerated loop's 44,
+  its feedback 0.59 to 0.63. Whether to keep Anderson's step is a decision; recorded.
+  2026-10-11, A1-6b.
+- **A cell whose moist wind turns against the dry wind's sweep is carried as calm (A1-6b).** The
+  march holds every cell in the sweep the dry atmosphere's zonal wind gives it
+  (`MoistureMarch`, "The sweeps are held"), so where the latent heating reverses the zonal wind, a
+  monsoon's westerly in a dry easterly, the cell's zonal flux is the march's least speed. How many
+  cells that is, and how much rain it moves, is not measured. 2026-10-11, A1-6b.
 - **The census on the circulation's ice (A1-6a).** The geometry census's known instances went
   from M1's twelve to seventeen: new are seed 1234's ice surface and terrain contours (four and two
   facets about (55, 498), three and two arcs of 173.5 degrees about (134, 488) and (544, 33) at 512
@@ -33,19 +89,6 @@
   borders and in seed 42's ice, seed 7's three ice arcs (one new at (788, 27)), and seed 99's ice arc and aligned
   biome edge. The ice's are `IceSheet`'s shape on the snow the new circulation
   brings; the right angle is not traced. 2026-10-11, A1-6a.
-- **The monsoon's summer inflow is calm under the seasonal circulation (A1-6a).**
-  `PressureWindTest`'s subtropical continents take -0.05 m/s onto their equatorward and eastern
-  coasts in the warm half, pooled over four seeds, against the 0.1 m/s bar, where M1 cleared it;
-  the cold half blows off them at -0.11. Recorded; it is likely the summer subtropics' lost
-  easterlies (the eddy-forcing entry below), not shown. 2026-10-11, A1-6a.
-- **Seed 7's cold-current coast is gone (A1-6a).** `CurrentFeedsRainTest`'s west coast at 27 to
-  33 S keeps no cell 0.8 C under its latitude's mean (78 km at M1); the ocean's stress still reads
-  the translated belts (`OceanStage.annualStress`), so what moved is the ground the rain eroded.
-  Re-recorded. 2026-10-11, A1-6a.
-- **Seed 42's ice sheet flows outward a hair under the bar (A1-6a).** `IceSheetTest`'s flow
-  clause reads seed 42's dome again (187 cells of its 513-cell disc), and 63.1% of it flows outward
-  at 67.7 degrees off radial against the 67% and 67.5 the clause asks; recorded, as at A1-4.
-  2026-10-11, A1-6a.
 - **The wave model's basic state keeps westerlies at the ground in the tropics in both halves
   (A1-6a).** `ZonalBasicState.jablonowskiWilliamson` blows westerly at every level and latitude,
   where the half-years' zonal-mean surface wind (`HadleyCirculation`) is easterly in the trades.
@@ -56,12 +99,6 @@
   1.4 GB kept at eight levels against the 700 MB the application keeps today, and a second 233 ms
   factoring a climate run. It waits for the chunk that makes the jets the energy balance's own.
   2026-10-11, A1-6a.
-- **The eddies' momentum forcing of the surface wind is the same in both halves (A1-6a).**
-  `HadleyCirculation.windMps` holds the zonal wind by `k u = f v + F`, with `F` the forcing that
-  keeps Earth's annual zonal-mean surface wind against the two halves' mean meridional wind. Earth's
-  eddy forcing has its own seasons, which no source read here gives; with `F` fixed, each half's
-  zonal wind departs from the annual one only by the Coriolis force on its departure of meridional
-  flow, so the summer subtropics lose most of their easterlies. 2026-10-11, A1-6a.
 - **A rift drawn as a straight line down seed 42's southern continent (A1-6a, rule 13).** M1's
   atlas of seed 42 at 1,024 rows shows a nearly straight north-south line from about 30 S to 85 S
   near column 1,400. It is a continental rift (`BoundaryClass.CONTINENTAL_RIFT`) on a plate
@@ -81,7 +118,9 @@
   cold and was no longer the world a fresh generation makes, so the chain stops inside the erosion
   stage, which always runs both of its climates. Saving the start with the stage results (the two
   halves' heating on the atmosphere's grid, the ground's return and the bank, about 34 MB a world
-  at 1,024 rows) would let the chain run whole. 2026-10-11, A1-6a.
+  at 1,024 rows) would let the chain run whole. 2026-10-11, A1-6a. **At A1-6b** the march's sweeps
+  are held at the dry atmosphere's partition whatever the loop starts from, which a warm start's
+  first lap would otherwise choose (`MoistureMarch`, "The sweeps are held"). 2026-10-11, A1-6b.
 - **`GroundFiguresTest` fails on main at 4c7f3a4a.** Its case *no figure in the source is counted
   in cycles round the map or as a share of it* names `Shoreline.kt:179` (`:cartography`, G2's
   drawn coast), `width / PIECES_PER_SIGMA`, as dividing the grid. Seen on both everyday runs of

@@ -51,12 +51,11 @@ class BoundaryLayerCostTest {
         const val ROWS = 1024
 
         /**
-         * The coupled loop's laps a climate run: 35 over a world's four runs on seed 7 at 1,024 rows
-         * (9, 7, 9 and 10), the erosion's second starting where its first settled and the others
-         * cold, 8.75 a run taken up to the whole lap (the world clause below, docs/DESIGN_LEDGER.md,
-         * A1-6a).
+         * The coupled loop's laps a climate run: 40 over a world's four runs on seed 7 at 1,024 rows
+         * (10, 9, 11 and 10), the erosion's second starting where its first settled and the others
+         * cold, ten a run (the world clause below, docs/DESIGN_LEDGER.md, A1-6b; 35 at A1-6a).
          */
-        const val LAPS_PER_CLIMATE = 9
+        const val LAPS_PER_CLIMATE = 10
     }
 
     @Test
@@ -157,7 +156,7 @@ class BoundaryLayerCostTest {
                 "%.2f%% of a %.1f s world in all and %.2f%% on the map's cells")
                 .format(ROWS, factorMs, downMs, solveMs, upMs, ascentMs, laps, LAPS_PER_CLIMATE, wholeShare * 100, worldSeconds, perCellShare * 100)
         )
-        KnownFailures.expect("A1-5: the coupled loop's per-cell work is over a hundredth of a world", "7%") {
+        KnownFailures.expect("A1-5: the coupled loop's per-cell work is over a hundredth of a world", "6%") {
             if (perCellShare >= WORTH_A_DEVICE_SHARE) {
                 throw RecordedViolation(
                     "the coupled loop's per-cell work takes %.2f%% of a world, over the hundredth rule 8 allows without a graphics path".format(perCellShare * 100),

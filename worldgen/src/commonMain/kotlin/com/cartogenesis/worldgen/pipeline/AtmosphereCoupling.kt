@@ -171,8 +171,20 @@ internal class AtmosphereCoupling(
      * condensation asks for: Walker and Ni's step `x + beta f - (dX + beta dF) gamma`, with `f` the
      * residual `g(x) - x` and `gamma` the least-squares fit of the residual's lap-to-lap changes
      * `dF` to it; the plain relaxed step at a depth of zero or on the first lap.
+     *
+     * A lap whose residual stands above the lap's before it starts the history again, and its step
+     * is the plain relaxed one. Near the fixed point the last laps' changes are the march's own
+     * settling more than the loop's slow modes, and the fit of them stopped describing the loop:
+     * on the ice's provisional climate of seed 7 at 1,024 rows, under the march's held sweeps, the
+     * residual fell to 0.004 by the ninth lap and then rose to 0.022 by the thirteenth, and the run
+     * took seventeen laps, where the plain iteration's own feedback there is 0.59 to 0.63
+     * (`AtmosphereCouplingTest`; docs/DESIGN_LEDGER.md, A1-6b).
      */
     private fun nextHeating(lastGiven: DoubleArray, lastAsked: DoubleArray): DoubleArray {
+        if (residuals.size >= 2 && residuals[residuals.size - 1] > residuals[residuals.size - 2]) {
+            givenHistory.clear()
+            targetHistory.clear()
+        }
         givenHistory.addLast(lastGiven)
         targetHistory.addLast(lastAsked)
         while (givenHistory.size > depth + 1) {

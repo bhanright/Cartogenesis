@@ -232,7 +232,8 @@ internal object GeometryFindings {
      * A rainfall level line runs straight along a row: under A1-6b's seasonal circulation the
      * year's rain on seeds 7 and 1234 at 512 rows, 104 to 188 cell widths along rows 1 to 3 and
      * 507 to 511, where the rain piles onto the polar rows (docs/TODO.md, "Rain piles onto the polar
-     * rows").
+     * rows"); at A1-6c 64 to 262 cell widths on seeds 7, 42 and 1234, traced to the ground's relief
+     * round the poles (docs/TODO.md, "The rain on the polar rows is the ground's relief round a pole").
      */
     const val ISOHYETS_ALONG_ROWS = "isohyets run straight along rows"
 

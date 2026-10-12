@@ -6,6 +6,7 @@ import com.cartogenesis.worldgen.pipeline.LakeWaterBalance
 import com.cartogenesis.worldgen.pipeline.SurfaceEvaporation
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
@@ -205,7 +206,7 @@ class LakeWaterBalanceTest : BorrowsSharedWorlds() {
         // Recorded at A1-6b: the seasonal circulation's rain moved the ground the sample was scanned
         // on, and seed 1's largest dry basin is 477 cells; the scan that re-picks it is a run of
         // its own (docs/TODO.md). The rest of the case reads the basin it has.
-        KnownFailures.expect("A1-6b: seed 1's dry basin sample falls under 500 cells", "493 cells") {
+        KnownFailures.expect("A1-6b: seed 1's dry basin sample falls under 500 cells", "283 cells") {
             if (basin.size < 500) {
                 throw RecordedViolation("seed $drySeed has no large dry basin any more (${basin.size} cells)", "${basin.size} cells")
             }
@@ -297,15 +298,12 @@ class LakeWaterBalanceTest : BorrowsSharedWorlds() {
         // on the re-picked sample, whose two lakes are both endorheic (docs/DESIGN_LEDGER.md, K2,
         // C1b and H1). Recorded at A1-6b: seed 1's 493-cell sample keeps water over 22% of its
         // spill area under the seasonal circulation's rain and none of its lakes is marked
-        // endorheic; not traced (docs/TODO.md).
-        KnownFailures.expect("A1-6b: seed 1's dry basin keeps water and none of its lakes is marked endorheic", "2 lakes, none endorheic") {
-            if (lakes.isNotEmpty() && lakes.none { it.endorheic }) {
-                throw RecordedViolation(
-                    "the dry basin keeps water and none of its lakes is marked endorheic",
-                    "${lakes.size} lakes, none endorheic"
-                )
-            }
-        }
+        // endorheic. Armed at A1-6c, whose re-picked 283-cell sample is dry, 38 mm of rain against
+        // 2,464 mm of evaporation, and keeps no lake (docs/DESIGN_LEDGER.md).
+        assertFalse(
+            lakes.isNotEmpty() && lakes.none { it.endorheic },
+            "the dry basin keeps water and none of its lakes is marked endorheic: ${lakes.size} lakes"
+        )
         lakes.forEach { lake ->
             if (lake.endorheic) {
                 assertTrue(

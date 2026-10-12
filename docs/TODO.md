@@ -75,6 +75,19 @@
   (175 against 0.245 mm-cells) and one of 35 cells 163.69 times, in dry country, far past the float's
   last places at the map's largest runoff: the basins' own accounting, as A1-1's 59-cell basin was.
   Recorded, not traced. 2026-10-12, A1-6c.
+- **What the closed air-sea loop moved in the deep tier (A1-6c).** Recorded, each a consequence of
+  the sea evaporating nearer Earth's and of the atmosphere reading the sea's anomaly, none traced
+  further. The shipped march's wettest two degrees of open ocean within 20 degrees stand at 3,345 mm
+  at 512 rows, 1.14 times GPCP's 2,922, and the convergence closure, which would take a tenth of it,
+  stands nearer (2,983; `MoistureBudgetTest`); it stays off, since the ascent already condenses that
+  convergence. Seed 969495's northern winter ridge stands at 24.9 degrees, a row inside the bar's
+  25, and seed 42's southern jet moves from 40.7 to 50.7 degrees between its winter and its summer,
+  just past the ten allowed (`MeanCirculationEarthTest`). The bare-ground control of the channel
+  heads no longer fails: on the wetter land its pooled curve is flat from the semi-arid class up
+  (0.0209, 0.0209 and 0.0207 per kilometer), so it peaks in the dry subhumid and falls on the wet
+  side by a hundredth, and the clauses it guards are met by the land's spread rather than by the
+  cover term (`ChannelInitiationControlTest`). The summer contrast across the west coasts stands
+  at 0.41 of Earth's, from 0.46 (`CoastContrastTest`). 2026-10-12, A1-6c.
 - **The seasonal circulation against Earth (A1-6b).** `MeanCirculationEarthTest` on seeds 42,
   969495 and 7 at 1,024 rows: the ridges (July 32.4 to 33.7 N and 25.8 to 27.3 S, January 25.6 to
   27.0 N and 30.7 to 34.7 S), the ITCZ's seasonal range (18.3 to 22.3 degrees) and the eddy-driven

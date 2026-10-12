@@ -464,7 +464,7 @@ object EnergyBalance {
     }
 
     /**
-     * The eddies' share of [diffusivityAt] at one latitude, in watts per square metre per degree:
+     * The eddies' share of [diffusivityAt] at one latitude, in watts per square meter per degree:
      * the polar floor and the storm track's Gaussian, without the cosine-squared term that stands
      * for the Hadley cell's mean overturning.
      *
@@ -739,7 +739,7 @@ object EnergyBalance {
      * Twenty-five together, the top of the 15-25 the standard formulae give across the range of
      * wind speeds and surface temperatures a planet has. Warmer water couples harder, because the
      * latent term follows Clausius-Clapeyron, about 7% a degree, and that dependence is not
-     * modelled here; 25 is the mid-latitude figure, which is
+     * modeled here; 25 is the mid-latitude figure, which is
      * where the coasts this matters for are.
      *
      * It sets how fast the air forgets the water: `C_air / 25` is 4.8 days, so marine air tracks
@@ -1461,7 +1461,7 @@ object EnergyBalance {
             geometry.bandAlbedo[band] = albedoOf(white, latitudeOfBand(band).toDouble())
             // Only the open sea's surface: a frozen one spends its sunlight melting ice at the
             // freezing point, a latent heat this model does not carry, so its share stays in the
-            // air as it did before the water took any. Given to two metres of ice as warmth
+            // air as it did before the water took any. Given to two meters of ice as warmth
             // instead, the polar summer's sun raised the frozen column past the freezing point
             // and opened the pole's sea while the sea twenty degrees from it stayed frozen.
             geometry.openSeaSurfaceShare[band] = SEA_SURFACE_SHARE_OF_ABSORBED_SUN * (1.0 - white)

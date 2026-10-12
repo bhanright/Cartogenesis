@@ -61,7 +61,7 @@ import kotlin.math.sqrt
 object IceSheet {
 
     /**
-     * The thickest ice measured on Earth, in metres: Bedmap2's deepest sounding in the Astrolabe
+     * The thickest ice measured on Earth, in meters: Bedmap2's deepest sounding in the Astrolabe
      * Subglacial Basin (Fretwell et al. 2013). The envelope guard's ceiling.
      */
     const val THICKEST_ICE_ON_EARTH_METRES = 4_776f
@@ -172,7 +172,7 @@ object IceSheet {
     }
 
     /**
-     * The height of a body's dome over its margin, in metres: Vialov's `H0` for a sheet whose
+     * The height of a body's dome over its margin, in meters: Vialov's `H0` for a sheet whose
      * divide stands [divideKm] from its margin, under [accumulationMmWater] of snow a year, with a
      * surface at [surfaceC] before the dome lifts it. The rate factor depends on how thick the ice
      * is and the thickness on the rate factor, and the surface cools by [lapseRateCPerKm] as the
@@ -292,7 +292,7 @@ object IceSheet {
     }
 
     /**
-     * How far each frozen cell stands from the nearest margin in a straight line, kilometres, and
+     * How far each frozen cell stands from the nearest margin in a straight line, kilometers, and
      * zero off the ice: the plain jump flood over the margin's cells, on the ground.
      */
     fun nearestMarginKm(config: WorldGenConfig, frozen: BooleanArray, margin: BooleanArray): FloatArray {
@@ -311,7 +311,7 @@ object IceSheet {
 
     /**
      * Which margin cell each frozen cell's surface is measured from, and how far away it is in
-     * kilometres: the margin whose profile reaches the cell *lowest*, which is not always the
+     * kilometers: the margin whose profile reaches the cell *lowest*, which is not always the
      * nearest one.
      *
      * The surface over a margin of varying height is the lower envelope of the profiles rising
@@ -330,7 +330,7 @@ object IceSheet {
         margin: BooleanArray,
         /** The shoreline-relative ground the margins stand on. */
         bedRelative: FloatArray,
-        /** What one unit of [bedRelative] is worth in metres. */
+        /** What one unit of [bedRelative] is worth in meters. */
         metresPerFieldUnit: Float,
         domeMetresOfMargin: FloatArray,
         divideKmOfMargin: FloatArray,
@@ -363,7 +363,7 @@ object IceSheet {
     }
 
     /**
-     * The smallest body of ice that is an ice *sheet*, in square kilometres: 50,000, glaciology's
+     * The smallest body of ice that is an ice *sheet*, in square kilometers: 50,000, glaciology's
      * own line between a sheet and an ice cap (Cuffey and Paterson, 4th edn, §1.2; Benn and Evans,
      * *Glaciers and Glaciation*, 2nd edn, §1.5). A body under it keeps no thickness and nothing
      * is written into the elevation field for it.
@@ -371,7 +371,7 @@ object IceSheet {
     const val SMALLEST_SHEET_SQUARE_KM = 50_000.0
 
     /**
-     * The profile over one cell, in metres above the margin it is measured from: the *mean* of
+     * The profile over one cell, in meters above the margin it is measured from: the *mean* of
      * the body's profile across the ground the cell covers, `marginDistanceKm - cellSpanKm` to
      * `marginDistanceKm`, not its value at the cell's middle, so the ice tapers to its margin
      * rather than ending in a step. [cellSpanKm] is the side of the square with a cell's own
@@ -396,7 +396,7 @@ object IceSheet {
     }
 
     /**
-     * How high the sheet's *surface* stands at one cell, in metres above the shoreline: the
+     * How high the sheet's *surface* stands at one cell, in meters above the shoreline: the
      * margin's own ground, floored at the waterline (a marine margin is where the ice meets the
      * sea), plus the profile. The profile is a surface and not a drape: the bed it sits on does not
      * show through it.

@@ -570,7 +570,7 @@ class EnergyBalanceTest {
      * the winter month's layer at least twice as deep as the summer's. The water's swing at 35 to 45
      * degrees is printed beside Earth's, about 8 C at 40 (the sea-surface figures above).
      *
-     * Shown failing on the fifty-metre slab it replaced, whose layer stood at 50 m all year.
+     * Shown failing on the fifty-meter slab it replaced, whose layer stood at 50 m all year.
      */
     @Test
     fun `the mixed layer is thin in summer and deep in winter`() {

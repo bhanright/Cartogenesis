@@ -30,7 +30,7 @@ package com.cartogenesis.worldgen.pipeline
  * differ only in what they divide it by, which is the part that genuinely differs.
  *
  * **Rainfall standing in for the storms.** What actually cuts a channel is the water a storm
- * delivers faster than the ground takes it in, and storms are not modelled, so the weight is an
+ * delivers faster than the ground takes it in, and storms are not modeled, so the weight is an
  * upper bound on the water and a smooth one on a quantity that is not smooth. Stated once, in the
  * place the substitution is made.
  *

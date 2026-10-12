@@ -95,9 +95,9 @@ internal object PressureWind {
     class Vectors(val eastwardMps: FloatArray, val southwardMps: FloatArray)
 
     /**
-     * The surface wind a sea-level pressure drives, in metres a second, one vector per cell of the
+     * The surface wind a sea-level pressure drives, in meters a second, one vector per cell of the
      * map: the pressure's departure from the circulation's, [eddyPressurePa] (pascals, row-major on
-     * the map), on top of the circulation's wind, [beltEastwardMps] and [beltSouthwardMps] (metres a
+     * the map), on top of the circulation's wind, [beltEastwardMps] and [beltSouthwardMps] (meters a
      * second, row-major, one each per cell: the circulation at each longitude, [LocalCirculation]),
      * which set the circulation's own pressure.
      *

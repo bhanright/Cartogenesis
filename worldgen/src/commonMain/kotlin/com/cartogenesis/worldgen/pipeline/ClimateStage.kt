@@ -1520,7 +1520,7 @@ object ClimateStage {
     /**
      * A half-year's wind from its belts and, when the pressure term is on, the boundary layer's
      * solved wind for that half ([BoundaryLayer]), whose zonal mean over the open sea is those
-     * belts: the wind in metres a second and the direction-and-slant pair the march reads.
+     * belts: the wind in meters a second and the direction-and-slant pair the march reads.
      *
      * Passing no [atmosphere] gives the belts alone, which is how `ClimateConfig.pressureWinds =
      * false` reproduces the belts' wind exactly: the solved wind is not computed at all.
@@ -1538,7 +1538,7 @@ object ClimateStage {
     private class SeasonWind(val march: WindField, val totalMps: PressureWind.Vectors)
 
     /**
-     * The belts' wind in metres a second, per cell: their zonal share of
+     * The belts' wind in meters a second, per cell: their zonal share of
      * [PressureWind.BELT_SPEED_MPS] and their slant turned back into a meridional speed.
      */
     private fun beltWindMps(config: WorldGenConfig, belts: WindField): PressureWind.Vectors {
@@ -1700,7 +1700,7 @@ object ClimateStage {
     internal fun atmosphere(config: WorldGenConfig, sea: SeaLevelResult, seaSurfaceAnomalyC: FloatArray? = null): BoundaryLayer.Atmosphere =
         atmosphere(config, sea, zonalClimate(config, sea), marineAirFraction(config, sea), seaSurfaceAnomalyC = seaSurfaceAnomalyC)
 
-    /** A wind in metres a second as the march reads it: a zonal direction and a slant in rows. */
+    /** A wind in meters a second as the march reads it: a zonal direction and a slant in rows. */
     private fun marchWindOf(
         config: WorldGenConfig,
         wind: PressureWind.Vectors,
@@ -1709,7 +1709,7 @@ object ClimateStage {
         val cellsAcross = config.width
         val cellsDown = config.height
 
-        // A slant is rows per cell of zonal travel and a wind is metres a second in each
+        // A slant is rows per cell of zonal travel and a wind is meters a second in each
         // direction, and the two are the same ratio only on a grid whose cells are square.
         val cellWidthOverHeight =
             (config.scale.cellWidthKm(cellsAcross) / config.scale.cellHeightKm(cellsDown)).toFloat()
@@ -1738,7 +1738,7 @@ object ClimateStage {
     }
 
     /**
-     * The surface wind of one calendar half-year over a finished world, in metres a second,
+     * The surface wind of one calendar half-year over a finished world, in meters a second,
      * eastward and southward - the field `PressureWindTest` measures against its coastlines;
      * [season] is [Season.JULY_HALF] or [Season.JANUARY_HALF].
      *

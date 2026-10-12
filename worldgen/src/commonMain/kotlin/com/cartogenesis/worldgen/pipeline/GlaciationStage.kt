@@ -40,11 +40,11 @@ internal data class GlacialMass(
      * the elevation field.
      */
     val iceThicknessMetres: FloatArray,
-    /** How far each frozen cell stands from the nearest ice margin, in kilometres. */
+    /** How far each frozen cell stands from the nearest ice margin, in kilometers. */
     val marginDistanceKm: FloatArray,
     /**
-     * Each margin cell's body's Vialov dome, metres, and its divide's distance from the margin,
-     * kilometres, zero off the margin: what the profile rising from that cell was drawn with.
+     * Each margin cell's body's Vialov dome, meters, and its divide's distance from the margin,
+     * kilometers, zero off the margin: what the profile rising from that cell was drawn with.
      */
     val domeMetresOfMargin: FloatArray,
     val divideKmOfMargin: FloatArray,
@@ -1789,7 +1789,7 @@ object GlaciationStage {
     /** The connected fields of frozen ground, and how many cells each holds. */
     private class FrozenFields(val id: IntArray, val size: IntArray, val count: Int)
 
-    /** Each frozen body's Vialov dome, in metres, and its divide's distance from its margin, km. */
+    /** Each frozen body's Vialov dome, in meters, and its divide's distance from its margin, km. */
     private class BodyDomes(val domeMetres: FloatArray, val divideKm: FloatArray)
 
     /**

@@ -240,7 +240,7 @@ internal class LocalCirculation private constructor(
         /** [bandsC]'s [Dome] over its bands from [southDegrees] to [northDegrees]. */
         fun domeOver(bandsC: FloatArray, southDegrees: Double, northDegrees: Double): Dome {
             val centre = 0.5 * (southDegrees + northDegrees)
-            // Least squares in x = latitude - centre, of y = a x^2 + b x + c.
+            // Least squares in x = latitude - center, of y = a x^2 + b x + c.
             var n = 0.0; var sx = 0.0; var sxx = 0.0; var sxxx = 0.0; var sxxxx = 0.0
             var sy = 0.0; var sxy = 0.0; var sxxy = 0.0
             for (band in bandsC.indices) {

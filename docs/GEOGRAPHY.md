@@ -1488,7 +1488,7 @@ off stands the axis upright and leaves no seasonal forcing for either to answer.
   the swings at 50–60° are 35.6 °C for land, 9.3 for marine air and 7.8 for water, against
   34–38, 8–11 and 5–8 (they were 38.7, 13.0 and 6.9). On seed 42 at 1,024 rows at 35° N, July against
   January: land 30.1 and 2.6 °C, marine air 19.6 and 13.7, water 18.1 and 15.3. The water is still
-  too steady there, a fifty-metre layer all year where Earth's summer layer is 20–30 m (TODO.md).
+  too steady there, a fifty-meter layer all year where Earth's summer layer is 20–30 m (TODO.md).
   The air over the sea carries the ocean's anomaly too, one for one as Kara and others measure it,
   so the map's air over a cold current is cold.
 - **A summer's contrast across a coast is half of Earth's.** Read the way Earth's is, a month's

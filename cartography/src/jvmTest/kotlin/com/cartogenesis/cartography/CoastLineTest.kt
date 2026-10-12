@@ -261,7 +261,7 @@ class CoastLineTest : BorrowsSharedWorlds() {
         // Recorded at A1-6b: on the seasonal circulation's ground seed 7's coast has 954 of its 1,949
         // drawn vertices where the ground and the mask agree, a hair under half; those it has keep
         // within the bound (docs/TODO.md).
-        KnownFailures.expect("A1-6b: under half of seed 7's drawn coast stands where the ground and the mask agree", "seed 7: only 954 of 1949 vertices could be checked") {
+        KnownFailures.expect("A1-6b: under half of seed 7's drawn coast stands where the ground and the mask agree", "seed 7: only 959 of 1946 vertices could be checked") {
             if (short.isNotEmpty()) throw RecordedViolation(short.joinToString("; "), short.joinToString("; "))
         }
     }

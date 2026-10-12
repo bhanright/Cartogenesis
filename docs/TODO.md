@@ -1,5 +1,80 @@
 # To do
 
+- **The rain on the polar rows is the ground's relief round a pole, not the march or the wind
+  (A1-6c, rule 13).** Traced on A1-6b's seed 969495 at 1,024 rows, whose south polar rows rain 1,007
+  mm against 113 at 83 S: 90 to 95% of it is condensate, condensed where the wind round the polar
+  rings crosses the ground's steps (on the last row, rain of up to 3 million mm in single cells at
+  columns 861 and 1,955, where the ground rises from 1,137 to 3,714 m within twelve columns, about
+  360 m of ground), and the rain's blur, wider there than the ring, lays it round the whole row.
+  Neither suspect was the cause on the standard worlds. The surface wind's zonal mean does blow
+  toward the pole there (0.1 to 0.27 m/s, the land's drag and the sea's turning one wave-1 flow
+  across the pole by different amounts), but averaging the drag over 64 km on the ground left the
+  last row at 985 mm; and the march did hold a polar defect, fixed (the next entry), which moved the
+  standard worlds by under 1%. With the climb and the air's temperature both made uniform round the
+  polar caps for a probe, seed 7's last row at 512 rows fell from 572 to 102 mm: the condensation is
+  the air's cooling as it rises over the ground's relief there, read cell by cell. The ground near a
+  pole holds the planet's whole range of relief round rings tens of kilometers round (seed 969495's
+  last row spans 0 to 4,962 m, as its row 100 spans 0 to 4,668), because the terrain is generated on
+  the grid's columns, which converge there; the climate reads it faithfully. Reading the ground over
+  a footprint as wide as a row is tall did not clear it either (1,009 mm), since the relief round the
+  ring is real at that scale too. The cause is the terrain stage's (rule 14); the census's three
+  isohyet entries along the polar rows stand. 2026-10-12, A1-6c.
+- **The march's water where the zonal wind parts (A1-6c).** Fixed: a cell's column water is now its
+  parcel over the speed through its downwind face, not its center's (`MoistureMarch`, the leaving
+  speed). Under a wind turning as a rigid body about an axis through the equator, which crosses both
+  poles and converges nowhere, the polar rows at 256 rows rained 2,959 mm against the mean's 710 and
+  single cells beside the meridian the wind runs up 580,426 mm; now 789 to 801 against 843
+  (`MoistureMarchPoleTest`). What is left: at the divergence line's own cells the rain stands about a
+  third under their neighbors' (313 against 468 mm), since the march still marches each row along
+  its own sweep; and with the axis at 45 degrees the polar rows stand 4% over the mean where the
+  equator's stand at it. 2026-10-12, A1-6c.
+- **The cold tongue under the closed loop (A1-6c).** The sea and the dry atmosphere are now solved
+  in rounds, the shallow heating reading the anomaly (`OceanStage`). The loop's gain is about a
+  tenth: the first feedback round moves the anomaly by 6.6 to 9.7% of its size, the next by 0.7 to
+  1.6%, and the equator's contrast moves from 0.10, 0.15 and 0.05 C to 0.12, 0.18 and 0.06 C on
+  seeds 42, 969495 and 7 at 1,024 rows. The cause of the weak tongue is not the upwelling: on the
+  standard worlds the solve grid's equator rows rise at 0.72 to 0.86 of the zonal stress's damped
+  Ekman figure (the 0.28 `OceanUpwellingTest` records is the belts' aquaplanet, 0.32 now), the rest
+  the convergence of the two halves' meridional stress, 0.15 to 0.27 m a day against 1.1 to 1.26.
+  It is the thermocline's depth: the basins' -0.022 N/m² over 6,000 to 10,000 km tilts the
+  equatorial thermocline from its 150 m mean to only 130 to 135 m in the east, short of the 100 m
+  the upwelling draws from, so the east's rising water is the warm layer's own (a deep share of 0.06
+  where the Pacific's -0.040 over 17,800 km gives 0.74). The tilt that would raise it is the Walker
+  circulation's, driven on Earth by the warm pool's convection, and the ocean's stress reads no latent
+  heat (the next entry). 2026-10-12, A1-6c.
+- **The ocean's stress reads no latent heat (A1-6c).** The ocean's rounds solve the dry atmosphere
+  over the anomaly, so the sea's warmth reaches its own wind only through the shallow heating: the
+  warm pool's convection, the monsoons' and the ITCZ's latent heat, which on Earth make the Walker
+  cell and most of the trades' east-west structure, do not. Closing that loop means a climate run
+  inside the ocean's rounds, 17 to 20 s a world at 1,024 rows. 2026-10-12, A1-6c.
+- **The summer mixed layer at 60 degrees is thinner than Earth's (A1-6c).** Kraus and Turner's depth
+  under the global mean wind over the ocean stands 16 to 18 m at 60 degrees through the summer, so on
+  Earth's land fraction the water swings 13.2 C at 50 to 60 degrees against Earth's 5 to 8, its
+  warmest month 9.2 C at 60 against 5.5, and the land only 2.80 times the water (all recorded in
+  `EnergyBalanceTest`). Earth's pooled zonal mean at 60 is mostly the Southern Ocean's, whose summer
+  layer stays deep under the westerlies and over its upwelled water, where the energy balance has
+  one wind for every latitude and no water beneath its slab. Deepening the winter layer to 75, 100
+  or 150 m moved the swing by under 1 C, since the slices the summer leaves behind hold the late
+  winter's water. 2026-10-12, A1-6c.
+- **The winter mixed layer is the slab's fifty meters (A1-6c).** Kraus and Turner's balance sets the
+  summer layer; in winter the layer convects down to the depth the seasonal cycle stirs and no
+  further, where Earth's winter layers reach 400 m in the Gulf Stream and the Kuroshio and 600 m in
+  the Southern Ocean's Indian and Pacific sectors (Holte and others 2017, read). A one-column slab
+  has no stratification beneath it to stop the convection, so the winter depth is a closure; it
+  waits for an ocean with a thermocline under its mixed layer. 2026-10-12, A1-6c.
+- **Seed 42's lake field at 55 to 65 S is the erosion's ground (A1-6c, traced).** On A1-6b's seed 42
+  at 1,024 rows, 11.4% of the land at 55 to 65 S holds lakes (5.0% at 45 to 55 S, 1.7% at 55 to 65
+  N). A priority flood of the erosion stage's own height from the sea finds 20.7% of the land there in
+  closed depressions, mean depth 0.0095 of the relief, against 2.2 to 7.5% at the other high
+  latitudes and 2.8% in the tropics; the sea stage deepens them threefold (22.4%, mean 0.028) and cuts
+  1.7% of the land, 7.6% of it under ice. So the hollows are the erosion's, left by its provisional
+  climates' rain on that ground (677 mm a year there), and the ice deepens what the erosion left; the
+  rivers' water balance fills about half. Not traced into the erosion. 2026-10-12, A1-6c.
+- **Two of seed 1234's basins are handed far more rain than reaches them (A1-6c).** On A1-6c's ground
+  at 512 rows, `LakeBodyTest` finds a basin of 8 cells handed 714.99 times the rain reaching it
+  (175 against 0.245 mm-cells) and one of 35 cells 163.69 times, in dry country, far past the float's
+  last places at the map's largest runoff: the basins' own accounting, as A1-1's 59-cell basin was.
+  Recorded, not traced. 2026-10-12, A1-6c.
 - **The seasonal circulation against Earth (A1-6b).** `MeanCirculationEarthTest` on seeds 42,
   969495 and 7 at 1,024 rows: the ridges (July 32.4 to 33.7 N and 25.8 to 27.3 S, January 25.6 to
   27.0 N and 30.7 to 34.7 S), the ITCZ's seasonal range (18.3 to 22.3 degrees) and the eddy-driven
@@ -21,6 +96,12 @@
   2,000 km (the next entry). The rising branch stands at the supercritical extent, 11.3 to 13.7
   degrees, and the ascent is narrow about it; whether the equator's own ascent, or the march's
   concentration of rain into the strongest ascent, is short is not traced. 2026-10-11, A1-6b.
+  **At A1-6c**, the sea and the air solved together, the year's ocean rain at 1,024 rows peaks at
+  7.8, 8.6 and 9.8 mm a day at 9, 11 and 13 N on seeds 42, 969495 and 7 and at 8.0, 8.0 and 6.2 at
+  9, 11 and 11 S, 0.97, 1.08 and 1.58 to one against GPCP's 8 at 7 N and 4 at 8 S (2.0), with 0.7 to
+  0.9 mm a day on the equator: the loop's gain of a tenth (the entry "The cold tongue under the
+  closed loop") does not move the rain onto one ITCZ, and nothing in a world of no hemispheric
+  preference asks it to (`AirSeaEarthTest`, recorded). 2026-10-12, A1-6c.
 - **Fronts along a row at the ITCZ's edges (A1-6b, rule 13).** `RainGeometryTest`'s longest
   straight front now stands at the tropics' edge, 1,984 km at 12.9 N on 42, 1,468 km at 13.1 N on
   969495 and 3,069 km at 14.5 N on 7 (A1-6a's 2,471 at 34.4 S, 1,402 at 62.8 N and 1,499 at 5.9 N):
@@ -38,7 +119,9 @@
   boundary layer converges water onto the pole's cells, whose zonal wind is near calm. The geometry
   census at 512 rows sees it: isohyets straight along rows 1 to 3 and 507 to 511 of seeds 7 and
   1234 for 104 to 188 cell widths (`GeometryFindings.ISOHYETS_ALONG_ROWS`). Not traced.
-  2026-10-11, A1-6b.
+  2026-10-11, A1-6b. **Traced at A1-6c** to the ground's relief round the poles (the entry "The rain
+  on the polar rows is the ground's relief round a pole"); the census's entries stand.
+  2026-10-12, A1-6c.
 - **The equator's trades are weak under the circulation (A1-6b).** The boundary layer's zonal
   momentum march starts each cell from rest at its edge and carries the air across the equator,
   where it turns westerly, so the zonal-mean easterly at the equator is weak: the cold tongue's
@@ -47,7 +130,10 @@
   of the trades' damped Ekman divergence (`OceanUpwellingTest`); and under the circulation alone the
   trades' band flows east at 0.002 to 0.008 m/s, in the north on seeds 7, 1234 and 99 and in the
   south on 1234 (`OceanCurrentTest`). All
-  recorded. 2026-10-11, A1-6b.
+  recorded. 2026-10-11, A1-6b. **At A1-6c** the zonal-mean easterly is not the shortfall: on the
+  standard worlds the equator's rows rise at 0.72 to 0.86 of the damped Ekman divergence of their own
+  zonal stress, the 0.28 being the belts' aquaplanet's (0.32 now); the weak tongue is the
+  thermocline's depth (the entry "The cold tongue under the closed loop"). 2026-10-12, A1-6c.
 - **The boundary layer's two convergences part in the subtropics (A1-6b).** `BoundaryLayerTest`'s
   one-layer clause reads seed 99's January half at 5 to 35 degrees outside its bar under the seasonal
   circulation; recorded, not traced. 2026-10-11, A1-6b.
@@ -1025,7 +1111,7 @@
 - ~~**A lake in two pieces (C1b2).**~~ Gone on A1-1's ground and the clause armed; the rule it exposed is untraced. `LakeBodyTest`: on C1b2's rain seed 1234's lake 71 and seed 99's lake 95 at 512 rows are each two pieces at one level, which L1's rule says cannot happen; a lake rule the rain exposed, not traced. A C1b2 known failure. 2026-10-09, C1b2.
 - ~~**The climate's two seasons are both hemispheres' summer, then both their winters (A1a).**~~ Done at A1-1: the energy balance exports the calendar's July, January and the half-years about them (April to September, October to March, Peel, Finlayson and McMahon 2007) from its daily year, and the march, the belts, the pressure winds, the inversion, the sun, the sea ice and the snow balance read them; Koppen keeps each place's own warmest and coldest month, bit for bit as before, and the biomes read each cell's warmer half as its summer. See docs/DESIGN_LEDGER.md, A1-1. 2026-10-09.
 - **A summer's contrast across a west coast is half of Earth's, and no larger than an east coast's (A1-1).** Measured as Earth's is read (`CoastContrast`: a month's sea-level temperature less its latitude's mean, the land's extreme within 2,000 km behind a coast against the sea's in front), seeds 42, 969495 and 7 at 1,024 rows read 7.6 to 11.5 C across subtropical west coasts in their July (and 8.0 to 8.8 across the southern ones in January) against Nakamura and Miyasaka's (2004) 18 to 20, and 9.4 to 15.3 across east coasts, where Earth's read 2 to 8 (their Fig. 2d); in January the mid-latitude coasts read -11 to -14 against Seager and others' (2002) -15 to -27. The contrast is the energy balance's land column less its marine column at that latitude and little else: the sea beside a subtropical west coast stands only 0.4 to 0.9 C under its latitude at its coldest, where the reanalysis puts the California and Canary Currents' air 6 to 10 C under it. Audited at A1-1 and not the causes: the columns' zonal exchange (the land column already swings 26.2 C at 30 to 40 degrees against Earth's interiors' 24 to 26, and the contrast equals the column gap) and the marine blend (it withholds 2 to 35% of the gap at the land's warmest point, 4 to 27% on most coast sets). What is missing, in order of size: the cold eastern-boundary sea, which the ocean stage's anomaly does not make (upwelling and equatorward advection under the highs, and the stratus over them: Nakamura and Miyasaka cite Klein and Hartmann 1993 for the stratus and Seager and others 2003 for the air-sea interaction that keeps the sea cold, neither read here); and the desert's own heat, since one land column carries wet and dry land alike and the Sahara's sensible heating is the same land as the Congo's. The first belongs to the ocean and to the atmosphere's marine-air and feedback chunks (the design's 4 to 6), the second to a land surface with its own Bowen ratio. `CoastContrastTest` records both clauses as known failures. 2026-10-09, A1-1.
-- **The mixed layer is fifty meters all year (A1-1).** Since the sea surface takes its share of the sun, the water at 35 degrees swings 2.8 C from July to January on seed 42, against the 6 to 9 C `docs/GEOGRAPHY.md` gives for Earth's sea surface there, and the July marine air still stands 1.5 C over the water where Kara and others (2007) find the sea warmer than the air nearly everywhere. de Boyer Montegut and others (2004), which the constant cites, put the summer mixed layer at 20 to 30 m: a layer that shoals in summer would warm twice as far, and nothing here makes it. 2026-10-09, A1-1.
+- **The mixed layer is fifty meters all year (A1-1).** Since the sea surface takes its share of the sun, the water at 35 degrees swings 2.8 C from July to January on seed 42, against the 6 to 9 C `docs/GEOGRAPHY.md` gives for Earth's sea surface there, and the July marine air still stands 1.5 C over the water where Kara and others (2007) find the sea warmer than the air nearly everywhere. de Boyer Montegut and others (2004), which the constant cites, put the summer mixed layer at 20 to 30 m: a layer that shoals in summer would warm twice as far, and nothing here makes it. 2026-10-09, A1-1. **At A1-6c** the summer layer shoals to Kraus and Turner's depth under the heat the surface takes in, 20 to 23 m at 30 to 40 degrees in summer, and the water at 35 degrees swings 6.9 to 8.0 C in the north on the three standard seeds at 1,024 rows; at 60 degrees it swings too far (the entry "The summer mixed layer at 60 degrees is thinner than Earth's"). 2026-10-12, A1-6c.
 - **The coast takes a quarter of the sea's anomaly and the sea's air all of it (A1-1).** The air over the sea now carries the current anomaly whole (Kara and others 2007), while `ClimateStage.applyMaritimeInfluence` still hands the land a blurred quarter of it, so the first land cell beside a cold current stands warmer than the air one cell offshore by most of the anomaly. W1 measured the corrected form making the coasts worse and recorded that the fix is a directed one along the wind; the atmosphere's marine-air chunk is where that wind will be. 2026-10-09, A1-1.
 - **The perennial pack is five sixths of the winter pack, and the pole opens on the warmest month (A1-1).** The biome draws as sea ice the water frozen through its own warmest half-year, as before A1-1: 22.2, 20.6 and 26.5% of the sea on seeds 7, 42 and 1234 at 256 rows against a winter pack of 26.4, 24.3 and 31.2%, where Earth's minima are a quarter of its maxima (NSIDC: 6.5 and 15.5 million km² in the Arctic, 2.5 and 18.5 in the Antarctic). Read on the water's warmest month the shares are 8.2, 5.7 and 8.4%, Earth's ratio, but the pole's sea opens and a frozen stripe stands twenty degrees from it, because the energy balance carries no latent heat: a frozen column under the polar summer's sun warms past its melting point instead of melting its ice at it. The sea surface's sunlight is withheld from the frozen share of a band for the same reason. What would answer it is a sea-ice budget, growth in winter against melt in summer at the melting point, the sea's twin of the snow balance; and the stripe the pack's edge draws along a row is W1's finding still. 2026-10-09, A1-1.
 - **The ice after A1-1.** The calendar's halves and the sea surface's sunlight feed the sheets more snow: the ice-sheet biome covers 9.2, 8.2 and 8.8% of the land on seeds 42, 969495 and 7 at 1,024 rows (6.5, 6.1 and 6.5 before; Earth's 10.1), and `IceSheetTest`'s four worlds at 512 rows stand 5.3 to 6.6 km at their thickest against Earth's 4,776 m (4.8 to 5.5 before), the C1b known failure's signature re-recorded; the share of the land's *cells* at 256 rows is 24.5% (`SnowBalanceTest`, recorded again with C1b's note that a cell count weighs the polar land several times over), and the ice's comb, the share of the world's water it adds as parallel bars, reads 4.19% on seed 718106 and 2.07% on seed 42 where C1b2 recorded 2.04% on 718106 alone. The flow clause's control moved from seed 2, whose sheet filled 17.7% of its disc on A1-1's first pass, to seed 17 (99.1%); on that pass, of the eleven seeds from 1 to 25 that fill a third, four passed the flow clause, where five of seven did at C1b2, and four read an indifferent bearing's outward share or less (seeds 4, 6, 23 and 24). The reported world's sheet no longer fills a third of its disc, so its C1b2 known failure is not read and the clause is armed on seeds 42 and 17 alone. Not traced. 2026-10-09, A1-1.
@@ -1049,7 +1135,7 @@
 - **The prescribed basic state is not the season's (A1-4).** Jablonowski and Williamson's state is the same in both halves, westerly at every latitude down to the ground (8.4 m/s at 45 degrees at the surface), so the summer hemisphere's terrain makes stationary waves as strong as the winter's, and the trades' terrain is lifted by a westerly: three quarters of the eddy sea-level pressure is the terrain's (5.0 against the land and sea's 1.6 hPa root mean square, seed 42 July, 15 to 60 degrees). Its jets and the energy balance's agree in size: the thermal wind of the energy balance's own zonal-mean gradient from the ground to 250 hPa is 16 to 28 m/s at 30 to 60 degrees on seed 42 against the state's 19 to 26 (`BoundaryLayerTest`, *the prescribed jets*); deriving the state from the energy balance, trades and seasons and all, is the chunk after the moisture's. 2026-10-09, A1-4.
 - **The subtropical highs stand ten degrees poleward and five hectopascals high (A1-4).** On the three worlds at 1,024 rows the dry atmosphere closes four cells over the sea at 15 to 45 degrees in the six halves (`BoundaryLayerEarthTest`, a report): seed 42 July at 42.6 N, 1,032.8 hPa, prominence 16.5 hPa, basin position 0.56; seed 969495 July at 43.8 N, 1,031.8 hPa, 9.0, position 0.69; seed 7 January at 37.8 S, 1,031.6 hPa, 15.0, position 0.51 (the branch's pressure, the belts' zonal mean with W2's departure, closed two, at 0.09 and 0.80 of their basins, prominences 4.0 and 2.0). Nakamura and Miyasaka's July cells sit near 35 N in the basins' eastern portions over 1,020 hPa. The ridge is the belts', which migrate the full ten degrees with the thermal equator (the design's risk 2), and the cells are mostly the terrain's; no winter-hemisphere cell closes. Latent heat is chunk 5's. 2026-10-09, A1-4.
 - **One transient wind everywhere (A1-4).** The sea's evaporation and FAO-56's wind read the mean wind and the weather's gusts in quadrature, the gusts 4.23 m/s at every latitude (`BoundaryLayer.TRANSIENT_WIND_MPS`, from Archer and Jacobson's ocean mean and the belts' mean square), and land's 10 m wind is 0.58 of the sea's under the same weather (`LAND_ROUGHNESS_SHARE`). The storm tracks (chunk 7) should carry the transient part: Earth's is larger in the storm tracks and smaller in the trades. The ocean's stress reads the mean wind's `|V| V` alone, as the belts' always did. 2026-10-09, A1-4.
-- **The sea's current anomaly does not force the atmosphere (A1-4).** The land-sea heating is the energy balance's own columns blended by the marine air's reach, without the currents' anomaly, so the ocean's stress and the climate solve the same atmosphere and the currents are not forced by a wind their own warmth made. Nakamura and Miyasaka's cold eastern seas, the other half of the subtropical highs' forcing, enter with the marine air and the ocean's feedback (chunk 6). 2026-10-09, A1-4.
+- **The sea's current anomaly does not force the atmosphere (A1-4).** The land-sea heating is the energy balance's own columns blended by the marine air's reach, without the currents' anomaly, so the ocean's stress and the climate solve the same atmosphere and the currents are not forced by a wind their own warmth made. Nakamura and Miyasaka's cold eastern seas, the other half of the subtropical highs' forcing, enter with the marine air and the ocean's feedback (chunk 6). 2026-10-09, A1-4. **At A1-6c** the shallow heating reads the anomaly over the sea, and the ocean's stress is solved in rounds with it (`OceanStage`, `BoundaryLayer`); its own part of the equatorial basins' east-west pressure is printed by `AirSeaEarthTest`. 2026-10-12, A1-6c.
 - **A coast's step rings at the coarse grid's scale (A1-4, rule 13).** `CoarsePeriod` reads its standard error over lines since A1-4, each line against its neighbors within a coarse period, because one row's coast or front made a phase of its own when the error was counted cell by cell. Read that way, A1-2's continent step carried down through the forcing's filter and up again shows the coarse grid down the map, x1.095 against a bar of 1.071 (`AtmosphereRemapTest`, a known failure; along the map x1.005, and the smooth bump passes at x1.047 against 1.048): the 1.67% overshoot the filter leaves rings at the coarse grid's own wavelength. The boundary layer's pressure and vertical motion carried up through the same filters pass with room (x1.000 to x1.003 against 1.003 to 1.023). A wider forcing filter or a smoother step reading is the place to start. 2026-10-09, A1-4.
 - **The 512 census after A1-4 (rule 13).** `GeometryGuardTest` records twelve violations on the four standard worlds against nine at A1-3: new are a right angle in seed 7's realm borders at (968,108), a right angle in seed 42's biome edges at (605,422), a side of seed 42's sea temperature anomaly 62 cells straight along row 247 at column 959 (the standing finding *the sea temperature anomaly runs straight along rows*, on the equatorial water the eddies' stress now drives), seed 7's ice surface with three arcs where it had one, and seed 1234's terrain contours with the arc its ice surface carries, moved to (835,50); seed 99's two ice arcs and its contour arc are gone. Untraced; the climate's new wind moved the ground through the provisional climates, and the ocean through its stress. 2026-10-09, A1-4.
 - **The everyday tier's clauses the new ground broke (A1-4).** Recorded as known failures, each untraced: seed 42's shelf off east- and west-facing coasts holds 88% of its band against the clause's nine tenths (`ContinentalShelfTest`); the gallery cone has 37 of 360 bearings floored again (`ReliefShadingTest`, armed at A1-2); the four seeds' desert shares stand 1.46 times apart against 1.5 (`AbsoluteRainfallTest`, armed at A1-2); the land gives back 0.514 of its rain against Earth's 0.645, x0.80 (`RainAgainstEarthTest`, held since C1b2), with the wetter land. Armed: the land's rain against Earth's (x1.14, recorded at x0.55 since C1b2) and the engraving's slope floor (recorded since K2). The ice-flow control's seed 17 now holds 8 cells near its dome, under the third of its disc the clause reads, so the control takes the first of the clause's seeds whose sheet has a dome (`IceSheetTest`). 2026-10-09, A1-4.

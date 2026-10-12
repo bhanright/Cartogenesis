@@ -1602,6 +1602,8 @@ object ClimateStage {
                 last.seaSurfaceAnomalyC === seaSurfaceAnomalyC
             ) return last.atmosphere
         }
+        // Let the last one go before this one is solved, so an ocean's rounds hold one at a time.
+        lastAtmosphere = null
         val solved = BoundaryLayer.solve(
             config, sea, zonal, marineFraction,
             beltWindOfRows(config, zonal, julyHalf = true), beltWindOfRows(config, zonal, julyHalf = false),

@@ -158,10 +158,7 @@ object OceanStage {
      * truer to fall back to.
      */
     fun generate(config: WorldGenConfig, sea: SeaLevelResult): OceanResult =
-        generateOcean(config, sea) { stencil, start, passes ->
-            OceanCirculation.relax(stencil, start, passes)
-            start
-        }
+        generateOcean(config, sea) { zonal, base, anomaly, start -> processorRound(config, sea, zonal, base, anomaly, start) }
 
     /**
      * The same ocean, relaxed on [accelerator] when the reader has graphics acceleration on.
@@ -185,27 +182,80 @@ object OceanStage {
         val device = if (config.erosion.acceleration == Acceleration.GPU) accelerator else null
         if (device != null) {
             try {
-                return generateOcean(config, sea) { stencil, start, passes ->
-                    currentCoroutineContext().ensureActive()
-                    device.solve(stencil, start, passes)
-                        ?: run {
-                            // A device that gave up because the generation was cancelled must not
-                            // hand the rest of the solve to the processor: ask before falling back.
-                            currentCoroutineContext().ensureActive()
-                            OceanCirculation.relax(stencil, start, passes)
-                            start
-                        }
-                }
+                return generateOcean(config, sea) { zonal, base, anomaly, start -> deviceRound(config, sea, zonal, base, anomaly, start, device) }
             } catch (failure: OceanCirculation.OceanSolveFailure) {
                 // Falls through to the processor's solve below.
             }
         }
-        return generateOcean(config, sea) { stencil, start, passes ->
-            currentCoroutineContext().ensureActive()
-            OceanCirculation.relax(stencil, start, passes)
-            start
-        }
+        return generateOcean(config, sea) { zonal, base, anomaly, start -> cancellableRound(config, sea, zonal, base, anomaly, start) }
     }
+
+    /**
+     * One round of the sea under the air over [seaSurfaceAnomalyC] ([generateOcean]), relaxed on the
+     * processor. Each round is a function of its own so that its solves, a few hundred megabytes on
+     * the solve grid whatever the map, are let go when it returns and never held beside the next's.
+     */
+    private fun processorRound(
+        config: WorldGenConfig,
+        sea: SeaLevelResult,
+        zonal: ZonalClimate,
+        baseTemperature: FloatField,
+        seaSurfaceAnomalyC: FloatArray?,
+        start: SolveStart?
+    ): Round {
+        val (across, down) = solveGrid(config.scale)
+        val solved = circulateUnder(config, sea, zonal, annualStress(config, sea, across, down, seaSurfaceAnomalyC), start) { stencil, values, passes ->
+            OceanCirculation.relax(stencil, values, passes)
+            values
+        }
+        return Round(onTheMap(config, sea, zonal, solved, FloatField(config.width, config.height, baseTemperature.data.copyOf())), SolveStart(solved.stream, solved.temperatureC))
+    }
+
+    /** [processorRound], asking before every batch of passes whether the generation was cancelled. */
+    private suspend fun cancellableRound(
+        config: WorldGenConfig,
+        sea: SeaLevelResult,
+        zonal: ZonalClimate,
+        baseTemperature: FloatField,
+        seaSurfaceAnomalyC: FloatArray?,
+        start: SolveStart?
+    ): Round {
+        val (across, down) = solveGrid(config.scale)
+        val solved = circulateUnder(config, sea, zonal, annualStress(config, sea, across, down, seaSurfaceAnomalyC), start) { stencil, values, passes ->
+            currentCoroutineContext().ensureActive()
+            OceanCirculation.relax(stencil, values, passes)
+            values
+        }
+        return Round(onTheMap(config, sea, zonal, solved, FloatField(config.width, config.height, baseTemperature.data.copyOf())), SolveStart(solved.stream, solved.temperatureC))
+    }
+
+    /** [processorRound] relaxed on [device], which may decline a batch and give it back to the processor. */
+    private suspend fun deviceRound(
+        config: WorldGenConfig,
+        sea: SeaLevelResult,
+        zonal: ZonalClimate,
+        baseTemperature: FloatField,
+        seaSurfaceAnomalyC: FloatArray?,
+        start: SolveStart?,
+        device: OceanAccelerator
+    ): Round {
+        val (across, down) = solveGrid(config.scale)
+        val solved = circulateUnder(config, sea, zonal, annualStress(config, sea, across, down, seaSurfaceAnomalyC), start) { stencil, values, passes ->
+            currentCoroutineContext().ensureActive()
+            device.solve(stencil, values, passes)
+                ?: run {
+                    // A device that gave up because the generation was cancelled must not
+                    // hand the rest of the solve to the processor: ask before falling back.
+                    currentCoroutineContext().ensureActive()
+                    OceanCirculation.relax(stencil, values, passes)
+                    values
+                }
+        }
+        return Round(onTheMap(config, sea, zonal, solved, FloatField(config.width, config.height, baseTemperature.data.copyOf())), SolveStart(solved.stream, solved.temperatureC))
+    }
+
+    /** One round's answer: the stage's result on the map, and where the next round's solves start. */
+    private class Round(val result: OceanResult, val start: SolveStart)
 
     /**
      * The two solves on the solve grid, before anything is carried to the map: what the tests read
@@ -238,7 +288,7 @@ object OceanStage {
     private inline fun generateOcean(
         config: WorldGenConfig,
         sea: SeaLevelResult,
-        relax: (OceanStencil, FloatArray, Int) -> FloatArray
+        round: (ZonalClimate, FloatField, FloatArray?, SolveStart?) -> Round
     ): OceanResult {
         val cellsAcross = config.width
         val cellsDown = config.height
@@ -259,17 +309,15 @@ object OceanStage {
         // atmosphere over the anomaly the round before left, whose shallow heating the cold water
         // cools and the warm water heats (BoundaryLayer), each round's solves starting from the last
         // round's answers.
-        val (across, down) = solveGrid(config.scale)
         val area = rowAreas(down = config.height)
         var seaSurfaceAnomalyC: FloatArray? = null
         var made: OceanResult? = null
-        var lastSolved: Circulation? = null
+        var start: SolveStart? = null
         val changes = ArrayList<Double>()
-        for (round in 0 until MAX_AIR_SEA_ROUNDS) {
-            val stress = annualStress(config, sea, across, down, seaSurfaceAnomalyC)
-            val solved = circulateUnder(config, sea, zonal, stress, lastSolved, relax)
-            lastSolved = solved
-            val result = onTheMap(config, sea, zonal, solved, FloatField(config.width, config.height, temperature.data.copyOf()))
+        for (count in 0 until MAX_AIR_SEA_ROUNDS) {
+            val solved = round(zonal, temperature, seaSurfaceAnomalyC, start)
+            start = solved.start
+            val result = solved.result
             made = result
             val change = seaSurfaceAnomalyC?.let { anomalyChangeShare(sea, area, config.width, it, result.anomaly.data) }
             if (change != null) changes += change
@@ -351,6 +399,16 @@ object OceanStage {
     }
 
     /**
+     * The most times the heat's solve is started again from where it stalled, a fresh shadow residual
+     * each time ([circulateUnder]): a ceiling and not a count, three where the one stall measured
+     * needed one, each start with the whole budget of iterations.
+     */
+    internal const val HEAT_SOLVE_RESTARTS = 3
+
+    /** Where a round's two solves start: the stream function and the water's temperature an earlier round left, on the solve grid. */
+    internal class SolveStart(val stream: FloatArray, val temperatureC: FloatArray)
+
+    /**
      * The circulation and its heat on the solve grid under a given [stress] on that grid, the
      * year's mean in [circulate] and whatever a guard asks for elsewhere. Both solves start from
      * [startFrom]'s answers where given, an earlier round's under a stress near this one, and stop at
@@ -361,7 +419,7 @@ object OceanStage {
         sea: SeaLevelResult,
         zonal: ZonalClimate,
         stress: Stress,
-        startFrom: Circulation? = null,
+        startFrom: SolveStart? = null,
         relax: (OceanStencil, FloatArray, Int) -> FloatArray
     ): Circulation {
         val (across, down) = solveGrid(config.scale)
@@ -419,14 +477,25 @@ object OceanStage {
                 entrainmentPerS = coarseMean(entrainment, across, down, coarseAcross, coarseDown), subsurfaceC = null
             )
         }
-        val heat = OceanCirculation.requireSolved(
-            "the sea's heat",
-            OceanCirculation.solveByKrylov(
-                heatLevels, startFrom?.temperatureC?.copyOf() ?: targetC.copyOf(), OceanCirculation.RESIDUAL_TOLERANCE, poleIsWall = false,
-                OceanCirculation.waterBodies(isWater, across, down), relax = relax
-            ),
-            OceanCirculation.RESIDUAL_TOLERANCE
+        // BiCGSTAB's shadow residual is the one it starts with, and where the residual left loses
+        // its overlap with it the iteration stalls short of the tolerance: on a world of 64 rows
+        // whose tilt is twice Earth's the heat stood at 0.059 after the whole budget, and started
+        // again from where it stalled, the residual left its new shadow, it settled in 89 more.
+        var heatSolved = OceanCirculation.solveByKrylov(
+            heatLevels, startFrom?.temperatureC?.copyOf() ?: targetC.copyOf(), OceanCirculation.RESIDUAL_TOLERANCE, poleIsWall = false,
+            OceanCirculation.waterBodies(isWater, across, down), relax = relax
         )
+        var restarts = 0
+        while (heatSolved.relativeResidual >= OceanCirculation.RESIDUAL_TOLERANCE && restarts < HEAT_SOLVE_RESTARTS &&
+            heatSolved.values.all { it.isFinite() }
+        ) {
+            heatSolved = OceanCirculation.solveByKrylov(
+                heatLevels, heatSolved.values.copyOf(), OceanCirculation.RESIDUAL_TOLERANCE, poleIsWall = false,
+                OceanCirculation.waterBodies(isWater, across, down), relax = relax
+            )
+            restarts++
+        }
+        val heat = OceanCirculation.requireSolved("the sea's heat", heatSolved, OceanCirculation.RESIDUAL_TOLERANCE)
         return Circulation(
             across, down, widthMeters, heightMeters, isWater, stream, eastward, northward, heat.values, flow, heat,
             stress, upwelling

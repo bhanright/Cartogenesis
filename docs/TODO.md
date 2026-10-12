@@ -1,5 +1,86 @@
 # To do
 
+- **The ocean's ITCZ rains under Earth's, on the equator's side of its convergence (F1).** On F1's
+  worlds at 1,024 rows the open sea's July-half convergence line, where its mean meridional wind
+  turns, stands at 8.9, 9.4 and 10.1 N on seeds 42, 969495 and 7, Earth's 9 N (Schneider, Bischoff
+  and Haug 2014), but its wettest row stands at 4.0 N, 5.0 N and 1.0 S at 5.4 to 6.4 mm a day,
+  against A1-6c's 10.3, 9.8 and 12.6 N at 17 to 22 mm a day; TRMM's ocean zonal mean in July to
+  September peaks near 8.6 mm a day at 9 N (Adam, Bischoff and Schneider 2016, their Fig. 1, read off
+  the figure). The everyday tier's wettest two degrees of ocean pool x0.58 GPCP's
+  (`RainAgainstEarthTest`, recorded) where A1-6c's pooled x0.91. Two causes, each measured by
+  switching it alone on A1-6c's worlds: over the open sea the sector's heating is the marine column's
+  warmest latitude, 2.6 to 5.6 N in the July half, which no cross-equatorial ocean transport carries
+  north as the Atlantic's overturning does Earth's; and the water travels on the column's
+  vapor-weighted wind, whose meridional part is 0.36 of the boundary layer's inflow, so the moist
+  inflow rains on the column's humidity before it reaches the line. With the circulation by longitude
+  alone the July ocean's wettest row stood at 7.5, 5.0 and 0.4 S; with the column's wind alone at
+  10.1, 9.4 and 12.2 N. Not traced further. 2026-10-12, F1.
+- **The half's rain before the blur steps along a row by its own grain (F1).**
+  `LocalCirculationEarthTest`'s step clause, recorded: across a row boundary of the equatorial
+  continent within the latitudes the ITCZ can take, the half's unblurred rain may change by Earth's
+  steepest gradient across the rain belt's edge, x1.043 a row (the Sahel's 700 to 165 mm over six
+  degrees), and changes by x1.22 to x1.67 at its largest (A1-6c's tree x1.42 to x1.87, the largest
+  seed 42's July at 12.9 N, where the meridional wind turned on one row). The line no longer steps:
+  the largest are the ground's own climb, cell by cell, and the continent's rows change by x1.05 to
+  x1.09 in their median over the span, Earth's whole per-row gradient. A bar for the field before the
+  blur wants Earth's own rain at the grid's cell, TRMM's at 0.25 degrees, read over a continent's
+  rows. 2026-10-12, F1.
+- **The fronts along a row after the circulation by longitude (F1, rule 13).** The longest straight
+  front reads 1,137, 1,250 and 1,109 km on seeds 42, 969495 and 7 at 1,024 rows (A1-6c 2,116, 2,133
+  and 3,348; bar 600; `RainGeometryTest`, re-recorded). Seed 42's lies at 26.6 S along an east-west
+  peninsula whose length the front follows, wet against the dry sea north of it and the drier
+  mainland south, where A1-6c's tree drew shorter runs. The others are not traced. The cells'
+  edges are still the zonal circulation's, where baroclinic eddies take over, so the descent at each
+  edge is row-uniform; edges by longitude, from the sector's own temperature gradient, are the next
+  step that would bend them. 2026-10-12, F1.
+- **The air above the boundary layer blows the circulation's zonal wind (F1).** The column's
+  vapor-weighted wind (`BoundaryLayer.columnWindMps`) holds the circulation's zonal wind up through
+  every level above the boundary layer, with the waves' own departures, because the model carries no
+  zonal mean of its own aloft but Jablonowski and Williamson's prescribed jets, whose lowest levels
+  blow westerly where the trades blow easterly. The trades weaken and the westerlies strengthen with
+  height on Earth; a thermal-wind profile from the energy balance's gradient, held by the
+  angular-momentum-conserving wind in the deep tropics, is what would replace it. 2026-10-12, F1.
+- **The land rains more after the column's wind (F1).** Pooled over seeds 42, 969495 and 7 at 1,024
+  rows the land takes 1,046 mm against A1-6c's 1,026 (Earth 756), seed 42 1,154 against 1,242 and the
+  others more, 1,030 against 940 and 954 against 895; the sea 749 against 745 (Earth 1,032). On
+  A1-6c's worlds under the circulation by longitude, the column's meridional part alone moved the
+  pooled land to 1,042 mm and its zonal part alone to 986: the moist inflow that rained at the
+  convergence line now rains on its way. Not traced further. 2026-10-12, F1.
+- **A citation behind the march's holdable share (F1).** `MoistureMarch.HOLDABLE_SHARE`'s comment
+  gives water vapor's scale height as "a shipboard survey of 1984 read 1.9 to 2.5 ... as Otarola and
+  others 2011 report it". Otarola, Querel and Kerber (2011, arXiv:1103.3025, read) report the
+  scale height from Antofagasta's 194 soundings of 2005, 1.5 to 2.3 km, and Armazones's median, 1.7 km,
+  and name no shipboard survey. The figure stands; its source is to be found or the comment re-sourced
+  (F1's column wind reads Kanemaru and Masunaga's AIRS figure, `BoundaryLayer.VAPOR_SCALE_HEIGHT_M`).
+  2026-10-12, F1.
+- **The circulation by longitude's per-cell work (F1, the graphics rule).** Each half's belts are
+  built on every cell once a climate run and once an ocean round (`LocalCirculation.belts`, in
+  parallel on the processor), and each lap carries the column's wind's two eddy fields up to the map
+  through the remap's double Fourier series, 48 ms a lap for both halves at 1,024 rows; the carrying
+  rides the remap's seam (`AtmosphereAccelerator.toGround`), unwired for the reason the A1-2 row
+  gives. `BoundaryLayerCostTest`'s per-cell share of a world now counts the column's wind, 7% where
+  the clause allows 1% (re-recorded from 6%). The device path for the loop's per-cell work, the
+  belts with it, waits on the fields kept on the card between laps. 2026-10-12, F1.
+- **The clauses F1's ground broke (F1).** Recorded as known failures, each untraced: seed 7's and
+  seed 42's continental shelves hold 89.4 and 89.2% of the near-coast water above the break against
+  90% (`ContinentalShelfTest`, armed at A1-6c); seed 42's lake 21 in two pieces at 512 rows
+  (`LakeBodyTest`); the sample's cold-current coast 59% wetter with the currents on, 355 mm against
+  223 (`CurrentFeedsRainTest`, armed at A1-6c); one ice-made lake a straight one-cell line on each of
+  seeds 42 and 7 at 1,024 rows (`GlaciationCombTest`, rule 13); no candidate's sheet filling a third
+  of its disc near its dome, so the flow clause reads none (`IceSheetTest`, the everyday tier's M1
+  control finding the same); seed 1's dry sample full to its spill again (`LakeWaterBalanceTest`,
+  armed at A1-6b; M1's scan re-picks it); the summer's pooled inflow onto the subtropical continents'
+  coasts +0.09 m/s against a bar of +0.10 (`PressureWindTest`); two seeds carrying a marginal snow
+  band where the clause reads three (`SnowBalanceTest`).
+  Armed, each passing on F1's ground: the interior's rain spreads within Earth's factor
+  (`PressureWindTest`, C1b2's), the deserts' edges along a row pool under main's (`RainGeometryTest`,
+  A1-6b's), and no standing water is a ruled bar (`StraightRunTest`, M1's). 2026-10-12, F1.
+- **The 512 census after F1 (rule 13).** `GeometryGuardTest` records five known entries and seven
+  instances on the four standard worlds against A1-6c's ten and seventeen: gone are the right angle at
+  (327,255) on seed 7 that three layers read, the crease in seed 7's lakes, the isohyets along seed
+  42's first row and seed 1234's isohyet facets; seed 7's and seed 1234's isohyets along their polar
+  rows fall from three and four instances to two each; new is an arc in seed 99's terrain contours at
+  (156,30), beside the ice surface's arc at (156,29) that moved there. Not traced. 2026-10-12, F1.
 - **The rain on the polar rows is the ground's relief round a pole, not the march or the wind
   (A1-6c, rule 13).** Traced on A1-6b's seed 969495 at 1,024 rows, whose south polar rows rain 1,007
   mm against 113 at 83 S: 90 to 95% of it is condensate, condensed where the wind round the polar
@@ -1186,7 +1267,7 @@
 - **The tropics' land stays too dry (A1-5).** Desert by band at 1,024 rows x1.00/2.01/0.07, x0.77/1.60/0.20 and x0.59/1.74/0.18 on seeds 42, 969495 and 7 against Peel and others' x0.27/2.05/0.12: the subtropics are Earth's, the tropics carry two to four times Earth's share. The ITCZ's ascent reaches land at 7 to 18 mm/s but the trades' land between the thermal equator's two positions sits under the halves' descents in turn. Pooled at 512 rows 0 to 15 degrees x0.93 (`GeographyAuditTest`, C1b's known failure). 2026-10-10, A1-5.
 - **The subtropical highs after the latent heat (A1-5).** Closed cells over the sea at 15 to 45 degrees at 1,024 rows (`BoundaryLayerEarthTest`): seed 969495 July 43.8 N, 1,030.6 hPa, prominence 9.0, basin position 0.72; seed 7 January 37.8 S, 1,030.4 hPa, 13.5, 0.51; none on seed 42 and none in a winter hemisphere (A1-4: three, at 37.8 to 43.8 degrees). The latent heat moved none nearer Nakamura and Miyasaka's 35 N: the ridge is the belts', and the prescribed basic state the same in both halves (the entry above). 2026-10-10, A1-5.
 - **The summer's inflow onto the subtropical coasts (A1-5).** Pooled over the four subtropical continents at 512 rows the warm half blows +0.06 m/s onshore and the cold half -0.78 (A1-4 +0.23 and -0.83; the bar +0.10; `PressureWindTest`, a known failure): seeds 7, 42 and 99 blow on in summer (+0.29, +0.21, +0.12) and seed 1234's equatorial continent off in both halves (-0.22, -0.45). 2026-10-10, A1-5.
-- **The fronts along a row after the belts' factor (A1-5).** With the latitude-only factor gone the longest straight front reads 2,369, 3,349 and 1,477 km on seeds 42, 969495 and 7 at 1,024 rows (A1-4 2,176, 2,223 and 2,060; bar 600; `RainGeometryTest`, a known failure). What holds a row now is the belts' own zonal wind and their zonal-mean ascent and descent, the Hadley cell's, in the boundary layer's convergence: zonal over the open sea, as the renders show. The basic state from the energy balance, and the storm tracks (chunk 7), are what should bend them. The 250 mm isohyet's straight edge, A1-2's known failure, is armed again. 2026-10-10, A1-5.
+- **The fronts along a row after the belts' factor (A1-5).** With the latitude-only factor gone the longest straight front reads 2,369, 3,349 and 1,477 km on seeds 42, 969495 and 7 at 1,024 rows (A1-4 2,176, 2,223 and 2,060; bar 600; `RainGeometryTest`, a known failure). What holds a row now is the belts' own zonal wind and their zonal-mean ascent and descent, the Hadley cell's, in the boundary layer's convergence: zonal over the open sea, as the renders show. The basic state from the energy balance, and the storm tracks (chunk 7), are what should bend them. The 250 mm isohyet's straight edge, A1-2's known failure, is armed again. 2026-10-10, A1-5. **At F1** the cells rise at each longitude's own energy flux equator and the line no longer holds a row; what holds one now is in the entry "The fronts along a row after the circulation by longitude". 2026-10-12, F1.
 - **The 512 census after A1-5 (rule 13).** `GeometryGuardTest` records sixteen violations on the four standard worlds against A1-4's twelve: new are arcs on the ice surface of seeds 42 (two, at (254,24)) and 99 (three, at (109,491)), seed 42's terrain contours' arc at (253,21) with its ice, a crease in seed 7's biome edges at (494,378) and in seed 42's sea temperature anomaly at (942,256); seed 7's ice arcs fell from three to one and the right angles in seed 7's realm borders and seed 42's biome edges are gone. The arcs are the ice profile's fans (the entry "The ice surface's arcs in the 512 census"), moved by the coupled rain's snow. Untraced. 2026-10-10, A1-5.
 - **Beads in the subtropical sea's near-zero rain (A1-5).** Under the solved descent the subtropical open sea rains nothing in each half on long stretches of a row, and the year's rain there, tens of millimeters, carries a regular ripple along the row (on seed 42 at 256 rows the saturated column, from the air's temperature, swings by a millimeter over six to eight cells, about 1,000 km): drawn with logarithmic contours, a chain of rings along a row (seen in the chunk's renders of seed 969495 at 15 S). The app's rain views draw these values a hundredth of their scale apart and do not show it. The ripple is in the marine air's temperature, before the atmosphere; untraced. 2026-10-10, A1-5.
 - **The everyday and deep tiers' clauses the new ground broke (A1-5).** Recorded as known failures, each untraced: seed 99's lake 17 in two pieces (`LakeBodyTest`, armed at A1-1); the gallery's land slope reading 0.07 against the engraving's floor of 0.06 (`ReliefShadingTest`, armed at A1-4); seed 7's cold-current coast sample gone, its water no longer 0.8 C under its latitude at 27 to 33 S under the ocean's stress from the new drag (`CurrentFeedsRainTest`; the clauses that read the coast wait for it); the lowstand's drowned valleys pooled at 1.36x against 1.5x (`SeaLevelHistoryTest`, armed at A1-4); the doubled slant moving no band's desert, the deserts being the solved descent's (`GridShapeTest`, armed at A1-4); the pooled largest lake 1.05x the Caspian's share, seed 42's at 256 and 1,024 rows over 1.5 (`OutletResolutionTest`, armed at C1b2). Re-derived by its own rule: `DeltaOutlineTest`'s straight bar, 1.1% between the square fans' 1.6% and the curved ones' 0.81%. Armed, each passing on A1-5's ground: the land's return against Earth's (x0.84), the seeds' desert shares 1.5 times apart, seed 1234's windward flank under the law, the cold dry interior's ice under 2%, seed 42's sheet flowing out from its dome, the 250 mm isohyet's row edge and the author's world's ruled bar. A test of three 128-row worlds outgrew the default minute and takes `PipelineTest`'s ten (`IceAcceleratorSwitchTest`). Under the deep tier's load `ScaleFreeTest` ran out of heap and `WorldDiskCacheTest` once read a different world from the cache's; each passed rerun alone. 2026-10-10, A1-5.

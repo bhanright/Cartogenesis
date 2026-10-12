@@ -456,9 +456,9 @@ class RiverWidthTest {
         if (abs(spans[1].second - 2f * spans[0].second) >= 0.02f) {
             offPen += "the pen did not double with the sheet: %.3f px at 512, %.3f px at 1024".format(spans[0].second, spans[1].second)
         }
-        KnownFailures.expect("A1-6b: the widest drawn stroke stands more than a hundredth under the full pen", "at 1024; the pen did not double with the sheet") {
-            if (offPen.isNotEmpty()) throw RecordedViolation(offPen.joinToString("; "), offPen.joinToString("; ") { it.substringBefore(" the drawn").substringBefore(":") })
-        }
+        // Armed at F1, on whose ground both sheets' widest strokes are the full pen
+        // (docs/DESIGN_LEDGER.md, F1).
+        assertTrue(offPen.isEmpty(), offPen.joinToString("; "))
         assertTrue(
             abs(spans[1].first - spans[0].first) < 1e-4f,
             "the hairline moved with the sheet: ${spans[0].first} then ${spans[1].first}"

@@ -214,9 +214,35 @@ class BoundaryLayerTest : BorrowsSharedWorlds() {
     }
 
     /**
+     * The convergence the circulation's own departure from its zonal mean makes in the layer of
+     * [half], on the atmosphere's grid in pascals a second: the layer's wind under no eddy pressure
+     * with the circulation at each longitude ([com.cartogenesis.worldgen.pipeline.LocalCirculation]),
+     * less the same with the zonal circulation on every column. The waves are the departures from
+     * the circulation and do not carry it.
+     */
+    private fun localBranchConvergence(world: WorldMap, atmosphere: BoundaryLayer.Atmosphere, half: BoundaryLayer.Half, julyHalf: Boolean): DoubleArray {
+        val config = world.config
+        val rows = ClimateStage.beltWindOfRows(config, ClimateStage.zonalClimate(config, world.sea), julyHalf)
+        val zonalEast = FloatArray(world.width * world.height) { rows.eastwardMps[it / world.width] }
+        val zonalSouth = FloatArray(world.width * world.height) { rows.southwardMps[it / world.width] }
+        val still = FloatArray(world.width * world.height)
+        fun convergence(east: FloatArray, south: FloatArray): DoubleArray {
+            val wind = PressureWind.surfaceWind(config, world.sea, still, east, south)
+            val calm = BoundaryLayer.Half(
+                east, south, half.beltPressurePa, half.eddyPressureCoarsePa, still, wind.eastwardMps, wind.southwardMps, half.response
+            )
+            return BoundaryLayer.convergenceOmegaPaPerSecond(atmosphere, calm)
+        }
+        val local = convergence(half.beltEastwardMps, half.beltSouthwardMps)
+        val zonal = convergence(zonalEast, zonalSouth)
+        return DoubleArray(local.size) { local[it] - zonal[it] }
+    }
+
+    /**
      * The model's lowest layer and the diagnosed one are one layer under one drag: the dry model's
      * own convergence at the layer's top, its lowest interior `omega` less the ground's, against the
-     * diagnosed layer's ([BoundaryLayer.boundaryLayerOmega]). Held in size, the model's root mean
+     * diagnosed layer's ([BoundaryLayer.boundaryLayerOmega]) less what the circulation's own
+     * departure from its zonal mean converges there ([localBranchConvergence]). Held in size, the model's root mean
      * square over the diagnosed one's within [DRAG_AGREEMENT_FACTOR] either way in the subtropics
      * and the middle latitudes (not the regression, which a correlation under one shrinks), and in
      * pattern where the drag balance is most of the lowest level's balance, the subtropics. Shown
@@ -237,7 +263,9 @@ class BoundaryLayerTest : BorrowsSharedWorlds() {
             for ((name, half) in listOf("July" to atmosphere.julyHalf, "January" to atmosphere.januaryHalf)) {
                 val model = half.response.verticalMotion[atmosphere.levels.interiorCount - 1]
                 val modelConvergence = DoubleArray(grid.cellCount) { model[it] - half.response.surfaceVerticalMotion[it] }
-                val diagnosed = BoundaryLayer.convergenceOmegaPaPerSecond(atmosphere, half)
+                val withBranch = BoundaryLayer.convergenceOmegaPaPerSecond(atmosphere, half)
+                val branch = localBranchConvergence(world, atmosphere, half, name == "July")
+                val diagnosed = DoubleArray(withBranch.size) { withBranch[it] - branch[it] }
                 val turned = BoundaryLayer.convergenceOmegaPaPerSecond(atmosphere, turnedHalf(world, half))
                 val control = DoubleArray(diagnosed.size) { 2 * diagnosed[it] }
                 for ((from, to) in listOf(SUBTROPICS_FROM_DEGREES to MIDDLE_FROM_DEGREES, MIDDLE_FROM_DEGREES to MIDDLE_TO_DEGREES)) {

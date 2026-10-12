@@ -268,6 +268,7 @@ val deepClassesByStage: Map<String, List<String>> = mapOf(
         "com.cartogenesis.worldgen.AtmosphereCouplingTest.the plain iteration does not settle, and where the loop starts does not move where it settles",
         "com.cartogenesis.worldgen.BoundaryLayerEarthTest",
         "com.cartogenesis.worldgen.MeanCirculationEarthTest",
+        "com.cartogenesis.worldgen.LocalCirculationEarthTest",
         "com.cartogenesis.worldgen.AirSeaEarthTest",
         "com.cartogenesis.worldgen.CoastContrastTest",
         "com.cartogenesis.worldgen.CurrentFeedsRainTest",

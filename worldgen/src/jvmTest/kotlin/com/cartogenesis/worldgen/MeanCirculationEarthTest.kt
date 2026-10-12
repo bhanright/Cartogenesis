@@ -43,6 +43,11 @@ import kotlin.test.assertTrue
  *   five degrees of the span Earth's jets cover, [JET_NEAREST_DEGREES] to [JET_FARTHEST_DEGREES], and
  *   each hemisphere's summer jet stands poleward of its winter jet by no more than
  *   [RIDGE_LARGEST_SHIFT_DEGREES], as its ridge does.
+ * - **The closed highs.** Barry and Chorley's subtropical anticyclones are cells over the oceans, and
+ *   Nakamura and Miyasaka's (2004) July cells stand at about 35 N in the eastern basins over 1,020
+ *   hPa, as `BoundaryLayerEarthTest` reads them. In each half the summer hemisphere's sea holds at
+ *   least one closed high at 15 to 45 degrees whose center stands over 1,020 hPa
+ *   ([SubtropicalHighs]).
  * - **The cells.** The ECMWF solstitial mean meridional streamfunction (MIT 12.810 lecture notes on
  *   the Hadley cell, 2023, read): the cross-equatorial winter cells' contours reach 20 and 24 times
  *   1e10 kg/s, the summer cells' 4. In each half the lower branch's greatest mass flux toward the
@@ -151,17 +156,33 @@ class MeanCirculationEarthTest : BorrowsSharedWorlds() {
                 if (shift < 0.0 || shift > RIDGE_LARGEST_SHIFT_DEGREES) moved += "seed $seed $name summer minus winter %.1f".format(shift)
             }
         }
-        // Both recorded at A1-6a, where they were written. The equal-area cells put each half's
-        // summer edge equatorward of its winter edge (26.5 to 28.4 degrees against 29.3 to 37.9 on
-        // these seeds), as Lindzen and Hou's own solutions do, and the surface wind's eddy forcing
-        // is the year's in both halves, so the summer subtropics keep too little of their
-        // easterlies: every summer ridge stands 7 to 17 degrees equatorward of its winter ridge,
-        // and four of the twelve under 25 degrees (docs/DESIGN_LEDGER.md, A1-6a; docs/TODO.md).
-        KnownFailures.expect("A1-6a: the ridge stands outside 25 to 40 degrees", "4 of 12") {
-            if (placed.isNotEmpty()) throw RecordedViolation("ridges outside 25 to 40 degrees: $placed", "${placed.size} of 12")
+        // Both recorded at A1-6a, where they were written: the equal-area cells put each half's
+        // summer edge equatorward of its winter edge, and every summer ridge stood 7 to 17 degrees
+        // equatorward of its winter ridge, four of the twelve under 25 degrees. Armed at A1-6b, whose
+        // cells end where the troposphere turns baroclinically unstable and whose westerlies balance
+        // the hemisphere's torque (docs/DESIGN_LEDGER.md, A1-6a and A1-6b).
+        assertTrue(placed.isEmpty(), "ridges outside 25 to 40 degrees: $placed")
+        assertTrue(moved.isEmpty(), "the ridge does not move poleward in summer: $moved")
+    }
+
+    @Test
+    fun `each summer hemisphere's sea holds a closed subtropical high`() {
+        val missing = ArrayList<String>()
+        for (seed in SEEDS) {
+            val world = world(seed)
+            val atmosphere = checkNotNull(ClimateStage.coupledAtmosphere(world.config, world.sea, world.ocean)).coupling.atmosphere
+            for (julyHalf in listOf(true, false)) {
+                val half = atmosphere.half(julyHalf)
+                val pressure = FloatArray(world.width * world.height) { half.seaLevelPressurePa(it, world.width).toFloat() }
+                val highs = SubtropicalHighs.find(world, pressure, atmosphere.remap)
+                val name = if (julyHalf) "July" else "January"
+                println("MEAN CIRCULATION seed $seed $name highs: " + highs.ifEmpty { listOf("none") }.joinToString("; "))
+                // Northern summer is the half about July; southern summer the half about January.
+                if (highs.none { (it.latitudeDegrees > 0.0) == julyHalf }) missing += "seed $seed $name ${if (julyHalf) "north" else "south"}"
+            }
         }
-        KnownFailures.expect("A1-6a: the summer ridge stands equatorward of the winter ridge", "6 of 6") {
-            if (moved.isNotEmpty()) throw RecordedViolation("the ridge does not move poleward in summer: $moved", "${moved.size} of 6")
+        KnownFailures.expect("A1-6b: a summer hemisphere's sea holds no closed high", "unrecorded") {
+            if (missing.isNotEmpty()) throw RecordedViolation("no closed high over a summer hemisphere's sea: $missing", missing.joinToString("; "))
         }
     }
 
@@ -235,12 +256,11 @@ class MeanCirculationEarthTest : BorrowsSharedWorlds() {
             val range = july - january
             if (range < ITCZ_LEAST_RANGE_DEGREES || range > ITCZ_LARGEST_RANGE_DEGREES) complaints += "seed $seed %.1f".format(range)
         }
-        // Recorded at A1-6a, where it was written: seed 42's ocean rains most at 4.7 S in the half
+        // Recorded at A1-6a, where it was written: seed 42's ocean rained most at 4.7 S in the half
         // about July and 7.5 N in the half about January, the wrong way round, under a July heating
-        // the energy balance puts at 2.1 N (docs/DESIGN_LEDGER.md, A1-6a; docs/TODO.md).
-        KnownFailures.expect("A1-6a: the ITCZ migrates outside Earth's range", "1 of 3") {
-            if (complaints.isNotEmpty()) throw RecordedViolation("the ITCZ's seasonal range: $complaints", "${complaints.size} of 3")
-        }
+        // the energy balance put at 2.1 N. Armed at A1-6b, whose cells are heated about the energy
+        // flux equator (docs/DESIGN_LEDGER.md, A1-6a and A1-6b).
+        assertTrue(complaints.isEmpty(), "the ITCZ's seasonal range: $complaints")
     }
 
     /**

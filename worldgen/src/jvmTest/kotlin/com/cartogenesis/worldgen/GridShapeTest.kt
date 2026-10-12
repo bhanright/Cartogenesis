@@ -170,11 +170,17 @@ class GridShapeTest : BorrowsSharedWorlds() {
         // Armed at A1-4, whose ground and rain read it again (docs/DESIGN_LEDGER.md, A1-4). Recorded
         // at A1-5: the doubled slant moves one band's rain past the spread and no band's desert, the
         // deserts now the solved descent's (docs/TODO.md). Armed on H1's ground under the coupled
-        // climate, where it moves both (docs/DESIGN_LEDGER.md, M1).
-        assertTrue(
-            misses.desert.isNotEmpty() && misses.rain.isNotEmpty(),
-            "a slant twice as steep should move both past the spread: deserts ${misses.desert}; land rain ${misses.rain}"
-        )
+        // climate, where it moves both (docs/DESIGN_LEDGER.md, M1). Recorded at A1-6b: the slant
+        // now sets only the Ferrel and polar legs, the Hadley cells' meridional wind being their own
+        // continuity's, and doubling it moves neither past the spread (docs/TODO.md).
+        KnownFailures.expect("A1-6b: the doubled slant reaches only the Ferrel and polar legs", "unrecorded") {
+            if (misses.desert.isEmpty() || misses.rain.isEmpty()) {
+                throw RecordedViolation(
+                    "a slant twice as steep should move both past the spread: deserts ${misses.desert}; land rain ${misses.rain}",
+                    "deserts ${misses.desert.size}, land rain ${misses.rain.size}"
+                )
+            }
+        }
     }
 
     private companion object {

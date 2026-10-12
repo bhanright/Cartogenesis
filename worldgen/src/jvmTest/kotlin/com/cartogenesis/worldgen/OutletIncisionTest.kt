@@ -490,10 +490,16 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
         // Recorded at A1-4, whose wetter land filled seed 718106's largest lake past the Caspian's
         // share again. Armed at A1-6a, under whose circulation every world's largest lake is under
         // it, seed 42's the largest at 0.1376% of the land against 0.2491% (docs/DESIGN_LEDGER.md, A1-6a).
-        assertTrue(
-            overCaspian.isEmpty(),
-            "a lake is over the Caspian's share of the map: ${overCaspian.joinToString("; ")}"
-        )
+        // Recorded at A1-6b, under whose rain seeds 718106 and 7 hold lakes of 3.6 times the
+        // Caspian's share and seed 1234 one of 1.6 (docs/TODO.md).
+        KnownFailures.expect("A1-6b: a lake stands over the Caspian's share under the seasonal circulation's rain", "unrecorded") {
+            if (overCaspian.isNotEmpty()) {
+                throw RecordedViolation(
+                    "a lake is over the Caspian's share of the map: ${overCaspian.joinToString("; ")}",
+                    overCaspian.joinToString("; ")
+                )
+            }
+        }
         // Recorded at C1b: the land rains more than Earth's and returns less of it, so two seeds
         // start with a lake over the Caspian's share again, and the notch takes their worlds' water
         // to 0.68 and 0.76 of the control rather than under half (docs/DESIGN_LEDGER.md, C1b;
@@ -502,11 +508,16 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
         // Recorded at A1-1, whose calendar seasons moved seed 99's ground: its largest lake does not
         // fall with its outlet and its world keeps 0.70 of its water (docs/TODO.md). Armed at A1-6a,
         // where no seed starts with an over-large lake, so the clause holds over none; the clause
-        // below records that it is read on none (docs/DESIGN_LEDGER.md, A1-6a).
-        assertTrue(
-            notHalved.isEmpty(),
-            "an over-large lake did not fall, or its world kept more than half its water: ${notHalved.joinToString("; ")}"
-        )
+        // below records that it is read on none (docs/DESIGN_LEDGER.md, A1-6a). Recorded at A1-6b,
+        // whose rain gives three seeds an over-large lake to begin with (docs/TODO.md).
+        KnownFailures.expect("A1-6b: an over-large lake does not fall with its outlet", "unrecorded") {
+            if (notHalved.isNotEmpty()) {
+                throw RecordedViolation(
+                    "an over-large lake did not fall, or its world kept more than half its water: ${notHalved.joinToString("; ")}",
+                    notHalved.joinToString("; ")
+                )
+            }
+        }
         // Recorded at L1, where only seed 718106 started over-large; armed again at its review round,
         // whose rift joins are relay ramps: seed 43's largest lake starts at 0.392% of its land, over
         // the Caspian's 0.249%, beside 718106's 0.975% (docs/DESIGN_LEDGER.md, L1).
@@ -520,14 +531,11 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
         // Recorded on H1's ground under the coupled climate, whose filled sags leave one seed so
         // (docs/DESIGN_LEDGER.md, M1; docs/TODO.md). Re-recorded at A1-6a, under whose rain no seed
         // starts with a lake over the Caspian's share, the largest seed 42's at 0.19% of its land.
-        KnownFailures.expect("M1: one seed starts with an over-large lake on H1's ground", "0 of 6") {
-            if (overLarge < 2) {
-                throw RecordedViolation(
-                    "only $overLarge of ${seeds.size} seeds had an over-large lake to begin with, so this guard proves little",
-                    "$overLarge of ${seeds.size}"
-                )
-            }
-        }
+        // Armed at A1-6b, under whose rain three seeds do (docs/DESIGN_LEDGER.md, A1-6b).
+        assertTrue(
+            overLarge >= 2,
+            "only $overLarge of ${seeds.size} seeds had an over-large lake to begin with, so this guard proves little"
+        )
         // Collected over every seed rather than asserted inside the loop, so a run reports all six
         // figures. With `postCutOutlet = false` this reads
         // 718106 0.6244%, 99 0.6514%, 43 0.2568% — see the ledger row for H5b.

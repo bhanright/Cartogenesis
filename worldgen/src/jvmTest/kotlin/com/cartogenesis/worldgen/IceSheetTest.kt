@@ -224,15 +224,9 @@ class IceSheetTest : BorrowsSharedWorlds() {
         // main's climate kept K2's record, seeds 7 and 878210 a hair under the bar; on H1's ground
         // under the coupled climate no dome is read (docs/DESIGN_LEDGER.md, H1 and M1). Recorded at
         // A1-6a, where seed 42's dome is read again and its sheet flows outward a hair under the
-        // bar, 63.1% at 67.7 degrees off radial against 67% and 67.5 (docs/TODO.md).
-        KnownFailures.expect("A1-6a: seed 42's sheet flows outward a hair under the bar", "seed 42") {
-            if (failures.isNotEmpty()) {
-                throw RecordedViolation(
-                    "the sheet is not flowing down its own surface: " + failures.joinToString("; "),
-                    failures.joinToString("; ") { it.substringBefore(":") }
-                )
-            }
-        }
+        // bar, 63.1% at 67.7 degrees off radial against 67% and 67.5 (docs/TODO.md). Armed at A1-6b,
+        // whose snow clears it (docs/DESIGN_LEDGER.md, A1-6b).
+        assertTrue("the sheet is not flowing down its own surface: " + failures.joinToString("; "), failures.isEmpty())
     }
 
     /**

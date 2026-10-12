@@ -311,16 +311,13 @@ class PressureWindTest : BorrowsSharedWorlds() {
         // both halves (docs/TODO.md). Armed on H1's ground under the coupled climate, whose coasts
         // clear it (docs/DESIGN_LEDGER.md, M1). Recorded again at A1-6a: under the seasonal mean
         // circulation the pooled summer wind on these coasts is -0.05 m/s, near calm and not onshore,
-        // not yet traced to a cause (docs/TODO.md).
-        KnownFailures.expect("A1-6a: the warm half's wind does not blow onto the subtropical continents", "-0.05") {
-            if (summer <= ONSHORE_BAR_MPS) {
-                throw RecordedViolation(
-                    ("the warm half blows %+.2f m/s onto the subtropical continents' equatorward and " +
-                        "eastern coasts, which is not onshore").format(summer),
-                    "%+.2f".format(summer)
-                )
-            }
-        }
+        // not yet traced to a cause (docs/TODO.md). Armed at A1-6b, whose summer cells reach far
+        // poleward and whose trades are the summer half's own (docs/DESIGN_LEDGER.md, A1-6b).
+        assertTrue(
+            summer > ONSHORE_BAR_MPS,
+            ("the warm half blows %+.2f m/s onto the subtropical continents' equatorward and " +
+                "eastern coasts, which is not onshore").format(summer)
+        )
         // A known failure on square cells from Q2 to L1, armed at K2, where the Earth-sized
         // planet's cold half blows off these coasts again (docs/DESIGN_LEDGER.md, Q2 and K2).
         assertTrue(

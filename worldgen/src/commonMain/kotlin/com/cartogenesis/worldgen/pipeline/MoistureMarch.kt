@@ -61,15 +61,19 @@ import kotlin.time.TimeSource
  *
  * # The sweeps are held
  *
- * Which sweep marches a cell is its first lap's wind's to say, and the coupled laps after it keep
- * that partition: a cell whose wind later turns against its sweep is carried along it at the
- * march's least speed, as calm. Where the zonal wind is weak, near every reversal, the solved
- * atmosphere's lap-to-lap changes turned ten thousand cells a lap from one sweep to the other, and
- * the march's answer stepped with each turn, so the coupled loop never settled: its residual hung
- * at a third of the heating over forty laps on seed 42 at 1,024 rows. Held, the march's answer
- * moves with the wind's speed alone and the loop settles in eleven laps. A cell's zonal flux is its
- * speed along its sweep, so as its wind turns against the sweep that flux falls to nothing before
- * the turn and not after it (docs/DESIGN_LEDGER.md, A1-6b).
+ * Which sweep marches a cell is the dry atmosphere's wind's to say, the wind a coupled loop's first
+ * lap runs under from a cold start ([Coupling.sweepWinds]), and every lap keeps that partition: a
+ * cell whose wind later turns against its sweep is carried along it at the march's least speed, as
+ * calm. Where the zonal wind is weak, near every reversal, the solved atmosphere's lap-to-lap
+ * changes turned ten thousand cells a lap from one sweep to the other, and the march's answer
+ * stepped with each turn, so the coupled loop never settled: its residual hung at a third of the
+ * heating over forty laps on seed 42 at 1,024 rows. Held, the march's answer moves with the wind's
+ * speed alone and the loop settles in eleven laps. A cell's zonal flux is its speed along its
+ * sweep, so as its wind turns against the sweep that flux falls to nothing before the turn and not
+ * after it. The partition is the dry wind's and not the first lap's because a loop may start
+ * elsewhere, the erosion's halfway weather where its opening weather settled: held at its own first
+ * lap's wind, a loop started from twice the settled heating settled a fifth to a third of the
+ * heating's departures away from the cold start's (docs/DESIGN_LEDGER.md, A1-6b).
  *
  * # The sinks
  *
@@ -359,6 +363,13 @@ object MoistureMarch {
 
         /** The two halves' seasons under the atmosphere solved from the heating [settledAfter] last read. */
         fun nextSeasons(): Pair<Season, Season>
+
+        /**
+         * The zonal winds that choose each cell's sweep, the half about July's and the half about
+         * January's, meters a second eastward, row-major: the dry atmosphere's (see the class
+         * comment). None when the first lap's seasons are already the dry atmosphere's.
+         */
+        fun sweepWinds(): Pair<FloatArray, FloatArray>? = null
     }
 
     /**
@@ -384,7 +395,7 @@ object MoistureMarch {
         val cellsDown = config.height
         val cellCount = cellsAcross * cellsDown
         val grid = Grid(config)
-        val seasons = startMarches(inputs, grid, keepCells = ledger != null, firstSeasons)
+        val seasons = startMarches(inputs, grid, keepCells = ledger != null, coupling?.sweepWinds(), firstSeasons)
         val july = seasons[0]
         val january = seasons[1]
         if (start != null) {
@@ -437,10 +448,6 @@ object MoistureMarch {
             if (settled || lap >= MAX_LAPS) {
                 lapMillis.add(lapElapsed.inWholeMicroseconds / 1_000.0)
                 break
-            }
-            if (lap == 1) {
-                july.holdSweeps()
-                january.holdSweeps()
             }
             val nextSeasons = coupling?.nextSeasons()
             val returnStarted = TimeSource.Monotonic.markNow()
@@ -684,17 +691,31 @@ object MoistureMarch {
      * One season's march: its precomputed fields, column-major so a column's rows are adjacent
      * in memory, and its state between laps.
      */
-    /** Both seasons' marches under [firstSeasons], July's then January's. */
-    private fun startMarches(inputs: Inputs, grid: Grid, keepCells: Boolean, firstSeasons: () -> Pair<Season, Season>): Array<SeasonMarch> {
+    /**
+     * Both seasons' marches under [firstSeasons], July's then January's, each cell held in the sweep
+     * [sweepWinds] blows it along, or the first seasons' own winds when none.
+     */
+    private fun startMarches(
+        inputs: Inputs,
+        grid: Grid,
+        keepCells: Boolean,
+        sweepWinds: Pair<FloatArray, FloatArray>?,
+        firstSeasons: () -> Pair<Season, Season>
+    ): Array<SeasonMarch> {
         val (julyHalf, januaryHalf) = firstSeasons()
-        return arrayOf(SeasonMarch(inputs, julyHalf, grid, keepCells), SeasonMarch(inputs, januaryHalf, grid, keepCells))
+        return arrayOf(
+            SeasonMarch(inputs, julyHalf, grid, keepCells, sweepWinds?.first ?: julyHalf.eastwardMps),
+            SeasonMarch(inputs, januaryHalf, grid, keepCells, sweepWinds?.second ?: januaryHalf.eastwardMps)
+        )
     }
 
     private class SeasonMarch(
         val inputs: Inputs,
         season: Season,
         val grid: Grid,
-        keepCells: Boolean
+        keepCells: Boolean,
+        /** The zonal wind that holds each cell in its sweep through every lap, row-major (see the class comment). */
+        sweepEastwardMps: FloatArray
     ) {
         val cellsAcross = grid.cellsAcross
         val cellsDown = grid.cellsDown
@@ -709,15 +730,14 @@ object MoistureMarch {
         private var windAt2mMps: FloatArray? = season.windAt2mMps
         private var extraterrestrialOfRow: DoubleArray = season.extraterrestrialOfRow
 
-        // Column-major: cell (row, column) is column * cellsDown + row.
-        val direction = ByteArray(cellCount)
-
-        /** Whether [direction] is held at the first lap's (see the class comment). */
-        private var sweepsHeld = false
-
-        /** Holds every cell in the sweep it marched in this lap, through the laps after it. */
-        fun holdSweeps() {
-            sweepsHeld = true
+        /**
+         * Each cell's sweep, east (1) or west (-1), held through every lap. Column-major: cell
+         * (row, column) is column * cellsDown + row.
+         */
+        val direction = ByteArray(cellCount).also { held ->
+            for (cell in 0 until cellCount) {
+                held[(cell % cellsAcross) * cellsDown + cell / cellsAcross] = if (sweepEastwardMps[cell] >= 0f) 1 else -1
+            }
         }
         val surface = ByteArray(cellCount)
         val saturatedMm = FloatArray(cellCount)
@@ -882,8 +902,7 @@ object MoistureMarch {
                         val cell = row * cellsAcross + column
                         val here = index(row, column)
                         val eastward = season.eastwardMps[cell].toDouble()
-                        if (!sweepsHeld) direction[here] = if (eastward >= 0.0) 1 else -1
-                        // The speed along the cell's sweep, its whole speed until the sweeps are held.
+                        // The speed along the cell's held sweep.
                         stretch[here] = (TRANSPORT_SPEED_MPS / maxOf(eastward * direction[here], slowest)).toFloat()
                         surface[here] = when {
                             inputs.isLand[cell] -> LAND

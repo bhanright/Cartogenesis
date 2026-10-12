@@ -242,15 +242,15 @@ class MoistureBudgetTest : BorrowsSharedWorlds() {
         // Recorded at A1-5: the shipped march's wettest ocean band falls to half of GPCP's under
         // the rain from the solved ascent, and the closure, on top of it, stands nearer; it stays
         // off, since it would rain the convergence the ascent already condenses (docs/TODO.md).
-        KnownFailures.expect("A1-5: the convergence closure stands nearer GPCP's band than the shipped march", "1490 against 1075") {
-            if (abs(ln(shipped / GPCP_OCEAN_PEAK_MM)) > abs(ln(withClosure / GPCP_OCEAN_PEAK_MM))) {
-                throw RecordedViolation(
-                    ("the convergence closure now stands nearer GPCP's equatorial band (%.0f mm) than the shipped " +
-                        "march (%.0f), against %.0f: the reason it is off has changed")
-                        .format(withClosure, shipped, GPCP_OCEAN_PEAK_MM),
-                    "%.0f against %.0f".format(withClosure, shipped)
-                )
-            }
+        // Armed at A1-6b, whose ITCZ rains the summer hemisphere's tropics nearer GPCP's band
+        // than the closure would (docs/DESIGN_LEDGER.md, A1-6b).
+        run {
+            assertTrue(
+                abs(ln(shipped / GPCP_OCEAN_PEAK_MM)) <= abs(ln(withClosure / GPCP_OCEAN_PEAK_MM)),
+                ("the convergence closure now stands nearer GPCP's equatorial band (%.0f mm) than the shipped " +
+                    "march (%.0f), against %.0f: the reason it is off has changed")
+                    .format(withClosure, shipped, GPCP_OCEAN_PEAK_MM)
+            )
         }
         // Recorded at C1b at twice GPCP's band; armed at C1b2, where the closure takes 1.21 of it.
         if (withClosure > GPCP_OCEAN_PEAK_MM * EARTH_TOLERANCE) {

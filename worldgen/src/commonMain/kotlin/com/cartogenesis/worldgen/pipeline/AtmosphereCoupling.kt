@@ -45,8 +45,9 @@ internal class AtmosphereCoupling(
     val depth: Int = ACCELERATION_DEPTH,
     /**
      * The heating the first lap runs under, each half's on the atmosphere's grid in watts per square
-     * meter; none, the dry atmosphere, by default. Only the test of the loop's sensitivity to its
-     * start hands one in.
+     * meter; none, the dry atmosphere, by default. The erosion's halfway weather hands in where its
+     * opening weather settled (`ClimateStage.WarmStart`), and the test of the loop's sensitivity to
+     * its start twice the settled heating.
      */
     initialLatentWPerM2: Pair<DoubleArray, DoubleArray>? = null
 ) : MoistureMarch.Coupling {
@@ -62,6 +63,18 @@ internal class AtmosphereCoupling(
     private val coarse = remap.coarse
     private val cellCount = coarse.cellCount
     private val widthInRows = WaveForcing.groundWidthInRows(remap)
+
+    /**
+     * The dry atmosphere's zonal winds, which hold each of the march's cells in its sweep
+     * (`MoistureMarch`'s "The sweeps are held"), when the first lap runs under some other heating:
+     * solved once here, before that lap's atmosphere, and let go of all but the two winds.
+     */
+    private val dryZonalWinds: Pair<FloatArray, FloatArray>? = initialLatentWPerM2?.let {
+        val (july, january) = seasonsOf(solver.solve(null, null))
+        july.eastwardMps to january.eastwardMps
+    }
+
+    override fun sweepWinds(): Pair<FloatArray, FloatArray>? = dryZonalWinds
 
     /** The heating the current atmosphere was solved under, both halves, July's cells then January's. */
     private var given: DoubleArray = initialLatentWPerM2?.let { (july, january) -> july + january } ?: DoubleArray(2 * cellCount)

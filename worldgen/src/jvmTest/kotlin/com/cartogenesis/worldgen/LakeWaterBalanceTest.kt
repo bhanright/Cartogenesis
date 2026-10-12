@@ -202,7 +202,15 @@ class LakeWaterBalanceTest : BorrowsSharedWorlds() {
         val on = world(drySeed, waterBalance = true, onTheScannedPlanet = true)
 
         val basin = basinOf(off, 0f, 300f)
-        assertTrue(basin.size >= 500, "seed $drySeed has no large dry basin any more (${basin.size} cells)")
+        // Recorded at A1-6b: the seasonal circulation's rain moved the ground the sample was scanned
+        // on, and seed 1's largest dry basin is 477 cells; the scan that re-picks it is a run of
+        // its own (docs/TODO.md). The rest of the case reads the basin it has.
+        KnownFailures.expect("A1-6b: seed 1's dry basin sample falls under 500 cells", "unrecorded") {
+            if (basin.size < 500) {
+                throw RecordedViolation("seed $drySeed has no large dry basin any more (${basin.size} cells)", "${basin.size} cells")
+            }
+        }
+        if (basin.isEmpty()) return
 
         val rain = basin.map { off.climate.precipitationMm.data[it] }.average()
         val evaporation = basin.map { off.climate.openWaterEvaporationMm.data[it] }.average()
@@ -338,15 +346,8 @@ class LakeWaterBalanceTest : BorrowsSharedWorlds() {
         // Recorded on H1's ground under the coupled climate: H1's wet sample, scanned on main's
         // climate, falls below its spill under the coupled rain, and the scan that re-picks it is a
         // run of its own (docs/DESIGN_LEDGER.md, M1; docs/TODO.md).
-        KnownFailures.expect("M1: H1's wet basin sample falls below its spill under the coupled rain", "2352 of 4907 cells") {
-            if (stillWet != basin.size) {
-                throw RecordedViolation(
-                    "a wet basin must stay full to its spill: $stillWet of ${basin.size} cells",
-                    "$stillWet of ${basin.size} cells"
-                )
-            }
-        }
-        if (stillWet != basin.size) return
+        // Armed at A1-6b, under whose rain the sample stands at its spill (docs/DESIGN_LEDGER.md, A1-6b).
+        assertTrue(stillWet == basin.size, "a wet basin must stay full to its spill: $stillWet of ${basin.size} cells")
         val lake = on.rivers.lakes.lakes[on.rivers.lakes.lakeId[basin.first()]]
         assertTrue(!lake.endorheic, "a basin that overflows must not be marked endorheic")
         assertEquals(

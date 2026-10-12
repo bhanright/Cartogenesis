@@ -106,6 +106,12 @@ class BoundaryLayerEarthTest : BorrowsSharedWorlds() {
  */
 internal object SubtropicalHighs {
 
+    /** One closed high: its center's latitude and longitude in degrees, pressure, prominence and place in its basin. */
+    class High(val latitudeDegrees: Double, val longitudeDegrees: Double, val centralPa: Double, val prominencePa: Double, val basinPosition: Double) {
+        override fun toString(): String = "%.1f degrees, longitude %.0f, %.1f hPa, prominence %.1f hPa, basin position %.2f".format(
+            latitudeDegrees, longitudeDegrees, centralPa / 100, prominencePa / 100, basinPosition)
+    }
+
     /** Nakamura and Miyasaka's (2004) shading of the July highs, over 1,020 hPa. */
     const val MIN_CENTRAL_PA = 102_000.0
 
@@ -115,12 +121,12 @@ internal object SubtropicalHighs {
     private const val PROMINENCE_STEP_PA = 50.0
     private const val MAX_PROMINENCE_PA = 3_000.0
 
-    fun find(world: WorldMap, pressurePa: FloatArray, remap: AtmosphereRemap): List<String> {
+    fun find(world: WorldMap, pressurePa: FloatArray, remap: AtmosphereRemap): List<High> {
         val grid = remap.coarse
         val pressure = remap.areaMean(pressurePa)
         val landShare = remap.areaMean(FloatArray(world.sea.isLand.size) { if (world.sea.isLand[it]) 1f else 0f })
         val columns = grid.columns
-        val found = ArrayList<String>()
+        val found = ArrayList<High>()
         for (row in 1 until grid.rows - 1) {
             val latitude = grid.latitudeRadians[row] * 180 / PI
             if (abs(latitude) < 15 || abs(latitude) > 45) continue
@@ -144,8 +150,7 @@ internal object SubtropicalHighs {
                 while (west < columns && landShare[row * columns + Math.floorMod(column - west - 1, columns)] < 0.5) west++
                 while (east < columns && landShare[row * columns + Math.floorMod(column + east + 1, columns)] < 0.5) east++
                 val position = if (west + east >= columns) Double.NaN else west.toDouble() / (west + east)
-                found += "%.1f degrees, longitude %.0f, %.1f hPa, prominence %.1f hPa, basin position %.2f".format(
-                    latitude, (column + 0.5) * 360.0 / columns, pressure[cell] / 100, prominence / 100, position)
+                found += High(latitude, (column + 0.5) * 360.0 / columns, pressure[cell], prominence, position)
             }
         }
         return found

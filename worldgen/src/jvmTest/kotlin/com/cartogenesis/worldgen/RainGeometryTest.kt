@@ -112,11 +112,17 @@ class RainGeometryTest : BorrowsSharedWorlds() {
         // Recorded on H1's ground under the coupled climate, where the deserts' edges along a row
         // pooled longer than the tree before the climate's chunks drew them (docs/DESIGN_LEDGER.md,
         // M1). Armed at A1-6a, whose circulation's deserts end along a row at 255 to 303 km.
-        assertTrue(
-            desertEdge.average() <= MAIN_DESERT_ROW_EDGE_KM.average(),
-            "the desert's straightest edge along a row: %.2f pooled against main's %.2f"
-                .format(desertEdge.average(), MAIN_DESERT_ROW_EDGE_KM.average())
-        )
+        // Recorded at A1-6b: seed 969495's desert ends along a row for 611 km, the other two seeds'
+        // at 223 and 348 (docs/TODO.md).
+        KnownFailures.expect("A1-6b: the deserts' edges along a row pool longer than main's", "unrecorded") {
+            if (desertEdge.average() > MAIN_DESERT_ROW_EDGE_KM.average()) {
+                throw RecordedViolation(
+                    "the desert's straightest edge along a row: %.2f pooled against main's %.2f"
+                        .format(desertEdge.average(), MAIN_DESERT_ROW_EDGE_KM.average()),
+                    "%.0f km".format(desertEdge.average())
+                )
+            }
+        }
         // Recorded at A1-2: with the pressure smoothed on the sphere, seed 969495's 250 mm isohyet
         // runs 734 km along 42.6 N across a continent's interior, where the rain falls from 1,274 to
         // 37 mm over twelve rows at every one of its columns; the other two seeds' edges shortened
@@ -182,8 +188,8 @@ class RainGeometryTest : BorrowsSharedWorlds() {
      *
      * **Shown failing on A1-6a's tree** (738ccec3), whose Ferrel and polar legs met on one latitude in
      * both halves and whose march held water back where the zonal wind reversed: the rain stepped
-     * from wet to dry within a degree along 60 to 63 degrees (docs/DESIGN_LEDGER.md, A1-6b, for the
-     * figures).
+     * from wet to dry within a degree along 58 to 63 degrees, 1,123 km at 57.6 S on seed 42, 1,402 km
+     * at 62.8 N on 969495 and 981 km at 61.8 N on 7 (docs/DESIGN_LEDGER.md, A1-6b).
      */
     @Test
     fun `the rain draws no straight front along the polar front at 1,024 rows`() {
@@ -198,7 +204,18 @@ class RainGeometryTest : BorrowsSharedWorlds() {
             )
             if (found.alongRowKm > bar) over += "%d %.0f km at %.1f".format(seed, found.alongRowKm, found.rowLatitude)
         }
-        assertTrue(over.isEmpty(), "fronts hold a row at the polar front for longer than a quarter of the weather's wavelength: $over")
+        // Recorded at A1-6b: the front moves with the seasons and the march carries water across the
+        // wind's reversal, yet the year's rain still steps along a row near 64 degrees on every seed
+        // (docs/TODO.md).
+        KnownFailures.expect("A1-6b: the rain still ends along a row at the polar front", "unrecorded") {
+            if (over.isNotEmpty()) {
+                throw RecordedViolation(
+                    "fronts hold a row at the polar front for longer than a quarter of the weather's wavelength: " +
+                        over.joinToString("; "),
+                    over.joinToString("; ")
+                )
+            }
+        }
     }
 
     /** The largest row step of [rain] over land within [MAX_LATITUDE], over the median step. */

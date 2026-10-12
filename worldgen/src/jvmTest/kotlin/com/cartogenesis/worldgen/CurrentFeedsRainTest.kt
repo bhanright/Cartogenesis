@@ -201,7 +201,7 @@ class CurrentFeedsRainTest : BorrowsSharedWorlds() {
         // Recorded at A1-6b: the sample's cold coast is back, two cells of it, and they came out 20%
         // wetter with the currents on, the atmosphere's marine air not reading the sea's anomaly
         // (docs/TODO.md).
-        KnownFailures.expect("A1-6b: the cold-current coast comes out wetter with the currents on", "unrecorded") {
+        KnownFailures.expect("A1-6b: the cold-current coast comes out wetter with the currents on", "+19.7%") {
             if (coldOn >= coldOff) {
                 throw RecordedViolation(
                     "cold-current coast should get drier with the currents on: off=$coldOff, on=$coldOn",
@@ -216,7 +216,7 @@ class CurrentFeedsRainTest : BorrowsSharedWorlds() {
         // Armed again at H1, where on main's climate it came out 0.2% wetter, and on H1's ground
         // under the coupled climate (docs/DESIGN_LEDGER.md, H1 and M1).
         // Recorded again at A1-6b, 1.4% drier (docs/TODO.md).
-        KnownFailures.expect("A1-6b: the warm-current coast comes out drier with the currents on", "unrecorded") {
+        KnownFailures.expect("A1-6b: the warm-current coast comes out drier with the currents on", "-1.4%") {
             if (warmOn < warmOff * 0.999) {
                 throw RecordedViolation(
                     "warm-current coast should not get drier with the currents on: off=$warmOff, on=$warmOn",

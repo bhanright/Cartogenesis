@@ -314,8 +314,7 @@ class PressureWindTest : BorrowsSharedWorlds() {
         // not yet traced to a cause (docs/TODO.md). Armed at A1-6b, whose summer cells reach far
         // poleward and whose trades are the summer half's own (docs/DESIGN_LEDGER.md, A1-6b).
         // Recorded at F1: under the circulation by longitude the pooled summer wind on these
-        // coasts is onshore at +0.09 m/s, a hundredth under the bar; the rising branch over a
-        // summer continent now stands inland, where the coasts' inflow converges (docs/TODO.md).
+        // coasts is onshore at +0.09 m/s, a hundredth under the bar, not traced (docs/TODO.md).
         KnownFailures.expect("F1: the summer's inflow onto the subtropical coasts is under the bar", "+0.09") {
             if (summer <= ONSHORE_BAR_MPS) {
                 throw RecordedViolation(

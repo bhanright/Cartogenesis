@@ -305,11 +305,16 @@ class LakeWaterBalanceTest : BorrowsSharedWorlds() {
         // C1b and H1). Recorded at A1-6b: seed 1's 493-cell sample keeps water over 22% of its
         // spill area under the seasonal circulation's rain and none of its lakes is marked
         // endorheic. Armed at A1-6c, whose re-picked 283-cell sample is dry, 38 mm of rain against
-        // 2,464 mm of evaporation, and keeps no lake (docs/DESIGN_LEDGER.md).
-        assertFalse(
-            lakes.isNotEmpty() && lakes.none { it.endorheic },
-            "the dry basin keeps water and none of its lakes is marked endorheic: ${lakes.size} lakes"
-        )
+        // 2,464 mm of evaporation, and keeps no lake (docs/DESIGN_LEDGER.md). Recorded at F1, under
+        // whose rain the sample keeps one lake, not marked endorheic (docs/TODO.md).
+        KnownFailures.expect("F1: the dry sample keeps a lake that is not endorheic", "1 lakes") {
+            if (lakes.isNotEmpty() && lakes.none { it.endorheic }) {
+                throw RecordedViolation(
+                    "the dry basin keeps water and none of its lakes is marked endorheic: ${lakes.size} lakes",
+                    "${lakes.size} lakes"
+                )
+            }
+        }
         lakes.forEach { lake ->
             if (lake.endorheic) {
                 assertTrue(

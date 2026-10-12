@@ -35,7 +35,9 @@
   bottom edge in the rain view, fainter in A1-6a's render; on 42 it rises from 84 to 170 mm. Over
   the last dozen rows of 969495 the solved surface wind's zonal mean blows toward the pole at 0.01
   to 0.27 m/s, where the circulation's own meridional wind goes to nothing at the pole, so the
-  boundary layer converges water onto the pole's cells, whose zonal wind is near calm. Not traced.
+  boundary layer converges water onto the pole's cells, whose zonal wind is near calm. The geometry
+  census at 512 rows sees it: isohyets straight along rows 1 to 3 and 507 to 511 of seeds 7 and
+  1234 for 104 to 188 cell widths (`GeometryFindings.ISOHYETS_ALONG_ROWS`). Not traced.
   2026-10-11, A1-6b.
 - **The equator's trades are weak under the circulation (A1-6b).** The boundary layer's zonal
   momentum march starts each cell from rest at its edge and carries the air across the equator,
@@ -89,7 +91,11 @@
   peoples' borders at (656, 460); gone are the creases in seed 7's ice, biome edges and peoples'
   borders and in seed 42's ice, seed 7's three ice arcs (one new at (788, 27)), and seed 99's ice arc and aligned
   biome edge. The ice's are `IceSheet`'s shape on the snow the new circulation
-  brings; the right angle is not traced. 2026-10-11, A1-6a.
+  brings; the right angle is not traced. 2026-10-11, A1-6a. **At A1-6b** the census at 512 rows holds four
+  known entries and thirteen instances against A1-6a's ten and seventeen: every ice, terrain,
+  biome, anomaly and peoples' entry above is gone but seed 7's ice-surface arcs, now four (187.5
+  degrees about (776, 24)), and three new isohyet entries on the polar rows (the entry "Rain piles
+  onto the polar rows"). 2026-10-12, A1-6b.
 - **The wave model's basic state keeps westerlies at the ground in the tropics in both halves
   (A1-6a).** `ZonalBasicState.jablonowskiWilliamson` blows westerly at every level and latitude,
   where the half-years' zonal-mean surface wind (`HadleyCirculation`) is easterly in the trades.

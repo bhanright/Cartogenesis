@@ -229,6 +229,14 @@ internal object GeometryFindings {
     const val ISOHYET_CREASE = "an isohyet creases between straight runs"
 
     /**
+     * A rainfall level line runs straight along a row: under A1-6b's seasonal circulation the
+     * year's rain on seeds 7 and 1234 at 512 rows, 104 to 188 cell widths along rows 1 to 3 and
+     * 507 to 511, where the rain piles onto the polar rows (docs/TODO.md, "Rain piles onto the polar
+     * rows").
+     */
+    const val ISOHYETS_ALONG_ROWS = "isohyets run straight along rows"
+
+    /**
      * The currents view's sea temperature anomaly ran straight along rows at 512, 189 to 217
      * steps, and doubled back in straight hairpins; at 2048 it drew no line at its levels. Chunk
      * 4a, which solved the currents on the ground and measured the anomaly from a band of latitude

@@ -435,7 +435,7 @@ internal class DesertBands {
         // rest again (docs/DESIGN_LEDGER.md, M1; docs/TODO.md).
         val tropical = reported.filter { it.contains("pooled ${names[0]} deg") }
         val complaints = reported - tropical.toSet()
-        KnownFailures.expect("M1: the pooled tropical band is over its bar on H1's ground under the coupled climate", "AUDIT BAND pooled 0-15 deg at x1.11") {
+        KnownFailures.expect("M1: the pooled tropical band is over its bar on H1's ground under the coupled climate", "AUDIT BAND pooled 0-15 deg at x0.74") {
             if (tropical.isNotEmpty()) {
                 throw RecordedViolation(
                     "desert sits in the wrong latitudes against Earth's Koeppen BW shares: $tropical",

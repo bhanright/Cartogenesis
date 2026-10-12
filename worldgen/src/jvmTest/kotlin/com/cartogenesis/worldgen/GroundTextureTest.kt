@@ -142,7 +142,7 @@ class GroundTextureTest : BorrowsSharedWorlds() {
         // to 4.1% of their land; armed at A1-6a, under whose circulation they drain again
         // (docs/DESIGN_LEDGER.md, M1 and A1-6a). Recorded again at A1-6b, whose seasonal
         // circulation's rain left seed 42 lakes over 4.4% of its land (docs/TODO.md).
-        KnownFailures.expect("A1-6b: the ground holds more lakes than Earth's under the seasonal circulation", "unrecorded") {
+        KnownFailures.expect("A1-6b: the ground holds more lakes than Earth's under the seasonal circulation", "0.0214") {
             if (pooledLakes > earthLakeShare * LAKE_SHARE_ALLOWANCE) {
                 throw RecordedViolation(
                     "lakes cover ${"%.4f".format(pooledLakes)} of the land, more than half again Earth's" +
@@ -156,7 +156,7 @@ class GroundTextureTest : BorrowsSharedWorlds() {
         // Earth-sized planet's 512 rows are 39 km cells, which hold fewer channel cells to a
         // square kilometer (docs/DESIGN_LEDGER.md, K2). Re-recorded at A1-6a, 0.0048 to 0.0050.
         KnownFailures.expect(
-            "K2: the drainage density at 512 rows is read on cells of 39 km, against a figure taken on 23 km cells", "0.0050"
+            "K2: the drainage density at 512 rows is read on cells of 39 km, against a figure taken on 23 km cells", "0.0047"
         ) {
             if (pooledDensity !in (MAIN_DRAINAGE_DENSITY_KM_PER_KM2 / DRAINAGE_DENSITY_ALLOWANCE)..
                     (MAIN_DRAINAGE_DENSITY_KM_PER_KM2 * DRAINAGE_DENSITY_ALLOWANCE)

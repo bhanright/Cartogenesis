@@ -198,7 +198,7 @@ class OceanUpwellingTest {
         // the equator itself, where the cross-equatorial air arrives calm, and its two halves'
         // meridional legs cross the equator each way rather than turning through zero there, so the
         // equator's rows rise at a fraction of the uniform easterly's figure (docs/TODO.md).
-        KnownFailures.expect("A1-6b: the equator's rows rise short of the trades' damped Ekman divergence", "unrecorded") {
+        KnownFailures.expect("A1-6b: the equator's rows rise short of the trades' damped Ekman divergence", "0.094 0.28; -0.094 0.28") {
             if (short.isNotEmpty()) throw RecordedViolation("rows short of the damped Ekman divergence (latitude, measured over expected): $short", short.joinToString("; "))
         }
     }

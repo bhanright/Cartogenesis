@@ -275,7 +275,7 @@ class BoundaryLayerTest : BorrowsSharedWorlds() {
         // surface wind's speed, which each cell's drag follows, moves further from its row's, which
         // the model's lowest level reads, and seed 99's January subtropics fall to r = 0.47
         // (docs/DESIGN_LEDGER.md, A1-6b).
-        KnownFailures.expect("A1-6b: the model's and the diagnosed layer's convergence part in the subtropics", "unrecorded") {
+        KnownFailures.expect("A1-6b: the model's and the diagnosed layer's convergence part in the subtropics", "seed 99 January 5-35") {
             if (failures.isNotEmpty()) throw RecordedViolation("readings of the model's and the diagnosed layer's convergence disagree: $failures", failures.joinToString("; "))
         }
     }

@@ -102,7 +102,7 @@ class ContinentalShelfTest : BorrowsSharedWorlds() {
         // Recorded at A1-6b: the seasonal circulation's rain moved the ground the erosion and the
         // ice cut, and seeds 7 and 42 held 89.2% and 87.6% (docs/TODO.md).
         KnownFailures.expect(
-            "A1-6b: the shelf's band stands deeper than its break on the seasonal circulation's ground", "unrecorded"
+            "A1-6b: the shelf's band stands deeper than its break on the seasonal circulation's ground", "seed 7 89.3%, seed 42 87.7%"
         ) {
             if (short.isNotEmpty()) {
                 val shares = short.joinToString { (seed, near) -> String.format(Locale.ROOT, "seed %d %.1f%%", seed, near * 100) }
@@ -156,7 +156,7 @@ class ContinentalShelfTest : BorrowsSharedWorlds() {
         // came under the coupled climate, whose shelves clear it (docs/DESIGN_LEDGER.md, M1).
         // Recorded again at A1-6b, whose seasonal circulation's rain moved the ground (docs/TODO.md).
         KnownFailures.expect(
-            "A1-6b: the shelf's plateau falls short of its width on the seasonal circulation's ground", "unrecorded"
+            "A1-6b: the shelf's plateau falls short of its width on the seasonal circulation's ground", "seed 7: the shelf's plateau holds 87% of its band off north- and south-facing coasts and 87% off east- and west-facing ones; seed 42: the shelf's plateau holds 87% of its band off north- and south-facing coasts and 85% off east- and west-facing ones; seed 1234: the shelf's plateau holds 89% of its band off north- and south-facing coasts and 90% off east- and west-facing ones"
         ) {
             if (failures.isNotEmpty()) {
                 throw RecordedViolation(failures.joinToString(System.lineSeparator()), failures.joinToString("; "))

@@ -59,12 +59,22 @@
   lake (`LakeWaterBalanceTest`). The shelf: 89.3% and 87.7% of the water within a shelf's width of
   seeds 7's and 42's coasts stands no deeper than the break, against 90% (`ContinentalShelfTest`).
   The ice: 25.23% of the land's cells pooled against twice Earth's 10.1% (`SnowBalanceTest`; by
-  area 7.2 to 12.2% of the land at 512 rows), the sheets thicker (`IceSheetTest`'s thickness record,
-  6,758 to 8,739 against 5,689 and 5,702), the level slabs larger (`GlacialBasinShapeTest`, 28 to
+  area 7.2 to 12.2% of the land at 512 rows), the sheets thicker (`IceSheetTest`: four over Earth's
+  deepest sounding where two were, 6,758 to 8,739 m against 5,689 and 5,702), the level slabs larger (`GlacialBasinShapeTest`, 28 to
   60 cells against 27) and the troughs' lattice deeper (`GlaciationLatticeTest`, 43.7 to 51.6%
   against 30.2 to 41.9); the largest drowned interiors stand at 3.65 times the Caspian's share
   (A1-6a's 3.24; `OutletIncisionTest`). The desert's longest edge along a row pools at 396 km against main's 311,
   969495's at 630 km (`RainGeometryTest`). All recorded. 2026-10-11, A1-6b.
+- **The drawing's and the applications' figures on the seasonal circulation's ground (A1-6b).**
+  Recorded, each a figure of the ground the new rain eroded: Scroll's steppe stands 15% of the way
+  from its desert to its forest on the gallery's world, outside 25 to 75% (`ClimateTintTest`); the
+  gallery's tenth percentile of land slope is 0.048 against the engraving's 0.06 floor
+  (`ReliefShadingTest`); 954 of seed 7's 1,949 drawn coast vertices stand where the ground and the
+  mask agree, a hair under half (`CoastLineTest`); seed 42's widest drawn river at 512 is 2.44 px,
+  more than a hundredth under the full pen, so the pen reads as not doubling with the sheet
+  (`RiverWidthTest`); the largest lake pooled over six grids is 1.98 times the Caspian's share,
+  seed 59758's at 1,024 rows 7.24 (`OutletResolutionTest`); and 20 open-sea cells come back above
+  the stated sea level, against 12 (`DataExportTest`). 2026-10-12, A1-6b.
 - **Controls the circulation took a lever from (A1-6b).** `GridShapeTest`'s doubled slant moves
   neither the deserts nor the rain past the spread, since `meridionalWindShare` now sets only the
   Ferrel and polar legs and the Hadley cells' meridional wind is their own continuity's.

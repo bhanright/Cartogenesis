@@ -31,8 +31,8 @@ import kotlin.test.assertTrue
  *   adds, the dry atmosphere over the anomaly less the one over a sea at its latitudes'
  *   temperatures, is printed beside it, since the shallow heating reads the anomaly from A1-6c on.
  * - **One ITCZ, north of the equator.** The GPCP version 2 climatology's ocean zonal means (Curtis
- *   and Adler's analysis of its twenty years, AMS, read) "peak at 8 mm/day at 7 N, with a secondary
- *   peak in the S.H. of 4 mm/day at 8 S". The year's wettest two-degree band of open ocean north of
+ *   and Adler's analysis of its twenty years, AMS, read) peak at 8 mm a day at 7 N, with a second,
+ *   southern peak of 4 mm a day at 8 S. The year's wettest two-degree band of open ocean north of
  *   the equator rains at least [NORTH_OVER_SOUTH_PEAK] times the wettest south of it, within 15
  *   degrees, the share GPCP's two peaks stand at.
  * - **The ocean's rounds with the air settle** before [OceanStage.MAX_AIR_SEA_ROUNDS], each round's

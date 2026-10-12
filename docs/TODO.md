@@ -75,6 +75,30 @@
   (175 against 0.245 mm-cells) and one of 35 cells 163.69 times, in dry country, far past the float's
   last places at the map's largest runoff: the basins' own accounting, as A1-1's 59-cell basin was.
   Recorded, not traced. 2026-10-12, A1-6c.
+- **The closed air-sea loop costs a world 13% (A1-6c).** `BoundaryLayerCostTest` on seed 7 at 1,024
+  rows, measured back to back on one machine: 73.6 s a world against A1-6b's head's 64.9 s (82.9
+  against 72.1 in the test's second world), over the 69 s A1-6b's ledger gives. The climate runs
+  take 34.1 s against 30.3: 43 laps against 40, the march's lap 400 to 405 ms against 373 to 384.
+  The rest, 4.9 s, is the ocean's rounds, four on that world, each solving the dry atmosphere over
+  the anomaly and the sea again from where the last round left it; a round's sea solve already has
+  the graphics path (`OceanStage.deviceRound`), the atmosphere's per-cell share is 0.31% of a world.
+  Not cut. 2026-10-12, A1-6c.
+- **The 512 census after A1-6c (rule 13).** `GeometryGuardTest` records ten known entries and
+  seventeen instances on the four standard worlds against A1-6b's four and thirteen: new are a right
+  angle at (327,255) in seed 7, one cell read alike by its ice-sheet ground, its ice carving and its
+  peoples' borders; a crease in seed 7's lakes at (945,4); isohyets straight along seed 42's first
+  row; arcs on the ice surface of seed 99 at (251,50); and seed 1234's isohyets along its polar rows
+  one instance more. Seed 7's ice-surface arcs fell from four to one. The polar isohyets are the
+  ground's relief round a pole (the first entry); the right angle and the crease are not traced.
+  2026-10-12, A1-6c.
+- **Openings in seed 7's perennial pack near 85 N (A1-6c).** The biome render of seed 7 at 1,024
+  rows shows three patches of open sea inside the northern pack at 84 to 86 N, the largest about
+  200 km across and 300 km down on the ground, where A1-6b's pack was closed; seeds 42 and 969495
+  show none. The pack is the sea surface frozen through its own warmest half-year
+  (`ClimateStage.seaIceMask`), and the summer mixed layer is now Kraus and Turner's thin one, so the
+  summer half's water near the pole stands nearer the freezing point and the currents' anomaly can
+  lift a patch over it. Not traced; Earth's Arctic pack at that latitude is perennial. 2026-10-12,
+  A1-6c.
 - **What the closed air-sea loop moved in the deep tier (A1-6c).** Recorded, each a consequence of
   the sea evaporating nearer Earth's and of the atmosphere reading the sea's anomaly, none traced
   further. The shipped march's wettest two degrees of open ocean within 20 degrees stand at 3,345 mm

@@ -87,11 +87,11 @@ class EarthLikenessTest : BorrowsSharedWorlds() {
                 "42: humid country carries 1.18 times the channel per unit of land that semi-arid " +
                 "country does, where Moglen, " +
                 "Eltahir & Bras (1998) have the density falling away on the wet side and so below one; " +
-                "pooled: humid country carries 1.00 times the channel per unit of land that semi-arid " +
+                "pooled: humid country carries 1.01 times the channel per unit of land that semi-arid " +
                 "country does, where Moglen, " +
                 "Eltahir & Bras (1998) have the density falling away on the wet side and so below one; " +
-                "pooled: the lake-size exponent is 0.853 over 651 of them, " +
-                "outside 1.06 +/- 0.12 (Downing et al. 2006, three sampling errors); " +
+                "pooled: the lake-size exponent is 0.846 over 640 of them, " +
+                "outside 1.06 +/- 0.13 (Downing et al. 2006, three sampling errors); " +
                 "pooled: the coastline's box-counting dimension is 0.894, " +
                 "outside 1.25 +/- 0.15 (Mandelbrot 1967: Britain 1.25, Richardson's smoothest coast 1.02)"
         ) {

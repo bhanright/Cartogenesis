@@ -28,7 +28,7 @@
 - **The rain still ends along a row at the polar front (A1-6b, rule 13).** The front now moves with
   each half's jet (seed 42's at 62.4 N and 56.4 S in July) and the march carries water across the
   wind's reversal, and the longest straight front at 55 to 70 degrees fell from A1-6a's 1,123 km at
-  57.6 S, 1,402 at 62.8 N and 981 at 61.8 N to 895 km at 63.9 S, 694 at 67.1 N and 680 at 63.5 N,
+  57.6 S, 1,402 at 62.8 N and 981 at 61.8 N to 904 km at 63.9 S, 694 at 67.1 N and 680 at 63.5 N,
   still over the 600 km bar (`RainGeometryTest`, recorded). Not traced further. 2026-10-11, A1-6b.
 - **Rain piles onto the polar rows (A1-6b, rule 13).** On seed 969495 at 1,024 rows the zonal-mean
   rain rises from 113 mm at 83 S to 1,007 mm on the last row, a straight wet band along the map's
@@ -50,7 +50,7 @@
   one-layer clause reads seed 99's January half at 5 to 35 degrees outside its bar under the seasonal
   circulation; recorded, not traced. 2026-10-11, A1-6b.
 - **The ground under the seasonal circulation's rain (A1-6b).** The erosion's climate moved the
-  ground. Lakes: 2.14% of the land pooled against Earth's 1.11% at this cell area (seed 42 4.37%, a
+  ground. Lakes: 2.55% of the land pooled against Earth's 1.11% at this cell area (seed 42 4.41%, a
   lake field over its southern continent at 55 to 65 S; `GroundTextureTest`), lakes of 3.31, 3.66
   and 1.65 times the Caspian's share on 718106, 7 and 1234 that the notch does not halve
   (`OutletIncisionTest`), and seed 1's dry sample down to 493 cells, keeping water and no endorheic
@@ -59,14 +59,15 @@
   The ice: 25.23% of the land's cells pooled against twice Earth's 10.1% (`SnowBalanceTest`; by
   area 7.2 to 12.2% of the land at 512 rows), the sheets thicker (`IceSheetTest`'s thickness record,
   6,758 to 8,739 against 5,689 and 5,702), the level slabs larger (`GlacialBasinShapeTest`, 28 to
-  60 cells against 27) and the troughs' lattice deeper (`GlaciationLatticeTest`, 43.7 to 51.9%
-  against 30.2 to 41.9). The desert's longest edge along a row pools at 411 km against main's 311,
+  60 cells against 27) and the troughs' lattice deeper (`GlaciationLatticeTest`, 43.7 to 51.6%
+  against 30.2 to 41.9); the largest drowned interiors stand at 3.65 times the Caspian's share
+  (A1-6a's 3.24; `OutletIncisionTest`). The desert's longest edge along a row pools at 396 km against main's 311,
   969495's at 630 km (`RainGeometryTest`). All recorded. 2026-10-11, A1-6b.
 - **Controls the circulation took a lever from (A1-6b).** `GridShapeTest`'s doubled slant moves
   neither the deserts nor the rain past the spread, since `meridionalWindShare` now sets only the
   Ferrel and polar legs and the Hadley cells' meridional wind is their own continuity's.
   `SeaIceTest`'s frozen cells take 1.93 and 1.88 times their rain with the ice off on seeds 7 and
-  1234, under the two asked. `PlanetWidthRainTest`'s wettest land on the 24,000 km planet is 1.63
+  1234, under the two asked. `PlanetWidthRainTest`'s wettest land on the 24,000 km planet is 1.62
   times the 12,000 km planet's, over the seeds' 1.42: the cells' extent goes with the thermal Rossby
   number, the inverse square of the radius, so the bar's premise that a planet's size moves the rain
   no more than the seeds differ no longer holds. `CurrentFeedsRainTest`'s cold coast is back but two

@@ -250,7 +250,7 @@ class MoistureBudgetTest : BorrowsSharedWorlds() {
         // the ascent already condensing that convergence (docs/TODO.md).
         KnownFailures.expect(
             "A1-6c: the shipped march's wettest ocean band stands past GPCP's and the closure nearer",
-            "2983 mm against 3345"
+            "1930 mm against 1775"
         ) {
             if (abs(ln(shipped / GPCP_OCEAN_PEAK_MM)) > abs(ln(withClosure / GPCP_OCEAN_PEAK_MM))) {
                 throw RecordedViolation(

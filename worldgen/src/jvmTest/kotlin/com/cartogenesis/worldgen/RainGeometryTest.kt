@@ -113,16 +113,13 @@ class RainGeometryTest : BorrowsSharedWorlds() {
         // pooled longer than the tree before the climate's chunks drew them (docs/DESIGN_LEDGER.md,
         // M1). Armed at A1-6a, whose circulation's deserts end along a row at 255 to 303 km.
         // Recorded at A1-6b: seed 969495's desert ends along a row for 630 km, the other two seeds'
-        // at 254 and 304 (docs/TODO.md).
-        KnownFailures.expect("A1-6b: the deserts' edges along a row pool longer than main's", "347 km") {
-            if (desertEdge.average() > MAIN_DESERT_ROW_EDGE_KM.average()) {
-                throw RecordedViolation(
-                    "the desert's straightest edge along a row: %.2f pooled against main's %.2f"
-                        .format(desertEdge.average(), MAIN_DESERT_ROW_EDGE_KM.average()),
-                    "%.0f km".format(desertEdge.average())
-                )
-            }
-        }
+        // at 254 and 304 (docs/TODO.md). Armed at F1, whose circulation by longitude bends the
+        // deserts' edges (docs/DESIGN_LEDGER.md, F1).
+        assertTrue(
+            desertEdge.average() <= MAIN_DESERT_ROW_EDGE_KM.average(),
+            "the desert's straightest edge along a row: %.2f pooled against main's %.2f"
+                .format(desertEdge.average(), MAIN_DESERT_ROW_EDGE_KM.average())
+        )
         // Recorded at A1-2: with the pressure smoothed on the sphere, seed 969495's 250 mm isohyet
         // runs 734 km along 42.6 N across a continent's interior, where the rain falls from 1,274 to
         // 37 mm over twelve rows at every one of its columns; the other two seeds' edges shortened
@@ -170,7 +167,7 @@ class RainGeometryTest : BorrowsSharedWorlds() {
             )
             if (found.alongRowKm > bar) over += "%d %.0f km at %.0f".format(seed, found.alongRowKm, found.rowLatitude)
         }
-        KnownFailures.expect("C1b2: fronts along the belts' factor", "42 2116 km at 13; 969495 2133 km at 13; 7 3348 km at 15") {
+        KnownFailures.expect("C1b2: fronts along the belts' factor", "42 1137 km at -27; 969495 1250 km at -15; 7 1109 km at 6") {
             if (over.isNotEmpty()) {
                 throw RecordedViolation(
                     "fronts hold a row for longer than a quarter of the weather's wavelength: " + over.joinToString("; "),
@@ -207,7 +204,7 @@ class RainGeometryTest : BorrowsSharedWorlds() {
         // Recorded at A1-6b: the front moves with the seasons and the march carries water across the
         // wind's reversal, yet the year's rain still steps along a row near 64 degrees on every seed
         // (docs/TODO.md).
-        KnownFailures.expect("A1-6b: the rain still ends along a row at the polar front", "42 853 km at -65.0; 969495 1184 km at 64.8") {
+        KnownFailures.expect("A1-6b: the rain still ends along a row at the polar front", "42 686 km at -65.7; 969495 754 km at -60.4") {
             if (over.isNotEmpty()) {
                 throw RecordedViolation(
                     "fronts hold a row at the polar front for longer than a quarter of the weather's wavelength: " +

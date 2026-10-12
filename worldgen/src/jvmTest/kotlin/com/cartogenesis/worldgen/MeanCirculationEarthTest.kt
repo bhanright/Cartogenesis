@@ -185,7 +185,7 @@ class MeanCirculationEarthTest : BorrowsSharedWorlds() {
                 if (highs.none { (it.latitudeDegrees > 0.0) == julyHalf }) missing += "seed $seed $name ${if (julyHalf) "north" else "south"}"
             }
         }
-        KnownFailures.expect("A1-6b: a summer hemisphere's sea holds no closed high", "seed 969495 July north; seed 969495 January south; seed 7 July north") {
+        KnownFailures.expect("A1-6b: a summer hemisphere's sea holds no closed high", "seed 969495 July north; seed 969495 January south") {
             if (missing.isNotEmpty()) throw RecordedViolation("no closed high over a summer hemisphere's sea: $missing", missing.joinToString("; "))
         }
     }
@@ -231,7 +231,7 @@ class MeanCirculationEarthTest : BorrowsSharedWorlds() {
         // Recorded at A1-6c: under the closed air-sea loop seed 42's southern jet moves from 40.7
         // to 50.7 degrees between its winter and its summer, just past the ten degrees allowed; the
         // other five shifts are 4.8 to 8.8 (docs/TODO.md).
-        KnownFailures.expect("A1-6c: a southern jet moves a row more than ten degrees between its seasons", "seed 42 south summer minus winter 10.0") {
+        KnownFailures.expect("A1-6c: a southern jet moves a row more than ten degrees between its seasons", "seed 42 south summer minus winter 10.2") {
             if (moved.isNotEmpty()) throw RecordedViolation("the jet does not move poleward in summer: $moved", moved.joinToString("; "))
         }
     }
@@ -248,7 +248,7 @@ class MeanCirculationEarthTest : BorrowsSharedWorlds() {
             if (july < ITCZ_JULY_SOUTHERNMOST || july > ITCZ_JULY_NORTHERNMOST) complaints += "seed $seed July %.1f".format(july)
             if (january < ITCZ_JANUARY_SOUTHERNMOST || january > ITCZ_JANUARY_NORTHERNMOST) complaints += "seed $seed January %.1f".format(january)
         }
-        KnownFailures.expect("A1-6b: the ITCZ stands outside Earth's positions in a half", "seed 42 January -9.2; seed 969495 January -11.0; seed 7 January -11.3") {
+        KnownFailures.expect("A1-6b: the ITCZ stands outside Earth's positions in a half", "seed 7 July -1.0; seed 7 January -9.4") {
             if (complaints.isNotEmpty()) throw RecordedViolation("the ITCZ outside Earth's positions: $complaints", complaints.joinToString("; "))
         }
     }
@@ -344,7 +344,7 @@ class MeanCirculationEarthTest : BorrowsSharedWorlds() {
         // heating stands 2.1 and 2.6 degrees north on seeds 42 and 7, too near the equator for the
         // cells to part by Earth's three times (2.0 and 1.6); every January half clears it
         // (docs/DESIGN_LEDGER.md, A1-6a).
-        KnownFailures.expect("A1-6a: the winter Hadley cell does not carry three times the summer cell's mass", "6 of 6") {
+        KnownFailures.expect("A1-6a: the winter Hadley cell does not carry three times the summer cell's mass", "5 of 6") {
             if (complaints.isNotEmpty()) throw RecordedViolation("the cells' asymmetry: $complaints", "${complaints.size} of 6")
         }
     }

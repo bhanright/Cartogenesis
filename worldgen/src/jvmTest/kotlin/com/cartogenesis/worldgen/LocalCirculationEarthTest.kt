@@ -166,7 +166,7 @@ class LocalCirculationEarthTest : BorrowsSharedWorlds() {
         // but the half's rain before the blur is the ground's climb cell by cell, and the
         // continent's rows change by x1.05 to x1.09 in their median over this span, Earth's whole
         // gradient across a row, and by x1.2 to x1.5 at their largest (docs/TODO.md).
-        KnownFailures.expect("F1: the half's rain before the blur steps along a row by its own grain", "") {
+        KnownFailures.expect("F1: the half's rain before the blur steps along a row by its own grain", "42 July x1.24 at 5.4; 42 January x1.44 at -24.7; 969495 July x1.50 at 9.8; 969495 January x1.67 at -8.9; 7 July x1.34 at 1.8; 7 January x1.22 at -5.9") {
             if (over.isNotEmpty()) {
                 throw RecordedViolation(
                     "the equatorial continent's rain steps along a row by more than Earth's steepest gradient allows: " + over.joinToString("; "),

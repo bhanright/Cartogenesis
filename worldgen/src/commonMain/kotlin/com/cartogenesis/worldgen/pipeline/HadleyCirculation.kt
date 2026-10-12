@@ -92,6 +92,9 @@ import kotlin.math.tan
  * a trough under the rising branch, ridges where the trades meet the westerlies at the cells' edges,
  * and the subpolar trough at the polar front.
  *
+ * **At each longitude** the cells rise at the longitude's own energy flux equator, carried from
+ * these ([LocalCirculation]); this is the zonal circulation they are carried from.
+ *
  * **Not counting the energy balance's transport twice.** The energy balance carries the zonal-mean
  * heat poleward by its diffusion and its temperatures are after that transport. The circulation
  * reads from them only where the transport parts and where the gradient it leaves turns the

@@ -821,7 +821,7 @@ object ClimateStage {
 
         // Each half's zonal-mean circulation: the Hadley cells heated about the season's energy flux
         // equator, and the eddy-driven belts poleward of them (HadleyCirculation). Its wind on each
-        // row is the zonal mean the march's wind and the boundary layer's pressure stand on.
+        // row is the belts' control's, and the circulation at each longitude is carried from it.
         val julyCirculation = HadleyCirculation.forHalf(config, zonal, Season.JULY_HALF)
         val januaryCirculation = HadleyCirculation.forHalf(config, zonal, Season.JANUARY_HALF)
         val julyHalfRows = HadleyCirculation.windOfRows(julyCirculation, cellsDown)

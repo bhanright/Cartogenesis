@@ -310,9 +310,10 @@ internal class LocalCirculation private constructor(
             val rossbyRadiusDegrees = rossbyRadiusMeters / radiusMeters / DEGREES
             // Both columns over the one span, from their warmest latitudes a Rossby radius outward
             // each way: fitted over the same latitudes, the two domes' blend is the band's own, and at
-            // the world's land share the blend's energy flux equator stands within a degree of the
-            // zonal circulation's heating, the band mean's warmest latitude, on the standard worlds
-            // (docs/DESIGN_LEDGER.md, F1).
+            // the world's land share the blend's energy flux equator stands near the zonal
+            // circulation's heating, the band mean's warmest latitude (docs/DESIGN_LEDGER.md, F1, for
+            // the figures on the standard worlds). The columns' shifts are taken from that blend, so
+            // a sector of the world's own land share is the zonal circulation.
             val landBands = zonal.land.at(season)
             val seaBands = zonal.sea.at(season)
             val landWarmest = warmestLatitudeDegrees(landBands)

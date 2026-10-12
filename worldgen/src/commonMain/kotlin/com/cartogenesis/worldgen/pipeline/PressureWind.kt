@@ -13,8 +13,8 @@ import kotlin.math.sqrt
  * The surface wind that blows down the sea-level pressure's gradient, and the figures the balance
  * is built from.
  *
- * The pressure is the boundary layer's ([BoundaryLayer]): a zonal mean from the circulation belts
- * and the stationary waves the dry atmosphere solves for the land and sea and the terrain under it.
+ * The pressure is the boundary layer's ([BoundaryLayer]): the circulation's at each longitude
+ * ([LocalCirculation]) and the stationary waves the dry atmosphere solves for the land and sea and the terrain under it.
  * [surfaceWind] balances its gradient against the Coriolis force and a linear surface drag on the
  * map's own grid, cell by cell, with land's drag and the sea's, so the wind changes at the real
  * coast and not at a coarse cell's edge.

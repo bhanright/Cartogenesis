@@ -62,7 +62,7 @@ class OceanCurrentTest : BorrowsSharedWorlds() {
         // three seeds the band's mean with it (docs/TODO.md).
         val trades = failures.filter { "the trades' band flows east" in it }
         assertTrue((failures - trades.toSet()).isEmpty(), (failures - trades.toSet()).joinToString("\n"))
-        KnownFailures.expect("A1-6b: under the circulation alone the trades' band flows east", "seed 7 at 256 rows: under the belts alone the trades' band flows east in the north (+0.0113 m/s); seed 7 at 256 rows: under the belts alone the trades' band flows east in the south (+0.0012 m/s); seed 1234 at 256 rows: under the belts alone the trades' band flows east in the north (+0.0031 m/s); seed 1234 at 256 rows: under the belts alone the trades' band flows east in the south (+0.0058 m/s); seed 99 at 256 rows: under the belts alone the trades' band flows east in the north (+0.0087 m/s)") {
+        KnownFailures.expect("A1-6b: under the circulation alone the trades' band flows east", "seed 7 at 256 rows: under the belts alone the trades' band flows east in the north (+0.0110 m/s); seed 7 at 256 rows: under the belts alone the trades' band flows east in the south (+0.0011 m/s); seed 1234 at 256 rows: under the belts alone the trades' band flows east in the north (+0.0031 m/s); seed 1234 at 256 rows: under the belts alone the trades' band flows east in the south (+0.0062 m/s); seed 99 at 256 rows: under the belts alone the trades' band flows east in the north (+0.0089 m/s)") {
             if (trades.isNotEmpty()) throw RecordedViolation(trades.joinToString("\n"), trades.joinToString("; "))
         }
     }

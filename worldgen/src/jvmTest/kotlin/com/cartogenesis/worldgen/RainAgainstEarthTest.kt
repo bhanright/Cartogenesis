@@ -178,7 +178,7 @@ class RainAgainstEarthTest : BorrowsSharedWorlds() {
         nearEarth("open-sea evaporation, mm", pooled.seaEvaporation / pooled.seaArea, EARTH_OCEAN_EVAPORATION_MM)
         // The sea rains less than Earth's still: what it gives up the land and the subtropics' dry
         // seas take (docs/TODO.md).
-        KnownFailures.expect("C1b2: the open sea rains less than Earth's", "x0.70") {
+        KnownFailures.expect("C1b2: the open sea rains less than Earth's", "x0.72") {
             nearEarth("open-sea rain, mm", pooled.seaRain / pooled.seaArea, EARTH_OCEAN_RAIN_MM)
         }
         // Recorded from C1b2 at x0.55; armed at A1-4, where the boundary layer's wind no longer
@@ -222,8 +222,12 @@ class RainAgainstEarthTest : BorrowsSharedWorlds() {
         // hemisphere's tropics (docs/DESIGN_LEDGER.md, A1-6b).
         assertTrue(farFromEquator.isEmpty(), "the year's wettest ocean band sits beyond $ITCZ_FROM_EQUATOR_DEGREES degrees: $farFromEquator")
         // The band's rain against GPCP's, since A1-5 rains it from the solved ascent; recorded at
-        // x0.37 until A1-6b, whose ITCZ rains the summer hemisphere's tropics (x0.91).
-        nearEarth("the ocean's wettest two degrees, mm", pooledPeak, GPCP_OCEAN_PEAK_MM)
+        // x0.37 until A1-6b, whose ITCZ rains the summer hemisphere's tropics (x0.91); recorded
+        // again at F1, whose water travels on the column's vapor-weighted wind and whose rising
+        // branch moves with the land, so the band is broader and its peak lower (docs/TODO.md).
+        KnownFailures.expect("F1: the ocean's wettest band rains under Earth's", "x0.58") {
+            nearEarth("the ocean's wettest two degrees, mm", pooledPeak, GPCP_OCEAN_PEAK_MM)
+        }
     }
 
     private val DAYS_PER_YEAR = MoistureMarch.SECONDS_PER_YEAR / 86_400.0

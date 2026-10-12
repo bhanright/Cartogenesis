@@ -35,12 +35,18 @@ import kotlin.math.sqrt
  * the ground ([WaveForcing.fromGround]).
  *
  * **The sea-level pressure** is the waves' own ([WaveResponse.surfacePressurePa]), carried up to the
- * map by its double Fourier series ([AtmosphereRemap.outputToGround]), on top of a zonal mean that is the
- * belts' own under the boundary layer's drag balance ([zonalPressurePa]). The belts stay the zonal
- * mean of the surface wind: the zonal mean the waves leave alone.
+ * map by its double Fourier series ([AtmosphereRemap.outputToGround]), on top of the circulation's,
+ * the Hadley cells and the belts at each longitude under the boundary layer's drag balance
+ * ([Belts], [LocalCirculation]). The waves are the departures from the circulation, and the
+ * circulation is what they leave alone.
  *
  * **The surface wind** is that pressure's drag balance on the map's own grid with land's drag and
- * the sea's ([PressureWind.surfaceWind]), so over the open sea its zonal mean is the belts exactly.
+ * the sea's ([PressureWind.surfaceWind]), so over the open sea under no eddy pressure it is the
+ * circulation's exactly.
+ *
+ * **The water's wind** is the column's, weighted by where its vapor is ([columnWindMps]): the
+ * boundary layer holds under half of it, and the air above moves on the circulation's zonal wind
+ * and the waves' own.
  *
  * **The vertical motion at the layer's top** ([boundaryLayerOmega]) is the surface wind's own mass
  * convergence over the model's lowest layer plus the terrain's lift under it: one boundary layer

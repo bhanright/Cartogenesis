@@ -58,8 +58,10 @@
   parallel on the processor), and each lap carries the column's wind's two eddy fields up to the map
   through the remap's double Fourier series, 48 ms a lap for both halves at 1,024 rows; the carrying
   rides the remap's seam (`AtmosphereAccelerator.toGround`), unwired for the reason the A1-2 row
-  gives. `BoundaryLayerCostTest`'s per-cell share of a world now counts the column's wind, 7% where
-  the clause allows 1% (re-recorded from 6%). The device path for the loop's per-cell work, the
+  gives. `BoundaryLayerCostTest`'s per-cell share of a world now counts the column's wind: 7% and 9%
+  on two runs where the clause allows 1%, re-recorded at 9% from 6%; c113b8e2's own tree read 9% on
+  the same machine that day against its recorded 6%, so the signature reads the machine's speed as
+  much as the work. The device path for the loop's per-cell work, the
   belts with it, waits on the fields kept on the card between laps. 2026-10-12, F1.
 - **The clauses F1's ground broke (F1).** Recorded as known failures, each untraced: seed 7's and
   seed 42's continental shelves hold 89.4 and 89.2% of the near-coast water above the break against

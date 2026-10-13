@@ -86,6 +86,7 @@ object RasterView {
  * | view      | scalarA            | scalarB | indexA  | indexB         | biome |
  * |-----------|--------------------|---------|---------|----------------|-------|
  * | fantasy   | ground dryness     | ground coldness | - | -            | yes   |
+ * | satellite | -                  | -       | surface | surface climate | yes  |
  * | political | -                  | -       | realm   | -              | -     |
  * | peoples   | -                  | -       | people  | -              | -     |
  * | elevation | -                  | -       | -       | -              | -     |
@@ -308,7 +309,21 @@ class RasterRecipe(
      */
     val skyDiffuseShare: Float = ReliefShading.DAYLIGHT.diffuseShare,
     val skyBrightness: FloatArray = ReliefShading.DAYLIGHT.brightness,
-    val skyBrightnessTotal: Float = ReliefShading.DAYLIGHT.brightnessTotal
+    val skyBrightnessTotal: Float = ReliefShading.DAYLIGHT.brightnessTotal,
+    /**
+     * Whether the fantasy view's land is painted from its surface ([MapStyle.satellite]).
+     *
+     * When it is, [indexA] carries [SatelliteSurface.composition], [indexB]
+     * [SatelliteSurface.climate], [vegetation] the living cover and [colorsA]
+     * [SatelliteGround.PALETTE], and the four figures below are the ones
+     * [SatelliteGround.groundColor] unpacks the bytes with: handed over rather than written into
+     * the shader a second time, for the reason [ordinaryGround] is.
+     */
+    val satellite: Boolean = false,
+    val satelliteStreakContrast: Float = SatelliteGround.STREAK_CONTRAST,
+    val satelliteUnitPerByte: Float = SatelliteGround.UNIT_PER_BYTE,
+    val satelliteUnitPerStreakByte: Float = SatelliteGround.UNIT_PER_STREAK_BYTE,
+    val satelliteStreakZeroByte: Int = SatelliteGround.STREAK_ZERO_BYTE
 ) {
 
     init {
@@ -395,8 +410,16 @@ class RasterRecipe(
                     biomes = biomeOrdinals(world)
                     // The climate's two per-cell numbers, computed here rather than on the device
                     // for the reason the colour tables are: an aridity index solved twice would be
-                    // two slightly different deserts.
-                    if (style.climateTint > 0f) {
+                    // two slightly different deserts. The satellite surface is the same rule
+                    // carried further: its wind traces and its drought are bytes before either
+                    // path reads them.
+                    if (style.satellite) {
+                        val surface = SatelliteGround.of(world)
+                        indexA = surface.composition
+                        indexB = surface.climate
+                        vegetation = surface.cover
+                        colorsA = SatelliteGround.PALETTE
+                    } else if (style.climateTint > 0f) {
                         scalarA = ClimateTint.drynessField(world)
                         scalarB = ClimateTint.coldnessField(world)
                         vegetation = ClimateTint.canopyField(world)
@@ -574,7 +597,8 @@ class RasterRecipe(
                 ordinaryGround = ReliefShading.ordinaryGround,
                 showLakes = showLakes,
                 showCoastline = options.showCoastline,
-                showBorders = borders
+                showBorders = borders,
+                satellite = view == MapView.FANTASY && style.satellite
             )
         }
 

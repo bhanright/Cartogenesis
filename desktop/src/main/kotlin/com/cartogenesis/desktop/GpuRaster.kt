@@ -254,6 +254,11 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
         GL43C.glUniform1f(uniform("uInkGain"), recipe.inkGain)
         GL43C.glUniform1i(uniform("uRealmSet"), recipe.realmSetSize)
         GL43C.glUniform1f(uniform("uHatchStrength"), recipe.hatchStrength)
+        GL43C.glUniform1i(uniform("uSatellite"), recipe.satellite.toGl())
+        GL43C.glUniform1f(uniform("uStreakContrast"), recipe.satelliteStreakContrast)
+        GL43C.glUniform1f(uniform("uUnitPerByte"), recipe.satelliteUnitPerByte)
+        GL43C.glUniform1f(uniform("uUnitPerStreakByte"), recipe.satelliteUnitPerStreakByte)
+        GL43C.glUniform1i(uniform("uStreakZeroByte"), recipe.satelliteStreakZeroByte)
 
         setEngravingUniforms(recipe)
 
@@ -478,6 +483,13 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
             uniform vec3 uAnomalyCold;
             uniform int uRealmSet;
             uniform float uHatchStrength;
+            // The satellite surface (SatelliteGround): whether the fantasy view's land is painted
+            // from it, and the figures its bytes are unpacked with, the processor's own.
+            uniform int uSatellite;
+            uniform float uStreakContrast;
+            uniform float uUnitPerByte;
+            uniform float uUnitPerStreakByte;
+            uniform int uStreakZeroByte;
 
             // The engraving, from the recipe's EngravingPlan. Not one of these is derived here:
             // every length is in sheet pixels, worked out once on the processor, so the two paths
@@ -966,7 +978,56 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
              * processor; the canopy was a table indexed by this pixel's biome until the world
              * started carrying a vegetation density of its own.
              */
+            uint byteOf(int packed, uint index) {
+                return (uint(packed) >> (index * 8u)) & 0xFFu;
+            }
+
+            /*
+             * SatelliteGround.groundColor, step for step: the bare ground mixed from its surfaces,
+             * the wind's streaks on the sand, the living cover over it and the snow over all, in
+             * floats in the processor's order and truncated once. The palette is ColorsA, in
+             * SatelliteGround.PALETTE's order; the surface's bytes are IndexA and IndexB, and the
+             * living cover is ScalarC.
+             */
+            vec3 satelliteGround(int i) {
+                int composition = indexA[i];
+                int climate = indexB[i];
+                precise float red = float(byteOf(composition, 0u)) * uUnitPerByte;
+                precise float rock = float(byteOf(composition, 1u)) * uUnitPerByte;
+                precise float sand = float(byteOf(composition, 2u)) * uUnitPerByte;
+                precise float salt = float(byteOf(composition, 3u)) * uUnitPerByte;
+                precise float streak =
+                    float(int(byteOf(climate, 0u)) - uStreakZeroByte) * uUnitPerStreakByte;
+                precise float riverbank = float(byteOf(climate, 1u)) * uUnitPerByte;
+                precise float snow = float(byteOf(climate, 2u)) * uUnitPerByte;
+                precise float arid = float(byteOf(climate, 3u)) * uUnitPerByte;
+                precise float streakLight = 1.0 + uStreakContrast * streak * sand;
+                float shown = max(scalarC[i], riverbank);
+
+                vec3 humidSoil = unpack(colorsA[0]);
+                vec3 aridSoil = unpack(colorsA[1]);
+                vec3 ironRed = unpack(colorsA[2]);
+                vec3 sandColour = unpack(colorsA[3]);
+                vec3 rockColour = unpack(colorsA[4]);
+                vec3 saltColour = unpack(colorsA[5]);
+                vec3 sparseGreen = unpack(colorsA[6]);
+                vec3 denseGreen = unpack(colorsA[7]);
+                vec3 snowColour = unpack(colorsA[8]);
+
+                precise vec3 soil = humidSoil + (aridSoil - humidSoil) * arid;
+                precise vec3 bare = soil + (ironRed - soil) * red;
+                bare = bare + (sandColour - bare) * sand;
+                bare = bare + (rockColour - bare) * rock;
+                bare = bare + (saltColour - bare) * salt;
+                bare = bare * streakLight;
+                precise vec3 green = sparseGreen + (denseGreen - sparseGreen) * shown;
+                precise vec3 surface = bare + (green - bare) * shown;
+                surface = surface + (snowColour - surface) * snow;
+                return clamp(floor(surface), vec3(0.0), vec3(255.0));
+            }
+
             vec3 ground(int i, float relative, int biome) {
+                if (uSatellite != 0) return satelliteGround(i);
                 if (uClimateTint <= 0.0) {
                     return tint(rampAt(RAMP_LAND, clamp(relative, 0.0, 1.0)), biome);
                 }

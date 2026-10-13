@@ -4,6 +4,35 @@ import com.cartogenesis.worldgen.pipeline.Biome
 import kotlinx.serialization.Serializable
 
 /**
+ * [MapStyle.NATURAL]'s sea, sampled off a Blue Marble photograph (its note says how), which
+ * [MapStyle.SATELLITE] shares because it is the same photograph's water. Top-level rather than in
+ * the companion, which is not yet built while the entries are.
+ */
+private val NATURAL_OCEAN_RAMP = intArrayOf(
+    0xFF001731.toInt(), // the deepest lit water at 0.85^6: the abyss no lit disc shows
+    0xFF001B3A.toInt(), // the same at 0.85^5
+    0xFF002044.toInt(), // 0.85^4
+    0xFF002651.toInt(), // 0.85^3
+    0xFF002C5F.toInt(), // 0.85^2
+    0xFF003470.toInt(), // 0.85
+    0xFF003E84.toInt(), // the deepest lit open water: 2nd percentile of (120,230)-(220,400)
+    0xFF004892.toInt(), // open Pacific off Baja, (148,338)-(180,366)
+    0xFF09839C.toInt() // sunlit shelf, Hudson Bay, (296,206)-(320,226)
+)
+
+/** [MapStyle.NATURAL]'s land ramp, coast first; its note says where each stop was sampled. */
+private val NATURAL_LAND_RAMP = intArrayOf(
+    0xFF2C6504.toInt(), // eastern woodland, (328,282)-(344,298)
+    0xFF3A6904.toInt(), // Mississippi lowland grass, (300,288)-(316,304)
+    0xFF797425.toInt(), // southern plains interior, (292,320)-(306,334)
+    0xFF977E4A.toInt(), // Great Basin umber, (252,312)-(270,328) — the earth band begins
+    0xFFAB8455.toInt(), // Chihuahua plateau ochre, (244,330)-(258,344)
+    0xFFC08F61.toInt(), // Colorado Plateau red rock, (250,318)-(262,332)
+    0xFFC7AE95.toInt(), // that red rock and the snow, half and half: see Natural's note
+    0xFFCECECA.toInt() // Greenland interior snow, (318,136)-(332,150) — see Natural's paper
+)
+
+/**
  * How a finished map is drawn: the paper it is on, the water, the ink, and how hard the light
  * rakes across the relief.
  *
@@ -124,8 +153,61 @@ enum class MapStyle(
      * (see [RasterRecipe]), so all that changes on the device is what is in the table and which
      * two ramps the political branch reads.
      */
-    internal val realmRamp: IntArray? = null
+    internal val realmRamp: IntArray? = null,
+    /**
+     * Paint the land from what its surface is made of rather than from a ramp: the living cover
+     * over bare ground whose colour is the ground's own — iron red, rock, sand, salt — with the
+     * wind's streaks, the rivers' green and the snow laid on it. True only for [SATELLITE]; see
+     * [SatelliteGround], which computes all of it, and which leaves [landRamp], [biomeWash],
+     * [biomeMuting] and [climateTint] unread on the fantasy view.
+     */
+    internal val satellite: Boolean = false
 ) {
+    /**
+     * The world as a satellite sees it, painted from the world's own physical fields: the living
+     * cover from the vegetation density, mixed continuously over bare ground whose colour says
+     * what the ground is — iron red on old dry crust, dark rock on steep slopes and active belts,
+     * pale sand where the erosion laid sediment down or the wind carries it from the uplands
+     * upwind, white salt on the playas — with streaks along the prevailing wind in the sand seas,
+     * green threads along the rivers through dry country, a seasonal snow tint by the share of the
+     * year below freezing, and the relief shaded as every style shades it.
+     *
+     * The application's default. Where [NATURAL] is a ramp modulated by the climate and washed
+     * with the biomes, this one has no ramp on land at all: see [SatelliteGround] for every field
+     * and the source of every colour. The sea, the water, the ink and the space around the sheet
+     * are [NATURAL]'s, which were sampled off the same kind of photograph.
+     */
+    SATELLITE(
+        label = "Satellite",
+        detail = "The ground as seen from orbit",
+        oceanRamp = NATURAL_OCEAN_RAMP,
+        // Read only where a view keys the land by height alone; the fantasy view paints the land
+        // from the surface instead.
+        landRamp = NATURAL_LAND_RAMP,
+        paper = 0xFFCECECA.toInt(),
+        // Not read: the cover is the vegetation density itself, not a biome's colour washed on.
+        biomeWash = 0f,
+        biomeMuting = 1f,
+        river = 0xFF4499A9.toInt(),
+        lake = 0xFF4499A9.toInt(),
+        coastline = 0xFF091205.toInt(),
+        coastlineStrength = 0.5f,
+        border = 0xFF091205.toInt(),
+        wilderness = 0xFF7D8774.toInt(),
+        // The hillshade exactly as computed, for Natural's reason: a photograph's light is the
+        // light that was there.
+        reliefStrength = 1f,
+        // Not read, for the reason the wash is not: the drought, the cold and the canopy reach the
+        // ground through the surface rather than through a ramp.
+        climateTint = 0f,
+        isobathInk = 0.05f,
+        glyphMuting = 0.15f,
+        lineArt = false,
+        inkGain = 0f,
+        backdrop = 0xFF000000.toInt(),
+        satellite = true
+    ),
+
     ATLAS(
         label = "Atlas",
         detail = "Elevation and climate",
@@ -630,17 +712,7 @@ enum class MapStyle(
         // Nine stops put the shelf in the top eighth, where the shelf is, and hand the photograph's
         // own open-ocean cobalt to the middle where the mass of the water sits. At the median
         // t of 0.90 this reads #015394, against the #015294 the reference's own open ocean measures.
-        oceanRamp = intArrayOf(
-            0xFF001731.toInt(), // the deepest lit water at 0.85^6: the abyss no lit disc shows
-            0xFF001B3A.toInt(), // the same at 0.85^5
-            0xFF002044.toInt(), // 0.85^4
-            0xFF002651.toInt(), // 0.85^3
-            0xFF002C5F.toInt(), // 0.85^2
-            0xFF003470.toInt(), // 0.85
-            0xFF003E84.toInt(), // the deepest lit open water: 2nd percentile of (120,230)-(220,400)
-            0xFF004892.toInt(), // open Pacific off Baja, (148,338)-(180,366)
-            0xFF09839C.toInt() // sunlit shelf, Hudson Bay, (296,206)-(320,226)
-        ),
+        oceanRamp = NATURAL_OCEAN_RAMP,
         // Coast first, snow line last, and every stop but the top two is a region of the reference
         // read straight off it. They climb in relative luminance without a step backwards —
         // 0.099, 0.110, 0.167, 0.220, 0.258, 0.317, 0.446, 0.615 — which is what lets height read
@@ -660,16 +732,7 @@ enum class MapStyle(
         // use. It matters more than any other stop, because half of every world's land sits
         // between the second and the fourth: the measured deciles of the author's two worlds run
         // 0.02 0.05 0.08 0.12 0.15 0.20 0.25 0.32 0.42, so this is the colour most of the map is.
-        landRamp = intArrayOf(
-            0xFF2C6504.toInt(), // eastern woodland, (328,282)-(344,298)
-            0xFF3A6904.toInt(), // Mississippi lowland grass, (300,288)-(316,304)
-            0xFF797425.toInt(), // southern plains interior, (292,320)-(306,334)
-            0xFF977E4A.toInt(), // Great Basin umber, (252,312)-(270,328) — the earth band begins
-            0xFFAB8455.toInt(), // Chihuahua plateau ochre, (244,330)-(258,344)
-            0xFFC08F61.toInt(), // Colorado Plateau red rock, (250,318)-(262,332)
-            0xFFC7AE95.toInt(), // that red rock and the snow, half and half: see below
-            0xFFCECECA.toInt() // Greenland interior snow, (318,136)-(332,150) — see below
-        ),
+        landRamp = NATURAL_LAND_RAMP,
         // The reference is a photograph and has no paper. The one pale thing in it is its snow, so
         // that is what the cold pales toward and what the sheet plates its scale bar on. The
         // sample reads #CDCECA, one unit greener than it is red; over the 196 pixels of the box

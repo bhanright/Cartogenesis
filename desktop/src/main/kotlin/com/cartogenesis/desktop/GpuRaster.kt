@@ -1006,6 +1006,7 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
                 precise float streakedSand = clamp(sand * (1.0 + uSandStreak * streak), 0.0, 1.0);
                 precise float streakLight = 1.0 + uStreakContrast * streak * arid;
                 precise float shown = max(scalarC[i] * (1.0 - exposure), riverbank);
+                precise float barren = arid * (1.0 - scalarC[i]);
 
                 vec3 humidSoil = unpack(colorsA[0]);
                 vec3 aridSoil = unpack(colorsA[1]);
@@ -1019,8 +1020,10 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
                 vec3 hamadaColour = unpack(colorsA[9]);
                 vec3 blushColour = unpack(colorsA[10]);
                 vec3 washColour = unpack(colorsA[11]);
+                vec3 regColour = unpack(colorsA[12]);
 
                 precise vec3 soil = humidSoil + (aridSoil - humidSoil) * arid;
+                soil = soil + (regColour - soil) * barren;
                 precise vec3 bare = soil + (hamadaColour - soil) * stone;
                 bare = bare + (sandColour - bare) * streakedSand;
                 bare = bare + (blushColour - bare) * blush;

@@ -79,6 +79,23 @@ class SatelliteStyleTest {
         /** The control wind's bearing, east of the east-west axis and clear of the grid's. */
         const val OFF_GRID_WIND_DEGREES = 20.0
 
+        /**
+         * A red over half its most (the iron red's 0.6); ground with under a tenth of sand, and
+         * ground at least a third sand.
+         */
+        const val STRONG_RED = 0.3f
+        const val BARE_OF_SAND = 0.1f
+        const val THIRD_SAND = 1f / 3f
+
+        /** The counterfactual river: ten times every river's discharge. */
+        const val TENFOLD = 10f
+
+        /** A share of the riverbank green, or of the rock's breaking through, that counts. */
+        const val CORRIDOR_SHARE = 0.1f
+
+        /** The counterfactual summer: every warmest month eight degrees colder. */
+        const val ALPINE_COOLING_C = 8f
+
         /** Where a streak's level lines are traced: a streak this far from none, either way. */
         const val STREAK_LEVEL = 0.5f
     }
@@ -113,6 +130,79 @@ class SatelliteStyleTest {
         println("SATELLITE red less blue over ${deserts.size} desert cells: craton %.1f, young crust %.1f".format(oldRed, youngRed))
         assertTrue(oldRed > youngRed + 10, "old crust %.1f against young %.1f".format(oldRed, youngRed))
         assertTrue(redderEverywhere == deserts.size, "${deserts.size - redderEverywhere} cells less red on old crust")
+    }
+
+    /**
+     * Red is a patch and not the default: on a world whose crust is all craton, the iron red is
+     * strong (over half its most) nowhere the ground is bare of sand, and over no more of the
+     * desert than is at least a third sand, because the red is the old sand's iron coat and the
+     * reg between it goes dark with varnish instead.
+     */
+    @Test
+    fun `on a craton the red is the sand's and not every desert's`() {
+        val field = FloatField(world.width, world.height)
+        field.data.fill(1f)
+        val craton = SatelliteGround.of(world.copy(plates = world.plates.copy(crustAge = field)))
+        val deserts = desertCells(craton)
+        assertTrue(deserts.size >= FEWEST_DESERT_CELLS, "only ${deserts.size} desert cells to measure")
+        val strongRed = deserts.filter { byteOf(craton.composition[it], 0) > STRONG_RED }
+        val offTheSand = strongRed.count { byteOf(craton.composition[it], 2) < BARE_OF_SAND }
+        val share = strongRed.size.toDouble() / deserts.size
+        val sandShare = deserts.count { byteOf(craton.composition[it], 2) >= THIRD_SAND }.toDouble() / deserts.size
+        println("SATELLITE on a craton: strong red on %.3f of %d desert cells, a third sand on %.3f, strong red off the sand %d"
+            .format(share, deserts.size, sandShare, offTheSand))
+        assertTrue(offTheSand == 0, "$offTheSand desert cells strongly red off the sand")
+        assertTrue(share <= sandShare, "red on %.3f of the desert, more than its sand's %.3f".format(share, sandShare))
+    }
+
+    /**
+     * A river's green corridor follows its discharge: the same world with ten times the water in
+     * every river lays more green, over more cells, and nowhere less.
+     */
+    @Test
+    fun `a river's green corridor widens and strengthens with its discharge`() {
+        val wetter = world.rivers.flowAccumulation.copy()
+        for (cell in wetter.data.indices) wetter.data[cell] *= TENFOLD
+        val before = SatelliteGround.of(world)
+        val after = SatelliteGround.of(world.copy(rivers = world.rivers.copy(flowAccumulation = wetter)))
+        val land = world.sea.isLand
+        fun green(surface: SatelliteSurface) = land.indices.filter { land[it] }.sumOf { byteOf(surface.climate[it], 1).toDouble() }
+        fun corridorCells(surface: SatelliteSurface) =
+            land.indices.count { land[it] && byteOf(surface.climate[it], 1) > CORRIDOR_SHARE }
+        val lessGreen = land.indices.count {
+            land[it] && byteOf(after.climate[it], 1) < byteOf(before.climate[it], 1)
+        }
+        println("SATELLITE riverbank green summed %.0f, tenfold discharge %.0f; corridor cells %d, then %d"
+            .format(green(before), green(after), corridorCells(before), corridorCells(after)))
+        assertTrue(green(after) > green(before) * 1.5, "tenfold discharge laid too little more green")
+        assertTrue(corridorCells(after) > corridorCells(before), "the corridors did not widen")
+        assertTrue(lessGreen == 0, "$lessGreen cells less green under more water")
+    }
+
+    /**
+     * Rock breaks through the cover above the tree line: the same world with every warmest month
+     * colder lays more rock, and where the rock breaks through, the ground is less green.
+     */
+    @Test
+    fun `colder summers bare more alpine rock`() {
+        val colder = world.climate.summerTemperature.copy()
+        for (cell in colder.data.indices) colder.data[cell] -= ALPINE_COOLING_C
+        val before = SatelliteGround.of(world)
+        val after = SatelliteGround.of(world.copy(climate = world.climate.copy(summerTemperature = colder)))
+        val land = world.sea.isLand
+        val opened = land.indices.filter {
+            land[it] && byteOf(after.terrain[it], 3) > byteOf(before.terrain[it], 3) + CORRIDOR_SHARE &&
+                byteOf(after.climate[it], 2) < 0.05f && byteOf(before.climate[it], 2) < 0.05f
+        }
+        val rockBefore = land.indices.filter { land[it] }.sumOf { byteOf(before.composition[it], 1).toDouble() }
+        val rockAfter = land.indices.filter { land[it] }.sumOf { byteOf(after.composition[it], 1).toDouble() }
+        val greenBefore = opened.map { greenness(SatelliteGround.groundColor(before, it)) }.average()
+        val greenAfter = opened.map { greenness(SatelliteGround.groundColor(after, it)) }.average()
+        println("SATELLITE rock summed %.0f, summers %.0f C colder %.0f; %d cells opened, green less red %.1f then %.1f"
+            .format(rockBefore, ALPINE_COOLING_C, rockAfter, opened.size, greenBefore, greenAfter))
+        assertTrue(rockAfter > rockBefore, "colder summers laid no more rock")
+        assertTrue(opened.size >= FEWEST_DESERT_CELLS, "only ${opened.size} cells where the rock broke through")
+        assertTrue(greenAfter < greenBefore - 10, "the opened ground is not less green")
     }
 
     @Test
@@ -324,7 +414,11 @@ class SatelliteStyleTest {
             level("satellite rock", share(surface.composition, 1), 0.5f),
             level("satellite sand", sand, 0.5f),
             level("satellite salt", share(surface.composition, 3), 0.5f),
-            level("satellite riverbank green", share(surface.climate, 1), 0.4f),
+            level("satellite riverbank green", share(surface.climate, 1), 0.2f),
+            level("satellite stone", share(surface.terrain, 0), 0.35f),
+            level("satellite wash", share(surface.terrain, 1), 0.2f),
+            level("satellite blush", share(surface.terrain, 2), 0.35f),
+            level("satellite rock through the cover", share(surface.terrain, 3), 0.5f),
             Layer("satellite streaks", MapLayers.levelLines(streak, floatArrayOf(-STREAK_LEVEL, STREAK_LEVEL), frame, dry))
         )
         return layers.map { GeometryGuard.read(it, frame, JUDGE) }

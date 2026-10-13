@@ -145,13 +145,16 @@ internal object SatelliteGround {
             // Bare ground on the oldest crust takes a little of it, as Australia's gibber does.
             val oldest = smoothstep(OLDEST_UNREDDENED_CRUST_AGE, 1f, age)
             val red = dry * IRON_STAIN_MOST * oldest * (RED_OFF_THE_SAND + (1f - RED_OFF_THE_SAND) * sand)
-            val blush = dry * BLUSH_MOST * smoothstep(YOUNGEST_BLUSHED_CRUST_AGE, OLDEST_UNREDDENED_CRUST_AGE, age)
+            val blush = dry * BLUSH_MOST * smoothstep(YOUNGEST_BLUSHED_CRUST_AGE, OLDEST_UNREDDENED_CRUST_AGE, age) *
+                (BLUSH_OFF_THE_SAND + (1f - BLUSH_OFF_THE_SAND) * sand)
 
-            // Stone: the dark, varnished lag of ground that sheds its sand rather than holding it,
-            // on a high plateau or on rough ground short of a slope that is all rock.
+            // Stone: the dark, varnished lag of ground that sheds its sand rather than holding it:
+            // ground the erosion wore down more than its region, by as much as a sand sheet holds,
+            // a high plateau, or rough ground short of a slope that is all rock.
             val plateau = smoothstep(PLATEAU_START_METRES, PLATEAU_FULL_METRES, altitude)
             val rough = smoothstep(ROUGH_GROUND_START_DEGREES, BARE_ROCK_SLOPE_START_DEGREES, slope)
-            val stone = dry * (1f - sand) * max(plateau, rough) * STONE_MOST
+            val deflated = smoothstep(0f, SAND_SHEET_METRES, sediment.shedMetres.data[cell])
+            val stone = dry * (1f - sand) * max(max(plateau, rough), deflated) * STONE_MOST
 
             // Rock: slopes too steep to hold soil, the active belts' unweathered ranges, and the
             // alpine slopes above the tree line, where the cold leaves too short a season for
@@ -171,12 +174,17 @@ internal object SatelliteGround {
 
             val streak = (traces.streak[cell] / streakScale).coerceIn(-1f, 1f)
 
+            // Snow: the perennial snow above the snow line, where even the warmest month freezes,
+            // and the seasonal snow and frost below it, of which a composite built from the
+            // clearest days of the year keeps only part, so the alpine rock between the tree line
+            // and the snow line shows.
             val frozen = frozenShareOfYear(warmestMonthC, world.climate.winterTemperature.data[cell])
             val density = ClimateTint.canopyAt(world, cell)
+            val perennial = 1f - smoothstep(SNOW_LINE_LOW_C, SNOW_LINE_HIGH_C, warmestMonthC)
             val snow = if (world.climate.biome[cell] == Biome.ICE_SHEET) {
                 1f
             } else {
-                frozen * frozen * (1f - CANOPY_ABOVE_SNOW * density)
+                max(perennial, frozen * frozen * SEASONAL_SNOW_SHOWN) * (1f - CANOPY_ABOVE_SNOW * density)
             }
 
             composition[cell] = pack(red, rock, sand, salt.data[cell])
@@ -216,6 +224,9 @@ internal object SatelliteGround {
         shares[STREAKED_SAND] = (sand * (1f + SAND_STREAK * streak)).coerceIn(0f, 1f)
         shares[STREAK_LIGHT] = 1f + STREAK_CONTRAST * streak * arid
         shares[SHOWN] = max(cover * (1f - exposure), riverbank)
+        // The arid soil's ochre is a shrubland's, its scattered plants in it; where nothing
+        // grows at all the ground is the bare reg's paler gray-buff.
+        shares[BARREN] = arid * (1f - cover)
         return argb(channel(16, shares), channel(8, shares), channel(0, shares))
     }
 
@@ -235,11 +246,13 @@ internal object SatelliteGround {
     private const val STONE = 8
     private const val WASH_SHARE = 9
     private const val BLUSH_SHARE = 10
-    private const val SHARE_COUNT = 11
+    private const val BARREN = 11
+    private const val SHARE_COUNT = 12
 
     private fun channel(shift: Int, shares: FloatArray): Int {
         fun of(color: Int): Float = ((color shr shift) and 0xFF).toFloat()
-        val soil = of(HUMID_SOIL) + (of(ARID_SOIL) - of(HUMID_SOIL)) * shares[ARID]
+        var soil = of(HUMID_SOIL) + (of(ARID_SOIL) - of(HUMID_SOIL)) * shares[ARID]
+        soil += (of(REG) - soil) * shares[BARREN]
         // The varnished stone first, as the ground the sand lies on; then the sand, then its
         // weathering, pink before red so that an old erg is red and a middle-aged one pink; then
         // the pale washes the floods leave over all of it, the rock and the salt.
@@ -260,12 +273,12 @@ internal object SatelliteGround {
 
     /**
      * The palette in the order the shader reads it from its color table: humid soil, arid soil,
-     * iron red, sand, rock, salt, sparse green, dense green, snow, hamada, blush, wash.
+     * iron red, sand, rock, salt, sparse green, dense green, snow, hamada, blush, wash, reg.
      */
     val PALETTE: IntArray
         get() = intArrayOf(
             HUMID_SOIL, ARID_SOIL, IRON_RED, SAND, ROCK, SALT, SPARSE_GREEN, DENSE_GREEN, SNOW,
-            HAMADA, BLUSH, WASH
+            HAMADA, BLUSH, WASH, REG
         )
 
     /*
@@ -332,6 +345,13 @@ internal object SatelliteGround {
     const val WASH: Int = 0xFFE4D9C3.toInt()
 
     /**
+     * Reg: the bare gravel and sand plain of a desert with nothing growing on it, the Tanezrouft
+     * and the Libyan Desert's floor, light gray-buff in the composites, paler and grayer than the
+     * Chihuahua's shrub-flecked ochre ([ARID_SOIL]).
+     */
+    const val REG: Int = 0xFFC8B491.toInt()
+
+    /**
      * How far one full streak brightens or darkens the dry ground it lies on, as a share of the
      * light, at full drought.
      *
@@ -376,6 +396,27 @@ internal object SatelliteGround {
      */
     private const val YOUNGEST_BLUSHED_CRUST_AGE = 0.3f
     private const val OLDEST_UNREDDENED_CRUST_AGE = 0.75f
+
+    /**
+     * The share of the pink the ground between the sands takes: a third. The pink is the sand's
+     * own weathering, so the reg and soils between keep most of their buff.
+     */
+    private const val BLUSH_OFF_THE_SAND = 0.33f
+
+    /**
+     * The snow line's span of warmest-month temperatures, in degrees Celsius: perennial snow
+     * where even the warmest month stays below freezing, Koppen's ice-cap boundary at 0 C, blended
+     * two degrees either side so the snow line is a gradient and not an edge.
+     */
+    private const val SNOW_LINE_LOW_C = -2f
+    private const val SNOW_LINE_HIGH_C = 2f
+
+    /**
+     * How much of the seasonal snow and frost the drawing keeps below the snow line: a half. An
+     * appearance choice: a true-color composite is built from the clearest days, which favors
+     * the snow-free season, so seasonal snow shows only in part.
+     */
+    private const val SEASONAL_SNOW_SHOWN = 0.5f
 
     /**
      * The most of the pinkish buff the ground takes. Seven tenths: the pink stage is a tint on
@@ -582,7 +623,7 @@ internal object SatelliteGround {
     /**
      * The narrowest a corridor is drawn, in cells: two, a cell either side of its channel, so a
      * corridor sits between cells the way the ground does rather than in a row of single cells.
-     * The drawing's own choice, and area-preserving ([corridors]).
+     * The drawing's own choice ([corridors]).
      */
     private const val NARROWEST_DRAWN_CORRIDOR_CELLS = 2f
 
@@ -909,9 +950,11 @@ internal object SatelliteGround {
      * The share is the corridor's overlap with the cell along the line between their centers, so
      * one three cells wide covers its neighbors too and fades at its edges by how far into them
      * it reaches. A corridor narrower than [NARROWEST_DRAWN_CORRIDOR_CELLS] is drawn that wide
-     * and as much fainter as it is narrower, so the green it lays on the map is the green it has
-     * on the ground: a valley a fifth of a cell wide is a soft thread a fifth as strong, not a
-     * cell-wide stroke.
+     * and fainter as it is narrower, by the square root of its width over the drawn width: a
+     * valley a ninth of the drawn width is a soft thread a third as strong, not a cell-wide
+     * stroke. The square root is an appearance choice, the map's emphasis on a feature smaller
+     * than its pixels: strictly by area, every river but the greatest would vanish on a grid of
+     * twenty-kilometer cells, where the Nile's own valley is little over half a cell wide.
      */
     private fun corridors(world: WorldMap, halfWidthKm: FloatArray, altitudeMetres: FloatField): FloatArray {
         val cellsAcross = world.width
@@ -947,7 +990,7 @@ internal object SatelliteGround {
                         val physicalHalf = halfWidthKm[channel]
                         if (physicalHalf <= 0f) continue
                         val half = max(physicalHalf, narrowestHalfKm)
-                        val strength = physicalHalf / half
+                        val strength = sqrt(physicalHalf / half)
                         val acrossKm = columnOffset * cellWidthKm
                         val distanceKm = sqrt(acrossKm * acrossKm + downKm * downKm).toFloat()
                         val overlapKm = min(distanceKm + cellKm * HALF, half) -

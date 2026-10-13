@@ -8,10 +8,12 @@ import com.cartogenesis.worldgen.pipeline.Biome
 import kotlin.math.PI
 import kotlin.math.acos
 import kotlin.math.atan
+import kotlin.math.ceil
 import kotlin.math.exp
 import kotlin.math.floor
-import kotlin.math.log10
 import kotlin.math.max
+import kotlin.math.min
+import kotlin.math.pow
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
@@ -24,30 +26,37 @@ import kotlin.math.sqrt
  *
  *  - **Living cover** is the vegetation density, `ClimateResult.vegetationDensity`, mixed over the
  *    bare ground as a continuous share rather than a biome's step.
- *  - **Iron red** is old, stable ground in a dry climate: the crust's age (`PlateResult.crustAge`,
- *    1 on a craton no epoch deformed) times the drought. Red desert soils and sands are coated in
- *    iron oxides that take a long, quiet exposure to form, which is why Australia's centre and the
- *    Sahara's shield are red and the young basins beside them are not.
- *  - **Dark rock** is ground too steep to hold soil, and the active belts: the slope over a fixed
- *    ground baseline, and the present epoch's belts (crust age near 0) at altitude.
+ *  - **Weathering** follows the crust's age (`PlateResult.crustAge`, 1 on a craton no epoch
+ *    deformed) on dry ground: young ground pale cream, middle-aged ground pinkish buff, and only
+ *    the oldest sand iron red. Desert sands redden as an iron-oxide coat grows on grains a
+ *    stable dune holds still, so the red is a patch where old crust and a sand sea meet rather
+ *    than the color of every shield.
+ *  - **Dark stone** (hamada) is dry ground that sheds its sand: a high plateau or rough hill
+ *    country, short of the slopes that are all rock.
+ *  - **Dark rock** is ground too steep to hold soil, the active belts (the present epoch's,
+ *    crust age near 0, at altitude), dry slopes, and the alpine slopes between the tree line and
+ *    the snow, where the warmest month is too cold for the cover to close; there the rock breaks
+ *    through the cover as well as coloring the ground beneath it.
  *  - **Pale sand** is loose sediment on flat, dry ground: where the erosion stage lowered the
  *    ground less than its region (`PlateResult.height` less `ErosionResult.height`) or the ground
  *    stands in a basin, and where the prevailing wind carries it from uplands upwind that the
- *    erosion wore down more than their region. Sand on old crust takes the iron red as well, so
- *    an old erg is red and a young one pale.
+ *    erosion wore down more than their region.
+ *  - **Pale washes** are the wadi floors, by the ground each drains, and the alluvial fans at the
+ *    foot of rough ground.
  *  - **White salt** is the playa floor of a closed basin, `LakeResult.playa`, softened by a
  *    Gaussian a cell across so a pan is not drawn as a block of cells.
  *  - **Wind streaks** are the terrain's own small relief averaged along the prevailing wind
- *    upwind of each cell, so they run with the wind and bend where it bends.
- *  - **Green threads** follow the rivers that carry water through dry country, by their
- *    discharge (`RiverResult.flowAccumulation`).
+ *    upwind of each cell, so they run with the wind and bend where it bends. They move the sand's
+ *    share and the light over all the dry ground.
+ *  - **Green corridors** follow the rivers through dry country, as wide as their discharge
+ *    makes their valley floors (`RiverResult.flowAccumulation`) and no higher than those floors.
  *  - **Snow and frost** are the share of the year a cell spends below freezing, from its warmest
  *    and coldest months, masked by a canopy that stands above the snow.
  *
  * The fields are worked out once on the processor and handed to both the processor's raster and
  * the graphics card as bytes, for the reason [ClimateTint]'s are: a drought or a wind trace solved
  * twice would be two slightly different deserts, while a byte is the same byte on both sides and
- * the colour arithmetic in [groundColor] then agrees exactly.
+ * the color arithmetic in [groundColor] then agrees exactly.
  */
 internal object SatelliteGround {
 
@@ -94,17 +103,13 @@ internal object SatelliteGround {
             flatEnough, land, SAND_SEA_SPREAD_KM / cellWidthKm, SAND_SEA_SPREAD_KM / cellHeightKm
         )
 
-        // Iron staining by the crust's age, softened by a Gaussian so a craton's red fades out
-        // over a few tens of kilometres rather than stopping at the line where the age jumps from
-        // the youngest epoch's band to the shield's untouched 1.
-        val ironStain = FloatField(cellsAcross, cellsDown)
-        for (cell in 0 until cellCount) {
-            if (!land[cell]) continue
-            ironStain.data[cell] =
-                smoothstep(OLDEST_UNREDDENED_CRUST_AGE, 1f, world.plates.crustAge.data[cell])
-        }
+        // How far the dry ground has weathered toward red, by the crust's age and softened by a
+        // Gaussian so the hues fade over a few tens of kilometers rather than stopping at the line
+        // where the age jumps from one epoch's band to the next. Two stages of one process: a
+        // middle-aged surface has gone pinkish buff, and only the oldest has gone iron red.
+        val crustAge = world.plates.crustAge.copy()
         GaussianBlur.apply(
-            ironStain, IRON_STAIN_SOFTENING_KM / cellWidthKm, IRON_STAIN_SOFTENING_KM / cellHeightKm
+            crustAge, IRON_STAIN_SOFTENING_KM / cellWidthKm, IRON_STAIN_SOFTENING_KM / cellHeightKm
         )
 
         val salt = FloatField(cellsAcross, cellsDown)
@@ -113,50 +118,60 @@ internal object SatelliteGround {
             salt, SALT_PAN_SOFTENING_KM / cellWidthKm, SALT_PAN_SOFTENING_KM / cellHeightKm
         )
 
-        val riparian = FloatField(cellsAcross, cellsDown)
-        val cellAreaSquareMetres = cellWidthKm * cellHeightKm * SQUARE_METRES_PER_SQUARE_KM
-        for (cell in 0 until cellCount) {
-            if (!land[cell]) continue
-            val dischargeCubicKmPerYear = world.rivers.flowAccumulation.data[cell] /
-                MILLIMETRES_PER_METRE * cellAreaSquareMetres / CUBIC_METRES_PER_CUBIC_KM
-            if (dischargeCubicKmPerYear <= 0.0) continue
-            riparian.data[cell] = smoothstep(
-                THINNEST_GREEN_RIVER_LOG10_KM3, FULLY_GREEN_RIVER_LOG10_KM3,
-                log10(dischargeCubicKmPerYear).toFloat()
-            ) * RIVERBANK_COVER
-        }
-        GaussianBlur.apply(
-            riparian, RIVERBANK_SOFTENING_KM / cellWidthKm, RIVERBANK_SOFTENING_KM / cellHeightKm
-        )
+        val drought = FloatArray(cellCount) { cell -> if (land[cell]) ClimateTint.droughtAt(world, cell) else 0f }
+        val riparian = riverCorridors(world, altitudeMetres)
+        val washes = wadiAndFanWashes(world, altitudeMetres, slopeDegrees)
 
-        val streakScale = streakScaleOf(traces.streak, land, looseMetres)
+        val streakScale = streakScaleOf(traces.streak, land, drought)
 
         val composition = IntArray(cellCount)
         val climate = IntArray(cellCount)
+        val terrain = IntArray(cellCount)
         val cover = FloatArray(cellCount)
         for (cell in 0 until cellCount) {
             if (!land[cell]) continue
-            val crustAge = world.plates.crustAge.data[cell]
-            val drought = ClimateTint.droughtAt(world, cell)
+            val age = crustAge.data[cell]
+            val dry = drought[cell]
             val slope = slopeDegrees[cell]
             val altitude = altitudeMetres.data[cell]
-
-            val red = drought * IRON_STAIN_MOST * ironStain.data[cell]
-
-            val steep = smoothstep(BARE_ROCK_SLOPE_START_DEGREES, BARE_ROCK_SLOPE_FULL_DEGREES, slope)
-            val activeBelt = (1f - smoothstep(0f, ACTIVE_BELT_CRUST_AGE, crustAge)) *
-                smoothstep(ROCKY_BELT_START_METRES, ROCKY_BELT_FULL_METRES, altitude)
-            val rock = max(steep, activeBelt)
+            val warmestMonthC = world.climate.summerTemperature.data[cell]
 
             val flat = flatness[cell]
-            val sand = drought * flat *
+            val sand = dry * flat *
                 smoothstep(SAND_SHEET_METRES, SAND_SEA_METRES, looseMetres[cell])
+
+            // Red is the oldest sand's: an iron coat grows on grains a stable dune holds still
+            // for long enough, while the reg and hamada between the ergs go dark with varnish.
+            // Bare ground on the oldest crust takes a little of it, as Australia's gibber does.
+            val oldest = smoothstep(OLDEST_UNREDDENED_CRUST_AGE, 1f, age)
+            val red = dry * IRON_STAIN_MOST * oldest * (RED_OFF_THE_SAND + (1f - RED_OFF_THE_SAND) * sand)
+            val blush = dry * BLUSH_MOST * smoothstep(YOUNGEST_BLUSHED_CRUST_AGE, OLDEST_UNREDDENED_CRUST_AGE, age)
+
+            // Stone: the dark, varnished lag of ground that sheds its sand rather than holding it,
+            // on a high plateau or on rough ground short of a slope that is all rock.
+            val plateau = smoothstep(PLATEAU_START_METRES, PLATEAU_FULL_METRES, altitude)
+            val rough = smoothstep(ROUGH_GROUND_START_DEGREES, BARE_ROCK_SLOPE_START_DEGREES, slope)
+            val stone = dry * (1f - sand) * max(plateau, rough) * STONE_MOST
+
+            // Rock: slopes too steep to hold soil, the active belts' unweathered ranges, and the
+            // alpine slopes above the tree line, where the cold leaves too short a season for
+            // the cover to close over the scree.
+            val steep = smoothstep(BARE_ROCK_SLOPE_START_DEGREES, BARE_ROCK_SLOPE_FULL_DEGREES, slope)
+            val activeBelt = (1f - smoothstep(0f, ACTIVE_BELT_CRUST_AGE, world.plates.crustAge.data[cell])) *
+                smoothstep(ROCKY_BELT_START_METRES, ROCKY_BELT_FULL_METRES, altitude)
+            // Above the tree line the cold, not the slope, keeps the cover open, so any ground too
+            // steep to hold loose sediment shows its scree; a flat alpine plain is tundra.
+            val alpine = (1f - smoothstep(CLOSED_ALPINE_COVER_C, TREE_LINE_WARMEST_C, warmestMonthC)) *
+                smoothstep(SAND_SHEDDING_DEGREES, ROUGH_GROUND_START_DEGREES, slope)
+            val drySlope = dry * smoothstep(ROUGH_GROUND_START_DEGREES, BARE_ROCK_SLOPE_FULL_DEGREES, slope)
+            val rock = max(max(steep, activeBelt), max(alpine, drySlope))
+            // How much of the living cover the rock breaks through: all of it above the tree line,
+            // and on slopes past the steepest any soil holds.
+            val exposure = max(alpine, steep * STEEP_ROCK_THROUGH_COVER)
 
             val streak = (traces.streak[cell] / streakScale).coerceIn(-1f, 1f)
 
-            val frozen = frozenShareOfYear(
-                world.climate.summerTemperature.data[cell], world.climate.winterTemperature.data[cell]
-            )
+            val frozen = frozenShareOfYear(warmestMonthC, world.climate.winterTemperature.data[cell])
             val density = ClimateTint.canopyAt(world, cell)
             val snow = if (world.climate.biome[cell] == Biome.ICE_SHEET) {
                 1f
@@ -165,80 +180,96 @@ internal object SatelliteGround {
             }
 
             composition[cell] = pack(red, rock, sand, salt.data[cell])
-            climate[cell] = pack(
-                (streak + 1f) * HALF, riparian.data[cell], snow, drought
-            )
+            climate[cell] = pack((streak + 1f) * HALF, riparian[cell], snow, dry)
+            terrain[cell] = pack(stone, dry * washes[cell], blush, exposure)
             cover[cell] = density
         }
-        return SatelliteSurface(composition, climate, cover)
+        return SatelliteSurface(composition, climate, terrain, cover)
     }
 
     /**
-     * The colour of a land cell's ground from its packed [composition] and [climate] and its
-     * living [cover], before the relief: the bare ground mixed from its surfaces, the wind's
-     * streaks laid on the sand, the cover over that, and the snow over everything.
+     * The color of a land cell's ground from its packed [composition], [climate] and [terrain]
+     * and its living [cover], before the relief: the bare ground mixed from its surfaces, the
+     * wind's streaks laid over the dry ground, the cover over that where the rock does not break
+     * through it, and the snow over everything.
      *
      * Every step is a float lerp in one fixed order and the channel is truncated once at the end,
      * which is what lets the shader's copy (`GpuRaster.satelliteGround`) agree to the bit.
      */
-    fun groundColor(composition: Int, climate: Int, cover: Float): Int {
-        val red = byteAt(composition, 0) * UNIT_PER_BYTE
-        val rock = byteAt(composition, 1) * UNIT_PER_BYTE
+    fun groundColor(composition: Int, climate: Int, terrain: Int, cover: Float): Int {
+        val shares = FloatArray(SHARE_COUNT)
+        shares[RED] = byteAt(composition, 0) * UNIT_PER_BYTE
+        shares[ROCK_SHARE] = byteAt(composition, 1) * UNIT_PER_BYTE
         val sand = byteAt(composition, 2) * UNIT_PER_BYTE
-        val salt = byteAt(composition, 3) * UNIT_PER_BYTE
+        shares[SALT_SHARE] = byteAt(composition, 3) * UNIT_PER_BYTE
         val streak = (byteAt(climate, 0) - STREAK_ZERO_BYTE) * UNIT_PER_STREAK_BYTE
         val riverbank = byteAt(climate, 1) * UNIT_PER_BYTE
-        val snow = byteAt(climate, 2) * UNIT_PER_BYTE
+        shares[SNOW_SHARE] = byteAt(climate, 2) * UNIT_PER_BYTE
         val arid = byteAt(climate, 3) * UNIT_PER_BYTE
-        val streakLight = 1f + STREAK_CONTRAST * streak * sand
-        val shown = max(cover, riverbank)
-        return argb(
-            channel(16, red, rock, sand, salt, streakLight, shown, snow, arid),
-            channel(8, red, rock, sand, salt, streakLight, shown, snow, arid),
-            channel(0, red, rock, sand, salt, streakLight, shown, snow, arid)
-        )
+        shares[ARID] = arid
+        shares[STONE] = byteAt(terrain, 0) * UNIT_PER_BYTE
+        shares[WASH_SHARE] = byteAt(terrain, 1) * UNIT_PER_BYTE
+        shares[BLUSH_SHARE] = byteAt(terrain, 2) * UNIT_PER_BYTE
+        val exposure = byteAt(terrain, 3) * UNIT_PER_BYTE
+        // A streak is sand drifted along the wind and the ground between laid bare, so it moves
+        // how much of the ground is sand as well as how much light comes off it.
+        shares[STREAKED_SAND] = (sand * (1f + SAND_STREAK * streak)).coerceIn(0f, 1f)
+        shares[STREAK_LIGHT] = 1f + STREAK_CONTRAST * streak * arid
+        shares[SHOWN] = max(cover * (1f - exposure), riverbank)
+        return argb(channel(16, shares), channel(8, shares), channel(0, shares))
     }
 
     /** [groundColor] for one cell of a [SatelliteSurface]. */
-    fun groundColor(surface: SatelliteSurface, cell: Int): Int =
-        groundColor(surface.composition[cell], surface.climate[cell], surface.cover[cell])
+    fun groundColor(surface: SatelliteSurface, cell: Int): Int = groundColor(
+        surface.composition[cell], surface.climate[cell], surface.terrain[cell], surface.cover[cell]
+    )
 
-    private fun channel(
-        shift: Int,
-        red: Float,
-        rock: Float,
-        sand: Float,
-        salt: Float,
-        streakLight: Float,
-        shown: Float,
-        snow: Float,
-        arid: Float
-    ): Int {
-        fun of(colour: Int): Float = ((colour shr shift) and 0xFF).toFloat()
-        val soil = of(HUMID_SOIL) + (of(ARID_SOIL) - of(HUMID_SOIL)) * arid
-        // The sand before the red, so an old erg is red sand and only a young one stays pale.
-        var bare = soil + (of(SAND) - soil) * sand
-        bare += (of(IRON_RED) - bare) * red
-        bare += (of(ROCK) - bare) * rock
-        bare += (of(SALT) - bare) * salt
-        bare *= streakLight
+    private const val RED = 0
+    private const val ROCK_SHARE = 1
+    private const val STREAKED_SAND = 2
+    private const val SALT_SHARE = 3
+    private const val STREAK_LIGHT = 4
+    private const val SHOWN = 5
+    private const val SNOW_SHARE = 6
+    private const val ARID = 7
+    private const val STONE = 8
+    private const val WASH_SHARE = 9
+    private const val BLUSH_SHARE = 10
+    private const val SHARE_COUNT = 11
+
+    private fun channel(shift: Int, shares: FloatArray): Int {
+        fun of(color: Int): Float = ((color shr shift) and 0xFF).toFloat()
+        val soil = of(HUMID_SOIL) + (of(ARID_SOIL) - of(HUMID_SOIL)) * shares[ARID]
+        // The varnished stone first, as the ground the sand lies on; then the sand, then its
+        // weathering, pink before red so that an old erg is red and a middle-aged one pink; then
+        // the pale washes the floods leave over all of it, the rock and the salt.
+        var bare = soil + (of(HAMADA) - soil) * shares[STONE]
+        bare += (of(SAND) - bare) * shares[STREAKED_SAND]
+        bare += (of(BLUSH) - bare) * shares[BLUSH_SHARE]
+        bare += (of(IRON_RED) - bare) * shares[RED]
+        bare += (of(WASH) - bare) * shares[WASH_SHARE]
+        bare += (of(ROCK) - bare) * shares[ROCK_SHARE]
+        bare += (of(SALT) - bare) * shares[SALT_SHARE]
+        bare *= shares[STREAK_LIGHT]
+        val shown = shares[SHOWN]
         val green = of(SPARSE_GREEN) + (of(DENSE_GREEN) - of(SPARSE_GREEN)) * shown
         var ground = bare + (green - bare) * shown
-        ground += (of(SNOW) - ground) * snow
+        ground += (of(SNOW) - ground) * shares[SNOW_SHARE]
         return floor(ground).toInt().coerceIn(0, 255)
     }
 
     /**
-     * The palette in the order the shader reads it from its colour table: humid soil, arid soil,
-     * iron red, sand, rock, salt, sparse green, dense green, snow.
+     * The palette in the order the shader reads it from its color table: humid soil, arid soil,
+     * iron red, sand, rock, salt, sparse green, dense green, snow, hamada, blush, wash.
      */
     val PALETTE: IntArray
         get() = intArrayOf(
-            HUMID_SOIL, ARID_SOIL, IRON_RED, SAND, ROCK, SALT, SPARSE_GREEN, DENSE_GREEN, SNOW
+            HUMID_SOIL, ARID_SOIL, IRON_RED, SAND, ROCK, SALT, SPARSE_GREEN, DENSE_GREEN, SNOW,
+            HAMADA, BLUSH, WASH
         )
 
     /*
-     * The colours, from true-colour satellite composites — NASA's Blue Marble and its Next
+     * The colors, from true-color satellite composites — NASA's Blue Marble and its Next
      * Generation monthly mosaics, where a region of the surface fills many pixels of one kind.
      * The five that `MapStyle.NATURAL` sampled pixel box by pixel box off a Blue Marble view of
      * North America are reused at its measured values and say so; the others are the composites'
@@ -277,14 +308,50 @@ internal object SatelliteGround {
     const val SNOW: Int = 0xFFCECECA.toInt()
 
     /**
-     * How far one full streak brightens or darkens the sand it lies on, as a share of the light.
-     *
-     * A fifth either way at full scale, which is two standard deviations of the streak field, so
-     * the typical streak moves the light by a tenth or less: the bright and dark wind streaks of
-     * the Sahara and the Ordos stand about that far from the sand around them in the composites at
-     * a few kilometres a pixel.
+     * Hamada: the dark, varnished stone of the Saharan plateaus (the Tademait, the Tinrhert, the
+     * Tassili's lower benches) and Arabia's Najd, typical of the composites. Set between [SAND]
+     * and [ROCK] at about the geometric mean of their luminances, because MODIS's albedo over
+     * these deserts sorts the same way: the brightest sand sheets reflect over twice what the
+     * darkest soils and volcanic ground do (Tsvetsinskaya and others 2002, 2006), and the lag
+     * gravels and varnished plateaus fall between.
      */
-    const val STREAK_CONTRAST: Float = 0.20f
+    const val HAMADA: Int = 0xFF937862.toInt()
+
+    /**
+     * Pinkish buff: sand and soil partly reddened, between the young pale cream and the old iron
+     * red: the salmon tones of the Tenere and of Egypt's Western Desert, and the eastern Rub al
+     * Khali, typical of the composites.
+     */
+    const val BLUSH: Int = 0xFFD6A888.toInt()
+
+    /**
+     * The pale wash of wadi floors and alluvial fans: silt, gravel and calcrete a flood laid down,
+     * the threads through the Hoggar and the aprons round the Tibesti in the composites, a little
+     * brighter and grayer than the sand.
+     */
+    const val WASH: Int = 0xFFE4D9C3.toInt()
+
+    /**
+     * How far one full streak brightens or darkens the dry ground it lies on, as a share of the
+     * light, at full drought.
+     *
+     * An appearance choice, and said to be one: no measurement found gives a streak's own
+     * brightness against the ground beside it at the map's scale. It is bounded by one that does
+     * exist: over the Sahara and Arabia the brightest sand sheets reflect a little over twice
+     * what the darkest desert soils do in the visible (Tsvetsinskaya and others 2002, 2006), and
+     * a streak alternates the two, so at full scale it should stay well inside a factor of two.
+     * A quarter either way in light is a factor of 1.67 from the brightest streak to the darkest,
+     * and the typical streak, at one standard deviation, moves the light by half that.
+     */
+    const val STREAK_CONTRAST: Float = 0.25f
+
+    /**
+     * How far one full streak moves the share of the ground that is sand: a half either way, so
+     * a streak is drifted sand along its crest and the ground laid bare between, and its contrast
+     * is the palette's own, sand against soil, stone or red. An appearance choice inside the
+     * same bound as [STREAK_CONTRAST]: the colors it moves between are Earth's.
+     */
+    const val SAND_STREAK: Float = 0.5f
 
     /** The byte a streak of zero is packed as: the middle of a byte, so both signs fit. */
     const val STREAK_ZERO_BYTE: Int = 128
@@ -296,14 +363,76 @@ internal object SatelliteGround {
     const val UNIT_PER_STREAK_BYTE: Float = 1f / 127f
 
     /**
-     * The crust age below which ground has not reddened at all, on `PlateResult.crustAge`'s scale
-     * of 0 for the present epoch's belts to 1 for a craton.
+     * The crust ages over which dry ground weathers from pale cream through pinkish buff to iron
+     * red, on `PlateResult.crustAge`'s scale of 0 for the present epoch's belts to 1 for a craton.
      *
-     * A half, so that the redness grows over the older half of the history and is full only on
-     * ground no epoch touched: rubification takes from a hundred thousand to a million years of
-     * stable exposure, and only the shields carry red soils over whole regions.
+     * Desert sands redden with age: a dune field's young sand is yellow-cream, and it goes pink
+     * and then red as an iron-oxide coat grows on the grains over a hundred thousand to a million
+     * years of stability (Walker 1979; Gardner and Pye 1981, on the reddening of dune sands), and
+     * only the shields carry red sand over whole regions. So the pink grows over the middle of
+     * the history, from [YOUNGEST_BLUSHED_CRUST_AGE], and the red only past
+     * [OLDEST_UNREDDENED_CRUST_AGE]. See docs/DESIGN_LEDGER.md, S1 Satellite look, round 2, for
+     * the share of dry land each reaches.
      */
-    private const val OLDEST_UNREDDENED_CRUST_AGE = 0.5f
+    private const val YOUNGEST_BLUSHED_CRUST_AGE = 0.3f
+    private const val OLDEST_UNREDDENED_CRUST_AGE = 0.75f
+
+    /**
+     * The most of the pinkish buff the ground takes. Seven tenths: the pink stage is a tint on
+     * the sand and soil, not a surface of its own.
+     */
+    private const val BLUSH_MOST = 0.7f
+
+    /**
+     * The share of the red the bare ground between the sands takes on the oldest crust: a
+     * quarter. A gravel plain's stones carry varnish more than an iron coat, so the Sahara's reg
+     * and hamada read brown and gray beside its red ergs; Australia's gibber is the exception,
+     * and a quarter lets it show without making red the shield's default.
+     */
+    private const val RED_OFF_THE_SAND = 0.25f
+
+    /**
+     * The altitudes over which dry ground becomes plateau, its sand blown off and its stones
+     * varnished dark: the Saharan basins (the Tanezrouft, the chotts, the Libyan Desert's floor)
+     * lie at 0 to 500 m and its stone plateaus (the Tademait at 500 to 800, the Tassili at 1,000
+     * to 2,000, Arabia's Najd at 700 to 1,000) above.
+     */
+    private const val PLATEAU_START_METRES = 500f
+    private const val PLATEAU_FULL_METRES = 1_500f
+
+    /**
+     * The slope at which dry ground stops being a plain and becomes stony hill country, in
+     * degrees over [SLOPE_BASELINE_KM]: two degrees, past the upper slope of a pediment, whose
+     * gravel plains fall less than a degree to the basins.
+     */
+    private const val ROUGH_GROUND_START_DEGREES = 2f
+
+    /**
+     * The most of the hamada's dark stone dry ground takes: seven tenths, so a plateau's own
+     * relief and its sand patches still show through it.
+     */
+    private const val STONE_MOST = 0.7f
+
+    /**
+     * The tree line: the warmest month's 10 C, Koppen's boundary of the tundra climates and the
+     * one `ClimateStage` classifies by.
+     */
+    private const val TREE_LINE_WARMEST_C = 10f
+
+    /**
+     * Where alpine cover gives out to scree and rock: the closed alpine grassland ends 600 to
+     * 800 m above the tree line (Koerner 2003, Alpine Plant Life), which at the standard
+     * atmosphere's 6.5 C a kilometer is 4 to 5 C cooler than the tree line's warmest month.
+     */
+    private const val CLOSED_ALPINE_COVER_C = TREE_LINE_WARMEST_C - 4.5f
+
+    /**
+     * How much of the living cover a slope too steep to hold soil breaks through below the tree
+     * line: a half. An appearance choice: forest clings to steep slopes in a wet range, and over
+     * a 12 km baseline the slope says where cliffs and scree are common, not where every
+     * hillside is bare.
+     */
+    private const val STEEP_ROCK_THROUGH_COVER = 0.5f
 
     /**
      * Where bare rock begins and where it is all there is, as the slope over
@@ -317,10 +446,14 @@ internal object SatelliteGround {
     private const val BARE_ROCK_SLOPE_FULL_DEGREES = 16f
 
     /**
-     * The ground length the slope is read over, in kilometres, so it is the same slope on every
-     * grid; the central difference spans this, rounded to whole cells and at least one each way.
+     * The ground length the slope is read over, in kilometers, so it is the same slope on every
+     * grid: the central difference spans this, rounded to whole cells and at least one each way,
+     * and a longer span is carried back to this one ([slopeDegrees]).
      */
     private const val SLOPE_BASELINE_KM = 12.0
+
+    /** The continents' Hurst exponent, which carries a slope between baselines ([slopeDegrees]). */
+    private const val CONTINENTAL_HURST_EXPONENT = 0.66
 
     /**
      * The crust age under which ground is the present epoch's own belt, rough and unweathered:
@@ -362,10 +495,11 @@ internal object SatelliteGround {
     private const val SEDIMENT_REGION_KM = 150.0
 
     /**
-     * The most of the iron red the ground takes on the oldest dry crust. A half: the
-     * reddest ergs and gibber plains read orange in the composites, half their quartz's own pale.
+     * The most of the iron red the sand takes on the oldest dry crust. Six tenths: the reddest
+     * ergs (the Simpson, the Murzuq, Arabia's Ad Dahna) read orange-red in the composites, not the
+     * full red of the oxide itself.
      */
-    private const val IRON_STAIN_MOST = 0.5f
+    private const val IRON_STAIN_MOST = 0.6f
 
     /** How far a craton's red fades out across its edge, in kilometres. */
     private const val IRON_STAIN_SOFTENING_KM = 30.0
@@ -430,19 +564,63 @@ internal object SatelliteGround {
     private const val SALT_PAN_SOFTENING_KM = 4.0
 
     /**
-     * The discharges at which a river begins to green its banks and is fully green, as the
-     * base-ten logarithm of cubic kilometres a year: one cubic kilometre, a perennial
-     * desert river, to thirty, the Nile and the Indus whose valleys are a ribbon of green through
-     * the composites.
+     * The Nile's natural discharge below Aswan, about 84 cubic km a year, and the width of the
+     * cultivated valley floor it waters between Aswan and Cairo, 10 to 15 km: the anchor of a
+     * river's green corridor ([riverCorridors]).
      */
-    private const val THINNEST_GREEN_RIVER_LOG10_KM3 = 0f
-    private const val FULLY_GREEN_RIVER_LOG10_KM3 = 1.5f
+    private const val NILE_DISCHARGE_CUBIC_KM_PER_YEAR = 84.0
+    private const val NILE_VALLEY_FLOOR_KM = 12.0
+
+    /**
+     * How far above its channel ground can stand and still be the valley floor a river waters or
+     * a wadi floods, in meters: a floodplain stands meters above its river, and a cell's altitude
+     * is its ground averaged over kilometers, so fifty lets a cell beside the channel count while
+     * the valley's walls and the terraces above them do not.
+     */
+    private const val VALLEY_FLOOR_RISE_METRES = 50f
+
+    /**
+     * The narrowest a corridor is drawn, in cells: two, a cell either side of its channel, so a
+     * corridor sits between cells the way the ground does rather than in a row of single cells.
+     * The drawing's own choice, and area-preserving ([corridors]).
+     */
+    private const val NARROWEST_DRAWN_CORRIDOR_CELLS = 2f
+
+    /**
+     * The widest a corridor is drawn either side of its channel, in kilometers: twice the Nile's
+     * half, past which a river's green is its delta's or its basin's and the cover already says so.
+     */
+    private const val WIDEST_CORRIDOR_HALF_KM = 12f
+
+    /**
+     * A wadi floor's width at a reference catchment, the anchor its square-root widening is drawn
+     * from: about a kilometer and a half at ten thousand square kilometers, the wide floors of the
+     * Hoggar's and the Tibesti's main drainages. An appearance choice read off the composites,
+     * not a measured law; the widening's exponent is the river's.
+     */
+    private const val WADI_REFERENCE_FLOOR_KM = 1.5
+    private const val WADI_REFERENCE_CATCHMENT_SQUARE_KM = 10_000.0
+
+    /** The smallest catchment that cuts a wadi floor wide enough to show, in square kilometers. */
+    private const val WADI_SMALLEST_CATCHMENT_SQUARE_KM = 500f
+
+    /** The most of the pale wash a full wadi floor takes, and a fan. */
+    private const val WADI_WASH_MOST = 0.6f
+    private const val FAN_WASH_MOST = 0.4f
+
+    /**
+     * How far an alluvial fan spreads from the uplands that feed it, in kilometers: the Gaussian
+     * reach of the rough ground's share. The fans of the Tibesti, the Makran and Death Valley run
+     * from a few kilometers to a few tens.
+     */
+    private const val FAN_REACH_KM = 10.0
+
+    /** The share of rough ground nearby at which a fan is full. */
+    private const val FAN_FULL_UPLAND_SHARE = 0.3f
 
     /** The cover a fully green river gives its banks: the irrigated Nile valley's, nearly closed. */
     private const val RIVERBANK_COVER = 0.8f
 
-    /** How far a river's green spreads from its course, in kilometres: half a cell or so. */
-    private const val RIVERBANK_SOFTENING_KM = 3.0
 
     /**
      * How much of the snow a closed canopy hides. Boreal forest in winter is dark in the
@@ -472,7 +650,19 @@ internal object SatelliteGround {
         return (acos((meanC / swingC).toDouble().coerceIn(-1.0, 1.0)) / PI).toFloat()
     }
 
-    /** The slope of the land in degrees over [SLOPE_BASELINE_KM]; 0 at sea. */
+    /**
+     * The slope of the land in degrees as a baseline of [SLOPE_BASELINE_KM] would read it; 0 at
+     * sea.
+     *
+     * The central difference spans whole cells, at least one each way, so on a grid coarser than
+     * the baseline it reads over a longer one, and a longer baseline reads a gentler slope: relief
+     * grows more slowly than the length it is measured over. Earth's continents are self-affine
+     * over these scales with a Hurst exponent of about two thirds (Gagnon, Lovejoy and Schertzer
+     * 2006, 0.66 for the continents), so relief over a length L grows as L to that power and the
+     * mean slope as L to its excess over one. The measured slope is carried back to the
+     * baseline's by that law, so every threshold in degrees here means on every grid what it
+     * means on Earth over twelve kilometers.
+     */
     internal fun slopeDegrees(
         altitudeMetres: FloatField,
         land: BooleanArray,
@@ -483,6 +673,8 @@ internal object SatelliteGround {
         val reachRows = (SLOPE_BASELINE_KM / 2.0 / cellHeightKm).roundToInt().coerceAtLeast(1)
         val acrossMetres = 2.0 * reachColumns * cellWidthKm * METRES_PER_KM
         val downMetres = 2.0 * reachRows * cellHeightKm * METRES_PER_KM
+        val measuredBaselineKm = 2.0 * reachColumns * cellWidthKm
+        val toBaseline = (measuredBaselineKm / SLOPE_BASELINE_KM).pow(1.0 - CONTINENTAL_HURST_EXPONENT)
         val cellsAcross = altitudeMetres.width
         val slope = FloatArray(land.size)
         parallelChunks(0, land.size) { from, to ->
@@ -494,7 +686,7 @@ internal object SatelliteGround {
                     altitudeMetres.sample(column - reachColumns, row)) / acrossMetres
                 val southward = (altitudeMetres.sample(column, row + reachRows) -
                     altitudeMetres.sample(column, row - reachRows)) / downMetres
-                slope[cell] = (atan(sqrt(eastward * eastward + southward * southward)) *
+                slope[cell] = (atan(sqrt(eastward * eastward + southward * southward) * toBaseline) *
                     DEGREES_PER_RADIAN).toFloat()
             }
         }
@@ -609,6 +801,169 @@ internal object SatelliteGround {
         }
     }
 
+    /**
+     * The green a river lays along its valley, per land cell, 0 to [RIVERBANK_COVER]: a corridor
+     * whose width follows the river's discharge, kept to the ground that stands no higher than the
+     * valley floor beside it.
+     *
+     * The width is the downstream hydraulic geometry's: a channel's width grows as the square root
+     * of its discharge (Leopold and Maddock 1953), and the valley floor it waters is taken to grow
+     * with it, anchored on the Nile below Aswan, whose cultivated plain is 10 to 15 km wide for a
+     * natural discharge of about 84 cubic km a year. A corridor narrower than a cell covers only
+     * its share of the cell, so a small river's green thins and fades rather than being drawn a
+     * cell wide.
+     */
+    internal fun riverCorridors(world: WorldMap, altitudeMetres: FloatField): FloatArray {
+        val config = world.config
+        val land = world.sea.isLand
+        val cellAreaSquareMetres = config.cellWidthKm * config.cellHeightKm * SQUARE_METRES_PER_SQUARE_KM
+        val halfWidthKm = FloatArray(land.size)
+        for (cell in land.indices) {
+            if (!land[cell]) continue
+            val dischargeCubicKmPerYear = world.rivers.flowAccumulation.data[cell] /
+                MILLIMETRES_PER_METRE * cellAreaSquareMetres / CUBIC_METRES_PER_CUBIC_KM
+            if (dischargeCubicKmPerYear <= 0.0) continue
+            halfWidthKm[cell] = (HALF * NILE_VALLEY_FLOOR_KM *
+                sqrt(dischargeCubicKmPerYear / NILE_DISCHARGE_CUBIC_KM_PER_YEAR)).toFloat()
+        }
+        val share = corridors(world, halfWidthKm, altitudeMetres)
+        for (cell in share.indices) share[cell] *= RIVERBANK_COVER
+        return share
+    }
+
+    /**
+     * The pale washes of dry country, per land cell, 0 to 1, before the drought weighs them: the
+     * floors of the wadis, whose floods leave silt and gravel paler than the ground they cross,
+     * and the alluvial fans spread at the foot of the uplands that shed them.
+     *
+     * A wadi's floor widens with its catchment as a river's valley does with its discharge,
+     * because a dry country's floods grow with the ground that drains to them rather than with a
+     * runoff it barely has. A fan is ground gentler than a hill country's within a few kilometers
+     * of rough or rocky ground.
+     */
+    internal fun wadiAndFanWashes(world: WorldMap, altitudeMetres: FloatField, slopeDegrees: FloatArray): FloatArray {
+        val config = world.config
+        val land = world.sea.isLand
+        val catchment = catchmentSquareKm(world)
+        val halfWidthKm = FloatArray(land.size)
+        for (cell in land.indices) {
+            if (!land[cell] || catchment[cell] < WADI_SMALLEST_CATCHMENT_SQUARE_KM) continue
+            halfWidthKm[cell] = (HALF * WADI_REFERENCE_FLOOR_KM *
+                sqrt(catchment[cell] / WADI_REFERENCE_CATCHMENT_SQUARE_KM)).toFloat()
+        }
+        val wadis = corridors(world, halfWidthKm, altitudeMetres)
+
+        val uplands = FloatField(world.width, world.height)
+        for (cell in land.indices) {
+            if (land[cell]) {
+                uplands.data[cell] =
+                    smoothstep(ROUGH_GROUND_START_DEGREES, BARE_ROCK_SLOPE_START_DEGREES, slopeDegrees[cell])
+            }
+        }
+        val nearUplands = uplands.copy()
+        GaussianBlur.apply(nearUplands, FAN_REACH_KM / config.cellWidthKm, FAN_REACH_KM / config.cellHeightKm)
+        return FloatArray(land.size) { cell ->
+            if (!land[cell]) {
+                0f
+            } else {
+                val fan = smoothstep(0f, FAN_FULL_UPLAND_SHARE, nearUplands.data[cell]) *
+                    (1f - uplands.data[cell]) * FAN_WASH_MOST
+                max(wadis[cell] * WADI_WASH_MOST, fan)
+            }
+        }
+    }
+
+    /** The ground each land cell drains, its own included, in square kilometers. */
+    private fun catchmentSquareKm(world: WorldMap): FloatArray {
+        val land = world.sea.isLand
+        val target = world.rivers.flowTarget
+        val cellSquareKm = (world.config.cellWidthKm * world.config.cellHeightKm).toFloat()
+        // The drainage tree in topological order: a cell flows on once everything above it has
+        // reached it, so its area is complete before it is added downstream.
+        val waiting = IntArray(land.size)
+        for (cell in land.indices) {
+            val next = target[cell]
+            if (land[cell] && next >= 0 && land[next]) waiting[next]++
+        }
+        val area = FloatArray(land.size) { if (land[it]) cellSquareKm else 0f }
+        val ready = IntArray(land.size)
+        var readyCount = 0
+        for (cell in land.indices) if (land[cell] && waiting[cell] == 0) ready[readyCount++] = cell
+        var taken = 0
+        while (taken < readyCount) {
+            val cell = ready[taken++]
+            val next = target[cell]
+            if (next < 0 || !land[next]) continue
+            area[next] += area[cell]
+            waiting[next]--
+            if (waiting[next] == 0) ready[readyCount++] = next
+        }
+        return area
+    }
+
+    /**
+     * The share of each land cell a set of channel corridors covers, 0 to 1: a corridor
+     * [halfWidthKm] either side of each channel cell (0 where there is none), across the ground
+     * no more than [VALLEY_FLOOR_RISE_METRES] above that channel.
+     *
+     * The share is the corridor's overlap with the cell along the line between their centers, so
+     * one three cells wide covers its neighbors too and fades at its edges by how far into them
+     * it reaches. A corridor narrower than [NARROWEST_DRAWN_CORRIDOR_CELLS] is drawn that wide
+     * and as much fainter as it is narrower, so the green it lays on the map is the green it has
+     * on the ground: a valley a fifth of a cell wide is a soft thread a fifth as strong, not a
+     * cell-wide stroke.
+     */
+    private fun corridors(world: WorldMap, halfWidthKm: FloatArray, altitudeMetres: FloatField): FloatArray {
+        val cellsAcross = world.width
+        val cellsDown = world.height
+        val land = world.sea.isLand
+        val cellWidthKm = world.config.cellWidthKm
+        val cellHeightKm = world.config.cellHeightKm
+        val cellKm = sqrt(cellWidthKm * cellHeightKm).toFloat()
+        val narrowestHalfKm = cellKm * NARROWEST_DRAWN_CORRIDOR_CELLS * HALF
+        var widest = narrowestHalfKm
+        for (cell in halfWidthKm.indices) {
+            halfWidthKm[cell] = halfWidthKm[cell].coerceAtMost(WIDEST_CORRIDOR_HALF_KM)
+            widest = max(widest, halfWidthKm[cell])
+        }
+        val reachColumns = ceil((widest + cellKm) / cellWidthKm).toInt()
+        val reachRows = ceil((widest + cellKm) / cellHeightKm).toInt()
+        val share = FloatArray(land.size)
+        parallelChunks(0, land.size) { from, to ->
+            for (cell in from until to) {
+                if (!land[cell]) continue
+                val column = cell % cellsAcross
+                val row = cell / cellsAcross
+                val altitude = altitudeMetres.data[cell]
+                var best = 0f
+                for (rowOffset in -reachRows..reachRows) {
+                    val channelRow = row + rowOffset
+                    if (channelRow < 0 || channelRow >= cellsDown) continue
+                    val downKm = rowOffset * cellHeightKm
+                    for (columnOffset in -reachColumns..reachColumns) {
+                        var channelColumn = (column + columnOffset) % cellsAcross
+                        if (channelColumn < 0) channelColumn += cellsAcross
+                        val channel = channelRow * cellsAcross + channelColumn
+                        val physicalHalf = halfWidthKm[channel]
+                        if (physicalHalf <= 0f) continue
+                        val half = max(physicalHalf, narrowestHalfKm)
+                        val strength = physicalHalf / half
+                        val acrossKm = columnOffset * cellWidthKm
+                        val distanceKm = sqrt(acrossKm * acrossKm + downKm * downKm).toFloat()
+                        val overlapKm = min(distanceKm + cellKm * HALF, half) -
+                            max(distanceKm - cellKm * HALF, -half)
+                        if (overlapKm <= 0f) continue
+                        val rise = altitude - altitudeMetres.data[channel]
+                        val onTheFloor = 1f - smoothstep(0f, VALLEY_FLOOR_RISE_METRES, rise)
+                        best = max(best, (overlapKm / cellKm).coerceAtMost(1f) * strength * onTheFloor)
+                    }
+                }
+                share[cell] = best
+            }
+        }
+        return share
+    }
+
     /** The two upwind averages, per cell: the streaks and the sand the wind brings. */
     internal class Traces(val streak: FloatArray, val supplyMetres: FloatArray)
 
@@ -688,20 +1043,20 @@ internal object SatelliteGround {
     }
 
     /**
-     * The streak field's spread over the cells that could be sand, times
+     * The streak field's spread over the dry ground, weighted by its drought, times
      * [STREAK_FULL_SCALE_SIGMAS]: the value a full streak is packed at. One per world, so the
      * strongest streaks are the strongest this world's wind draws.
      */
-    private fun streakScaleOf(streak: FloatArray, land: BooleanArray, looseMetres: FloatArray): Float {
+    private fun streakScaleOf(streak: FloatArray, land: BooleanArray, drought: FloatArray): Float {
         var sumOfSquares = 0.0
-        var count = 0
+        var weights = 0.0
         for (cell in streak.indices) {
-            if (!land[cell] || looseMetres[cell] <= SAND_SHEET_METRES) continue
-            sumOfSquares += streak[cell].toDouble() * streak[cell]
-            count++
+            if (!land[cell] || drought[cell] <= 0f) continue
+            sumOfSquares += drought[cell].toDouble() * streak[cell] * streak[cell]
+            weights += drought[cell]
         }
-        if (count == 0) return 1f
-        return max(sqrt(sumOfSquares / count).toFloat() * STREAK_FULL_SCALE_SIGMAS, 1e-6f)
+        if (weights <= 0.0) return 1f
+        return max(sqrt(sumOfSquares / weights).toFloat() * STREAK_FULL_SCALE_SIGMAS, 1e-6f)
     }
 
     private fun nearestCell(x: Double, y: Double, cellsAcross: Int, cellsDown: Int): Int {
@@ -742,10 +1097,13 @@ internal object SatelliteGround {
  *
  * [composition] holds four bytes a cell, low first: iron red, rock, sand and salt, each a share of
  * the bare ground. [climate] holds the streak (128 is none), the riverbank green, the snow and the
- * drought. [cover] is the living cover, 0 to 1. All three are row-major, a cell each.
+ * drought. [terrain] holds the hamada's stone, the pale wash of wadis and fans, the pinkish buff of
+ * partly reddened ground, and how far the rock breaks through the living cover. [cover] is the
+ * living cover, 0 to 1. All four are row-major, a cell each.
  */
 class SatelliteSurface internal constructor(
     val composition: IntArray,
     val climate: IntArray,
+    val terrain: IntArray,
     val cover: FloatArray
 )

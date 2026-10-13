@@ -256,6 +256,7 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
         GL43C.glUniform1f(uniform("uHatchStrength"), recipe.hatchStrength)
         GL43C.glUniform1i(uniform("uSatellite"), recipe.satellite.toGl())
         GL43C.glUniform1f(uniform("uStreakContrast"), recipe.satelliteStreakContrast)
+        GL43C.glUniform1f(uniform("uSandStreak"), recipe.satelliteSandStreak)
         GL43C.glUniform1f(uniform("uUnitPerByte"), recipe.satelliteUnitPerByte)
         GL43C.glUniform1f(uniform("uUnitPerStreakByte"), recipe.satelliteUnitPerStreakByte)
         GL43C.glUniform1i(uniform("uStreakZeroByte"), recipe.satelliteStreakZeroByte)
@@ -487,6 +488,7 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
             // from it, and the figures its bytes are unpacked with, the processor's own.
             uniform int uSatellite;
             uniform float uStreakContrast;
+            uniform float uSandStreak;
             uniform float uUnitPerByte;
             uniform float uUnitPerStreakByte;
             uniform int uStreakZeroByte;
@@ -978,14 +980,16 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
 
             /*
              * SatelliteGround.groundColor, step for step: the bare ground mixed from its surfaces,
-             * the wind's streaks on the sand, the living cover over it and the snow over all, in
-             * floats in the processor's order and truncated once. The palette is ColorsA, in
-             * SatelliteGround.PALETTE's order; the surface's bytes are IndexA and IndexB, and the
-             * living cover is ScalarC.
+             * the wind's streaks over the dry ground, the living cover over it where the rock does
+             * not break through, and the snow over all, in floats in the processor's order and
+             * truncated once. The palette is ColorsA, in SatelliteGround.PALETTE's order; the
+             * surface's bytes are IndexA, IndexB and ColorsB (its terrain, a word a cell on this
+             * view), and the living cover is ScalarC.
              */
             vec3 satelliteGround(int i) {
                 int composition = indexA[i];
                 int climate = indexB[i];
+                int terrain = int(colorsB[i]);
                 precise float red = float(byteOf(composition, 0u)) * uUnitPerByte;
                 precise float rock = float(byteOf(composition, 1u)) * uUnitPerByte;
                 precise float sand = float(byteOf(composition, 2u)) * uUnitPerByte;
@@ -995,8 +999,13 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
                 precise float riverbank = float(byteOf(climate, 1u)) * uUnitPerByte;
                 precise float snow = float(byteOf(climate, 2u)) * uUnitPerByte;
                 precise float arid = float(byteOf(climate, 3u)) * uUnitPerByte;
-                precise float streakLight = 1.0 + uStreakContrast * streak * sand;
-                float shown = max(scalarC[i], riverbank);
+                precise float stone = float(byteOf(terrain, 0u)) * uUnitPerByte;
+                precise float wash = float(byteOf(terrain, 1u)) * uUnitPerByte;
+                precise float blush = float(byteOf(terrain, 2u)) * uUnitPerByte;
+                precise float exposure = float(byteOf(terrain, 3u)) * uUnitPerByte;
+                precise float streakedSand = clamp(sand * (1.0 + uSandStreak * streak), 0.0, 1.0);
+                precise float streakLight = 1.0 + uStreakContrast * streak * arid;
+                precise float shown = max(scalarC[i] * (1.0 - exposure), riverbank);
 
                 vec3 humidSoil = unpack(colorsA[0]);
                 vec3 aridSoil = unpack(colorsA[1]);
@@ -1007,10 +1016,16 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
                 vec3 sparseGreen = unpack(colorsA[6]);
                 vec3 denseGreen = unpack(colorsA[7]);
                 vec3 snowColour = unpack(colorsA[8]);
+                vec3 hamadaColour = unpack(colorsA[9]);
+                vec3 blushColour = unpack(colorsA[10]);
+                vec3 washColour = unpack(colorsA[11]);
 
                 precise vec3 soil = humidSoil + (aridSoil - humidSoil) * arid;
-                precise vec3 bare = soil + (sandColour - soil) * sand;
+                precise vec3 bare = soil + (hamadaColour - soil) * stone;
+                bare = bare + (sandColour - bare) * streakedSand;
+                bare = bare + (blushColour - bare) * blush;
                 bare = bare + (ironRed - bare) * red;
+                bare = bare + (washColour - bare) * wash;
                 bare = bare + (rockColour - bare) * rock;
                 bare = bare + (saltColour - bare) * salt;
                 bare = bare * streakLight;

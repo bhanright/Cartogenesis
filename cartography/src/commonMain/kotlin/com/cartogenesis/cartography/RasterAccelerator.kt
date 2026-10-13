@@ -98,6 +98,9 @@ object RasterView {
  * | wind      | -                  | -       | -       | -              | -     |
  * | normals   | slope x            | slope y | -       | -              | -     |
  *
+ * The satellite view also carries its surface's terrain in [colorsB], a packed word a cell
+ * rather than a color table: the one int buffer that view leaves free.
+ *
  * [elevation] and [land] are always present: the relief shading, the coastline pass and half the
  * views read them.
  *
@@ -314,13 +317,14 @@ class RasterRecipe(
      * Whether the fantasy view's land is painted from its surface ([MapStyle.satellite]).
      *
      * When it is, [indexA] carries [SatelliteSurface.composition], [indexB]
-     * [SatelliteSurface.climate], [vegetation] the living cover and [colorsA]
-     * [SatelliteGround.PALETTE], and the four figures below are the ones
+     * [SatelliteSurface.climate], [colorsB] [SatelliteSurface.terrain], [vegetation] the living
+     * cover and [colorsA] [SatelliteGround.PALETTE], and the figures below are the ones
      * [SatelliteGround.groundColor] unpacks the bytes with: handed over rather than written into
      * the shader a second time, for the reason [ordinaryGround] is.
      */
     val satellite: Boolean = false,
     val satelliteStreakContrast: Float = SatelliteGround.STREAK_CONTRAST,
+    val satelliteSandStreak: Float = SatelliteGround.SAND_STREAK,
     val satelliteUnitPerByte: Float = SatelliteGround.UNIT_PER_BYTE,
     val satelliteUnitPerStreakByte: Float = SatelliteGround.UNIT_PER_STREAK_BYTE,
     val satelliteStreakZeroByte: Int = SatelliteGround.STREAK_ZERO_BYTE
@@ -417,6 +421,7 @@ class RasterRecipe(
                         val surface = SatelliteGround.of(world)
                         indexA = surface.composition
                         indexB = surface.climate
+                        colorsB = surface.terrain
                         vegetation = surface.cover
                         colorsA = SatelliteGround.PALETTE
                     } else if (style.climateTint > 0f) {

@@ -150,6 +150,7 @@ class SatelliteStyleTest {
         val again = SatelliteGround.of(world)
         assertContentEquals(surface.composition, again.composition)
         assertContentEquals(surface.climate, again.climate)
+        assertContentEquals(surface.terrain, again.terrain)
         assertContentEquals(surface.cover, again.cover)
     }
 

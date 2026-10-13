@@ -51,7 +51,8 @@ class DrawnRiverMouthTest : BorrowsSharedWorlds() {
                 shortTotal += short
                 intoWaterTotal += counts.getValue(RiverSelection.Ending.DRAWN_WATER)
                 throughNarrowSeaTotal += world.rivers.rivers.indices.count { course ->
-                    selection.drawn[course] && world.rivers.rivers[course].cells.any { narrow[it] }
+                    val cells = world.rivers.rivers[course].cells
+                    selection.drawn[course] && (0 until cells.size - 1).any { narrow[cells[it]] }
                 }
                 endings.forEachIndexed { course, ending ->
                     if (ending == RiverSelection.Ending.SHORT_OF_THE_WATER && examples.size < 6) {

@@ -22,14 +22,14 @@ import kotlin.test.assertContentEquals
 import kotlin.test.assertTrue
 
 /**
- * The satellite style's guards: its colour answers to the fields it claims to be drawn from, the
+ * The satellite style's guards: its color answers to the fields it claims to be drawn from, the
  * same world draws the same picture, and none of the layers it adds to the map carries the grid's
  * geometry (conventions rule 13).
  *
- * The graphics card's copy of the colour is held to the processor's by `GpuRasterTest` in
+ * The graphics card's copy of the color is held to the processor's by `GpuRasterTest` in
  * `:desktop`, which draws every style in every view and so takes this one with the rest.
  *
- * Measured on seed 969495 at 512 rows ([WORLD]), and the colour's two responses are asked as
+ * Measured on seed 969495 at 512 rows ([WORLD]), and the color's two responses are asked as
  * counterfactuals of it: the same world with older crust, and with more cover, so nothing but the
  * one field differs between the two pictures compared.
  */

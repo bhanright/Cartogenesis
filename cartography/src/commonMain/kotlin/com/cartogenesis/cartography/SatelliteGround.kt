@@ -296,7 +296,7 @@ internal object SatelliteGround {
     const val ARID_SOIL: Int = 0xFFAB8455.toInt()
 
     /**
-     * Iron-oxide red: the red centre of Australia and the iron-stained ergs of the central
+     * Iron-oxide red: the red center of Australia and the iron-stained ergs of the central
      * Sahara, typical of the composites. Redder than the Colorado Plateau's #C08F61, which is a
      * sandstone country seen through sparse juniper.
      */
@@ -305,7 +305,7 @@ internal object SatelliteGround {
     /** Pale buff and cream: the sand seas of the Sahara and Arabia, typical of the composites. */
     const val SAND: Int = 0xFFDEC496.toInt()
 
-    /** Dark brown-grey rock: the Tibesti, the Hoggar and bare high ranges, typical. */
+    /** Dark brown-gray rock: the Tibesti, the Hoggar and bare high ranges, typical. */
     const val ROCK: Int = 0xFF5B5146.toInt()
 
     /** Salt crust: the Salar de Uyuni and the Chott el Djerid, near white and a little warm. */
@@ -479,7 +479,7 @@ internal object SatelliteGround {
      * Where bare rock begins and where it is all there is, as the slope over
      * [SLOPE_BASELINE_KM] of ground, in degrees.
      *
-     * Over a baseline of about twelve kilometres the Great Plains slope well under a degree, worn
+     * Over a baseline of about twelve kilometers the Great Plains slope well under a degree, worn
      * uplands like the Appalachians three to six, and the Alps and the Himalaya twelve to twenty;
      * soil holds on the first two and the last is mostly rock and scree in the composites.
      */
@@ -510,13 +510,13 @@ internal object SatelliteGround {
     /**
      * The slopes over which loose sand stops lying: below the first a sand sea, above the second
      * the wind strips it. The great ergs fill basins and plains sloping a few tenths of a degree
-     * over a baseline of kilometres; by a degree the ground is reg, hamada or upland.
+     * over a baseline of kilometers; by a degree the ground is reg, hamada or upland.
      */
     private const val FLAT_GROUND_DEGREES = 0.3f
     private const val SAND_SHEDDING_DEGREES = 1f
 
     /**
-     * How much loose sediment, in metres, begins a sand sheet and makes a sand sea: kept on the
+     * How much loose sediment, in meters, begins a sand sheet and makes a sand sea: kept on the
      * cell or carried to it on the wind ([sedimentOf]).
      *
      * [sedimentOf] is a proxy rather than a thickness — a basin's depth below its region counts in
@@ -531,7 +531,7 @@ internal object SatelliteGround {
 
     /**
      * How far the regional average reaches that tells a source of sediment from a sink, in
-     * kilometres: the size of the basins and uplands that feed and hold a sand sea.
+     * kilometers: the size of the basins and uplands that feed and hold a sand sea.
      */
     private const val SEDIMENT_REGION_KM = 150.0
 
@@ -542,40 +542,40 @@ internal object SatelliteGround {
      */
     private const val IRON_STAIN_MOST = 0.6f
 
-    /** How far a craton's red fades out across its edge, in kilometres. */
+    /** How far a craton's red fades out across its edge, in kilometers. */
     private const val IRON_STAIN_SOFTENING_KM = 30.0
 
     /**
-     * How far upwind the wind's sand comes from, in kilometres: the e-folding length of the upwind
-     * trace. The Saharan sand seas sit a few hundred kilometres downwind of the massifs and wadis
+     * How far upwind the wind's sand comes from, in kilometers: the e-folding length of the upwind
+     * trace. The Saharan sand seas sit a few hundred kilometers downwind of the massifs and wadis
      * that feed them.
      */
     private const val SAND_SUPPLY_REACH_KM = 250.0
 
     /**
-     * How long a wind streak runs, in kilometres: the e-folding length of the upwind average.
+     * How long a wind streak runs, in kilometers: the e-folding length of the upwind average.
      * The linear dunes of the Namib and the Simpson and the wind streaks of the Sahara and the
-     * Ordos run tens of kilometres to a few hundred; two hundred is long against the
+     * Ordos run tens of kilometers to a few hundred; two hundred is long against the
      * spacing of the valleys the small relief is mostly made of, so the average draws streaks and
      * not the drainage.
      */
     private const val STREAK_LENGTH_KM = 200.0
 
     /**
-     * How far the sediment a sink keeps is spread, in kilometres: a sand sea fills its basin
+     * How far the sediment a sink keeps is spread, in kilometers: a sand sea fills its basin
      * rather than tracing the valley floors of the ground beneath it.
      */
     private const val SAND_SEA_SPREAD_KM = 25.0
 
     /**
-     * The spread of the relief a streak is drawn from, in kilometres: the terrain less its own
+     * The spread of the relief a streak is drawn from, in kilometers: the terrain less its own
      * Gaussian average at this spread, which keeps the hills and hollows a few cells across and
      * drops the regional slope that would otherwise shade a whole basin one way.
      */
     private const val STREAK_SOURCE_SPREAD_KM = 40.0
 
     /**
-     * The finest relief a streak is drawn from, in kilometres: the terrain is Gaussian-averaged at
+     * The finest relief a streak is drawn from, in kilometers: the terrain is Gaussian-averaged at
      * this spread before the regional average is taken off it, so a streak is a few cells across.
      * A streak one cell wide can only run between cells as a staircase, and its grain measures as
      * the grid's bearings whatever bearing the wind gave it.
@@ -583,13 +583,13 @@ internal object SatelliteGround {
     private const val STREAK_SOURCE_FINEST_KM = 12.0
 
     /**
-     * The spread over which the small relief is measured against its own size, in kilometres, so
+     * The spread over which the small relief is measured against its own size, in kilometers, so
      * a streak on a plain is as plain to see as one among hills: the sand does not know how high
      * the hill upwind of it was, only that it was there.
      */
     private const val STREAK_SOURCE_REGION_KM = 150.0
 
-    /** The quietest small relief that counts, in metres, so a dead-flat plain is not amplified. */
+    /** The quietest small relief that counts, in meters, so a dead-flat plain is not amplified. */
     private const val QUIETEST_RELIEF_METRES = 2f
 
     /** How many of the trace's e-folding lengths it walks before the rest weighs nothing. */
@@ -601,7 +601,7 @@ internal object SatelliteGround {
      */
     private const val STREAK_FULL_SCALE_SIGMAS = 2f
 
-    /** How far a playa's crust is softened, in kilometres: about a cell on the application's grid. */
+    /** How far a playa's crust is softened, in kilometers: about a cell on the application's grid. */
     private const val SALT_PAN_SOFTENING_KM = 4.0
 
     /**
@@ -773,7 +773,7 @@ internal object SatelliteGround {
     }
 
     /**
-     * What the erosion stage's work says about loose sediment, per land cell, in metres: what an
+     * What the erosion stage's work says about loose sediment, per land cell, in meters: what an
      * eroding upland sheds ([shedMetres]) and what a sink keeps ([keptMetres]).
      */
     internal class Sediment(val shedMetres: FloatField, val keptMetres: FloatArray)
@@ -781,7 +781,7 @@ internal object SatelliteGround {
     /**
      * The erosion's sources and sinks, from how far it lowered each cell against its region.
      *
-     * The stage lowers nearly every cell of a world by a hundred to three hundred metres (the
+     * The stage lowers nearly every cell of a world by a hundred to three hundred meters (the
      * probes at 1,024 rows put the dry land's deciles at 135 to 325 m), so the raw difference
      * between the plate stage's height and the erosion stage's says how old the ground is more
      * than where its sediment went. Against the Gaussian average of the lowering over
@@ -1109,7 +1109,7 @@ internal object SatelliteGround {
         return row * cellsAcross + column
     }
 
-    /** [field] between cell centres, wrapping east-west and clamped at the poles. */
+    /** [field] between cell centers, wrapping east-west and clamped at the poles. */
     private fun bilinear(field: FloatField, x: Double, y: Double): Float {
         val left = floor(x).toInt()
         val top = floor(y).toInt()

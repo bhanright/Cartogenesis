@@ -198,7 +198,7 @@ class ClimateTintTest : BorrowsSharedWorlds() {
             )
             // The satellite paints the vegetation density itself, so a desert cell that carries
             // cover, or a river's green through it, reads green there as it does in a photograph
-            // of the Nile; `SatelliteStyleTest` holds its colour to the cover instead.
+            // of the Nile; `SatelliteStyleTest` holds its color to the cover instead.
             if (style != MapStyle.CLEAR && style != MapStyle.SCHOOLROOM && !style.satellite) {
                 assertTrue(
                     green == 0,

@@ -156,7 +156,7 @@ enum class MapStyle(
     internal val realmRamp: IntArray? = null,
     /**
      * Paint the land from what its surface is made of rather than from a ramp: the living cover
-     * over bare ground whose colour is the ground's own — iron red, rock, sand, salt — with the
+     * over bare ground whose color is the ground's own — iron red, rock, sand, salt — with the
      * wind's streaks, the rivers' green and the snow laid on it. True only for [SATELLITE]; see
      * [SatelliteGround], which computes all of it, and which leaves [landRamp], [biomeWash],
      * [biomeMuting] and [climateTint] unread on the fantasy view.
@@ -177,7 +177,7 @@ enum class MapStyle(
      *
      * The application's default. Where [NATURAL] is a ramp modulated by the climate and washed
      * with the biomes, this one has no ramp on land at all: see [SatelliteGround] for every field
-     * and the source of every colour. The sea, the water, the ink and the space around the sheet
+     * and the source of every color. The sea, the water, the ink and the space around the sheet
      * are [NATURAL]'s, which were sampled off the same kind of photograph.
      */
     SATELLITE(
@@ -188,7 +188,7 @@ enum class MapStyle(
         // from the surface instead.
         landRamp = NATURAL_LAND_RAMP,
         paper = 0xFFCECECA.toInt(),
-        // Not read: the cover is the vegetation density itself, not a biome's colour washed on.
+        // Not read: the cover is the vegetation density itself, not a biome's color washed on.
         biomeWash = 0f,
         biomeMuting = 1f,
         river = 0xFF4499A9.toInt(),

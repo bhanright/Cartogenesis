@@ -976,6 +976,14 @@ object RiverStage {
      * cell wide it is the river, has no room for the parallel scan lines above, and has to be drawn
      * as the river or it appears as a thread joining two thick channels (F15).
      *
+     * The sea is held to the same test, against the coast's pen rather than two cells: a drowned
+     * valley too narrow for the map to draw as sea is the river's own lower reach, and the course
+     * runs on down it to the sea the map draws, one shortest step on the ground at a time
+     * ([SeaChannels.seawardSteps]). Two courses that meet in such a valley meet as they would on
+     * land: the later one stops on the first, at a cell of water rather than of ground. Stopped at
+     * the valley's head instead, a course ended at a thread of sea color with the coast inked
+     * across the valley's mouth, short of the sea on the map (docs/DESIGN_LEDGER.md, RM1).
+     *
      * Courses are traced from the head with the longest way down to the water, not from the head
      * carrying the most water. Both orders draw the same network — every channel cell is claimed by
      * somebody, and what the order decides is only which course claims which reach — but only this
@@ -1014,10 +1022,14 @@ object RiverStage {
         val cellHeightKm = config.cellHeightKm.toFloat()
         val diagonalKm = sqrt(cellWidthKm * cellWidthKm + cellHeightKm * cellHeightKm)
 
-        // The water a course ends at: the sea, or a lake's own surface. A strip of lake one cell
-        // wide is not open water and is a reach of the river, for the reason [LakeResult.openWater]
-        // gives.
-        fun isTheWater(cell: Int): Boolean = !sea.isLand[cell] || lakes.isOpenWater(cell)
+        // The water a course ends at: the sea the map draws as sea, or a lake's own surface. A
+        // strip of lake one cell wide is not open water and is a reach of the river, for the reason
+        // [LakeResult.openWater] gives; a drowned valley too narrow to be drawn as sea is a reach of
+        // it too, and the course runs on down it to the open water ([SeaChannels]).
+        val narrowSea = SeaChannels.narrow(config, sea.isLand)
+        val seaward = SeaChannels.seawardSteps(config, sea.isLand, narrowSea)
+        fun isTheWater(cell: Int): Boolean =
+            (!sea.isLand[cell] && !narrowSea[cell]) || lakes.isOpenWater(cell)
 
         val hasUpstream = BooleanArray(cellCount)
         for (cell in 0 until cellCount) {
@@ -1067,10 +1079,10 @@ object RiverStage {
                 claimed[current] = true
                 claimedByThisRiver++
 
-                val next = flowTarget[current]
+                val next = if (sea.isLand[current]) flowTarget[current] else seaward[current]
                 if (next < 0) break
                 if (isTheWater(next)) {
-                    path.add(next) // the river mouth, on the sea or on a lake shore
+                    path.add(next) // the river mouth, on the open sea or on a lake shore
                     break
                 }
                 current = next

@@ -1015,8 +1015,8 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
                 vec3 snowColour = unpack(colorsA[8]);
 
                 precise vec3 soil = humidSoil + (aridSoil - humidSoil) * arid;
-                precise vec3 bare = soil + (ironRed - soil) * red;
-                bare = bare + (sandColour - bare) * sand;
+                precise vec3 bare = soil + (sandColour - soil) * sand;
+                bare = bare + (ironRed - bare) * red;
                 bare = bare + (rockColour - bare) * rock;
                 bare = bare + (saltColour - bare) * salt;
                 bare = bare * streakLight;

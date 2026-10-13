@@ -30,9 +30,11 @@ import kotlin.math.sqrt
  *    Sahara's shield are red and the young basins beside them are not.
  *  - **Dark rock** is ground too steep to hold soil, and the active belts: the slope over a fixed
  *    ground baseline, and the present epoch's belts (crust age near 0) at altitude.
- *  - **Pale sand** is loose sediment on flat, dry ground, where the erosion stage put it down
- *    (`ErosionResult.height` above `PlateResult.height`) or where the prevailing wind carries it
- *    from uplands upwind that the erosion wore away.
+ *  - **Pale sand** is loose sediment on flat, dry ground: where the erosion stage lowered the
+ *    ground less than its region (`PlateResult.height` less `ErosionResult.height`) or the ground
+ *    stands in a basin, and where the prevailing wind carries it from uplands upwind that the
+ *    erosion wore down more than their region. Sand on old crust takes the iron red as well, so
+ *    an old erg is red and a young one pale.
  *  - **White salt** is the playa floor of a closed basin, `LakeResult.playa`, softened by a
  *    Gaussian a cell across so a pan is not drawn as a block of cells.
  *  - **Wind streaks** are the terrain's own small relief averaged along the prevailing wind
@@ -72,21 +74,38 @@ internal object SatelliteGround {
         }
         val slopeDegrees = slopeDegrees(altitudeMetres, land, cellWidthKm, cellHeightKm)
 
-        // Net change the erosion stage made to each cell, in metres: what it carried away from the
-        // uplands and what it laid down in the valleys and basins.
-        val erodedMetres = FloatField(cellsAcross, cellsDown)
-        val depositedMetres = FloatArray(cellCount)
-        val beforeErosion = world.plates.height.data
-        val afterErosion = world.erosion.height.data
-        for (cell in 0 until cellCount) {
-            if (!land[cell]) continue
-            val changeMetres = (afterErosion[cell] - beforeErosion[cell]) * reliefSpanMetres
-            if (changeMetres > 0f) depositedMetres[cell] = changeMetres
-            else erodedMetres.data[cell] = -changeMetres
+        val smallRelief = smallReliefInRegionalUnits(altitudeMetres, land, cellWidthKm, cellHeightKm)
+        val sediment = sedimentOf(world, altitudeMetres)
+        val traces = upwindTraces(world, smallRelief, sediment.shedMetres, cellWidthKm, cellHeightKm)
+        val looseMetres = FloatArray(cellCount) { cell ->
+            if (land[cell]) sediment.keptMetres[cell] + traces.supplyMetres[cell] else 0f
         }
 
-        val smallRelief = smallReliefInRegionalUnits(altitudeMetres, land, cellWidthKm, cellHeightKm)
-        val traces = upwindTraces(world, smallRelief, erodedMetres, cellWidthKm, cellHeightKm)
+        // Where sand can lie, spread as the sediment is: a sand sea blankets the low swells and
+        // valley sides of the ground beneath it, so it is the region's slope that sheds it and not
+        // each valley wall's.
+        val flatEnough = FloatField(cellsAcross, cellsDown)
+        for (cell in 0 until cellCount) {
+            if (!land[cell]) continue
+            flatEnough.data[cell] =
+                1f - smoothstep(FLAT_GROUND_DEGREES, SAND_SHEDDING_DEGREES, slopeDegrees[cell])
+        }
+        val flatness = landAverage(
+            flatEnough, land, SAND_SEA_SPREAD_KM / cellWidthKm, SAND_SEA_SPREAD_KM / cellHeightKm
+        )
+
+        // Iron staining by the crust's age, softened by a Gaussian so a craton's red fades out
+        // over a few tens of kilometres rather than stopping at the line where the age jumps from
+        // the youngest epoch's band to the shield's untouched 1.
+        val ironStain = FloatField(cellsAcross, cellsDown)
+        for (cell in 0 until cellCount) {
+            if (!land[cell]) continue
+            ironStain.data[cell] =
+                smoothstep(OLDEST_UNREDDENED_CRUST_AGE, 1f, world.plates.crustAge.data[cell])
+        }
+        GaussianBlur.apply(
+            ironStain, IRON_STAIN_SOFTENING_KM / cellWidthKm, IRON_STAIN_SOFTENING_KM / cellHeightKm
+        )
 
         val salt = FloatField(cellsAcross, cellsDown)
         for (cell in 0 until cellCount) if (world.rivers.lakes.isPlaya(cell)) salt.data[cell] = 1f
@@ -110,7 +129,7 @@ internal object SatelliteGround {
             riparian, RIVERBANK_SOFTENING_KM / cellWidthKm, RIVERBANK_SOFTENING_KM / cellHeightKm
         )
 
-        val streakScale = streakScaleOf(traces.streak, land, depositedMetres, traces.supplyMetres)
+        val streakScale = streakScaleOf(traces.streak, land, looseMetres)
 
         val composition = IntArray(cellCount)
         val climate = IntArray(cellCount)
@@ -122,16 +141,16 @@ internal object SatelliteGround {
             val slope = slopeDegrees[cell]
             val altitude = altitudeMetres.data[cell]
 
-            val red = drought * smoothstep(OLDEST_UNREDDENED_CRUST_AGE, 1f, crustAge)
+            val red = drought * IRON_STAIN_MOST * ironStain.data[cell]
 
             val steep = smoothstep(BARE_ROCK_SLOPE_START_DEGREES, BARE_ROCK_SLOPE_FULL_DEGREES, slope)
             val activeBelt = (1f - smoothstep(0f, ACTIVE_BELT_CRUST_AGE, crustAge)) *
                 smoothstep(ROCKY_BELT_START_METRES, ROCKY_BELT_FULL_METRES, altitude)
             val rock = max(steep, activeBelt)
 
-            val flat = 1f - smoothstep(FLAT_GROUND_DEGREES, SAND_SHEDDING_DEGREES, slope)
-            val looseMetres = depositedMetres[cell] + traces.supplyMetres[cell]
-            val sand = drought * flat * smoothstep(0f, SAND_SEA_SEDIMENT_METRES, looseMetres)
+            val flat = flatness[cell]
+            val sand = drought * flat *
+                smoothstep(SAND_SHEET_METRES, SAND_SEA_METRES, looseMetres[cell])
 
             val streak = (traces.streak[cell] / streakScale).coerceIn(-1f, 1f)
 
@@ -197,8 +216,9 @@ internal object SatelliteGround {
     ): Int {
         fun of(colour: Int): Float = ((colour shr shift) and 0xFF).toFloat()
         val soil = of(HUMID_SOIL) + (of(ARID_SOIL) - of(HUMID_SOIL)) * arid
-        var bare = soil + (of(IRON_RED) - soil) * red
-        bare += (of(SAND) - bare) * sand
+        // The sand before the red, so an old erg is red sand and only a young one stays pale.
+        var bare = soil + (of(SAND) - soil) * sand
+        bare += (of(IRON_RED) - bare) * red
         bare += (of(ROCK) - bare) * rock
         bare += (of(SALT) - bare) * salt
         bare *= streakLight
@@ -259,11 +279,12 @@ internal object SatelliteGround {
     /**
      * How far one full streak brightens or darkens the sand it lies on, as a share of the light.
      *
-     * A tenth either way: linear dunes and the bright and dark wind streaks of the Sahara and the
-     * Ordos change the composites' brightness by about that much against the sand around them, and
-     * any stronger reads as a ruled texture rather than as ground.
+     * A fifth either way at full scale, which is two standard deviations of the streak field, so
+     * the typical streak moves the light by a tenth or less: the bright and dark wind streaks of
+     * the Sahara and the Ordos stand about that far from the sand around them in the composites at
+     * a few kilometres a pixel.
      */
-    const val STREAK_CONTRAST: Float = 0.10f
+    const val STREAK_CONTRAST: Float = 0.20f
 
     /** The byte a streak of zero is packed as: the middle of a byte, so both signs fit. */
     const val STREAK_ZERO_BYTE: Int = 128
@@ -314,18 +335,40 @@ internal object SatelliteGround {
 
     /**
      * The slopes over which loose sand stops lying: below the first a sand sea, above the second
-     * the wind strips it. Sand seas on Earth fill basins and plains of under a degree over a
-     * baseline of tens of kilometres; by three degrees the ground is reg, hamada or upland.
+     * the wind strips it. The great ergs fill basins and plains sloping a few tenths of a degree
+     * over a baseline of kilometres; by a degree the ground is reg, hamada or upland.
      */
-    private const val FLAT_GROUND_DEGREES = 1f
-    private const val SAND_SHEDDING_DEGREES = 3f
+    private const val FLAT_GROUND_DEGREES = 0.3f
+    private const val SAND_SHEDDING_DEGREES = 1f
 
     /**
-     * How much loose sediment, in metres, makes a sand sea: laid down on the cell or carried to it
-     * on the wind. The great ergs stand tens to a hundred metres deep; ten metres is a sheet of
-     * sand covering the ground beneath.
+     * How much loose sediment, in metres, begins a sand sheet and makes a sand sea: kept on the
+     * cell or carried to it on the wind ([sedimentOf]).
+     *
+     * [sedimentOf] is a proxy rather than a thickness — a basin's depth below its region counts in
+     * it — so the two ends are set against Earth's deserts rather than against an erg's depth:
+     * sand covers about a fifth of the Sahara and a third of Arabia, the rest being reg, hamada
+     * and rock. With these ends a sand sea (a weight over a half) covers 30 to 40 per cent of the
+     * dry land of seeds 969495 and 7 at 1,024 rows; the dry land's loose sediment there runs 23 to
+     * 534 m between its first and ninth deciles. See docs/DESIGN_LEDGER.md, S1.
      */
-    private const val SAND_SEA_SEDIMENT_METRES = 10f
+    private const val SAND_SHEET_METRES = 60f
+    private const val SAND_SEA_METRES = 200f
+
+    /**
+     * How far the regional average reaches that tells a source of sediment from a sink, in
+     * kilometres: the size of the basins and uplands that feed and hold a sand sea.
+     */
+    private const val SEDIMENT_REGION_KM = 150.0
+
+    /**
+     * The most of the iron red the ground takes on the oldest dry crust. A half: the
+     * reddest ergs and gibber plains read orange in the composites, half their quartz's own pale.
+     */
+    private const val IRON_STAIN_MOST = 0.5f
+
+    /** How far a craton's red fades out across its edge, in kilometres. */
+    private const val IRON_STAIN_SOFTENING_KM = 30.0
 
     /**
      * How far upwind the wind's sand comes from, in kilometres: the e-folding length of the upwind
@@ -336,9 +379,18 @@ internal object SatelliteGround {
 
     /**
      * How long a wind streak runs, in kilometres: the e-folding length of the upwind average.
-     * Linear dunes and wind streaks in the Sahara and the Ordos run tens of kilometres.
+     * The linear dunes of the Namib and the Simpson and the wind streaks of the Sahara and the
+     * Ordos run tens of kilometres to a few hundred; a hundred and twenty is long against the
+     * spacing of the valleys the small relief is mostly made of, so the average draws streaks and
+     * not the drainage.
      */
-    private const val STREAK_LENGTH_KM = 40.0
+    private const val STREAK_LENGTH_KM = 120.0
+
+    /**
+     * How far the sediment a sink keeps is spread, in kilometres: a sand sea fills its basin
+     * rather than tracing the valley floors of the ground beneath it.
+     */
+    private const val SAND_SEA_SPREAD_KM = 25.0
 
     /**
      * The spread of the relief a streak is drawn from, in kilometres: the terrain less its own
@@ -371,11 +423,11 @@ internal object SatelliteGround {
 
     /**
      * The discharges at which a river begins to green its banks and is fully green, as the
-     * base-ten logarithm of cubic kilometres a year: a tenth of a cubic kilometre, a perennial
+     * base-ten logarithm of cubic kilometres a year: one cubic kilometre, a perennial
      * desert river, to thirty, the Nile and the Indus whose valleys are a ribbon of green through
      * the composites.
      */
-    private const val THINNEST_GREEN_RIVER_LOG10_KM3 = -1f
+    private const val THINNEST_GREEN_RIVER_LOG10_KM3 = 0f
     private const val FULLY_GREEN_RIVER_LOG10_KM3 = 1.5f
 
     /** The cover a fully green river gives its banks: the irrigated Nile valley's, nearly closed. */
@@ -413,7 +465,7 @@ internal object SatelliteGround {
     }
 
     /** The slope of the land in degrees over [SLOPE_BASELINE_KM]; 0 at sea. */
-    private fun slopeDegrees(
+    internal fun slopeDegrees(
         altitudeMetres: FloatField,
         land: BooleanArray,
         cellWidthKm: Double,
@@ -446,7 +498,7 @@ internal object SatelliteGround {
      * relief has in its own region, so the streaks a plain draws read as plainly as a hill
      * country's. 0 at sea.
      */
-    private fun smallReliefInRegionalUnits(
+    internal fun smallReliefInRegionalUnits(
         altitudeMetres: FloatField,
         land: BooleanArray,
         cellWidthKm: Double,
@@ -475,13 +527,83 @@ internal object SatelliteGround {
         return small
     }
 
+    /**
+     * What the erosion stage's work says about loose sediment, per land cell, in metres: what an
+     * eroding upland sheds ([shedMetres]) and what a sink keeps ([keptMetres]).
+     */
+    internal class Sediment(val shedMetres: FloatField, val keptMetres: FloatArray)
+
+    /**
+     * The erosion's sources and sinks, from how far it lowered each cell against its region.
+     *
+     * The stage lowers nearly every cell of a world by a hundred to three hundred metres (the
+     * probes at 1,024 rows put the dry land's deciles at 135 to 325 m), so the raw difference
+     * between the plate stage's height and the erosion stage's says how old the ground is more
+     * than where its sediment went. Against the Gaussian average of the lowering over
+     * [SEDIMENT_REGION_KM] it says the second: a cell lowered more than its region has shed
+     * material, one lowered less has kept it. A cell standing below its region's average ground is
+     * a basin and keeps sediment too, by as much as it stands below it.
+     */
+    internal fun sedimentOf(world: WorldMap, altitudeMetres: FloatField): Sediment {
+        val config = world.config
+        val land = world.sea.isLand
+        val cellsAcross = world.width
+        val cellsDown = world.height
+        val sigmaAcross = SEDIMENT_REGION_KM / config.cellWidthKm
+        val sigmaDown = SEDIMENT_REGION_KM / config.cellHeightKm
+        val reliefSpanMetres = config.scale.reliefSpanMetres
+        val beforeErosion = world.plates.height.data
+        val afterErosion = world.erosion.height.data
+
+        val lowered = FloatField(cellsAcross, cellsDown)
+        for (cell in land.indices) {
+            if (land[cell]) lowered.data[cell] = (beforeErosion[cell] - afterErosion[cell]) * reliefSpanMetres
+        }
+        val regionalLowering = landAverage(lowered, land, sigmaAcross, sigmaDown)
+        val regionalAltitude = landAverage(altitudeMetres, land, sigmaAcross, sigmaDown)
+
+        val shed = FloatField(cellsAcross, cellsDown)
+        val keptField = FloatField(cellsAcross, cellsDown)
+        val kept = keptField.data
+        for (cell in land.indices) {
+            if (!land[cell]) continue
+            val againstRegion = lowered.data[cell] - regionalLowering[cell]
+            if (againstRegion > 0f) shed.data[cell] = againstRegion
+            kept[cell] = max(0f, -againstRegion) + max(0f, regionalAltitude[cell] - altitudeMetres.data[cell])
+        }
+        val spreadKept = landAverage(
+            keptField, land, SAND_SEA_SPREAD_KM / config.cellWidthKm, SAND_SEA_SPREAD_KM / config.cellHeightKm
+        )
+        for (cell in land.indices) if (!land[cell]) spreadKept[cell] = 0f
+        return Sediment(shed, spreadKept)
+    }
+
+    /**
+     * [field]'s Gaussian average over the land alone: the blur of the field over the blur of the
+     * land mask, so a coast does not average its ground with the sea's zeros.
+     */
+    private fun landAverage(field: FloatField, land: BooleanArray, sigmaAcross: Double, sigmaDown: Double): FloatArray {
+        val sum = FloatField(field.width, field.height)
+        val weight = FloatField(field.width, field.height)
+        for (cell in land.indices) {
+            if (!land[cell]) continue
+            sum.data[cell] = field.data[cell]
+            weight.data[cell] = 1f
+        }
+        GaussianBlur.apply(sum, sigmaAcross, sigmaDown)
+        GaussianBlur.apply(weight, sigmaAcross, sigmaDown)
+        return FloatArray(land.size) { cell ->
+            if (weight.data[cell] > 0f) sum.data[cell] / weight.data[cell] else 0f
+        }
+    }
+
     /** The two upwind averages, per cell: the streaks and the sand the wind brings. */
-    private class Traces(val streak: FloatArray, val supplyMetres: FloatArray)
+    internal class Traces(val streak: FloatArray, val supplyMetres: FloatArray)
 
     /**
      * Walks upwind from every land cell along the prevailing wind, a cell's width at a time, and
      * averages two fields along the way with an exponential weight: the small relief over
-     * [STREAK_LENGTH_KM], which is the streak, and the depth the erosion stage removed over
+     * [STREAK_LENGTH_KM], which is the streak, and what the uplands shed ([sedimentOf]) over
      * [SAND_SUPPLY_REACH_KM], which is the sand the wind delivers. A walk stops at the sea, which
      * brings no sand and has no relief to streak.
      *
@@ -490,10 +612,10 @@ internal object SatelliteGround {
      * the ground at every step and turns where it turns. Fields are read between cells
      * bilinearly, so no step lands on the grid's rows.
      */
-    private fun upwindTraces(
+    internal fun upwindTraces(
         world: WorldMap,
         smallRelief: FloatField,
-        erodedMetres: FloatField,
+        shedMetres: FloatField,
         cellWidthKm: Double,
         cellHeightKm: Double
     ): Traces {
@@ -531,7 +653,7 @@ internal object SatelliteGround {
                         streakWeights += streakWeight
                         streakWeight *= streakDecay
                     }
-                    supplySum += supplyWeight * bilinear(erodedMetres, x, y)
+                    supplySum += supplyWeight * bilinear(shedMetres, x, y)
                     supplyWeights += supplyWeight
                     supplyWeight *= supplyDecay
                     // The wind's bearing on the ground, then back into cells: one column is a
@@ -556,16 +678,11 @@ internal object SatelliteGround {
      * [STREAK_FULL_SCALE_SIGMAS]: the value a full streak is packed at. One per world, so the
      * strongest streaks are the strongest this world's wind draws.
      */
-    private fun streakScaleOf(
-        streak: FloatArray,
-        land: BooleanArray,
-        depositedMetres: FloatArray,
-        supplyMetres: FloatArray
-    ): Float {
+    private fun streakScaleOf(streak: FloatArray, land: BooleanArray, looseMetres: FloatArray): Float {
         var sumOfSquares = 0.0
         var count = 0
         for (cell in streak.indices) {
-            if (!land[cell] || depositedMetres[cell] + supplyMetres[cell] <= 0f) continue
+            if (!land[cell] || looseMetres[cell] <= SAND_SHEET_METRES) continue
             sumOfSquares += streak[cell].toDouble() * streak[cell]
             count++
         }

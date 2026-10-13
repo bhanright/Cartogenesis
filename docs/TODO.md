@@ -1,5 +1,36 @@
 # To do
 
+- **A drowned valley keeps its mouth's width all the way to its head (RM1).** `DrownedValleys`
+  sizes each drowned cell by Leopold and Maddock's width at the catchment that reaches it, and the
+  catchment barely grows down a valley, so a valley the mouth's width keeps is kept to its head at
+  that width: on seed 1 at 2,048 rows, 328 drawn rivers reached the sea at the heads of channels
+  one and two cells wide, half of them more than twenty cells (200 km) from the open water by the
+  channel, and one dendritic network of them runs some 300 km up from its bay (the longest, 330
+  cells, is the drowned basin's strait entered further down this list). A real estuary is a funnel whose width falls
+  inland over a convergence length of tens of kilometers (Savenije, *Salinity and Tides in Alluvial
+  Estuaries*, 2005), so most of these reaches are narrower than half a cell and would be ground
+  again. RM1 carried the rivers down the channels rather than changing the ground; the funnel is a
+  change to the sea stage that moves every world, and wants the estuaries' length and width
+  measured on the standard worlds against Savenije's convergence lengths first. 2026-10-13, RM1.
+- **The drowned notches on a steep coast run along the rows (RM1, rule 13).** Seed 1's eastern
+  coast at 2,048 rows, around sheet (1,340-1,410, 900-1,050), carries a comb of one-cell sea
+  channels running due east, parallel, ten to thirty cells long: the valleys the erosion cut down a
+  smooth east-facing slope, drowned. Since RM1 a drawn river runs down each, so the comb is drawn
+  in river ink where it was drawn as threads of sea; the geometry census's river layer is where it
+  will show. The cause is the valleys' own bearing on that slope (the coastal comb entries below),
+  not the tracer. 2026-10-13, RM1.
+- **An open pool of sea reached only through narrow sea reads as a lake (RM1).** Three drawn
+  rivers on seed 1 at 2,048 rows end in a patch of sea wide enough to be drawn as sea, whose only
+  way to the ocean is a channel too narrow to be drawn: the coast is inked round the patch and
+  across the channel's mouth, so the river seems to end in a coastal pond. Outside the band the
+  site shows. Carrying a course on through such a patch would draw a river across open water; the
+  honest answer is the same one the funnel above would give, or the drawing treating a pool
+  enclosed by narrow sea as part of the sea it drains to. 2026-10-13, RM1.
+- **Two rivers meeting in a drowned valley do not add their water (RM1).** Below a confluence in
+  sea too narrow to draw, the trunk's width is carried from its last cell on land
+  (`RiverWidth.sizedByFlow` reads no discharge on a sea cell), so the tributary's water does not
+  widen it. Small on today's worlds (a few estuaries take two drawn courses); summing what enters
+  each narrow sea cell would close it. 2026-10-13, RM1.
 - **Land too wet and deserts too few, from tropical air too dry (W1, paused on `chunk/w1-land-rain`, 2026-10-13).** On the Earth-sized default the land rains 853-1,029 mm against Earth's 756 and desert covers 5-17% of land against about 19%; the excess falls at 10-30 and 40-50 degrees and summer land rain peaks at 16-21 degrees against Earth's 5-12. Measured cause: 76-98% of land rain is condensate from lifted air at a rate linear in the column's humidity (`MoistureMarch`), while the air holds far too little water: tropical land 21-24 mm precipitable water at a column humidity near 0.4 against the Amazon's 55-60 mm and 0.75-0.8 (Schiro and others 2016), the tropical sea near 0.5, the planet 15-19 mm against 24.7. A critical-humidity gate on lifted condensation (Sundqvist and others 1989; Zhao and Carr 1997's 0.75 over land and 0.90 over sea) brings land rain to 600-800 mm but turns 42-61% of land within 10 degrees of the equator to desert; the rain then falls on the high, rough tropical terrain (800-1,070 m mean) and misses the lowlands. Placing deep ascent by subcloud moist static energy did not move the summer peak (the energy balance's land air is flat at 28 C from 8 to 28 N, so the energy maximum sits on the heat low) and kept the coupled loop from settling on seed 99. Smaller defects measured on the branch: the waves' eddy winds at 690-810 hPa diverge moisture out of the continents (desert falls 5-8 points without them); 6-20% of deep-tropics cells march against their coupled wind and stagnate about 60 days; the Budyko return reads 40% under its regional value. Next step when resumed: why the atmosphere holds about 60% of Earth's water (the column rain law, sea evaporation, residence), then the gate and these defects on top. Probe and figures: the branch's ledger notes and the maintainer's notes.
 - **The ocean's ITCZ rains under Earth's, on the equator's side of its convergence (F1).** On F1's
   worlds at 1,024 rows the open sea's July-half convergence line, where its mean meridional wind

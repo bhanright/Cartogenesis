@@ -12,6 +12,13 @@
   again. RM1 carried the rivers down the channels rather than changing the ground; the funnel is a
   change to the sea stage that moves every world, and wants the estuaries' length and width
   measured on the standard worlds against Savenije's convergence lengths first. 2026-10-13, RM1.
+- **`EarthSizeGeometryReport` runs out of its 2 GB heap in the drawing's deep tier.** Twice on
+  RM1's branch, in `:cartography:deepTest -Pstages=rivers` run beside `:worldgen:deepTest` and
+  `:desktop:deepTest`, generating an Earth-sized world (`OutOfMemoryError` in
+  `BoundaryLayer.convergenceOmegaPaPerSecond` under the erosion's provisional weather); alone, on
+  the same tree, it passes in nine minutes. Not traced to RM1, whose change is in the rivers stage
+  after the climate; the module's per-merge heap (`cartographyTestHeap`, 2 GB) may simply be short
+  of a coupled climate at Earth's size. 2026-10-13, RM1.
 - **The drowned notches on a steep coast run along the rows (RM1, rule 13).** Seed 1's eastern
   coast at 2,048 rows, around sheet (1,340-1,410, 900-1,050), carries a comb of one-cell sea
   channels running due east, parallel, ten to thirty cells long: the valleys the erosion cut down a

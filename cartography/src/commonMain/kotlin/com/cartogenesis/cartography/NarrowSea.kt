@@ -17,7 +17,7 @@ import com.cartogenesis.worldgen.pipeline.SeaChannels
  * So a sea cell is open only when it belongs to some block of sea wider than one pen both ways on
  * the sheet, and a sea cell in no such block is a bank to the coast: the ink runs round the open
  * water and across a channel's mouth, and the channel itself is drawn as the water it is, about
- * the width of a river. It stays sea in every other respect, and its colour is the ocean ramp's at
+ * the width of a river. It stays sea in every other respect, and its color is the ocean ramp's at
  * its depth; a river that reaches it runs on down it to the open sea, as its water does
  * ([SeaChannels]), so the river's line reaches the drawn coast. The same thought as a lake's open water
  * (`LakeResult.openWater`), measured against the pen that would otherwise fill it; and measured on

@@ -1,0 +1,10 @@
+# robots.txt for https://cartogenesis.com
+
+User-agent: *
+Allow: /
+
+# The Linux package repository and the bundled fonts are files for programs, not pages for readers.
+Disallow: /apt/
+Disallow: /fonts/
+
+Sitemap: https://cartogenesis.com/sitemap.xml

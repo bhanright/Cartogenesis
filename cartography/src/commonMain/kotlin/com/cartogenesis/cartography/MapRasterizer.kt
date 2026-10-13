@@ -7,6 +7,7 @@ import com.cartogenesis.worldgen.pipeline.LandmarkKind
 import com.cartogenesis.worldgen.pipeline.CultureResult
 import com.cartogenesis.worldgen.pipeline.NationResult
 import com.cartogenesis.worldgen.pipeline.River
+import com.cartogenesis.worldgen.pipeline.SeaChannels
 import kotlin.math.abs
 import kotlin.math.sqrt
 
@@ -904,7 +905,8 @@ object MapRasterizer {
      * and the stroke ends there. Every vertex closer than that goes, because a round cap at a
      * vertex within half a stroke of the shore would cross it just as the end cap did.
      *
-     * A course that ends on land is a tributary stopping on the trunk it joins, and is left whole.
+     * A course that ends anywhere but the water the map draws is a tributary stopping on the trunk
+     * it joins, on land or in a drowned valley too narrow to be drawn as sea, and is left whole.
      *
      * Walked in sheet pixels, which is what the pen is measured in: a step east is
      * [SheetGeometry.pixelsPerCellAcross] pixels of the sheet and a step south
@@ -917,8 +919,7 @@ object MapRasterizer {
         if (cells.size < 3) return whole
         val mouth = cells[cells.size - 1]
         val lastOnLand = cells.size - 2
-        val intoWater = !world.sea.isLand[mouth] || world.rivers.lakes.isOpenWater(mouth)
-        if (!intoWater) return whole
+        if (!RiverSelection.endsInDrawnWater(world, mouth, SeaChannels.openBlock(world.config))) return whole
 
         val halfStrokePixels =
             RiverPen.widthPixels(river.widthRatio[lastOnLand], sheet.widthPixels, world.config.scale.worldWidthKm) / 2f

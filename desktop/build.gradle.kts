@@ -134,6 +134,9 @@ val auditOnlyClasses = listOf(
     // sheets. Four worlds, three of them above 512. Its 512 guards are `:cartography`'s
     // `RiverSelectionTest` and run on every merge.
     "com.cartogenesis.desktop.RiverSelectionAuditTest",
+    // RM1: the site's opening world, seed 1 at 2,048 rows, read for drawn rivers that stop short
+    // of the water. Its 512 guard is `:cartography`'s `DrawnRiverMouthTest` and runs every merge.
+    "com.cartogenesis.desktop.SiteRiverMouthsAuditTest",
     // T5, by method: three measurements inside classes whose other cases are guards, which stay.
     // The ocean stage's wall clock on the card and off it at 2048 and 4096, which its own KDoc says
     // is reported and not asserted: seven minutes of every merge. The engraved style drawn at 512

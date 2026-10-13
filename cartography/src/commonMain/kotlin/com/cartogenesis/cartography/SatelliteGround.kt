@@ -380,11 +380,11 @@ internal object SatelliteGround {
     /**
      * How long a wind streak runs, in kilometres: the e-folding length of the upwind average.
      * The linear dunes of the Namib and the Simpson and the wind streaks of the Sahara and the
-     * Ordos run tens of kilometres to a few hundred; a hundred and twenty is long against the
+     * Ordos run tens of kilometres to a few hundred; two hundred is long against the
      * spacing of the valleys the small relief is mostly made of, so the average draws streaks and
      * not the drainage.
      */
-    private const val STREAK_LENGTH_KM = 120.0
+    private const val STREAK_LENGTH_KM = 200.0
 
     /**
      * How far the sediment a sink keeps is spread, in kilometres: a sand sea fills its basin
@@ -397,7 +397,15 @@ internal object SatelliteGround {
      * Gaussian average at this spread, which keeps the hills and hollows a few cells across and
      * drops the regional slope that would otherwise shade a whole basin one way.
      */
-    private const val STREAK_SOURCE_SPREAD_KM = 20.0
+    private const val STREAK_SOURCE_SPREAD_KM = 40.0
+
+    /**
+     * The finest relief a streak is drawn from, in kilometres: the terrain is Gaussian-averaged at
+     * this spread before the regional average is taken off it, so a streak is a few cells across.
+     * A streak one cell wide can only run between cells as a staircase, and its grain measures as
+     * the grid's bearings whatever bearing the wind gave it.
+     */
+    private const val STREAK_SOURCE_FINEST_KM = 12.0
 
     /**
      * The spread over which the small relief is measured against its own size, in kilometres, so
@@ -508,11 +516,15 @@ internal object SatelliteGround {
         GaussianBlur.apply(
             average, STREAK_SOURCE_SPREAD_KM / cellWidthKm, STREAK_SOURCE_SPREAD_KM / cellHeightKm
         )
+        val finest = altitudeMetres.copy()
+        GaussianBlur.apply(
+            finest, STREAK_SOURCE_FINEST_KM / cellWidthKm, STREAK_SOURCE_FINEST_KM / cellHeightKm
+        )
         val small = FloatField(altitudeMetres.width, altitudeMetres.height)
         val power = FloatField(altitudeMetres.width, altitudeMetres.height)
         for (cell in land.indices) {
             if (!land[cell]) continue
-            val residual = altitudeMetres.data[cell] - average.data[cell]
+            val residual = finest.data[cell] - average.data[cell]
             small.data[cell] = residual
             power.data[cell] = residual * residual
         }
@@ -607,10 +619,12 @@ internal object SatelliteGround {
      * [SAND_SUPPLY_REACH_KM], which is the sand the wind delivers. A walk stops at the sea, which
      * brings no sand and has no relief to streak.
      *
-     * The wind is `ClimateResult.windDirection` east-west and `windMeridional` rows a column,
-     * carried onto the ground by the cells' own lengths, so the walk follows the wind's bearing on
-     * the ground at every step and turns where it turns. Fields are read between cells
-     * bilinearly, so no step lands on the grid's rows.
+     * The wind is `ClimateResult.windEastwardMps` and `windSouthwardMps`, the annual surface wind
+     * on the ground before the moisture march clamped its slant. It is read between cells
+     * bilinearly as every field here is, and each step goes a cell's width along it and is carried
+     * back into cells by the cells' own lengths, so the walk follows the wind's bearing and turns
+     * where it turns. The march's clamped `windMeridional` would hold a quarter of the dry land at
+     * one row a column, which is the grid's diagonal, and lay every streak there along it.
      */
     internal fun upwindTraces(
         world: WorldMap,
@@ -631,8 +645,8 @@ internal object SatelliteGround {
         val steps = max(streakSteps, supplySteps)
         val streakDecay = exp(-stepKm / STREAK_LENGTH_KM).toFloat()
         val supplyDecay = exp(-stepKm / SAND_SUPPLY_REACH_KM).toFloat()
-        val eastward = world.climate.windDirection
-        val southward = world.climate.windMeridional.data
+        val eastwardMps = world.climate.windEastwardMps
+        val southwardMps = world.climate.windSouthwardMps
 
         parallelChunks(0, cellCount) { from, to ->
             for (cell in from until to) {
@@ -656,14 +670,14 @@ internal object SatelliteGround {
                     supplySum += supplyWeight * bilinear(shedMetres, x, y)
                     supplyWeights += supplyWeight
                     supplyWeight *= supplyDecay
-                    // The wind's bearing on the ground, then back into cells: one column is a
+                    // A step along the wind on the ground, then back into cells: one column is a
                     // cell's width east, one row a cell's height south.
-                    val eastKm = eastward[here] * cellWidthKm
-                    val southKm = southward[here] * cellHeightKm
-                    val lengthKm = sqrt(eastKm * eastKm + southKm * southKm)
-                    if (lengthKm <= 0.0) break
-                    x -= eastKm / lengthKm * stepKm / cellWidthKm
-                    y -= southKm / lengthKm * stepKm / cellHeightKm
+                    val east = bilinear(eastwardMps, x, y).toDouble()
+                    val south = bilinear(southwardMps, x, y).toDouble()
+                    val speed = sqrt(east * east + south * south)
+                    if (speed <= 0.0) break
+                    x -= east / speed * stepKm / cellWidthKm
+                    y -= south / speed * stepKm / cellHeightKm
                     if (y < 0.0 || y > cellsDown - 1.0) break
                 }
                 streak[cell] = if (streakWeights > 0f) streakSum / streakWeights else 0f

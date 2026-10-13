@@ -130,6 +130,10 @@ object WorldCodec {
     /**
      * The only version this build reads or writes.
      *
+     * 26 because the climate keeps its annual surface wind unclamped, `climate.windEastwardMps`
+     * and `climate.windSouthwardMps`, which the satellite style lays its streaks along: a
+     * format-25 file has no such sections and would not open as this build's world.
+     *
      * 25 because `climate.subtropicalDryness` left the settings: the subtropics' dryness is the
      * solved atmosphere's descent, not a strength a reader states, and a format-24 file's setting
      * would be read as nothing.
@@ -311,7 +315,7 @@ object WorldCodec {
      * every cell-valued name took a `Cells` suffix. 3 was the container below with none of that, 2
      * the JSON text that preceded it; none of them opens.
      */
-    const val FORMAT_VERSION = 25
+    const val FORMAT_VERSION = 26
 
     private val MAGIC = byteArrayOf('C'.code.toByte(), 'G'.code.toByte(), 'W'.code.toByte(), 'D'.code.toByte())
 

@@ -350,7 +350,7 @@ internal object SatelliteGround {
      * sand covers about a fifth of the Sahara and a third of Arabia, the rest being reg, hamada
      * and rock. With these ends a sand sea (a weight over a half) covers 30 to 40 per cent of the
      * dry land of seeds 969495 and 7 at 1,024 rows; the dry land's loose sediment there runs 23 to
-     * 534 m between its first and ninth deciles. See docs/DESIGN_LEDGER.md, S1.
+     * 521 m between its first and ninth deciles. See docs/DESIGN_LEDGER.md, S1 Satellite look.
      */
     private const val SAND_SHEET_METRES = 60f
     private const val SAND_SEA_METRES = 200f

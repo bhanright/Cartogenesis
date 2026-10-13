@@ -1,5 +1,28 @@
 # To do
 
+- **The moisture march's wind slant sits at its clamp over a quarter of the dry land (S1 Satellite
+  look).** `ClimateResult.windMeridional` is held to one row a column (`maxSlantRowsPerCell`), and
+  at 1,024 rows the dry land's |slant| reaches that clamp from its seventh or eighth decile on seeds
+  969495, 7 and 42: wherever the meridional wind outruns the zonal one, the march carries its
+  moisture along the grid's diagonal. The satellite style reads the unclamped annual wind
+  (`windEastwardMps`, `windSouthwardMps`) and is clear of it; whether the march's diagonal shows in
+  the rain was not measured. 2026-10-13, S1 Satellite look.
+- **Volcanic ground is not told apart in the satellite style (S1 Satellite look).** The world keeps
+  no volcanic field; the nearest boundary's class (`nearestBoundaryClass`) is a nearest-boundary
+  partition whose class lines would cut across a belt, so dark volcanic ground is drawn only where
+  an active belt stands high or the ground is steep. A field of the arcs' and hotspots' own
+  volcanoes would let it be drawn. 2026-10-13, S1 Satellite look.
+- **A row-straight edge between dry and green ground on seed 7 (S1 Satellite look).** On seed 7 at
+  1,024 rows a desert meets green ground along a nearly east-west line about 290 rows into the
+  window at (192, 256); Atlas draws the same edge, so it is the climate's drought or cover and not
+  the drawing. Not traced. 2026-10-13, S1 Satellite look.
+- **The satellite streaks' grain is modest at 512 rows (S1 Satellite look).** On seed 969495 at 512
+  the streak field changes along the wind 0.49 as fast as across it, and along the wind 0.37 to
+  0.79 as fast as along each grid bearing; the row-aligned control reads 1.06 along the rows. The
+  census's own isotropy test asks for 456 blocks of chords and a world's deserts give fewer than a
+  hundred, so `SatelliteStyleTest` measures the grain directly; a census over several worlds' deserts
+  would measure it with the census's own statistics. 2026-10-13, S1 Satellite look.
+
 - **The ocean's ITCZ rains under Earth's, on the equator's side of its convergence (F1).** On F1's
   worlds at 1,024 rows the open sea's July-half convergence line, where its mean meridional wind
   turns, stands at 8.9, 9.4 and 10.1 N on seeds 42, 969495 and 7, Earth's 9 N (Schneider, Bischoff

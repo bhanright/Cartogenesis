@@ -971,15 +971,9 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
                 return blend(base, muted, uBiomeWash);
             }
 
-            /*
-             * MapStyle.ground: the land ramp read at a height the drought has lifted, paled toward
-             * the paper by the cold, darkened under a canopy, then washed with the biome's colour.
-             * The dryness, the coldness and the canopy are all per-cell fields worked out on the
-             * processor; the canopy was a table indexed by this pixel's biome until the world
-             * started carrying a vegetation density of its own.
-             */
-            uint byteOf(int packed, uint index) {
-                return (uint(packed) >> (index * 8u)) & 0xFFu;
+            /* One byte of a packed word, low byte first, as SatelliteGround packs them. */
+            uint byteOf(int word, uint slot) {
+                return (uint(word) >> (slot * 8u)) & 0xFFu;
             }
 
             /*
@@ -1026,6 +1020,14 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
                 return clamp(floor(surface), vec3(0.0), vec3(255.0));
             }
 
+            /*
+             * MapStyle.ground: the land ramp read at a height the drought has lifted, paled toward
+             * the paper by the cold, darkened under a canopy, then washed with the biome's colour.
+             * The dryness, the coldness and the canopy are all per-cell fields worked out on the
+             * processor; the canopy was a table indexed by this pixel's biome until the world
+             * started carrying a vegetation density of its own. The satellite style paints from
+             * its surface instead.
+             */
             vec3 ground(int i, float relative, int biome) {
                 if (uSatellite != 0) return satelliteGround(i);
                 if (uClimateTint <= 0.0) {

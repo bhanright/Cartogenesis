@@ -137,15 +137,13 @@ internal class LocalCirculation private constructor(
     }
 
     /**
-     * The circulation's surface wind and the sea-level pressure that holds it on every cell of a
-     * map [cellsAcross] by [cellsDown], row-major: the wind in meters a second, eastward and
-     * southward, and the pressure in pascals ([BoundaryLayer.Belts]).
+     * The circulation's surface wind on every cell of a map [cellsAcross] by [cellsDown], row-major,
+     * meters a second, eastward and southward ([windMps]).
      */
-    fun belts(cellsAcross: Int, cellsDown: Int, radiusMeters: Double): BoundaryLayer.Belts {
+    fun surfaceWindMps(cellsAcross: Int, cellsDown: Int): PressureWind.Vectors {
         val cellCount = cellsAcross * cellsDown
         val eastward = FloatArray(cellCount)
         val southward = FloatArray(cellCount)
-        val zonalRows = HadleyCirculation.windOfRows(zonal, cellsDown)
         parallelChunks(0, cellsDown) { startRow, endRow ->
             for (row in startRow until endRow) {
                 val latitude = ClimateStage.latitudeOf(row, cellsDown).toDouble()
@@ -157,6 +155,20 @@ internal class LocalCirculation private constructor(
                 }
             }
         }
+        return PressureWind.Vectors(eastward, southward)
+    }
+
+    /**
+     * The circulation's surface wind and the sea-level pressure that holds it on every cell of a
+     * map [cellsAcross] by [cellsDown], row-major: the wind in meters a second, eastward and
+     * southward, and the pressure in pascals ([BoundaryLayer.Belts]).
+     */
+    fun belts(cellsAcross: Int, cellsDown: Int, radiusMeters: Double): BoundaryLayer.Belts {
+        val wind = surfaceWindMps(cellsAcross, cellsDown)
+        val eastward = wind.eastwardMps
+        val southward = wind.southwardMps
+        val zonalRows = HadleyCirculation.windOfRows(zonal, cellsDown)
+        val cellCount = cellsAcross * cellsDown
         val zonalPressure = BoundaryLayer.zonalPressurePa(cellsDown, radiusMeters, zonalRows.eastwardMps, zonalRows.southwardMps)
         val pressure = DoubleArray(cellCount) { zonalPressure[it / cellsAcross] }
         // The rows the cells cover, and the zonal mean's own rows on either side of them.
@@ -302,6 +314,24 @@ internal class LocalCirculation private constructor(
             season: Season,
             zonalCirculation: HadleyCirculation = HadleyCirculation.forHalf(config, zonal, season),
             heldToLandOrSea: Boolean = false
+        ): LocalCirculation = onProfiles(config, isLand, zonal.land.at(season), zonal.sea.at(season), zonalCirculation, heldToLandOrSea)
+
+        /**
+         * [zonalCirculation] at each longitude of the world [config] describes, its rising branch
+         * moved by each sector's land share between two columns' profiles by latitude, [landBands]
+         * and [seaBands], one entry per energy-balance band ([EnergyBalance.latitudeOfBand]): the
+         * temperature of the air for the circulation that holds the surface wind ([forHalf]), the
+         * subcloud moist static energy for its deep ascent ([moistStaticEnergyBands]). The domes,
+         * the sector and the carrying are the same for either, so the two placements differ by what
+         * the columns' profiles say and by nothing else.
+         */
+        fun onProfiles(
+            config: WorldGenConfig,
+            isLand: BooleanArray,
+            landBands: FloatArray,
+            seaBands: FloatArray,
+            zonalCirculation: HadleyCirculation,
+            heldToLandOrSea: Boolean = false
         ): LocalCirculation {
             val cellsAcross = config.width
             val cellsDown = config.height
@@ -314,8 +344,6 @@ internal class LocalCirculation private constructor(
             // circulation's heating, the band mean's warmest latitude (docs/DESIGN_LEDGER.md, F1, for
             // the figures on the standard worlds). The columns' shifts are taken from that blend, so
             // a sector of the world's own land share is the zonal circulation.
-            val landBands = zonal.land.at(season)
-            val seaBands = zonal.sea.at(season)
             val landWarmest = warmestLatitudeDegrees(landBands)
             val seaWarmest = warmestLatitudeDegrees(seaBands)
             val spanSouth = minOf(landWarmest, seaWarmest) - rossbyRadiusDegrees
@@ -367,6 +395,53 @@ internal class LocalCirculation private constructor(
             }
             return LocalCirculation(zonalCirculation, shift, ascent)
         }
+
+        /**
+         * The subcloud moist static energy of the land column and the marine column in each
+         * energy-balance band in [season], joules per kilogram, `h = c_p T + L_v q + g z` at the
+         * ground: the band's air temperature from [zonal] carried up to the land's mean height in the
+         * band, [landElevationMByBand] meters, at the climate's lapse [lapseRateCPerKm], its pressure
+         * hydrostatic, and its specific humidity at the surface relative humidity the march leaves
+         * there, [landHumidityByBand] and [seaHumidityByBand] (0..1, one entry per band).
+         *
+         * Deep convection is organized by this energy and not by the air's temperature: the monsoon's
+         * ascent and its rain stand just equatorward of its maximum (Privé and Plumb 2007, as Boos
+         * and Emanuel 2009 and Nie, Boos and Kuang 2010 report and test it, read), while the hot,
+         * dry heat low poleward of it, at the temperature's maximum, rises only in a shallow
+         * circulation that returns below 600 to 700 hPa (Nie and others: "the poleward extents of
+         * deep and shallow circulations are bounded by maxima" in the two).
+         */
+        fun moistStaticEnergyBands(
+            zonal: ZonalClimate,
+            season: Season,
+            landHumidityByBand: FloatArray,
+            seaHumidityByBand: FloatArray,
+            landElevationMByBand: FloatArray,
+            lapseRateCPerKm: Double
+        ): Pair<FloatArray, FloatArray> {
+            val landColumn = zonal.land.at(season)
+            val seaColumn = zonal.sea.at(season)
+            fun energy(seaLevelC: Double, elevationM: Double, relativeHumidity: Double): Double {
+                val groundC = seaLevelC - lapseRateCPerKm * elevationM / METERS_PER_KM
+                val pressureKpa = ColumnWater.SEA_LEVEL_PRESSURE_KPA *
+                    exp(-STANDARD_GRAVITY_MPS2 * elevationM / (DRY_AIR_GAS_CONSTANT_J_PER_KG_K * (groundC + ColumnWater.KELVIN_AT_ZERO_C)))
+                val humidity = relativeHumidity.coerceIn(0.0, 1.0) *
+                    ColumnWater.specificHumidity(ColumnWater.saturationVaporPressureKpa(groundC), pressureKpa)
+                return DRY_AIR_HEAT_CAPACITY_J_PER_KG_K * (groundC + ColumnWater.KELVIN_AT_ZERO_C) +
+                    ColumnWater.LATENT_HEAT_J_PER_KG * humidity + STANDARD_GRAVITY_MPS2 * elevationM
+            }
+            val land = FloatArray(landColumn.size) { band ->
+                energy(landColumn[band].toDouble(), landElevationMByBand[band].toDouble(), landHumidityByBand[band].toDouble()).toFloat()
+            }
+            val sea = FloatArray(seaColumn.size) { band -> energy(seaColumn[band].toDouble(), 0.0, seaHumidityByBand[band].toDouble()).toFloat() }
+            return land to sea
+        }
+
+        /** Dry air's heat capacity and gas constant, standard gravity, and meters in a kilometer. */
+        private const val DRY_AIR_HEAT_CAPACITY_J_PER_KG_K = 1004.0
+        private const val DRY_AIR_GAS_CONSTANT_J_PER_KG_K = 287.04
+        private const val STANDARD_GRAVITY_MPS2 = 9.80665
+        private const val METERS_PER_KM = 1_000.0
 
         /** The control's majority: half the sector. */
         private const val MAJORITY = 0.5

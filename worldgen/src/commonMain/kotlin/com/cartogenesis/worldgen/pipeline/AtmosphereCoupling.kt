@@ -37,8 +37,11 @@ import kotlin.time.TimeSource
  */
 internal class AtmosphereCoupling(
     solver: BoundaryLayer.Solver,
-    /** The two half-years' seasons the march reads under a solved atmosphere. */
-    seasonsOf: (BoundaryLayer.Atmosphere) -> Pair<MoistureMarch.Season, MoistureMarch.Season>,
+    /**
+     * The two half-years' seasons the march reads under a solved atmosphere and, after the first
+     * lap, the column humidity each half left at every cell ([MoistureMarch.Coupling.humidityAfter]).
+     */
+    seasonsOf: (BoundaryLayer.Atmosphere, Pair<FloatArray, FloatArray>?) -> Pair<MoistureMarch.Season, MoistureMarch.Season>,
     /** Walker and Ni's mixing `beta`: the share of the residual each lap's heating moves by. */
     val relaxation: Double = RELAXATION,
     /** How many earlier laps the acceleration combines; zero for the plain relaxed iteration. */
@@ -58,7 +61,14 @@ internal class AtmosphereCoupling(
      * Held until [release]: it closes over the climate run's seasonal fields, a few dozen of the
      * map's fields, which a kept coupling would otherwise hold into the next world.
      */
-    private var seasonsOf: ((BoundaryLayer.Atmosphere) -> Pair<MoistureMarch.Season, MoistureMarch.Season>)? = seasonsOf
+    private var seasonsOf: ((BoundaryLayer.Atmosphere, Pair<FloatArray, FloatArray>?) -> Pair<MoistureMarch.Season, MoistureMarch.Season>)? = seasonsOf
+
+    /** The column humidity the last lap left, each half's, row-major on the map; none before the first lap. */
+    private var humidity: Pair<FloatArray, FloatArray>? = null
+
+    override fun humidityAfter(julyHalfColumnHumidity: FloatArray, januaryHalfColumnHumidity: FloatArray) {
+        humidity = julyHalfColumnHumidity to januaryHalfColumnHumidity
+    }
     private val remap = solver.remap
     private val coarse = remap.coarse
     private val cellCount = coarse.cellCount
@@ -70,7 +80,7 @@ internal class AtmosphereCoupling(
      * solved once here, before that lap's atmosphere, and let go of all but the two winds.
      */
     private val dryZonalWinds: Pair<FloatArray, FloatArray>? = initialLatentWPerM2?.let {
-        val (july, january) = seasonsOf(solver.solve(null, null))
+        val (july, january) = seasonsOf(solver.solve(null, null), null)
         july.waterEastwardMps to january.waterEastwardMps
     }
 
@@ -126,7 +136,7 @@ internal class AtmosphereCoupling(
 
     /** The two seasons the first lap runs under. */
     fun firstSeasons(): Pair<MoistureMarch.Season, MoistureMarch.Season> =
-        checkNotNull(seasonsOf) { "the coupling has been released" }(atmosphere)
+        checkNotNull(seasonsOf) { "the coupling has been released" }(atmosphere, null)
 
     override fun settledAfter(julyHalfCondensationMm: FloatArray, januaryHalfCondensationMm: FloatArray): Boolean {
         val started = TimeSource.Monotonic.markNow()
@@ -150,7 +160,7 @@ internal class AtmosphereCoupling(
         current = solved
         val seasonsStarted = TimeSource.Monotonic.markNow()
         solveMillis.add((seasonsStarted - started).inWholeMicroseconds / 1_000.0)
-        val next = seasons(solved)
+        val next = seasons(solved, humidity)
         seasonsMillis.add(seasonsStarted.elapsedNow().inWholeMicroseconds / 1_000.0)
         return next
     }
@@ -162,6 +172,7 @@ internal class AtmosphereCoupling(
     fun release() {
         solver = null
         seasonsOf = null
+        humidity = null
         givenHistory.clear()
         targetHistory.clear()
     }

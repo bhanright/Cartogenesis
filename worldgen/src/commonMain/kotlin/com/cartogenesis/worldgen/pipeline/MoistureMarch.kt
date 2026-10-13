@@ -411,6 +411,13 @@ object MoistureMarch {
          */
         fun settledAfter(julyHalfCondensationMm: FloatArray, januaryHalfCondensationMm: FloatArray): Boolean
 
+        /**
+         * The column's relative humidity each half left at every cell on the last lap, its water
+         * over its saturated water (row-major), handed in before [nextSeasons]: what the deep
+         * ascent's moist static energy reads ([LocalCirculation.moistStaticEnergyBands]).
+         */
+        fun humidityAfter(julyHalfColumnHumidity: FloatArray, januaryHalfColumnHumidity: FloatArray) {}
+
         /** The two halves' seasons under the atmosphere solved from the heating [settledAfter] last read. */
         fun nextSeasons(): Pair<Season, Season>
 
@@ -499,6 +506,7 @@ object MoistureMarch {
                 lapMillis.add(lapElapsed.inWholeMicroseconds / 1_000.0)
                 break
             }
+            coupling?.humidityAfter(july.humidityRowMajor(), january.humidityRowMajor())
             val nextSeasons = coupling?.nextSeasons()
             val returnStarted = TimeSource.Monotonic.markNow()
             nextSeasons?.let { (nextJuly, nextJanuary) ->
@@ -771,6 +779,7 @@ object MoistureMarch {
     }
 
     private const val METERS_PER_KM = 1_000.0
+
 
     /** Surfaces, as the march stores them per cell. */
     private const val LAND: Byte = 0
@@ -1628,6 +1637,9 @@ object MoistureMarch {
         }
 
         fun rainMmRowMajor(cell: Int): Float = rainMm[index(cell / cellsAcross, cell % cellsAcross)]
+
+        /** This lap's column relative humidity as each cell leaves it, row-major. */
+        fun humidityRowMajor(): FloatArray = FloatArray(cellCount) { humidity[index(it / cellsAcross, it % cellsAcross)] }
 
         /** This lap's net condensation, millimeters a year, row-major. */
         fun condensationRowMajor(): FloatArray = FloatArray(cellCount) { condensationMm[index(it / cellsAcross, it % cellsAcross)] }

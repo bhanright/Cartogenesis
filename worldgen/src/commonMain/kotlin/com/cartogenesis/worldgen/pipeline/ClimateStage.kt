@@ -897,17 +897,23 @@ object ClimateStage {
         // Both halves' seasons under a solved atmosphere, or under the belts alone when the
         // pressure term is off: that setting is the control, with no pressure, no solved wind and
         // no vertical motion, rather than a near-miss.
-        fun seasonsUnder(atmosphere: BoundaryLayer.Atmosphere?): Pair<MoistureMarch.Season, MoistureMarch.Season> {
+        // The deep ascent's rising branch, each half's, at the sector's subcloud moist static energy
+        // and not at its air's temperature, read from the column humidity the march's last lap left;
+        // the surface wind's convergence line stays at the temperature's (DeepAscent).
+        val deepAscent = DeepAscent(config, sea, zonal, elevationM, julyCirculation, januaryCirculation)
+        fun seasonsUnder(atmosphere: BoundaryLayer.Atmosphere?, columnHumidity: Pair<FloatArray, FloatArray>?): Pair<MoistureMarch.Season, MoistureMarch.Season> {
             val july = seasonWind(config, julyHalfBelts, atmosphere?.julyHalf)
             val january = seasonWind(config, januaryHalfBelts, atmosphere?.januaryHalf)
+            val julyDeep = if (atmosphere != null) deepAscent.surfaceWindMps(true, columnHumidity?.first) else null
+            val januaryDeep = if (atmosphere != null) deepAscent.surfaceWindMps(false, columnHumidity?.second) else null
             return marchSeason(
                 true, julyHalfTemperature, julyHalfSeaSurface, julyHalfSeaIce, july,
-                atmosphere?.let { BoundaryLayer.groundAscentMps(it, it.julyHalf) }, julyHalfInversion,
-                atmosphere?.let { BoundaryLayer.columnWindMps(it, it.julyHalf) }
+                atmosphere?.let { deepAscent.ascentMps(it, it.julyHalf, julyDeep) }, julyHalfInversion,
+                atmosphere?.let { BoundaryLayer.columnWindMps(it, it.julyHalf, julyDeep?.southwardMps) }
             ) to marchSeason(
                 false, januaryHalfTemperature, januaryHalfSeaSurface, januaryHalfSeaIce, january,
-                atmosphere?.let { BoundaryLayer.groundAscentMps(it, it.januaryHalf) }, januaryHalfInversion,
-                atmosphere?.let { BoundaryLayer.columnWindMps(it, it.januaryHalf) }
+                atmosphere?.let { deepAscent.ascentMps(it, it.januaryHalf, januaryDeep) }, januaryHalfInversion,
+                atmosphere?.let { BoundaryLayer.columnWindMps(it, it.januaryHalf, januaryDeep?.southwardMps) }
             )
         }
 
@@ -946,7 +952,7 @@ object ClimateStage {
             ledger,
             coupling,
             start?.march
-        ) { coupling?.firstSeasons() ?: seasonsUnder(null) }
+        ) { coupling?.firstSeasons() ?: seasonsUnder(null, null) }
         coupling?.release()
         val atmosphere = coupling?.atmosphere
         val endStart = marched.endState?.let { march ->
@@ -958,7 +964,7 @@ object ClimateStage {
             )
         }
         if (coupling != null) {
-            lastCoupled = CoupledAtmosphere(config, sea, ocean, globalCoolingC, coupling, marched)
+            lastCoupled = CoupledAtmosphere(config, sea, ocean, globalCoolingC, coupling, marched, deepAscent.largestShifts.toList(), deepAscent.lastAscent())
         }
 
         // The stored wind is the annual one: what the wind view means by "the prevailing wind".
@@ -1651,7 +1657,11 @@ object ClimateStage {
         val ocean: OceanResult,
         val globalCoolingC: Float,
         val coupling: AtmosphereCoupling,
-        val march: MoistureMarch.Result
+        val march: MoistureMarch.Result,
+        /** The deep ascent's largest move at any column between one lap and the next, degrees ([DeepAscent.largestShifts]). */
+        val deepAscentShifts: List<Double> = emptyList(),
+        /** Each half's deep rising branch at every column on the last lap, degrees north, or none. */
+        val deepAscentLatitudes: Pair<DoubleArray, DoubleArray>? = null
     )
 
     @kotlin.concurrent.Volatile

@@ -701,23 +701,44 @@ internal object BoundaryLayer {
      */
     fun convergenceOmegaPaPerSecond(atmosphere: Atmosphere, half: Half): DoubleArray {
         val remap = atmosphere.remap
+        val divergence = groundDivergencePerSecond(remap, half.eastwardMps, half.southwardMps)
+        val convergence = remap.forcing(FloatArray(divergence.size) { divergence[it].toFloat() }, WaveForcing.groundWidthInRows(remap))
+        val layerPa = atmosphere.levels.thicknessPa[atmosphere.levels.levelCount - 1]
+        return DoubleArray(convergence.size) { layerPa * convergence[it] }
+    }
+
+    /**
+     * The divergence of a wind on the map's own grid, per second, row-major: [eastwardMps] and
+     * [southwardMps] (meters a second) by the finite volumes of [SphericalOperators] on the ground,
+     * the northward wind on each face between rows the mean of the rows either side, and the polar
+     * faces, which have no length, carrying nothing.
+     */
+    fun groundDivergencePerSecond(remap: AtmosphereRemap, eastwardMps: FloatArray, southwardMps: FloatArray): DoubleArray {
         val ground = SphericalGrid(remap.groundRows, remap.groundColumns, remap.coarse.radiusMeters)
-        val groundOperators = SphericalOperators(ground)
         val columns = remap.groundColumns
-        // The northward wind on the map's faces between rows, the mean of the rows either side; the
-        // polar faces have no length and carry nothing.
         val northFaces = DoubleArray((remap.groundRows + 1) * columns)
         for (face in 1 until remap.groundRows) {
             for (column in 0 until columns) {
                 northFaces[face * columns + column] =
-                    -0.5 * (half.southwardMps[(face - 1) * columns + column] + half.southwardMps[face * columns + column])
+                    -0.5 * (southwardMps[(face - 1) * columns + column] + southwardMps[face * columns + column])
             }
         }
-        val east = DoubleArray(half.eastwardMps.size) { half.eastwardMps[it].toDouble() }
-        val divergence = groundOperators.divergence(SphericalOperators.Vector(east, northFaces))
-        val convergence = remap.forcing(FloatArray(divergence.size) { divergence[it].toFloat() }, WaveForcing.groundWidthInRows(remap))
+        val east = DoubleArray(eastwardMps.size) { eastwardMps[it].toDouble() }
+        return SphericalOperators(ground).divergence(SphericalOperators.Vector(east, northFaces))
+    }
+
+    /**
+     * The vertical velocity at the boundary layer's top under [atmosphere] that a change of the
+     * circulation's surface wind by [eastwardChangeMps] and [southwardChangeMps] (meters a second,
+     * row-major on the map) makes, meters a second, positive up: its mass convergence over the
+     * boundary layer, `-dp div(V) / (rho g)`, on the map's own grid. The circulation is smooth on the
+     * Rossby radius's scale ([LocalCirculation]), so it is not spread as the waves' forcing is.
+     */
+    fun circulationAscentChangeMps(atmosphere: Atmosphere, eastwardChangeMps: FloatArray, southwardChangeMps: FloatArray): FloatArray {
+        val divergence = groundDivergencePerSecond(atmosphere.remap, eastwardChangeMps, southwardChangeMps)
         val layerPa = atmosphere.levels.thicknessPa[atmosphere.levels.levelCount - 1]
-        return DoubleArray(convergence.size) { layerPa * convergence[it] }
+        val perPascal = -1.0 / (PressureWind.AIR_DENSITY_KG_PER_M3 * DryAir.GRAVITY_MPS2)
+        return FloatArray(divergence.size) { (layerPa * divergence[it] * perPascal).toFloat() }
     }
 
     /**
@@ -802,7 +823,7 @@ internal object BoundaryLayer {
      *   carried up unchanged from its top ([HadleyCirculation]); above it the same mass returns,
      *   spread evenly over the layers there, where the column holds a tenth of its vapor.
      */
-    fun columnWindMps(atmosphere: Atmosphere, half: Half): PressureWind.Vectors {
+    fun columnWindMps(atmosphere: Atmosphere, half: Half, deepBeltSouthwardMps: FloatArray? = null): PressureWind.Vectors {
         val levels = atmosphere.levels
         val shares = vaporShares(levels)
         val boundaryLayer = levels.levelCount - 1
@@ -813,12 +834,18 @@ internal object BoundaryLayer {
         var freeShare = 0.0
         var upperThicknessPa = 0.0
         var upperShare = 0.0
+        var shallowThicknessPa = 0.0
+        var shallowShare = 0.0
         for (level in 0 until boundaryLayer) {
             val share = shares[level]
             freeShare += share
             if (levels.interfacePressuresPa[level + 1] <= UPPER_BRANCH_BASE_PA) {
                 upperThicknessPa += levels.thicknessPa[level]
                 upperShare += share
+            }
+            if (levels.interfacePressuresPa[level] >= SHALLOW_HEATING_TOP_SHARE * levels.surfacePressurePa) {
+                shallowThicknessPa += levels.thicknessPa[level]
+                shallowShare += share
             }
             val eastward = response.eastward[level]
             val northward = response.northwardAtCenters(level)
@@ -832,14 +859,17 @@ internal object BoundaryLayer {
         val boundaryShare = shares[boundaryLayer]
         // The upper branch's speed per unit of the lower branch's, against it: the same mass over its own depth.
         val returnPerInflow = if (upperThicknessPa > 0.0) -levels.thicknessPa[boundaryLayer] / upperThicknessPa else 0.0
+        val shallowReturnPerInflow = if (shallowThicknessPa > 0.0) -levels.thicknessPa[boundaryLayer] / shallowThicknessPa else returnPerInflow
         val cellCount = half.eastwardMps.size
         val eastward = FloatArray(cellCount)
         val southward = FloatArray(cellCount)
         for (cell in 0 until cellCount) {
             eastward[cell] = (boundaryShare * half.eastwardMps[cell] + freeShare * half.beltEastwardMps[cell] +
                 eddyEastwardGround[cell]).toFloat()
-            southward[cell] = (boundaryShare * half.southwardMps[cell] + upperShare * returnPerInflow * half.beltSouthwardMps[cell] -
-                eddyNorthwardGround[cell]).toFloat()
+            val deep = deepBeltSouthwardMps?.get(cell) ?: half.beltSouthwardMps[cell]
+            val shallow = half.beltSouthwardMps[cell] - deep
+            southward[cell] = (boundaryShare * half.southwardMps[cell] + upperShare * returnPerInflow * deep +
+                shallowShare * shallowReturnPerInflow * shallow - eddyNorthwardGround[cell]).toFloat()
         }
         return PressureWind.Vectors(eastward, southward)
     }

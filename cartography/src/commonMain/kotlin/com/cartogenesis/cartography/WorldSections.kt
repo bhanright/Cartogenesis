@@ -186,6 +186,10 @@ internal object WorldSections {
         // so the two add to the rain at every cell.
         FloatSection("climate.potentialEvapotranspirationMm") { it.climate.potentialEvapotranspirationMm.data },
         FloatSection("climate.openWaterEvaporationMm") { it.climate.openWaterEvaporationMm.data },
+        // The annual surface wind before its slant was clamped, which the satellite style lays its
+        // streaks along.
+        FloatSection("climate.windEastwardMps") { it.climate.windEastwardMps.data },
+        FloatSection("climate.windSouthwardMps") { it.climate.windSouthwardMps.data },
         ByteSection("climate.permafrost", ByteMeaning.PERMAFROST) { bytesOf(it.climate.permafrost) },
         ByteSection("climate.biome", ByteMeaning.BIOME) { biomesOf(it.climate.biome) },
         FloatSection("rivers.filledElevation") { it.rivers.filledElevation.data },
@@ -360,7 +364,9 @@ internal object WorldSections {
                 januaryHalfSeaIce = flags("climate.januaryHalfSeaIce"),
                 biome = arrays.getValue("climate.biome") as Array<Biome>,
                 potentialEvapotranspirationMm = field("climate.potentialEvapotranspirationMm"),
-                openWaterEvaporationMm = field("climate.openWaterEvaporationMm")
+                openWaterEvaporationMm = field("climate.openWaterEvaporationMm"),
+                windEastwardMps = field("climate.windEastwardMps"),
+                windSouthwardMps = field("climate.windSouthwardMps")
             ),
             rivers = RiverResult(
                 filledElevation = field("rivers.filledElevation"),

@@ -399,9 +399,9 @@ class PanelKnobsTest {
     fun `the toolbar offers every style and every view`() {
         assertEquals(MapStyle.entries.toList(), MapChrome.styles)
         assertEquals(MapView.entries.toList(), MapChrome.views)
-        // Twelve cells in the segmented row: Mars the tenth, Colour-blind the eleventh and
-        // Natural the twelfth.
-        assertEquals(12, MapChrome.styles.size)
+        // Thirteen cells in the segmented row, Satellite first as the default: Mars the eleventh,
+        // Natural the twelfth and Color-blind the thirteenth.
+        assertEquals(13, MapChrome.styles.size)
         assertEquals(15, MapChrome.views.size)
     }
 
@@ -440,7 +440,7 @@ class PanelKnobsTest {
         assertTrue(MapChrome.styleApplies(MapView.POLITICAL))
         assertFalse(MapChrome.styleApplies(MapView.RAINFALL))
 
-        assertEquals(MapStyle.ATLAS.detail, MapChrome.note(view))
+        assertEquals(MapStyle.SATELLITE.detail, MapChrome.note(view))
         val note = MapChrome.note(view.copy(view = MapView.RAINFALL))
         assertTrue("rainfall" in note, note)
         assertTrue("ignores the style" in note, note)

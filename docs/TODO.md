@@ -1,5 +1,44 @@
 # To do
 
+- **Rivers' green corridors and wadi floors are mostly narrower than a cell (S1 Satellite look,
+  round 2).** At 1,024 rows a cell is 19.6 km, and by the Nile's anchor (a 12 km valley floor for
+  84 cubic km a year, widening as the square root of discharge, which the Tarim's 2 km poplar belt
+  for about 5 cubic km a year agrees with) only rivers past about 220 cubic km a year water a
+  cell's width; a wadi floor of 1.5 km at ten thousand square km reaches a cell only past about
+  1.7 million. `SatelliteGround.corridors` draws a narrower corridor two cells wide, fainter by the
+  square root of its width (an appearance choice), so most dry-country rivers show as faint
+  threads and most wadis not at all. A finer drawn raster than the grid would let them be drawn at
+  their own width. 2026-10-13, S1 Satellite look.
+- **On an all-craton world the iron red covers about a third of the desert (S1 Satellite look,
+  round 2).** `SatelliteStyleTest` measures strong red (over half its most) on 0.365 of seed
+  969495's desert at 512 rows when every crust age is 1, against 0.373 that is at least a third
+  sand; on the world's own crust it is about a sixth of the dry land at 1,024 rows. Half the dry
+  land of seeds 969495 and 7 is crust of age 1, so the redness by age alone cannot pick the
+  Sahara's few red ergs from its pale ones; the sand's own age (when it was last mobile) would.
+  2026-10-13, S1 Satellite look.
+- **The moisture march's wind slant sits at its clamp over a quarter of the dry land (S1 Satellite
+  look).** `ClimateResult.windMeridional` is held to one row a column (`maxSlantRowsPerCell`), and
+  at 1,024 rows the dry land's |slant| reaches that clamp from its seventh or eighth decile on seeds
+  969495, 7 and 42: wherever the meridional wind outruns the zonal one, the march carries its
+  moisture along the grid's diagonal. The satellite style reads the unclamped annual wind
+  (`windEastwardMps`, `windSouthwardMps`) and is clear of it; whether the march's diagonal shows in
+  the rain was not measured. 2026-10-13, S1 Satellite look.
+- **Volcanic ground is not told apart in the satellite style (S1 Satellite look).** The world keeps
+  no volcanic field; the nearest boundary's class (`nearestBoundaryClass`) is a nearest-boundary
+  partition whose class lines would cut across a belt, so dark volcanic ground is drawn only where
+  an active belt stands high or the ground is steep. A field of the arcs' and hotspots' own
+  volcanoes would let it be drawn. 2026-10-13, S1 Satellite look.
+- **A row-straight edge between dry and green ground on seed 7 (S1 Satellite look).** On seed 7 at
+  1,024 rows a desert meets green ground along a nearly east-west line about 290 rows into the
+  window at (192, 256); Atlas draws the same edge, so it is the climate's drought or cover and not
+  the drawing. Not traced. 2026-10-13, S1 Satellite look.
+- **The satellite streaks' grain is modest at 512 rows (S1 Satellite look).** On seed 969495 at 512
+  the streak field changes along the wind 0.47 as fast as across it, and along the wind 0.35 to
+  0.76 as fast as along each grid bearing; the row-aligned control reads 1.08 along the rows. The
+  census's own isotropy test asks for 456 blocks of chords and a world's deserts give fewer than a
+  hundred, so `SatelliteStyleTest` measures the grain directly; a census over several worlds' deserts
+  would measure it with the census's own statistics. 2026-10-13, S1 Satellite look.
+
 - **A drowned valley keeps its mouth's width all the way to its head (RM1).** `DrownedValleys`
   sizes each drowned cell by Leopold and Maddock's width at the catchment that reaches it, and the
   catchment barely grows down a valley, so a valley the mouth's width keeps is kept to its head at

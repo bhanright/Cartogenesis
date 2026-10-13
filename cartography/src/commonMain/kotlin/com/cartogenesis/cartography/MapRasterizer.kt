@@ -63,8 +63,9 @@ data class RenderOptions(
     /**
      * How the finished map is drawn. Applies to the fantasy and political views; the diagnostic
      * views ignore it, because their colours carry meaning and a prettier ramp would make them lie.
+     * [MapStyle.SATELLITE] by default, which is what the application opens on.
      */
-    val style: MapStyle = MapStyle.ATLAS,
+    val style: MapStyle = MapStyle.SATELLITE,
     val showRivers: Boolean = true,
     /**
      * Which mark of [RiverSelection]'s density scale this sheet draws its rivers at.
@@ -324,6 +325,7 @@ object MapRasterizer {
         val flattestSlope =
             if (contoured) Isobaths.flattestSlope(world.config, cellsAcross, cellsDown) else 0f
         val isobathStencil = Isobaths.slopeStencil(world.config.cellWidthKm)
+        val surface = if (painted && style.satellite) SatelliteGround.of(world) else null
 
         for (cell in 0 until cellCount) {
             val column = cell % cellsAcross
@@ -351,10 +353,14 @@ object MapRasterizer {
                 continue
             }
 
-            var color = baseColor(
-                world, sheet, options.view, style, cell, isobathInterval, flattestSlope,
-                isobathStencil
-            )
+            var color = if (surface != null && world.sea.isLand[cell]) {
+                SatelliteGround.groundColor(surface, cell)
+            } else {
+                baseColor(
+                    world, sheet, options.view, style, cell, isobathInterval, flattestSlope,
+                    isobathStencil
+                )
+            }
             val isLand = world.sea.isLand[cell]
             if (plan != null && engraveWater && !isLand) {
                 color = MapPalette.blend(

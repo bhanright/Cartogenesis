@@ -354,7 +354,9 @@ class IncrementalReuseTest {
                 vegetationDensity = field(world.climate.vegetationDensity),
                 permafrost = world.climate.permafrost.copyOf(),
                 potentialEvapotranspirationMm = field(world.climate.potentialEvapotranspirationMm),
-                openWaterEvaporationMm = field(world.climate.openWaterEvaporationMm)
+                openWaterEvaporationMm = field(world.climate.openWaterEvaporationMm),
+                windEastwardMps = field(world.climate.windEastwardMps),
+                windSouthwardMps = field(world.climate.windSouthwardMps)
             ),
             rivers = RiverResult(
                 filledElevation = field(world.rivers.filledElevation),

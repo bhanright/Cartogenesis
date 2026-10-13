@@ -104,7 +104,9 @@ internal object SyntheticWorlds {
                 vegetationDensity = field(),
                 permafrost = ByteArray(cells) { (it % 3).toByte() },
                 potentialEvapotranspirationMm = field(),
-                openWaterEvaporationMm = field()
+                openWaterEvaporationMm = field(),
+                windEastwardMps = field(),
+                windSouthwardMps = field()
             ),
             rivers = RiverResult(
                 filledElevation = field(),

@@ -254,6 +254,12 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
         GL43C.glUniform1f(uniform("uInkGain"), recipe.inkGain)
         GL43C.glUniform1i(uniform("uRealmSet"), recipe.realmSetSize)
         GL43C.glUniform1f(uniform("uHatchStrength"), recipe.hatchStrength)
+        GL43C.glUniform1i(uniform("uSatellite"), recipe.satellite.toGl())
+        GL43C.glUniform1f(uniform("uStreakContrast"), recipe.satelliteStreakContrast)
+        GL43C.glUniform1f(uniform("uSandStreak"), recipe.satelliteSandStreak)
+        GL43C.glUniform1f(uniform("uUnitPerByte"), recipe.satelliteUnitPerByte)
+        GL43C.glUniform1f(uniform("uUnitPerStreakByte"), recipe.satelliteUnitPerStreakByte)
+        GL43C.glUniform1i(uniform("uStreakZeroByte"), recipe.satelliteStreakZeroByte)
 
         setEngravingUniforms(recipe)
 
@@ -478,6 +484,14 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
             uniform vec3 uAnomalyCold;
             uniform int uRealmSet;
             uniform float uHatchStrength;
+            // The satellite surface (SatelliteGround): whether the fantasy view's land is painted
+            // from it, and the figures its bytes are unpacked with, the processor's own.
+            uniform int uSatellite;
+            uniform float uStreakContrast;
+            uniform float uSandStreak;
+            uniform float uUnitPerByte;
+            uniform float uUnitPerStreakByte;
+            uniform int uStreakZeroByte;
 
             // The engraving, from the recipe's EngravingPlan. Not one of these is derived here:
             // every length is in sheet pixels, worked out once on the processor, so the two paths
@@ -959,14 +973,81 @@ class GpuRaster private constructor(private val deviceName: String) : RasterAcce
                 return blend(base, muted, uBiomeWash);
             }
 
+            /* One byte of a packed word, low byte first, as SatelliteGround packs them. */
+            uint byteOf(int word, uint slot) {
+                return (uint(word) >> (slot * 8u)) & 0xFFu;
+            }
+
+            /*
+             * SatelliteGround.groundColor, step for step: the bare ground mixed from its surfaces,
+             * the wind's streaks over the dry ground, the living cover over it where the rock does
+             * not break through, and the snow over all, in floats in the processor's order and
+             * truncated once. The palette is ColorsA, in SatelliteGround.PALETTE's order; the
+             * surface's bytes are IndexA, IndexB and ColorsB (its terrain, a word a cell on this
+             * view), and the living cover is ScalarC.
+             */
+            vec3 satelliteGround(int i) {
+                int composition = indexA[i];
+                int climate = indexB[i];
+                int terrain = int(colorsB[i]);
+                precise float red = float(byteOf(composition, 0u)) * uUnitPerByte;
+                precise float rock = float(byteOf(composition, 1u)) * uUnitPerByte;
+                precise float sand = float(byteOf(composition, 2u)) * uUnitPerByte;
+                precise float salt = float(byteOf(composition, 3u)) * uUnitPerByte;
+                precise float streak =
+                    float(int(byteOf(climate, 0u)) - uStreakZeroByte) * uUnitPerStreakByte;
+                precise float riverbank = float(byteOf(climate, 1u)) * uUnitPerByte;
+                precise float snow = float(byteOf(climate, 2u)) * uUnitPerByte;
+                precise float arid = float(byteOf(climate, 3u)) * uUnitPerByte;
+                precise float stone = float(byteOf(terrain, 0u)) * uUnitPerByte;
+                precise float wash = float(byteOf(terrain, 1u)) * uUnitPerByte;
+                precise float blush = float(byteOf(terrain, 2u)) * uUnitPerByte;
+                precise float exposure = float(byteOf(terrain, 3u)) * uUnitPerByte;
+                precise float streakedSand = clamp(sand * (1.0 + uSandStreak * streak), 0.0, 1.0);
+                precise float streakLight = 1.0 + uStreakContrast * streak * arid;
+                precise float shown = max(scalarC[i] * (1.0 - exposure), riverbank);
+                precise float barren = arid * (1.0 - scalarC[i]);
+
+                vec3 humidSoil = unpack(colorsA[0]);
+                vec3 aridSoil = unpack(colorsA[1]);
+                vec3 ironRed = unpack(colorsA[2]);
+                vec3 sandColour = unpack(colorsA[3]);
+                vec3 rockColour = unpack(colorsA[4]);
+                vec3 saltColour = unpack(colorsA[5]);
+                vec3 sparseGreen = unpack(colorsA[6]);
+                vec3 denseGreen = unpack(colorsA[7]);
+                vec3 snowColour = unpack(colorsA[8]);
+                vec3 hamadaColour = unpack(colorsA[9]);
+                vec3 blushColour = unpack(colorsA[10]);
+                vec3 washColour = unpack(colorsA[11]);
+                vec3 regColour = unpack(colorsA[12]);
+
+                precise vec3 soil = humidSoil + (aridSoil - humidSoil) * arid;
+                soil = soil + (regColour - soil) * barren;
+                precise vec3 bare = soil + (hamadaColour - soil) * stone;
+                bare = bare + (sandColour - bare) * streakedSand;
+                bare = bare + (blushColour - bare) * blush;
+                bare = bare + (ironRed - bare) * red;
+                bare = bare + (washColour - bare) * wash;
+                bare = bare + (rockColour - bare) * rock;
+                bare = bare + (saltColour - bare) * salt;
+                bare = bare * streakLight;
+                precise vec3 green = sparseGreen + (denseGreen - sparseGreen) * shown;
+                precise vec3 surface = bare + (green - bare) * shown;
+                surface = surface + (snowColour - surface) * snow;
+                return clamp(floor(surface), vec3(0.0), vec3(255.0));
+            }
+
             /*
              * MapStyle.ground: the land ramp read at a height the drought has lifted, paled toward
              * the paper by the cold, darkened under a canopy, then washed with the biome's colour.
              * The dryness, the coldness and the canopy are all per-cell fields worked out on the
              * processor; the canopy was a table indexed by this pixel's biome until the world
-             * started carrying a vegetation density of its own.
+             * started carrying a vegetation density of its own. The satellite style paints from
+             * its surface instead.
              */
             vec3 ground(int i, float relative, int biome) {
+                if (uSatellite != 0) return satelliteGround(i);
                 if (uClimateTint <= 0.0) {
                     return tint(rampAt(RAMP_LAND, clamp(relative, 0.0, 1.0)), biome);
                 }

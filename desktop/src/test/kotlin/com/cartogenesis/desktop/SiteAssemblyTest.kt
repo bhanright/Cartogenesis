@@ -295,8 +295,9 @@ class SiteAssemblyTest {
             "step-climate.webp" to (520 to 280),
             "step-rivers.webp" to (520 to 280),
             "step-realms.webp" to (520 to 280),
-            // The twelve styles, each the same 600 by 400 window: three are cards, all twelve are
-            // the comparison slider's.
+            // The thirteen styles, each the same 600 by 400 window: three are cards, all thirteen
+            // are the comparison slider's.
+            "style-satellite.webp" to (600 to 400),
             "style-atlas.webp" to (600 to 400),
             "style-vellum.webp" to (600 to 400),
             "style-ink_wash.webp" to (600 to 400),
@@ -488,13 +489,13 @@ class SiteAssemblyTest {
      * a picker's option and fetched when picked.
      */
     @Test
-    fun `the slider offers all twelve styles on one ground and loads two`() {
+    fun `the slider offers all thirteen styles on one ground and loads two`() {
         val styles = SiteImagery.STYLE_PICTURES
         assertEquals(
             com.cartogenesis.cartography.MapStyle.entries.toList(), styles.map { it.style },
             "the slider's pictures are not every style the application offers, in its order"
         )
-        assertEquals(1, styles.map { it.window }.distinct().size, "the twelve styles are cut from different windows")
+        assertEquals(1, styles.map { it.window }.distinct().size, "the thirteen styles are cut from different windows")
         assertTrue(styles.all { it.reduction == 1 }, "a style picture is reduced, so the pens are not the renderer's")
         assertTrue(SiteImagery.STYLE_CARDS.all { it in styles }, "a style card is not one of the slider's pictures")
 
@@ -508,7 +509,7 @@ class SiteAssemblyTest {
         assertEquals(2, pickers.size, "the slider has ${pickers.size} pickers, where it has a left and a right")
         // By the application's own names, which are the page's: both are in American English.
         val offered = styles.map { it.file.removePrefix("style-").removeSuffix(".webp") to it.style.label }
-        pickers.forEach { assertEquals(offered, it, "a picker does not offer the twelve styles by their own names") }
+        pickers.forEach { assertEquals(offered, it, "a picker does not offer the thirteen styles by their own names") }
 
         val loaded = Regex("""<img\s[^>]*src="([^"]+)"""").findAll(figure).map { it.groupValues[1] }.toList()
         assertEquals(2, loaded.size, "the slider asks for ${loaded.size} pictures as the page loads, not two: $loaded")

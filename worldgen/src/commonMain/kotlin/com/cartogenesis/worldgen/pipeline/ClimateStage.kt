@@ -174,7 +174,18 @@ data class ClimateResult(
      * What a lake surface loses, which is not what a field of grass could: open water has no
      * canopy holding its vapor in.
      */
-    val openWaterEvaporationMm: FloatField
+    val openWaterEvaporationMm: FloatField,
+    /**
+     * The annual surface wind in meters a second, eastward and southward, one entry per cell,
+     * row-major: the field [windDirection] and [windMeridional] are read off, before the slant is
+     * clamped to the march's one-neighbour blend.
+     *
+     * Kept for the drawing, which lays the satellite style's wind streaks along it: the clamp holds
+     * a quarter or more of a world's dry land at exactly one row a column, the grid's diagonal, and
+     * streaks drawn along the clamped slant would run there too. Nothing in the generator reads it.
+     */
+    val windEastwardMps: FloatField,
+    val windSouthwardMps: FloatField
 )
 
 /**
@@ -568,6 +579,8 @@ object ClimateStage {
         /** Frozen through its own warmest half-year: the pack that survives the summer. */
         val perennialSeaIce: BooleanArray,
         val wind: WindField,
+        /** The annual surface wind [wind] is read off, per cell and unclamped. */
+        val annualWindMps: PressureWind.Vectors,
         val landOriginPrecipitationMm: FloatField,
         val potentialEvapotranspirationMm: FloatField,
         val openWaterEvaporationMm: FloatField,
@@ -712,7 +725,9 @@ object ClimateStage {
                 vegetationDensity = vegetation.density,
                 permafrost = vegetation.permafrost,
                 potentialEvapotranspirationMm = fields.potentialEvapotranspirationMm,
-                openWaterEvaporationMm = fields.openWaterEvaporationMm
+                openWaterEvaporationMm = fields.openWaterEvaporationMm,
+                windEastwardMps = FloatField(cellsAcross, cellsDown, fields.annualWindMps.eastwardMps),
+                windSouthwardMps = FloatField(cellsAcross, cellsDown, fields.annualWindMps.southwardMps)
             ),
             summerPrecipitationMm = summerPrecipitationMm,
             winterPrecipitationMm = winterPrecipitationMm,
@@ -968,10 +983,13 @@ object ClimateStage {
             FloatArray(cellsDown) { (julyHalfRows.eastwardMps[it] + januaryHalfRows.eastwardMps[it]) * 0.5f },
             FloatArray(cellsDown) { (julyHalfRows.southwardMps[it] + januaryHalfRows.southwardMps[it]) * 0.5f }
         )
-        val wind = if (atmosphere == null) {
-            buildWind(config, cellsAcross, annualRows)
+        val annualWindMps = if (atmosphere == null) {
+            PressureWind.Vectors(
+                FloatArray(cellsAcross * cellsDown) { annualRows.eastwardMps[it / cellsAcross] },
+                FloatArray(cellsAcross * cellsDown) { annualRows.southwardMps[it / cellsAcross] }
+            )
         } else {
-            val annual = PressureWind.Vectors(
+            PressureWind.Vectors(
                 FloatArray(cellsAcross * cellsDown) {
                     (atmosphere.julyHalf.eastwardMps[it] + atmosphere.januaryHalf.eastwardMps[it]) * 0.5f
                 },
@@ -979,8 +997,12 @@ object ClimateStage {
                     (atmosphere.julyHalf.southwardMps[it] + atmosphere.januaryHalf.southwardMps[it]) * 0.5f
                 }
             )
+        }
+        val wind = if (atmosphere == null) {
+            buildWind(config, cellsAcross, annualRows)
+        } else {
             marchWindOf(
-                config, annual,
+                config, annualWindMps,
                 buildWind(config, 1, annualRows).zonalShareOfRow
             )
         }
@@ -1005,6 +1027,7 @@ object ClimateStage {
             januaryHalfSeaIce = januaryHalfSeaIce,
             perennialSeaIce = perennialSeaIce,
             wind = wind,
+            annualWindMps = annualWindMps,
             landOriginPrecipitationMm = marched.landOriginRainMm,
             potentialEvapotranspirationMm = marched.potentialEvapotranspirationMm,
             openWaterEvaporationMm = marched.openWaterEvaporationMm,

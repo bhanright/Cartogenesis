@@ -78,7 +78,7 @@ tasks.withType<Test>().configureEach {
  *
  * The render harnesses, none of which asserts anything. W4's is the one that cost: five worlds,
  * two of them at 2048 and each generated twice, for pictures a person judges, six minutes of every
- * merge until T5. F30b's, I3's, R1's and S3's only draw when their environment variable is set
+ * merge until T5. F30b's, I3's, R1's, S3's and S1's only draw when their environment variable is set
  * and skip or return otherwise; they are here because a render harness is an audit's job
  * whatever it costs, so that the per-merge list is guards and nothing else. The two classes that
  * regenerate checked-in fixtures on request stay where they are: they are tools, not measurements.
@@ -93,6 +93,7 @@ val auditOnlyClasses = listOf(
     "com.cartogenesis.cartography.I3RenderDump",
     "com.cartogenesis.cartography.R1RenderDump",
     "com.cartogenesis.cartography.S3RenderDump",
+    "com.cartogenesis.cartography.S1RenderDump",
     "com.cartogenesis.cartography.geometry.GeometryGuardAuditTest"
 )
 

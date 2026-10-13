@@ -548,39 +548,12 @@ object SiteImagery {
         val contact = System.getProperty("cartogenesis.siteImagery.contact") == "true"
 
         val started = System.currentTimeMillis()
-        val world = generate()
-        val generated = System.currentTimeMillis()
-        println(
-            "SITE IMAGERY seed=$SEED ${world.width}x${world.height} generated in " +
-                "${(generated - started) / 1000}s (rivers=${world.rivers.rivers.size}, " +
-                "realms=${world.nations.nations.size})"
-        )
+        // The author's world is made and cut in a function of its own so that nothing here holds
+        // it once its figures are written: the opening's world is as large, and with both alive
+        // the run filled the task's 8 GB (the author's world alone is 3.8 GB live). See
+        // docs/DESIGN_LEDGER.md, S1 Satellite look, round 2.
+        var total = writeAuthorsWorld(outputDir, contact, started)
 
-        // One rasterisation per distinct reading rather than one per figure: the link preview, the
-        // band and the Natural style card are the same reading of the same world, and a 2048 sheet
-        // is 32 MB and most of a second.
-        var total = 0L
-        fun writeAll(sheets: Sheets, figures: List<Figure>) {
-            for (figure in figures) {
-                val bytes = write(sheets, figure, outputDir)
-                total += bytes
-                println(
-                    "  ${figure.file.padEnd(24)} ${figure.width}x${figure.height}  " +
-                        "$bytes bytes  (${figure.readingName} ${figure.cut}, window " +
-                        "${figure.window.width}x${figure.window.height} at " +
-                        "${figure.window.x},${figure.window.y} reduced ${figure.reduction}, " +
-                        "quality ${figure.quality})"
-                )
-            }
-        }
-        val sheets = Sheets(world)
-        try {
-            writeAll(sheets, FIGURES.filter { it.seed == SEED })
-            total += writeReliefHeights(world, outputDir)
-            if (contact) writeContactSheets(sheets, outputDir)
-        } finally {
-            sheets.close()
-        }
         // The opening's world and the reel's, one at a time, each let go before the next is made.
         FIGURES.filter { it.seed != SEED }.groupBy { it.seed }.forEach { (seed, figures) ->
             val madeAt = System.currentTimeMillis()
@@ -588,7 +561,7 @@ object SiteImagery {
             println("SITE IMAGERY seed=$seed ${reelWorld.width}x${reelWorld.height} generated in ${System.currentTimeMillis() - madeAt} ms")
             val reelSheets = Sheets(reelWorld)
             try {
-                writeAll(reelSheets, figures)
+                total += writeFigures(reelSheets, figures, outputDir)
             } finally {
                 reelSheets.close()
             }
@@ -599,6 +572,53 @@ object SiteImagery {
             "SITE IMAGERY ${FIGURES.size} figures, $total bytes total, " +
                 "${(finished - started) / 1000}s including generation"
         )
+    }
+
+    /**
+     * Generates [SEED]'s world and writes its figures and the relief's heights, returning the
+     * bytes written. The world is local to this call, so it can be collected before the next is
+     * generated.
+     */
+    private fun writeAuthorsWorld(outputDir: File, contact: Boolean, started: Long): Long {
+        val world = generate()
+        val generated = System.currentTimeMillis()
+        println(
+            "SITE IMAGERY seed=$SEED ${world.width}x${world.height} generated in " +
+                "${(generated - started) / 1000}s (rivers=${world.rivers.rivers.size}, " +
+                "realms=${world.nations.nations.size})"
+        )
+        var total = 0L
+        val sheets = Sheets(world)
+        try {
+            total += writeFigures(sheets, FIGURES.filter { it.seed == SEED }, outputDir)
+            total += writeReliefHeights(world, outputDir)
+            if (contact) writeContactSheets(sheets, outputDir)
+        } finally {
+            sheets.close()
+        }
+        return total
+    }
+
+    /**
+     * Writes [figures] from [sheets] into [outputDir], one line each to the log, and returns the
+     * bytes written. One rasterisation per distinct reading rather than one per figure: the link
+     * preview, the band and the Natural style card are the same reading of the same world, and a
+     * 2048 sheet is 32 MB and most of a second.
+     */
+    private fun writeFigures(sheets: Sheets, figures: List<Figure>, outputDir: File): Long {
+        var total = 0L
+        for (figure in figures) {
+            val bytes = write(sheets, figure, outputDir)
+            total += bytes
+            println(
+                "  ${figure.file.padEnd(24)} ${figure.width}x${figure.height}  " +
+                    "$bytes bytes  (${figure.readingName} ${figure.cut}, window " +
+                    "${figure.window.width}x${figure.window.height} at " +
+                    "${figure.window.x},${figure.window.y} reduced ${figure.reduction}, " +
+                    "quality ${figure.quality})"
+            )
+        }
+        return total
     }
 
     /** [SEED] at [GRID_ROWS] rows, with the settings the page names. */

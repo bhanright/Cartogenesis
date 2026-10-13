@@ -71,7 +71,9 @@ internal object HandMadeWorlds {
             vegetationDensity = FloatField(cellsAcross, config.height),
             permafrost = ByteArray(cellCount),
             potentialEvapotranspirationMm = field(potentialMm),
-            openWaterEvaporationMm = field(openWaterMm)
+            openWaterEvaporationMm = field(openWaterMm),
+            windEastwardMps = FloatField(cellsAcross, config.height),
+            windSouthwardMps = FloatField(cellsAcross, config.height)
         )
     }
 

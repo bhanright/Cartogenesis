@@ -2,7 +2,6 @@ package com.cartogenesis.worldgen.pipeline
 
 import com.cartogenesis.worldgen.math.LongMinHeap
 import com.cartogenesis.worldgen.model.WorldGenConfig
-import kotlin.math.abs
 import kotlin.math.floor
 import kotlin.math.roundToInt
 

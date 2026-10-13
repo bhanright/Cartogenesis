@@ -84,8 +84,11 @@ import kotlin.time.TimeSource
  *   means ([columnRainMmPerDay]). It is the rate that sets the atmosphere's turnover: nothing
  *   here states a lifetime, and the one the world ends with is diagnosed (`RainAgainstEarthTest`).
  * - **Condensate.** Rising air condenses at Smith and Barstad's (2004) source, `C_w w`, on the
- *   saturated share of the column (its water over what it holds when its surface air saturates,
- *   [HOLDABLE_SHARE]); what the column cannot hold at all condenses too. The rise `w` is the
+ *   saturated share of the column, which it has only above its critical humidity (Sundqvist and
+ *   others' 1989 share at Zhao and Carr's 1997 thresholds, [CRITICAL_HUMIDITY_OVER_LAND]), the
+ *   humidity being its water over what it holds when its surface air saturates ([HOLDABLE_SHARE]);
+ *   what the column cannot hold at all condenses too, and cloud carried into a column under its
+ *   critical humidity evaporates up to it. The rise `w` is the
  *   atmosphere's own vertical motion at the boundary layer's top ([Season.largeScaleAscentMps]) and
  *   the wind's climb over the ground, summed before anything condenses, so a climb inside a large
  *   descent is first spent against it. The cloud turns to falling hydrometeors and falls out over
@@ -195,6 +198,20 @@ object MoistureMarch {
      */
     val HOLDABLE_SHARE = (COLUMN_RAIN_HUMIDITY_OFFSET +
         kotlin.math.ln(EARTH_MEAN_RAIN_MM_PER_DAY) / COLUMN_RAIN_PER_HUMIDITY) / MARINE_RELATIVE_HUMIDITY
+
+    /**
+     * The relative humidity below which lifted air does not condense, over land and over the sea:
+     * Zhao and Carr's (1997) critical relative humidity, 0.75 over land and 0.90 over the ocean, the
+     * values of their prognostic cloud scheme in the National Centers for Environmental Prediction's
+     * operational models. Lifted air condenses only in the share of the column that is saturated,
+     * and the weather inside a column a model holds as one humidity leaves part of it saturated
+     * before its mean is: Sundqvist, Berge and Kristjansson's (1989) saturated share
+     * `b = 1 - sqrt((1 - f) / (1 - f_c))` for a humidity `f` over the critical `f_c` ([columnAfterLiftMm]).
+     * The humidity read is the column's water over what it holds when its surface air saturates
+     * ([HOLDABLE_SHARE]), so `f` is the surface air's relative humidity.
+     */
+    const val CRITICAL_HUMIDITY_OVER_LAND = 0.75
+    const val CRITICAL_HUMIDITY_OVER_SEA = 0.90
 
     /**
      * Smith and Barstad's (2004) two delays in the orographic rain, seconds: cloud water turning
@@ -624,6 +641,51 @@ object MoistureMarch {
     /** Newton's method's ceiling and its stopping step, as a share of the column. */
     private const val NEWTON_ITERATIONS = 60
     private const val NEWTON_TOLERANCE = 1.0e-12
+
+    /**
+     * The column water left when a column of [startMm], holding [holdableMm] when its surface air
+     * saturates, is lifted for [seconds] at Smith and Barstad's source [upliftKgPerM2PerSecond]
+     * (`C_w w`), condensing only in its saturated share, Sundqvist and others' (1989)
+     * `b = 1 - sqrt((1 - f) / (1 - f_c))` of the humidity `f = W / W_hold` over the critical
+     * [criticalHumidity] ([CRITICAL_HUMIDITY_OVER_LAND]):
+     *
+     *     dW/dt = -C_w w b(W / W_hold).
+     *
+     * Exact over any crossing, so the condensation is the same on every grid. With
+     * `s = sqrt((1 - f) / (1 - f_c))` the equation is `2 (1 - f_c) W_hold s ds / (1 - s) = C_w w dt`,
+     * whose integral `y - 1 + exp(-y)` with `y = -ln(1 - s)` rises by `C_w w t / (2 (1 - f_c) W_hold)`;
+     * it is solved for `y` by Newton's method from above, which on a convex rising function falls to
+     * the root without passing it. The humidity falls toward the critical one and never below it,
+     * and a column at or under it is left as it is.
+     */
+    fun columnAfterLiftMm(
+        startMm: Double,
+        holdableMm: Double,
+        criticalHumidity: Double,
+        upliftKgPerM2PerSecond: Double,
+        seconds: Double
+    ): Double {
+        if (startMm <= 0.0 || holdableMm <= 0.0 || upliftKgPerM2PerSecond <= 0.0 || seconds <= 0.0) return startMm
+        val humidity = (startMm / holdableMm).coerceAtMost(1.0)
+        if (humidity <= criticalHumidity) return startMm
+        val dryShare = 1.0 - criticalHumidity
+        val startSaturatedRoot = kotlin.math.sqrt((1.0 - humidity) / dryShare)
+        val startY = -kotlin.math.ln(1.0 - startSaturatedRoot)
+        val target = startY - 1.0 + exp(-startY) + upliftKgPerM2PerSecond * seconds / (2.0 * dryShare * holdableMm)
+        // y - 1 + exp(-y) >= y - 1, so y = target + 1 lies at or above the root.
+        var y = target + 1.0
+        for (iteration in 0 until NEWTON_ITERATIONS) {
+            val excess = y - 1.0 + exp(-y) - target
+            val slope = 1.0 - exp(-y)
+            if (slope <= 0.0) break
+            val next = (y - excess / slope).coerceAtLeast(startY)
+            if (abs(next - y) <= NEWTON_TOLERANCE * (1.0 + y)) { y = next; break }
+            y = next
+        }
+        val saturatedRoot = 1.0 - exp(-y)
+        val humidityAfter = 1.0 - dryShare * saturatedRoot * saturatedRoot
+        return (humidityAfter * holdableMm).coerceIn(criticalHumidity * holdableMm, minOf(startMm, holdableMm))
+    }
 
     /**
      * The share of a row's water the mid-latitude eddies trade through the face between two rows
@@ -1368,19 +1430,21 @@ object MoistureMarch {
                 condensedHere += condensed
                 if (entry != null) entry.condensed += condensed / toColumnWater
             }
+            val criticalHumidity = if (kind == LAND) CRITICAL_HUMIDITY_OVER_LAND else CRITICAL_HUMIDITY_OVER_SEA
             if (uplift > 0.0 && vapor > 0.0 && holdable > 0.0) {
-                // Air carried up the ground condenses at Smith and Barstad's rate where it is
-                // saturated, and the column's saturated share is its water over what it holds at
-                // surface saturation: the climb takes `C_w w W / W_hold` a second, which never
-                // empties the column however long the climb.
-                val condensed = vapor * (1.0 - exp(-uplift / holdable * seconds))
-                val condensedLand = condensed * (vaporLand / vapor)
-                cloud += condensed
-                cloudLand += condensedLand
-                vapor -= condensed
-                vaporLand -= condensedLand
-                condensedHere += condensed
-                if (entry != null) entry.condensed += condensed / toColumnWater
+                // Lifted air condenses at Smith and Barstad's rate in the column's saturated share
+                // alone, which the column has only above its critical humidity: lifted unsaturated
+                // air cools without raining.
+                val condensed = vapor - columnAfterLiftMm(vapor, holdable, criticalHumidity, uplift, seconds)
+                if (condensed > 0.0) {
+                    val condensedLand = condensed * (vaporLand / vapor)
+                    cloud += condensed
+                    cloudLand += condensedLand
+                    vapor -= condensed
+                    vaporLand -= condensedLand
+                    condensedHere += condensed
+                    if (entry != null) entry.condensed += condensed / toColumnWater
+                }
             } else if (uplift < 0.0) {
                 // Descending air warms and takes back water at the same rate: the cloud it carries
                 // first, then (below) the column's rain as it falls through it.
@@ -1396,6 +1460,20 @@ object MoistureMarch {
                     condensedHere -= evaporated
                     if (entry != null) entry.reevaporated += evaporated / toColumnWater
                 }
+            }
+            // Cloud carried into a column under its critical humidity evaporates until the column
+            // stands at it, as Zhao and Carr's cloud does, `E_c = max(min(q_s (f_c - f), c), 0)` over
+            // a step: the share of the column that was saturated is gone, and its cloud with it.
+            val deficit = criticalHumidity * holdable - vapor
+            if (cloud > 0.0 && deficit > 0.0) {
+                val evaporated = minOf(cloud, deficit)
+                val evaporatedLand = evaporated * (cloudLand / cloud)
+                cloud -= evaporated
+                cloudLand -= evaporatedLand
+                vapor += evaporated
+                vaporLand += evaporatedLand
+                condensedHere -= evaporated
+                if (entry != null) entry.reevaporated += evaporated / toColumnWater
             }
 
             // The convergence closure, when switched on.

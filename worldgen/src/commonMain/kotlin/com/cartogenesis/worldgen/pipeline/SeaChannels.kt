@@ -30,6 +30,8 @@ import kotlin.math.roundToInt
  * the open water, and the course ends where the map draws the sea. This is the same thought as a
  * lake one cell wide (`LakeResult.openWater`), measured against the coast's pen rather than against
  * two cells, because the pen is what decides whether the drawing shows water between two shores.
+ * Where a valley widens into a pool the drawing can show and narrows again below it, the course
+ * crosses the pool and goes on, as a river crosses a lake ([passage]).
  *
  * Both computations here are a block scan and a shortest-path walk over a graph, work that stays on
  * the processor by the project's rule for graph walks and priority queues.
@@ -96,6 +98,54 @@ object SeaChannels {
     }
 
     /**
+     * The sea a river's water passes through on its way to the sea the map draws: every cell of
+     * [narrow] sea, and every pool, which is open sea in a body that touches the rest of the sea only
+     * through narrow sea and is no larger than the largest lake Earth has
+     * (`SeaConfig.enclosedSeaMaxKm2`). One entry per cell, row-major.
+     *
+     * A pool is where a drowned valley widens for a few cells and narrows again before the coast:
+     * the drawing inks a coast round it and across the channel below it, so on the map it is a pond
+     * a cell or two inland, and a course that ended there would end in a pond with the sea in sight.
+     * Its water goes on to the sea down the channel, so the course does too. The bound is the
+     * enclosure rule's own: a body larger than any lake Earth has is a sea whatever joins it to the
+     * ocean, and a river that reaches it has reached the sea. The largest body of open sea is the
+     * ocean and is never a pool.
+     */
+    fun passage(config: WorldGenConfig, isLand: BooleanArray, narrow: BooleanArray): BooleanArray {
+        val cellsAcross = config.width
+        val cellsDown = config.height
+        val cellCount = cellsAcross * cellsDown
+        val largestLakeCells = (config.sea.enclosedSeaMaxKm2(config.scale) / config.squareKilometresPerCell).toInt()
+        val body = IntArray(cellCount) { -1 }
+        val bodySizes = ArrayList<Int>()
+        val frontier = IntArray(cellCount)
+        for (start in 0 until cellCount) {
+            if (isLand[start] || narrow[start] || body[start] >= 0) continue
+            val id = bodySizes.size
+            var frontierSize = 0
+            var found = 0
+            body[start] = id
+            frontier[frontierSize++] = start
+            while (frontierSize > 0) {
+                val cell = frontier[--frontierSize]
+                found++
+                FlowRouting.forEachNeighbour(cellsAcross, cellsDown, cell % cellsAcross, cell / cellsAcross) { neighbor ->
+                    if (!isLand[neighbor] && !narrow[neighbor] && body[neighbor] < 0) {
+                        body[neighbor] = id
+                        frontier[frontierSize++] = neighbor
+                    }
+                }
+            }
+            bodySizes.add(found)
+        }
+        var ocean = -1
+        for (id in bodySizes.indices) if (ocean < 0 || bodySizes[id] > bodySizes[ocean]) ocean = id
+        return BooleanArray(cellCount) { cell ->
+            narrow[cell] || (body[cell] >= 0 && body[cell] != ocean && bodySizes[body[cell]] <= largestLakeCells)
+        }
+    }
+
+    /**
      * True on every sea cell of [isLand] that belongs to no block of sea [blockColumns] across and
      * [blockRows] down, row-major and [cellsAcross] wide, wrapping east-west because the world is a
      * cylinder. False on land.
@@ -153,24 +203,25 @@ object SeaChannels {
     }
 
     /**
-     * How the water in narrow sea runs to the open sea: for each cell, the neighbor it runs on to,
-     * and how far it still has to go.
+     * How the water in [passage] runs on to the sea the map draws: for each cell, the neighbor it
+     * runs on to, and how far it still has to go.
      */
     class SeawardRoutes(
-        /** For each cell of narrow sea, the next cell on its way; -1 on every other cell. */
+        /** For each cell of passage, the next cell on its way; -1 on every other cell. */
         val nextCell: IntArray,
         /**
-         * For each cell of narrow sea, the length of the way on to the open sea in cell widths
-         * ([WorldGenConfig.groundSteps]); infinite on every other cell. It falls strictly along
-         * [nextCell], so ordering by it, longest first, puts every cell before the cell it runs on to.
+         * For each cell of passage, the length of the way on to the sea the map draws, in cell
+         * widths ([WorldGenConfig.groundSteps]); infinite on every other cell. It falls strictly
+         * along [nextCell], so ordering by it, longest first, puts every cell before the cell it
+         * runs on to.
          */
         val toOpenSeaCellWidths: FloatArray
     )
 
     /**
-     * For every cell of [narrow], the neighbor its water runs on to: one step along the shortest way
-     * on the ground, through narrow sea, to the nearest open sea. -1 on every other cell, and on
-     * narrow sea with no open water at the end of it, which the enclosure rule leaves none of.
+     * For every cell of [passage], the neighbor its water runs on to: one step along the shortest
+     * way on the ground, through passage, to the nearest sea the map draws, which is sea outside
+     * [passage]. -1 on every other cell, and on passage with no such sea at the end of it.
      *
      * The shortest way and not the deepest, because the shelf lies over a drowned valley at one
      * depth from its head to its mouth: the shelf's wedge is laid by distance from land, and every
@@ -179,7 +230,7 @@ object SeaChannels {
      * strictly falls along every step, so the walk cannot loop. Ties fall to the lower cell index,
      * through the same packing every ordering in this pipeline uses.
      */
-    fun seawardSteps(config: WorldGenConfig, isLand: BooleanArray, narrow: BooleanArray): SeawardRoutes {
+    fun seawardSteps(config: WorldGenConfig, isLand: BooleanArray, passage: BooleanArray): SeawardRoutes {
         val cellsAcross = config.width
         val cellsDown = config.height
         val cellCount = cellsAcross * cellsDown
@@ -187,10 +238,10 @@ object SeaChannels {
         val toOpenSea = FloatArray(cellCount) { Float.POSITIVE_INFINITY }
         val seaward = IntArray(cellCount) { -1 }
         val frontier = LongMinHeap()
-        fun isOpenSea(cell: Int) = !isLand[cell] && !narrow[cell]
+        fun isOpenSea(cell: Int) = !isLand[cell] && !passage[cell]
 
         for (cell in 0 until cellCount) {
-            if (!narrow[cell]) continue
+            if (!passage[cell]) continue
             FlowRouting.forEachNeighbourWithDistance(
                 cellsAcross, cellsDown, cell % cellsAcross, cell / cellsAcross, steps
             ) { neighbor, length ->
@@ -205,7 +256,7 @@ object SeaChannels {
             FlowRouting.forEachNeighbourWithDistance(
                 cellsAcross, cellsDown, cell % cellsAcross, cell / cellsAcross, steps
             ) { neighbor, length ->
-                if (!narrow[neighbor]) return@forEachNeighbourWithDistance
+                if (!passage[neighbor]) return@forEachNeighbourWithDistance
                 val through = toOpenSea[cell] + length
                 if (through < toOpenSea[neighbor]) {
                     toOpenSea[neighbor] = through
@@ -215,14 +266,14 @@ object SeaChannels {
         }
 
         for (cell in 0 until cellCount) {
-            if (!narrow[cell] || toOpenSea[cell] == Float.POSITIVE_INFINITY) continue
+            if (!passage[cell] || toOpenSea[cell] == Float.POSITIVE_INFINITY) continue
             var best = Float.POSITIVE_INFINITY
             FlowRouting.forEachNeighbourWithDistance(
                 cellsAcross, cellsDown, cell % cellsAcross, cell / cellsAcross, steps
             ) { neighbor, length ->
                 val beyond = when {
                     isOpenSea(neighbor) -> 0f
-                    narrow[neighbor] -> toOpenSea[neighbor]
+                    passage[neighbor] -> toOpenSea[neighbor]
                     else -> Float.POSITIVE_INFINITY
                 }
                 val through = beyond + length
@@ -236,10 +287,10 @@ object SeaChannels {
     }
 
     /**
-     * The discharge every cell carries once narrow sea carries it on: [landDischarge] on land, as
-     * the routing accumulated it, and on each cell of narrow sea everything the land sends straight
-     * into it ([flowTarget]) and everything the narrow sea above it carries down ([routes]). In
-     * [landDischarge]'s own units; nought on open sea.
+     * The discharge every cell carries once the [passage] carries it on: [landDischarge] on land,
+     * as the routing accumulated it, and on each cell of passage everything the land sends straight
+     * into it ([flowTarget]) and everything the passage above it carries down ([routes]). In
+     * [landDischarge]'s own units; nought on the sea the map draws.
      *
      * So two rivers that meet in a drowned valley run on below the meeting as one river carrying
      * both, which is what makes the course below a confluence the widest of the courses that meet
@@ -247,7 +298,7 @@ object SeaChannels {
      */
     fun dischargeCarriedDown(
         isLand: BooleanArray,
-        narrow: BooleanArray,
+        passage: BooleanArray,
         routes: SeawardRoutes,
         flowTarget: IntArray,
         landDischarge: FloatArray
@@ -256,14 +307,14 @@ object SeaChannels {
         for (cell in carried.indices) {
             if (!isLand[cell]) continue
             val below = flowTarget[cell]
-            if (below >= 0 && narrow[below]) carried[below] += landDischarge[cell]
+            if (below >= 0 && passage[below]) carried[below] += landDischarge[cell]
         }
-        // Farthest from the open sea first, packed so that one ascending sort gives that order:
-        // a positive float's bits sort as the float does, so their complement sorts the other way,
+        // Farthest from the sea first, packed so that one ascending sort gives that order: a
+        // positive float's bits sort as the float does, so their complement sorts the other way,
         // and ties fall to the lower cell index.
         val upstreamFirst = ArrayList<Long>()
         for (cell in carried.indices) {
-            if (narrow[cell] && routes.nextCell[cell] >= 0) {
+            if (passage[cell] && routes.nextCell[cell] >= 0) {
                 val farther = Int.MAX_VALUE.toLong() - routes.toOpenSeaCellWidths[cell].toRawBits().toLong()
                 upstreamFirst.add((farther shl 32) or cell.toLong())
             }
@@ -273,7 +324,7 @@ object SeaChannels {
         for (packed in order) {
             val cell = (packed and 0xFFFFFFFFL).toInt()
             val below = routes.nextCell[cell]
-            if (narrow[below]) carried[below] += carried[cell]
+            if (passage[below]) carried[below] += carried[cell]
         }
         return carried
     }

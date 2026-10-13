@@ -978,8 +978,9 @@ object RiverStage {
      *
      * The sea is held to the same test, against the coast's pen rather than two cells: a drowned
      * valley too narrow for the map to draw as sea is the river's own lower reach, and the course
-     * runs on down it to the sea the map draws, one shortest step on the ground at a time
-     * ([SeaChannels.seawardSteps]). Two courses that meet in such a valley meet as they would on
+     * runs on down it, and across any pool where it widens for a few cells, to the sea the map
+     * draws, one shortest step on the ground at a time ([SeaChannels.passage],
+     * [SeaChannels.seawardSteps]). Two courses that meet in such a valley meet as they would on
      * land: the later one stops on the first, at a cell of water rather than of ground. Stopped at
      * the valley's head instead, a course ended at a thread of sea color with the coast inked
      * across the valley's mouth, short of the sea on the map (docs/DESIGN_LEDGER.md, RM1).
@@ -1026,11 +1027,11 @@ object RiverStage {
         // strip of lake one cell wide is not open water and is a reach of the river, for the reason
         // [LakeResult.openWater] gives; a drowned valley too narrow to be drawn as sea is a reach of
         // it too, and the course runs on down it to the open water ([SeaChannels]).
-        val narrowSea = SeaChannels.narrow(config, sea.isLand)
-        val seawardRoutes = SeaChannels.seawardSteps(config, sea.isLand, narrowSea)
+        val passage = SeaChannels.passage(config, sea.isLand, SeaChannels.narrow(config, sea.isLand))
+        val seawardRoutes = SeaChannels.seawardSteps(config, sea.isLand, passage)
         val seaward = seawardRoutes.nextCell
         fun isTheWater(cell: Int): Boolean =
-            (!sea.isLand[cell] && !narrowSea[cell]) || lakes.isOpenWater(cell)
+            (!sea.isLand[cell] && !passage[cell]) || lakes.isOpenWater(cell)
 
         val hasUpstream = BooleanArray(cellCount)
         for (cell in 0 until cellCount) {
@@ -1125,7 +1126,7 @@ object RiverStage {
         // drowned valley a channel carries what reaches it, so two courses meeting there run on as
         // one carrying both.
         val discharge = SeaChannels.dischargeCarriedDown(
-            sea.isLand, narrowSea, seawardRoutes, flowTarget, accumulation.data
+            sea.isLand, passage, seawardRoutes, flowTarget, accumulation.data
         )
         return RiverWidth.sizedByFlow(rivers, discharge)
     }

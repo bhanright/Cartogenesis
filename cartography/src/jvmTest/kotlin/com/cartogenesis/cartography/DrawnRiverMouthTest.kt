@@ -75,22 +75,24 @@ class DrawnRiverMouthTest : BorrowsSharedWorlds() {
     }
 
     /**
-     * A course is carried only down water the drawing leaves without a coast: once it reaches sea
-     * the drawing draws as sea, it has reached the sea and stops, rather than running on across it.
+     * A course is carried only down water the map does not draw as the sea: sea too narrow for a
+     * coast, and the pools along it. Once it reaches the sea the map draws, it has reached the sea and
+     * stops, rather than running on across it.
      */
     @Test
-    fun `a course runs through no sea the map draws as sea, only into it`() {
+    fun `a course runs through no sea the map draws as the sea, only into it`() {
         for (seed in SEEDS) {
             val world = world(seed)
-            val narrow = NarrowSea.of(world)
+            val isLand = world.sea.isLand
+            val passage = SeaChannels.passage(world.config, isLand, SeaChannels.narrow(world.config, isLand))
             var badSteps = 0
             world.rivers.rivers.forEach { river ->
                 val cells = river.cells
                 for (step in 0 until cells.size - 1) {
-                    if (!world.sea.isLand[cells[step]] && !narrow[cells[step]]) badSteps++
+                    if (!isLand[cells[step]] && !passage[cells[step]]) badSteps++
                 }
             }
-            assertEquals(0, badSteps, "seed $seed: $badSteps steps of a course leave open sea rather than end at it")
+            assertEquals(0, badSteps, "seed $seed: $badSteps steps of a course cross the sea rather than end at it")
         }
     }
 }

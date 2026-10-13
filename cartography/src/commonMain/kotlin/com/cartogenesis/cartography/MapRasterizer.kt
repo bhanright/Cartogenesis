@@ -448,8 +448,16 @@ object MapRasterizer {
                 emptyList()
             }
 
+        // Which cells some course runs on through, for where each one stops: see
+        // [RiverSelection.cellsRunThrough]. And the block that open sea fills, for the pools a
+        // course crosses on its way down a drowned valley.
+        val runThrough = if (drawnRivers.isEmpty()) BooleanArray(0) else RiverSelection.cellsRunThrough(world)
+        val openSea = SeaChannels.openBlock(world.config)
+        fun isOpenSea(cell: Int) = !world.sea.isLand[cell] &&
+            !SeaChannels.isNarrow(world.sea.isLand, cellsAcross, cell, openSea.columns, openSea.rows)
+
         drawnRivers.forEach { river ->
-            val course = trimmedAtTheShore(world, river, geometry)
+            val course = trimmedAtTheShore(world, river, geometry, runThrough)
             for (vertex in 0 until course.vertexCount - 1) {
                 val fromCell = river.cells[vertex]
                 val toCell = river.cells[vertex + 1]
@@ -471,6 +479,11 @@ object MapRasterizer {
                 if (skipInLakes && water.isOpenWater(fromCell) && water.isOpenWater(toCell)) {
                     continue
                 }
+                // Nor across a pool of open sea in a drowned valley: the course runs on through it
+                // to the coast (`SeaChannels.passage`), and the map draws the pool as water with its
+                // own shore, so the line stops at the pool and starts again at its outlet, as it
+                // does at a lake.
+                if (isOpenSea(fromCell) && isOpenSea(toCell)) continue
 
                 if (abs(toColumn - fromColumn) > cellsAcross / 2) {
                     // The river crosses the east-west seam. Drawing it as-is would streak a
@@ -913,13 +926,18 @@ object MapRasterizer {
      * [SheetGeometry.pixelsPerCellDown], so half a stroke is given up along the ground the river
      * actually crosses on the drawn map.
      */
-    private fun trimmedAtTheShore(world: WorldMap, river: River, sheet: SheetGeometry): DrawnCourse {
+    private fun trimmedAtTheShore(
+        world: WorldMap,
+        river: River,
+        sheet: SheetGeometry,
+        runThrough: BooleanArray
+    ): DrawnCourse {
         val cells = river.cells
         val whole = DrawnCourse(cells.size, 1f)
         if (cells.size < 3) return whole
         val mouth = cells[cells.size - 1]
         val lastOnLand = cells.size - 2
-        if (!RiverSelection.endsInDrawnWater(world, mouth, SeaChannels.openBlock(world.config))) return whole
+        if (!RiverSelection.endsInDrawnWater(world, mouth, runThrough)) return whole
 
         val halfStrokePixels =
             RiverPen.widthPixels(river.widthRatio[lastOnLand], sheet.widthPixels, world.config.scale.worldWidthKm) / 2f

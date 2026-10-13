@@ -484,17 +484,17 @@ object RiverSelection {
         for (course in rivers.indices) {
             for (cell in rivers[course].cells) if (owner[cell] == NO_TRUNK) owner[cell] = course
         }
-        val openSea = SeaChannels.openBlock(world.config)
+        val runThrough = cellsRunThrough(world)
         return IntArray(rivers.size) { course ->
             val end = rivers[course].cells[rivers[course].cells.size - 1]
-            if (endsInDrawnWater(world, end, openSea)) NO_TRUNK
+            if (endsInDrawnWater(world, end, runThrough)) NO_TRUNK
             else owner[end].let { if (it == course) NO_TRUNK else it }
         }
     }
 
     /** Where a drawn course ends, as [endings] reads it. */
     enum class Ending {
-        /** On water the map draws as water: open sea, or a lake's open water. */
+        /** On water the map draws as water: the sea it inks a coast round, or a lake's open water. */
         DRAWN_WATER,
         /** On a cell of its trunk, which the selection's closure draws with it. */
         DRAWN_TRUNK,
@@ -509,20 +509,25 @@ object RiverSelection {
     /**
      * How each course [selection] draws on [world] ends, in course order, and null for a course it
      * does not draw: the question a reader asks of the map, whether every river it draws ends in
-     * something, or whether a line stops on dry ground with the sea a few cells off.
+     * something, or whether a line stops on dry ground, at a thread of sea or in a coastal pond
+     * with the sea a few cells off.
+     *
+     * Read off the generator's whole rule for the sea a river passes through
+     * ([SeaChannels.passage]) rather than off what the courses did, so that it holds the tracer to
+     * the rule and not the rule to the tracer.
      */
     fun endings(world: WorldMap, selection: Selection): Array<Ending?> {
         val rivers = world.rivers.rivers
         val lakes = world.rivers.lakes
         val isLand = world.sea.isLand
-        val openSea = SeaChannels.openBlock(world.config)
+        val passage = SeaChannels.passage(world.config, isLand, SeaChannels.narrow(world.config, isLand))
         return Array(rivers.size) { course ->
             if (!selection.drawn[course]) return@Array null
             val end = rivers[course].cells[rivers[course].cells.size - 1]
             val trunk = selection.trunkOf[course]
             val row = end / world.width
             when {
-                endsInDrawnWater(world, end, openSea) -> Ending.DRAWN_WATER
+                lakes.isOpenWater(end) || (!isLand[end] && !passage[end]) -> Ending.DRAWN_WATER
                 trunk != NO_TRUNK && selection.drawn[trunk] -> Ending.DRAWN_TRUNK
                 isLand[end] && (lakes.isPlaya(end) ||
                     (lakes.isLake(end) && lakes.lakes[lakes.lakeId[end]].endorheic)) -> Ending.CLOSED_BASIN
@@ -534,14 +539,29 @@ object RiverSelection {
     }
 
     /**
-     * Whether [end], a course's last cell, is water the map draws as water: open sea, which is
-     * sea in some [openSea] block of sea ([SeaChannels]), or a lake's open water. A course ending
+     * Every cell some course of [world] runs on through rather than stops at, one entry per cell.
+     *
+     * A course stops at the water the map draws and runs on through everything else, sea too
+     * narrow to draw and the pools along it included ([SeaChannels.passage]); so a cell of sea that
+     * a course ends at and no course runs through is the drawn sea, and one that some course runs
+     * through is a junction in a drowned valley. Read off the courses rather than recomputed from
+     * the sea, because the drawing asks it of every course on every sheet.
+     */
+    internal fun cellsRunThrough(world: WorldMap): BooleanArray {
+        val runThrough = BooleanArray(world.width * world.height)
+        for (river in world.rivers.rivers) {
+            for (step in 0 until river.cells.size - 1) runThrough[river.cells[step]] = true
+        }
+        return runThrough
+    }
+
+    /**
+     * Whether [end], a course's last cell, is water the map draws as water: sea no course runs on
+     * through ([cellsRunThrough], here [runThrough]), or a lake's open water. A course ending
      * anywhere else ends on its trunk, the polar edge or a closed basin's floor.
      */
-    internal fun endsInDrawnWater(world: WorldMap, end: Int, openSea: SeaChannels.OpenBlock): Boolean =
-        world.rivers.lakes.isOpenWater(end) ||
-            (!world.sea.isLand[end] &&
-                !SeaChannels.isNarrow(world.sea.isLand, world.width, end, openSea.columns, openSea.rows))
+    internal fun endsInDrawnWater(world: WorldMap, end: Int, runThrough: BooleanArray): Boolean =
+        world.rivers.lakes.isOpenWater(end) || (!world.sea.isLand[end] && !runThrough[end])
 
     /**
      * How long a course runs on the ground, in kilometres.

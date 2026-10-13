@@ -246,8 +246,8 @@ class WorldLinksTest {
     fun `the styles and views are named in links as they were when the format was fixed`() {
         assertEquals(
             listOf(
-                "atlas", "vellum", "ink_wash", "nautical", "midnight", "schoolroom", "verdant",
-                "scroll", "pen_and_ink", "mars", "natural", "clear"
+                "satellite", "atlas", "vellum", "ink_wash", "nautical", "midnight", "schoolroom",
+                "verdant", "scroll", "pen_and_ink", "mars", "natural", "clear"
             ),
             MapStyle.entries.map { WorldLinks.wireName(it) }
         )

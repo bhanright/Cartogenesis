@@ -165,12 +165,15 @@ enum class MapStyle(
 ) {
     /**
      * The world as a satellite sees it, painted from the world's own physical fields: the living
-     * cover from the vegetation density, mixed continuously over bare ground whose colour says
-     * what the ground is — iron red on old dry crust, dark rock on steep slopes and active belts,
-     * pale sand where the erosion laid sediment down or the wind carries it from the uplands
-     * upwind, white salt on the playas — with streaks along the prevailing wind in the sand seas,
-     * green threads along the rivers through dry country, a seasonal snow tint by the share of the
-     * year below freezing, and the relief shaded as every style shades it.
+     * cover from the vegetation density, mixed continuously over bare ground whose color says
+     * what the ground is — cream, pinkish buff and, on the oldest sand, iron red by the crust's
+     * age; dark varnished stone on plateaus and ground that sheds its sediment; dark rock on
+     * steep slopes, active belts and the alpine slopes above the tree line; pale sand where the
+     * erosion laid sediment down or the wind carries it from the uplands upwind; pale washes on
+     * wadi floors and fans; white salt on the playas — with streaks along the prevailing wind
+     * over the dry ground, green corridors along the rivers as wide as their discharge makes
+     * their valleys, perennial snow above the snow line and part of the seasonal snow below it,
+     * and the relief shaded as every style shades it.
      *
      * The application's default. Where [NATURAL] is a ramp modulated by the climate and washed
      * with the biomes, this one has no ramp on land at all: see [SatelliteGround] for every field

@@ -1027,7 +1027,8 @@ object RiverStage {
         // [LakeResult.openWater] gives; a drowned valley too narrow to be drawn as sea is a reach of
         // it too, and the course runs on down it to the open water ([SeaChannels]).
         val narrowSea = SeaChannels.narrow(config, sea.isLand)
-        val seaward = SeaChannels.seawardSteps(config, sea.isLand, narrowSea)
+        val seawardRoutes = SeaChannels.seawardSteps(config, sea.isLand, narrowSea)
+        val seaward = seawardRoutes.nextCell
         fun isTheWater(cell: Int): Boolean =
             (!sea.isLand[cell] && !narrowSea[cell]) || lakes.isOpenWater(cell)
 
@@ -1120,8 +1121,13 @@ object RiverStage {
         }
 
         // Sized last, because the scale a channel is measured against is the whole network's: what
-        // makes a trunk a trunk is that it carries more than anything else on this map.
-        return RiverWidth.sizedByFlow(rivers, accumulation.data)
+        // makes a trunk a trunk is that it carries more than anything else on this map. Down a
+        // drowned valley a channel carries what reaches it, so two courses meeting there run on as
+        // one carrying both.
+        val discharge = SeaChannels.dischargeCarriedDown(
+            sea.isLand, narrowSea, seawardRoutes, flowTarget, accumulation.data
+        )
+        return RiverWidth.sizedByFlow(rivers, discharge)
     }
 
     /**

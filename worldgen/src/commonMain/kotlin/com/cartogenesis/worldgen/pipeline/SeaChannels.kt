@@ -153,6 +153,21 @@ object SeaChannels {
     }
 
     /**
+     * How the water in narrow sea runs to the open sea: for each cell, the neighbor it runs on to,
+     * and how far it still has to go.
+     */
+    class SeawardRoutes(
+        /** For each cell of narrow sea, the next cell on its way; -1 on every other cell. */
+        val nextCell: IntArray,
+        /**
+         * For each cell of narrow sea, the length of the way on to the open sea in cell widths
+         * ([WorldGenConfig.groundSteps]); infinite on every other cell. It falls strictly along
+         * [nextCell], so ordering by it, longest first, puts every cell before the cell it runs on to.
+         */
+        val toOpenSeaCellWidths: FloatArray
+    )
+
+    /**
      * For every cell of [narrow], the neighbor its water runs on to: one step along the shortest way
      * on the ground, through narrow sea, to the nearest open sea. -1 on every other cell, and on
      * narrow sea with no open water at the end of it, which the enclosure rule leaves none of.
@@ -164,7 +179,7 @@ object SeaChannels {
      * strictly falls along every step, so the walk cannot loop. Ties fall to the lower cell index,
      * through the same packing every ordering in this pipeline uses.
      */
-    fun seawardSteps(config: WorldGenConfig, isLand: BooleanArray, narrow: BooleanArray): IntArray {
+    fun seawardSteps(config: WorldGenConfig, isLand: BooleanArray, narrow: BooleanArray): SeawardRoutes {
         val cellsAcross = config.width
         val cellsDown = config.height
         val cellCount = cellsAcross * cellsDown
@@ -217,6 +232,49 @@ object SeaChannels {
                 }
             }
         }
-        return seaward
+        return SeawardRoutes(seaward, toOpenSea)
+    }
+
+    /**
+     * The discharge every cell carries once narrow sea carries it on: [landDischarge] on land, as
+     * the routing accumulated it, and on each cell of narrow sea everything the land sends straight
+     * into it ([flowTarget]) and everything the narrow sea above it carries down ([routes]). In
+     * [landDischarge]'s own units; nought on open sea.
+     *
+     * So two rivers that meet in a drowned valley run on below the meeting as one river carrying
+     * both, which is what makes the course below a confluence the widest of the courses that meet
+     * there, in a valley as on land.
+     */
+    fun dischargeCarriedDown(
+        isLand: BooleanArray,
+        narrow: BooleanArray,
+        routes: SeawardRoutes,
+        flowTarget: IntArray,
+        landDischarge: FloatArray
+    ): FloatArray {
+        val carried = FloatArray(landDischarge.size) { cell -> if (isLand[cell]) landDischarge[cell] else 0f }
+        for (cell in carried.indices) {
+            if (!isLand[cell]) continue
+            val below = flowTarget[cell]
+            if (below >= 0 && narrow[below]) carried[below] += landDischarge[cell]
+        }
+        // Farthest from the open sea first, packed so that one ascending sort gives that order:
+        // a positive float's bits sort as the float does, so their complement sorts the other way,
+        // and ties fall to the lower cell index.
+        val upstreamFirst = ArrayList<Long>()
+        for (cell in carried.indices) {
+            if (narrow[cell] && routes.nextCell[cell] >= 0) {
+                val farther = Int.MAX_VALUE.toLong() - routes.toOpenSeaCellWidths[cell].toRawBits().toLong()
+                upstreamFirst.add((farther shl 32) or cell.toLong())
+            }
+        }
+        val order = upstreamFirst.toLongArray()
+        order.sort()
+        for (packed in order) {
+            val cell = (packed and 0xFFFFFFFFL).toInt()
+            val below = routes.nextCell[cell]
+            if (narrow[below]) carried[below] += carried[cell]
+        }
+        return carried
     }
 }

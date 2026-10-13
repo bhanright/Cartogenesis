@@ -27,9 +27,11 @@ class SiteRiverMouthsAuditTest {
         val selection = RiverSelection.select(world, MapSheet.UNGENERALISED)
         val endings = RiverSelection.endings(world, selection)
         val counts = RiverSelection.Ending.entries.associateWith { ending -> endings.count { it == ending } }
+        val mouths = selection.drawnCount - counts.getValue(RiverSelection.Ending.DRAWN_TRUNK)
         println(
             "SITE RIVERMOUTH seed=${SiteImagery.BAND_SEED} ${world.width}x${world.height} " +
-                "drawn=${selection.drawnCount} " +
+                "drawn=${selection.drawnCount} mouths=$mouths reaching drawn water " +
+                "${"%.1f".format(100.0 * counts.getValue(RiverSelection.Ending.DRAWN_WATER) / mouths)}% " +
                 counts.entries.joinToString(" ") { "${it.key.name.lowercase()}=${it.value}" }
         )
         val short = endings.indices.filter { endings[it] == RiverSelection.Ending.SHORT_OF_THE_WATER }

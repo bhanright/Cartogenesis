@@ -60,8 +60,12 @@ class DrawnRiverMouthTest : BorrowsSharedWorlds() {
                         examples += "seed $seed mark $mark course $course at (${end % world.width}, ${end / world.width})"
                     }
                 }
+                // Every drawn course that is not a tributary of a drawn course is a river mouth: the
+                // share of those that reach water the map draws is the figure a reader sees.
+                val mouths = selection.drawnCount - counts.getValue(RiverSelection.Ending.DRAWN_TRUNK)
                 println(
-                    "RIVERMOUTH seed=$seed mark=$mark drawn=${selection.drawnCount} " +
+                    "RIVERMOUTH seed=$seed mark=$mark drawn=${selection.drawnCount} mouths=$mouths " +
+                        "reaching drawn water ${"%.1f".format(100.0 * counts.getValue(RiverSelection.Ending.DRAWN_WATER) / mouths)}% " +
                         counts.entries.joinToString(" ") { "${it.key.name.lowercase()}=${it.value}" }
                 )
             }

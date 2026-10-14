@@ -875,7 +875,7 @@ class SiteAssemblyTest {
         }
         // Recorded with the data frame's land above: on H1's ground the frame's rivers and lakes
         // cover under the half percent the bar asks (docs/TODO.md).
-        KnownFailures.expect("M1: the site's data frame holds little land on H1's ground", "img/data-rivers.webp covers 0.0039") {
+        KnownFailures.expect("M1: the site's data frame holds little land on H1's ground", "img/data-rivers.webp covers 0.0048") {
             if (thinLayers.isNotEmpty()) {
                 throw RecordedViolation(
                     "a layer covers less of its frame than $LEAST_LAYER_COVER or more than $MOST_LAYER_COVER: " +

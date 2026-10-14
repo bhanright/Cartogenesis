@@ -153,7 +153,7 @@ object SiteImagery {
      * cells became square, by the maintainer's eye over two others (docs/DESIGN_LEDGER.md, Q6):
      * the seed makes the same country there. It starts at column 3,264, so the preview's first
      * 1,600 columns cross the sheet's seam, which the map does not have: the world wraps east and
-     * west. Drawn in `MapStyle.NATURAL`, for the color.
+     * west. Drawn in `MapStyle.SATELLITE`, the application's default.
      */
     val BAND = Window(3264, 848, 1600, 800)
 
@@ -504,7 +504,7 @@ object SiteImagery {
     val WORLD_BAND: Figure by lazy {
         Figure(
             "world-band.webp", Window(BAND.x, BAND.y, SHEET_WIDTH_PIXELS, BAND.height),
-            MapView.FANTASY, MapStyle.NATURAL, quality = WORLD_BAND_QUALITY, seed = BAND_SEED
+            MapView.FANTASY, MapStyle.SATELLITE, quality = WORLD_BAND_QUALITY, seed = BAND_SEED
         )
     }
 
@@ -519,7 +519,7 @@ object SiteImagery {
      */
     val WORLD_BAND_HALF: Figure by lazy {
         Figure(
-            "world-band-half.webp", WORLD_BAND.window, MapView.FANTASY, MapStyle.NATURAL,
+            "world-band-half.webp", WORLD_BAND.window, MapView.FANTASY, MapStyle.SATELLITE,
             reduction = 2, quality = WORLD_BAND_QUALITY, seed = BAND_SEED
         )
     }

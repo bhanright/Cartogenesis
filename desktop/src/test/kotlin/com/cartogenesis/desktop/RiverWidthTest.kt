@@ -16,6 +16,7 @@ import com.cartogenesis.worldgen.generateBlocking
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.River
+import com.cartogenesis.worldgen.pipeline.SeaChannels
 import kotlin.math.abs
 import kotlin.math.floor
 import kotlin.math.pow
@@ -84,7 +85,17 @@ class RiverWidthTest {
 
     /** One world, its drawn network flattened to what a guard needs to ask about. */
     private class Network(val world: WorldMap) {
-        val discharge: FloatArray = world.rivers.flowAccumulation.data
+        /**
+         * What each cell carries: the routing's accumulation on land, and down a drowned valley too
+         * narrow to draw as sea, what the land sends into it, which is what the tracer sizes a
+         * course's reach there by (`SeaChannels.dischargeCarriedDown`).
+         */
+        val discharge: FloatArray = passageOf(world).let { passage ->
+            SeaChannels.dischargeCarriedDown(
+                world.sea.isLand, passage, SeaChannels.seawardSteps(world.config, world.sea.isLand, passage),
+                world.rivers.flowTarget, world.rivers.flowAccumulation.data
+            )
+        }
 
         /** Every cell any drawn river runs through, and how wide it is drawn there. */
         val ratioByCell = HashMap<Int, Float>()
@@ -379,7 +390,7 @@ class RiverWidthTest {
         // counted (the filter above), and the pen rises with the water at every width but the
         // widest, so an equal width is the float's last digit. Seed 1234 at 84.1%, the other two
         // above the bar (docs/DESIGN_LEDGER.md, C1b; docs/TODO.md).
-        KnownFailures.expect("C1b: dry branches add too little water to widen their trunks", "97.4%") {
+        KnownFailures.expect("C1b: dry branches add too little water to widen their trunks", "96.6%") {
             if (worstShareNow < MIN_WIDENING_JUNCTIONS) {
                 throw RecordedViolation(
                     "only %.1f%% of confluences widen the trunk on the worst seed, under %.1f%%"
@@ -505,14 +516,17 @@ class RiverWidthTest {
             val water = world.rivers.lakes
 
             // Where every drawn stroke finishes. A stroke that ends over water carries a round cap
-            // of half its own width out there with it, which is the blob this trims away.
+            // of half its own width out there with it, which is the blob this trims away. Sea a
+            // course runs on through, a drowned valley too narrow to draw as sea, is the river's
+            // own channel and not the water it ends at (`SeaChannels.passage`).
+            val passage = passageOf(world)
             var endsOverWater = 0
             MapRasterizer.overlay(world, options).rivers.forEach { segment ->
                 var x = floor(segment.toX).toInt() % w
                 if (x < 0) x += w
                 val y = floor(segment.toY).toInt().coerceIn(0, h - 1)
                 val cell = y * w + x
-                if (!world.sea.isLand[cell] || water.isOpenWater(cell)) endsOverWater++
+                if ((!world.sea.isLand[cell] && !passage[cell]) || water.isOpenWater(cell)) endsOverWater++
             }
 
             // The control: the untrimmed course ended at the centre of the water cell itself, so
@@ -714,3 +728,7 @@ class RiverWidthTest {
         return covariance / sqrt(varianceA * varianceB)
     }
 }
+
+/** The sea [world]'s courses run on through rather than end at: see `SeaChannels.passage`. */
+private fun passageOf(world: WorldMap): BooleanArray =
+    SeaChannels.passage(world.config, world.sea.isLand, SeaChannels.narrow(world.config, world.sea.isLand))

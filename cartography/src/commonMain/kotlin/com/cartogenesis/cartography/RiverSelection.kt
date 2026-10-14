@@ -2,6 +2,7 @@ package com.cartogenesis.cartography
 
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.River
+import com.cartogenesis.worldgen.pipeline.SeaChannels
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.pow
@@ -474,6 +475,8 @@ object RiverSelection {
      * of its trunk. Ownership is first claim in traced order, which is the same claim the tracer
      * itself made. Two courses can reach the *same* cell of sea, which would make the later one
      * look like a tributary of the earlier, so a course ending in water is given no trunk outright.
+     * The water is the water the map draws ([endsInDrawnWater]): a junction in a drowned valley too
+     * narrow to be drawn as sea is a junction like one on land, and the trunk carries both down it.
      */
     private fun trunksOf(world: WorldMap): IntArray {
         val rivers = world.rivers.rivers
@@ -481,13 +484,84 @@ object RiverSelection {
         for (course in rivers.indices) {
             for (cell in rivers[course].cells) if (owner[cell] == NO_TRUNK) owner[cell] = course
         }
-        val water = world.rivers.lakes
+        val runThrough = cellsRunThrough(world)
         return IntArray(rivers.size) { course ->
             val end = rivers[course].cells[rivers[course].cells.size - 1]
-            if (!world.sea.isLand[end] || water.isOpenWater(end)) NO_TRUNK
+            if (endsInDrawnWater(world, end, runThrough)) NO_TRUNK
             else owner[end].let { if (it == course) NO_TRUNK else it }
         }
     }
+
+    /** Where a drawn course ends, as [endings] reads it. */
+    enum class Ending {
+        /** On water the map draws as water: the sea it inks a coast round, or a lake's open water. */
+        DRAWN_WATER,
+        /** On a cell of its trunk, which the selection's closure draws with it. */
+        DRAWN_TRUNK,
+        /** On the floor of a basin that keeps its water: an endorheic lake, or a playa. */
+        CLOSED_BASIN,
+        /** On a polar row, where the routing has no further cell. */
+        EDGE_OF_THE_WORLD,
+        /** Anywhere else: a line that stops short of water, of a trunk and of a sink. */
+        SHORT_OF_THE_WATER
+    }
+
+    /**
+     * How each course [selection] draws on [world] ends, in course order, and null for a course it
+     * does not draw: the question a reader asks of the map, whether every river it draws ends in
+     * something, or whether a line stops on dry ground, at a thread of sea or in a coastal pond
+     * with the sea a few cells off.
+     *
+     * Read off the generator's whole rule for the sea a river passes through
+     * ([SeaChannels.passage]) rather than off what the courses did, so that it holds the tracer to
+     * the rule and not the rule to the tracer.
+     */
+    fun endings(world: WorldMap, selection: Selection): Array<Ending?> {
+        val rivers = world.rivers.rivers
+        val lakes = world.rivers.lakes
+        val isLand = world.sea.isLand
+        val passage = SeaChannels.passage(world.config, isLand, SeaChannels.narrow(world.config, isLand))
+        return Array(rivers.size) { course ->
+            if (!selection.drawn[course]) return@Array null
+            val end = rivers[course].cells[rivers[course].cells.size - 1]
+            val trunk = selection.trunkOf[course]
+            val row = end / world.width
+            when {
+                lakes.isOpenWater(end) || (!isLand[end] && !passage[end]) -> Ending.DRAWN_WATER
+                trunk != NO_TRUNK && selection.drawn[trunk] -> Ending.DRAWN_TRUNK
+                isLand[end] && (lakes.isPlaya(end) ||
+                    (lakes.isLake(end) && lakes.lakes[lakes.lakeId[end]].endorheic)) -> Ending.CLOSED_BASIN
+                isLand[end] && world.rivers.flowTarget[end] < 0 && (row == 0 || row == world.height - 1) ->
+                    Ending.EDGE_OF_THE_WORLD
+                else -> Ending.SHORT_OF_THE_WATER
+            }
+        }
+    }
+
+    /**
+     * Every cell some course of [world] runs on through rather than stops at, one entry per cell.
+     *
+     * A course stops at the water the map draws and runs on through everything else, sea too
+     * narrow to draw and the pools along it included ([SeaChannels.passage]); so a cell of sea that
+     * a course ends at and no course runs through is the drawn sea, and one that some course runs
+     * through is a junction in a drowned valley. Read off the courses rather than recomputed from
+     * the sea, because the drawing asks it of every course on every sheet.
+     */
+    internal fun cellsRunThrough(world: WorldMap): BooleanArray {
+        val runThrough = BooleanArray(world.width * world.height)
+        for (river in world.rivers.rivers) {
+            for (step in 0 until river.cells.size - 1) runThrough[river.cells[step]] = true
+        }
+        return runThrough
+    }
+
+    /**
+     * Whether [end], a course's last cell, is water the map draws as water: sea no course runs on
+     * through ([cellsRunThrough], here [runThrough]), or a lake's open water. A course ending
+     * anywhere else ends on its trunk, the polar edge or a closed basin's floor.
+     */
+    internal fun endsInDrawnWater(world: WorldMap, end: Int, runThrough: BooleanArray): Boolean =
+        world.rivers.lakes.isOpenWater(end) || (!world.sea.isLand[end] && !runThrough[end])
 
     /**
      * How long a course runs on the ground, in kilometres.

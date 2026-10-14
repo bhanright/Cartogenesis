@@ -35,8 +35,10 @@ class RiverSelectionTest : BorrowsSharedWorlds() {
          * clause's other seeds still do, and the largest river is still drawn on every sheet. Once
          * the implicit pass lets a lake fall with its outlet, seed 99's chain fits it too. On square
          * cells the seeds are 7 and 99: seed 42's network there needs the floor again, and seed 7's
-         * chain fits the quarter. A smaller sheet or another seed would restore it, and is not
-         * chosen here (docs/DESIGN_LEDGER.md, Fix 3b and Q4).
+         * chain fits the quarter. Since RM1 a course runs on down its drowned valley to the sea the
+         * map draws, its chain is longer by those kilometers, and seed 7's needs the floor again;
+         * seeds 42, 1234 and 99 do not. A smaller sheet or another seed would restore it, and is not
+         * chosen here (docs/DESIGN_LEDGER.md, Fix 3b, Q4 and RM1).
          */
         const val FLOOR_IDLE_ON_SOME_SEEDS =
             "the rivers: on the law's terrain some seeds' largest chains fit the tiny sheet's quarter of Earth's ink"
@@ -520,7 +522,7 @@ class RiverSelectionTest : BorrowsSharedWorlds() {
         }
         // Re-recorded at L1: seed 42's largest chain fits the quarter too on L1's worlds, and no
         // longer at its review round, whose rift joins are relay ramps (docs/DESIGN_LEDGER.md, L1).
-        KnownFailures.expect(FLOOR_IDLE_ON_SOME_SEEDS, "seed 7, seed 42, seed 1234, seed 99") {
+        KnownFailures.expect(FLOOR_IDLE_ON_SOME_SEEDS, "seed 42, seed 1234, seed 99") {
             if (idleFloor.isNotEmpty()) {
                 throw RecordedViolation(
                     "the largest river's chain fits a quarter of Earth's ink even on the tiny sheet, so it does not " +

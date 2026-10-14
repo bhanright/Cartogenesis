@@ -7,6 +7,7 @@ import com.cartogenesis.worldgen.pipeline.LandmarkKind
 import com.cartogenesis.worldgen.pipeline.CultureResult
 import com.cartogenesis.worldgen.pipeline.NationResult
 import com.cartogenesis.worldgen.pipeline.River
+import com.cartogenesis.worldgen.pipeline.SeaChannels
 import kotlin.math.abs
 import kotlin.math.sqrt
 
@@ -453,8 +454,16 @@ object MapRasterizer {
                 emptyList()
             }
 
+        // Which cells some course runs on through, for where each one stops: see
+        // [RiverSelection.cellsRunThrough]. And the block that open sea fills, for the pools a
+        // course crosses on its way down a drowned valley.
+        val runThrough = if (drawnRivers.isEmpty()) BooleanArray(0) else RiverSelection.cellsRunThrough(world)
+        val openSea = SeaChannels.openBlock(world.config)
+        fun isOpenSea(cell: Int) = !world.sea.isLand[cell] &&
+            !SeaChannels.isNarrow(world.sea.isLand, cellsAcross, cell, openSea.columns, openSea.rows)
+
         drawnRivers.forEach { river ->
-            val course = trimmedAtTheShore(world, river, geometry)
+            val course = trimmedAtTheShore(world, river, geometry, runThrough)
             for (vertex in 0 until course.vertexCount - 1) {
                 val fromCell = river.cells[vertex]
                 val toCell = river.cells[vertex + 1]
@@ -476,6 +485,11 @@ object MapRasterizer {
                 if (skipInLakes && water.isOpenWater(fromCell) && water.isOpenWater(toCell)) {
                     continue
                 }
+                // Nor across a pool of open sea in a drowned valley: the course runs on through it
+                // to the coast (`SeaChannels.passage`), and the map draws the pool as water with its
+                // own shore, so the line stops at the pool and starts again at its outlet, as it
+                // does at a lake.
+                if (isOpenSea(fromCell) && isOpenSea(toCell)) continue
 
                 if (abs(toColumn - fromColumn) > cellsAcross / 2) {
                     // The river crosses the east-west seam. Drawing it as-is would streak a
@@ -910,21 +924,26 @@ object MapRasterizer {
      * and the stroke ends there. Every vertex closer than that goes, because a round cap at a
      * vertex within half a stroke of the shore would cross it just as the end cap did.
      *
-     * A course that ends on land is a tributary stopping on the trunk it joins, and is left whole.
+     * A course that ends anywhere but the water the map draws is a tributary stopping on the trunk
+     * it joins, on land or in a drowned valley too narrow to be drawn as sea, and is left whole.
      *
      * Walked in sheet pixels, which is what the pen is measured in: a step east is
      * [SheetGeometry.pixelsPerCellAcross] pixels of the sheet and a step south
      * [SheetGeometry.pixelsPerCellDown], so half a stroke is given up along the ground the river
      * actually crosses on the drawn map.
      */
-    private fun trimmedAtTheShore(world: WorldMap, river: River, sheet: SheetGeometry): DrawnCourse {
+    private fun trimmedAtTheShore(
+        world: WorldMap,
+        river: River,
+        sheet: SheetGeometry,
+        runThrough: BooleanArray
+    ): DrawnCourse {
         val cells = river.cells
         val whole = DrawnCourse(cells.size, 1f)
         if (cells.size < 3) return whole
         val mouth = cells[cells.size - 1]
         val lastOnLand = cells.size - 2
-        val intoWater = !world.sea.isLand[mouth] || world.rivers.lakes.isOpenWater(mouth)
-        if (!intoWater) return whole
+        if (!RiverSelection.endsInDrawnWater(world, mouth, runThrough)) return whole
 
         val halfStrokePixels =
             RiverPen.widthPixels(river.widthRatio[lastOnLand], sheet.widthPixels, world.config.scale.worldWidthKm) / 2f

@@ -65,7 +65,71 @@
   in river ink where it was drawn as threads of sea; the geometry census's river layer is where it
   will show. The cause is the valleys' own bearing on that slope (the coastal comb entries below),
   not the tracer. 2026-10-13, RM1.
-- **Land too wet and deserts too few, from tropical air too dry (W1, paused on `chunk/w1-land-rain`, 2026-10-13).** On the Earth-sized default the land rains 853-1,029 mm against Earth's 756 and desert covers 5-17% of land against about 19%; the excess falls at 10-30 and 40-50 degrees and summer land rain peaks at 16-21 degrees against Earth's 5-12. Measured cause: 76-98% of land rain is condensate from lifted air at a rate linear in the column's humidity (`MoistureMarch`), while the air holds far too little water: tropical land 21-24 mm precipitable water at a column humidity near 0.4 against the Amazon's 55-60 mm and 0.75-0.8 (Schiro and others 2016), the tropical sea near 0.5, the planet 15-19 mm against 24.7. A critical-humidity gate on lifted condensation (Sundqvist and others 1989; Zhao and Carr 1997's 0.75 over land and 0.90 over sea) brings land rain to 600-800 mm but turns 42-61% of land within 10 degrees of the equator to desert; the rain then falls on the high, rough tropical terrain (800-1,070 m mean) and misses the lowlands. Placing deep ascent by subcloud moist static energy did not move the summer peak (the energy balance's land air is flat at 28 C from 8 to 28 N, so the energy maximum sits on the heat low) and kept the coupled loop from settling on seed 99. Smaller defects measured on the branch: the waves' eddy winds at 690-810 hPa diverge moisture out of the continents (desert falls 5-8 points without them); 6-20% of deep-tropics cells march against their coupled wind and stagnate about 60 days; the Budyko return reads 40% under its regional value. Next step when resumed: why the atmosphere holds about 60% of Earth's water (the column rain law, sea evaporation, residence), then the gate and these defects on top. Probe and figures: the branch's ledger notes and the maintainer's notes.
+- **The tropical interiors starve into desert under one rain law (W2).** Since W2 the large-scale
+  rain is the column law's alone, the ground's climb condenses only over Zhao and Carr's critical
+  humidity, and the descent no longer takes the law's rain back; each crossing is one budget and the
+  saturated column is the rising parcel's (docs/DESIGN_LEDGER.md, W2). The land then rains 575-711 mm
+  on seeds 42, 969495 and 7 at 512 rows (Earth 756-796; GPCP version 2.3's land 822) and desert
+  covers 23-44% of the land (Peel's 19.1%), 42-51% of the land within 15 degrees (Earth's 5.2%): W1's
+  finding, the interiors short of the water they import. `WaterColumnEarthTest` records the misses
+  (desert x1.90 pooled, the tropics' band x8.73 and the polar band x4.26; land within 40 degrees x0.76
+  of GPCP's; the atmosphere's water x0.70) and `RainAgainstEarthTest` the land's return share x0.78.
+  W1's three remaining defects, each switched alone on W2's branch (the switches are the maintainer's
+  notes): the stationary waves' eddy winds in the column's wind, off, raise land rain by 53, 78 and
+  143 mm and cut desert by 4.9, 5.3 and 9.6 points (the tropics' band by 7, 10 and 18); the ground's
+  Budyko return, raised by 1/0.6 (W1 read it 40% under its regional value), raises land rain by 432,
+  289 and 309 mm and cuts desert by 11.2, 7.3 and 8.4 points (the tropics' band by 22, 16 and 15); the
+  calm cells, marched at their own speed instead of the least, move land rain by 3 to 18 mm and desert
+  by under a point, since the crossing's own budget already holds them at their balance. The summer
+  land rain's peak moved toward Earth's 5-12 degrees on some seeds and not others (July north at 512
+  rows: seed 42 12-14 degrees, 1234 0-2, 99 4-6 and 7 14-16, against main's 18-20, 20-22, 16-18 and
+  14-16);
+  seed 99's January south peaks at 54-56 S, not traced. Next, by those numbers: the eddy winds and the
+  return, after the tropical sea's temperature below. 2026-10-16, W2.
+- **The tropical sea stands 1.8 C under Earth's (W2, measured, not fixed).** The energy balance's sea
+  surface between 10 S and 10 N stands at 25.8-25.9 C against the 1971-2000 optimum-interpolation
+  climatology's 27.7 (NOAA CPC bulletin, August 2003, table T2). Warmed by that much in the march
+  alone the planet holds 2.1-2.8 mm more water and the sea evaporates 12% more; with W2's parcel
+  column, about 8% more saturated water a degree. `EnergyBalanceTest`'s own figure for the equator's
+  sea surface, 26.5 C, is attributed to ERA5 without a table read. A coupled energy-balance chunk of
+  its own, before the column's rain is calibrated further. 2026-10-16, W2.
+- **The subtropical sea evaporates under Earth's (W2, measured, not fixed).** The march's sea
+  evaporates 1,000-1,080 mm at 20-30 degrees against about 1,800 over the subtropical latitudes (Yu
+  2007, OAFlux), under a scalar wind of 6.1-6.5 m/s where 10-20 degrees has 7.8-8.1. Diagnose after
+  the sea's temperature is corrected, reading the wind, the air's humidity (the bulk formula reads
+  Dai's marine 0.775 everywhere, not the column's) and the stability together; a transient wind
+  raised for it moves the transport too. 2026-10-16, W2.
+- **Earth's land rain by ten-degree band was not read (W2).** `WaterColumnEarthTest` holds the land
+  within 40 degrees to GPCP version 2.3's 2.81 mm a day (Adler and others 2018, Table 4) and prints
+  the ten-degree bands beside it: the land-only zonal means are drawn in the papers read, not
+  tabulated, and the gridded monthly product would have to be read to hold each band. Nor were the
+  atmosphere's water over land and over sea read from a climatology; the planet's 24.7 mm is the only
+  figure held. 2026-10-16, W2.
+- **The column law over land and outside the tropics is assumed (W2).** Bretherton, Peters and
+  Back's relation is the tropical oceans' (a microwave retrieval that holds only over the sea);
+  W2 rains every column by it. Read a relation between column humidity and rain over tropical land
+  and in the extratropics before calibrating the land's rain further. 2026-10-16, W2.
+- **The climb's condensation reads the moist adiabat at sea-level pressure (W2).**
+  `ColumnWater.upliftCondensationKgPerM3` takes Smith and Barstad's `C_w` at the standard sea level
+  whatever the ground; the saturated column now starts at the ground's pressure. Small (the moist
+  lapse rate at 70 kPa is a few percent under the sea level's at the same temperature). 2026-10-16, W2.
+- **Courses stop in narrow sea the seaward route does not carry on (W2, recorded).** On W2's ground
+  `DrawnRiverMouthTest` finds 187 drawn courses over the standard worlds at 512 rows that end on a
+  narrow-sea cell with no seaward step (seed 42: 8 at Earth's density and 57 at every course, the
+  rest of its 10 and 62 on the ice sheet with no flow target; seed 99: 5 and 110), where RM1's ground
+  had none: the passages the sea channels open are not all joined to the sea the map draws. Not
+  traced. 2026-10-16, W2.
+- **Four drawing pins W2's ground and rain move (recorded).** The drawn rivers' confluences widen
+  their trunk at 56.2% on the worst seed where main's widened at 96.6% (`RiverWidthTest`, C1b's
+  finding that dry branches add too little water): the drier land's branches carry less. Seed 7's drawn coast can be checked at 944 of
+  its 1,912 vertices, a hair under half (`CoastLineTest`; those checked keep within the bound); the
+  gallery ground's tenth percentile of land slope reads 0.066 against the engraving's floor of 0.06
+  (`ReliefShadingTest`); and 26 cells of seed 969495 draw less green under more cover in the
+  Satellite style than the truncations allow (`SatelliteStyleTest`), not traced. 2026-10-16, W2.
+- **The geometry census on W2's ground.** 138 known entries and 412 instances where main had 137 and
+  413: seed 7's ice-surface arc is gone and the two isohyet entries along seeds 7's and 1234's
+  edge rows hold one instance each where they held two; new are a crease in seed 42's terrain
+  contours at (246,196) and an arc on seed 1234's ice surface at (124,492). Not traced. 2026-10-16, W2.
 - **The ocean's ITCZ rains under Earth's, on the equator's side of its convergence (F1).** On F1's
   worlds at 1,024 rows the open sea's July-half convergence line, where its mean meridional wind
   turns, stands at 8.9, 9.4 and 10.1 N on seeds 42, 969495 and 7, Earth's 9 N (Schneider, Bischoff

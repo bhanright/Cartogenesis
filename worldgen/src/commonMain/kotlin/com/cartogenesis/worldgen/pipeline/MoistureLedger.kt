@@ -127,6 +127,19 @@ internal class MoistureLedger {
 
         /** The rain the condensate makes at each cell: the climb's and the cold's cloud, fallen. */
         val condensateRain = FloatField(cellsAcross, cellsDown)
+
+        // Diagnostic terms for MoistureProbe's measurements, millimeters a year unless named.
+        val probeAdjusted = FloatField(cellsAcross, cellsDown)
+        val probeLifted = FloatField(cellsAcross, cellsDown)
+        val probeColumnRain = FloatField(cellsAcross, cellsDown)
+        val probeTakenBack = FloatField(cellsAcross, cellsDown)
+        /** Column water arriving, before the cell's sources, mm. */
+        val probeArrival = FloatField(cellsAcross, cellsDown)
+        /** Column water averaged over the crossing's steps, mm. */
+        val probeMeanColumn = FloatField(cellsAcross, cellsDown)
+        val probeSeconds = FloatField(cellsAcross, cellsDown)
+        /** Cloud and falling water carried on, mm. */
+        val probeCloud = FloatField(cellsAcross, cellsDown)
     }
 
     var julyHalf: Cells? = null

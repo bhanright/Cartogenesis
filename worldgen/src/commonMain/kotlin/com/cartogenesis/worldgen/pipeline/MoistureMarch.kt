@@ -963,10 +963,10 @@ object MoistureMarch {
                         saturatedMm[here] = ColumnWater.saturatedColumnMm(airC).toFloat()
                         if (surface[here] == OPEN_SEA) {
                             val surfaceHumidity = SurfaceEvaporation.seaSurfaceHumidity(season.seaSurfaceC[cell].toDouble())
-                            val airHumidity = MARINE_RELATIVE_HUMIDITY * ColumnWater.specificHumidity(
-                                ColumnWater.saturationVaporPressureKpa(airC - SEA_OVER_MARINE_AIR_C), ColumnWater.SEA_LEVEL_PRESSURE_KPA
+                            val airHumidity = (MoistureProbe.marineRelativeHumidity ?: MARINE_RELATIVE_HUMIDITY) * ColumnWater.specificHumidity(
+                                ColumnWater.saturationVaporPressureKpa(airC - (MoistureProbe.seaOverMarineAirC ?: SEA_OVER_MARINE_AIR_C)), ColumnWater.SEA_LEVEL_PRESSURE_KPA
                             )
-                            val massFlux = season.scalarWindAt10mMps?.let { transferMassFlux(it[cell].toDouble()) } ?: referenceMassFlux
+                            val massFlux = season.scalarWindAt10mMps?.let { transferMassFlux(it[cell].toDouble() * MoistureProbe.seaWindScale) } ?: referenceMassFlux
                             seaEvaporationRate[here] = SurfaceEvaporation.bulkEvaporationKgPerM2S(
                                 surfaceHumidity, airHumidity, massFlux
                             ).toFloat()
@@ -998,14 +998,14 @@ object MoistureMarch {
                     val south = if (row < cellsDown - 1) row + 1 else row
                     for (column in 0 until cellsAcross) {
                         val cell = row * cellsAcross + column
-                        var upward = ascent?.get(cell)?.toDouble() ?: 0.0
-                        if (inputs.isLand[cell]) {
+                        var upward = (ascent?.get(cell)?.toDouble() ?: 0.0) * MoistureProbe.ascentScale
+                        if (inputs.isLand[cell] && MoistureProbe.climbScale != 0.0) {
                             val east = row * cellsAcross + (column + 1) % cellsAcross
                             val west = row * cellsAcross + (column + cellsAcross - 1) % cellsAcross
                             val slopeEast = (inputs.elevationM[east] - inputs.elevationM[west]) / (2.0 * cellWidthM)
                             val slopeSouth = (inputs.elevationM[south * cellsAcross + column] -
                                 inputs.elevationM[north * cellsAcross + column]) / ((south - north) * cellHeightM)
-                            upward += season.eastwardMps[cell] * slopeEast + season.southwardMps[cell] * slopeSouth
+                            upward += (season.eastwardMps[cell] * slopeEast + season.southwardMps[cell] * slopeSouth) * MoistureProbe.climbScale
                         }
                         upliftCondensationRate[index(row, column)] = if (upward == 0.0) 0f else (ColumnWater.upliftCondensationKgPerM3(
                             season.airTemperatureC[cell].toDouble(), lapseRate
@@ -1339,109 +1339,133 @@ object MoistureMarch {
             vaporLand = vaporLand.coerceIn(0.0, vapor)
 
             // The sources: the sea by the bulk formula, the ground by its share of the year's return.
+            val substeps = substepsOf(toColumnWater)
+            val stepSeconds = seconds / substeps
             var added = 0.0
-            if (kind == OPEN_SEA) {
-                added = seaEvaporationRate[here].toDouble() * seconds
-                if (entry != null) entry.seaEvaporation += added / toColumnWater
-            } else if (kind == LAND) {
-                added = groundReturnRate[here].toDouble() * seconds
-                vaporLand += added
-                if (entry != null) entry.groundReturn += added / toColumnWater
-            }
-            vapor += added
-
-            // What the column cannot hold condenses to cloud. A column holds [HOLDABLE_SHARE] of
-            // its saturated water before its surface air saturates.
-            val holdable = HOLDABLE_SHARE * saturated
-            val uplift = upliftCondensationRate[here].toDouble()
-            // What the descent may still take back after the cloud, column water this crossing.
-            var descentLeft = 0.0
+            var columnRain = 0.0
+            var convergenceRain = 0.0
+            var condensateRain = 0.0
+            var vaporLandRained = 0.0
+            var condensateLandRain = 0.0
             // Vapor turned to condensate here less condensate turned back, column water.
             var condensedHere = 0.0
-            if (vapor > holdable) {
-                val condensed = vapor - holdable
-                val condensedLand = condensed * (vaporLand / vapor)
-                cloud += condensed
-                cloudLand += condensedLand
-                vapor = holdable
-                vaporLand -= condensedLand
-                condensedHere += condensed
-                if (entry != null) entry.condensed += condensed / toColumnWater
-            }
-            if (uplift > 0.0 && vapor > 0.0 && holdable > 0.0) {
-                // Air carried up the ground condenses at Smith and Barstad's rate where it is
-                // saturated, and the column's saturated share is its water over what it holds at
-                // surface saturation: the climb takes `C_w w W / W_hold` a second, which never
-                // empties the column however long the climb.
-                val condensed = vapor * (1.0 - exp(-uplift / holdable * seconds))
-                val condensedLand = condensed * (vaporLand / vapor)
-                cloud += condensed
-                cloudLand += condensedLand
-                vapor -= condensed
-                vaporLand -= condensedLand
-                condensedHere += condensed
-                if (entry != null) entry.condensed += condensed / toColumnWater
-            } else if (uplift < 0.0) {
-                // Descending air warms and takes back water at the same rate: the cloud it carries
-                // first, then (below) the column's rain as it falls through it.
-                descentLeft = -uplift * seconds
-                if (cloud > 0.0) {
-                    val evaporated = minOf(cloud, descentLeft, (holdable - vapor).coerceAtLeast(0.0))
-                    val evaporatedLand = evaporated * (cloudLand / cloud)
-                    cloud -= evaporated
-                    cloudLand -= evaporatedLand
-                    vapor += evaporated
-                    vaporLand += evaporatedLand
-                    descentLeft -= evaporated
-                    condensedHere -= evaporated
-                    if (entry != null) entry.reevaporated += evaporated / toColumnWater
+            var adjustedHere = 0.0
+            var liftedHere = 0.0
+            var takenBackHere = 0.0
+            var columnSum = 0.0
+            val arrivalColumn = vapor
+            // What the column cannot hold condenses to cloud. A column holds [HOLDABLE_SHARE] of
+            // its saturated water before its surface air saturates.
+            val holdable = (MoistureProbe.holdableShare ?: HOLDABLE_SHARE) * saturated
+            val uplift = upliftCondensationRate[here].toDouble()
+            for (substep in 0 until substeps) {
+                var addedStep = 0.0
+                if (kind == OPEN_SEA) {
+                    addedStep = seaEvaporationRate[here].toDouble() * stepSeconds
+                    if (entry != null) entry.seaEvaporation += addedStep / toColumnWater
+                } else if (kind == LAND) {
+                    addedStep = groundReturnRate[here].toDouble() * stepSeconds
+                    vaporLand += addedStep
+                    if (entry != null) entry.groundReturn += addedStep / toColumnWater
                 }
-            }
+                vapor += addedStep
+                added += addedStep
 
-            // The convergence closure, when switched on.
-            var convergenceRain = 0.0
-            val convergence = convergenceShare[here].toDouble() * slowing * toColumnWater
-            if (convergence > 0.0 && vapor > 0.0) {
-                convergenceRain = vapor * (1.0 - exp(-convergence))
-            }
-            val vaporShareLand = if (vapor > 0.0) (vaporLand / vapor).coerceIn(0.0, 1.0) else 0.0
-            vapor -= convergenceRain
+                // What the descent may still take back after the cloud, column water this crossing.
+                var descentLeft = 0.0
+                if (vapor > holdable) {
+                    val condensed = vapor - holdable
+                    val condensedLand = condensed * (vaporLand / vapor)
+                    cloud += condensed
+                    cloudLand += condensedLand
+                    vapor = holdable
+                    vaporLand -= condensedLand
+                    condensedHere += condensed
+                    adjustedHere += condensed
+                    if (entry != null) entry.condensed += condensed / toColumnWater
+                }
+                if (uplift > 0.0 && vapor > 0.0 && holdable > 0.0) {
+                    // Air carried up the ground condenses at Smith and Barstad's rate where it is
+                    // saturated, and the column's saturated share is its water over what it holds at
+                    // surface saturation: the climb takes `C_w w W / W_hold` a second, which never
+                    // empties the column however long the climb.
+                    val condensed = vapor * (1.0 - exp(-uplift / holdable * stepSeconds))
+                    val condensedLand = condensed * (vaporLand / vapor)
+                    cloud += condensed
+                    cloudLand += condensedLand
+                    vapor -= condensed
+                    vaporLand -= condensedLand
+                    condensedHere += condensed
+                    liftedHere += condensed
+                    if (entry != null) entry.condensed += condensed / toColumnWater
+                } else if (uplift < 0.0 && MoistureProbe.descentDrying) {
+                    // Descending air warms and takes back water at the same rate: the cloud it carries
+                    // first, then (below) the column's rain as it falls through it.
+                    descentLeft = -uplift * stepSeconds
+                    if (cloud > 0.0) {
+                        val evaporated = minOf(cloud, descentLeft, (holdable - vapor).coerceAtLeast(0.0))
+                        val evaporatedLand = evaporated * (cloudLand / cloud)
+                        cloud -= evaporated
+                        cloudLand -= evaporatedLand
+                        vapor += evaporated
+                        vaporLand += evaporatedLand
+                        descentLeft -= evaporated
+                        condensedHere -= evaporated
+                        takenBackHere += evaporated
+                        if (entry != null) entry.reevaporated += evaporated / toColumnWater
+                    }
+                }
 
-            // The column's own rain at its relative humidity, less what the descent takes back as it
-            // falls, up to what the column holds before its surface air saturates.
-            val afterRain = columnAfterRainMm(vapor, saturated, seconds, slowing)
-            var columnRain = vapor - afterRain
-            vapor = afterRain
-            if (descentLeft > 0.0 && columnRain > 0.0) {
-                val takenBack = minOf(columnRain, descentLeft, (holdable - vapor).coerceAtLeast(0.0))
-                columnRain -= takenBack
-                vapor += takenBack
-                if (entry != null) entry.reevaporated += takenBack / toColumnWater
-            }
-            vaporLand = vapor * vaporShareLand
-            condensedHere += columnRain + convergenceRain
-            val vaporLandRained = (columnRain + convergenceRain) * vaporShareLand
+                // The convergence closure, when switched on.
+                var convergenceStep = 0.0
+                val convergence = convergenceShare[here].toDouble() * slowing * toColumnWater / substeps
+                if (convergence > 0.0 && vapor > 0.0) {
+                    convergenceStep = vapor * (1.0 - exp(-convergence))
+                }
+                val vaporShareLand = if (vapor > 0.0) (vaporLand / vapor).coerceIn(0.0, 1.0) else 0.0
+                vapor -= convergenceStep
 
-            // The cloud turns to hydrometeors and they fall: Smith and Barstad's two delays in
-            // series over the crossing, the first slowed by the descent. The condensate's
-            // land-origin share is mixed once.
-            val condensateBefore = cloud + falling
-            val condensateShareLand = if (condensateBefore > 0.0) {
-                ((cloudLand + fallingLand) / condensateBefore).coerceIn(0.0, 1.0)
-            } else 0.0
-            val conversion = slowing * config.climate.rainShadowScale / CLOUD_CONVERSION_SECONDS
-            val fallout = 1.0 / FALLOUT_SECONDS
-            val cloudLeft = exp(-conversion * seconds)
-            val fallingLeft = exp(-fallout * seconds)
-            val handedOn = twoDelayShare(conversion, fallout, seconds)
-            val cloudAfter = cloud * cloudLeft
-            val fallingAfter = falling * fallingLeft + cloud * handedOn
-            val condensateRain = (condensateBefore - cloudAfter - fallingAfter).coerceAtLeast(0.0)
-            val condensateLandRain = condensateRain * condensateShareLand
-            cloud = cloudAfter
-            falling = fallingAfter
-            cloudLand = cloud * condensateShareLand
-            fallingLand = falling * condensateShareLand
+                // The column's own rain at its relative humidity, less what the descent takes back as it
+                // falls, up to what the column holds before its surface air saturates.
+                val afterRain = columnAfterRainMm(vapor, saturated * MoistureProbe.rainSaturatedScale, stepSeconds, slowing)
+                var columnStep = vapor - afterRain
+                vapor = afterRain
+                if (descentLeft > 0.0 && columnStep > 0.0) {
+                    val takenBack = minOf(columnStep, descentLeft, (holdable - vapor).coerceAtLeast(0.0))
+                    columnStep -= takenBack
+                    vapor += takenBack
+                    takenBackHere += takenBack
+                    if (entry != null) entry.reevaporated += takenBack / toColumnWater
+                }
+                vaporLand = vapor * vaporShareLand
+                condensedHere += columnStep + convergenceStep
+                vaporLandRained += (columnStep + convergenceStep) * vaporShareLand
+                columnRain += columnStep
+                convergenceRain += convergenceStep
+
+                // The cloud turns to hydrometeors and they fall: Smith and Barstad's two delays in
+                // series over the crossing, the first slowed by the descent. The condensate's
+                // land-origin share is mixed once.
+                val condensateBefore = cloud + falling
+                val condensateShareLand = if (condensateBefore > 0.0) {
+                    ((cloudLand + fallingLand) / condensateBefore).coerceIn(0.0, 1.0)
+                } else 0.0
+                val conversion = slowing * config.climate.rainShadowScale / CLOUD_CONVERSION_SECONDS
+                val fallout = 1.0 / FALLOUT_SECONDS
+                val cloudLeft = exp(-conversion * stepSeconds)
+                val fallingLeft = exp(-fallout * stepSeconds)
+                val handedOn = twoDelayShare(conversion, fallout, stepSeconds)
+                val cloudAfter = cloud * cloudLeft
+                val fallingAfter = falling * fallingLeft + cloud * handedOn
+                val condensateStep = (condensateBefore - cloudAfter - fallingAfter).coerceAtLeast(0.0)
+                condensateRain += condensateStep
+                condensateLandRain += condensateStep * condensateShareLand
+                cloud = cloudAfter
+                falling = fallingAfter
+                cloudLand = cloud * condensateShareLand
+                fallingLand = falling * condensateShareLand
+                columnSum += vapor
+            }
 
             val downwind = downwindBase + row
             val carriedOn = direction[downwind].toInt() == sweep
@@ -1476,6 +1500,14 @@ object MoistureMarch {
                 if (kind == OPEN_SEA) record.seaEvaporation.data[cell] = (added * rate).toFloat()
                 record.convergenceRain.data[cell] = (convergenceRain * rate).toFloat()
                 record.condensateRain.data[cell] = (rainedCondensate * rate).toFloat()
+                record.probeAdjusted.data[cell] = (adjustedHere * rate).toFloat()
+                record.probeLifted.data[cell] = (liftedHere * rate).toFloat()
+                record.probeColumnRain.data[cell] = (columnRain * rate).toFloat()
+                record.probeTakenBack.data[cell] = (takenBackHere * rate).toFloat()
+                record.probeArrival.data[cell] = arrivalColumn.toFloat()
+                record.probeMeanColumn.data[cell] = (columnSum / substeps).toFloat()
+                record.probeSeconds.data[cell] = seconds.toFloat()
+                record.probeCloud.data[cell] = (cloud + falling).toFloat()
             }
 
             // Back into parcels, and on downwind: to the next cell of this sweep, or banked where
@@ -1597,6 +1629,13 @@ object MoistureMarch {
      * chain's middle, `c (e^-ct - e^-ft) / (f - c)`, and its limit `c t e^-ct` where the two
      * rates meet. Exact over any crossing, so the delays filter the same on every grid.
      */
+    /** How many steps a crossing of [stretch] reference crossings is charged in ([MoistureProbe]); one by default. */
+    private fun substepsOf(stretch: Double): Int {
+        val perStep = MoistureProbe.substepPerReference
+        if (perStep <= 0.0) return 1
+        return kotlin.math.ceil(stretch / perStep).toInt().coerceIn(1, MoistureProbe.MAX_SUBSTEPS)
+    }
+
     private fun twoDelayShare(conversionPerSecond: Double, falloutPerSecond: Double, seconds: Double): Double {
         val difference = falloutPerSecond - conversionPerSecond
         val conversionLeft = exp(-conversionPerSecond * seconds)

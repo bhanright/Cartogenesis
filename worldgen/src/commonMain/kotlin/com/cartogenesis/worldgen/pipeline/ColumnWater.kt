@@ -290,15 +290,18 @@ internal object ColumnWater {
     /** Below this saturated vapor density the rest of the column is nothing, kg m⁻³. */
     private const val NEGLIGIBLE_VAPOR_KG_PER_M3 = 1.0e-9
 
-    /** The table, a row of temperatures for each pressure from the highest down. */
-    private val saturatedColumnTable: DoubleArray by lazy {
+    /**
+     * The table, a row of temperatures for each pressure from the highest down. Built when the
+     * object is first read and held in a plain field, since every cell of every lap reads it from
+     * several threads at once.
+     */
+    private val saturatedColumnTable: DoubleArray =
         DoubleArray(COLUMN_TABLE_PRESSURES * COLUMN_TABLE_TEMPERATURES) { index ->
             integratedSaturatedColumnMm(
                 COLUMN_TABLE_COLDEST_C + (index % COLUMN_TABLE_TEMPERATURES) * COLUMN_TABLE_STEP_C,
                 COLUMN_TABLE_HIGHEST_PRESSURE_KPA - (index / COLUMN_TABLE_TEMPERATURES) * COLUMN_TABLE_PRESSURE_STEP_KPA
             )
         }
-    }
 
     /** Pascals in a kilopascal. */
     private const val PASCALS_PER_KPA = 1_000.0

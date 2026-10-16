@@ -45,8 +45,9 @@ import kotlin.math.sqrt
  * to that balance, `W(t) = W_eq + (W - W_eq) exp(-k t)` with `k = (S(W) - S(W_eq)) / (W - W_eq)`:
  * a step leaves at the true rate, `E - S(W)`, and ends at the true balance however long it is, so
  * the crossing is exact as it goes to nothing and as it grows without bound. Between the two a
- * step misses by the sinks' curvature, so a crossing long against the column's relaxation is
- * taken in steps of a quarter of an e-folding ([MAX_RELAXATION_PER_STEP]), each one evaluation of
+ * step misses by the sinks' curvature over the distance it closes, so a crossing long against the
+ * column's relaxation is taken in steps, the first relaxing it by a quarter of an e-folding
+ * ([MAX_RELAXATION_PER_STEP]) and each after it longer as the distance left shortens, each one evaluation of
  * the sinks, since the balance is the same for all of them; the end then stands within two
  * hundredths of the column's distance from its balance of a fine Runge-Kutta march's
  * (`ColumnCrossingTest`). A single backward Euler step over the crossing, by contrast, is exact
@@ -58,7 +59,7 @@ import kotlin.math.sqrt
  *
  * What the sinks take is split between the column's rain and the lifting at the crossing's mean
  * column, and the cloud's growth, lifted and capped, enters the delays at a steady rate over the
- * crossing, which they solve exactly ([cloudAfter], [fallingAfter]).
+ * crossing, which they solve exactly.
  *
  * Reused: one instance per season's march, its fields set before [solve] and read after it.
  */
@@ -194,36 +195,49 @@ internal class ColumnCrossing {
         lifted = sunk - columnRain
         vapor = start + supply * crossing - cappedWhileHeld - sunk
 
-        // The cloud's growth enters the delays at a steady rate over the crossing.
+        // The cloud's growth enters the delays at a steady rate over the crossing; a column with
+        // no cloud, no falling water and none grown has nothing for them to do.
         val carriedCloud = cloud - cloudEvaporated
         val grown = lifted + capped
-        val growthPerSecond = grown / crossing
-        val cloudEnd = cloudAfter(carriedCloud, growthPerSecond, conversionPerSecond, crossing)
-        val fallingEnd = fallingAfter(falling, carriedCloud, growthPerSecond, conversionPerSecond, falloutPerSecond, crossing)
-        condensateRain = (carriedCloud + falling + grown - cloudEnd - fallingEnd).coerceAtLeast(0.0)
-        cloud = cloudEnd
-        falling = fallingEnd
+        if (carriedCloud > 0.0 || falling > 0.0 || grown > 0.0) {
+            val growthPerSecond = grown / crossing
+            val conversionLeft = exp(-conversionPerSecond * crossing)
+            val falloutLeft = exp(-falloutPerSecond * crossing)
+            val chain = chainIntegral(conversionPerSecond, falloutPerSecond, crossing, conversionLeft, falloutLeft)
+            val cloudEnd = carriedCloud * conversionLeft + growthPerSecond * crossing * relaxedShare(conversionPerSecond * crossing, conversionLeft)
+            val fromGrowth = growthPerSecond * (crossing * relaxedShare(falloutPerSecond * crossing, falloutLeft) - chain)
+            val fallingEnd = falling * falloutLeft + carriedCloud * conversionPerSecond * chain + fromGrowth.coerceAtLeast(0.0)
+            condensateRain = (carriedCloud + falling + grown - cloudEnd - fallingEnd).coerceAtLeast(0.0)
+            cloud = cloudEnd
+            falling = fallingEnd
+        } else {
+            condensateRain = 0.0
+            cloud = 0.0
+            falling = 0.0
+        }
         waterOut = vapor + cloud + falling + columnRain + condensateRain
     }
 
     /**
      * The crossing as one exponential Euler step, `W_1 = W_0 + t (1 - e^-kt) / (kt) (E - S(W_0))`
      * with `k = S'(W_0)`, where the sinks' slope at both ends relaxes the column by no more than
-     * [MAX_RELAXATION_PER_STEP] over it and the column stays under its cap: most crossings of an
+     * [MAX_SHORT_RELAXATION] over it and the column stays under its cap: most crossings of an
      * ordinary wind, which the stepped solve would take in one secant step to the same answer at
      * the cost of the balance's root. Returns false, having set nothing, where it does not apply.
      */
     private fun advanceShort(start: Double, supply: Double): Boolean {
-        val startSinks = sinkRate(start)
-        val startRain = columnRainRate(start)
-        val startSlope = sinkSlope(start)
-        if (!(startSlope * seconds <= MAX_RELAXATION_PER_STEP)) return false
+        evaluateSinks(start)
+        val startRain = rainNow
+        val startSinks = rainNow + liftNow
+        val startSlope = slopeNow
+        if (!(startSlope * seconds <= MAX_SHORT_RELAXATION)) return false
         val end = start + seconds * relaxedShare(startSlope * seconds) * (supply - startSinks)
         if (end < 0.0 || end > holdableMm) return false
-        if (!(sinkSlope(end) * seconds <= MAX_RELAXATION_PER_STEP)) return false
-        val endSinks = sinkRate(end)
+        evaluateSinks(end)
+        if (!(slopeNow * seconds <= MAX_SHORT_RELAXATION)) return false
+        val endSinks = rainNow + liftNow
         val sunk = start + supply * seconds - end
-        val rainShare = if (startSinks + endSinks > 0.0) (startRain + columnRainRate(end)) / (startSinks + endSinks) else 1.0
+        val rainShare = if (startSinks + endSinks > 0.0) (startRain + rainNow) / (startSinks + endSinks) else 1.0
         water = end
         rainSunk = sunk * rainShare
         liftSunk = sunk - rainSunk
@@ -235,23 +249,41 @@ internal class ColumnCrossing {
     /**
      * Advances the column from [start] over the crossing in steps of its own relaxation, each along
      * the secant from where it stands to its balance under the cap, or to the cap where the sources
-     * outrun the sinks there; how many is read off the faster of the first secant and the sinks'
-     * slope at the balance, where a convex sink relaxes fastest ([MAX_RELAXATION_PER_STEP]).
+     * outrun the sinks there; the first step's length is read off the faster of the first secant
+     * and the sinks' slope at the balance, where a convex sink relaxes fastest
+     * ([MAX_RELAXATION_PER_STEP]), and each step after it longer by the root of how far the
+     * column's distance from its balance has fallen.
      */
     private fun advanceInSteps(start: Double, supply: Double) {
         val atCap = sinkRate(holdableMm)
         val heldAtCap = supply >= atCap && holdableMm > 0.0
         val balance = if (heldAtCap) holdableMm else balanceMm(supply, start)
         val firstRate = if (heldAtCap) climbRate(start, atCap) else secantRate(start, balance)
-        val fastestRate = maxOf(firstRate, sinkSlope(balance).takeIf { it.isFinite() } ?: firstRate)
-        val steps = kotlin.math.ceil(fastestRate * seconds / MAX_RELAXATION_PER_STEP).toInt().coerceIn(1, MAX_STEPS)
-        val step = seconds / steps
+        evaluateSinks(balance)
+        val balanceSinks = rainNow + liftNow
+        val balanceRainShare = if (balanceSinks > 0.0) rainNow / balanceSinks else 1.0
+        val fastestRate = maxOf(firstRate, slopeNow.takeIf { it.isFinite() } ?: firstRate)
+        // Each step relaxes the column by [MAX_RELAXATION_PER_STEP] at the fastest rate, lengthened
+        // by the root of how far its distance from its balance has fallen since the start: a secant
+        // step misses by the sinks' curvature over the distance it closes, so a column nearer its
+        // balance can take a longer step for the same miss. In proportion to the distance itself
+        // the steps outran the curvature on columns arriving far below their balance.
+        val startDistance = abs(start - balance)
+        val firstStep = if (fastestRate > 0.0) MAX_RELAXATION_PER_STEP / fastestRate else seconds
+        var step: Double
+        var elapsed = 0.0
         water = start
         rainSunk = 0.0
         liftSunk = 0.0
         cappedWhileHeld = 0.0
         waterTime = 0.0
-        for (index in 0 until steps) {
+        for (index in 0 until MAX_STEPS) {
+            if (elapsed >= seconds) break
+            val distance = abs(water - balance)
+            step = when {
+                index == MAX_STEPS - 1 || distance <= 0.0 -> seconds - elapsed
+                else -> minOf(firstStep * sqrt(startDistance / distance), seconds - elapsed)
+            }
             if (heldAtCap) {
                 val fromStart = sinkRate(water)
                 val gap = holdableMm - water
@@ -291,7 +323,16 @@ internal class ColumnCrossing {
                     water = holdableMm
                 }
             } else {
-                val rate = secantRate(water, balance)
+                if (abs(water - balance) <= BALANCE_TOLERANCE * (holdableMm + 1.0)) {
+                    // At its balance for the rest of the crossing: the sinks take the supply.
+                    val rest = seconds - elapsed
+                    rainSunk += supply * rest * balanceRainShare
+                    liftSunk += supply * rest * (1.0 - balanceRainShare)
+                    waterTime += balance * rest
+                    water = balance
+                    break
+                }
+                val rate = (sinkRate(water) - balanceSinks) / (water - balance)
                 val end: Double
                 val mean: Double
                 if (rate * step > 0.0) {
@@ -309,11 +350,38 @@ internal class ColumnCrossing {
                 waterTime += mean * step
                 water = end
             }
+            elapsed += step
         }
     }
 
     /** Every sink of the vapor at a column of [waterMm], kilograms per square meter per second. */
     fun sinkRate(waterMm: Double): Double = columnRainRate(waterMm) + liftingRate(waterMm)
+
+    // The sinks at the column [evaluateSinks] was last asked about: the column's rain and the
+    // lifting, kilograms per square meter per second, and their slope, per second.
+    private var rainNow = 0.0
+    private var liftNow = 0.0
+    private var slopeNow = 0.0
+
+    /**
+     * The sinks and their slope at [waterMm] in one pass, one exponential for the rain law and one
+     * root for the lifting's saturated share, where [sinkRate] and [sinkSlope] each take their own.
+     */
+    private fun evaluateSinks(waterMm: Double) {
+        rainNow = 0.0
+        liftNow = 0.0
+        slopeNow = 0.0
+        if (saturatedMm > 0.0 && rainSuppression > 0.0) {
+            val grown = exp(MoistureMarch.COLUMN_RAIN_PER_HUMIDITY * (waterMm / saturatedMm - MoistureMarch.COLUMN_RAIN_HUMIDITY_OFFSET))
+            if (waterMm > 0.0) rainNow = rainSuppression * (grown - DRY_COLUMN_RAIN) / SECONDS_PER_DAY
+            slopeNow += rainSuppression * grown * MoistureMarch.COLUMN_RAIN_PER_HUMIDITY / saturatedMm / SECONDS_PER_DAY
+        }
+        if (liftingKgPerM2PerSecond > 0.0 && holdableMm > 0.0) {
+            val humidity = waterMm / holdableMm
+            if (waterMm > 0.0) liftNow = liftingKgPerM2PerSecond * saturatedShare(humidity, criticalHumidity)
+            slopeNow += liftingKgPerM2PerSecond * saturatedShareSlope(humidity, criticalHumidity) / holdableMm
+        }
+    }
 
     /** The sinks' secant between [waterMm] and the [balance] under the cap, per second. */
     private fun secantRate(waterMm: Double, balance: Double): Double =
@@ -353,8 +421,9 @@ internal class ColumnCrossing {
 
     /** The column's rain's share of the sinks at [waterMm]; all of it where nothing sinks. */
     private fun rainShareAt(waterMm: Double): Double {
-        val total = sinkRate(waterMm)
-        return if (total > 0.0) columnRainRate(waterMm) / total else 1.0
+        evaluateSinks(waterMm)
+        val total = rainNow + liftNow
+        return if (total > 0.0) rainNow / total else 1.0
     }
 
     /**
@@ -382,11 +451,12 @@ internal class ColumnCrossing {
         val tolerance = BALANCE_TOLERANCE * (holdableMm + 1.0)
         var water = high
         for (iteration in 0 until NEWTON_ITERATIONS) {
-            val excess = sinkRate(water) - supply
+            evaluateSinks(water)
+            val excess = rainNow + liftNow - supply
             val above = if (highest) excess > 0.0 else excess >= 0.0
             if (above) high = water else low = water
             if (high - low <= tolerance) break
-            val slope = sinkSlope(water)
+            val slope = slopeNow
             var next = if (slope > 0.0 && slope.isFinite()) water - excess / slope else Double.NaN
             if (!(next > low && next < high)) next = 0.5 * (low + high)
             if (abs(next - water) <= tolerance) return next
@@ -398,18 +468,32 @@ internal class ColumnCrossing {
     companion object {
         private const val SECONDS_PER_DAY = 86_400.0
 
-        /**
-         * How far one step may relax the column, in e-foldings of its first secant: a quarter. A
-         * secant step from where the column stands is exact in its first rate and in its end, and
-         * misses between them by the sinks' curvature over the step; at a quarter of an e-folding
-         * a step's miss is a few thousandths of the column's distance from its balance, and an
-         * ordinary crossing of the 512-row grid, a tenth of an e-folding or less, takes one step.
-         */
-        private const val MAX_RELAXATION_PER_STEP = 0.25
+        /** The rain law's value at a dry column, which [MoistureMarch.columnRainMmPerDay] subtracts. */
+        private val DRY_COLUMN_RAIN = exp(-MoistureMarch.COLUMN_RAIN_PER_HUMIDITY * MoistureMarch.COLUMN_RAIN_HUMIDITY_OFFSET)
 
         /**
-         * The most steps a crossing takes, a ceiling and not a count: past some thirty e-foldings
-         * the column stands at its balance to the doubles' rounding whatever the steps.
+         * How far the first of a crossing's steps may relax the column, in e-foldings of the faster
+         * of its secant and the sinks' slope at the balance: a fifth. A secant step from where the
+         * column stands is exact in its first rate and in its end, and misses between them by the
+         * sinks' curvature over the step; at a fifth of an e-folding, the later steps lengthening as
+         * the distance left shortens, the crossing's end stands within 0.016 of the column's distance
+         * from its balance of a fine march's on the test's cases, and at a quarter within 0.020.
+         */
+        private const val MAX_RELAXATION_PER_STEP = 0.2
+
+        /**
+         * How far a crossing taken as one exponential Euler step may relax the column, in
+         * e-foldings of the sinks' slope at either end: a quarter, where the step's miss is a few
+         * thousandths of the column's distance from its balance, and an ordinary crossing of the
+         * 512-row grid, a tenth of an e-folding or less, takes it.
+         */
+        private const val MAX_SHORT_RELAXATION = 0.25
+
+
+        /**
+         * The most steps a crossing takes, a ceiling and not a count: steps that lengthen as the
+         * distance they leave shortens reach the balance to the doubles' rounding in a few dozen,
+         * and the last step takes what is left of the crossing whatever its length.
          */
         private const val MAX_STEPS = 32
 
@@ -452,39 +536,35 @@ internal class ColumnCrossing {
         private fun relaxedShare(x: Double): Double = if (x > 1.0e-9) -expm1(-x) / x else 1.0 - 0.5 * x
 
         /**
-         * A cloud of [carried] at the start, growing at [growthPerSecond] and converting at
-         * [conversionPerSecond], after [seconds]: `C_0 e^-ct + G t (1 - e^-ct) / (ct)`.
+         * The same with `e^-x` in hand as [left]: read off it where `1 - e^-x` keeps its digits,
+         * from `expm1` where `x` is small enough to lose them.
          */
-        fun cloudAfter(carried: Double, growthPerSecond: Double, conversionPerSecond: Double, seconds: Double): Double =
-            carried * exp(-conversionPerSecond * seconds) + growthPerSecond * seconds * relaxedShare(conversionPerSecond * seconds)
-
-        /**
-         * The falling water after [seconds]: [fallingAtStart] falling out at [falloutPerSecond], the
-         * carried cloud handed on through the two delays in series, and the cloud's steady growth
-         * handed on too, `G ((1 - e^-ft) / f - (e^-ct - e^-ft) / (f - c))`.
-         */
-        fun fallingAfter(
-            fallingAtStart: Double,
-            carriedCloud: Double,
-            growthPerSecond: Double,
-            conversionPerSecond: Double,
-            falloutPerSecond: Double,
-            seconds: Double
-        ): Double {
-            val chain = chainIntegral(conversionPerSecond, falloutPerSecond, seconds)
-            val fromGrowth = growthPerSecond * (seconds * relaxedShare(falloutPerSecond * seconds) - chain)
-            return fallingAtStart * exp(-falloutPerSecond * seconds) +
-                carriedCloud * conversionPerSecond * chain + fromGrowth.coerceAtLeast(0.0)
+        private fun relaxedShare(x: Double, left: Double): Double = when {
+            x > SMALL_RELAXATION -> (1.0 - left) / x
+            else -> relaxedShare(x)
         }
 
-        /** `int_0^t e^-f(t-s) e^-cs ds`: `(e^-ct - e^-ft) / (f - c)`, and `t e^-ct` where the rates meet. */
-        private fun chainIntegral(conversionPerSecond: Double, falloutPerSecond: Double, seconds: Double): Double {
+        /** Under this exponent `1 - e^-x` is taken by `expm1`, where subtracting would cost digits. */
+        private const val SMALL_RELAXATION = 0.1
+
+        /**
+         * `int_0^t e^-f(t-s) e^-cs ds`, what the second of two delays in series holds per unit put
+         * through the first: `(e^-ct - e^-ft) / (f - c)`, and `t e^-ct` where the rates meet, with
+         * `e^-ct` and `e^-ft` in hand as [conversionLeft] and [falloutLeft]. Exact over any crossing,
+         * so the delays filter the same on every grid.
+         */
+        private fun chainIntegral(
+            conversionPerSecond: Double,
+            falloutPerSecond: Double,
+            seconds: Double,
+            conversionLeft: Double,
+            falloutLeft: Double
+        ): Double {
             val difference = falloutPerSecond - conversionPerSecond
-            val conversionLeft = exp(-conversionPerSecond * seconds)
             return if (abs(difference) * seconds < EQUAL_RATES) {
                 seconds * conversionLeft
             } else {
-                (conversionLeft - exp(-falloutPerSecond * seconds)) / difference
+                (conversionLeft - falloutLeft) / difference
             }
         }
 

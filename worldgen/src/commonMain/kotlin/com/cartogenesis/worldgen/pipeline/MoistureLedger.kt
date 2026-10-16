@@ -140,6 +140,12 @@ internal class MoistureLedger {
         val probeSeconds = FloatField(cellsAcross, cellsDown)
         /** Cloud and falling water carried on, mm. */
         val probeCloud = FloatField(cellsAcross, cellsDown)
+        val probeSeaWind = FloatField(cellsAcross, cellsDown)
+        val probeHumidityDifference = FloatField(cellsAcross, cellsDown)
+        val probeSeaSurfaceC = FloatField(cellsAcross, cellsDown)
+        val probeAirC = FloatField(cellsAcross, cellsDown)
+        /** C_w w, the lifting's condensation rate at saturation, mm a year; negative in descent. */
+        val probeUplift = FloatField(cellsAcross, cellsDown)
     }
 
     var julyHalf: Cells? = null

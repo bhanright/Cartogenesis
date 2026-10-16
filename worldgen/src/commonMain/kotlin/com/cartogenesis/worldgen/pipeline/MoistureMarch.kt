@@ -777,6 +777,8 @@ object MoistureMarch {
 
         /** The sea's evaporation, kilograms per square meter per second, at open-sea cells. */
         val seaEvaporationRate = FloatArray(cellCount)
+        val probeSeaWind = FloatArray(cellCount)
+        val probeHumidityDifference = FloatArray(cellCount)
 
         /**
          * How much more column water a unit of parcel is at each cell than at the reference speed:
@@ -960,7 +962,7 @@ object MoistureMarch {
                             else -> OPEN_SEA
                         }
                         val airC = season.airTemperatureC[cell].toDouble()
-                        saturatedMm[here] = ColumnWater.saturatedColumnMm(airC).toFloat()
+                        saturatedMm[here] = (if (MoistureProbe.subcloudColumn) ColumnWater.subcloudSaturatedColumnMm(airC) else ColumnWater.saturatedColumnMm(airC)).toFloat()
                         if (surface[here] == OPEN_SEA) {
                             val surfaceHumidity = SurfaceEvaporation.seaSurfaceHumidity(season.seaSurfaceC[cell].toDouble())
                             val airHumidity = (MoistureProbe.marineRelativeHumidity ?: MARINE_RELATIVE_HUMIDITY) * ColumnWater.specificHumidity(
@@ -970,6 +972,8 @@ object MoistureMarch {
                             seaEvaporationRate[here] = SurfaceEvaporation.bulkEvaporationKgPerM2S(
                                 surfaceHumidity, airHumidity, massFlux
                             ).toFloat()
+                            probeSeaWind[here] = (season.scalarWindAt10mMps?.get(cell)?.toDouble() ?: TRANSPORT_SPEED_MPS).toFloat()
+                            probeHumidityDifference[here] = (surfaceHumidity - airHumidity).toFloat()
                         }
                         suppression[here] = (if (inputs.isLand[cell]) lidFactor(cell, season.inversionSuppression) else 1.0).toFloat()
                     }
@@ -1389,7 +1393,9 @@ object MoistureMarch {
                     // saturated, and the column's saturated share is its water over what it holds at
                     // surface saturation: the climb takes `C_w w W / W_hold` a second, which never
                     // empties the column however long the climb.
-                    val condensed = vapor * (1.0 - exp(-uplift / holdable * stepSeconds))
+                    val gate = if (kind == LAND) MoistureProbe.criticalHumidity else MoistureProbe.criticalHumiditySea
+                    val condensed = if (gate == null) vapor * (1.0 - exp(-uplift / holdable * stepSeconds))
+                    else vapor - probeColumnAfterLiftMm(vapor, holdable, gate, uplift, stepSeconds)
                     val condensedLand = condensed * (vaporLand / vapor)
                     cloud += condensed
                     cloudLand += condensedLand
@@ -1508,6 +1514,13 @@ object MoistureMarch {
                 record.probeMeanColumn.data[cell] = (columnSum / substeps).toFloat()
                 record.probeSeconds.data[cell] = seconds.toFloat()
                 record.probeCloud.data[cell] = (cloud + falling).toFloat()
+                if (kind == OPEN_SEA) {
+                    record.probeSeaWind.data[cell] = probeSeaWind[here]
+                    record.probeHumidityDifference.data[cell] = probeHumidityDifference[here]
+                    record.probeSeaSurfaceC.data[cell] = seaSurfaceC[cell]
+                }
+                record.probeAirC.data[cell] = airTemperatureC[cell]
+                record.probeUplift.data[cell] = (upliftCondensationRate[here] * SECONDS_PER_YEAR).toFloat()
             }
 
             // Back into parcels, and on downwind: to the next cell of this sweep, or banked where
@@ -1629,6 +1642,29 @@ object MoistureMarch {
      * chain's middle, `c (e^-ct - e^-ft) / (f - c)`, and its limit `c t e^-ct` where the two
      * rates meet. Exact over any crossing, so the delays filter the same on every grid.
      */
+    /** Probe only: the critical-humidity gate on lifted condensation, Sundqvist's saturated share, solved exactly over [seconds]. */
+    private fun probeColumnAfterLiftMm(startMm: Double, holdableMm: Double, criticalHumidity: Double, upliftKgPerM2PerSecond: Double, seconds: Double): Double {
+        if (startMm <= 0.0 || holdableMm <= 0.0 || upliftKgPerM2PerSecond <= 0.0 || seconds <= 0.0) return startMm
+        val humidity = (startMm / holdableMm).coerceAtMost(1.0)
+        if (humidity <= criticalHumidity) return startMm
+        val dryShare = 1.0 - criticalHumidity
+        val startSaturatedRoot = kotlin.math.sqrt((1.0 - humidity) / dryShare)
+        val startY = -kotlin.math.ln(1.0 - startSaturatedRoot)
+        val target = startY - 1.0 + exp(-startY) + upliftKgPerM2PerSecond * seconds / (2.0 * dryShare * holdableMm)
+        var y = target + 1.0
+        for (iteration in 0 until NEWTON_ITERATIONS) {
+            val excess = y - 1.0 + exp(-y) - target
+            val slope = 1.0 - exp(-y)
+            if (slope <= 0.0) break
+            val next = (y - excess / slope).coerceAtLeast(startY)
+            if (abs(next - y) <= NEWTON_TOLERANCE * (1.0 + y)) { y = next; break }
+            y = next
+        }
+        val saturatedRoot = 1.0 - exp(-y)
+        val humidityAfter = 1.0 - dryShare * saturatedRoot * saturatedRoot
+        return (humidityAfter * holdableMm).coerceIn(criticalHumidity * holdableMm, minOf(startMm, holdableMm))
+    }
+
     /** How many steps a crossing of [stretch] reference crossings is charged in ([MoistureProbe]); one by default. */
     private fun substepsOf(stretch: Double): Int {
         val perStep = MoistureProbe.substepPerReference

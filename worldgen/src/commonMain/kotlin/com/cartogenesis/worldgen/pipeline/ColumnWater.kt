@@ -200,6 +200,55 @@ internal object ColumnWater {
         DoubleArray(steps) { integratedSaturatedColumnMm(COLUMN_TABLE_COLDEST_C + it * COLUMN_TABLE_STEP_C) }
     }
 
+    /**
+     * Probe only: the saturated column of the temperature profile a surface parcel at [MoistureMarch.MARINE_RELATIVE_HUMIDITY]
+     * makes, lifted dry to its condensation level and then along the moist adiabat, read from a table as
+     * [saturatedColumnMm] is.
+     */
+    fun subcloudSaturatedColumnMm(surfaceTemperatureC: Double): Double {
+        val position = ((surfaceTemperatureC - COLUMN_TABLE_COLDEST_C) / COLUMN_TABLE_STEP_C)
+            .coerceIn(0.0, (subcloudColumnTable.size - 1).toDouble())
+        val below = position.toInt().coerceAtMost(subcloudColumnTable.size - 2)
+        val share = position - below
+        return subcloudColumnTable[below] * (1.0 - share) + subcloudColumnTable[below + 1] * share
+    }
+
+    private val subcloudColumnTable: DoubleArray by lazy {
+        val steps = ((COLUMN_TABLE_WARMEST_C - COLUMN_TABLE_COLDEST_C) / COLUMN_TABLE_STEP_C).toInt() + 1
+        DoubleArray(steps) { integratedSubcloudColumnMm(COLUMN_TABLE_COLDEST_C + it * COLUMN_TABLE_STEP_C, MoistureMarch.MARINE_RELATIVE_HUMIDITY) }
+    }
+
+    internal fun integratedSubcloudColumnMm(surfaceTemperatureC: Double, parcelRelativeHumidity: Double): Double {
+        var kelvin = surfaceTemperatureC + KELVIN_AT_ZERO_C
+        var pressureKpa = SEA_LEVEL_PRESSURE_KPA
+        val vapor = parcelRelativeHumidity * saturationVaporPressureKpa(surfaceTemperatureC)
+        var parcelHumidity = specificHumidity(vapor, pressureKpa)
+        var column = 0.0
+        var height = 0.0
+        val dryLapse = STANDARD_GRAVITY_MPS2 / DRY_AIR_HEAT_CAPACITY_J_PER_KG_K
+        while (height < COLUMN_TOP_M) {
+            val celsius = kelvin - KELVIN_AT_ZERO_C
+            val saturatedHumidity = specificHumidity(saturationVaporPressureKpa(celsius), pressureKpa)
+            val saturated = parcelHumidity >= saturatedHumidity
+            val lapse = if (saturated) moistAdiabaticLapseKPerM(celsius, pressureKpa) else dryLapse
+            val midKelvin = kelvin - lapse * COLUMN_STEP_M * 0.5
+            val midPressure = pressureKpa * exp(-STANDARD_GRAVITY_MPS2 * COLUMN_STEP_M * 0.5 / (DRY_AIR_GAS_CONSTANT_J_PER_KG_K * kelvin))
+            val midCelsius = midKelvin - KELVIN_AT_ZERO_C
+            val midDensity = saturationVaporPressureKpa(midCelsius) * PASCALS_PER_KPA / (WATER_VAPOR_GAS_CONSTANT_J_PER_KG_K * midKelvin)
+            column += midDensity * COLUMN_STEP_M
+            if (saturated) {
+                kelvin -= moistAdiabaticLapseKPerM(midCelsius, midPressure) * COLUMN_STEP_M
+                parcelHumidity = saturatedHumidity
+            } else {
+                kelvin -= dryLapse * COLUMN_STEP_M
+            }
+            pressureKpa *= exp(-STANDARD_GRAVITY_MPS2 * COLUMN_STEP_M / (DRY_AIR_GAS_CONSTANT_J_PER_KG_K * midKelvin))
+            height += COLUMN_STEP_M
+            if (midDensity < NEGLIGIBLE_VAPOR_KG_PER_M3) break
+        }
+        return column
+    }
+
     /** Pascals in a kilopascal. */
     private const val PASCALS_PER_KPA = 1_000.0
 

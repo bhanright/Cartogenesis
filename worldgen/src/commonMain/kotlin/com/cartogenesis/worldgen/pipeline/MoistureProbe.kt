@@ -37,6 +37,13 @@ internal object MoistureProbe {
     var substepPerReference = 0.0
     const val MAX_SUBSTEPS = 512
 
+    /** Reads the saturated column up the profile of a subcloud parcel at the marine air's humidity. */
+    var subcloudColumn = false
+
+    /** Gates the large-scale ascent's and the climb's condensation by Sundqvist's saturated share over this critical humidity of the holdable column, when set. */
+    var criticalHumidity: Double? = null
+    var criticalHumiditySea: Double? = null
+
     fun reset() {
         ascentScale = 1.0
         climbScale = 1.0
@@ -47,5 +54,8 @@ internal object MoistureProbe {
         seaWindScale = 1.0
         rainSaturatedScale = 1.0
         substepPerReference = 0.0
+        subcloudColumn = false
+        criticalHumidity = null
+        criticalHumiditySea = null
     }
 }

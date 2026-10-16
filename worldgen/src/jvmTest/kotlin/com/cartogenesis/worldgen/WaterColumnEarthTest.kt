@@ -269,7 +269,7 @@ class WaterColumnEarthTest : BorrowsSharedWorlds() {
         }
         // The tropics' land stands desert where W1 found it once lifted air stopped raining on dry
         // ground: the interiors import too little water (docs/DESIGN_LEDGER.md, W2; docs/TODO.md).
-        KnownFailures.expect("W2: the tropics' land is desert", "unrecorded") {
+        KnownFailures.expect("W2: the tropics' land is desert", "band 0 x8.73, band 2 x4.26") {
             if (misplaced.isNotEmpty()) throw RecordedViolation("desert misplaced by band: $misplaced", misplaced.joinToString())
         }
     }

@@ -33,8 +33,9 @@ import kotlin.math.sqrt
  * Charged in turn (the sources first, then the cap, then the lifting, then the rain), a crossing
  * many times the column's own relaxation time puts its whole evaporation in before any sink acts,
  * condenses everything over the cap at once and leaves the column far below the balance its
- * sources and sinks would hold it at: a calm tropical cell, crossed in two months, held 25 mm where
- * the same cell charged in steps of an ordinary crossing held 38 (docs/DESIGN_LEDGER.md, W2).
+ * sources and sinks would hold it at: seed 42's calm tropical cells, crossed in up to two months,
+ * held 25 mm on the mean where charged in steps of an ordinary crossing they held 38
+ * (docs/DESIGN_LEDGER.md, W2).
  *
  * # How it is solved
  *
@@ -46,10 +47,10 @@ import kotlin.math.sqrt
  * a step leaves at the true rate, `E - S(W)`, and ends at the true balance however long it is, so
  * the crossing is exact as it goes to nothing and as it grows without bound. Between the two a
  * step misses by the sinks' curvature over the distance it closes, so a crossing long against the
- * column's relaxation is taken in steps, the first relaxing it by a quarter of an e-folding
- * ([MAX_RELAXATION_PER_STEP]) and each after it longer as the distance left shortens, each one evaluation of
- * the sinks, since the balance is the same for all of them; the end then stands within two
- * hundredths of the column's distance from its balance of a fine Runge-Kutta march's
+ * column's relaxation is taken in steps, the first relaxing it by a fifth of an e-folding
+ * ([MAX_RELAXATION_PER_STEP]) and each after it longer as the distance left shortens, each one
+ * evaluation of the sinks, since the balance is the same for all of them; the end then stands
+ * within two hundredths of the column's distance from its balance of a fine Runge-Kutta march's
  * (`ColumnCrossingTest`). A single backward Euler step over the crossing, by contrast, is exact
  * only at the two ends, and at a crossing near the relaxation time leaves 16% of that distance.
  *

@@ -105,9 +105,10 @@ class WaterColumnEarthTest : BorrowsSharedWorlds() {
         get() = synchronized(measured) {
             for (seed in seeds) measured.getOrPut(seed) {
                 val world = SharedWorlds.world(WorldGenConfig.forRows(seed, ROWS))
-                figuresOf(world, ClimateStage.moistureLedger(world.config, world.sea, world.ocean)).also { figures ->
+                val ledger = ClimateStage.moistureLedger(world.config, world.sea, world.ocean)
+                figuresOf(world, ledger).also { figures ->
                     println("WATER COLUMN seed %d: %s".format(seed, summary(figures)))
-                    println("WATER COLUMN seed %d: %s".format(seed, summerPeak(world)))
+                    println("WATER COLUMN seed %d: %s".format(seed, summerPeak(world, ledger)))
                 }
             }
             Figures().also { total -> measured.values.forEach(total::add) }
@@ -172,12 +173,15 @@ class WaterColumnEarthTest : BorrowsSharedWorlds() {
                 100 * figures.bandDesert[1] / figures.bandLand[1], 100 * figures.bandDesert[2] / figures.bandLand[2])
     }
 
-    /** Each hemisphere's summer half's zonal land rain in two-degree bands, and where it peaks. */
-    private fun summerPeak(world: WorldMap): String {
+    /**
+     * Each hemisphere's summer half's zonal land rain in two-degree bands, the half's own rain in
+     * millimeters before the blur, and where it peaks.
+     */
+    private fun summerPeak(world: WorldMap, ledger: MoistureLedger): String {
         val parts = ArrayList<String>()
         for ((name, rain, north) in listOf(
-            Triple("July north", world.climate.julyHalfPrecipitation.data, true),
-            Triple("January south", world.climate.januaryHalfPrecipitation.data, false)
+            Triple("July north", ledger.julyHalf!!.rain.data, true),
+            Triple("January south", ledger.januaryHalf!!.rain.data, false)
         )) {
             val sum = DoubleArray(45)
             val area = DoubleArray(45)

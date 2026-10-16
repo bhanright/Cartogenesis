@@ -171,14 +171,13 @@ class GlaciationCombTest : BorrowsSharedWorlds() {
         // Armed at A1-6b, whose ground holds none (docs/DESIGN_LEDGER.md, A1-6b). Recorded at F1:
         // one such lake on seed 42 and one on seed 7 at 1,024 rows, a rule 13 finding, not traced
         // (docs/TODO.md).
-        KnownFailures.expect("F1: an ice-made lake is a straight one-cell line on the circulation by longitude's ground", "seed 42 at 1024 has 1; seed 7 at 1024 has 1") {
-            if (straight.isNotEmpty()) {
-                throw RecordedViolation(
-                    signature + " lakes that are a straight one-cell line along a D8 bearing — a" +
-                        " trough is a valley the ice found, not a line drawn down a flow path",
-                    signature
-                )
-            }
+        // Armed at W2, whose ground holds none (docs/DESIGN_LEDGER.md, W2).
+        if (straight.isNotEmpty()) {
+            throw RecordedViolation(
+                signature + " lakes that are a straight one-cell line along a D8 bearing — a" +
+                    " trough is a valley the ice found, not a line drawn down a flow path",
+                signature
+            )
         }
         // Collected and asserted once, rather than seed by seed, so a run reports all three figures
         // instead of stopping at the first that is over. On the implicit update before the uplift

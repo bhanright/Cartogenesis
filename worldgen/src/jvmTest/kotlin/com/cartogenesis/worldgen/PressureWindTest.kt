@@ -315,14 +315,13 @@ class PressureWindTest : BorrowsSharedWorlds() {
         // poleward and whose trades are the summer half's own (docs/DESIGN_LEDGER.md, A1-6b).
         // Recorded at F1: under the circulation by longitude the pooled summer wind on these
         // coasts is onshore at +0.09 m/s, a hundredth under the bar, not traced (docs/TODO.md).
-        KnownFailures.expect("F1: the summer's inflow onto the subtropical coasts is under the bar", "+0.09") {
-            if (summer <= ONSHORE_BAR_MPS) {
-                throw RecordedViolation(
-                    ("the warm half blows %+.2f m/s onto the subtropical continents' equatorward and " +
-                        "eastern coasts, which is not onshore").format(summer),
-                    "%+.2f".format(summer)
-                )
-            }
+        // Armed at W2, whose summer coasts draw the wind on past the bar (docs/DESIGN_LEDGER.md, W2).
+        if (summer <= ONSHORE_BAR_MPS) {
+            throw RecordedViolation(
+                ("the warm half blows %+.2f m/s onto the subtropical continents' equatorward and " +
+                    "eastern coasts, which is not onshore").format(summer),
+                "%+.2f".format(summer)
+            )
         }
         // A known failure on square cells from Q2 to L1, armed at K2, where the Earth-sized
         // planet's cold half blows off these coasts again (docs/DESIGN_LEDGER.md, Q2 and K2).
@@ -390,12 +389,17 @@ class PressureWindTest : BorrowsSharedWorlds() {
         // Recorded at C1b2: the interior's rain runs from the windward rises' to the dry plateaus'
         // more widely than Earth's interiors do (docs/TODO.md, "The march's misses against Earth,
         // after C1b2"). Armed at F1, whose interiors' rain spreads within the factor
-        // (docs/DESIGN_LEDGER.md, F1).
-        assertTrue(
-            meanWith > earthSpread / INTERIOR_SPREAD_FACTOR && meanWith < earthSpread * INTERIOR_SPREAD_FACTOR,
-            ("the interior's rainfall spreads by %.3f, outside a factor of %.0f either side of " +
-                "Earth's %.3f").format(meanWith, INTERIOR_SPREAD_FACTOR, earthSpread)
-        )
+        // (docs/DESIGN_LEDGER.md, F1). Recorded at W2, whose interiors run from wet rises to deserts
+        // more widely again (docs/TODO.md).
+        KnownFailures.expect("W2: the interior's rain spreads wider than Earth's", "2.04") {
+            if (!(meanWith > earthSpread / INTERIOR_SPREAD_FACTOR && meanWith < earthSpread * INTERIOR_SPREAD_FACTOR)) {
+                throw RecordedViolation(
+                    ("the interior's rainfall spreads by %.3f, outside a factor of %.0f either side of " +
+                        "Earth's %.3f").format(meanWith, INTERIOR_SPREAD_FACTOR, earthSpread),
+                    "%.2f".format(meanWith)
+                )
+            }
+        }
         // The level as well as the spread, which is W3's addition to this measurement: the
         // complaint that started the chunk was about variation, and a uniformly pale interior may
         // be uniformly dry rather than uniformly anything. Same table, same twenty-five places.

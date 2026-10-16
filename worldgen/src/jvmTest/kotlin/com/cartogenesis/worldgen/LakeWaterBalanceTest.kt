@@ -206,7 +206,7 @@ class LakeWaterBalanceTest : BorrowsSharedWorlds() {
         // Recorded at A1-6b: the seasonal circulation's rain moved the ground the sample was scanned
         // on, and seed 1's largest dry basin is 477 cells; the scan that re-picks it is a run of
         // its own (docs/TODO.md). The rest of the case reads the basin it has.
-        KnownFailures.expect("A1-6b: seed 1's dry basin sample falls under 500 cells", "314 cells") {
+        KnownFailures.expect("A1-6b: seed 1's dry basin sample falls under 500 cells", "173 cells") {
             if (basin.size < 500) {
                 throw RecordedViolation("seed $drySeed has no large dry basin any more (${basin.size} cells)", "${basin.size} cells")
             }

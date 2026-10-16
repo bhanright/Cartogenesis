@@ -204,14 +204,13 @@ class IceSheetTest : BorrowsSharedWorlds() {
         // Armed at A1-6a, where seed 42's sheet fills 187 cells of its 513-cell disc again.
         // Recorded at F1, on whose ground no candidate's sheet fills a third near its dome, as the
         // everyday tier's control finds at 512 rows (docs/TODO.md).
-        KnownFailures.expect("F1: no sheet the flow clause can read has a dome", "0 seeds") {
-            if (domesRead < LEAST_SEEDS_WITH_A_DOME) {
-                throw RecordedViolation(
-                    "only $domesRead seeds grow a sheet whose dome fills a third of its own disc, under" +
-                        " $LEAST_SEEDS_WITH_A_DOME, so the flow clause is asserting nothing",
-                    "$domesRead seeds"
-                )
-            }
+        // Armed at W2, on whose ground enough sheets fill a third near their domes (docs/DESIGN_LEDGER.md, W2).
+        if (domesRead < LEAST_SEEDS_WITH_A_DOME) {
+            throw RecordedViolation(
+                "only $domesRead seeds grow a sheet whose dome fills a third of its own disc, under" +
+                    " $LEAST_SEEDS_WITH_A_DOME, so the flow clause is asserting nothing",
+                "$domesRead seeds"
+            )
         }
         // Recorded from Fix 3b to Q2 on seeds 59758 and 7 on the 512 by 512 grid, and armed on
         // square cells, where neither is read and [DOME_SEED]'s sheet knows its dome

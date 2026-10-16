@@ -170,14 +170,13 @@ class SeaIceTest : BorrowsSharedWorlds() {
         }
         // Recorded at A1-6b: seed 7's frozen cells take 1.93 times their rain with the ice off and
         // seed 1234's 1.88, under the polar front that now moves with the seasons (docs/TODO.md).
-        KnownFailures.expect("A1-6b: with the ice off, the frozen cells take less than twice the rain", "seed 7 x1.90; seed 1234 x1.98") {
-            if (lidless.isNotEmpty()) {
-                throw RecordedViolation(
-                    "with the ice off the same cells take less than $ICE_OFF_WETTER_RATIO times the rain they take with it on, " +
-                        "so the guard is not measuring the lid: $lidless",
-                    lidless.joinToString("; ")
-                )
-            }
+        // Armed at W2, under whose rain the open cells take twice it and more (docs/DESIGN_LEDGER.md, W2).
+        if (lidless.isNotEmpty()) {
+            throw RecordedViolation(
+                "with the ice off the same cells take less than $ICE_OFF_WETTER_RATIO times the rain they take with it on, " +
+                    "so the guard is not measuring the lid: $lidless",
+                lidless.joinToString("; ")
+            )
         }
     }
 

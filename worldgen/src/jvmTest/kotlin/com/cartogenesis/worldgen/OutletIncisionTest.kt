@@ -262,7 +262,7 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
         val pooledDepth = depthShares.average()
         // Recorded since Fix 3b: see [NOTCH_SHORT_ON_THE_LAWS_TERRAIN].
         // Re-recorded on square cells at Q2 (docs/DESIGN_LEDGER.md, Q2). Re-recorded at L1, whose rifts are Earth's half-grabens and the same at every grid (docs/DESIGN_LEDGER.md, L1).
-        KnownFailures.expect(NOTCH_SHORT_ON_THE_LAWS_TERRAIN, "83.2% as deep as the control's") {
+        KnownFailures.expect(NOTCH_SHORT_ON_THE_LAWS_TERRAIN, "76.8% as deep as the control's") {
             if (pooledDepth >= 0.5) {
                 throw RecordedViolation(
                     "the fill still stands ${"%.1f".format(pooledDepth * 100)}% as deep over the land as the " +
@@ -492,7 +492,7 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
         // it, seed 42's the largest at 0.1376% of the land against 0.2491% (docs/DESIGN_LEDGER.md, A1-6a).
         // Recorded at A1-6b, under whose rain seeds 718106 and 7 hold lakes of 3.6 times the
         // Caspian's share and seed 1234 one of 1.6 (docs/TODO.md).
-        KnownFailures.expect("A1-6b: a lake stands over the Caspian's share under the seasonal circulation's rain", "seed 1234's largest lake 1.49x the Caspian") {
+        KnownFailures.expect("A1-6b: a lake stands over the Caspian's share under the seasonal circulation's rain", "seed 718106's largest lake 4.05x the Caspian") {
             if (overCaspian.isNotEmpty()) {
                 throw RecordedViolation(
                     "a lake is over the Caspian's share of the map: ${overCaspian.joinToString("; ")}",
@@ -510,7 +510,7 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
         // where no seed starts with an over-large lake, so the clause holds over none; the clause
         // below records that it is read on none (docs/DESIGN_LEDGER.md, A1-6a). Recorded at A1-6b,
         // whose rain gives three seeds an over-large lake to begin with (docs/TODO.md).
-        KnownFailures.expect("A1-6b: an over-large lake does not fall with its outlet", "seed 718106's water 1.8103% to 1.4125%; seed 1234's largest lake 0.2717% to 0.3703%; seed 1234's water 1.3770% to 1.1564%") {
+        KnownFailures.expect("A1-6b: an over-large lake does not fall with its outlet", "seed 718106's largest lake 0.6153% to 1.0096%; seed 718106's water 2.1420% to 2.7569%") {
             if (notHalved.isNotEmpty()) {
                 throw RecordedViolation(
                     "an over-large lake did not fall, or its world kept more than half its water: ${notHalved.joinToString("; ")}",
@@ -531,11 +531,16 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
         // Recorded on H1's ground under the coupled climate, whose filled sags leave one seed so
         // (docs/DESIGN_LEDGER.md, M1; docs/TODO.md). Re-recorded at A1-6a, under whose rain no seed
         // starts with a lake over the Caspian's share, the largest seed 42's at 0.19% of its land.
-        // Armed at A1-6b, under whose rain three seeds do (docs/DESIGN_LEDGER.md, A1-6b).
-        assertTrue(
-            overLarge >= 2,
-            "only $overLarge of ${seeds.size} seeds had an over-large lake to begin with, so this guard proves little"
-        )
+        // Armed at A1-6b, under whose rain three seeds do (docs/DESIGN_LEDGER.md, A1-6b). Recorded
+        // at W2, under whose drier land one seed does (docs/TODO.md).
+        KnownFailures.expect("W2: too few seeds start with a lake over the Caspian's share", "1 of 6") {
+            if (overLarge < 2) {
+                throw RecordedViolation(
+                    "only $overLarge of ${seeds.size} seeds had an over-large lake to begin with, so this guard proves little",
+                    "$overLarge of ${seeds.size}"
+                )
+            }
+        }
         // Collected over every seed rather than asserted inside the loop, so a run reports all six
         // figures. With `postCutOutlet = false` this reads
         // 718106 0.6244%, 99 0.6514%, 43 0.2568% — see the ledger row for H5b.

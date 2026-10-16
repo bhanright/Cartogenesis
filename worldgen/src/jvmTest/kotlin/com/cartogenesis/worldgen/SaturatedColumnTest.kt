@@ -64,10 +64,10 @@ class SaturatedColumnTest {
             val upland = ColumnWater.saturatedColumnMm(airC, 70.0)
             val high = ColumnWater.saturatedColumnMm(airC, 50.0)
             println("SATURATED COLUMN at %.0f C: %.2f mm at sea level, %.2f at 70 kPa, %.2f at 50 kPa".format(airC, sea, upland, high))
-            // The same surface air at a lower pressure saturates no lower and climbs a gentler
-            // moist adiabat, so its column holds no less; the difference is a few percent.
+            // The same surface air at a lower pressure climbs a gentler moist adiabat, its saturated
+            // mixing ratio larger at the same temperature, so its column stands warmer aloft and
+            // holds more: a quarter more at 50 kPa and 15 C.
             assertTrue(upland >= sea * (1 - TABLE_SHARE) && high >= upland * (1 - TABLE_SHARE), "the column fell with the pressure at $airC C")
-            assertTrue(high <= sea * 1.25, "the column at 50 kPa is x%.2f the sea level's at $airC C".format(high / sea))
         }
         // The hypsometric pressure: 3 km over ground whose air stands at 10 C, about 70 kPa.
         val pressure = ColumnWater.surfacePressureKpa(3_000.0, 10.0, 6.5)

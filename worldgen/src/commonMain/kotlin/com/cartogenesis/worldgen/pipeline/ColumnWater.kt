@@ -1,6 +1,7 @@
 package com.cartogenesis.worldgen.pipeline
 
 import kotlin.math.exp
+import kotlin.math.pow
 
 /**
  * How much water a column of air can hold, and how wet the air near the ground is: the
@@ -201,23 +202,46 @@ internal object ColumnWater {
         surfacePressureKpa: Double,
         parcelRelativeHumidity: Double = PARCEL_RELATIVE_HUMIDITY
     ): Double {
-        var kelvin = surfaceTemperatureC + KELVIN_AT_ZERO_C
-        var pressureKpa = surfacePressureKpa
-        val parcelHumidity = specificHumidity(parcelRelativeHumidity * saturationVaporPressureKpa(surfaceTemperatureC), pressureKpa)
-        var saturated = false
+        val surfaceKelvin = surfaceTemperatureC + KELVIN_AT_ZERO_C
+        val parcelHumidity = specificHumidity(parcelRelativeHumidity * saturationVaporPressureKpa(surfaceTemperatureC), surfacePressureKpa)
+        // Dry, the parcel's temperature falls at g / c_p and its pressure as `(T / T_0)^(c_p / R_d)`;
+        // it saturates where its saturation humidity falls to its own, found by bisection so the
+        // column moves smoothly with the surface's temperature.
+        fun dryKelvin(height: Double) = surfaceKelvin - DRY_LAPSE_K_PER_M * height
+        fun dryPressureKpa(height: Double) =
+            surfacePressureKpa * (dryKelvin(height) / surfaceKelvin).pow(DRY_AIR_HEAT_CAPACITY_J_PER_KG_K / DRY_AIR_GAS_CONSTANT_J_PER_KG_K)
+        fun saturationDeficit(height: Double) =
+            specificHumidity(saturationVaporPressureKpa(dryKelvin(height) - KELVIN_AT_ZERO_C), dryPressureKpa(height)) - parcelHumidity
+        var condensationLevel = 0.0
+        if (saturationDeficit(0.0) > 0.0) {
+            var low = 0.0
+            var high = MAX_CONDENSATION_LEVEL_M
+            repeat(CONDENSATION_LEVEL_BISECTIONS) {
+                val middle = 0.5 * (low + high)
+                if (saturationDeficit(middle) > 0.0) low = middle else high = middle
+            }
+            condensationLevel = 0.5 * (low + high)
+        }
         var column = 0.0
-        var height = 0.0
+        val drySteps = kotlin.math.ceil(condensationLevel / COLUMN_STEP_M).toInt()
+        for (step in 0 until drySteps) {
+            val thickness = condensationLevel / drySteps
+            val midKelvin = dryKelvin((step + 0.5) * thickness)
+            column += saturationVaporPressureKpa(midKelvin - KELVIN_AT_ZERO_C) * PASCALS_PER_KPA /
+                (WATER_VAPOR_GAS_CONSTANT_J_PER_KG_K * midKelvin) * thickness
+        }
+        var kelvin = dryKelvin(condensationLevel)
+        var pressureKpa = dryPressureKpa(condensationLevel)
+        var height = condensationLevel
         while (height < COLUMN_TOP_M) {
             val celsius = kelvin - KELVIN_AT_ZERO_C
-            if (!saturated) saturated = parcelHumidity >= specificHumidity(saturationVaporPressureKpa(celsius), pressureKpa)
-            val lapse = if (saturated) moistAdiabaticLapseKPerM(celsius, pressureKpa) else DRY_LAPSE_K_PER_M
+            val lapse = moistAdiabaticLapseKPerM(celsius, pressureKpa)
             val midKelvin = kelvin - lapse * COLUMN_STEP_M * 0.5
             val midPressure = pressureKpa * exp(-STANDARD_GRAVITY_MPS2 * COLUMN_STEP_M * 0.5 / (DRY_AIR_GAS_CONSTANT_J_PER_KG_K * kelvin))
             val midCelsius = midKelvin - KELVIN_AT_ZERO_C
             val midDensity = saturationVaporPressureKpa(midCelsius) * PASCALS_PER_KPA / (WATER_VAPOR_GAS_CONSTANT_J_PER_KG_K * midKelvin)
             column += midDensity * COLUMN_STEP_M
-            val midLapse = if (saturated) moistAdiabaticLapseKPerM(midCelsius, midPressure) else DRY_LAPSE_K_PER_M
-            kelvin -= midLapse * COLUMN_STEP_M
+            kelvin -= moistAdiabaticLapseKPerM(midCelsius, midPressure) * COLUMN_STEP_M
             pressureKpa *= exp(-STANDARD_GRAVITY_MPS2 * COLUMN_STEP_M / (DRY_AIR_GAS_CONSTANT_J_PER_KG_K * midKelvin))
             height += COLUMN_STEP_M
             if (midDensity < NEGLIGIBLE_VAPOR_KG_PER_M3) break
@@ -228,7 +252,7 @@ internal object ColumnWater {
     /**
      * The table's span and step in the surface's temperature, degrees Celsius: from colder than any
      * air the energy balance makes to warmer than any it makes, at a quarter of a degree, where the
-     * interpolation is under a part in ten thousand off the integral (the column grows about 7% a
+     * interpolation is under a part in a thousand off the integral (the column grows 6 to 10% a
      * degree and bends little over a quarter of one).
      */
     private const val COLUMN_TABLE_COLDEST_C = -80.0
@@ -239,7 +263,7 @@ internal object ColumnWater {
     /**
      * Its span and step in the surface's pressure, kilopascals: from over the standard sea level's
      * to the pressure on ground higher than any the plates raise, nine kilometers, at two and a half,
-     * over which the column changes by a few percent at most.
+     * over which the column changes by under 2%.
      */
     private const val COLUMN_TABLE_HIGHEST_PRESSURE_KPA = 105.0
     private const val COLUMN_TABLE_LOWEST_PRESSURE_KPA = 27.5
@@ -254,6 +278,14 @@ internal object ColumnWater {
      */
     private const val COLUMN_STEP_M = 50.0
     private const val COLUMN_TOP_M = 16_000.0
+
+    /**
+     * Where the parcel's condensation level is sought, meters, and in how many halvings: up to six
+     * kilometers, over the driest air's (surface air at a tenth of saturation saturates near four),
+     * to a few millimeters.
+     */
+    private const val MAX_CONDENSATION_LEVEL_M = 6_000.0
+    private const val CONDENSATION_LEVEL_BISECTIONS = 40
 
     /** Below this saturated vapor density the rest of the column is nothing, kg m⁻³. */
     private const val NEGLIGIBLE_VAPOR_KG_PER_M3 = 1.0e-9

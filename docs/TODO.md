@@ -81,10 +81,9 @@
   289 and 309 mm and cuts desert by 11.2, 7.3 and 8.4 points (the tropics' band by 22, 16 and 15); the
   calm cells, marched at their own speed instead of the least, move land rain by 3 to 18 mm and desert
   by under a point, since the crossing's own budget already holds them at their balance. The summer
-  land rain's peak moved toward Earth's 5-12 degrees on some seeds and not others (July north at 512
-  rows: seed 42 12-14 degrees, 1234 0-2, 99 4-6 and 7 14-16, against main's 18-20, 20-22, 16-18 and
-  14-16);
-  seed 99's January south peaks at 54-56 S, not traced. Next, by those numbers: the eddy winds and the
+  land rain's peak stays on the heat low: in each half's own rain at 512 rows, July north at 16-18,
+  20-22 and 22-24 degrees on seeds 42, 969495 and 7 against main's 18-20, 20-22 and 24-26 (Earth's
+  5-12). Next, by those numbers: the eddy winds and the
   return, after the tropical sea's temperature below. 2026-10-16, W2.
 - **The tropical sea stands 1.8 C under Earth's (W2, measured, not fixed).** The energy balance's sea
   surface between 10 S and 10 N stands at 25.8-25.9 C against the 1971-2000 optimum-interpolation

@@ -142,7 +142,7 @@ class GroundTextureTest : BorrowsSharedWorlds() {
         // to 4.1% of their land; armed at A1-6a, under whose circulation they drain again
         // (docs/DESIGN_LEDGER.md, M1 and A1-6a). Recorded again at A1-6b, whose seasonal
         // circulation's rain left seed 42 lakes over 4.4% of its land (docs/TODO.md).
-        KnownFailures.expect("A1-6b: the ground holds more lakes than Earth's under the seasonal circulation", "0.0172") {
+        KnownFailures.expect("A1-6b: the ground holds more lakes than Earth's under the seasonal circulation", "0.0170") {
             if (pooledLakes > earthLakeShare * LAKE_SHARE_ALLOWANCE) {
                 throw RecordedViolation(
                     "lakes cover ${"%.4f".format(pooledLakes)} of the land, more than half again Earth's" +

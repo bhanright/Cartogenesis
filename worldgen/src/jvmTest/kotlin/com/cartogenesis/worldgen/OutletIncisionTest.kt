@@ -563,15 +563,14 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
         // 2.7% and 2.4% of their land, the interiors H1's Earth share drowns (docs/TODO.md, "The
         // drowned crust lies in the interiors of the largest continents"; docs/DESIGN_LEDGER.md, M1).
         // Re-recorded at A1-6a, 3.96 to 3.24 times, seeds 42 and 99 at 1.83% and 2.94% of their land.
-        KnownFailures.expect("M1: the drowned interiors H1's ground keeps are larger than the Caspian", "1.97x") {
-            if (pooledDrowned >= caspianShare * drownedChaos) {
-                throw RecordedViolation(
-                    "these worlds keep a basin below the sea-level cut holding more water than the " +
-                        "Caspian's ${"%.4f".format(caspianShare * 100)}% share of Earth's land, " +
-                        "${"%.2f".format(pooledDrowned / caspianShare)}x it pooled: $overSizedDrowned",
-                    "%.2fx".format(pooledDrowned / caspianShare)
-                )
-            }
+        // Armed at W2, on whose ground the pooled largest drowned basin stands under the Caspian's share again (docs/DESIGN_LEDGER.md, W2).
+        if (pooledDrowned >= caspianShare * drownedChaos) {
+            throw RecordedViolation(
+                "these worlds keep a basin below the sea-level cut holding more water than the " +
+                    "Caspian's ${"%.4f".format(caspianShare * 100)}% share of Earth's land, " +
+                    "${"%.2f".format(pooledDrowned / caspianShare)}x it pooled: $overSizedDrowned",
+                "%.2fx".format(pooledDrowned / caspianShare)
+            )
         }
     }
 

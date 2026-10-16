@@ -225,9 +225,6 @@ internal object ColumnWater {
         return column
     }
 
-    /** The dry adiabat's lapse rate, `g / c_p`, kelvin per meter. */
-    private const val DRY_LAPSE_K_PER_M = STANDARD_GRAVITY_MPS2 / DRY_AIR_HEAT_CAPACITY_J_PER_KG_K
-
     /**
      * The table's span and step in the surface's temperature, degrees Celsius: from colder than any
      * air the energy balance makes to warmer than any it makes, at a quarter of a degree, where the
@@ -317,4 +314,7 @@ internal object ColumnWater {
     private const val DRY_AIR_GAS_CONSTANT_J_PER_KG_K = 287.04
     private const val DRY_AIR_HEAT_CAPACITY_J_PER_KG_K = 1004.0
     private const val STANDARD_GRAVITY_MPS2 = 9.80665
+
+    /** The dry adiabat's lapse rate, `g / c_p`, kelvin per meter. */
+    private const val DRY_LAPSE_K_PER_M = STANDARD_GRAVITY_MPS2 / DRY_AIR_HEAT_CAPACITY_J_PER_KG_K
 }

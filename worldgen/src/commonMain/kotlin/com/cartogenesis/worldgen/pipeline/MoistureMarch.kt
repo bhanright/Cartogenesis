@@ -203,6 +203,22 @@ object MoistureMarch {
         kotlin.math.ln(EARTH_MEAN_RAIN_MM_PER_DAY) / COLUMN_RAIN_PER_HUMIDITY) / MARINE_RELATIVE_HUMIDITY
 
     /**
+     * The humidity, the column's water over what it holds when its surface air saturates
+     * ([HOLDABLE_SHARE]), over which air lifted up the ground condenses: Zhao and Carr's (1997)
+     * critical relative humidity over land, "empirically set to 0.75 over land and 0.90 over
+     * ocean" in their prognostic cloud scheme for the National Centers for Environmental
+     * Prediction's models (as Brenowitz and others 2022, appendix A, quote it). Lifted air
+     * condenses only in the share of the column that is saturated, which the weather inside a
+     * column the march holds as one humidity leaves part of it before its mean is: Sundqvist, Berge
+     * and Kristjansson's (1989) share ([ColumnCrossing.saturatedShare]).
+     *
+     * Read on the same humidity as the cap, so the gate opens below where the cap binds: the
+     * humidity is the surface air's, which the lifted boundary-layer air carries up. Only the land
+     * lifts air up the ground, so the ocean's 0.90 has nothing to gate.
+     */
+    const val CRITICAL_HUMIDITY_OVER_LAND = 0.75
+
+    /**
      * Smith and Barstad's (2004) two delays in the orographic rain, seconds: cloud water turning
      * into hydrometeors, and hydrometeors falling out. A thousand each in their worked example;
      * Smith and others (2005) read 500 to 5,000 from the Oregon Cascades' rain and isotopes.
@@ -763,12 +779,19 @@ object MoistureMarch {
         val stretch = FloatArray(cellCount)
 
         /**
-         * Smith and Barstad's (2004) uplift source at each cell, kilograms per square meter per
-         * second: `C_w w`, the condensation of saturated air rising at `w`, the atmosphere's
-         * ascent plus the wind's climb over the ground, `u dh/dx + v dh/dy`; negative where it
-         * descends.
+         * Smith and Barstad's (2004) source for the ground's lifting at each cell, kilograms per
+         * square meter per second: `C_w w`, the condensation of saturated air rising at `w`, the
+         * wind's climb over the ground, `u dh/dx + v dh/dy`, less what a large-scale descent takes
+         * off it; zero where nothing climbs. The large-scale ascent's own rain is the column's
+         * rain law's ([columnRainMmPerDay]), so it adds nothing here.
          */
-        val upliftCondensationRate = FloatArray(cellCount)
+        val liftingRate = FloatArray(cellCount)
+
+        /**
+         * What the descending air can take up at each cell, `C_w |w|`, kilograms per square meter
+         * per second, the large-scale descent and the ground's together; zero where the air rises.
+         */
+        val descentRate = FloatArray(cellCount)
 
         /** The marine inversion's lid, 0..1: what slows every sink on the land under it. */
         val suppression = FloatArray(cellCount)
@@ -968,9 +991,10 @@ object MoistureMarch {
                     }
                 }
             }
-            // The rise: the atmosphere's ascent at the layer's top, plus on land the ground's slope
-            // along the wind (centered differences on the ground's own lengths), summed before it
-            // is turned into condensation by the saturated air's yield per meter of rise.
+            // The rise: the atmosphere's ascent at the layer's top, and on land the climb up the
+            // ground's slope along the wind (centered differences on the ground's own lengths). The
+            // climb condenses where the two together still rise, so a climb inside a large descent
+            // is first spent against it; the two together descending take water back.
             val cellHeightM = config.cellHeightKm * METERS_PER_KM
             val lapseRate = climate.lapseRateCPerKm.toDouble()
             val ascent = season.largeScaleAscentMps
@@ -981,18 +1005,24 @@ object MoistureMarch {
                     val south = if (row < cellsDown - 1) row + 1 else row
                     for (column in 0 until cellsAcross) {
                         val cell = row * cellsAcross + column
-                        var upward = ascent?.get(cell)?.toDouble() ?: 0.0
+                        val largeScale = ascent?.get(cell)?.toDouble() ?: 0.0
+                        var climb = 0.0
                         if (inputs.isLand[cell]) {
                             val east = row * cellsAcross + (column + 1) % cellsAcross
                             val west = row * cellsAcross + (column + cellsAcross - 1) % cellsAcross
                             val slopeEast = (inputs.elevationM[east] - inputs.elevationM[west]) / (2.0 * cellWidthM)
                             val slopeSouth = (inputs.elevationM[south * cellsAcross + column] -
                                 inputs.elevationM[north * cellsAcross + column]) / ((south - north) * cellHeightM)
-                            upward += season.eastwardMps[cell] * slopeEast + season.southwardMps[cell] * slopeSouth
+                            climb = season.eastwardMps[cell] * slopeEast + season.southwardMps[cell] * slopeSouth
                         }
-                        upliftCondensationRate[index(row, column)] = if (upward == 0.0) 0f else (ColumnWater.upliftCondensationKgPerM3(
-                            season.airTemperatureC[cell].toDouble(), lapseRate
-                        ) * upward).toFloat()
+                        val upward = largeScale + climb
+                        val lifted = minOf(climb, upward).coerceAtLeast(0.0)
+                        val descending = (-upward).coerceAtLeast(0.0)
+                        val yieldPerMeter = if (lifted > 0.0 || descending > 0.0) {
+                            ColumnWater.upliftCondensationKgPerM3(season.airTemperatureC[cell].toDouble(), lapseRate)
+                        } else 0.0
+                        liftingRate[index(row, column)] = (yieldPerMeter * lifted).toFloat()
+                        descentRate[index(row, column)] = (yieldPerMeter * descending).toFloat()
                     }
                 }
             }
@@ -1338,7 +1368,6 @@ object MoistureMarch {
                 LAND -> groundReturnRate[here].toDouble()
                 else -> 0.0
             }
-            val uplift = upliftCondensationRate[here].toDouble()
             val cloudShareLand = if (cloud > 0.0) (cloudLand / cloud).coerceIn(0.0, 1.0) else 0.0
             val budget = crossing
             budget.seconds = seconds
@@ -1346,10 +1375,9 @@ object MoistureMarch {
             budget.saturatedMm = saturated
             budget.holdableMm = HOLDABLE_SHARE * saturated
             budget.rainSuppression = slowing
-            budget.liftingKgPerM2PerSecond = uplift.coerceAtLeast(0.0)
-            budget.criticalHumidity = 0.0
-            budget.descentKgPerM2PerSecond = (-uplift).coerceAtLeast(0.0)
-            budget.descentTakesColumnRain = true
+            budget.liftingKgPerM2PerSecond = liftingRate[here].toDouble()
+            budget.criticalHumidity = CRITICAL_HUMIDITY_OVER_LAND
+            budget.descentKgPerM2PerSecond = descentRate[here].toDouble()
             budget.conversionPerSecond = slowing * config.climate.rainShadowScale / CLOUD_CONVERSION_SECONDS
             budget.falloutPerSecond = 1.0 / FALLOUT_SECONDS
             budget.vapor = vapor
@@ -1364,7 +1392,7 @@ object MoistureMarch {
                 if (kind == OPEN_SEA) entry.seaEvaporation += added / toColumnWater
                 if (kind == LAND) entry.groundReturn += added / toColumnWater
                 entry.condensed += (budget.lifted + budget.capped) / toColumnWater
-                entry.reevaporated += (budget.cloudEvaporated + budget.rainTakenBack) / toColumnWater
+                entry.reevaporated += budget.cloudEvaporated / toColumnWater
                 val imbalance = abs(budget.waterIn - budget.waterOut) / (budget.waterIn + CROSSING_WATER_FLOOR_MM)
                 if (imbalance > entry.worstCrossingImbalance) entry.worstCrossingImbalance = imbalance
             }
@@ -1428,7 +1456,7 @@ object MoistureMarch {
                 record.condensateRain.data[cell] = (rainedCondensate * rate).toFloat()
                 record.liftedCondensation.data[cell] = (budget.lifted * rate).toFloat()
                 record.capCondensation.data[cell] = (budget.capped * rate).toFloat()
-                record.reevaporation.data[cell] = ((budget.cloudEvaporated + budget.rainTakenBack) * rate).toFloat()
+                record.reevaporation.data[cell] = (budget.cloudEvaporated * rate).toFloat()
                 record.crossingSeconds.data[cell] = seconds.toFloat()
                 record.meanColumnWater.data[cell] = budget.meanVapor.toFloat()
                 record.liftingAtSaturation.data[cell] = (budget.liftingKgPerM2PerSecond * SECONDS_PER_YEAR).toFloat()

@@ -96,10 +96,10 @@ internal class ColumnCrossing {
 
     /**
      * What descending air can take up, `C_w |w|`, kilograms per square meter per second: it
-     * evaporates the carried cloud, and with [descentTakesColumnRain] the column's rain as it falls.
+     * evaporates the cloud carried into it. Not the column's own rain, which the rain law already
+     * gives as what reaches the ground.
      */
     var descentKgPerM2PerSecond = 0.0
-    var descentTakesColumnRain = false
 
     /** The cloud's conversion to falling hydrometeors and their fallout, per second. */
     var conversionPerSecond = 0.0
@@ -116,7 +116,7 @@ internal class ColumnCrossing {
     /** What the sources put in. */
     var sourced = 0.0
 
-    /** The column's own rain, net of what the descent took back as it fell. */
+    /** The column's own rain, by its rain law. */
     var columnRain = 0.0
 
     /** The cloud and falling water's rain. */
@@ -126,9 +126,8 @@ internal class ColumnCrossing {
     var lifted = 0.0
     var capped = 0.0
 
-    /** Cloud the descent evaporated, and column rain it took back as it fell. */
+    /** Cloud the descent evaporated, net of what the cap condensed beside it. */
     var cloudEvaporated = 0.0
-    var rainTakenBack = 0.0
 
     /** The crossing's mean column, millimeters, for what reads the column over the whole crossing. */
     var meanVapor = 0.0
@@ -145,15 +144,12 @@ internal class ColumnCrossing {
     private var cappedWhileHeld = 0.0
     private var waterTime = 0.0
 
-    /** The descent's capacity left for the column's rain once it has spent what the cloud took. */
-    private var descentLeftKgPerM2PerSecond = 0.0
-
     fun solve() {
         val crossing = seconds
         sourced = sourceKgPerM2PerSecond * crossing
         waterIn = vapor + cloud + falling + sourced
         columnRain = 0.0; condensateRain = 0.0; lifted = 0.0; capped = 0.0
-        cloudEvaporated = 0.0; rainTakenBack = 0.0
+        cloudEvaporated = 0.0
         if (crossing <= 0.0) {
             meanVapor = vapor
             waterOut = waterIn
@@ -169,7 +165,6 @@ internal class ColumnCrossing {
             } else cloud / descent
             cloudEvaporated = minOf(cloud, descent * minOf(dryAfter, crossing))
         }
-        descentLeftKgPerM2PerSecond = (descent - cloudEvaporated / crossing).coerceAtLeast(0.0)
         val supply = sourceKgPerM2PerSecond + cloudEvaporated / crossing
 
         // A column arriving over the cap condenses the difference as it arrives.
@@ -194,14 +189,10 @@ internal class ColumnCrossing {
         cloudEvaporated -= cancelled
         capped -= cancelled
 
-        // What the sinks took: the column's rain, net of what the descent took back as it fell,
-        // and the lifting into cloud.
+        // What the sinks took: the column's rain and the lifting into cloud.
         columnRain = sunk * rainShare
         lifted = sunk - columnRain
-        if (descentTakesColumnRain) rainTakenBack = takenBackOver(meanVapor) * crossing
         vapor = start + supply * crossing - cappedWhileHeld - sunk
-        if (descentTakesColumnRain) rainTakenBack = takenBackOver(meanVapor) * crossing
-        vapor = end
 
         // The cloud's growth enters the delays at a steady rate over the crossing.
         val carriedCloud = cloud - cloudEvaporated
@@ -224,7 +215,7 @@ internal class ColumnCrossing {
      */
     private fun advanceShort(start: Double, supply: Double): Boolean {
         val startSinks = sinkRate(start)
-        val startRain = netColumnRainRate(start)
+        val startRain = columnRainRate(start)
         val startSlope = sinkSlope(start)
         if (!(startSlope * seconds <= MAX_RELAXATION_PER_STEP)) return false
         val end = start + seconds * relaxedShare(startSlope * seconds) * (supply - startSinks)
@@ -232,7 +223,7 @@ internal class ColumnCrossing {
         if (!(sinkSlope(end) * seconds <= MAX_RELAXATION_PER_STEP)) return false
         val endSinks = sinkRate(end)
         val sunk = start + supply * seconds - end
-        val rainShare = if (startSinks + endSinks > 0.0) (startRain + netColumnRainRate(end)) / (startSinks + endSinks) else 1.0
+        val rainShare = if (startSinks + endSinks > 0.0) (startRain + columnRainRate(end)) / (startSinks + endSinks) else 1.0
         water = end
         rainSunk = sunk * rainShare
         liftSunk = sunk - rainSunk
@@ -322,7 +313,7 @@ internal class ColumnCrossing {
     }
 
     /** Every sink of the vapor at a column of [waterMm], kilograms per square meter per second. */
-    fun sinkRate(waterMm: Double): Double = netColumnRainRate(waterMm) + liftingRate(waterMm)
+    fun sinkRate(waterMm: Double): Double = columnRainRate(waterMm) + liftingRate(waterMm)
 
     /** The sinks' secant between [waterMm] and the [balance] under the cap, per second. */
     private fun secantRate(waterMm: Double, balance: Double): Double =
@@ -336,16 +327,8 @@ internal class ColumnCrossing {
         return if (gap > 0.0) (atCap - sinkRate(waterMm)) / gap else 0.0
     }
 
-    /** The column's rain at [waterMm], net of what the descent takes back as it falls, kg m⁻² s⁻¹. */
-    private fun netColumnRainRate(waterMm: Double): Double {
-        val gross = grossColumnRainRate(waterMm)
-        return if (descentTakesColumnRain) (gross - descentLeftKgPerM2PerSecond).coerceAtLeast(0.0) else gross
-    }
-
-    private fun takenBackOver(waterMm: Double): Double =
-        minOf(grossColumnRainRate(waterMm), descentLeftKgPerM2PerSecond)
-
-    private fun grossColumnRainRate(waterMm: Double): Double {
+    /** The column's rain at [waterMm] under the lid, kilograms per square meter per second. */
+    private fun columnRainRate(waterMm: Double): Double {
         if (saturatedMm <= 0.0 || rainSuppression <= 0.0 || waterMm <= 0.0) return 0.0
         return rainSuppression * MoistureMarch.columnRainMmPerDay(waterMm / saturatedMm) / SECONDS_PER_DAY
     }
@@ -359,9 +342,8 @@ internal class ColumnCrossing {
     private fun sinkSlope(waterMm: Double): Double {
         var slope = 0.0
         if (saturatedMm > 0.0 && rainSuppression > 0.0) {
-            val gross = rainSuppression * exp(MoistureMarch.COLUMN_RAIN_PER_HUMIDITY * (waterMm / saturatedMm - MoistureMarch.COLUMN_RAIN_HUMIDITY_OFFSET)) *
+            slope += rainSuppression * exp(MoistureMarch.COLUMN_RAIN_PER_HUMIDITY * (waterMm / saturatedMm - MoistureMarch.COLUMN_RAIN_HUMIDITY_OFFSET)) *
                 MoistureMarch.COLUMN_RAIN_PER_HUMIDITY / saturatedMm / SECONDS_PER_DAY
-            if (!descentTakesColumnRain || grossColumnRainRate(waterMm) > descentLeftKgPerM2PerSecond) slope += gross
         }
         if (liftingKgPerM2PerSecond > 0.0 && holdableMm > 0.0) {
             slope += liftingKgPerM2PerSecond * saturatedShareSlope(waterMm / holdableMm, criticalHumidity) / holdableMm
@@ -372,14 +354,15 @@ internal class ColumnCrossing {
     /** The column's rain's share of the sinks at [waterMm]; all of it where nothing sinks. */
     private fun rainShareAt(waterMm: Double): Double {
         val total = sinkRate(waterMm)
-        return if (total > 0.0) netColumnRainRate(waterMm) / total else 1.0
+        return if (total > 0.0) columnRainRate(waterMm) / total else 1.0
     }
 
     /**
      * The balance under the cap a column starting at [startMm] relaxes to with [supply] coming in
-     * (kg m⁻² s⁻¹). Where the sinks are flat, as the column's rain is where the descent takes all of
-     * it back, `S(W) = E` holds over a range and the column stops at the near end of it: the highest
-     * such column when it starts above them, the lowest when below, and where it is when inside.
+     * (kg m⁻² s⁻¹). Where the sinks are flat, `S(W) = E` holds over a range and the column stops at
+     * the near end of it: the highest such column when it starts above them, the lowest when below,
+     * and where it is when inside. The column's rain rises everywhere, so the range is one column
+     * but for the doubles' rounding.
      */
     private fun balanceMm(supply: Double, startMm: Double): Double {
         val highest = boundaryMm(supply, highest = true)

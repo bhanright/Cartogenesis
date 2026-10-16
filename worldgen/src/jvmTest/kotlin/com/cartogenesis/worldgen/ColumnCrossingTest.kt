@@ -138,7 +138,6 @@ class ColumnCrossingTest {
                 liftingKgPerM2PerSecond = if (random.nextBoolean()) random.nextDouble(0.0, 50.0) / DAY_SECONDS else 0.0
                 criticalHumidity = if (random.nextBoolean()) 0.75 else 0.0
                 descentKgPerM2PerSecond = if (liftingKgPerM2PerSecond == 0.0 && random.nextBoolean()) random.nextDouble(0.0, 20.0) / DAY_SECONDS else 0.0
-                descentTakesColumnRain = random.nextBoolean()
                 conversionPerSecond = random.nextDouble(0.0, 2.0e-3)
                 falloutPerSecond = 1.0e-3
                 vapor = random.nextDouble(0.0, 1.3) * holdableMm

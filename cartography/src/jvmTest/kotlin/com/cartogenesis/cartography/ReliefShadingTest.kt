@@ -698,7 +698,7 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
             if (LandSlopes.hundredths(EngravingPlan.SLOPE_FLOOR) != LandSlopes.hundredths(tenth)) {
                 throw RecordedViolation(
                     "the tenth percentile of seed 234475's land slope at 512 rows is $tenth; the floor is ${EngravingPlan.SLOPE_FLOOR}",
-                    "%.2f".format(java.util.Locale.ROOT, LandSlopes.hundredths(tenth) / 100.0)
+                    LandSlopes.hundredths(tenth)
                 )
             }
         }

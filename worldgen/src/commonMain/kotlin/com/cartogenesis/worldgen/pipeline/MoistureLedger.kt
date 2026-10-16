@@ -28,7 +28,7 @@ internal class MoistureLedger {
     enum class Sink {
         /**
          * The column's own rain at its relative humidity, Bretherton, Peters and Back's relation,
-         * under the belts' descent and the inversion's lid ([MoistureMarch.columnRainMmPerDay]).
+         * under the inversion's lid ([MoistureMarch.columnRainMmPerDay]): the large-scale rain.
          */
         COLUMN,
 
@@ -36,8 +36,8 @@ internal class MoistureLedger {
         CONVERGENCE,
 
         /**
-         * Cloud the column could not hold at its temperature, from the climb or the cold, fallen
-         * out over Smith and Barstad's two delays, or where the wind turns and does not carry it on.
+         * Cloud from the ground's lifting and from the column over its cap, fallen out over Smith
+         * and Barstad's two delays.
          */
         CONDENSATE
     }

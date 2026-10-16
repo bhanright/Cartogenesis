@@ -77,28 +77,36 @@ import kotlin.time.TimeSource
  *
  * # The sinks
  *
- * One family, each a rate the column's own state sets, charged in turn on what the one before
- * left:
+ * Two laws, which never count the same water, solved together with the sources over each crossing
+ * ([ColumnCrossing]):
  * - **The column's rain** at its relative humidity `r = W / W_s`, Bretherton, Peters and Back's
  *   (2004) relation over the tropical oceans, `P = exp(11.4 (r - 0.522))` mm a day for monthly
- *   means ([columnRainMmPerDay]). It is the rate that sets the atmosphere's turnover: nothing
- *   here states a lifetime, and the one the world ends with is diagnosed (`RainAgainstEarthTest`).
- * - **Condensate.** Rising air condenses at Smith and Barstad's (2004) source, `C_w w`, on the
- *   saturated share of the column (its water over what it holds when its surface air saturates,
- *   [HOLDABLE_SHARE]); what the column cannot hold at all condenses too. The rise `w` is the
- *   atmosphere's own vertical motion at the boundary layer's top ([Season.largeScaleAscentMps]) and
- *   the wind's climb over the ground, summed before anything condenses, so a climb inside a large
- *   descent is first spent against it. The cloud turns to falling hydrometeors and falls out over
- *   their two delays. `C_w` is thermodynamics ([ColumnWater.upliftCondensationKgPerM3]), so neither
- *   the climb's rain nor the ascent's has a strength of its own to set.
+ *   means ([columnRainMmPerDay]), `W_s` the saturated column of the boundary layer's rising parcel
+ *   ([ColumnWater.saturatedColumnMm]). It is the whole of the large-scale rain: their relation is
+ *   the tropical ocean's surface rain at its monthly humidity, the rain the atmosphere's own ascent
+ *   wrings out included and what falling rain loses to the air below it already taken off, so the
+ *   ascent ([Season.largeScaleAscentMps]) condenses nothing beside it and the descent takes none of
+ *   it back; the ascent's water is the column's convergence, which the march carries in. Over land
+ *   and outside the tropics it is assumed, not measured: their microwave retrieval holds only over
+ *   the sea, and no relation of the kind was read for the extratropics' fronts. It is the rate that
+ *   sets the atmosphere's turnover: nothing here states a lifetime, and the one the world ends with
+ *   is diagnosed (`RainAgainstEarthTest`).
+ * - **The ground's lifting.** Air carried up the ground condenses at Smith and Barstad's (2004)
+ *   source, `C_w w`, in the column's saturated share alone, which it has only over its critical
+ *   humidity ([CRITICAL_HUMIDITY_OVER_LAND]), the humidity being its water over what it holds when
+ *   its surface air saturates ([HOLDABLE_SHARE]). The rise is the wind's climb up the ground, less
+ *   a large-scale descent around it, which spends a climb first. The cloud turns to falling
+ *   hydrometeors and falls out over their two delays. `C_w` is thermodynamics
+ *   ([ColumnWater.upliftCondensationKgPerM3]), so the climb's rain has no strength of its own to set.
+ * - **The cap.** What the column cannot hold at all, over [HOLDABLE_SHARE] of its saturated
+ *   water, condenses to cloud and falls out over the same delays.
  * - **Convergence**, a closure switched off by default (`ClimateConfig.convergenceRain`).
  *
- * **Descent** warms the air at the same `C_w |w|` and takes back water at that rate: first the
- * cloud it carries, then the column's rain as it falls, never past what the column holds before
- * its surface air saturates. That is the subtropics' dryness where the atmosphere sinks, from the
- * solved subsidence and from nothing else. The marine inversion's lid slows the column's rain, the
- * cloud's conversion to rain and the convergence closure on the land under it. None of them
- * deletes water: what they hold back is carried on.
+ * **Descent**, large-scale and down the ground together, warms the air at the same `C_w |w|` and
+ * evaporates the cloud carried into it at that rate, never past what the column holds before its
+ * surface air saturates. The marine inversion's lid slows the column's rain, the cloud's conversion
+ * to rain and the convergence closure on the land under it. None of them deletes water: what they
+ * hold back is carried on.
  *
  * **What condenses** is counted apart from what falls ([Result.julyHalfCondensationMm]): the
  * column's rain and the convergence closure's, which leave the vapor where they fall, and the

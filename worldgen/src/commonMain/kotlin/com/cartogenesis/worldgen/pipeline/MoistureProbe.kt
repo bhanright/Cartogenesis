@@ -44,6 +44,9 @@ internal object MoistureProbe {
     var criticalHumidity: Double? = null
     var criticalHumiditySea: Double? = null
 
+    /** Warms the open sea's surface and its air, in the march alone, degrees. */
+    var seaWarmingC = 0.0
+
     fun reset() {
         ascentScale = 1.0
         climbScale = 1.0
@@ -57,5 +60,6 @@ internal object MoistureProbe {
         subcloudColumn = false
         criticalHumidity = null
         criticalHumiditySea = null
+        seaWarmingC = 0.0
     }
 }

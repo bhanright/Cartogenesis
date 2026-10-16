@@ -961,10 +961,11 @@ object MoistureMarch {
                             season.seaIce[cell] -> SEA_ICE
                             else -> OPEN_SEA
                         }
-                        val airC = season.airTemperatureC[cell].toDouble()
+                        val seaWarming = if (surface[here] == OPEN_SEA) MoistureProbe.seaWarmingC else 0.0
+                        val airC = season.airTemperatureC[cell].toDouble() + seaWarming
                         saturatedMm[here] = (if (MoistureProbe.subcloudColumn) ColumnWater.subcloudSaturatedColumnMm(airC) else ColumnWater.saturatedColumnMm(airC)).toFloat()
                         if (surface[here] == OPEN_SEA) {
-                            val surfaceHumidity = SurfaceEvaporation.seaSurfaceHumidity(season.seaSurfaceC[cell].toDouble())
+                            val surfaceHumidity = SurfaceEvaporation.seaSurfaceHumidity(season.seaSurfaceC[cell].toDouble() + seaWarming)
                             val airHumidity = (MoistureProbe.marineRelativeHumidity ?: MARINE_RELATIVE_HUMIDITY) * ColumnWater.specificHumidity(
                                 ColumnWater.saturationVaporPressureKpa(airC - (MoistureProbe.seaOverMarineAirC ?: SEA_OVER_MARINE_AIR_C)), ColumnWater.SEA_LEVEL_PRESSURE_KPA
                             )

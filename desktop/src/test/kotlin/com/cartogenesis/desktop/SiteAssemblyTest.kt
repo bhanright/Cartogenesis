@@ -1174,11 +1174,9 @@ class SiteAssemblyTest {
         // spelling out the name that must not appear — which would be naming it — every absolute
         // URL on the page is checked against the short list of hosts that belong here. Anything
         // else fails, a font host and an analytics script included.
-        // www.w3.org is the SVG namespace in the inline data-URI favicon. It is an identifier
-        // rather than an address: no browser ever fetches it, and an SVG without it does not
-        // render at all. schema.org is the same kind of name: the vocabulary the structured data
-        // for search is written in, which no browser or search engine fetches from the page.
-        val allowed = setOf("cartogenesis.com", "github.com", "api.github.com", "www.w3.org", "schema.org")
+        // schema.org is a name rather than an address: the vocabulary the structured data for
+        // search is written in, which no browser or search engine fetches from the page.
+        val allowed = setOf("cartogenesis.com", "github.com", "api.github.com", "schema.org")
         val strangers = Regex("""https?://([A-Za-z0-9.-]+)""")
             .findAll(file("index.html").readText())
             .map { it.groupValues[1] }
@@ -1576,8 +1574,8 @@ const held = (fingerX, fingerY) => {
      * The JSON-LD block the page gives a search engine, parsed.
      *
      * That it states only what the page states: every address in it is one the page itself links
-     * or names (the `@context`, schema.org's vocabulary, is an identifier and not an address, like
-     * the SVG namespace in the favicon); its licence is the one the repository's LICENSE file
+     * or names (the `@context`, schema.org's vocabulary, is an identifier and not an address); its
+     * license is the one the repository's LICENSE file
      * declares, by the name on the file's first line; its description is a sentence the page says;
      * and nothing in it is a rating, a review, a count of downloads, an author or a publisher,
      * none of which the page states.

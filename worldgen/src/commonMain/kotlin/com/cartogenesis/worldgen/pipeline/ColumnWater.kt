@@ -66,34 +66,69 @@ internal object ColumnWater {
     private const val MOLAR_MASS_RATIO = 0.622
 
     /**
-     * The water a saturated column of air holds over ground at [surfaceTemperatureC], in
-     * kilograms per square meter, which is millimeters of water.
+     * The water a column of air would hold if it were saturated, over ground at
+     * [surfaceTemperatureC] and [surfacePressureKpa], in kilograms per square meter, which is
+     * millimeters of water: the denominator of the column's relative humidity, as Bretherton,
+     * Peters and Back (2004, section 2) sum it, the saturation humidity integrated up the column's
+     * temperature profile.
      *
-     * Clausius-Clapeyron up the saturated adiabat: the column's temperature falls with height at
-     * the moist adiabat's own lapse rate ([moistAdiabaticLapseKPerM]) from the surface's, its
-     * pressure hydrostatically from the standard sea level's, and the saturated vapor density
-     * `e_s / (R_v T)` is summed up it, in [COLUMN_STEP_M] steps to [COLUMN_TOP_M]. It is 82 mm at
-     * 25 C, 33 mm at 15 C, 8.5 mm at 0 C and 0.8 at -25 C, and 106 to 115 mm at 28 to 29 C.
+     * The profile is the one the boundary layer's own air makes rising: surface air at
+     * [PARCEL_RELATIVE_HUMIDITY] lifted dry to the height where it saturates, then up the moist
+     * adiabat ([moistAdiabaticLapseKPerM]), its pressure hydrostatic from the ground's. The
+     * saturation vapor density `e_s / (R_v T)` is summed up all of it, below the condensation level
+     * too, where the parcel itself is not saturated: the column's saturated water is a property of
+     * its temperatures, not of the parcel's own water. Over the tropical sea the profile stands
+     * near the temperatures Bretherton and others integrated (theirs from analyzed soundings,
+     * whose temperature above the boundary layer varies by one or two kelvin over the tropical
+     * oceans): 63 mm at 25 C and 81 at 28 C against their 72 in the regions of active convection,
+     * where the moist adiabat climbed from saturated air at the surface's own temperature stands
+     * warmer aloft and holds 82 and 106 (docs/DESIGN_LEDGER.md, W2).
      *
-     * The adiabat starts from air saturated at the surface's own temperature, which stands warmer
-     * aloft than the column Bretherton, Peters and Back's (2004) humidity divides by: theirs is
-     * summed from analyzed temperatures, 72 mm in the regions of active convection. So the march's
-     * column humidity reads lower than theirs for the same water, and its rain, their relation,
-     * falls only at more water than theirs would (docs/TODO.md, "Land too wet and deserts too few").
+     * Over high ground the column starts at the ground's lower pressure, where a saturated parcel's
+     * lapse rate is smaller for the same temperature, and the condensation level's height is the
+     * parcel's own.
      *
      * Earth's atmosphere holds 12.6e3 km³ over its 510 million km² (Trenberth and others 2011, as
      * van der Ent and Tuinenburg 2017 use it), a mean of 24.7 mm: the check, read off the world in
      * `RainAgainstEarthTest`, and not an input.
      *
-     * Tabulated once by the surface's temperature at [COLUMN_TABLE_STEP_C] and read by linear
-     * interpolation, since every cell of every lap asks it.
+     * Tabulated once by the surface's temperature at [COLUMN_TABLE_STEP_C] and its pressure at
+     * [COLUMN_TABLE_PRESSURE_STEP_KPA] and read by bilinear interpolation, since every cell of every
+     * lap asks it.
      */
-    fun saturatedColumnMm(surfaceTemperatureC: Double): Double {
-        val position = ((surfaceTemperatureC - COLUMN_TABLE_COLDEST_C) / COLUMN_TABLE_STEP_C)
-            .coerceIn(0.0, (saturatedColumnTable.size - 1).toDouble())
-        val below = position.toInt().coerceAtMost(saturatedColumnTable.size - 2)
-        val share = position - below
-        return saturatedColumnTable[below] * (1.0 - share) + saturatedColumnTable[below + 1] * share
+    fun saturatedColumnMm(surfaceTemperatureC: Double, surfacePressureKpa: Double = SEA_LEVEL_PRESSURE_KPA): Double {
+        val temperatures = COLUMN_TABLE_TEMPERATURES
+        val pressures = COLUMN_TABLE_PRESSURES
+        val across = ((surfaceTemperatureC - COLUMN_TABLE_COLDEST_C) / COLUMN_TABLE_STEP_C).coerceIn(0.0, (temperatures - 1).toDouble())
+        val down = ((COLUMN_TABLE_HIGHEST_PRESSURE_KPA - surfacePressureKpa) / COLUMN_TABLE_PRESSURE_STEP_KPA).coerceIn(0.0, (pressures - 1).toDouble())
+        val left = across.toInt().coerceAtMost(temperatures - 2)
+        val top = down.toInt().coerceAtMost(pressures - 2)
+        val acrossShare = across - left
+        val downShare = down - top
+        val table = saturatedColumnTable
+        val upper = table[top * temperatures + left] * (1.0 - acrossShare) + table[top * temperatures + left + 1] * acrossShare
+        val lower = table[(top + 1) * temperatures + left] * (1.0 - acrossShare) + table[(top + 1) * temperatures + left + 1] * acrossShare
+        return upper * (1.0 - downShare) + lower * downShare
+    }
+
+    /**
+     * The relative humidity of the surface parcel whose rise sets the column's temperature profile:
+     * Dai's (2006) marine surface air, [MoistureMarch.MARINE_RELATIVE_HUMIDITY], the boundary-layer
+     * air that feeds the convection whose profile the tropical troposphere keeps. Read the same
+     * everywhere: the column's own humidity would make its denominator move with its water.
+     */
+    const val PARCEL_RELATIVE_HUMIDITY = MoistureMarch.MARINE_RELATIVE_HUMIDITY
+
+    /**
+     * The pressure at ground [elevationM] above the sea under air whose surface stands at
+     * [surfaceTemperatureC], kilopascals: the hypsometric equation from the standard sea level,
+     * through a layer whose mean temperature is the surface's plus half the environment's
+     * [lapseRateCPerKm] over the height.
+     */
+    fun surfacePressureKpa(elevationM: Double, surfaceTemperatureC: Double, lapseRateCPerKm: Double): Double {
+        if (elevationM <= 0.0) return SEA_LEVEL_PRESSURE_KPA
+        val meanKelvin = surfaceTemperatureC + KELVIN_AT_ZERO_C + 0.5 * lapseRateCPerKm * elevationM / METERS_PER_KM
+        return SEA_LEVEL_PRESSURE_KPA * exp(-STANDARD_GRAVITY_MPS2 * elevationM / (DRY_AIR_GAS_CONSTANT_J_PER_KG_K * meanKelvin))
     }
 
     /**
@@ -154,40 +189,66 @@ internal object ColumnWater {
         return Adiabat(result, top)
     }
 
-    /** The saturated column summed up the moist adiabat from one surface temperature, mm. */
-    internal fun integratedSaturatedColumnMm(surfaceTemperatureC: Double): Double {
+    /**
+     * The saturated column of the profile [saturatedColumnMm] reads, summed from a surface at
+     * [surfaceTemperatureC] and [surfacePressureKpa], mm: the parcel's temperature, its surface air
+     * at [parcelRelativeHumidity], carried up dry until its own water saturates it and moist after,
+     * by the midpoint rule over each step, and the saturation vapor density summed at every step's
+     * middle. At a humidity of one it is the moist adiabat from saturated surface air.
+     */
+    internal fun integratedSaturatedColumnMm(
+        surfaceTemperatureC: Double,
+        surfacePressureKpa: Double,
+        parcelRelativeHumidity: Double = PARCEL_RELATIVE_HUMIDITY
+    ): Double {
         var kelvin = surfaceTemperatureC + KELVIN_AT_ZERO_C
-        var pressureKpa = SEA_LEVEL_PRESSURE_KPA
+        var pressureKpa = surfacePressureKpa
+        val parcelHumidity = specificHumidity(parcelRelativeHumidity * saturationVaporPressureKpa(surfaceTemperatureC), pressureKpa)
+        var saturated = false
         var column = 0.0
         var height = 0.0
         while (height < COLUMN_TOP_M) {
             val celsius = kelvin - KELVIN_AT_ZERO_C
-            val density = saturationVaporPressureKpa(celsius) * PASCALS_PER_KPA / (WATER_VAPOR_GAS_CONSTANT_J_PER_KG_K * kelvin)
-            // The midpoint rule over the step: the density there, from the lapse and the
-            // hydrostatic fall half a step up.
-            val lapse = moistAdiabaticLapseKPerM(celsius, pressureKpa)
+            if (!saturated) saturated = parcelHumidity >= specificHumidity(saturationVaporPressureKpa(celsius), pressureKpa)
+            val lapse = if (saturated) moistAdiabaticLapseKPerM(celsius, pressureKpa) else DRY_LAPSE_K_PER_M
             val midKelvin = kelvin - lapse * COLUMN_STEP_M * 0.5
-            val midPressure = pressureKpa * kotlin.math.exp(-STANDARD_GRAVITY_MPS2 * COLUMN_STEP_M * 0.5 / (DRY_AIR_GAS_CONSTANT_J_PER_KG_K * kelvin))
+            val midPressure = pressureKpa * exp(-STANDARD_GRAVITY_MPS2 * COLUMN_STEP_M * 0.5 / (DRY_AIR_GAS_CONSTANT_J_PER_KG_K * kelvin))
             val midCelsius = midKelvin - KELVIN_AT_ZERO_C
             val midDensity = saturationVaporPressureKpa(midCelsius) * PASCALS_PER_KPA / (WATER_VAPOR_GAS_CONSTANT_J_PER_KG_K * midKelvin)
             column += midDensity * COLUMN_STEP_M
-            val midLapse = moistAdiabaticLapseKPerM(midCelsius, midPressure)
+            val midLapse = if (saturated) moistAdiabaticLapseKPerM(midCelsius, midPressure) else DRY_LAPSE_K_PER_M
             kelvin -= midLapse * COLUMN_STEP_M
-            pressureKpa *= kotlin.math.exp(-STANDARD_GRAVITY_MPS2 * COLUMN_STEP_M / (DRY_AIR_GAS_CONSTANT_J_PER_KG_K * midKelvin))
+            pressureKpa *= exp(-STANDARD_GRAVITY_MPS2 * COLUMN_STEP_M / (DRY_AIR_GAS_CONSTANT_J_PER_KG_K * midKelvin))
             height += COLUMN_STEP_M
-            if (density < NEGLIGIBLE_VAPOR_KG_PER_M3) break
+            if (midDensity < NEGLIGIBLE_VAPOR_KG_PER_M3) break
         }
         return column
     }
 
+    /** The dry adiabat's lapse rate, `g / c_p`, kelvin per meter. */
+    private const val DRY_LAPSE_K_PER_M = STANDARD_GRAVITY_MPS2 / DRY_AIR_HEAT_CAPACITY_J_PER_KG_K
+
     /**
-     * The table's span and step, degrees Celsius: from colder than any air the energy balance
-     * makes to warmer than any it makes, at a twentieth of a degree, where the interpolation is
-     * a part in a hundred thousand off the integral.
+     * The table's span and step in the surface's temperature, degrees Celsius: from colder than any
+     * air the energy balance makes to warmer than any it makes, at a quarter of a degree, where the
+     * interpolation is under a part in ten thousand off the integral (the column grows about 7% a
+     * degree and bends little over a quarter of one).
      */
     private const val COLUMN_TABLE_COLDEST_C = -80.0
     private const val COLUMN_TABLE_WARMEST_C = 50.0
-    private const val COLUMN_TABLE_STEP_C = 0.05
+    private const val COLUMN_TABLE_STEP_C = 0.25
+    private val COLUMN_TABLE_TEMPERATURES = ((COLUMN_TABLE_WARMEST_C - COLUMN_TABLE_COLDEST_C) / COLUMN_TABLE_STEP_C).toInt() + 1
+
+    /**
+     * Its span and step in the surface's pressure, kilopascals: from over the standard sea level's
+     * to the pressure on ground higher than any the plates raise, nine kilometers, at two and a half,
+     * over which the column changes by a few percent at most.
+     */
+    private const val COLUMN_TABLE_HIGHEST_PRESSURE_KPA = 105.0
+    private const val COLUMN_TABLE_LOWEST_PRESSURE_KPA = 27.5
+    private const val COLUMN_TABLE_PRESSURE_STEP_KPA = 2.5
+    private val COLUMN_TABLE_PRESSURES =
+        ((COLUMN_TABLE_HIGHEST_PRESSURE_KPA - COLUMN_TABLE_LOWEST_PRESSURE_KPA) / COLUMN_TABLE_PRESSURE_STEP_KPA).toInt() + 1
 
     /**
      * The column's step and top, meters: fifty meters, a hundredth of the vapor's own scale height,
@@ -200,9 +261,14 @@ internal object ColumnWater {
     /** Below this saturated vapor density the rest of the column is nothing, kg m⁻³. */
     private const val NEGLIGIBLE_VAPOR_KG_PER_M3 = 1.0e-9
 
+    /** The table, a row of temperatures for each pressure from the highest down. */
     private val saturatedColumnTable: DoubleArray by lazy {
-        val steps = ((COLUMN_TABLE_WARMEST_C - COLUMN_TABLE_COLDEST_C) / COLUMN_TABLE_STEP_C).toInt() + 1
-        DoubleArray(steps) { integratedSaturatedColumnMm(COLUMN_TABLE_COLDEST_C + it * COLUMN_TABLE_STEP_C) }
+        DoubleArray(COLUMN_TABLE_PRESSURES * COLUMN_TABLE_TEMPERATURES) { index ->
+            integratedSaturatedColumnMm(
+                COLUMN_TABLE_COLDEST_C + (index % COLUMN_TABLE_TEMPERATURES) * COLUMN_TABLE_STEP_C,
+                COLUMN_TABLE_HIGHEST_PRESSURE_KPA - (index / COLUMN_TABLE_TEMPERATURES) * COLUMN_TABLE_PRESSURE_STEP_KPA
+            )
+        }
     }
 
     /** Pascals in a kilopascal. */

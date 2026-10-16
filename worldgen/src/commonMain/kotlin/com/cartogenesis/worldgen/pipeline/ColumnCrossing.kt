@@ -137,6 +137,14 @@ internal class ColumnCrossing {
     var waterIn = 0.0
     var waterOut = 0.0
 
+    // The vapor's advance over the crossing: where it ends, what its sinks took by each path,
+    // what the cap condensed while the column was held there, and the column integrated over time.
+    private var water = 0.0
+    private var rainSunk = 0.0
+    private var liftSunk = 0.0
+    private var cappedWhileHeld = 0.0
+    private var waterTime = 0.0
+
     /** The descent's capacity left for the column's rain once it has spent what the cloud took. */
     private var descentLeftKgPerM2PerSecond = 0.0
 
@@ -172,22 +180,86 @@ internal class ColumnCrossing {
             start = holdableMm
         }
 
-        // The column advances in steps of its own relaxation, each along the secant from where it
-        // stands to its balance under the cap, or to the cap where the sources outrun the sinks
-        // there; how many is read off the faster of the first secant and the sinks' slope at the
-        // balance, where a convex sink relaxes fastest ([MAX_RELAXATION_PER_STEP]).
+        if (!advanceShort(start, supply)) advanceInSteps(start, supply)
+        meanVapor = (waterTime / crossing).coerceIn(0.0, holdableMm)
+        // What the sinks took, the column's water balance closed on its end: so the crossing
+        // conserves whatever the rounding of the steps above.
+        val end = water.coerceIn(0.0, holdableMm)
+        val sunk = (start + supply * crossing - end - cappedWhileHeld).coerceAtLeast(0.0)
+        val rainShare = if (rainSunk + liftSunk > 0.0) (rainSunk / (rainSunk + liftSunk)).coerceIn(0.0, 1.0) else 1.0
+        capped = cappedOnArrival + cappedWhileHeld
+        // The descent's evaporation of cloud and the cap's condensation into cloud are the same
+        // exchange run both ways; only their difference moves water.
+        val cancelled = minOf(cloudEvaporated, capped)
+        cloudEvaporated -= cancelled
+        capped -= cancelled
+
+        // What the sinks took: the column's rain, net of what the descent took back as it fell,
+        // and the lifting into cloud.
+        columnRain = sunk * rainShare
+        lifted = sunk - columnRain
+        if (descentTakesColumnRain) rainTakenBack = takenBackOver(meanVapor) * crossing
+        vapor = start + supply * crossing - cappedWhileHeld - sunk
+        if (descentTakesColumnRain) rainTakenBack = takenBackOver(meanVapor) * crossing
+        vapor = end
+
+        // The cloud's growth enters the delays at a steady rate over the crossing.
+        val carriedCloud = cloud - cloudEvaporated
+        val grown = lifted + capped
+        val growthPerSecond = grown / crossing
+        val cloudEnd = cloudAfter(carriedCloud, growthPerSecond, conversionPerSecond, crossing)
+        val fallingEnd = fallingAfter(falling, carriedCloud, growthPerSecond, conversionPerSecond, falloutPerSecond, crossing)
+        condensateRain = (carriedCloud + falling + grown - cloudEnd - fallingEnd).coerceAtLeast(0.0)
+        cloud = cloudEnd
+        falling = fallingEnd
+        waterOut = vapor + cloud + falling + columnRain + condensateRain
+    }
+
+    /**
+     * The crossing as one exponential Euler step, `W_1 = W_0 + t (1 - e^-kt) / (kt) (E - S(W_0))`
+     * with `k = S'(W_0)`, where the sinks' slope at both ends relaxes the column by no more than
+     * [MAX_RELAXATION_PER_STEP] over it and the column stays under its cap: most crossings of an
+     * ordinary wind, which the stepped solve would take in one secant step to the same answer at
+     * the cost of the balance's root. Returns false, having set nothing, where it does not apply.
+     */
+    private fun advanceShort(start: Double, supply: Double): Boolean {
+        val startSinks = sinkRate(start)
+        val startRain = netColumnRainRate(start)
+        val startSlope = sinkSlope(start)
+        if (!(startSlope * seconds <= MAX_RELAXATION_PER_STEP)) return false
+        val end = start + seconds * relaxedShare(startSlope * seconds) * (supply - startSinks)
+        if (end < 0.0 || end > holdableMm) return false
+        if (!(sinkSlope(end) * seconds <= MAX_RELAXATION_PER_STEP)) return false
+        val endSinks = sinkRate(end)
+        val sunk = start + supply * seconds - end
+        val rainShare = if (startSinks + endSinks > 0.0) (startRain + netColumnRainRate(end)) / (startSinks + endSinks) else 1.0
+        water = end
+        rainSunk = sunk * rainShare
+        liftSunk = sunk - rainSunk
+        cappedWhileHeld = 0.0
+        waterTime = 0.5 * (start + end) * seconds
+        return true
+    }
+
+    /**
+     * Advances the column from [start] over the crossing in steps of its own relaxation, each along
+     * the secant from where it stands to its balance under the cap, or to the cap where the sources
+     * outrun the sinks there; how many is read off the faster of the first secant and the sinks'
+     * slope at the balance, where a convex sink relaxes fastest ([MAX_RELAXATION_PER_STEP]).
+     */
+    private fun advanceInSteps(start: Double, supply: Double) {
         val atCap = sinkRate(holdableMm)
         val heldAtCap = supply >= atCap && holdableMm > 0.0
         val balance = if (heldAtCap) holdableMm else balanceMm(supply, start)
         val firstRate = if (heldAtCap) climbRate(start, atCap) else secantRate(start, balance)
         val fastestRate = maxOf(firstRate, sinkSlope(balance).takeIf { it.isFinite() } ?: firstRate)
-        val steps = kotlin.math.ceil(fastestRate * crossing / MAX_RELAXATION_PER_STEP).toInt().coerceIn(1, MAX_STEPS)
-        val step = crossing / steps
-        var water = start
-        var rainSunk = 0.0
-        var liftSunk = 0.0
-        var cappedWhileHeld = 0.0
-        var waterTime = 0.0
+        val steps = kotlin.math.ceil(fastestRate * seconds / MAX_RELAXATION_PER_STEP).toInt().coerceIn(1, MAX_STEPS)
+        val step = seconds / steps
+        water = start
+        rainSunk = 0.0
+        liftSunk = 0.0
+        cappedWhileHeld = 0.0
+        waterTime = 0.0
         for (index in 0 until steps) {
             if (heldAtCap) {
                 val fromStart = sinkRate(water)
@@ -247,38 +319,6 @@ internal class ColumnCrossing {
                 water = end
             }
         }
-        meanVapor = (waterTime / crossing).coerceIn(0.0, holdableMm)
-        // What the sinks took, the column's water balance closed on its end: so the crossing
-        // conserves whatever the rounding of the steps above.
-        val end = water.coerceIn(0.0, holdableMm)
-        val sunk = (start + supply * crossing - end - cappedWhileHeld).coerceAtLeast(0.0)
-        val rainShare = if (rainSunk + liftSunk > 0.0) (rainSunk / (rainSunk + liftSunk)).coerceIn(0.0, 1.0) else 1.0
-        capped = cappedOnArrival + cappedWhileHeld
-        // The descent's evaporation of cloud and the cap's condensation into cloud are the same
-        // exchange run both ways; only their difference moves water.
-        val cancelled = minOf(cloudEvaporated, capped)
-        cloudEvaporated -= cancelled
-        capped -= cancelled
-
-        // What the sinks took: the column's rain, net of what the descent took back as it fell,
-        // and the lifting into cloud.
-        columnRain = sunk * rainShare
-        lifted = sunk - columnRain
-        if (descentTakesColumnRain) rainTakenBack = takenBackOver(meanVapor) * crossing
-        vapor = start + supply * crossing - cappedWhileHeld - sunk
-        if (descentTakesColumnRain) rainTakenBack = takenBackOver(meanVapor) * crossing
-        vapor = end
-
-        // The cloud's growth enters the delays at a steady rate over the crossing.
-        val carriedCloud = cloud - cloudEvaporated
-        val grown = lifted + capped
-        val growthPerSecond = grown / crossing
-        val cloudEnd = cloudAfter(carriedCloud, growthPerSecond, conversionPerSecond, crossing)
-        val fallingEnd = fallingAfter(falling, carriedCloud, growthPerSecond, conversionPerSecond, falloutPerSecond, crossing)
-        condensateRain = (carriedCloud + falling + grown - cloudEnd - fallingEnd).coerceAtLeast(0.0)
-        cloud = cloudEnd
-        falling = fallingEnd
-        waterOut = vapor + cloud + falling + columnRain + condensateRain
     }
 
     /** Every sink of the vapor at a column of [waterMm], kilograms per square meter per second. */

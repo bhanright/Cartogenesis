@@ -188,10 +188,16 @@ object MoistureMarch {
      * surface air's, both of them Earth's. Bretherton, Peters and Back's relation puts the column at
      * 0.606 of its saturated water at Earth's mean rain of 2.61 mm a day, and Dai's surface air
      * stands at [MARINE_RELATIVE_HUMIDITY], so a column holds 0.78 of its saturated water at
-     * surface saturation. Water vapor thins upward faster than its saturated value does, over a
-     * scale height near 2 km (a shipboard survey of 1984 read 1.9 to 2.5 over the Mediterranean, the
-     * Indian Ocean and the Red Sea, as Otarola and others 2011 report it) against the saturated column's 2.6 at 15 C, which is the same ratio within that
-     * spread.
+     * surface saturation.
+     *
+     * It stands on the saturated column the march reads ([ColumnWater.saturatedColumnMm]) because
+     * that column is theirs: their humidity divides by the saturation humidity summed up analyzed
+     * temperatures, which the boundary layer's rising parcel follows over the tropical sea, so a
+     * humidity read off their relation is a humidity of this column. Their own figures bracket it:
+     * the days that rain over 8 mm stand at 0.75 to 0.8 of the saturated column (section 3a), so the
+     * column saturates its surface air where Earth's wettest columns stand, and the air below 900 hPa
+     * keeps nearly the same humidity whatever the rain (section 3e), so the surface air stays near
+     * Dai's while the column above it moistens.
      */
     val HOLDABLE_SHARE = (COLUMN_RAIN_HUMIDITY_OFFSET +
         kotlin.math.ln(EARTH_MEAN_RAIN_MM_PER_DAY) / COLUMN_RAIN_PER_HUMIDITY) / MARINE_RELATIVE_HUMIDITY
@@ -922,6 +928,7 @@ object MoistureMarch {
         private fun precompute(season: Season) {
             val climate = config.climate
             val referenceMassFlux = transferMassFlux(TRANSPORT_SPEED_MPS)
+            val lapseRateCPerKm = climate.lapseRateCPerKm.toDouble()
             val slowest = TRANSPORT_SPEED_MPS * SLOWEST_SPEED_SHARE
             parallelChunks(0, cellsAcross) { startColumn, endColumn ->
                 for (column in startColumn until endColumn) {
@@ -935,7 +942,8 @@ object MoistureMarch {
                             else -> OPEN_SEA
                         }
                         val airC = season.airTemperatureC[cell].toDouble()
-                        saturatedMm[here] = ColumnWater.saturatedColumnMm(airC).toFloat()
+                        val groundPressureKpa = ColumnWater.surfacePressureKpa(inputs.elevationM[cell].toDouble(), airC, lapseRateCPerKm)
+                        saturatedMm[here] = ColumnWater.saturatedColumnMm(airC, groundPressureKpa).toFloat()
                         if (surface[here] == OPEN_SEA) {
                             val surfaceHumidity = SurfaceEvaporation.seaSurfaceHumidity(season.seaSurfaceC[cell].toDouble())
                             val airHumidity = MARINE_RELATIVE_HUMIDITY * ColumnWater.specificHumidity(
@@ -1357,7 +1365,7 @@ object MoistureMarch {
                 if (kind == LAND) entry.groundReturn += added / toColumnWater
                 entry.condensed += (budget.lifted + budget.capped) / toColumnWater
                 entry.reevaporated += (budget.cloudEvaporated + budget.rainTakenBack) / toColumnWater
-                val imbalance = abs(budget.waterIn - budget.waterOut) / budget.waterIn.coerceAtLeast(Double.MIN_VALUE)
+                val imbalance = abs(budget.waterIn - budget.waterOut) / (budget.waterIn + CROSSING_WATER_FLOOR_MM)
                 if (imbalance > entry.worstCrossingImbalance) entry.worstCrossingImbalance = imbalance
             }
 
@@ -1545,6 +1553,13 @@ object MoistureMarch {
      * counts it, as a share: a millionth, for the rounding of the doubles it is carried in.
      */
     private const val TRACER_SLACK = 1.0e-6
+
+    /**
+     * The water a crossing's closure is read against beside its own, millimeters: a micrometer,
+     * so a column next to dry, whose doubles' rounding is a large share of its few molecules of
+     * water, is not read as leaking.
+     */
+    private const val CROSSING_WATER_FLOOR_MM = 1.0e-3
 
     /**
      * How far below zero a parcel may stand after transport before the ledger counts it negative,

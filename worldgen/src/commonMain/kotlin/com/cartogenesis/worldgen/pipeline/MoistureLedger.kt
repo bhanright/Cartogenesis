@@ -80,6 +80,13 @@ internal class MoistureLedger {
         /** Values that were not finite numbers anywhere in the lap. */
         var nonFinite = 0
 
+        /**
+         * The worst crossing's water out (its column, cloud, falling water and rain) against its
+         * water in (what arrived and what its sources put in), as a share of the water in: zero but
+         * for the doubles' rounding, since every crossing conserves its water ([ColumnCrossing]).
+         */
+        var worstCrossingImbalance = 0.0
+
         /** Every source the budget names. */
         val sources: Double get() = seaEvaporation + groundReturn
 
@@ -127,6 +134,26 @@ internal class MoistureLedger {
 
         /** The rain the condensate makes at each cell: the climb's and the cold's cloud, fallen. */
         val condensateRain = FloatField(cellsAcross, cellsDown)
+
+        /** Vapor lifted into cloud, and condensed at the cap, at each cell. */
+        val liftedCondensation = FloatField(cellsAcross, cellsDown)
+        val capCondensation = FloatField(cellsAcross, cellsDown)
+
+        /** Cloud, and with it falling column rain, the descending air took back at each cell. */
+        val reevaporation = FloatField(cellsAcross, cellsDown)
+
+        /** How long the column's water takes to cross each cell, seconds. */
+        val crossingSeconds = FloatField(cellsAcross, cellsDown)
+
+        /** The column's water over its crossing of each cell, its mean, millimeters. */
+        val meanColumnWater = FloatField(cellsAcross, cellsDown)
+
+        /**
+         * What the lifting condenses at each cell from a saturated column (`C_w w`), and what the
+         * descending air could take up (`C_w |w|`), millimeters a year.
+         */
+        val liftingAtSaturation = FloatField(cellsAcross, cellsDown)
+        val descentCapacity = FloatField(cellsAcross, cellsDown)
     }
 
     var julyHalf: Cells? = null

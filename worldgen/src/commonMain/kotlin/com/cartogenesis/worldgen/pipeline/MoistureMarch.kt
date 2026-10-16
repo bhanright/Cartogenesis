@@ -598,34 +598,6 @@ object MoistureMarch {
             exp(-COLUMN_RAIN_PER_HUMIDITY * COLUMN_RAIN_HUMIDITY_OFFSET)
 
     /**
-     * The column water left when a column of [startMm] against a saturated column of
-     * [saturatedMm] rains at [columnRainMmPerDay] for [seconds], slowed by [suppression]: the
-     * backward step `W + dt S P(W / W_s) = W_0`, solved by Newton's method. The left side rises
-     * and bends upward in `W`, so Newton from `W_0` falls to the root without overshooting it, and
-     * the root lies between zero and `W_0`: the column neither rains more than it holds nor goes
-     * below dry.
-     */
-    fun columnAfterRainMm(startMm: Double, saturatedMm: Double, seconds: Double, suppression: Double): Double {
-        if (startMm <= 0.0 || saturatedMm <= 0.0 || seconds <= 0.0 || suppression <= 0.0) return startMm.coerceAtLeast(0.0)
-        val a = COLUMN_RAIN_PER_HUMIDITY / saturatedMm
-        val scaleMm = seconds / SECONDS_PER_DAY * suppression * exp(-COLUMN_RAIN_PER_HUMIDITY * COLUMN_RAIN_HUMIDITY_OFFSET)
-        var water = startMm
-        for (iteration in 0 until NEWTON_ITERATIONS) {
-            val grown = exp(a * water)
-            val excess = water + scaleMm * (grown - 1.0) - startMm
-            val slope = 1.0 + scaleMm * a * grown
-            val next = (water - excess / slope).coerceAtLeast(0.0)
-            if (abs(next - water) <= NEWTON_TOLERANCE * startMm) return next
-            water = next
-        }
-        return water
-    }
-
-    /** Newton's method's ceiling and its stopping step, as a share of the column. */
-    private const val NEWTON_ITERATIONS = 60
-    private const val NEWTON_TOLERANCE = 1.0e-12
-
-    /**
      * The share of a row's water the mid-latitude eddies trade through the face between two rows
      * at [faceLatitudeDegrees] in one column of the march, at [TRANSPORT_SPEED_MPS], each way, on
      * [config]'s grid.
@@ -878,6 +850,9 @@ object MoistureMarch {
 
         val cells: MoistureLedger.Cells? =
             if (keepCells) MoistureLedger.Cells(cellsAcross, cellsDown) else null
+
+        /** The one crossing this season's march solves at a time ([ColumnCrossing]). */
+        private val crossing = ColumnCrossing()
 
         init {
             precompute(season)
@@ -1338,110 +1313,77 @@ object MoistureMarch {
             vapor = vapor.coerceAtLeast(0.0)
             vaporLand = vaporLand.coerceIn(0.0, vapor)
 
-            // The sources: the sea by the bulk formula, the ground by its share of the year's return.
-            var added = 0.0
-            if (kind == OPEN_SEA) {
-                added = seaEvaporationRate[here].toDouble() * seconds
-                if (entry != null) entry.seaEvaporation += added / toColumnWater
-            } else if (kind == LAND) {
-                added = groundReturnRate[here].toDouble() * seconds
-                vaporLand += added
-                if (entry != null) entry.groundReturn += added / toColumnWater
-            }
-            vapor += added
-
-            // What the column cannot hold condenses to cloud. A column holds [HOLDABLE_SHARE] of
-            // its saturated water before its surface air saturates.
-            val holdable = HOLDABLE_SHARE * saturated
-            val uplift = upliftCondensationRate[here].toDouble()
-            // What the descent may still take back after the cloud, column water this crossing.
-            var descentLeft = 0.0
-            // Vapor turned to condensate here less condensate turned back, column water.
-            var condensedHere = 0.0
-            if (vapor > holdable) {
-                val condensed = vapor - holdable
-                val condensedLand = condensed * (vaporLand / vapor)
-                cloud += condensed
-                cloudLand += condensedLand
-                vapor = holdable
-                vaporLand -= condensedLand
-                condensedHere += condensed
-                if (entry != null) entry.condensed += condensed / toColumnWater
-            }
-            if (uplift > 0.0 && vapor > 0.0 && holdable > 0.0) {
-                // Air carried up the ground condenses at Smith and Barstad's rate where it is
-                // saturated, and the column's saturated share is its water over what it holds at
-                // surface saturation: the climb takes `C_w w W / W_hold` a second, which never
-                // empties the column however long the climb.
-                val condensed = vapor * (1.0 - exp(-uplift / holdable * seconds))
-                val condensedLand = condensed * (vaporLand / vapor)
-                cloud += condensed
-                cloudLand += condensedLand
-                vapor -= condensed
-                vaporLand -= condensedLand
-                condensedHere += condensed
-                if (entry != null) entry.condensed += condensed / toColumnWater
-            } else if (uplift < 0.0) {
-                // Descending air warms and takes back water at the same rate: the cloud it carries
-                // first, then (below) the column's rain as it falls through it.
-                descentLeft = -uplift * seconds
-                if (cloud > 0.0) {
-                    val evaporated = minOf(cloud, descentLeft, (holdable - vapor).coerceAtLeast(0.0))
-                    val evaporatedLand = evaporated * (cloudLand / cloud)
-                    cloud -= evaporated
-                    cloudLand -= evaporatedLand
-                    vapor += evaporated
-                    vaporLand += evaporatedLand
-                    descentLeft -= evaporated
-                    condensedHere -= evaporated
-                    if (entry != null) entry.reevaporated += evaporated / toColumnWater
-                }
-            }
-
-            // The convergence closure, when switched on.
+            // The convergence closure, when switched on, on the water arriving.
             var convergenceRain = 0.0
+            var convergenceLandRain = 0.0
             val convergence = convergenceShare[here].toDouble() * slowing * toColumnWater
             if (convergence > 0.0 && vapor > 0.0) {
                 convergenceRain = vapor * (1.0 - exp(-convergence))
+                convergenceLandRain = convergenceRain * (vaporLand / vapor)
+                vaporLand -= convergenceLandRain
+                vapor -= convergenceRain
             }
-            val vaporShareLand = if (vapor > 0.0) (vaporLand / vapor).coerceIn(0.0, 1.0) else 0.0
-            vapor -= convergenceRain
 
-            // The column's own rain at its relative humidity, less what the descent takes back as it
-            // falls, up to what the column holds before its surface air saturates.
-            val afterRain = columnAfterRainMm(vapor, saturated, seconds, slowing)
-            var columnRain = vapor - afterRain
-            vapor = afterRain
-            if (descentLeft > 0.0 && columnRain > 0.0) {
-                val takenBack = minOf(columnRain, descentLeft, (holdable - vapor).coerceAtLeast(0.0))
-                columnRain -= takenBack
-                vapor += takenBack
-                if (entry != null) entry.reevaporated += takenBack / toColumnWater
+            // The crossing's sources and sinks, solved together ([ColumnCrossing]).
+            val sourceRate = when (kind) {
+                OPEN_SEA -> seaEvaporationRate[here].toDouble()
+                LAND -> groundReturnRate[here].toDouble()
+                else -> 0.0
             }
+            val uplift = upliftCondensationRate[here].toDouble()
+            val cloudShareLand = if (cloud > 0.0) (cloudLand / cloud).coerceIn(0.0, 1.0) else 0.0
+            val budget = crossing
+            budget.seconds = seconds
+            budget.sourceKgPerM2PerSecond = sourceRate
+            budget.saturatedMm = saturated
+            budget.holdableMm = HOLDABLE_SHARE * saturated
+            budget.rainSuppression = slowing
+            budget.liftingKgPerM2PerSecond = uplift.coerceAtLeast(0.0)
+            budget.criticalHumidity = 0.0
+            budget.descentKgPerM2PerSecond = (-uplift).coerceAtLeast(0.0)
+            budget.descentTakesColumnRain = true
+            budget.conversionPerSecond = slowing * config.climate.rainShadowScale / CLOUD_CONVERSION_SECONDS
+            budget.falloutPerSecond = 1.0 / FALLOUT_SECONDS
+            budget.vapor = vapor
+            budget.cloud = cloud
+            budget.falling = falling
+            val vaporIn = vapor
+            val cloudIn = cloud
+            val condensateLandIn = cloudLand + fallingLand
+            budget.solve()
+            val added = budget.sourced
+            if (entry != null) {
+                if (kind == OPEN_SEA) entry.seaEvaporation += added / toColumnWater
+                if (kind == LAND) entry.groundReturn += added / toColumnWater
+                entry.condensed += (budget.lifted + budget.capped) / toColumnWater
+                entry.reevaporated += (budget.cloudEvaporated + budget.rainTakenBack) / toColumnWater
+                val imbalance = abs(budget.waterIn - budget.waterOut) / budget.waterIn.coerceAtLeast(Double.MIN_VALUE)
+                if (imbalance > entry.worstCrossingImbalance) entry.worstCrossingImbalance = imbalance
+            }
+
+            // The land-origin water: the vapor's share mixed once from what came in, the ground's
+            // return and the cloud the descent evaporated; the condensate's share mixed once from
+            // the cloud carried in and the vapor's share of what grew.
+            val vaporWaterIn = vaporIn + added + budget.cloudEvaporated
+            val vaporLandIn = vaporLand + (if (kind == LAND) added else 0.0) + budget.cloudEvaporated * cloudShareLand
+            val vaporShareLand = if (vaporWaterIn > 0.0) (vaporLandIn / vaporWaterIn).coerceIn(0.0, 1.0) else 0.0
+            val grown = budget.lifted + budget.capped
+            val condensateWaterIn = cloudIn - budget.cloudEvaporated + falling + grown
+            val condensateLandWaterIn = condensateLandIn - budget.cloudEvaporated * cloudShareLand + grown * vaporShareLand
+            val condensateShareLand = if (condensateWaterIn > 0.0) (condensateLandWaterIn / condensateWaterIn).coerceIn(0.0, 1.0) else 0.0
+
+            vapor = budget.vapor
             vaporLand = vapor * vaporShareLand
-            condensedHere += columnRain + convergenceRain
-            val vaporLandRained = (columnRain + convergenceRain) * vaporShareLand
-
-            // The cloud turns to hydrometeors and they fall: Smith and Barstad's two delays in
-            // series over the crossing, the first slowed by the descent. The condensate's
-            // land-origin share is mixed once.
-            val condensateBefore = cloud + falling
-            val condensateShareLand = if (condensateBefore > 0.0) {
-                ((cloudLand + fallingLand) / condensateBefore).coerceIn(0.0, 1.0)
-            } else 0.0
-            val conversion = slowing * config.climate.rainShadowScale / CLOUD_CONVERSION_SECONDS
-            val fallout = 1.0 / FALLOUT_SECONDS
-            val cloudLeft = exp(-conversion * seconds)
-            val fallingLeft = exp(-fallout * seconds)
-            val handedOn = twoDelayShare(conversion, fallout, seconds)
-            val cloudAfter = cloud * cloudLeft
-            val fallingAfter = falling * fallingLeft + cloud * handedOn
-            val condensateRain = (condensateBefore - cloudAfter - fallingAfter).coerceAtLeast(0.0)
-            val condensateLandRain = condensateRain * condensateShareLand
-            cloud = cloudAfter
-            falling = fallingAfter
+            cloud = budget.cloud
+            falling = budget.falling
             cloudLand = cloud * condensateShareLand
             fallingLand = falling * condensateShareLand
+            val columnRain = budget.columnRain
+            val condensateRain = budget.condensateRain
+            val vaporLandRained = columnRain * vaporShareLand + convergenceLandRain
+            val condensateLandRain = condensateRain * condensateShareLand
+            // Vapor turned to rain or condensate here less condensate turned back, column water.
+            val condensedHere = columnRain + convergenceRain + grown - budget.cloudEvaporated
 
             val downwind = downwindBase + row
             val carriedOn = direction[downwind].toInt() == sweep
@@ -1476,6 +1418,13 @@ object MoistureMarch {
                 if (kind == OPEN_SEA) record.seaEvaporation.data[cell] = (added * rate).toFloat()
                 record.convergenceRain.data[cell] = (convergenceRain * rate).toFloat()
                 record.condensateRain.data[cell] = (rainedCondensate * rate).toFloat()
+                record.liftedCondensation.data[cell] = (budget.lifted * rate).toFloat()
+                record.capCondensation.data[cell] = (budget.capped * rate).toFloat()
+                record.reevaporation.data[cell] = ((budget.cloudEvaporated + budget.rainTakenBack) * rate).toFloat()
+                record.crossingSeconds.data[cell] = seconds.toFloat()
+                record.meanColumnWater.data[cell] = budget.meanVapor.toFloat()
+                record.liftingAtSaturation.data[cell] = (budget.liftingKgPerM2PerSecond * SECONDS_PER_YEAR).toFloat()
+                record.descentCapacity.data[cell] = (budget.descentKgPerM2PerSecond * SECONDS_PER_YEAR).toFloat()
             }
 
             // Back into parcels, and on downwind: to the next cell of this sweep, or banked where
@@ -1590,25 +1539,6 @@ object MoistureMarch {
         fun total(): Double = vapor.sum() + cloud.sum() + falling.sum()
         fun totalLand(): Double = vaporLand.sum() + cloudLand.sum() + fallingLand.sum()
     }
-
-    /**
-     * The share of a cloud that has turned into hydrometeors and not yet fallen after [seconds],
-     * converting at [conversionPerSecond] and falling at [falloutPerSecond]: the two-reservoir
-     * chain's middle, `c (e^-ct - e^-ft) / (f - c)`, and its limit `c t e^-ct` where the two
-     * rates meet. Exact over any crossing, so the delays filter the same on every grid.
-     */
-    private fun twoDelayShare(conversionPerSecond: Double, falloutPerSecond: Double, seconds: Double): Double {
-        val difference = falloutPerSecond - conversionPerSecond
-        val conversionLeft = exp(-conversionPerSecond * seconds)
-        return if (abs(difference) * seconds < EQUAL_RATES) {
-            conversionPerSecond * seconds * conversionLeft
-        } else {
-            conversionPerSecond * (conversionLeft - exp(-falloutPerSecond * seconds)) / difference
-        }
-    }
-
-    /** Below this product of the rates' difference and the time, the two are taken as equal. */
-    private const val EQUAL_RATES = 1.0e-6
 
     /**
      * How far the land-origin water may stand outside zero to the column's water before the ledger

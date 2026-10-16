@@ -72,13 +72,18 @@ internal object ColumnWater {
      * Clausius-Clapeyron up the saturated adiabat: the column's temperature falls with height at
      * the moist adiabat's own lapse rate ([moistAdiabaticLapseKPerM]) from the surface's, its
      * pressure hydrostatically from the standard sea level's, and the saturated vapor density
-     * `e_s / (R_v T)` is summed up it, in [COLUMN_STEP_M] steps to [COLUMN_TOP_M]. The tropical
-     * troposphere stands close to that adiabat (Xu and Emanuel 1989), and Bretherton, Peters and
-     * Back's (2004) column humidity, which the march's rain reads, divides by the saturated column
-     * of the real temperature profile. It is 75 mm at 25 C, 36 mm at 15 C, 13 mm at 0 C and 1.3
-     * at -25 C. Earth's atmosphere holds 12.6e3 km³ over its 510 million km² (Trenberth and
-     * others 2011, as van der Ent and Tuinenburg 2017 use it), a mean of 24.7 mm: the check, read
-     * off the world in `RainAgainstEarthTest`, and not an input.
+     * `e_s / (R_v T)` is summed up it, in [COLUMN_STEP_M] steps to [COLUMN_TOP_M]. It is 82 mm at
+     * 25 C, 33 mm at 15 C, 8.5 mm at 0 C and 0.8 at -25 C, and 106 to 115 mm at 28 to 29 C.
+     *
+     * The adiabat starts from air saturated at the surface's own temperature, which stands warmer
+     * aloft than the column Bretherton, Peters and Back's (2004) humidity divides by: theirs is
+     * summed from analyzed temperatures, 72 mm in the regions of active convection. So the march's
+     * column humidity reads lower than theirs for the same water, and its rain, their relation,
+     * falls only at more water than theirs would (docs/TODO.md, "Land too wet and deserts too few").
+     *
+     * Earth's atmosphere holds 12.6e3 km³ over its 510 million km² (Trenberth and others 2011, as
+     * van der Ent and Tuinenburg 2017 use it), a mean of 24.7 mm: the check, read off the world in
+     * `RainAgainstEarthTest`, and not an input.
      *
      * Tabulated once by the surface's temperature at [COLUMN_TABLE_STEP_C] and read by linear
      * interpolation, since every cell of every lap asks it.

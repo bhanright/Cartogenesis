@@ -92,7 +92,7 @@ class SeaSurfaceEarthTest : BorrowsSharedWorlds() {
                 .format(seaC, OISST_TROPICS_C, OISST_TROPICS_NORTH_C, OISST_TROPICS_SOUTH_C))
             if (abs(seaC - OISST_TROPICS_C) > TROPICS_ENVELOPE_C) misses += "seed $seed %+.2f".format(seaC - OISST_TROPICS_C)
         }
-        KnownFailures.expect(TROPICAL_SEA_COLD, "seed 7 -0.61; seed 42 -0.60; seed 1234 -0.62; seed 99 -0.61") {
+        KnownFailures.expect(TROPICAL_SEA_COLD, "seed 7 -0.58; seed 42 -0.56; seed 1234 -0.55; seed 99 -0.62") {
             if (misses.isNotEmpty()) {
                 throw RecordedViolation("the tropical sea stands outside Earth's halves: ${misses.joinToString("; ")}", misses.joinToString("; "))
             }

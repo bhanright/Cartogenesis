@@ -80,7 +80,7 @@ class LakeBodyTest : BorrowsSharedWorlds() {
         // the coupled climate it is one lake of eight cells on seed 42, not traced to either cause;
         // armed at A1-6a, whose circulation leaves none; recorded at F1, whose rain by longitude
         // leaves one on seed 42 (docs/DESIGN_LEDGER.md, H1, M1, A1-6a and F1).
-        KnownFailures.expect("F1: a lake in two pieces on the circulation by longitude's ground", "seed 42: [lake 20 in 2 pieces]") {
+        KnownFailures.expect("F1: a lake in two pieces on the circulation by longitude's ground", "seed 42: [lake 14 in 2 pieces, lake 17 in 2 pieces]; seed 99: [lake 40 in 2 pieces]") {
             if (pieceFailures.isNotEmpty()) {
                 throw RecordedViolation("a body of water holds more than one piece: $pieceFailures", pieceFailures.joinToString("; "))
             }

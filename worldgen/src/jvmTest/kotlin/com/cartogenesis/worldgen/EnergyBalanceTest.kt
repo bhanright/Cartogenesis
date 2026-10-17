@@ -403,7 +403,7 @@ class EnergyBalanceTest {
         // global mean wind: at 60 degrees the layer stands at 16 to 17 m through the summer, where the
         // Southern Ocean's, which the pooled zonal mean is mostly made of, stays deep under its
         // westerlies (docs/TODO.md).
-        KnownFailures.expect(HIGH_LATITUDE_SUMMER_LAYER, "the marine air's warmest month at 60 deg is 10.2 against 7.0; the water's warmest month at 60 deg is 9.2 against 5.5") {
+        KnownFailures.expect(HIGH_LATITUDE_SUMMER_LAYER, "the marine air's warmest month at 60 deg is 9.7 against 5.6; the water's warmest month at 60 deg is 9.5 against 6.3") {
             if (complaints.isNotEmpty()) {
                 throw RecordedViolation(
                     complaints.joinToString("; ", prefix = "outside the reanalysis by more than ${WARMEST_MONTH_ENVELOPE_C.toInt()} C: "),
@@ -814,7 +814,7 @@ class EnergyBalanceTest {
                 .format(landSwing / bands, waterSwing / bands, landSwing / waterSwing)
         )
         // Recorded at A1-6c with the high latitudes' thin summer layer, which swings the water further (docs/TODO.md).
-        KnownFailures.expect(HIGH_LATITUDE_SUMMER_LAYER, "all-ocean x2.94") {
+        KnownFailures.expect(HIGH_LATITUDE_SUMMER_LAYER, "all-ocean x2.93") {
             if (landSwing / waterSwing < LAND_TO_SEA_SWING_RATIO) {
                 throw RecordedViolation(
                     "the contrast is the geography rather than the capacities: an all-ocean world's land column swings only %.2f times its water"

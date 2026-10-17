@@ -85,13 +85,37 @@
   20-22 and 22-24 degrees on seeds 42, 969495 and 7 against main's 18-20, 20-22 and 24-26 (Earth's
   5-12). Next, by those numbers: the eddy winds and the
   return, after the tropical sea's temperature below. 2026-10-16, W2b.
-- **The tropical sea stands 1.8 C under Earth's (W2b, measured, not fixed).** The energy balance's sea
-  surface between 10 S and 10 N stands at 25.8-25.9 C against the 1971-2000 optimum-interpolation
-  climatology's 27.7 (NOAA CPC bulletin, August 2003, table T2). Warmed by that much in the march
-  alone the planet holds 2.1-2.8 mm more water and the sea evaporates 12% more; with W2b's parcel
-  column, about 8% more saturated water a degree. `EnergyBalanceTest`'s own figure for the equator's
-  sea surface, 26.5 C, is attributed to ERA5 without a table read. A coupled energy-balance chunk of
-  its own, before the column's rain is calibrated further. 2026-10-16, W2b.
+- **The sea from the equator to 40 degrees still stands under Earth's (W2c, two causes fixed, the
+  rest measured).** W2c gave the slab's water Kara's air-sea difference and the ITCZ's cloud its
+  longwave (`EnergyBalance.SEA_OVER_MARINE_AIR_C`, `ITCZ_CLOUD_SHORTWAVE_OVER_LONGWAVE`): between
+  10 S and 10 N the energy balance's sea moved from 25.8 to 27.05 C against the 1971-2000
+  optimum-interpolation climatology's 27.64, and on Earth's land the pooled bands 10-20, 20-30 and
+  30-40 stand 1.1, 1.5 and 1.2 C under it, outside half the difference between Earth's two
+  hemispheres (`EnergyBalanceTest`, `SeaSurfaceEarthTest`, recorded), while 40-60 sits on it. The
+  marine air over the tropical sea is 26.3 against Earth's 26.9 (the climatology less Kara's
+  0.78), so the moisture march's column gained 0.4 to 0.5 mm, not the 2.1 to 2.8 a sea and air
+  warmed 1.8 C gave W2b. Measured alone on seeds 42, 969495 and 7 at 512 rows and on Earth's land:
+  neither the summer mixed layer (+0.01 C) nor the currents' anomaly (its mean over the band within
+  0.01 C of zero, by construction) moves the band; the tropical diffusivity moves it (x0.8 +1.3 C,
+  x1.2 -1.0 C) but also the high latitudes (the cold-season ice edge 3 degrees further equatorward
+  at x0.8), and the model already carries less heat poleward than Trenberth and Caron's radiation
+  requires (5.37 PW at its peaks against 5.79 and 5.66, x0.94, recorded): a tropics that exported
+  more at the same temperature would be both warmer and nearer the transport, which is a top of
+  atmosphere budget the model gets wrong in the low latitudes. Not the longwave's shape alone: the
+  zonal-mean outgoing longwave of NOAA's interpolated climatology (1991-2020), imposed on the law as
+  its residual, moves the equator only +0.2 C and lowers the transport to 4.96 PW, so the shortwave
+  or the transport's closure is in it. Read CERES's zonal top-of-atmosphere fluxes (absorbed and
+  outgoing, all-sky and clear) against the model's band by band before changing either; the
+  diffusivity's two numbers were swept against the unsourced profile `EnergyBalanceTest` held before
+  W2c (the ledger, W1), and the transport over Earth's observed sea-surface gradient implies about
+  1.2 at 20 degrees and 0.85 at 30 against the model's 0.84 and 0.80. 2026-10-17, W2c.
+- **The planet's mean stands under Earth's on two standard worlds (W2c, measured, not fixed).** The
+  annual temperature at the ground by area reads 12.80, 13.70, 12.85 and 13.84 C on seeds 7, 42,
+  1234 and 99 at 512 rows against Jones and others' 14.0 (hemispheres 14.6 and 13.4), 12.94, 13.78,
+  12.92 and 13.92 on 9ff725c9 (`SeaSurfaceEarthTest`, recorded). The energy balance is a sea-level
+  model whose planet reads 15.4 C on Earth's land; Earth's 14.0 is at its ground, so the gap is the
+  land's height times the lapse rate on each world, and seeds 7 and 1234 carry more of it. Not
+  measured: each world's land share and mean height against Earth's. 2026-10-17, W2c.
 - **The subtropical sea evaporates under Earth's (W2b, measured, not fixed).** The march's sea
   evaporates 1,000-1,080 mm at 20-30 degrees against about 1,800 over the subtropical latitudes (Yu
   2007, OAFlux), under a scalar wind of 6.1-6.5 m/s where 10-20 degrees has 7.8-8.1. Diagnose after

@@ -126,7 +126,7 @@ class ColdWaterPlacementTest : BorrowsSharedWorlds() {
         }
         // Re-recorded on square cells at Q2, the ocean still solved on its own grid (docs/DESIGN_LEDGER.md, Q2).
         // Re-recorded at L1, whose rifts are Earth's half-grabens and the same at every grid (docs/DESIGN_LEDGER.md, L1).
-        KnownFailures.expect(EQUATORIAL_TONGUE_SHALLOW, "seed 7 0.06 of 1.19 C; seed 42 0.15 of 1.54 C; seed 1234 0.07 of 0.82 C; seed 99 0.09 of 1.27 C") {
+        KnownFailures.expect(EQUATORIAL_TONGUE_SHALLOW, "seed 7 0.06 of 1.15 C; seed 42 0.13 of 1.45 C; seed 1234 0.07 of 0.79 C; seed 99 0.09 of 1.22 C") {
             if (failures.isNotEmpty()) throw RecordedViolation(failures.joinToString("\n"), shortOf.joinToString("; "))
         }
     }

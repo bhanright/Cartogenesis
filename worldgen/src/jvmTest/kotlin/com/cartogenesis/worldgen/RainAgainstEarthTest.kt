@@ -182,7 +182,7 @@ class RainAgainstEarthTest : BorrowsSharedWorlds() {
         nearEarth("open-sea evaporation, mm", pooled.seaEvaporation / pooled.seaArea, EARTH_OCEAN_EVAPORATION_MM)
         // The sea rains less than Earth's still: what it gives up the land and the subtropics' dry
         // seas take (docs/TODO.md).
-        KnownFailures.expect("C1b2: the open sea rains less than Earth's", "x0.76") {
+        KnownFailures.expect("C1b2: the open sea rains less than Earth's", "x0.79") {
             nearEarth("open-sea rain, mm", pooled.seaRain / pooled.seaArea, EARTH_OCEAN_RAIN_MM)
         }
         // Recorded from C1b2 at x0.55; armed at A1-4, where the boundary layer's wind no longer
@@ -229,7 +229,7 @@ class RainAgainstEarthTest : BorrowsSharedWorlds() {
         // x0.37 until A1-6b, whose ITCZ rains the summer hemisphere's tropics (x0.91); recorded
         // again at F1, whose water travels on the column's vapor-weighted wind and whose rising
         // branch moves with the land, so the band is broader and its peak lower (docs/TODO.md).
-        KnownFailures.expect("F1: the ocean's wettest band rains under Earth's", "x0.57") {
+        KnownFailures.expect("F1: the ocean's wettest band rains under Earth's", "x0.59") {
             nearEarth("the ocean's wettest two degrees, mm", pooledPeak, GPCP_OCEAN_PEAK_MM)
         }
     }

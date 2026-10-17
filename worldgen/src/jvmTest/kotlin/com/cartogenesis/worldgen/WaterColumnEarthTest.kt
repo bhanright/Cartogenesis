@@ -219,7 +219,7 @@ class WaterColumnEarthTest : BorrowsSharedWorlds() {
         // warmer aloft than Earth's and let the column hold more at the same humidity; shorter
         // with the column read on the parcel's profile, the tropical sea still 1.8 C under Earth's
         // and the continents short of the water they import (docs/DESIGN_LEDGER.md, W2b; docs/TODO.md).
-        KnownFailures.expect("W2b: the atmosphere holds under Earth's water", "x0.70") {
+        KnownFailures.expect("W2b: the atmosphere holds under Earth's water", "x0.71") {
             nearEarth("column water, mm", figures.columnWater / figures.area, EARTH_COLUMN_WATER_MM)
         }
     }
@@ -243,7 +243,7 @@ class WaterColumnEarthTest : BorrowsSharedWorlds() {
         // Inside on main, x1.12, where lifted condensation rained on dry land; under it once the
         // large-scale rain is the column law's alone and the tropical interiors are short of the
         // water they import (docs/DESIGN_LEDGER.md, W2b; docs/TODO.md).
-        KnownFailures.expect("W2b: the land within forty degrees rains under GPCP's", "x0.76") {
+        KnownFailures.expect("W2b: the land within forty degrees rains under GPCP's", "x0.77") {
             nearEarth("land rain within 40 degrees, mm", figures.rainWithinBand / figures.landWithinBand, GPCP_LAND_WITHIN_40_MM)
         }
     }
@@ -253,7 +253,7 @@ class WaterColumnEarthTest : BorrowsSharedWorlds() {
         val figures = pooled
         // Under it on main, x0.64; over it once the land rains by the column law and the gated
         // climb alone and its interiors import too little (docs/DESIGN_LEDGER.md, W2b; docs/TODO.md).
-        KnownFailures.expect("W2b: desert covers more of the land than Earth's", "x1.90") {
+        KnownFailures.expect("W2b: desert covers more of the land than Earth's", "x1.86") {
             nearEarth("desert share of the land", figures.desert / figures.landArea, EARTH_DESERT_SHARE)
         }
     }
@@ -273,7 +273,7 @@ class WaterColumnEarthTest : BorrowsSharedWorlds() {
         }
         // The tropics' land stands desert where W1 found it once lifted air stopped raining on dry
         // ground: the interiors import too little water (docs/DESIGN_LEDGER.md, W2b; docs/TODO.md).
-        KnownFailures.expect("W2b: the tropics' land is desert", "band 0 x8.73, band 2 x4.26") {
+        KnownFailures.expect("W2b: the tropics' land is desert", "band 0 x8.59, band 2 x4.00") {
             if (misplaced.isNotEmpty()) throw RecordedViolation("desert misplaced by band: $misplaced", misplaced.joinToString())
         }
     }

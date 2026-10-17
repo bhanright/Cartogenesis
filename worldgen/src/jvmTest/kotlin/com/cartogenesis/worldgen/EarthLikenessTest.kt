@@ -79,9 +79,9 @@ class EarthLikenessTest : BorrowsSharedWorlds() {
         // 1.05 at L1's review round, whose rift joins are relay ramps.
         KnownFailures.expect(
             LAW_SETS_EVERY_CUT,
-            "pooled: the lake-size exponent is 0.911 over 678 of them, " +
-                "outside 1.06 +/- 0.12 (Downing et al. 2006, three sampling errors); " +
-                "pooled: the coastline's box-counting dimension is 0.908, " +
+            "pooled: the lake-size exponent is 0.915 over 634 of them, " +
+                "outside 1.06 +/- 0.13 (Downing et al. 2006, three sampling errors); " +
+                "pooled: the coastline's box-counting dimension is 0.910, " +
                 "outside 1.25 +/- 0.15 (Mandelbrot 1967: Britain 1.25, Richardson's smoothest coast 1.02)"
         ) {
             if (complaints.isNotEmpty()) {

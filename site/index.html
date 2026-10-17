@@ -934,6 +934,10 @@
   select{max-width:100%;min-width:0}
   .translation-note{font-size:12px;line-height:1.6}
   [dir="rtl"] .card{direction:rtl}
+  /* A release number such as 3.x is Latin text in an Arabic row: left to the right-to-left rules it reads x.3, so the label is
+     laid out left to right and placed at the row's start (its right edge) with the tag beside it. */
+  [dir="rtl"] .spec dt{direction:ltr;display:flex;flex-direction:row-reverse;justify-content:flex-start;align-items:baseline}
+  [dir="rtl"] .spec dt .tag{margin-inline-start:0;margin-inline-end:10px}
   [dir="rtl"] code,[dir="rtl"] pre{direction:ltr;unicode-bidi:isolate;text-align:left}
   .compare,.lens-frame,.relief-frame{direction:ltr}
   :lang(ar) *,:lang(hi) *,:lang(bn) *{letter-spacing:normal}

@@ -222,7 +222,9 @@
   1,024 rows reads 1.26 times it, from 1.34, recorded), and the deserts end along a row at 298 km pooled against main's
   311 (`RainGeometryTest`). The rain's straight fronts along a row read 1,480, 1,497 and 2,396 km
   (1,480, 1,337 and 2,414 on W2c) and at the polar front 926, 1,049 and 744 (961, 895 and 689):
-  seed 969495's longest front moved from 31 N to 30 S and is longer, recorded. 2026-10-17, W2d.
+  seed 969495's longest front moved from 31 N to 30 S and is longer, recorded. The drowned
+  interiors pool 1.57 times the Caspian's share, from 1.74, seed 99's at 1.97% of its land
+  (`OutletIncisionTest`, recorded). 2026-10-17, W2d.
 - **The geometry census on W2b's ground.** 138 known entries and 412 instances where main had 137 and
   413: seed 7's ice-surface arc is gone and the two isohyet entries along seeds 7's and 1234's
   edge rows hold one instance each where they held two; new are a crease in seed 42's terrain

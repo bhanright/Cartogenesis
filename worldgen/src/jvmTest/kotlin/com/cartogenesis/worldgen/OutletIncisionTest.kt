@@ -557,8 +557,9 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
         // Re-recorded at A1-6a, 3.96 to 3.24 times, seeds 42 and 99 at 1.83% and 2.94% of their land.
         // Armed at W2b, on whose ground the pooled largest drowned basin stands under the Caspian's share again (docs/DESIGN_LEDGER.md, W2b).
         // Recorded at W2c, whose ground leaves seed 99's interior drowned over 2.2% of its land and
-        // seed 42's over 0.27% (docs/TODO.md).
-        KnownFailures.expect("W2c: the drowned interiors stand over the Caspian's share pooled", "1.74x") {
+        // seed 42's over 0.27% (docs/TODO.md); 1.57 times at W2d, seed 99's at 1.97% and seed 42's
+        // at 0.28% (docs/DESIGN_LEDGER.md, W2d).
+        KnownFailures.expect("W2c: the drowned interiors stand over the Caspian's share pooled", "1.57x") {
             if (pooledDrowned >= caspianShare * drownedChaos) {
                 throw RecordedViolation(
                     "these worlds keep a basin below the sea-level cut holding more water than the " +

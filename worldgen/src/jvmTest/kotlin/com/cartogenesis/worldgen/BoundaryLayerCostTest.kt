@@ -102,8 +102,8 @@ class BoundaryLayerCostTest {
      * What one lap of the coupled loop costs the atmosphere at the application's grid, and its
      * part per map cell: both halves' condensation carried down as heating, both solved by
      * back-substitution, each half's pressure carried up and balanced, its convergence carried down
-     * and its ascent carried up, and the column's vapor-weighted wind the march carries its water on
-     * ([BoundaryLayer.columnWindMps]). A report and a recorded figure: the loop's laps a climate run come
+     * and its ascent carried up, and the free troposphere's vapor-weighted wind the march carries its water on
+     * ([BoundaryLayer.freeTroposphereWindMps]). A report and a recorded figure: the loop's laps a climate run come
      * from `AtmosphereCouplingTest` and are given here as [LAPS_PER_CLIMATE].
      */
     @Test
@@ -140,8 +140,8 @@ class BoundaryLayerCostTest {
             BoundaryLayer.groundAscentMps(responses, responses.julyHalf)
             BoundaryLayer.groundAscentMps(responses, responses.januaryHalf)
             val ascended = System.nanoTime()
-            BoundaryLayer.columnWindMps(responses, responses.julyHalf)
-            BoundaryLayer.columnWindMps(responses, responses.januaryHalf)
+            BoundaryLayer.freeTroposphereWindMps(responses, responses.julyHalf)
+            BoundaryLayer.freeTroposphereWindMps(responses, responses.januaryHalf)
             val carried = System.nanoTime()
             if (run >= WARM_UP_RUNS) {
                 downMs += (carriedDown - started) / 1e6 / MEASURED_RUNS

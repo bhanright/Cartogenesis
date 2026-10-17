@@ -44,9 +44,9 @@ import kotlin.math.sqrt
  * the sea's ([PressureWind.surfaceWind]), so over the open sea under no eddy pressure it is the
  * circulation's exactly.
  *
- * **The water's wind** is the column's, weighted by where its vapor is ([columnWindMps]): the
- * boundary layer holds under half of it, and the air above moves on the circulation's zonal wind
- * and the waves' own.
+ * **The water's winds** are two: the boundary layer's water moves on the surface wind, and the
+ * free troposphere's on the levels above, weighted by where its vapor is
+ * ([freeTroposphereWindMps]): the circulation's zonal wind and the waves' own.
  *
  * **The vertical motion at the layer's top** ([boundaryLayerOmega]) is the surface wind's own mass
  * convergence over the model's lowest layer plus the terrain's lift under it: one boundary layer
@@ -723,10 +723,9 @@ internal object BoundaryLayer {
     /**
      * The large-scale vertical velocity at the boundary layer's top on the map, meters a second,
      * positive up, row-major: the layer's own convergence ([convergenceOmegaPaPerSecond]) carried
-     * up, `w = -omega / (rho g)`. What the march's sinks read as the atmosphere's ascent and
-     * descent, with the ground's own climb over the terrain added cell by cell (`MoistureMarch`):
-     * the terrain's large-scale lift ([BoundaryLayerOmega.terrainPaPerSecond]) is that climb
-     * smoothed, so the ground's residual climb and it carried up would sum to the ground's whole.
+     * up, `w = -omega / (rho g)`: the atmosphere's ascent and descent at the layer's top, smoothed to
+     * the scale the waves resolve. The march does not read it: it carries the same convergence at
+     * the map's own scale, as the boundary layer's air gathered by its own faces (`MoistureMarch`).
      */
     fun groundAscentMps(atmosphere: Atmosphere, half: Half): FloatArray {
         val omega = atmosphere.remap.outputToGround(convergenceOmegaPaPerSecond(atmosphere, half))
@@ -784,25 +783,26 @@ internal object BoundaryLayer {
     const val UPPER_BRANCH_BASE_PA = 50_000.0
 
     /**
-     * The column's vapor-weighted wind under [half] of [atmosphere], meters a second, eastward and
-     * southward, row-major on the map: what carries the column's water, `int q V dp / int q dp`
-     * over the model's layers, each layer's share of the vapor its [vaporShares].
+     * The free troposphere's vapor-weighted wind under [half] of [atmosphere], meters a second,
+     * eastward and southward, row-major on the map: what carries the water above the boundary layer,
+     * `int q V dp / int q dp` over the model's layers above the lowest, each layer's share of the
+     * vapor its [vaporShares]. The boundary layer's own water moves on the surface wind
+     * ([MoistureMarch]); before the column was split, this wind and that one were carried together as
+     * one column's, the boundary layer's 0.38 of the vapor on the surface wind.
      *
-     * - **The boundary layer**, the lowest layer, blows the surface wind: the circulation, the
-     *   waves' pressure and the ground's drag under it ([PressureWind.surfaceWind]).
-     * - **Each layer above it** blows the circulation's zonal wind and the stationary waves' own
-     *   wind at that level ([WaveResponse.eastward], [WaveResponse.northwardAtCenters]), carried up
-     *   to the map as the pressure is ([AtmosphereRemap.outputToGround]): the waves are the
-     *   departures from the zonal mean at every level. The circulation's zonal wind is held up
-     *   through the vapor's depth, where the trades are deep, since the model carries no zonal mean
-     *   of its own above the boundary layer but the basic state's, Jablonowski and Williamson's
-     *   prescribed jets, which are not the trades.
+     * - **Each layer** blows the circulation's zonal wind and the stationary waves' own wind at that
+     *   level ([WaveResponse.eastward], [WaveResponse.northwardAtCenters]), carried up to the map as
+     *   the pressure is ([AtmosphereRemap.outputToGround]): the waves are the departures from the
+     *   zonal mean at every level. The circulation's zonal wind is held up through the vapor's depth,
+     *   where the trades are deep, since the model carries no zonal mean of its own above the boundary
+     *   layer but the basic state's, Jablonowski and Williamson's prescribed jets, which are not the
+     *   trades.
      * - **The circulation's meridional wind** is the boundary layer's alone up to
      *   [UPPER_BRANCH_BASE_PA], since the cells' whole inflow runs in the layer and their ascent is
      *   carried up unchanged from its top ([HadleyCirculation]); above it the same mass returns,
      *   spread evenly over the layers there, where the column holds a tenth of its vapor.
      */
-    fun columnWindMps(atmosphere: Atmosphere, half: Half): PressureWind.Vectors {
+    fun freeTroposphereWindMps(atmosphere: Atmosphere, half: Half): PressureWind.Vectors {
         val levels = atmosphere.levels
         val shares = vaporShares(levels)
         val boundaryLayer = levels.levelCount - 1
@@ -829,17 +829,14 @@ internal object BoundaryLayer {
         }
         val eddyEastwardGround = atmosphere.remap.outputToGround(eddyEastward)
         val eddyNorthwardGround = atmosphere.remap.outputToGround(eddyNorthward)
-        val boundaryShare = shares[boundaryLayer]
         // The upper branch's speed per unit of the lower branch's, against it: the same mass over its own depth.
         val returnPerInflow = if (upperThicknessPa > 0.0) -levels.thicknessPa[boundaryLayer] / upperThicknessPa else 0.0
         val cellCount = half.eastwardMps.size
         val eastward = FloatArray(cellCount)
         val southward = FloatArray(cellCount)
         for (cell in 0 until cellCount) {
-            eastward[cell] = (boundaryShare * half.eastwardMps[cell] + freeShare * half.beltEastwardMps[cell] +
-                eddyEastwardGround[cell]).toFloat()
-            southward[cell] = (boundaryShare * half.southwardMps[cell] + upperShare * returnPerInflow * half.beltSouthwardMps[cell] -
-                eddyNorthwardGround[cell]).toFloat()
+            eastward[cell] = (half.beltEastwardMps[cell] + eddyEastwardGround[cell] / freeShare).toFloat()
+            southward[cell] = ((upperShare * returnPerInflow * half.beltSouthwardMps[cell] - eddyNorthwardGround[cell]) / freeShare).toFloat()
         }
         return PressureWind.Vectors(eastward, southward)
     }

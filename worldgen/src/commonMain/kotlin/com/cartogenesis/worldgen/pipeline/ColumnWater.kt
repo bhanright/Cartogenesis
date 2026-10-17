@@ -306,25 +306,225 @@ internal object ColumnWater {
     /** Pascals in a kilopascal. */
     private const val PASCALS_PER_KPA = 1_000.0
 
-    /**
-     * The water air lifted over the ground condenses per meter it rises, in kilograms per cubic
-     * meter: Smith and Barstad's (2004) thermodynamic sensitivity `C_w = rho_s Gamma_m / gamma`,
-     * the saturated vapor density at the surface's [surfaceTemperatureC] times the moist
-     * adiabat's lapse rate over the environment's, [lapseRateCPerKm]. A column of saturated air
-     * carried up a slope at `w` meters a second condenses `C_w w` kilograms per square meter a
-     * second, which is their linear model's source term.
-     */
-    fun upliftCondensationKgPerM3(surfaceTemperatureC: Double, lapseRateCPerKm: Double): Double {
-        val kelvin = surfaceTemperatureC + KELVIN_AT_ZERO_C
-        val vaporPressurePa = saturationVaporPressureKpa(surfaceTemperatureC) * PASCALS_PER_KPA
-        val vaporDensity = vaporPressurePa / (WATER_VAPOR_GAS_CONSTANT_J_PER_KG_K * kelvin)
-        val environmentKPerM = lapseRateCPerKm / METERS_PER_KM
-        if (environmentKPerM <= 0.0) return 0.0
-        return vaporDensity * moistAdiabaticLapseKPerM(surfaceTemperatureC, SEA_LEVEL_PRESSURE_KPA) / environmentKPerM
-    }
-
     /** One kilometer in meters, for the lapse rate the configuration states per kilometer. */
     private const val METERS_PER_KM = 1_000.0
+
+    /**
+     * The boundary layer's depth in pressure, kilopascals: the dry atmosphere's lowest layer, the
+     * mass the surface wind's drag balance acts on ([BoundaryLayer.LAYER_THICKNESS_PA]), so the
+     * water the boundary layer carries moves on the wind that layer blows. 1.1 km deep over the sea,
+     * between the trades' well-mixed subcloud layer, 0.69 to 0.71 km deep over EUREC4A's sondes, and
+     * the trade inversion's base near 2 km (Albright and others 2022, read as chapter 4 of Albright's
+     * thesis, its Table 4.2; Galewsky and Los 2026, section 2.1).
+     */
+    const val BOUNDARY_LAYER_DEPTH_KPA = BoundaryLayer.LAYER_THICKNESS_PA / PASCALS_PER_KPA
+
+    /** Saturation specific humidity at [temperatureC] and [pressureKpa], kilograms per kilogram. */
+    fun saturationSpecificHumidity(temperatureC: Double, pressureKpa: Double): Double =
+        specificHumidity(saturationVaporPressureKpa(temperatureC), pressureKpa)
+
+    /**
+     * The column the free troposphere is read against, from a sea-level surface at
+     * [seaLevelTemperatureC]: the saturated column of the parcel profile ([saturatedColumnMm]) split
+     * at the boundary layer's top, [BOUNDARY_LAYER_DEPTH_KPA] above the ground.
+     *
+     * [saturatedMm] is the whole column, [boundaryLayerSaturatedMm] the part under the layer's top
+     * and [freeSaturatedMm] the part above it, all millimeters; [layerTopSaturationHumidity] is the
+     * saturation specific humidity at the layer's top, kilograms per kilogram, which the free
+     * troposphere's lowest air carries into the boundary layer at its own relative humidity.
+     */
+    class ReferenceColumn(
+        val saturatedMm: Double,
+        val boundaryLayerSaturatedMm: Double,
+        val layerTopSaturationHumidity: Double
+    ) {
+        val freeSaturatedMm: Double get() = saturatedMm - boundaryLayerSaturatedMm
+    }
+
+    /**
+     * [ReferenceColumn] at [seaLevelTemperatureC], read from a table at [COLUMN_TABLE_STEP_C] by
+     * linear interpolation. Its parts in place of the object, for the march's inner loop:
+     * [referenceBoundaryLayerSaturatedMm] and [referenceLayerTopSaturationHumidity]; the whole is
+     * [saturatedColumnMm] at the standard sea level.
+     */
+    fun referenceColumn(seaLevelTemperatureC: Double): ReferenceColumn = ReferenceColumn(
+        saturatedColumnMm(seaLevelTemperatureC),
+        referenceBoundaryLayerSaturatedMm(seaLevelTemperatureC),
+        referenceLayerTopSaturationHumidity(seaLevelTemperatureC)
+    )
+
+    fun referenceBoundaryLayerSaturatedMm(seaLevelTemperatureC: Double): Double =
+        interpolateSeaLevel(boundaryLayerTable, seaLevelTemperatureC, 0)
+
+    fun referenceLayerTopSaturationHumidity(seaLevelTemperatureC: Double): Double =
+        interpolateSeaLevel(boundaryLayerTable, seaLevelTemperatureC, 1)
+
+    private fun interpolateSeaLevel(table: DoubleArray, temperatureC: Double, part: Int): Double {
+        val across = ((temperatureC - COLUMN_TABLE_COLDEST_C) / COLUMN_TABLE_STEP_C).coerceIn(0.0, (COLUMN_TABLE_TEMPERATURES - 1).toDouble())
+        val left = across.toInt().coerceAtMost(COLUMN_TABLE_TEMPERATURES - 2)
+        val share = across - left
+        return table[2 * left + part] * (1.0 - share) + table[2 * (left + 1) + part] * share
+    }
+
+    /**
+     * The saturated column's part under the boundary layer's top and the saturation humidity at that
+     * top, on the parcel profile [integratedSaturatedColumnMm] climbs from a sea-level surface at
+     * [surfaceTemperatureC]: the same steps, stopped where the pressure falls
+     * [BOUNDARY_LAYER_DEPTH_KPA] under the surface's.
+     */
+    internal fun integratedBoundaryLayerPart(surfaceTemperatureC: Double): DoubleArray {
+        val surfacePressureKpa = SEA_LEVEL_PRESSURE_KPA
+        val topPressureKpa = surfacePressureKpa - BOUNDARY_LAYER_DEPTH_KPA
+        val surfaceKelvin = surfaceTemperatureC + KELVIN_AT_ZERO_C
+        val parcelHumidity = specificHumidity(PARCEL_RELATIVE_HUMIDITY * saturationVaporPressureKpa(surfaceTemperatureC), surfacePressureKpa)
+        fun dryKelvin(height: Double) = surfaceKelvin - DRY_LAPSE_K_PER_M * height
+        fun dryPressureKpa(height: Double) =
+            surfacePressureKpa * (dryKelvin(height) / surfaceKelvin).pow(DRY_AIR_HEAT_CAPACITY_J_PER_KG_K / DRY_AIR_GAS_CONSTANT_J_PER_KG_K)
+        fun saturationDeficit(height: Double) =
+            specificHumidity(saturationVaporPressureKpa(dryKelvin(height) - KELVIN_AT_ZERO_C), dryPressureKpa(height)) - parcelHumidity
+        var condensationLevel = 0.0
+        if (saturationDeficit(0.0) > 0.0) {
+            var low = 0.0
+            var high = MAX_CONDENSATION_LEVEL_M
+            repeat(CONDENSATION_LEVEL_BISECTIONS) {
+                val middle = 0.5 * (low + high)
+                if (saturationDeficit(middle) > 0.0) low = middle else high = middle
+            }
+            condensationLevel = 0.5 * (low + high)
+        }
+        // Where the dry part of the climb reaches the layer's top, if it does: the dry adiabat's
+        // pressure falls as a power of its temperature, so the height is read off it directly.
+        val dryTopHeight = surfaceKelvin / DRY_LAPSE_K_PER_M *
+            (1.0 - (topPressureKpa / surfacePressureKpa).pow(DRY_AIR_GAS_CONSTANT_J_PER_KG_K / DRY_AIR_HEAT_CAPACITY_J_PER_KG_K))
+        var column = 0.0
+        val dryEnd = minOf(condensationLevel, dryTopHeight)
+        val drySteps = kotlin.math.ceil(dryEnd / COLUMN_STEP_M).toInt()
+        for (step in 0 until drySteps) {
+            val thickness = dryEnd / drySteps
+            val midKelvin = dryKelvin((step + 0.5) * thickness)
+            column += saturationVaporPressureKpa(midKelvin - KELVIN_AT_ZERO_C) * PASCALS_PER_KPA /
+                (WATER_VAPOR_GAS_CONSTANT_J_PER_KG_K * midKelvin) * thickness
+        }
+        if (dryTopHeight <= condensationLevel) {
+            val topKelvin = dryKelvin(dryTopHeight)
+            return doubleArrayOf(column, saturationSpecificHumidity(topKelvin - KELVIN_AT_ZERO_C, topPressureKpa))
+        }
+        var kelvin = dryKelvin(condensationLevel)
+        var pressureKpa = dryPressureKpa(condensationLevel)
+        while (true) {
+            val celsius = kelvin - KELVIN_AT_ZERO_C
+            val lapse = moistAdiabaticLapseKPerM(celsius, pressureKpa)
+            val midKelvin = kelvin - lapse * COLUMN_STEP_M * 0.5
+            val midPressure = pressureKpa * exp(-STANDARD_GRAVITY_MPS2 * COLUMN_STEP_M * 0.5 / (DRY_AIR_GAS_CONSTANT_J_PER_KG_K * kelvin))
+            val midCelsius = midKelvin - KELVIN_AT_ZERO_C
+            val midDensity = saturationVaporPressureKpa(midCelsius) * PASCALS_PER_KPA / (WATER_VAPOR_GAS_CONSTANT_J_PER_KG_K * midKelvin)
+            val nextKelvin = kelvin - moistAdiabaticLapseKPerM(midCelsius, midPressure) * COLUMN_STEP_M
+            val nextPressure = pressureKpa * exp(-STANDARD_GRAVITY_MPS2 * COLUMN_STEP_M / (DRY_AIR_GAS_CONSTANT_J_PER_KG_K * midKelvin))
+            if (nextPressure <= topPressureKpa) {
+                // The last step's share that lies under the top, by the logarithm of the pressure.
+                val share = kotlin.math.ln(pressureKpa / topPressureKpa) / kotlin.math.ln(pressureKpa / nextPressure)
+                column += midDensity * COLUMN_STEP_M * share
+                val topKelvin = kelvin + (nextKelvin - kelvin) * share
+                return doubleArrayOf(column, saturationSpecificHumidity(topKelvin - KELVIN_AT_ZERO_C, topPressureKpa))
+            }
+            column += midDensity * COLUMN_STEP_M
+            kelvin = nextKelvin
+            pressureKpa = nextPressure
+        }
+    }
+
+    /** [integratedBoundaryLayerPart] at every temperature of the column table, the two parts interleaved. */
+    private val boundaryLayerTable: DoubleArray = DoubleArray(2 * COLUMN_TABLE_TEMPERATURES).also { table ->
+        for (index in 0 until COLUMN_TABLE_TEMPERATURES) {
+            val parts = integratedBoundaryLayerPart(COLUMN_TABLE_COLDEST_C + index * COLUMN_TABLE_STEP_C)
+            table[2 * index] = parts[0]
+            table[2 * index + 1] = parts[1]
+        }
+    }
+
+    /**
+     * The boundary layer's depth in meters over ground at [groundPressureKpa] whose air stands at
+     * [surfaceTemperatureC]: [BOUNDARY_LAYER_DEPTH_KPA] by the hypsometric equation, through air
+     * cooling at the dry adiabat's rate, the well-mixed layer's own. 1.1 km at 25 C over the sea.
+     */
+    fun boundaryLayerDepthM(surfaceTemperatureC: Double, groundPressureKpa: Double): Double {
+        val surfaceKelvin = surfaceTemperatureC + KELVIN_AT_ZERO_C
+        val topPressureKpa = (groundPressureKpa - BOUNDARY_LAYER_DEPTH_KPA).coerceAtLeast(MIN_LAYER_TOP_KPA)
+        return surfaceKelvin / DRY_LAPSE_K_PER_M *
+            (1.0 - (topPressureKpa / groundPressureKpa).pow(DRY_AIR_GAS_CONSTANT_J_PER_KG_K / DRY_AIR_HEAT_CAPACITY_J_PER_KG_K))
+    }
+
+    /** The least pressure a layer's top is read at, kilopascals: under any ground the plates raise. */
+    private const val MIN_LAYER_TOP_KPA = 10.0
+
+    /**
+     * What the boundary layer's air condenses per meter it is lifted, in kilograms per square meter
+     * per meter, with the meter of lift's derivative in the layer's water: the thermodynamics of
+     * Smith and Barstad's (2004) source term read on the layer's own air rather than on a saturated
+     * column.
+     *
+     * The layer is well mixed: its air at every height carries the specific humidity [humidity]
+     * (kg/kg) of its surface air at [surfaceTemperatureC] and [groundPressureKpa], and climbs dry
+     * to its lifting condensation level `z_c`, where its own water saturates it. Lifted at `w`, the
+     * air above `z_c` and under the layer's top, [layerDepthM] over the ground, rises along the
+     * moist adiabat and condenses `rho (-dq_s/dz)` per meter, so the layer condenses
+     * `w Y (h - z_c)`, `Y` the saturated air's yield per meter at its condensation level; none where
+     * `z_c` stands at or over the top. Air under its condensation level only cools.
+     *
+     * Into [into]: the yield `Y (h - z_c)` in kilograms per square meter per meter of lift, and its
+     * slope in the layer's water, per millimeter of column water, the condensation level moving with
+     * the humidity (`Y` held). The condensation level is found by Newton's method on the dry
+     * adiabat, where the vapor's pressure falls with the air's in proportion and the saturation
+     * pressure falls with the temperature (Tetens' form, [saturationVaporPressureKpa]).
+     */
+    fun boundaryLayerLiftYield(
+        surfaceTemperatureC: Double,
+        groundPressureKpa: Double,
+        layerDepthM: Double,
+        humidity: Double,
+        into: DoubleArray
+    ) {
+        into[0] = 0.0
+        into[1] = 0.0
+        if (humidity <= 0.0) return
+        val surfaceKelvin = surfaceTemperatureC + KELVIN_AT_ZERO_C
+        val vaporPressure = humidity * groundPressureKpa / (MOLAR_MASS_RATIO + (1.0 - MOLAR_MASS_RATIO) * humidity)
+        val logVapor = kotlin.math.ln(vaporPressure / TETENS_KPA)
+        // The dew point, from Tetens' form inverted; the condensation level's temperature lies under it.
+        var levelC = TETENS_OFFSET_C * logVapor / (TETENS_SLOPE - logVapor)
+        var slope = 1.0
+        repeat(CONDENSATION_LEVEL_NEWTON_STEPS) {
+            val shifted = levelC + TETENS_OFFSET_C
+            val levelKelvin = levelC + KELVIN_AT_ZERO_C
+            val excess = TETENS_SLOPE * levelC / shifted - logVapor - DRY_POWER * kotlin.math.ln(levelKelvin / surfaceKelvin)
+            slope = TETENS_SLOPE * TETENS_OFFSET_C / (shifted * shifted) - DRY_POWER / levelKelvin
+            levelC -= excess / slope
+        }
+        val levelKelvin = levelC + KELVIN_AT_ZERO_C
+        val levelHeight = ((surfaceKelvin - levelKelvin) / DRY_LAPSE_K_PER_M).coerceAtLeast(0.0)
+        val above = layerDepthM - levelHeight
+        if (above <= 0.0) return
+        val levelPressure = groundPressureKpa * (levelKelvin / surfaceKelvin).pow(DRY_POWER)
+        val levelHumidity = saturationSpecificHumidity(levelC, levelPressure)
+        val density = levelPressure * PASCALS_PER_KPA / (DRY_AIR_GAS_CONSTANT_J_PER_KG_K * levelKelvin)
+        val perMeter = density * levelHumidity * (
+            LATENT_HEAT_J_PER_KG * moistAdiabaticLapseKPerM(levelC, levelPressure) /
+                (WATER_VAPOR_GAS_CONSTANT_J_PER_KG_K * levelKelvin * levelKelvin) -
+                STANDARD_GRAVITY_MPS2 / (DRY_AIR_GAS_CONSTANT_J_PER_KG_K * levelKelvin)
+            )
+        into[0] = perMeter * above
+        // d(z_c)/dW: the level's temperature rises with the vapor's pressure, which rises with the
+        // humidity; the level falls by its warming over the dry lapse rate.
+        val logVaporPerHumidity = 1.0 / humidity - (1.0 - MOLAR_MASS_RATIO) / (MOLAR_MASS_RATIO + (1.0 - MOLAR_MASS_RATIO) * humidity)
+        val levelWarmingPerHumidity = logVaporPerHumidity / slope
+        into[1] = perMeter * levelWarmingPerHumidity / DRY_LAPSE_K_PER_M / BOUNDARY_LAYER_MASS_KG_PER_M2
+    }
+
+    /**
+     * Newton's steps for the condensation level's temperature from the dew point: the excess is
+     * nearly linear over the few kelvin between them, and four steps leave it under a microkelvin.
+     */
+    private const val CONDENSATION_LEVEL_NEWTON_STEPS = 4
 
 
     /**
@@ -352,4 +552,10 @@ internal object ColumnWater {
 
     /** The dry adiabat's lapse rate, `g / c_p`, kelvin per meter. */
     private const val DRY_LAPSE_K_PER_M = STANDARD_GRAVITY_MPS2 / DRY_AIR_HEAT_CAPACITY_J_PER_KG_K
+
+    /** The boundary layer's air, kilograms per square meter: its depth in pressure over gravity, 1,292. */
+    const val BOUNDARY_LAYER_MASS_KG_PER_M2 = BoundaryLayer.LAYER_THICKNESS_PA / STANDARD_GRAVITY_MPS2
+
+    /** `c_p / R_d`, the dry adiabat's power between pressure and temperature. */
+    private const val DRY_POWER = DRY_AIR_HEAT_CAPACITY_J_PER_KG_K / DRY_AIR_GAS_CONSTANT_J_PER_KG_K
 }

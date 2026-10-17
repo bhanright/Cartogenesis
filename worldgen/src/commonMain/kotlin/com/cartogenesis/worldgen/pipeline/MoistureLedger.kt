@@ -27,8 +27,9 @@ internal class MoistureLedger {
     /** Which mechanism rained it. Each is charged once, on the water left by the ones before. */
     enum class Sink {
         /**
-         * The column's own rain at its relative humidity, Bretherton, Peters and Back's relation,
-         * under the inversion's lid ([MoistureMarch.columnRainMmPerDay]): the large-scale rain.
+         * The column's own rain at the free troposphere's humidity, Bretherton, Peters and Back's
+         * relation, under the inversion's lid ([MoistureMarch.columnRainMmPerDay]): the large-scale
+         * rain, with what the free troposphere holds over its saturated column.
          */
         COLUMN,
 
@@ -36,8 +37,8 @@ internal class MoistureLedger {
         CONVERGENCE,
 
         /**
-         * Cloud from the ground's lifting and from the column over its cap, fallen out over Smith
-         * and Barstad's two delays.
+         * Cloud from the boundary layer's lifting and from the layer over its cap, fallen out over
+         * Smith and Barstad's two delays.
          */
         CONDENSATE
     }
@@ -90,6 +91,24 @@ internal class MoistureLedger {
         /** Every source the budget names. */
         val sources: Double get() = seaEvaporation + groundReturn
 
+        /**
+         * Adds [other]'s terms to this lap's, the worst crossing the worse of the two: one layer's
+         * part of a season's lap, merged into the season's. The storage is the season's own and is
+         * not added.
+         */
+        fun add(other: Lap) {
+            seaEvaporation += other.seaEvaporation
+            groundReturn += other.groundReturn
+            for (sink in rain.indices) for (surface in rain[sink].indices) rain[sink][surface] += other.rain[sink][surface]
+            landOriginRain += other.landOriginRain
+            condensed += other.condensed
+            reevaporated += other.reevaporated
+            negativeParcels += other.negativeParcels
+            tracerOutOfBounds += other.tracerOutOfBounds
+            nonFinite += other.nonFinite
+            worstCrossingImbalance = maxOf(worstCrossingImbalance, other.worstCrossingImbalance)
+        }
+
         /** Every sink: the rain, by every mechanism, wherever it fell. */
         val totalRain: Double get() = rain.sumOf { it.sum() }
 
@@ -116,11 +135,45 @@ internal class MoistureLedger {
         val groundReturn = FloatField(cellsAcross, cellsDown)
         val seaEvaporation = FloatField(cellsAcross, cellsDown)
 
-        /** The column's water as the march leaves each cell, millimeters. */
+        /** The column's water as the march leaves each cell, both layers', millimeters. */
         val columnWater = FloatField(cellsAcross, cellsDown)
 
-        /** The saturated column at each cell's air temperature, millimeters. */
+        /** The saturated column over the ground at each cell's air temperature, millimeters. */
         val saturatedColumn = FloatField(cellsAcross, cellsDown)
+
+        /** The boundary layer's water as it leaves each cell, millimeters, and the free troposphere's. */
+        val boundaryLayerWater = FloatField(cellsAcross, cellsDown)
+        val freeWater = FloatField(cellsAcross, cellsDown)
+
+        /**
+         * The boundary layer's surface air's relative humidity as it leaves each cell, 0..1, and its
+         * specific humidity, kilograms per kilogram.
+         */
+        val boundaryLayerHumidity = FloatField(cellsAcross, cellsDown)
+        val boundaryLayerSpecificHumidity = FloatField(cellsAcross, cellsDown)
+
+        /**
+         * The humidity the column's rain law read over each cell's crossing ([MoistureMarch.lawHumidity]),
+         * and the free troposphere's saturated column read from sea level, millimeters.
+         */
+        val lawHumidity = FloatField(cellsAcross, cellsDown)
+        val freeSaturatedColumn = FloatField(cellsAcross, cellsDown)
+
+        /** The column's own rain at each cell, the free troposphere's, millimeters a year. */
+        val columnRain = FloatField(cellsAcross, cellsDown)
+
+        /**
+         * What the boundary layer sent the free troposphere at each cell, less what it drew from it,
+         * millimeters a year; and the part of it the layer's converging air carried up.
+         */
+        val exchangeToFree = FloatField(cellsAcross, cellsDown)
+        val risingAir = FloatField(cellsAcross, cellsDown)
+
+        /** How long the free troposphere's water takes to cross each cell, seconds. */
+        val freeCrossingSeconds = FloatField(cellsAcross, cellsDown)
+
+        /** The sea's surface, degrees Celsius, at open-sea cells. */
+        val seaSurface = FloatField(cellsAcross, cellsDown)
 
         /** The sea's surface less the air over it, degrees, at open-sea cells. */
         val seaMinusAirC = FloatField(cellsAcross, cellsDown)
@@ -149,8 +202,8 @@ internal class MoistureLedger {
         val meanColumnWater = FloatField(cellsAcross, cellsDown)
 
         /**
-         * What the lifting condenses at each cell from a saturated column (`C_w w`), and what the
-         * descending air could take up (`C_w |w|`), millimeters a year.
+         * What the lifting condenses at each cell from a saturated boundary layer, and what the
+         * descending air could take up, millimeters a year.
          */
         val liftingAtSaturation = FloatField(cellsAcross, cellsDown)
         val descentCapacity = FloatField(cellsAcross, cellsDown)

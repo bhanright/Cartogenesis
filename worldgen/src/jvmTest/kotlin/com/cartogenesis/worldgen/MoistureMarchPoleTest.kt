@@ -86,7 +86,6 @@ class MoistureMarchPoleTest {
             seaIce = BooleanArray(cells),
             eastwardMps = east,
             southwardMps = south,
-            largeScaleAscentMps = null,
             inversionSuppression = null,
             extraterrestrialOfRow = DoubleArray(config.height) { 10.0 }
         )

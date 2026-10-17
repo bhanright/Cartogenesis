@@ -65,16 +65,17 @@ internal class AtmosphereCoupling(
     private val widthInRows = WaveForcing.groundWidthInRows(remap)
 
     /**
-     * The dry atmosphere's zonal winds, which hold each of the march's cells in its sweep
+     * The dry atmosphere's zonal winds, which hold each of the march's cells in its sweeps
      * (`MoistureMarch`'s "The sweeps are held"), when the first lap runs under some other heating:
-     * solved once here, before that lap's atmosphere, and let go of all but the two winds.
+     * solved once here, before that lap's atmosphere, and let go of all but each half's two layers'
+     * zonal winds.
      */
-    private val dryZonalWinds: Pair<FloatArray, FloatArray>? = initialLatentWPerM2?.let {
+    private val dryZonalWinds: Pair<MoistureMarch.SweepWinds, MoistureMarch.SweepWinds>? = initialLatentWPerM2?.let {
         val (july, january) = seasonsOf(solver.solve(null, null))
-        july.waterEastwardMps to january.waterEastwardMps
+        july.sweepWinds() to january.sweepWinds()
     }
 
-    override fun sweepWinds(): Pair<FloatArray, FloatArray>? = dryZonalWinds
+    override fun sweepWinds(): Pair<MoistureMarch.SweepWinds, MoistureMarch.SweepWinds>? = dryZonalWinds
 
     /** The heating the current atmosphere was solved under, both halves, July's cells then January's. */
     private var given: DoubleArray = initialLatentWPerM2?.let { (july, january) -> july + january } ?: DoubleArray(2 * cellCount)

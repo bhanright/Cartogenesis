@@ -11,24 +11,41 @@ import kotlin.time.TimeSource
 
 /**
  * The rain: water carried along the wind in kilograms per square meter, taken up from the sea and
- * the ground, rained out where the column cannot keep it, and conserved between the two.
+ * the ground, rained out where the air cannot keep it, and conserved between the two.
+ *
+ * # Two layers
+ *
+ * The column's water is carried in two layers, each on its own wind:
+ * - **The boundary layer**, the dry atmosphere's lowest layer, a fixed mass of air
+ *   ([ColumnWater.BOUNDARY_LAYER_MASS_KG_PER_M2]) over the ground, well mixed, with one specific
+ *   humidity. The sea evaporates into it by the bulk formula on its own humidity, and the ground
+ *   gives its water back into it. It blows the surface wind ([Season.eastwardMps]), the boundary
+ *   layer's drag balance, which carries the trades' inflow into the rising branches.
+ * - **The free troposphere** above it, which carries the rest of the column's water on the levels
+ *   above ([Season.freeEastwardMps], [BoundaryLayer.freeTroposphereWindMps]): the circulation's
+ *   zonal wind and the stationary waves' own, and the cells' return aloft.
+ *
+ * The two exchange their water at every cell, conservatively, in two ways. **What the boundary
+ * layer's wind converges rises out of it**: its air is carried as a tracer beside its water, by
+ * the same transport, so where the march's own faces gather more air into a cell than the layer
+ * holds, the excess leaves it upward with its water into the free troposphere, and where they take
+ * air out, the free troposphere's lowest air comes down to make it up; a uniform humidity stays
+ * uniform under any wind. **The layer's top is stirred**: the cumulus mass flux out of the
+ * boundary layer and the entrainment of drier air into it exchange a mass of air each way at
+ * [EXCHANGE_VELOCITY_MPS]. The free troposphere's air comes down at its lowest level's specific
+ * humidity, its relative humidity at the saturation humidity of the boundary layer's top.
  *
  * # What is solved
  *
- * The steady state of the column-water budget on the sphere,
- *
- *     div(W V) = E - P,
- *
- * with `W` the column's water (kg m⁻², which is millimeters), `V` the column's vapor-weighted wind
- * ([Season.transportEastwardMps]), `E` what the sea and the ground put in and `P` what rains. Marched column by column along each cell's own
- * zonal wind `u`, the steady equation is a march in space and not in time: crossing a column of
- * ground width `dx = cellWidth cos(latitude)` takes `dt = dx / |u|`, every source and sink is
- * charged over that `dt`, and what a row carries across a column's side is the mass flux
- * `|u| W cellHeight`. The march keeps that flux in one unit for every row, the column water it
- * would be at [TRANSPORT_SPEED_MPS], so a row's **parcel** is `|u| W / U`, and the parcels of
- * different rows and different speeds add without weights. Where the wind slows the same flux is
- * more water over the ground and stays longer, and where it reverses the column water a cell
- * holds is still finite while its flux passes through zero.
+ * The steady state of each layer's water budget on the sphere, `div(W V) = E - P - X`, with `X`
+ * the exchange. Marched column by column along each cell's own zonal wind `u`, the steady
+ * equation is a march in space and not in time: crossing a column of ground width
+ * `dx = cellWidth cos(latitude)` takes `dt = dx / |u|`, every source and sink is charged over that
+ * `dt`, and what a row carries across a column's side is the mass flux `|u| W cellHeight`. The
+ * march keeps that flux in one unit for every row, the column water it would be at
+ * [TRANSPORT_SPEED_MPS], so a row's **parcel** is `|u| W / U`, and the parcels of different rows,
+ * different speeds and different layers add without weights: a rate at a cell is the same parcel
+ * in both layers, whichever wind crosses it.
  *
  * Between rows the wind's meridional part and the eddies carry water through each face, `v W`
  * and `K dW/dy` times the face's length `cellWidth cos(latitude of the face)`, each taken out of
@@ -41,23 +58,23 @@ import kotlin.time.TimeSource
  *
  * A column-by-column march has to run one way. A cell whose wind blows east is marched by the
  * eastward sweep and one whose wind blows west by the westward one; every cell belongs to exactly
- * one. Water that crosses from one sweep's cell into the other's where two zonal winds meet head
- * on is **banked** at the receiving cell and taken up by the other sweep when it reaches it, its cloud
- * and falling water with it, to fall over their own delays there; rained out at the turn instead,
- * they drew a wet line wherever the zonal wind reversed. So is
- * what the mean wind carries through a face into a row of the other sweep: each row's outflow
- * through such a face is solved in its own sweep's system, implicitly, beside the inflow its own
- * sweep's rows give it in the same column, and banked at the receiving cell, the eastward sweep's
- * for the westward one this lap and the westward sweep's for the eastward one the next. That is
- * the flux the same face would carry between two rows of one sweep. Solved instead in the westward
- * sweep's system, with an eastward row entering it as the water it had left the column with and
- * none of its own sweep's faces, the eastward row could send no more than it carried along the row
- * and keep no more than it could mix back, so water piled up on the upwind side of every reversal
- * of the zonal wind and the downwind side went dry (docs/DESIGN_LEDGER.md, A1-6b). The eddies'
- * mixing between the two sweeps' rows is still solved that way, by the westward sweep with the
- * eastward rows beside its own in one system: mixed a lap late in one direction, as the mean wind's
- * outflow is, two rows that mix hard each wait on the other's last lap, and the march settled only
- * over dozens of laps.
+ * one, in each layer. Water that crosses from one sweep's cell into the other's where two zonal
+ * winds meet head on is **banked** at the receiving cell and taken up by the other sweep when it
+ * reaches it, its cloud and falling water with it, to fall over their own delays there; rained out
+ * at the turn instead, they drew a wet line wherever the zonal wind reversed. So is what the mean
+ * wind carries through a face into a row of the other sweep: each row's outflow through such a
+ * face is solved in its own sweep's system, implicitly, beside the inflow its own sweep's rows give
+ * it in the same column, and banked at the receiving cell, the eastward sweep's for the westward
+ * one this lap and the westward sweep's for the eastward one the next (docs/DESIGN_LEDGER.md,
+ * A1-6b). The eddies' mixing between the two sweeps' rows is solved by the westward sweep with the
+ * eastward rows beside its own in one system.
+ *
+ * The layers march side by side, each on its own thread, so their exchange runs a lap behind: what
+ * each layer sends the other at a cell, solved implicitly in its own water over its own crossing,
+ * waits at the cell ([SeasonMarch]'s inboxes) and enters the other layer there on the next lap, as
+ * a steady rate over that layer's crossing, as the surface's sources enter. At the march's steady
+ * state a lap's lag is no lag, a uniform state stays uniform however long a cell's crossing, and the
+ * inboxes are held in the budget like any bank.
  *
  * # The sweeps are held
  *
@@ -66,47 +83,39 @@ import kotlin.time.TimeSource
  * cell whose wind later turns against its sweep is carried along it at the march's least speed, as
  * calm. Where the zonal wind is weak, near every reversal, the solved atmosphere's lap-to-lap
  * changes turned ten thousand cells a lap from one sweep to the other, and the march's answer
- * stepped with each turn, so the coupled loop never settled: its residual hung at a third of the
- * heating over forty laps on seed 42 at 1,024 rows. Held, the march's answer moves with the wind's
- * speed alone and the loop settles in eleven laps. A cell's zonal flux is its speed along its
- * sweep, so as its wind turns against the sweep that flux falls to nothing before the turn and not
- * after it. The partition is the dry wind's and not the first lap's because a loop may start
- * elsewhere, the erosion's halfway weather where its opening weather settled: held at its own first
- * lap's wind, a loop started from twice the settled heating settled a fifth to a third of the
- * heating's departures away from the cold start's (docs/DESIGN_LEDGER.md, A1-6b).
+ * stepped with each turn, so the coupled loop never settled (docs/DESIGN_LEDGER.md, A1-6b).
  *
  * # The sinks
  *
- * Two laws, which never count the same water, solved together with the sources over each crossing
- * ([ColumnCrossing]):
- * - **The column's rain** at its relative humidity `r = W / W_s`, Bretherton, Peters and Back's
- *   (2004) relation over the tropical oceans, `P = exp(11.4 (r - 0.522))` mm a day for monthly
- *   means ([columnRainMmPerDay]), `W_s` the saturated column of the boundary layer's rising parcel
- *   ([ColumnWater.saturatedColumnMm]). It is the whole of the large-scale rain: their relation is
- *   the tropical ocean's surface rain at its monthly humidity, the rain the atmosphere's own ascent
- *   wrings out included and what falling rain loses to the air below it already taken off, so the
- *   ascent ([Season.largeScaleAscentMps]) condenses nothing beside it and the descent takes none of
- *   it back; the ascent's water is the column's convergence, which the march carries in. Over land
- *   and outside the tropics it is assumed, not measured: their microwave retrieval holds only over
- *   the sea, and no relation of the kind was read for the extratropics' fronts. It is the rate that
- *   sets the atmosphere's turnover: nothing here states a lifetime, and the one the world ends with
- *   is diagnosed (`RainAgainstEarthTest`).
- * - **The ground's lifting.** Air carried up the ground condenses at Smith and Barstad's (2004)
- *   source, `C_w w`, in the column's saturated share alone, which it has only over its critical
- *   humidity ([CRITICAL_HUMIDITY_OVER_LAND]), the humidity being its water over what it holds when
- *   its surface air saturates ([HOLDABLE_SHARE]). The rise is the wind's climb up the ground, less
- *   a large-scale descent around it, which spends a climb first. The cloud turns to falling
- *   hydrometeors and falls out over their two delays. `C_w` is thermodynamics
- *   ([ColumnWater.upliftCondensationKgPerM3]), so the climb's rain has no strength of its own to set.
- * - **The cap.** What the column cannot hold at all, over [HOLDABLE_SHARE] of its saturated
- *   water, condenses to cloud and falls out over the same delays.
- * - **Convergence**, a closure switched off by default (`ClimateConfig.convergenceRain`).
+ * Solved together with the sources over each crossing ([ColumnCrossing]):
+ * - **The column's rain**, from the free troposphere, at Bretherton, Peters and Back's (2004)
+ *   relation over the tropical oceans, `P = exp(11.4 (r - 0.522))` mm a day for monthly means
+ *   ([columnRainMmPerDay]). Their humidity is the column's, but the boundary layer's part of it is
+ *   insensitive to the rain ("below 900 mb, q_n is insensitive to P, presumably due to rapid
+ *   turbulent interactions with a sea surface of nearly constant temperature", section 3e), and the
+ *   rain moves with the troposphere's humidity between 850 and 400 hPa; so the law reads the free
+ *   troposphere's water over a boundary layer at the marine humidity their columns stood on
+ *   ([lawHumidity]). Its saturated column is the free troposphere's own air read from sea level, not
+ *   the column over the ground under it, so high ground does not raise it: that water came from the
+ *   air above the lowlands' boundary layer and is read against what that air holds. Over land and
+ *   outside the tropics the relation is assumed, not measured.
+ * - **The ground's lifting.** Air carried up the ground at `w`, the boundary layer's wind's climb
+ *   over the ground read at [CLIMB_TERRAIN_SIGMA_KM] on the ground, lifts the boundary layer, whose
+ *   air climbs dry to its own lifting condensation level and condenses above it at Smith and
+ *   Barstad's (2004) saturated rate ([ColumnWater.boundaryLayerLiftYield]). Air that has already
+ *   been lifted to its saturation once condenses again only where it is lifted higher, so a run of
+ *   small hills rains as one. The cloud turns to falling hydrometeors and falls out over Smith and
+ *   Barstad's two delays; where the air comes down the ground its descent evaporates the cloud that
+ *   has not fallen, at the rate the same lift would condense it.
+ * - **The cap.** What the boundary layer cannot hold at all, over its air's saturation at the
+ *   ground's own temperature and pressure, condenses to cloud and falls out over the same delays;
+ *   the free troposphere's water over its saturated column rains at once.
+ * - **Convergence**, a closure switched off by default (`ClimateConfig.convergenceRain`), on the
+ *   free troposphere's water.
  *
- * **Descent**, large-scale and down the ground together, warms the air at the same `C_w |w|` and
- * evaporates the cloud carried into it at that rate, never past what the column holds before its
- * surface air saturates. The marine inversion's lid slows the column's rain, the cloud's conversion
- * to rain and the convergence closure on the land under it. None of them deletes water: what they
- * hold back is carried on.
+ * The marine inversion's lid slows the column's rain, the cloud's conversion to rain and the
+ * convergence closure on the land under it. None of them deletes water: what they hold back is
+ * carried on.
  *
  * **What condenses** is counted apart from what falls ([Result.julyHalfCondensationMm]): the
  * column's rain and the convergence closure's, which leave the vapor where they fall, and the
@@ -115,27 +124,29 @@ import kotlin.time.TimeSource
  *
  * # The sources
  *
- * The open sea evaporates by the bulk formula, from its water ([Season.seaSurfaceC], which stands
- * [EnergyBalance.SEA_OVER_MARINE_AIR_C] above its air on the open sea) into the air over it at the
- * marine boundary layer's own relative humidity ([MARINE_RELATIVE_HUMIDITY]), not the column's, at the scalar mean wind
- * the turbulence feels ([Season.scalarWindAt10mMps]), the mean wind and the weather's gusts
- * together, which does not fall to nothing where the mean wind reverses. The ground gives
- * back Budyko's share of its own year of rain against its potential evapotranspiration, each half
- * of the year its share of the potential as far as that half's rain and the root zone's store can
- * supply it ([halfYearReturnsMm]).
+ * The open sea evaporates by the bulk formula, from its water ([Season.seaSurfaceC]) into the
+ * boundary layer at the layer's own specific humidity, at the scalar mean wind the turbulence feels
+ * ([Season.scalarWindAt10mMps]), the mean wind and the weather's gusts together, which does not fall
+ * to nothing where the mean wind reverses. The ground gives back Budyko's share of its own year of
+ * rain against its potential evapotranspiration, each half of the year its share of the potential as
+ * far as that half's rain and the root zone's store can supply it ([halfYearReturnsMm]).
  *
  * # One season at a time, coupled through the year's rain
  *
  * Each half-year is marched on its own wind and temperatures. With a [Coupling] the atmosphere is
  * solved again between laps from each half's condensation, and the laps run until its heating has
- * settled too. The ground's return couples the halves:
- * it is Budyko's share of the cell's **annual** rain, after the blur, against the annual
- * potential evaporation, which is what the rivers and lakes read too, and the root zone carries
- * water from one half into the other ([ROOT_ZONE_STORE_MM]). The laps run both seasons
- * in step and update the return between laps until the year's rain stops moving
- * ([CONVERGED_SHARE]); the last lap's rain and potential are then the ones the return was set
- * from, so the surface budget, rain equals the ground's return plus the runoff, closes cell by
- * cell.
+ * settled too. The ground's return couples the halves: it is Budyko's share of the cell's
+ * **annual** rain, after the blur, against the annual potential evaporation, which is what the
+ * rivers and lakes read too, and the root zone carries water from one half into the other
+ * ([ROOT_ZONE_STORE_MM]). The laps run both seasons in step and update the return between laps
+ * until the year's rain stops moving ([CONVERGED_SHARE]); the last lap's rain and potential are
+ * then the ones the return was set from, so the surface budget, rain equals the ground's return
+ * plus the runoff, closes cell by cell.
+ *
+ * The march has no graphics path yet (docs/TODO.md, the moisture accelerator). Its per-cell work is
+ * [ColumnCrossing]'s, which reads one cell and the layer's arriving water and nothing else, so each
+ * column's rows are one wavefront for a device's kernel; the exchange between the layers reads only
+ * the other layer's last lap at the same cell.
  */
 object MoistureMarch {
 
@@ -166,74 +177,78 @@ object MoistureMarch {
     const val COLUMN_RAIN_HUMIDITY_OFFSET = 0.522
 
     /**
-     * The relative humidity of the air at the sea's surface, which the bulk formula evaporates
-     * against: Dai's (2006) 75 to 80 percent over most of the oceans in every season, from ship
-     * observations, with small variations in space and from year to year; its middle.
+     * The relative humidity of the air at the sea's surface in the columns Bretherton and others'
+     * relation was read on: Dai's (2006) 75 to 80 percent over most of the oceans in every season,
+     * from ship observations, its middle. The boundary layer the law counts beside the free
+     * troposphere's water ([lawHumidity]), and the surface air whose rise sets the saturated column's
+     * profile ([ColumnWater.PARCEL_RELATIVE_HUMIDITY]); the sea now evaporates into the boundary
+     * layer's own humidity.
      */
     const val MARINE_RELATIVE_HUMIDITY = 0.775
 
     /**
-     * Earth's mean rain, millimeters a day: Trenberth and others' (2007) 486.9 thousand km³ a year
-     * over the planet's 510.1 million km², 954 mm a year.
+     * The free troposphere's net radiative cooling, kelvin a day: EUREC4A's clear-sky soundings
+     * "largely negative from the surface up to 10 km, with a median value around -1 K/day"
+     * (Albright and others 2021, read as chapter 3 of Albright's thesis, section 3.4.1).
      */
-    private const val EARTH_MEAN_RAIN_MM_PER_DAY = 486.9e3 / 510.1e6 * 1.0e6 / 365.25
+    const val FREE_TROPOSPHERE_COOLING_K_PER_DAY = 1.0
 
     /**
-     * The share of its saturated water a column holds when the air at its surface saturates,
-     * which is where lifting it begins to condense: the column's relative humidity over its
-     * surface air's, both of them Earth's. Bretherton, Peters and Back's relation puts the column at
-     * 0.606 of its saturated water at Earth's mean rain of 2.61 mm a day, and Dai's surface air
-     * stands at [MARINE_RELATIVE_HUMIDITY], so a column holds 0.78 of its saturated water at
-     * surface saturation.
+     * The velocity the boundary layer's top exchanges air at with the free troposphere, each way,
+     * meters a second, under air whose temperature falls [lapseRateCPerKm] a kilometer: the speed at
+     * which the free troposphere sinks where its radiative cooling
+     * ([FREE_TROPOSPHERE_COOLING_K_PER_DAY]) is balanced by the warming of its descent, `Q / (Gamma_d
+     * - gamma)`, 3.5 mm a second under the standard 6.5 K/km, against which the convection carries
+     * the same mass up out of the layer: radiative-convective equilibrium's overturning, which the
+     * march's winds do not resolve.
      *
-     * It stands on the saturated column the march reads ([ColumnWater.saturatedColumnMm]) because
-     * that column is theirs: their humidity divides by the saturation humidity summed up analyzed
-     * temperatures, which the boundary layer's rising parcel follows over the tropical sea, so a
-     * humidity read off their relation is a humidity of this column. Their own figures bracket it:
-     * the days that rain over 8 mm stand at 0.75 to 0.8 of the saturated column (section 3a), so the
-     * column saturates its surface air where Earth's wettest columns stand, and the air below 900 hPa
-     * keeps nearly the same humidity whatever the rain (section 3e), so the surface air stays near
-     * Dai's while the column above it moistens.
+     * Not the trade cumulus' mass flux out of the subcloud layer, 15.2 mm a second over EUREC4A
+     * (Albright's thesis, chapter 7), nor the entrainment at its top, 18.8 (Galewsky and Los 2026,
+     * section 2.1): those exchange the subcloud layer with the cloud layer just above it, 13.0 g/kg
+     * against its 15.1 (Galewsky and Los, Table 1), inside the moist layer under the trade inversion.
+     * The march's free troposphere holds one relative humidity from the boundary layer's top up, the
+     * drier air above the inversion with the cloud layer, so the cumulus' mass flux against it took
+     * the subcloud air down to 0.59 of saturation and evaporated half again the sea's water
+     * (docs/DESIGN_LEDGER.md, W2e).
      */
-    val HOLDABLE_SHARE = (COLUMN_RAIN_HUMIDITY_OFFSET +
-        kotlin.math.ln(EARTH_MEAN_RAIN_MM_PER_DAY) / COLUMN_RAIN_PER_HUMIDITY) / MARINE_RELATIVE_HUMIDITY
+    fun exchangeVelocityMps(lapseRateCPerKm: Double): Double {
+        val stabilityKPerM = DRY_LAPSE_K_PER_M - lapseRateCPerKm / METERS_PER_KM
+        return if (stabilityKPerM > 0.0) FREE_TROPOSPHERE_COOLING_K_PER_DAY / SECONDS_PER_DAY_DOUBLE / stabilityKPerM else 0.0
+    }
 
-    /**
-     * The humidity, the column's water over what it holds when its surface air saturates
-     * ([HOLDABLE_SHARE]), over which air lifted up the ground condenses: Zhao and Carr's (1997)
-     * critical relative humidity over land, "empirically set to 0.75 over land and 0.90 over
-     * ocean" in their prognostic cloud scheme for the National Centers for Environmental
-     * Prediction's models (as Brenowitz and others 2022, appendix A, quote it). Lifted air
-     * condenses only in the share of the column that is saturated, which the weather inside a
-     * column the march holds as one humidity leaves part of it before its mean is: Sundqvist, Berge
-     * and Kristjansson's (1989) share ([ColumnCrossing.saturatedShare]).
-     *
-     * Read on the same humidity as the cap, so the gate opens below where the cap binds: the
-     * humidity is the surface air's, which the lifted boundary-layer air carries up. Only the land
-     * lifts air up the ground, so the ocean's 0.90 has nothing to gate.
-     */
-    const val CRITICAL_HUMIDITY_OVER_LAND = 0.75
+    /** Seconds in a day. */
+    private const val SECONDS_PER_DAY_DOUBLE = 86_400.0
 
     /**
      * Smith and Barstad's (2004) two delays in the orographic rain, seconds: cloud water turning
-     * into hydrometeors, and hydrometeors falling out. A thousand each in their worked example;
+     * into hydrometeors, and hydrometeors falling out. A thousand each in their worked examples;
      * Smith and others (2005) read 500 to 5,000 from the Oregon Cascades' rain and isotopes.
      */
     const val CLOUD_CONVERSION_SECONDS = 1_000.0
     const val FALLOUT_SECONDS = 1_000.0
 
     /**
+     * The length the ground's climb is read on, the standard deviation of a Gaussian on the ground,
+     * kilometers: how far the march's wind carries the condensate over Smith and Barstad's two
+     * delays, `U (tau_c + tau_f)`, 15 km at [TRANSPORT_SPEED_MPS]. Shorter terrain makes condensate
+     * that the lee's descent evaporates before it falls, which their transfer function filters by the
+     * same delays (`1 / ((1 + i sigma tau_c)(1 + i sigma tau_f))`), so a slope shorter than this is
+     * not a slope the rain sees; and a length on the ground and not a count of cells, so every grid
+     * reads the same terrain.
+     */
+    val CLIMB_TERRAIN_SIGMA_KM = TRANSPORT_SPEED_MPS * (CLOUD_CONVERSION_SECONDS + FALLOUT_SECONDS) / METERS_PER_KM_DOUBLE
+
+    /**
      * The most laps of both seasons round the planet. The first starts from air at four fifths of
-     * its saturated column over dry ground and leaves a year's rain for the second's ground to
-     * give back; each later one carries the return a lap further toward the year it belongs to,
-     * until the year's land rain moves by less than [CONVERGED_SHARE], and with a [Coupling] until
-     * the atmosphere's heating has settled too.
+     * its saturation over dry ground and leaves a year's rain for the second's ground to give back;
+     * each later one carries the return a lap further toward the year it belongs to, until the
+     * year's land rain moves by less than [CONVERGED_SHARE], and with a [Coupling] until the
+     * atmosphere's heating has settled too.
      *
      * Forty, a ceiling and not a count: the coupled loop settles in 13 to 18 laps on the standard
-     * worlds at 512 and 1,024 rows, and the plain iteration it is accelerated from in 12 to 29, or
-     * not within forty on one world in four (docs/DESIGN_LEDGER.md, A1-5). A loop that reaches the ceiling has a feedback at or
-     * over one, which more laps would not settle; it stops with the last lap's rain, and
-     * `AtmosphereCouplingTest` holds the standard worlds short of it.
+     * worlds at 512 and 1,024 rows (docs/DESIGN_LEDGER.md, A1-5). A loop that reaches the ceiling has
+     * a feedback at or over one, which more laps would not settle; it stops with the last lap's
+     * rain, and `AtmosphereCouplingTest` holds the standard worlds short of it.
      */
     const val MAX_LAPS = 40
 
@@ -252,25 +267,26 @@ object MoistureMarch {
     /** Seconds in a year: 365.25 days. */
     const val SECONDS_PER_YEAR = 3.15576e7
 
-    /** Seconds in a day. */
-    private const val SECONDS_PER_DAY = 86_400.0
-
     /**
-     * The share of its saturated column the first lap's air starts at. A starting guess and no
-     * more: the laps wash it out.
+     * The share of its saturation each layer's air starts at on the first lap. A starting guess and
+     * no more: the laps wash it out.
      */
     private const val INITIAL_HUMIDITY = 0.8
 
+    /** One kilometer in meters. */
+    private const val METERS_PER_KM_DOUBLE = 1_000.0
+
     /** What a season's march reads, every per-cell array row-major on the world's grid. */
     class Season(
-        /** The half-year's air temperature, degrees Celsius. */
+        /** The half-year's air temperature at the ground, degrees Celsius. */
         val airTemperatureC: FloatArray,
         /** The water's temperature at sea cells, current and all; ignored on land. */
         val seaSurfaceC: FloatArray,
         val seaIce: BooleanArray,
         /**
          * The surface wind, the boundary layer's, belts and pressure departure together, meters a
-         * second, positive east: what climbs the ground and what the evaporation feels.
+         * second, positive east: what carries the boundary layer's water, what climbs the ground and
+         * what the evaporation feels.
          */
         val eastwardMps: FloatArray,
         /** Its meridional part, meters a second, positive toward the south (down the map). */
@@ -283,30 +299,33 @@ object MoistureMarch {
         val scalarWindAt10mMps: FloatArray? = null,
         /** The wind at 2 m over FAO-56's grass, meters a second; null for its 2 m/s station mean. */
         val windAt2mMps: FloatArray? = null,
-        /**
-         * The atmosphere's vertical velocity at the boundary layer's top, meters a second, positive
-         * up ([BoundaryLayer.groundAscentMps]); null for the belts' control, which has none.
-         */
-        val largeScaleAscentMps: FloatArray?,
         /** The marine inversion's hold on each land cell's rain, 0..1, or null when it is off. */
         val inversionSuppression: FloatArray?,
         /** The half-year's mean sun at the top of the air, per row, MJ m⁻² day⁻¹. */
         val extraterrestrialOfRow: DoubleArray,
         /**
-         * The wind the column's water travels on, meters a second, eastward and southward: the
-         * column's vapor-weighted wind ([BoundaryLayer.columnWindMps]), since the boundary layer holds
-         * under half of the column's vapor and the air above it moves otherwise. Null for the belts'
-         * control, whose water travels on the surface wind.
+         * The free troposphere's wind, meters a second, eastward and southward: the levels above the
+         * boundary layer weighted by their vapor ([BoundaryLayer.freeTroposphereWindMps]). Null for
+         * the belts' control, whose whole column travels on the surface wind.
          */
-        val transportEastwardMps: FloatArray? = null,
-        val transportSouthwardMps: FloatArray? = null
+        val freeEastwardMps: FloatArray? = null,
+        val freeSouthwardMps: FloatArray? = null
     ) {
-        /** The water's eastward wind: [transportEastwardMps], or the surface's when there is none. */
-        val waterEastwardMps: FloatArray get() = transportEastwardMps ?: eastwardMps
+        /** The free troposphere's eastward wind: [freeEastwardMps], or the surface's when there is none. */
+        val freeEastward: FloatArray get() = freeEastwardMps ?: eastwardMps
 
-        /** The water's southward wind: [transportSouthwardMps], or the surface's when there is none. */
-        val waterSouthwardMps: FloatArray get() = transportSouthwardMps ?: southwardMps
+        /** The free troposphere's southward wind: [freeSouthwardMps], or the surface's when there is none. */
+        val freeSouthward: FloatArray get() = freeSouthwardMps ?: southwardMps
+
+        /** The two layers' zonal winds, which hold each cell in its sweeps ([Coupling.sweepWinds]). */
+        fun sweepWinds(): SweepWinds = SweepWinds(eastwardMps, freeEastward)
     }
+
+    /**
+     * The zonal winds that choose each cell's sweep in each layer, meters a second eastward,
+     * row-major: the boundary layer's and the free troposphere's.
+     */
+    class SweepWinds(val boundaryEastwardMps: FloatArray, val freeEastwardMps: FloatArray)
 
     /**
      * What the march reads beyond the two seasons. [run] builds the seasons itself, so that a
@@ -378,15 +397,19 @@ object MoistureMarch {
     )
 
     /**
-     * A half's water in flight at the end of a lap, which the next lap starts from: the bank at every
-     * cell, kilograms a square meter of column water in the march's own units (row-major), which
-     * holds what the westward sweep's faces moved between rows; and each row's parcel arriving at the
-     * map's first column in each sweep, vapor, cloud and falling water.
+     * A half's water in flight at the end of a lap, which the next lap starts from, each layer's:
+     * the bank at every cell, kilograms a square meter of column water in the march's own units
+     * (row-major), which holds what the westward sweep's faces moved between rows, the boundary
+     * layer's with its cloud and falling water banked at a turn and the free troposphere's with what
+     * the boundary layer sent it last, and the boundary layer's with what the free troposphere sent it;
+     * and each row's parcel arriving at the map's first column in each sweep, vapor, cloud and falling
+     * water.
      *
      * Started cold, the first lap marches with an empty bank and its rows exchange nothing they did
      * not exchange within the lap, so it condenses a quarter differently from the settled lap
      * whatever the heating it runs under (docs/DESIGN_LEDGER.md, A1-6a). The land-origin parts are
-     * not carried: they start at none, as a cold march's do, and only the recycling's share reads them.
+     * not carried: they start at none, as a cold march's do, and only the recycling's share reads
+     * them; nor is the boundary layer's air, which starts at the layer's own mass.
      */
     class WaterInFlight(
         val bank: FloatArray,
@@ -395,7 +418,10 @@ object MoistureMarch {
         val eastwardFalling: DoubleArray,
         val westwardVapor: DoubleArray,
         val westwardCloud: DoubleArray,
-        val westwardFalling: DoubleArray
+        val westwardFalling: DoubleArray,
+        val freeBank: FloatArray,
+        val freeEastwardVapor: DoubleArray,
+        val freeWestwardVapor: DoubleArray
     )
 
     /**
@@ -416,11 +442,11 @@ object MoistureMarch {
         fun nextSeasons(): Pair<Season, Season>
 
         /**
-         * The zonal winds that choose each cell's sweep, the half about July's and the half about
-         * January's, meters a second eastward, row-major: the dry atmosphere's (see the class
-         * comment). None when the first lap's seasons are already the dry atmosphere's.
+         * The zonal winds that choose each cell's sweeps, the half about July's and the half about
+         * January's: the dry atmosphere's (see the class comment). None when the first lap's
+         * seasons are already the dry atmosphere's.
          */
-        fun sweepWinds(): Pair<FloatArray, FloatArray>? = null
+        fun sweepWinds(): Pair<SweepWinds, SweepWinds>? = null
     }
 
     /**
@@ -432,13 +458,13 @@ object MoistureMarch {
         inputs: Inputs,
         ledger: MoistureLedger? = null,
         coupling: Coupling? = null,
+        /** The ground's return to start from, from an earlier march of this world's grid; dry ground when none. */
+        start: StartState? = null,
         /**
          * The two seasons the first lap reads, April to September about July and October to March
          * about January: built inside the march and held by no frame of it or its caller once the
          * marches are set up, so a coupled run's first seasons are let go after its first lap.
          */
-        /** The ground's return to start from, from an earlier march of this world's grid; dry ground when none. */
-        start: StartState? = null,
         firstSeasons: () -> Pair<Season, Season>
     ): Result {
         val config = inputs.config
@@ -446,7 +472,8 @@ object MoistureMarch {
         val cellsDown = config.height
         val cellCount = cellsAcross * cellsDown
         val grid = Grid(config)
-        val seasons = startMarches(inputs, grid, keepCells = ledger != null, coupling?.sweepWinds(), firstSeasons)
+        val climbElevationM = smoothedElevationM(config, grid, inputs.elevationM, CLIMB_TERRAIN_SIGMA_KM)
+        val seasons = startMarches(inputs, grid, climbElevationM, keepCells = ledger != null, coupling?.sweepWinds(), firstSeasons)
         val july = seasons[0]
         val january = seasons[1]
         if (start != null) {
@@ -468,11 +495,14 @@ object MoistureMarch {
         while (true) {
             val lapStarted = TimeSource.Monotonic.markNow()
             val laps = Array(2) { season -> ledger?.let { MoistureLedger.Lap(season == 0, lap) } }
+            for (season in 0 until 2) seasons[season].beginLap(laps[season])
             // The two seasons share nothing inside a lap but the ground's return, which was set
-            // before it began, so they march side by side.
-            parallelChunks(0, 2) { first, last ->
-                for (season in first until last) seasons[season].lap(laps[season])
+            // before it began, and each season's two layers share only what the other left at the
+            // lap's start, so all four march side by side.
+            parallelChunks(0, 2 * LAYERS) { first, last ->
+                for (task in first until last) seasons[task / LAYERS].marchLayer(task % LAYERS)
             }
+            for (season in 0 until 2) seasons[season].endLap(laps[season])
             laps.forEach { entry -> if (entry != null) ledger?.laps?.add(entry) }
 
             // The year's rain, as the rivers will read it, and the potential evaporation the two
@@ -585,6 +615,11 @@ object MoistureMarch {
         )
     }
 
+    /** The march's two layers, as [SeasonMarch.marchLayer] numbers them. */
+    private const val LAYERS = 2
+    private const val BOUNDARY = 0
+    private const val FREE = 1
+
     /**
      * How far the land's annual rain moved between two laps: the mean of each land cell's change
      * over the land's mean rain, both by area on the sphere.
@@ -606,12 +641,34 @@ object MoistureMarch {
 
     /**
      * The column's rain at relative humidity [relativeHumidity], millimeters a day: Bretherton,
-     * Peters and Back's (2004) `exp(11.4 (r - 0.522))` less its value at a dry column, 0.0026 mm
-     * a day, so a column with no water rains none however long the wind leaves it over a cell.
+     * Peters and Back's (2004) `exp(11.4 (r - 0.522))`, less its value at a dry column, 0.0026 mm a
+     * day, so a column with no water rains none however long the wind leaves it over a cell.
      */
     fun columnRainMmPerDay(relativeHumidity: Double): Double =
         exp(COLUMN_RAIN_PER_HUMIDITY * (relativeHumidity - COLUMN_RAIN_HUMIDITY_OFFSET)) -
             exp(-COLUMN_RAIN_PER_HUMIDITY * COLUMN_RAIN_HUMIDITY_OFFSET)
+
+    /**
+     * The water the column's rain law counts beside the free troposphere's at a cell whose air,
+     * carried down to the sea at the environment's lapse rate, stands at [seaLevelTemperatureC],
+     * millimeters: the boundary layer's mass at [MARINE_RELATIVE_HUMIDITY] of its surface air's
+     * saturation, the boundary layer of the columns the relation was read on, whose humidity their
+     * rain does not move (Bretherton, Peters and Back 2004, section 3e).
+     */
+    fun lawOffsetMm(seaLevelTemperatureC: Double): Double =
+        MARINE_RELATIVE_HUMIDITY * ColumnWater.saturationSpecificHumidity(seaLevelTemperatureC, ColumnWater.SEA_LEVEL_PRESSURE_KPA) *
+            ColumnWater.BOUNDARY_LAYER_MASS_KG_PER_M2
+
+    /**
+     * The humidity the column's rain law reads at a cell holding [freeWaterMm] in its free
+     * troposphere, its air carried down to the sea standing at [seaLevelTemperatureC]: that water and
+     * [lawOffsetMm] over the sea-level column's saturated water ([ColumnWater.saturatedColumnMm]).
+     * Dimensionless; what [columnRainMmPerDay] is read at.
+     */
+    fun lawHumidity(freeWaterMm: Double, seaLevelTemperatureC: Double): Double {
+        val saturated = ColumnWater.saturatedColumnMm(seaLevelTemperatureC)
+        return if (saturated > 0.0) (freeWaterMm + lawOffsetMm(seaLevelTemperatureC)) / saturated else 0.0
+    }
 
     /**
      * The share of a row's water the mid-latitude eddies trade through the face between two rows
@@ -625,8 +682,8 @@ object MoistureMarch {
      * ([EnergyBalance.eddyDiffusivityAt], in watts per square meter per kelvin per radian²) turned
      * into square meters a second by the air column's heat capacity and the planet's radius,
      * `K = D a² g / (p_s c_p)`: the energy balance carries the latent heat of that water already,
-     * and the same eddies carry the water. About 1.2e6 m²/s under the polar floor and 2.2e6 at
-     * the storm track's 50 degrees on Earth.
+     * and the same eddies carry the water, in both layers alike. About 1.2e6 m²/s under the polar
+     * floor and 2.2e6 at the storm track's 50 degrees on Earth.
      *
      * In the march's units a diffusive flux `K dW/dy` through a face `cellWidth cos(face)` long,
      * over a row `cellHeight` tall, against the reference throughflow `U cellHeight`, is
@@ -643,10 +700,11 @@ object MoistureMarch {
             (TRANSPORT_SPEED_MPS * cellHeightM * cellHeightM)
     }
 
-    /** Standard gravity, the standard atmosphere's surface pressure and dry air's heat capacity. */
+    /** Standard gravity, the standard atmosphere's surface pressure and dry air's heat capacity and gas constant. */
     private const val STANDARD_GRAVITY_MPS2 = 9.80665
     private const val SEA_LEVEL_PRESSURE_PA = 101_325.0
     private const val AIR_HEAT_CAPACITY_J_PER_KG_K = 1004.0
+    private const val DRY_AIR_GAS_CONSTANT_J_PER_KG_K = 287.04
 
     /**
      * Seconds the march's unit of water takes to cross one cell of [row] on [config]'s grid at
@@ -754,6 +812,64 @@ object MoistureMarch {
         january.setGroundReturn(cell, januaryReturn, annualRainMm, annualPotentialMm)
     }
 
+    /**
+     * [elevationM] (row-major, meters) spread by a Gaussian of [sigmaKm] on the ground, row-major:
+     * a pass along each row at that row's own cell width and one across the rows, each weighting a
+     * neighbor by the Gaussian of its distance on the ground and dividing by the weights, so a
+     * spread under a cell's width leaves the ground nearly as it is on every grid and the kernel is
+     * round on the ground at every width (conventions rule 13).
+     */
+    private fun smoothedElevationM(config: WorldGenConfig, grid: Grid, elevationM: FloatArray, sigmaKm: Double): FloatArray {
+        val cellsAcross = config.width
+        val cellsDown = config.height
+        val alongRows = FloatArray(elevationM.size)
+        parallelChunks(0, cellsDown) { startRow, endRow ->
+            for (row in startRow until endRow) {
+                val widthKm = config.cellWidthKm * grid.cosRow[row]
+                val reach = minOf((GAUSSIAN_REACH_SIGMAS * sigmaKm / widthKm).toInt(), cellsAcross / 2)
+                val weights = DoubleArray(reach + 1) { offset -> gaussian(offset * widthKm, sigmaKm) }
+                for (column in 0 until cellsAcross) {
+                    var sum = 0.0
+                    var weight = 0.0
+                    for (offset in -reach..reach) {
+                        val neighbor = row * cellsAcross + (column + offset + cellsAcross) % cellsAcross
+                        val w = weights[abs(offset)]
+                        sum += w * elevationM[neighbor]
+                        weight += w
+                    }
+                    alongRows[row * cellsAcross + column] = (sum / weight).toFloat()
+                }
+            }
+        }
+        val heightKm = config.cellHeightKm
+        val reach = (GAUSSIAN_REACH_SIGMAS * sigmaKm / heightKm).toInt()
+        val weights = DoubleArray(reach + 1) { offset -> gaussian(offset * heightKm, sigmaKm) }
+        val smoothed = FloatArray(elevationM.size)
+        parallelChunks(0, cellsDown) { startRow, endRow ->
+            for (row in startRow until endRow) {
+                for (column in 0 until cellsAcross) {
+                    var sum = 0.0
+                    var weight = 0.0
+                    for (offset in -reach..reach) {
+                        val other = row + offset
+                        if (other < 0 || other >= cellsDown) continue
+                        val w = weights[abs(offset)]
+                        sum += w * alongRows[other * cellsAcross + column]
+                        weight += w
+                    }
+                    smoothed[row * cellsAcross + column] = (sum / weight).toFloat()
+                }
+            }
+        }
+        return smoothed
+    }
+
+    /** The unnormalized Gaussian of [distanceKm] at [sigmaKm]. */
+    private fun gaussian(distanceKm: Double, sigmaKm: Double): Double = exp(-0.5 * distanceKm * distanceKm / (sigmaKm * sigmaKm))
+
+    /** How many standard deviations the terrain's Gaussian reaches: three, past which it weighs under a hundredth. */
+    private const val GAUSSIAN_REACH_SIGMAS = 3.0
+
     /** The grid's geometry as the march spends it. */
     private class Grid(config: WorldGenConfig) {
         val cellsAcross = config.width
@@ -799,34 +915,36 @@ object MoistureMarch {
     private const val ACROSS: Byte = 2
 
     /**
-     * One season's march: its precomputed fields, column-major so a column's rows are adjacent
-     * in memory, and its state between laps.
-     */
-    /**
-     * Both seasons' marches under [firstSeasons], July's then January's, each cell held in the sweep
-     * [sweepWinds] blows it along, or the first seasons' own winds when none.
+     * Both seasons' marches under [firstSeasons], July's then January's, each cell held in the sweeps
+     * [sweepWinds] blow it along, or the first seasons' own winds when none.
      */
     private fun startMarches(
         inputs: Inputs,
         grid: Grid,
+        climbElevationM: FloatArray,
         keepCells: Boolean,
-        sweepWinds: Pair<FloatArray, FloatArray>?,
+        sweepWinds: Pair<SweepWinds, SweepWinds>?,
         firstSeasons: () -> Pair<Season, Season>
     ): Array<SeasonMarch> {
         val (julyHalf, januaryHalf) = firstSeasons()
         return arrayOf(
-            SeasonMarch(inputs, julyHalf, grid, keepCells, sweepWinds?.first ?: julyHalf.waterEastwardMps),
-            SeasonMarch(inputs, januaryHalf, grid, keepCells, sweepWinds?.second ?: januaryHalf.waterEastwardMps)
+            SeasonMarch(inputs, julyHalf, grid, climbElevationM, keepCells, sweepWinds?.first ?: julyHalf.sweepWinds()),
+            SeasonMarch(inputs, januaryHalf, grid, climbElevationM, keepCells, sweepWinds?.second ?: januaryHalf.sweepWinds())
         )
     }
 
+    /**
+     * One season's march: its precomputed fields, column-major so a column's rows are adjacent
+     * in memory, its two layers and its state between laps.
+     */
     private class SeasonMarch(
         val inputs: Inputs,
         season: Season,
         val grid: Grid,
+        /** The ground the climb is read on, meters, row-major ([CLIMB_TERRAIN_SIGMA_KM]). */
+        val climbElevationM: FloatArray,
         keepCells: Boolean,
-        /** The zonal wind that holds each cell in its sweep through every lap, row-major (see the class comment). */
-        sweepEastwardMps: FloatArray
+        sweepWinds: SweepWinds
     ) {
         val cellsAcross = grid.cellsAcross
         val cellsDown = grid.cellsDown
@@ -834,53 +952,42 @@ object MoistureMarch {
         val config = inputs.config
 
         // What the ledger and the last potentials read of the season's air. The rest of a season,
-        // its wind and its ascent, is let go once each lap's fields are built from it, so a
-        // coupled lap's next seasons are not built beside the last ones.
+        // its wind, is let go once each lap's fields are built from it, so a coupled lap's next
+        // seasons are not built beside the last ones.
         private var airTemperatureC: FloatArray = season.airTemperatureC
         private var seaSurfaceC: FloatArray = season.seaSurfaceC
         private var windAt2mMps: FloatArray? = season.windAt2mMps
         private var extraterrestrialOfRow: DoubleArray = season.extraterrestrialOfRow
 
-        /**
-         * Each cell's sweep, east (1) or west (-1), held through every lap. Column-major: cell
-         * (row, column) is column * cellsDown + row.
-         */
-        val direction = ByteArray(cellCount).also { held ->
-            for (cell in 0 until cellCount) {
-                held[(cell % cellsAcross) * cellsDown + cell / cellsAcross] = if (sweepEastwardMps[cell] >= 0f) 1 else -1
-            }
-        }
         val surface = ByteArray(cellCount)
+
+        /** The whole saturated column over the ground, millimeters: the ledger's humidity reads it. */
         val saturatedMm = FloatArray(cellCount)
 
-        /** The sea's evaporation, kilograms per square meter per second, at open-sea cells. */
-        val seaEvaporationRate = FloatArray(cellCount)
+        /** The ground's pressure, kilopascals, and the boundary layer's depth over it, meters. */
+        val groundPressureKpa = FloatArray(cellCount)
+        val layerDepthM = FloatArray(cellCount)
+
+        /** The boundary layer's water at its surface air's saturation: its cap, millimeters. */
+        val boundaryCapMm = FloatArray(cellCount)
 
         /**
-         * How much more column water a unit of parcel is at each cell than at the reference speed:
-         * `U / |u|`. The crossing time is the reference's times this.
+         * The bulk formula's `rho C_E U`, kilograms per square meter per second, at open-sea cells,
+         * and the specific humidity at the sea's surface it evaporates from.
          */
-        val stretch = FloatArray(cellCount)
+        val seaTransferMassFlux = FloatArray(cellCount)
+        val seaSurfaceHumidity = FloatArray(cellCount)
 
         /**
-         * Smith and Barstad's (2004) source for the ground's lifting at each cell, kilograms per
-         * square meter per second: `C_w w`, the condensation of saturated air rising at `w`, the
-         * wind's climb over the ground, `u dh/dx + v dh/dy`, less what a large-scale descent takes
-         * off it; zero where nothing climbs. The large-scale ascent's own rain is the column's
-         * rain law's ([columnRainMmPerDay]), so it adds nothing here.
+         * The boundary layer's wind's climb over the ground ([climbElevationM]), meters a second,
+         * where it rises, and what its descent can evaporate where it comes down, kilograms per
+         * square meter per second: the saturated layer's yield at the same rate ([ColumnWater.boundaryLayerLiftYield]).
          */
-        val liftingRate = FloatArray(cellCount)
-
-        /**
-         * What the descending air can take up at each cell, `C_w |w|`, kilograms per square meter
-         * per second, the large-scale descent and the ground's together; zero where the air rises.
-         */
+        val liftMps = FloatArray(cellCount)
         val descentRate = FloatArray(cellCount)
 
         /** The marine inversion's lid, 0..1: what slows every sink on the land under it. */
         val suppression = FloatArray(cellCount)
-        val convergenceShare = FloatArray(cellCount)
-        val faceShare = FloatArray(cellCount)
 
         /** The ground's return this season, millimeters a second, land cells only. */
         val groundReturnRate = FloatArray(cellCount)
@@ -889,16 +996,39 @@ object MoistureMarch {
         val returnRain = FloatArray(cellCount)
         val returnPotential = FloatArray(cellCount)
 
-        // This lap's results, column-major.
+        // This lap's results, column-major: the boundary layer's and the free troposphere's apart,
+        // since the two are marched at once.
         val rainMm = FloatArray(cellCount)
         val landRainMm = FloatArray(cellCount)
         val condensationMm = FloatArray(cellCount)
+        val freeRainMm = FloatArray(cellCount)
+        val freeLandRainMm = FloatArray(cellCount)
+
+        /** The boundary layer's surface air's relative humidity as it leaves each cell: what the potential reads. */
         val humidity = FloatArray(cellCount)
         val sourceMm = FloatArray(cellCount)
 
-        /** The parcel each cell sent on, column-major, for the westward sweep's faces to read. */
-        val sentParcel = DoubleArray(cellCount)
-        val sentParcelLand = DoubleArray(cellCount)
+        /**
+         * What each layer sent the other at each cell, in the march's units, with its land-origin
+         * part: the last lap's, which the receiving layer takes in this lap as a steady rate over its
+         * crossing, and this lap's, which it takes in the next.
+         */
+        var toFree = DoubleArray(cellCount)
+        var toFreeLand = DoubleArray(cellCount)
+        var toFreeNext = DoubleArray(cellCount)
+        var toFreeLandNext = DoubleArray(cellCount)
+        var toBoundary = DoubleArray(cellCount)
+        var toBoundaryLand = DoubleArray(cellCount)
+        var toBoundaryNext = DoubleArray(cellCount)
+        var toBoundaryLandNext = DoubleArray(cellCount)
+
+        /**
+         * The share of the boundary layer's air the march's faces took out of each cell, per second
+         * of its crossing, which the free troposphere's lowest air makes up: the last lap's, which
+         * the free troposphere gives this lap, and this lap's.
+         */
+        var replacedPerSecond = FloatArray(cellCount)
+        var replacedPerSecondNext = FloatArray(cellCount)
 
         // Potential evaporation from the last lap's air, row-major, and its terms in the air's
         // humidity at each land cell, built once.
@@ -908,64 +1038,15 @@ object MoistureMarch {
         val potentialPerRootHumidity = FloatArray(cellCount)
         val potentialPerHumidity = FloatArray(cellCount)
 
-        // The march's state: per row and sweep, the parcel of vapor, of cloud and of falling
-        // hydrometeors, each with its land-origin part; and the bank of each cell.
-        val eastParcel = RowState(cellsDown)
-        val westParcel = RowState(cellsDown)
-        val bank = DoubleArray(cellCount)
-        val bankLand = DoubleArray(cellCount)
-
-        /**
-         * Each cell's place in the condensate banks below, or -1 (column-major). The cloud is banked
-         * only where a row's wind turns, into a cell whose own downwind neighbor along the row is of
-         * the other sweep, and with the sweeps held those cells are fixed and a few hundredths of the
-         * map's: banks for every cell would hold 67 MB a half-year at 1,024 rows, most of it zero.
-         */
-        private val turnSlot = IntArray(cellCount) { -1 }
-        private val turnCells: Int = run {
-            var count = 0
-            for (column in 0 until cellsAcross) {
-                for (row in 0 until cellsDown) {
-                    val here = index(row, column)
-                    val sweep = direction[here].toInt()
-                    if (direction[index(row, (column + sweep + cellsAcross) % cellsAcross)].toInt() != sweep) turnSlot[here] = count++
-                }
-            }
-            count
-        }
-
-        /** The cloud and the falling water banked where the wind turns, with their land-origin parts, parcel units, by [turnSlot]. */
-        val bankCloud = DoubleArray(turnCells)
-        val bankCloudLand = DoubleArray(turnCells)
-        val bankFalling = DoubleArray(turnCells)
-        val bankFallingLand = DoubleArray(turnCells)
-
-        // Working space for one column's solve.
-        val role = ByteArray(cellsDown)
-        val water = DoubleArray(cellsDown)
-        val waterLand = DoubleArray(cellsDown)
-        val lower = DoubleArray(cellsDown)
-        val diagonal = DoubleArray(cellsDown)
-        val upper = DoubleArray(cellsDown)
-        val sweepUpper = DoubleArray(cellsDown)
-        val sweepSolved = DoubleArray(cellsDown)
-        val sweepSolvedLand = DoubleArray(cellsDown)
-        val acrossBefore = DoubleArray(cellsDown)
-        val acrossBeforeLand = DoubleArray(cellsDown)
-
-        /**
-         * Each marched row's outflow by the mean wind, per unit of its solved parcel, through its
-         * face with a row of the other sweep above or below: what [solveFaces] hands to the bank
-         * there.
-         */
-        val sentAbove = DoubleArray(cellsDown)
-        val sentBelow = DoubleArray(cellsDown)
-
         val cells: MoistureLedger.Cells? =
             if (keepCells) MoistureLedger.Cells(cellsAcross, cellsDown) else null
 
-        /** The one crossing this season's march solves at a time ([ColumnCrossing]). */
-        private val crossing = ColumnCrossing()
+        val boundary = Layer(true, sweepWinds.boundaryEastwardMps)
+        val free = Layer(false, sweepWinds.freeEastwardMps)
+
+        /** Each layer's part of this lap's ledger, merged into the season's lap at its end. */
+        private var boundaryEntry: MoistureLedger.Lap? = null
+        private var freeEntry: MoistureLedger.Lap? = null
 
         init {
             precompute(season)
@@ -973,15 +1054,32 @@ object MoistureMarch {
             for (row in 0 until cellsDown) {
                 val east = index(row, 0)
                 val west = index(row, cellsAcross - 1)
-                eastParcel.vapor[row] = if (direction[east] > 0) INITIAL_HUMIDITY * saturatedMm[east] / stretch[east] else 0.0
-                westParcel.vapor[row] = if (direction[west] < 0) INITIAL_HUMIDITY * saturatedMm[west] / stretch[west] else 0.0
+                val boundaryStart = { here: Int -> INITIAL_HUMIDITY * boundaryCapMm[here] / boundary.stretch[here] }
+                boundary.eastParcel.vapor[row] = if (boundary.direction[east] > 0) boundaryStart(east) else 0.0
+                boundary.westParcel.vapor[row] = if (boundary.direction[west] < 0) boundaryStart(west) else 0.0
+                val freeStart = { here: Int -> INITIAL_HUMIDITY * referenceFreeSaturatedMm(here) / free.stretch[here] }
+                free.eastParcel.vapor[row] = if (free.direction[east] > 0) freeStart(east) else 0.0
+                free.westParcel.vapor[row] = if (free.direction[west] < 0) freeStart(west) else 0.0
             }
+            boundary.resetAir()
+        }
+
+        /** The free troposphere's saturated column at [here] (column-major), read from sea level, millimeters. */
+        private fun referenceFreeSaturatedMm(here: Int): Double {
+            val seaLevelC = seaLevelTemperatureC(here)
+            return ColumnWater.saturatedColumnMm(seaLevelC) - ColumnWater.referenceBoundaryLayerSaturatedMm(seaLevelC)
+        }
+
+        /** The air at [here] (column-major) carried down to the sea at the environment's lapse rate, degrees Celsius. */
+        private fun seaLevelTemperatureC(here: Int): Double {
+            val cell = (here % cellsDown) * cellsAcross + here / cellsDown
+            return airTemperatureC[cell] + config.climate.lapseRateCPerKm * inputs.elevationM[cell] / METERS_PER_KM
         }
 
         /**
          * Marches the next lap under [next], the same half-year's air under a newly solved
-         * atmosphere: every field the wind and the vertical motion set is built again, and the
-         * water in flight, the bank and the ground's return are kept.
+         * atmosphere: every field the wind sets is built again, and the water in flight, the banks
+         * and the ground's return are kept.
          */
         fun reseason(next: Season) {
             airTemperatureC = next.airTemperatureC
@@ -993,17 +1091,12 @@ object MoistureMarch {
             // A row's parcel in flight into the lap's first column, where the new wind no longer
             // marches it in that sweep, waits in the bank there for the sweep that does, all of its
             // water: a parcel arriving at a cell of the other sweep would be cleared.
-            for (row in 0 until cellsDown) {
-                bankParcelIfTurned(eastParcel, row, index(row, 0), 1)
-                bankParcelIfTurned(westParcel, row, index(row, cellsAcross - 1), -1)
+            for (layer in arrayOf(boundary, free)) {
+                for (row in 0 until cellsDown) {
+                    layer.bankParcelIfTurned(layer.eastParcel, row, index(row, 0), 1)
+                    layer.bankParcelIfTurned(layer.westParcel, row, index(row, cellsAcross - 1), -1)
+                }
             }
-        }
-
-        private fun bankParcelIfTurned(parcel: RowState, row: Int, first: Int, sweep: Int) {
-            if (direction[first].toInt() == sweep) return
-            bank[first] += parcel.vapor[row] + parcel.cloud[row] + parcel.falling[row]
-            bankLand[first] += parcel.vaporLand[row] + parcel.cloudLand[row] + parcel.fallingLand[row]
-            parcel.clear(row)
         }
 
         /** The land's FAO-56 terms from this season's air and wind, built once per season. */
@@ -1026,7 +1119,7 @@ object MoistureMarch {
             }
         }
 
-        private fun index(row: Int, column: Int) = column * cellsDown + row
+        fun index(row: Int, column: Int) = column * cellsDown + row
 
         /** The wind at 2 m over [cell] (row-major), meters a second. */
         private fun windAt2m(cell: Int): Double =
@@ -1036,128 +1129,60 @@ object MoistureMarch {
             val climate = config.climate
             val referenceMassFlux = transferMassFlux(TRANSPORT_SPEED_MPS)
             val lapseRateCPerKm = climate.lapseRateCPerKm.toDouble()
-            val slowest = TRANSPORT_SPEED_MPS * SLOWEST_SPEED_SHARE
+            boundary.precomputeTransport(season.eastwardMps, season.southwardMps)
+            free.precomputeTransport(season.freeEastward, season.freeSouthward)
             parallelChunks(0, cellsAcross) { startColumn, endColumn ->
+                val cellYield = DoubleArray(2)
                 for (column in startColumn until endColumn) {
                     for (row in 0 until cellsDown) {
                         val cell = row * cellsAcross + column
                         val here = index(row, column)
-                        stretch[here] = (TRANSPORT_SPEED_MPS / maxOf(leavingSpeedMps(season, row, column), slowest)).toFloat()
                         surface[here] = when {
                             inputs.isLand[cell] -> LAND
                             season.seaIce[cell] -> SEA_ICE
                             else -> OPEN_SEA
                         }
                         val airC = season.airTemperatureC[cell].toDouble()
-                        val groundPressureKpa = ColumnWater.surfacePressureKpa(inputs.elevationM[cell].toDouble(), airC, lapseRateCPerKm)
-                        saturatedMm[here] = ColumnWater.saturatedColumnMm(airC, groundPressureKpa).toFloat()
+                        val groundPressure = ColumnWater.surfacePressureKpa(inputs.elevationM[cell].toDouble(), airC, lapseRateCPerKm)
+                        groundPressureKpa[here] = groundPressure.toFloat()
+                        layerDepthM[here] = ColumnWater.boundaryLayerDepthM(airC, groundPressure).toFloat()
+                        saturatedMm[here] = ColumnWater.saturatedColumnMm(airC, groundPressure).toFloat()
+                        val surfaceSaturation = ColumnWater.saturationSpecificHumidity(airC, groundPressure)
+                        boundaryCapMm[here] = (surfaceSaturation * ColumnWater.BOUNDARY_LAYER_MASS_KG_PER_M2).toFloat()
                         if (surface[here] == OPEN_SEA) {
-                            val surfaceHumidity = SurfaceEvaporation.seaSurfaceHumidity(season.seaSurfaceC[cell].toDouble())
-                            val airHumidity = MARINE_RELATIVE_HUMIDITY * ColumnWater.specificHumidity(
-                                ColumnWater.saturationVaporPressureKpa(airC), ColumnWater.SEA_LEVEL_PRESSURE_KPA
-                            )
-                            val massFlux = season.scalarWindAt10mMps?.let { transferMassFlux(it[cell].toDouble()) } ?: referenceMassFlux
-                            seaEvaporationRate[here] = SurfaceEvaporation.bulkEvaporationKgPerM2S(
-                                surfaceHumidity, airHumidity, massFlux
-                            ).toFloat()
+                            seaSurfaceHumidity[here] = SurfaceEvaporation.seaSurfaceHumidity(season.seaSurfaceC[cell].toDouble()).toFloat()
+                            seaTransferMassFlux[here] = (season.scalarWindAt10mMps?.let { transferMassFlux(it[cell].toDouble()) } ?: referenceMassFlux).toFloat()
+                        } else {
+                            seaSurfaceHumidity[here] = 0f
+                            seaTransferMassFlux[here] = 0f
                         }
                         suppression[here] = (if (inputs.isLand[cell]) lidFactor(cell, season.inversionSuppression) else 1.0).toFloat()
-                    }
-                }
-            }
-            // Faces: the meridional wind at the face below each row, the mean of the two rows'.
-            parallelChunks(0, cellsAcross) { startColumn, endColumn ->
-                for (column in startColumn until endColumn) {
-                    for (row in 0 until cellsDown - 1) {
-                        val above = season.waterSouthwardMps[row * cellsAcross + column]
-                        val below = season.waterSouthwardMps[(row + 1) * cellsAcross + column]
-                        faceShare[index(row, column)] = ((above + below) * 0.5 * grid.faceSharePerMps[row]).toFloat()
-                    }
-                }
-            }
-            // The rise: the atmosphere's ascent at the layer's top, and on land the climb up the
-            // ground's slope along the wind (centered differences on the ground's own lengths). The
-            // climb condenses where the two together still rise, so a climb inside a large descent
-            // is first spent against it; the two together descending take water back.
-            val cellHeightM = config.cellHeightKm * METERS_PER_KM
-            val lapseRate = climate.lapseRateCPerKm.toDouble()
-            val ascent = season.largeScaleAscentMps
-            parallelChunks(0, cellsDown) { startRow, endRow ->
-                for (row in startRow until endRow) {
-                    val cellWidthM = config.cellWidthKm * METERS_PER_KM * grid.cosRow[row]
-                    val north = if (row > 0) row - 1 else row
-                    val south = if (row < cellsDown - 1) row + 1 else row
-                    for (column in 0 until cellsAcross) {
-                        val cell = row * cellsAcross + column
-                        val largeScale = ascent?.get(cell)?.toDouble() ?: 0.0
+                        // The climb up the ground the terrain is read on, along the boundary layer's
+                        // wind, by centered differences on the ground's own lengths.
                         var climb = 0.0
                         if (inputs.isLand[cell]) {
+                            val cellWidthM = config.cellWidthKm * METERS_PER_KM * grid.cosRow[row]
+                            val cellHeightM = config.cellHeightKm * METERS_PER_KM
+                            val north = if (row > 0) row - 1 else row
+                            val south = if (row < cellsDown - 1) row + 1 else row
                             val east = row * cellsAcross + (column + 1) % cellsAcross
                             val west = row * cellsAcross + (column + cellsAcross - 1) % cellsAcross
-                            val slopeEast = (inputs.elevationM[east] - inputs.elevationM[west]) / (2.0 * cellWidthM)
-                            val slopeSouth = (inputs.elevationM[south * cellsAcross + column] -
-                                inputs.elevationM[north * cellsAcross + column]) / ((south - north) * cellHeightM)
+                            val slopeEast = (climbElevationM[east] - climbElevationM[west]) / (2.0 * cellWidthM)
+                            val slopeSouth = (climbElevationM[south * cellsAcross + column] - climbElevationM[north * cellsAcross + column]) /
+                                ((south - north) * cellHeightM)
                             climb = season.eastwardMps[cell] * slopeEast + season.southwardMps[cell] * slopeSouth
                         }
-                        val upward = largeScale + climb
-                        val lifted = minOf(climb, upward).coerceAtLeast(0.0)
-                        val descending = (-upward).coerceAtLeast(0.0)
-                        val yieldPerMeter = if (lifted > 0.0 || descending > 0.0) {
-                            ColumnWater.upliftCondensationKgPerM3(season.airTemperatureC[cell].toDouble(), lapseRate)
-                        } else 0.0
-                        liftingRate[index(row, column)] = (yieldPerMeter * lifted).toFloat()
-                        descentRate[index(row, column)] = (yieldPerMeter * descending).toFloat()
+                        liftMps[here] = climb.coerceAtLeast(0.0).toFloat()
+                        if (climb < 0.0) {
+                            ColumnWater.boundaryLayerLiftYield(airC, groundPressure, layerDepthM[here].toDouble(), surfaceSaturation, cellYield)
+                            descentRate[here] = (-climb * cellYield[0]).toFloat()
+                        } else {
+                            descentRate[here] = 0f
+                        }
                     }
                 }
             }
-            if (!config.climate.convergenceRain) return
-            // The air's own budget per column, when the convergence closure is on: what flows in
-            // through the four sides less what flows out, as shares of the column.
-            parallelChunks(0, cellsAcross) { startColumn, endColumn ->
-                for (column in startColumn until endColumn) {
-                    val west = (column + cellsAcross - 1) % cellsAcross
-                    val east = (column + 1) % cellsAcross
-                    for (row in 0 until cellsDown) {
-                        val here = index(row, column)
-                        var inflow = (if (direction[index(row, west)] > 0) 1.0 else 0.0) +
-                            (if (direction[index(row, east)] < 0) 1.0 else 0.0)
-                        var outflow = 1.0
-                        if (row > 0) {
-                            val north = faceShare[index(row - 1, column)].toDouble()
-                            if (north > 0.0) inflow += north else outflow -= north
-                        }
-                        if (row < cellsDown - 1) {
-                            val south = faceShare[here].toDouble()
-                            if (south < 0.0) inflow -= south else outflow += south
-                        }
-                        convergenceShare[here] = (inflow - outflow).coerceAtLeast(0.0).toFloat()
-                    }
-                }
-            }
-        }
-
-        /**
-         * The speed a cell's water leaves it by along its held sweep, meters a second: the zonal wind
-         * on its downwind face, the mean of its own and its downwind neighbor's along the sweep, where
-         * that neighbor is of the same sweep; its own where the wind turns there and the water is
-         * banked. The march's parcel is the flux through that face, so the column water a cell holds
-         * is the parcel over the face's speed, as an upwind finite volume's is.
-         *
-         * Read at the cell's own center instead, a cell beside a line where the zonal wind parts,
-         * whose upwind face carries nothing, held its water at half the speed it leaves by and so
-         * held twice the water; where a meridional wind runs along that line toward a pole, each row
-         * handed the doubled water on to the next through its face and the doubling compounded row
-         * by row. Under a wind that crosses a pole without converging anywhere, a rigid rotation
-         * about a tilted axis (`MoistureMarchPoleTest`), the polar rows rained four times the planet's
-         * mean and single cells beside the line hundreds of times it (docs/DESIGN_LEDGER.md, A1-6c).
-         */
-        private fun leavingSpeedMps(season: Season, row: Int, column: Int): Double {
-            val sweep = direction[index(row, column)]
-            val eastward = season.waterEastwardMps
-            val own = eastward[row * cellsAcross + column] * sweep.toDouble()
-            val downwindColumn = (column + sweep + cellsAcross) % cellsAcross
-            if (direction[index(row, downwindColumn)] != sweep) return own
-            return 0.5 * (own + eastward[row * cellsAcross + downwindColumn] * sweep.toDouble())
+            if (config.climate.convergenceRain) free.precomputeConvergence()
         }
 
         /** The bulk formula's `rho C_E(U) U` at a wind of [windMps], kilograms per square meter per second. */
@@ -1197,378 +1222,94 @@ object MoistureMarch {
         }
 
         /**
-         * Starts this season's water in flight from [start], a march's end on the same grid: the bank
-         * at every cell and each row's arriving parcels, their land-origin parts at none.
+         * Starts this season's water in flight from [start], a march's end on the same grid: each
+         * layer's bank at every cell and each row's arriving parcels, their land-origin parts at
+         * none, and the free troposphere's water at each cell.
          */
         fun startWaterFrom(start: WaterInFlight) {
-            for (cell in 0 until cellCount) bank[index(cell / cellsAcross, cell % cellsAcross)] = start.bank[cell].toDouble()
-            bankCloud.fill(0.0)
-            bankCloudLand.fill(0.0)
-            bankFalling.fill(0.0)
-            bankFallingLand.fill(0.0)
-            for (row in 0 until cellsDown) {
-                eastParcel.clear(row)
-                westParcel.clear(row)
-                eastParcel.vapor[row] = start.eastwardVapor[row]
-                eastParcel.cloud[row] = start.eastwardCloud[row]
-                eastParcel.falling[row] = start.eastwardFalling[row]
-                westParcel.vapor[row] = start.westwardVapor[row]
-                westParcel.cloud[row] = start.westwardCloud[row]
-                westParcel.falling[row] = start.westwardFalling[row]
-                // A parcel this world's wind does not march in from the first column waits in the
-                // bank there, as between two laps ([reseason]).
-                bankParcelIfTurned(eastParcel, row, index(row, 0), 1)
-                bankParcelIfTurned(westParcel, row, index(row, cellsAcross - 1), -1)
-            }
-            bankLand.fill(0.0)
+            boundary.startFrom(start.bank, start.eastwardVapor, start.eastwardCloud, start.eastwardFalling,
+                start.westwardVapor, start.westwardCloud, start.westwardFalling)
+            free.startFrom(start.freeBank, start.freeEastwardVapor, null, null, start.freeWestwardVapor, null, null)
+            boundary.resetAir()
         }
 
         /** This season's water in flight now, for a later march to start from ([WaterInFlight]). */
         fun waterInFlight(): WaterInFlight = WaterInFlight(
-            FloatArray(cellCount) {
-                val here = index(it / cellsAcross, it % cellsAcross)
-                val slot = turnSlot[here]
-                (bank[here] + if (slot >= 0) bankCloud[slot] + bankFalling[slot] else 0.0).toFloat()
-            },
-            eastParcel.vapor.copyOf(), eastParcel.cloud.copyOf(), eastParcel.falling.copyOf(),
-            westParcel.vapor.copyOf(), westParcel.cloud.copyOf(), westParcel.falling.copyOf()
+            boundary.bankRowMajor(toBoundary),
+            boundary.eastParcel.vapor.copyOf(), boundary.eastParcel.cloud.copyOf(), boundary.eastParcel.falling.copyOf(),
+            boundary.westParcel.vapor.copyOf(), boundary.westParcel.cloud.copyOf(), boundary.westParcel.falling.copyOf(),
+            free.bankRowMajor(toFree),
+            free.eastParcel.vapor.copyOf(), free.westParcel.vapor.copyOf()
         )
 
         /** The ground's return at [cell] (row-major), millimeters a second. */
         fun groundReturnRateRowMajor(cell: Int): Float = groundReturnRate[index(cell / cellsAcross, cell % cellsAcross)]
 
-        fun lap(entry: MoistureLedger.Lap?) {
+        /** Opens a lap: each layer's part of the ledger, and the storage read. */
+        fun beginLap(entry: MoistureLedger.Lap?) {
+            boundaryEntry = entry?.let { MoistureLedger.Lap(it.julyHalf, it.lap) }
+            freeEntry = entry?.let { MoistureLedger.Lap(it.julyHalf, it.lap) }
             if (entry != null) {
                 entry.storageAtStart = storage()
                 entry.landStorageAtStart = landStorage()
             }
-            for (step in 0 until cellsAcross) sweepColumn(step, 1, entry)
-            for (step in 0 until cellsAcross) sweepColumn(cellsAcross - 1 - step, -1, entry)
-            if (entry != null) {
-                entry.storageAtEnd = storage()
-                entry.landStorageAtEnd = landStorage()
-                entry.bankAtEnd = bank.sum()
-            }
         }
 
-        private fun storage(): Double = eastParcel.total() + westParcel.total() + bank.sum() + bankCloud.sum() + bankFalling.sum()
-        private fun landStorage(): Double =
-            eastParcel.totalLand() + westParcel.totalLand() + bankLand.sum() + bankCloudLand.sum() + bankFallingLand.sum()
+        /** Marches one layer, [BOUNDARY] or [FREE], through both sweeps. */
+        fun marchLayer(layer: Int) {
+            val marched = if (layer == BOUNDARY) boundary else free
+            marched.entry = if (layer == BOUNDARY) boundaryEntry else freeEntry
+            for (step in 0 until cellsAcross) marched.sweepColumn(step, 1)
+            for (step in 0 until cellsAcross) marched.sweepColumn(cellsAcross - 1 - step, -1)
+        }
 
         /**
-         * The faces of one column, solved: every row this sweep marches, and in the westward
-         * sweep every eastward row beside one of them, as one tridiagonal system in the parcels
-         * (see the class comment). [water] holds the parcels going in and comes out with them
-         * solved; [waterLand] the same for the land-origin part, which the same matrix moves.
+         * Closes a lap: the free troposphere's water as this lap left it becomes what the next lap's
+         * boundary layer draws on, the layers' ledgers are merged and the storage read again.
          */
-        private fun solveFaces(base: Int) {
-            for (row in 0 until cellsDown) {
-                lower[row] = 0.0
-                upper[row] = 0.0
-                diagonal[row] = 1.0
-                sentAbove[row] = 0.0
-                sentBelow[row] = 0.0
-            }
-            for (face in 0 until cellsDown - 1) {
-                val above = face
-                val below = face + 1
-                val roleAbove = role[above]
-                val roleBelow = role[below]
-                // A face is solved when a marched row is on either side of it; between two rows
-                // of the other sweep it is that sweep's.
-                if (roleAbove != MARCHED && roleBelow != MARCHED) continue
-                val stretchAbove = stretch[base + above].toDouble()
-                val stretchBelow = stretch[base + below].toDouble()
-                val advection = faceShare[base + face].toDouble()
-                // The mean wind out of a marched row into the other sweep's row beside it,
-                // implicit in the marched row's own equation and handed to the bank.
-                if (roleAbove == MARCHED && roleBelow != MARCHED && advection > 0.0) {
-                    sentBelow[above] = advection * stretchAbove
-                    diagonal[above] += sentBelow[above]
-                }
-                if (roleBelow == MARCHED && roleAbove != MARCHED && advection < 0.0) {
-                    sentAbove[below] = -advection * stretchBelow
-                    diagonal[below] += sentAbove[below]
-                }
-                if (roleAbove == OUTSIDE || roleBelow == OUTSIDE) continue
-                val mixing = grid.faceMixing[face]
-                // Out of the row above, into the row below, as coefficients on each row's parcel:
-                // the eddies' mixing, and the mean wind's where both rows are this sweep's.
-                val oneSweep = roleAbove == MARCHED && roleBelow == MARCHED
-                val fromAbove = mixing * stretchAbove + (if (oneSweep && advection > 0.0) advection * stretchAbove else 0.0)
-                val fromBelow = mixing * stretchBelow + (if (oneSweep && advection < 0.0) -advection * stretchBelow else 0.0)
-                diagonal[above] += fromAbove
-                diagonal[below] += fromBelow
-                upper[above] -= fromBelow
-                lower[below] -= fromAbove
-            }
-            // The Thomas algorithm, which needs no pivoting on a diagonally dominant M-matrix.
-            var previousUpper = 0.0
-            var previousSolved = 0.0
-            var previousSolvedLand = 0.0
-            for (row in 0 until cellsDown) {
-                val denominator = diagonal[row] - lower[row] * previousUpper
-                sweepUpper[row] = upper[row] / denominator
-                sweepSolved[row] = (water[row] - lower[row] * previousSolved) / denominator
-                sweepSolvedLand[row] = (waterLand[row] - lower[row] * previousSolvedLand) / denominator
-                previousUpper = sweepUpper[row]
-                previousSolved = sweepSolved[row]
-                previousSolvedLand = sweepSolvedLand[row]
-            }
-            water[cellsDown - 1] = sweepSolved[cellsDown - 1]
-            waterLand[cellsDown - 1] = sweepSolvedLand[cellsDown - 1]
-            for (row in cellsDown - 2 downTo 0) {
-                water[row] = sweepSolved[row] - sweepUpper[row] * water[row + 1]
-                waterLand[row] = sweepSolvedLand[row] - sweepUpper[row] * waterLand[row + 1]
-            }
-        }
-
-        private fun sweepColumn(column: Int, sweep: Int, entry: MoistureLedger.Lap?) {
-            val base = column * cellsDown
-            val parcel = if (sweep > 0) eastParcel else westParcel
-
-            // What arrives: the row's parcel from the column behind and whatever was banked here;
-            // and, in the westward sweep, the eastward rows beside them as they left this column.
-            for (row in 0 until cellsDown) {
-                val here = base + row
-                if (direction[here].toInt() == sweep) {
-                    role[row] = MARCHED
-                    // A bank the westward sweep's faces drew on can hold less than nothing; what
-                    // the parcel cannot pay of it waits there for the next lap's.
-                    val slot = turnSlot[here]
-                    if (slot >= 0) {
-                        parcel.cloud[row] += bankCloud[slot]
-                        parcel.cloudLand[row] += bankCloudLand[slot]
-                        parcel.falling[row] += bankFalling[slot]
-                        parcel.fallingLand[row] += bankFallingLand[slot]
-                        bankCloud[slot] = 0.0
-                        bankCloudLand[slot] = 0.0
-                        bankFalling[slot] = 0.0
-                        bankFallingLand[slot] = 0.0
-                    }
-                    val arriving = parcel.vapor[row] + bank[here]
-                    val arrivingLand = parcel.vaporLand[row] + bankLand[here]
-                    water[row] = arriving.coerceAtLeast(0.0)
-                    waterLand[row] = arrivingLand.coerceIn(0.0, water[row])
-                    bank[here] = arriving - water[row]
-                    bankLand[here] = arrivingLand - waterLand[row]
-                } else {
-                    role[row] = OUTSIDE
-                    water[row] = 0.0
-                    waterLand[row] = 0.0
-                }
-            }
-            if (sweep < 0) {
-                for (row in 0 until cellsDown) {
-                    if (role[row] != OUTSIDE) continue
-                    val besideMarched = (row > 0 && role[row - 1] == MARCHED) ||
-                        (row < cellsDown - 1 && role[row + 1] == MARCHED)
-                    if (!besideMarched) continue
-                    role[row] = ACROSS
-                    // What the eastward row will bring here, net of what it already owes here.
-                    val bringing = (sentParcel[base + row] + bank[base + row]).coerceAtLeast(0.0)
-                    water[row] = bringing
-                    waterLand[row] = (sentParcelLand[base + row] + bankLand[base + row]).coerceIn(0.0, bringing)
-                    acrossBefore[row] = water[row]
-                    acrossBeforeLand[row] = waterLand[row]
-                }
-            }
-            solveFaces(base)
-            // What the marched rows' mean wind sent into the other sweep's rows waits in those
-            // rows' bank: the westward sweep's this lap, the eastward sweep's the next.
-            for (row in 0 until cellsDown) {
-                if (role[row] != MARCHED) continue
-                if (sentAbove[row] > 0.0) {
-                    bank[base + row - 1] += sentAbove[row] * water[row]
-                    bankLand[base + row - 1] += sentAbove[row] * waterLand[row]
-                }
-                if (sentBelow[row] > 0.0) {
-                    bank[base + row + 1] += sentBelow[row] * water[row]
-                    bankLand[base + row + 1] += sentBelow[row] * waterLand[row]
-                }
-            }
-            // What the solve's mixing gave or took from the eastward rows waits in their bank.
-            if (sweep < 0) {
-                for (row in 0 until cellsDown) {
-                    if (role[row] != ACROSS) continue
-                    bank[base + row] += water[row] - acrossBefore[row]
-                    bankLand[base + row] += waterLand[row] - acrossBeforeLand[row]
-                }
-            }
-
-            // The column's physics, row by row, and the water it sends on.
-            val downwindBase = ((column + sweep + cellsAcross) % cellsAcross) * cellsDown
-            for (row in 0 until cellsDown) {
-                if (role[row] != MARCHED) {
-                    parcel.clear(row)
-                    continue
-                }
-                marchCell(base, row, sweep, parcel, downwindBase, entry)
-            }
-        }
-
-        private fun marchCell(base: Int, row: Int, sweep: Int, parcel: RowState, downwindBase: Int, entry: MoistureLedger.Lap?) {
-            val here = base + row
-            val kind = surface[here]
-            val surfaceIndex = kind.toInt()
-            val toColumnWater = stretch[here].toDouble()
-            val seconds = grid.secondsPerColumn[row] * toColumnWater
-            val saturated = saturatedMm[here].toDouble()
-            val slowing = suppression[here].toDouble()
-
-            // Everything below is in the cell's own column water, the parcel times the stretch.
-            var vapor = water[row] * toColumnWater
-            var vaporLand = waterLand[row] * toColumnWater
-            var cloud = parcel.cloud[row] * toColumnWater
-            var cloudLand = parcel.cloudLand[row] * toColumnWater
-            var falling = parcel.falling[row] * toColumnWater
-            var fallingLand = parcel.fallingLand[row] * toColumnWater
+        fun endLap(entry: MoistureLedger.Lap?) {
+            // What each layer took in this lap is spent; what each sent waits for the next.
+            toFree = toFreeNext.also { toFreeNext = toFree }
+            toFreeLand = toFreeLandNext.also { toFreeLandNext = toFreeLand }
+            toBoundary = toBoundaryNext.also { toBoundaryNext = toBoundary }
+            toBoundaryLand = toBoundaryLandNext.also { toBoundaryLandNext = toBoundaryLand }
+            replacedPerSecond = replacedPerSecondNext.also { replacedPerSecondNext = replacedPerSecond }
+            toFreeNext.fill(0.0)
+            toFreeLandNext.fill(0.0)
+            toBoundaryNext.fill(0.0)
+            toBoundaryLandNext.fill(0.0)
             if (entry != null) {
-                if (vapor < -NEGATIVE_SLACK_MM) entry.negativeParcels++
-                val slack = TRACER_SLACK * (abs(vapor) + 1.0)
-                if (vaporLand < -slack || vaporLand > vapor + slack) entry.tracerOutOfBounds++
+                boundaryEntry?.let(entry::add)
+                freeEntry?.let(entry::add)
+                entry.storageAtEnd = storage()
+                entry.landStorageAtEnd = landStorage()
+                entry.bankAtEnd = boundary.bank.sum() + free.bank.sum() + toFree.sum() + toBoundary.sum()
             }
-            vapor = vapor.coerceAtLeast(0.0)
-            vaporLand = vaporLand.coerceIn(0.0, vapor)
-
-            // The convergence closure, when switched on, on the water arriving.
-            var convergenceRain = 0.0
-            var convergenceLandRain = 0.0
-            val convergence = convergenceShare[here].toDouble() * slowing * toColumnWater
-            if (convergence > 0.0 && vapor > 0.0) {
-                convergenceRain = vapor * (1.0 - exp(-convergence))
-                convergenceLandRain = convergenceRain * (vaporLand / vapor)
-                vaporLand -= convergenceLandRain
-                vapor -= convergenceRain
-            }
-
-            // The crossing's sources and sinks, solved together ([ColumnCrossing]).
-            val sourceRate = when (kind) {
-                OPEN_SEA -> seaEvaporationRate[here].toDouble()
-                LAND -> groundReturnRate[here].toDouble()
-                else -> 0.0
-            }
-            val cloudShareLand = if (cloud > 0.0) (cloudLand / cloud).coerceIn(0.0, 1.0) else 0.0
-            val budget = crossing
-            budget.seconds = seconds
-            budget.sourceKgPerM2PerSecond = sourceRate
-            budget.saturatedMm = saturated
-            budget.holdableMm = HOLDABLE_SHARE * saturated
-            budget.rainSuppression = slowing
-            budget.liftingKgPerM2PerSecond = liftingRate[here].toDouble()
-            budget.criticalHumidity = CRITICAL_HUMIDITY_OVER_LAND
-            budget.descentKgPerM2PerSecond = descentRate[here].toDouble()
-            budget.conversionPerSecond = slowing * config.climate.rainShadowScale / CLOUD_CONVERSION_SECONDS
-            budget.falloutPerSecond = 1.0 / FALLOUT_SECONDS
-            budget.vapor = vapor
-            budget.cloud = cloud
-            budget.falling = falling
-            val vaporIn = vapor
-            val cloudIn = cloud
-            val condensateLandIn = cloudLand + fallingLand
-            budget.solve()
-            val added = budget.sourced
-            if (entry != null) {
-                if (kind == OPEN_SEA) entry.seaEvaporation += added / toColumnWater
-                if (kind == LAND) entry.groundReturn += added / toColumnWater
-                entry.condensed += (budget.lifted + budget.capped) / toColumnWater
-                entry.reevaporated += budget.cloudEvaporated / toColumnWater
-                val imbalance = abs(budget.waterIn - budget.waterOut) / (budget.waterIn + CROSSING_WATER_FLOOR_MM)
-                if (imbalance > entry.worstCrossingImbalance) entry.worstCrossingImbalance = imbalance
-            }
-
-            // The land-origin water: the vapor's share mixed once from what came in, the ground's
-            // return and the cloud the descent evaporated; the condensate's share mixed once from
-            // the cloud carried in and the vapor's share of what grew.
-            val vaporWaterIn = vaporIn + added + budget.cloudEvaporated
-            val vaporLandIn = vaporLand + (if (kind == LAND) added else 0.0) + budget.cloudEvaporated * cloudShareLand
-            val vaporShareLand = if (vaporWaterIn > 0.0) (vaporLandIn / vaporWaterIn).coerceIn(0.0, 1.0) else 0.0
-            val grown = budget.lifted + budget.capped
-            val condensateWaterIn = cloudIn - budget.cloudEvaporated + falling + grown
-            val condensateLandWaterIn = condensateLandIn - budget.cloudEvaporated * cloudShareLand + grown * vaporShareLand
-            val condensateShareLand = if (condensateWaterIn > 0.0) (condensateLandWaterIn / condensateWaterIn).coerceIn(0.0, 1.0) else 0.0
-
-            vapor = budget.vapor
-            vaporLand = vapor * vaporShareLand
-            cloud = budget.cloud
-            falling = budget.falling
-            cloudLand = cloud * condensateShareLand
-            fallingLand = falling * condensateShareLand
-            val columnRain = budget.columnRain
-            val condensateRain = budget.condensateRain
-            val vaporLandRained = columnRain * vaporShareLand + convergenceLandRain
-            val condensateLandRain = condensateRain * condensateShareLand
-            // Vapor turned to rain or condensate here less condensate turned back, column water.
-            val condensedHere = columnRain + convergenceRain + grown - budget.cloudEvaporated
-
-            val downwind = downwindBase + row
-            val carriedOn = direction[downwind].toInt() == sweep
-
-            val rainedCondensate = condensateRain
-            val rainedTotal = columnRain + convergenceRain + rainedCondensate
-            val landRained = vaporLandRained + condensateLandRain
-            if (entry != null) {
-                val perParcel = 1.0 / toColumnWater
-                entry.rain[MoistureLedger.Sink.COLUMN.ordinal][surfaceIndex] += columnRain * perParcel
-                entry.rain[MoistureLedger.Sink.CONVERGENCE.ordinal][surfaceIndex] += convergenceRain * perParcel
-                entry.rain[MoistureLedger.Sink.CONDENSATE.ordinal][surfaceIndex] += rainedCondensate * perParcel
-                entry.landOriginRain += landRained * perParcel
-                if (!vapor.isFinite() || !cloud.isFinite() || !falling.isFinite() || !vaporLand.isFinite()) entry.nonFinite++
-            }
-
-            // Rates at the cell: a parcel's worth over the reference crossing time is a cell's
-            // rain over its own, since the two differ by the stretch on both sides.
-            val rate = SECONDS_PER_YEAR / seconds
-            rainMm[here] = (rainedTotal * rate).toFloat()
-            landRainMm[here] = (landRained * rate).toFloat()
-            condensationMm[here] = (condensedHere * rate).toFloat()
-            humidity[here] = if (saturated > 0.0) (vapor / saturated).toFloat() else 1f
-            sourceMm[here] = (added * rate).toFloat()
             cells?.let { record ->
-                val cell = row * cellsAcross + base / cellsDown
-                record.rain.data[cell] = rainMm[here]
-                record.columnWater.data[cell] = vapor.toFloat()
-                record.saturatedColumn.data[cell] = saturated.toFloat()
-                if (kind == OPEN_SEA) record.seaMinusAirC.data[cell] = (seaSurfaceC[cell] - airTemperatureC[cell]).toFloat()
-                if (kind == LAND) record.groundReturn.data[cell] = (added * rate).toFloat()
-                if (kind == OPEN_SEA) record.seaEvaporation.data[cell] = (added * rate).toFloat()
-                record.convergenceRain.data[cell] = (convergenceRain * rate).toFloat()
-                record.condensateRain.data[cell] = (rainedCondensate * rate).toFloat()
-                record.liftedCondensation.data[cell] = (budget.lifted * rate).toFloat()
-                record.capCondensation.data[cell] = (budget.capped * rate).toFloat()
-                record.reevaporation.data[cell] = (budget.cloudEvaporated * rate).toFloat()
-                record.crossingSeconds.data[cell] = seconds.toFloat()
-                record.meanColumnWater.data[cell] = budget.meanVapor.toFloat()
-                record.liftingAtSaturation.data[cell] = (budget.liftingKgPerM2PerSecond * SECONDS_PER_YEAR).toFloat()
-                record.descentCapacity.data[cell] = (budget.descentKgPerM2PerSecond * SECONDS_PER_YEAR).toFloat()
+                for (cell in 0 until cellCount) {
+                    record.columnWater.data[cell] = record.boundaryLayerWater.data[cell] + record.freeWater.data[cell]
+                    record.rain.data[cell] = rainMmRowMajor(cell)
+                }
             }
+        }
 
-            // Back into parcels, and on downwind: to the next cell of this sweep, or banked where
-            // the wind turns.
-            val perParcel = 1.0 / toColumnWater
-            val sent = vapor * perParcel
-            val sentLand = vaporLand * perParcel
-            sentParcel[here] = sent
-            sentParcelLand[here] = sentLand
-            if (carriedOn) {
-                parcel.vapor[row] = sent
-                parcel.vaporLand[row] = sentLand
-                parcel.cloud[row] = cloud * perParcel
-                parcel.cloudLand[row] = cloudLand * perParcel
-                parcel.falling[row] = falling * perParcel
-                parcel.fallingLand[row] = fallingLand * perParcel
-            } else {
-                // Where the wind turns, the cloud and the falling water go on in the other sweep
-                // as the vapor does, and fall over their own delays there.
-                bank[downwind] += sent
-                bankLand[downwind] += sentLand
-                val slot = turnSlot[downwind]
-                bankCloud[slot] += cloud * perParcel
-                bankCloudLand[slot] += cloudLand * perParcel
-                bankFalling[slot] += falling * perParcel
-                bankFallingLand[slot] += fallingLand * perParcel
-                parcel.clear(row)
-            }
+        private fun storage(): Double = boundary.storage() + free.storage() + toFree.sum() + toBoundary.sum()
+        private fun landStorage(): Double = boundary.landStorage() + free.landStorage() + toFreeLand.sum() + toBoundaryLand.sum()
+
+        /** The velocity the boundary layer's top exchanges air at ([exchangeVelocityMps]). */
+        private val exchangeVelocity = exchangeVelocityMps(config.climate.lapseRateCPerKm.toDouble())
+
+        /**
+         * The rate the boundary layer's air at [here] (column-major, [cell] row-major) is stirred
+         * with the free troposphere's, per second of its mass: [exchangeVelocity] in the density of
+         * the layer's top, the well-mixed layer's air carried up the dry adiabat.
+         */
+        fun exchangePerSecondAt(here: Int, cell: Int): Double {
+            val groundPressure = groundPressureKpa[here].toDouble()
+            val topKelvin = airTemperatureC[cell] + ColumnWater.KELVIN_AT_ZERO_C - DRY_LAPSE_K_PER_M * layerDepthM[here]
+            val topDensity = (groundPressure - ColumnWater.BOUNDARY_LAYER_DEPTH_KPA).coerceAtLeast(0.0) * PASCALS_PER_KPA /
+                (DRY_AIR_GAS_CONSTANT_J_PER_KG_K * topKelvin)
+            return topDensity * exchangeVelocity / ColumnWater.BOUNDARY_LAYER_MASS_KG_PER_M2
         }
 
         /**
@@ -1602,7 +1343,7 @@ object MoistureMarch {
                         val cell = row * cellsAcross + column
                         val airC = airTemperatureC[cell].toDouble()
                         val elevation = inputs.elevationM[cell].toDouble()
-                        val humidity = humidity[index(row, column)].toDouble()
+                        val humidity = humidity[index(row, column)].toDouble().coerceIn(0.0, 1.0)
                         if (!inputs.isLand[cell]) {
                             potentialMm[cell] = (SurfaceEvaporation.referenceTerms(airC, sun, elevation, windAt2m(cell))
                                 .mmPerDay(humidity) * SurfaceEvaporation.DAYS_PER_YEAR_DOUBLE).toFloat()
@@ -1614,11 +1355,22 @@ object MoistureMarch {
             }
         }
 
-        fun rainMmRowMajor(cell: Int): Float = rainMm[index(cell / cellsAcross, cell % cellsAcross)]
+        fun rainMmRowMajor(cell: Int): Float {
+            val here = index(cell / cellsAcross, cell % cellsAcross)
+            return rainMm[here] + freeRainMm[here]
+        }
 
-        /** This lap's net condensation, millimeters a year, row-major. */
-        fun condensationRowMajor(): FloatArray = FloatArray(cellCount) { condensationMm[index(it / cellsAcross, it % cellsAcross)] }
-        fun landRainMmRowMajor(cell: Int): Float = landRainMm[index(cell / cellsAcross, cell % cellsAcross)]
+        /** This lap's net condensation, millimeters a year, row-major: the free troposphere's rain all condensed where it fell. */
+        fun condensationRowMajor(): FloatArray = FloatArray(cellCount) {
+            val here = index(it / cellsAcross, it % cellsAcross)
+            condensationMm[here] + freeRainMm[here]
+        }
+
+        fun landRainMmRowMajor(cell: Int): Float {
+            val here = index(cell / cellsAcross, cell % cellsAcross)
+            return landRainMm[here] + freeLandRainMm[here]
+        }
+
         fun sourceMmRowMajor(cell: Int): Float = sourceMm[index(cell / cellsAcross, cell % cellsAcross)]
         fun groundReturnMmRowMajor(cell: Int): Float =
             if (surface[index(cell / cellsAcross, cell % cellsAcross)] == LAND) sourceMmRowMajor(cell) else 0f
@@ -1632,11 +1384,725 @@ object MoistureMarch {
             for (cell in 0 until cellCount) field.data[cell] = rainMmRowMajor(cell)
             return field
         }
+
+        /**
+         * One layer's transport: its wind's sweeps, held through every lap, its parcels, banks and
+         * the working space of one column's solve. The boundary layer's carries its air beside its
+         * water ([Layer.isBoundary]), and its cloud and falling water, which the free troposphere,
+         * raining what it condenses where it condenses, has none of.
+         */
+        inner class Layer(val isBoundary: Boolean, sweepEastwardMps: FloatArray) {
+
+            /**
+             * Each cell's sweep, east (1) or west (-1), held through every lap. Column-major: cell
+             * (row, column) is column * cellsDown + row.
+             */
+            val direction = ByteArray(cellCount).also { held ->
+                for (cell in 0 until cellCount) {
+                    held[(cell % cellsAcross) * cellsDown + cell / cellsAcross] = if (sweepEastwardMps[cell] >= 0f) 1 else -1
+                }
+            }
+
+            /**
+             * How much more column water a unit of parcel is at each cell than at the reference speed:
+             * `U / |u|`. The crossing time is the reference's times this.
+             */
+            val stretch = FloatArray(cellCount)
+            val faceShare = FloatArray(cellCount)
+            var convergenceShare: FloatArray? = null
+
+            // The layer's state: per row and sweep, the parcel of vapor, of cloud and of falling
+            // hydrometeors, each with its land-origin part, and the boundary layer's air; and the
+            // bank of each cell.
+            val eastParcel = RowState(cellsDown)
+            val westParcel = RowState(cellsDown)
+            val bank = DoubleArray(cellCount)
+            val bankLand = DoubleArray(cellCount)
+            val bankAir: DoubleArray? = if (isBoundary) DoubleArray(cellCount) else null
+
+            /**
+             * Each cell's place in the condensate banks below, or -1 (column-major). The cloud is
+             * banked only where a row's wind turns, into a cell whose own downwind neighbor along the
+             * row is of the other sweep, and with the sweeps held those cells are fixed and a few
+             * hundredths of the map's: banks for every cell would hold 67 MB a half-year at 1,024
+             * rows, most of it zero. The free troposphere carries no condensate and banks none.
+             */
+            private val turnSlot = IntArray(cellCount) { -1 }
+            private val turnCells: Int = run {
+                var count = 0
+                if (isBoundary) {
+                    for (column in 0 until cellsAcross) {
+                        for (row in 0 until cellsDown) {
+                            val here = index(row, column)
+                            val sweep = direction[here].toInt()
+                            if (direction[index(row, (column + sweep + cellsAcross) % cellsAcross)].toInt() != sweep) turnSlot[here] = count++
+                        }
+                    }
+                }
+                count
+            }
+
+            /** The cloud and the falling water banked where the wind turns, with their land-origin parts, parcel units, by [turnSlot]. */
+            val bankCloud = DoubleArray(turnCells)
+            val bankCloudLand = DoubleArray(turnCells)
+            val bankFalling = DoubleArray(turnCells)
+            val bankFallingLand = DoubleArray(turnCells)
+
+            /** The parcel each cell sent on, column-major, for the westward sweep's faces to read. */
+            val sentParcel = DoubleArray(cellCount)
+            val sentParcelLand = DoubleArray(cellCount)
+            val sentParcelAir: DoubleArray? = if (isBoundary) DoubleArray(cellCount) else null
+
+            // Working space for one column's solve.
+            val role = ByteArray(cellsDown)
+            val water = DoubleArray(cellsDown)
+            val waterLand = DoubleArray(cellsDown)
+            val waterAir = DoubleArray(cellsDown)
+            val lower = DoubleArray(cellsDown)
+            val diagonal = DoubleArray(cellsDown)
+            val upper = DoubleArray(cellsDown)
+            val sweepUpper = DoubleArray(cellsDown)
+            val sweepSolved = DoubleArray(cellsDown)
+            val sweepSolvedLand = DoubleArray(cellsDown)
+            val sweepSolvedAir = DoubleArray(cellsDown)
+            val acrossBefore = DoubleArray(cellsDown)
+            val acrossBeforeLand = DoubleArray(cellsDown)
+            val acrossBeforeAir = DoubleArray(cellsDown)
+
+            /**
+             * Each marched row's outflow by the mean wind, per unit of its solved parcel, through its
+             * face with a row of the other sweep above or below: what [solveFaces] hands to the bank
+             * there.
+             */
+            val sentAbove = DoubleArray(cellsDown)
+            val sentBelow = DoubleArray(cellsDown)
+
+            /** The one crossing this layer solves at a time ([ColumnCrossing]). */
+            val crossing = ColumnCrossing()
+
+            /** This lap's part of the ledger, when one is kept. */
+            var entry: MoistureLedger.Lap? = null
+
+            /** The boundary layer's lift yield, filled per cell. */
+            private val yield = DoubleArray(2)
+
+            /** Its stretch and faces from the layer's wind, [eastwardMps] and [southwardMps], row-major. */
+            fun precomputeTransport(eastwardMps: FloatArray, southwardMps: FloatArray) {
+                val slowest = TRANSPORT_SPEED_MPS * SLOWEST_SPEED_SHARE
+                parallelChunks(0, cellsAcross) { startColumn, endColumn ->
+                    for (column in startColumn until endColumn) {
+                        for (row in 0 until cellsDown) {
+                            stretch[index(row, column)] =
+                                (TRANSPORT_SPEED_MPS / maxOf(leavingSpeedMps(eastwardMps, row, column), slowest)).toFloat()
+                        }
+                        // The meridional wind at the face below each row, the mean of the two rows'.
+                        for (row in 0 until cellsDown - 1) {
+                            val above = southwardMps[row * cellsAcross + column]
+                            val below = southwardMps[(row + 1) * cellsAcross + column]
+                            faceShare[index(row, column)] = ((above + below) * 0.5 * grid.faceSharePerMps[row]).toFloat()
+                        }
+                    }
+                }
+            }
+
+            /**
+             * The air's own budget per column, for the convergence closure: what flows in through the
+             * four sides less what flows out, as shares of the column.
+             */
+            fun precomputeConvergence() {
+                val shares = convergenceShare ?: FloatArray(cellCount).also { convergenceShare = it }
+                parallelChunks(0, cellsAcross) { startColumn, endColumn ->
+                    for (column in startColumn until endColumn) {
+                        val west = (column + cellsAcross - 1) % cellsAcross
+                        val east = (column + 1) % cellsAcross
+                        for (row in 0 until cellsDown) {
+                            val here = index(row, column)
+                            var inflow = (if (direction[index(row, west)] > 0) 1.0 else 0.0) +
+                                (if (direction[index(row, east)] < 0) 1.0 else 0.0)
+                            var outflow = 1.0
+                            if (row > 0) {
+                                val north = faceShare[index(row - 1, column)].toDouble()
+                                if (north > 0.0) inflow += north else outflow -= north
+                            }
+                            if (row < cellsDown - 1) {
+                                val south = faceShare[here].toDouble()
+                                if (south < 0.0) inflow -= south else outflow += south
+                            }
+                            shares[here] = (inflow - outflow).coerceAtLeast(0.0).toFloat()
+                        }
+                    }
+                }
+            }
+
+            /**
+             * The speed a cell's water leaves it by along its held sweep, meters a second: the zonal
+             * wind on its downwind face, the mean of its own and its downwind neighbor's along the
+             * sweep, where that neighbor is of the same sweep; its own where the wind turns there and
+             * the water is banked. Read at the cell's own center instead, a cell beside a line where
+             * the zonal wind parts held twice the water, and the doubling compounded row by row toward
+             * a pole (docs/DESIGN_LEDGER.md, A1-6c).
+             */
+            private fun leavingSpeedMps(eastward: FloatArray, row: Int, column: Int): Double {
+                val sweep = direction[index(row, column)]
+                val own = eastward[row * cellsAcross + column] * sweep.toDouble()
+                val downwindColumn = (column + sweep + cellsAcross) % cellsAcross
+                if (direction[index(row, downwindColumn)] != sweep) return own
+                return 0.5 * (own + eastward[row * cellsAcross + downwindColumn] * sweep.toDouble())
+            }
+
+            /** The boundary layer's air at its own mass in every row's parcels, and none banked. */
+            fun resetAir() {
+                if (!isBoundary) return
+                for (row in 0 until cellsDown) {
+                    eastParcel.air[row] = ColumnWater.BOUNDARY_LAYER_MASS_KG_PER_M2 / stretch[index(row, 0)]
+                    westParcel.air[row] = ColumnWater.BOUNDARY_LAYER_MASS_KG_PER_M2 / stretch[index(row, cellsAcross - 1)]
+                }
+                bankAir?.fill(0.0)
+            }
+
+            fun bankParcelIfTurned(parcel: RowState, row: Int, first: Int, sweep: Int) {
+                if (direction[first].toInt() == sweep) return
+                bank[first] += parcel.vapor[row] + parcel.cloud[row] + parcel.falling[row]
+                bankLand[first] += parcel.vaporLand[row] + parcel.cloudLand[row] + parcel.fallingLand[row]
+                bankAir?.let { it[first] += parcel.air[row] }
+                parcel.clear(row)
+            }
+
+            /** Starts the layer's bank and parcels from a march's end (see [WaterInFlight]). */
+            fun startFrom(
+                startBank: FloatArray,
+                eastwardVapor: DoubleArray, eastwardCloud: DoubleArray?, eastwardFalling: DoubleArray?,
+                westwardVapor: DoubleArray, westwardCloud: DoubleArray?, westwardFalling: DoubleArray?
+            ) {
+                for (cell in 0 until cellCount) bank[index(cell / cellsAcross, cell % cellsAcross)] = startBank[cell].toDouble()
+                bankCloud.fill(0.0)
+                bankCloudLand.fill(0.0)
+                bankFalling.fill(0.0)
+                bankFallingLand.fill(0.0)
+                for (row in 0 until cellsDown) {
+                    eastParcel.clear(row)
+                    westParcel.clear(row)
+                    eastParcel.vapor[row] = eastwardVapor[row]
+                    westParcel.vapor[row] = westwardVapor[row]
+                    if (eastwardCloud != null) eastParcel.cloud[row] = eastwardCloud[row]
+                    if (eastwardFalling != null) eastParcel.falling[row] = eastwardFalling[row]
+                    if (westwardCloud != null) westParcel.cloud[row] = westwardCloud[row]
+                    if (westwardFalling != null) westParcel.falling[row] = westwardFalling[row]
+                    // A parcel this world's wind does not march in from the first column waits in the
+                    // bank there, as between two laps ([reseason]).
+                    bankParcelIfTurned(eastParcel, row, index(row, 0), 1)
+                    bankParcelIfTurned(westParcel, row, index(row, cellsAcross - 1), -1)
+                }
+                bankLand.fill(0.0)
+            }
+
+            /** The bank at every cell, row-major, its banked condensate and [extra] (column-major) with it. */
+            fun bankRowMajor(extra: DoubleArray?): FloatArray = FloatArray(cellCount) {
+                val here = index(it / cellsAcross, it % cellsAcross)
+                val slot = turnSlot[here]
+                (bank[here] + (extra?.get(here) ?: 0.0) + if (slot >= 0) bankCloud[slot] + bankFalling[slot] else 0.0).toFloat()
+            }
+
+            fun storage(): Double = eastParcel.total() + westParcel.total() + bank.sum() + bankCloud.sum() + bankFalling.sum()
+            fun landStorage(): Double =
+                eastParcel.totalLand() + westParcel.totalLand() + bankLand.sum() + bankCloudLand.sum() + bankFallingLand.sum()
+
+            /**
+             * The faces of one column, solved: every row this sweep marches, and in the westward
+             * sweep every eastward row beside one of them, as one tridiagonal system in the parcels
+             * (see the class comment). [water] holds the parcels going in and comes out with them
+             * solved; [waterLand] and the boundary layer's [waterAir] the same, which the same matrix
+             * moves.
+             */
+            private fun solveFaces(base: Int) {
+                for (row in 0 until cellsDown) {
+                    lower[row] = 0.0
+                    upper[row] = 0.0
+                    diagonal[row] = 1.0
+                    sentAbove[row] = 0.0
+                    sentBelow[row] = 0.0
+                }
+                for (face in 0 until cellsDown - 1) {
+                    val above = face
+                    val below = face + 1
+                    val roleAbove = role[above]
+                    val roleBelow = role[below]
+                    // A face is solved when a marched row is on either side of it; between two rows
+                    // of the other sweep it is that sweep's.
+                    if (roleAbove != MARCHED && roleBelow != MARCHED) continue
+                    val stretchAbove = stretch[base + above].toDouble()
+                    val stretchBelow = stretch[base + below].toDouble()
+                    val advection = faceShare[base + face].toDouble()
+                    // The mean wind out of a marched row into the other sweep's row beside it,
+                    // implicit in the marched row's own equation and handed to the bank.
+                    if (roleAbove == MARCHED && roleBelow != MARCHED && advection > 0.0) {
+                        sentBelow[above] = advection * stretchAbove
+                        diagonal[above] += sentBelow[above]
+                    }
+                    if (roleBelow == MARCHED && roleAbove != MARCHED && advection < 0.0) {
+                        sentAbove[below] = -advection * stretchBelow
+                        diagonal[below] += sentAbove[below]
+                    }
+                    if (roleAbove == OUTSIDE || roleBelow == OUTSIDE) continue
+                    val mixing = grid.faceMixing[face]
+                    // Out of the row above, into the row below, as coefficients on each row's parcel:
+                    // the eddies' mixing, and the mean wind's where both rows are this sweep's.
+                    val oneSweep = roleAbove == MARCHED && roleBelow == MARCHED
+                    val fromAbove = mixing * stretchAbove + (if (oneSweep && advection > 0.0) advection * stretchAbove else 0.0)
+                    val fromBelow = mixing * stretchBelow + (if (oneSweep && advection < 0.0) -advection * stretchBelow else 0.0)
+                    diagonal[above] += fromAbove
+                    diagonal[below] += fromBelow
+                    upper[above] -= fromBelow
+                    lower[below] -= fromAbove
+                }
+                // The Thomas algorithm, which needs no pivoting on a diagonally dominant M-matrix.
+                var previousUpper = 0.0
+                var previousSolved = 0.0
+                var previousSolvedLand = 0.0
+                var previousSolvedAir = 0.0
+                for (row in 0 until cellsDown) {
+                    val denominator = diagonal[row] - lower[row] * previousUpper
+                    sweepUpper[row] = upper[row] / denominator
+                    sweepSolved[row] = (water[row] - lower[row] * previousSolved) / denominator
+                    sweepSolvedLand[row] = (waterLand[row] - lower[row] * previousSolvedLand) / denominator
+                    previousUpper = sweepUpper[row]
+                    previousSolved = sweepSolved[row]
+                    previousSolvedLand = sweepSolvedLand[row]
+                    if (isBoundary) {
+                        sweepSolvedAir[row] = (waterAir[row] - lower[row] * previousSolvedAir) / denominator
+                        previousSolvedAir = sweepSolvedAir[row]
+                    }
+                }
+                water[cellsDown - 1] = sweepSolved[cellsDown - 1]
+                waterLand[cellsDown - 1] = sweepSolvedLand[cellsDown - 1]
+                if (isBoundary) waterAir[cellsDown - 1] = sweepSolvedAir[cellsDown - 1]
+                for (row in cellsDown - 2 downTo 0) {
+                    water[row] = sweepSolved[row] - sweepUpper[row] * water[row + 1]
+                    waterLand[row] = sweepSolvedLand[row] - sweepUpper[row] * waterLand[row + 1]
+                    if (isBoundary) waterAir[row] = sweepSolvedAir[row] - sweepUpper[row] * waterAir[row + 1]
+                }
+            }
+
+            fun sweepColumn(column: Int, sweep: Int) {
+                val base = column * cellsDown
+                val parcel = if (sweep > 0) eastParcel else westParcel
+                val air = bankAir
+
+                // What arrives: the row's parcel from the column behind and whatever was banked here;
+                // and, in the westward sweep, the eastward rows beside them as they left this column.
+                for (row in 0 until cellsDown) {
+                    val here = base + row
+                    if (direction[here].toInt() == sweep) {
+                        role[row] = MARCHED
+                        // A bank the westward sweep's faces drew on can hold less than nothing; what
+                        // the parcel cannot pay of it waits there for the next lap's.
+                        val slot = turnSlot[here]
+                        if (slot >= 0) {
+                            parcel.cloud[row] += bankCloud[slot]
+                            parcel.cloudLand[row] += bankCloudLand[slot]
+                            parcel.falling[row] += bankFalling[slot]
+                            parcel.fallingLand[row] += bankFallingLand[slot]
+                            bankCloud[slot] = 0.0
+                            bankCloudLand[slot] = 0.0
+                            bankFalling[slot] = 0.0
+                            bankFallingLand[slot] = 0.0
+                        }
+                        val arriving = parcel.vapor[row] + bank[here]
+                        val arrivingLand = parcel.vaporLand[row] + bankLand[here]
+                        water[row] = arriving.coerceAtLeast(0.0)
+                        waterLand[row] = arrivingLand.coerceIn(0.0, water[row])
+                        bank[here] = arriving - water[row]
+                        bankLand[here] = arrivingLand - waterLand[row]
+                        if (air != null) {
+                            val arrivingAir = parcel.air[row] + air[here]
+                            waterAir[row] = arrivingAir.coerceAtLeast(0.0)
+                            air[here] = arrivingAir - waterAir[row]
+                        }
+                    } else {
+                        role[row] = OUTSIDE
+                        water[row] = 0.0
+                        waterLand[row] = 0.0
+                        waterAir[row] = 0.0
+                    }
+                }
+                if (sweep < 0) {
+                    val sentAir = sentParcelAir
+                    for (row in 0 until cellsDown) {
+                        if (role[row] != OUTSIDE) continue
+                        val besideMarched = (row > 0 && role[row - 1] == MARCHED) ||
+                            (row < cellsDown - 1 && role[row + 1] == MARCHED)
+                        if (!besideMarched) continue
+                        role[row] = ACROSS
+                        // What the eastward row will bring here, net of what it already owes here.
+                        val bringing = (sentParcel[base + row] + bank[base + row]).coerceAtLeast(0.0)
+                        water[row] = bringing
+                        waterLand[row] = (sentParcelLand[base + row] + bankLand[base + row]).coerceIn(0.0, bringing)
+                        acrossBefore[row] = water[row]
+                        acrossBeforeLand[row] = waterLand[row]
+                        if (air != null && sentAir != null) {
+                            waterAir[row] = (sentAir[base + row] + air[base + row]).coerceAtLeast(0.0)
+                            acrossBeforeAir[row] = waterAir[row]
+                        }
+                    }
+                }
+                solveFaces(base)
+                // What the marched rows' mean wind sent into the other sweep's rows waits in those
+                // rows' bank: the westward sweep's this lap, the eastward sweep's the next.
+                for (row in 0 until cellsDown) {
+                    if (role[row] != MARCHED) continue
+                    if (sentAbove[row] > 0.0) {
+                        bank[base + row - 1] += sentAbove[row] * water[row]
+                        bankLand[base + row - 1] += sentAbove[row] * waterLand[row]
+                        if (air != null) air[base + row - 1] += sentAbove[row] * waterAir[row]
+                    }
+                    if (sentBelow[row] > 0.0) {
+                        bank[base + row + 1] += sentBelow[row] * water[row]
+                        bankLand[base + row + 1] += sentBelow[row] * waterLand[row]
+                        if (air != null) air[base + row + 1] += sentBelow[row] * waterAir[row]
+                    }
+                }
+                // What the solve's mixing gave or took from the eastward rows waits in their bank.
+                if (sweep < 0) {
+                    for (row in 0 until cellsDown) {
+                        if (role[row] != ACROSS) continue
+                        bank[base + row] += water[row] - acrossBefore[row]
+                        bankLand[base + row] += waterLand[row] - acrossBeforeLand[row]
+                        if (air != null) air[base + row] += waterAir[row] - acrossBeforeAir[row]
+                    }
+                }
+
+                // The column's physics, row by row, and the water it sends on.
+                val downwindBase = ((column + sweep + cellsAcross) % cellsAcross) * cellsDown
+                for (row in 0 until cellsDown) {
+                    if (role[row] != MARCHED) {
+                        parcel.clear(row)
+                        continue
+                    }
+                    if (isBoundary) boundaryCell(base, row, sweep, parcel, downwindBase) else freeCell(base, row, sweep, parcel, downwindBase)
+                }
+            }
+
+            /** Checks the arriving vapor and its tracer for the ledger. */
+            private fun checkArriving(vapor: Double, vaporLand: Double) {
+                val record = entry ?: return
+                if (vapor < -NEGATIVE_SLACK_MM) record.negativeParcels++
+                val slack = TRACER_SLACK * (abs(vapor) + 1.0)
+                if (vaporLand < -slack || vaporLand > vapor + slack) record.tracerOutOfBounds++
+            }
+
+            /**
+             * The boundary layer's crossing of a cell: its air's convergence sent up or made up from
+             * the free troposphere, its sources and sinks solved together ([ColumnCrossing]), its
+             * condensate's delays, and what it sends the free troposphere.
+             */
+            private fun boundaryCell(base: Int, row: Int, sweep: Int, parcel: RowState, downwindBase: Int) {
+                val here = base + row
+                val cell = row * cellsAcross + base / cellsDown
+                val kind = surface[here]
+                val surfaceIndex = kind.toInt()
+                val toColumnWater = stretch[here].toDouble()
+                val seconds = grid.secondsPerColumn[row] * toColumnWater
+                val slowing = suppression[here].toDouble()
+                val layerMass = ColumnWater.BOUNDARY_LAYER_MASS_KG_PER_M2
+
+                // Everything below is in the cell's own column water, the parcel times the stretch.
+                var vapor = water[row] * toColumnWater
+                var vaporLand = waterLand[row] * toColumnWater
+                val air = waterAir[row] * toColumnWater
+                var cloud = parcel.cloud[row] * toColumnWater
+                var cloudLand = parcel.cloudLand[row] * toColumnWater
+                val falling = parcel.falling[row] * toColumnWater
+                val fallingLand = parcel.fallingLand[row] * toColumnWater
+                checkArriving(vapor, vaporLand)
+                vapor = vapor.coerceAtLeast(0.0)
+                vaporLand = vaporLand.coerceIn(0.0, vapor)
+
+                // The layer's air: what the march's faces gathered here over its mass rises with its
+                // water into the free troposphere at once; what they took away is made up from the
+                // free troposphere's lowest air, which sends it on the next lap.
+                var sentUp = 0.0
+                var sentUpLand = 0.0
+                if (air > layerMass) {
+                    val rising = (air - layerMass) / air
+                    sentUp = vapor * rising
+                    sentUpLand = vaporLand * rising
+                    vapor -= sentUp
+                    vaporLand -= sentUpLand
+                }
+                replacedPerSecondNext[here] = if (air < layerMass) ((layerMass - air) / layerMass / seconds).toFloat() else 0f
+
+                // What the free troposphere sent last lap, its lowest air stirred in and drawn down,
+                // at a steady rate over the crossing; the layer's own air stirred out, which the
+                // crossing solves.
+                val exchangePerSecond = exchangePerSecondAt(here, cell)
+                val mixedInRate = toBoundary[here] / grid.secondsPerColumn[row]
+                val mixedInShareLand = if (toBoundary[here] > 0.0) (toBoundaryLand[here] / toBoundary[here]).coerceIn(0.0, 1.0) else 0.0
+                val groundPressure = groundPressureKpa[here].toDouble()
+                val depth = layerDepthM[here].toDouble()
+                val airC = airTemperatureC[cell].toDouble()
+
+                val surfaceRate = when (kind) {
+                    OPEN_SEA -> seaTransferMassFlux[here].toDouble() * seaSurfaceHumidity[here].toDouble()
+                    LAND -> groundReturnRate[here].toDouble()
+                    else -> 0.0
+                }
+                val cloudShareLand = if (cloud > 0.0) (cloudLand / cloud).coerceIn(0.0, 1.0) else 0.0
+                val budget = crossing
+                budget.seconds = seconds
+                budget.sourceKgPerM2PerSecond = surfaceRate + mixedInRate
+                budget.lawSaturatedMm = 0.0
+                budget.lawOffsetMm = 0.0
+                budget.holdableMm = boundaryCapMm[here].toDouble()
+                budget.rainSuppression = slowing
+                budget.exchangePerSecond = exchangePerSecond
+                if (kind == OPEN_SEA) {
+                    budget.evaporationPerSecond = seaTransferMassFlux[here].toDouble() / layerMass
+                    budget.evaporationCeilingMm = seaSurfaceHumidity[here].toDouble() * layerMass
+                } else {
+                    budget.evaporationPerSecond = 0.0
+                    budget.evaporationCeilingMm = 0.0
+                }
+                budget.liftMps = liftMps[here].toDouble()
+                budget.airTemperatureC = airC
+                budget.groundPressureKpa = groundPressure
+                budget.layerDepthM = depth
+                budget.descentKgPerM2PerSecond = descentRate[here].toDouble()
+                budget.conversionPerSecond = slowing * config.climate.rainShadowScale / CLOUD_CONVERSION_SECONDS
+                budget.falloutPerSecond = 1.0 / FALLOUT_SECONDS
+                budget.condensateFallsAtOnce = false
+                budget.vapor = vapor
+                budget.cloud = cloud
+                budget.falling = falling
+                val vaporIn = vapor
+                val cloudIn = cloud
+                val condensateLandIn = cloudLand + fallingLand
+                budget.solve()
+                val mixedIn = mixedInRate * seconds
+                val added = budget.sourced - mixedIn - budget.evaporationWithheld
+                entry?.let { record ->
+                    if (kind == OPEN_SEA) record.seaEvaporation += added / toColumnWater
+                    if (kind == LAND) record.groundReturn += added / toColumnWater
+                    record.condensed += (budget.lifted + budget.capped) / toColumnWater
+                    record.reevaporated += budget.cloudEvaporated / toColumnWater
+                    val imbalance = abs(budget.waterIn - budget.waterOut) / (budget.waterIn + CROSSING_WATER_FLOOR_MM)
+                    if (imbalance > record.worstCrossingImbalance) record.worstCrossingImbalance = imbalance
+                }
+
+                // The land-origin water: the vapor's share mixed once from what came in, what the free
+                // troposphere mixed in, the ground's return and the cloud the descent evaporated; the
+                // condensate's share mixed once from the cloud carried in and the vapor's share of what
+                // grew.
+                val vaporWaterIn = vaporIn + mixedIn + added + budget.cloudEvaporated
+                val vaporLandIn = vaporLand + mixedIn * mixedInShareLand + (if (kind == LAND) added else 0.0) +
+                    budget.cloudEvaporated * cloudShareLand
+                val vaporShareLand = if (vaporWaterIn > 0.0) (vaporLandIn / vaporWaterIn).coerceIn(0.0, 1.0) else 0.0
+                val grown = budget.lifted + budget.capped
+                val condensateWaterIn = cloudIn - budget.cloudEvaporated + falling + grown
+                val condensateLandWaterIn = condensateLandIn - budget.cloudEvaporated * cloudShareLand + grown * vaporShareLand
+                val condensateShareLand = if (condensateWaterIn > 0.0) (condensateLandWaterIn / condensateWaterIn).coerceIn(0.0, 1.0) else 0.0
+
+                vapor = budget.vapor
+                vaporLand = vapor * vaporShareLand
+                cloud = budget.cloud
+                cloudLand = cloud * condensateShareLand
+                val fallingOut = budget.falling
+                val fallingOutLand = fallingOut * condensateShareLand
+                val condensateRain = budget.condensateRain
+                val condensateLandRain = condensateRain * condensateShareLand
+
+                // What the free troposphere gets of this crossing, in the march's units: the air that
+                // rose and the air stirred out.
+                val sentToFree = sentUp + budget.exchanged
+                toFreeNext[here] = sentToFree / toColumnWater
+                toFreeLandNext[here] = (sentUpLand + budget.exchanged * vaporShareLand) / toColumnWater
+
+                entry?.let { record ->
+                    record.rain[MoistureLedger.Sink.CONDENSATE.ordinal][surfaceIndex] += condensateRain / toColumnWater
+                    record.landOriginRain += condensateLandRain / toColumnWater
+                    if (!vapor.isFinite() || !cloud.isFinite() || !fallingOut.isFinite() || !vaporLand.isFinite()) record.nonFinite++
+                }
+
+                // Rates at the cell: a parcel's worth over the reference crossing time is a cell's
+                // rain over its own, since the two differ by the stretch on both sides.
+                val rate = SECONDS_PER_YEAR / seconds
+                rainMm[here] = (condensateRain * rate).toFloat()
+                landRainMm[here] = (condensateLandRain * rate).toFloat()
+                condensationMm[here] = ((grown - budget.cloudEvaporated) * rate).toFloat()
+                val cap = boundaryCapMm[here].toDouble()
+                humidity[here] = if (cap > 0.0) (vapor / cap).toFloat() else 1f
+                sourceMm[here] = (added * rate).toFloat()
+                cells?.let { record ->
+                    record.boundaryLayerWater.data[cell] = vapor.toFloat()
+                    record.boundaryLayerHumidity.data[cell] = humidity[here]
+                    record.boundaryLayerSpecificHumidity.data[cell] = (vapor / layerMass).toFloat()
+                    record.saturatedColumn.data[cell] = saturatedMm[here]
+                    if (kind == OPEN_SEA) record.seaMinusAirC.data[cell] = (seaSurfaceC[cell] - airTemperatureC[cell]).toFloat()
+                    if (kind == OPEN_SEA) record.seaSurface.data[cell] = seaSurfaceC[cell]
+                    if (kind == LAND) record.groundReturn.data[cell] = (added * rate).toFloat()
+                    if (kind == OPEN_SEA) record.seaEvaporation.data[cell] = (added * rate).toFloat()
+                    record.condensateRain.data[cell] = (condensateRain * rate).toFloat()
+                    record.liftedCondensation.data[cell] = (budget.lifted * rate).toFloat()
+                    record.capCondensation.data[cell] = (budget.capped * rate).toFloat()
+                    record.reevaporation.data[cell] = (budget.cloudEvaporated * rate).toFloat()
+                    record.crossingSeconds.data[cell] = seconds.toFloat()
+                    record.meanColumnWater.data[cell] = budget.meanVapor.toFloat()
+                    record.exchangeToFree.data[cell] = ((sentToFree - mixedIn) * rate).toFloat()
+                    record.risingAir.data[cell] = (sentUp * rate).toFloat()
+                    record.descentCapacity.data[cell] = (descentRate[here] * SECONDS_PER_YEAR).toFloat()
+                    if (liftMps[here] > 0f) {
+                        ColumnWater.boundaryLayerLiftYield(airC, groundPressure, depth, cap / layerMass, yield)
+                        record.liftingAtSaturation.data[cell] = (liftMps[here] * yield[0] * SECONDS_PER_YEAR).toFloat()
+                    }
+                }
+
+                // Back into parcels, and on downwind: to the next cell of this sweep, or banked where
+                // the wind turns. The layer leaves at its own mass.
+                val perParcel = 1.0 / toColumnWater
+                val sent = vapor * perParcel
+                val sentLand = vaporLand * perParcel
+                val sentAirParcel = layerMass * perParcel
+                sentParcel[here] = sent
+                sentParcelLand[here] = sentLand
+                sentParcelAir?.let { it[here] = sentAirParcel }
+                val downwind = downwindBase + row
+                if (direction[downwind].toInt() == sweep) {
+                    parcel.vapor[row] = sent
+                    parcel.vaporLand[row] = sentLand
+                    parcel.air[row] = sentAirParcel
+                    parcel.cloud[row] = cloud * perParcel
+                    parcel.cloudLand[row] = cloudLand * perParcel
+                    parcel.falling[row] = fallingOut * perParcel
+                    parcel.fallingLand[row] = fallingOutLand * perParcel
+                } else {
+                    // Where the wind turns, the cloud and the falling water go on in the other sweep
+                    // as the vapor does, and fall over their own delays there.
+                    bank[downwind] += sent
+                    bankLand[downwind] += sentLand
+                    bankAir?.let { it[downwind] += sentAirParcel }
+                    val slot = turnSlot[downwind]
+                    bankCloud[slot] += cloud * perParcel
+                    bankCloudLand[slot] += cloudLand * perParcel
+                    bankFalling[slot] += fallingOut * perParcel
+                    bankFallingLand[slot] += fallingOutLand * perParcel
+                    parcel.clear(row)
+                }
+            }
+
+            /**
+             * The free troposphere's crossing of a cell: the convergence closure when it is on, and
+             * the column's rain law and the layer's saturation solved together ([ColumnCrossing]).
+             */
+            private fun freeCell(base: Int, row: Int, sweep: Int, parcel: RowState, downwindBase: Int) {
+                val here = base + row
+                val cell = row * cellsAcross + base / cellsDown
+                val surfaceIndex = surface[here].toInt()
+                val toColumnWater = stretch[here].toDouble()
+                val seconds = grid.secondsPerColumn[row] * toColumnWater
+                val slowing = suppression[here].toDouble()
+
+                var vapor = water[row] * toColumnWater
+                var vaporLand = waterLand[row] * toColumnWater
+                checkArriving(vapor, vaporLand)
+                vapor = vapor.coerceAtLeast(0.0)
+                vaporLand = vaporLand.coerceIn(0.0, vapor)
+
+                // The convergence closure, when switched on, on the water arriving.
+                var convergenceRain = 0.0
+                var convergenceLandRain = 0.0
+                val convergence = (convergenceShare?.get(here)?.toDouble() ?: 0.0) * slowing * toColumnWater
+                if (convergence > 0.0 && vapor > 0.0) {
+                    convergenceRain = vapor * (1.0 - exp(-convergence))
+                    convergenceLandRain = convergenceRain * (vaporLand / vapor)
+                    vaporLand -= convergenceLandRain
+                    vapor -= convergenceRain
+                }
+
+                // What the boundary layer sent last lap, at a steady rate over the crossing; and what
+                // this layer gives it, its lowest air stirred down and drawn into the boundary layer's
+                // place, at the saturation humidity of the boundary layer's top and this layer's own
+                // relative humidity, linear in its water.
+                val seaLevelC = seaLevelTemperatureC(here)
+                val saturatedFromSea = ColumnWater.saturatedColumnMm(seaLevelC)
+                val freeSaturated = saturatedFromSea - ColumnWater.referenceBoundaryLayerSaturatedMm(seaLevelC)
+                // The free troposphere's lowest air is the air at the boundary layer's top over this
+                // ground, at the environment's temperature there: over high ground colder and thinner
+                // than the air that stood over the lowlands' boundary layer.
+                val topPressure = (groundPressureKpa[here] - ColumnWater.BOUNDARY_LAYER_DEPTH_KPA).coerceAtLeast(MIN_TOP_PRESSURE_KPA)
+                val topC = airTemperatureC[cell] - config.climate.lapseRateCPerKm * layerDepthM[here] / METERS_PER_KM
+                val baseShare = if (freeSaturated > 0.0) {
+                    ColumnWater.saturationSpecificHumidity(topC, topPressure) * ColumnWater.BOUNDARY_LAYER_MASS_KG_PER_M2 / freeSaturated
+                } else 0.0
+                val sentInRate = toFree[here] / grid.secondsPerColumn[row]
+                val sentInShareLand = if (toFree[here] > 0.0) (toFreeLand[here] / toFree[here]).coerceIn(0.0, 1.0) else 0.0
+                val budget = crossing
+                budget.seconds = seconds
+                budget.sourceKgPerM2PerSecond = sentInRate
+                budget.lawSaturatedMm = saturatedFromSea
+                budget.lawOffsetMm = lawOffsetMm(seaLevelC)
+                budget.holdableMm = freeSaturated
+                budget.rainSuppression = slowing
+                budget.exchangePerSecond = baseShare * (exchangePerSecondAt(here, cell) + replacedPerSecond[here])
+                budget.evaporationPerSecond = 0.0
+                budget.evaporationCeilingMm = 0.0
+                budget.liftMps = 0.0
+                budget.descentKgPerM2PerSecond = 0.0
+                budget.condensateFallsAtOnce = true
+                budget.vapor = vapor
+                budget.cloud = 0.0
+                budget.falling = 0.0
+                val vaporIn = vapor
+                budget.solve()
+                val sentIn = budget.sourced
+                val shareLand = if (vaporIn + sentIn > 0.0) ((vaporLand + sentIn * sentInShareLand) / (vaporIn + sentIn)).coerceIn(0.0, 1.0) else 0.0
+                val rained = budget.columnRain + budget.condensateRain
+                vapor = budget.vapor
+                vaporLand = vapor * shareLand
+                val landRained = rained * shareLand + convergenceLandRain
+                toBoundaryNext[here] = budget.exchanged / toColumnWater
+                toBoundaryLandNext[here] = budget.exchanged * shareLand / toColumnWater
+                entry?.let { record ->
+                    record.rain[MoistureLedger.Sink.COLUMN.ordinal][surfaceIndex] += rained / toColumnWater
+                    record.rain[MoistureLedger.Sink.CONVERGENCE.ordinal][surfaceIndex] += convergenceRain / toColumnWater
+                    record.landOriginRain += landRained / toColumnWater
+                    record.condensed += budget.capped / toColumnWater
+                    val imbalance = abs(budget.waterIn - budget.waterOut) / (budget.waterIn + CROSSING_WATER_FLOOR_MM)
+                    if (imbalance > record.worstCrossingImbalance) record.worstCrossingImbalance = imbalance
+                    if (!vapor.isFinite() || !vaporLand.isFinite()) record.nonFinite++
+                }
+
+                val rate = SECONDS_PER_YEAR / seconds
+                freeRainMm[here] = ((rained + convergenceRain) * rate).toFloat()
+                freeLandRainMm[here] = (landRained * rate).toFloat()
+                cells?.let { record ->
+                    record.freeWater.data[cell] = vapor.toFloat()
+                    record.columnRain.data[cell] = (rained * rate).toFloat()
+                    record.convergenceRain.data[cell] = (convergenceRain * rate).toFloat()
+                    record.lawHumidity.data[cell] = ((budget.meanVapor + budget.lawOffsetMm) / saturatedFromSea).toFloat()
+                    record.freeSaturatedColumn.data[cell] = budget.holdableMm.toFloat()
+                    record.freeCrossingSeconds.data[cell] = seconds.toFloat()
+                }
+
+                val perParcel = 1.0 / toColumnWater
+                val sent = vapor * perParcel
+                val sentLand = vaporLand * perParcel
+                sentParcel[here] = sent
+                sentParcelLand[here] = sentLand
+                val downwind = downwindBase + row
+                if (direction[downwind].toInt() == sweep) {
+                    parcel.vapor[row] = sent
+                    parcel.vaporLand[row] = sentLand
+                } else {
+                    bank[downwind] += sent
+                    bankLand[downwind] += sentLand
+                    parcel.clear(row)
+                }
+            }
+        }
     }
 
     /**
      * What one row and sweep carries from column to column, in the march's parcels: vapor, cloud
-     * and falling hydrometeors, each with its land-origin part.
+     * and falling hydrometeors, each with its land-origin part, and the boundary layer's air.
      */
     private class RowState(rows: Int) {
         val vapor = DoubleArray(rows)
@@ -1645,16 +2111,25 @@ object MoistureMarch {
         val cloudLand = DoubleArray(rows)
         val falling = DoubleArray(rows)
         val fallingLand = DoubleArray(rows)
+        val air = DoubleArray(rows)
 
         fun clear(row: Int) {
             vapor[row] = 0.0; vaporLand[row] = 0.0
             cloud[row] = 0.0; cloudLand[row] = 0.0
             falling[row] = 0.0; fallingLand[row] = 0.0
+            air[row] = 0.0
         }
 
         fun total(): Double = vapor.sum() + cloud.sum() + falling.sum()
         fun totalLand(): Double = vaporLand.sum() + cloudLand.sum() + fallingLand.sum()
     }
+
+    /** The least pressure a boundary layer's top is read at, kilopascals: under any ground the plates raise. */
+    private const val MIN_TOP_PRESSURE_KPA = 10.0
+
+    /** The dry adiabat's lapse rate, `g / c_p`, kelvin per meter, and pascals in a kilopascal. */
+    private const val DRY_LAPSE_K_PER_M = STANDARD_GRAVITY_MPS2 / AIR_HEAT_CAPACITY_J_PER_KG_K
+    private const val PASCALS_PER_KPA = 1_000.0
 
     /**
      * How far the land-origin water may stand outside zero to the column's water before the ledger

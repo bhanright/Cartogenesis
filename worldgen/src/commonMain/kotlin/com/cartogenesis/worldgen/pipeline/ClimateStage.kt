@@ -869,9 +869,8 @@ object ClimateStage {
             waterC: FloatField,
             seaIce: BooleanArray,
             wind: SeasonWind,
-            ascentMps: FloatArray?,
             inversion: FloatField?,
-            transport: PressureWind.Vectors?
+            freeWind: PressureWind.Vectors?
         ): MoistureMarch.Season {
             val totalWind = wind.totalMps
             // The water carries the current anomaly already, through the air it is built from.
@@ -880,7 +879,7 @@ object ClimateStage {
             }
             // The wind's speed through every gust and calm, which the sea's evaporation and the
             // ground's potential read; the belts' control keeps the march's own scalar winds.
-            val solved = ascentMps != null
+            val solved = freeWind != null
             val scalarAt10m = if (solved) FloatArray(cellsAcross * cellsDown) { cell ->
                 BoundaryLayer.scalarWindAt10mMps(totalWind.eastwardMps[cell], totalWind.southwardMps[cell], sea.isLand[cell])
             } else null
@@ -895,15 +894,14 @@ object ClimateStage {
                 southwardMps = totalWind.southwardMps,
                 scalarWindAt10mMps = scalarAt10m,
                 windAt2mMps = at2m,
-                largeScaleAscentMps = ascentMps,
                 inversionSuppression = inversion?.data,
                 extraterrestrialOfRow = DoubleArray(cellsDown) { row ->
                     SurfaceEvaporation.halfYearExtraterrestrialMjPerM2Day(
                         latitudeOf(row, cellsDown).toDouble(), obliquityDegrees, julyHalf
                     )
                 },
-                transportEastwardMps = transport?.eastwardMps,
-                transportSouthwardMps = transport?.southwardMps
+                freeEastwardMps = freeWind?.eastwardMps,
+                freeSouthwardMps = freeWind?.southwardMps
             )
         }
         val elevationM = FloatArray(cellsAcross * cellsDown) { cell ->
@@ -918,13 +916,11 @@ object ClimateStage {
             val july = seasonWind(config, julyHalfBelts, atmosphere?.julyHalf)
             val january = seasonWind(config, januaryHalfBelts, atmosphere?.januaryHalf)
             return marchSeason(
-                true, julyHalfTemperature, julyHalfSeaSurface, julyHalfSeaIce, july,
-                atmosphere?.let { BoundaryLayer.groundAscentMps(it, it.julyHalf) }, julyHalfInversion,
-                atmosphere?.let { BoundaryLayer.columnWindMps(it, it.julyHalf) }
+                true, julyHalfTemperature, julyHalfSeaSurface, julyHalfSeaIce, july, julyHalfInversion,
+                atmosphere?.let { BoundaryLayer.freeTroposphereWindMps(it, it.julyHalf) }
             ) to marchSeason(
-                false, januaryHalfTemperature, januaryHalfSeaSurface, januaryHalfSeaIce, january,
-                atmosphere?.let { BoundaryLayer.groundAscentMps(it, it.januaryHalf) }, januaryHalfInversion,
-                atmosphere?.let { BoundaryLayer.columnWindMps(it, it.januaryHalf) }
+                false, januaryHalfTemperature, januaryHalfSeaSurface, januaryHalfSeaIce, january, januaryHalfInversion,
+                atmosphere?.let { BoundaryLayer.freeTroposphereWindMps(it, it.januaryHalf) }
             )
         }
 

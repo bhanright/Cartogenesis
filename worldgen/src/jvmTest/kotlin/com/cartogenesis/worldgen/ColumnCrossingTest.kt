@@ -1,22 +1,21 @@
 package com.cartogenesis.worldgen
 
 import com.cartogenesis.worldgen.pipeline.ColumnCrossing
-import com.cartogenesis.worldgen.pipeline.MoistureMarch
+import com.cartogenesis.worldgen.pipeline.ColumnWater
 import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.random.Random
 import kotlin.test.Test
-import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * One column's crossing of a cell, its sources and sinks solved together ([ColumnCrossing]):
- * it conserves its water, it ends at the column's own balance however long the crossing, and in
+ * One layer's crossing of a cell, its sources and sinks solved together ([ColumnCrossing]): it
+ * conserves its water, it ends at the layer's own balance however long the crossing, and in
  * between it stands near a fine Runge-Kutta march of the same budget.
  *
- * The control is the arithmetic the march ran before (`chargedInTurn`): the whole crossing's
- * evaporation first, then the cap clipped, then the lifting, then the column's rain by a backward
- * step. It conserves too, but a long crossing leaves the column far from its balance.
+ * The control is the arithmetic the march ran before W2b (`chargedInTurn`): the whole crossing's
+ * evaporation first, then the cap clipped, then the sinks by a backward step. It conserves too,
+ * but a long crossing leaves the layer far from its balance.
  */
 class ColumnCrossingTest {
 
@@ -39,33 +38,53 @@ class ColumnCrossingTest {
         const val REFERENCE_STEPS = 200_000
     }
 
-    /** A tropical sea, a lifted tropical land column, and a cold one, each in the march's units. */
+    /**
+     * A layer's crossing in the march's units: the free troposphere over a tropical sea, raining by
+     * the column's law; the boundary layer over the sea, evaporating on its own humidity and mixing
+     * out; and the boundary layer lifted up a tropical and a cold slope.
+     */
     private class Case(
         val name: String,
-        val saturatedMm: Double,
+        /** The law's saturated column and the water it counts beside the layer's; zero for no law. */
+        val lawSaturatedMm: Double,
+        val lawOffsetMm: Double,
+        val holdableMm: Double,
         val sourceMmPerDay: Double,
-        val liftingMmPerDay: Double,
-        val criticalHumidity: Double,
+        val exchangePerDay: Double,
+        val evaporationCeilingMm: Double,
+        val evaporationPerDay: Double,
+        val liftMps: Double,
+        val airTemperatureC: Double,
+        val groundPressureKpa: Double,
         val startShare: Double
     )
 
     private val cases = listOf(
-        Case("tropical sea, arriving dry", 66.0, 5.0, 0.0, 0.0, 0.40),
-        Case("tropical sea, arriving at the cap", 66.0, 5.0, 0.0, 0.0, 1.0),
-        Case("tropical land, lifted and gated", 55.0, 3.0, 20.0, 0.75, 0.55),
-        Case("tropical land, lifted and gated, arriving wet", 55.0, 3.0, 20.0, 0.75, 0.95),
-        Case("cold land, lifted on the whole column", 8.0, 1.0, 6.0, 0.0, 0.7),
-        Case("a calm sea whose sources outrun the cap", 66.0, 40.0, 0.0, 0.0, 0.5)
+        Case("the free troposphere over a tropical sea, arriving dry", 66.0, 20.0, 44.0, 5.0, 0.0, 0.0, 0.0, 0.0, 26.0, 101.3, 0.30),
+        // The wettest a free troposphere arrives: where the single column's cap held it, 0.78 of the
+        // whole column's saturation, its own share 0.72.
+        Case("the free troposphere over a tropical sea, arriving at the column's old cap", 66.0, 20.0, 44.0, 5.0, 0.0, 0.0, 0.0, 0.0, 26.0, 101.3, 0.72),
+        Case("the boundary layer over a tropical sea", 0.0, 0.0, 28.0, 3.0, 1.1, 26.0, 0.73, 0.0, 26.0, 101.3, 0.40),
+        Case("the boundary layer lifted up a tropical slope", 0.0, 0.0, 25.0, 3.0, 1.1, 0.0, 0.0, 0.03, 24.0, 95.0, 0.60),
+        Case("the boundary layer lifted up a tropical slope, arriving wet", 0.0, 0.0, 25.0, 3.0, 1.1, 0.0, 0.0, 0.03, 24.0, 95.0, 0.97),
+        Case("the boundary layer lifted up a cold slope", 0.0, 0.0, 5.5, 1.0, 1.1, 0.0, 0.0, 0.05, 0.0, 85.0, 0.8),
+        Case("a calm boundary layer whose sources outrun its cap", 0.0, 0.0, 28.0, 40.0, 0.1, 0.0, 0.0, 0.0, 26.0, 101.3, 0.5)
     )
 
     private fun crossingFor(case: Case, seconds: Double): ColumnCrossing = ColumnCrossing().apply {
         this.seconds = seconds
         sourceKgPerM2PerSecond = case.sourceMmPerDay / DAY_SECONDS
-        saturatedMm = case.saturatedMm
-        holdableMm = MoistureMarch.HOLDABLE_SHARE * case.saturatedMm
+        lawSaturatedMm = case.lawSaturatedMm
+        lawOffsetMm = case.lawOffsetMm
+        holdableMm = case.holdableMm
         rainSuppression = 1.0
-        liftingKgPerM2PerSecond = case.liftingMmPerDay / DAY_SECONDS
-        criticalHumidity = case.criticalHumidity
+        exchangePerSecond = case.exchangePerDay / DAY_SECONDS
+        evaporationPerSecond = case.evaporationPerDay / DAY_SECONDS
+        evaporationCeilingMm = case.evaporationCeilingMm
+        liftMps = case.liftMps
+        airTemperatureC = case.airTemperatureC
+        groundPressureKpa = case.groundPressureKpa
+        layerDepthM = ColumnWater.boundaryLayerDepthM(case.airTemperatureC, case.groundPressureKpa)
         descentKgPerM2PerSecond = 0.0
         conversionPerSecond = 1.0e-3
         falloutPerSecond = 1.0e-3
@@ -92,7 +111,7 @@ class ColumnCrossingTest {
         return water
     }
 
-    /** The column's balance: where its sinks take its source, or the cap. */
+    /** The layer's balance: where its sinks take its source, or the cap. */
     private fun balanceMm(case: Case): Double {
         val probe = crossingFor(case, 1.0)
         if (probe.sinkRate(probe.holdableMm) <= probe.sourceKgPerM2PerSecond) return probe.holdableMm
@@ -105,21 +124,20 @@ class ColumnCrossingTest {
         return 0.5 * (low + high)
     }
 
-    /** The march's arithmetic before: sources, the cap clipped, the lifting, then a backward step of rain. */
+    /**
+     * The march's arithmetic before W2b: the whole crossing's sources first, the cap clipped, then
+     * the sinks by one backward step over the crossing.
+     */
     private fun chargedInTurn(case: Case, seconds: Double): Double {
         val probe = crossingFor(case, seconds)
-        val holdable = probe.holdableMm
-        var water = probe.vapor + probe.sourceKgPerM2PerSecond * seconds
-        if (water > holdable) water = holdable
-        if (probe.liftingKgPerM2PerSecond > 0.0) water *= exp(-probe.liftingKgPerM2PerSecond / holdable * seconds)
-        val start = water
+        val start = minOf(probe.vapor + probe.sourceKgPerM2PerSecond * seconds, probe.holdableMm)
+        var low = 0.0
+        var high = start
         repeat(200) {
-            val rain = MoistureMarch.columnRainMmPerDay(water / case.saturatedMm) / DAY_SECONDS * seconds
-            val slope = 1.0 + MoistureMarch.COLUMN_RAIN_PER_HUMIDITY / case.saturatedMm *
-                exp(MoistureMarch.COLUMN_RAIN_PER_HUMIDITY * (water / case.saturatedMm - MoistureMarch.COLUMN_RAIN_HUMIDITY_OFFSET)) / DAY_SECONDS * seconds
-            water = (water - (water + rain - start) / slope).coerceAtLeast(0.0)
+            val middle = 0.5 * (low + high)
+            if (middle + seconds * probe.sinkRate(middle) > start) high = middle else low = middle
         }
-        return water
+        return 0.5 * (low + high)
     }
 
     private val crossingDays = listOf(0.01, 0.06, 0.25, 1.0, 3.0, 10.0, 60.0)
@@ -132,12 +150,20 @@ class ColumnCrossingTest {
             val crossing = ColumnCrossing().apply {
                 seconds = DAY_SECONDS * exp(random.nextDouble(-6.0, 5.0))
                 sourceKgPerM2PerSecond = random.nextDouble(0.0, 30.0) / DAY_SECONDS
-                saturatedMm = random.nextDouble(0.5, 90.0)
-                holdableMm = MoistureMarch.HOLDABLE_SHARE * saturatedMm
+                val freeLayer = random.nextBoolean()
+                lawSaturatedMm = if (freeLayer) random.nextDouble(0.5, 90.0) else 0.0
+                lawOffsetMm = if (freeLayer) random.nextDouble(0.0, 0.4) * lawSaturatedMm else 0.0
+                holdableMm = if (freeLayer) lawSaturatedMm - lawOffsetMm else random.nextDouble(0.5, 35.0)
+                condensateFallsAtOnce = freeLayer
                 rainSuppression = random.nextDouble(0.0, 1.0)
-                liftingKgPerM2PerSecond = if (random.nextBoolean()) random.nextDouble(0.0, 50.0) / DAY_SECONDS else 0.0
-                criticalHumidity = if (random.nextBoolean()) 0.75 else 0.0
-                descentKgPerM2PerSecond = if (liftingKgPerM2PerSecond == 0.0 && random.nextBoolean()) random.nextDouble(0.0, 20.0) / DAY_SECONDS else 0.0
+                exchangePerSecond = if (freeLayer) 0.0 else random.nextDouble(0.0, 3.0) / DAY_SECONDS
+                evaporationPerSecond = if (!freeLayer && random.nextBoolean()) random.nextDouble(0.0, 2.0) / DAY_SECONDS else 0.0
+                evaporationCeilingMm = random.nextDouble(0.0, 1.2) * holdableMm
+                airTemperatureC = random.nextDouble(-30.0, 32.0)
+                groundPressureKpa = random.nextDouble(55.0, 102.0)
+                layerDepthM = ColumnWater.boundaryLayerDepthM(airTemperatureC, groundPressureKpa)
+                liftMps = if (!freeLayer && random.nextBoolean()) random.nextDouble(0.0, 0.1) else 0.0
+                descentKgPerM2PerSecond = if (liftMps == 0.0 && random.nextBoolean()) random.nextDouble(0.0, 20.0) / DAY_SECONDS else 0.0
                 conversionPerSecond = random.nextDouble(0.0, 2.0e-3)
                 falloutPerSecond = 1.0e-3
                 vapor = random.nextDouble(0.0, 1.3) * holdableMm
@@ -146,7 +172,7 @@ class ColumnCrossingTest {
             }
             crossing.solve()
             assertTrue(crossing.vapor >= 0.0 && crossing.cloud >= 0.0 && crossing.falling >= 0.0, "a reservoir went below nothing")
-            assertTrue(crossing.vapor <= crossing.holdableMm * (1 + 1e-12), "the column ended over its cap")
+            assertTrue(crossing.vapor <= crossing.holdableMm * (1 + 1e-12), "the layer ended over its cap")
             worst = maxOf(worst, abs(crossing.waterIn - crossing.waterOut) / crossing.waterIn)
         }
         println("CROSSING closure: worst of 20,000 random crossings %.2e of the water in".format(worst))
@@ -195,14 +221,5 @@ class ColumnCrossingTest {
         println("CROSSING worst %.3f of the column's distance from its balance (bar %.2f); the control %.3f".format(worst, END_SHARE_OF_DISTANCE, controlWorst))
         assertTrue(worst <= END_SHARE_OF_DISTANCE, "the crossing stands %.3f of its distance from the fine march".format(worst))
         assertTrue(controlWorst > END_SHARE_OF_DISTANCE, "the control should miss the fine march by more than the bar")
-    }
-
-    @Test
-    fun `the saturated share is Sundqvist's, none under the critical humidity`() {
-        assertEquals(0.0, ColumnCrossing.saturatedShare(0.75, 0.75), 0.0)
-        assertEquals(0.0, ColumnCrossing.saturatedShare(0.5, 0.75), 0.0)
-        assertEquals(1.0, ColumnCrossing.saturatedShare(1.0, 0.75), 0.0)
-        assertEquals(1.0 - kotlin.math.sqrt(0.1 / 0.25), ColumnCrossing.saturatedShare(0.9, 0.75), 1e-15)
-        assertEquals(0.6, ColumnCrossing.saturatedShare(0.6, 0.0), 0.0)
     }
 }

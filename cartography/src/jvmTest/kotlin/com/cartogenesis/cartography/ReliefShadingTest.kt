@@ -311,7 +311,7 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
         // Armed again at A1-2: C1b2's gallery world floored faces under the sky at its ninth decile
         // of slope, and on A1-2's ground no face is floored (docs/DESIGN_LEDGER.md, A1-2). Recorded
         // again at A1-4, whose ground moved with the provisional climates' wind (docs/TODO.md).
-        KnownFailures.expect("A1-4: the gallery cone's steepest faces are floored again", "39") {
+        KnownFailures.expect("A1-4: the gallery cone's steepest faces are floored again", "37") {
             if (sky.floored != 0) {
                 throw RecordedViolation(
                     "${sky.floored} of $BEARINGS bearings round the cone are pinned at the darkest factor the model " +
@@ -403,7 +403,7 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
         // Recorded at K2: the gallery's world on the 12,000 km planet under K2's physics is other
         // ground than the one the declared figure was read off; it is the drawing's to re-derive,
         // with its other constants, for the Earth-sized default (docs/TODO.md).
-        KnownFailures.expect("K2: the relief's ordinary ground was read off the gallery's ground before K2", "0.9389") {
+        KnownFailures.expect("K2: the relief's ordinary ground was read off the gallery's ground before K2", "0.9414") {
             if (kotlin.math.abs(declaredGround - ReliefShading.ordinaryGround) > MAX_GROUND_DRIFT) {
                 val found = "%.4f".format(declaredGround)
                 throw RecordedViolation(

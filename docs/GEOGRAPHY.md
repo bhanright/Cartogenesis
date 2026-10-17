@@ -1311,6 +1311,19 @@ C1b's march the deserts do not sit in the horse latitudes yet: the subtropics ta
 monsoon's water and the tropical interiors are dry (`GeographyAuditTest`'s band clause is a known
 failure; docs/TODO.md, "The desert left the horse latitudes").
 
+**Since W2e the column is two layers.** The boundary layer, the dry atmosphere's lowest eighth of
+the air, carries its own humidity on the surface wind: the sea evaporates into it by the bulk
+formula on that humidity, the ground gives its water back into it, and air carried up the ground
+condenses only once it is lifted past its own lifting condensation level, so a dry interior's air
+crosses a range without raining until it is cooled enough, and a run of small hills rains as one.
+The free troposphere above it carries the rest on the levels above, and the column's large-scale
+rain reads its humidity against its own saturated column, read from sea level, so high ground no
+longer raises it: on Earth the high plateaus stay dry and the rain favors the lowlands and the
+windward slopes (Anders and others 2006), and over CRU's land within 30 degrees the ground over
+1,500 m rains 0.56 of what the ground under 200 m rains (`RainPlacementEarthTest`). The two layers
+exchange their air where the boundary layer's wind converges or diverges and at the free
+troposphere's radiative subsidence; docs/DESIGN_LEDGER.md, W2e, has the measurements.
+
 Deserts belong to the horse latitudes, near 30 degrees, where air that rose at the equator descends
 dry. Getting them there took two mechanisms rather than a tuned constant.
 

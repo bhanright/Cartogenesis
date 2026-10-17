@@ -84,7 +84,10 @@
   land rain's peak stays on the heat low: in each half's own rain at 512 rows, July north at 16-18,
   20-22 and 22-24 degrees on seeds 42, 969495 and 7 against main's 18-20, 20-22 and 24-26 (Earth's
   5-12). Next, by those numbers: the eddy winds and the
-  return, after the tropical sea's temperature below. 2026-10-16, W2b.
+  return, after the tropical sea's temperature below. 2026-10-16, W2b. **At W2e** the interiors are no longer
+  desert: the lifted boundary layer condenses past its own condensation level and the column law
+  reads the free troposphere, so desert covers 13.5% of the standard worlds' land and the tropics'
+  band twice Earth's (the entry "The deserts overshoot to the wet side"). 2026-10-17, W2e.
 - **The land gives back less of its rain than Earth's because its rain falls where it cannot be
   returned, not because the return is short (W2d, measured; the cause is the rain's placement).**
   Budyko's curve, which the ground returns by, gives back 0.603 of Earth's land rain on Earth's own
@@ -105,7 +108,9 @@
   everywhere, the potential raised a fifth) where W1's blunt raise of the return by 1/0.6 moved it by
   +289 to +425. Recorded in `GroundReturnEarthTest` (the share under half the potential x1.83, the
   groups' shares and millimeters). Next: the column's rain law over land and the eddy winds, which
-  decide where the rain falls. 2026-10-17, W2d.
+  decide where the rain falls. 2026-10-17, W2d. **At W2e** a third of the land's rain falls
+  under half the potential (x1.30 of CRU's), from nearly half; the land returns 0.60 of its rain
+  (`RainAgainstEarthTest`, armed). 2026-10-17, W2e.
 - **More of what the land evaporates rains on land again than Earth's (W2d, recorded).** van der Ent
   and others' (2010) continents rain 57% of their evaporation back on land; the standard worlds rain
   0.70 of it on 6eb31400 and 0.73 once the root zone's store moved the dry half's return into the wet
@@ -122,6 +127,90 @@
   ranges and whose lakes stand over the Caspian's share, it may be more. Measure the lakes' and
   playas' open-water loss against the land's return before deciding whether the climate should read
   the rivers. 2026-10-17, W2d.
+- **The deserts overshoot to the wet side once the climb condenses past the boundary layer's own
+  condensation level (W2e, recorded; the subtropical highs' correction is the counterweight).** With
+  the column split into a boundary layer and the free troposphere (docs/DESIGN_LEDGER.md, W2e) the
+  standard worlds at 512 rows carry 13.5% desert pooled against Peel's 19.1% (`WaterColumnEarthTest`,
+  x0.71, recorded), the horse latitudes' band 0.63 of Earth's and the tropics' twice Earth's 5.2%
+  (band 0 x2.16, recorded); on seeds 42, 969495 and 7 at 512 rows 6.8, 11.6 and 16.4%, within 15
+  degrees 10.8, 7.7 and 7.4%. The land within 40 degrees now rains x0.84 of GPCP's and the land
+  imports 39,500 to 47,000 km³ a year at Earth's land area, both inside Earth's; what is short is the
+  dry subtropics' desert, which the high-pressure systems' strength sets. Still x1.74 of Earth's land
+  stands over five times drier than its potential (`RainPlacementEarthTest`, recorded) and x1.30 of
+  Earth's share of the land's rain falls where the potential is under half of it
+  (`GroundReturnEarthTest`, recorded): the windward coasts' and the eddy winds' share. Not tuned: the
+  queued correction to the highs is the counterweight. 2026-10-17, W2e.
+- **The stationary waves' eddy winds still dry the land, now through the free troposphere (W2e,
+  measured).** The eddy winds act at the levels above the boundary layer (690 to 810 hPa where D2
+  measured them) and so, since W2e, on the free troposphere's water alone. Switched off alone on
+  seeds 42, 969495 and 7 at 512 rows they raise the land's rain by 68, 62 and 143 mm and cut desert
+  by 5.5, 9.0 and 9.8 points (to 1.3, 2.6 and 6.6%); D2 measured 6 to 10 points with them in the
+  column's wind. Their divergence of the free troposphere's water out of the continents is what
+  is left of the interiors' drought. 2026-10-17, W2e.
+- **High tropical ground still rains near the lowland on some worlds (W2e, measured).** Over the
+  land within 30 degrees the ground over 1,500 m rains 0.76 of what the ground under 200 m rains,
+  pooled on the standard worlds at 512 rows (CRU TS 4.07 over the CPC's half-degree elevation, 0.56;
+  D2 read 3.5 to 7 times on 6d5257e2), seed 99 0.22 and seed 7 1.10. On seeds 42 and 7 the land
+  over 2,500 m rains 1,500 and 1,330 mm, most of it the lifted boundary layer's condensate on
+  windward ranges (1,200 and 690 mm), against Earth's 569; seed 969495's plateau rains 640. Two
+  things to measure: where the boundary layer is saturated at the ground the cap condenses what the
+  cell's colder air cannot hold and the lift condenses the climb too, so a saturated layer climbing
+  a slope rains early (the total over a climb is the water it brings, but its place moves up the
+  slope); and the plateaus' boundary layers are fed by their own ground's return. 2026-10-17, W2e.
+- **Fewer isolated wet spots than Earth's (W2e, recorded).** D2's measure (land raining over 500 mm
+  and over twice the land 160 to 320 km round it) covers 0.0019 of the standard worlds' land at 512
+  rows against 0.0067 of CRU's (`RainPlacementEarthTest`, x0.28, recorded); on 6d5257e2 x1.92, the
+  round wet blobs over isolated high ground. Earth's are its isolated mountains and volcanoes; the
+  march's lifted air rains only past its own condensation level and the column law no longer reads
+  the ground's saturated column, so a lone peak with dry air round it rains little. Whether Earth's
+  spots are windward slopes of lone peaks, which the climb read at 15 km could not hold at 512
+  rows, was not measured. 2026-10-17, W2e.
+- **The tropical land's column holds half the Amazon's water (W2e, measured, not fixed).** Over the
+  standard seeds' lowland land within 10 degrees under 500 m at 512 rows (seeds 42, 969495 and 7) the
+  column holds 30 to 34 mm in either half (the boundary layer 12 to 14, the free troposphere 18 to
+  20) of 62 to 67 mm saturated, 0.47 to 0.54, against Manaus's 55 to 60 mm of 73 in the wet season
+  (Schiro and others 2016), the boundary layer's surface air at 0.47 to 0.55 of saturation. The
+  regions' budget per half-year, seed 42's July half: rain 1,462 mm (the column law 1,389, the lifted
+  condensate 72), the ground's return 852, P - E 609 mm or 6,900 km³ a half-year; the boundary layer
+  brings in 52,800 km³ across the region's edge on its own wind and carries out 48,500, the free
+  troposphere 63,100 and 60,500, and the boundary layer sends 14,100 km³ a half-year up into the free
+  troposphere, 9,700 of it its converging air. The free troposphere's humidity there reads 0.56 to
+  0.58 on the law, so its rain stops at 1,000 to 1,400 mm and the column keeps what the law leaves.
+  The land's boundary layer is dry because its only source is the Budyko return of its own rain:
+  next, the return's rate inside the wet half (a soil store drawn at the potential, W2d's candidate)
+  and the convective exchange over land, whose air a dry free troposphere's base dries.
+  2026-10-17, W2e.
+- **The convergence closure rains what the boundary layer sends up at once (W2e, measured; off by
+  default).** `ClimateConfig.convergenceRain` now rains the free troposphere's arriving water at its
+  own faces' convergence. Switched on, on seeds 42, 969495 and 7 at 512 rows, it rains 128 to 203 mm
+  a year of the land's water at once, the land rains 46 to 59 mm more and desert falls 3.3 to 7.2
+  points, and over the tropical lowland the free troposphere holds 1 to 2 mm less (17.7 against 19.7
+  on seed 42) and its law humidity reads 0.55 against 0.58. Off, the default, converging air builds
+  the free troposphere's water and the law rains it, which is Bretherton's relation; no defect in
+  the default world. Kept as the control. 2026-10-17, W2e.
+- **The free troposphere holds one relative humidity from the boundary layer's top up (W2e).** The
+  boundary layer's top exchanges air with the free troposphere at its radiative subsidence, 3.5 mm a
+  second (`MoistureMarch.exchangeVelocityMps`), because the free troposphere's lowest air is read at
+  its own mean relative humidity and the saturation of the layer's top: the trades' cloud layer,
+  13.0 g/kg over EUREC4A against the subcloud layer's 15.1 (Galewsky and Los 2026), is in that one
+  humidity with the dry air above the inversion. With the cumulus' own mass flux, 15.2 mm a second,
+  the trades' boundary layer stood at 0.59 of saturation and the sea evaporated half again its water
+  (measured at W2e); with none, 0.9. A free troposphere with its own vertical profile, or the cloud
+  layer as a third layer, would let the observed mass flux stand. The trades' surface air now stands
+  at 0.68 of saturation and 14.2 g/kg over a 26.5 to 28 C sea against EUREC4A's 0.716 and 15.1
+  (`RainPlacementEarthTest`, inside). 2026-10-17, W2e.
+- **A world drying toward nothing ends in the westward sweep's debt (W2e, measured).** The westward
+  sweep's faces draw on the eastward rows beside them, and what the eastward row cannot pay waits in
+  its bank (A1-6b). In `MoistureClosureTest`'s world with no source, run past three laps since W2e's
+  march settles on the whole planet's rain, the march's storage falls below zero, to -1.6 of a start
+  of 38.6 after ten laps, while every lap still closes its budget: the debts of rows that dried
+  before they could repay. In a world with sources the next lap's parcel pays them. The clause now
+  reads its closure against the water each lap moved. 2026-10-17, W2e.
+- **The march settles in more laps (W2e).** The two layers exchange their water a lap behind, so the
+  march settles in 15 to 17 laps on seeds 42, 969495 and 7 at 512 rows against W2d's 10 to 12 (the
+  probe's figures; the cost guard's below in the ledger row). An exchange solved together within
+  the lap, the two layers marched in one sweep where their sweeps agree, would take the lag out.
+  2026-10-17, W2e.
 - **The sea from the equator to 40 degrees still stands under Earth's (W2c, two causes fixed, the
   rest measured).** W2c gave the slab's water Kara's air-sea difference and the ITCZ's cloud its
   longwave (`EnergyBalance.SEA_OVER_MARINE_AIR_C`, `ITCZ_CLOUD_SHORTWAVE_OVER_LONGWAVE`): between
@@ -188,7 +277,9 @@
 - **The climb's condensation reads the moist adiabat at sea-level pressure (W2b).**
   `ColumnWater.upliftCondensationKgPerM3` takes Smith and Barstad's `C_w` at the standard sea level
   whatever the ground; the saturated column now starts at the ground's pressure. Small (the moist
-  lapse rate at 70 kPa is a few percent under the sea level's at the same temperature). 2026-10-16, W2b.
+  lapse rate at 70 kPa is a few percent under the sea level's at the same temperature). 2026-10-16, W2b. **Gone at
+  W2e**: the climb's yield is the boundary layer's own, climbed from its condensation level's
+  pressure up the moist adiabat (`ColumnWater.boundaryLayerLiftYield`). 2026-10-17, W2e.
 - **Courses stop in narrow sea the seaward route does not carry on (W2b, recorded).** On W2b's ground
   `DrawnRiverMouthTest` finds 187 drawn courses over the standard worlds at 512 rows that end on a
   narrow-sea cell with no seaward step (seed 42: 8 at Earth's density and 57 at every course, the
@@ -268,7 +359,9 @@
   zonal mean of its own aloft but Jablonowski and Williamson's prescribed jets, whose lowest levels
   blow westerly where the trades blow easterly. The trades weaken and the westerlies strengthen with
   height on Earth; a thermal-wind profile from the energy balance's gradient, held by the
-  angular-momentum-conserving wind in the deep tropics, is what would replace it. 2026-10-12, F1.
+  angular-momentum-conserving wind in the deep tropics, is what would replace it. 2026-10-12, F1. Since W2e
+  it is the free troposphere's own wind (`BoundaryLayer.freeTroposphereWindMps`), the boundary
+  layer's water travelling on the surface wind. 2026-10-17, W2e.
 - **The land rains more after the column's wind (F1).** Pooled over seeds 42, 969495 and 7 at 1,024
   rows the land takes 1,046 mm against A1-6c's 1,026 (Earth 756), seed 42 1,154 against 1,242 and the
   others more, 1,030 against 940 and 954 against 895; the sea 749 against 745 (Earth 1,032). On
@@ -281,7 +374,8 @@
   scale height from Antofagasta's 194 soundings of 2005, 1.5 to 2.3 km, and Armazones's median, 1.7 km,
   and name no shipboard survey. The figure stands; its source is to be found or the comment re-sourced
   (F1's column wind reads Kanemaru and Masunaga's AIRS figure, `BoundaryLayer.VAPOR_SCALE_HEIGHT_M`).
-  2026-10-12, F1.
+  2026-10-12, F1. **Gone at W2e**: the cap is the boundary layer's surface air's
+  saturation and `HOLDABLE_SHARE` is deleted. 2026-10-17, W2e.
 - **The circulation by longitude's per-cell work (F1, the graphics rule).** Each half's belts are
   built on every cell once a climate run and once an ocean round (`LocalCirculation.belts`, in
   parallel on the processor), and each lap carries the column's wind's two eddy fields up to the map
@@ -1437,7 +1531,11 @@
 - **The march's surface wind, its speed and its sun, all stand-ins (C1b).** The march carries water at the belts' 7.5 m/s east or west, with the belts' zonal speed constant up to their edges, so across an edge two air streams of different origin meet at full speed and the orographic term flips its windward side from one row to the next (the seasonal fields' pre-blur row steps of 4 to 6 at the edges). **The zonal wind closed at C1b2**: the belts' zonal wind is continuous through zero at each edge (`SurfaceBelts.zonalShare`) and the march carries water at each cell's own speed, so the reversal moves with the pressure field; what still draws rows is the entry "Fronts along the belts' factor". The land's potential evapotranspiration reads FAO-56's 2 m/s station mean for the wind at 2 m and Earth's land-mean transmissivity, 184.7 of 330.2 W/m² (Trenberth, Fasullo and Kiehl 2009), for the sun at the ground, so a desert's clear sky and a rainforest's cloud are the same. All three are the atmosphere's (the entry "Build the atmosphere"). 2026-10-08, C1b.
 - **The belts' factor's floor has no Earth source (C1b).** `ClimateStage.MIN_BAND`, a twentieth of the rain's lifetime under the subtropical high, was kept as it stood; C1a's design guessed it inside a Saharan column's turnover of 110 to 365 days against 8.9 and left the figures to be checked. Reached smoothly now. 2026-10-08, C1b.
 - **The ocean's wind stress still reads the belts' old meridional step (C1b).** `SurfaceBelts` gives the gyres the belts' slope as a constant across each belt, where the atmosphere's meridional wind is now a half sine, zero at every edge and at the equator. 2026-10-08, C1b.
-- **The rain on the graphics card (C1b; the next chunk, C1c).** `MoistureAccelerator` is the seam, unwired: one workgroup per run of rows and sweep, a barrier per column, the faces' fluxes and the eddy exchange through shared memory and the bank in a buffer, held to the processor's rain and to its own ledger's closure. The march costs about 4.7 s a climate run at 1,024 rows against main's 2.6, and the climate runs three times a generation. 2026-10-08, C1b. At C1b2 a column is one tridiagonal solve over every row of both sweeps that meets one being marched (the Thomas algorithm, sequential in the rows: a parallel cyclic reduction on the card), and the physics per row is independent; the march costs 6.0 to 7.4 s a climate run. 2026-10-09, C1b2.
+- **The rain on the graphics card (C1b; the next chunk, C1c).** `MoistureAccelerator` is the seam, unwired: one workgroup per run of rows and sweep, a barrier per column, the faces' fluxes and the eddy exchange through shared memory and the bank in a buffer, held to the processor's rain and to its own ledger's closure. The march costs about 4.7 s a climate run at 1,024 rows against main's 2.6, and the climate runs three times a generation. 2026-10-08, C1b. At C1b2 a column is one tridiagonal solve over every row of both sweeps that meets one being marched (the Thomas algorithm, sequential in the rows: a parallel cyclic reduction on the card), and the physics per row is independent; the march costs 6.0 to 7.4 s a climate run. 2026-10-09, C1b2. At W2e
+  the march is two layers, each a march of its own with its own sweeps and faces, exchanging through
+  per-cell inboxes a lap behind; the per-cell physics stays one cell's crossing reading only that
+  cell and the layers' last lap there (`ColumnCrossing`, `ColumnWater.boundaryLayerLiftYield`), the
+  form a kernel takes, and the two layers' marches are independent within a lap. 2026-10-17, W2e.
 - **The marine inversion, re-measured on a march that takes its rain out (C1b).** `MoistureBudget.INVERSION_MEASURED_EFFECT` records 0.2% from the old march, a reservoir whose rate the lid held down; on a march that takes the rain out of the column the lid may bite, and `MoistureBudgetTest` prints the new figure. 2026-10-08, C1b.
 - **The desert left the horse latitudes (C1b).** `GeographyAuditTest`'s band clause, asserted from Fix 3b, is a C1b known failure: pooled over the audit's worlds at 512 rows the desert's share of the 0 to 15 degree band's land is 2.95 times its share of all land, where Earth's is 0.27, and seed 42's 15 to 45 degree band holds 0.23 times it against Earth's 2.05. Measured causes, not fixed: in the warm half the belts' meridional wind converges from 10 to 25 degrees (the half sine peaks mid-belt, and the thermal equator stands at the tilt), so the subtropics take a monsoon's water in summer, and the orographic term rains it out of moist air on any climb; and the tropical continents' interiors are high dry plateaus some 900 km inland, which the march reaches with its water already rained out on the windward rise. The atmosphere's subsidence (the entry "Build the atmosphere") is what dries the horse latitudes on Earth, and the march has only the inversion's lid for it. `MeridionalWindTest`'s monsoon coast and `RainGeometryTest` print the figures. 2026-10-08, C1b. C1b2 restored the descent on every sink and measured the bands (the entry "The march's misses against Earth, after C1b2"). 2026-10-09, C1b2.
 - **The ice after C1b.** The march that closes its budget snows on the polar land the water the old march's cold cap dropped, and the ice grew: the ice-sheet biome covers 8.6 to 10.0% of the land's area on seeds 42, 969495 and 7 at 256, 512 and 1,024 rows alike (Earth 10.1; main 1.8 to 2.5); `SnowBalanceTest`'s share, a count of the grid's cells that weighs the polar land several times over, reads 24.4% on its four seeds at 256 rows and fails its bar of twice Earth's, where by area it reads 7.86% against the control's 17.48%, so on the sphere the control sits inside the bar too and the guard wants a control that fails it (or the bar re-derived) when it is moved to area; the sheets stand 7.0 to 7.8 km at their thickest against Earth's envelope (`IceSheetTest`); 6% of the cold dry interior is ice (`SnowBalanceTest`, against 2%); the ice adds 2.9 to 3.1% of the standing water as parallel grid-bearing bars (`GlaciationCombTest`, bar 2%); the sheets cut a trough's depth into 36 to 45% of seed 718106's flat frozen country (`GlaciationLatticeTest`, bar 15%); and the geometry census's ice surface, measurable now on seeds 7 and 1234 at 512 rows, holds a crease and a round rim on each and a round rim on 99. All are C1b known failures; the brief measured the ice and left it. The thickness and the lattice are the ice's own physics (`GlaciationStage`'s flow law and scour, set when the sheets were a few percent of the land), the share is the snow's, and which to move first is the ice chunk's to measure: the snow's resolution dependence first, since a law cannot depend on the cell. 2026-10-08, C1b. The thickness is Glen's law's at C1b2 (the entry "The ice after C1b2"). 2026-10-09, C1b2.

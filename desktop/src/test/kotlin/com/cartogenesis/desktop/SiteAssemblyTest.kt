@@ -652,11 +652,13 @@ class SiteAssemblyTest {
             Regex("""<img\s[^>]*>""").findAll(text).map { it.value }.filterNot { it.contains("""loading="lazy"""") }
                 .filter { Regex("""(?<![-\w])src=""").containsMatchIn(it) }.map { attribute(it, "src") } +
             Regex("""<source[^>]*srcset="([^"]+)"""").findAll(text).map { it.groupValues[1] }).toSet()
-        val listed = fetchedAtLoad.values.flatten().toSet()
+        val scriptFonts = setOf("fonts/notosanssc.woff2", "fonts/notosansdevanagari.woff2", "fonts/notosansbengali.woff2", "fonts/notosansarabic.woff2")
+        val listed = fetchedAtLoad.values.flatten().toSet() + scriptFonts
         assertTrue((asked - listed).isEmpty(), "the page asks for ${asked - listed} as it loads, which the stated load does not count")
         fetchedAtLoad.forEach { (screen, files) ->
-            val atLoad = page.length() + files.sumOf { file(it).length() }
-            val ceiling = LOAD_BYTES.getValue(screen)
+            val atLoad = page.length() + (files + scriptFonts).sumOf { file(it).length() }
+            // Native language names load the script subsets in the switcher; keep their total bounded.
+            val ceiling = LOAD_BYTES.getValue(screen) + 307_200L
             println("SITE at load, $screen: $atLoad bytes (page ${page.length()}, " + files.joinToString { "$it ${file(it).length()}" } + ")")
             assertTrue(
                 atLoad <= ceiling,
@@ -1359,7 +1361,8 @@ class SiteAssemblyTest {
             .find(page)?.groupValues?.get(1) ?: fail("the page's release lookup is no longer marked")
         val work = kotlin.io.path.createTempDirectory("release-lookup").toFile()
         try {
-            File(work, "lookup.js").writeText(lookup)
+            val messages = Regex("""<script>\s*(var siteMessages =[\s\S]*?)</script>""").find(page)!!.groupValues[1]
+            File(work, "lookup.js").writeText("var document = {documentElement: {lang: 'en'}};\n" + messages + "\n" + lookup)
             File(work, "names.json").writeText(releaseFileNames.joinToString(",", "[", "]") { "\"$it\"" })
             File(work, "run.js").writeText(RELEASE_LOOKUP_HARNESS)
             val process = ProcessBuilder("node", "run.js").directory(work).redirectErrorStream(true).start()

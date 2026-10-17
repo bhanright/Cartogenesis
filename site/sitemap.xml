@@ -1,9 +1,121 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
   <url>
     <loc>https://cartogenesis.com/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cartogenesis.com/"/>
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://cartogenesis.com/zh/"/>
+    <xhtml:link rel="alternate" hreflang="hi" href="https://cartogenesis.com/hi/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cartogenesis.com/es/"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://cartogenesis.com/ar/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://cartogenesis.com/fr/"/>
+    <xhtml:link rel="alternate" hreflang="bn" href="https://cartogenesis.com/bn/"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://cartogenesis.com/pt/"/>
+    <xhtml:link rel="alternate" hreflang="ru" href="https://cartogenesis.com/ru/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cartogenesis.com/"/>
   </url>
   <url>
-    <loc>https://cartogenesis.com/app/</loc>
+    <loc>https://cartogenesis.com/zh/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cartogenesis.com/"/>
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://cartogenesis.com/zh/"/>
+    <xhtml:link rel="alternate" hreflang="hi" href="https://cartogenesis.com/hi/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cartogenesis.com/es/"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://cartogenesis.com/ar/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://cartogenesis.com/fr/"/>
+    <xhtml:link rel="alternate" hreflang="bn" href="https://cartogenesis.com/bn/"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://cartogenesis.com/pt/"/>
+    <xhtml:link rel="alternate" hreflang="ru" href="https://cartogenesis.com/ru/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cartogenesis.com/"/>
   </url>
+  <url>
+    <loc>https://cartogenesis.com/hi/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cartogenesis.com/"/>
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://cartogenesis.com/zh/"/>
+    <xhtml:link rel="alternate" hreflang="hi" href="https://cartogenesis.com/hi/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cartogenesis.com/es/"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://cartogenesis.com/ar/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://cartogenesis.com/fr/"/>
+    <xhtml:link rel="alternate" hreflang="bn" href="https://cartogenesis.com/bn/"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://cartogenesis.com/pt/"/>
+    <xhtml:link rel="alternate" hreflang="ru" href="https://cartogenesis.com/ru/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cartogenesis.com/"/>
+  </url>
+  <url>
+    <loc>https://cartogenesis.com/es/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cartogenesis.com/"/>
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://cartogenesis.com/zh/"/>
+    <xhtml:link rel="alternate" hreflang="hi" href="https://cartogenesis.com/hi/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cartogenesis.com/es/"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://cartogenesis.com/ar/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://cartogenesis.com/fr/"/>
+    <xhtml:link rel="alternate" hreflang="bn" href="https://cartogenesis.com/bn/"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://cartogenesis.com/pt/"/>
+    <xhtml:link rel="alternate" hreflang="ru" href="https://cartogenesis.com/ru/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cartogenesis.com/"/>
+  </url>
+  <url>
+    <loc>https://cartogenesis.com/ar/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cartogenesis.com/"/>
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://cartogenesis.com/zh/"/>
+    <xhtml:link rel="alternate" hreflang="hi" href="https://cartogenesis.com/hi/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cartogenesis.com/es/"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://cartogenesis.com/ar/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://cartogenesis.com/fr/"/>
+    <xhtml:link rel="alternate" hreflang="bn" href="https://cartogenesis.com/bn/"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://cartogenesis.com/pt/"/>
+    <xhtml:link rel="alternate" hreflang="ru" href="https://cartogenesis.com/ru/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cartogenesis.com/"/>
+  </url>
+  <url>
+    <loc>https://cartogenesis.com/fr/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cartogenesis.com/"/>
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://cartogenesis.com/zh/"/>
+    <xhtml:link rel="alternate" hreflang="hi" href="https://cartogenesis.com/hi/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cartogenesis.com/es/"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://cartogenesis.com/ar/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://cartogenesis.com/fr/"/>
+    <xhtml:link rel="alternate" hreflang="bn" href="https://cartogenesis.com/bn/"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://cartogenesis.com/pt/"/>
+    <xhtml:link rel="alternate" hreflang="ru" href="https://cartogenesis.com/ru/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cartogenesis.com/"/>
+  </url>
+  <url>
+    <loc>https://cartogenesis.com/bn/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cartogenesis.com/"/>
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://cartogenesis.com/zh/"/>
+    <xhtml:link rel="alternate" hreflang="hi" href="https://cartogenesis.com/hi/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cartogenesis.com/es/"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://cartogenesis.com/ar/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://cartogenesis.com/fr/"/>
+    <xhtml:link rel="alternate" hreflang="bn" href="https://cartogenesis.com/bn/"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://cartogenesis.com/pt/"/>
+    <xhtml:link rel="alternate" hreflang="ru" href="https://cartogenesis.com/ru/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cartogenesis.com/"/>
+  </url>
+  <url>
+    <loc>https://cartogenesis.com/pt/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cartogenesis.com/"/>
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://cartogenesis.com/zh/"/>
+    <xhtml:link rel="alternate" hreflang="hi" href="https://cartogenesis.com/hi/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cartogenesis.com/es/"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://cartogenesis.com/ar/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://cartogenesis.com/fr/"/>
+    <xhtml:link rel="alternate" hreflang="bn" href="https://cartogenesis.com/bn/"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://cartogenesis.com/pt/"/>
+    <xhtml:link rel="alternate" hreflang="ru" href="https://cartogenesis.com/ru/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cartogenesis.com/"/>
+  </url>
+  <url>
+    <loc>https://cartogenesis.com/ru/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cartogenesis.com/"/>
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://cartogenesis.com/zh/"/>
+    <xhtml:link rel="alternate" hreflang="hi" href="https://cartogenesis.com/hi/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cartogenesis.com/es/"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://cartogenesis.com/ar/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://cartogenesis.com/fr/"/>
+    <xhtml:link rel="alternate" hreflang="bn" href="https://cartogenesis.com/bn/"/>
+    <xhtml:link rel="alternate" hreflang="pt" href="https://cartogenesis.com/pt/"/>
+    <xhtml:link rel="alternate" hreflang="ru" href="https://cartogenesis.com/ru/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cartogenesis.com/"/>
+  </url>
+  <url><loc>https://cartogenesis.com/app/</loc></url>
 </urlset>

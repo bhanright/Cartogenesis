@@ -50,6 +50,7 @@ class SiteFontsTest {
         assertEquals(asked, record.keys, "the page's @font-face rules and faces.json name different files")
         record.forEach { (face, entry) ->
             val source = File(repoRoot, entry.jsonObject.getValue("builtFrom").jsonPrimitive.content)
+            assertTrue(source.isFile, "Missing source $source; download the Noto sources before generating subsets")
             assertEquals(
                 entry.jsonObject.getValue("sourceSha256").jsonPrimitive.content, sha256(source),
                 "${source.name} has changed since site/fonts/$face was cut from it: run site/fonts/build_web_fonts.py"
@@ -63,7 +64,9 @@ class SiteFontsTest {
 
     @Test
     fun `every character the page sets is in each face that could set it`() {
-        val text = File(repoRoot, "site/index.html").readText() + File(repoRoot, "ROADMAP.md").readText()
+        val template = File(repoRoot, "site/index.html").readText()
+        val text = template.replace(Regex("""<(script|style)\b[^>]*>[\s\S]*?</\1>"""), "").replace(Regex("<[^>]*>"), "") +
+            SiteTranslations.languages.keys.joinToString(" ") { language -> SiteTranslations.catalog(language).toString() }
         val used = text.codePoints().toArray().filter { it >= 0x20 }.toSortedSet()
         val gaps = ArrayList<String>()
         record.forEach { (face, entry) ->
@@ -72,11 +75,15 @@ class SiteFontsTest {
                 first..last
             }.toSet()
             val source = File(repoRoot, entry.jsonObject.getValue("builtFrom").jsonPrimitive.content)
+            assertTrue(source.isFile, "Missing source $source; download the Noto sources before generating subsets")
             val typeface = FontMgr.default.makeFromFile(source.path, 0)
                 ?: fail("could not read ${source.path} as a face")
             // Only what the application's face can draw: a character it has no glyph for falls back
             // to another face whether or not the page's copy is cut from it.
-            val dropped = used.filter { typeface.getUTF32Glyph(it).toInt() != 0 && it !in kept }
+            val languages = entry.jsonObject["languages"]?.jsonArray?.map { it.jsonPrimitive.content }
+            val relevant = if (languages == null) used else (languages.joinToString(" ") { SiteTranslations.catalog(it).toString() } +
+                "English 简体中文 हिन्दी Español العربية Français বাংলা Português Русский").codePoints().toArray().toSortedSet()
+            val dropped = relevant.filter { typeface.getUTF32Glyph(it).toInt() != 0 && it !in kept }
             if (dropped.isNotEmpty()) {
                 gaps += "$face lacks " + dropped.joinToString(" ") { String(Character.toChars(it)) + " (U+%04X)".format(it) }
             }

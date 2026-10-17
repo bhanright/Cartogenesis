@@ -37,3 +37,5 @@ from publication. Publish the generated WOFF2 subsets with their licenses.
 The generator collects each script's characters from its catalog, the template,
 and the native language names; it also regenerates the shared Latin/Cyrillic faces.
 Keep shaping tables when subsetting Arabic, Devanagari, and Bengali.
+The test runs without those sources (as on the deploy runner) by reading `absentFromSource` in
+`faces.json`: the characters a Noto source has no glyph for, recorded when the subsets are cut.

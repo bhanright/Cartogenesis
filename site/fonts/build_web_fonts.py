@@ -7,7 +7,10 @@ most of what the page fetches as it loads. This writes each one as a WOFF2 cut t
 Latin-script page can use, which is about an eighth of that, and records in faces.json which
 application file each was built from and which characters it keeps. SiteFontsTest reads the record:
 it fails when an application face changes and this has not been run again, and when the page or
-the roadmap uses a character a subset has dropped.
+the roadmap uses a character a subset has dropped. The four downloaded Noto faces are cut from
+sources under site/fonts/sources, which the repository does not hold; for them faces.json also
+records, as absentFromSource, the page's characters the source has no glyph for, so the test can
+still check coverage on a machine that has only the subsets.
 
 Two families are renamed, because a subset is a Modified Version under the SIL Open Font License
 and IBM Plex reserves the name "Plex": a Modified Version may not carry a Reserved Font Name without
@@ -22,6 +25,7 @@ Needs fontTools and brotli (pip install fonttools brotli). Run from the reposito
 import hashlib
 import json
 import os
+import pathlib
 import re
 import html
 
@@ -119,7 +123,10 @@ def build():
         return sorted({ord(character) for character in plain if ord(character) >= 32})
 
     record = {}
-    all_faces = [(face, family, os.path.join(SOURCE_DIRECTORY, face + ".ttf"), list(catalogs)) for face, family in FACES]
+    # as_posix, so the path faces.json records is the same on every machine that runs this: a
+    # backslash is a separator only on Windows, and the test reads the record on Linux too.
+    all_faces = [(face, family, (pathlib.PurePath(SOURCE_DIRECTORY) / (face + ".ttf")).as_posix(), list(catalogs))
+                 for face, family in FACES]
     all_faces.extend((face.removesuffix(".woff2"), entry["family"], entry["builtFrom"], entry["languages"])
                      for face, entry in previous.items() if "languages" in entry)
     for face, family, source, languages in all_faces:
@@ -142,12 +149,19 @@ def build():
             "codePointRanges": ranges_of(kept),
         }
         if face + ".woff2" in previous and "languages" in previous[face + ".woff2"]:
+            # What the page sets in these languages that the source face cannot draw. A downloaded
+            # source is not kept in the repository, so a machine without it (the deploy runner)
+            # cannot ask the source which characters it lacks; this is that answer, recorded while
+            # the source is at hand. The application's faces are tracked, so they need no such record.
+            source_characters = set(TTFont(source).getBestCmap().keys())
+            record[face + ".woff2"]["absentFromSource"] = ranges_of(
+                [code_point for code_point in characters(languages) if code_point not in source_characters])
             record[face + ".woff2"]["languages"] = languages
             record[face + ".woff2"]["sourceUrl"] = previous[face + ".woff2"]["sourceUrl"]
         print(f"{face}: {os.path.getsize(source)} bytes of TrueType to {os.path.getsize(output)} of WOFF2, "
               f"{len(kept)} characters, published as {family}")
 
-    with open(os.path.join(OUTPUT_DIRECTORY, "faces.json"), "w", encoding="utf-8") as file:
+    with open(os.path.join(OUTPUT_DIRECTORY, "faces.json"), "w", encoding="utf-8", newline="\n") as file:
         json.dump(record, file, ensure_ascii=False, indent=2)
         file.write("\n")
 

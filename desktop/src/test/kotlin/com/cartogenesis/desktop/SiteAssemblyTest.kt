@@ -656,9 +656,11 @@ class SiteAssemblyTest {
         val listed = fetchedAtLoad.values.flatten().toSet() + scriptFonts
         assertTrue((asked - listed).isEmpty(), "the page asks for ${asked - listed} as it loads, which the stated load does not count")
         fetchedAtLoad.forEach { (screen, files) ->
-            val atLoad = page.length() + (files + scriptFonts).sumOf { file(it).length() }
-            // Native language names load the script subsets in the switcher; keep their total bounded.
-            val ceiling = LOAD_BYTES.getValue(screen) + 307_200L
+            // A page sets type in its own language's one script face (index.html's :root:lang rules) and
+            // the switcher's native names use system fonts, so a page fetches at most the largest of the four.
+            val scriptFace = scriptFonts.maxOf { file(it).length() }
+            val atLoad = page.length() + files.sumOf { file(it).length() } + scriptFace
+            val ceiling = LOAD_BYTES.getValue(screen) + scriptFace
             println("SITE at load, $screen: $atLoad bytes (page ${page.length()}, " + files.joinToString { "$it ${file(it).length()}" } + ")")
             assertTrue(
                 atLoad <= ceiling,

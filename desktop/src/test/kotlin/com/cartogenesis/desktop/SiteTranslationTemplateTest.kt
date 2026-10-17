@@ -19,6 +19,19 @@ internal object SiteTranslations {
     fun catalog(language: String): JsonObject = Json.parseToJsonElement(
         File(root, "site/i18n/$language.json").readText()).jsonObject
     fun path(language: String) = if (language == "en") "/" else "/$language/"
+
+    /**
+     * The characters a language's page can show from its catalog: every string and roadmap row with
+     * its markup removed and its entities decoded, which is what the font subsets are cut to (the
+     * catalog's own text, not its JSON spelling, whose escaping backslashes the page never shows).
+     */
+    fun shownText(language: String): String {
+        val catalog = catalog(language)
+        val texts = catalog.getValue("strings").jsonObject.values.map { it.jsonPrimitive.content } +
+            catalog.getValue("roadmap").jsonObject.flatMap { (release, rows) -> listOf(release) + rows.jsonArray.map { it.jsonPrimitive.content } }
+        return texts.joinToString(" ") { it.replace(Regex("<[^>]*>"), "") }
+            .replace("&nbsp;", " ").replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&")
+    }
     fun page(language: String) = File(root, "desktop/build/site${path(language)}index.html")
     fun matches(pattern: String, text: String) = Regex(pattern).findAll(text).map { it.value }.sorted().toList()
 }

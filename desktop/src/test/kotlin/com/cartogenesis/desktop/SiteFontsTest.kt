@@ -66,7 +66,7 @@ class SiteFontsTest {
     fun `every character the page sets is in each face that could set it`() {
         val template = File(repoRoot, "site/index.html").readText()
         val text = template.replace(Regex("""<(script|style)\b[^>]*>[\s\S]*?</\1>"""), "").replace(Regex("<[^>]*>"), "") +
-            SiteTranslations.languages.keys.joinToString(" ") { language -> SiteTranslations.catalog(language).toString() }
+            SiteTranslations.languages.keys.joinToString(" ") { language -> SiteTranslations.shownText(language) }
         val used = text.codePoints().toArray().filter { it >= 0x20 }.toSortedSet()
         val gaps = ArrayList<String>()
         record.forEach { (face, entry) ->
@@ -81,7 +81,7 @@ class SiteFontsTest {
             // Only what the application's face can draw: a character it has no glyph for falls back
             // to another face whether or not the page's copy is cut from it.
             val languages = entry.jsonObject["languages"]?.jsonArray?.map { it.jsonPrimitive.content }
-            val relevant = if (languages == null) used else (languages.joinToString(" ") { SiteTranslations.catalog(it).toString() } +
+            val relevant = if (languages == null) used else (languages.joinToString(" ") { SiteTranslations.shownText(it) } +
                 "English 简体中文 हिन्दी Español العربية Français বাংলা Português Русский").codePoints().toArray().toSortedSet()
             val dropped = relevant.filter { typeface.getUTF32Glyph(it).toInt() != 0 && it !in kept }
             if (dropped.isNotEmpty()) {

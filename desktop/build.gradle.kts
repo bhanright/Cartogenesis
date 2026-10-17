@@ -526,6 +526,7 @@ tasks.register<Sync>("assembleSite") {
     from(rootProject.layout.projectDirectory.dir("site")) {
         // Documentation for whoever maintains the site, not part of the site.
         exclude("README.md")
+        exclude("i18n/**")
 
         // Three files that are about the site rather than part of it: the list of release file
         // names the page's Download and Installation section is checked against, the rule that
@@ -638,10 +639,18 @@ tasks.register<Sync>("assembleSite") {
     }
 }
 
+tasks.register<Exec>("siteTranslationTemplateTest") {
+    group = "verification"
+    description = "Checks keyed landing-page text, catalog completeness, and unchanged markup."
+    workingDir(rootProject.projectDir)
+    commandLine("node", "--test", "desktop/src/test/kotlin/com/cartogenesis/desktop/SiteTranslationTemplateTest.mjs")
+}
+
 tasks.register<Test>("siteTest") {
     group = "verification"
     description = "Assembles cartogenesis.com and checks the tree that would be uploaded."
     dependsOn("assembleSite")
+    dependsOn("siteTranslationTemplateTest")
     val testTask = tasks.named<Test>("test").get()
     testClassesDirs = testTask.testClassesDirs
     classpath = testTask.classpath

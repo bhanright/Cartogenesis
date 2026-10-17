@@ -61,7 +61,9 @@ class OceanLeavesTheGroundTest : BorrowsSharedWorlds() {
      * march leaves each cell at its downwind face's speed. W2b re-took the same two: the provisional
      * climate's march solves each crossing as one budget, reads its saturated column on the rising
      * parcel's profile, and rains by one law. W2c re-took the same two: the provisional climate's
-     * water stands Kara's difference above its air and the ITCZ's cloud keeps its longwave. An ocean change that leaks into the
+     * water stands Kara's difference above its air and the ITCZ's cloud keeps its longwave. W2d re-took
+     * the same two: the provisional climate's ground gives back each half-year's share as far as its
+     * rain and the root zone's store supply it. An ocean change that leaks into the
      * ground moves them.
      * A chunk meant to move the ground re-takes them here, as the render records are re-taken.
      * At [SharedWorlds.DETAIL_ROWS], whose standard worlds the detail guards generate anyway, so
@@ -93,12 +95,12 @@ class OceanLeavesTheGroundTest : BorrowsSharedWorlds() {
             "plates.continentalShare" to -8606387063464998658L,
             "plates.upliftRateMmPerYear" to -9204950406715247596L,
             "plates.crustAge" to 5808649867131644059L,
-            "erosion.height" to -8107149304097666584L,
+            "erosion.height" to -7649408749290424107L,
             "erosion.sweptOnDevice" to -358906410940142731L,
-            "sea.shorelineHeight" to 6558693518352324544L,
-            "sea.isLand" to 6877006559056202450L,
-            "sea.relativeElevation" to -8121205692740427928L,
-            "sea.landCellCount" to -5160307748466942313L
+            "sea.shorelineHeight" to 1015691289453624346L,
+            "sea.isLand" to -676185223250578078L,
+            "sea.relativeElevation" to 2550027169030494356L,
+            "sea.landCellCount" to 3636592555742626965L
         )
     }
 }

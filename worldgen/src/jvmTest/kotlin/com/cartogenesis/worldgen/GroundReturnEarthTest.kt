@@ -313,7 +313,7 @@ class GroundReturnEarthTest : BorrowsSharedWorlds() {
         }
         // The humid groups rain half again to twice Earth's rain there, and Budyko's curve gives
         // back a smaller share of more rain; on Earth's own rain the curve gives back Earth's 0.603
-        // (the class comment). Recorded at W2d, x0.80, x0.70 and x0.75 before it too
+        // (the class comment). Recorded at W2d; on 6eb31400 x0.80, x0.70 and x0.74
         // (docs/DESIGN_LEDGER.md, W2d; docs/TODO.md).
         KnownFailures.expect("W2d: the humid groups give back less of their rain than Earth's", "A x0.80 C x0.70 E x0.75") {
             if (outside.isNotEmpty()) throw RecordedViolation("groups outside Earth's share: $outside", outside.joinToString(" "))
@@ -335,9 +335,9 @@ class GroundReturnEarthTest : BorrowsSharedWorlds() {
         }
         // The arid group rains under half of Earth's arid rain and gives back nearly all of it;
         // the temperate and polar groups rain twice and half again Earth's and give back more
-        // millimeters than Earth's. Recorded at W2d, B x0.47, C x1.40 and E x1.35 before it
+        // millimeters than Earth's. Recorded at W2d; on 6eb31400 B x0.47, C x1.41 and E x1.33
         // (docs/DESIGN_LEDGER.md, W2d; docs/TODO.md).
-        KnownFailures.expect("W2d: the arid group evaporates under Earth's millimeters and the temperate and polar over", "B x0.45 C x1.43 E x1.35") {
+        KnownFailures.expect("W2d: the arid group evaporates under Earth's millimeters and the temperate and polar over", "B x0.45 C x1.42 E x1.34") {
             if (outside.isNotEmpty()) throw RecordedViolation("groups outside Earth's millimeters: $outside", outside.joinToString(" "))
         }
     }
@@ -385,7 +385,7 @@ class GroundReturnEarthTest : BorrowsSharedWorlds() {
         val figures = pooled
         // Nearly half the land's rain falls where the potential is under half of it, the windward
         // coasts and ranges, where Budyko's curve gives back a quarter: why the land as a whole
-        // gives back less than Earth's share, x1.83 before W2d too (docs/DESIGN_LEDGER.md, W2d;
+        // gives back less than Earth's share, x1.84 on 6eb31400 (docs/DESIGN_LEDGER.md, W2d;
         // docs/TODO.md).
         KnownFailures.expect("W2d: the land's rain falls where it cannot be returned", "x1.83") {
             nearEarth("the land's rain where the potential is under half of it", figures.rainUnderHalf / figures.rain, EARTH_RAIN_SHARE_UNDER_HALF)

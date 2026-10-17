@@ -182,7 +182,7 @@ class RainAgainstEarthTest : BorrowsSharedWorlds() {
         nearEarth("open-sea evaporation, mm", pooled.seaEvaporation / pooled.seaArea, EARTH_OCEAN_EVAPORATION_MM)
         // The sea rains less than Earth's still: what it gives up the land and the subtropics' dry
         // seas take (docs/TODO.md).
-        KnownFailures.expect("C1b2: the open sea rains less than Earth's", "x0.79") {
+        KnownFailures.expect("C1b2: the open sea rains less than Earth's", "x0.78") {
             nearEarth("open-sea rain, mm", pooled.seaRain / pooled.seaArea, EARTH_OCEAN_RAIN_MM)
         }
         // Recorded from C1b2 at x0.55; armed at A1-4, where the boundary layer's wind no longer

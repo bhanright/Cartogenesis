@@ -203,7 +203,8 @@
   (`ReliefShadingTest`); and 26 cells of seed 969495 draw less green under more cover in the
   Satellite style than the truncations allow (`SatelliteStyleTest`), not traced. 2026-10-16, W2b.
   W2c's ground clears two of them, both armed again: seed 7's coast can be checked at 948 of 1,890
-  vertices and the slope's tenth percentile reads 0.059. 2026-10-17, W2c.
+  vertices and the slope's tenth percentile reads 0.059. 2026-10-17, W2c. W2d's ground takes seed
+  7's coast under half again, 936 of 1,879, recorded. 2026-10-17, W2d.
 - **The geometry census on W2b's ground.** 138 known entries and 412 instances where main had 137 and
   413: seed 7's ice-surface arc is gone and the two isohyet entries along seeds 7's and 1234's
   edge rows hold one instance each where they held two; new are a crease in seed 42's terrain

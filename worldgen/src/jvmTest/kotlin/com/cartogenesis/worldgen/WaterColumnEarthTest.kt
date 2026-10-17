@@ -243,7 +243,7 @@ class WaterColumnEarthTest : BorrowsSharedWorlds() {
         // Inside on main, x1.12, where lifted condensation rained on dry land; under it once the
         // large-scale rain is the column law's alone and the tropical interiors are short of the
         // water they import (docs/DESIGN_LEDGER.md, W2b; docs/TODO.md).
-        KnownFailures.expect("W2b: the land within forty degrees rains under GPCP's", "x0.77") {
+        KnownFailures.expect("W2b: the land within forty degrees rains under GPCP's", "x0.80") {
             nearEarth("land rain within 40 degrees, mm", figures.rainWithinBand / figures.landWithinBand, GPCP_LAND_WITHIN_40_MM)
         }
     }
@@ -273,7 +273,7 @@ class WaterColumnEarthTest : BorrowsSharedWorlds() {
         }
         // The tropics' land stands desert where W1 found it once lifted air stopped raining on dry
         // ground: the interiors import too little water (docs/DESIGN_LEDGER.md, W2b; docs/TODO.md).
-        KnownFailures.expect("W2b: the tropics' land is desert", "band 0 x8.59, band 2 x4.00") {
+        KnownFailures.expect("W2b: the tropics' land is desert", "band 0 x8.46, band 2 x4.12") {
             if (misplaced.isNotEmpty()) throw RecordedViolation("desert misplaced by band: $misplaced", misplaced.joinToString())
         }
     }

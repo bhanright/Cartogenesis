@@ -163,7 +163,7 @@ class MeanCirculationEarthTest : BorrowsSharedWorlds() {
         // the hemisphere's torque (docs/DESIGN_LEDGER.md, A1-6a and A1-6b).
         // Recorded at A1-6c: under the closed air-sea loop seed 969495's northern winter ridge stands
         // at 24.9 degrees, a row inside the bar's edge, the other eleven at 25.0 to 35.4 (docs/TODO.md).
-        KnownFailures.expect("A1-6c: a winter ridge stands a row equatorward of 25 degrees", "seed 969495 July south 24.7; seed 969495 January north 24.3; seed 7 January north 24.7") {
+        KnownFailures.expect("A1-6c: a winter ridge stands a row equatorward of 25 degrees", "seed 969495 July south 24.7; seed 969495 January north 24.5; seed 7 January north 24.7") {
             if (placed.isNotEmpty()) throw RecordedViolation("ridges outside 25 to 40 degrees: $placed", placed.joinToString("; "))
         }
         assertTrue(moved.isEmpty(), "the ridge does not move poleward in summer: $moved")

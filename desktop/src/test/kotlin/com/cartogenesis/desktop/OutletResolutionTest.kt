@@ -217,8 +217,8 @@ class OutletResolutionTest {
         // 1,024 rows is 7.24 times the share and the pool 1.98. Armed at A1-6c, the pool 0.57 and
         // seed 59758's largest lake 0.87 at 1,024 rows (docs/DESIGN_LEDGER.md, A1-6c). Recorded at
         // W2c: on its ground seed 59758's largest lake at 1,024 rows is 4.89 times the share and the
-        // pool 1.34 (docs/TODO.md).
-        KnownFailures.expect("W2c: seed 59758's largest lake at 1,024 rows stands over the Caspian's share", "1.34x") {
+        // pool 1.34 (docs/TODO.md); on W2d's, the pool 1.26 (docs/DESIGN_LEDGER.md, W2d).
+        KnownFailures.expect("W2c: seed 59758's largest lake at 1,024 rows stands over the Caspian's share", "1.26x") {
             if (pooledLargest >= caspianShare) {
                 throw RecordedViolation(
                     "the largest lake pooled over ${largestLandLakeShares.size} worlds is " +

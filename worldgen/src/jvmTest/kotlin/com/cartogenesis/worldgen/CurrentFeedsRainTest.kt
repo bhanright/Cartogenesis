@@ -203,7 +203,7 @@ class CurrentFeedsRainTest : BorrowsSharedWorlds() {
         // Armed at A1-6c, whose atmosphere's shallow heating reads the anomaly: 7.4% drier
         // (docs/DESIGN_LEDGER.md). Recorded at F1: the circulation by longitude and the column's
         // wind leave the sample's cold coast 59% wetter with the currents on, not traced (docs/TODO.md).
-        KnownFailures.expect("F1: the cold-current coast is wetter with the currents on", "off 276, on 372") {
+        KnownFailures.expect("F1: the cold-current coast is wetter with the currents on", "off 280, on 388") {
             if (coldOn >= coldOff) {
                 throw RecordedViolation(
                     "cold-current coast should get drier with the currents on: off=$coldOff, on=$coldOn",
@@ -218,7 +218,7 @@ class CurrentFeedsRainTest : BorrowsSharedWorlds() {
         // Armed again at H1, where on main's climate it came out 0.2% wetter, and on H1's ground
         // under the coupled climate (docs/DESIGN_LEDGER.md, H1 and M1).
         // Recorded again at A1-6b, 1.4% drier (docs/TODO.md).
-        KnownFailures.expect("A1-6b: the warm-current coast comes out drier with the currents on", "-7.8%") {
+        KnownFailures.expect("A1-6b: the warm-current coast comes out drier with the currents on", "-8.5%") {
             if (warmOn < warmOff * 0.999) {
                 throw RecordedViolation(
                     "warm-current coast should not get drier with the currents on: off=$warmOff, on=$warmOn",

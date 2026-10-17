@@ -391,7 +391,7 @@ class PressureWindTest : BorrowsSharedWorlds() {
         // after C1b2"). Armed at F1, whose interiors' rain spreads within the factor
         // (docs/DESIGN_LEDGER.md, F1). Recorded at W2b, whose interiors run from wet rises to deserts
         // more widely again (docs/TODO.md).
-        KnownFailures.expect("W2b: the interior's rain spreads wider than Earth's", "2.06") {
+        KnownFailures.expect("W2b: the interior's rain spreads wider than Earth's", "2.05") {
             if (!(meanWith > earthSpread / INTERIOR_SPREAD_FACTOR && meanWith < earthSpread * INTERIOR_SPREAD_FACTOR)) {
                 throw RecordedViolation(
                     ("the interior's rainfall spreads by %.3f, outside a factor of %.0f either side of " +

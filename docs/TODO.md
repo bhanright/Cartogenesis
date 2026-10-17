@@ -205,6 +205,24 @@
   W2c's ground clears two of them, both armed again: seed 7's coast can be checked at 948 of 1,890
   vertices and the slope's tenth percentile reads 0.059. 2026-10-17, W2c. W2d's ground takes seed
   7's coast under half again, 936 of 1,879, recorded. 2026-10-17, W2d.
+- **The geometry census on W2d's ground (recorded, not traced).** At 512 rows the known entries go
+  from five holding seven instances to six holding ten: seed 7's terrain crease at (900,21) and its
+  isohyet's aligned side at (928,3) are gone, and a polar isohyet facet at (861,2) stands in their
+  place; seed 42's ice surface holds a second arc at (650,493) and seed 99's a fourth at (706,492);
+  new are an arc in seed 1234's terrain contours at (1022,471), at the map's seam, and a 70-step
+  biome edge along the grid on seed 99 at (226,74), 64 degrees north. The ice and the polar rows are
+  where the rain's small changes move a threshold; the biome edge wants its own look. 2026-10-17, W2d.
+- **The deep tier on W2d's ground (three recorded, two armed).** Recorded: the iced zone holds 2.28
+  times temperate country's lakes against 2.5, the ice still taking cold country's lakes from 0.38
+  to 2.39 per 10k cells (`GlaciationTest`); no candidate's sheet fills a third of its disc near its
+  dome, so the flow clause reads none (`IceSheetTest`); and one lake of 21 cells in seed 7's frozen
+  north at (901,10) on 512 rows runs 20 cells along a row (`StraightRunTest`, rule 13). Each is the
+  ice's answer to a provisional climate whose return moved; not traced further. Armed: no world
+  keeps a lake over the Caspian's share in `OutletIncisionTest` (`OutletResolutionTest`'s pool at
+  1,024 rows reads 1.26 times it, from 1.34, recorded), and the deserts end along a row at 298 km pooled against main's
+  311 (`RainGeometryTest`). The rain's straight fronts along a row read 1,480, 1,497 and 2,396 km
+  (1,480, 1,337 and 2,414 on W2c) and at the polar front 926, 1,049 and 744 (961, 895 and 689):
+  seed 969495's longest front moved from 31 N to 30 S and is longer, recorded. 2026-10-17, W2d.
 - **The geometry census on W2b's ground.** 138 known entries and 412 instances where main had 137 and
   413: seed 7's ice-surface arc is gone and the two isohyet entries along seeds 7's and 1234's
   edge rows hold one instance each where they held two; new are a crease in seed 42's terrain

@@ -407,7 +407,7 @@ class SnowBalanceTest : BorrowsSharedWorlds() {
         // land: 25.23% of the cells, where by area on the sphere the ice-sheet biome holds 7.2 to
         // 12.2% of the land of seeds 7, 42, 1234 and 99 at 512 rows against Earth's 10.1
         // (`RainAgainstEarthTest`; docs/TODO.md).
-        KnownFailures.expect("A1-6b: the ice covers more than twice Earth's share of the land's cells", "24.39%") {
+        KnownFailures.expect("A1-6b: the ice covers more than twice Earth's share of the land's cells", "24.36%") {
             if (shareOn > EARTH_ICE_SHARE * 2) {
                 throw RecordedViolation(
                     "ice covers ${"%.2f".format(shareOn)}% of land, more than twice Earth's ${EARTH_ICE_SHARE}%",

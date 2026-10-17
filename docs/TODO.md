@@ -85,6 +85,43 @@
   20-22 and 22-24 degrees on seeds 42, 969495 and 7 against main's 18-20, 20-22 and 24-26 (Earth's
   5-12). Next, by those numbers: the eddy winds and the
   return, after the tropical sea's temperature below. 2026-10-16, W2b.
+- **The land gives back less of its rain than Earth's because its rain falls where it cannot be
+  returned, not because the return is short (W2d, measured; the cause is the rain's placement).**
+  Budyko's curve, which the ground returns by, gives back 0.603 of Earth's land rain on Earth's own
+  fields (CRU TS 4.07's rain and FAO-56 reference evapotranspiration for 2001 to 2010, cell by cell
+  without Antarctica) against Rodell and others' 0.606; on the generated land it gives back each
+  dryness class's Earth share (0.25, 0.56, 0.79, 0.95 and 1.00 under a dryness of 0.5, 1, 2, 5 and
+  over, against Earth's 0.34, 0.56, 0.78, 0.94, 1.00), and the humid Koppen groups evaporate more
+  millimeters than Mueller and others' (2013) Earth (`GroundReturnEarthTest`). What differs is where
+  the rain falls: 43 to 51% of the land's rain falls where the potential is under half of it, on 8
+  to 11% of the land, against Earth's 25.5% on 9%; and 44 to 64% of the land stands at a dryness
+  over 5 against Earth's 21%. By Koppen's groups, on seeds 42 and 969495 at 512 rows, the land is
+  3 to 5% tropical against Earth's 21.5% and 38 to 43% arid against 31%; on the standard seeds its
+  temperate land rains 1,870 to 2,250 mm against Earth's 1,020 and its arid land 95 to 140 against
+  256. The land is split into too-wet windward
+  coasts and ranges and too-dry interiors, which is the rain law's and the wind's (the entries above
+  on the eddy winds and the summer peak), not the ground's: the candidates within the ground's reach,
+  each switched alone, move the land's rain by +21 to +39 mm (a forest's deep-rooted Zhang curve
+  everywhere, the potential raised a fifth) where W1's blunt raise of the return by 1/0.6 moved it by
+  +289 to +425. Recorded in `GroundReturnEarthTest` (the share under half the potential x1.83, the
+  groups' shares and millimeters). Next: the column's rain law over land and the eddy winds, which
+  decide where the rain falls. 2026-10-17, W2d.
+- **More of what the land evaporates rains on land again than Earth's (W2d, recorded).** van der Ent
+  and others' (2010) continents rain 57% of their evaporation back on land; the standard worlds rain
+  0.70 of it on 6eb31400 and 0.73 once the root zone's store moved the dry half's return into the wet
+  half, whose air rains on the land it crosses (`GroundReturnEarthTest`, x1.28, recorded). The
+  precipitation recycling ratio stands inside Earth's band, 0.37 against 0.40. Not traced: the
+  continents' size and shape against Earth's, and the summer peak's placement on the heat low, both
+  keep the land's water over land. 2026-10-17, W2d.
+- **The lakes and wetlands give nothing back to the air (W2d, noted, not measured).** The march's
+  ground return is each cell's own Budyko share of its own rain; the runoff that reaches a lake, a
+  floodplain or an endorheic basin and evaporates there (`LakeWaterBalance`'s open-water loss) never
+  enters the march, so the water of an inland sea leaves the climate's budget. On Earth the curve on
+  each half-degree cell's own rain already gives Rodell's land share, so the term is a few percent of
+  the land's return there; on these worlds, whose rain is twice as concentrated on the windward
+  ranges and whose lakes stand over the Caspian's share, it may be more. Measure the lakes' and
+  playas' open-water loss against the land's return before deciding whether the climate should read
+  the rivers. 2026-10-17, W2d.
 - **The sea from the equator to 40 degrees still stands under Earth's (W2c, two causes fixed, the
   rest measured).** W2c gave the slab's water Kara's air-sea difference and the ITCZ's cloud its
   longwave (`EnergyBalance.SEA_OVER_MARINE_AIR_C`, `ITCZ_CLOUD_SHORTWAVE_OVER_LONGWAVE`): between
@@ -1641,7 +1678,12 @@
   that is a change to what the march integrates rather than to which field it reads. The switch is
   `ClimateConfig.vegetationRecycling` and `MoistureBudgetTest` re-measures both numbers on every
   audited seed, so whoever opens this starts from figures rather than from this paragraph.
-  2026-09-20, W4.
+  2026-09-20, W4. **Answered at W2d**: the proxy and its switch went at C1b, where the return became Budyko's
+  share of the cell's own year of rain; W2d measured that curve on Earth's fields (it gives back
+  Rodell's share on Earth's rain) and put a store and a drawdown where the year meets its halves:
+  each half gives back its share of the potential as far as its rain and FAO-56's root zone, 180 mm,
+  supply it. The store was not what kept the continents dry; the entry "The land gives back less of
+  its rain than Earth's" above has why. 2026-10-17, W2d.
 - **Permafrost covers 2.10 times Earth's share of the land, and it is the tundra entry wearing a
   second hat.** Pooled over seeds 7/42/1234/99 at 512 the permafrost zones take 35.7% of ice-free
   land against Earth's 17% (Zhang and others 1999), running 7.7 to 59.9% by seed. The mask is a

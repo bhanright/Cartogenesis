@@ -38,12 +38,13 @@ class MoistureMarchPoleTest {
 
         /**
          * How far past the equator's departure the polar rows' may stand, as a share of the mean:
-         * a ten-thousandth, the rounding of a half's rain stored in floats and blurred. Since each
-         * crossing is solved as one budget the march holds every row of this uniform sea at the
-         * cell's own balance, 843.1 mm at 256 rows, and both departures are that rounding; the
-         * march this test was written against departed by four times the mean.
+         * the march's own convergence bound, [MoistureMarch.CONVERGED_SHARE]. Since W2e the boundary
+         * layer and the free troposphere exchange their water a lap behind each other, so a uniform
+         * sea's rain stands as near its fixed point as the laps carried it, 0.4 to 0.5 mm of 701 at
+         * 256 rows, where the single column held every row at the cell's own balance to a float's
+         * rounding; the march this test was written against departed by four times the mean.
          */
-        const val ROUNDING_SHARE = 1.0e-4
+        const val STEADY_SHARE = MoistureMarch.CONVERGED_SHARE
     }
 
     @Test
@@ -62,7 +63,7 @@ class MoistureMarchPoleTest {
                 .format(alphaDegrees, mean, polar.joinToString(" ") { "%.0f".format(it) }, equator.joinToString(" ") { "%.0f".format(it) }, polarDeparture, equatorDeparture))
             if (alphaDegrees == 0.0) {
                 assertTrue(polarDeparture < 1.0 && equatorDeparture < 1.0, "the march departs from the mean under a wind along the rows")
-            } else if (polarDeparture > equatorDeparture + ROUNDING_SHARE * mean) {
+            } else if (polarDeparture > equatorDeparture + STEADY_SHARE * mean) {
                 failures += "alpha %.0f: the polar rows depart by %.1f mm, the equator's by %.1f".format(alphaDegrees, polarDeparture, equatorDeparture)
             }
         }

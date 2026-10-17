@@ -240,8 +240,8 @@ internal class MoistureLedger {
     var lapsRun = 0
 
     /**
-     * After each lap, the land's mean change of annual rain from the lap before, over its mean
-     * rain: what [MoistureMarch.CONVERGED_SHARE] is held against.
+     * After each lap, the annual rain's mean change from the lap before, over its mean rain, the
+     * larger of the land's and the whole planet's: what [MoistureMarch.CONVERGED_SHARE] is held against.
      */
     val settling = ArrayList<Double>()
 

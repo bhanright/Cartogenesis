@@ -30,10 +30,11 @@ import kotlin.time.TimeSource
  * the same transport, so where the march's own faces gather more air into a cell than the layer
  * holds, the excess leaves it upward with its water into the free troposphere, and where they take
  * air out, the free troposphere's lowest air comes down to make it up; a uniform humidity stays
- * uniform under any wind. **The layer's top is stirred**: the cumulus mass flux out of the
- * boundary layer and the entrainment of drier air into it exchange a mass of air each way at
- * [EXCHANGE_VELOCITY_MPS]. The free troposphere's air comes down at its lowest level's specific
- * humidity, its relative humidity at the saturation humidity of the boundary layer's top.
+ * uniform under any wind. **The layer's top is stirred**: the free troposphere sinks into it where
+ * its radiative cooling is balanced by its descent, and the convection carries as much out of it,
+ * a mass of air each way at [exchangeVelocityMps]. The free troposphere's air comes down at its
+ * own relative humidity and the saturation humidity of the boundary layer's top over the ground
+ * there.
  *
  * # What is solved
  *
@@ -254,7 +255,7 @@ object MoistureMarch {
 
     /**
      * When the year's rain has stopped moving: the land's mean change of annual rain from one lap
-     * to the next, cell by cell, under six thousandths of its mean rain, the twice-standard-error
+     * to the next, cell by cell, and the whole planet's, each under six thousandths of its mean rain, the twice-standard-error
      * of GPCP's global rain over 17 years (2.9 of 486.9 thousand km³; Trenberth and others 2007),
      * which `MoistureClosureTest` holds the march's last storage change to as well. A year nearer
      * its fixed point than that is nearer than Earth's own rain is known.
@@ -363,7 +364,10 @@ object MoistureMarch {
          */
         val julyHalfCondensationMm: FloatArray,
         val januaryHalfCondensationMm: FloatArray,
-        /** The land's mean change of annual rain after each lap, as a share of its mean rain ([CONVERGED_SHARE]). */
+        /**
+         * The annual rain's change after each lap, as a share of its mean rain, the larger of the
+         * land's and the whole planet's ([CONVERGED_SHARE]).
+         */
         val landRainChanges: List<Double>,
         /**
          * Each lap's own time in milliseconds: both seasons marched, the year's rain and potential
@@ -520,7 +524,12 @@ object MoistureMarch {
                 annualPotential[cell] = (july.potentialMmRowMajor(cell) + january.potentialMmRowMajor(cell)) * 0.5f
             }
             lap++
-            val change = landChangeShare(inputs.isLand, annualRain.data, previousRain, grid)
+            // The land's year, which the ground's return couples, and the whole planet's, which the
+            // two layers' exchange carries a lap behind and the sea's rain feeds the atmosphere with.
+            val change = maxOf(
+                changeShare(inputs.isLand, annualRain.data, previousRain, grid, landOnly = true),
+                changeShare(inputs.isLand, annualRain.data, previousRain, grid, landOnly = false)
+            )
             ledger?.settling?.add(change)
             landRainChanges.add(change)
             var lapElapsed = lapStarted.elapsedNow()
@@ -621,15 +630,15 @@ object MoistureMarch {
     private const val FREE = 1
 
     /**
-     * How far the land's annual rain moved between two laps: the mean of each land cell's change
-     * over the land's mean rain, both by area on the sphere.
+     * How far the annual rain moved between two laps: the mean of each cell's change over the mean
+     * rain, both by area on the sphere, over the land when [landOnly] and over every cell otherwise.
      */
-    private fun landChangeShare(isLand: BooleanArray, rain: FloatArray, previous: FloatArray, grid: Grid): Double {
+    private fun changeShare(isLand: BooleanArray, rain: FloatArray, previous: FloatArray, grid: Grid, landOnly: Boolean): Double {
         var area = 0.0
         var total = 0.0
         var moved = 0.0
         for (cell in rain.indices) {
-            if (!isLand[cell]) continue
+            if (landOnly && !isLand[cell]) continue
             val weight = grid.cosRow[cell / grid.cellsAcross]
             area += weight
             total += weight * rain[cell]
@@ -1057,18 +1066,13 @@ object MoistureMarch {
                 val boundaryStart = { here: Int -> INITIAL_HUMIDITY * boundaryCapMm[here] / boundary.stretch[here] }
                 boundary.eastParcel.vapor[row] = if (boundary.direction[east] > 0) boundaryStart(east) else 0.0
                 boundary.westParcel.vapor[row] = if (boundary.direction[west] < 0) boundaryStart(west) else 0.0
-                val freeStart = { here: Int -> INITIAL_HUMIDITY * referenceFreeSaturatedMm(here) / free.stretch[here] }
+                val freeStart = { here: Int -> INITIAL_HUMIDITY * ColumnWater.referenceFreeSaturatedMm(seaLevelTemperatureC(here)) / free.stretch[here] }
                 free.eastParcel.vapor[row] = if (free.direction[east] > 0) freeStart(east) else 0.0
                 free.westParcel.vapor[row] = if (free.direction[west] < 0) freeStart(west) else 0.0
             }
             boundary.resetAir()
         }
 
-        /** The free troposphere's saturated column at [here] (column-major), read from sea level, millimeters. */
-        private fun referenceFreeSaturatedMm(here: Int): Double {
-            val seaLevelC = seaLevelTemperatureC(here)
-            return ColumnWater.saturatedColumnMm(seaLevelC) - ColumnWater.referenceBoundaryLayerSaturatedMm(seaLevelC)
-        }
 
         /** The air at [here] (column-major) carried down to the sea at the environment's lapse rate, degrees Celsius. */
         private fun seaLevelTemperatureC(here: Int): Double {
@@ -2023,7 +2027,7 @@ object MoistureMarch {
                 // relative humidity, linear in its water.
                 val seaLevelC = seaLevelTemperatureC(here)
                 val saturatedFromSea = ColumnWater.saturatedColumnMm(seaLevelC)
-                val freeSaturated = saturatedFromSea - ColumnWater.referenceBoundaryLayerSaturatedMm(seaLevelC)
+                val freeSaturated = ColumnWater.referenceFreeSaturatedMm(seaLevelC)
                 // The free troposphere's lowest air is the air at the boundary layer's top over this
                 // ground, at the environment's temperature there: over high ground colder and thinner
                 // than the air that stood over the lowlands' boundary layer.
@@ -2077,7 +2081,7 @@ object MoistureMarch {
                     record.freeWater.data[cell] = vapor.toFloat()
                     record.columnRain.data[cell] = (rained * rate).toFloat()
                     record.convergenceRain.data[cell] = (convergenceRain * rate).toFloat()
-                    record.lawHumidity.data[cell] = ((budget.meanVapor + budget.lawOffsetMm) / saturatedFromSea).toFloat()
+                    record.lawHumidity.data[cell] = lawHumidity(budget.meanVapor, seaLevelC).toFloat()
                     record.freeSaturatedColumn.data[cell] = budget.holdableMm.toFloat()
                     record.freeCrossingSeconds.data[cell] = seconds.toFloat()
                 }

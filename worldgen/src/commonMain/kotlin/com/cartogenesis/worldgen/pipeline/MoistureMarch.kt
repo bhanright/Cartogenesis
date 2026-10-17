@@ -115,8 +115,9 @@ import kotlin.time.TimeSource
  *
  * # The sources
  *
- * The open sea evaporates by the bulk formula against surface air at the marine boundary layer's
- * own relative humidity ([MARINE_RELATIVE_HUMIDITY]), not the column's, at the scalar mean wind
+ * The open sea evaporates by the bulk formula, from its water ([Season.seaSurfaceC], which stands
+ * [EnergyBalance.SEA_OVER_MARINE_AIR_C] above its air on the open sea) into the air over it at the
+ * marine boundary layer's own relative humidity ([MARINE_RELATIVE_HUMIDITY]), not the column's, at the scalar mean wind
  * the turbulence feels ([Season.scalarWindAt10mMps]), the mean wind and the weather's gusts
  * together, which does not fall to nothing where the mean wind reverses. The ground gives
  * back Budyko's share of its own year of rain against its potential evapotranspiration.
@@ -167,22 +168,6 @@ object MoistureMarch {
      * observations, with small variations in space and from year to year; its middle.
      */
     const val MARINE_RELATIVE_HUMIDITY = 0.775
-
-    /**
-     * How much warmer the sea's surface stands than the air the bulk formula evaporates into, on the
-     * year's mean, degrees Celsius: Kara, Hurlburt and Loh's (2007, J. Geophys. Res. 112, C05020)
-     * regressions of the sea surface on the air over Earth's open ocean, one degree bin at a time,
-     * `Tsst = 0.93 + 1.00 Tair` in ERA-40 and `0.63 + 1.00 Tair` in COADS; their mean, 0.78.
-     *
-     * The energy balance's slab cannot hold it: nothing carries heat away beneath its water, so the
-     * water's year integrates to no exchange with the air and its annual mean is the marine air's,
-     * where Earth's sea surface loses its sensible heat to the air above it all year (12 W/m2 over the
-     * ocean, Trenberth, Fasullo and Kiehl 2009, Table 2b). The march's air over the open sea is the
-     * marine column the energy balance carries, the water's own seasonal departure from it and the
-     * currents' anomaly included, less this; so the air the sea evaporates into is drier by the
-     * difference, about 5 to 6% of its water at 25 C.
-     */
-    const val SEA_OVER_MARINE_AIR_C = (0.93 + 0.63) / 2.0
 
     /**
      * Earth's mean rain, millimeters a day: Trenberth and others' (2007) 486.9 thousand km³ a year
@@ -978,7 +963,7 @@ object MoistureMarch {
                         if (surface[here] == OPEN_SEA) {
                             val surfaceHumidity = SurfaceEvaporation.seaSurfaceHumidity(season.seaSurfaceC[cell].toDouble())
                             val airHumidity = MARINE_RELATIVE_HUMIDITY * ColumnWater.specificHumidity(
-                                ColumnWater.saturationVaporPressureKpa(airC - SEA_OVER_MARINE_AIR_C), ColumnWater.SEA_LEVEL_PRESSURE_KPA
+                                ColumnWater.saturationVaporPressureKpa(airC), ColumnWater.SEA_LEVEL_PRESSURE_KPA
                             )
                             val massFlux = season.scalarWindAt10mMps?.let { transferMassFlux(it[cell].toDouble()) } ?: referenceMassFlux
                             seaEvaporationRate[here] = SurfaceEvaporation.bulkEvaporationKgPerM2S(
@@ -1457,7 +1442,7 @@ object MoistureMarch {
                 record.rain.data[cell] = rainMm[here]
                 record.columnWater.data[cell] = vapor.toFloat()
                 record.saturatedColumn.data[cell] = saturated.toFloat()
-                if (kind == OPEN_SEA) record.seaMinusAirC.data[cell] = (seaSurfaceC[cell] - airTemperatureC[cell] + SEA_OVER_MARINE_AIR_C).toFloat()
+                if (kind == OPEN_SEA) record.seaMinusAirC.data[cell] = (seaSurfaceC[cell] - airTemperatureC[cell]).toFloat()
                 if (kind == LAND) record.groundReturn.data[cell] = (added * rate).toFloat()
                 if (kind == OPEN_SEA) record.seaEvaporation.data[cell] = (added * rate).toFloat()
                 record.convergenceRain.data[cell] = (convergenceRain * rate).toFloat()

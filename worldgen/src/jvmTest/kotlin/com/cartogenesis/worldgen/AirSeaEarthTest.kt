@@ -22,8 +22,9 @@ import kotlin.test.assertTrue
  *   Earth's open ocean the annual sea surface regresses on the air above it as `Tsst = 0.93 + 1.00
  *   Tair` in ERA-40 and `0.63 + 1.00 Tair` in COADS. The open sea's mean excess over the air the
  *   march's bulk formula reads stands within [KARA_LEAST_C] to [KARA_MOST_C]. Before A1-6c it was
- *   the energy balance's own gap alone, whose year integrates to nothing (0.00 to 0.01 C on the
- *   three seeds).
+ *   the energy balance's own gap alone, whose year integrated to nothing (0.00 to 0.01 C on the
+ *   three seeds); A1-6c read the air that far under the energy balance's water, and since W2c the
+ *   water itself stands that far above its air (`EnergyBalance.SEA_OVER_MARINE_AIR_C`).
  * - **The Walker cell.** The equatorial basins' eastern thirds hold the year's higher sea-level
  *   pressure than their western thirds, as Earth's Pacific does under its trades. The sign is asked
  *   and no Earth figure, none having been read. It held before A1-6c too, at 0.84 to 1.13 hPa on the

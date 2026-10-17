@@ -232,7 +232,7 @@ class IceSheetTest : BorrowsSharedWorlds() {
         // bar, 63.1% at 67.7 degrees off radial against 67% and 67.5 (docs/TODO.md). Armed at A1-6b,
         // whose snow clears it (docs/DESIGN_LEDGER.md, A1-6b). Recorded at W2b, whose ground reads
         // seed 42's dome again, its sheet flowing outward a hair under the bar (docs/TODO.md).
-        KnownFailures.expect("W2b: seed 42's sheet flows outward a hair under the bar", "seed 42: 65.6% of the ice near the dome flows outward at a mean 64.4 degrees off radial, where a flow that knows its dome owes 67% and 67.5 degrees against an indifferent bearing's 50% and 90") {
+        KnownFailures.expect("W2b: seed 42's sheet flows outward a hair under the bar", "seed 7: 19.8% of the ice near the dome flows outward at a mean 120.7 degrees off radial, where a flow that knows its dome owes 67% and 67.5 degrees against an indifferent bearing's 50% and 90") {
             if (failures.isNotEmpty()) {
                 throw RecordedViolation("the sheet is not flowing down its own surface: " + failures.joinToString("; "), failures.joinToString("; "))
             }

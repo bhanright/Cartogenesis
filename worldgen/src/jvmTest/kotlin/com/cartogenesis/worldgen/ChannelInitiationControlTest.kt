@@ -71,7 +71,7 @@ class ChannelInitiationControlTest : BorrowsSharedWorlds() {
         // than by the term (docs/TODO.md).
         KnownFailures.expect(
             "A1-6c: the bare-ground control meets the drainage-density clauses by a hundredth",
-            "peak SEMI_ARID, humid over semi-arid 0.85"
+            "peak SEMI_ARID, humid over semi-arid 0.87"
         ) {
             if (complaints.isEmpty()) {
                 throw RecordedViolation(

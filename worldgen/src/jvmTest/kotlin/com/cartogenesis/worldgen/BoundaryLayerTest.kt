@@ -294,11 +294,10 @@ class BoundaryLayerTest : BorrowsSharedWorlds() {
         assertTrue(controlFailures > 0, "a diagnosed layer twice the model's passes the clause, so it cannot tell the layers apart")
         // Recorded at A1-6b, whose Hadley cells' lower branch runs through the boundary layer: the
         // surface wind's speed, which each cell's drag follows, moves further from its row's, which
-        // the model's lowest level reads, and seed 99's January subtropics fall to r = 0.47
-        // (docs/DESIGN_LEDGER.md, A1-6b).
-        KnownFailures.expect("A1-6b: the model's and the diagnosed layer's convergence part in the subtropics", "seed 99 January 5-35") {
-            if (failures.isNotEmpty()) throw RecordedViolation("readings of the model's and the diagnosed layer's convergence disagree: $failures", failures.joinToString("; "))
-        }
+        // the model's lowest level reads, and seed 99's January subtropics fell to r = 0.47
+        // (docs/DESIGN_LEDGER.md, A1-6b). Armed at W2e, whose condensation heats the waves where the
+        // two layers' march rains (docs/DESIGN_LEDGER.md, W2e).
+        assertTrue(failures.isEmpty(), "readings of the model's and the diagnosed layer's convergence disagree: $failures")
     }
 
     /**

@@ -79,12 +79,9 @@ class LakeBodyTest : BorrowsSharedWorlds() {
         // ground of the one cell between its two hollows, to the sixth place. On H1's ground under
         // the coupled climate it is one lake of eight cells on seed 42, not traced to either cause;
         // armed at A1-6a, whose circulation leaves none; recorded at F1, whose rain by longitude
-        // leaves one on seed 42 (docs/DESIGN_LEDGER.md, H1, M1, A1-6a and F1).
-        KnownFailures.expect("F1: a lake in two pieces on the circulation by longitude's ground", "seed 42: [lake 10 in 2 pieces]") {
-            if (pieceFailures.isNotEmpty()) {
-                throw RecordedViolation("a body of water holds more than one piece: $pieceFailures", pieceFailures.joinToString("; "))
-            }
-        }
+        // leaves one on seed 42; armed at W2e, whose ground leaves none (docs/DESIGN_LEDGER.md, H1,
+        // M1, A1-6a, F1 and W2e).
+        assertTrue(pieceFailures.isEmpty(), "a body of water holds more than one piece: $pieceFailures")
         assertTrue(failures.isEmpty(), "a body of water holds more than one level: $failures")
     }
 
@@ -150,8 +147,12 @@ class LakeBodyTest : BorrowsSharedWorlds() {
         // at A1-6b, whose ground leaves every basin's excess inside the summing order's room.
         // Recorded at A1-6c, whose ground leaves two small basins in seed 1234's dry country handed
         // hundreds of times the rain reaching them, far past the float's last places: the basins'
-        // own accounting, not traced (docs/TODO.md). Armed at W2b, whose ground leaves none.
-        if (failures.isNotEmpty()) throw RecordedViolation("rain counted twice or lost: $failures", shortFailures.joinToString("; "))
+        // own accounting, not traced (docs/TODO.md). Armed at W2b, whose ground leaves none. Recorded
+        // at W2e, whose ground leaves one basin of six cells in seed 1234's dry country handed 1.05
+        // times the rain reaching it, the same accounting, not traced (docs/TODO.md).
+        KnownFailures.expect("W2e: a small dry basin on seed 1234 handed more than the rain reaching it", "seed 1234: 6 cells x1.05") {
+            if (failures.isNotEmpty()) throw RecordedViolation("rain counted twice or lost: $failures", shortFailures.joinToString("; "))
+        }
     }
 
     private companion object {

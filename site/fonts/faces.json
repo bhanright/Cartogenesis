@@ -1,7 +1,7 @@
 {
   "spectral_regular.woff2": {
     "family": "Spectral",
-    "builtFrom": "ui/src/commonMain/composeResources/font\\spectral_regular.ttf",
+    "builtFrom": "ui/src/commonMain/composeResources/font/spectral_regular.ttf",
     "sourceSha256": "c89021dc20720c8d0dcf40b0b2f6e00c13665fa8041717f581396f51b8c78f5d",
     "sha256": "5589ceb8ad9a67e9f3081046d45fb086c63f46f142175370988d704b1b90997e",
     "codePointRanges": [
@@ -161,7 +161,7 @@
   },
   "spectral_semibold.woff2": {
     "family": "Spectral",
-    "builtFrom": "ui/src/commonMain/composeResources/font\\spectral_semibold.ttf",
+    "builtFrom": "ui/src/commonMain/composeResources/font/spectral_semibold.ttf",
     "sourceSha256": "5f86915a744832ecf6e4a17ab04bea091b9fa992ef5164ff65ae34c1da2fe94b",
     "sha256": "6ed363411293fb39d3e16ded5496a45a8ba93a6e01f3ab9def7bad38411a4537",
     "codePointRanges": [
@@ -321,7 +321,7 @@
   },
   "plex_sans_regular.woff2": {
     "family": "Cartogenesis Sans",
-    "builtFrom": "ui/src/commonMain/composeResources/font\\plex_sans_regular.ttf",
+    "builtFrom": "ui/src/commonMain/composeResources/font/plex_sans_regular.ttf",
     "sourceSha256": "975dcda37d80f038dcd143c22e33ca2d97a0cc5a929aace1c749153b0fe1afa5",
     "sha256": "f891e5f50537ec8cea720b7a3bd1d6a216e820a46d37e1fc049a5df592bd9590",
     "codePointRanges": [
@@ -481,7 +481,7 @@
   },
   "plex_sans_medium.woff2": {
     "family": "Cartogenesis Sans",
-    "builtFrom": "ui/src/commonMain/composeResources/font\\plex_sans_medium.ttf",
+    "builtFrom": "ui/src/commonMain/composeResources/font/plex_sans_medium.ttf",
     "sourceSha256": "331c8639d7598b2cde62a911a71db195e30cb655cd6bdf2e324a7e984955f907",
     "sha256": "7ae0d31ae73b65863e451d098d331f35560b1724fbb8e49730cfcfd7f5588d07",
     "codePointRanges": [
@@ -641,7 +641,7 @@
   },
   "plex_mono_regular.woff2": {
     "family": "Cartogenesis Mono",
-    "builtFrom": "ui/src/commonMain/composeResources/font\\plex_mono_regular.ttf",
+    "builtFrom": "ui/src/commonMain/composeResources/font/plex_mono_regular.ttf",
     "sourceSha256": "fe11304a5fe956d5744e9b6a246cc83d90425245e75a62230044966ca96a7f50",
     "sha256": "b4cf5bf42cc0c8b84242a96a43fa280e0d890e145b8bea257f395a4adf474cb3",
     "codePointRanges": [
@@ -3186,6 +3186,80 @@
         65311
       ]
     ],
+    "absentFromSource": [
+      [
+        1575,
+        1577
+      ],
+      [
+        1585,
+        1585
+      ],
+      [
+        1593,
+        1593
+      ],
+      [
+        1604,
+        1604
+      ],
+      [
+        1610,
+        1610
+      ],
+      [
+        1632,
+        1641
+      ],
+      [
+        2342,
+        2342
+      ],
+      [
+        2344,
+        2344
+      ],
+      [
+        2361,
+        2361
+      ],
+      [
+        2367,
+        2368
+      ],
+      [
+        2381,
+        2381
+      ],
+      [
+        2406,
+        2415
+      ],
+      [
+        2434,
+        2434
+      ],
+      [
+        2476,
+        2476
+      ],
+      [
+        2482,
+        2482
+      ],
+      [
+        2494,
+        2494
+      ],
+      [
+        2534,
+        2543
+      ],
+      [
+        9656,
+        9656
+      ]
+    ],
     "languages": [
       "zh"
     ],
@@ -3348,6 +3422,96 @@
       [
         8722,
         8722
+      ]
+    ],
+    "absentFromSource": [
+      [
+        1056,
+        1056
+      ],
+      [
+        1080,
+        1082
+      ],
+      [
+        1089,
+        1089
+      ],
+      [
+        1091,
+        1091
+      ],
+      [
+        1575,
+        1577
+      ],
+      [
+        1585,
+        1585
+      ],
+      [
+        1593,
+        1593
+      ],
+      [
+        1604,
+        1604
+      ],
+      [
+        1610,
+        1610
+      ],
+      [
+        1632,
+        1641
+      ],
+      [
+        2434,
+        2434
+      ],
+      [
+        2476,
+        2476
+      ],
+      [
+        2482,
+        2482
+      ],
+      [
+        2494,
+        2494
+      ],
+      [
+        2534,
+        2543
+      ],
+      [
+        8599,
+        8599
+      ],
+      [
+        9656,
+        9656
+      ],
+      [
+        10003,
+        10003
+      ],
+      [
+        20013,
+        20013
+      ],
+      [
+        20307,
+        20307
+      ],
+      [
+        25991,
+        25991
+      ],
+      [
+        31616,
+        31616
       ]
     ],
     "languages": [
@@ -3518,6 +3682,100 @@
         8722
       ]
     ],
+    "absentFromSource": [
+      [
+        1056,
+        1056
+      ],
+      [
+        1080,
+        1082
+      ],
+      [
+        1089,
+        1089
+      ],
+      [
+        1091,
+        1091
+      ],
+      [
+        1575,
+        1577
+      ],
+      [
+        1585,
+        1585
+      ],
+      [
+        1593,
+        1593
+      ],
+      [
+        1604,
+        1604
+      ],
+      [
+        1610,
+        1610
+      ],
+      [
+        1632,
+        1641
+      ],
+      [
+        2342,
+        2342
+      ],
+      [
+        2344,
+        2344
+      ],
+      [
+        2361,
+        2361
+      ],
+      [
+        2367,
+        2368
+      ],
+      [
+        2381,
+        2381
+      ],
+      [
+        2406,
+        2415
+      ],
+      [
+        8599,
+        8599
+      ],
+      [
+        9656,
+        9656
+      ],
+      [
+        10003,
+        10003
+      ],
+      [
+        20013,
+        20013
+      ],
+      [
+        20307,
+        20307
+      ],
+      [
+        25991,
+        25991
+      ],
+      [
+        31616,
+        31616
+      ]
+    ],
     "languages": [
       "bn"
     ],
@@ -3668,6 +3926,96 @@
       [
         8722,
         8722
+      ]
+    ],
+    "absentFromSource": [
+      [
+        1056,
+        1056
+      ],
+      [
+        1080,
+        1082
+      ],
+      [
+        1089,
+        1089
+      ],
+      [
+        1091,
+        1091
+      ],
+      [
+        2342,
+        2342
+      ],
+      [
+        2344,
+        2344
+      ],
+      [
+        2361,
+        2361
+      ],
+      [
+        2367,
+        2368
+      ],
+      [
+        2381,
+        2381
+      ],
+      [
+        2406,
+        2415
+      ],
+      [
+        2434,
+        2434
+      ],
+      [
+        2476,
+        2476
+      ],
+      [
+        2482,
+        2482
+      ],
+      [
+        2494,
+        2494
+      ],
+      [
+        2534,
+        2543
+      ],
+      [
+        8599,
+        8599
+      ],
+      [
+        9656,
+        9656
+      ],
+      [
+        10003,
+        10003
+      ],
+      [
+        20013,
+        20013
+      ],
+      [
+        20307,
+        20307
+      ],
+      [
+        25991,
+        25991
+      ],
+      [
+        31616,
+        31616
       ]
     ],
     "languages": [

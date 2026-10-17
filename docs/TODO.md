@@ -129,7 +129,9 @@
   desert to the forest in the Scroll style (`ClimateTintTest`, 19%). The pooled largest drowned
   basin stands 1.74 times the Caspian's share, seed 99's interior drowned over 2.2% of its land
   (`OutletIncisionTest`, armed at W2b), and no seed starts with a lake over the Caspian's share, so
-  the outlet is not seen taking one down. None traced. 2026-10-17, W2c.
+  the outlet is not seen taking one down; seed 59758's largest lake at 1,024 rows stands 4.89 times
+  the Caspian's share, the pool over two seeds and three grids 1.34 (`OutletResolutionTest`, armed
+  at A1-6c). None traced. 2026-10-17, W2c.
 - **The subtropical sea evaporates under Earth's (W2b, measured, not fixed).** The march's sea
   evaporates 1,000-1,080 mm at 20-30 degrees against about 1,800 over the subtropical latitudes (Yu
   2007, OAFlux), under a scalar wind of 6.1-6.5 m/s where 10-20 degrees has 7.8-8.1. Diagnose after

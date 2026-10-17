@@ -120,7 +120,9 @@ import kotlin.time.TimeSource
  * marine boundary layer's own relative humidity ([MARINE_RELATIVE_HUMIDITY]), not the column's, at the scalar mean wind
  * the turbulence feels ([Season.scalarWindAt10mMps]), the mean wind and the weather's gusts
  * together, which does not fall to nothing where the mean wind reverses. The ground gives
- * back Budyko's share of its own year of rain against its potential evapotranspiration.
+ * back Budyko's share of its own year of rain against its potential evapotranspiration, each half
+ * of the year its share of the potential as far as that half's rain and the root zone's store can
+ * supply it ([halfYearReturnsMm]).
  *
  * # One season at a time, coupled through the year's rain
  *
@@ -128,7 +130,8 @@ import kotlin.time.TimeSource
  * solved again between laps from each half's condensation, and the laps run until its heating has
  * settled too. The ground's return couples the halves:
  * it is Budyko's share of the cell's **annual** rain, after the blur, against the annual
- * potential evaporation, which is what the rivers and lakes read too. The laps run both seasons
+ * potential evaporation, which is what the rivers and lakes read too, and the root zone carries
+ * water from one half into the other ([ROOT_ZONE_STORE_MM]). The laps run both seasons
  * in step and update the return between laps until the year's rain stops moving
  * ([CONVERGED_SHARE]); the last lap's rain and potential are then the ones the return was set
  * from, so the surface budget, rain equals the ground's return plus the runoff, closes cell by
@@ -508,9 +511,7 @@ object MoistureMarch {
             parallelChunks(0, cellsDown) { startRow, endRow ->
                 for (cell in startRow * cellsAcross until endRow * cellsAcross) {
                     if (!inputs.isLand[cell]) continue
-                    val returning = config.climate.groundReturn
-                    july.setGroundReturn(cell, annualRain.data[cell], annualPotential[cell], returning)
-                    january.setGroundReturn(cell, annualRain.data[cell], annualPotential[cell], returning)
+                    setGroundReturn(cell, july, january, annualRain.data[cell], annualPotential[cell], config.climate.groundReturn)
                 }
             }
             lapElapsed += returnStarted.elapsedNow()
@@ -662,6 +663,96 @@ object MoistureMarch {
      */
     fun groundReturnMm(annualRainMm: Float, potentialMm: Float): Float =
         annualRainMm * (1f - LakeWaterBalance.runoffShareOfRain(annualRainMm, potentialMm))
+
+    /**
+     * Water held between field capacity and the wilting point, millimeters per meter of soil: the
+     * middle of the three soils FAO-56 works from its Table 19 (Example 36), loamy sand's 90,
+     * silty clay's 120 and silt's 170.
+     */
+    const val AVAILABLE_WATER_MM_PER_M = 120.0
+
+    /**
+     * How deep the roots draw, meters: FAO-56's Table 22 gives grazing pasture 0.5 to 1.5 m and
+     * conifer trees 1.0 to 1.5, and its footnote takes the larger values for modeling water stress
+     * under rain alone, which is the ground here; so 1.5.
+     */
+    const val ROOTING_DEPTH_M = 1.5
+
+    /**
+     * The water the root zone holds for plants to draw, millimeters: FAO-56's total available
+     * water `1000 (theta_FC - theta_WP) Z_r` (Allen and others 1998, equation 82), at
+     * [AVAILABLE_WATER_MM_PER_M] of soil and [ROOTING_DEPTH_M] of roots, 180 mm. What one half of
+     * the year can carry into the other: a dry half's ground gives back no more than its own rain
+     * and this ([halfYearReturnsMm]).
+     */
+    const val ROOT_ZONE_STORE_MM = AVAILABLE_WATER_MM_PER_M * ROOTING_DEPTH_M
+
+    /**
+     * Each half-year's ground return, from the year's: millimeters a year at that half's own pace,
+     * the July half's first. The year gives back [annualReturnMm] (Budyko's, [groundReturnMm]),
+     * and each half takes its share of the year's potential evapotranspiration, the halves'
+     * [julyHalfPotentialMm] and [januaryHalfPotentialMm] at their own paces, as far as the water
+     * lets it: a half gives back at most its own rain, [julyHalfRainMm] or [januaryHalfRainMm] at
+     * its own pace, and what the root zone carried in from the other half, [ROOT_ZONE_STORE_MM].
+     * What a half cannot supply the other half gives back instead, from the rain that half did not
+     * return, so the year's return stays Budyko's and the rivers' runoff the rest of the rain.
+     *
+     * Shared by the potential alone, a monsoon's dry half gave back half the year's return from
+     * ground its few millimeters of rain had left dry, into air that does not rain, while its wet
+     * half gave back too little to the air that does (docs/DESIGN_LEDGER.md, W2d).
+     */
+    fun halfYearReturnsMm(
+        annualReturnMm: Double,
+        julyHalfPotentialMm: Double,
+        januaryHalfPotentialMm: Double,
+        julyHalfRainMm: Double,
+        januaryHalfRainMm: Double
+    ): Pair<Double, Double> {
+        val potential = julyHalfPotentialMm + januaryHalfPotentialMm
+        val julyShare = if (potential > 0.0) julyHalfPotentialMm / potential else 0.5
+        var july = 2.0 * annualReturnMm * julyShare
+        var january = 2.0 * annualReturnMm - july
+        // A half's pace is twice what it gives in its six months, so the store it draws counts twice.
+        val julyMost = julyHalfRainMm + 2.0 * ROOT_ZONE_STORE_MM
+        val januaryMost = januaryHalfRainMm + 2.0 * ROOT_ZONE_STORE_MM
+        if (july > julyMost) {
+            january += july - julyMost
+            july = julyMost
+        } else if (january > januaryMost) {
+            july += january - januaryMost
+            january = januaryMost
+        }
+        return july to january
+    }
+
+    /**
+     * Sets both halves' ground return at [cell] (row-major) from the year's rain and potential
+     * ([halfYearReturnsMm]), each half's rain the lap's own, scaled to the year's blurred rain so
+     * the halves add to it; with the return switched off, none, and the year still kept.
+     */
+    private fun setGroundReturn(
+        cell: Int,
+        july: SeasonMarch,
+        january: SeasonMarch,
+        annualRainMm: Float,
+        annualPotentialMm: Float,
+        returning: Boolean
+    ) {
+        val annualReturnMm = if (returning) groundReturnMm(annualRainMm, annualPotentialMm).toDouble() else 0.0
+        val julyRain = july.rainMmRowMajor(cell).toDouble().coerceAtLeast(0.0)
+        val januaryRain = january.rainMmRowMajor(cell).toDouble().coerceAtLeast(0.0)
+        val lapRain = julyRain + januaryRain
+        val julyShare = if (lapRain > 0.0) julyRain / lapRain else 0.5
+        val (julyReturn, januaryReturn) = halfYearReturnsMm(
+            annualReturnMm,
+            july.potentialMmRowMajor(cell).toDouble(),
+            january.potentialMmRowMajor(cell).toDouble(),
+            2.0 * annualRainMm * julyShare,
+            2.0 * annualRainMm * (1.0 - julyShare)
+        )
+        july.setGroundReturn(cell, julyReturn, annualRainMm, annualPotentialMm)
+        january.setGroundReturn(cell, januaryReturn, annualRainMm, annualPotentialMm)
+    }
 
     /** The grid's geometry as the march spends it. */
     private class Grid(config: WorldGenConfig) {
@@ -1083,15 +1174,11 @@ object MoistureMarch {
         }
 
         /**
-         * Sets this season's ground return from the year's rain and potential, the season taking
-         * the year's return in proportion to its own potential, and keeps the year it was set
-         * from for the rivers. With the return switched off the year is still kept.
+         * Sets this season's ground return at [cell] (row-major) to [returnMm], millimeters a year
+         * at this half's pace, and keeps the year it was set from for the rivers.
          */
-        fun setGroundReturn(cell: Int, annualRainMm: Float, annualPotentialMm: Float, returning: Boolean) {
-            val here = index(cell / cellsAcross, cell % cellsAcross)
-            val annualReturnMm = if (returning) groundReturnMm(annualRainMm, annualPotentialMm) else 0f
-            val shareOfYear = if (annualPotentialMm > 0f) potentialMm[cell] / annualPotentialMm else 0.5f
-            groundReturnRate[here] = (annualReturnMm * shareOfYear / SECONDS_PER_YEAR).toFloat()
+        fun setGroundReturn(cell: Int, returnMm: Double, annualRainMm: Float, annualPotentialMm: Float) {
+            groundReturnRate[index(cell / cellsAcross, cell % cellsAcross)] = (returnMm / SECONDS_PER_YEAR).toFloat()
             returnRain[cell] = annualRainMm
             returnPotential[cell] = annualPotentialMm
         }

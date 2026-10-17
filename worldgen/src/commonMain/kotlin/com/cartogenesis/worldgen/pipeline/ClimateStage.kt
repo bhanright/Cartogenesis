@@ -627,13 +627,15 @@ object ClimateStage {
         sea: SeaLevelResult,
         ocean: OceanResult,
         /** Where an earlier climate of this world settled, for this run's loop to start from ([WarmStart]); cold when none. */
-        warmStart: WarmStart? = null
+        warmStart: WarmStart? = null,
+        /** Filled with the march's water budget when handed in, as [moistureLedger] fills it; the world is the same either way. */
+        ledger: MoistureLedger? = null
     ): Generated {
         val cellsAcross = config.width
         val cellsDown = config.height
         val cellCount = cellsAcross * cellsDown
 
-        val fields = seasonalFields(config, sea, ocean, warmStart = warmStart)
+        val fields = seasonalFields(config, sea, ocean, warmStart = warmStart, ledger = ledger)
         val temperature = fields.temperature
         val summerTemperature = fields.summerTemperature
         val winterTemperature = fields.winterTemperature

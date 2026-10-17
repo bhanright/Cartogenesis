@@ -152,9 +152,9 @@
     --oxblood:#5d0000;
     --oxblood-lit:#7e1414;
 
-    --sans:"Cartogenesis Sans","Cartogenesis ZH","Cartogenesis HI","Cartogenesis BN","Cartogenesis AR","Segoe UI",system-ui,-apple-system,sans-serif;
-    --serif:"Spectral","Cartogenesis ZH","Cartogenesis HI","Cartogenesis BN","Cartogenesis AR","Palatino Linotype","Book Antiqua",Palatino,Georgia,serif;
-    --mono:"Cartogenesis Mono","Cartogenesis ZH","Cartogenesis HI","Cartogenesis BN","Cartogenesis AR","Cascadia Mono",Consolas,"Liberation Mono",monospace;
+    --sans:"Cartogenesis Sans","Segoe UI",system-ui,-apple-system,sans-serif;
+    --serif:"Spectral","Palatino Linotype","Book Antiqua",Palatino,Georgia,serif;
+    --mono:"Cartogenesis Mono","Cascadia Mono",Consolas,"Liberation Mono",monospace;
 
     --measure:1120px;
     --gutter:24px;
@@ -916,6 +916,13 @@
   @font-face{font-family:"Cartogenesis HI";font-style:normal;font-weight:100 900;font-display:swap;src:url("fonts/notosansdevanagari.woff2") format("woff2")}
   @font-face{font-family:"Cartogenesis BN";font-style:normal;font-weight:100 900;font-display:swap;src:url("fonts/notosansbengali.woff2") format("woff2")}
   @font-face{font-family:"Cartogenesis AR";font-style:normal;font-weight:100 900;font-display:swap;src:url("fonts/notosansarabic.woff2") format("woff2")}
+  /* Each page sets type in the one script face its own language needs, put in front of the system's fallbacks by its lang;
+     the other three are never asked for, so the browser never fetches them. The switcher's native names for the other
+     scripts use the reader's system fonts, which every current phone and desktop ships for all four. */
+  :root:lang(zh){--sans:"Cartogenesis Sans","Cartogenesis ZH","Segoe UI",system-ui,-apple-system,sans-serif;--serif:"Spectral","Cartogenesis ZH","Palatino Linotype","Book Antiqua",Palatino,Georgia,serif;--mono:"Cartogenesis Mono","Cartogenesis ZH","Cascadia Mono",Consolas,"Liberation Mono",monospace}
+  :root:lang(hi){--sans:"Cartogenesis Sans","Cartogenesis HI","Segoe UI",system-ui,-apple-system,sans-serif;--serif:"Spectral","Cartogenesis HI","Palatino Linotype","Book Antiqua",Palatino,Georgia,serif;--mono:"Cartogenesis Mono","Cartogenesis HI","Cascadia Mono",Consolas,"Liberation Mono",monospace}
+  :root:lang(bn){--sans:"Cartogenesis Sans","Cartogenesis BN","Segoe UI",system-ui,-apple-system,sans-serif;--serif:"Spectral","Cartogenesis BN","Palatino Linotype","Book Antiqua",Palatino,Georgia,serif;--mono:"Cartogenesis Mono","Cartogenesis BN","Cascadia Mono",Consolas,"Liberation Mono",monospace}
+  :root:lang(ar){--sans:"Cartogenesis Sans","Cartogenesis AR","Segoe UI",system-ui,-apple-system,sans-serif;--serif:"Spectral","Cartogenesis AR","Palatino Linotype","Book Antiqua",Palatino,Georgia,serif;--mono:"Cartogenesis Mono","Cartogenesis AR","Cascadia Mono",Consolas,"Liberation Mono",monospace}
   .languages{display:flex;flex-wrap:wrap;justify-content:center;gap:8px 16px;padding:12px 16px;background:var(--ink);font-family:var(--sans);font-size:14px;position:relative;z-index:10}
   .languages a{color:var(--bone);padding:4px;min-height:32px}
   .languages [aria-current]{color:var(--brass);text-decoration:underline}

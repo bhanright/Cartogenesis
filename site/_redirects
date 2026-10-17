@@ -11,3 +11,19 @@
 # permanent — a 301 would be cached by the browser and pin a visitor to whatever release was
 # current the first time they clicked.
 /releases/latest  https://github.com/bhanright/Cartogenesis/releases/latest  302
+
+/zh  /zh/  301
+
+/hi  /hi/  301
+
+/es  /es/  301
+
+/ar  /ar/  301
+
+/fr  /fr/  301
+
+/bn  /bn/  301
+
+/pt  /pt/  301
+
+/ru  /ru/  301

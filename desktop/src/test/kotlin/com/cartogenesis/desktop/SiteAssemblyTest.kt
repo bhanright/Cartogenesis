@@ -652,11 +652,15 @@ class SiteAssemblyTest {
             Regex("""<img\s[^>]*>""").findAll(text).map { it.value }.filterNot { it.contains("""loading="lazy"""") }
                 .filter { Regex("""(?<![-\w])src=""").containsMatchIn(it) }.map { attribute(it, "src") } +
             Regex("""<source[^>]*srcset="([^"]+)"""").findAll(text).map { it.groupValues[1] }).toSet()
-        val listed = fetchedAtLoad.values.flatten().toSet()
+        val scriptFonts = setOf("fonts/notosanssc.woff2", "fonts/notosansdevanagari.woff2", "fonts/notosansbengali.woff2", "fonts/notosansarabic.woff2")
+        val listed = fetchedAtLoad.values.flatten().toSet() + scriptFonts
         assertTrue((asked - listed).isEmpty(), "the page asks for ${asked - listed} as it loads, which the stated load does not count")
         fetchedAtLoad.forEach { (screen, files) ->
-            val atLoad = page.length() + files.sumOf { file(it).length() }
-            val ceiling = LOAD_BYTES.getValue(screen)
+            // A page sets type in its own language's one script face (index.html's :root:lang rules) and
+            // the switcher's native names use system fonts, so a page fetches at most the largest of the four.
+            val scriptFace = scriptFonts.maxOf { file(it).length() }
+            val atLoad = page.length() + files.sumOf { file(it).length() } + scriptFace
+            val ceiling = LOAD_BYTES.getValue(screen) + scriptFace
             println("SITE at load, $screen: $atLoad bytes (page ${page.length()}, " + files.joinToString { "$it ${file(it).length()}" } + ")")
             assertTrue(
                 atLoad <= ceiling,
@@ -1359,7 +1363,8 @@ class SiteAssemblyTest {
             .find(page)?.groupValues?.get(1) ?: fail("the page's release lookup is no longer marked")
         val work = kotlin.io.path.createTempDirectory("release-lookup").toFile()
         try {
-            File(work, "lookup.js").writeText(lookup)
+            val messages = Regex("""<script>\s*(var siteMessages =[\s\S]*?)</script>""").find(page)!!.groupValues[1]
+            File(work, "lookup.js").writeText("var document = {documentElement: {lang: 'en'}};\n" + messages + "\n" + lookup)
             File(work, "names.json").writeText(releaseFileNames.joinToString(",", "[", "]") { "\"$it\"" })
             File(work, "run.js").writeText(RELEASE_LOOKUP_HARNESS)
             val process = ProcessBuilder("node", "run.js").directory(work).redirectErrorStream(true).start()

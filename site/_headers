@@ -49,3 +49,51 @@
 
 /apt/dists/*
   Cache-Control: no-cache
+
+/zh/
+  Cache-Control: no-cache
+
+/zh/index.html
+  Cache-Control: no-cache
+
+/hi/
+  Cache-Control: no-cache
+
+/hi/index.html
+  Cache-Control: no-cache
+
+/es/
+  Cache-Control: no-cache
+
+/es/index.html
+  Cache-Control: no-cache
+
+/ar/
+  Cache-Control: no-cache
+
+/ar/index.html
+  Cache-Control: no-cache
+
+/fr/
+  Cache-Control: no-cache
+
+/fr/index.html
+  Cache-Control: no-cache
+
+/bn/
+  Cache-Control: no-cache
+
+/bn/index.html
+  Cache-Control: no-cache
+
+/pt/
+  Cache-Control: no-cache
+
+/pt/index.html
+  Cache-Control: no-cache
+
+/ru/
+  Cache-Control: no-cache
+
+/ru/index.html
+  Cache-Control: no-cache

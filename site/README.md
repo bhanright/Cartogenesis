@@ -190,3 +190,18 @@ The first should say `public, max-age=31536000, immutable` and `application/wasm
 `no-cache`. If the wildcard turns out not to match, widen it to `/app/*` and give `/app/index.html`
 its own rule — but note that Pages *joins* duplicate headers with a comma rather than letting the
 later rule win, so the two rules must not both set `Cache-Control`.
+
+## Language pages
+
+The landing page is assembled in English at `/` and in simplified Chinese, Hindi,
+Spanish, Arabic, French, Bengali, Portuguese, and Russian under their language
+codes. `site/index.html` is the single template, and `site/i18n/*.json` contains
+the text, roadmap translations, and glossaries. Kotlin assembly validates every
+catalog, writes the pages, strips translation markers, and sets canonical URLs,
+search alternates, structured data, and localized dynamic labels. The browser
+application remains English. See `i18n/README.md` for the editing workflow.
+
+The native language links use self-hosted Noto subsets in addition to the shared
+Spectral and renamed Plex faces. `fonts/faces.json` specifies their sources and
+records generated hashes and character coverage. Raw Noto files are local build
+inputs under `fonts/sources/`; only WOFF2 files and license texts are published.

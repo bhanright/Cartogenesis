@@ -3527,7 +3527,7 @@
     "family": "Cartogenesis AR",
     "builtFrom": "site/fonts/sources/notosansarabic.ttf",
     "sourceSha256": "63111b5b2e074dd48cc67692e0a2726d86ee94c1c37fe8598257b7b4e87e869e",
-    "sha256": "bbda8861389e4eeb897d6ab46f9db535ff733fe44066e25b0e9564b05a6ddc0a",
+    "sha256": "ed1b914edc350aded27b09477ead7ca703f373564614d642c105c653a9181c7b",
     "codePointRanges": [
       [
         32,
@@ -3648,6 +3648,10 @@
       [
         1644,
         1644
+      ],
+      [
+        8206,
+        8206
       ],
       [
         8211,

@@ -36,7 +36,7 @@ class SaturatedColumnTest {
         /**
          * The air over the tropical sea, degrees Celsius: the sea surface between 10 S and 10 N in
          * the 1971-2000 optimum-interpolation climatology, 27.7 C (NOAA Climate Prediction Center's
-         * Climate Diagnostics Bulletin, August 2003, table T2, as docs/DESIGN_LEDGER.md, W2, reads
+         * Climate Diagnostics Bulletin, August 2003, table T2, as docs/DESIGN_LEDGER.md, W2b, reads
          * it), less Kara, Hurlburt and Loh's 0.78 C between the sea and the air above it.
          */
         val CONVECTING_AIR_C = listOf(27.7 - 0.78)

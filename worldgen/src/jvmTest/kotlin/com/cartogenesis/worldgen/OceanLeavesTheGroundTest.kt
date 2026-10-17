@@ -58,7 +58,7 @@ class OceanLeavesTheGroundTest : BorrowsSharedWorlds() {
      * provisional climate's cells are heated about the energy flux equator and its westerlies
      * balance the hemisphere's torque. A1-6c re-took the same two: the provisional climate's water
      * layer shoals in summer, its sea evaporates into air under the water by Kara's difference and its
-     * march leaves each cell at its downwind face's speed. W2 re-took the same two: the provisional
+     * march leaves each cell at its downwind face's speed. W2b re-took the same two: the provisional
      * climate's march solves each crossing as one budget, reads its saturated column on the rising
      * parcel's profile, and rains by one law. An ocean change that leaks into the
      * ground moves them.

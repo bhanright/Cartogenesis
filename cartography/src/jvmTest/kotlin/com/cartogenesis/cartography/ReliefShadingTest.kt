@@ -692,9 +692,9 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
         // on H1's ground under that rain (docs/DESIGN_LEDGER.md, M1). Recorded again at A1-6b, whose
         // seasonal circulation's rain moved the gallery's ground to a tenth percentile of 0.048
         // (docs/TODO.md); armed again at A1-6c, whose ground reads the floor's hundredth
-        // (docs/DESIGN_LEDGER.md, A1-6c). Recorded again at W2, whose rain moved the gallery's
+        // (docs/DESIGN_LEDGER.md, A1-6c). Recorded again at W2b, whose rain moved the gallery's
         // ground to a tenth percentile of 0.066 (docs/TODO.md).
-        KnownFailures.expect("W2: the slope floor stands under the gallery ground's tenth percentile", "0.07") {
+        KnownFailures.expect("W2b: the slope floor stands under the gallery ground's tenth percentile", "0.07") {
             if (LandSlopes.hundredths(EngravingPlan.SLOPE_FLOOR) != LandSlopes.hundredths(tenth)) {
                 throw RecordedViolation(
                     "the tenth percentile of seed 234475's land slope at 512 rows is $tenth; the floor is ${EngravingPlan.SLOPE_FLOOR}",

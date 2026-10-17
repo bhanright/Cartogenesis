@@ -35,7 +35,7 @@ import kotlin.math.sqrt
  * condenses everything over the cap at once and leaves the column far below the balance its
  * sources and sinks would hold it at: seed 42's calm tropical cells, crossed in up to two months,
  * held 25 mm on the mean where charged in steps of an ordinary crossing they held 38
- * (docs/DESIGN_LEDGER.md, W2).
+ * (docs/DESIGN_LEDGER.md, W2b).
  *
  * # How it is solved
  *

@@ -114,9 +114,9 @@ class RainGeometryTest : BorrowsSharedWorlds() {
         // M1). Armed at A1-6a, whose circulation's deserts end along a row at 255 to 303 km.
         // Recorded at A1-6b: seed 969495's desert ends along a row for 630 km, the other two seeds'
         // at 254 and 304 (docs/TODO.md). Armed at F1, whose circulation by longitude bends the
-        // deserts' edges (docs/DESIGN_LEDGER.md, F1). Recorded at W2, whose deserts are wider and
+        // deserts' edges (docs/DESIGN_LEDGER.md, F1). Recorded at W2b, whose deserts are wider and
         // pool longer edges along a row (docs/TODO.md).
-        KnownFailures.expect("W2: the deserts' edges along a row pool longer than main's", "318.56") {
+        KnownFailures.expect("W2b: the deserts' edges along a row pool longer than main's", "318.56") {
             if (desertEdge.average() > MAIN_DESERT_ROW_EDGE_KM.average()) {
                 throw RecordedViolation(
                     "the desert's straightest edge along a row: %.2f pooled against main's %.2f"

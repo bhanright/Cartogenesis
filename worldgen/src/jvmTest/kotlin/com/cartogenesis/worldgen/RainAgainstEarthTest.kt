@@ -171,10 +171,10 @@ class RainAgainstEarthTest : BorrowsSharedWorlds() {
         // wetter and the ground's Budyko share of its rain smaller; armed again at A1-5, the rain
         // from the solved vertical motion (docs/DESIGN_LEDGER.md); recorded again when H1's ground
         // came under it (docs/DESIGN_LEDGER.md, M1; docs/TODO.md); armed at A1-6b, x0.84, under
-        // the seasonal circulation's rain; recorded at W2, where the land's rain is the column
+        // the seasonal circulation's rain; recorded at W2b, where the land's rain is the column
         // law's and the gated climb's alone and its dry interiors give back less of it
-        // (docs/DESIGN_LEDGER.md, W2; docs/TODO.md).
-        KnownFailures.expect("W2: the land gives back less of its rain than Earth's", "x0.78") {
+        // (docs/DESIGN_LEDGER.md, W2b; docs/TODO.md).
+        KnownFailures.expect("W2b: the land gives back less of its rain than Earth's", "x0.78") {
             nearEarth("land's return over its rain", pooled.landReturn / pooled.landRain, EARTH_LAND_RETURN_SHARE)
         }
         // Recorded from C1b2 at x0.73, the marine air standing at the sea's own temperature; armed at

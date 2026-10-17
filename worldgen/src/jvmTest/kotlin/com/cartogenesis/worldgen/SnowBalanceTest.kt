@@ -627,7 +627,7 @@ class SnowBalanceTest : BorrowsSharedWorlds() {
         // cells too, so the claim is read on seeds 7 and 42 alone (docs/TODO.md). Armed on H1's
         // ground under the coupled climate, where enough seeds carry one (docs/DESIGN_LEDGER.md, M1).
         // Recorded at F1, under whose rain one seed's band falls under its least (docs/TODO.md).
-        // Armed at W2, on whose ground enough seeds carry one (docs/DESIGN_LEDGER.md, W2).
+        // Armed at W2b, on whose ground enough seeds carry one (docs/DESIGN_LEDGER.md, W2b).
         if (seeds.size - unmeasured.size < LEAST_SEEDS_WITH_A_MARGIN) {
             throw RecordedViolation(
                 "only ${seeds.size - unmeasured.size} seeds carry a marginal band, under $LEAST_SEEDS_WITH_A_MARGIN",

@@ -74,9 +74,9 @@ class DrawnRiverMouthTest : BorrowsSharedWorlds() {
         }
         println("RIVERMOUTH $throughNarrowSeaTotal drawn courses run down sea too narrow to draw as sea")
         assertTrue(intoWaterTotal > 0, "no drawn course on any seed reaches water, so this guard has stopped discriminating")
-        // Recorded at W2, whose rain moved the ground: on seeds 42 and 99 courses stop in narrow sea
+        // Recorded at W2b, whose rain moved the ground: on seeds 42 and 99 courses stop in narrow sea
         // the seaward route carries no further, and on seed 42 a few on the ice (docs/TODO.md).
-        KnownFailures.expect("W2: courses stop in narrow sea the seaward route does not carry on", "187") {
+        KnownFailures.expect("W2b: courses stop in narrow sea the seaward route does not carry on", "187") {
             if (shortTotal != 0) {
                 throw RecordedViolation(
                     "$shortTotal drawn rivers stop short of the water, their trunk or a closed basin: ${examples.joinToString()}",

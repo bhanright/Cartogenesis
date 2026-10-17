@@ -101,7 +101,7 @@ class ContinentalShelfTest : BorrowsSharedWorlds() {
         val short = measured.filter { it.second <= NEAR_SHALLOW_SHARE }
         // Recorded at A1-6b, seeds 7 and 42 holding 89.3% and 87.7% on the seasonal circulation's
         // ground; armed at A1-6c, whose rain cut it back inside; recorded again at F1, whose rain by
-        // longitude moved the ground; armed at W2, whose rain moved it back inside (docs/DESIGN_LEDGER.md).
+        // longitude moved the ground; armed at W2b, whose rain moved it back inside (docs/DESIGN_LEDGER.md).
         val shares = short.joinToString { (seed, near) -> String.format(Locale.ROOT, "seed %d %.1f%%", seed, near * 100) }
         if (short.isNotEmpty()) {
             throw RecordedViolation(
@@ -151,7 +151,7 @@ class ContinentalShelfTest : BorrowsSharedWorlds() {
         // Recorded at A1-4: the provisional climates' new wind moved the ground the erosion cut, and
         // seed 42's east- and west-facing shelf held 88% of its band. Armed again when H1's ground
         // came under the coupled climate, whose shelves clear it (docs/DESIGN_LEDGER.md, M1).
-        // Recorded again at A1-6b, whose seasonal circulation's rain moved the ground; armed at W2,
+        // Recorded again at A1-6b, whose seasonal circulation's rain moved the ground; armed at W2b,
         // whose rain moved it back inside (docs/DESIGN_LEDGER.md).
         if (failures.isNotEmpty()) {
             throw RecordedViolation(failures.joinToString(System.lineSeparator()), failures.joinToString("; "))

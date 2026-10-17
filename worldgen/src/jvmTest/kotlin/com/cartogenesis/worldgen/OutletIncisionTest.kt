@@ -532,8 +532,8 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
         // (docs/DESIGN_LEDGER.md, M1; docs/TODO.md). Re-recorded at A1-6a, under whose rain no seed
         // starts with a lake over the Caspian's share, the largest seed 42's at 0.19% of its land.
         // Armed at A1-6b, under whose rain three seeds do (docs/DESIGN_LEDGER.md, A1-6b). Recorded
-        // at W2, under whose drier land one seed does (docs/TODO.md).
-        KnownFailures.expect("W2: too few seeds start with a lake over the Caspian's share", "1 of 6") {
+        // at W2b, under whose drier land one seed does (docs/TODO.md).
+        KnownFailures.expect("W2b: too few seeds start with a lake over the Caspian's share", "1 of 6") {
             if (overLarge < 2) {
                 throw RecordedViolation(
                     "only $overLarge of ${seeds.size} seeds had an over-large lake to begin with, so this guard proves little",
@@ -563,7 +563,7 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
         // 2.7% and 2.4% of their land, the interiors H1's Earth share drowns (docs/TODO.md, "The
         // drowned crust lies in the interiors of the largest continents"; docs/DESIGN_LEDGER.md, M1).
         // Re-recorded at A1-6a, 3.96 to 3.24 times, seeds 42 and 99 at 1.83% and 2.94% of their land.
-        // Armed at W2, on whose ground the pooled largest drowned basin stands under the Caspian's share again (docs/DESIGN_LEDGER.md, W2).
+        // Armed at W2b, on whose ground the pooled largest drowned basin stands under the Caspian's share again (docs/DESIGN_LEDGER.md, W2b).
         if (pooledDrowned >= caspianShare * drownedChaos) {
             throw RecordedViolation(
                 "these worlds keep a basin below the sea-level cut holding more water than the " +

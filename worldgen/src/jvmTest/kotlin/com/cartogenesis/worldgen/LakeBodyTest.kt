@@ -150,7 +150,7 @@ class LakeBodyTest : BorrowsSharedWorlds() {
         // at A1-6b, whose ground leaves every basin's excess inside the summing order's room.
         // Recorded at A1-6c, whose ground leaves two small basins in seed 1234's dry country handed
         // hundreds of times the rain reaching them, far past the float's last places: the basins'
-        // own accounting, not traced (docs/TODO.md). Armed at W2, whose ground leaves none.
+        // own accounting, not traced (docs/TODO.md). Armed at W2b, whose ground leaves none.
         if (failures.isNotEmpty()) throw RecordedViolation("rain counted twice or lost: $failures", shortFailures.joinToString("; "))
     }
 

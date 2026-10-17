@@ -171,7 +171,7 @@ class GlaciationCombTest : BorrowsSharedWorlds() {
         // Armed at A1-6b, whose ground holds none (docs/DESIGN_LEDGER.md, A1-6b). Recorded at F1:
         // one such lake on seed 42 and one on seed 7 at 1,024 rows, a rule 13 finding, not traced
         // (docs/TODO.md).
-        // Armed at W2, whose ground holds none (docs/DESIGN_LEDGER.md, W2).
+        // Armed at W2b, whose ground holds none (docs/DESIGN_LEDGER.md, W2b).
         if (straight.isNotEmpty()) {
             throw RecordedViolation(
                 signature + " lakes that are a straight one-cell line along a D8 bearing — a" +

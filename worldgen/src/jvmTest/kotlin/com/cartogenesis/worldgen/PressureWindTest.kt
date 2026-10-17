@@ -315,7 +315,7 @@ class PressureWindTest : BorrowsSharedWorlds() {
         // poleward and whose trades are the summer half's own (docs/DESIGN_LEDGER.md, A1-6b).
         // Recorded at F1: under the circulation by longitude the pooled summer wind on these
         // coasts is onshore at +0.09 m/s, a hundredth under the bar, not traced (docs/TODO.md).
-        // Armed at W2, whose summer coasts draw the wind on past the bar (docs/DESIGN_LEDGER.md, W2).
+        // Armed at W2b, whose summer coasts draw the wind on past the bar (docs/DESIGN_LEDGER.md, W2b).
         if (summer <= ONSHORE_BAR_MPS) {
             throw RecordedViolation(
                 ("the warm half blows %+.2f m/s onto the subtropical continents' equatorward and " +
@@ -389,9 +389,9 @@ class PressureWindTest : BorrowsSharedWorlds() {
         // Recorded at C1b2: the interior's rain runs from the windward rises' to the dry plateaus'
         // more widely than Earth's interiors do (docs/TODO.md, "The march's misses against Earth,
         // after C1b2"). Armed at F1, whose interiors' rain spreads within the factor
-        // (docs/DESIGN_LEDGER.md, F1). Recorded at W2, whose interiors run from wet rises to deserts
+        // (docs/DESIGN_LEDGER.md, F1). Recorded at W2b, whose interiors run from wet rises to deserts
         // more widely again (docs/TODO.md).
-        KnownFailures.expect("W2: the interior's rain spreads wider than Earth's", "2.04") {
+        KnownFailures.expect("W2b: the interior's rain spreads wider than Earth's", "2.04") {
             if (!(meanWith > earthSpread / INTERIOR_SPREAD_FACTOR && meanWith < earthSpread * INTERIOR_SPREAD_FACTOR)) {
                 throw RecordedViolation(
                     ("the interior's rainfall spreads by %.3f, outside a factor of %.0f either side of " +

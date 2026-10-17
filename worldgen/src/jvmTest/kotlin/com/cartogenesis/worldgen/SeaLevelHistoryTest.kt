@@ -169,9 +169,9 @@ class SeaLevelHistoryTest : BorrowsSharedWorlds() {
         // Armed at A1-4, whose ground and rain read it again (docs/DESIGN_LEDGER.md, A1-4); recorded
         // at A1-5, whose rain moved the ground under it once more (docs/TODO.md). Armed again at H1
         // at 1.55x on main's climate, and on H1's ground under the coupled climate
-        // (docs/DESIGN_LEDGER.md, H1 and M1). Recorded at W2, whose rain moved the ground under it
+        // (docs/DESIGN_LEDGER.md, H1 and M1). Recorded at W2b, whose rain moved the ground under it
         // again, to 1.47x (docs/TODO.md).
-        KnownFailures.expect("W2: the lowstand leaves under the estuary mouths a drowned valley owes", "1.47") {
+        KnownFailures.expect("W2b: the lowstand leaves under the estuary mouths a drowned valley owes", "1.47") {
             if (!(pooledEstuaries.size == seeds.size && meanGain >= estuaryGain)) {
                 throw RecordedViolation(
                     "pooled over ${pooledEstuaries.size} seeds the lowstand leaves ${meanGain}x the estuary mouths, " +

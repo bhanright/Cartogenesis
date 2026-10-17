@@ -268,10 +268,10 @@ class MeanCirculationEarthTest : BorrowsSharedWorlds() {
         // Recorded at A1-6a, where it was written: seed 42's ocean rained most at 4.7 S in the half
         // about July and 7.5 N in the half about January, the wrong way round, under a July heating
         // the energy balance put at 2.1 N. Armed at A1-6b, whose cells are heated about the energy
-        // flux equator (docs/DESIGN_LEDGER.md, A1-6a and A1-6b). Recorded at W2: the open sea now
+        // flux equator (docs/DESIGN_LEDGER.md, A1-6a and A1-6b). Recorded at W2b: the open sea now
         // rains by its column's humidity alone, and seed 42's wettest ocean row stands near the
         // equator in both halves, at 1.3 N and 1.7 S (docs/TODO.md).
-        KnownFailures.expect("W2: seed 42's ocean rains most near the equator in both halves", "seed 42 3.0") {
+        KnownFailures.expect("W2b: seed 42's ocean rains most near the equator in both halves", "seed 42 3.0") {
             if (complaints.isNotEmpty()) throw RecordedViolation("the ITCZ's seasonal range: $complaints", complaints.joinToString("; "))
         }
     }

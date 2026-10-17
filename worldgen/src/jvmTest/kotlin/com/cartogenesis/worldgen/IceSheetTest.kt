@@ -204,7 +204,7 @@ class IceSheetTest : BorrowsSharedWorlds() {
         // Armed at A1-6a, where seed 42's sheet fills 187 cells of its 513-cell disc again.
         // Recorded at F1, on whose ground no candidate's sheet fills a third near its dome, as the
         // everyday tier's control finds at 512 rows (docs/TODO.md).
-        // Armed at W2, on whose ground enough sheets fill a third near their domes (docs/DESIGN_LEDGER.md, W2).
+        // Armed at W2b, on whose ground enough sheets fill a third near their domes (docs/DESIGN_LEDGER.md, W2b).
         if (domesRead < LEAST_SEEDS_WITH_A_DOME) {
             throw RecordedViolation(
                 "only $domesRead seeds grow a sheet whose dome fills a third of its own disc, under" +
@@ -230,9 +230,9 @@ class IceSheetTest : BorrowsSharedWorlds() {
         // under the coupled climate no dome is read (docs/DESIGN_LEDGER.md, H1 and M1). Recorded at
         // A1-6a, where seed 42's dome is read again and its sheet flows outward a hair under the
         // bar, 63.1% at 67.7 degrees off radial against 67% and 67.5 (docs/TODO.md). Armed at A1-6b,
-        // whose snow clears it (docs/DESIGN_LEDGER.md, A1-6b). Recorded at W2, whose ground reads
+        // whose snow clears it (docs/DESIGN_LEDGER.md, A1-6b). Recorded at W2b, whose ground reads
         // seed 42's dome again, its sheet flowing outward a hair under the bar (docs/TODO.md).
-        KnownFailures.expect("W2: seed 42's sheet flows outward a hair under the bar", "seed 42: 65.6% of the ice near the dome flows outward at a mean 64.4 degrees off radial, where a flow that knows its dome owes 67% and 67.5 degrees against an indifferent bearing's 50% and 90") {
+        KnownFailures.expect("W2b: seed 42's sheet flows outward a hair under the bar", "seed 42: 65.6% of the ice near the dome flows outward at a mean 64.4 degrees off radial, where a flow that knows its dome owes 67% and 67.5 degrees against an indifferent bearing's 50% and 90") {
             if (failures.isNotEmpty()) {
                 throw RecordedViolation("the sheet is not flowing down its own surface: " + failures.joinToString("; "), failures.joinToString("; "))
             }

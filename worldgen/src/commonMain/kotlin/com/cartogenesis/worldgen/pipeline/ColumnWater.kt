@@ -83,7 +83,7 @@ internal object ColumnWater {
      * whose temperature above the boundary layer varies by one or two kelvin over the tropical
      * oceans): 63 mm at 25 C and 81 at 28 C against their 72 in the regions of active convection,
      * where the moist adiabat climbed from saturated air at the surface's own temperature stands
-     * warmer aloft and holds 82 and 106 (docs/DESIGN_LEDGER.md, W2).
+     * warmer aloft and holds 82 and 106 (docs/DESIGN_LEDGER.md, W2b).
      *
      * Over high ground the column starts at the ground's lower pressure, where a saturated parcel's
      * lapse rate is smaller for the same temperature, and the condensation level's height is the

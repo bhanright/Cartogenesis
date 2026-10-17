@@ -163,7 +163,9 @@ class BoundaryLayerCostTest {
                 "%.2f%% of a %.1f s world in all and %.2f%% on the map's cells")
                 .format(ROWS, factorMs, downMs, solveMs, upMs, ascentMs, columnMs, laps, LAPS_PER_CLIMATE, wholeShare * 100, worldSeconds, perCellShare * 100)
         )
-        KnownFailures.expect("A1-5: the coupled loop's per-cell work is over a hundredth of a world", "9%") {
+        // Re-recorded at W2c, 9% to 7%, its run beside 9ff725c9's on one machine reading 7.19% against
+        // 9.95%: the share moves with the machine's load more than with the tree.
+        KnownFailures.expect("A1-5: the coupled loop's per-cell work is over a hundredth of a world", "7%") {
             if (perCellShare >= WORTH_A_DEVICE_SHARE) {
                 throw RecordedViolation(
                     "the coupled loop's per-cell work takes %.2f%% of a world, over the hundredth rule 8 allows without a graphics path".format(perCellShare * 100),

@@ -215,13 +215,10 @@ class WaterColumnEarthTest : BorrowsSharedWorlds() {
     @Test
     fun `the atmosphere holds Earth's water`() {
         val figures = pooled
-        // Short on main too, x0.79, where the saturated column the rain law divided by stood
-        // warmer aloft than Earth's and let the column hold more at the same humidity; shorter
-        // with the column read on the parcel's profile, the tropical sea still 1.8 C under Earth's
-        // and the continents short of the water they import (docs/DESIGN_LEDGER.md, W2b; docs/TODO.md).
-        KnownFailures.expect("W2b: the atmosphere holds under Earth's water", "x0.71") {
-            nearEarth("column water, mm", figures.columnWater / figures.area, EARTH_COLUMN_WATER_MM)
-        }
+        // Short on main, x0.79, and from W2b to W2d, x0.71; armed at W2e, x0.82, whose boundary
+        // layer over the sea holds its own humidity and whose free troposphere is read on its own
+        // saturated column (docs/DESIGN_LEDGER.md, W2b and W2e).
+        nearEarth("column water, mm", figures.columnWater / figures.area, EARTH_COLUMN_WATER_MM)
     }
 
     @Test
@@ -240,20 +237,20 @@ class WaterColumnEarthTest : BorrowsSharedWorlds() {
     @Test
     fun `the land within forty degrees rains as GPCP's does`() {
         val figures = pooled
-        // Inside on main, x1.12, where lifted condensation rained on dry land; under it once the
-        // large-scale rain is the column law's alone and the tropical interiors are short of the
-        // water they import (docs/DESIGN_LEDGER.md, W2b; docs/TODO.md).
-        KnownFailures.expect("W2b: the land within forty degrees rains under GPCP's", "x0.80") {
-            nearEarth("land rain within 40 degrees, mm", figures.rainWithinBand / figures.landWithinBand, GPCP_LAND_WITHIN_40_MM)
-        }
+        // Inside on main, x1.12; under it from W2b to W2d, x0.80, the tropical interiors short of the
+        // water they import; armed at W2e, x0.84, whose lifted boundary layer condenses past its own
+        // condensation level (docs/DESIGN_LEDGER.md, W2b and W2e).
+        nearEarth("land rain within 40 degrees, mm", figures.rainWithinBand / figures.landWithinBand, GPCP_LAND_WITHIN_40_MM)
     }
 
     @Test
     fun `desert covers Earth's share of the land`() {
         val figures = pooled
-        // Under it on main, x0.64; over it once the land rains by the column law and the gated
-        // climb alone and its interiors import too little (docs/DESIGN_LEDGER.md, W2b; docs/TODO.md).
-        KnownFailures.expect("W2b: desert covers more of the land than Earth's", "x1.86") {
+        // Under it on main, x0.64; over it from W2b to W2d, x1.86, the land raining by the column
+        // law and the gated climb alone; under it again at W2e, x0.71, the subtropical highs too weak
+        // to dry the horse latitudes once the climb condenses past the boundary layer's condensation
+        // level (docs/DESIGN_LEDGER.md, W2e; docs/TODO.md).
+        KnownFailures.expect("W2e: desert covers less of the land than Earth's", "x0.71") {
             nearEarth("desert share of the land", figures.desert / figures.landArea, EARTH_DESERT_SHARE)
         }
     }
@@ -271,9 +268,9 @@ class WaterColumnEarthTest : BorrowsSharedWorlds() {
             val wrong = if (band == 1) share < earth / BAND_FACTOR else share > earth * BAND_FACTOR
             if (wrong) misplaced += "band %d x%.2f".format(band, share / earth)
         }
-        // The tropics' land stands desert where W1 found it once lifted air stopped raining on dry
-        // ground: the interiors import too little water (docs/DESIGN_LEDGER.md, W2b; docs/TODO.md).
-        KnownFailures.expect("W2b: the tropics' land is desert", "band 0 x8.46, band 2 x4.12") {
+        // The tropics' land stood desert from W2b to W2d, band 0 x8.46 and band 2 x4.12; at W2e twice
+        // Earth's, the polar band's gone (docs/DESIGN_LEDGER.md, W2e; docs/TODO.md).
+        KnownFailures.expect("W2e: the tropics' land is twice Earth's desert", "band 0 x2.16") {
             if (misplaced.isNotEmpty()) throw RecordedViolation("desert misplaced by band: $misplaced", misplaced.joinToString())
         }
     }

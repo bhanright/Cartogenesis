@@ -171,20 +171,18 @@ class RainAgainstEarthTest : BorrowsSharedWorlds() {
         // wetter and the ground's Budyko share of its rain smaller; armed again at A1-5, the rain
         // from the solved vertical motion (docs/DESIGN_LEDGER.md); recorded again when H1's ground
         // came under it (docs/DESIGN_LEDGER.md, M1; docs/TODO.md); armed at A1-6b, x0.84, under
-        // the seasonal circulation's rain; recorded at W2b, where the land's rain is the column
-        // law's and the gated climb's alone and its dry interiors give back less of it
-        // (docs/DESIGN_LEDGER.md, W2b; docs/TODO.md).
-        KnownFailures.expect("W2b: the land gives back less of its rain than Earth's", "x0.78") {
-            nearEarth("land's return over its rain", pooled.landReturn / pooled.landRain, EARTH_LAND_RETURN_SHARE)
-        }
+        // the seasonal circulation's rain; recorded at W2b, x0.78, where the land's rain is the
+        // column law's and the gated climb's alone and its dry interiors give back less of it;
+        // armed at W2e, x0.93, whose rain falls where the ground can give it back
+        // (docs/DESIGN_LEDGER.md, W2b and W2e).
+        nearEarth("land's return over its rain", pooled.landReturn / pooled.landRain, EARTH_LAND_RETURN_SHARE)
         // Recorded from C1b2 at x0.73, the marine air standing at the sea's own temperature; armed at
         // A1-6c, whose bulk formula reads the air Kara's difference under the sea (docs/DESIGN_LEDGER.md).
         nearEarth("open-sea evaporation, mm", pooled.seaEvaporation / pooled.seaArea, EARTH_OCEAN_EVAPORATION_MM)
-        // The sea rains less than Earth's still: what it gives up the land and the subtropics' dry
-        // seas take (docs/TODO.md).
-        KnownFailures.expect("C1b2: the open sea rains less than Earth's", "x0.78") {
-            nearEarth("open-sea rain, mm", pooled.seaRain / pooled.seaArea, EARTH_OCEAN_RAIN_MM)
-        }
+        // Recorded from C1b2 to W2d, x0.78, the sea raining less than Earth's; armed at W2e, x0.92,
+        // whose sea evaporates into its boundary layer's own humidity and whose atmosphere holds
+        // more water (docs/DESIGN_LEDGER.md, W2e).
+        nearEarth("open-sea rain, mm", pooled.seaRain / pooled.seaArea, EARTH_OCEAN_RAIN_MM)
         // Recorded from C1b2 at x0.55; armed at A1-4, where the boundary layer's wind no longer
         // blows the continents' air out over the sea as W2's thermal pressure did (docs/TODO.md).
         nearEarth("land rain, mm", pooled.landRain / pooled.landArea, EARTH_LAND_RAIN_MM)
@@ -228,8 +226,9 @@ class RainAgainstEarthTest : BorrowsSharedWorlds() {
         // The band's rain against GPCP's, since A1-5 rains it from the solved ascent; recorded at
         // x0.37 until A1-6b, whose ITCZ rains the summer hemisphere's tropics (x0.91); recorded
         // again at F1, whose water travels on the column's vapor-weighted wind and whose rising
-        // branch moves with the land, so the band is broader and its peak lower (docs/TODO.md).
-        KnownFailures.expect("F1: the ocean's wettest band rains under Earth's", "x0.59") {
+        // branch moves with the land, so the band is broader and its peak lower; x0.70 at W2e
+        // (docs/TODO.md).
+        KnownFailures.expect("F1: the ocean's wettest band rains under Earth's", "x0.70") {
             nearEarth("the ocean's wettest two degrees, mm", pooledPeak, GPCP_OCEAN_PEAK_MM)
         }
     }

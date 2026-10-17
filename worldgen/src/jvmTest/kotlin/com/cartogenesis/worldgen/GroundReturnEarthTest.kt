@@ -311,13 +311,10 @@ class GroundReturnEarthTest : BorrowsSharedWorlds() {
                 outside += "%s %s".format(GROUPS[group], violation.signature)
             }
         }
-        // The humid groups rain half again to twice Earth's rain there, and Budyko's curve gives
-        // back a smaller share of more rain; on Earth's own rain the curve gives back Earth's 0.603
-        // (the class comment). Recorded at W2d; on 6eb31400 x0.80, x0.70 and x0.74
-        // (docs/DESIGN_LEDGER.md, W2d; docs/TODO.md).
-        KnownFailures.expect("W2d: the humid groups give back less of their rain than Earth's", "A x0.80 C x0.70 E x0.75") {
-            if (outside.isNotEmpty()) throw RecordedViolation("groups outside Earth's share: $outside", outside.joinToString(" "))
-        }
+        // Recorded at W2d, the humid groups raining half again to twice Earth's rain there, A x0.80,
+        // C x0.70 and E x0.75; armed at W2e, whose rain no longer gathers on the windward ranges
+        // (docs/DESIGN_LEDGER.md, W2d and W2e).
+        assertTrue(outside.isEmpty(), "groups outside Earth's share: $outside")
     }
 
     @Test
@@ -333,25 +330,19 @@ class GroundReturnEarthTest : BorrowsSharedWorlds() {
                 outside += "%s %s".format(GROUPS[group], violation.signature)
             }
         }
-        // The arid group rains under half of Earth's arid rain and gives back nearly all of it;
-        // the temperate and polar groups rain twice and half again Earth's and give back more
-        // millimeters than Earth's. Recorded at W2d; on 6eb31400 B x0.47, C x1.41 and E x1.33
-        // (docs/DESIGN_LEDGER.md, W2d; docs/TODO.md).
-        KnownFailures.expect("W2d: the arid group evaporates under Earth's millimeters and the temperate and polar over", "B x0.45 C x1.42 E x1.34") {
-            if (outside.isNotEmpty()) throw RecordedViolation("groups outside Earth's millimeters: $outside", outside.joinToString(" "))
-        }
+        // Recorded at W2d, B x0.45, C x1.42 and E x1.34, the arid group raining under half Earth's
+        // arid rain and the temperate and polar twice and half again Earth's; armed at W2e
+        // (docs/DESIGN_LEDGER.md, W2d and W2e).
+        assertTrue(outside.isEmpty(), "groups outside Earth's millimeters: $outside")
     }
 
     @Test
     fun `the continents recycle their water as Earth's do`() {
         val figures = pooled
         nearEarth("the land's rain that last evaporated from land", figures.landOriginRain / figures.rain, EARTH_PRECIPITATION_RECYCLING)
-        // Inside before W2d, x1.22; the root zone's store moves the dry half's return into the wet
-        // half, whose air rains on the land it crossed, so more of what the land gives back rains
-        // on land again (docs/DESIGN_LEDGER.md, W2d; docs/TODO.md).
-        KnownFailures.expect("W2d: more of what the land evaporates rains on land than Earth's", "x1.28") {
-            nearEarth("the land's evaporation that rains on land", figures.landOriginRain / figures.evapotranspiration, EARTH_EVAPORATION_RECYCLING)
-        }
+        // Inside before W2d, x1.22; recorded at W2d, x1.28, the wet half's air raining on the land
+        // it crossed; armed at W2e, x1.05 (docs/DESIGN_LEDGER.md, W2d and W2e).
+        nearEarth("the land's evaporation that rains on land", figures.landOriginRain / figures.evapotranspiration, EARTH_EVAPORATION_RECYCLING)
     }
 
     @Test
@@ -383,11 +374,12 @@ class GroundReturnEarthTest : BorrowsSharedWorlds() {
     @Test
     fun `the land's rain falls where Earth's does against its potential`() {
         val figures = pooled
-        // Nearly half the land's rain falls where the potential is under half of it, the windward
-        // coasts and ranges, where Budyko's curve gives back a quarter: why the land as a whole
-        // gives back less than Earth's share, x1.84 on 6eb31400 (docs/DESIGN_LEDGER.md, W2d;
+        // Nearly half the land's rain fell where the potential is under half of it, the windward
+        // coasts and ranges, x1.84 on 6eb31400 and x1.83 at W2d; a third at W2e, whose climb
+        // condenses the boundary layer only over its condensation level and whose rain law no
+        // longer reads the ground's saturated column (docs/DESIGN_LEDGER.md, W2d and W2e;
         // docs/TODO.md).
-        KnownFailures.expect("W2d: the land's rain falls where it cannot be returned", "x1.83") {
+        KnownFailures.expect("W2d: the land's rain falls where it cannot be returned", "x1.30") {
             nearEarth("the land's rain where the potential is under half of it", figures.rainUnderHalf / figures.rain, EARTH_RAIN_SHARE_UNDER_HALF)
         }
     }

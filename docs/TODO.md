@@ -116,6 +116,20 @@
   model whose planet reads 15.4 C on Earth's land; Earth's 14.0 is at its ground, so the gap is the
   land's height times the lapse rate on each world, and seeds 7 and 1234 carry more of it. Not
   measured: each world's land share and mean height against Earth's. 2026-10-17, W2c.
+- **Clauses W2c's sea and cloud moved (recorded).** The pooled ice share of land on the snow
+  balance's seeds rose from 22.79% to 24.39% against Earth's 10.1 (`SnowBalanceTest`): the ITCZ
+  cloud's longwave taken back out of the law's global mean costs the extratropics 2.1 W/m2, 0.4 to
+  0.5 C at 50 to 70 degrees on Earth's land, and seed 7's marginal band then falls under the
+  thousand cells its claim needs, as seed 99's had, so two seeds carry one against three. July's
+  convergence line stands 7.4 degrees inland pooled against Earth's 7.8, seed 7's over land at 16.1 N
+  (`LocalCirculationEarthTest`). The polar wind's control passes on the synthetic continent, 1.73
+  against 2.39 m/s (`PressureWindPoleTest`). In the drawing, 283 drawn courses end in narrow sea
+  with no seaward step against W2b's 187 (`DrawnRiverMouthTest`), 34 cells of seed 969495 draw less
+  green under more cover (`SatelliteStyleTest`, 26), and a steppe stands 15% of the way from the
+  desert to the forest in the Scroll style (`ClimateTintTest`, 19%). The pooled largest drowned
+  basin stands 1.74 times the Caspian's share, seed 99's interior drowned over 2.2% of its land
+  (`OutletIncisionTest`, armed at W2b), and no seed starts with a lake over the Caspian's share, so
+  the outlet is not seen taking one down. None traced. 2026-10-17, W2c.
 - **The subtropical sea evaporates under Earth's (W2b, measured, not fixed).** The march's sea
   evaporates 1,000-1,080 mm at 20-30 degrees against about 1,800 over the subtropical latitudes (Yu
   2007, OAFlux), under a scalar wind of 6.1-6.5 m/s where 10-20 degrees has 7.8-8.1. Diagnose after

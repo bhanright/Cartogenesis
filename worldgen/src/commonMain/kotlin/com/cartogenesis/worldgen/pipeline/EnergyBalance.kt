@@ -394,11 +394,11 @@ object EnergyBalance {
      * The albedo below carries the ITCZ's tall cloud as a belt ([CLOUD_ALBEDO_ITCZ]), fitted to
      * CERES's all-sky planetary albedo; the outgoing longwave law, a straight line in the surface
      * temperature, carried none of the same cloud's trapping, so the convecting tropics reflected
-     * like a cloud and radiated like a clear sky. That is the shortwave half of a pair whose two
-     * halves nearly cancel, and it cost the equator 13.8 W/m2 it does not lose: the tropical sea
-     * stood 1.8 C under Earth's and the tropics exported less than Trenberth and Caron's transport
-     * asks of them. The cloud's longwave is the belt's reflected sunlight over this ratio, read on
-     * the band's own annual sunlight as the belt's albedo is, and on its open share.
+     * like a cloud and radiated like a clear sky: the shortwave half of a pair whose two halves
+     * nearly cancel, 13.8 W/m2 at the equator taken without the longwave that comes back with it.
+     * The cloud's longwave is the belt's reflected sunlight over this ratio, read on the band's own
+     * annual sunlight as the belt's albedo is, and on its open share. See docs/DESIGN_LEDGER.md, W2c,
+     * for what it moved.
      */
     private const val ITCZ_CLOUD_SHORTWAVE_OVER_LONGWAVE = 1.2
 
@@ -445,8 +445,7 @@ object EnergyBalance {
      * the water's year still integrates to no exchange with the air, so no heat is made: the air's
      * budget is the one it always had, and the water stands this far above it on the open share of
      * the band. Under ice the water and the air part company by far more and by other physics, so a
-     * white share carries none of it. Before W2c the slab's water stood at the air's annual mean,
-     * which the moisture march then read as the sea and evaporated into air this much colder.
+     * white share carries none of it. See docs/DESIGN_LEDGER.md, W2c.
      */
     const val SEA_OVER_MARINE_AIR_C = (0.93 + 0.63) / 2.0
 

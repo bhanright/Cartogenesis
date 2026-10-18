@@ -270,7 +270,7 @@ class WaterColumnEarthTest : BorrowsSharedWorlds() {
         }
         // The tropics' land stood desert from W2b to W2d, band 0 x8.46 and band 2 x4.12; at W2e twice
         // Earth's, the polar band's gone (docs/DESIGN_LEDGER.md, W2e; docs/TODO.md).
-        KnownFailures.expect("W2e: the tropics' land is twice Earth's desert", "band 0 x2.16") {
+        KnownFailures.expect("W2e: the tropics' land is twice Earth's desert", "band 0 x2.12") {
             if (misplaced.isNotEmpty()) throw RecordedViolation("desert misplaced by band: $misplaced", misplaced.joinToString())
         }
     }

@@ -64,8 +64,9 @@ class OceanLeavesTheGroundTest : BorrowsSharedWorlds() {
      * water stands Kara's difference above its air and the ITCZ's cloud keeps its longwave. W2d re-took
      * the same two: the provisional climate's ground gives back each half-year's share as far as its
      * rain and the root zone's store supply it. W2e re-took the same two: the provisional climate's
-     * march carries a boundary layer and the free troposphere on their own winds. An ocean change
-     * that leaks into the
+     * march carries a boundary layer and the free troposphere on their own winds. W2f re-took the
+     * same two by a few tenths of a percent of the rain: the provisional climate's free troposphere
+     * takes in the boundary layer's water of the same lap. An ocean change that leaks into the
      * ground moves them.
      * A chunk meant to move the ground re-takes them here, as the render records are re-taken.
      * At [SharedWorlds.DETAIL_ROWS], whose standard worlds the detail guards generate anyway, so
@@ -97,12 +98,12 @@ class OceanLeavesTheGroundTest : BorrowsSharedWorlds() {
             "plates.continentalShare" to -8606387063464998658L,
             "plates.upliftRateMmPerYear" to -9204950406715247596L,
             "plates.crustAge" to 5808649867131644059L,
-            "erosion.height" to -1402957717451522780L,
+            "erosion.height" to -547202049739930714L,
             "erosion.sweptOnDevice" to -358906410940142731L,
-            "sea.shorelineHeight" to -1485820912368532278L,
-            "sea.isLand" to -1989242940470987432L,
-            "sea.relativeElevation" to 2304082901642161804L,
-            "sea.landCellCount" to 3451202824929506891L
+            "sea.shorelineHeight" to 8679620093095337981L,
+            "sea.isLand" to -8960544417350287311L,
+            "sea.relativeElevation" to 7193649467547773306L,
+            "sea.landCellCount" to 6927870003309673247L
         )
     }
 }

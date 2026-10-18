@@ -85,6 +85,57 @@ class BoundaryLayerWaterTest {
         assertTrue(worst <= YIELD_SHARE, "the yield stands %.3f from the fine climb's".format(worst))
     }
 
+
+    /**
+     * The saturated yield's table ([ColumnWater.saturatedLiftYield]) against the direct calculation
+     * over the ground the worlds reach (air from -60 to 45 C, ground from the sea to eight kilometers
+     * up) and over the table's whole span, relative; and its value where the lift yield's own
+     * test above reads the layer at saturation.
+     */
+    @Test
+    fun `the saturated lift yield's table stands within its bound of the direct calculation`() {
+        val random = Random(20261018)
+        val direct = DoubleArray(2)
+        var worstReached = 0.0
+        var worstReachedAt = ""
+        var worstSpan = 0.0
+        var worstSpanAt = ""
+        repeat(200_000) { sample ->
+            // Air as a world makes it, the sea-level air's temperature less the lapse rate over the
+            // ground's height; then every pair the table's span holds where the saturation vapor
+            // pressure is under a third of the pressure (past it the direct calculation divides by
+            // the air's own dry share), which no world's air reaches: 31 C at 22 kPa.
+            val reached = sample < 150_000
+            val heightM = if (reached) random.nextDouble(0.0, 8_000.0) else 0.0
+            val temperatureC = if (reached) {
+                (random.nextDouble(-40.0, 40.0) - 6.5 * heightM / 1_000.0).coerceAtLeast(-60.0)
+            } else random.nextDouble(-80.0, 60.0)
+            val pressureKpa = if (reached) {
+                ColumnWater.surfacePressureKpa(heightM, temperatureC, 6.5)
+            } else random.nextDouble(20.0, 105.0)
+            if (ColumnWater.saturationVaporPressureKpa(temperatureC) > pressureKpa / 3.0) return@repeat
+            val depth = ColumnWater.boundaryLayerDepthM(temperatureC, pressureKpa)
+            ColumnWater.boundaryLayerLiftYield(
+                temperatureC, pressureKpa, depth, ColumnWater.saturationSpecificHumidity(temperatureC, pressureKpa), direct
+            )
+            if (direct[0] <= 0.0) return@repeat
+            val miss = abs(ColumnWater.saturatedLiftYield(temperatureC, pressureKpa) - direct[0]) / direct[0]
+            val at = "%.2f C, %.2f kPa".format(temperatureC, pressureKpa)
+            if (reached && miss > worstReached) { worstReached = miss; worstReachedAt = at }
+            if (!reached && miss > worstSpan) { worstSpan = miss; worstSpanAt = at }
+        }
+        println(
+            "LIFT TABLE worst %.2e of the direct yield over the air worlds reach (at %s), %.2e over the table's whole span (at %s); bar %.0e"
+                .format(worstReached, worstReachedAt, worstSpan, worstSpanAt, ColumnWater.LIFT_TABLE_BOUND)
+        )
+        assertTrue(worstReached <= ColumnWater.LIFT_TABLE_BOUND, "the saturated lift yield's table stands %.2e from the direct calculation at %s".format(worstReached, worstReachedAt))
+        // Outside its span the table hands the question to the direct calculation.
+        for ((temperatureC, pressureKpa) in listOf(-90.0 to 80.0, 70.0 to 80.0, 10.0 to 15.0, 10.0 to 110.0)) {
+            val depth = ColumnWater.boundaryLayerDepthM(temperatureC, pressureKpa)
+            ColumnWater.boundaryLayerLiftYield(temperatureC, pressureKpa, depth, ColumnWater.saturationSpecificHumidity(temperatureC, pressureKpa), direct)
+            assertEquals(direct[0], ColumnWater.saturatedLiftYield(temperatureC, pressureKpa), 0.0, "outside the span at $temperatureC C, $pressureKpa kPa")
+        }
+    }
     @Test
     fun `the yield's slope is its own derivative in the layer's water`() {
         val yield = DoubleArray(2)

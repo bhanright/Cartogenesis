@@ -1189,7 +1189,6 @@ object MoistureMarch {
             boundary.precomputeTransport(season.eastwardMps, season.southwardMps)
             free.precomputeTransport(season.freeEastward, season.freeSouthward)
             parallelChunks(0, cellsAcross) { startColumn, endColumn ->
-                val cellYield = DoubleArray(2)
                 for (column in startColumn until endColumn) {
                     for (row in 0 until cellsDown) {
                         val cell = row * cellsAcross + column
@@ -1231,8 +1230,7 @@ object MoistureMarch {
                         }
                         liftMps[here] = climb.coerceAtLeast(0.0).toFloat()
                         if (climb < 0.0) {
-                            ColumnWater.boundaryLayerLiftYield(airC, groundPressure, layerDepthM[here].toDouble(), surfaceSaturation, cellYield)
-                            descentRate[here] = (-climb * cellYield[0]).toFloat()
+                            descentRate[here] = (-climb * ColumnWater.saturatedLiftYield(airC, groundPressure)).toFloat()
                         } else {
                             descentRate[here] = 0f
                         }

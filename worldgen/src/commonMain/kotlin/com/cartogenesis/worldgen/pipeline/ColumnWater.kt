@@ -458,6 +458,10 @@ internal object ColumnWater {
         val logVapor = kotlin.math.ln(vaporPressure / TETENS_KPA)
         // The dew point, from Tetens' form inverted; the condensation level's temperature lies under it.
         var levelC = TETENS_OFFSET_C * logVapor / (TETENS_SLOPE - logVapor)
+        // Rising dry the air cools by more than its dew point does, so its condensation level is
+        // over the height where the air has cooled to the dew point; a layer that ends under that
+        // height never condenses, and most of the land's layers do, so they go no further.
+        if ((surfaceKelvin - (levelC + KELVIN_AT_ZERO_C)) / DRY_LAPSE_K_PER_M >= layerDepthM) return
         var slope = 1.0
         repeat(CONDENSATION_LEVEL_NEWTON_STEPS) {
             val shifted = levelC + TETENS_OFFSET_C
@@ -501,6 +505,91 @@ internal object ColumnWater {
      * nearly linear over the few kelvin between them, and four steps leave it under a microkelvin.
      */
     private const val CONDENSATION_LEVEL_NEWTON_STEPS = 4
+
+    /**
+     * What the boundary layer's air condenses per meter it is lifted when it stands at its surface
+     * air's saturation, in kilograms per square meter per meter ([boundaryLayerLiftYield] at
+     * [saturationSpecificHumidity], its first term): the most the layer yields, and the rate the
+     * lee's descent can evaporate cloud at. It depends on the ground's temperature and pressure
+     * alone, the layer's depth being theirs ([boundaryLayerDepthM]), so it is read from a table
+     * of the direct calculation, at [LIFT_TABLE_STEP_C] in the temperature and [LIFT_TABLE_PRESSURES]
+     * steps in the logarithm of the pressure, by bicubic (Catmull-Rom) interpolation: within
+     * [LIFT_TABLE_BOUND] of it, relative, over the air a world makes, and within 2e-3 of it in
+     * the span's corners no world reaches, 31 C at 22 kPa (`BoundaryLayerWaterTest`). Ground outside
+     * the table's span is taken from the direct calculation.
+     */
+    fun saturatedLiftYield(surfaceTemperatureC: Double, groundPressureKpa: Double): Double {
+        if (!(surfaceTemperatureC in LIFT_TABLE_COLDEST_C..LIFT_TABLE_WARMEST_C) ||
+            !(groundPressureKpa in LIFT_TABLE_LOWEST_PRESSURE_KPA..LIFT_TABLE_HIGHEST_PRESSURE_KPA)
+        ) {
+            return directSaturatedLiftYield(surfaceTemperatureC, groundPressureKpa)
+        }
+        val across = (surfaceTemperatureC - LIFT_TABLE_COLDEST_C) / LIFT_TABLE_STEP_C
+        val down = (kotlin.math.ln(groundPressureKpa) - LIFT_TABLE_LOWEST_LOG_PRESSURE) / LIFT_TABLE_LOG_PRESSURE_STEP
+        val row = across.toInt().coerceIn(1, LIFT_TABLE_TEMPERATURES - 3)
+        val column = down.toInt().coerceIn(1, LIFT_TABLE_PRESSURES - 3)
+        val acrossShare = across - row
+        val downShare = down - column
+        val table = saturatedLiftYieldTable
+        var first = 0.0
+        var second = 0.0
+        var third = 0.0
+        var fourth = 0.0
+        for (offset in 0 until 4) {
+            val start = (row - 1 + offset) * LIFT_TABLE_PRESSURES + column - 1
+            val along = catmullRom(table[start], table[start + 1], table[start + 2], table[start + 3], downShare)
+            when (offset) {
+                0 -> first = along
+                1 -> second = along
+                2 -> third = along
+                else -> fourth = along
+            }
+        }
+        return catmullRom(first, second, third, fourth, acrossShare).coerceAtLeast(0.0)
+    }
+
+    /** The Catmull-Rom cubic through four equally spaced values, read between the middle two at [share]. */
+    private fun catmullRom(before: Double, first: Double, second: Double, after: Double, share: Double): Double =
+        first + 0.5 * share * (second - before + share * (2.0 * before - 5.0 * first + 4.0 * second - after +
+            share * (3.0 * (first - second) + after - before)))
+
+    private fun directSaturatedLiftYield(surfaceTemperatureC: Double, groundPressureKpa: Double): Double {
+        val into = DoubleArray(2)
+        boundaryLayerLiftYield(
+            surfaceTemperatureC, groundPressureKpa, boundaryLayerDepthM(surfaceTemperatureC, groundPressureKpa),
+            saturationSpecificHumidity(surfaceTemperatureC, groundPressureKpa), into
+        )
+        return into[0]
+    }
+
+    /**
+     * The table's span and steps: from colder than any air the energy balance makes to warmer than
+     * any it makes, an eighth of a degree apart, and in pressure from over the highest ground the
+     * plates raise to over the standard sea level's, 128 steps of the logarithm. Fine enough that
+     * the interpolation is within [LIFT_TABLE_BOUND] of the direct calculation, which grows 7% a
+     * degree and bends little over an eighth of one.
+     */
+    private const val LIFT_TABLE_COLDEST_C = -80.0
+    private const val LIFT_TABLE_WARMEST_C = 60.0
+    private const val LIFT_TABLE_STEP_C = 0.125
+    private const val LIFT_TABLE_TEMPERATURES = 1121
+    private const val LIFT_TABLE_LOWEST_PRESSURE_KPA = 20.0
+    private const val LIFT_TABLE_HIGHEST_PRESSURE_KPA = 105.0
+    private const val LIFT_TABLE_PRESSURES = 128
+    private val LIFT_TABLE_LOWEST_LOG_PRESSURE = kotlin.math.ln(LIFT_TABLE_LOWEST_PRESSURE_KPA)
+    private val LIFT_TABLE_LOG_PRESSURE_STEP =
+        (kotlin.math.ln(LIFT_TABLE_HIGHEST_PRESSURE_KPA) - LIFT_TABLE_LOWEST_LOG_PRESSURE) / (LIFT_TABLE_PRESSURES - 1)
+
+    /** How far the table may stand from the direct calculation, relative: a millionth. */
+    const val LIFT_TABLE_BOUND = 1.0e-6
+
+    /** The table, a row of pressures for each temperature from the coldest up, built when the object is first read. */
+    private val saturatedLiftYieldTable: DoubleArray = DoubleArray(LIFT_TABLE_TEMPERATURES * LIFT_TABLE_PRESSURES) { index ->
+        directSaturatedLiftYield(
+            LIFT_TABLE_COLDEST_C + (index / LIFT_TABLE_PRESSURES) * LIFT_TABLE_STEP_C,
+            kotlin.math.exp(LIFT_TABLE_LOWEST_LOG_PRESSURE + (index % LIFT_TABLE_PRESSURES) * LIFT_TABLE_LOG_PRESSURE_STEP)
+        )
+    }
 
 
     /**

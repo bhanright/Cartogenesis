@@ -52,13 +52,14 @@ class BoundaryLayerCostTest {
         const val ROWS = 1024
 
         /**
-         * The coupled loop's laps a climate run: 64 over a world's four runs on seed 7 at 1,024 rows
-         * (20, 10, 17 and 17), the erosion's second starting where its first settled and the others
-         * cold, sixteen a run (the world clause below, docs/DESIGN_LEDGER.md, W2e), the two layers
-         * exchanging their water a lap behind; 38 on 6d5257e2 (10, 8, 9 and 11), 40 at A1-6b and 35
-         * at A1-6a.
+         * The coupled loop's laps a climate run: 46 over a world's four runs on seed 7 at 1,024 rows
+         * (13, 9, 11 and 13), the erosion's second starting where its first settled and the others
+         * cold, twelve a run, rounded up (the world clause below, docs/DESIGN_LEDGER.md, W2f), the
+         * free troposphere taking in the boundary layer's water of the same lap; 64 at W2e (20, 10,
+         * 17 and 17), the two layers a lap behind each other; 38 on 6d5257e2 (10, 8, 9 and 11), 40 at
+         * A1-6b and 35 at A1-6a.
          */
-        const val LAPS_PER_CLIMATE = 16
+        const val LAPS_PER_CLIMATE = 12
     }
 
     @Test

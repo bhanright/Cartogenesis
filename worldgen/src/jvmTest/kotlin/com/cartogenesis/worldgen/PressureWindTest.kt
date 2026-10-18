@@ -387,16 +387,12 @@ class PressureWindTest : BorrowsSharedWorlds() {
         )
         // Recorded at W2e: the interiors' rain spreads as widely without the pressure term as with
         // it, 1.433 against 1.435, the boundary layer's return and its climb now setting where the
-        // interiors rain more than the free troposphere's wind (docs/TODO.md).
-        KnownFailures.expect("W2e: the pressure term no longer widens the interior's rainfall", "1.433 against 1.435") {
-            if (!(meanWith > meanWithout)) {
-                throw RecordedViolation(
-                    "the pressure term does not widen the interior's rainfall at all: %.3f against %.3f"
-                        .format(meanWith, meanWithout),
-                    "%.3f against %.3f".format(meanWith, meanWithout)
-                )
-            }
-        }
+        // interiors rain more than the free troposphere's wind (docs/TODO.md). Armed at W2f, 1.433
+        // against 1.428, the free troposphere taking in the boundary layer's water of the same lap.
+        assertTrue(
+            meanWith > meanWithout,
+            "the pressure term does not widen the interior's rainfall at all: %.3f against %.3f".format(meanWith, meanWithout)
+        )
         // Recorded at C1b2: the interior's rain runs from the windward rises' to the dry plateaus'
         // more widely than Earth's interiors do (docs/TODO.md, "The march's misses against Earth,
         // after C1b2"). Armed at F1, whose interiors' rain spreads within the factor

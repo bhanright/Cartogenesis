@@ -407,7 +407,7 @@ class SnowBalanceTest : BorrowsSharedWorlds() {
         // land: 25.23% of the cells, where by area on the sphere the ice-sheet biome holds 7.2 to
         // 12.2% of the land of seeds 7, 42, 1234 and 99 at 512 rows against Earth's 10.1
         // (`RainAgainstEarthTest`; docs/TODO.md).
-        KnownFailures.expect("A1-6b: the ice covers more than twice Earth's share of the land's cells", "25.51%") {
+        KnownFailures.expect("A1-6b: the ice covers more than twice Earth's share of the land's cells", "25.55%") {
             if (shareOn > EARTH_ICE_SHARE * 2) {
                 throw RecordedViolation(
                     "ice covers ${"%.2f".format(shareOn)}% of land, more than twice Earth's ${EARTH_ICE_SHARE}%",
@@ -491,7 +491,7 @@ class SnowBalanceTest : BorrowsSharedWorlds() {
         // whose rain from the solved vertical motion leaves the cold dry interior under 2% ice.
         // Recorded at W2e, whose free troposphere carries more water over the cold interiors: 2.6%
         // (docs/DESIGN_LEDGER.md, W2e; docs/TODO.md).
-        KnownFailures.expect("W2e: a little more of the cold dry interior stays ice sheet", "2.6%") {
+        KnownFailures.expect("W2e: a little more of the cold dry interior stays ice sheet", "2.5%") {
             if (shareOn >= 2.0) {
                 throw RecordedViolation(
                     "${"%.1f".format(shareOn)}% of the cold dry interior is still ice sheet",

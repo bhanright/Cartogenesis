@@ -202,6 +202,9 @@ val auditOnlyClasses = listOf(
     // The benchmarks' own figures and the model's invariants run per merge in
     // `StationaryWaveBenchmarkTest` and `StationaryWaveModelTest`.
     "com.cartogenesis.worldgen.StationaryWaveReport",
+    // The order the stationary waves converge at as their levels double, which `LevelExtrapolation`
+    // reads, and its answer against sixteen and twenty-four levels on the benchmarks and on worlds.
+    "com.cartogenesis.worldgen.LevelExtrapolationReport",
     "com.cartogenesis.worldgen.StationaryWaveCostTest"
 )
 

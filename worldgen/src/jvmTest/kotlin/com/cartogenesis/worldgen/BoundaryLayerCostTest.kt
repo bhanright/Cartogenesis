@@ -52,11 +52,13 @@ class BoundaryLayerCostTest {
         const val ROWS = 1024
 
         /**
-         * The coupled loop's laps a climate run: 40 over a world's four runs on seed 7 at 1,024 rows
-         * (10, 9, 11 and 10), the erosion's second starting where its first settled and the others
-         * cold, ten a run (the world clause below, docs/DESIGN_LEDGER.md, A1-6b; 35 at A1-6a).
+         * The coupled loop's laps a climate run: 64 over a world's four runs on seed 7 at 1,024 rows
+         * (20, 10, 17 and 17), the erosion's second starting where its first settled and the others
+         * cold, sixteen a run (the world clause below, docs/DESIGN_LEDGER.md, W2e), the two layers
+         * exchanging their water a lap behind; 38 on 6d5257e2 (10, 8, 9 and 11), 40 at A1-6b and 35
+         * at A1-6a.
          */
-        const val LAPS_PER_CLIMATE = 10
+        const val LAPS_PER_CLIMATE = 16
     }
 
     @Test
@@ -164,8 +166,11 @@ class BoundaryLayerCostTest {
                 .format(ROWS, factorMs, downMs, solveMs, upMs, ascentMs, columnMs, laps, LAPS_PER_CLIMATE, wholeShare * 100, worldSeconds, perCellShare * 100)
         )
         // Re-recorded at W2c, 9% to 7%, its run beside 9ff725c9's on one machine reading 7.19% against
-        // 9.95%: the share moves with the machine's load more than with the tree.
-        KnownFailures.expect("A1-5: the coupled loop's per-cell work is over a hundredth of a world", "7%") {
+        // 9.95%: the share moves with the machine's load more than with the tree. Re-recorded at W2e,
+        // 9% at sixteen laps a run of a 138.2 s world, where 6d5257e2's tree, run on the same machine
+        // between two runs of this one, read 10% at ten laps of an 87.7 s world
+        // (docs/DESIGN_LEDGER.md, W2e).
+        KnownFailures.expect("A1-5: the coupled loop's per-cell work is over a hundredth of a world", "9%") {
             if (perCellShare >= WORTH_A_DEVICE_SHARE) {
                 throw RecordedViolation(
                     "the coupled loop's per-cell work takes %.2f%% of a world, over the hundredth rule 8 allows without a graphics path".format(perCellShare * 100),

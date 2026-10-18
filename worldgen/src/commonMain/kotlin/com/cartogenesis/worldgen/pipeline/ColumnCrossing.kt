@@ -597,7 +597,13 @@ internal class ColumnCrossing {
         private const val BALANCE_TOLERANCE = 1.0e-12
 
         /** `(1 - e^-x) / x`, one at nothing. */
-        private fun relaxedShare(x: Double): Double = if (x > 1.0e-9) -expm1(-x) / x else 1.0 - 0.5 * x
+        private fun relaxedShare(x: Double): Double = if (x > NEGLIGIBLE_RELAXATION) -expm1(-x) / x else 1.0 - 0.5 * x
+
+        /**
+         * Below this exponent `(1 - e^-x) / x` is taken as `1 - x / 2`: its next term, `x^2 / 6`, is
+         * under a part in 10^19 there, below the doubles' rounding.
+         */
+        private const val NEGLIGIBLE_RELAXATION = 1.0e-9
 
         /**
          * The same with `e^-x` in hand as [left]: read off it where `1 - e^-x` keeps its digits,
@@ -634,5 +640,19 @@ internal class ColumnCrossing {
 
         /** Below this product of the rates' difference and the time, the two are taken as equal. */
         private const val EQUAL_RATES = 1.0e-6
+
+        /** The crossing's constants by the names a device's kernels read them by ([MoistureDeviceRun.constants]). */
+        internal fun deviceConstants(): Map<String, Double> = mapOf(
+            "SECONDS_PER_DAY" to SECONDS_PER_DAY,
+            "MAX_RELAXATION_PER_STEP" to MAX_RELAXATION_PER_STEP,
+            "MAX_SHORT_RELAXATION" to MAX_SHORT_RELAXATION,
+            "MAX_STEPS" to MAX_STEPS.toDouble(),
+            "FLAT_SHARE" to FLAT_SHARE,
+            "NEWTON_ITERATIONS" to NEWTON_ITERATIONS.toDouble(),
+            "BALANCE_TOLERANCE" to BALANCE_TOLERANCE,
+            "SMALL_RELAXATION" to SMALL_RELAXATION,
+            "NEGLIGIBLE_RELAXATION" to NEGLIGIBLE_RELAXATION,
+            "EQUAL_RATES" to EQUAL_RATES
+        )
     }
 }

@@ -486,6 +486,12 @@ object MoistureMarch {
         /** The ground's return to start from, from an earlier march of this world's grid; dry ground when none. */
         start: StartState? = null,
         /**
+         * Where the laps are marched other than on the processor, if it takes the run
+         * ([MoistureAccelerator.open]); every other part of the run stays here. A device that
+         * fails partway throws [DeviceFailed], and the caller runs the whole run again without it.
+         */
+        accelerator: MoistureAccelerator? = null,
+        /**
          * The two seasons the first lap reads, April to September about July and October to March
          * about January: built inside the march and held by no frame of it or its caller once the
          * marches are set up, so a coupled run's first seasons are let go after its first lap.
@@ -514,78 +520,117 @@ object MoistureMarch {
         val annualPotential = FloatArray(cellCount)
         ledger?.millimetersPerYearPerUnit = grid.millimetersPerYearPerUnit
 
+        // The device, when one takes the run; the convergence closure is the processor's alone.
+        val measuring = ledger != null || accelerator?.measuresBudget == true
+        val device = if (accelerator != null && !config.climate.convergenceRain) {
+            accelerator.open(
+                MoistureDeviceRun(
+                    cellsAcross, cellsDown, july.schedule, grid.secondsPerColumn, grid.faceMixing,
+                    config.climate.rainShadowScale.toDouble(), measuring,
+                    july.deviceSeason(measuring), january.deviceSeason(measuring)
+                )
+            )
+        } else null
+        var fixedFieldsChanged = false
+
         var lap = 0
         val landRainChanges = mutableListOf<Double>()
         val lapMillis = mutableListOf<Double>()
-        while (true) {
-            val lapStarted = TimeSource.Monotonic.markNow()
-            val laps = Array(2) { season -> ledger?.let { MoistureLedger.Lap(season == 0, lap) } }
-            for (season in 0 until 2) seasons[season].beginLap(laps[season])
-            // The two seasons share nothing inside a lap but the ground's return, which was set
-            // before it began, so they march side by side; and inside a season the free troposphere
-            // follows the boundary layer by one stage, which is what gives it the boundary layer's
-            // water of this lap where their sweeps allow ("The exchange inside the lap").
-            val slots = seasons[0].schedule.slotCount
-            for (slot in 0 until slots) {
-                parallelChunks(0, 2 * LAYERS) { first, last ->
-                    for (task in first until last) {
-                        val season = seasons[task / LAYERS]
-                        val layer = task % LAYERS
-                        val stage = season.schedule.stageAt(layer == BOUNDARY, slot)
-                        if (stage >= 0) season.marchStage(layer, stage)
+        try {
+            while (true) {
+                val lapStarted = TimeSource.Monotonic.markNow()
+                val laps = Array(2) { season -> if (ledger != null || (device != null && measuring)) MoistureLedger.Lap(season == 0, lap) else null }
+                for (season in 0 until 2) seasons[season].beginLap(laps[season])
+                if (device != null) {
+                    // The lap on the device; while it marches, the processor builds what the lap does not
+                    // read and the next step does: the potential's terms of the air the lap runs under.
+                    if (!device.startLap(fixedFieldsChanged)) throw DeviceFailed("${accelerator?.name} failed to start lap $lap")
+                    fixedFieldsChanged = false
+                    for (season in seasons) season.finishPotentialTerms()
+                    if (!device.finishLap()) throw DeviceFailed("${accelerator?.name} failed in lap $lap")
+                    if (measuring) for (season in 0 until 2) seasons[season].takeDeviceBudget(laps[season])
+                } else {
+                    // The two seasons share nothing inside a lap but the ground's return, which was set
+                    // before it began, so they march side by side; and inside a season the free troposphere
+                    // follows the boundary layer by one stage, which is what gives it the boundary layer's
+                    // water of this lap where their sweeps allow ("The exchange inside the lap").
+                    val slots = seasons[0].schedule.slotCount
+                    for (slot in 0 until slots) {
+                        parallelChunks(0, 2 * LAYERS) { first, last ->
+                            for (task in first until last) {
+                                val season = seasons[task / LAYERS]
+                                val layer = task % LAYERS
+                                val stage = season.schedule.stageAt(layer == BOUNDARY, slot)
+                                if (stage >= 0) season.marchStage(layer, stage)
+                            }
+                        }
                     }
                 }
-            }
-            for (season in 0 until 2) seasons[season].endLap(laps[season])
-
-            laps.forEach { entry -> if (entry != null) ledger?.laps?.add(entry) }
-
-            // The year's rain, as the rivers will read it, and the potential evaporation the two
-            // seasons' air sets.
-            annualRain.data.copyInto(previousRain)
-            parallelChunks(0, cellsDown) { startRow, endRow ->
-                for (cell in startRow * cellsAcross until endRow * cellsAcross) {
-                    annualRain.data[cell] = (july.rainMmRowMajor(cell) + january.rainMmRowMajor(cell)) * 0.5f
+                for (season in 0 until 2) seasons[season].endLap(laps[season])
+                if (device != null && measuring) {
+                    for (entry in laps) entry?.let { device.budgetMeasured(budgetOf(it)) }
                 }
-            }
-            SphereBlur.apply(config, annualRain, inputs.blurSigmaKm)
-            july.updateLandPotential()
-            january.updateLandPotential()
-            for (cell in 0 until cellCount) {
-                annualPotential[cell] = (july.potentialMmRowMajor(cell) + january.potentialMmRowMajor(cell)) * 0.5f
-            }
-            lap++
-            // The land's year, which the ground's return couples, and the whole planet's, which the
-            // two layers' exchange carries a lap behind and the sea's rain feeds the atmosphere with.
-            val change = maxOf(
-                changeShare(inputs.isLand, annualRain.data, previousRain, grid, landOnly = true),
-                changeShare(inputs.isLand, annualRain.data, previousRain, grid, landOnly = false)
-            )
-            ledger?.settling?.add(change)
-            landRainChanges.add(change)
-            var lapElapsed = lapStarted.elapsedNow()
-            val heatingSettled = coupling?.settledAfter(july.condensationRowMajor(), january.condensationRowMajor()) ?: true
-            val settled = lap >= MIN_LAPS && change < CONVERGED_SHARE && heatingSettled
-            if (settled || lap >= MAX_LAPS) {
+
+                laps.forEach { entry -> if (entry != null) ledger?.laps?.add(entry) }
+
+                // The year's rain, as the rivers will read it, and the potential evaporation the two
+                // seasons' air sets.
+                annualRain.data.copyInto(previousRain)
+                parallelChunks(0, cellsDown) { startRow, endRow ->
+                    for (cell in startRow * cellsAcross until endRow * cellsAcross) {
+                        annualRain.data[cell] = (july.rainMmRowMajor(cell) + january.rainMmRowMajor(cell)) * 0.5f
+                    }
+                }
+                SphereBlur.apply(config, annualRain, inputs.blurSigmaKm)
+                july.updateLandPotential()
+                january.updateLandPotential()
+                for (cell in 0 until cellCount) {
+                    annualPotential[cell] = (july.potentialMmRowMajor(cell) + january.potentialMmRowMajor(cell)) * 0.5f
+                }
+                lap++
+                // The land's year, which the ground's return couples, and the whole planet's, which the
+                // two layers' exchange carries a lap behind and the sea's rain feeds the atmosphere with.
+                val change = maxOf(
+                    changeShare(inputs.isLand, annualRain.data, previousRain, grid, landOnly = true),
+                    changeShare(inputs.isLand, annualRain.data, previousRain, grid, landOnly = false)
+                )
+                ledger?.settling?.add(change)
+                landRainChanges.add(change)
+                var lapElapsed = lapStarted.elapsedNow()
+                val heatingSettled = coupling?.settledAfter(july.condensationRowMajor(), january.condensationRowMajor()) ?: true
+                val settled = lap >= MIN_LAPS && change < CONVERGED_SHARE && heatingSettled
+                if (settled || lap >= MAX_LAPS) {
+                    lapMillis.add(lapElapsed.inWholeMicroseconds / 1_000.0)
+                    break
+                }
+                val nextSeasons = coupling?.nextSeasons()
+                val returnStarted = TimeSource.Monotonic.markNow()
+                nextSeasons?.let { (nextJuly, nextJanuary) ->
+                    if (device != null) {
+                        // Both seasons reseasoned, whichever moved its air: `||` would skip the second.
+                        val julyMoved = july.reseasonForDevice(nextJuly)
+                        val januaryMoved = january.reseasonForDevice(nextJanuary)
+                        fixedFieldsChanged = julyMoved || januaryMoved
+                    } else {
+                        july.reseason(nextJuly)
+                        january.reseason(nextJanuary)
+                    }
+                }
+
+                // The ground's return for the next lap, from this lap's year.
+                parallelChunks(0, cellsDown) { startRow, endRow ->
+                    for (cell in startRow * cellsAcross until endRow * cellsAcross) {
+                        if (!inputs.isLand[cell]) continue
+                        setGroundReturn(cell, july, january, annualRain.data[cell], annualPotential[cell], config.climate.groundReturn)
+                    }
+                }
+                lapElapsed += returnStarted.elapsedNow()
                 lapMillis.add(lapElapsed.inWholeMicroseconds / 1_000.0)
-                break
             }
-            val nextSeasons = coupling?.nextSeasons()
-            val returnStarted = TimeSource.Monotonic.markNow()
-            nextSeasons?.let { (nextJuly, nextJanuary) ->
-                july.reseason(nextJuly)
-                january.reseason(nextJanuary)
-            }
-
-            // The ground's return for the next lap, from this lap's year.
-            parallelChunks(0, cellsDown) { startRow, endRow ->
-                for (cell in startRow * cellsAcross until endRow * cellsAcross) {
-                    if (!inputs.isLand[cell]) continue
-                    setGroundReturn(cell, july, january, annualRain.data[cell], annualPotential[cell], config.climate.groundReturn)
-                }
-            }
-            lapElapsed += returnStarted.elapsedNow()
-            lapMillis.add(lapElapsed.inWholeMicroseconds / 1_000.0)
+            // The water in flight as the last lap left it, and that lap's land-origin rain and sources.
+            if (device != null && !device.readState()) throw DeviceFailed("${accelerator?.name} failed to read the march's end")
+        } finally {
+            device?.close()
         }
         val lapsRun = lap
         ledger?.lapsRun = lapsRun
@@ -654,6 +699,34 @@ object MoistureMarch {
             landRainChanges, lapMillis, endState
         )
     }
+
+    /**
+     * A device that took a run and failed partway through it ([MoistureDevice]): the water in flight
+     * was the device's, so the caller marches the whole run again on the processor.
+     */
+    internal class DeviceFailed(message: String) : RuntimeException(message)
+
+    /** [lap]'s budget as a device's caller reads it. */
+    private fun budgetOf(lap: MoistureLedger.Lap) = MoistureLapBudget(
+        lap.julyHalf, lap.lap, lap.storageAtStart, lap.storageAtEnd, lap.sources, lap.totalRain,
+        lap.worstCrossingImbalance, lap.negativeParcels, lap.tracerOutOfBounds, lap.nonFinite
+    )
+
+    /**
+     * The constants a device's kernels read ([MoistureDeviceRun.constants]), by name: the march's,
+     * the crossing's and the thermodynamics', each the figure the processor's code is written with.
+     */
+    internal fun deviceConstants(): Map<String, Double> = mapOf(
+        "SECONDS_PER_YEAR" to SECONDS_PER_YEAR,
+        "CLOUD_CONVERSION_SECONDS" to CLOUD_CONVERSION_SECONDS,
+        "FALLOUT_SECONDS" to FALLOUT_SECONDS,
+        "COLUMN_RAIN_PER_HUMIDITY" to COLUMN_RAIN_PER_HUMIDITY,
+        "COLUMN_RAIN_HUMIDITY_OFFSET" to COLUMN_RAIN_HUMIDITY_OFFSET,
+        "BOUNDARY_LAYER_MASS_KG_PER_M2" to ColumnWater.BOUNDARY_LAYER_MASS_KG_PER_M2,
+        "TRACER_SLACK" to TRACER_SLACK,
+        "CROSSING_WATER_FLOOR_MM" to CROSSING_WATER_FLOOR_MM,
+        "NEGATIVE_SLACK_MM" to NEGATIVE_SLACK_MM
+    ) + ColumnCrossing.deviceConstants() + ColumnWater.deviceConstants()
 
     /** The march's two layers, as [SeasonMarch.marchStage] numbers them. */
     private const val LAYERS = 2
@@ -1023,6 +1096,11 @@ object MoistureMarch {
         private var windAt2mMps: FloatArray? = season.windAt2mMps
         private var extraterrestrialOfRow: DoubleArray = season.extraterrestrialOfRow
 
+        // What a device's reseason compares the next season's air with, to upload the fields the air
+        // sets only when it has moved ([reseasonForDevice]).
+        private var seaIce: BooleanArray = season.seaIce
+        private var inversionSuppression: FloatArray? = season.inversionSuppression
+
         val surface = ByteArray(cellCount)
 
         /** The whole saturated column over the ground, millimeters: the ledger's humidity reads it. */
@@ -1156,6 +1234,157 @@ object MoistureMarch {
             }
         }
 
+        /**
+         * [reseason] for a march whose laps a device marches: the fields the wind sets are built
+         * again, those the air sets only where [next]'s air, sea, ice or inversion differ from this
+         * season's, and the potential's terms are left for [finishPotentialTerms] to build while the
+         * device marches. Returns whether the air's fields moved, which the device uploads again.
+         *
+         * The parcels in flight are the device's and are not banked as [reseason] banks them: the
+         * sweeps are held through the run, so a parcel arriving at a sweep's first column was sent
+         * there by a cell of its own sweep and is never one that turned.
+         */
+        fun reseasonForDevice(next: Season): Boolean {
+            val airMoved = !sameField(next.airTemperatureC, airTemperatureC) || !sameField(next.seaSurfaceC, seaSurfaceC) ||
+                !(next.seaIce === seaIce || next.seaIce.contentEquals(seaIce)) ||
+                !sameInversion(next.inversionSuppression, inversionSuppression)
+            airTemperatureC = next.airTemperatureC
+            seaSurfaceC = next.seaSurfaceC
+            seaIce = next.seaIce
+            inversionSuppression = next.inversionSuppression
+            windAt2mMps = next.windAt2mMps
+            extraterrestrialOfRow = next.extraterrestrialOfRow
+            if (airMoved) precomputeAir(next)
+            precomputeWind(next)
+            potentialTermsPending = true
+            return airMoved
+        }
+
+        private fun sameField(next: FloatArray, last: FloatArray) = next === last || next.contentEquals(last)
+
+        private fun sameInversion(next: FloatArray?, last: FloatArray?) =
+            if (next == null || last == null) next === last else sameField(next, last)
+
+        /** Whether [reseasonForDevice] has left the potential's terms to build. */
+        private var potentialTermsPending = false
+
+        /** Builds the potential's terms [reseasonForDevice] left, if it left them. */
+        fun finishPotentialTerms() {
+            if (!potentialTermsPending) return
+            precomputePotentialTerms()
+            potentialTermsPending = false
+        }
+
+        /**
+         * This season as a device reads it ([MoistureDeviceSeason]): the march's own arrays, and the
+         * descent's yields kept for the run from here on. With [measuring], each layer's per-cell
+         * budget, which the device fills every lap and [takeDeviceBudget] reads.
+         */
+        fun deviceSeason(measuring: Boolean): MoistureDeviceSeason {
+            if (descentYield == null) descentYield = DoubleArray(cellCount).also { fillDescentYields(it, airTemperatureC) }
+            return MoistureDeviceSeason(
+                surface, boundary.deviceLayer(measuring), free.deviceLayer(measuring), boundary.turnSlot, boundary.turnCells,
+                boundaryCapMm, groundPressureKpa, layerDepthM, { airTemperatureC }, seaSurfaceHumidity, suppression,
+                ::fillCrossingTerms,
+                seaTransferMassFlux, liftMps, descentRate, groundReturnRate,
+                toFree, toFreeLand, toBoundary, toBoundaryLand, replacedPerSecond,
+                boundary.bankCloud, boundary.bankCloudLand, boundary.bankFalling, boundary.bankFallingLand,
+                rainMm, landRainMm, condensationMm, humidity, sourceMm, freeRainMm, freeLandRainMm
+            )
+        }
+
+        /** The per-cell terms the crossings read in doubles, as the boundary layer's and the free troposphere's crossings compute them. */
+        private fun fillCrossingTerms(terms: FreeTroposphereTerms) {
+            parallelChunks(0, cellsAcross) { startColumn, endColumn ->
+                for (column in startColumn until endColumn) {
+                    for (row in 0 until cellsDown) {
+                        val cell = row * cellsAcross + column
+                        val here = index(row, column)
+                        val seaLevelC = seaLevelTemperatureC(here)
+                        val freeSaturated = ColumnWater.referenceFreeSaturatedMm(seaLevelC)
+                        terms.exchangePerSecond[here] = exchangePerSecondAt(here, cell)
+                        terms.lawSaturatedMm[here] = ColumnWater.saturatedColumnMm(seaLevelC)
+                        terms.lawOffsetMm[here] = lawOffsetMm(seaLevelC)
+                        terms.freeSaturatedMm[here] = freeSaturated
+                        terms.baseShare[here] = freeBaseShare(here, cell, freeSaturated)
+                    }
+                }
+            }
+        }
+
+        /**
+         * The share of the free troposphere's saturated column [freeSaturated] its lowest air holds at
+         * [here] (column-major, [cell] row-major): the saturation humidity of the boundary layer's top
+         * over this ground, at the environment's temperature there, in the layer's mass.
+         */
+        private fun freeBaseShare(here: Int, cell: Int, freeSaturated: Double): Double {
+            // The free troposphere's lowest air is the air at the boundary layer's top over this
+            // ground, at the environment's temperature there: over high ground colder and thinner
+            // than the air that stood over the lowlands' boundary layer.
+            val topPressure = (groundPressureKpa[here] - ColumnWater.BOUNDARY_LAYER_DEPTH_KPA).coerceAtLeast(MIN_TOP_PRESSURE_KPA)
+            val topC = airTemperatureC[cell] - config.climate.lapseRateCPerKm * layerDepthM[here] / METERS_PER_KM
+            return if (freeSaturated > 0.0) {
+                ColumnWater.saturationSpecificHumidity(topC, topPressure) * ColumnWater.BOUNDARY_LAYER_MASS_KG_PER_M2 / freeSaturated
+            } else 0.0
+        }
+
+        /**
+         * Fills this season's part of [entry] and its per-cell record from the lap a measuring
+         * device marched: each layer's sources, rain and condensation by surface, its worst crossing
+         * and its guards, as the processor's crossings charge them.
+         */
+        fun takeDeviceBudget(entry: MoistureLedger.Lap?) {
+            if (entry == null) return
+            val boundaryPart = MoistureLedger.Lap(entry.julyHalf, entry.lap)
+            val freePart = MoistureLedger.Lap(entry.julyHalf, entry.lap)
+            val boundaryCells = checkNotNull(boundary.deviceBudget) { "the device was not measuring" }
+            val freeCells = checkNotNull(free.deviceBudget) { "the device was not measuring" }
+            val record = cells
+            for (column in 0 until cellsAcross) {
+                for (row in 0 until cellsDown) {
+                    val here = index(row, column)
+                    val cell = row * cellsAcross + column
+                    val kind = surface[here]
+                    val surfaceIndex = kind.toInt()
+                    if (kind == OPEN_SEA) boundaryPart.seaEvaporation += boundaryCells.added[here]
+                    if (kind == LAND) boundaryPart.groundReturn += boundaryCells.added[here]
+                    boundaryPart.rain[MoistureLedger.Sink.CONDENSATE.ordinal][surfaceIndex] += boundaryCells.rain[here]
+                    boundaryPart.landOriginRain += boundaryCells.landRain[here]
+                    boundaryPart.condensed += boundaryCells.condensed[here]
+                    boundaryPart.reevaporated += boundaryCells.reevaporated[here]
+                    chargeGuards(boundaryPart, boundaryCells, here)
+                    freePart.rain[MoistureLedger.Sink.COLUMN.ordinal][surfaceIndex] += freeCells.rain[here]
+                    freePart.landOriginRain += freeCells.landRain[here]
+                    freePart.condensed += freeCells.condensed[here]
+                    chargeGuards(freePart, freeCells, here)
+                    if (record != null) {
+                        val rate = SECONDS_PER_YEAR / grid.secondsPerColumn[row]
+                        val water = boundaryCells.waterMm[here]
+                        record.boundaryLayerWater.data[cell] = water
+                        record.freeWater.data[cell] = freeCells.waterMm[here]
+                        record.saturatedColumn.data[cell] = saturatedMm[here]
+                        record.boundaryLayerHumidity.data[cell] = humidity[here]
+                        record.boundaryLayerSpecificHumidity.data[cell] = (water / ColumnWater.BOUNDARY_LAYER_MASS_KG_PER_M2).toFloat()
+                        if (kind == LAND) record.groundReturn.data[cell] = (boundaryCells.added[here] * rate).toFloat()
+                        if (kind == OPEN_SEA) record.seaEvaporation.data[cell] = (boundaryCells.added[here] * rate).toFloat()
+                        record.condensateRain.data[cell] = (boundaryCells.rain[here] * rate).toFloat()
+                        record.columnRain.data[cell] = (freeCells.rain[here] * rate).toFloat()
+                    }
+                }
+            }
+            boundaryEntry = boundaryPart
+            freeEntry = freePart
+        }
+
+        /** Adds the crossing at [here]'s guards and closure from a device's [cells] to [part]. */
+        private fun chargeGuards(part: MoistureLedger.Lap, cells: MoistureDeviceCellBudget, here: Int) {
+            val flags = cells.flags[here]
+            if (flags and MoistureDeviceCellBudget.NEGATIVE != 0) part.negativeParcels++
+            if (flags and MoistureDeviceCellBudget.TRACER != 0) part.tracerOutOfBounds++
+            if (flags and MoistureDeviceCellBudget.NON_FINITE != 0) part.nonFinite++
+            if (cells.imbalance[here] > part.worstCrossingImbalance) part.worstCrossingImbalance = cells.imbalance[here]
+        }
+
         /** The land's FAO-56 terms from this season's air and wind, built once per season. */
         private fun precomputePotentialTerms() {
             parallelChunks(0, cellsDown) { startRow, endRow ->
@@ -1183,11 +1412,38 @@ object MoistureMarch {
             windAt2mMps?.let { it[cell].toDouble() } ?: SurfaceEvaporation.LAND_WIND_AT_2_M_MPS
 
         private fun precompute(season: Season) {
-            val climate = config.climate
-            val referenceMassFlux = transferMassFlux(TRANSPORT_SPEED_MPS)
-            val lapseRateCPerKm = climate.lapseRateCPerKm.toDouble()
-            boundary.precomputeTransport(season.eastwardMps, season.southwardMps)
-            free.precomputeTransport(season.freeEastward, season.freeSouthward)
+            precomputeAir(season)
+            precomputeWind(season)
+        }
+
+        /** The ground's pressure at [cell] (row-major) under air standing at [airC], kilopascals, unrounded. */
+        private fun groundPressureOf(airC: FloatArray, cell: Int): Double =
+            ColumnWater.surfacePressureKpa(
+                inputs.elevationM[cell].toDouble(), airC[cell].toDouble(), config.climate.lapseRateCPerKm.toDouble()
+            )
+
+        /**
+         * The saturated layer's lift yield at every land cell under the air [airC] (row-major), the
+         * descent's rate per meter of it, column-major: a device's march keeps it for the run, since
+         * the air does not move between laps, where the processor's takes it every lap.
+         */
+        private var descentYield: DoubleArray? = null
+
+        private fun fillDescentYields(yields: DoubleArray, airC: FloatArray) {
+            parallelChunks(0, cellsAcross) { startColumn, endColumn ->
+                for (column in startColumn until endColumn) {
+                    for (row in 0 until cellsDown) {
+                        val cell = row * cellsAcross + column
+                        yields[index(row, column)] = if (inputs.isLand[cell]) {
+                            ColumnWater.saturatedLiftYield(airC[cell].toDouble(), groundPressureOf(airC, cell))
+                        } else 0.0
+                    }
+                }
+            }
+        }
+
+        /** The fields [season]'s air, sea and ice set, which a coupled lap's atmosphere does not move. */
+        private fun precomputeAir(season: Season) {
             parallelChunks(0, cellsAcross) { startColumn, endColumn ->
                 for (column in startColumn until endColumn) {
                     for (row in 0 until cellsDown) {
@@ -1199,20 +1455,39 @@ object MoistureMarch {
                             else -> OPEN_SEA
                         }
                         val airC = season.airTemperatureC[cell].toDouble()
-                        val groundPressure = ColumnWater.surfacePressureKpa(inputs.elevationM[cell].toDouble(), airC, lapseRateCPerKm)
+                        val groundPressure = groundPressureOf(season.airTemperatureC, cell)
                         groundPressureKpa[here] = groundPressure.toFloat()
                         layerDepthM[here] = ColumnWater.boundaryLayerDepthM(airC, groundPressure).toFloat()
                         saturatedMm[here] = ColumnWater.saturatedColumnMm(airC, groundPressure).toFloat()
                         val surfaceSaturation = ColumnWater.saturationSpecificHumidity(airC, groundPressure)
                         boundaryCapMm[here] = (surfaceSaturation * ColumnWater.BOUNDARY_LAYER_MASS_KG_PER_M2).toFloat()
-                        if (surface[here] == OPEN_SEA) {
-                            seaSurfaceHumidity[here] = SurfaceEvaporation.seaSurfaceHumidity(season.seaSurfaceC[cell].toDouble()).toFloat()
-                            seaTransferMassFlux[here] = (season.scalarWindAt10mMps?.let { transferMassFlux(it[cell].toDouble()) } ?: referenceMassFlux).toFloat()
-                        } else {
-                            seaSurfaceHumidity[here] = 0f
-                            seaTransferMassFlux[here] = 0f
-                        }
+                        seaSurfaceHumidity[here] = if (surface[here] == OPEN_SEA) {
+                            SurfaceEvaporation.seaSurfaceHumidity(season.seaSurfaceC[cell].toDouble()).toFloat()
+                        } else 0f
                         suppression[here] = (if (inputs.isLand[cell]) lidFactor(cell, season.inversionSuppression) else 1.0).toFloat()
+                    }
+                }
+            }
+            descentYield?.let { fillDescentYields(it, season.airTemperatureC) }
+        }
+
+        /**
+         * The fields [season]'s winds set, every lap: each layer's transport, the sea's transfer and
+         * the ground's climb and descent. [precomputeAir] has set the surfaces first.
+         */
+        private fun precomputeWind(season: Season) {
+            val referenceMassFlux = transferMassFlux(TRANSPORT_SPEED_MPS)
+            boundary.precomputeTransport(season.eastwardMps, season.southwardMps)
+            free.precomputeTransport(season.freeEastward, season.freeSouthward)
+            val yields = descentYield
+            parallelChunks(0, cellsAcross) { startColumn, endColumn ->
+                for (column in startColumn until endColumn) {
+                    for (row in 0 until cellsDown) {
+                        val cell = row * cellsAcross + column
+                        val here = index(row, column)
+                        seaTransferMassFlux[here] = if (surface[here] == OPEN_SEA) {
+                            (season.scalarWindAt10mMps?.let { transferMassFlux(it[cell].toDouble()) } ?: referenceMassFlux).toFloat()
+                        } else 0f
                         // The climb up the ground the terrain is read on, along the boundary layer's
                         // wind, by centered differences on the ground's own lengths.
                         var climb = 0.0
@@ -1230,7 +1505,12 @@ object MoistureMarch {
                         }
                         liftMps[here] = climb.coerceAtLeast(0.0).toFloat()
                         if (climb < 0.0) {
-                            descentRate[here] = (-climb * ColumnWater.saturatedLiftYield(airC, groundPressure)).toFloat()
+                            // The saturated yield is the air's and the ground's, kept for the run on
+                            // a device's march and taken afresh here on the processor's: the same bits.
+                            val yieldPerMeter = if (yields != null) yields[here] else {
+                                ColumnWater.saturatedLiftYield(season.airTemperatureC[cell].toDouble(), groundPressureOf(season.airTemperatureC, cell))
+                            }
+                            descentRate[here] = (-climb * yieldPerMeter).toFloat()
                         } else {
                             descentRate[here] = 0f
                         }
@@ -1484,8 +1764,8 @@ object MoistureMarch {
              * hundredths of the map's: banks for every cell would hold 67 MB a half-year at 1,024
              * rows, most of it zero. The free troposphere carries no condensate and banks none.
              */
-            private val turnSlot = IntArray(cellCount) { -1 }
-            private val turnCells: Int = run {
+            val turnSlot = IntArray(cellCount) { -1 }
+            val turnCells: Int = run {
                 var count = 0
                 if (isBoundary) {
                     for (column in 0 until cellsAcross) {
@@ -1512,8 +1792,8 @@ object MoistureMarch {
              * the map's with the sweeps held; kept for every cell the arrays below would hold 84 MB a
              * half-year over the two layers at 1,024 rows, most of it never read.
              */
-            private val sentSlot = IntArray(cellCount) { -1 }
-            private val sentSlots: Int = run {
+            val sentSlot = IntArray(cellCount) { -1 }
+            val sentSlots: Int = run {
                 var count = 0
                 for (here in 0 until cellCount) {
                     if (direction[here] <= 0) continue
@@ -1565,6 +1845,19 @@ object MoistureMarch {
 
             /** The boundary layer's lift yield, filled per cell. */
             private val yield = DoubleArray(2)
+
+            /** What a measuring device's crossings of this layer did in the last lap ([deviceLayer]). */
+            var deviceBudget: MoistureDeviceCellBudget? = null
+
+            /** This layer as a device reads it, its per-cell budget with it when [measuring]. */
+            fun deviceLayer(measuring: Boolean): MoistureDeviceLayer {
+                if (measuring && deviceBudget == null) deviceBudget = MoistureDeviceCellBudget(cellCount)
+                return MoistureDeviceLayer(
+                    isBoundary, direction, sentSlot, sentSlots, stretch, faceShare,
+                    eastParcel.deviceParcels(), westParcel.deviceParcels(), bank, bankLand, bankAir,
+                    if (measuring) deviceBudget else null
+                )
+            }
 
             /** Its stretch and faces from the layer's wind, [eastwardMps] and [southwardMps], row-major. */
             fun precomputeTransport(eastwardMps: FloatArray, southwardMps: FloatArray) {
@@ -2128,14 +2421,7 @@ object MoistureMarch {
                 val seaLevelC = seaLevelTemperatureC(here)
                 val saturatedFromSea = ColumnWater.saturatedColumnMm(seaLevelC)
                 val freeSaturated = ColumnWater.referenceFreeSaturatedMm(seaLevelC)
-                // The free troposphere's lowest air is the air at the boundary layer's top over this
-                // ground, at the environment's temperature there: over high ground colder and thinner
-                // than the air that stood over the lowlands' boundary layer.
-                val topPressure = (groundPressureKpa[here] - ColumnWater.BOUNDARY_LAYER_DEPTH_KPA).coerceAtLeast(MIN_TOP_PRESSURE_KPA)
-                val topC = airTemperatureC[cell] - config.climate.lapseRateCPerKm * layerDepthM[here] / METERS_PER_KM
-                val baseShare = if (freeSaturated > 0.0) {
-                    ColumnWater.saturationSpecificHumidity(topC, topPressure) * ColumnWater.BOUNDARY_LAYER_MASS_KG_PER_M2 / freeSaturated
-                } else 0.0
+                val baseShare = freeBaseShare(here, cell, freeSaturated)
                 // What the boundary layer sent up, this lap's if it has marched the cell already and
                 // last lap's if not, and spent as it is read.
                 val inboxAmount = toFree[here]
@@ -2234,6 +2520,9 @@ object MoistureMarch {
 
         fun total(): Double = vapor.sum() + cloud.sum() + falling.sum()
         fun totalLand(): Double = vaporLand.sum() + cloudLand.sum() + fallingLand.sum()
+
+        /** These parcels as a device reads and writes them: the same arrays. */
+        fun deviceParcels() = MoistureDeviceParcels(vapor, vaporLand, cloud, cloudLand, falling, fallingLand, air)
     }
 
     /** The least pressure a boundary layer's top is read at, kilopascals: under any ground the plates raise. */

@@ -623,4 +623,25 @@ internal object ColumnWater {
 
     /** `c_p / R_d`, the dry adiabat's power between pressure and temperature. */
     private const val DRY_POWER = DRY_AIR_HEAT_CAPACITY_J_PER_KG_K / DRY_AIR_GAS_CONSTANT_J_PER_KG_K
+
+    /**
+     * The constants [boundaryLayerLiftYield] is written with, by the names a device's kernels read
+     * them by ([MoistureDeviceRun.constants]).
+     */
+    internal fun deviceConstants(): Map<String, Double> = mapOf(
+        "KELVIN_AT_ZERO_C" to KELVIN_AT_ZERO_C,
+        "TETENS_KPA" to TETENS_KPA,
+        "TETENS_SLOPE" to TETENS_SLOPE,
+        "TETENS_OFFSET_C" to TETENS_OFFSET_C,
+        "MOLAR_MASS_RATIO" to MOLAR_MASS_RATIO,
+        "LATENT_HEAT_J_PER_KG" to LATENT_HEAT_J_PER_KG,
+        "WATER_VAPOR_GAS_CONSTANT_J_PER_KG_K" to WATER_VAPOR_GAS_CONSTANT_J_PER_KG_K,
+        "DRY_AIR_GAS_CONSTANT_J_PER_KG_K" to DRY_AIR_GAS_CONSTANT_J_PER_KG_K,
+        "DRY_AIR_HEAT_CAPACITY_J_PER_KG_K" to DRY_AIR_HEAT_CAPACITY_J_PER_KG_K,
+        "STANDARD_GRAVITY_MPS2" to STANDARD_GRAVITY_MPS2,
+        "DRY_LAPSE_K_PER_M" to DRY_LAPSE_K_PER_M,
+        "DRY_POWER" to DRY_POWER,
+        "PASCALS_PER_KPA" to PASCALS_PER_KPA,
+        "CONDENSATION_LEVEL_NEWTON_STEPS" to CONDENSATION_LEVEL_NEWTON_STEPS.toDouble()
+    )
 }

@@ -238,6 +238,8 @@ tasks.register<Test>("deepTest") {
         isFailOnNoMatchingTests = !(rootProject.extra["deepStagesLimited"] as Boolean)
     }
     withPerMergeBudget()
+    // The deep tier's own heap (see the root build script).
+    maxHeapSize = rootProject.extra["desktopDeepTestHeap"] as String
 }
 
 tasks.register<Test>("audit") {

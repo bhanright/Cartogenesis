@@ -59,6 +59,17 @@ extra["worldgenTestHeap"] = "3584m"
 extra["desktopTestProcessors"] = if (machineIsShared) hardwareThreads * 3 / 8 else hardwareThreads
 extra["desktopTestHeap"] = "3g"
 extra["cartographyTestHeap"] = "2g"
+
+/*
+ * The deep tiers' share, set apart from the per-merge tier's since W2e's two-layer climate: a
+ * 1,024-row climate holds about 1.7 GB live, and a deep worker that has already run other classes
+ * keeps their worlds beside it, so 3.5 GB workers ran out of heap on classes that pass alone. One
+ * worker fewer at 5 GB each keeps the deep tier inside the same memory as four at 3.5 GB plus
+ * room; `:desktop`'s one deep worker takes 4 GB, where its whole deep tier passes.
+ */
+extra["worldgenDeepTestForks"] = (worldgenTestForks - 1).coerceAtLeast(1)
+extra["worldgenDeepTestHeap"] = "5g"
+extra["desktopDeepTestHeap"] = "4g"
 extra["lightTestProcessors"] = if (machineIsShared) (hardwareThreads / 16).coerceAtLeast(1) else hardwareThreads
 
 /*

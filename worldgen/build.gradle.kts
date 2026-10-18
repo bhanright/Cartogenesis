@@ -364,6 +364,9 @@ tasks.register<Test>("deepTest") {
         isFailOnNoMatchingTests = !(rootProject.extra["deepStagesLimited"] as Boolean)
     }
     withPerMergeBudget()
+    // The deep tier's own share (see the root build script): fewer, larger workers.
+    maxParallelForks = rootProject.extra["worldgenDeepTestForks"] as Int
+    maxHeapSize = rootProject.extra["worldgenDeepTestHeap"] as String
 }
 
 tasks.register<Test>("audit") {

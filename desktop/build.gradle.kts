@@ -177,6 +177,12 @@ val deepClassesByStage: Map<String, List<String>> = mapOf(
     "ocean" to listOf(
         "com.cartogenesis.desktop.GpuOceanTest"
     ),
+    "climate" to listOf(
+        // The moisture march on the card against the processor's at the application's 1,024 rows:
+        // a climate there holds 1.6 to 1.7 GB live beside its world, which the per-merge worker's
+        // 3 GB does not hold with the card's ledger. Its 512-row clauses run on every merge.
+        "com.cartogenesis.desktop.GpuMoistureTest.at the application's grid the card's rain is the processor's and its budget closes"
+    ),
     "rivers" to listOf(
         // Two seeds on the square 512, 1,024 and 2,048 grids.
         "com.cartogenesis.desktop.OutletResolutionTest"

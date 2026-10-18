@@ -10,6 +10,7 @@ import com.cartogenesis.cartography.WorldLibrary
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.ErosionAccelerator
 import com.cartogenesis.worldgen.pipeline.IceSheetAccelerator
+import com.cartogenesis.worldgen.pipeline.MoistureAccelerator
 import com.cartogenesis.worldgen.pipeline.OceanAccelerator
 
 /**
@@ -177,6 +178,17 @@ interface Platform {
      * switch is off.
      */
     val iceAccelerator: IceSheetAccelerator? get() = null
+
+    /**
+     * Where to march the climate's rain, every climate run's laps, or null to leave them on the
+     * processor.
+     *
+     * Behind the same switch as [accelerator]: the card's march rounds its per-cell arithmetic in
+     * single precision, so its rain is the processor's to within the coupled loop's own tolerance
+     * and not to the bit, and the rain moves the erosion that reads it. Offered whatever the switch
+     * says, as [iceAccelerator] is; the climate stage reads the switch where it would call the card.
+     */
+    val moistureAccelerator: MoistureAccelerator? get() = null
 
     val accelerationUnavailableBecause: String?
 

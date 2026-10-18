@@ -247,13 +247,23 @@
   46 laps that is 11.6 s of a climate run's 49.5. The per-cell parts, 186 ms of the 252
   (`BoundaryLayerCostTest`), are the graphics path's next candidates after the march's own, and the
   back-substitution's `ComplexBlockTridiagonal.solveBlock` is 34% of the atmosphere's samples.
-  2026-10-18, W2f.
+  2026-10-18, W2f. With the march on the card (W2g) the atmosphere is the larger part of a lap. The
+  back-substitution belongs on the card only in double precision, its pivots being refused below
+  1e-13 of a block's largest entry (`SINGULAR_SHARE`), which a single cannot hold; and in double
+  precision it is small work, each wave's system 150 blocks of 31 complex unknowns on Earth's grid,
+  under a gigaflop a lap over both halves' hundred waves, a few milliseconds at this card's double
+  rate (an estimate, not measured), bound by the 150 blocks' dependence rather than by the rate. It
+  pays only with its factors kept on the card for the run (about 700 MB) and the per-cell carrying
+  of the forcing and the response there too, so a lap's fields do not cross each way. 2026-10-18, W2g.
 - **The march's reseason recomputes what a lap does not change (W2f, measured, not fixed).** A lap's
   reseason builds each season's ground pressure, layer depth, saturated column, cap, sea humidity
   and suppression from the air temperature, the sea and the ground, which the atmosphere's lap does
   not move (only the winds do: the transport, the climb, the descent and the sea's transfer). The
   saving was not measured; the largest of the recomputed terms was the descent's lift yield, which
-  W2f tabulated (`ColumnWater.saturatedLiftYield`). 2026-10-18, W2f.
+  W2f tabulated (`ColumnWater.saturatedLiftYield`). 2026-10-18, W2f. The card's path does not
+  (`MoistureMarch`'s `reseasonForDevice`): it builds the air's fields again only where the next
+  season's air, sea, ice or inversion differ, and keeps the descent's yields for the run; the
+  processor's path is unchanged. 2026-10-18, W2g.
 - **`IceSheet.VIALOV_SHAPE` is read through a lazy delegate in the climate's hot loop (W2f,
   measured, not fixed).** The execution sampler puts 2% of the climate's samples (12% of those
   outside the march and the atmosphere) at the getter (`IceSheet.kt`, the table's `by lazy`
@@ -1656,17 +1666,31 @@
 - **The march's surface wind, its speed and its sun, all stand-ins (C1b).** The march carries water at the belts' 7.5 m/s east or west, with the belts' zonal speed constant up to their edges, so across an edge two air streams of different origin meet at full speed and the orographic term flips its windward side from one row to the next (the seasonal fields' pre-blur row steps of 4 to 6 at the edges). **The zonal wind closed at C1b2**: the belts' zonal wind is continuous through zero at each edge (`SurfaceBelts.zonalShare`) and the march carries water at each cell's own speed, so the reversal moves with the pressure field; what still draws rows is the entry "Fronts along the belts' factor". The land's potential evapotranspiration reads FAO-56's 2 m/s station mean for the wind at 2 m and Earth's land-mean transmissivity, 184.7 of 330.2 W/m² (Trenberth, Fasullo and Kiehl 2009), for the sun at the ground, so a desert's clear sky and a rainforest's cloud are the same. All three are the atmosphere's (the entry "Build the atmosphere"). 2026-10-08, C1b.
 - **The belts' factor's floor has no Earth source (C1b).** `ClimateStage.MIN_BAND`, a twentieth of the rain's lifetime under the subtropical high, was kept as it stood; C1a's design guessed it inside a Saharan column's turnover of 110 to 365 days against 8.9 and left the figures to be checked. Reached smoothly now. 2026-10-08, C1b.
 - **The ocean's wind stress still reads the belts' old meridional step (C1b).** `SurfaceBelts` gives the gyres the belts' slope as a constant across each belt, where the atmosphere's meridional wind is now a half sine, zero at every edge and at the equator. 2026-10-08, C1b.
-- **The rain on the graphics card (C1b; the next chunk, C1c).** `MoistureAccelerator` is the seam, unwired: one workgroup per run of rows and sweep, a barrier per column, the faces' fluxes and the eddy exchange through shared memory and the bank in a buffer, held to the processor's rain and to its own ledger's closure. The march costs about 4.7 s a climate run at 1,024 rows against main's 2.6, and the climate runs three times a generation. 2026-10-08, C1b. At C1b2 a column is one tridiagonal solve over every row of both sweeps that meets one being marched (the Thomas algorithm, sequential in the rows: a parallel cyclic reduction on the card), and the physics per row is independent; the march costs 6.0 to 7.4 s a climate run. 2026-10-09, C1b2. At W2f the lap is a schedule (`MarchSchedule`): a season's two layers are two queues, the free
-  troposphere's one stage (32 columns of a sweep) behind the boundary layer's, a barrier a column
-  inside a stage; the inboxes are four arrays a season, each written by one layer and emptied by
-  the other in the order the schedule gives; the row loop (`marchRows`: `boundaryCell` and
-  `freeCell`) is the kernel, each row reading its arrival, its cell's fields and the other layer's
-  inbox at the same cell and writing the next column's parcel, its cell's rain and condensation,
-  its own inbox cell and a sparse place for its sent parcel; the faces' tridiagonal solve is the
-  column's one serial part (88 ms of a lap in the boundary layer, 81 in the free
-  troposphere, measured with four pieces); the precompute, the ground's return and the potential are per-cell loops of their
-  own. The processor marches a column's rows in up to twelve pieces side by side, the form a
-  workgroup takes (docs/DESIGN_LEDGER.md, W2f). 2026-10-17, W2e; 2026-10-18, W2f.
+- **The rain on the graphics card (C1b; built at W2g).** `GpuMoisture` marches every climate run's
+  laps behind `MoistureAccelerator` and the acceleration switch, in mixed precision, held to the
+  processor's rain within twice the coupled loop's settling bar and to its closure on its own ledger
+  (`GpuMoistureTest`; docs/DESIGN_LEDGER.md, W2g). What is left of the entry is in the W2g entries
+  below. 2026-10-18, W2g.
+- **The card's lap waits on each column's slowest crossing (W2g, measured, not changed).** A step of
+  the card's lap is as long as its slowest row's crossing: at 1,024 rows on seed 42 the average
+  crossing evaluates its sinks 3.1 to 3.3 times in the boundary layer and 5.6 to 6.3 in the free
+  troposphere, as on the processor, but the worst crossing of a step evaluates them 73 times at the
+  median step and up to 100 (the long, calm crossings walked in up to 32 steps toward their
+  balance), and the crossings are about 200 of a lap's 330 to 360 ms on the card. Fewer
+  evaluations for those crossings would be a change to the crossing on both paths (a step rule
+  that reaches the balance in fewer steps), not a device's. 2026-10-18, W2g.
+- **The card's faces' solve and the wind's upload (W2g, measured, not changed).** Each step solves
+  each queue's column twice in single precision by parallel cyclic reduction, about 15 us each at
+  1,024 rows (60 ms a lap each), where a reduction of a few levels and the Thomas algorithm on
+  the subsystems it leaves would do a third of the work; and the wind's sixteen fields a lap (134
+  MB at 1,024 rows) cross to the card at about 1.2 GB/s through `glBufferSubData`, hidden behind the
+  lap by uploading a stage of columns ahead of the sweep, where building the transport, the sea's
+  transfer and the climb on the card from the four winds would carry half as much. 2026-10-18, W2g.
+- **The acceleration switch's sentence does not name the rain (W2g).** `Platform.acceleratedWork`
+  lists erosion, the currents, the ice sheet and the export raster, which run "many times faster"
+  on the card; the rain runs on it too since W2g, about two to three times faster a lap, which
+  "many times" would overstate. The sentence was left alone rather than made to claim it.
+  2026-10-18, W2g.
 - **The marine inversion, re-measured on a march that takes its rain out (C1b).** `MoistureBudget.INVERSION_MEASURED_EFFECT` records 0.2% from the old march, a reservoir whose rate the lid held down; on a march that takes the rain out of the column the lid may bite, and `MoistureBudgetTest` prints the new figure. 2026-10-08, C1b.
 - **The desert left the horse latitudes (C1b).** `GeographyAuditTest`'s band clause, asserted from Fix 3b, is a C1b known failure: pooled over the audit's worlds at 512 rows the desert's share of the 0 to 15 degree band's land is 2.95 times its share of all land, where Earth's is 0.27, and seed 42's 15 to 45 degree band holds 0.23 times it against Earth's 2.05. Measured causes, not fixed: in the warm half the belts' meridional wind converges from 10 to 25 degrees (the half sine peaks mid-belt, and the thermal equator stands at the tilt), so the subtropics take a monsoon's water in summer, and the orographic term rains it out of moist air on any climb; and the tropical continents' interiors are high dry plateaus some 900 km inland, which the march reaches with its water already rained out on the windward rise. The atmosphere's subsidence (the entry "Build the atmosphere") is what dries the horse latitudes on Earth, and the march has only the inversion's lid for it. `MeridionalWindTest`'s monsoon coast and `RainGeometryTest` print the figures. 2026-10-08, C1b. C1b2 restored the descent on every sink and measured the bands (the entry "The march's misses against Earth, after C1b2"). 2026-10-09, C1b2.
 - **The ice after C1b.** The march that closes its budget snows on the polar land the water the old march's cold cap dropped, and the ice grew: the ice-sheet biome covers 8.6 to 10.0% of the land's area on seeds 42, 969495 and 7 at 256, 512 and 1,024 rows alike (Earth 10.1; main 1.8 to 2.5); `SnowBalanceTest`'s share, a count of the grid's cells that weighs the polar land several times over, reads 24.4% on its four seeds at 256 rows and fails its bar of twice Earth's, where by area it reads 7.86% against the control's 17.48%, so on the sphere the control sits inside the bar too and the guard wants a control that fails it (or the bar re-derived) when it is moved to area; the sheets stand 7.0 to 7.8 km at their thickest against Earth's envelope (`IceSheetTest`); 6% of the cold dry interior is ice (`SnowBalanceTest`, against 2%); the ice adds 2.9 to 3.1% of the standing water as parallel grid-bearing bars (`GlaciationCombTest`, bar 2%); the sheets cut a trough's depth into 36 to 45% of seed 718106's flat frozen country (`GlaciationLatticeTest`, bar 15%); and the geometry census's ice surface, measurable now on seeds 7 and 1234 at 512 rows, holds a crease and a round rim on each and a round rim on 99. All are C1b known failures; the brief measured the ice and left it. The thickness and the lattice are the ice's own physics (`GlaciationStage`'s flow law and scour, set when the sheets were a few percent of the land), the share is the snow's, and which to move first is the ice chunk's to measure: the snow's resolution dependence first, since a law cannot depend on the cell. 2026-10-08, C1b. The thickness is Glen's law's at C1b2 (the entry "The ice after C1b2"). 2026-10-09, C1b2.

@@ -5,6 +5,7 @@ import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.ErosionAccelerator
 import com.cartogenesis.worldgen.pipeline.IceSheetAccelerator
+import com.cartogenesis.worldgen.pipeline.MoistureAccelerator
 import com.cartogenesis.worldgen.pipeline.OceanAccelerator
 import kotlinx.coroutines.runBlocking
 
@@ -26,8 +27,9 @@ fun WorldGenerationEngine.generateBlocking(
     accelerator: ErosionAccelerator? = null,
     oceanAccelerator: OceanAccelerator? = null,
     iceAccelerator: IceSheetAccelerator? = null,
+    moistureAccelerator: MoistureAccelerator? = null,
     capture: LayerCapture? = null,
     progress: GenerationProgress = GenerationProgress { _, _, _ -> }
 ): WorldMap = runBlocking {
-    generate(config, previous, accelerator, oceanAccelerator, iceAccelerator, capture, progress)
+    generate(config, previous, accelerator, oceanAccelerator, iceAccelerator, moistureAccelerator, capture, progress)
 }

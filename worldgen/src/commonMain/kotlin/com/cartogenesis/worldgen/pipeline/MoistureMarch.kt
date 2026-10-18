@@ -156,10 +156,16 @@ import kotlin.time.TimeSource
  * then the ones the return was set from, so the surface budget, rain equals the ground's return
  * plus the runoff, closes cell by cell.
  *
- * The march has no graphics path yet (docs/TODO.md, the moisture accelerator). Its per-cell work is
- * [ColumnCrossing]'s, which reads one cell and the layer's arriving water and nothing else, so each
- * column's rows are one wavefront for a device's kernel; the exchange between the layers reads only
- * the other layer's last lap at the same cell.
+ * # On a graphics card
+ *
+ * With a [MoistureAccelerator] that takes the run, each lap is marched on the device and every
+ * other part of the run stays here: the precompute, the ground's return, the year's rain and the
+ * atmosphere between laps ([MoistureDeviceRun]). The water in flight stays on the device from the
+ * first lap to the last. The device's order is [MarchSchedule]'s, a column of each layer at a time,
+ * so a device gives one answer for a world, held to this march's within the coupled loop's own
+ * tolerance and its ledger to this march's closure (docs/DESIGN_LEDGER.md, W2g). While the device
+ * marches, the processor builds the potential's terms of the air the lap runs under, which the lap
+ * does not read.
  */
 object MoistureMarch {
 

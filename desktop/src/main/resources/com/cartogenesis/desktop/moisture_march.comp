@@ -839,7 +839,7 @@ void main() {
 
 layout(local_size_x = WORKGROUP_ROWS) in;
 
-// The faces' system in reduction; a row's own values stay in its invocation.
+// The faces' system in reduction, a row's equation an entry of each array.
 #if MIXED
 shared float reducedLower[ROWS];
 shared float reducedDiagonal[ROWS];
@@ -1205,6 +1205,12 @@ void boundaryCell(int season, int column, int row, int sweep, int queue) {
     double cloudIn = cloud;
     double condensateLandIn = cloudLand + fallingLand;
     solveCrossing();
+#ifdef CONTROL_LEAK_SHARE
+    // The closure guard's control (GpuMoistureTest): a share of the condensate's rain lost.
+    double leaked = cCondensateRain * CONTROL_LEAK_SHARE;
+    cCondensateRain -= leaked;
+    cWaterOut -= leaked;
+#endif
     double mixedIn = mixedInRate * seconds;
     double added = cSourced - mixedIn - cWithheld;
 

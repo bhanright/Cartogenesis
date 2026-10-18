@@ -86,8 +86,10 @@ object ErosionStage {
         config: WorldGenConfig,
         height: FloatField,
         upliftRateMmPerYear: FloatField? = null,
-        accelerator: ErosionAccelerator? = null
-    ): ErosionResult = apply(config, height, upliftRateMmPerYear, accelerator, onRound = null)
+        accelerator: ErosionAccelerator? = null,
+        /** Where the hydraulic rounds' provisional weather marches its rain when the config asks for the card. */
+        moistureAccelerator: MoistureAccelerator? = null
+    ): ErosionResult = apply(config, height, upliftRateMmPerYear, accelerator, onRound = null, moistureAccelerator = moistureAccelerator)
 
     /**
      * @param upliftRateMmPerYear how fast the rock is still rising under each cell, which the
@@ -122,7 +124,9 @@ object ErosionStage {
          */
         shieldCut: Boolean = true,
         /** See `HydraulicErosion.incise`: every cell the incision reached, for its guards. */
-        incisionWatch: IncisionWatch? = null
+        incisionWatch: IncisionWatch? = null,
+        /** See the public [apply]. */
+        moistureAccelerator: MoistureAccelerator? = null
     ): ErosionResult {
         if (!config.erosion.enabled) return ErosionResult(height)
 
@@ -142,7 +146,7 @@ object ErosionStage {
         return ErosionResult(
             HydraulicErosion.apply(
                 config, weathered.height, config.seaLevel, upliftRateMmPerYear, onRound, log,
-                receiverClamp, weightSums, shieldCut, incisionWatch
+                receiverClamp, weightSums, shieldCut, incisionWatch, moistureAccelerator
             ) { field ->
                 thermalErosion(config, field, accelerator, sweepsPerRound).height
             },

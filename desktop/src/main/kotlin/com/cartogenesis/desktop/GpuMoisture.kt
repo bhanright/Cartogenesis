@@ -18,21 +18,39 @@ import org.lwjgl.opengl.GL43C
  * Marches the climate's rain on the graphics card: each lap of `MoistureMarch`, both seasons and
  * both layers, with the water in flight kept on the card from a run's first lap to its last.
  *
- * The algorithm is the processor's, read line for line (`moisture_march.comp`): a lap is the
- * schedule's steps, each a column of each of the four queues (two seasons, two layers), one
- * dispatch solving each queue's column of faces in a workgroup and one crossing its rows side by
- * side. Its answer is not the processor's to the bit, for two reasons this class's [Precision]
- * chooses between; it is held to the processor's within the coupled loop's own settling tolerance
- * (`GpuMoistureTest`), and its water budget closes on its own ledger to the processor's bar.
+ * The algorithm is the processor's, read line for line (`moisture_march.comp`). A lap is the
+ * schedule's steps, each a column of each of the four queues (two seasons, two layers), and a step
+ * is five dispatches: the rows' arrivals and their rows of the faces' system, a row an invocation
+ * over the card; the faces' solve, a workgroup a queue, in single precision; its residual in double
+ * precision, a row an invocation; the solve of the residual; and the rows' crossings, a row an
+ * invocation, which add the double-precision residual of the solve's answer before they cross, so
+ * a column moves exactly the water its faces' fluxes say. Only the solve is one multiprocessor's,
+ * and it holds no doubles, whose rate on this kind of card is a sixty-fourth of the singles'.
+ *
+ * Its answer is not the processor's to the bit: the solve is a parallel cyclic reduction where the
+ * processor's is Thomas's, and the crossings' heavy arithmetic is single precision in the
+ * [Precision.MIXED] form the application uses. It is held to the processor's within the coupled
+ * loop's own settling tolerance (`GpuMoistureTest`), and its water budget closes on its own ledger
+ * to the processor's bar; at 1,024 rows its rain stands within a few parts in ten million of the
+ * processor's, its crossings close to the doubles' rounding (docs/DESIGN_LEDGER.md, W2g).
  *
  * Within a column the rows' order does not matter (each row reads its own arrival and writes its
  * own cells), and the columns are marched in the processor's order, so one world on one device
  * gives one climate, run after run.
+ *
+ * While a lap marches, the context's thread uploads the wind's fields a stage of columns ahead of
+ * the eastward sweep, so the card starts at once; the processor builds what the lap does not read
+ * (`MoistureMarch`) and is otherwise free.
  */
 class GpuMoisture private constructor(
     override val name: String,
     /** Which precision the per-cell arithmetic and the faces' solve run in. */
-    val precision: Precision
+    val precision: Precision,
+    /**
+     * The share of the condensate's rain each crossing loses, which only the closure guard's control
+     * sets (`GpuMoistureTest`); none in every march that makes a world.
+     */
+    private val leakShareForTheControl: Double = 0.0
 ) : MoistureAccelerator {
 
     /** The two forms the march was measured in (docs/DESIGN_LEDGER.md, W2g). */
@@ -63,13 +81,13 @@ class GpuMoisture private constructor(
     val lapDeviceMillis: MutableList<Double> = Collections.synchronizedList(ArrayList())
 
     /**
-     * Whether each lap times its three kernels apart ([kernelMillis]), by the card's timestamps
-     * between every dispatch: a report for the cost probes, which slows the lap a little.
+     * Whether each lap times its dispatches apart ([kernelMillis]), by the card's timestamps between
+     * every dispatch: a report for the cost probes, which slows the lap by about a fifth.
      */
     @Volatile
     var profilesKernels: Boolean = false
 
-    /** Each profiled lap's milliseconds in the arrivals, the faces' solve and the crossings, in that order. */
+    /** Each profiled lap's milliseconds in each of a step's dispatches, in the order a step makes them. */
     val kernelMillis: MutableList<DoubleArray> = Collections.synchronizedList(ArrayList())
 
     /** Forgets [budgets], [lapDeviceMillis] and [kernelMillis]. */
@@ -90,6 +108,7 @@ class GpuMoisture private constructor(
     private val programs = HashMap<ProgramKey, Programs>()
 
     private data class ProgramKey(val rows: Int, val columns: Int, val measuring: Boolean)
+
     /** A grid's kernels; the residual's only in the mixed form, which solves twice a step. */
     private class Programs(val arrivals: Int, val faces: Int, val residual: Int, val crossings: Int)
 
@@ -141,6 +160,7 @@ class GpuMoisture private constructor(
         header.append("#define STEP_WIDTH ${MoistureDeviceRun.STEP_WIDTH}\n")
         header.append("uniform double RAIN_SHADOW_SCALE;\n")
         header.append("const double SINGLE_BALANCE_TOLERANCE = ${literal(SINGLE_BALANCE_TOLERANCE)};\n")
+        if (leakShareForTheControl > 0.0) header.append("#define CONTROL_LEAK_SHARE ${literal(leakShareForTheControl)}\n")
         for ((name, value) in constants.toSortedMap()) header.append("const double $name = ${literal(value)};\n")
         return header.toString() + KERNEL_SOURCE
     }
@@ -742,10 +762,15 @@ class GpuMoisture private constructor(
          * Takes the shared offscreen context, reads the device's limits and compiles the kernels on a
          * small grid, or returns null with a reason if this machine cannot offer what they need.
          */
-        fun createOrNull(precision: Precision = Precision.MIXED): Result {
+        fun createOrNull(precision: Precision = Precision.MIXED): Result = create(precision, 0.0)
+
+        /** A march that loses [leakShare] of the condensate's rain at every crossing: the closure guard's control. */
+        internal fun createLeakingForTheControl(leakShare: Double): Result = create(Precision.MIXED, leakShare)
+
+        private fun create(precision: Precision, leakShare: Double): Result {
             val context = GlContext.ensure()
             val device = context.device ?: return Result(null, context.unavailableBecause ?: "unknown failure")
-            val march = GpuMoisture(device, precision)
+            val march = GpuMoisture(device, precision, leakShare)
             var failure: String? = "the moisture march's kernels would not compile"
             GlContext.run("Compiling the moisture march", timeoutSeconds = COMPILE_TIMEOUT_SECONDS) {
                 val blocks = GL43C.glGetInteger(GL43C.GL_MAX_COMPUTE_SHADER_STORAGE_BLOCKS)

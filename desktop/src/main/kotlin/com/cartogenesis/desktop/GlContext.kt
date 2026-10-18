@@ -2,6 +2,7 @@ package com.cartogenesis.desktop
 
 import java.util.concurrent.Callable
 import java.util.concurrent.Executors
+import java.util.concurrent.Future
 import java.util.concurrent.TimeUnit
 import org.lwjgl.glfw.GLFW
 import org.lwjgl.opengl.GL
@@ -79,6 +80,31 @@ internal object GlContext {
             System.err.println(
                 "$what failed on the GPU, falling back to the CPU: ${failure.message}"
             )
+            null
+        }
+
+    /**
+     * Queues [body] on the context's thread and returns at once, so the caller can work while the
+     * card does; the future holds [body]'s answer, or null if it failed, as [run]'s does.
+     */
+    fun <T> submit(what: String, body: () -> T?): Future<T?> =
+        worker.submit(
+            Callable {
+                try {
+                    body()
+                } catch (failure: Exception) {
+                    System.err.println("$what failed on the GPU: ${failure.message}")
+                    null
+                }
+            }
+        )
+
+    /** Waits for [pending] as [run] waits for its work, or null if it failed or timed out. */
+    fun <T> await(what: String, pending: Future<T?>, timeoutSeconds: Long = WORK_TIMEOUT_SECONDS): T? =
+        try {
+            pending.get(timeoutSeconds, TimeUnit.SECONDS)
+        } catch (failure: Exception) {
+            System.err.println("$what failed on the GPU: ${failure.message}")
             null
         }
 

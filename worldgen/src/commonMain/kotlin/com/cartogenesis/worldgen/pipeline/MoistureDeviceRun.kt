@@ -63,14 +63,17 @@ class MoistureDeviceRun internal constructor(
         return if (inside) intArrayOf(column, sweep) else intArrayOf(-1, 0)
     }
 
-    /**
-     * The constants the device's per-cell arithmetic reads, by the names its kernels use: the same
-     * figures the processor's march, crossing and thermodynamics are written with, so a kernel
-     * holds no number of its own but its precision's.
-     */
-    val constants: Map<String, Double> = MoistureMarch.deviceConstants()
+    /** [CONSTANTS], which every run hands its device. */
+    val constants: Map<String, Double> get() = CONSTANTS
 
     companion object {
+        /**
+         * The constants the device's per-cell arithmetic reads, by the names its kernels use: the
+         * same figures the processor's march, crossing and thermodynamics are written with, so a
+         * kernel holds no number of its own but its precision's.
+         */
+        val CONSTANTS: Map<String, Double> by lazy { MoistureMarch.deviceConstants() }
+
         /** Entries a step of [steps] holds. */
         const val STEP_WIDTH = 4
 

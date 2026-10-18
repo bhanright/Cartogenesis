@@ -1686,6 +1686,7 @@
   MB at 1,024 rows) cross to the card at about 1.2 GB/s through `glBufferSubData`, hidden behind the
   lap by uploading a stage of columns ahead of the sweep, where building the transport, the sea's
   transfer and the climb on the card from the four winds would carry half as much. 2026-10-18, W2g.
+- **`EarthSizeGeometryReport` is at the edge of the cartography deep worker's heap (W2g).** In `:cartography:deepTest -Pstages=climate` it ran out of its 2 GB heap behind the tier's other three classes, on a tree whose processor path is W2f's to the bit; alone it passes in 11 min 33 s, as at W2f. Its worker's heap, or its order, wants a look before the next chunk that moves the climate. 2026-10-18, W2g.
 - **The acceleration switch's sentence does not name the rain (W2g).** `Platform.acceleratedWork`
   lists erosion, the currents, the ice sheet and the export raster, which run "many times faster"
   on the card; the rain runs on it too since W2g, about two to three times faster a lap, which

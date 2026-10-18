@@ -781,10 +781,9 @@ class GpuMoisture private constructor(
                 maxStorageBlockBytes = GL43C.glGetInteger64(GL43C.GL_MAX_SHADER_STORAGE_BLOCK_SIZE)
                 maxWorkgroupInvocations = GL43C.glGetInteger(GL43C.GL_MAX_COMPUTE_WORK_GROUP_INVOCATIONS)
                 sharedMemoryBytes = GL43C.glGetInteger(GL43C.GL_MAX_COMPUTE_SHARED_MEMORY_SIZE).toLong()
-                // A small grid's kernels, both forms of the ledger, to know the device compiles them
-                // before a world asks.
+                // A small grid's kernels, to know the device compiles them before a world asks; the
+                // measuring ledger's are the tests' and are compiled when one first asks.
                 march.programsFor(PROBE_ROWS, 2 * PROBE_ROWS, false, MoistureDeviceRun.CONSTANTS)
-                march.programsFor(PROBE_ROWS, 2 * PROBE_ROWS, true, MoistureDeviceRun.CONSTANTS)
                 failure = null
             }
             return if (failure == null) Result(march, null) else Result(null, failure)

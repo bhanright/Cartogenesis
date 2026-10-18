@@ -51,7 +51,7 @@ class GlacialBasinShapeTest : BorrowsSharedWorlds() {
         }
         // Recorded at K2: on the Earth-sized planet the ice leaves ground level to a meter over
         // more than Salar de Uyuni's area (docs/DESIGN_LEDGER.md, K2; docs/TODO.md).
-        KnownFailures.expect("K2: the ice leaves dead-level slabs over the bar on the Earth-sized planet", "seed 42: 30 cells of land at one height at (568,1651), against 27 allowed; seed 718106: 37 cells of land at one height at (155,1760), against 27 allowed; seed 364673: 47 cells of land at one height at (550,469), against 27 allowed") {
+        KnownFailures.expect("K2: the ice leaves dead-level slabs over the bar on the Earth-sized planet", "seed 42: 31 cells of land at one height at (515,1753), against 27 allowed; seed 718106: 36 cells of land at one height at (155,1760), against 27 allowed; seed 364673: 47 cells of land at one height at (550,469), against 27 allowed") {
             if (failures.isNotEmpty()) {
                 throw RecordedViolation(
                     "the ice left a plate of ground at one height:\n" + failures.joinToString("\n"),

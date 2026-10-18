@@ -8,6 +8,7 @@ import com.cartogenesis.worldgen.pipeline.MoistureDeviceSeason
 import com.cartogenesis.worldgen.pipeline.MoistureLapBudget
 import java.util.Collections
 import java.util.concurrent.Future
+import org.lwjgl.BufferUtils
 import org.lwjgl.opengl.GL15C
 import org.lwjgl.opengl.GL33C
 import org.lwjgl.opengl.GL40C
@@ -61,17 +62,36 @@ class GpuMoisture private constructor(
     /** Each lap's time on the card itself, milliseconds, by the card's own timer: a report for the cost probes. */
     val lapDeviceMillis: MutableList<Double> = Collections.synchronizedList(ArrayList())
 
-    /** Forgets [budgets] and [lapDeviceMillis]. */
+    /**
+     * Whether each lap times its three kernels apart ([kernelMillis]), by the card's timestamps
+     * between every dispatch: a report for the cost probes, which slows the lap a little.
+     */
+    @Volatile
+    var profilesKernels: Boolean = false
+
+    /** Each profiled lap's milliseconds in the arrivals, the faces' solve and the crossings, in that order. */
+    val kernelMillis: MutableList<DoubleArray> = Collections.synchronizedList(ArrayList())
+
+    /** Forgets [budgets], [lapDeviceMillis] and [kernelMillis]. */
     fun clearRecords() {
         budgets.clear()
         lapDeviceMillis.clear()
+        kernelMillis.clear()
     }
+
+    /**
+     * Bytes of the faces' solve's shared memory a row takes: the reduction's matrix and right-hand
+     * sides, six singles in the mixed form (three sides at once) and five doubles in the double form
+     * (two at once).
+     */
+    private val sharedBytesPerRow = if (precision == Precision.MIXED) 6 * Float.SIZE_BYTES else 5 * Double.SIZE_BYTES
 
     /** The compiled kernels for each grid this has marched, by [ProgramKey]. Touched on the context's thread only. */
     private val programs = HashMap<ProgramKey, Programs>()
 
     private data class ProgramKey(val rows: Int, val columns: Int, val measuring: Boolean)
-    private class Programs(val faces: Int, val crossings: Int)
+    /** A grid's kernels; the residual's only in the mixed form, which solves twice a step. */
+    private class Programs(val arrivals: Int, val faces: Int, val residual: Int, val crossings: Int)
 
     override fun open(run: MoistureDeviceRun): MoistureDevice? {
         val rows = run.cellsDown
@@ -79,7 +99,7 @@ class GpuMoisture private constructor(
         if (rows <= 1 || run.cellsAcross <= 1) return null
         // The faces' solve holds a column in one workgroup's shared memory, and the largest buffer
         // must fit one storage block; past either, the processor marches.
-        if (rows > maxSolvedRows) return null
+        if (rows.toLong() * sharedBytesPerRow > sharedMemoryBytes) return null
         val largest = STATE_FIELDS * SEASONS * cellCount * Double.SIZE_BYTES
         if (largest > maxStorageBlockBytes) return null
         if (run.measuring && LEDGER_FIELDS * SEASONS * LAYERS * cellCount * Double.SIZE_BYTES > maxStorageBlockBytes) return null
@@ -97,9 +117,11 @@ class GpuMoisture private constructor(
     private fun programsFor(rows: Int, columns: Int, measuring: Boolean, constants: Map<String, Double>): Programs? {
         val key = ProgramKey(rows, columns, measuring)
         programs[key]?.let { return it }
+        val arrivals = GlContext.compileCompute(source("ARRIVALS", rows, columns, measuring, constants))
         val faces = GlContext.compileCompute(source("FACES", rows, columns, measuring, constants))
+        val residual = if (precision == Precision.MIXED) GlContext.compileCompute(source("RESIDUAL", rows, columns, measuring, constants)) else 0
         val crossings = GlContext.compileCompute(source("CROSSINGS", rows, columns, measuring, constants))
-        return Programs(faces, crossings).also { programs[key] = it }
+        return Programs(arrivals, faces, residual, crossings).also { programs[key] = it }
     }
 
     /** The shader's source for [kernel] on a grid of [rows] by [columns]: the definitions it reads, then the file. */
@@ -116,7 +138,6 @@ class GpuMoisture private constructor(
         header.append("#define WORKGROUP_ROWS $workgroupRows\n")
         header.append("#define ROWS_PER_THREAD ${(rows + workgroupRows - 1) / workgroupRows}\n")
         header.append("#define CROSSING_GROUP $CROSSING_GROUP\n")
-        header.append("#define REFINEMENTS $REFINEMENTS\n")
         header.append("#define STEP_WIDTH ${MoistureDeviceRun.STEP_WIDTH}\n")
         header.append("uniform double RAIN_SHADOW_SCALE;\n")
         header.append("const double SINGLE_BALANCE_TOLERANCE = ${literal(SINGLE_BALANCE_TOLERANCE)};\n")
@@ -137,6 +158,7 @@ class GpuMoisture private constructor(
         val smallLayout = SmallLayout(run)
         var timerQuery = 0
         var pending: Future<Boolean?>? = null
+        var kernelStamps: IntArray? = null
 
         /** Allocates every buffer and uploads the run's fields and its water. On the context's thread. */
         fun upload(): Boolean {
@@ -149,6 +171,7 @@ class GpuMoisture private constructor(
             allocate(INTS_BINDING, INT_FIELDS.toLong() * SEASONS * cells * Int.SIZE_BYTES)
             allocate(SMALL_BINDING, smallLayout.total.toLong() * Double.SIZE_BYTES)
             allocate(ROLES_BINDING, QUEUES.toLong() * rows * Int.SIZE_BYTES)
+            if (precision == Precision.MIXED) allocate(REDUCED_BINDING, QUEUES.toLong() * REDUCED_FIELDS * rows * Float.SIZE_BYTES)
             bind(STEPS_BINDING)
             GL15C.glBufferData(GL43C.GL_SHADER_STORAGE_BUFFER, steps, GL15C.GL_STATIC_DRAW)
             bind(LAYOUT_BINDING)
@@ -177,33 +200,49 @@ class GpuMoisture private constructor(
                         uploadSurfaceAndSweeps(season, fields)
                         uploadAirFields(season, fields)
                     }
-                    uploadWindFields(season, fields)
                 }
+                // The wind's fields go up a stage of columns ahead of the eastward sweep, as the
+                // steps are issued, so the card starts at once and the copies overlap its work.
+                windColumnsUploaded = 0
                 if (GL15C.glGetError() != GL15C.GL_NO_ERROR) return@submit false
                 for (binding in 0 until BUFFER_COUNT) {
                     if (buffers[binding] != 0) GL43C.glBindBufferBase(GL43C.GL_SHADER_STORAGE_BUFFER, binding, buffers[binding])
                 }
-                GL43C.glUseProgram(programs.faces)
-                GL40C.glUniform1d(GL43C.glGetUniformLocation(programs.faces, "RAIN_SHADOW_SCALE"), run.rainShadowScale)
-                val facesStep = GL43C.glGetUniformLocation(programs.faces, "uStep")
-                GL43C.glUseProgram(programs.crossings)
-                GL40C.glUniform1d(GL43C.glGetUniformLocation(programs.crossings, "RAIN_SHADOW_SCALE"), run.rainShadowScale)
-                val crossingsStep = GL43C.glGetUniformLocation(programs.crossings, "uStep")
-                val rowGroups = (rows + CROSSING_GROUP - 1) / CROSSING_GROUP
-                GL15C.glBeginQuery(GL33C.GL_TIME_ELAPSED, timerQuery)
-                for (step in 0 until stepCount) {
-                    GL43C.glUseProgram(programs.faces)
-                    GL43C.glUniform1i(facesStep, step)
-                    GL43C.glDispatchCompute(QUEUES, 1, 1)
-                    // The crossings read the faces' solve, which other work groups have just written.
-                    GL43C.glMemoryBarrier(GL43C.GL_SHADER_STORAGE_BARRIER_BIT)
-                    GL43C.glUseProgram(programs.crossings)
-                    GL43C.glUniform1i(crossingsStep, step)
-                    GL43C.glDispatchCompute(rowGroups, QUEUES, 1)
-                    // And the next column's arrivals read the parcels and banks they wrote.
-                    GL43C.glMemoryBarrier(GL43C.GL_SHADER_STORAGE_BARRIER_BIT)
+                val dispatches = stepDispatches()
+                val stepUniforms = IntArray(dispatches.size) { index ->
+                    val program = dispatches[index].program
+                    GL43C.glUseProgram(program)
+                    GL40C.glUniform1d(GL43C.glGetUniformLocation(program, "RAIN_SHADOW_SCALE"), run.rainShadowScale)
+                    GL43C.glGetUniformLocation(program, "uStep")
                 }
-                GL15C.glEndQuery(GL33C.GL_TIME_ELAPSED)
+                val passUniforms = IntArray(dispatches.size) { index -> GL43C.glGetUniformLocation(dispatches[index].program, "uPass") }
+                val stamps = if (profilesKernels) IntArray(dispatches.size * stepCount + 1).also { GL15C.glGenQueries(it) } else null
+                kernelStamps = stamps
+                if (stamps == null) GL15C.glBeginQuery(GL33C.GL_TIME_ELAPSED, timerQuery)
+                stamps?.let { GL33C.glQueryCounter(it[0], GL33C.GL_TIMESTAMP) }
+                for (step in 0 until stepCount) {
+                    val stepBase = step * MoistureDeviceRun.STEP_WIDTH
+                    for (layer in 0 until LAYERS) {
+                        val column = steps[stepBase + 2 * layer]
+                        if (column < 0) continue
+                        // Eastward, a stage ahead; westward (all behind the eastward sweep by then), the rest.
+                        uploadWindColumnsThrough(if (steps[stepBase + 2 * layer + 1] > 0) column + COLUMNS_UPLOADED_AHEAD else run.cellsAcross)
+                    }
+                    for ((index, dispatch) in dispatches.withIndex()) {
+                        GL43C.glUseProgram(dispatch.program)
+                        GL43C.glUniform1i(stepUniforms[index], step)
+                        if (passUniforms[index] >= 0) GL43C.glUniform1i(passUniforms[index], dispatch.pass)
+                        GL43C.glDispatchCompute(dispatch.groupsAcross, dispatch.groupsDown, 1)
+                        // Each reads what the one before it wrote, the arrivals what the last
+                        // column's crossings did, from other work groups.
+                        GL43C.glMemoryBarrier(GL43C.GL_SHADER_STORAGE_BARRIER_BIT)
+                        stamps?.let { GL33C.glQueryCounter(it[dispatches.size * step + index + 1], GL33C.GL_TIMESTAMP) }
+                    }
+                    // Handed to the card as they are issued: the driver otherwise holds a lap's
+                    // twenty thousand dispatches until the last, and the card waits for the issue.
+                    if (step % FLUSH_STEPS == FLUSH_STEPS - 1) GL15C.glFlush()
+                }
+                if (stamps == null) GL15C.glEndQuery(GL33C.GL_TIME_ELAPSED)
                 GL15C.glFlush()
                 GL15C.glGetError() == GL15C.GL_NO_ERROR
             }
@@ -222,13 +261,44 @@ class GpuMoisture private constructor(
                     readResult(season, HUMIDITY, fields.humidity)
                     readResult(season, FREE_RAIN, fields.freeRainMm)
                 }
-                lapDeviceMillis += GL33C.glGetQueryObjecti64(timerQuery, GL15C.GL_QUERY_RESULT) / NANOSECONDS_PER_MILLISECOND
+                val stamps = kernelStamps
+                if (stamps == null) {
+                    lapDeviceMillis += GL33C.glGetQueryObjecti64(timerQuery, GL15C.GL_QUERY_RESULT) / NANOSECONDS_PER_MILLISECOND
+                } else {
+                    val times = LongArray(stamps.size) { GL33C.glGetQueryObjecti64(stamps[it], GL15C.GL_QUERY_RESULT) }
+                    val perStep = (stamps.size - 1) / stepCount
+                    val kernelNanos = LongArray(perStep)
+                    for (index in 1 until times.size) kernelNanos[(index - 1) % perStep] += times[index] - times[index - 1]
+                    lapDeviceMillis += (times.last() - times[0]) / NANOSECONDS_PER_MILLISECOND
+                    kernelMillis += DoubleArray(perStep) { kernelNanos[it] / NANOSECONDS_PER_MILLISECOND }
+                    GL15C.glDeleteQueries(stamps)
+                    kernelStamps = null
+                }
                 if (run.measuring) {
                     readLedger()
                     readStateArrays()
                 }
                 GL15C.glGetError() == GL15C.GL_NO_ERROR
             } == true
+        }
+
+        /** One dispatch of a step: its kernel, its pass, its workgroups. */
+        inner class Dispatch(val program: Int, val pass: Int, val groupsAcross: Int, val groupsDown: Int)
+
+        /**
+         * A step's dispatches in order: the arrivals and the crossings a row an invocation over the
+         * card, the solve a workgroup a queue; in the mixed form, the first solve's residual and the
+         * second solve between them.
+         */
+        fun stepDispatches(): List<Dispatch> {
+            val rowGroups = (rows + CROSSING_GROUP - 1) / CROSSING_GROUP
+            val arrivals = Dispatch(programs.arrivals, 0, rowGroups, QUEUES)
+            val firstSolve = Dispatch(programs.faces, 0, QUEUES, 1)
+            val crossings = Dispatch(programs.crossings, 0, rowGroups, QUEUES)
+            if (precision != Precision.MIXED) return listOf(arrivals, firstSolve, crossings)
+            val residual = Dispatch(programs.residual, 0, rowGroups, QUEUES)
+            val secondSolve = Dispatch(programs.faces, 1, QUEUES, 1)
+            return listOf(arrivals, firstSolve, residual, secondSolve, crossings)
         }
 
         override fun readState(): Boolean = GlContext.run("Reading the moisture march's end") {
@@ -325,6 +395,38 @@ class GpuMoisture private constructor(
             put(FIELDS_BINDING, fieldOffset(season, GROUND_RETURN), Float.SIZE_BYTES, fields.groundReturnRate)
         }
 
+        /** How many of the wind's columns, from the first, the lap being issued has uploaded. */
+        var windColumnsUploaded = 0
+
+        /** A stage's worth of a wind field, in the copy's native memory. */
+        val windStaging = BufferUtils.createFloatBuffer(COLUMNS_UPLOADED_AHEAD * rows)
+
+        /** Uploads every season's wind fields up to and including [lastColumn] from where the last call stopped. */
+        fun uploadWindColumnsThrough(lastColumn: Int) {
+            val end = minOf(lastColumn + 1, run.cellsAcross)
+            while (windColumnsUploaded < end) {
+                val first = windColumnsUploaded
+                val last = minOf(first + COLUMNS_UPLOADED_AHEAD, end)
+                for ((season, fields) in run.seasons.withIndex()) {
+                    for ((field, values) in windFields(fields)) {
+                        windStaging.clear()
+                        windStaging.put(values, first * rows, (last - first) * rows)
+                        windStaging.flip()
+                        bind(FIELDS_BINDING)
+                        GL15C.glBufferSubData(GL43C.GL_SHADER_STORAGE_BUFFER, (fieldOffset(season, field) + first.toLong() * rows) * Float.SIZE_BYTES, windStaging)
+                    }
+                }
+                windColumnsUploaded = last
+            }
+        }
+
+        private fun windFields(fields: MoistureDeviceSeason) = listOf(
+            BL_STRETCH to fields.boundary.stretch, FT_STRETCH to fields.free.stretch,
+            BL_FACE to fields.boundary.faceShare, FT_FACE to fields.free.faceShare,
+            SEA_TRANSFER to fields.seaTransferMassFlux, LIFT to fields.liftMps, DESCENT to fields.descentRate,
+            GROUND_RETURN to fields.groundReturnRate
+        )
+
         private fun uploadState(season: Int, fields: MoistureDeviceSeason) {
             put(STATE_BINDING, stateOffset(season, BL_BANK), Double.SIZE_BYTES, fields.boundary.bank)
             put(STATE_BINDING, stateOffset(season, BL_BANK_LAND), Double.SIZE_BYTES, fields.boundary.bankLand)
@@ -418,7 +520,7 @@ class GpuMoisture private constructor(
         val boundaryParcelBase = IntArray(SEASONS)
         val freeParcelBase = IntArray(SEASONS)
         val rowConstants: Int
-        val scratch: Int
+        val handover: Int
         val total: Int
         val table: IntArray
 
@@ -432,7 +534,7 @@ class GpuMoisture private constructor(
                 freeParcelBase[season] = cursor; cursor += SWEEPS * FREE_PARCEL_FIELDS * rows
             }
             rowConstants = cursor; cursor += ROW_CONSTANT_FIELDS * rows
-            scratch = cursor; cursor += QUEUES * SCRATCH_FIELDS * rows
+            handover = cursor; cursor += QUEUES * HANDOVER_FIELDS * rows
             total = cursor
             table = IntArray(SEASONS * LAYOUT_PER_SEASON + 2)
             for (season in 0 until SEASONS) {
@@ -443,7 +545,7 @@ class GpuMoisture private constructor(
                 table[season * LAYOUT_PER_SEASON + 4] = freeParcelBase[season]
             }
             table[SEASONS * LAYOUT_PER_SEASON] = rowConstants
-            table[SEASONS * LAYOUT_PER_SEASON + 1] = scratch
+            table[SEASONS * LAYOUT_PER_SEASON + 1] = handover
         }
 
         private fun turnArrays(fields: MoistureDeviceSeason) =
@@ -495,13 +597,12 @@ class GpuMoisture private constructor(
         private var maxStorageBlockBytes = 0L
 
         /**
-         * The tallest grid the faces' solve takes, rows: a column's rows in one workgroup, in the
-         * mixed form a role and six singles a row in its shared memory, which the GL specification
-         * guarantees at 32 KB and this class asks the device for (49,152 bytes on the machine this
-         * was built on); a taller grid is the processor's.
+         * The shared memory a workgroup has, bytes: the faces' solve holds a column's rows in one
+         * workgroup's, [sharedBytesPerRow] a row, so a grid taller than it holds is the processor's.
+         * The GL specification guarantees 32 KB; the machine this was built on offers 49,152 bytes.
          */
         @Volatile
-        private var maxSolvedRows = 0
+        private var sharedMemoryBytes = 0L
 
         /**
          * How many rows a workgroup of the faces' kernel has one invocation for: the grid's rows up
@@ -526,22 +627,24 @@ class GpuMoisture private constructor(
         private const val CROSSING_GROUP = 64
 
         /**
-         * The single-precision faces' solve's refinements against the double-precision matrix: two.
-         * The system is an M-matrix whose condition reaches about four times its largest mixing
-         * share, up to some 5e4 where a calm cell's stretch multiplies the eddies' share; a solve in
-         * singles leaves `cond * 2^-24`, 3e-3, of the answer, and each refinement multiplies that by
-         * itself, so two leave it under 1e-8 before the last residual, added in doubles, closes what
-         * the faces moved on the doubles' matrix.
-         */
-        private const val REFINEMENTS = 2
-
-        /**
          * The crossing's balance tolerance in single precision, as a share of the cap and a
          * millimeter: sixteen units of a single's last place, 2^-20. A root search in singles cannot
          * resolve the balance closer than the rounding of the sinks it evaluates there, a few units
          * of the last place; the processor's own, 1e-12, is a double's.
          */
         private val SINGLE_BALANCE_TOLERANCE = Math.scalb(1.0, -20)
+
+        /**
+         * Steps issued between flushes of the driver's queue: 32, a slot of the schedule, a few
+         * hundred microseconds of the card's work, so it starts within a slot of the first dispatch.
+         */
+        private const val FLUSH_STEPS = 32
+
+        /**
+         * Columns of the wind's fields uploaded at a time, ahead of the eastward sweep: 32, a stage
+         * of the schedule's at the processor's stage length, 2 MB of the sixteen fields at 1,024 rows.
+         */
+        private const val COLUMNS_UPLOADED_AHEAD = 32
 
         /** Nanoseconds in a millisecond, for the card's timer. */
         private const val NANOSECONDS_PER_MILLISECOND = 1.0e6
@@ -562,7 +665,11 @@ class GpuMoisture private constructor(
         private const val LEDGER_BINDING = 9
         private const val LEDGER_WATER_BINDING = 10
         private const val LEDGER_FLAGS_BINDING = 11
-        private const val BUFFER_COUNT = 12
+        private const val REDUCED_BINDING = 12
+        private const val BUFFER_COUNT = 13
+
+        /** The faces' system in singles a row of a queue holds: its matrix row, three right-hand sides, two answers of three. */
+        private const val REDUCED_FIELDS = 12
 
         // Each buffer's fields, in the shader's order.
         private const val SEASONS = 2
@@ -624,10 +731,9 @@ class GpuMoisture private constructor(
         private const val BOUNDARY_PARCEL_FIELDS = 7
         private const val FREE_PARCEL_FIELDS = 2
         private const val ROW_CONSTANT_FIELDS = 2
-        private const val SCRATCH_FIELDS = 20
+        private const val HANDOVER_FIELDS = 11
 
-        /** Bytes of the faces' kernel's shared memory a row takes in the mixed form: a role and six singles. */
-        private const val SHARED_BYTES_PER_ROW = Int.SIZE_BYTES + 6 * Float.SIZE_BYTES
+
 
         /** How long a driver may take over the march's two kernels before it is given up on. */
         private const val COMPILE_TIMEOUT_SECONDS = 60L
@@ -649,7 +755,7 @@ class GpuMoisture private constructor(
                 }
                 maxStorageBlockBytes = GL43C.glGetInteger64(GL43C.GL_MAX_SHADER_STORAGE_BLOCK_SIZE)
                 maxWorkgroupInvocations = GL43C.glGetInteger(GL43C.GL_MAX_COMPUTE_WORK_GROUP_INVOCATIONS)
-                maxSolvedRows = GL43C.glGetInteger(GL43C.GL_MAX_COMPUTE_SHARED_MEMORY_SIZE) / SHARED_BYTES_PER_ROW
+                sharedMemoryBytes = GL43C.glGetInteger(GL43C.GL_MAX_COMPUTE_SHARED_MEMORY_SIZE).toLong()
                 // A small grid's kernels, both forms of the ledger, to know the device compiles them
                 // before a world asks.
                 march.programsFor(PROBE_ROWS, 2 * PROBE_ROWS, false, MoistureDeviceRun.CONSTANTS)

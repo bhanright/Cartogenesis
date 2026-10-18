@@ -4,8 +4,15 @@
 // constant the march is written with, by the names below.
 //
 // A step marches one column of each of the four queues, a season's boundary layer or free
-// troposphere each: FACES solves each queue's column of faces in one workgroup, CROSSINGS crosses
-// its rows side by side. The order of the steps is the processor's (MoistureDeviceRun.steps).
+// troposphere each: ARRIVALS takes each row's arrivals and builds its row of the faces' system,
+// FACES solves each queue's column in one workgroup, CROSSINGS crosses the marched rows side by side
+// and hands what the faces sent into the other rows' banks; with MIXED, RESIDUAL and a second FACES
+// between them refine the solve. Every kernel but FACES is spread over the card a row an
+// invocation, so the double-precision arithmetic is not one multiprocessor's; the solve holds only
+// what must be one workgroup's, and with MIXED it holds no doubles. The order of the steps is the
+// processor's (MoistureDeviceRun.steps). Nothing a dispatch writes is read by another invocation of
+// the same dispatch but through shared memory, so the buffers need no coherence beyond the barrier
+// between dispatches.
 //
 // Precision: with MIXED, the per-cell arithmetic of a crossing (the sinks' exponentials and the lift
 // yield's logarithms, the balance's root and the steps toward it) runs in single precision, `H`,
@@ -26,15 +33,19 @@ layout(std430, binding = 2) buffer CellFields { float fields[]; };
 layout(std430, binding = 3) writeonly buffer CellResults { float results[]; };
 // The surface and the sweeps (KIND), and the places in the small buffer: INT_FIELDS arrays of CELLS a season.
 layout(std430, binding = 4) readonly buffer CellInts { int cellInts[]; };
-// The turns' condensate banks, the sent parcels, the rows' parcels, the per-row constants and the
-// faces' working space, doubles, at the places LAYOUT holds.
-layout(std430, binding = 5) coherent buffer Small { double small[]; };
+// The turns' condensate banks, the sent parcels, the rows' parcels, the per-row constants and what
+// the faces hand the crossings, doubles, at the places the layout table holds.
+layout(std430, binding = 5) buffer Small { double small[]; };
 // A lap's steps: STEP_WIDTH entries a step.
 layout(std430, binding = 6) readonly buffer Steps { int steps[]; };
 // Each queue's rows' roles in the column being marched.
-layout(std430, binding = 7) coherent buffer Roles { int roles[]; };
+layout(std430, binding = 7) buffer Roles { int roles[]; };
 // Where each season's small arrays start, LAYOUT_PER_SEASON a season, then the shared places.
 layout(std430, binding = 8) readonly buffer Layout { int layoutTable[]; };
+#if MIXED
+// The faces' system in singles, what the solves hand on: REDUCED_FIELDS arrays of ROWS a queue.
+layout(std430, binding = 12) buffer Reduced { float reduced[]; };
+#endif
 #if MEASURING
 // What each crossing did, doubles, singles and flags: LEDGER_FIELDS, one and one array of CELLS a season and layer.
 layout(std430, binding = 9) writeonly buffer Ledger { double ledger[]; };
@@ -43,6 +54,9 @@ layout(std430, binding = 11) writeonly buffer LedgerFlags { int ledgerFlags[]; }
 #endif
 
 uniform int uStep;
+// Which of a step's two solves this is, with MIXED: the first, of the system, or the second, of its
+// residual.
+uniform int uPass;
 
 // The fields of each buffer, as GpuMoisture uploads them.
 const int STATE_FIELDS = 9;
@@ -62,23 +76,32 @@ const int LEDGER_FIELDS = 6;
 const int ADDED = 0, LEDGER_RAIN = 1, LEDGER_LAND_RAIN = 2, CONDENSED = 3, REEVAPORATED = 4, IMBALANCE = 5;
 const int FLAG_NEGATIVE = 1, FLAG_TRACER = 2, FLAG_NON_FINITE = 4;
 
-// LAYOUT_PER_SEASON entries a season, then the per-row constants' and the working space's places.
+// LAYOUT_PER_SEASON entries a season, then the per-row constants' and the hand-over's places.
 const int LAYOUT_PER_SEASON = 5;
 const int TURN_BASE = 0, BL_SENT_BASE = 1, FT_SENT_BASE = 2, BL_PARCEL_BASE = 3, FT_PARCEL_BASE = 4;
-const int ROW_CONSTANTS_BASE = 2 * LAYOUT_PER_SEASON, SCRATCH_BASE = ROW_CONSTANTS_BASE + 1;
-// The turns' banks (TURN_CELLS each), the sent parcels and the rows' parcels.
+const int ROW_CONSTANTS_BASE = 2 * LAYOUT_PER_SEASON, HANDOVER_BASE = ROW_CONSTANTS_BASE + 1;
+// The turns' banks, the sent parcels and the rows' parcels.
 const int BANK_CLOUD = 0, BANK_CLOUD_LAND = 1, BANK_FALLING = 2, BANK_FALLING_LAND = 3;
+const int TURN_FIELDS = 4;
 const int SENT_PARCEL = 0, SENT_LAND = 1, SENT_AIR = 2;
+const int BL_SENT_FIELDS = 3, FT_SENT_FIELDS = 2;
 const int BL_PARCEL_FIELDS = 7, FT_PARCEL_FIELDS = 2;
 const int VAPOR = 0, VAPOR_LAND = 1, CLOUD = 2, CLOUD_LAND = 3, FALLING = 4, FALLING_LAND = 5, AIR = 6;
 // The per-row constants: seconds a column, and the eddies' share through the face below.
 const int SECONDS_PER_COLUMN = 0, FACE_MIXING = 1;
-// The faces' working space, ROWS each, a queue.
-const int SCRATCH_FIELDS = 20;
-const int WATER = 0, WATER_LAND = 1, WATER_AIR = 2, RHS_WATER = 3, RHS_LAND = 4, RHS_AIR = 5;
-const int LOWER = 6, DIAGONAL = 7, UPPER = 8, SENT_ABOVE = 9, SENT_BELOW = 10;
-const int ACROSS_BEFORE = 11, ACROSS_BEFORE_LAND = 12, ACROSS_BEFORE_AIR = 13;
-const int REDUCED_LOWER = 14, REDUCED_DIAGONAL = 15, REDUCED_UPPER = 16, REDUCED_WATER = 17, REDUCED_LAND = 18, REDUCED_AIR = 19;
+// What a step's dispatches hand each other, ROWS each, a queue: the faces' system (its right-hand
+// sides, the rows' water as it arrived, and its matrix), what each row sends through its faces into
+// the other sweep's rows, and the solve's answer.
+const int HANDOVER_FIELDS = 11;
+const int RIGHT_WATER = 0, RIGHT_LAND = 1, RIGHT_AIR = 2, LOWER = 3, DIAGONAL = 4, UPPER = 5;
+const int SENT_ABOVE = 6, SENT_BELOW = 7, SOLVED_WATER = 8, SOLVED_LAND = 9, SOLVED_AIR = 10;
+
+// The faces' system in singles: the matrix and the right-hand sides (the residual's, in the second
+// solve), the first solve's answer and the second's correction.
+const int REDUCED_FIELDS = 12;
+const int REDUCED_LOWER_ROW = 0, REDUCED_DIAGONAL_ROW = 1, REDUCED_UPPER_ROW = 2, REDUCED_RIGHT = 3;
+const int REDUCED_SOLVED = 6, REDUCED_CORRECTION = 9;
+int reducedAt(int queue, int field, int row) { return (queue * REDUCED_FIELDS + field) * ROWS + row; }
 
 // A row's part in a column: marched by this sweep, solved for its faces only, or neither.
 const int OUTSIDE = 0, MARCHED = 1, ACROSS = 2;
@@ -89,24 +112,35 @@ int termAt(int season, int field, int here) { return (season * TERM_FIELDS + fie
 int fieldAt(int season, int field, int here) { return (season * FIELD_COUNT + field) * CELLS + here; }
 int resultAt(int season, int field, int here) { return (season * RESULT_FIELDS + field) * CELLS + here; }
 int intAt(int season, int field, int here) { return (season * INT_FIELDS + field) * CELLS + here; }
-int layoutAt(int season, int entry) { return layoutTable[season * LAYOUT_PER_SEASON + entry]; }
-int turnCellsOf(int season) { return layoutAt(season, BL_SENT_BASE) - layoutAt(season, TURN_BASE); }
-int turnAt(int season, int field, int slot) { return layoutAt(season, TURN_BASE) + field * (turnCellsOf(season) / 4) + slot; }
-int blSentAt(int season, int field, int slot) {
-    int count = (layoutAt(season, FT_SENT_BASE) - layoutAt(season, BL_SENT_BASE)) / 3;
-    return layoutAt(season, BL_SENT_BASE) + field * count + slot;
+
+// The places in the small buffer for the season an invocation marches, read once (readLayout).
+int turnBase, turnCount, blSentBase, blSentCount, ftSentBase, ftSentCount, blParcelBase, ftParcelBase;
+int rowConstantsBase, handoverBase;
+
+void readLayout(int season) {
+    int first = season * LAYOUT_PER_SEASON;
+    turnBase = layoutTable[first + TURN_BASE];
+    blSentBase = layoutTable[first + BL_SENT_BASE];
+    ftSentBase = layoutTable[first + FT_SENT_BASE];
+    blParcelBase = layoutTable[first + BL_PARCEL_BASE];
+    ftParcelBase = layoutTable[first + FT_PARCEL_BASE];
+    turnCount = (blSentBase - turnBase) / TURN_FIELDS;
+    blSentCount = (ftSentBase - blSentBase) / BL_SENT_FIELDS;
+    ftSentCount = (blParcelBase - ftSentBase) / FT_SENT_FIELDS;
+    rowConstantsBase = layoutTable[ROW_CONSTANTS_BASE];
+    handoverBase = layoutTable[HANDOVER_BASE];
 }
-int ftSentAt(int season, int field, int slot) {
-    int count = (layoutAt(season, BL_PARCEL_BASE) - layoutAt(season, FT_SENT_BASE)) / 2;
-    return layoutAt(season, FT_SENT_BASE) + field * count + slot;
-}
-int parcelAt(int season, bool boundary, int sweep, int field, int row) {
+
+int turnAt(int field, int slot) { return turnBase + field * turnCount + slot; }
+int blSentAt(int field, int slot) { return blSentBase + field * blSentCount + slot; }
+int ftSentAt(int field, int slot) { return ftSentBase + field * ftSentCount + slot; }
+int parcelAt(bool boundary, int sweep, int field, int row) {
     int sweepIndex = sweep > 0 ? 0 : 1;
-    if (boundary) return layoutAt(season, BL_PARCEL_BASE) + (sweepIndex * BL_PARCEL_FIELDS + field) * ROWS + row;
-    return layoutAt(season, FT_PARCEL_BASE) + (sweepIndex * FT_PARCEL_FIELDS + field) * ROWS + row;
+    if (boundary) return blParcelBase + (sweepIndex * BL_PARCEL_FIELDS + field) * ROWS + row;
+    return ftParcelBase + (sweepIndex * FT_PARCEL_FIELDS + field) * ROWS + row;
 }
-int rowConstantAt(int field, int row) { return layoutTable[ROW_CONSTANTS_BASE] + field * ROWS + row; }
-int scratchAt(int queue, int field, int row) { return layoutTable[SCRATCH_BASE] + (queue * SCRATCH_FIELDS + field) * ROWS + row; }
+int rowConstantAt(int field, int row) { return rowConstantsBase + field * ROWS + row; }
+int handoverAt(int queue, int field, int row) { return handoverBase + (queue * HANDOVER_FIELDS + field) * ROWS + row; }
 
 int surfaceOf(int season, int here) { return cellInts[intAt(season, KIND, here)] & 3; }
 int directionOf(int season, bool boundary, int here) {
@@ -183,16 +217,33 @@ double hpow(double base, double power) { return hexp(power * hlog(base)); }
 #endif
 
 // e^x - 1 where subtracting would cost the digits: Taylor below a half, to the power whose term is
-// under the precision there (a half to the 10th over 10! is 3e-10, to the 18th over 18! 6e-22).
-#if MIXED
-const int EXPM1_ORDER = 9;
-#else
-const int EXPM1_ORDER = 17;
-#endif
+// under the precision there (a half to the 10th over 10! is 3e-10, to the 18th over 18! 6e-22), its
+// coefficients 1/k! so the series is multiplications and additions only.
 H hexpm1(H x) {
     if (abs(x) < H(0.5)) {
-        H series = H(1.0);
-        for (int order = EXPM1_ORDER; order >= 2; order--) series = H(1.0) + x * series / H(order);
+#if MIXED
+        H series = H(1.0 / 362880.0);
+        series = series * x + H(1.0 / 40320.0);
+        series = series * x + H(1.0 / 5040.0);
+#else
+        H series = H(1.0LF / 355687428096000.0LF);
+        series = series * x + H(1.0LF / 20922789888000.0LF);
+        series = series * x + H(1.0LF / 1307674368000.0LF);
+        series = series * x + H(1.0LF / 87178291200.0LF);
+        series = series * x + H(1.0LF / 6227020800.0LF);
+        series = series * x + H(1.0LF / 479001600.0LF);
+        series = series * x + H(1.0LF / 39916800.0LF);
+        series = series * x + H(1.0LF / 3628800.0LF);
+        series = series * x + H(1.0LF / 362880.0LF);
+        series = series * x + H(1.0LF / 40320.0LF);
+        series = series * x + H(1.0LF / 5040.0LF);
+#endif
+        series = series * x + H(1.0 / 720.0);
+        series = series * x + H(1.0 / 120.0);
+        series = series * x + H(1.0 / 24.0);
+        series = series * x + H(1.0 / 6.0);
+        series = series * x + H(0.5);
+        series = series * x + H(1.0);
         return x * series;
     }
     return hexp(x) - H(1.0);
@@ -229,6 +280,10 @@ H hSeconds, hLawSaturated, hLawOffset, hHoldable, hSuppression, hExchange, hEvap
 H hLift, hAirC, hGroundPressure, hLayerDepth, hDryRain;
 HV4 pathNow, pathSunk, pathShare, startPaths, balancePaths;
 H sinksNow, slopeNow, advanceWater, cappedWhileHeld, waterTime;
+
+// With MIXED, the rain law's exponent as `scale * water + offset` and its rate and slope per unit of
+// the exponential, a crossing's constants taken once.
+H rainExponentScale, rainExponentOffset, rainPathScale, rainSlopeScale;
 
 // The boundary layer's lift yield per meter and its slope in the layer's water (ColumnWater.boundaryLayerLiftYield).
 H yieldPerMeter, yieldSlope;
@@ -287,14 +342,51 @@ void liftYield(H surfaceC, H groundPressure, H layerDepth, H humidity) {
     yieldSlope = perMeter * levelWarmingPerHumidity / H(DRY_LAPSE_K_PER_M) / H(BOUNDARY_LAYER_MASS_KG_PER_M2);
 }
 
+// The sinks a lifted layer's crossing has evaluated, the last four, newest first, by the water they
+// were evaluated at: the solve returns to the same few waters (the cap, the start, the balance),
+// and a lifted layer's evaluation costs the lift yield's logarithms and exponentials. Held in
+// registers, so shifted rather than indexed. The processor keeps eight the same way: the same bits.
+H memoWater0, memoWater1, memoWater2, memoWater3;
+HV4 memoPaths0, memoPaths1, memoPaths2, memoPaths3;
+H memoSinks0, memoSinks1, memoSinks2, memoSinks3;
+H memoSlope0, memoSlope1, memoSlope2, memoSlope3;
+int memoCount;
+
+void evaluateSinks(H water);
+
 // Every sink at a layer of [water], by path (rain, lift, exchange, evaporation), and their slope.
 void computeSinks(H water) {
+    bool remembering = hLift > H(0.0);
+    if (remembering) {
+        if (memoCount > 0 && water == memoWater0) { pathNow = memoPaths0; sinksNow = memoSinks0; slopeNow = memoSlope0; return; }
+        if (memoCount > 1 && water == memoWater1) { pathNow = memoPaths1; sinksNow = memoSinks1; slopeNow = memoSlope1; return; }
+        if (memoCount > 2 && water == memoWater2) { pathNow = memoPaths2; sinksNow = memoSinks2; slopeNow = memoSlope2; return; }
+        if (memoCount > 3 && water == memoWater3) { pathNow = memoPaths3; sinksNow = memoSinks3; slopeNow = memoSlope3; return; }
+    }
+    evaluateSinks(water);
+    if (remembering) {
+        memoWater3 = memoWater2; memoPaths3 = memoPaths2; memoSinks3 = memoSinks2; memoSlope3 = memoSlope2;
+        memoWater2 = memoWater1; memoPaths2 = memoPaths1; memoSinks2 = memoSinks1; memoSlope2 = memoSlope1;
+        memoWater1 = memoWater0; memoPaths1 = memoPaths0; memoSinks1 = memoSinks0; memoSlope1 = memoSlope0;
+        memoWater0 = water; memoPaths0 = pathNow; memoSinks0 = sinksNow; memoSlope0 = slopeNow;
+        memoCount = min(memoCount + 1, 4);
+    }
+}
+
+void evaluateSinks(H water) {
     pathNow = HV4(0.0);
     slopeNow = H(0.0);
     if (hLawSaturated > H(0.0) && hSuppression > H(0.0)) {
+#if MIXED
+        // The law's exponent linear in the water, its factors taken once a crossing (rainExponentScale).
+        H grown = hexp(rainExponentScale * water + rainExponentOffset);
+        if (water > H(0.0)) pathNow.x = rainPathScale * (grown - hDryRain);
+        slopeNow += rainSlopeScale * grown;
+#else
         H grown = hexp(H(COLUMN_RAIN_PER_HUMIDITY) * ((water + hLawOffset) / hLawSaturated - H(COLUMN_RAIN_HUMIDITY_OFFSET)));
         if (water > H(0.0)) pathNow.x = hSuppression * (grown - hDryRain) / H(SECONDS_PER_DAY);
         slopeNow += hSuppression * grown * H(COLUMN_RAIN_PER_HUMIDITY) / hLawSaturated / H(SECONDS_PER_DAY);
+#endif
     }
     if (hLift > H(0.0) && water > H(0.0)) {
         liftYield(hAirC, hGroundPressure, hLayerDepth, water / H(BOUNDARY_LAYER_MASS_KG_PER_M2));
@@ -341,14 +433,24 @@ H climbRate(H water, H atCap) {
     return gap > H(0.0) ? (atCap - sinkRate(water)) / gap : H(0.0);
 }
 
-H boundaryWater(H supply, bool highest) {
+// Where the sinks cross [supply] under the cap (ColumnCrossing.boundaryMm): the search's last
+// bracket, and the point it stopped at when a step fell within the tolerance; and whether any of its
+// evaluations took exactly the supply, the only case in which the search for the highest root and
+// the one for the lowest walk different paths.
+H searchLow, searchHigh, searchNext;
+bool searchStopped, searchTied;
+
+void searchBoundary(H supply, bool highest) {
     H low = H(0.0);
     H high = hHoldable;
     H tolerance = BALANCE_TOLERANCE_H * (hHoldable + H(1.0));
     H water = high;
+    searchStopped = false;
+    searchTied = false;
     for (int iteration = 0; iteration < int(NEWTON_ITERATIONS); iteration++) {
         computeSinks(water);
         H excess = sinksNow - supply;
+        if (excess == H(0.0)) searchTied = true;
         bool above = highest ? excess > H(0.0) : excess >= H(0.0);
         if (above) high = water; else low = water;
         if (high - low <= tolerance) break;
@@ -356,17 +458,30 @@ H boundaryWater(H supply, bool highest) {
         bool newton = slope > H(0.0) && !isinf(slope);
         H next = newton ? water - excess / slope : H(0.0);
         if (!newton || !(next > low && next < high)) next = H(0.5) * (low + high);
-        if (abs(next - water) <= tolerance) return next;
+        if (abs(next - water) <= tolerance) {
+            searchNext = next;
+            searchStopped = true;
+            break;
+        }
         water = next;
     }
-    return highest ? low : high;
+    searchLow = low;
+    searchHigh = high;
 }
 
+// The balance a layer starting at [start] relaxes to (ColumnCrossing.balanceMm). The search for
+// the lowest root is the search for the highest walked again unless an evaluation tied, so its
+// answer is read off the same walk: the same bits, at half the evaluations.
 H balanceWater(H supply, H start) {
-    H highest = boundaryWater(supply, true);
+    searchBoundary(supply, true);
+    H highest = searchStopped ? searchNext : searchLow;
     if (start >= highest) return highest;
+    bool tied = searchTied;
+    H lowest = searchStopped ? searchNext : searchHigh;
     if (sinkRate(start) >= supply) return start;
-    return boundaryWater(supply, false);
+    if (!tied) return lowest;
+    searchBoundary(supply, false);
+    return searchStopped ? searchNext : searchHigh;
 }
 
 bool advanceShort(H start, H supply) {
@@ -467,9 +582,20 @@ void advanceInSteps(H start, H supply) {
     }
 }
 
+// What the second of two delays holds per unit put through the first (ColumnCrossing.chainIntegral),
+// `(e^-ct - e^-ft) / (f - c)`. In single precision the two exponentials' difference loses its
+// digits as the rates near each other, by the single's rounding over their difference times the
+// crossing (a part in twenty at the processor's 1e-6, where it takes the rates as equal), so the
+// mixed form writes it as `t` times what the slower delay leaves, the larger of the two shares,
+// times `(1 - e^-|f - c|t) / (|f - c| t)`: the same function without the subtraction, which is
+// `t e^-ct` where the rates meet.
 H chainIntegral(H conversion, H fallout, H seconds, H conversionLeft, H falloutLeft) {
     H difference = fallout - conversion;
+#if MIXED
+    return seconds * max(conversionLeft, falloutLeft) * relaxedShare(abs(difference) * seconds);
+#else
     return abs(difference) * seconds < H(EQUAL_RATES) ? seconds * conversionLeft : (conversionLeft - falloutLeft) / difference;
+#endif
 }
 
 void solveCrossing() {
@@ -509,8 +635,17 @@ void solveCrossing() {
     hAirC = H(cAirC);
     hGroundPressure = H(cGroundPressure);
     hLayerDepth = H(cLayerDepth);
+    memoCount = 0;
     hDryRain = (hLawSaturated > H(0.0) && hSuppression > H(0.0))
         ? hexp(H(COLUMN_RAIN_PER_HUMIDITY) * (hLawOffset / hLawSaturated - H(COLUMN_RAIN_HUMIDITY_OFFSET))) : H(0.0);
+#if MIXED
+    if (hLawSaturated > H(0.0)) {
+        rainExponentScale = H(COLUMN_RAIN_PER_HUMIDITY) / hLawSaturated;
+        rainExponentOffset = H(COLUMN_RAIN_PER_HUMIDITY) * (hLawOffset / hLawSaturated - H(COLUMN_RAIN_HUMIDITY_OFFSET));
+        rainPathScale = hSuppression / H(SECONDS_PER_DAY);
+        rainSlopeScale = rainPathScale * rainExponentScale;
+    }
+#endif
     H startH = H(start);
     H supplyH = H(supply);
     if (!advanceShort(startH, supplyH)) advanceInSteps(startH, supplyH);
@@ -566,428 +701,359 @@ void solveCrossing() {
 
 bool finite(double value) { return !isinf(value) && !isnan(value); }
 
-// ---- The faces of a column (sweepColumn's arrivals and solveFaces) --------------------------------
+// ---- A column's arrivals and its faces' system (sweepColumn's arrivals and solveFaces' matrix) ----
+
+// A row's role, from the sweeps of the rows about it alone: MARCHED where this sweep marches it,
+// ACROSS where it is an eastward row beside a marched row of the westward sweep, OUTSIDE else.
+int roleOf(int season, bool boundaryLayer, int sweep, int base, int row) {
+    if (row < 0 || row >= ROWS) return OUTSIDE;
+    if (directionOf(season, boundaryLayer, base + row) == sweep) return MARCHED;
+    if (sweep > 0) return OUTSIDE;
+    bool besideMarched = (row > 0 && directionOf(season, boundaryLayer, base + row - 1) == sweep) ||
+        (row < ROWS - 1 && directionOf(season, boundaryLayer, base + row + 1) == sweep);
+    return besideMarched ? ACROSS : OUTSIDE;
+}
+
+#ifdef ARRIVALS
+
+layout(local_size_x = CROSSING_GROUP) in;
+
+void main() {
+    int row = int(gl_GlobalInvocationID.x);
+    int queue = int(gl_GlobalInvocationID.y);
+    if (row >= ROWS) return;
+    int season = queue >> 1;
+    bool boundaryLayer = (queue & 1) == 0;
+    int stepBase = uStep * STEP_WIDTH + (boundaryLayer ? 0 : 2);
+    int column = steps[stepBase];
+    int sweep = steps[stepBase + 1];
+    if (column < 0) return;
+    readLayout(season);
+    int base = column * ROWS;
+    int here = base + row;
+    int bankField = boundaryLayer ? BL_BANK : FT_BANK;
+    int bankLandField = boundaryLayer ? BL_BANK_LAND : FT_BANK_LAND;
+    int roleAbove = roleOf(season, boundaryLayer, sweep, base, row - 1);
+    int role = roleOf(season, boundaryLayer, sweep, base, row);
+    int roleBelow = roleOf(season, boundaryLayer, sweep, base, row + 1);
+
+    // What arrives: the row's parcel from the column behind and whatever was banked here; and, in
+    // the westward sweep, the eastward rows beside them as they left this column.
+    dvec3 water = dvec3(0.0LF);
+    if (role == MARCHED) {
+        if (boundaryLayer) {
+            // A bank the westward sweep's faces drew on can hold less than nothing; what the parcel
+            // cannot pay of it waits there for the next lap's.
+            int slot = cellInts[intAt(season, TURN_SLOT, here)];
+            if (slot >= 0) {
+                for (int field = BANK_CLOUD; field <= BANK_FALLING_LAND; field++) {
+                    small[parcelAt(true, sweep, CLOUD + field, row)] += small[turnAt(field, slot)];
+                    small[turnAt(field, slot)] = 0.0LF;
+                }
+            }
+        }
+        double arriving = small[parcelAt(boundaryLayer, sweep, VAPOR, row)] + state[stateAt(season, bankField, here)];
+        double arrivingLand = small[parcelAt(boundaryLayer, sweep, VAPOR_LAND, row)] + state[stateAt(season, bankLandField, here)];
+        water.x = max(arriving, 0.0LF);
+        water.y = clamp(arrivingLand, 0.0LF, water.x);
+        state[stateAt(season, bankField, here)] = arriving - water.x;
+        state[stateAt(season, bankLandField, here)] = arrivingLand - water.y;
+        if (boundaryLayer) {
+            double arrivingAir = small[parcelAt(true, sweep, AIR, row)] + state[stateAt(season, BL_BANK_AIR, here)];
+            water.z = max(arrivingAir, 0.0LF);
+            state[stateAt(season, BL_BANK_AIR, here)] = arrivingAir - water.z;
+        }
+    } else if (role == ACROSS) {
+        // What the eastward row will bring here, net of what it already owes here.
+        int place = cellInts[intAt(season, boundaryLayer ? BL_SENT_SLOT : FT_SENT_SLOT, here)];
+        double sent = boundaryLayer ? small[blSentAt(SENT_PARCEL, place)] : small[ftSentAt(SENT_PARCEL, place)];
+        double sentLand = boundaryLayer ? small[blSentAt(SENT_LAND, place)] : small[ftSentAt(SENT_LAND, place)];
+        water.x = max(sent + state[stateAt(season, bankField, here)], 0.0LF);
+        water.y = clamp(sentLand + state[stateAt(season, bankLandField, here)], 0.0LF, water.x);
+        if (boundaryLayer) water.z = max(small[blSentAt(SENT_AIR, place)] + state[stateAt(season, BL_BANK_AIR, here)], 0.0LF);
+    }
+
+    // The row of the faces' system, in the processor's order of its sums: the face above, then the
+    // face below.
+    double stretchHere = double(fields[fieldAt(season, boundaryLayer ? BL_STRETCH : FT_STRETCH, here)]);
+    double diagonal = 1.0LF;
+    double lower = 0.0LF;
+    double upper = 0.0LF;
+    double sentAbove = 0.0LF;
+    double sentBelow = 0.0LF;
+    if (row > 0 && (roleAbove == MARCHED || role == MARCHED)) {
+        double stretchAbove = double(fields[fieldAt(season, boundaryLayer ? BL_STRETCH : FT_STRETCH, here - 1)]);
+        double advection = double(fields[fieldAt(season, boundaryLayer ? BL_FACE : FT_FACE, here - 1)]);
+        if (role == MARCHED && roleAbove != MARCHED && advection < 0.0LF) {
+            sentAbove = -advection * stretchHere;
+            diagonal += sentAbove;
+        }
+        if (roleAbove != OUTSIDE && role != OUTSIDE) {
+            double mixing = small[rowConstantAt(FACE_MIXING, row - 1)];
+            bool oneSweep = roleAbove == MARCHED && role == MARCHED;
+            double fromAbove = mixing * stretchAbove + ((oneSweep && advection > 0.0LF) ? advection * stretchAbove : 0.0LF);
+            double fromBelow = mixing * stretchHere + ((oneSweep && advection < 0.0LF) ? -advection * stretchHere : 0.0LF);
+            diagonal += fromBelow;
+            lower = -fromAbove;
+        }
+    }
+    if (row < ROWS - 1 && (role == MARCHED || roleBelow == MARCHED)) {
+        double stretchBelow = double(fields[fieldAt(season, boundaryLayer ? BL_STRETCH : FT_STRETCH, here + 1)]);
+        double advection = double(fields[fieldAt(season, boundaryLayer ? BL_FACE : FT_FACE, here)]);
+        if (role == MARCHED && roleBelow != MARCHED && advection > 0.0LF) {
+            sentBelow = advection * stretchHere;
+            diagonal += sentBelow;
+        }
+        if (role != OUTSIDE && roleBelow != OUTSIDE) {
+            double mixing = small[rowConstantAt(FACE_MIXING, row)];
+            bool oneSweep = role == MARCHED && roleBelow == MARCHED;
+            double fromAbove = mixing * stretchHere + ((oneSweep && advection > 0.0LF) ? advection * stretchHere : 0.0LF);
+            double fromBelow = mixing * stretchBelow + ((oneSweep && advection < 0.0LF) ? -advection * stretchBelow : 0.0LF);
+            diagonal += fromAbove;
+            upper = -fromBelow;
+        }
+    }
+    small[handoverAt(queue, RIGHT_WATER, row)] = water.x;
+    small[handoverAt(queue, RIGHT_LAND, row)] = water.y;
+    small[handoverAt(queue, RIGHT_AIR, row)] = water.z;
+    small[handoverAt(queue, LOWER, row)] = lower;
+    small[handoverAt(queue, DIAGONAL, row)] = diagonal;
+    small[handoverAt(queue, UPPER, row)] = upper;
+    small[handoverAt(queue, SENT_ABOVE, row)] = sentAbove;
+    small[handoverAt(queue, SENT_BELOW, row)] = sentBelow;
+    roles[queue * ROWS + row] = role;
+#if MIXED
+    reduced[reducedAt(queue, REDUCED_LOWER_ROW, row)] = float(lower);
+    reduced[reducedAt(queue, REDUCED_DIAGONAL_ROW, row)] = float(diagonal);
+    reduced[reducedAt(queue, REDUCED_UPPER_ROW, row)] = float(upper);
+    vec3 right = vec3(water);
+    for (int side = 0; side < 3; side++) reduced[reducedAt(queue, REDUCED_RIGHT + side, row)] = right[side];
+#endif
+}
+
+#endif
+
+// ---- A column's faces solved (solveFaces' Thomas algorithm, as a parallel cyclic reduction) -------
 
 #ifdef FACES
 
 layout(local_size_x = WORKGROUP_ROWS) in;
 
-shared int sharedRole[ROWS];
+// The faces' system in reduction; a row's own values stay in its invocation.
 #if MIXED
 shared float reducedLower[ROWS];
 shared float reducedDiagonal[ROWS];
 shared float reducedUpper[ROWS];
-shared float reducedWater[ROWS];
-shared float reducedLand[ROWS];
-shared float reducedAir[ROWS];
+shared float reducedFirst[ROWS];
+shared float reducedSecond[ROWS];
+shared float reducedThird[ROWS];
+#define REDUCED float
+#define REDUCED_VECTOR vec3
+#else
+shared double reducedLower[ROWS];
+shared double reducedDiagonal[ROWS];
+shared double reducedUpper[ROWS];
+shared double reducedFirst[ROWS];
+shared double reducedSecond[ROWS];
+#define REDUCED double
+#define REDUCED_VECTOR dvec3
 #endif
 
-int queue;
-int season;
-bool boundaryLayer;
-int column;
-int sweep;
-int base;
+int thread;
 
-double stretchAt(int row) { return double(fields[fieldAt(season, boundaryLayer ? BL_STRETCH : FT_STRETCH, base + row)]); }
-double faceShareAt(int row) { return double(fields[fieldAt(season, boundaryLayer ? BL_FACE : FT_FACE, base + row)]); }
-double scratch(int field, int row) { return small[scratchAt(queue, field, row)]; }
-void setScratch(int field, int row, double value) { small[scratchAt(queue, field, row)] = value; }
+int rowOf(int k) { return thread + k * WORKGROUP_ROWS; }
 
-void syncAll() { memoryBarrierShared(); memoryBarrierBuffer(); barrier(); }
+#if !MIXED
+// Each invocation's rows, ROWS_PER_THREAD of them: thread, thread + WORKGROUP_ROWS, and so on.
+dvec3 ownWater[ROWS_PER_THREAD];
+dvec3 ownRight[ROWS_PER_THREAD];
+double ownLower[ROWS_PER_THREAD];
+double ownDiagonal[ROWS_PER_THREAD];
+double ownUpper[ROWS_PER_THREAD];
 
-// The residual of the faces' system at [row] for the solution in the WATER fields, the three right-hand sides.
-dvec3 residualAt(int row) {
-    double lower = scratch(LOWER, row);
-    double diagonal = scratch(DIAGONAL, row);
-    double upper = scratch(UPPER, row);
-    dvec3 here = dvec3(scratch(WATER, row), scratch(WATER_LAND, row), scratch(WATER_AIR, row));
-    dvec3 product = diagonal * here;
-    if (row > 0) product += lower * dvec3(scratch(WATER, row - 1), scratch(WATER_LAND, row - 1), scratch(WATER_AIR, row - 1));
-    if (row < ROWS - 1) product += upper * dvec3(scratch(WATER, row + 1), scratch(WATER_LAND, row + 1), scratch(WATER_AIR, row + 1));
-    return dvec3(scratch(RHS_WATER, row), scratch(RHS_LAND, row), scratch(RHS_AIR, row)) - product;
+// Each own row's matrix into the shared arrays.
+void loadMatrix() {
+    for (int k = 0; k < ROWS_PER_THREAD; k++) {
+        int row = rowOf(k);
+        if (row >= ROWS) continue;
+        reducedLower[row] = ownLower[k];
+        reducedDiagonal[row] = ownDiagonal[k];
+        reducedUpper[row] = ownUpper[k];
+    }
+}
+#endif
+
+void syncShared() { memoryBarrierShared(); barrier(); }
+
+REDUCED_VECTOR reducedRight(int row) {
+#if MIXED
+    return REDUCED_VECTOR(reducedFirst[row], reducedSecond[row], reducedThird[row]);
+#else
+    return REDUCED_VECTOR(reducedFirst[row], reducedSecond[row], 0.0LF);
+#endif
 }
 
-#if MIXED
-// Parallel cyclic reduction of the faces' system in singles, the right-hand sides [rhs] given per
-// row by the caller in reducedWater/Land/Air, the matrix read from the double-precision fields.
-// Leaves each row's solution in reducedWater/Land/Air.
-void reduceInSingles(int thread) {
-    for (int k = 0; k < ROWS_PER_THREAD; k++) {
-        int row = thread + k * WORKGROUP_ROWS;
-        if (row >= ROWS) continue;
-        reducedLower[row] = float(scratch(LOWER, row));
-        reducedDiagonal[row] = float(scratch(DIAGONAL, row));
-        reducedUpper[row] = float(scratch(UPPER, row));
-    }
-    syncAll();
-    float nextLower[ROWS_PER_THREAD], nextDiagonal[ROWS_PER_THREAD], nextUpper[ROWS_PER_THREAD];
-    vec3 nextRight[ROWS_PER_THREAD];
+// Parallel cyclic reduction of the faces' system in the shared arrays, in REDUCED precision;
+// leaves each row's solution there, over its diagonal.
+void reduceFaces() {
+    REDUCED nextLower[ROWS_PER_THREAD];
+    REDUCED nextDiagonal[ROWS_PER_THREAD];
+    REDUCED nextUpper[ROWS_PER_THREAD];
+    REDUCED_VECTOR nextRight[ROWS_PER_THREAD];
     for (int stride = 1; stride < ROWS; stride *= 2) {
         for (int k = 0; k < ROWS_PER_THREAD; k++) {
-            int row = thread + k * WORKGROUP_ROWS;
+            int row = rowOf(k);
             if (row >= ROWS) continue;
-            float lower = reducedLower[row];
-            float diagonal = reducedDiagonal[row];
-            float upper = reducedUpper[row];
-            vec3 right = vec3(reducedWater[row], reducedLand[row], reducedAir[row]);
-            float newLower = 0.0;
-            float newUpper = 0.0;
+            REDUCED diagonal = reducedDiagonal[row];
+            REDUCED_VECTOR right = reducedRight(row);
+            REDUCED newLower = REDUCED(0.0);
+            REDUCED newUpper = REDUCED(0.0);
             if (row - stride >= 0) {
                 int other = row - stride;
-                float alpha = -lower / reducedDiagonal[other];
+                REDUCED alpha = -reducedLower[row] / reducedDiagonal[other];
                 newLower = alpha * reducedLower[other];
                 diagonal += alpha * reducedUpper[other];
-                right += alpha * vec3(reducedWater[other], reducedLand[other], reducedAir[other]);
+                right += alpha * reducedRight(other);
             }
             if (row + stride < ROWS) {
                 int other = row + stride;
-                float gamma = -upper / reducedDiagonal[other];
+                REDUCED gamma = -reducedUpper[row] / reducedDiagonal[other];
                 newUpper = gamma * reducedUpper[other];
                 diagonal += gamma * reducedLower[other];
-                right += gamma * vec3(reducedWater[other], reducedLand[other], reducedAir[other]);
+                right += gamma * reducedRight(other);
             }
             nextLower[k] = newLower;
             nextDiagonal[k] = diagonal;
             nextUpper[k] = newUpper;
             nextRight[k] = right;
         }
-        syncAll();
+        syncShared();
         for (int k = 0; k < ROWS_PER_THREAD; k++) {
-            int row = thread + k * WORKGROUP_ROWS;
+            int row = rowOf(k);
             if (row >= ROWS) continue;
             reducedLower[row] = nextLower[k];
             reducedDiagonal[row] = nextDiagonal[k];
             reducedUpper[row] = nextUpper[k];
-            reducedWater[row] = nextRight[k].x;
-            reducedLand[row] = nextRight[k].y;
-            reducedAir[row] = nextRight[k].z;
-        }
-        syncAll();
-    }
-    for (int k = 0; k < ROWS_PER_THREAD; k++) {
-        int row = thread + k * WORKGROUP_ROWS;
-        if (row >= ROWS) continue;
-        float diagonal = reducedDiagonal[row];
-        reducedWater[row] /= diagonal;
-        reducedLand[row] /= diagonal;
-        reducedAir[row] /= diagonal;
-    }
-    syncAll();
-}
-#else
-// Parallel cyclic reduction of the faces' system in doubles, in the working space's REDUCED fields.
-void reduceInDoubles(int thread) {
-    for (int k = 0; k < ROWS_PER_THREAD; k++) {
-        int row = thread + k * WORKGROUP_ROWS;
-        if (row >= ROWS) continue;
-        setScratch(REDUCED_LOWER, row, scratch(LOWER, row));
-        setScratch(REDUCED_DIAGONAL, row, scratch(DIAGONAL, row));
-        setScratch(REDUCED_UPPER, row, scratch(UPPER, row));
-        setScratch(REDUCED_WATER, row, scratch(RHS_WATER, row));
-        setScratch(REDUCED_LAND, row, scratch(RHS_LAND, row));
-        setScratch(REDUCED_AIR, row, scratch(RHS_AIR, row));
-    }
-    syncAll();
-    double nextLower[ROWS_PER_THREAD], nextDiagonal[ROWS_PER_THREAD], nextUpper[ROWS_PER_THREAD];
-    dvec3 nextRight[ROWS_PER_THREAD];
-    for (int stride = 1; stride < ROWS; stride *= 2) {
-        for (int k = 0; k < ROWS_PER_THREAD; k++) {
-            int row = thread + k * WORKGROUP_ROWS;
-            if (row >= ROWS) continue;
-            double lower = scratch(REDUCED_LOWER, row);
-            double diagonal = scratch(REDUCED_DIAGONAL, row);
-            double upper = scratch(REDUCED_UPPER, row);
-            dvec3 right = dvec3(scratch(REDUCED_WATER, row), scratch(REDUCED_LAND, row), scratch(REDUCED_AIR, row));
-            double newLower = 0.0LF;
-            double newUpper = 0.0LF;
-            if (row - stride >= 0) {
-                int other = row - stride;
-                double alpha = -lower / scratch(REDUCED_DIAGONAL, other);
-                newLower = alpha * scratch(REDUCED_LOWER, other);
-                diagonal += alpha * scratch(REDUCED_UPPER, other);
-                right += alpha * dvec3(scratch(REDUCED_WATER, other), scratch(REDUCED_LAND, other), scratch(REDUCED_AIR, other));
-            }
-            if (row + stride < ROWS) {
-                int other = row + stride;
-                double gamma = -upper / scratch(REDUCED_DIAGONAL, other);
-                newUpper = gamma * scratch(REDUCED_UPPER, other);
-                diagonal += gamma * scratch(REDUCED_LOWER, other);
-                right += gamma * dvec3(scratch(REDUCED_WATER, other), scratch(REDUCED_LAND, other), scratch(REDUCED_AIR, other));
-            }
-            nextLower[k] = newLower;
-            nextDiagonal[k] = diagonal;
-            nextUpper[k] = newUpper;
-            nextRight[k] = right;
-        }
-        syncAll();
-        for (int k = 0; k < ROWS_PER_THREAD; k++) {
-            int row = thread + k * WORKGROUP_ROWS;
-            if (row >= ROWS) continue;
-            setScratch(REDUCED_LOWER, row, nextLower[k]);
-            setScratch(REDUCED_DIAGONAL, row, nextDiagonal[k]);
-            setScratch(REDUCED_UPPER, row, nextUpper[k]);
-            setScratch(REDUCED_WATER, row, nextRight[k].x);
-            setScratch(REDUCED_LAND, row, nextRight[k].y);
-            setScratch(REDUCED_AIR, row, nextRight[k].z);
-        }
-        syncAll();
-    }
-    for (int k = 0; k < ROWS_PER_THREAD; k++) {
-        int row = thread + k * WORKGROUP_ROWS;
-        if (row >= ROWS) continue;
-        double diagonal = scratch(REDUCED_DIAGONAL, row);
-        setScratch(WATER, row, scratch(REDUCED_WATER, row) / diagonal);
-        setScratch(WATER_LAND, row, scratch(REDUCED_LAND, row) / diagonal);
-        setScratch(WATER_AIR, row, scratch(REDUCED_AIR, row) / diagonal);
-    }
-    syncAll();
-}
+            reducedFirst[row] = nextRight[k].x;
+            reducedSecond[row] = nextRight[k].y;
+#if MIXED
+            reducedThird[row] = nextRight[k].z;
 #endif
+        }
+        syncShared();
+    }
+}
 
 void main() {
-    queue = int(gl_WorkGroupID.x);
-    season = queue >> 1;
-    boundaryLayer = (queue & 1) == 0;
-    int stepBase = uStep * STEP_WIDTH + (boundaryLayer ? 0 : 2);
-    column = steps[stepBase];
-    sweep = steps[stepBase + 1];
+    int queue = int(gl_WorkGroupID.x);
+    bool boundaryLayer = (queue & 1) == 0;
+    int column = steps[uStep * STEP_WIDTH + (boundaryLayer ? 0 : 2)];
     if (column < 0) return;
-    base = column * ROWS;
-    int thread = int(gl_LocalInvocationID.x);
-    int bankField = boundaryLayer ? BL_BANK : FT_BANK;
-    int bankLandField = boundaryLayer ? BL_BANK_LAND : FT_BANK_LAND;
-
-    // What arrives: the row's parcel from the column behind and whatever was banked here.
-    for (int k = 0; k < ROWS_PER_THREAD; k++) {
-        int row = thread + k * WORKGROUP_ROWS;
-        if (row >= ROWS) continue;
-        int here = base + row;
-        double water = 0.0LF;
-        double waterLand = 0.0LF;
-        double waterAir = 0.0LF;
-        int role = OUTSIDE;
-        if (directionOf(season, boundaryLayer, here) == sweep) {
-            role = MARCHED;
-            if (boundaryLayer) {
-                // A bank the westward sweep's faces drew on can hold less than nothing; what the
-                // parcel cannot pay of it waits there for the next lap's.
-                int slot = cellInts[intAt(season, TURN_SLOT, here)];
-                if (slot >= 0) {
-                    for (int field = BANK_CLOUD; field <= BANK_FALLING_LAND; field++) {
-                        int parcelField = CLOUD + field;
-                        small[parcelAt(season, true, sweep, parcelField, row)] += small[turnAt(season, field, slot)];
-                        small[turnAt(season, field, slot)] = 0.0LF;
-                    }
-                }
-            }
-            double arriving = small[parcelAt(season, boundaryLayer, sweep, VAPOR, row)] + state[stateAt(season, bankField, here)];
-            double arrivingLand = small[parcelAt(season, boundaryLayer, sweep, VAPOR_LAND, row)] + state[stateAt(season, bankLandField, here)];
-            water = max(arriving, 0.0LF);
-            waterLand = clamp(arrivingLand, 0.0LF, water);
-            state[stateAt(season, bankField, here)] = arriving - water;
-            state[stateAt(season, bankLandField, here)] = arrivingLand - waterLand;
-            if (boundaryLayer) {
-                double arrivingAir = small[parcelAt(season, true, sweep, AIR, row)] + state[stateAt(season, BL_BANK_AIR, here)];
-                waterAir = max(arrivingAir, 0.0LF);
-                state[stateAt(season, BL_BANK_AIR, here)] = arrivingAir - waterAir;
-            }
-        }
-        sharedRole[row] = role;
-        setScratch(WATER, row, water);
-        setScratch(WATER_LAND, row, waterLand);
-        setScratch(WATER_AIR, row, waterAir);
-    }
-    syncAll();
-    // In the westward sweep, the eastward rows beside a marched row, as they left this column.
-    if (sweep < 0) {
-        for (int k = 0; k < ROWS_PER_THREAD; k++) {
-            int row = thread + k * WORKGROUP_ROWS;
-            if (row >= ROWS || sharedRole[row] != OUTSIDE) continue;
-            bool besideMarched = (row > 0 && sharedRole[row - 1] == MARCHED) || (row < ROWS - 1 && sharedRole[row + 1] == MARCHED);
-            if (!besideMarched) continue;
-            int here = base + row;
-            int place = cellInts[intAt(season, boundaryLayer ? BL_SENT_SLOT : FT_SENT_SLOT, here)];
-            double sent = boundaryLayer ? small[blSentAt(season, SENT_PARCEL, place)] : small[ftSentAt(season, SENT_PARCEL, place)];
-            double sentLand = boundaryLayer ? small[blSentAt(season, SENT_LAND, place)] : small[ftSentAt(season, SENT_LAND, place)];
-            double bringing = max(sent + state[stateAt(season, bankField, here)], 0.0LF);
-            double bringingLand = clamp(sentLand + state[stateAt(season, bankLandField, here)], 0.0LF, bringing);
-            setScratch(WATER, row, bringing);
-            setScratch(WATER_LAND, row, bringingLand);
-            setScratch(ACROSS_BEFORE, row, bringing);
-            setScratch(ACROSS_BEFORE_LAND, row, bringingLand);
-            if (boundaryLayer) {
-                double air = max(small[blSentAt(season, SENT_AIR, place)] + state[stateAt(season, BL_BANK_AIR, here)], 0.0LF);
-                setScratch(WATER_AIR, row, air);
-                setScratch(ACROSS_BEFORE_AIR, row, air);
-            }
-            // Read beside this write by the rows either side, which ask only whether it is MARCHED,
-            // and no marched row changes here.
-            sharedRole[row] = ACROSS;
-        }
-        syncAll();
-    }
-
-    // The faces' system, row by row in the processor's order of its sums: the faces above and below.
-    for (int k = 0; k < ROWS_PER_THREAD; k++) {
-        int row = thread + k * WORKGROUP_ROWS;
-        if (row >= ROWS) continue;
-        double diagonal = 1.0LF;
-        double lower = 0.0LF;
-        double upper = 0.0LF;
-        double sentAbove = 0.0LF;
-        double sentBelow = 0.0LF;
-        if (row > 0) {
-            int roleAbove = sharedRole[row - 1];
-            int roleBelow = sharedRole[row];
-            if (roleAbove == MARCHED || roleBelow == MARCHED) {
-                double stretchAbove = stretchAt(row - 1);
-                double stretchBelow = stretchAt(row);
-                double advection = faceShareAt(row - 1);
-                if (roleBelow == MARCHED && roleAbove != MARCHED && advection < 0.0LF) {
-                    sentAbove = -advection * stretchBelow;
-                    diagonal += sentAbove;
-                }
-                if (roleAbove != OUTSIDE && roleBelow != OUTSIDE) {
-                    double mixing = small[rowConstantAt(FACE_MIXING, row - 1)];
-                    bool oneSweep = roleAbove == MARCHED && roleBelow == MARCHED;
-                    double fromAbove = mixing * stretchAbove + ((oneSweep && advection > 0.0LF) ? advection * stretchAbove : 0.0LF);
-                    double fromBelow = mixing * stretchBelow + ((oneSweep && advection < 0.0LF) ? -advection * stretchBelow : 0.0LF);
-                    diagonal += fromBelow;
-                    lower = -fromAbove;
-                }
-            }
-        }
-        if (row < ROWS - 1) {
-            int roleAbove = sharedRole[row];
-            int roleBelow = sharedRole[row + 1];
-            if (roleAbove == MARCHED || roleBelow == MARCHED) {
-                double stretchAbove = stretchAt(row);
-                double stretchBelow = stretchAt(row + 1);
-                double advection = faceShareAt(row);
-                if (roleAbove == MARCHED && roleBelow != MARCHED && advection > 0.0LF) {
-                    sentBelow = advection * stretchAbove;
-                    diagonal += sentBelow;
-                }
-                if (roleAbove != OUTSIDE && roleBelow != OUTSIDE) {
-                    double mixing = small[rowConstantAt(FACE_MIXING, row)];
-                    bool oneSweep = roleAbove == MARCHED && roleBelow == MARCHED;
-                    double fromAbove = mixing * stretchAbove + ((oneSweep && advection > 0.0LF) ? advection * stretchAbove : 0.0LF);
-                    double fromBelow = mixing * stretchBelow + ((oneSweep && advection < 0.0LF) ? -advection * stretchBelow : 0.0LF);
-                    diagonal += fromAbove;
-                    upper = -fromBelow;
-                }
-            }
-        }
-        setScratch(LOWER, row, lower);
-        setScratch(DIAGONAL, row, diagonal);
-        setScratch(UPPER, row, upper);
-        setScratch(SENT_ABOVE, row, sentAbove);
-        setScratch(SENT_BELOW, row, sentBelow);
-        setScratch(RHS_WATER, row, scratch(WATER, row));
-        setScratch(RHS_LAND, row, scratch(WATER_LAND, row));
-        setScratch(RHS_AIR, row, scratch(WATER_AIR, row));
-        roles[queue * ROWS + row] = sharedRole[row];
-    }
-    syncAll();
+    readLayout(queue >> 1);
+    thread = int(gl_LocalInvocationID.x);
 
 #if MIXED
-    // In singles, then refined against the doubles' residual, then the residual added once more so
-    // that what the faces moved is what the doubles' matrix says they moved.
+    // In singles: the system's own right-hand sides in the first pass, its residual for the first
+    // answer in the second (RESIDUAL), each answer handed on in singles.
     for (int k = 0; k < ROWS_PER_THREAD; k++) {
-        int row = thread + k * WORKGROUP_ROWS;
+        int row = rowOf(k);
         if (row >= ROWS) continue;
-        reducedWater[row] = float(scratch(RHS_WATER, row));
-        reducedLand[row] = float(scratch(RHS_LAND, row));
-        reducedAir[row] = float(scratch(RHS_AIR, row));
+        reducedLower[row] = reduced[reducedAt(queue, REDUCED_LOWER_ROW, row)];
+        reducedDiagonal[row] = reduced[reducedAt(queue, REDUCED_DIAGONAL_ROW, row)];
+        reducedUpper[row] = reduced[reducedAt(queue, REDUCED_UPPER_ROW, row)];
+        reducedFirst[row] = reduced[reducedAt(queue, REDUCED_RIGHT, row)];
+        reducedSecond[row] = reduced[reducedAt(queue, REDUCED_RIGHT + 1, row)];
+        reducedThird[row] = reduced[reducedAt(queue, REDUCED_RIGHT + 2, row)];
     }
-    syncAll();
-    reduceInSingles(thread);
+    syncShared();
+    reduceFaces();
+    int answer = uPass == 0 ? REDUCED_SOLVED : REDUCED_CORRECTION;
     for (int k = 0; k < ROWS_PER_THREAD; k++) {
-        int row = thread + k * WORKGROUP_ROWS;
+        int row = rowOf(k);
         if (row >= ROWS) continue;
-        setScratch(WATER, row, double(reducedWater[row]));
-        setScratch(WATER_LAND, row, double(reducedLand[row]));
-        setScratch(WATER_AIR, row, double(reducedAir[row]));
-    }
-    syncAll();
-    for (int refinement = 0; refinement < REFINEMENTS; refinement++) {
-        dvec3 residual[ROWS_PER_THREAD];
-        for (int k = 0; k < ROWS_PER_THREAD; k++) {
-            int row = thread + k * WORKGROUP_ROWS;
-            if (row >= ROWS) continue;
-            residual[k] = residualAt(row);
-        }
-        syncAll();
-        for (int k = 0; k < ROWS_PER_THREAD; k++) {
-            int row = thread + k * WORKGROUP_ROWS;
-            if (row >= ROWS) continue;
-            reducedWater[row] = float(residual[k].x);
-            reducedLand[row] = float(residual[k].y);
-            reducedAir[row] = float(residual[k].z);
-        }
-        syncAll();
-        reduceInSingles(thread);
-        for (int k = 0; k < ROWS_PER_THREAD; k++) {
-            int row = thread + k * WORKGROUP_ROWS;
-            if (row >= ROWS) continue;
-            setScratch(WATER, row, scratch(WATER, row) + double(reducedWater[row]));
-            setScratch(WATER_LAND, row, scratch(WATER_LAND, row) + double(reducedLand[row]));
-            setScratch(WATER_AIR, row, scratch(WATER_AIR, row) + double(reducedAir[row]));
-        }
-        syncAll();
-    }
-    {
-        dvec3 residual[ROWS_PER_THREAD];
-        for (int k = 0; k < ROWS_PER_THREAD; k++) {
-            int row = thread + k * WORKGROUP_ROWS;
-            if (row >= ROWS) continue;
-            residual[k] = residualAt(row);
-        }
-        syncAll();
-        for (int k = 0; k < ROWS_PER_THREAD; k++) {
-            int row = thread + k * WORKGROUP_ROWS;
-            if (row >= ROWS) continue;
-            setScratch(WATER, row, scratch(WATER, row) + residual[k].x);
-            setScratch(WATER_LAND, row, scratch(WATER_LAND, row) + residual[k].y);
-            setScratch(WATER_AIR, row, scratch(WATER_AIR, row) + residual[k].z);
-        }
-        syncAll();
+        vec3 solved = reducedRight(row) / reducedDiagonal[row];
+        for (int side = 0; side < 3; side++) reduced[reducedAt(queue, answer + side, row)] = solved[side];
     }
 #else
-    reduceInDoubles(thread);
+    for (int k = 0; k < ROWS_PER_THREAD; k++) {
+        int row = rowOf(k);
+        if (row >= ROWS) continue;
+        ownLower[k] = small[handoverAt(queue, LOWER, row)];
+        ownDiagonal[k] = small[handoverAt(queue, DIAGONAL, row)];
+        ownUpper[k] = small[handoverAt(queue, UPPER, row)];
+        ownRight[k] = dvec3(small[handoverAt(queue, RIGHT_WATER, row)], small[handoverAt(queue, RIGHT_LAND, row)],
+            small[handoverAt(queue, RIGHT_AIR, row)]);
+    }
+    // In doubles: the water and its land-origin part together, then the boundary layer's air.
+    loadMatrix();
+    for (int k = 0; k < ROWS_PER_THREAD; k++) {
+        int row = rowOf(k);
+        if (row >= ROWS) continue;
+        reducedFirst[row] = ownRight[k].x;
+        reducedSecond[row] = ownRight[k].y;
+    }
+    syncShared();
+    reduceFaces();
+    for (int k = 0; k < ROWS_PER_THREAD; k++) {
+        int row = rowOf(k);
+        if (row >= ROWS) continue;
+        ownWater[k] = dvec3(reducedFirst[row] / reducedDiagonal[row], reducedSecond[row] / reducedDiagonal[row], 0.0LF);
+    }
+    if (boundaryLayer) {
+        syncShared();
+        loadMatrix();
+        for (int k = 0; k < ROWS_PER_THREAD; k++) {
+            int row = rowOf(k);
+            if (row >= ROWS) continue;
+            reducedFirst[row] = ownRight[k].z;
+            reducedSecond[row] = 0.0LF;
+        }
+        syncShared();
+        reduceFaces();
+        for (int k = 0; k < ROWS_PER_THREAD; k++) {
+            int row = rowOf(k);
+            if (row >= ROWS) continue;
+            ownWater[k].z = reducedFirst[row] / reducedDiagonal[row];
+        }
+    }
+    for (int k = 0; k < ROWS_PER_THREAD; k++) {
+        int row = rowOf(k);
+        if (row >= ROWS) continue;
+        small[handoverAt(queue, SOLVED_WATER, row)] = ownWater[k].x;
+        small[handoverAt(queue, SOLVED_LAND, row)] = ownWater[k].y;
+        small[handoverAt(queue, SOLVED_AIR, row)] = ownWater[k].z;
+    }
+#endif
+}
+
+
 #endif
 
-    // What the marched rows' mean wind sent into the other sweep's rows waits in those rows' bank,
-    // and what the solve's mixing gave or took from the eastward rows waits in theirs.
-    for (int k = 0; k < ROWS_PER_THREAD; k++) {
-        int row = thread + k * WORKGROUP_ROWS;
-        if (row >= ROWS || sharedRole[row] == MARCHED) continue;
-        int here = base + row;
-        double bank = state[stateAt(season, bankField, here)];
-        double bankLand = state[stateAt(season, bankLandField, here)];
-        double bankAir = boundaryLayer ? state[stateAt(season, BL_BANK_AIR, here)] : 0.0LF;
-        if (row > 0 && sharedRole[row - 1] == MARCHED && scratch(SENT_BELOW, row - 1) > 0.0LF) {
-            double share = scratch(SENT_BELOW, row - 1);
-            bank += share * scratch(WATER, row - 1);
-            bankLand += share * scratch(WATER_LAND, row - 1);
-            bankAir += share * scratch(WATER_AIR, row - 1);
-        }
-        if (row < ROWS - 1 && sharedRole[row + 1] == MARCHED && scratch(SENT_ABOVE, row + 1) > 0.0LF) {
-            double share = scratch(SENT_ABOVE, row + 1);
-            bank += share * scratch(WATER, row + 1);
-            bankLand += share * scratch(WATER_LAND, row + 1);
-            bankAir += share * scratch(WATER_AIR, row + 1);
-        }
-        if (sharedRole[row] == ACROSS) {
-            bank += scratch(WATER, row) - scratch(ACROSS_BEFORE, row);
-            bankLand += scratch(WATER_LAND, row) - scratch(ACROSS_BEFORE_LAND, row);
-            bankAir += scratch(WATER_AIR, row) - scratch(ACROSS_BEFORE_AIR, row);
-        }
-        state[stateAt(season, bankField, here)] = bank;
-        state[stateAt(season, bankLandField, here)] = bankLand;
-        if (boundaryLayer) state[stateAt(season, BL_BANK_AIR, here)] = bankAir;
-    }
+// ---- The first solve's residual (MIXED), in doubles, a row an invocation ---------------------------
+
+#ifdef RESIDUAL
+
+layout(local_size_x = CROSSING_GROUP) in;
+
+dvec3 firstAnswer(int queue, int row) {
+    return dvec3(reduced[reducedAt(queue, REDUCED_SOLVED, row)], reduced[reducedAt(queue, REDUCED_SOLVED + 1, row)],
+        reduced[reducedAt(queue, REDUCED_SOLVED + 2, row)]);
+}
+
+void main() {
+    int row = int(gl_GlobalInvocationID.x);
+    int queue = int(gl_GlobalInvocationID.y);
+    if (row >= ROWS) return;
+    bool boundaryLayer = (queue & 1) == 0;
+    int column = steps[uStep * STEP_WIDTH + (boundaryLayer ? 0 : 2)];
+    if (column < 0) return;
+    readLayout(queue >> 1);
+    dvec3 product = small[handoverAt(queue, DIAGONAL, row)] * firstAnswer(queue, row);
+    if (row > 0) product += small[handoverAt(queue, LOWER, row)] * firstAnswer(queue, row - 1);
+    if (row < ROWS - 1) product += small[handoverAt(queue, UPPER, row)] * firstAnswer(queue, row + 1);
+    dvec3 right = dvec3(small[handoverAt(queue, RIGHT_WATER, row)], small[handoverAt(queue, RIGHT_LAND, row)], small[handoverAt(queue, RIGHT_AIR, row)]);
+    vec3 residual = vec3(right - product);
+    for (int side = 0; side < 3; side++) reduced[reducedAt(queue, REDUCED_RIGHT + side, row)] = residual[side];
 }
 
 #endif
@@ -998,9 +1064,9 @@ void main() {
 
 layout(local_size_x = CROSSING_GROUP) in;
 
-void clearParcel(int season, bool boundary, int sweep, int row) {
+void clearParcel(bool boundary, int sweep, int row) {
     int fieldsOf = boundary ? BL_PARCEL_FIELDS : FT_PARCEL_FIELDS;
-    for (int field = 0; field < fieldsOf; field++) small[parcelAt(season, boundary, sweep, field, row)] = 0.0LF;
+    for (int field = 0; field < fieldsOf; field++) small[parcelAt(boundary, sweep, field, row)] = 0.0LF;
 }
 
 int checkArriving(double vapor, double vaporLand) {
@@ -1015,6 +1081,53 @@ int checkArriving(double vapor, double vaporLand) {
 int ledgerAt(int season, int layer, int field, int here) { return ((season * 2 + layer) * LEDGER_FIELDS + field) * CELLS + here; }
 #endif
 
+// The faces' solve's answer at [row]: with MIXED, the first solve's and its correction's, added in doubles.
+dvec3 solvedWater(int queue, int row) {
+#if MIXED
+    dvec3 first = dvec3(reduced[reducedAt(queue, REDUCED_SOLVED, row)], reduced[reducedAt(queue, REDUCED_SOLVED + 1, row)],
+        reduced[reducedAt(queue, REDUCED_SOLVED + 2, row)]);
+    return first + dvec3(reduced[reducedAt(queue, REDUCED_CORRECTION, row)], reduced[reducedAt(queue, REDUCED_CORRECTION + 1, row)],
+        reduced[reducedAt(queue, REDUCED_CORRECTION + 2, row)]);
+#else
+    return dvec3(small[handoverAt(queue, SOLVED_WATER, row)], small[handoverAt(queue, SOLVED_LAND, row)], small[handoverAt(queue, SOLVED_AIR, row)]);
+#endif
+}
+
+// The row's water after the faces, the solve's answer plus its residual in doubles: what the faces'
+// fluxes, read off the solve's answer, leave in the row. A bank that a row's mean wind sends into is
+// paid the same fluxes off the same answer (bankWhatTheFacesSent), so a column conserves its water
+// to the doubles' rounding whatever precision the solve ran in.
+dvec3 waterAfterFaces(int queue, int row) {
+    dvec3 product = small[handoverAt(queue, DIAGONAL, row)] * solvedWater(queue, row);
+    if (row > 0) product += small[handoverAt(queue, LOWER, row)] * solvedWater(queue, row - 1);
+    if (row < ROWS - 1) product += small[handoverAt(queue, UPPER, row)] * solvedWater(queue, row + 1);
+    dvec3 right = dvec3(small[handoverAt(queue, RIGHT_WATER, row)], small[handoverAt(queue, RIGHT_LAND, row)], small[handoverAt(queue, RIGHT_AIR, row)]);
+    return solvedWater(queue, row) + (right - product);
+}
+
+// A row this sweep does not march: what the marched rows' mean wind sent it through their faces
+// waits in its bank, the row above's first, and what the solve's mixing gave or took from an
+// eastward row beside the westward sweep's waits there too, after them.
+void bankWhatTheFacesSent(int season, bool boundaryLayer, int queue, int column, int row, int role) {
+    int here = column * ROWS + row;
+    int bankField = boundaryLayer ? BL_BANK : FT_BANK;
+    int bankLandField = boundaryLayer ? BL_BANK_LAND : FT_BANK_LAND;
+    bool fromAbove = row > 0 && roles[queue * ROWS + row - 1] == MARCHED && small[handoverAt(queue, SENT_BELOW, row - 1)] > 0.0LF;
+    bool fromBelow = row < ROWS - 1 && roles[queue * ROWS + row + 1] == MARCHED && small[handoverAt(queue, SENT_ABOVE, row + 1)] > 0.0LF;
+    if (!fromAbove && !fromBelow && role != ACROSS) return;
+    dvec3 bank = dvec3(state[stateAt(season, bankField, here)], state[stateAt(season, bankLandField, here)],
+        boundaryLayer ? state[stateAt(season, BL_BANK_AIR, here)] : 0.0LF);
+    if (fromAbove) bank += small[handoverAt(queue, SENT_BELOW, row - 1)] * solvedWater(queue, row - 1);
+    if (fromBelow) bank += small[handoverAt(queue, SENT_ABOVE, row + 1)] * solvedWater(queue, row + 1);
+    if (role == ACROSS) {
+        bank += waterAfterFaces(queue, row) - dvec3(small[handoverAt(queue, RIGHT_WATER, row)],
+            small[handoverAt(queue, RIGHT_LAND, row)], small[handoverAt(queue, RIGHT_AIR, row)]);
+    }
+    state[stateAt(season, bankField, here)] = bank.x;
+    state[stateAt(season, bankLandField, here)] = bank.y;
+    if (boundaryLayer) state[stateAt(season, BL_BANK_AIR, here)] = bank.z;
+}
+
 void boundaryCell(int season, int column, int row, int sweep, int queue) {
     int base = column * ROWS;
     int here = base + row;
@@ -1026,13 +1139,14 @@ void boundaryCell(int season, int column, int row, int sweep, int queue) {
     double slowing = double(fields[fieldAt(season, SUPPRESSION, here)]);
     double layerMass = BOUNDARY_LAYER_MASS_KG_PER_M2;
 
-    double vapor = small[scratchAt(queue, WATER, row)] * toColumnWater;
-    double vaporLand = small[scratchAt(queue, WATER_LAND, row)] * toColumnWater;
-    double air = small[scratchAt(queue, WATER_AIR, row)] * toColumnWater;
-    double cloud = small[parcelAt(season, true, sweep, CLOUD, row)] * toColumnWater;
-    double cloudLand = small[parcelAt(season, true, sweep, CLOUD_LAND, row)] * toColumnWater;
-    double falling = small[parcelAt(season, true, sweep, FALLING, row)] * toColumnWater;
-    double fallingLand = small[parcelAt(season, true, sweep, FALLING_LAND, row)] * toColumnWater;
+    dvec3 arrived = waterAfterFaces(queue, row);
+    double vapor = arrived.x * toColumnWater;
+    double vaporLand = arrived.y * toColumnWater;
+    double air = arrived.z * toColumnWater;
+    double cloud = small[parcelAt(true, sweep, CLOUD, row)] * toColumnWater;
+    double cloudLand = small[parcelAt(true, sweep, CLOUD_LAND, row)] * toColumnWater;
+    double falling = small[parcelAt(true, sweep, FALLING, row)] * toColumnWater;
+    double fallingLand = small[parcelAt(true, sweep, FALLING_LAND, row)] * toColumnWater;
     int flags = checkArriving(vapor, vaporLand);
     vapor = max(vapor, 0.0LF);
     vaporLand = clamp(vaporLand, 0.0LF, vapor);
@@ -1143,19 +1257,19 @@ void boundaryCell(int season, int column, int row, int sweep, int queue) {
     double sentAirParcel = layerMass * perParcel;
     int sentPlace = cellInts[intAt(season, BL_SENT_SLOT, here)];
     if (sentPlace >= 0) {
-        small[blSentAt(season, SENT_PARCEL, sentPlace)] = sent;
-        small[blSentAt(season, SENT_LAND, sentPlace)] = sentLand;
-        small[blSentAt(season, SENT_AIR, sentPlace)] = sentAirParcel;
+        small[blSentAt(SENT_PARCEL, sentPlace)] = sent;
+        small[blSentAt(SENT_LAND, sentPlace)] = sentLand;
+        small[blSentAt(SENT_AIR, sentPlace)] = sentAirParcel;
     }
     int downwind = ((column + sweep + COLUMNS) % COLUMNS) * ROWS + row;
     if (directionOf(season, true, downwind) == sweep) {
-        small[parcelAt(season, true, sweep, VAPOR, row)] = sent;
-        small[parcelAt(season, true, sweep, VAPOR_LAND, row)] = sentLand;
-        small[parcelAt(season, true, sweep, AIR, row)] = sentAirParcel;
-        small[parcelAt(season, true, sweep, CLOUD, row)] = cloud * perParcel;
-        small[parcelAt(season, true, sweep, CLOUD_LAND, row)] = cloudLand * perParcel;
-        small[parcelAt(season, true, sweep, FALLING, row)] = fallingOut * perParcel;
-        small[parcelAt(season, true, sweep, FALLING_LAND, row)] = fallingOutLand * perParcel;
+        small[parcelAt(true, sweep, VAPOR, row)] = sent;
+        small[parcelAt(true, sweep, VAPOR_LAND, row)] = sentLand;
+        small[parcelAt(true, sweep, AIR, row)] = sentAirParcel;
+        small[parcelAt(true, sweep, CLOUD, row)] = cloud * perParcel;
+        small[parcelAt(true, sweep, CLOUD_LAND, row)] = cloudLand * perParcel;
+        small[parcelAt(true, sweep, FALLING, row)] = fallingOut * perParcel;
+        small[parcelAt(true, sweep, FALLING_LAND, row)] = fallingOutLand * perParcel;
     } else {
         // Where the wind turns, the cloud and the falling water go on in the other sweep as the
         // vapor does, and fall over their own delays there.
@@ -1163,11 +1277,11 @@ void boundaryCell(int season, int column, int row, int sweep, int queue) {
         state[stateAt(season, BL_BANK_LAND, downwind)] += sentLand;
         state[stateAt(season, BL_BANK_AIR, downwind)] += sentAirParcel;
         int slot = cellInts[intAt(season, TURN_SLOT, downwind)];
-        small[turnAt(season, BANK_CLOUD, slot)] += cloud * perParcel;
-        small[turnAt(season, BANK_CLOUD_LAND, slot)] += cloudLand * perParcel;
-        small[turnAt(season, BANK_FALLING, slot)] += fallingOut * perParcel;
-        small[turnAt(season, BANK_FALLING_LAND, slot)] += fallingOutLand * perParcel;
-        clearParcel(season, true, sweep, row);
+        small[turnAt(BANK_CLOUD, slot)] += cloud * perParcel;
+        small[turnAt(BANK_CLOUD_LAND, slot)] += cloudLand * perParcel;
+        small[turnAt(BANK_FALLING, slot)] += fallingOut * perParcel;
+        small[turnAt(BANK_FALLING_LAND, slot)] += fallingOutLand * perParcel;
+        clearParcel(true, sweep, row);
     }
 }
 
@@ -1179,8 +1293,9 @@ void freeCell(int season, int column, int row, int sweep, int queue) {
     double seconds = secondsPerColumn * toColumnWater;
     double slowing = double(fields[fieldAt(season, SUPPRESSION, here)]);
 
-    double vapor = small[scratchAt(queue, WATER, row)] * toColumnWater;
-    double vaporLand = small[scratchAt(queue, WATER_LAND, row)] * toColumnWater;
+    dvec3 arrived = waterAfterFaces(queue, row);
+    double vapor = arrived.x * toColumnWater;
+    double vaporLand = arrived.y * toColumnWater;
     int flags = checkArriving(vapor, vaporLand);
     vapor = max(vapor, 0.0LF);
     vaporLand = clamp(vaporLand, 0.0LF, vapor);
@@ -1245,17 +1360,17 @@ void freeCell(int season, int column, int row, int sweep, int queue) {
     double sentLand = vaporLand * perParcel;
     int sentPlace = cellInts[intAt(season, FT_SENT_SLOT, here)];
     if (sentPlace >= 0) {
-        small[ftSentAt(season, SENT_PARCEL, sentPlace)] = sent;
-        small[ftSentAt(season, SENT_LAND, sentPlace)] = sentLand;
+        small[ftSentAt(SENT_PARCEL, sentPlace)] = sent;
+        small[ftSentAt(SENT_LAND, sentPlace)] = sentLand;
     }
     int downwind = ((column + sweep + COLUMNS) % COLUMNS) * ROWS + row;
     if (directionOf(season, false, downwind) == sweep) {
-        small[parcelAt(season, false, sweep, VAPOR, row)] = sent;
-        small[parcelAt(season, false, sweep, VAPOR_LAND, row)] = sentLand;
+        small[parcelAt(false, sweep, VAPOR, row)] = sent;
+        small[parcelAt(false, sweep, VAPOR_LAND, row)] = sentLand;
     } else {
         state[stateAt(season, FT_BANK, downwind)] += sent;
         state[stateAt(season, FT_BANK_LAND, downwind)] += sentLand;
-        clearParcel(season, false, sweep, row);
+        clearParcel(false, sweep, row);
     }
 }
 
@@ -1269,8 +1384,11 @@ void main() {
     int column = steps[stepBase];
     int sweep = steps[stepBase + 1];
     if (column < 0) return;
-    if (roles[queue * ROWS + row] != MARCHED) {
-        clearParcel(season, boundaryLayer, sweep, row);
+    readLayout(season);
+    int role = roles[queue * ROWS + row];
+    if (role != MARCHED) {
+        clearParcel(boundaryLayer, sweep, row);
+        bankWhatTheFacesSent(season, boundaryLayer, queue, column, row, role);
         return;
     }
     if (boundaryLayer) boundaryCell(season, column, row, sweep, queue);

@@ -153,7 +153,7 @@ class AtmosphereCouplingTest : BorrowsSharedWorlds() {
         println("COUPLING laps over the four worlds: the plain iteration %d, accelerated %d; the plain iteration unsettled on %d".format(plainLaps, acceleratedLaps, plainUnsettled))
         // Recorded at A1-6b: with the march's sweeps held the plain iteration settles every world in
         // 10 to 11 laps, its feedback 0.59 to 0.63, and the acceleration saves none (docs/TODO.md).
-        KnownFailures.expect("A1-6b: the plain iteration settles every world as fast as the accelerated one", "47 against 43") {
+        KnownFailures.expect("A1-6b: the plain iteration settles every world as fast as the accelerated one", "68 against 65") {
             if (!(plainUnsettled > 0 && plainLaps > acceleratedLaps)) {
                 throw RecordedViolation(
                     "the plain iteration settles every world in $plainLaps laps against the acceleration's $acceleratedLaps, so the acceleration is not what settles the loop",

@@ -445,7 +445,7 @@ class ClimateFedErosionTest {
         // well as its flat-rain control (docs/DESIGN_LEDGER.md, A1-6a).
         KnownFailures.expect(
             "B-I2: the rain-dissection pin was set on rounds without the uplift",
-            "seed 1234 at 0.145; seed 1234's flat-rain control at -0.090"
+            "; seed 1234's flat-rain control at -0.043"
         ) {
             if (underThePin.isNotEmpty() || uncontrolled.isNotEmpty()) {
                 val found = underThePin.joinToString { (seed, fed) -> String.format(Locale.ROOT, "seed %d at %.3f", seed, fed) } +

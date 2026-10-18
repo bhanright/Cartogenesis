@@ -166,7 +166,7 @@ class LocalCirculationEarthTest : BorrowsSharedWorlds() {
         // but the half's rain before the blur is the ground's climb cell by cell, and the
         // continent's rows change by x1.05 to x1.09 in their median over this span, Earth's whole
         // gradient across a row, and by x1.2 to x1.5 at their largest (docs/TODO.md).
-        KnownFailures.expect("F1: the half's rain before the blur steps along a row by its own grain", "42 July x1.46 at 12.6; 42 January x1.72 at -25.0; 969495 July x1.84 at -2.7; 969495 January x2.54 at -11.2; 7 July x1.53 at -1.1; 7 January x1.51 at 1.7") {
+        KnownFailures.expect("F1: the half's rain before the blur steps along a row by its own grain", "42 July x1.15 at 5.4; 42 January x1.28 at -9.2; 969495 July x1.36 at 15.7; 969495 January x1.11 at -10.1; 7 July x1.14 at 22.4; 7 January x1.14 at -18.2") {
             if (over.isNotEmpty()) {
                 throw RecordedViolation(
                     "the equatorial continent's rain steps along a row by more than Earth's steepest gradient allows: " + over.joinToString("; "),
@@ -203,7 +203,7 @@ class LocalCirculationEarthTest : BorrowsSharedWorlds() {
         }
         // Recorded at W2c, whose warmer tropical sea and cloud left seed 7's line over land at 16.1 N
         // where W2b's stood near 17.6, the pooled shift a hair under Earth's (docs/TODO.md).
-        KnownFailures.expect("W2c: July's convergence line stands a hair under Earth's distance inland", "7.4") {
+        KnownFailures.expect("W2c: July's convergence line stands a hair under Earth's distance inland", "7.1") {
             if (shifts.average() < LEAST_INLAND_SHIFT_DEGREES) {
                 throw RecordedViolation(
                     "July's convergence line over land stands %.1f degrees poleward of the sea's pooled, under Earth's %.1f"

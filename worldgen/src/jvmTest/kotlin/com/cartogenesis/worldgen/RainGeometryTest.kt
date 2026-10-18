@@ -169,7 +169,7 @@ class RainGeometryTest : BorrowsSharedWorlds() {
             )
             if (found.alongRowKm > bar) over += "%d %.0f km at %.0f".format(seed, found.alongRowKm, found.rowLatitude)
         }
-        KnownFailures.expect("C1b2: fronts along the belts' factor", "42 1480 km at -27; 969495 1497 km at -30; 7 2396 km at -18") {
+        KnownFailures.expect("C1b2: fronts along the belts' factor", "42 895 km at 66; 969495 802 km at 13; 7 2412 km at -19") {
             if (over.isNotEmpty()) {
                 throw RecordedViolation(
                     "fronts hold a row for longer than a quarter of the weather's wavelength: " + over.joinToString("; "),
@@ -206,7 +206,7 @@ class RainGeometryTest : BorrowsSharedWorlds() {
         // Recorded at A1-6b: the front moves with the seasons and the march carries water across the
         // wind's reversal, yet the year's rain still steps along a row near 64 degrees on every seed
         // (docs/TODO.md).
-        KnownFailures.expect("A1-6b: the rain still ends along a row at the polar front", "42 926 km at 64.8; 969495 1049 km at 65.7; 7 744 km at 69.0") {
+        KnownFailures.expect("A1-6b: the rain still ends along a row at the polar front", "42 895 km at 65.7; 969495 609 km at -60.4; 7 602 km at 63.5") {
             if (over.isNotEmpty()) {
                 throw RecordedViolation(
                     "fronts hold a row at the polar front for longer than a quarter of the weather's wavelength: " +

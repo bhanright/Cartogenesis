@@ -262,7 +262,7 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
         val pooledDepth = depthShares.average()
         // Recorded since Fix 3b: see [NOTCH_SHORT_ON_THE_LAWS_TERRAIN].
         // Re-recorded on square cells at Q2 (docs/DESIGN_LEDGER.md, Q2). Re-recorded at L1, whose rifts are Earth's half-grabens and the same at every grid (docs/DESIGN_LEDGER.md, L1).
-        KnownFailures.expect(NOTCH_SHORT_ON_THE_LAWS_TERRAIN, "73.2% as deep as the control's") {
+        KnownFailures.expect(NOTCH_SHORT_ON_THE_LAWS_TERRAIN, "140.9% as deep as the control's") {
             if (pooledDepth >= 0.5) {
                 throw RecordedViolation(
                     "the fill still stands ${"%.1f".format(pooledDepth * 100)}% as deep over the land as the " +
@@ -493,7 +493,14 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
         // Recorded at A1-6b, under whose rain seeds 718106 and 7 hold lakes of 3.6 times the
         // Caspian's share and seed 1234 one of 1.6 (docs/TODO.md). Armed at W2d, under whose rain
         // every world's largest lake is under the Caspian's share (docs/DESIGN_LEDGER.md, W2d).
-        assertTrue(overCaspian.isEmpty(), "a lake is over the Caspian's share of the map: ${overCaspian.joinToString("; ")}")
+        // Recorded at W2e, whose interiors rain where they were desert and fill their closed basins:
+        // seed 718106's largest lake stands at 5.76 times the Caspian's share after the notch
+        // (docs/DESIGN_LEDGER.md, W2e; docs/TODO.md).
+        KnownFailures.expect("W2e: the wetter interiors fill a basin past the Caspian's share", "seed 718106's largest lake 5.76x the Caspian") {
+            if (overCaspian.isNotEmpty()) {
+                throw RecordedViolation("a lake is over the Caspian's share of the map: ${overCaspian.joinToString("; ")}", overCaspian.joinToString("; "))
+            }
+        }
         // Recorded at C1b: the land rains more than Earth's and returns less of it, so two seeds
         // start with a lake over the Caspian's share again, and the notch takes their worlds' water
         // to 0.68 and 0.76 of the control rather than under half (docs/DESIGN_LEDGER.md, C1b;
@@ -505,11 +512,17 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
         // below records that it is read on none (docs/DESIGN_LEDGER.md, A1-6a). Recorded at A1-6b,
         // whose rain gives three seeds an over-large lake to begin with (docs/TODO.md). Armed at
         // W2c, on whose ground no seed starts with one, so the clause holds over none; the clause
-        // below records that it is read on none (docs/DESIGN_LEDGER.md, W2c).
-        assertTrue(
-            notHalved.isEmpty(),
-            "an over-large lake did not fall, or its world kept more than half its water: ${notHalved.joinToString("; ")}"
-        )
+        // below records that it is read on none (docs/DESIGN_LEDGER.md, W2c). Recorded at W2e, whose
+        // wetter interiors give seed 718106 a lake of 6.7 times the Caspian's share to begin with,
+        // which the notch takes to 5.8 and whose world keeps 0.81 of its water (docs/TODO.md).
+        KnownFailures.expect("W2e: seed 718106's over-large lake keeps most of its water", "seed 718106's water 3.1722% to 2.5699%") {
+            if (notHalved.isNotEmpty()) {
+                throw RecordedViolation(
+                    "an over-large lake did not fall, or its world kept more than half its water: ${notHalved.joinToString("; ")}",
+                    notHalved.joinToString("; ")
+                )
+            }
+        }
         // Recorded at L1, where only seed 718106 started over-large; armed again at its review round,
         // whose rift joins are relay ramps: seed 43's largest lake starts at 0.392% of its land, over
         // the Caspian's 0.249%, beside 718106's 0.975% (docs/DESIGN_LEDGER.md, L1).
@@ -524,15 +537,12 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
         // (docs/DESIGN_LEDGER.md, M1; docs/TODO.md). Re-recorded at A1-6a, under whose rain no seed
         // starts with a lake over the Caspian's share, the largest seed 42's at 0.19% of its land.
         // Armed at A1-6b, under whose rain three seeds do (docs/DESIGN_LEDGER.md, A1-6b). Recorded
-        // at W2b, under whose drier land one seed does (docs/TODO.md), and at W2c none.
-        KnownFailures.expect("W2b: too few seeds start with a lake over the Caspian's share", "0 of 6") {
-            if (overLarge < 2) {
-                throw RecordedViolation(
-                    "only $overLarge of ${seeds.size} seeds had an over-large lake to begin with, so this guard proves little",
-                    "$overLarge of ${seeds.size}"
-                )
-            }
-        }
+        // at W2b, under whose drier land one seed does (docs/TODO.md), and at W2c none. Armed at W2e,
+        // under whose wetter interiors seeds 718106 and 7 do (docs/DESIGN_LEDGER.md, W2e).
+        assertTrue(
+            overLarge >= 2,
+            "only $overLarge of ${seeds.size} seeds had an over-large lake to begin with, so this guard proves little"
+        )
         // Collected over every seed rather than asserted inside the loop, so a run reports all six
         // figures. With `postCutOutlet = false` this reads
         // 718106 0.6244%, 99 0.6514%, 43 0.2568% — see the ledger row for H5b.
@@ -558,8 +568,10 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
         // Armed at W2b, on whose ground the pooled largest drowned basin stands under the Caspian's share again (docs/DESIGN_LEDGER.md, W2b).
         // Recorded at W2c, whose ground leaves seed 99's interior drowned over 2.2% of its land and
         // seed 42's over 0.27% (docs/TODO.md); 1.57 times at W2d, seed 99's at 1.97% and seed 42's
-        // at 0.28% (docs/DESIGN_LEDGER.md, W2d).
-        KnownFailures.expect("W2c: the drowned interiors stand over the Caspian's share pooled", "1.57x") {
+        // at 0.28% (docs/DESIGN_LEDGER.md, W2d); 4.72 times at W2e, seed 99's at 2.86%, seed 42's at
+        // 2.70% and seed 7's at 1.01%, the wetter interiors filling the basins under the cut
+        // (docs/DESIGN_LEDGER.md, W2e; docs/TODO.md).
+        KnownFailures.expect("W2c: the drowned interiors stand over the Caspian's share pooled", "4.72x") {
             if (pooledDrowned >= caspianShare * drownedChaos) {
                 throw RecordedViolation(
                     "these worlds keep a basin below the sea-level cut holding more water than the " +

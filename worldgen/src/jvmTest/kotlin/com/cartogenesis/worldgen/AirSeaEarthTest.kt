@@ -128,7 +128,7 @@ class AirSeaEarthTest : BorrowsSharedWorlds() {
                 .format(north / DAYS_PER_YEAR, northAt, south / DAYS_PER_YEAR, -southAt, ratio, equator / DAYS_PER_YEAR))
             if (!(ratio >= NORTH_OVER_SOUTH_PEAK)) failures += "seed $seed %.2f".format(ratio)
         }
-        KnownFailures.expect("A1-6c: the year's ocean rain peaks either side of the equator alike", "seed 42 1.10; seed 969495 0.94; seed 7 0.80") {
+        KnownFailures.expect("A1-6c: the year's ocean rain peaks either side of the equator alike", "seed 42 1.13; seed 969495 0.90; seed 7 0.85") {
             if (failures.isNotEmpty()) throw RecordedViolation("the north peak stands under twice the south: $failures", failures.joinToString("; "))
         }
     }

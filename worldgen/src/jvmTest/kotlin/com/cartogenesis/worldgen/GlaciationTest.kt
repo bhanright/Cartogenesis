@@ -163,7 +163,7 @@ class GlaciationTest : BorrowsSharedWorlds() {
         // (docs/DESIGN_LEDGER.md, W2d; docs/TODO.md).
         val tripled = with.coldLakes.toLong() * without.coldLand >= 3L * without.coldLakes * with.coldLand
         val contrasted = with.ratio >= COLD_LAKE_RATIO
-        KnownFailures.expect("W2d: the iced zone holds under two and a half times temperate country's lakes", "zone ratio 2.28") {
+        KnownFailures.expect("W2d: the iced zone holds under two and a half times temperate country's lakes", "zone ratio 2.41") {
             if (!(tripled && contrasted)) {
                 throw RecordedViolation(
                     ("the ice takes cold-country lakes from %.2f to %.2f per 10k cells, asked three times, " +

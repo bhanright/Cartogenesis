@@ -475,7 +475,8 @@ internal object ColumnWater {
         // The saturated part's climb to the layer's top, one midpoint step up the moist adiabat: what
         // it condenses is its water at the condensation level less what it holds at the top, in the
         // air's mean density over the climb.
-        val midKelvin = levelKelvin - 0.5 * moistAdiabaticLapseKPerM(levelC, levelPressure) * above
+        val levelLapse = moistAdiabaticLapseKPerM(levelC, levelPressure)
+        val midKelvin = levelKelvin - 0.5 * levelLapse * above
         val midPressure = levelPressure * exp(-STANDARD_GRAVITY_MPS2 * 0.5 * above / (DRY_AIR_GAS_CONSTANT_J_PER_KG_K * levelKelvin))
         val topKelvin = levelKelvin - moistAdiabaticLapseKPerM(midKelvin - KELVIN_AT_ZERO_C, midPressure) * above
         val topPressure = levelPressure * exp(-STANDARD_GRAVITY_MPS2 * above / (DRY_AIR_GAS_CONSTANT_J_PER_KG_K * midKelvin))
@@ -486,7 +487,7 @@ internal object ColumnWater {
         // temperature rises with the vapor's pressure, which rises with the humidity.
         val levelDensity = levelPressure * PASCALS_PER_KPA / (DRY_AIR_GAS_CONSTANT_J_PER_KG_K * levelKelvin)
         val perMeter = levelDensity * levelHumidity * (
-            LATENT_HEAT_J_PER_KG * moistAdiabaticLapseKPerM(levelC, levelPressure) /
+            LATENT_HEAT_J_PER_KG * levelLapse /
                 (WATER_VAPOR_GAS_CONSTANT_J_PER_KG_K * levelKelvin * levelKelvin) -
                 STANDARD_GRAVITY_MPS2 / (DRY_AIR_GAS_CONSTANT_J_PER_KG_K * levelKelvin)
             )

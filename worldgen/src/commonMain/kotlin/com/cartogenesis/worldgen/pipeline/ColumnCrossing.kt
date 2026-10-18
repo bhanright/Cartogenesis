@@ -181,6 +181,15 @@ internal class ColumnCrossing {
     private val yield = DoubleArray(2)
 
     fun solve() {
+        remembering = true
+        rememberedCount = 0
+        rememberedNext = 0
+        dryRainKnown = false
+        solveCrossing()
+        remembering = false
+    }
+
+    private fun solveCrossing() {
         val crossing = seconds
         sourced = sourceKgPerM2PerSecond * crossing
         waterIn = vapor + cloud + falling + sourced
@@ -402,13 +411,56 @@ internal class ColumnCrossing {
     private var sinksNow = 0.0
     private var slopeNow = 0.0
 
+    // While [solve] runs, the sinks it has evaluated are kept, by the layer's water they were
+    // evaluated at: the solve asks again at the same few waters (the cap, the start, the balance,
+    // and the balance's root search once for the highest and once for the lowest root), and an
+    // evaluation costs exponentials. The sinks are a function of the water alone while the fields
+    // above hold, and those do not change inside a solve, so the answer is the same bits.
+    private var remembering = false
+    private var rememberedCount = 0
+    private var rememberedNext = 0
+    private val rememberedWater = LongArray(REMEMBERED)
+    private val rememberedPaths = DoubleArray(REMEMBERED * PATHS)
+    private val rememberedSinks = DoubleArray(REMEMBERED)
+    private val rememberedSlope = DoubleArray(REMEMBERED)
+
+    // The rain law's value at a dry column, which depends on the law's two fields and not on the water.
+    private var dryRainKnown = false
+    private var dryRain = 0.0
+
     /** The sinks, by path, and their slope at [waterMm] in one pass. */
     private fun evaluateSinks(waterMm: Double) {
+        if (!remembering) {
+            computeSinks(waterMm)
+            return
+        }
+        val bits = waterMm.toRawBits()
+        for (entry in 0 until rememberedCount) {
+            if (rememberedWater[entry] == bits) {
+                for (path in 0 until PATHS) pathNow[path] = rememberedPaths[entry * PATHS + path]
+                sinksNow = rememberedSinks[entry]
+                slopeNow = rememberedSlope[entry]
+                return
+            }
+        }
+        computeSinks(waterMm)
+        val entry = rememberedNext
+        rememberedWater[entry] = bits
+        for (path in 0 until PATHS) rememberedPaths[entry * PATHS + path] = pathNow[path]
+        rememberedSinks[entry] = sinksNow
+        rememberedSlope[entry] = slopeNow
+        rememberedNext = (entry + 1) % REMEMBERED
+        if (rememberedCount < REMEMBERED) rememberedCount++
+    }
+
+    private fun computeSinks(waterMm: Double) {
         pathNow.fill(0.0)
         slopeNow = 0.0
         if (lawSaturatedMm > 0.0 && rainSuppression > 0.0) {
             val grown = exp(MoistureMarch.COLUMN_RAIN_PER_HUMIDITY * ((waterMm + lawOffsetMm) / lawSaturatedMm - MoistureMarch.COLUMN_RAIN_HUMIDITY_OFFSET))
-            val dry = exp(MoistureMarch.COLUMN_RAIN_PER_HUMIDITY * (lawOffsetMm / lawSaturatedMm - MoistureMarch.COLUMN_RAIN_HUMIDITY_OFFSET))
+            val dry = if (remembering && dryRainKnown) dryRain else exp(
+                MoistureMarch.COLUMN_RAIN_PER_HUMIDITY * (lawOffsetMm / lawSaturatedMm - MoistureMarch.COLUMN_RAIN_HUMIDITY_OFFSET)
+            ).also { if (remembering) { dryRain = it; dryRainKnown = true } }
             if (waterMm > 0.0) pathNow[RAIN] = rainSuppression * (grown - dry) / SECONDS_PER_DAY
             slopeNow += rainSuppression * grown * MoistureMarch.COLUMN_RAIN_PER_HUMIDITY / lawSaturatedMm / SECONDS_PER_DAY
         }
@@ -493,6 +545,14 @@ internal class ColumnCrossing {
 
     companion object {
         private const val SECONDS_PER_DAY = 86_400.0
+
+        /**
+         * How many evaluations of the sinks a solve keeps: eight, the few waters a crossing returns
+         * to (the cap, the start, the balance) and the root search's path for the balance, which a
+         * solve walks twice; a search that runs longer forgets its oldest points, which only costs
+         * the evaluation again.
+         */
+        private const val REMEMBERED = 8
 
         /** The sinks' paths, as [pathSunk] and [pathShare] index them. */
         private const val RAIN = 0

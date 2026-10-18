@@ -1,6 +1,7 @@
 package com.cartogenesis.worldgen.pipeline
 
 import com.cartogenesis.worldgen.concurrent.parallelChunks
+import com.cartogenesis.worldgen.concurrent.parallelism
 import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import kotlin.math.PI
@@ -70,12 +71,23 @@ import kotlin.time.TimeSource
  * A1-6b). The eddies' mixing between the two sweeps' rows is solved by the westward sweep with the
  * eastward rows beside its own in one system.
  *
- * The layers march side by side, each on its own thread, so their exchange runs a lap behind: what
- * each layer sends the other at a cell, solved implicitly in its own water over its own crossing,
- * waits at the cell ([SeasonMarch]'s inboxes) and enters the other layer there on the next lap, as
- * a steady rate over that layer's crossing, as the surface's sources enter. At the march's steady
- * state a lap's lag is no lag, a uniform state stays uniform however long a cell's crossing, and the
- * inboxes are held in the budget like any bank.
+ * # The exchange inside the lap
+ *
+ * What each layer sends the other at a cell, solved implicitly in its own water over its own
+ * crossing, waits at the cell ([SeasonMarch]'s inboxes) and enters the other layer there as a
+ * steady rate over that layer's crossing, as the surface's sources enter; the inboxes are held in
+ * the budget like any bank. A lap is marched in stages of a few dozen columns of one sweep
+ * ([SeasonMarch.marchStage]), the free troposphere one stage behind the boundary layer
+ * ([SeasonMarch.stageAt]). Whichever layer crosses a cell second in the lap takes in what the first
+ * sent it in that very lap, and the first takes in what the second sent in the lap before, so only
+ * one of the two directions of the exchange runs a lap behind: the free troposphere takes in the
+ * boundary layer's water of the same lap, in every cell but those the boundary layer marches
+ * westward and the free troposphere eastward, and what it sends down waits for the next. A lag in
+ * both directions, the two layers marching side by side, takes more laps to settle, since the loop
+ * through both layers' inboxes then closes a lap late both ways (docs/DESIGN_LEDGER.md, W2f). Every
+ * read is of a stage done before the one reading it, or of the last lap, so the answer does not
+ * depend on how the stages are scheduled. At the march's steady state a lap's lag is no lag, and
+ * a uniform state stays uniform however long a cell's crossing.
  *
  * # The sweeps are held
  *
@@ -501,12 +513,22 @@ object MoistureMarch {
             val laps = Array(2) { season -> ledger?.let { MoistureLedger.Lap(season == 0, lap) } }
             for (season in 0 until 2) seasons[season].beginLap(laps[season])
             // The two seasons share nothing inside a lap but the ground's return, which was set
-            // before it began, and each season's two layers share only what the other left at the
-            // lap's start, so all four march side by side.
-            parallelChunks(0, 2 * LAYERS) { first, last ->
-                for (task in first until last) seasons[task / LAYERS].marchLayer(task % LAYERS)
+            // before it began, so they march side by side; and inside a season the free troposphere
+            // follows the boundary layer by one stage, which is what gives it the boundary layer's
+            // water of this lap where their sweeps allow ("The exchange inside the lap").
+            val slots = seasons[0].slotCount
+            for (slot in 0 until slots) {
+                parallelChunks(0, 2 * LAYERS) { first, last ->
+                    for (task in first until last) {
+                        val season = seasons[task / LAYERS]
+                        val layer = task % LAYERS
+                        val stage = season.stageAt(layer, slot)
+                        if (stage >= 0) season.marchStage(layer, stage)
+                    }
+                }
             }
             for (season in 0 until 2) seasons[season].endLap(laps[season])
+
             laps.forEach { entry -> if (entry != null) ledger?.laps?.add(entry) }
 
             // The year's rain, as the rivers will read it, and the potential evaporation the two
@@ -624,8 +646,27 @@ object MoistureMarch {
         )
     }
 
-    /** The march's two layers, as [SeasonMarch.marchLayer] numbers them. */
+    /** The march's two layers, as [SeasonMarch.marchStage] numbers them. */
     private const val LAYERS = 2
+
+
+    /**
+     * The most pieces a column's rows are marched in. Each piece is handed to the pool and waited
+     * for once a column, a hand-off of a few tens of microseconds against the 0.1 to 0.3 ms a
+     * layer's column takes at the application's 1,024 rows; past a dozen the hand-offs outweigh
+     * what the pieces save on the sixteen-thread machine this was measured on
+     * (docs/DESIGN_LEDGER.md, W2f).
+     */
+    private const val MAX_ROW_CHUNKS = 12
+
+    /**
+     * Columns of one sweep a stage marches ([SeasonMarch.marchStage]): the lap's schedule is a
+     * hand-off of the pool's four marches every stage, so a stage is long enough that the hand-off
+     * is a hundredth of it and short enough that the free troposphere, a stage behind, has a stage's
+     * columns of the boundary layer's sent water to read. Sixteen to 128 columns marched the same
+     * lap in the same time.
+     */
+    private const val COLUMNS_PER_STAGE = 32
     private const val BOUNDARY = 0
     private const val FREE = 1
 
@@ -960,6 +1001,15 @@ object MoistureMarch {
         val cellCount = cellsAcross * cellsDown
         val config = inputs.config
 
+        /**
+         * The pieces a column's rows are marched in, side by side: half the processor's workers, so
+         * that the four marches running at once (two seasons, two layers) offer the pool twice
+         * its workers and keep it busy while a piece waits on the pool. A machine of one or two
+         * workers marches its rows in order. Every row of a column is independent of every other,
+         * so the answer does not depend on the number.
+         */
+        val rowChunks = ((parallelism() + 1) / 2).coerceIn(1, MAX_ROW_CHUNKS)
+
         // What the ledger and the last potentials read of the season's air. The rest of a season,
         // its wind, is let go once each lap's fields are built from it, so a coupled lap's next
         // seasons are not built beside the last ones.
@@ -1019,25 +1069,24 @@ object MoistureMarch {
 
         /**
          * What each layer sent the other at each cell, in the march's units, with its land-origin
-         * part: the last lap's, which the receiving layer takes in this lap as a steady rate over its
-         * crossing, and this lap's, which it takes in the next.
+         * part, waiting for the other layer to take it in at its crossing of the cell, as a steady
+         * rate over that crossing. The layer that crosses the cell second in the lap takes in what
+         * the first sent in the same lap, and the first takes in what the second sent in the lap
+         * before; the one that takes it in empties the cell, and the other writes it again later in
+         * the lap, so one array does for both laps ([marchStage] orders the crossings).
          */
-        var toFree = DoubleArray(cellCount)
-        var toFreeLand = DoubleArray(cellCount)
-        var toFreeNext = DoubleArray(cellCount)
-        var toFreeLandNext = DoubleArray(cellCount)
-        var toBoundary = DoubleArray(cellCount)
-        var toBoundaryLand = DoubleArray(cellCount)
-        var toBoundaryNext = DoubleArray(cellCount)
-        var toBoundaryLandNext = DoubleArray(cellCount)
+        val toFree = DoubleArray(cellCount)
+        val toFreeLand = DoubleArray(cellCount)
+        val toBoundary = DoubleArray(cellCount)
+        val toBoundaryLand = DoubleArray(cellCount)
 
         /**
          * The share of the boundary layer's air the march's faces took out of each cell, per second
-         * of its crossing, which the free troposphere's lowest air makes up: the last lap's, which
-         * the free troposphere gives this lap, and this lap's.
+         * of its crossing, which the free troposphere's lowest air makes up: written by the boundary
+         * layer's crossing of the cell and read by the free troposphere's, this lap's or the last
+         * lap's by the same order as the inboxes above.
          */
-        var replacedPerSecond = FloatArray(cellCount)
-        var replacedPerSecondNext = FloatArray(cellCount)
+        val replacedPerSecond = FloatArray(cellCount)
 
         // Potential evaporation from the last lap's air, row-major, and its terms in the air's
         // humidity at each land cell, built once.
@@ -1259,12 +1308,51 @@ object MoistureMarch {
             }
         }
 
-        /** Marches one layer, [BOUNDARY] or [FREE], through both sweeps. */
-        fun marchLayer(layer: Int) {
+        /**
+         * A lap's march in stages, [columnsPerStage] columns of one sweep each: the eastward sweep's
+         * first, then the westward sweep's from the last column back. Each layer marches the same
+         * stages in the same order, so a layer's answer does not depend on how the stages are
+         * scheduled.
+         */
+        val columnsPerStage: Int = COLUMNS_PER_STAGE
+        val stagesPerSweep: Int = (cellsAcross + columnsPerStage - 1) / columnsPerStage
+        val stageCount: Int = 2 * stagesPerSweep
+
+        /**
+         * The slots of a lap's schedule: the boundary layer marches stage `s` of the eastward sweep
+         * in slot `s`, then rests a slot, then marches stage `s` of the westward sweep in slot
+         * `stagesPerSweep + 1 + s`; the free troposphere marches the same stages one slot after.
+         * Whatever a slot's two marches touch lies in different columns, and every read of the
+         * other layer's cell is of a crossing in an earlier slot or in the last lap. The rest keeps
+         * the boundary layer's first westward stage off the free troposphere's last eastward one,
+         * which stand on the same columns.
+         */
+        val slotCount: Int = 2 * stagesPerSweep + 2
+
+        /** The stage [layer] marches in [slot], or -1 if it rests. */
+        fun stageAt(layer: Int, slot: Int): Int {
+            val own = slot - (if (layer == BOUNDARY) 0 else 1)
+            return when {
+                own < 0 || own == stagesPerSweep -> -1
+                own < stagesPerSweep -> own
+                own - 1 < stageCount -> own - 1
+                else -> -1
+            }
+        }
+
+        /**
+         * Marches [stage] of one layer, [BOUNDARY] or [FREE] (see [stageAt]).
+         */
+        fun marchStage(layer: Int, stage: Int) {
             val marched = if (layer == BOUNDARY) boundary else free
             marched.entry = if (layer == BOUNDARY) boundaryEntry else freeEntry
-            for (step in 0 until cellsAcross) marched.sweepColumn(step, 1)
-            for (step in 0 until cellsAcross) marched.sweepColumn(cellsAcross - 1 - step, -1)
+            if (stage < stagesPerSweep) {
+                val first = stage * columnsPerStage
+                for (column in first until minOf(first + columnsPerStage, cellsAcross)) marched.sweepColumn(column, 1)
+            } else {
+                val first = (stage - stagesPerSweep) * columnsPerStage
+                for (step in first until minOf(first + columnsPerStage, cellsAcross)) marched.sweepColumn(cellsAcross - 1 - step, -1)
+            }
         }
 
         /**
@@ -1272,16 +1360,6 @@ object MoistureMarch {
          * boundary layer draws on, the layers' ledgers are merged and the storage read again.
          */
         fun endLap(entry: MoistureLedger.Lap?) {
-            // What each layer took in this lap is spent; what each sent waits for the next.
-            toFree = toFreeNext.also { toFreeNext = toFree }
-            toFreeLand = toFreeLandNext.also { toFreeLandNext = toFreeLand }
-            toBoundary = toBoundaryNext.also { toBoundaryNext = toBoundary }
-            toBoundaryLand = toBoundaryLandNext.also { toBoundaryLandNext = toBoundaryLand }
-            replacedPerSecond = replacedPerSecondNext.also { replacedPerSecondNext = replacedPerSecond }
-            toFreeNext.fill(0.0)
-            toFreeLandNext.fill(0.0)
-            toBoundaryNext.fill(0.0)
-            toBoundaryLandNext.fill(0.0)
             if (entry != null) {
                 boundaryEntry?.let(entry::add)
                 freeEntry?.let(entry::add)
@@ -1452,10 +1530,30 @@ object MoistureMarch {
             val bankFalling = DoubleArray(turnCells)
             val bankFallingLand = DoubleArray(turnCells)
 
-            /** The parcel each cell sent on, column-major, for the westward sweep's faces to read. */
-            val sentParcel = DoubleArray(cellCount)
-            val sentParcelLand = DoubleArray(cellCount)
-            val sentParcelAir: DoubleArray? = if (isBoundary) DoubleArray(cellCount) else null
+            /**
+             * Each cell's place among the cells whose sent parcel the westward sweep reads, or -1
+             * (column-major). The westward sweep's faces read what an eastward row sent on only in
+             * the cells where it stands beside a westward row of the same column, a few hundredths of
+             * the map's with the sweeps held; kept for every cell the three arrays below would hold
+             * 100 MB a half-year at 1,024 rows, most of it never read.
+             */
+            private val sentSlot = IntArray(cellCount) { -1 }
+            private val sentSlots: Int = run {
+                var count = 0
+                for (here in 0 until cellCount) {
+                    if (direction[here] <= 0) continue
+                    val row = here % cellsDown
+                    val westwardAbove = row > 0 && direction[here - 1] < 0
+                    val westwardBelow = row < cellsDown - 1 && direction[here + 1] < 0
+                    if (westwardAbove || westwardBelow) sentSlot[here] = count++
+                }
+                count
+            }
+
+            /** The parcel each of those cells sent on, by [sentSlot], for the westward sweep's faces to read. */
+            val sentParcel = DoubleArray(sentSlots)
+            val sentParcelLand = DoubleArray(sentSlots)
+            val sentParcelAir: DoubleArray? = if (isBoundary) DoubleArray(sentSlots) else null
 
             // Working space for one column's solve.
             val role = ByteArray(cellsDown)
@@ -1481,8 +1579,12 @@ object MoistureMarch {
             val sentAbove = DoubleArray(cellsDown)
             val sentBelow = DoubleArray(cellsDown)
 
-            /** The one crossing this layer solves at a time ([ColumnCrossing]). */
-            val crossing = ColumnCrossing()
+            /**
+             * The crossings this layer solves, one for each piece its rows are marched in
+             * ([rowChunks]); a piece solves one at a time ([ColumnCrossing]).
+             */
+            val crossings = Array(rowChunks) { ColumnCrossing() }
+
 
             /** This lap's part of the ledger, when one is kept. */
             var entry: MoistureLedger.Lap? = null
@@ -1738,13 +1840,14 @@ object MoistureMarch {
                         if (!besideMarched) continue
                         role[row] = ACROSS
                         // What the eastward row will bring here, net of what it already owes here.
-                        val bringing = (sentParcel[base + row] + bank[base + row]).coerceAtLeast(0.0)
+                        val sentPlace = sentSlot[base + row]
+                        val bringing = (sentParcel[sentPlace] + bank[base + row]).coerceAtLeast(0.0)
                         water[row] = bringing
-                        waterLand[row] = (sentParcelLand[base + row] + bankLand[base + row]).coerceIn(0.0, bringing)
+                        waterLand[row] = (sentParcelLand[sentPlace] + bankLand[base + row]).coerceIn(0.0, bringing)
                         acrossBefore[row] = water[row]
                         acrossBeforeLand[row] = waterLand[row]
                         if (air != null && sentAir != null) {
-                            waterAir[row] = (sentAir[base + row] + air[base + row]).coerceAtLeast(0.0)
+                            waterAir[row] = (sentAir[sentPlace] + air[base + row]).coerceAtLeast(0.0)
                             acrossBeforeAir[row] = waterAir[row]
                         }
                     }
@@ -1775,14 +1878,31 @@ object MoistureMarch {
                     }
                 }
 
-                // The column's physics, row by row, and the water it sends on.
+                // The column's physics, row by row, and the water it sends on. The rows share
+                // nothing here: each reads its own arrivals and writes its own parcel and its own
+                // cell of every field, and what it banks lands in the next column's cells, so they
+                // are marched in [rowChunks] pieces side by side. A ledger's sums are not made
+                // for that, and a march that keeps one marches its rows in order.
                 val downwindBase = ((column + sweep + cellsAcross) % cellsAcross) * cellsDown
-                for (row in 0 until cellsDown) {
+                if (rowChunks <= 1 || entry != null) {
+                    marchRows(0, cellsDown, crossings[0], base, sweep, parcel, downwindBase)
+                } else {
+                    parallelChunks(0, rowChunks) { firstChunk, lastChunk ->
+                        for (chunk in firstChunk until lastChunk) {
+                            marchRows(chunk * cellsDown / rowChunks, (chunk + 1) * cellsDown / rowChunks, crossings[chunk], base, sweep, parcel, downwindBase)
+                        }
+                    }
+                }
+            }
+
+            /** The crossings of rows [firstRow] to [lastRow] (exclusive) of one column, each solved on [budget]. */
+            private fun marchRows(firstRow: Int, lastRow: Int, budget: ColumnCrossing, base: Int, sweep: Int, parcel: RowState, downwindBase: Int) {
+                for (row in firstRow until lastRow) {
                     if (role[row] != MARCHED) {
                         parcel.clear(row)
                         continue
                     }
-                    if (isBoundary) boundaryCell(base, row, sweep, parcel, downwindBase) else freeCell(base, row, sweep, parcel, downwindBase)
+                    if (isBoundary) boundaryCell(budget, base, row, sweep, parcel, downwindBase) else freeCell(budget, base, row, sweep, parcel, downwindBase)
                 }
             }
 
@@ -1799,7 +1919,7 @@ object MoistureMarch {
              * the free troposphere, its sources and sinks solved together ([ColumnCrossing]), its
              * condensate's delays, and what it sends the free troposphere.
              */
-            private fun boundaryCell(base: Int, row: Int, sweep: Int, parcel: RowState, downwindBase: Int) {
+            private fun boundaryCell(budget: ColumnCrossing, base: Int, row: Int, sweep: Int, parcel: RowState, downwindBase: Int) {
                 val here = base + row
                 val cell = row * cellsAcross + base / cellsDown
                 val kind = surface[here]
@@ -1833,14 +1953,18 @@ object MoistureMarch {
                     vapor -= sentUp
                     vaporLand -= sentUpLand
                 }
-                replacedPerSecondNext[here] = if (air < layerMass) ((layerMass - air) / layerMass / seconds).toFloat() else 0f
+                replacedPerSecond[here] = if (air < layerMass) ((layerMass - air) / layerMass / seconds).toFloat() else 0f
 
                 // What the free troposphere sent last lap, its lowest air stirred in and drawn down,
                 // at a steady rate over the crossing; the layer's own air stirred out, which the
                 // crossing solves.
                 val exchangePerSecond = exchangePerSecondAt(here, cell)
-                val mixedInRate = toBoundary[here] / grid.secondsPerColumn[row]
-                val mixedInShareLand = if (toBoundary[here] > 0.0) (toBoundaryLand[here] / toBoundary[here]).coerceIn(0.0, 1.0) else 0.0
+                val inboxAmount = toBoundary[here]
+                val inboxLandAmount = toBoundaryLand[here]
+                toBoundary[here] = 0.0
+                toBoundaryLand[here] = 0.0
+                val mixedInRate = inboxAmount / grid.secondsPerColumn[row]
+                val mixedInShareLand = if (inboxAmount > 0.0) (inboxLandAmount / inboxAmount).coerceIn(0.0, 1.0) else 0.0
                 val groundPressure = groundPressureKpa[here].toDouble()
                 val depth = layerDepthM[here].toDouble()
                 val airC = airTemperatureC[cell].toDouble()
@@ -1851,7 +1975,6 @@ object MoistureMarch {
                     else -> 0.0
                 }
                 val cloudShareLand = if (cloud > 0.0) (cloudLand / cloud).coerceIn(0.0, 1.0) else 0.0
-                val budget = crossing
                 budget.seconds = seconds
                 budget.sourceKgPerM2PerSecond = surfaceRate + mixedInRate
                 budget.lawSaturatedMm = 0.0
@@ -1917,8 +2040,8 @@ object MoistureMarch {
                 // What the free troposphere gets of this crossing, in the march's units: the air that
                 // rose and the air stirred out.
                 val sentToFree = sentUp + budget.exchanged
-                toFreeNext[here] = sentToFree / toColumnWater
-                toFreeLandNext[here] = (sentUpLand + budget.exchanged * vaporShareLand) / toColumnWater
+                toFree[here] = sentToFree / toColumnWater
+                toFreeLand[here] = (sentUpLand + budget.exchanged * vaporShareLand) / toColumnWater
 
                 entry?.let { record ->
                     record.rain[MoistureLedger.Sink.CONDENSATE.ordinal][surfaceIndex] += condensateRain / toColumnWater
@@ -1965,9 +2088,12 @@ object MoistureMarch {
                 val sent = vapor * perParcel
                 val sentLand = vaporLand * perParcel
                 val sentAirParcel = layerMass * perParcel
-                sentParcel[here] = sent
-                sentParcelLand[here] = sentLand
-                sentParcelAir?.let { it[here] = sentAirParcel }
+                val sentPlace = sentSlot[here]
+                if (sentPlace >= 0) {
+                    sentParcel[sentPlace] = sent
+                    sentParcelLand[sentPlace] = sentLand
+                    sentParcelAir?.let { it[sentPlace] = sentAirParcel }
+                }
                 val downwind = downwindBase + row
                 if (direction[downwind].toInt() == sweep) {
                     parcel.vapor[row] = sent
@@ -1996,7 +2122,7 @@ object MoistureMarch {
              * The free troposphere's crossing of a cell: the convergence closure when it is on, and
              * the column's rain law and the layer's saturation solved together ([ColumnCrossing]).
              */
-            private fun freeCell(base: Int, row: Int, sweep: Int, parcel: RowState, downwindBase: Int) {
+            private fun freeCell(budget: ColumnCrossing, base: Int, row: Int, sweep: Int, parcel: RowState, downwindBase: Int) {
                 val here = base + row
                 val cell = row * cellsAcross + base / cellsDown
                 val surfaceIndex = surface[here].toInt()
@@ -2036,9 +2162,14 @@ object MoistureMarch {
                 val baseShare = if (freeSaturated > 0.0) {
                     ColumnWater.saturationSpecificHumidity(topC, topPressure) * ColumnWater.BOUNDARY_LAYER_MASS_KG_PER_M2 / freeSaturated
                 } else 0.0
-                val sentInRate = toFree[here] / grid.secondsPerColumn[row]
-                val sentInShareLand = if (toFree[here] > 0.0) (toFreeLand[here] / toFree[here]).coerceIn(0.0, 1.0) else 0.0
-                val budget = crossing
+                // What the boundary layer sent up, this lap's if it has marched the cell already and
+                // last lap's if not, and spent as it is read.
+                val inboxAmount = toFree[here]
+                val inboxLandAmount = toFreeLand[here]
+                toFree[here] = 0.0
+                toFreeLand[here] = 0.0
+                val sentInRate = inboxAmount / grid.secondsPerColumn[row]
+                val sentInShareLand = if (inboxAmount > 0.0) (inboxLandAmount / inboxAmount).coerceIn(0.0, 1.0) else 0.0
                 budget.seconds = seconds
                 budget.sourceKgPerM2PerSecond = sentInRate
                 budget.lawSaturatedMm = saturatedFromSea
@@ -2062,8 +2193,8 @@ object MoistureMarch {
                 vapor = budget.vapor
                 vaporLand = vapor * shareLand
                 val landRained = rained * shareLand + convergenceLandRain
-                toBoundaryNext[here] = budget.exchanged / toColumnWater
-                toBoundaryLandNext[here] = budget.exchanged * shareLand / toColumnWater
+                toBoundary[here] = budget.exchanged / toColumnWater
+                toBoundaryLand[here] = budget.exchanged * shareLand / toColumnWater
                 entry?.let { record ->
                     record.rain[MoistureLedger.Sink.COLUMN.ordinal][surfaceIndex] += rained / toColumnWater
                     record.rain[MoistureLedger.Sink.CONVERGENCE.ordinal][surfaceIndex] += convergenceRain / toColumnWater
@@ -2089,8 +2220,11 @@ object MoistureMarch {
                 val perParcel = 1.0 / toColumnWater
                 val sent = vapor * perParcel
                 val sentLand = vaporLand * perParcel
-                sentParcel[here] = sent
-                sentParcelLand[here] = sentLand
+                val sentPlace = sentSlot[here]
+                if (sentPlace >= 0) {
+                    sentParcel[sentPlace] = sent
+                    sentParcelLand[sentPlace] = sentLand
+                }
                 val downwind = downwindBase + row
                 if (direction[downwind].toInt() == sweep) {
                     parcel.vapor[row] = sent

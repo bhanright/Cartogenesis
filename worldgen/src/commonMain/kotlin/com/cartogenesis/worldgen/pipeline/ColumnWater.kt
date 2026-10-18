@@ -516,18 +516,18 @@ internal object ColumnWater {
      * steps in the logarithm of the pressure, by bicubic (Catmull-Rom) interpolation: within
      * [LIFT_TABLE_BOUND] of it, relative, over the air a world makes, and within 2e-3 of it in
      * the span's corners no world reaches, 31 C at 22 kPa (`BoundaryLayerWaterTest`). Ground outside
-     * the table's span is taken from the direct calculation.
+     * the table's span, and in its outermost step, is taken from the direct calculation.
      */
     fun saturatedLiftYield(surfaceTemperatureC: Double, groundPressureKpa: Double): Double {
-        if (!(surfaceTemperatureC in LIFT_TABLE_COLDEST_C..LIFT_TABLE_WARMEST_C) ||
-            !(groundPressureKpa in LIFT_TABLE_LOWEST_PRESSURE_KPA..LIFT_TABLE_HIGHEST_PRESSURE_KPA)
-        ) {
-            return directSaturatedLiftYield(surfaceTemperatureC, groundPressureKpa)
-        }
         val across = (surfaceTemperatureC - LIFT_TABLE_COLDEST_C) / LIFT_TABLE_STEP_C
         val down = (kotlin.math.ln(groundPressureKpa) - LIFT_TABLE_LOWEST_LOG_PRESSURE) / LIFT_TABLE_LOG_PRESSURE_STEP
-        val row = across.toInt().coerceIn(1, LIFT_TABLE_TEMPERATURES - 3)
-        val column = down.toInt().coerceIn(1, LIFT_TABLE_PRESSURES - 3)
+        // The cubic reads a step before the cell and a step after it, so the outermost cells go to the
+        // direct calculation.
+        if (!(across >= 1.0 && across < LIFT_TABLE_TEMPERATURES - 2 && down >= 1.0 && down < LIFT_TABLE_PRESSURES - 2)) {
+            return directSaturatedLiftYield(surfaceTemperatureC, groundPressureKpa)
+        }
+        val row = across.toInt()
+        val column = down.toInt()
         val acrossShare = across - row
         val downShare = down - column
         val table = saturatedLiftYieldTable
@@ -572,7 +572,7 @@ internal object ColumnWater {
     private const val LIFT_TABLE_COLDEST_C = -80.0
     private const val LIFT_TABLE_WARMEST_C = 60.0
     private const val LIFT_TABLE_STEP_C = 0.125
-    private const val LIFT_TABLE_TEMPERATURES = 1121
+    private val LIFT_TABLE_TEMPERATURES = ((LIFT_TABLE_WARMEST_C - LIFT_TABLE_COLDEST_C) / LIFT_TABLE_STEP_C).toInt() + 1
     private const val LIFT_TABLE_LOWEST_PRESSURE_KPA = 20.0
     private const val LIFT_TABLE_HIGHEST_PRESSURE_KPA = 105.0
     private const val LIFT_TABLE_PRESSURES = 128

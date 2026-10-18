@@ -33,11 +33,11 @@ internal class MarchSchedule(val cellsAcross: Int, val columnsPerStage: Int) {
 
     /** The stage the layer marches in [slot], or -1 if it rests; the free troposphere is one slot behind. */
     fun stageAt(boundaryLayer: Boolean, slot: Int): Int {
-        val own = slot - (if (boundaryLayer) 0 else 1)
+        val layerSlot = slot - (if (boundaryLayer) 0 else 1)
         return when {
-            own < 0 || own == stagesPerSweep -> -1
-            own < stagesPerSweep -> own
-            own - 1 < stageCount -> own - 1
+            layerSlot < 0 || layerSlot == stagesPerSweep -> -1
+            layerSlot < stagesPerSweep -> layerSlot
+            layerSlot - 1 < stageCount -> layerSlot - 1
             else -> -1
         }
     }

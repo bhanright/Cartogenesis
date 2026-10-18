@@ -15,6 +15,12 @@ package com.cartogenesis.worldgen.pipeline
  * asserted on the device's own ledger, since a march that conserves on the processor and leaks on
  * the card would pass a comparison of fields and fail the closure.
  *
+ * **The lap's order is [MarchSchedule]'s**: a season's two layers are two queues, the free
+ * troposphere's one stage behind the boundary layer's, and the inboxes the layers exchange through
+ * are one array each because of it (`MoistureMarch`, "The exchange inside the lap"); a device that
+ * marches the layers in another order gets another answer to within the loop's tolerance, and
+ * should say so in its test.
+ *
  * Not yet called by the engine: the device path is the next chunk's (docs/TODO.md), and until it
  * exists the climate stage runs the processor's march.
  */

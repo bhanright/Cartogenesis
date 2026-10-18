@@ -211,6 +211,95 @@
   probe's figures; the cost guard's below in the ledger row). An exchange solved together within
   the lap, the two layers marched in one sweep where their sweeps agree, would take the lag out.
   2026-10-17, W2e.
+- **The boundary layer's rain steps along a row where the surface wind reverses (W2e, rule 13,
+  measured).** At 512 rows seed 42's southern continent shows the rain in east-west streaks near 57.5
+  S, at row 419, where the surface wind's zonal mean turns from the westerlies to the polar easterlies
+  along the whole row: the boundary layer's sweep turns there, and its air north of the row is the
+  westerlies' marine air at saturation where south of it the easterlies' air stands at 0.4, so its
+  rain steps across the row. The turn's latitude is the zonal circulation's own, the same on every
+  longitude (the entry "The air above the boundary layer blows the circulation's zonal wind", F1:
+  the cells' edges are row-uniform). At 1,024 rows `RainGeometryTest`'s longest front along a row
+  reads 895, 802 and 2,412 km on seeds 42, 969495 and 7 (6d5257e2: 1,480, 1,497 and 2,396), at 66 N,
+  13 N and 19 S, and at the polar front 895, 609 and 602 (926, 1,049 and 744), all recorded; the 57.5
+  S streak is shorter than these and is not the clause's. The cells' edges by longitude are what
+  would bend it. 2026-10-17, W2e.
+- **The 512 census on W2e's ground (recorded, not traced).** `GeometryExpectations` goes from six
+  known entries holding ten instances to twelve holding twenty-one. Gone: W2d's biome edge along a
+  row on seed 99 at (226,74), seed 7's polar isohyet facet at (861,2), seed 1234's contour arc at the
+  seam and its aligned isohyet at (106,508). New: one round margin each on seeds 7 at (860,42) and 99
+  at (69,35), an arc in the ice surface, the terrain contours and the peoples' borders at one place,
+  an ice sheet's edge (the entry "The ice surface's arcs in the 512 census"); seed 42's ice arcs go
+  from two to four, and its drawn coast holds an arc at (298,457), 70 S, beside them; the polar
+  isohyets of seeds 7 and 1234 run along rows 0 to 4 and 507 to 511, three aligned sides and two
+  facets each (the entry "The rain on the polar rows is the ground's relief round a pole"). The ice
+  and the polar rows are where the rain's change moves a threshold. 2026-10-17, W2e.
+- **The wetter interiors fill their basins, and the ice moves with them (W2e, recorded).** Where the
+  deserts were the land rains now, and the closed basins hold more: lakes cover 0.0253 of the
+  standard worlds' land at 512 rows against the bar of 0.0167 (`GroundTextureTest`, recorded; 0.0149
+  at W2c); seed 718106 starts with a lake of 6.7 times the Caspian's share, the notch takes it to 5.8
+  and its world keeps 0.81 of its water, and seed 7's starts at 2.9 and falls under it
+  (`OutletIncisionTest`, recorded; the clause that wants two seeds starting over-large is armed);
+  the fill after the notch stands 141% as deep as the control's (73% at W2d); the drowned interiors
+  pool 4.72 times the Caspian's share, seeds 99, 42 and 7 at 2.86, 2.70 and 1.01% of their land
+  (1.57 at W2d). The ice: the thickest sheets stand 6,380, 6,362, 5,094 and 4,782 m on seeds 718106,
+  59758, 7 and 42 (6,959, 7,492, 6,117 and 5,594), the ice covers 25.5% of the land at 256 rows
+  (24.4%), and 2.6% of the cold dry interior stays ice sheet against the 2% bar (`SnowBalanceTest`,
+  recorded); the iced zone holds 2.41 times temperate country's lakes (2.28). The frozen sea takes
+  under twice its rain with the ice off on seeds 7 and 42 (1.76 and 1.96, `SeaIceTest`, recorded):
+  the free troposphere carries its water over the pack whatever the sea under it gives the boundary
+  layer, and the frozen sea still rains five to six times less than the open sea beside it. The
+  lowstand leaves 1.34 times the estuary mouths against 1.5 (`SeaLevelHistoryTest`, recorded); seed
+  718106 keeps one channel cell below its receiver (`ReceiverClampTest`, recorded, the same untraced
+  cell); one basin of six cells on seed 1234 is handed 1.05 times the rain reaching it (`LakeBodyTest`,
+  recorded; the entry "The basins' accounting at the float's last place"); seed 7 holds one course of
+  a single cell of land into water (`RiverCourseTest`, recorded); seed 42's frozen north holds a lake
+  of 21 cells along a row at (784,21) where seed 7's is gone (`StraightRunTest`, rule 13). Each is
+  the ground's and the ice's answer to the rain; none traced further. 2026-10-17, W2e.
+- **The pressure term and the interiors' rain (W2e, recorded).** The subtropical continents' summer
+  coasts draw the wind on at +0.09 m/s pooled, a hundredth under the bar, seed 1234's equatorial
+  continent blowing off its coasts in both halves (`PressureWindTest`, recorded; F1 read the same);
+  and the interiors' rain spreads as widely without the pressure term as with it, 1.433 against
+  1.435, though its spread now stands within a factor of two of Earth's 0.853 (armed). Where the
+  interiors rain is set more by the boundary layer's own return and climb than by the free
+  troposphere's wind. Not traced. 2026-10-17, W2e.
+- **The windward percentile on a wider planet (W2e, recorded).** `PlanetWidthRainTest` reads the
+  land's 99.5th percentile on the 24,000 km planet at 2.05 times the stock 12,000 km planet's against
+  a bar of 1.55, the stock seeds' own spread. The wide planet is no wetter than on 6d5257e2 (3,221,
+  5,011 and 2,804 mm against 4,766, 4,114 and 3,009 on seeds 42, 969495 and 7 at 256 rows); the stock
+  planet's wettest land is drier, seed 969495's 3,613 mm gone to 1,844 with its wet spot, and the
+  three seeds stand closer together, so the bar fell from 2.55. From half to twice the width the
+  percentile moves 1.7 times where it moved 2.6; the land's mean holds (0.74 and 1.63 times on
+  6d5257e2, 1.12 and 1.68 now, bar 3.36). The windward coasts' rain still grows with the planet:
+  the Hadley cells narrow on the wider planet (A1-6b). 2026-10-17, W2e.
+- **Grid convergence (W2e, measured, holds).** On seed 42 the land rains 756 mm at 512 rows and 763
+  at 1,024 (x1.009) and desert covers 6.8% and 7.6% of the land (`RainPlacementEarthTest`'s
+  cross-grid clause, bars 5% and two points; the ungated climb grew 11 to 15% between the grids
+  before W2e). The climb reads the ground smoothed to 15 km, a length on the ground, so a finer grid
+  resolves the same slopes. 2026-10-17, W2e.
+- **The two layers' march costs twice W2d's climate and half a gigabyte more at the application's
+  grid, which three tiers' heaps do not hold (W2e, measured, not fixed).** One climate run at 1,024
+  rows takes 62 and 65 s on seeds 42 and 7 against 30 and 29 on 6d5257e2. Its live heap, read by a
+  full collection's class histogram every few seconds through the run on seed 42, holds 0.70 to 0.72
+  GB of double-precision arrays against 0.23 to 0.25 GB on 6d5257e2, and 1.00 to 1.12 GB of
+  single-precision ones against 0.92 to 1.04, the world's own 0.28 GB among them: the difference is
+  the march's new double arrays, fourteen a season at 2.1 million cells (the eight inboxes the layers
+  exchange through, the free troposphere's bank and sent parcel with their land parts, and the
+  boundary layer's air bank and sent air). What that does to the tiers: in the deep worldgen tier,
+  whose four workers hold 3.5 GB each with 0.7 GB of shared worlds, nine clauses ran out of heap
+  generating 1,024-row worlds (`IceSheetTest`, `GlacialBasinShapeTest`, `GlaciationCombTest`,
+  `LakeWaterBalanceTest`, `RealmIdRangeTest`, `StraightRunTest`), each passing or recording when run
+  without the others; the deep desktop tier's 3 GB worker died of it in `WorldLinkDesktopTest`, which
+  passes alone; and the deep drawing tier's `EarthSizeGeometryReport`, two worlds of 1,024 rows in a
+  2 GB heap, runs out of heap even alone, where on W2d it passed alone (`build.gradle.kts`'s budget).
+  Sampled on seed 42 at 1,024 rows, 13% of the climate's samples fall in the moist adiabat's lapse
+  rate, which the boundary layer's lift yield evaluates at every step of every rising cell's crossing
+  solve, 30% in the crossing's solve and 23% in the atmosphere. In order of reach: those fourteen
+  arrays in single precision, the sender charged exactly what it stored, which takes back half the
+  difference (0.24 GB); the exchange solved within the lap, which needs no double buffer and fewer
+  laps (10 to 12 at W2d, 15 to 17 now, the entry "The march settles in more laps"); the lift yield
+  tabulated over temperature, pressure and humidity as the saturated column is; and the march's
+  graphics path, whose kernel form the arithmetic keeps. Or the budget itself, which is the
+  maintainer's. 2026-10-17, W2e.
 - **The sea from the equator to 40 degrees still stands under Earth's (W2c, two causes fixed, the
   rest measured).** W2c gave the slab's water Kara's air-sea difference and the ITCZ's cloud its
   longwave (`EnergyBalance.SEA_OVER_MARINE_AIR_C`, `ITCZ_CLOUD_SHORTWAVE_OVER_LONGWAVE`): between

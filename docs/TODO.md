@@ -1,5 +1,112 @@
 # To do
 
+- **Fewer levels make the stationary waves' surface pressure stronger, not weaker (W2h, measured).**
+  A1-3's "17 to 21% off at eight levels" was the relative root mean square of the difference from
+  twenty-four levels, not a shortfall: on the benchmarks the eight-level surface pressure's root mean
+  square stands 1.03 to 1.19 times twenty-four levels' and the four-level's 1.11 to 1.59, so
+  `LevelExtrapolation` weakens the waves' pressure (to 0.90 to 0.99 of twenty-four levels'). On the
+  standard worlds the eight-level surface pressure already stands within 7 to 9% of sixteen levels'
+  (amplitude 0.96 to 0.985) and the extrapolation does not bring it nearer (0.069 to 0.090 against
+  0.070 to 0.087); it does bring the 850 hPa wind under the climate's latent heating nearer (0.113 and
+  0.135 against 0.180 and 0.166) and the 500 hPa omega (0.043 to 0.044 against 0.050 to 0.054). The
+  order the surface pressure converges at from four to sixteen levels is 1.27 to 1.72 on the
+  benchmarks but 0.0 to 0.6 on the worlds' forcing, and the winds' orders spread below zero: four
+  levels are not where the error falls as a power of the spacing. Sixteen levels on the same ground
+  give 14.2% desert pooled over seeds 42, 969495 and 7 at 1,024 rows, the extrapolation 13.5 and
+  eight levels 12.2, at 44 to 50 s of climate against 28 to 31 and 22 to 27: the extrapolation goes
+  about two thirds of the way. The correction is to be deleted when sixteen levels are affordable
+  (`LevelExtrapolation`; docs/DESIGN_LEDGER.md, W2h). 2026-10-18, W2h.
+- **The subtropical highs stand equatorward of Earth's in winter (W2h, recorded).**
+  `MeanCirculationEarthTest`'s new clause holds the highest sea-level pressure over the sea at 15 to
+  45 degrees in each half and hemisphere, over the planet's area mean, to the NCEP/NCAR reanalysis's
+  1991 to 2020 half-years: the strength pools at 11.9 hPa on seeds 42, 969495 and 7 at 1,024 rows
+  against Earth's 11.0 to 12.7, inside (the circulation's pressure alone, the control, fails), but the
+  latitude pools at 28.8 degrees against Earth's 32.5 to 35.0: the winter hemisphere's highest sea
+  pressure stands at 21.9 to 25.9 degrees on every seed, with the winter ridge (the entry "The
+  seasonal circulation against Earth"). The cells' winter edge, Held's onset on the winter's steep
+  gradient, is where it sits. 2026-10-18, W2h.
+- **The tropics' deserts grow (W2h, recorded).** Under the extrapolated stationary waves and the
+  cells' edges by sector the standard worlds at 512 rows carry 16.1% desert pooled (x0.85 of Peel's
+  19.1%, armed in `WaterColumnEarthTest`), but within 15 degrees 18.1%, x3.49 of Earth's 5.2% (x2.12
+  at W2f); at 1,024 rows seed 42's tropical land is 21.8% desert against 13.9 at W2g, 969495's 10.0
+  against 7.5 and 7's 11.5 against 8.2. Most of the growth follows the waves' winds: on the same
+  ground the extrapolation alone takes seed 42's tropics from 13.6 to 18.2%, and with the edges by sector
+  the world stands at 21.8 on its own ground. The free troposphere's eddy winds dry the continents' interiors (the entry "The
+  stationary waves' eddy winds still dry the land"), and the extrapolation strengthens the 850 hPa
+  wind under latent heating by a tenth. Sixteen levels give seed 42's tropics 11.8%: the
+  extrapolation's tropical drying is its own, not the converged answer's (the first entry above).
+  2026-10-18, W2h.
+- **The ocean's stress reads the zonal cells' edges (W2h).** `OceanStage.annualStress` lays the
+  zonal circulation's stress on every column (`ClimateStage.beltWindOfRows`) and the boundary layer's
+  wind beyond it, which since W2h stands on cells whose edges and belts move by sector, so the eddy
+  part `|V| V - |B| B` carries the belts' own shift only where the local belts differ from the
+  zonal. The gyres moved by under 5% of their Sverdrup transport (docs/DESIGN_LEDGER.md, W2h).
+  2026-10-18, W2h.
+- **The drawing's figures on W2h's ground (recorded).** Scroll's steppe stands 23% of the way from
+  its desert to its forest on the gallery's world, under the 25% bar (`ClimateTintTest`), and seed
+  7's drawn coast has 940 of its 1,891 vertices where the ground and the mask agree, a hair under
+  half (`CoastLineTest`); both moved with the climate, as at A1-6b, W2b and W2d. 2026-10-18, W2h.
+- **Every term of the climate that knows only latitude (W2h, inventory).** Three times now a rain or
+  desert edge has run along a row (F1's Hadley branch, W2b and W2f's fronts and deserts' edges, W2h's
+  57.5 S and 19 S), each from a field with one value round its row. The terms that are the same at
+  every longitude of a row, file and line at fac3296a, ranked by how likely each is to draw the next
+  straight edge (sharp: a step, a switch, a narrow front, a clamp; smooth: a gradient only):
+  1. **Which half is a place's summer** (`ClimateStage.localSummerIsJulyHalf`, ClimateStage.kt:769,
+     applied 672-680): both halves' temperatures are the annual field plus a departure that is the
+     row's land and marine columns by the cell's marine fraction (1488-1505), so far inland the
+     switch falls on one row; at it the summer and winter rain swap, and Koppen's aridity bonus
+     (2042-2049) and the monsoon-forest and savanna gates (1976-1983) switch with them. Sharp; the
+     biome only. Not fixed.
+  2. **The cells' edges, the polar fronts and the zero lines of the zonal wind**
+     (`HadleyCirculation.Belt` 263-282, `beltWindMps`, `windMps` 305-313): the wind turns through zero
+     at the cells' edge, the rising branch and the polar front, the march's sweep turns with it
+     (MoistureMarch.kt:1745) and the boundary layer's air on either side has another origin, so the
+     rain steps across the turn; the meridional legs `v = 0.15 u` kink at the edge and the front, so
+     the convergence steps there too. Sharp; the rain. Since W2h by sector, but flat across a broad
+     continent or ocean of uniform land share, and the whole hemisphere falls back to the zonal edge
+     where either column never turns unstable (LocalCirculation.kt:520). The two W2h edges are this
+     term: fixed in part (the cells' edges by sector); the jet's and the front's own placement by the
+     sector's baroclinicity is the next step (the entries above on 57.5 S and 19 S).
+  3. **The sea ice's mask** (`ClimateStage`, the `<= SEA_FREEZING_C` test at 1131, perennial ice
+     850-856) on the row's sea temperature plus the weather noise and the current: a switch on an
+     isotherm the noise bends at 2,400 km. Sharp; rain downwind and the biome.
+  4. **The ocean's zonal stress** (`OceanStage.annualStress` 609-649, rows from
+     `ClimateStage.beltWindOfRows`): the zonal circulation's edges and fronts on the same rows round
+     the planet, where the atmosphere's are by sector since W2h; the curl and the Ekman pumping kink
+     at them, softened by the ocean's heat diffusion. Sharp-ish; the sea's anomaly.
+  5. **The biome's temperature gates** (`ClimateStage.classify` 1948-2002, aridity 2049) on fields
+     that are the row's band values plus noise, lapse and the marine air: isotherms wobbled by the
+     noise's 3.5 C. Sharp, near-straight only where the gradient is steep.
+  6. **The band's land share** (`EnergyBalance.landFractionByBand` 926-944, `bandC` 76-80) under
+     Held's onset (`HadleyCirculation.baroclinicOnsetDegrees`, gradient over a degree): a coast along a
+     parallel steps the share and can pin the zonal edge to its latitude, the base every sector's edge
+     is shifted from. Sharp, indirectly.
+  7. **The rain blur's radius per row** (`SphereBlur`, 64-67): a whole number of cells, stepping
+     between rows and none on coarse grids' tropical rows. A texture step, not a mean one.
+  8. **The stratus belt** (`MoistureBudget.stratusBelt`, 100-105, 131-135): a Gaussian in latitude
+     from the zonal rising branch, with a kink at the thermal equator; measured at 0.2% of a coast's
+     rain. Smooth with a kink.
+  9. **The sun at the top of the air per row** (`ClimateStage` 917-921, `SurfaceEvaporation`
+     89-117): smooth, with the polar night's clamp. Smooth.
+  10. **The upwelled water's outcrop latitude** (`OceanStage.outcropLatitude` 910-917), clamped at
+      Earth's 45 degrees, not the world's own belts. Kinks; the sea's anomaly where it upwells.
+  Smooth and kept: latitude and Coriolis per row, the energy balance's bands read between their
+  centers (`ZonalClimate`), the storm track's eddy diffusivity (`EnergyBalance.eddyDiffusivityAt`, a
+  Gaussian about Earth's 50 degrees, not the world's own jet), the drag per coarse row, the basic
+  state's jets. Inert with the pressure term on: `BoundaryLayer.zonalPressurePa` and the circulation's
+  pressure (the drawn sea-level pressure only), `SurfaceBelts.zonalShare` (the weather's gusts'
+  constant). Listed by a read-only sweep of the climate's files and spot-checked against the code
+  (the summer switch, the sweep's sign, the ocean's rows, the hemisphere's fallback). 2026-10-18, W2h.
+- **What W2h's climate moved in the deep tier (recorded).** Each a consequence of the new rain, not
+  traced further: the sample's cold-current coast 3% wetter with the currents on, 319 against 309 mm
+  (`CurrentFeedsRainTest`); the square-fan control's straight-run share 1.00%, a hair under its
+  1.05% bar (`DeltaOutlineTest`); the wet basin sample 842 of its 1,358 cells at the balance
+  (`LakeWaterBalanceTest`); seed 42's southern ridge moving 10.4 degrees between its seasons, a row
+  past ten (`MeanCirculationEarthTest`); the pressure term no longer widening the interiors' rain,
+  1.414 against 1.428 (`PressureWindTest`); the pooled largest lake 1.21 times the Caspian's share,
+  seed 59758's at 1,024 rows 5.24 (`OutletResolutionTest`). Armed: the deserts' edges along a row,
+  the iced zone's lakes, the dry basin's lake, the incision's clamp and the snow's marginal band.
+  2026-10-18, W2h.
 - **Rivers' green corridors and wadi floors are mostly narrower than a cell (S1 Satellite look,
   round 2).** At 1,024 rows a cell is 19.6 km, and by the Nile's anchor (a 12 km valley floor for
   84 cubic km a year, widening as the square root of discharge, which the Tarim's 2 km poplar belt
@@ -227,7 +334,16 @@
   311 (recorded; W2d and W2e armed it), the 250 mm isohyet's at 491 against 487. The run is a
   threshold crossing on a slowly varying field laid along one row, so it moves by a third on any
   change of the rain; the cause is the belts' factor, not the exchange of the lap (W2e's tree reads
-  497 km). 2026-10-18, W2f.
+  497 km). 2026-10-18, W2f. Traced at W2h: there is no belts' factor in the climate since C1b2;
+  the front at 19 S is the half about January's boundary-layer wind turning from the summer cell's
+  monsoon westerlies to its trades inside the cell, the surface wind's zonal part 1.08 to 0.05 m/s and
+  the circulation's 0.23 to -0.94 over rows 613 to 615 at seed
+  7's columns 257 to 268, where the column's rain falls from 2,190 to 151 mm in two rows; its
+  latitude is the column's carried cell (`LocalCirculation.zonalSineOf`), which a broad continent's
+  uniform land share holds on one row. With the cells' edges by sector (W2h) the desert's edge there
+  runs 239 km along a row against 644, and the deserts' edges pool at 292 km against main's 311,
+  armed (`RainGeometryTest`); the rain's front itself still runs 2,321 km along 18.4 S (2,430 at
+  W2f), recorded. 2026-10-18, W2h.
 - **Lakes of a few cells come and go with any change of the rain (W2f, recorded).** The pieces
   guard (`LakeBodyTest`, armed at W2e) finds two lakes of 6 and 3 cells in two pieces each on seed
   42 once the rain moves by a few tenths of a percent, and the dry basin on seed 1 keeps a lake that
@@ -280,7 +396,20 @@
   reads 895, 802 and 2,412 km on seeds 42, 969495 and 7 (6d5257e2: 1,480, 1,497 and 2,396), at 66 N,
   13 N and 19 S, and at the polar front 895, 609 and 602 (926, 1,049 and 744), all recorded; the 57.5
   S streak is shorter than these and is not the clause's. The cells' edges by longitude are what
-  would bend it. 2026-10-17, W2e.
+  would bend it. 2026-10-17, W2e. Traced at W2h on seed 42 at 512 rows, columns 760 to 880: in the
+  half about July the surface wind's zonal part passes through zero between rows 413 and 416 (55.4
+  to 56.4 S) at every one of those columns, the boundary layer's water falls from 1.95 to 0.77 mm
+  across it at column 780 and the column's rain from 423 to 128 mm, all within three rows; the
+  half about January's westerlies carry no such turn there, and the streaks westward of the wet
+  east coast are the boundary layer's plumes on a wind that blows along the rows. W2h's cells end
+  at each sector's own baroclinic onset and the polar front moves with them, by 0.6 to 4.8 degrees
+  round the planet (`LocalCirculationTest`), but under a degree across this continent, whose land
+  share is uniform at the edges' latitudes: the streaks are unchanged in the renders at 512 rows
+  (notes, renders-h). What would bend them is the eddy-driven jet and the polar front placed by the
+  sector's own baroclinicity at the jet's latitude (the storm tracks Williams, Wilson and Hughes
+  2007 locate at the local Eady growth rate's maxima), not at Earth's belt width from the cells'
+  edge (`HadleyCirculation.Belt`; the entry "Every term of the climate that knows only latitude").
+  2026-10-18, W2h.
 - **The 512 census on W2e's ground (recorded, not traced).** `GeometryExpectations` goes from six
   known entries holding ten instances to twelve holding twenty-one. Gone: W2d's biome edge along a
   row on seed 99 at (226,74), seed 7's polar isohyet facet at (861,2), seed 1234's contour arc at the

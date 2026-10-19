@@ -52,11 +52,14 @@ class BoundaryLayerCostTest {
         const val ROWS = 1024
 
         /**
-         * The coupled loop's laps a climate run: 40 over a world's four runs on seed 7 at 1,024 rows
-         * (10, 9, 11 and 10), the erosion's second starting where its first settled and the others
-         * cold, ten a run (the world clause below, docs/DESIGN_LEDGER.md, A1-6b; 35 at A1-6a).
+         * The coupled loop's laps a climate run: 46 over a world's four runs on seed 7 at 1,024 rows
+         * (13, 9, 11 and 13), the erosion's second starting where its first settled and the others
+         * cold, eleven and a half a run (the world clause below, docs/DESIGN_LEDGER.md, W2f), the
+         * free troposphere taking in the boundary layer's water of the same lap; 64 at W2e (20, 10,
+         * 17 and 17), the two layers a lap behind each other; 38 on 6d5257e2 (10, 8, 9 and 11), 40 at
+         * A1-6b and 35 at A1-6a.
          */
-        const val LAPS_PER_CLIMATE = 10
+        const val LAPS_PER_CLIMATE = 11.5
     }
 
     @Test
@@ -102,8 +105,8 @@ class BoundaryLayerCostTest {
      * What one lap of the coupled loop costs the atmosphere at the application's grid, and its
      * part per map cell: both halves' condensation carried down as heating, both solved by
      * back-substitution, each half's pressure carried up and balanced, its convergence carried down
-     * and its ascent carried up, and the column's vapor-weighted wind the march carries its water on
-     * ([BoundaryLayer.columnWindMps]). A report and a recorded figure: the loop's laps a climate run come
+     * and its ascent carried up, and the free troposphere's vapor-weighted wind the march carries its water on
+     * ([BoundaryLayer.freeTroposphereWindMps]). A report and a recorded figure: the loop's laps a climate run come
      * from `AtmosphereCouplingTest` and are given here as [LAPS_PER_CLIMATE].
      */
     @Test
@@ -140,8 +143,8 @@ class BoundaryLayerCostTest {
             BoundaryLayer.groundAscentMps(responses, responses.julyHalf)
             BoundaryLayer.groundAscentMps(responses, responses.januaryHalf)
             val ascended = System.nanoTime()
-            BoundaryLayer.columnWindMps(responses, responses.julyHalf)
-            BoundaryLayer.columnWindMps(responses, responses.januaryHalf)
+            BoundaryLayer.freeTroposphereWindMps(responses, responses.julyHalf)
+            BoundaryLayer.freeTroposphereWindMps(responses, responses.januaryHalf)
             val carried = System.nanoTime()
             if (run >= WARM_UP_RUNS) {
                 downMs += (carriedDown - started) / 1e6 / MEASURED_RUNS
@@ -159,11 +162,18 @@ class BoundaryLayerCostTest {
         val wholeShare = ((perCellMs + solveMs) * laps + factorMs * COUPLED_CLIMATES_PER_WORLD) / 1000.0 / worldSeconds
         println(
             ("COUPLING COST at %d rows: factoring %.0f ms; a lap %.0f ms carrying the heating down, %.0f ms back-substituting, " +
-                "%.0f ms carrying the pressure up and balancing it, %.0f ms the ascent, %.0f ms the column's wind; %d laps a world (%d a climate run), " +
+                "%.0f ms carrying the pressure up and balancing it, %.0f ms the ascent, %.0f ms the column's wind; %.0f laps a world (%.1f a climate run), " +
                 "%.2f%% of a %.1f s world in all and %.2f%% on the map's cells")
                 .format(ROWS, factorMs, downMs, solveMs, upMs, ascentMs, columnMs, laps, LAPS_PER_CLIMATE, wholeShare * 100, worldSeconds, perCellShare * 100)
         )
-        KnownFailures.expect("A1-5: the coupled loop's per-cell work is over a hundredth of a world", "9%") {
+        // Re-recorded at W2c, 9% to 7%, its run beside 9ff725c9's on one machine reading 7.19% against
+        // 9.95%: the share moves with the machine's load more than with the tree. Re-recorded at W2e,
+        // 9% at sixteen laps a run of a 138.2 s world, where 6d5257e2's tree, run on the same machine
+        // between two runs of this one, read 10% at ten laps of an 87.7 s world
+        // (docs/DESIGN_LEDGER.md, W2e). Re-recorded at W2f, 8% at 46 laps of a 96 s world: 8.1 to 8.3% in
+        // the runs beside W2e's tree (8.2% at its 64 laps), where twelve laps a run read 8.5 to 8.7 and
+        // the figure rounded to 8 or 9 with the machine's load (docs/DESIGN_LEDGER.md, W2f).
+        KnownFailures.expect("A1-5: the coupled loop's per-cell work is over a hundredth of a world", "8%") {
             if (perCellShare >= WORTH_A_DEVICE_SHARE) {
                 throw RecordedViolation(
                     "the coupled loop's per-cell work takes %.2f%% of a world, over the hundredth rule 8 allows without a graphics path".format(perCellShare * 100),

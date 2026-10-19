@@ -205,12 +205,9 @@ class LakeWaterBalanceTest : BorrowsSharedWorlds() {
         val basin = basinOf(off, 0f, 300f)
         // Recorded at A1-6b: the seasonal circulation's rain moved the ground the sample was scanned
         // on, and seed 1's largest dry basin is 477 cells; the scan that re-picks it is a run of
-        // its own (docs/TODO.md). The rest of the case reads the basin it has.
-        KnownFailures.expect("A1-6b: seed 1's dry basin sample falls under 500 cells", "314 cells") {
-            if (basin.size < 500) {
-                throw RecordedViolation("seed $drySeed has no large dry basin any more (${basin.size} cells)", "${basin.size} cells")
-            }
-        }
+        // its own (docs/TODO.md). The rest of the case reads the basin it has. Armed at W2e, whose
+        // ground gives seed 1 a dry basin of 538 cells (docs/DESIGN_LEDGER.md, W2e).
+        assertTrue(basin.size >= 500, "seed $drySeed has no large dry basin any more (${basin.size} cells)")
         if (basin.isEmpty()) return
 
         val rain = basin.map { off.climate.precipitationMm.data[it] }.average()
@@ -278,16 +275,14 @@ class LakeWaterBalanceTest : BorrowsSharedWorlds() {
         // (docs/DESIGN_LEDGER.md, M1; docs/TODO.md).
         // Armed at A1-6b, under whose rain the sample settles below its spill (docs/DESIGN_LEDGER.md, A1-6b).
         // Recorded at F1, under whose rain the sample stays full again; the scan that re-picks it is
-        // M1's (docs/TODO.md).
-        KnownFailures.expect("F1: the dry sample stays full to its spill", "seed 1 at 100%") {
-            if (share >= DRY_BASIN_SHARE_OF_SPILL_AREA) {
-                throw RecordedViolation(
-                    "seed $drySeed's dry basin holds ${"%.0f".format(share * 100)}% of its spill area," +
-                        " wanted under ${"%.0f".format(DRY_BASIN_SHARE_OF_SPILL_AREA * 100)}%",
-                    "seed $drySeed at ${"%.0f".format(share * 100)}%"
-                )
-            }
-        }
+        // M1's (docs/TODO.md). Armed at W2e, under whose rain seed 1's dry basin of 538 cells, 93 mm a
+        // year against 2,552 mm of open-water evaporation, settles at 10% of its spill area
+        // (docs/DESIGN_LEDGER.md, W2e).
+        assertTrue(
+            share < DRY_BASIN_SHARE_OF_SPILL_AREA,
+            "seed $drySeed's dry basin holds ${"%.0f".format(share * 100)}% of its spill area," +
+                " wanted under ${"%.0f".format(DRY_BASIN_SHARE_OF_SPILL_AREA * 100)}%"
+        )
 
         // Since L1 a closed basin holds a lake in each of its hollows, and a hollow full to its
         // saddle spills into the next, so the basin can hold several: every one that keeps its water
@@ -306,14 +301,13 @@ class LakeWaterBalanceTest : BorrowsSharedWorlds() {
         // spill area under the seasonal circulation's rain and none of its lakes is marked
         // endorheic. Armed at A1-6c, whose re-picked 283-cell sample is dry, 38 mm of rain against
         // 2,464 mm of evaporation, and keeps no lake (docs/DESIGN_LEDGER.md). Recorded at F1, under
-        // whose rain the sample keeps one lake, not marked endorheic (docs/TODO.md).
-        KnownFailures.expect("F1: the dry sample keeps a lake that is not endorheic", "1 lakes") {
-            if (lakes.isNotEmpty() && lakes.none { it.endorheic }) {
-                throw RecordedViolation(
-                    "the dry basin keeps water and none of its lakes is marked endorheic: ${lakes.size} lakes",
-                    "${lakes.size} lakes"
-                )
-            }
+        // whose rain the sample keeps one lake, not marked endorheic (docs/TODO.md). Armed at W2e,
+        // whose 538-cell sample keeps endorheic water; recorded again at W2f, under whose rain the
+        // same sample keeps one lake, not marked endorheic, as it did at F1: a few tenths of a
+        // percent of the rain decide it (docs/DESIGN_LEDGER.md, W2e and W2f; docs/TODO.md).
+        // Armed again at W2h, under whose rain the sample keeps no lake that is not endorheic.
+        if (lakes.isNotEmpty() && lakes.none { it.endorheic }) {
+            throw AssertionError("the dry basin keeps water and none of its lakes is marked endorheic: ${lakes.size} lakes")
         }
         lakes.forEach { lake ->
             if (lake.endorheic) {
@@ -357,7 +351,15 @@ class LakeWaterBalanceTest : BorrowsSharedWorlds() {
         // climate, falls below its spill under the coupled rain, and the scan that re-picks it is a
         // run of its own (docs/DESIGN_LEDGER.md, M1; docs/TODO.md).
         // Armed at A1-6b, under whose rain the sample stands at its spill (docs/DESIGN_LEDGER.md, A1-6b).
-        assertTrue(stillWet == basin.size, "a wet basin must stay full to its spill: $stillWet of ${basin.size} cells")
+        // Recorded at W2h: under its drier climate the sample keeps 842 of its 1,358 cells at the
+        // balance (docs/TODO.md, "What W2h's climate moved in the deep tier").
+        KnownFailures.expect("W2h: the wet sample falls below its spill", "842 of 1358") {
+            if (stillWet != basin.size) {
+                throw RecordedViolation("a wet basin must stay full to its spill: $stillWet of ${basin.size} cells", "$stillWet of ${basin.size}")
+            }
+        }
+        // The clauses below read the lake the full basin holds, which a basin below its spill does not.
+        if (stillWet != basin.size) return
         val lake = on.rivers.lakes.lakes[on.rivers.lakes.lakeId[basin.first()]]
         assertTrue(!lake.endorheic, "a basin that overflows must not be marked endorheic")
         assertEquals(

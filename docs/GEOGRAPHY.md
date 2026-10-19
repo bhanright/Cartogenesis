@@ -1020,16 +1020,23 @@ darkening never reaches its own full twelfth. Recorded rather than rescaled, bec
 factor chosen to make the wettest cell read 1 is a per-world fit and is the thing A4 took out of
 the rainfall.
 
-**The moisture march's ground return is still a proxy, and W4 measured the derivation that would
-have replaced it.** `MoistureBudget.groundWetness` scales the ground's return by the previous lap's
-rain against Koppen's 500 mm steppe line, which W3 stated as a proxy for the vegetation field. The
-field exists now and Budyko's evaporative fraction ought to *be* that return rather than stand in
-for it — but measured, it puts the continental recycling ratio at 26.5% pooled against the proxy's
-32.7% and van der Ent and others' (2010) 30-45%, so the derivation falls outside Earth's band and
-the proxy does not. The proxy ships. The two differ because Budyko's fraction is a share of a
-*year's* evaporative energy and the march wants a share of a *parcel's* passage; over the dry and
-cold ground that covers most of these worlds the annual figure is the smaller of the two. It is
-kept as `ClimateConfig.vegetationRecycling` so the figures are re-measured on every audited seed.
+**The moisture march's ground return is Budyko's curve on the year's rain, and on Earth's rain it
+gives back Earth's share.** Since C1b the ground gives back Budyko's evaporated share of each cell's
+year of rain against FAO-56's reference evapotranspiration, the curve the rivers' runoff is the
+rest of; W4's rainfall proxy and its switch are gone. W2d measured the curve on Earth's own fields:
+on the Climatic Research Unit's rain and FAO-56 reference evapotranspiration for 2001 to 2010 (CRU
+TS 4.07), half-degree cell by cell without Antarctica, it gives back 0.603 of the land's rain
+against Rodell and others' (2015) 0.606, and Fu's curve fitted to the generated land's cells stands
+at 2.67, inside the 1.31 to 3.08 of Li and others' (2013) 26 large basins. What the generated land
+gives back short of Earth's share, 0.47 to 0.54 of its rain on the standard seeds, is where its rain
+falls: nearly half of it falls where the potential is under half the rain, the windward coasts and
+ranges, against a quarter on Earth, and by Koppen's groups the humid land rains half again to twice
+Earth's rain and gives back more millimeters than Earth's (Mueller and others 2013), while the arid
+land is wider and drier. The year's return is shared between the two halves of the year by their
+potential, as far as each half's rain and the root zone's store (FAO-56's total available water,
+180 mm) can supply it; before W2d the dry half of a monsoon gave back half the year's return from
+ground its rain had left dry. `GroundReturnEarthTest` holds these figures; docs/DESIGN_LEDGER.md,
+W2d, has the measurements.
 
 **An inland sea is left as sea.** The enclosure rule above stops at the largest lake Earth has,
 0.073% of the surface: a body of unreachable water larger than that is a piece of the sea walled off
@@ -1303,6 +1310,19 @@ figures are the old march's. `ClimateConfig.groundReturn` off is the control for
 C1b's march the deserts do not sit in the horse latitudes yet: the subtropics take a summer
 monsoon's water and the tropical interiors are dry (`GeographyAuditTest`'s band clause is a known
 failure; docs/TODO.md, "The desert left the horse latitudes").
+
+**Since W2e the column is two layers.** The boundary layer, the dry atmosphere's lowest eighth of
+the air, carries its own humidity on the surface wind: the sea evaporates into it by the bulk
+formula on that humidity, the ground gives its water back into it, and air carried up the ground
+condenses only once it is lifted past its own lifting condensation level, so a dry interior's air
+crosses a range without raining until it is cooled enough, and a run of small hills rains as one.
+The free troposphere above it carries the rest on the levels above, and the column's large-scale
+rain reads its humidity against its own saturated column, read from sea level, so high ground no
+longer raises it: on Earth the high plateaus stay dry and the rain favors the lowlands and the
+windward slopes (Anders and others 2006), and over CRU's land within 30 degrees the ground over
+1,500 m rains 0.56 of what the ground under 200 m rains (`RainPlacementEarthTest`). The two layers
+exchange their air where the boundary layer's wind converges or diverges and at the free
+troposphere's radiative subsidence; docs/DESIGN_LEDGER.md, W2e, has the measurements.
 
 Deserts belong to the horse latitudes, near 30 degrees, where air that rose at the equator descends
 dry. Getting them there took two mechanisms rather than a tuned constant.

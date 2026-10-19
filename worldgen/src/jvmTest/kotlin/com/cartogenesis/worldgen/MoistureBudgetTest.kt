@@ -247,20 +247,16 @@ class MoistureBudgetTest : BorrowsSharedWorlds() {
         // Recorded at A1-6c: the bulk formula reads the air Kara's difference below the sea, the sea
         // evaporates nearer Earth's and its wettest band rises past GPCP's, x1.14, and the closure,
         // which takes a tenth of it to rain where the air converges, stands nearer; it stays off,
-        // the ascent already condensing that convergence (docs/TODO.md).
-        KnownFailures.expect(
-            "A1-6c: the shipped march's wettest ocean band stands past GPCP's and the closure nearer",
-            "1930 mm against 1775"
-        ) {
-            if (abs(ln(shipped / GPCP_OCEAN_PEAK_MM)) > abs(ln(withClosure / GPCP_OCEAN_PEAK_MM))) {
-                throw RecordedViolation(
-                    ("the convergence closure now stands nearer GPCP's equatorial band (%.0f mm) than the shipped " +
-                        "march (%.0f), against %.0f: the reason it is off has changed")
-                        .format(withClosure, shipped, GPCP_OCEAN_PEAK_MM),
-                    "%.0f mm against %.0f".format(withClosure, shipped)
-                )
-            }
-        }
+        // the ascent already condensing that convergence (docs/TODO.md). Armed at W2e, whose shipped
+        // march's wettest ocean band, 2,034 mm pooled, stands under GPCP's and nearer it than the
+        // closure's 1,994, the closure raining the free troposphere's arriving water before it reaches
+        // the band (docs/DESIGN_LEDGER.md, W2e).
+        assertTrue(
+            abs(ln(shipped / GPCP_OCEAN_PEAK_MM)) <= abs(ln(withClosure / GPCP_OCEAN_PEAK_MM)),
+            ("the convergence closure now stands nearer GPCP's equatorial band (%.0f mm) than the shipped " +
+                "march (%.0f), against %.0f: the reason it is off has changed")
+                .format(withClosure, shipped, GPCP_OCEAN_PEAK_MM)
+        )
         // Recorded at C1b at twice GPCP's band; armed at C1b2, where the closure takes 1.21 of it.
         if (withClosure > GPCP_OCEAN_PEAK_MM * EARTH_TOLERANCE) {
             throw AssertionError(

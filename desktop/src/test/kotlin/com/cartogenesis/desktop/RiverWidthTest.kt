@@ -390,7 +390,7 @@ class RiverWidthTest {
         // counted (the filter above), and the pen rises with the water at every width but the
         // widest, so an equal width is the float's last digit. Seed 1234 at 84.1%, the other two
         // above the bar (docs/DESIGN_LEDGER.md, C1b; docs/TODO.md).
-        KnownFailures.expect("C1b: dry branches add too little water to widen their trunks", "96.6%") {
+        KnownFailures.expect("C1b: dry branches add too little water to widen their trunks", "84.8%") {
             if (worstShareNow < MIN_WIDENING_JUNCTIONS) {
                 throw RecordedViolation(
                     "only %.1f%% of confluences widen the trunk on the worst seed, under %.1f%%"
@@ -468,7 +468,10 @@ class RiverWidthTest {
             offPen += "the pen did not double with the sheet: %.3f px at 512, %.3f px at 1024".format(spans[0].second, spans[1].second)
         }
         // Armed at F1, on whose ground both sheets' widest strokes are the full pen
-        // (docs/DESIGN_LEDGER.md, F1).
+        // (docs/DESIGN_LEDGER.md, F1). Recorded at W2e, on whose ground seed 42's widest stroke at 512
+        // stands at 2.44 px against the full pen's 2.458 again, the A1-6b reading, and so does not
+        // double to the 1,024 sheet's full 4.92 (docs/DESIGN_LEDGER.md, W2e; docs/TODO.md).
+        // Armed at W2f, on whose ground both sheets' widest strokes are the full pen again.
         assertTrue(offPen.isEmpty(), offPen.joinToString("; "))
         assertTrue(
             abs(spans[1].first - spans[0].first) < 1e-4f,

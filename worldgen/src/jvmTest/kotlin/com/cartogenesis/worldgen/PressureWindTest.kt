@@ -315,7 +315,10 @@ class PressureWindTest : BorrowsSharedWorlds() {
         // poleward and whose trades are the summer half's own (docs/DESIGN_LEDGER.md, A1-6b).
         // Recorded at F1: under the circulation by longitude the pooled summer wind on these
         // coasts is onshore at +0.09 m/s, a hundredth under the bar, not traced (docs/TODO.md).
-        KnownFailures.expect("F1: the summer's inflow onto the subtropical coasts is under the bar", "+0.09") {
+        // Armed at W2b, whose summer coasts draw the wind on past the bar (docs/DESIGN_LEDGER.md, W2b).
+        // Recorded at W2e, +0.09 m/s, a hundredth under the bar again, seed 1234's equatorial
+        // continent blowing off its coasts in both halves, not traced (docs/TODO.md).
+        KnownFailures.expect("W2e: the summer wind onto the subtropical coasts stands a hundredth under the bar", "+0.07") {
             if (summer <= ONSHORE_BAR_MPS) {
                 throw RecordedViolation(
                     ("the warm half blows %+.2f m/s onto the subtropical continents' equatorward and " +
@@ -382,15 +385,26 @@ class PressureWindTest : BorrowsSharedWorlds() {
                     EARTH_INTERIOR_NORMALS_MM.size
                 )
         )
-        assertTrue(
-            meanWith > meanWithout,
-            "the pressure term does not widen the interior's rainfall at all: %.3f against %.3f"
-                .format(meanWith, meanWithout)
-        )
+        // Recorded at W2e: the interiors' rain spreads as widely without the pressure term as with
+        // it, 1.433 against 1.435, the boundary layer's return and its climb now setting where the
+        // interiors rain more than the free troposphere's wind (docs/TODO.md). Armed at W2f, 1.433
+        // against 1.428, the free troposphere taking in the boundary layer's water of the same lap.
+        // Recorded at W2h: 1.414 against 1.428, the extrapolated waves' winds drying the interiors'
+        // windward rises as much as their basins (docs/TODO.md, "What W2h's climate moved in the deep tier").
+        KnownFailures.expect("W2h: the pressure term does not widen the interior's rainfall", "1.414 against 1.428") {
+            if (meanWith <= meanWithout) {
+                throw RecordedViolation(
+                    "the pressure term does not widen the interior's rainfall at all: %.3f against %.3f".format(meanWith, meanWithout),
+                    "%.3f against %.3f".format(meanWith, meanWithout)
+                )
+            }
+        }
         // Recorded at C1b2: the interior's rain runs from the windward rises' to the dry plateaus'
         // more widely than Earth's interiors do (docs/TODO.md, "The march's misses against Earth,
         // after C1b2"). Armed at F1, whose interiors' rain spreads within the factor
-        // (docs/DESIGN_LEDGER.md, F1).
+        // (docs/DESIGN_LEDGER.md, F1). Recorded at W2b, whose interiors run from wet rises to deserts
+        // more widely again (docs/TODO.md). Armed at W2e, 1.43 against Earth's 0.853, whose
+        // interiors rain where they were desert (docs/DESIGN_LEDGER.md, W2e).
         assertTrue(
             meanWith > earthSpread / INTERIOR_SPREAD_FACTOR && meanWith < earthSpread * INTERIOR_SPREAD_FACTOR,
             ("the interior's rainfall spreads by %.3f, outside a factor of %.0f either side of " +

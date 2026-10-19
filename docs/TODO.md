@@ -1,5 +1,112 @@
 # To do
 
+- **Fewer levels make the stationary waves' surface pressure stronger, not weaker (W2h, measured).**
+  A1-3's "17 to 21% off at eight levels" was the relative root mean square of the difference from
+  twenty-four levels, not a shortfall: on the benchmarks the eight-level surface pressure's root mean
+  square stands 1.03 to 1.19 times twenty-four levels' and the four-level's 1.11 to 1.59, so
+  `LevelExtrapolation` weakens the waves' pressure (to 0.90 to 0.99 of twenty-four levels'). On the
+  standard worlds the eight-level surface pressure already stands within 7 to 9% of sixteen levels'
+  (amplitude 0.96 to 0.985) and the extrapolation does not bring it nearer (0.069 to 0.090 against
+  0.070 to 0.087); it does bring the 850 hPa wind under the climate's latent heating nearer (0.113 and
+  0.135 against 0.180 and 0.166) and the 500 hPa omega (0.043 to 0.044 against 0.050 to 0.054). The
+  order the surface pressure converges at from four to sixteen levels is 1.27 to 1.72 on the
+  benchmarks but 0.0 to 0.6 on the worlds' forcing, and the winds' orders spread below zero: four
+  levels are not where the error falls as a power of the spacing. Sixteen levels on the same ground
+  give 14.2% desert pooled over seeds 42, 969495 and 7 at 1,024 rows, the extrapolation 13.5 and
+  eight levels 12.2, at 44 to 50 s of climate against 28 to 31 and 22 to 27: the extrapolation goes
+  about two thirds of the way. The correction is to be deleted when sixteen levels are affordable
+  (`LevelExtrapolation`; docs/DESIGN_LEDGER.md, W2h). 2026-10-18, W2h.
+- **The subtropical highs stand equatorward of Earth's in winter (W2h, recorded).**
+  `MeanCirculationEarthTest`'s new clause holds the highest sea-level pressure over the sea at 15 to
+  45 degrees in each half and hemisphere, over the planet's area mean, to the NCEP/NCAR reanalysis's
+  1991 to 2020 half-years: the strength pools at 11.9 hPa on seeds 42, 969495 and 7 at 1,024 rows
+  against Earth's 11.0 to 12.7, inside (the circulation's pressure alone, the control, fails), but the
+  latitude pools at 28.8 degrees against Earth's 32.5 to 35.0: the winter hemisphere's highest sea
+  pressure stands at 21.9 to 25.9 degrees on every seed, with the winter ridge (the entry "The
+  seasonal circulation against Earth"). The cells' winter edge, Held's onset on the winter's steep
+  gradient, is where it sits. 2026-10-18, W2h.
+- **The tropics' deserts grow (W2h, recorded).** Under the extrapolated stationary waves and the
+  cells' edges by sector the standard worlds at 512 rows carry 16.1% desert pooled (x0.85 of Peel's
+  19.1%, armed in `WaterColumnEarthTest`), but within 15 degrees 18.1%, x3.49 of Earth's 5.2% (x2.12
+  at W2f); at 1,024 rows seed 42's tropical land is 21.8% desert against 13.9 at W2g, 969495's 10.0
+  against 7.5 and 7's 11.5 against 8.2. Most of the growth follows the waves' winds: on the same
+  ground the extrapolation alone takes seed 42's tropics from 13.6 to 18.2%, and with the edges by sector
+  the world stands at 21.8 on its own ground. The free troposphere's eddy winds dry the continents' interiors (the entry "The
+  stationary waves' eddy winds still dry the land"), and the extrapolation strengthens the 850 hPa
+  wind under latent heating by a tenth. Sixteen levels give seed 42's tropics 11.8%: the
+  extrapolation's tropical drying is its own, not the converged answer's (the first entry above).
+  2026-10-18, W2h.
+- **The ocean's stress reads the zonal cells' edges (W2h).** `OceanStage.annualStress` lays the
+  zonal circulation's stress on every column (`ClimateStage.beltWindOfRows`) and the boundary layer's
+  wind beyond it, which since W2h stands on cells whose edges and belts move by sector, so the eddy
+  part `|V| V - |B| B` carries the belts' own shift only where the local belts differ from the
+  zonal. The gyres moved by under 5% of their Sverdrup transport (docs/DESIGN_LEDGER.md, W2h).
+  2026-10-18, W2h.
+- **The drawing's figures on W2h's ground (recorded).** Scroll's steppe stands 23% of the way from
+  its desert to its forest on the gallery's world, under the 25% bar (`ClimateTintTest`), and seed
+  7's drawn coast has 940 of its 1,891 vertices where the ground and the mask agree, a hair under
+  half (`CoastLineTest`); both moved with the climate, as at A1-6b, W2b and W2d. 2026-10-18, W2h.
+- **Every term of the climate that knows only latitude (W2h, inventory).** Three times now a rain or
+  desert edge has run along a row (F1's Hadley branch, W2b and W2f's fronts and deserts' edges, W2h's
+  57.5 S and 19 S), each from a field with one value round its row. The terms that are the same at
+  every longitude of a row, file and line at fac3296a, ranked by how likely each is to draw the next
+  straight edge (sharp: a step, a switch, a narrow front, a clamp; smooth: a gradient only):
+  1. **Which half is a place's summer** (`ClimateStage.localSummerIsJulyHalf`, ClimateStage.kt:769,
+     applied 672-680): both halves' temperatures are the annual field plus a departure that is the
+     row's land and marine columns by the cell's marine fraction (1488-1505), so far inland the
+     switch falls on one row; at it the summer and winter rain swap, and Koppen's aridity bonus
+     (2042-2049) and the monsoon-forest and savanna gates (1976-1983) switch with them. Sharp; the
+     biome only. Not fixed.
+  2. **The cells' edges, the polar fronts and the zero lines of the zonal wind**
+     (`HadleyCirculation.Belt` 263-282, `beltWindMps`, `windMps` 305-313): the wind turns through zero
+     at the cells' edge, the rising branch and the polar front, the march's sweep turns with it
+     (MoistureMarch.kt:1745) and the boundary layer's air on either side has another origin, so the
+     rain steps across the turn; the meridional legs `v = 0.15 u` kink at the edge and the front, so
+     the convergence steps there too. Sharp; the rain. Since W2h by sector, but flat across a broad
+     continent or ocean of uniform land share, and the whole hemisphere falls back to the zonal edge
+     where either column never turns unstable (LocalCirculation.kt:520). The two W2h edges are this
+     term: fixed in part (the cells' edges by sector); the jet's and the front's own placement by the
+     sector's baroclinicity is the next step (the entries above on 57.5 S and 19 S).
+  3. **The sea ice's mask** (`ClimateStage`, the `<= SEA_FREEZING_C` test at 1131, perennial ice
+     850-856) on the row's sea temperature plus the weather noise and the current: a switch on an
+     isotherm the noise bends at 2,400 km. Sharp; rain downwind and the biome.
+  4. **The ocean's zonal stress** (`OceanStage.annualStress` 609-649, rows from
+     `ClimateStage.beltWindOfRows`): the zonal circulation's edges and fronts on the same rows round
+     the planet, where the atmosphere's are by sector since W2h; the curl and the Ekman pumping kink
+     at them, softened by the ocean's heat diffusion. Sharp-ish; the sea's anomaly.
+  5. **The biome's temperature gates** (`ClimateStage.classify` 1948-2002, aridity 2049) on fields
+     that are the row's band values plus noise, lapse and the marine air: isotherms wobbled by the
+     noise's 3.5 C. Sharp, near-straight only where the gradient is steep.
+  6. **The band's land share** (`EnergyBalance.landFractionByBand` 926-944, `bandC` 76-80) under
+     Held's onset (`HadleyCirculation.baroclinicOnsetDegrees`, gradient over a degree): a coast along a
+     parallel steps the share and can pin the zonal edge to its latitude, the base every sector's edge
+     is shifted from. Sharp, indirectly.
+  7. **The rain blur's radius per row** (`SphereBlur`, 64-67): a whole number of cells, stepping
+     between rows and none on coarse grids' tropical rows. A texture step, not a mean one.
+  8. **The stratus belt** (`MoistureBudget.stratusBelt`, 100-105, 131-135): a Gaussian in latitude
+     from the zonal rising branch, with a kink at the thermal equator; measured at 0.2% of a coast's
+     rain. Smooth with a kink.
+  9. **The sun at the top of the air per row** (`ClimateStage` 917-921, `SurfaceEvaporation`
+     89-117): smooth, with the polar night's clamp. Smooth.
+  10. **The upwelled water's outcrop latitude** (`OceanStage.outcropLatitude` 910-917), clamped at
+      Earth's 45 degrees, not the world's own belts. Kinks; the sea's anomaly where it upwells.
+  Smooth and kept: latitude and Coriolis per row, the energy balance's bands read between their
+  centers (`ZonalClimate`), the storm track's eddy diffusivity (`EnergyBalance.eddyDiffusivityAt`, a
+  Gaussian about Earth's 50 degrees, not the world's own jet), the drag per coarse row, the basic
+  state's jets. Inert with the pressure term on: `BoundaryLayer.zonalPressurePa` and the circulation's
+  pressure (the drawn sea-level pressure only), `SurfaceBelts.zonalShare` (the weather's gusts'
+  constant). Listed by a read-only sweep of the climate's files and spot-checked against the code
+  (the summer switch, the sweep's sign, the ocean's rows, the hemisphere's fallback). 2026-10-18, W2h.
+- **What W2h's climate moved in the deep tier (recorded).** Each a consequence of the new rain, not
+  traced further: the sample's cold-current coast 3% wetter with the currents on, 319 against 309 mm
+  (`CurrentFeedsRainTest`); the square-fan control's straight-run share 1.00%, a hair under its
+  1.05% bar (`DeltaOutlineTest`); the wet basin sample 842 of its 1,358 cells at the balance
+  (`LakeWaterBalanceTest`); seed 42's southern ridge moving 10.4 degrees between its seasons, a row
+  past ten (`MeanCirculationEarthTest`); the pressure term no longer widening the interiors' rain,
+  1.414 against 1.428 (`PressureWindTest`); the pooled largest lake 1.21 times the Caspian's share,
+  seed 59758's at 1,024 rows 5.24 (`OutletResolutionTest`). Armed: the deserts' edges along a row,
+  the iced zone's lakes, the dry basin's lake, the incision's clamp and the snow's marginal band.
+  2026-10-18, W2h.
 - **Rivers' green corridors and wadi floors are mostly narrower than a cell (S1 Satellite look,
   round 2).** At 1,024 rows a cell is 19.6 km, and by the Nile's anchor (a 12 km valley floor for
   84 cubic km a year, widening as the square root of discharge, which the Tarim's 2 km poplar belt
@@ -65,7 +172,418 @@
   in river ink where it was drawn as threads of sea; the geometry census's river layer is where it
   will show. The cause is the valleys' own bearing on that slope (the coastal comb entries below),
   not the tracer. 2026-10-13, RM1.
-- **Land too wet and deserts too few, from tropical air too dry (W1, paused on `chunk/w1-land-rain`, 2026-10-13).** On the Earth-sized default the land rains 853-1,029 mm against Earth's 756 and desert covers 5-17% of land against about 19%; the excess falls at 10-30 and 40-50 degrees and summer land rain peaks at 16-21 degrees against Earth's 5-12. Measured cause: 76-98% of land rain is condensate from lifted air at a rate linear in the column's humidity (`MoistureMarch`), while the air holds far too little water: tropical land 21-24 mm precipitable water at a column humidity near 0.4 against the Amazon's 55-60 mm and 0.75-0.8 (Schiro and others 2016), the tropical sea near 0.5, the planet 15-19 mm against 24.7. A critical-humidity gate on lifted condensation (Sundqvist and others 1989; Zhao and Carr 1997's 0.75 over land and 0.90 over sea) brings land rain to 600-800 mm but turns 42-61% of land within 10 degrees of the equator to desert; the rain then falls on the high, rough tropical terrain (800-1,070 m mean) and misses the lowlands. Placing deep ascent by subcloud moist static energy did not move the summer peak (the energy balance's land air is flat at 28 C from 8 to 28 N, so the energy maximum sits on the heat low) and kept the coupled loop from settling on seed 99. Smaller defects measured on the branch: the waves' eddy winds at 690-810 hPa diverge moisture out of the continents (desert falls 5-8 points without them); 6-20% of deep-tropics cells march against their coupled wind and stagnate about 60 days; the Budyko return reads 40% under its regional value. Next step when resumed: why the atmosphere holds about 60% of Earth's water (the column rain law, sea evaporation, residence), then the gate and these defects on top. Probe and figures: the branch's ledger notes and the maintainer's notes.
+- **The tropical interiors starve into desert under one rain law (W2b).** Since W2b the large-scale
+  rain is the column law's alone, the ground's climb condenses only over Zhao and Carr's critical
+  humidity, and the descent no longer takes the law's rain back; each crossing is one budget and the
+  saturated column is the rising parcel's (docs/DESIGN_LEDGER.md, W2b). The land then rains 575-711 mm
+  on seeds 42, 969495 and 7 at 512 rows (Earth 756-796; GPCP version 2.3's land 822) and desert
+  covers 23-44% of the land (Peel's 19.1%), 42-51% of the land within 15 degrees (Earth's 5.2%): W1's
+  finding, the interiors short of the water they import. `WaterColumnEarthTest` records the misses
+  (desert x1.90 pooled, the tropics' band x8.73 and the polar band x4.26; land within 40 degrees x0.76
+  of GPCP's; the atmosphere's water x0.70) and `RainAgainstEarthTest` the land's return share x0.78.
+  W1's three remaining defects, each switched alone on W2b's branch (the switches are the maintainer's
+  notes): the stationary waves' eddy winds in the column's wind, off, raise land rain by 53, 78 and
+  143 mm and cut desert by 4.9, 5.3 and 9.6 points (the tropics' band by 7, 10 and 18); the ground's
+  Budyko return, raised by 1/0.6 (W1 read it 40% under its regional value), raises land rain by 432,
+  289 and 309 mm and cuts desert by 11.2, 7.3 and 8.4 points (the tropics' band by 22, 16 and 15); the
+  calm cells, marched at their own speed instead of the least, move land rain by 3 to 18 mm and desert
+  by under a point, since the crossing's own budget already holds them at their balance. The summer
+  land rain's peak stays on the heat low: in each half's own rain at 512 rows, July north at 16-18,
+  20-22 and 22-24 degrees on seeds 42, 969495 and 7 against main's 18-20, 20-22 and 24-26 (Earth's
+  5-12). Next, by those numbers: the eddy winds and the
+  return, after the tropical sea's temperature below. 2026-10-16, W2b. **At W2e** the interiors are no longer
+  desert: the lifted boundary layer condenses past its own condensation level and the column law
+  reads the free troposphere, so desert covers 13.5% of the standard worlds' land and the tropics'
+  band twice Earth's (the entry "The deserts overshoot to the wet side"). 2026-10-17, W2e.
+- **The land gives back less of its rain than Earth's because its rain falls where it cannot be
+  returned, not because the return is short (W2d, measured; the cause is the rain's placement).**
+  Budyko's curve, which the ground returns by, gives back 0.603 of Earth's land rain on Earth's own
+  fields (CRU TS 4.07's rain and FAO-56 reference evapotranspiration for 2001 to 2010, cell by cell
+  without Antarctica) against Rodell and others' 0.606; on the generated land it gives back each
+  dryness class's Earth share (0.25, 0.56, 0.79, 0.95 and 1.00 under a dryness of 0.5, 1, 2, 5 and
+  over, against Earth's 0.34, 0.56, 0.78, 0.94, 1.00), and the humid Koppen groups evaporate more
+  millimeters than Mueller and others' (2013) Earth (`GroundReturnEarthTest`). What differs is where
+  the rain falls: 43 to 51% of the land's rain falls where the potential is under half of it, on 8
+  to 11% of the land, against Earth's 25.5% on 9%; and 44 to 64% of the land stands at a dryness
+  over 5 against Earth's 21%. By Koppen's groups, on seeds 42 and 969495 at 512 rows, the land is
+  3 to 5% tropical against Earth's 21.5% and 38 to 43% arid against 31%; on the standard seeds its
+  temperate land rains 1,870 to 2,250 mm against Earth's 1,020 and its arid land 95 to 140 against
+  256. The land is split into too-wet windward
+  coasts and ranges and too-dry interiors, which is the rain law's and the wind's (the entries above
+  on the eddy winds and the summer peak), not the ground's: the candidates within the ground's reach,
+  each switched alone, move the land's rain by +21 to +39 mm (a forest's deep-rooted Zhang curve
+  everywhere, the potential raised a fifth) where W1's blunt raise of the return by 1/0.6 moved it by
+  +289 to +425. Recorded in `GroundReturnEarthTest` (the share under half the potential x1.83, the
+  groups' shares and millimeters). Next: the column's rain law over land and the eddy winds, which
+  decide where the rain falls. 2026-10-17, W2d. **At W2e** a third of the land's rain falls
+  under half the potential (x1.30 of CRU's), from nearly half; the land returns 0.60 of its rain
+  (`RainAgainstEarthTest`, armed). 2026-10-17, W2e.
+- **More of what the land evaporates rains on land again than Earth's (W2d, recorded).** van der Ent
+  and others' (2010) continents rain 57% of their evaporation back on land; the standard worlds rain
+  0.70 of it on 6eb31400 and 0.73 once the root zone's store moved the dry half's return into the wet
+  half, whose air rains on the land it crosses (`GroundReturnEarthTest`, x1.28, recorded). The
+  precipitation recycling ratio stands inside Earth's band, 0.37 against 0.40. Not traced: the
+  continents' size and shape against Earth's, and the summer peak's placement on the heat low, both
+  keep the land's water over land. 2026-10-17, W2d.
+- **The lakes and wetlands give nothing back to the air (W2d, noted, not measured).** The march's
+  ground return is each cell's own Budyko share of its own rain; the runoff that reaches a lake, a
+  floodplain or an endorheic basin and evaporates there (`LakeWaterBalance`'s open-water loss) never
+  enters the march, so the water of an inland sea leaves the climate's budget. On Earth the curve on
+  each half-degree cell's own rain already gives Rodell's land share, so the term is a few percent of
+  the land's return there; on these worlds, whose rain is twice as concentrated on the windward
+  ranges and whose lakes stand over the Caspian's share, it may be more. Measure the lakes' and
+  playas' open-water loss against the land's return before deciding whether the climate should read
+  the rivers. 2026-10-17, W2d.
+- **The deserts overshoot to the wet side once the climb condenses past the boundary layer's own
+  condensation level (W2e, recorded; the subtropical highs' correction is the counterweight).** With
+  the column split into a boundary layer and the free troposphere (docs/DESIGN_LEDGER.md, W2e) the
+  standard worlds at 512 rows carry 13.5% desert pooled against Peel's 19.1% (`WaterColumnEarthTest`,
+  x0.71, recorded), the horse latitudes' band 0.63 of Earth's and the tropics' twice Earth's 5.2%
+  (band 0 x2.16, recorded); on seeds 42, 969495 and 7 at 512 rows 6.8, 11.6 and 16.4%, within 15
+  degrees 10.8, 7.7 and 7.4%. The land within 40 degrees now rains x0.84 of GPCP's and the land
+  imports 39,500 to 47,000 km³ a year at Earth's land area, both inside Earth's; what is short is the
+  dry subtropics' desert, which the high-pressure systems' strength sets. Still x1.74 of Earth's land
+  stands over five times drier than its potential (`RainPlacementEarthTest`, recorded) and x1.30 of
+  Earth's share of the land's rain falls where the potential is under half of it
+  (`GroundReturnEarthTest`, recorded): the windward coasts' and the eddy winds' share. Not tuned: the
+  queued correction to the highs is the counterweight. 2026-10-17, W2e.
+- **The stationary waves' eddy winds still dry the land, now through the free troposphere (W2e,
+  measured).** The eddy winds act at the levels above the boundary layer (690 to 810 hPa where D2
+  measured them) and so, since W2e, on the free troposphere's water alone. Switched off alone on
+  seeds 42, 969495 and 7 at 512 rows they raise the land's rain by 68, 62 and 143 mm and cut desert
+  by 5.5, 9.0 and 9.8 points (to 1.3, 2.6 and 6.6%); D2 measured 6 to 10 points with them in the
+  column's wind. Their divergence of the free troposphere's water out of the continents is what
+  is left of the interiors' drought. 2026-10-17, W2e.
+- **High tropical ground still rains near the lowland on some worlds (W2e, measured).** Over the
+  land within 30 degrees the ground over 1,500 m rains 0.76 of what the ground under 200 m rains,
+  pooled on the standard worlds at 512 rows (CRU TS 4.07 over the CPC's half-degree elevation, 0.56;
+  D2 read 3.5 to 7 times on 6d5257e2), seed 99 0.22 and seed 7 1.10. On seeds 42 and 7 the land
+  over 2,500 m rains 1,500 and 1,330 mm, most of it the lifted boundary layer's condensate on
+  windward ranges (1,200 and 690 mm), against Earth's 569; seed 969495's plateau rains 640. Two
+  things to measure: where the boundary layer is saturated at the ground the cap condenses what the
+  cell's colder air cannot hold and the lift condenses the climb too, so a saturated layer climbing
+  a slope rains early (the total over a climb is the water it brings, but its place moves up the
+  slope); and the plateaus' boundary layers are fed by their own ground's return. 2026-10-17, W2e.
+- **Fewer isolated wet spots than Earth's (W2e, recorded).** D2's measure (land raining over 500 mm
+  and over twice the land 160 to 320 km round it) covers 0.0019 of the standard worlds' land at 512
+  rows against 0.0067 of CRU's (`RainPlacementEarthTest`, x0.28, recorded); on 6d5257e2 x1.92, the
+  round wet blobs over isolated high ground. Earth's are its isolated mountains and volcanoes; the
+  march's lifted air rains only past its own condensation level and the column law no longer reads
+  the ground's saturated column, so a lone peak with dry air round it rains little. Whether Earth's
+  spots are windward slopes of lone peaks, which the climb read at 15 km could not hold at 512
+  rows, was not measured. 2026-10-17, W2e.
+- **The tropical land's column holds half the Amazon's water (W2e, measured, not fixed).** Over the
+  standard seeds' lowland land within 10 degrees under 500 m at 512 rows (seeds 42, 969495 and 7) the
+  column holds 30 to 34 mm in either half (the boundary layer 12 to 14, the free troposphere 18 to
+  20) of 62 to 67 mm saturated, 0.47 to 0.54, against Manaus's 55 to 60 mm of 73 in the wet season
+  (Schiro and others 2016), the boundary layer's surface air at 0.47 to 0.55 of saturation. The
+  regions' budget per half-year, seed 42's July half: rain 1,462 mm (the column law 1,389, the lifted
+  condensate 72), the ground's return 852, P - E 609 mm or 6,900 km³ a half-year; the boundary layer
+  brings in 52,800 km³ across the region's edge on its own wind and carries out 48,500, the free
+  troposphere 63,100 and 60,500, and the boundary layer sends 14,100 km³ a half-year up into the free
+  troposphere, 9,700 of it its converging air. The free troposphere's humidity there reads 0.56 to
+  0.58 on the law, so its rain stops at 1,000 to 1,400 mm and the column keeps what the law leaves.
+  The land's boundary layer is dry because its only source is the Budyko return of its own rain:
+  next, the return's rate inside the wet half (a soil store drawn at the potential, W2d's candidate)
+  and the convective exchange over land, whose air a dry free troposphere's base dries.
+  2026-10-17, W2e.
+- **The convergence closure rains what the boundary layer sends up at once (W2e, measured; off by
+  default).** `ClimateConfig.convergenceRain` now rains the free troposphere's arriving water at its
+  own faces' convergence. Switched on, on seeds 42, 969495 and 7 at 512 rows, it rains 128 to 203 mm
+  a year of the land's water at once, the land rains 46 to 59 mm more and desert falls 3.3 to 7.2
+  points, and over the tropical lowland the free troposphere holds 1 to 2 mm less (17.7 against 19.7
+  on seed 42) and its law humidity reads 0.55 against 0.58. Off, the default, converging air builds
+  the free troposphere's water and the law rains it, which is Bretherton's relation; no defect in
+  the default world. Kept as the control. 2026-10-17, W2e.
+- **The free troposphere holds one relative humidity from the boundary layer's top up (W2e).** The
+  boundary layer's top exchanges air with the free troposphere at its radiative subsidence, 3.5 mm a
+  second (`MoistureMarch.exchangeVelocityMps`), because the free troposphere's lowest air is read at
+  its own mean relative humidity and the saturation of the layer's top: the trades' cloud layer,
+  13.0 g/kg over EUREC4A against the subcloud layer's 15.1 (Galewsky and Los 2026), is in that one
+  humidity with the dry air above the inversion. With the cumulus' own mass flux, 15.2 mm a second,
+  the trades' boundary layer stood at 0.59 of saturation and the sea evaporated half again its water
+  (measured at W2e); with none, 0.9. A free troposphere with its own vertical profile, or the cloud
+  layer as a third layer, would let the observed mass flux stand. The trades' surface air now stands
+  at 0.68 of saturation and 14.2 g/kg over a 26.5 to 28 C sea against EUREC4A's 0.716 and 15.1
+  (`RainPlacementEarthTest`, inside). 2026-10-17, W2e.
+- **A world drying toward nothing ends in the westward sweep's debt (W2e, measured).** The westward
+  sweep's faces draw on the eastward rows beside them, and what the eastward row cannot pay waits in
+  its bank (A1-6b). In `MoistureClosureTest`'s world with no source, run past three laps since W2e's
+  march settles on the whole planet's rain, the march's storage falls below zero, to -1.6 of a start
+  of 38.6 after ten laps, while every lap still closes its budget: the debts of rows that dried
+  before they could repay. In a world with sources the next lap's parcel pays them. The clause now
+  reads its closure against the water each lap moved. 2026-10-17, W2e.
+- **The march settles in more laps than W2d's, by less (W2e, W2f).** The two layers exchanged their
+  water a lap behind each other at W2e and the march settled in 15 to 17 laps on seeds 42, 969495
+  and 7 at 512 rows against W2d's 10 to 12. At W2f the free troposphere takes in the boundary
+  layer's water of the same lap and the loop settles in 11 to 13 (`MoistureMarch`, "The exchange
+  inside the lap"); a world's four climate runs at 1,024 rows take 46 laps, from 64, against W2d's
+  38. What is left of the gap was not traced to one cause: the atmosphere's heating loop, whose
+  residual wanders between 0.005 and 0.008 over the last laps under a bar of 0.006 (the per-lap
+  residuals of the lap probe at 512 rows), is the criterion that settles last on seeds 42 and
+  969495, and the year's rain change on seed 7. The boundary layer still takes in the free
+  troposphere's water of the lap before everywhere but in the cells the boundary layer crosses
+  westward and the free troposphere eastward, the only ones where it comes second. 2026-10-17, W2e;
+  2026-10-18, W2f.
+- **The desert's edge along the belts' factor (W2f, rule 13, recorded).** Seed 7's desert ends along
+  a row for 644 km at 19.95 S (rows 625 and 626 of 1,024; 497 km on W2e's ground), where the
+  year's rain steps along the whole run from 239 mm above the row to 207 below it (means over the
+  run), the potential the same, 2,000 mm, on both sides: the biome's threshold falls on the rain
+  front the belts' factor draws along 20 S, the front `RainGeometryTest` records at 2,430 km.
+  Pooled with the other two seeds' 194 and 187 km the deserts' edges stand at 342 km against main's
+  311 (recorded; W2d and W2e armed it), the 250 mm isohyet's at 491 against 487. The run is a
+  threshold crossing on a slowly varying field laid along one row, so it moves by a third on any
+  change of the rain; the cause is the belts' factor, not the exchange of the lap (W2e's tree reads
+  497 km). 2026-10-18, W2f. Traced at W2h: there is no belts' factor in the climate since C1b2;
+  the front at 19 S is the half about January's boundary-layer wind turning from the summer cell's
+  monsoon westerlies to its trades inside the cell, the surface wind's zonal part 1.08 to 0.05 m/s and
+  the circulation's 0.23 to -0.94 over rows 613 to 615 at seed
+  7's columns 257 to 268, where the column's rain falls from 2,190 to 151 mm in two rows; its
+  latitude is the column's carried cell (`LocalCirculation.zonalSineOf`), which a broad continent's
+  uniform land share holds on one row. With the cells' edges by sector (W2h) the desert's edge there
+  runs 239 km along a row against 644, and the deserts' edges pool at 292 km against main's 311,
+  armed (`RainGeometryTest`); the rain's front itself still runs 2,321 km along 18.4 S (2,430 at
+  W2f), recorded. 2026-10-18, W2h.
+- **Lakes of a few cells come and go with any change of the rain (W2f, recorded).** The pieces
+  guard (`LakeBodyTest`, armed at W2e) finds two lakes of 6 and 3 cells in two pieces each on seed
+  42 once the rain moves by a few tenths of a percent, and the dry basin on seed 1 keeps a lake that
+  is not marked endorheic (`LakeWaterBalanceTest`, armed at W2e). Both were recorded at F1, armed
+  at W2e and are recorded again. What decides them is a few cells at the margin of a hollow's
+  saddle (H1 found a three-cell lake whose surface stood at the ground of the one cell between its
+  two hollows, to the sixth place), which no chunk's rain can be asked to leave alone; a margin in
+  the lake stage would let the guards stay armed. 2026-10-18, W2f.
+- **The ice sheets' thickest moves by up to 44% on a few tenths of a percent of the rain (W2f,
+  recorded).** `IceSheetTest`'s thickest sheet, a recorded failure against Earth's, reads 5,094 to
+  7,352 m on seed 7, 4,782 to 5,323 on seed 42, 6,380 to 6,415 on seed 718106 and 6,362 to 6,501
+  on seed 59758 between W2e's ground and this one's. Not traced; the record holds the failure, not
+  the number. 2026-10-18, W2f.
+- **The atmosphere is a quarter of a lap now (W2f, measured).** A coupled lap at 1,024 rows costs
+  118 ms to solve the atmosphere, 124 to build the next seasons from it and 10 for the heating,
+  252 ms beside the march's 657, of which about 115 are its reseason and the ground's return. Over
+  46 laps that is 11.6 s of a climate run's 49.5. The per-cell parts, 186 ms of the 252
+  (`BoundaryLayerCostTest`), are the graphics path's next candidates after the march's own, and the
+  back-substitution's `ComplexBlockTridiagonal.solveBlock` is 34% of the atmosphere's samples.
+  2026-10-18, W2f. With the march on the card (W2g) the atmosphere is the larger part of a lap. The
+  back-substitution belongs on the card only in double precision, its pivots being refused below
+  1e-13 of a block's largest entry (`SINGULAR_SHARE`), which a single cannot hold; and in double
+  precision it is small work, each wave's system 150 blocks of 31 complex unknowns on Earth's grid,
+  under a gigaflop a lap over both halves' hundred waves, a few milliseconds at this card's double
+  rate (an estimate, not measured), bound by the 150 blocks' dependence rather than by the rate. It
+  pays only with its factors kept on the card for the run (about 700 MB) and the per-cell carrying
+  of the forcing and the response there too, so a lap's fields do not cross each way. 2026-10-18, W2g.
+- **The march's reseason recomputes what a lap does not change (W2f, measured, not fixed).** A lap's
+  reseason builds each season's ground pressure, layer depth, saturated column, cap, sea humidity
+  and suppression from the air temperature, the sea and the ground, which the atmosphere's lap does
+  not move (only the winds do: the transport, the climb, the descent and the sea's transfer). The
+  saving was not measured; the largest of the recomputed terms was the descent's lift yield, which
+  W2f tabulated (`ColumnWater.saturatedLiftYield`). 2026-10-18, W2f. The card's path does not
+  (`MoistureMarch`'s `reseasonForDevice`): it builds the air's fields again only where the next
+  season's air, sea, ice or inversion differ, and keeps the descent's yields for the run; the
+  processor's path is unchanged. 2026-10-18, W2g.
+- **`IceSheet.VIALOV_SHAPE` is read through a lazy delegate in the climate's hot loop (W2f,
+  measured, not fixed).** The execution sampler puts 2% of the climate's samples (12% of those
+  outside the march and the atmosphere) at the getter (`IceSheet.kt`, the table's `by lazy`
+  field), read at every cell of the ice pass; a plain field would not pay the delegate's check.
+  2026-10-18, W2f.
+- **The boundary layer's rain steps along a row where the surface wind reverses (W2e, rule 13,
+  measured).** At 512 rows seed 42's southern continent shows the rain in east-west streaks near 57.5
+  S, at row 419, where the surface wind's zonal mean turns from the westerlies to the polar easterlies
+  along the whole row: the boundary layer's sweep turns there, and its air north of the row is the
+  westerlies' marine air at saturation where south of it the easterlies' air stands at 0.4, so its
+  rain steps across the row. The turn's latitude is the zonal circulation's own, the same on every
+  longitude (the entry "The air above the boundary layer blows the circulation's zonal wind", F1:
+  the cells' edges are row-uniform). At 1,024 rows `RainGeometryTest`'s longest front along a row
+  reads 895, 802 and 2,412 km on seeds 42, 969495 and 7 (6d5257e2: 1,480, 1,497 and 2,396), at 66 N,
+  13 N and 19 S, and at the polar front 895, 609 and 602 (926, 1,049 and 744), all recorded; the 57.5
+  S streak is shorter than these and is not the clause's. The cells' edges by longitude are what
+  would bend it. 2026-10-17, W2e. Traced at W2h on seed 42 at 512 rows, columns 760 to 880: in the
+  half about July the surface wind's zonal part passes through zero between rows 413 and 416 (55.4
+  to 56.4 S) at every one of those columns, the boundary layer's water falls from 1.95 to 0.77 mm
+  across it at column 780 and the column's rain from 423 to 128 mm, all within three rows; the
+  half about January's westerlies carry no such turn there, and the streaks westward of the wet
+  east coast are the boundary layer's plumes on a wind that blows along the rows. W2h's cells end
+  at each sector's own baroclinic onset and the polar front moves with them, by 0.6 to 4.8 degrees
+  round the planet (`LocalCirculationTest`), but under a degree across this continent, whose land
+  share is uniform at the edges' latitudes: the streaks are unchanged in the renders at 512 rows
+  (notes, renders-h). What would bend them is the eddy-driven jet and the polar front placed by the
+  sector's own baroclinicity at the jet's latitude (the storm tracks Williams, Wilson and Hughes
+  2007 locate at the local Eady growth rate's maxima), not at Earth's belt width from the cells'
+  edge (`HadleyCirculation.Belt`; the entry "Every term of the climate that knows only latitude").
+  2026-10-18, W2h.
+- **The 512 census on W2e's ground (recorded, not traced).** `GeometryExpectations` goes from six
+  known entries holding ten instances to twelve holding twenty-one. Gone: W2d's biome edge along a
+  row on seed 99 at (226,74), seed 7's polar isohyet facet at (861,2), seed 1234's contour arc at the
+  seam and its aligned isohyet at (106,508). New: one round margin each on seeds 7 at (860,42) and 99
+  at (69,35), an arc in the ice surface, the terrain contours and the peoples' borders at one place,
+  an ice sheet's edge (the entry "The ice surface's arcs in the 512 census"); seed 42's ice arcs go
+  from two to four, and its drawn coast holds an arc at (298,457), 70 S, beside them; the polar
+  isohyets of seeds 7 and 1234 run along rows 0 to 4 and 507 to 511, three aligned sides and two
+  facets each (the entry "The rain on the polar rows is the ground's relief round a pole"). The ice
+  and the polar rows are where the rain's change moves a threshold. 2026-10-17, W2e.
+- **The wetter interiors fill their basins, and the ice moves with them (W2e, recorded).** Where the
+  deserts were the land rains now, and the closed basins hold more: lakes cover 0.0253 of the
+  standard worlds' land at 512 rows against the bar of 0.0167 (`GroundTextureTest`, recorded; 0.0149
+  at W2c); seed 718106 starts with a lake of 6.7 times the Caspian's share, the notch takes it to 5.8
+  and its world keeps 0.81 of its water, and seed 7's starts at 2.9 and falls under it
+  (`OutletIncisionTest`, recorded; the clause that wants two seeds starting over-large is armed);
+  the fill after the notch stands 141% as deep as the control's (73% at W2d); the drowned interiors
+  pool 4.72 times the Caspian's share, seeds 99, 42 and 7 at 2.86, 2.70 and 1.01% of their land
+  (1.57 at W2d). The ice: the thickest sheets stand 6,380, 6,362, 5,094 and 4,782 m on seeds 718106,
+  59758, 7 and 42 (6,959, 7,492, 6,117 and 5,594), the ice covers 25.5% of the land at 256 rows
+  (24.4%), and 2.6% of the cold dry interior stays ice sheet against the 2% bar (`SnowBalanceTest`,
+  recorded); the iced zone holds 2.41 times temperate country's lakes (2.28). The frozen sea takes
+  under twice its rain with the ice off on seeds 7 and 42 (1.76 and 1.96, `SeaIceTest`, recorded):
+  the free troposphere carries its water over the pack whatever the sea under it gives the boundary
+  layer, and the frozen sea still rains five to six times less than the open sea beside it. The
+  lowstand leaves 1.34 times the estuary mouths against 1.5 (`SeaLevelHistoryTest`, recorded); seed
+  718106 keeps one channel cell below its receiver (`ReceiverClampTest`, recorded, the same untraced
+  cell); one basin of six cells on seed 1234 is handed 1.05 times the rain reaching it (`LakeBodyTest`,
+  recorded; the entry "The basins' accounting at the float's last place"); seed 7 holds one course of
+  a single cell of land into water (`RiverCourseTest`, recorded); seed 42's frozen north holds a lake
+  of 21 cells along a row at (784,21) where seed 7's is gone (`StraightRunTest`, rule 13). Each is
+  the ground's and the ice's answer to the rain; none traced further. 2026-10-17, W2e.
+- **The pressure term and the interiors' rain (W2e, recorded).** The subtropical continents' summer
+  coasts draw the wind on at +0.09 m/s pooled, a hundredth under the bar, seed 1234's equatorial
+  continent blowing off its coasts in both halves (`PressureWindTest`, recorded; F1 read the same);
+  and the interiors' rain spreads as widely without the pressure term as with it, 1.433 against
+  1.435, though its spread now stands within a factor of two of Earth's 0.853 (armed). Where the
+  interiors rain is set more by the boundary layer's own return and climb than by the free
+  troposphere's wind. Not traced. 2026-10-17, W2e.
+- **The windward percentile on a wider planet (W2e, recorded).** `PlanetWidthRainTest` reads the
+  land's 99.5th percentile on the 24,000 km planet at 2.05 times the stock 12,000 km planet's against
+  a bar of 1.55, the stock seeds' own spread. The wide planet is no wetter than on 6d5257e2 (3,221,
+  5,011 and 2,804 mm against 4,766, 4,114 and 3,009 on seeds 42, 969495 and 7 at 256 rows); the stock
+  planet's wettest land is drier, seed 969495's 3,613 mm gone to 1,844 with its wet spot, and the
+  three seeds stand closer together, so the bar fell from 2.55. From half to twice the width the
+  percentile moves 1.7 times where it moved 2.6; the land's mean holds (0.74 and 1.63 times on
+  6d5257e2, 1.12 and 1.68 now, bar 3.36). The windward coasts' rain still grows with the planet:
+  the Hadley cells narrow on the wider planet (A1-6b). 2026-10-17, W2e.
+- **Grid convergence (W2e, measured, holds).** On seed 42 the land rains 756 mm at 512 rows and 763
+  at 1,024 (x1.009) and desert covers 6.8% and 7.6% of the land (`RainPlacementEarthTest`'s
+  cross-grid clause, bars 5% and two points; the ungated climb grew 11 to 15% between the grids
+  before W2e). The climb reads the ground smoothed to 15 km, a length on the ground, so a finer grid
+  resolves the same slopes. 2026-10-17, W2e.
+- **The two layers' march and the deep tiers' heaps (W2e, W2f).** W2e's march cost twice W2d's
+  climate (a world 129 s against 80, its four climate runs 91 s in 64 laps against 38 s in 38) and
+  held half a gigabyte more at 1,024 rows. W2f brings it to a world of 87 s and climate runs of
+  49.6 s in 46 laps, a lap's march 657 ms (W2d: 540) beside an atmosphere of 252 ms a lap, and the
+  climate's live heap over the world from 2.26 GB to 1.69 on seed 42 (W2d: 1.46); the ledger row
+  W2f has the measures. What W2f did not bring back: the 46 laps against 38 (the entry "The march
+  settles in more laps than W2d's"); the lap's march itself, which at 657 ms is bound by the machine's cores (the row pieces' scaling
+  flattens from 680 ms in eight to 650 in twelve and 676 in sixteen); and the heaps. The deep worldgen tier's four 3.5 GB workers lose five tests in three classes to the heap (`GlacialBasinShapeTest`, `RealmIdRangeTest`, `StraightRunTest`; W2e: nine in six classes) and, at 4 GB each, two in two (`RealmIdRangeTest`, `StraightRunTest`), every one of which passes alone at 3.5 GB: a worker that has run other classes keeps their worlds, 0.37 to 0.48 GB live for each of 1,024 rows, beside the climate's 1.69 GB over its world, so what it needs is more than 4 GB (not measured above that: four workers over 4 GB do not fit the machine's free memory beside the rest of the tier). The deep desktop tier's 3 GB worker runs out of heap in `WorldLinkDesktopTest`, which passes alone; at 4 GB the whole tier of 24 tests passes. The deep drawing tier's `EarthSizeGeometryReport`, which W2e could not run in its 2 GB heap even alone, passes. The remedies still
+  open, in order of reach: the banks (five double arrays a season, kept whole because a bank can hold
+  a rounding residual anywhere; a bank kept apart from its residuals would be sparse like the sent
+  parcels; not tried); the graphics path, whose kernel form the arithmetic keeps; or the budget itself, which
+  is the maintainer's. 2026-10-17, W2e; 2026-10-18, W2f.
+- **The sea from the equator to 40 degrees still stands under Earth's (W2c, two causes fixed, the
+  rest measured).** W2c gave the slab's water Kara's air-sea difference and the ITCZ's cloud its
+  longwave (`EnergyBalance.SEA_OVER_MARINE_AIR_C`, `ITCZ_CLOUD_SHORTWAVE_OVER_LONGWAVE`): between
+  10 S and 10 N the energy balance's sea moved from 25.8 to 27.05 C against the 1971-2000
+  optimum-interpolation climatology's 27.64, and on Earth's land the pooled bands 10-20, 20-30 and
+  30-40 stand 1.1, 1.5 and 1.2 C under it, outside half the difference between Earth's two
+  hemispheres (`EnergyBalanceTest`, `SeaSurfaceEarthTest`, recorded), while 40-60 sits on it. The
+  marine air over the tropical sea is 26.3 against Earth's 26.9 (the climatology less Kara's
+  0.78), so the moisture march's column gained 0.4 to 0.5 mm, not the 2.1 to 2.8 a sea and air
+  warmed 1.8 C gave W2b. Measured alone on seeds 42, 969495 and 7 at 512 rows and on Earth's land:
+  neither the summer mixed layer (+0.01 C) nor the currents' anomaly (its mean over the band within
+  0.01 C of zero, by construction) moves the band; the tropical diffusivity moves it (x0.8 +1.3 C,
+  x1.2 -1.0 C) but also the high latitudes (the cold-season ice edge 3 degrees further equatorward
+  at x0.8), and the model already carries less heat poleward than Trenberth and Caron's radiation
+  requires (5.37 PW at its peaks against 5.79 and 5.66, x0.94, recorded): a tropics that exported
+  more at the same temperature would be both warmer and nearer the transport, which is a top of
+  atmosphere budget the model gets wrong in the low latitudes. Not the longwave's shape alone: the
+  zonal-mean outgoing longwave of NOAA's interpolated climatology (1991-2020), imposed on the law as
+  its residual, moves the equator only +0.2 C and lowers the transport to 4.96 PW, so the shortwave
+  or the transport's closure is in it. Read CERES's zonal top-of-atmosphere fluxes (absorbed and
+  outgoing, all-sky and clear) against the model's band by band before changing either; the
+  diffusivity's two numbers were swept against the unsourced profile `EnergyBalanceTest` held before
+  W2c (the ledger, W1), and the transport over Earth's observed sea-surface gradient implies about
+  1.2 at 20 degrees and 0.85 at 30 against the model's 0.84 and 0.80. 2026-10-17, W2c.
+- **The planet's mean stands under Earth's on two standard worlds (W2c, measured, not fixed).** The
+  annual temperature at the ground by area reads 12.80, 13.70, 12.85 and 13.84 C on seeds 7, 42,
+  1234 and 99 at 512 rows against Jones and others' 14.0 (hemispheres 14.6 and 13.4), 12.94, 13.78,
+  12.92 and 13.92 on 9ff725c9 (`SeaSurfaceEarthTest`, recorded). The energy balance is a sea-level
+  model whose planet reads 15.4 C on Earth's land; Earth's 14.0 is at its ground, so the gap is the
+  land's height times the lapse rate on each world, and seeds 7 and 1234 carry more of it. Not
+  measured: each world's land share and mean height against Earth's. 2026-10-17, W2c.
+- **Clauses W2c's sea and cloud moved (recorded).** The pooled ice share of land on the snow
+  balance's seeds rose from 22.79% to 24.39% against Earth's 10.1 (`SnowBalanceTest`): the ITCZ
+  cloud's longwave taken back out of the law's global mean costs the extratropics 2.1 W/m2, 0.4 to
+  0.5 C at 50 to 70 degrees on Earth's land, and seed 7's marginal band then falls under the
+  thousand cells its claim needs, as seed 99's had, so two seeds carry one against three. July's
+  convergence line stands 7.4 degrees inland pooled against Earth's 7.8, seed 7's over land at 16.1 N
+  (`LocalCirculationEarthTest`). The polar wind's control passes on the synthetic continent, 1.73
+  against 2.39 m/s (`PressureWindPoleTest`). In the drawing, 283 drawn courses end in narrow sea
+  with no seaward step against W2b's 187 (`DrawnRiverMouthTest`), 34 cells of seed 969495 draw less
+  green under more cover (`SatelliteStyleTest`, 26), and a steppe stands 15% of the way from the
+  desert to the forest in the Scroll style (`ClimateTintTest`, 19%). The pooled largest drowned
+  basin stands 1.74 times the Caspian's share, seed 99's interior drowned over 2.2% of its land
+  (`OutletIncisionTest`, armed at W2b), and no seed starts with a lake over the Caspian's share, so
+  the outlet is not seen taking one down; seed 59758's largest lake at 1,024 rows stands 4.89 times
+  the Caspian's share, the pool over two seeds and three grids 1.34 (`OutletResolutionTest`, armed
+  at A1-6c). None traced. 2026-10-17, W2c.
+- **The subtropical sea evaporates under Earth's (W2b, measured, not fixed).** The march's sea
+  evaporates 1,000-1,080 mm at 20-30 degrees against about 1,800 over the subtropical latitudes (Yu
+  2007, OAFlux), under a scalar wind of 6.1-6.5 m/s where 10-20 degrees has 7.8-8.1. Diagnose after
+  the sea's temperature is corrected, reading the wind, the air's humidity (the bulk formula reads
+  Dai's marine 0.775 everywhere, not the column's) and the stability together; a transient wind
+  raised for it moves the transport too. 2026-10-16, W2b.
+- **Earth's land rain by ten-degree band was not read (W2b).** `WaterColumnEarthTest` holds the land
+  within 40 degrees to GPCP version 2.3's 2.81 mm a day (Adler and others 2018, Table 4) and prints
+  the ten-degree bands beside it: the land-only zonal means are drawn in the papers read, not
+  tabulated, and the gridded monthly product would have to be read to hold each band. Nor were the
+  atmosphere's water over land and over sea read from a climatology; the planet's 24.7 mm is the only
+  figure held. 2026-10-16, W2b.
+- **The column law over land and outside the tropics is assumed (W2b).** Bretherton, Peters and
+  Back's relation is the tropical oceans' (a microwave retrieval that holds only over the sea);
+  W2b rains every column by it. Read a relation between column humidity and rain over tropical land
+  and in the extratropics before calibrating the land's rain further. 2026-10-16, W2b.
+- **The climb's condensation reads the moist adiabat at sea-level pressure (W2b).**
+  `ColumnWater.upliftCondensationKgPerM3` takes Smith and Barstad's `C_w` at the standard sea level
+  whatever the ground; the saturated column now starts at the ground's pressure. Small (the moist
+  lapse rate at 70 kPa is a few percent under the sea level's at the same temperature). 2026-10-16, W2b. **Gone at
+  W2e**: the climb's yield is the boundary layer's own, climbed from its condensation level's
+  pressure up the moist adiabat (`ColumnWater.boundaryLayerLiftYield`). 2026-10-17, W2e.
+- **Courses stop in narrow sea the seaward route does not carry on (W2b, recorded).** On W2b's ground
+  `DrawnRiverMouthTest` finds 187 drawn courses over the standard worlds at 512 rows that end on a
+  narrow-sea cell with no seaward step (seed 42: 8 at Earth's density and 57 at every course, the
+  rest of its 10 and 62 on the ice sheet with no flow target; seed 99: 5 and 110), where RM1's ground
+  had none: the passages the sea channels open are not all joined to the sea the map draws. Not
+  traced. 2026-10-16, W2b.
+- **Four drawing pins W2b's ground and rain move (recorded).** The drawn rivers' confluences widen
+  their trunk at 56.2% on the worst seed where main's widened at 96.6% (`RiverWidthTest`, C1b's
+  finding that dry branches add too little water): the drier land's branches carry less. Seed 7's drawn coast can be checked at 944 of
+  its 1,912 vertices, a hair under half (`CoastLineTest`; those checked keep within the bound); the
+  gallery ground's tenth percentile of land slope reads 0.066 against the engraving's floor of 0.06
+  (`ReliefShadingTest`); and 26 cells of seed 969495 draw less green under more cover in the
+  Satellite style than the truncations allow (`SatelliteStyleTest`), not traced. 2026-10-16, W2b.
+  W2c's ground clears two of them, both armed again: seed 7's coast can be checked at 948 of 1,890
+  vertices and the slope's tenth percentile reads 0.059. 2026-10-17, W2c. W2d's ground takes seed
+  7's coast under half again, 936 of 1,879, recorded. 2026-10-17, W2d.
+- **The geometry census on W2d's ground (recorded, not traced).** At 512 rows the known entries go
+  from five holding seven instances to six holding ten: seed 7's terrain crease at (900,21) and its
+  isohyet's aligned side at (928,3) are gone, and a polar isohyet facet at (861,2) stands in their
+  place; seed 42's ice surface holds a second arc at (650,493) and seed 99's a fourth at (706,492);
+  new are an arc in seed 1234's terrain contours at (1022,471), at the map's seam, and a 70-step
+  biome edge along the grid on seed 99 at (226,74), 64 degrees north. The ice and the polar rows are
+  where the rain's small changes move a threshold; the biome edge wants its own look. 2026-10-17, W2d.
+- **The deep tier on W2d's ground (three recorded, two armed).** Recorded: the iced zone holds 2.28
+  times temperate country's lakes against 2.5, the ice still taking cold country's lakes from 0.38
+  to 2.39 per 10k cells (`GlaciationTest`); no candidate's sheet fills a third of its disc near its
+  dome, so the flow clause reads none (`IceSheetTest`); and one lake of 21 cells in seed 7's frozen
+  north at (901,10) on 512 rows runs 20 cells along a row (`StraightRunTest`, rule 13). Each is the
+  ice's answer to a provisional climate whose return moved; not traced further. Armed: no world
+  keeps a lake over the Caspian's share in `OutletIncisionTest` (`OutletResolutionTest`'s pool at
+  1,024 rows reads 1.26 times it, from 1.34, recorded), and the deserts end along a row at 298 km pooled against main's
+  311 (`RainGeometryTest`). The rain's straight fronts along a row read 1,480, 1,497 and 2,396 km
+  (1,480, 1,337 and 2,414 on W2c) and at the polar front 926, 1,049 and 744 (961, 895 and 689):
+  seed 969495's longest front moved from 31 N to 30 S and is longer, recorded. The drowned
+  interiors pool 1.57 times the Caspian's share, from 1.74, seed 99's at 1.97% of its land
+  (`OutletIncisionTest`, recorded). 2026-10-17, W2d.
+- **The geometry census on W2b's ground.** 138 known entries and 412 instances where main had 137 and
+  413: seed 7's ice-surface arc is gone and the two isohyet entries along seeds 7's and 1234's
+  edge rows hold one instance each where they held two; new are a crease in seed 42's terrain
+  contours at (246,196) and an arc on seed 1234's ice surface at (124,492). Not traced. 2026-10-16, W2b.
 - **The ocean's ITCZ rains under Earth's, on the equator's side of its convergence (F1).** On F1's
   worlds at 1,024 rows the open sea's July-half convergence line, where its mean meridional wind
   turns, stands at 8.9, 9.4 and 10.1 N on seeds 42, 969495 and 7, Earth's 9 N (Schneider, Bischoff
@@ -105,7 +623,9 @@
   zonal mean of its own aloft but Jablonowski and Williamson's prescribed jets, whose lowest levels
   blow westerly where the trades blow easterly. The trades weaken and the westerlies strengthen with
   height on Earth; a thermal-wind profile from the energy balance's gradient, held by the
-  angular-momentum-conserving wind in the deep tropics, is what would replace it. 2026-10-12, F1.
+  angular-momentum-conserving wind in the deep tropics, is what would replace it. 2026-10-12, F1. Since W2e
+  it is the free troposphere's own wind (`BoundaryLayer.freeTroposphereWindMps`), the boundary
+  layer's water travelling on the surface wind. 2026-10-17, W2e.
 - **The land rains more after the column's wind (F1).** Pooled over seeds 42, 969495 and 7 at 1,024
   rows the land takes 1,046 mm against A1-6c's 1,026 (Earth 756), seed 42 1,154 against 1,242 and the
   others more, 1,030 against 940 and 954 against 895; the sea 749 against 745 (Earth 1,032). On
@@ -118,7 +638,8 @@
   scale height from Antofagasta's 194 soundings of 2005, 1.5 to 2.3 km, and Armazones's median, 1.7 km,
   and name no shipboard survey. The figure stands; its source is to be found or the comment re-sourced
   (F1's column wind reads Kanemaru and Masunaga's AIRS figure, `BoundaryLayer.VAPOR_SCALE_HEIGHT_M`).
-  2026-10-12, F1.
+  2026-10-12, F1. **Gone at W2e**: the cap is the boundary layer's surface air's
+  saturation and `HOLDABLE_SHARE` is deleted. 2026-10-17, W2e.
 - **The circulation by longitude's per-cell work (F1, the graphics rule).** Each half's belts are
   built on every cell once a climate run and once an ocean round (`LocalCirculation.belts`, in
   parallel on the processor), and each lap carries the column's wind's two eddy fields up to the map
@@ -1274,7 +1795,32 @@
 - **The march's surface wind, its speed and its sun, all stand-ins (C1b).** The march carries water at the belts' 7.5 m/s east or west, with the belts' zonal speed constant up to their edges, so across an edge two air streams of different origin meet at full speed and the orographic term flips its windward side from one row to the next (the seasonal fields' pre-blur row steps of 4 to 6 at the edges). **The zonal wind closed at C1b2**: the belts' zonal wind is continuous through zero at each edge (`SurfaceBelts.zonalShare`) and the march carries water at each cell's own speed, so the reversal moves with the pressure field; what still draws rows is the entry "Fronts along the belts' factor". The land's potential evapotranspiration reads FAO-56's 2 m/s station mean for the wind at 2 m and Earth's land-mean transmissivity, 184.7 of 330.2 W/m² (Trenberth, Fasullo and Kiehl 2009), for the sun at the ground, so a desert's clear sky and a rainforest's cloud are the same. All three are the atmosphere's (the entry "Build the atmosphere"). 2026-10-08, C1b.
 - **The belts' factor's floor has no Earth source (C1b).** `ClimateStage.MIN_BAND`, a twentieth of the rain's lifetime under the subtropical high, was kept as it stood; C1a's design guessed it inside a Saharan column's turnover of 110 to 365 days against 8.9 and left the figures to be checked. Reached smoothly now. 2026-10-08, C1b.
 - **The ocean's wind stress still reads the belts' old meridional step (C1b).** `SurfaceBelts` gives the gyres the belts' slope as a constant across each belt, where the atmosphere's meridional wind is now a half sine, zero at every edge and at the equator. 2026-10-08, C1b.
-- **The rain on the graphics card (C1b; the next chunk, C1c).** `MoistureAccelerator` is the seam, unwired: one workgroup per run of rows and sweep, a barrier per column, the faces' fluxes and the eddy exchange through shared memory and the bank in a buffer, held to the processor's rain and to its own ledger's closure. The march costs about 4.7 s a climate run at 1,024 rows against main's 2.6, and the climate runs three times a generation. 2026-10-08, C1b. At C1b2 a column is one tridiagonal solve over every row of both sweeps that meets one being marched (the Thomas algorithm, sequential in the rows: a parallel cyclic reduction on the card), and the physics per row is independent; the march costs 6.0 to 7.4 s a climate run. 2026-10-09, C1b2.
+- **The rain on the graphics card (C1b; built at W2g).** `GpuMoisture` marches every climate run's
+  laps behind `MoistureAccelerator` and the acceleration switch, in mixed precision, held to the
+  processor's rain within twice the coupled loop's settling bar and to its closure on its own ledger
+  (`GpuMoistureTest`; docs/DESIGN_LEDGER.md, W2g). What is left of the entry is in the W2g entries
+  below. 2026-10-18, W2g.
+- **The card's lap waits on each column's slowest crossing (W2g, measured, not changed).** A step of
+  the card's lap is as long as its slowest row's crossing: at 1,024 rows on seed 42 the average
+  crossing evaluates its sinks 3.1 to 3.3 times in the boundary layer and 5.6 to 6.3 in the free
+  troposphere, as on the processor, but the worst crossing of a step evaluates them 73 times at the
+  median step and up to 100 (the long, calm crossings walked in up to 32 steps toward their
+  balance), and the crossings are about 200 of a lap's 330 to 360 ms on the card. Fewer
+  evaluations for those crossings would be a change to the crossing on both paths (a step rule
+  that reaches the balance in fewer steps), not a device's. 2026-10-18, W2g.
+- **The card's faces' solve and the wind's upload (W2g, measured, not changed).** Each step solves
+  each queue's column twice in single precision by parallel cyclic reduction, about 15 us each at
+  1,024 rows (60 ms a lap each), where a reduction of a few levels and the Thomas algorithm on
+  the subsystems it leaves would do a third of the work; and the wind's sixteen fields a lap (134
+  MB at 1,024 rows) cross to the card at about 1.2 GB/s through `glBufferSubData`, hidden behind the
+  lap by uploading a stage of columns ahead of the sweep, where building the transport, the sea's
+  transfer and the climb on the card from the four winds would carry half as much. 2026-10-18, W2g.
+- **`EarthSizeGeometryReport` is at the edge of the cartography deep worker's heap (W2g).** In `:cartography:deepTest -Pstages=climate` it ran out of its 2 GB heap behind the tier's other three classes, on a tree whose processor path is W2f's to the bit; alone it passes in 11 min 33 s, as at W2f. Its worker's heap, or its order, wants a look before the next chunk that moves the climate. 2026-10-18, W2g.
+- **The acceleration switch's sentence does not name the rain (W2g).** `Platform.acceleratedWork`
+  lists erosion, the currents, the ice sheet and the export raster, which run "many times faster"
+  on the card; the rain runs on it too since W2g, about two to three times faster a lap, which
+  "many times" would overstate. The sentence was left alone rather than made to claim it.
+  2026-10-18, W2g.
 - **The marine inversion, re-measured on a march that takes its rain out (C1b).** `MoistureBudget.INVERSION_MEASURED_EFFECT` records 0.2% from the old march, a reservoir whose rate the lid held down; on a march that takes the rain out of the column the lid may bite, and `MoistureBudgetTest` prints the new figure. 2026-10-08, C1b.
 - **The desert left the horse latitudes (C1b).** `GeographyAuditTest`'s band clause, asserted from Fix 3b, is a C1b known failure: pooled over the audit's worlds at 512 rows the desert's share of the 0 to 15 degree band's land is 2.95 times its share of all land, where Earth's is 0.27, and seed 42's 15 to 45 degree band holds 0.23 times it against Earth's 2.05. Measured causes, not fixed: in the warm half the belts' meridional wind converges from 10 to 25 degrees (the half sine peaks mid-belt, and the thermal equator stands at the tilt), so the subtropics take a monsoon's water in summer, and the orographic term rains it out of moist air on any climb; and the tropical continents' interiors are high dry plateaus some 900 km inland, which the march reaches with its water already rained out on the windward rise. The atmosphere's subsidence (the entry "Build the atmosphere") is what dries the horse latitudes on Earth, and the march has only the inversion's lid for it. `MeridionalWindTest`'s monsoon coast and `RainGeometryTest` print the figures. 2026-10-08, C1b. C1b2 restored the descent on every sink and measured the bands (the entry "The march's misses against Earth, after C1b2"). 2026-10-09, C1b2.
 - **The ice after C1b.** The march that closes its budget snows on the polar land the water the old march's cold cap dropped, and the ice grew: the ice-sheet biome covers 8.6 to 10.0% of the land's area on seeds 42, 969495 and 7 at 256, 512 and 1,024 rows alike (Earth 10.1; main 1.8 to 2.5); `SnowBalanceTest`'s share, a count of the grid's cells that weighs the polar land several times over, reads 24.4% on its four seeds at 256 rows and fails its bar of twice Earth's, where by area it reads 7.86% against the control's 17.48%, so on the sphere the control sits inside the bar too and the guard wants a control that fails it (or the bar re-derived) when it is moved to area; the sheets stand 7.0 to 7.8 km at their thickest against Earth's envelope (`IceSheetTest`); 6% of the cold dry interior is ice (`SnowBalanceTest`, against 2%); the ice adds 2.9 to 3.1% of the standing water as parallel grid-bearing bars (`GlaciationCombTest`, bar 2%); the sheets cut a trough's depth into 36 to 45% of seed 718106's flat frozen country (`GlaciationLatticeTest`, bar 15%); and the geometry census's ice surface, measurable now on seeds 7 and 1234 at 512 rows, holds a crease and a round rim on each and a round rim on 99. All are C1b known failures; the brief measured the ice and left it. The thickness and the lattice are the ice's own physics (`GlaciationStage`'s flow law and scour, set when the sheets were a few percent of the land), the share is the snow's, and which to move first is the ice chunk's to measure: the snow's resolution dependence first, since a law cannot depend on the cell. 2026-10-08, C1b. The thickness is Glen's law's at C1b2 (the entry "The ice after C1b2"). 2026-10-09, C1b2.
@@ -1536,7 +2082,12 @@
   that is a change to what the march integrates rather than to which field it reads. The switch is
   `ClimateConfig.vegetationRecycling` and `MoistureBudgetTest` re-measures both numbers on every
   audited seed, so whoever opens this starts from figures rather than from this paragraph.
-  2026-09-20, W4.
+  2026-09-20, W4. **Answered at W2d**: the proxy and its switch went at C1b, where the return became Budyko's
+  share of the cell's own year of rain; W2d measured that curve on Earth's fields (it gives back
+  Rodell's share on Earth's rain) and put a store and a drawdown where the year meets its halves:
+  each half gives back its share of the potential as far as its rain and FAO-56's root zone, 180 mm,
+  supply it. The store was not what kept the continents dry; the entry "The land gives back less of
+  its rain than Earth's" above has why. 2026-10-17, W2d.
 - **Permafrost covers 2.10 times Earth's share of the land, and it is the tundra entry wearing a
   second hat.** Pooled over seeds 7/42/1234/99 at 512 the permafrost zones take 35.7% of ice-free
   land against Earth's 17% (Zhang and others 1999), running 7.7 to 59.9% by seed. The mask is a

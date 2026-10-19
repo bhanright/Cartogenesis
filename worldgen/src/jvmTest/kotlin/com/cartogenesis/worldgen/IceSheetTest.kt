@@ -68,7 +68,7 @@ class IceSheetTest : BorrowsSharedWorlds() {
         // Recorded at C1b: the march that closes its budget snows on the polar land where the old one
         // dropped the cold cap's water, and the sheets it feeds stand thicker than Earth's. The ice
         // is measured and not fixed in C1b (docs/TODO.md, "The ice after C1b").
-        KnownFailures.expect("C1b: the sheets the conserving march feeds stand thicker than Earth's", "seed 718106 stands 6811; seed 59758 stands 7072; seed 7 stands 6794; seed 42 stands 6012") {
+        KnownFailures.expect("C1b: the sheets the conserving march feeds stand thicker than Earth's", "seed 718106 stands 6569; seed 59758 stands 6285; seed 7 stands 6525") {
             if (failures.isNotEmpty()) {
                 throw RecordedViolation(
                     "the sheets are outside the envelope Earth's two sit in:\n" + failures.joinToString("\n"),
@@ -204,7 +204,10 @@ class IceSheetTest : BorrowsSharedWorlds() {
         // Armed at A1-6a, where seed 42's sheet fills 187 cells of its 513-cell disc again.
         // Recorded at F1, on whose ground no candidate's sheet fills a third near its dome, as the
         // everyday tier's control finds at 512 rows (docs/TODO.md).
-        KnownFailures.expect("F1: no sheet the flow clause can read has a dome", "0 seeds") {
+        // Armed at W2b, on whose ground enough sheets fill a third near their domes (docs/DESIGN_LEDGER.md, W2b).
+        // Recorded at W2d, on whose ground no candidate's sheet fills a third near its dome, as the
+        // everyday tier's control finds at 512 rows (docs/DESIGN_LEDGER.md, W2d; docs/TODO.md).
+        KnownFailures.expect("W2d: no sheet the flow clause can read has a dome", "0 seeds") {
             if (domesRead < LEAST_SEEDS_WITH_A_DOME) {
                 throw RecordedViolation(
                     "only $domesRead seeds grow a sheet whose dome fills a third of its own disc, under" +
@@ -231,7 +234,10 @@ class IceSheetTest : BorrowsSharedWorlds() {
         // under the coupled climate no dome is read (docs/DESIGN_LEDGER.md, H1 and M1). Recorded at
         // A1-6a, where seed 42's dome is read again and its sheet flows outward a hair under the
         // bar, 63.1% at 67.7 degrees off radial against 67% and 67.5 (docs/TODO.md). Armed at A1-6b,
-        // whose snow clears it (docs/DESIGN_LEDGER.md, A1-6b).
+        // whose snow clears it (docs/DESIGN_LEDGER.md, A1-6b). Recorded at W2b, whose ground reads
+        // seed 42's dome again, its sheet flowing outward a hair under the bar (docs/TODO.md).
+        // Armed at W2d, on whose ground no dome is read and the clause above records it, so this one
+        // holds over none (docs/DESIGN_LEDGER.md, W2d).
         assertTrue("the sheet is not flowing down its own surface: " + failures.joinToString("; "), failures.isEmpty())
     }
 
@@ -259,7 +265,7 @@ class IceSheetTest : BorrowsSharedWorlds() {
             // Recorded when H1's ground came under the coupled climate: none of the candidates'
             // sheets fills a third of its disc near its dome, so the control has no flow to turn
             // (docs/DESIGN_LEDGER.md, M1; docs/TODO.md).
-            KnownFailures.expect("M1: no sheet the control can read has a dome", "seed 17: 51 of 513 cells; seed 718106: 18 of 513 cells; seed 59758: 126 of 513 cells; seed 7: 5 of 513 cells; seed 42: 129 of 513 cells") {
+            KnownFailures.expect("M1: no sheet the control can read has a dome", "seed 17: 31 of 513 cells; seed 718106: 148 of 513 cells; seed 59758: 77 of 513 cells; seed 7: 52 of 513 cells; seed 42: 1 of 513 cells") {
                 val readings = candidates.map { candidate ->
                     val candidateMeasured = measure(candidate)
                     val reading = readFlow(candidateMeasured, candidateMeasured.mass.sheetFlowReceiver)

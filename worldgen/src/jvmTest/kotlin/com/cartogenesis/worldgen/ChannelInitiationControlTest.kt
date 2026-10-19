@@ -68,21 +68,15 @@ class ChannelInitiationControlTest : BorrowsSharedWorlds() {
         // pooled curve is all but flat from the semi-arid class up, 0.0209, 0.0209 and 0.0207 per
         // kilometer, and so falls on the wet side by a hundredth and peaks in the dry subhumid: the
         // control no longer fails, and the clauses it guards are met by the land's spread rather
-        // than by the term (docs/TODO.md).
-        KnownFailures.expect(
-            "A1-6c: the bare-ground control meets the drainage-density clauses by a hundredth",
-            "peak SEMI_ARID, humid over semi-arid 0.90"
-        ) {
-            if (complaints.isEmpty()) {
-                throw RecordedViolation(
-                    "with the cover term off the drainage density still peaks in a dryland and still" +
-                        " falls away on the wet side, so the term is not what earns those clauses and the" +
-                        " control is measuring nothing",
-                    "peak ${pooled.drainageInitiatedNetwork.peak()}, humid over semi-arid " +
-                        "%.2f".format(EarthLikeness.drainageWetSideRatio(pooled.drainageInitiatedNetwork))
-                )
-            }
-        }
+        // than by the term (docs/TODO.md). Armed at W2e, whose bare-ground network peaks in the humid
+        // class, humid over semi-arid 1.05, so the control fails as it should (docs/DESIGN_LEDGER.md, W2e).
+        assertTrue(
+            "with the cover term off the drainage density still peaks in a dryland and still" +
+                " falls away on the wet side, so the term is not what earns those clauses and the" +
+                " control is measuring nothing: peak ${pooled.drainageInitiatedNetwork.peak()}, humid over semi-arid " +
+                "%.2f".format(EarthLikeness.drainageWetSideRatio(pooled.drainageInitiatedNetwork)),
+            complaints.isNotEmpty()
+        )
         if (complaints.isNotEmpty()) println("R1 CONTROL the bare-ground threshold fails: ${complaints.joinToString("; ")}")
     }
 

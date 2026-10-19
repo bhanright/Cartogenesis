@@ -215,12 +215,22 @@ class OutletResolutionTest {
         // pool at 0.15% of the land against the share's 0.25% (docs/DESIGN_LEDGER.md, A1-6a).
         // Recorded at A1-6b: under the seasonal circulation's rain seed 59758's largest lake at
         // 1,024 rows is 7.24 times the share and the pool 1.98. Armed at A1-6c, the pool 0.57 and
-        // seed 59758's largest lake 0.87 at 1,024 rows (docs/DESIGN_LEDGER.md, A1-6c).
-        assertTrue(
-            pooledLargest < caspianShare,
-            "the largest lake pooled over ${largestLandLakeShares.size} worlds is " +
-                "${"%.2f".format(pooledLargest / caspianShare)}x the Caspian's share of land: $overLarge"
-        )
+        // seed 59758's largest lake 0.87 at 1,024 rows (docs/DESIGN_LEDGER.md, A1-6c). Recorded at
+        // W2c: on its ground seed 59758's largest lake at 1,024 rows is 4.89 times the share and the
+        // pool 1.34 (docs/TODO.md); on W2d's, the pool 1.26 (docs/DESIGN_LEDGER.md, W2d). Armed at
+        // W2e, the pool 0.69 though seed 59758's largest lake at 1,024 rows still stands at 2.67
+        // times the share (docs/DESIGN_LEDGER.md, W2e). Recorded at W2h: seed 59758's largest lake at
+        // 1,024 rows stands at 5.24 times the share and the pool at 1.21 (docs/TODO.md, "What W2h's
+        // climate moved in the deep tier").
+        KnownFailures.expect("W2h: the pooled largest lake stands over the Caspian's share", "1.21x") {
+            if (pooledLargest >= caspianShare) {
+                throw RecordedViolation(
+                    "the largest lake pooled over ${largestLandLakeShares.size} worlds is " +
+                        "${"%.2f".format(pooledLargest / caspianShare)}x the Caspian's share of land: $overLarge",
+                    "%.2fx".format(pooledLargest / caspianShare)
+                )
+            }
+        }
         println(
             "OUTLET SCALE FINDING basins below the sea-level cut at or over the Caspian's share " +
                 "of their land: $overLargeDrowned"

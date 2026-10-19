@@ -181,6 +181,12 @@ val deepClassesByStage: Map<String, List<String>> = mapOf(
     "ocean" to listOf(
         "com.cartogenesis.desktop.GpuOceanTest"
     ),
+    "climate" to listOf(
+        // The moisture march on the card against the processor's at the application's 1,024 rows:
+        // a climate there holds 1.6 to 1.7 GB live beside its world, which the per-merge worker's
+        // 3 GB does not hold with the card's ledger. Its 512-row clauses run on every merge.
+        "com.cartogenesis.desktop.GpuMoistureTest.at the application's grid the card's rain is the processor's and its budget closes"
+    ),
     "rivers" to listOf(
         // Two seeds on the square 512, 1,024 and 2,048 grids.
         "com.cartogenesis.desktop.OutletResolutionTest"
@@ -243,6 +249,8 @@ tasks.register<Test>("deepTest") {
         isFailOnNoMatchingTests = !(rootProject.extra["deepStagesLimited"] as Boolean)
     }
     withPerMergeBudget()
+    // The deep tier's own heap (see the root build script).
+    maxHeapSize = rootProject.extra["desktopDeepTestHeap"] as String
 }
 
 tasks.register<Test>("audit") {
@@ -289,8 +297,10 @@ tasks.register<JavaExec>("renderSiteImagery") {
     classpath = sourceSets["main"].runtimeClasspath
     // The two worlds are 2048 rows, 4096 by 2048 cells, and every stage keeps float fields over
     // them: 3.0 GB live at the fullest (docs/DESIGN_LEDGER.md, Q5), with the sheets drawn from it
-    // on top. 8g leaves the collector room, and is well inside the 16 GB a hosted runner has.
-    maxHeapSize = "8g"
+    // on top. 8g left the collector room until the two-layer climate (W2e) and the atmosphere's
+    // second solve (W2h) added their fields at 2048 rows; 11g holds them, and with the deploy's
+    // short-lived Gradle process beside it stays inside the 16 GB a hosted runner has.
+    maxHeapSize = "11g"
     systemProperty("java.awt.headless", "true")
     if (project.hasProperty("contact")) {
         systemProperty("cartogenesis.siteImagery.contact", "true")

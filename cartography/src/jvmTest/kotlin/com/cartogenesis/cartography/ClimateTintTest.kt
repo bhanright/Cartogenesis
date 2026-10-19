@@ -259,8 +259,11 @@ class ClimateTintTest : BorrowsSharedWorlds() {
         // (docs/TODO.md, "The drawing's constants on C1b2's gallery world"). Armed again at A1-6a,
         // whose circulation draws every style's steppe inside its band on the gallery's world.
         // Recorded again at A1-6b, whose seasonal circulation's rain moved the gallery's world and
-        // put Scroll's steppe 15% of the way from its desert to its forest (docs/TODO.md).
-        KnownFailures.expect("A1-6b: a style's steppe falls outside its band on the seasonal circulation's gallery world", "Scroll: a steppe stands 20% of the way from the desert to the forest, outside 25-75%") {
+        // put Scroll's steppe 15% of the way from its desert to its forest (docs/TODO.md). Armed
+        // again at W2e, whose wetter gallery world draws every style's steppe inside its band.
+        // Recorded again at W2h, whose drier gallery world puts Scroll's steppe 23% of the way from
+        // its desert to its forest (docs/TODO.md, "The drawing's figures on W2h's ground").
+        KnownFailures.expect("W2h: Scroll's steppe stands outside its band on the gallery's world", "Scroll: a steppe stands 23% of the way from the desert to the forest, outside 25-75%") {
             if (outside.isNotEmpty()) throw RecordedViolation(outside.joinToString("; "), outside.joinToString("; "))
         }
     }

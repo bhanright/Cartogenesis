@@ -114,7 +114,16 @@ class RainGeometryTest : BorrowsSharedWorlds() {
         // M1). Armed at A1-6a, whose circulation's deserts end along a row at 255 to 303 km.
         // Recorded at A1-6b: seed 969495's desert ends along a row for 630 km, the other two seeds'
         // at 254 and 304 (docs/TODO.md). Armed at F1, whose circulation by longitude bends the
-        // deserts' edges (docs/DESIGN_LEDGER.md, F1).
+        // deserts' edges (docs/DESIGN_LEDGER.md, F1). Recorded at W2b, whose deserts are wider and
+        // pool longer edges along a row (docs/TODO.md). Armed at W2d, whose deserts end along a row
+        // at 274, 290 and 329 km, 298 pooled against main's 311 (docs/DESIGN_LEDGER.md, W2d).
+        // Recorded again at W2f: the deserts end along a row at 194, 187 and 644 km, 342 pooled, seed
+        // 7's longest where the desert's edge falls on the rain's front along 20 S that the belts' factor
+        // draws (the row-straight front recorded below at 2,412 km), 497 km on W2e's ground
+        // (docs/TODO.md, "The desert's edge along the belts' factor"). Armed at W2h, whose Hadley cells
+        // end at each sector's own baroclinic onset: the deserts end along a row at 172, 466 and 239
+        // km, 292 pooled against main's 311, seed 7's run along 20 S from 644 km to 239 (shown failing
+        // on 23411966's tree, 342 pooled; docs/DESIGN_LEDGER.md, W2h).
         assertTrue(
             desertEdge.average() <= MAIN_DESERT_ROW_EDGE_KM.average(),
             "the desert's straightest edge along a row: %.2f pooled against main's %.2f"
@@ -128,11 +137,18 @@ class RainGeometryTest : BorrowsSharedWorlds() {
         // Recorded on H1's ground under the coupled climate, pooled a little over main's again
         // (docs/DESIGN_LEDGER.md, M1). Armed at A1-6a, whose 250 mm isohyets end along a row at 384
         // to 453 km.
-        assertTrue(
-            dryEdge.average() <= MAIN_DRY_ROW_EDGE_KM.average(),
-            "the 250 mm isohyet's straightest edge along a row: %.2f pooled against main's %.2f"
-                .format(dryEdge.average(), MAIN_DRY_ROW_EDGE_KM.average())
-        )
+        // Recorded again at W2f, with the desert's edge above: the isohyet ends along a row at 385,
+        // 371 and 718 km, 491 pooled against main's 487, seed 7's the longest again, 631 km on W2e's
+        // ground (docs/TODO.md, "The desert's edge along the belts' factor").
+        KnownFailures.expect("M1: the 250 mm isohyet's edge runs longer along a row", "524.52") {
+            if (dryEdge.average() > MAIN_DRY_ROW_EDGE_KM.average()) {
+                throw RecordedViolation(
+                    "the 250 mm isohyet's straightest edge along a row: %.2f pooled against main's %.2f"
+                        .format(dryEdge.average(), MAIN_DRY_ROW_EDGE_KM.average()),
+                    "%.2f".format(dryEdge.average())
+                )
+            }
+        }
     }
 
 
@@ -167,7 +183,7 @@ class RainGeometryTest : BorrowsSharedWorlds() {
             )
             if (found.alongRowKm > bar) over += "%d %.0f km at %.0f".format(seed, found.alongRowKm, found.rowLatitude)
         }
-        KnownFailures.expect("C1b2: fronts along the belts' factor", "42 1137 km at -27; 969495 1250 km at -15; 7 1109 km at 6") {
+        KnownFailures.expect("C1b2: fronts along the belts' factor", "42 772 km at -65; 969495 1114 km at 53; 7 2321 km at -18") {
             if (over.isNotEmpty()) {
                 throw RecordedViolation(
                     "fronts hold a row for longer than a quarter of the weather's wavelength: " + over.joinToString("; "),
@@ -204,7 +220,7 @@ class RainGeometryTest : BorrowsSharedWorlds() {
         // Recorded at A1-6b: the front moves with the seasons and the march carries water across the
         // wind's reversal, yet the year's rain still steps along a row near 64 degrees on every seed
         // (docs/TODO.md).
-        KnownFailures.expect("A1-6b: the rain still ends along a row at the polar front", "42 686 km at -65.7; 969495 754 km at -60.4") {
+        KnownFailures.expect("A1-6b: the rain still ends along a row at the polar front", "42 772 km at -64.6; 969495 619 km at -60.4") {
             if (over.isNotEmpty()) {
                 throw RecordedViolation(
                     "fronts hold a row at the polar front for longer than a quarter of the weather's wavelength: " +

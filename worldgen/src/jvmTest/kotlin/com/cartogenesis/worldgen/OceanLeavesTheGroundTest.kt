@@ -58,7 +58,17 @@ class OceanLeavesTheGroundTest : BorrowsSharedWorlds() {
      * provisional climate's cells are heated about the energy flux equator and its westerlies
      * balance the hemisphere's torque. A1-6c re-took the same two: the provisional climate's water
      * layer shoals in summer, its sea evaporates into air under the water by Kara's difference and its
-     * march leaves each cell at its downwind face's speed. An ocean change that leaks into the
+     * march leaves each cell at its downwind face's speed. W2b re-took the same two: the provisional
+     * climate's march solves each crossing as one budget, reads its saturated column on the rising
+     * parcel's profile, and rains by one law. W2c re-took the same two: the provisional climate's
+     * water stands Kara's difference above its air and the ITCZ's cloud keeps its longwave. W2d re-took
+     * the same two: the provisional climate's ground gives back each half-year's share as far as its
+     * rain and the root zone's store supply it. W2e re-took the same two: the provisional climate's
+     * march carries a boundary layer and the free troposphere on their own winds. W2f re-took the
+     * same two by a few tenths of a percent of the rain: the provisional climate's free troposphere
+     * takes in the boundary layer's water of the same lap. W2h re-took the same two: the provisional
+     * climate's stationary waves are extrapolated to their converged answer and its Hadley cells end
+     * at each sector's own baroclinic onset. An ocean change that leaks into the
      * ground moves them.
      * A chunk meant to move the ground re-takes them here, as the render records are re-taken.
      * At [SharedWorlds.DETAIL_ROWS], whose standard worlds the detail guards generate anyway, so
@@ -90,12 +100,12 @@ class OceanLeavesTheGroundTest : BorrowsSharedWorlds() {
             "plates.continentalShare" to -8606387063464998658L,
             "plates.upliftRateMmPerYear" to -9204950406715247596L,
             "plates.crustAge" to 5808649867131644059L,
-            "erosion.height" to 1234942634135062095L,
+            "erosion.height" to -8231064963526314194L,
             "erosion.sweptOnDevice" to -358906410940142731L,
-            "sea.shorelineHeight" to -415303709785810742L,
-            "sea.isLand" to 5944051734971170527L,
-            "sea.relativeElevation" to 5129060765357856416L,
-            "sea.landCellCount" to -5359221445845944503L
+            "sea.shorelineHeight" to -702966044717337125L,
+            "sea.isLand" to -672535606362511186L,
+            "sea.relativeElevation" to 4898869016668761950L,
+            "sea.landCellCount" to 459892246028338177L
         )
     }
 }

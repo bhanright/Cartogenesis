@@ -13,6 +13,7 @@ import com.cartogenesis.ui.WorldCeilings
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.ErosionAccelerator
 import com.cartogenesis.worldgen.pipeline.IceSheetAccelerator
+import com.cartogenesis.worldgen.pipeline.MoistureAccelerator
 import com.cartogenesis.worldgen.pipeline.OceanAccelerator
 import java.awt.Desktop
 import java.awt.GraphicsEnvironment
@@ -183,11 +184,18 @@ class DesktopPlatform(
     // the ocean do, so with it off the sheet is the processor's on every machine.
     private val iceProbe = GpuIceSheet.createOrNull()
 
+    // And the climate's rain, on the same device and behind the same switch: the march's laps on the
+    // card round in single precision, so its rain is the processor's within the coupled loop's own
+    // tolerance and not to the bit, and the erosion reads that rain.
+    private val moistureProbe = GpuMoisture.createOrNull()
+
     override val accelerator: ErosionAccelerator? get() = erosionProbe.accelerator
 
     override val oceanAccelerator: OceanAccelerator? get() = oceanProbe.accelerator
 
     override val iceAccelerator: IceSheetAccelerator? get() = iceProbe.accelerator
+
+    override val moistureAccelerator: MoistureAccelerator? get() = moistureProbe.accelerator
 
     override val accelerationUnavailableBecause: String? get() = erosionProbe.unavailableBecause
 
@@ -202,7 +210,7 @@ class DesktopPlatform(
         val destination = chooseSaveFile(Exporter.defaultName(world.config, size, format)) ?: return null
         val started = System.currentTimeMillis()
         return withContext(Dispatchers.Default) {
-            val subject = ExportSubjects.at(world, size, accelerator, oceanAccelerator, iceAccelerator)
+            val subject = ExportSubjects.at(world, size, accelerator, oceanAccelerator, iceAccelerator, moistureAccelerator)
             val result = Exporter.export(subject.world, options, destination, format, rasterProbe.accelerator)
             ExportOutcome(result.file.name, System.currentTimeMillis() - started, result.bytes, subject.source)
         }
@@ -224,7 +232,7 @@ class DesktopPlatform(
         val destination = chooseSaveFile(Exporter.defaultDataName(world.config, size, layer)) ?: return null
         val started = System.currentTimeMillis()
         return withContext(Dispatchers.Default) {
-            val subject = ExportSubjects.at(world, size, accelerator, oceanAccelerator, iceAccelerator)
+            val subject = ExportSubjects.at(world, size, accelerator, oceanAccelerator, iceAccelerator, moistureAccelerator)
             val result = Exporter.exportData(subject.world, destination, layer, subject.source)
             val sidecar = Exporter.sidecarNameFor(result.file.name)
             ExportOutcome(

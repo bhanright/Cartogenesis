@@ -203,11 +203,15 @@ class CurrentFeedsRainTest : BorrowsSharedWorlds() {
         // Armed at A1-6c, whose atmosphere's shallow heating reads the anomaly: 7.4% drier
         // (docs/DESIGN_LEDGER.md). Recorded at F1: the circulation by longitude and the column's
         // wind leave the sample's cold coast 59% wetter with the currents on, not traced (docs/TODO.md).
-        KnownFailures.expect("F1: the cold-current coast is wetter with the currents on", "off 223, on 355") {
+        // Armed at W2e, whose cold coast comes out 0.7% drier with the currents on, 485 against 481 mm
+        // (docs/DESIGN_LEDGER.md, W2e). Recorded at W2h: under the cells' edges by sector the sample's
+        // cold coast comes out 3% wetter with the currents on, 319 against 309 mm, not traced
+        // (docs/TODO.md, "What W2h's climate moved in the deep tier").
+        KnownFailures.expect("W2h: the cold-current coast comes out wetter with the currents on", "off 309 on 319") {
             if (coldOn >= coldOff) {
                 throw RecordedViolation(
                     "cold-current coast should get drier with the currents on: off=$coldOff, on=$coldOn",
-                    "off %.0f, on %.0f".format(coldOff, coldOn)
+                    "off %.0f on %.0f".format(coldOff, coldOn)
                 )
             }
         }
@@ -217,8 +221,8 @@ class CurrentFeedsRainTest : BorrowsSharedWorlds() {
         // Recorded at A1-4: the warm sample coast came out 2.5% drier with the currents on (docs/TODO.md).
         // Armed again at H1, where on main's climate it came out 0.2% wetter, and on H1's ground
         // under the coupled climate (docs/DESIGN_LEDGER.md, H1 and M1).
-        // Recorded again at A1-6b, 1.4% drier (docs/TODO.md).
-        KnownFailures.expect("A1-6b: the warm-current coast comes out drier with the currents on", "-6.5%") {
+        // Recorded again at A1-6b, 1.4% drier (docs/TODO.md); 4.5% drier at W2e.
+        KnownFailures.expect("A1-6b: the warm-current coast comes out drier with the currents on", "-4.6%") {
             if (warmOn < warmOff * 0.999) {
                 throw RecordedViolation(
                     "warm-current coast should not get drier with the currents on: off=$warmOff, on=$warmOn",

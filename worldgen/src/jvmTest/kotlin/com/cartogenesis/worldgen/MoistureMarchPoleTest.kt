@@ -35,6 +35,18 @@ class MoistureMarchPoleTest {
         const val ROWS = 256
         const val WIND_MPS = 7.5
         const val ROWS_EACH_SIDE = 2
+
+        /**
+         * How far past the equator's departure the polar rows' may stand, as a share of the mean:
+         * the march's own convergence bound, [MoistureMarch.CONVERGED_SHARE]. Since W2e the boundary
+         * layer and the free troposphere exchange their water through inboxes, so a uniform sea's rain
+         * stands as near its fixed point as the laps carried it: 0.4 to 0.5 mm of 701 at 256 rows with
+         * the layers a lap behind each other, 0.1 since the free troposphere takes in the boundary
+         * layer's water of the same lap, where the single column held every row at the cell's own
+         * balance to a float's rounding; the march this test was written against departed by four
+         * times the mean.
+         */
+        const val STEADY_SHARE = MoistureMarch.CONVERGED_SHARE
     }
 
     @Test
@@ -53,7 +65,7 @@ class MoistureMarchPoleTest {
                 .format(alphaDegrees, mean, polar.joinToString(" ") { "%.0f".format(it) }, equator.joinToString(" ") { "%.0f".format(it) }, polarDeparture, equatorDeparture))
             if (alphaDegrees == 0.0) {
                 assertTrue(polarDeparture < 1.0 && equatorDeparture < 1.0, "the march departs from the mean under a wind along the rows")
-            } else if (polarDeparture > equatorDeparture) {
+            } else if (polarDeparture > equatorDeparture + STEADY_SHARE * mean) {
                 failures += "alpha %.0f: the polar rows depart by %.1f mm, the equator's by %.1f".format(alphaDegrees, polarDeparture, equatorDeparture)
             }
         }
@@ -77,7 +89,6 @@ class MoistureMarchPoleTest {
             seaIce = BooleanArray(cells),
             eastwardMps = east,
             southwardMps = south,
-            largeScaleAscentMps = null,
             inversionSuppression = null,
             extraterrestrialOfRow = DoubleArray(config.height) { 10.0 }
         )

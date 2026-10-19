@@ -40,9 +40,17 @@ import kotlin.math.sqrt
  * energy flux equator with a 2,500 km running mean, a standard deviation of 720 km, and find the
  * framework "inapplicable at small regional scales". On Earth the radius is 830 km.
  *
- * **The local cells.** The zonal circulation's cells keep their edges, where baroclinic eddies take
- * over and which the land does not move here, and their rising branch moves by the column's heating
- * shift, the ITCZ following the energy flux equator one for one, as the first-order theory has it.
+ * **The local cells.** Each column's rising branch moves by its heating shift, the ITCZ following
+ * the energy flux equator one for one, as the first-order theory has it; and each column's cells end
+ * where its own sector's troposphere turns baroclinically unstable ([HadleyCirculation.baroclinicOnsetDegrees]
+ * on the sector's air, its land and marine columns by its own land share at every latitude), since
+ * the storm tracks the eddies grow in are local: regions of eddy growth at the local minima of the
+ * Eady growth period, on the scale of the deformation radius, about 1,000 km (Williams, Wilson and
+ * Hughes 2007, J. Phys. Oceanogr. 37, read). The sector here is a Gaussian of that radius
+ * ([PressureWind.rossbyRadiusKm]) along each latitude circle ([sectorEdges]). The eddy-driven belts
+ * poleward of the cells, the westerlies, the polar front and the polar easterlies, start from each
+ * column's own edge ([HadleyCirculation.beltWindMps]), at the zonal circulation's westerly peaks;
+ * on a sector of the band's own land share at every latitude the edges are the zonal circulation's.
  * Each cell is carried in the sine of latitude from its edge to the moved rising branch
  * ([zonalSineOf]), as [HadleyCirculation] carries the axisymmetric cells onto its own edges.
  *
@@ -56,10 +64,11 @@ import kotlin.math.sqrt
  * where the zonal cell's own was.
  *
  * **The pressure** that holds this wind is its drag balance integrated down each column through the
- * cells from the northern edge, as [BoundaryLayer.zonalPressurePa] integrates the zonal mean, and
- * outside the cells the zonal mean itself, where the column's wind is the zonal one. What the
- * integral leaves at the southern edge is spread back over the cells in the row, so the trough
- * moves with the rising branch and the pressure is continuous at both edges ([Belts.pressurePa]).
+ * rows where its wind differs from the zonal circulation's, as [BoundaryLayer.zonalPressurePa]
+ * integrates the zonal mean, and elsewhere the zonal mean itself. What the integral leaves at the
+ * last such row is spread back over those rows, so the trough moves with the rising branch and the
+ * subpolar trough with the polar front, and the pressure is continuous where the column meets the
+ * zonal mean ([Belts.pressurePa]).
  */
 internal class LocalCirculation private constructor(
     /** The zonal circulation the columns' cells are carried from. */
@@ -67,32 +76,50 @@ internal class LocalCirculation private constructor(
     /** Each column's heating latitude less the zonal one, degrees north. */
     val heatingShiftDegrees: DoubleArray,
     /** Each column's rising branch, degrees north. */
-    val ascentLatitudeDegrees: DoubleArray
+    val ascentLatitudeDegrees: DoubleArray,
+    /** Each column's cells' northern edge, degrees north, where its sector turns baroclinically unstable. */
+    val northEdgeDegrees: DoubleArray,
+    /** Each column's cells' southern edge, degrees south, positive. */
+    val southEdgeDegrees: DoubleArray
 ) {
-    private val northEdgeSine = sin(zonal.northEdgeDegrees * DEGREES)
-    private val southEdgeSine = -sin(zonal.southEdgeDegrees * DEGREES)
+    private val zonalNorthEdgeSine = sin(zonal.northEdgeDegrees * DEGREES)
+    private val zonalSouthEdgeSine = -sin(zonal.southEdgeDegrees * DEGREES)
     private val zonalAscentSine = sin(zonal.ascentLatitudeDegrees * DEGREES)
+    private val northEdgeSine = DoubleArray(northEdgeDegrees.size) { sin(northEdgeDegrees[it] * DEGREES) }
+    private val southEdgeSine = DoubleArray(southEdgeDegrees.size) { -sin(southEdgeDegrees[it] * DEGREES) }
+
+    /** Each column's eddy-driven belts, from its own edges. */
+    val northBelts: Array<HadleyCirculation.Belt> = Array(northEdgeDegrees.size) { zonal.Belt(northEdgeDegrees[it]) }
+    val southBelts: Array<HadleyCirculation.Belt> = Array(southEdgeDegrees.size) { zonal.Belt(southEdgeDegrees[it]) }
+
+    /** Whether [latitudeDegrees] lies inside column [column]'s cells. */
+    fun inCells(column: Int, latitudeDegrees: Double): Boolean {
+        val sine = sin(latitudeDegrees * DEGREES)
+        return sine > southEdgeSine[column] && sine < northEdgeSine[column]
+    }
 
     /**
-     * The zonal cells' sine that the sine [localSine] of column [column]'s cells stands for: the
-     * identity outside the cells, and inside them each cell carried from its edge to the column's
-     * rising branch by a monotone cubic in the sine ([carried]), whose slope is one at the edges, as
-     * the identity's is outside them, and the same either side of the rising branch. Carried
-     * linearly instead, the map's slope stepped at each edge, and with it the vertical motion its
-     * mass flux sets, and the rain drew both edges along their rows.
+     * The zonal cells' sine that the sine [localSine] inside column [column]'s cells stands for: each
+     * cell carried from the column's own edge to the zonal cell's and from the column's rising
+     * branch to the zonal one by a monotone cubic in the sine ([carried]), whose slope is one at the
+     * edges and the same either side of the rising branch. Carried linearly instead, the map's slope
+     * stepped at each edge, and with it the vertical motion its mass flux sets, and the rain drew
+     * both edges along their rows. Outside the column's cells, the sine itself.
      */
     fun zonalSineOf(column: Int, localSine: Double): Double {
-        if (localSine <= southEdgeSine || localSine >= northEdgeSine) return localSine
+        val southEdge = southEdgeSine[column]
+        val northEdge = northEdgeSine[column]
+        if (localSine <= southEdge || localSine >= northEdge) return localSine
         val localAscentSine = sin(ascentLatitudeDegrees[column] * DEGREES)
-        val southSlope = (zonalAscentSine - southEdgeSine) / (localAscentSine - southEdgeSine)
-        val northSlope = (northEdgeSine - zonalAscentSine) / (northEdgeSine - localAscentSine)
+        val southSlope = (zonalAscentSine - zonalSouthEdgeSine) / (localAscentSine - southEdge)
+        val northSlope = (zonalNorthEdgeSine - zonalAscentSine) / (northEdge - localAscentSine)
         // Fritsch and Butland's slope at the interior knot, the secants' harmonic mean, which keeps
         // a monotone piecewise cubic monotone.
         val ascentSlope = 2.0 * southSlope * northSlope / (southSlope + northSlope)
         return if (localSine <= localAscentSine) {
-            carried(localSine, southEdgeSine, localAscentSine, southEdgeSine, zonalAscentSine, EDGE_SLOPE, ascentSlope)
+            carried(localSine, southEdge, localAscentSine, zonalSouthEdgeSine, zonalAscentSine, EDGE_SLOPE, ascentSlope)
         } else {
-            carried(localSine, localAscentSine, northEdgeSine, zonalAscentSine, northEdgeSine, ascentSlope, EDGE_SLOPE)
+            carried(localSine, localAscentSine, northEdge, zonalAscentSine, zonalNorthEdgeSine, ascentSlope, EDGE_SLOPE)
         }
     }
 
@@ -123,10 +150,11 @@ internal class LocalCirculation private constructor(
 
     /**
      * The surface wind of column [column]'s circulation at [latitudeDegrees], meters a second,
-     * eastward and northward: the zonal circulation's at the latitude the column's cells carry
-     * there, its northward mass flux `v cos(phi)` held.
+     * eastward and northward: inside its cells the zonal circulation's at the latitude the column's
+     * cells carry there, its northward mass flux `v cos(phi)` held; outside them its own belts.
      */
     fun windMps(column: Int, latitudeDegrees: Double): Pair<Double, Double> {
+        if (!inCells(column, latitudeDegrees)) return zonal.beltWindMps(latitudeDegrees, northBelts[column], southBelts[column])
         val localSine = sin(latitudeDegrees * DEGREES)
         val zonalSine = zonalSineOf(column, localSine)
         if (zonalSine == localSine) return zonal.windMps(latitudeDegrees)
@@ -159,42 +187,42 @@ internal class LocalCirculation private constructor(
         }
         val zonalPressure = BoundaryLayer.zonalPressurePa(cellsDown, radiusMeters, zonalRows.eastwardMps, zonalRows.southwardMps)
         val pressure = DoubleArray(cellCount) { zonalPressure[it / cellsAcross] }
-        // The rows the cells cover, and the zonal mean's own rows on either side of them.
-        var firstInside = -1
-        var lastInside = -1
-        for (row in 0 until cellsDown) {
-            val latitude = ClimateStage.latitudeOf(row, cellsDown)
-            if (latitude < zonal.northEdgeDegrees && latitude > -zonal.southEdgeDegrees) {
-                if (firstInside < 0) firstInside = row
-                lastInside = row
+        val spacingMeters = radiusMeters * PI / cellsDown
+        val density = PressureWind.AIR_DENSITY_KG_PER_M3.toDouble()
+        parallelChunks(0, cellsAcross) { startColumn, endColumn -> for (column in startColumn until endColumn) {
+            // The rows where the column's wind is not the zonal circulation's, and one either side.
+            var firstDiffering = -1
+            var lastDiffering = -1
+            for (row in 0 until cellsDown) {
+                val cell = row * cellsAcross + column
+                if (eastward[cell] != zonalRows.eastwardMps[row] || southward[cell] != zonalRows.southwardMps[row]) {
+                    if (firstDiffering < 0) firstDiffering = row
+                    lastDiffering = row
+                }
             }
-        }
-        if (firstInside > 0 && lastInside < cellsDown - 1) {
-            val spacingMeters = radiusMeters * PI / cellsDown
-            val density = PressureWind.AIR_DENSITY_KG_PER_M3.toDouble()
-            val above = firstInside - 1
-            val below = lastInside + 1
-            parallelChunks(0, cellsAcross) { startColumn, endColumn -> for (column in startColumn until endColumn) {
-                fun northwardGradient(row: Int): Double {
-                    val cell = row * cellsAcross + column
-                    val coriolis = PressureWind.coriolisParameter(ClimateStage.latitudeOf(row, cellsDown)).toDouble()
-                    val drag = PressureWind.beltDrag(eastward[cell], southward[cell])
-                    return -density * (drag * -southward[cell] + coriolis * eastward[cell])
-                }
-                var previousGradient = northwardGradient(above)
-                pressure[above * cellsAcross + column] = zonalPressure[above]
-                for (row in firstInside..below) {
-                    val gradient = northwardGradient(row)
-                    pressure[row * cellsAcross + column] =
-                        pressure[(row - 1) * cellsAcross + column] - 0.5 * (previousGradient + gradient) * spacingMeters
-                    previousGradient = gradient
-                }
-                val leftOver = pressure[below * cellsAcross + column] - zonalPressure[below]
-                for (row in firstInside..below) {
-                    pressure[row * cellsAcross + column] -= leftOver * (row - above).toDouble() / (below - above)
-                }
-            } }
-        }
+            if (firstDiffering < 0) continue
+            val above = (firstDiffering - 1).coerceAtLeast(0)
+            val below = (lastDiffering + 1).coerceAtMost(cellsDown - 1)
+            if (below <= above) continue
+            fun northwardGradient(row: Int): Double {
+                val cell = row * cellsAcross + column
+                val coriolis = PressureWind.coriolisParameter(ClimateStage.latitudeOf(row, cellsDown)).toDouble()
+                val drag = PressureWind.beltDrag(eastward[cell], southward[cell])
+                return -density * (drag * -southward[cell] + coriolis * eastward[cell])
+            }
+            var previousGradient = northwardGradient(above)
+            pressure[above * cellsAcross + column] = zonalPressure[above]
+            for (row in above + 1..below) {
+                val gradient = northwardGradient(row)
+                pressure[row * cellsAcross + column] =
+                    pressure[(row - 1) * cellsAcross + column] - 0.5 * (previousGradient + gradient) * spacingMeters
+                previousGradient = gradient
+            }
+            val leftOver = pressure[below * cellsAcross + column] - zonalPressure[below]
+            for (row in above + 1..below) {
+                pressure[row * cellsAcross + column] -= leftOver * (row - above).toDouble() / (below - above)
+            }
+        } }
         return BoundaryLayer.Belts(eastward, southward, pressure)
     }
 
@@ -293,7 +321,9 @@ internal class LocalCirculation private constructor(
          * [heldToLandOrSea] is the guards' control: each sector taken as all land or all sea by its
          * majority, so the rising branch jumps from the sea's latitude to the land's between two
          * columns, as a heating found by an argmax across the blend would jump between its two
-         * maxima (`LocalCirculationEarthTest`).
+         * maxima (`LocalCirculationEarthTest`). [zonalEdges] is another: every column's cells end at
+         * the zonal circulation's edges, as they did before the edges were read by sector, so the
+         * belts and the polar front stand on one row the world round (`RainGeometryTest`).
          */
         fun forHalf(
             config: WorldGenConfig,
@@ -301,7 +331,8 @@ internal class LocalCirculation private constructor(
             isLand: BooleanArray,
             season: Season,
             zonalCirculation: HadleyCirculation = HadleyCirculation.forHalf(config, zonal, season),
-            heldToLandOrSea: Boolean = false
+            heldToLandOrSea: Boolean = false,
+            zonalEdges: Boolean = false
         ): LocalCirculation {
             val cellsAcross = config.width
             val cellsDown = config.height
@@ -359,14 +390,197 @@ internal class LocalCirculation private constructor(
             // The rising branch moves with the heating, and stays inside the cells by the Rossby radius
             // at least, so neither cell is carried onto less than the length its overturning is
             // organized over (Gill 1980). It binds on none of the standard worlds.
-            val northmost = zonalCirculation.northEdgeDegrees - rossbyRadiusDegrees
-            val southmost = -zonalCirculation.southEdgeDegrees + rossbyRadiusDegrees
-            val ascent = DoubleArray(cellsAcross) { column ->
-                val moved = zonalCirculation.ascentLatitudeDegrees + shift[column]
-                if (southmost >= northmost) zonalCirculation.ascentLatitudeDegrees else moved.coerceIn(southmost, northmost)
+            fun bounded(moved: Double, northEdge: Double, southEdge: Double): Double {
+                val northmost = northEdge - rossbyRadiusDegrees
+                val southmost = -southEdge + rossbyRadiusDegrees
+                return if (southmost >= northmost) zonalCirculation.ascentLatitudeDegrees else moved.coerceIn(southmost, northmost)
             }
-            return LocalCirculation(zonalCirculation, shift, ascent)
+            val (northEdge, southEdge) = if (zonalEdges) {
+                DoubleArray(cellsAcross) { zonalCirculation.northEdgeDegrees } to DoubleArray(cellsAcross) { zonalCirculation.southEdgeDegrees }
+            } else {
+                sectorEdges(config, zonal, isLand, season, zonalCirculation, heldToLandOrSea)
+            }
+            val ascent = DoubleArray(cellsAcross) { column ->
+                bounded(zonalCirculation.ascentLatitudeDegrees + shift[column], northEdge[column], southEdge[column])
+            }
+            return LocalCirculation(zonalCirculation, shift, ascent, northEdge, southEdge)
         }
+
+        /**
+         * Each column's cells' edges, degrees from the equator, north then south: where its sector's
+         * troposphere turns baroclinically unstable ([HadleyCirculation.baroclinicOnsetDegrees]), the
+         * sector's air its land and marine columns by its own land share, to first order in the share
+         * about each column's own onset ([blendedOnsetDegrees]), and the shift from the zonal
+         * circulation's edge taken from that blend, so a sector of the band's own land share stands
+         * at the zonal edge.
+         *
+         * The sector is a Gaussian of the storm track's deformation radius on the ground
+         * ([PressureWind.rossbyRadiusKm], 970 km on Earth), the scale the eddies that end the cells
+         * grow on, along each band's latitude circle and then across the bands, so its share is the
+         * large-scale land's and not a coast's. Its shares are read at longitudes [SECTOR_SAMPLES_PER_RADIUS]
+         * to the radius at the equator, each bin's land share first pooled over its own map columns,
+         * and the edges carried to every column linearly between them: a length on the ground and not
+         * a count of cells, so every grid fine enough to hold the radius reads the same edges. Where
+         * either column never turns unstable short of the search's end the zonal circulation's edge
+         * stands at every longitude.
+         * [heldToLandOrSea] holds every sector to all land or all sea by its majority, the guards'
+         * control, as [forHalf]'s does for the rising branch.
+         */
+        private fun sectorEdges(
+            config: WorldGenConfig,
+            zonal: ZonalClimate,
+            isLand: BooleanArray,
+            season: Season,
+            zonalCirculation: HadleyCirculation,
+            heldToLandOrSea: Boolean
+        ): Pair<DoubleArray, DoubleArray> {
+            val cellsAcross = config.width
+            val cellsDown = config.height
+            val radiusMeters = config.scale.radiusMeters
+            val storm = PressureWind.rossbyRadiusKm() * METERS_PER_KM
+            val samples = maxOf(MIN_SECTOR_SAMPLES, ceil(2.0 * PI * radiusMeters * SECTOR_SAMPLES_PER_RADIUS / storm).toInt())
+                .coerceAtMost(cellsAcross)
+            val bands = EnergyBalance.BANDS
+            // Each band's land share in each longitude bin, pooled from the map's rows whose center
+            // lies in the band; a band with no rows takes the one before it.
+            val landInBin = Array(bands) { DoubleArray(samples) }
+            val cellsInBin = Array(bands) { DoubleArray(samples) }
+            for (row in 0 until cellsDown) {
+                val latitude = ClimateStage.latitudeOf(row, cellsDown)
+                val band = ((EnergyBalance.POLE_DEGREES - latitude) * bands / EnergyBalance.POLE_TO_POLE_DEGREES).toInt().coerceIn(0, bands - 1)
+                for (column in 0 until cellsAcross) {
+                    val bin = column * samples / cellsAcross
+                    cellsInBin[band][bin] += 1.0
+                    if (isLand[row * cellsAcross + column]) landInBin[band][bin] += 1.0
+                }
+            }
+            val binShare = Array(bands) { DoubleArray(samples) }
+            var lastBand = -1
+            for (band in 0 until bands) {
+                if (cellsInBin[band].sum() > 0.0) {
+                    for (bin in 0 until samples) binShare[band][bin] = if (cellsInBin[band][bin] > 0.0) landInBin[band][bin] / cellsInBin[band][bin] else 0.0
+                    lastBand = band
+                } else if (lastBand >= 0) {
+                    binShare[band] = binShare[lastBand].copyOf()
+                }
+            }
+            // Each band's sector share at each sample: the Gaussian of the storm's radius along the
+            // band's circle, wrapping round the planet.
+            val landBands = zonal.land.at(season)
+            val seaBands = zonal.sea.at(season)
+            val sectorShare = Array(bands) { DoubleArray(samples) }
+            for (band in 0 until bands) {
+                val circleMeters = 2.0 * PI * radiusMeters * cos(EnergyBalance.latitudeOfBand(band) * DEGREES)
+                val sigmaBins = storm / (circleMeters / samples)
+                val reach = minOf(ceil(GAUSSIAN_REACH_SIGMAS * sigmaBins).toInt(), samples / 2)
+                for (sample in 0 until samples) {
+                    var weighted = 0.0
+                    var total = 0.0
+                    for (offset in -reach..reach) {
+                        val weight = exp(-0.5 * (offset / sigmaBins) * (offset / sigmaBins))
+                        weighted += weight * binShare[band][Math.floorMod(sample + offset, samples)]
+                        total += weight
+                    }
+                    sectorShare[band][sample] = weighted / total
+                }
+            }
+            // And the same Gaussian across the latitude circles: the gradient the eddies feel is the
+            // large-scale air's, so a coast running along a band does not by itself make a front.
+            val sigmaBands = storm / (PI * radiusMeters / bands)
+            val bandReach = ceil(GAUSSIAN_REACH_SIGMAS * sigmaBands).toInt()
+            val acrossBands = Array(bands) { DoubleArray(samples) }
+            for (band in 0 until bands) {
+                for (sample in 0 until samples) {
+                    var weighted = 0.0
+                    var total = 0.0
+                    for (offset in -bandReach..bandReach) {
+                        val other = band + offset
+                        if (other < 0 || other >= bands) continue
+                        val weight = exp(-0.5 * (offset / sigmaBands) * (offset / sigmaBands))
+                        weighted += weight * sectorShare[other][sample]
+                        total += weight
+                    }
+                    acrossBands[band][sample] = weighted / total
+                }
+            }
+            // The sector's share at a latitude, between the bands' centers.
+            fun shareAt(sample: Int, latitudeDegrees: Double): Double {
+                val position = (EnergyBalance.POLE_DEGREES - latitudeDegrees) * bands / EnergyBalance.POLE_TO_POLE_DEGREES - 0.5
+                val lower = position.toInt().coerceIn(0, bands - 1)
+                val upper = (lower + 1).coerceAtMost(bands - 1)
+                val within = (position - lower).coerceIn(0.0, 1.0)
+                val smooth = acrossBands[lower][sample] * (1.0 - within) + acrossBands[upper][sample] * within
+                return if (heldToLandOrSea) (if (smooth >= MAJORITY) 1.0 else 0.0) else smooth
+            }
+            fun sampled(north: Boolean, zonalEdge: Double): DoubleArray {
+                val sign = if (north) 1.0 else -1.0
+                val from = maxOf(sign * zonalCirculation.ascentLatitudeDegrees, 0.0) + ONSET_STEP_DEGREES
+                val land = onsetOf(landBands, zonal, north, from)
+                val sea = onsetOf(seaBands, zonal, north, from)
+                if (land == null || sea == null) return DoubleArray(samples) { zonalEdge }
+                val zonalShare = zonal.bandValueAt(zonal.landShare, (sign * zonalEdge).toFloat()).toDouble()
+                val zonalBlend = blendedOnsetDegrees(zonalShare, land, sea)
+                return DoubleArray(samples) { sample ->
+                    // The share read where the edge stands, found by one step from the zonal edge.
+                    val first = zonalEdge + blendedOnsetDegrees(shareAt(sample, sign * zonalEdge), land, sea) - zonalBlend
+                    zonalEdge + blendedOnsetDegrees(shareAt(sample, sign * first), land, sea) - zonalBlend
+                }
+            }
+            val sampleNorth = sampled(north = true, zonalCirculation.northEdgeDegrees)
+            val sampleSouth = sampled(north = false, zonalCirculation.southEdgeDegrees)
+            fun toColumns(sampled: DoubleArray) = DoubleArray(cellsAcross) { column ->
+                val position = (column + 0.5) * samples / cellsAcross - 0.5
+                val before = kotlin.math.floor(position).toInt()
+                val share = position - before
+                sampled[Math.floorMod(before, samples)] * (1.0 - share) + sampled[Math.floorMod(before + 1, samples)] * share
+            }
+            return toColumns(sampleNorth) to toColumns(sampleSouth)
+        }
+
+        /**
+         * Where a column of the energy balance, [bandsC], first turns baroclinically unstable poleward
+         * of [fromDegrees] in the hemisphere [north] says ([HadleyCirculation.baroclinicOnsetDegrees]),
+         * with the supercriticality's slope there, per degree; null where it never does, or does not
+         * cross rising.
+         */
+        fun onsetOf(bandsC: FloatArray, zonal: ZonalClimate, north: Boolean, fromDegrees: Double): Onset? {
+            val latitude = HadleyCirculation.baroclinicOnsetDegrees(bandsC, zonal, north, fromDegrees) ?: return null
+            val slope = HadleyCirculation.supercriticalitySlopePerDegree(bandsC, zonal, north, latitude)
+            return if (slope > 0.0) Onset(latitude, slope) else null
+        }
+
+        /** A column's baroclinic onset, degrees from the equator, and its supercriticality's slope there, per degree. */
+        class Onset(val latitudeDegrees: Double, val slopePerDegree: Double)
+
+        /**
+         * The onset of a sector whose land share is [landShare], degrees from the equator: Held's
+         * criterion on the blend of the [land] and [sea] columns' air, linear in the share at each
+         * latitude, its supercriticality each column's own linearized about its onset, so the blend
+         * reaches one at the onsets' mean weighted by share and slope. Smooth and monotone in the
+         * share, where the first crossing of the blend itself jumps between two crossings as the
+         * share moves (rule 13); the first-order onset, as [sectorEnergyFluxEquatorDegrees] is the
+         * first-order energy flux equator.
+         */
+        fun blendedOnsetDegrees(landShare: Double, land: Onset, sea: Onset): Double {
+            val landWeight = landShare * land.slopePerDegree
+            val seaWeight = (1.0 - landShare) * sea.slopePerDegree
+            return (landWeight * land.latitudeDegrees + seaWeight * sea.latitudeDegrees) / (landWeight + seaWeight)
+        }
+
+        /**
+         * Longitudes a sector's share is read at per storm radius at the equator: four, so the
+         * Gaussian's own curve is drawn through several points a radius and its linear reading
+         * between them stands within about a hundredth of its swing.
+         */
+        private const val SECTOR_SAMPLES_PER_RADIUS = 4.0
+
+        /** The fewest longitudes a sector is read at, on a planet small beside its storms: enough to draw a Gaussian round it. */
+        private const val MIN_SECTOR_SAMPLES = 16
+
+        /** The step the edge is searched from past the rising branch, as [HadleyCirculation.forHalf] steps it, degrees. */
+        private const val ONSET_STEP_DEGREES = 0.25
+
+        private const val METERS_PER_KM = 1_000.0
 
         /** The control's majority: half the sector. */
         private const val MAJORITY = 0.5

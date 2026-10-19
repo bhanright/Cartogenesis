@@ -202,6 +202,9 @@ val auditOnlyClasses = listOf(
     // The benchmarks' own figures and the model's invariants run per merge in
     // `StationaryWaveBenchmarkTest` and `StationaryWaveModelTest`.
     "com.cartogenesis.worldgen.StationaryWaveReport",
+    // The order the stationary waves converge at as their levels double, which `LevelExtrapolation`
+    // reads, and its answer against sixteen and twenty-four levels on the benchmarks and on worlds.
+    "com.cartogenesis.worldgen.LevelExtrapolationReport",
     "com.cartogenesis.worldgen.StationaryWaveCostTest"
 )
 
@@ -273,6 +276,7 @@ val deepClassesByStage: Map<String, List<String>> = mapOf(
         "com.cartogenesis.worldgen.CoastContrastTest",
         "com.cartogenesis.worldgen.CurrentFeedsRainTest",
         "com.cartogenesis.worldgen.RainGeometryTest",
+        "com.cartogenesis.worldgen.RainPlacementEarthTest.the rain's placement is the same on the application's grid",
         "com.cartogenesis.worldgen.GridShapeTest",
         "com.cartogenesis.worldgen.MeridionalWindTest",
         "com.cartogenesis.worldgen.MoistureBudgetTest",
@@ -363,6 +367,9 @@ tasks.register<Test>("deepTest") {
         isFailOnNoMatchingTests = !(rootProject.extra["deepStagesLimited"] as Boolean)
     }
     withPerMergeBudget()
+    // The deep tier's own share (see the root build script): fewer, larger workers.
+    maxParallelForks = rootProject.extra["worldgenDeepTestForks"] as Int
+    maxHeapSize = rootProject.extra["worldgenDeepTestHeap"] as String
 }
 
 tasks.register<Test>("audit") {

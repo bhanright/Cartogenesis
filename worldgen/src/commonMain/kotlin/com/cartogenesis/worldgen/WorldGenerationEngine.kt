@@ -10,6 +10,7 @@ import com.cartogenesis.worldgen.pipeline.ErosionAccelerator
 import com.cartogenesis.worldgen.pipeline.ErosionStage
 import com.cartogenesis.worldgen.pipeline.GlaciationStage
 import com.cartogenesis.worldgen.pipeline.LandmarkStage
+import com.cartogenesis.worldgen.pipeline.MoistureAccelerator
 import com.cartogenesis.worldgen.pipeline.NationStage
 import com.cartogenesis.worldgen.pipeline.IceSheetAccelerator
 import com.cartogenesis.worldgen.pipeline.OceanAccelerator
@@ -126,6 +127,12 @@ object WorldGenerationEngine {
          */
         iceAccelerator: IceSheetAccelerator? = null,
         /**
+         * Used only when the config asks for it, through the same switch again, for the climate's
+         * moisture march, every climate run's (the erosion's provisional weather, the ice's snow
+         * balance and the finished climate); null keeps the processor's march.
+         */
+        moistureAccelerator: MoistureAccelerator? = null,
+        /**
          * Filled in with the layers the map draws that no stage's result carries, for the geometry
          * guard; null, the default, costs a few null checks, allocates nothing and moves no bit of the
          * world. See [LayerCapture].
@@ -223,12 +230,12 @@ object WorldGenerationEngine {
             }
             ?.erosion
             ?: if (capture == null) {
-                ErosionStage.apply(config, plates.height, plates.upliftRateMmPerYear, accelerator)
+                ErosionStage.apply(config, plates.height, plates.upliftRateMmPerYear, accelerator, moistureAccelerator)
             } else {
                 val log = DepositionLog(config.width * config.height)
                 ErosionStage.apply(
                     config, plates.height, plates.upliftRateMmPerYear, accelerator,
-                    onRound = null, log = log
+                    onRound = null, log = log, moistureAccelerator = moistureAccelerator
                 ).also { capture.deposition = DepositionLayers(log.mechanism) }
             }
 
@@ -282,7 +289,7 @@ object WorldGenerationEngine {
                         cut.landCellCount > 0
                     ) {
                         ClimateStage.provisionalSnowBalance(
-                            config, cut, OceanStage.withoutCurrents(config, cut)
+                            config, cut, OceanStage.withoutCurrents(config, cut), moistureAccelerator = moistureAccelerator
                         )
                     } else null
                 if (capture == null) {
@@ -327,7 +334,7 @@ object WorldGenerationEngine {
                     it.config.vegetation == config.vegetation
             }
             ?.climate
-            ?: ClimateStage.generate(config, sea, ocean)
+            ?: ClimateStage.generate(config, sea, ocean, moistureAccelerator)
 
         report(GenerationStage.RIVERS)
         val rivers = reusable

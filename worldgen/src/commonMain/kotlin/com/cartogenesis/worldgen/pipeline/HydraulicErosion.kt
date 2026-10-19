@@ -414,7 +414,9 @@ internal object HydraulicErosion {
         /** Which round is about to cut with this, so the march sees the sea that round sees. */
         round: Int = 0,
         /** Where the last provisional climate of this world settled, or none for a cold start. */
-        climateStart: ClimateStage.WarmStart? = null
+        climateStart: ClimateStage.WarmStart? = null,
+        /** Where the march's laps go when the config asks for the graphics card ([ClimateStage.generate]). */
+        moistureAccelerator: MoistureAccelerator? = null
     ): Weather {
         val cellCount = config.width * config.height
         val cut = SeaLevelStage.percentileCut(
@@ -423,7 +425,9 @@ internal object HydraulicErosion {
         val rainfall = FloatArray(cellCount) { Runoff.FLOOR_MM }
         if (cut.landCellCount == 0) return Weather(rainfall, FloatArray(cellCount), climateStart)
 
-        val generated = ClimateStage.generateWithSeasonalMm(config, cut, OceanStage.withoutCurrents(config, cut), climateStart)
+        val generated = ClimateStage.generateWithSeasonalMm(
+            config, cut, OceanStage.withoutCurrents(config, cut), climateStart, moistureAccelerator = moistureAccelerator
+        )
         val climate = generated.result
         val annualMm = climate.precipitationMm.data
 
@@ -614,6 +618,8 @@ internal object HydraulicErosion {
         shieldCut: Boolean = true,
         /** Handed every cell's cut and every round's result; see [IncisionWatch]. */
         incisionWatch: IncisionWatch? = null,
+        /** Where the provisional weather's march runs its laps when the config asks for the card. */
+        moistureAccelerator: MoistureAccelerator? = null,
         relax: suspend (FloatField) -> FloatField
     ): FloatField {
         val erosion = config.erosion
@@ -646,7 +652,7 @@ internal object HydraulicErosion {
             if (erosion.climateFeed && erosion.hydraulicRounds > 1) erosion.hydraulicRounds / 2
             else -1
         val opening =
-            if (erosion.climateFeed) provisionalWeather(config, working, provisionalSeaLevel)
+            if (erosion.climateFeed) provisionalWeather(config, working, provisionalSeaLevel, moistureAccelerator = moistureAccelerator)
             else Weather(FloatArray(cellsAcross * cellsDown) { 1f }, FloatArray(cellsAcross * cellsDown))
         // Held as the arrays rather than as the pair, because the accumulation reads one of them
         // once per land cell per round and a field load there is not free.
@@ -780,7 +786,7 @@ internal object HydraulicErosion {
             // it and the sea as this round will take it, which is the same pair the march at the
             // top was given.
             if (round == refreshAtRound) {
-                val refreshed = provisionalWeather(config, working, provisionalSeaLevel, round, opening.climateStart)
+                val refreshed = provisionalWeather(config, working, provisionalSeaLevel, round, opening.climateStart, moistureAccelerator)
                 rainfallMm = refreshed.rainfallMm
                 vegetationDensity = refreshed.vegetationDensity
             }

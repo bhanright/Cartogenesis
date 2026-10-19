@@ -44,9 +44,9 @@ import kotlin.math.sqrt
  * the sea's ([PressureWind.surfaceWind]), so over the open sea under no eddy pressure it is the
  * circulation's exactly.
  *
- * **The water's wind** is the column's, weighted by where its vapor is ([columnWindMps]): the
- * boundary layer holds under half of it, and the air above moves on the circulation's zonal wind
- * and the waves' own.
+ * **The water's winds** are two: the boundary layer's water moves on the surface wind, and the
+ * free troposphere's on the levels above, weighted by where its vapor is
+ * ([freeTroposphereWindMps]): the circulation's zonal wind and the waves' own.
  *
  * **The vertical motion at the layer's top** ([boundaryLayerOmega]) is the surface wind's own mass
  * convergence over the model's lowest layer plus the terrain's lift under it: one boundary layer
@@ -58,7 +58,9 @@ internal object BoundaryLayer {
     /**
      * Levels of the dry atmosphere. Against 24 levels the surface pressure of A1-3's benchmarks
      * stands 17 to 21% off at eight and 50 to 65% off at four, where things lie holding at every
-     * count; sixteen levels cost about a second a solve (docs/DESIGN_LEDGER.md, A1-3 and A1-4).
+     * count; sixteen levels cost about a second a solve (docs/DESIGN_LEDGER.md, A1-3 and A1-4). The
+     * answer the boundary layer reads is extrapolated from eight and four ([LevelExtrapolation])
+     * until sixteen are affordable (docs/DESIGN_LEDGER.md, W2h).
      */
     const val LEVEL_COUNT = 8
 
@@ -286,11 +288,13 @@ internal object BoundaryLayer {
 
     /**
      * One world's boundary layer, ready to be solved for any latent heating: everything that does
-     * not depend on the rain, built once. The basic state and the drag are the same in both
-     * calendar halves, so the first [keptWaves] waves are factored once here and back-substitute
-     * at each solve after, two a coupling lap, and the others are factored afresh at each solve,
-     * both halves at once (every wave's factors are about 700 MB on Earth's planet at eight levels;
-     * [wavesToKeep] decides). The answer is the same to the bit however many are kept.
+     * not depend on the rain, built once. The atmosphere is solved on [levelCount] levels and, when
+     * [extrapolated], on half as many too, and the two answers are extrapolated to the converged
+     * one ([LevelExtrapolation]); the boundary layer reads the extrapolated answer, on [levelCount]
+     * levels. The basic state and the drag are the same in both calendar halves, so the first
+     * [keptWaves] waves of each model are factored once here and back-substitute at each solve
+     * after, two a coupling lap, and the others are factored afresh at each solve, both halves at
+     * once ([wavesToKeep] decides). The answer is the same to the bit however many are kept.
      * [seaSurfaceAnomalyC] is the ocean's anomaly the shallow heating reads over the sea, degrees
      * Celsius, row-major on the map, or none.
      */
@@ -302,19 +306,26 @@ internal object BoundaryLayer {
         private val julyHalfBelts: Belts,
         private val januaryHalfBelts: Belts,
         keptWaves: Int,
-        seaSurfaceAnomalyC: FloatArray? = null
+        seaSurfaceAnomalyC: FloatArray? = null,
+        levelCount: Int = LEVEL_COUNT,
+        extrapolated: Boolean = true
     ) {
         private val cellsAcross = config.width
         private val cellsDown = config.height
         val coarse: SphericalGrid = SphericalGrid.forAtmosphere(config.scale)
         val remap = AtmosphereRemap(cellsAcross, cellsDown, coarse)
-        val levels: AtmosphereLevels = AtmosphereLevels.equalMass(LEVEL_COUNT)
-        private val state = ZonalBasicState.jablonowskiWilliamson(coarse, levels)
+        val levels: AtmosphereLevels = AtmosphereLevels.equalMass(levelCount)
+
+        init {
+            require(!extrapolated || levelCount % LevelExtrapolation.LEVEL_RATIO == 0) { "$levelCount levels cannot be halved" }
+        }
 
         /**
-         * Each coarse row's drag on the lowest level: the row's mean of the map's by area, land's and
-         * the sea's, each at the speed of its cell's circulation over the two halves, the root mean
-         * square (the model's basic state is the same in both).
+         * Each coarse row's drag on the boundary layer, the lowest [LAYER_THICKNESS_PA] of air: the
+         * row's mean of the map's by area, land's and the sea's, each at the speed of its cell's
+         * circulation over the two halves, the root mean square (the model's basic state is the
+         * same in both). A model whose lowest layer holds more air spreads the same stress over it
+         * ([LevelModel]).
          */
         val dragOfRow: DoubleArray = run {
             val ground = FloatArray(cellsAcross * cellsDown) { cell ->
@@ -329,7 +340,6 @@ internal object BoundaryLayer {
                 sum / coarse.columns
             }
         }
-        val model = StationaryWaveModel(state, damping(levels, dragOfRow))
         private val widthInRows = WaveForcing.groundWidthInRows(remap)
 
         /** The terrain on the atmosphere's grid in meters, spread as the model reads it. */
@@ -364,42 +374,80 @@ internal object BoundaryLayer {
 
         private val julySurfaceC = surfaceCoarseC(zonal, marineFraction, Season.JULY_HALF, seaSurfaceAnomalyC)
         private val januarySurfaceC = surfaceCoarseC(zonal, marineFraction, Season.JANUARY_HALF, seaSurfaceAnomalyC)
-        private val shallowRates = shallowRelaxationPerSecond(levels)
-        private val factored: StationaryWaveModel.Factored = model.factorize(keptWaves)
-
-        /** Each half's latent heating's shape up every column, `[interface][cell]`, from its surface ([latentHeatingShape]). */
-        private val julyLatentShape = latentHeatingShapes(levels, julySurfaceC)
-        private val januaryLatentShape = latentHeatingShapes(levels, januarySurfaceC)
 
         /**
-         * The dry part of each half's forcing, the shallow land-sea heating toward its surface and the
-         * terrain, solved once: it is the same at every lap, and the model is linear, so each lap
-         * solves its latent heating alone and adds it ([StationaryWaveModel.Solution.plus]).
+         * The model on one set of levels, with its own basic state, damping, factors and latent
+         * heating's shapes. What it reads from the map, the surface temperature and the terrain, is
+         * carried down once for both models, and the latent heating is a column's per square meter:
+         * each is spread over a model's own levels on the atmosphere's grid alone, so the second
+         * model carries nothing between the grids.
          */
-        private val drySolutions: List<StationaryWaveModel.Solution> by lazy {
-            factored.solveSpectra(listOf(dryForcing(julySurfaceC), dryForcing(januarySurfaceC)))
+        private inner class LevelModel(val levels: AtmosphereLevels, keptWaves: Int) {
+            val state = ZonalBasicState.jablonowskiWilliamson(coarse, levels)
+            private val shallowRates = shallowRelaxationPerSecond(levels)
+
+            /** The surface's stress on this model's lowest layer: [dragOfRow] over its own mass. */
+            private val lowestLayerDragOfRow = DoubleArray(coarse.rows) { row ->
+                dragOfRow[row] * LAYER_THICKNESS_PA / levels.thicknessPa[levels.levelCount - 1]
+            }
+            val model = StationaryWaveModel(state, damping(levels, lowestLayerDragOfRow))
+            private val factored: StationaryWaveModel.Factored = model.factorize(keptWaves)
+            private val julyLatentShape = latentHeatingShapes(levels, julySurfaceC)
+            private val januaryLatentShape = latentHeatingShapes(levels, januarySurfaceC)
+
+            /**
+             * The dry part of each half's forcing, the shallow land-sea heating toward its surface
+             * and the terrain, solved once: it is the same at every lap, and the model is linear, so
+             * each lap solves its latent heating alone and adds it ([StationaryWaveModel.Solution.plus]).
+             */
+            private val drySolutions: List<StationaryWaveModel.Solution> by lazy {
+                factored.solveSpectra(listOf(dryForcing(julySurfaceC), dryForcing(januarySurfaceC)))
+            }
+
+            /** The shallow land-sea heating toward [surfaceC] and the terrain. */
+            private fun dryForcing(surfaceC: DoubleArray): WaveForcing {
+                val heating = Array(levels.interiorCount) { interior ->
+                    DoubleArray(coarse.cellCount) { cell -> surfaceC[cell] * shallowRates[interior] }
+                }
+                return WaveForcing(heating, terrain)
+            }
+
+            /**
+             * The latent heating of a column heating [latentWPerM2] (watts per square meter on the
+             * atmosphere's grid), spread up each column by its half's [shape]: the column's mean
+             * heating rate `Q g / (c_p p_s)` times the shape, as [latentHeatingKelvinPerSecond] gives it.
+             */
+            private fun latentForcing(latentWPerM2: DoubleArray, shape: Array<DoubleArray>): WaveForcing {
+                val perWatt = DryAir.GRAVITY_MPS2 / (DryAir.HEAT_CAPACITY_J_PER_KG_K * levels.surfacePressurePa)
+                val heating = Array(levels.interiorCount) { interior ->
+                    DoubleArray(coarse.cellCount) { cell -> latentWPerM2[cell] * perWatt * shape[interior][cell] }
+                }
+                return WaveForcing(heating, null)
+            }
+
+            /** Both halves' responses under the latent heating given (none for the dry atmosphere), July's first. */
+            fun solve(julyLatentWPerM2: DoubleArray?, januaryLatentWPerM2: DoubleArray?): Pair<WaveResponse, WaveResponse> {
+                val dry = drySolutions
+                val latent = if (julyLatentWPerM2 == null && januaryLatentWPerM2 == null) null
+                else factored.solveSpectra(
+                    listOf(
+                        latentForcing(julyLatentWPerM2 ?: DoubleArray(coarse.cellCount), julyLatentShape),
+                        latentForcing(januaryLatentWPerM2 ?: DoubleArray(coarse.cellCount), januaryLatentShape)
+                    )
+                )
+                val july = if (latent == null) dry[0] else dry[0] + latent[0]
+                val january = if (latent == null) dry[1] else dry[1] + latent[1]
+                return july.response() to january.response()
+            }
         }
 
-        /** The shallow land-sea heating toward [surfaceC] and the terrain. */
-        private fun dryForcing(surfaceC: DoubleArray): WaveForcing {
-            val heating = Array(levels.interiorCount) { interior ->
-                DoubleArray(coarse.cellCount) { cell -> surfaceC[cell] * shallowRates[interior] }
-            }
-            return WaveForcing(heating, terrain)
-        }
+        private val fine = LevelModel(levels, keptWaves)
+        private val halved: LevelModel? = if (extrapolated) {
+            LevelModel(AtmosphereLevels.equalMass(levelCount / LevelExtrapolation.LEVEL_RATIO, levels.surfacePressurePa), keptWaves)
+        } else null
 
-        /**
-         * The latent heating of a column heating [latentWPerM2] (watts per square meter on the
-         * atmosphere's grid), spread up each column by its half's [shape]: the column's mean heating
-         * rate `Q g / (c_p p_s)` times the shape, as [latentHeatingKelvinPerSecond] gives it.
-         */
-        private fun latentForcing(latentWPerM2: DoubleArray, shape: Array<DoubleArray>): WaveForcing {
-            val perWatt = DryAir.GRAVITY_MPS2 / (DryAir.HEAT_CAPACITY_J_PER_KG_K * levels.surfacePressurePa)
-            val heating = Array(levels.interiorCount) { interior ->
-                DoubleArray(coarse.cellCount) { cell -> latentWPerM2[cell] * perWatt * shape[interior][cell] }
-            }
-            return WaveForcing(heating, null)
-        }
+        /** The model on [levels], whose answer the extrapolation starts from. */
+        val model: StationaryWaveModel get() = fine.model
 
         /**
          * Both halves under the latent heating [julyLatentWPerM2] and [januaryLatentWPerM2], each
@@ -407,19 +455,13 @@ internal object BoundaryLayer {
          * dry atmosphere).
          */
         fun solve(julyLatentWPerM2: DoubleArray?, januaryLatentWPerM2: DoubleArray?): Atmosphere {
-            val dry = drySolutions
-            val latent = if (julyLatentWPerM2 == null && januaryLatentWPerM2 == null) null
-            else factored.solveSpectra(
-                listOf(
-                    latentForcing(julyLatentWPerM2 ?: DoubleArray(coarse.cellCount), julyLatentShape),
-                    latentForcing(januaryLatentWPerM2 ?: DoubleArray(coarse.cellCount), januaryLatentShape)
-                )
-            )
-            val july = if (latent == null) dry[0] else dry[0] + latent[0]
-            val january = if (latent == null) dry[1] else dry[1] + latent[1]
+            val (fineJuly, fineJanuary) = fine.solve(julyLatentWPerM2, januaryLatentWPerM2)
+            val coarseAnswers = halved?.solve(julyLatentWPerM2, januaryLatentWPerM2)
+            val july = coarseAnswers?.let { LevelExtrapolation.extrapolate(fineJuly, it.first) } ?: fineJuly
+            val january = coarseAnswers?.let { LevelExtrapolation.extrapolate(fineJanuary, it.second) } ?: fineJanuary
             return Atmosphere(
-                remap, levels, state.surfaceDensity, terrain,
-                half(july.response(), julyHalfBelts, julyLatentWPerM2), half(january.response(), januaryHalfBelts, januaryLatentWPerM2),
+                remap, levels, fine.state.surfaceDensity, terrain,
+                half(july, julyHalfBelts, julyLatentWPerM2), half(january, januaryHalfBelts, januaryLatentWPerM2),
                 dragOfRow
             )
         }
@@ -446,23 +488,28 @@ internal object BoundaryLayer {
      * All or none, not as many as the share holds: the share is of the heap's ceiling, not of what
      * the world beside the loop leaves free, and keeping the 64 waves an eighth of a test worker's
      * 3.5 GB holds (448 MB) ran the deep tier's worlds of 1,024 rows out of heap in fourteen tests,
-     * against four with none kept.
+     * against four with none kept. The count is for both of the [Solver]'s models, the [LEVEL_COUNT]
+     * levels' and the half as many its answer is extrapolated from, whose factors together must fit
+     * the share: about 850 MB on Earth's planet.
      */
     fun wavesToKeep(config: WorldGenConfig): Int {
         val coarse = SphericalGrid.forAtmosphere(config.scale)
-        val blockSize = 4 * LEVEL_COUNT - 1
         val waves = coarse.columns / 3
-        val bytesPerWave = coarse.rows.toLong() * FACTOR_BLOCKS_PER_ROW * blockSize * blockSize * COMPLEX_BYTES
+        var bytesPerWave = 0L
+        for (levelCount in listOf(LEVEL_COUNT, LEVEL_COUNT / LevelExtrapolation.LEVEL_RATIO)) {
+            val blockSize = 4L * levelCount - 1
+            bytesPerWave += coarse.rows.toLong() * FACTOR_BLOCKS_PER_ROW * blockSize * blockSize * COMPLEX_BYTES
+        }
         val budget = com.cartogenesis.worldgen.concurrent.maximumHeapBytes() / FACTORS_SHARE_OF_HEAP
         return if (waves * bytesPerWave <= budget) waves else 0
     }
 
     /**
      * The share of the heap the factors may take, as its inverse: an eighth. Every wave's factors
-     * are about 700 MB on Earth's planet at eight levels, kept in a heap of 5.6 GB or more, the
-     * application's (three quarters of the machine's memory); the test workers' 3 to 4 GB, which
-     * hold a world of 1,024 rows, its march and a drawing beside them, ran out of heap with every
-     * wave kept at a quarter.
+     * are about 700 MB on Earth's planet at eight levels and 160 MB at four, kept together in a
+     * heap of 6.8 GB or more, the application's (three quarters of the machine's memory); the test
+     * workers' 3 to 4 GB, which hold a world of 1,024 rows, its march and a drawing beside them, ran
+     * out of heap with every wave kept at a quarter.
      */
     const val FACTORS_SHARE_OF_HEAP = 8L
 
@@ -723,10 +770,9 @@ internal object BoundaryLayer {
     /**
      * The large-scale vertical velocity at the boundary layer's top on the map, meters a second,
      * positive up, row-major: the layer's own convergence ([convergenceOmegaPaPerSecond]) carried
-     * up, `w = -omega / (rho g)`. What the march's sinks read as the atmosphere's ascent and
-     * descent, with the ground's own climb over the terrain added cell by cell (`MoistureMarch`):
-     * the terrain's large-scale lift ([BoundaryLayerOmega.terrainPaPerSecond]) is that climb
-     * smoothed, so the ground's residual climb and it carried up would sum to the ground's whole.
+     * up, `w = -omega / (rho g)`: the atmosphere's ascent and descent at the layer's top, smoothed to
+     * the scale the waves resolve. The march does not read it: it carries the same convergence at
+     * the map's own scale, as the boundary layer's air gathered by its own faces (`MoistureMarch`).
      */
     fun groundAscentMps(atmosphere: Atmosphere, half: Half): FloatArray {
         val omega = atmosphere.remap.outputToGround(convergenceOmegaPaPerSecond(atmosphere, half))
@@ -784,25 +830,26 @@ internal object BoundaryLayer {
     const val UPPER_BRANCH_BASE_PA = 50_000.0
 
     /**
-     * The column's vapor-weighted wind under [half] of [atmosphere], meters a second, eastward and
-     * southward, row-major on the map: what carries the column's water, `int q V dp / int q dp`
-     * over the model's layers, each layer's share of the vapor its [vaporShares].
+     * The free troposphere's vapor-weighted wind under [half] of [atmosphere], meters a second,
+     * eastward and southward, row-major on the map: what carries the water above the boundary layer,
+     * `int q V dp / int q dp` over the model's layers above the lowest, each layer's share of the
+     * vapor its [vaporShares]. The boundary layer's own water moves on the surface wind
+     * ([MoistureMarch]); before the column was split, this wind and that one were carried together as
+     * one column's, the boundary layer's 0.38 of the vapor on the surface wind.
      *
-     * - **The boundary layer**, the lowest layer, blows the surface wind: the circulation, the
-     *   waves' pressure and the ground's drag under it ([PressureWind.surfaceWind]).
-     * - **Each layer above it** blows the circulation's zonal wind and the stationary waves' own
-     *   wind at that level ([WaveResponse.eastward], [WaveResponse.northwardAtCenters]), carried up
-     *   to the map as the pressure is ([AtmosphereRemap.outputToGround]): the waves are the
-     *   departures from the zonal mean at every level. The circulation's zonal wind is held up
-     *   through the vapor's depth, where the trades are deep, since the model carries no zonal mean
-     *   of its own above the boundary layer but the basic state's, Jablonowski and Williamson's
-     *   prescribed jets, which are not the trades.
+     * - **Each layer** blows the circulation's zonal wind and the stationary waves' own wind at that
+     *   level ([WaveResponse.eastward], [WaveResponse.northwardAtCenters]), carried up to the map as
+     *   the pressure is ([AtmosphereRemap.outputToGround]): the waves are the departures from the
+     *   zonal mean at every level. The circulation's zonal wind is held up through the vapor's depth,
+     *   where the trades are deep, since the model carries no zonal mean of its own above the boundary
+     *   layer but the basic state's, Jablonowski and Williamson's prescribed jets, which are not the
+     *   trades.
      * - **The circulation's meridional wind** is the boundary layer's alone up to
      *   [UPPER_BRANCH_BASE_PA], since the cells' whole inflow runs in the layer and their ascent is
      *   carried up unchanged from its top ([HadleyCirculation]); above it the same mass returns,
      *   spread evenly over the layers there, where the column holds a tenth of its vapor.
      */
-    fun columnWindMps(atmosphere: Atmosphere, half: Half): PressureWind.Vectors {
+    fun freeTroposphereWindMps(atmosphere: Atmosphere, half: Half): PressureWind.Vectors {
         val levels = atmosphere.levels
         val shares = vaporShares(levels)
         val boundaryLayer = levels.levelCount - 1
@@ -829,17 +876,14 @@ internal object BoundaryLayer {
         }
         val eddyEastwardGround = atmosphere.remap.outputToGround(eddyEastward)
         val eddyNorthwardGround = atmosphere.remap.outputToGround(eddyNorthward)
-        val boundaryShare = shares[boundaryLayer]
         // The upper branch's speed per unit of the lower branch's, against it: the same mass over its own depth.
         val returnPerInflow = if (upperThicknessPa > 0.0) -levels.thicknessPa[boundaryLayer] / upperThicknessPa else 0.0
         val cellCount = half.eastwardMps.size
         val eastward = FloatArray(cellCount)
         val southward = FloatArray(cellCount)
         for (cell in 0 until cellCount) {
-            eastward[cell] = (boundaryShare * half.eastwardMps[cell] + freeShare * half.beltEastwardMps[cell] +
-                eddyEastwardGround[cell]).toFloat()
-            southward[cell] = (boundaryShare * half.southwardMps[cell] + upperShare * returnPerInflow * half.beltSouthwardMps[cell] -
-                eddyNorthwardGround[cell]).toFloat()
+            eastward[cell] = (half.beltEastwardMps[cell] + eddyEastwardGround[cell] / freeShare).toFloat()
+            southward[cell] = ((upperShare * returnPerInflow * half.beltSouthwardMps[cell] - eddyNorthwardGround[cell]) / freeShare).toFloat()
         }
         return PressureWind.Vectors(eastward, southward)
     }

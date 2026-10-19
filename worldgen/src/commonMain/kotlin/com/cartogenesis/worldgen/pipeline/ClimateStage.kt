@@ -3,6 +3,7 @@ package com.cartogenesis.worldgen.pipeline
 import com.cartogenesis.worldgen.concurrent.parallelChunks
 import com.cartogenesis.worldgen.math.BoxBlur
 import com.cartogenesis.worldgen.math.JumpFloodDistance
+import com.cartogenesis.worldgen.model.Acceleration
 import com.cartogenesis.worldgen.model.ClimateConfig
 import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.WorldGenConfig
@@ -546,6 +547,18 @@ object ClimateStage {
         generateWithSeasonalMm(config, sea, ocean).result
 
     /**
+     * [generate], its moisture march's laps on [moistureAccelerator] when the config's acceleration
+     * asks for the graphics card ([com.cartogenesis.worldgen.model.Acceleration.GPU]) and the device
+     * takes the run; on the processor otherwise.
+     */
+    fun generate(
+        config: WorldGenConfig,
+        sea: SeaLevelResult,
+        ocean: OceanResult,
+        moistureAccelerator: MoistureAccelerator?
+    ): ClimateResult = generateWithSeasonalMm(config, sea, ocean, moistureAccelerator = moistureAccelerator).result
+
+    /**
      * Everything this stage computes before the biomes: the three temperature fields, the two
      * seasonal rainfall marches in millimetres, and the annual wind.
      *
@@ -610,9 +623,11 @@ object ClimateStage {
         sea: SeaLevelResult,
         ocean: OceanResult,
         /** See `GlaciationConfig.glacialMaximumC`: the ice that carved the ground is not today's. */
-        globalCoolingC: Float = config.glaciation.glacialMaximumC
+        globalCoolingC: Float = config.glaciation.glacialMaximumC,
+        /** Where the march's laps go when the config asks for the card; see [generate]. */
+        moistureAccelerator: MoistureAccelerator? = null
     ): FloatField {
-        val fields = seasonalFields(config, sea, ocean, globalCoolingC)
+        val fields = seasonalFields(config, sea, ocean, globalCoolingC, moistureAccelerator = moistureAccelerator)
         return SnowBalance.field(
             sea.isLand,
             fields.julyHalfTemperature,
@@ -627,13 +642,17 @@ object ClimateStage {
         sea: SeaLevelResult,
         ocean: OceanResult,
         /** Where an earlier climate of this world settled, for this run's loop to start from ([WarmStart]); cold when none. */
-        warmStart: WarmStart? = null
+        warmStart: WarmStart? = null,
+        /** Filled with the march's water budget when handed in, as [moistureLedger] fills it; the world is the same either way. */
+        ledger: MoistureLedger? = null,
+        /** Where the march's laps go when the config asks for the card; see [generate]. */
+        moistureAccelerator: MoistureAccelerator? = null
     ): Generated {
         val cellsAcross = config.width
         val cellsDown = config.height
         val cellCount = cellsAcross * cellsDown
 
-        val fields = seasonalFields(config, sea, ocean, warmStart = warmStart)
+        val fields = seasonalFields(config, sea, ocean, warmStart = warmStart, ledger = ledger, moistureAccelerator = moistureAccelerator)
         val temperature = fields.temperature
         val summerTemperature = fields.summerTemperature
         val winterTemperature = fields.winterTemperature
@@ -762,7 +781,9 @@ object ClimateStage {
         /** How the atmosphere's loop is started and relaxed; the defaults for every world. */
         loop: CouplingStart = CouplingStart(),
         /** Where an earlier climate of this world settled ([WarmStart]); cold when none. */
-        warmStart: WarmStart? = null
+        warmStart: WarmStart? = null,
+        /** Where the march's laps go when the config asks for the card; see [generate]. */
+        moistureAccelerator: MoistureAccelerator? = null
     ): SeasonalFields {
         val runStarted = TimeSource.Monotonic.markNow()
         val cellsAcross = config.width
@@ -867,9 +888,8 @@ object ClimateStage {
             waterC: FloatField,
             seaIce: BooleanArray,
             wind: SeasonWind,
-            ascentMps: FloatArray?,
             inversion: FloatField?,
-            transport: PressureWind.Vectors?
+            freeWind: PressureWind.Vectors?
         ): MoistureMarch.Season {
             val totalWind = wind.totalMps
             // The water carries the current anomaly already, through the air it is built from.
@@ -878,7 +898,7 @@ object ClimateStage {
             }
             // The wind's speed through every gust and calm, which the sea's evaporation and the
             // ground's potential read; the belts' control keeps the march's own scalar winds.
-            val solved = ascentMps != null
+            val solved = freeWind != null
             val scalarAt10m = if (solved) FloatArray(cellsAcross * cellsDown) { cell ->
                 BoundaryLayer.scalarWindAt10mMps(totalWind.eastwardMps[cell], totalWind.southwardMps[cell], sea.isLand[cell])
             } else null
@@ -893,15 +913,14 @@ object ClimateStage {
                 southwardMps = totalWind.southwardMps,
                 scalarWindAt10mMps = scalarAt10m,
                 windAt2mMps = at2m,
-                largeScaleAscentMps = ascentMps,
                 inversionSuppression = inversion?.data,
                 extraterrestrialOfRow = DoubleArray(cellsDown) { row ->
                     SurfaceEvaporation.halfYearExtraterrestrialMjPerM2Day(
                         latitudeOf(row, cellsDown).toDouble(), obliquityDegrees, julyHalf
                     )
                 },
-                transportEastwardMps = transport?.eastwardMps,
-                transportSouthwardMps = transport?.southwardMps
+                freeEastwardMps = freeWind?.eastwardMps,
+                freeSouthwardMps = freeWind?.southwardMps
             )
         }
         val elevationM = FloatArray(cellsAcross * cellsDown) { cell ->
@@ -916,13 +935,11 @@ object ClimateStage {
             val july = seasonWind(config, julyHalfBelts, atmosphere?.julyHalf)
             val january = seasonWind(config, januaryHalfBelts, atmosphere?.januaryHalf)
             return marchSeason(
-                true, julyHalfTemperature, julyHalfSeaSurface, julyHalfSeaIce, july,
-                atmosphere?.let { BoundaryLayer.groundAscentMps(it, it.julyHalf) }, julyHalfInversion,
-                atmosphere?.let { BoundaryLayer.columnWindMps(it, it.julyHalf) }
+                true, julyHalfTemperature, julyHalfSeaSurface, julyHalfSeaIce, july, julyHalfInversion,
+                atmosphere?.let { BoundaryLayer.freeTroposphereWindMps(it, it.julyHalf) }
             ) to marchSeason(
-                false, januaryHalfTemperature, januaryHalfSeaSurface, januaryHalfSeaIce, january,
-                atmosphere?.let { BoundaryLayer.groundAscentMps(it, it.januaryHalf) }, januaryHalfInversion,
-                atmosphere?.let { BoundaryLayer.columnWindMps(it, it.januaryHalf) }
+                false, januaryHalfTemperature, januaryHalfSeaSurface, januaryHalfSeaIce, january, januaryHalfInversion,
+                atmosphere?.let { BoundaryLayer.freeTroposphereWindMps(it, it.januaryHalf) }
             )
         }
 
@@ -935,7 +952,7 @@ object ClimateStage {
 
         // The atmosphere over this world's land, sea and terrain, heated by the march's own
         // condensation between its laps (AtmosphereCoupling).
-        val coupling = if (climateConfig.pressureWinds) {
+        fun startCoupling() = if (climateConfig.pressureWinds) {
             AtmosphereCoupling(
                 BoundaryLayer.Solver(
                     config, sea, zonal, marineFraction,
@@ -949,7 +966,7 @@ object ClimateStage {
                 loop.initialLatentWPerM2 ?: startHeating
             )
         } else null
-        val marched = MoistureMarch.run(
+        fun march(coupling: AtmosphereCoupling?, device: MoistureAccelerator?) = MoistureMarch.run(
             MoistureMarch.Inputs(
                 config = config,
                 isLand = sea.isLand,
@@ -960,8 +977,23 @@ object ClimateStage {
             ),
             ledger,
             coupling,
-            start?.march
+            start?.march,
+            device
         ) { coupling?.firstSeasons() ?: seasonsUnder(null) }
+        val device = moistureAccelerator?.takeIf { config.erosion.acceleration == Acceleration.GPU }
+        var coupling = startCoupling()
+        val marched = try {
+            march(coupling, device)
+        } catch (failed: MoistureMarch.DeviceFailed) {
+            // The water in flight went with the device, and the coupled loop has moved on with it:
+            // the run starts again on the processor, from its own start, with a loop of its own.
+            println("The moisture march failed on the graphics card, marching on the processor: ${failed.message}")
+            ledger?.laps?.clear()
+            ledger?.settling?.clear()
+            coupling?.release()
+            coupling = startCoupling()
+            march(coupling, null)
+        }
         coupling?.release()
         val atmosphere = coupling?.atmosphere
         val endStart = marched.endState?.let { march ->

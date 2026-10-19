@@ -170,7 +170,12 @@ class SeaIceTest : BorrowsSharedWorlds() {
         }
         // Recorded at A1-6b: seed 7's frozen cells take 1.93 times their rain with the ice off and
         // seed 1234's 1.88, under the polar front that now moves with the seasons (docs/TODO.md).
-        KnownFailures.expect("A1-6b: with the ice off, the frozen cells take less than twice the rain", "seed 7 x1.90; seed 1234 x1.98") {
+        // Armed at W2b, under whose rain the open cells take twice it and more (docs/DESIGN_LEDGER.md, W2b).
+        // Recorded at W2e, whose free troposphere carries its water over the pack whatever the sea
+        // under it gives the boundary layer: seed 7's cells take 1.76 times their rain with the ice
+        // off and seed 42's 1.96, the frozen sea still five to six times drier than the open sea
+        // beside it (docs/DESIGN_LEDGER.md, W2e; docs/TODO.md).
+        KnownFailures.expect("W2e: the frozen cells take under twice their rain with the ice off", "seed 7 x1.67; seed 42 x1.97") {
             if (lidless.isNotEmpty()) {
                 throw RecordedViolation(
                     "with the ice off the same cells take less than $ICE_OFF_WETTER_RATIO times the rain they take with it on, " +

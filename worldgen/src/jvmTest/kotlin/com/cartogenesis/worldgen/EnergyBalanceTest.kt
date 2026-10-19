@@ -43,9 +43,10 @@ class EnergyBalanceTest {
          * Earth's annual zonal-mean surface air temperature at the equator, at 60 degrees and at
          * the poles, in degrees Celsius, with the envelope each is asserted within.
          *
-         * The figures are the plan's, from North (1975)'s fit to the observed profile and from
-         * modern reanalysis climatology (ERA5's 1991-2020 zonal means read 26.2 C at the equator,
-         * -1 C at 60 N and -3 C at 60 S, -16 C at the north pole and -50 C at the south).
+         * The equator's is the marine air there, [EARTH_MARINE_AIR_C]'s first, the equator being
+         * three quarters sea and its lowland stations standing within half a degree of it. No zonal
+         * climatology of the air was read for 60 degrees or the poles: those two are the plan's
+         * midpoints of a spread, held only as loosely as the envelopes below say.
          *
          * The envelopes are what a planet without Earth's particular geography can be held to. The
          * equator's is the tightest, at 3 C: the tropics are the part of the profile that a
@@ -56,7 +57,7 @@ class EnergyBalanceTest {
          * knows only the land fraction cannot be asked to pick a side. Sixty degrees takes 6 C,
          * half the poles', because the two hemispheres differ by only 2 C there.
          */
-        const val EARTH_EQUATOR_C = 27f
+        const val EARTH_EQUATOR_C = 26.5f
         const val EARTH_EQUATOR_ENVELOPE_C = 3f
         const val EARTH_SIXTY_C = 0f
         const val EARTH_SIXTY_ENVELOPE_C = 6f
@@ -105,27 +106,26 @@ class EnergyBalanceTest {
 
         /**
          * Earth's annual mean surface **air** temperature over the ocean at those latitudes, in
-         * degrees Celsius, both hemispheres pooled (ICOADS marine air, and ERA5 over ocean).
+         * degrees Celsius, both hemispheres pooled: the sea surface below ([EARTH_SEA_SURFACE_C]) less
+         * Kara, Hurlburt and Loh's (2007) 0.78 C, the mean of their ERA-40 and COADS regressions of the
+         * sea on the air over the open ocean, whose slope is one at every temperature.
          *
          * Marine air and not the sea-surface temperature, which would be the wrong object: the
-         * model solves one temperature per surface and it is the temperature the air over that
-         * surface has. The two agree to a degree through the tropics and part company under ice,
-         * where the water is held at its freezing point and the air above it is fifteen degrees
-         * colder — 80 degrees reads -1.5 as an SST and -16 as an air temperature.
+         * model's sea column is the air over that surface. Kara's regression leaves out the high
+         * latitudes where sea ice forms, where the water is held at its freezing point and the air
+         * above it is far colder, so no marine air was read for 80 degrees and it is printed only.
          */
-        val EARTH_MARINE_AIR_C = floatArrayOf(26.5f, 24.5f, 14.5f, 2f, -16f)
+        val EARTH_MARINE_AIR_C = floatArrayOf(26.54f, 24.54f, 14.50f, 2.35f, Float.NaN)
 
         /**
          * Earth's **warmest month** over the ocean and over the sea surface at 0, 20, 40 and 60
          * degrees, both hemispheres pooled, in degrees Celsius.
          *
-         * Zonal means of a reanalysis climatology — ERA5's 1991-2020 2 m air temperature over
-         * ocean, of the kind tabulated in Peixoto and Oort's *Physics of Climate* and in the ERA5
-         * climatology papers — with the sea-surface figures from the same fields' skin temperature.
-         * The annual means are [EARTH_MARINE_AIR_C] above; these are the warm end of the same year,
-         * built from the annual figure and the observed zonal-mean seasonal range: about 1 C of
-         * range at the equator, 5 at 20 degrees, 9 at 40 and 9-11 at 60 for the air, and rather
-         * less for the water beneath it (about 8 at 40 and 5 at 60).
+         * The sea surface's are the optimum-interpolation climatology's ([EARTH_SEA_SURFACE_C]):
+         * each hemisphere's warmest calendar month of its zonal mean over the two one-degree rows
+         * about the latitude, the two hemispheres' averaged. The marine air's are those less Kara's
+         * 0.78 C, which is the annual regression's offset and is taken for the summer too, no
+         * seasonal one having been read.
          *
          * An envelope of [WARMEST_MONTH_ENVELOPE_C] rather than a point, and it is a real spread
          * and not a hedge: the Atlantic and the Pacific straddle these numbers on every one of
@@ -134,16 +134,56 @@ class EnergyBalanceTest {
          * of them is. A one-dimensional model with no basins cannot be asked to pick a side, so it
          * is asked to land between them.
          */
-        val EARTH_MARINE_AIR_WARMEST_C = floatArrayOf(27f, 27f, 19f, 7f)
-        val EARTH_SEA_SURFACE_WARMEST_C = floatArrayOf(27f, 27f, 19f, 5.5f)
+        val EARTH_MARINE_AIR_WARMEST_C = floatArrayOf(27.45f, 26.29f, 18.86f, 5.56f)
+        val EARTH_SEA_SURFACE_WARMEST_C = floatArrayOf(28.23f, 27.07f, 19.64f, 6.34f)
 
         /**
          * Earth's annual mean **sea surface** temperature at those latitudes, both hemispheres
-         * pooled, in degrees Celsius: the same climatology's skin temperature, which through the
-         * tropics runs a degree above the marine air over it — the sea warms the air, not the other
-         * way round — and at 60 runs a degree above it again for the same reason.
+         * pooled, in degrees Celsius: NOAA's optimum-interpolation sea-surface climatology for
+         * 1971-2000 (OI SST version 2's long-term monthly means, Reynolds and others 2002, J. Climate
+         * 15, 1609-1625; built from a two-degree in situ climatology for 1971-2000 and the one-degree
+         * analysis for 1982-2000), read cell by cell from NOAA's Physical Sciences Laboratory's file
+         * with its land mask and averaged over the ocean cells of the two one-degree rows about each
+         * latitude by area. Each hemisphere's: 27.32 at the equator, 26.13 and 24.52 at 20, 15.99 and
+         * 14.57 at 40, 5.09 and 1.16 at 60.
          */
-        val EARTH_SEA_SURFACE_C = floatArrayOf(26.5f, 25f, 15f, 3f)
+        val EARTH_SEA_SURFACE_C = floatArrayOf(27.32f, 25.32f, 15.28f, 3.13f)
+
+        /**
+         * The same climatology's annual sea surface over each ten degrees of latitude from the
+         * equator, the ocean's cells by area, northern hemisphere then southern, in degrees Celsius:
+         * 0-10 to 50-60. The band's figure is the two hemispheres' mean; the model's may stand from it
+         * by half the two hemispheres' difference: Earth's own two hemispheres sit that far either
+         * side of the mean of the same band, and a model that knows only how much of a band is land
+         * is asked to land between them, as [COLUMN_ENVELOPE_C] is argued. The World Ocean Atlas
+         * 2023's 1991-2020 surface (NOAA NCEI, the one-degree analyzed mean at 0 m, read) gives 27.82
+         * for 10 S to 10 N against this one's 27.64.
+         */
+        val OISST_BAND_NORTH_C = floatArrayOf(27.96f, 27.15f, 24.54f, 19.52f, 11.69f, 6.77f)
+        val OISST_BAND_SOUTH_C = floatArrayOf(27.33f, 25.94f, 22.77f, 17.74f, 10.41f, 3.74f)
+        const val SEA_BAND_DEGREES = 10
+
+        /**
+         * Earth's poleward transport of energy, ocean and atmosphere together, in petawatts: the
+         * transport the ERBE satellites' top-of-atmosphere radiation requires, Trenberth and Caron
+         * (2001, J. Climate 14, 3433-3443, read), read off their Fig. 7 by its pixels: 5.79 PW at 40
+         * N and 5.66 at 37.5 S at its peaks; 5.50 and 5.51 at 30, 5.43 and 5.26 at 45, 3.77 and 3.32
+         * at 60, north and south. Their atmospheric part peaks at 5.0 PW at 43 N, and at 35 degrees,
+         * near the total's peak, it is 78% of it in the north and 92% in the south (their abstract
+         * and section 3): the ocean carries the rest, and is the larger only from the equator to 17
+         * N. The peak is held within the two hemispheres' half-difference and the 0.15 PW their
+         * annual means vary by from year to year ("mostly less than 0.15 PW").
+         */
+        const val EARTH_TRANSPORT_PEAK_PW = (5.79 + 5.66) / 2
+        const val EARTH_TRANSPORT_PEAK_ENVELOPE_PW = (5.79 - 5.66) / 2 + 0.15
+        val EARTH_TRANSPORT_PW = mapOf(30 to (5.50 + 5.51) / 2, 45 to (5.43 + 5.26) / 2, 60 to (3.77 + 3.32) / 2)
+
+        /** The finding the low latitudes' cold sea is recorded under. */
+        const val SEA_BANDS_COLD = "W2c: the sea from the equator to 40 degrees stands under Earth's"
+
+        /** The finding the transport's shortfall is recorded under. */
+        const val TRANSPORT_SHORT = "W2c: the energy balance carries less heat poleward than Trenberth and Caron's radiation requires"
+
 
         /** How far the warmest-month figures may sit from the reanalysis, in degrees Celsius. */
         const val WARMEST_MONTH_ENVELOPE_C = 3f
@@ -363,7 +403,7 @@ class EnergyBalanceTest {
         // global mean wind: at 60 degrees the layer stands at 16 to 17 m through the summer, where the
         // Southern Ocean's, which the pooled zonal mean is mostly made of, stays deep under its
         // westerlies (docs/TODO.md).
-        KnownFailures.expect(HIGH_LATITUDE_SUMMER_LAYER, "the marine air's warmest month at 60 deg is 10.2 against 7.0; the water's warmest month at 60 deg is 9.2 against 5.5") {
+        KnownFailures.expect(HIGH_LATITUDE_SUMMER_LAYER, "the marine air's warmest month at 60 deg is 9.7 against 5.6; the water's warmest month at 60 deg is 9.5 against 6.3") {
             if (complaints.isNotEmpty()) {
                 throw RecordedViolation(
                     complaints.joinToString("; ", prefix = "outside the reanalysis by more than ${WARMEST_MONTH_ENVELOPE_C.toInt()} C: "),
@@ -397,14 +437,14 @@ class EnergyBalanceTest {
 
     /**
      * The poleward energy transport across 30, 45 and 60 degrees, in petawatts, against Trenberth
-     * and Caron's (2001) observed curve — 5.3, 5.0 and 3.3 PW, peaking near 35 at 5.5.
+     * and Caron's (2001) required transport, both hemispheres pooled ([EARTH_TRANSPORT_PW]).
      *
      * Reported, not asserted: it is the same information the temperatures carry, one derivative
      * away, and it is here because it is what says *where* a constant diffusivity was wrong.
      */
     private fun transportReport(solved: ZonalClimate, landFraction: FloatArray): String {
         val earthRadiusMetres = 6.371e6
-        val observedPW = mapOf(30 to 5.3, 45 to 5.0, 60 to 3.3)
+        val observedPW = EARTH_TRANSPORT_PW
         return observedPW.keys.sorted().joinToString(", ") { latitude ->
             fun bandMeanAt(degrees: Double): Double {
                 val band = ((EnergyBalance.POLE_DEGREES - degrees) * EnergyBalance.BANDS /
@@ -424,6 +464,119 @@ class EnergyBalanceTest {
         }
     }
 
+    /**
+     * The northward transport across every edge between two bands, in petawatts, the diffusion the
+     * solve itself takes: `2 pi R^2 D cos(latitude) dT/d(latitude)` on the band means' difference
+     * across the edge. Index `i` is the edge north of band `i`, so the two poles' are left out.
+     */
+    private fun northwardTransportByEdgePW(solved: ZonalClimate, landFraction: FloatArray): DoubleArray {
+        val earthRadiusMetres = 6.371e6
+        val bands = EnergyBalance.BANDS
+        val bandC = DoubleArray(bands) { landFraction[it] * solved.land.annualC[it] + (1.0 - landFraction[it]) * solved.sea.annualC[it] }
+        val widthRadians = PI / bands
+        return DoubleArray(bands - 1) { north ->
+            val edgeLatitude = 90.0 - 180.0 * (north + 1) / bands
+            2 * PI * earthRadiusMetres * earthRadiusMetres * EnergyBalance.diffusivityAt(edgeLatitude) *
+                cos(edgeLatitude * PI / 180.0) * (bandC[north + 1] - bandC[north]) / widthRadians / 1e15
+        }
+    }
+
+    /** The annual mean of [values] over the open sea of the bands between [fromDegrees] and [toDegrees], by area. */
+    private fun seaBandC(values: FloatArray, landFraction: FloatArray, fromDegrees: Float, toDegrees: Float): Double {
+        var weighted = 0.0
+        var area = 0.0
+        for (band in 0 until EnergyBalance.BANDS) {
+            val latitude = EnergyBalance.latitudeOfBand(band)
+            if (latitude < fromDegrees || latitude > toDegrees) continue
+            val weight = cos(latitude * PI / 180.0) * (1.0 - landFraction[band])
+            weighted += weight * values[band]
+            area += weight
+        }
+        return weighted / area
+    }
+
+    /** The sea surface over ten degrees from [fromDegrees], both hemispheres pooled. */
+    private fun pooledSeaBandC(solved: ZonalClimate, land: FloatArray, fromDegrees: Int): Double {
+        val to = (fromDegrees + SEA_BAND_DEGREES).toFloat()
+        return (seaBandC(solved.water.annualC, land, fromDegrees.toFloat(), to) +
+            seaBandC(solved.water.annualC, land, -to, -fromDegrees.toFloat())) / 2
+    }
+
+    /**
+     * The sea surface over each ten degrees from the equator to 60, both hemispheres pooled, against
+     * the optimum-interpolation climatology's ([OISST_BAND_NORTH_C]), each within half the
+     * difference between Earth's two hemispheres in that band; the band from 10 S to 10 N is the
+     * first. On 9ff725c9 the water stood at the marine air's mean, with no cloud keeping longwave
+     * back over the ITCZ, and the four bands from the equator to 40 stood 1.8 to 2.3 C under Earth's.
+     */
+    @Test
+    fun `the sea surface stands on Earth's in each ten degrees from the equator`() {
+        val land = earthLandFraction()
+        val solved = EnergyBalance.solve(land, EARTH_OBLIQUITY)
+        val misses = ArrayList<String>()
+        for (index in OISST_BAND_NORTH_C.indices) {
+            val from = index * SEA_BAND_DEGREES
+            val earth = (OISST_BAND_NORTH_C[index] + OISST_BAND_SOUTH_C[index]) / 2.0
+            val envelope = abs(OISST_BAND_NORTH_C[index] - OISST_BAND_SOUTH_C[index]) / 2.0
+            val model = pooledSeaBandC(solved, land, from)
+            println("EBM sea surface %2d-%2d deg: %.2f C (OISST %.2f, north %.2f, south %.2f; envelope +/-%.2f)"
+                .format(from, from + SEA_BAND_DEGREES, model, earth, OISST_BAND_NORTH_C[index], OISST_BAND_SOUTH_C[index], envelope))
+            if (abs(model - earth) > envelope) misses += "%d-%d %+.2f".format(from, from + SEA_BAND_DEGREES, model - earth)
+        }
+        KnownFailures.expect(SEA_BANDS_COLD, "0-10 -0.59; 10-20 -1.08; 20-30 -1.49; 30-40 -1.19") {
+            if (misses.isNotEmpty()) {
+                throw RecordedViolation("the sea surface stands outside Earth's hemispheres: ${misses.joinToString("; ")}", misses.joinToString("; "))
+            }
+        }
+    }
+
+    /**
+     * The sea surface's fall from the equator's ten degrees to those from 50 to 60, both hemispheres
+     * pooled, between Earth's two hemispheres' own falls in the same climatology: 21.19 C in the
+     * north and 23.59 in the south. On 9ff725c9, 20.73.
+     */
+    @Test
+    fun `the sea surface falls from the equator to sixty degrees as far as Earth's`() {
+        val land = earthLandFraction()
+        val solved = EnergyBalance.solve(land, EARTH_OBLIQUITY)
+        val last = OISST_BAND_NORTH_C.size - 1
+        val northFall = (OISST_BAND_NORTH_C[0] - OISST_BAND_NORTH_C[last]).toDouble()
+        val southFall = (OISST_BAND_SOUTH_C[0] - OISST_BAND_SOUTH_C[last]).toDouble()
+        val fall = pooledSeaBandC(solved, land, 0) - pooledSeaBandC(solved, land, last * SEA_BAND_DEGREES)
+        println("EBM sea surface's fall from 0-10 to 50-60 deg: %.2f C (OISST north %.2f, south %.2f)".format(fall, northFall, southFall))
+        assertTrue(fall in minOf(northFall, southFall)..maxOf(northFall, southFall),
+            "the sea surface falls %.2f C from the equator to sixty degrees, outside Earth's hemispheres' %.2f to %.2f".format(fall, northFall, southFall))
+    }
+
+    /**
+     * The peak of the poleward transport in each hemisphere, against Trenberth and Caron's required
+     * transport ([EARTH_TRANSPORT_PEAK_PW]). The model's diffusion carries the ocean's and the
+     * atmosphere's transport together, so their split is printed and not held: the ocean stage's
+     * currents move heat along a latitude and carry next to none across it (`OceanCurrentTest`).
+     * On 9ff725c9 the peaks stood at 5.24 PW.
+     */
+    @Test
+    fun `the poleward transport peaks as Earth's does`() {
+        val land = earthLandFraction()
+        val solved = EnergyBalance.solve(land, EARTH_OBLIQUITY)
+        val transport = northwardTransportByEdgePW(solved, land)
+        val north = transport.indices.maxByOrNull { transport[it] }!!
+        val south = transport.indices.minByOrNull { transport[it] }!!
+        fun latitudeOfEdge(edge: Int) = 90.0 - 180.0 * (edge + 1) / EnergyBalance.BANDS
+        println("EBM transport peaks: %.2f PW at %.1f N, %.2f PW at %.1f S (Trenberth and Caron: 5.79 at 40 N, 5.66 at 37.5 S; the ocean's share at 35 degrees 22%% north, 8%% south)"
+            .format(transport[north], latitudeOfEdge(north), -transport[south], -latitudeOfEdge(south)))
+        val misses = listOf(transport[north], -transport[south]).filter { abs(it - EARTH_TRANSPORT_PEAK_PW) > EARTH_TRANSPORT_PEAK_ENVELOPE_PW }
+        KnownFailures.expect(TRANSPORT_SHORT, "x0.94") {
+            if (misses.isNotEmpty()) {
+                val worst = misses.maxByOrNull { abs(it - EARTH_TRANSPORT_PEAK_PW) }!!
+                throw RecordedViolation(
+                    "the transport peaks at %.2f PW against Trenberth and Caron's %.2f +/- %.2f".format(worst, EARTH_TRANSPORT_PEAK_PW, EARTH_TRANSPORT_PEAK_ENVELOPE_PW),
+                    "x%.2f".format(worst / EARTH_TRANSPORT_PEAK_PW)
+                )
+            }
+        }
+    }
+
     @Test
     fun `the annual zonal mean sits on Earth's own profile`() {
         val land = earthLandFraction()
@@ -433,10 +586,10 @@ class EnergyBalanceTest {
         val sixty = bothHemispheresC(solved, land, 60f)
         val pole = bothHemispheresC(solved, land, 89f)
         println(
-            ("EBM Earth profile: global mean %.1f C (Earth 14), equator %.1f C (Earth %.0f), " +
+            ("EBM Earth profile: global mean %.1f C at sea level (Earth %.1f at its surface, Jones and others 1999), equator %.1f C (Earth %.1f), " +
                 "60 deg %.1f C (Earth %.0f), pole %.1f C (Earth %.0f); spin-up residual %.4f C")
                 .format(
-                    solved.globalMeanC, equator, EARTH_EQUATOR_C, sixty, EARTH_SIXTY_C,
+                    solved.globalMeanC, EnergyBalance.EARTH_MEAN_SURFACE_C, equator, EARTH_EQUATOR_C, sixty, EARTH_SIXTY_C,
                     pole, EARTH_POLE_C, solved.spinUpResidualC
                 )
         )
@@ -461,7 +614,7 @@ class EnergyBalanceTest {
 
         assertTrue(
             abs(equator - EARTH_EQUATOR_C) <= EARTH_EQUATOR_ENVELOPE_C,
-            "equator %.1f C is outside Earth's %.0f +/- %.0f".format(
+            "equator %.1f C is outside Earth's %.1f +/- %.0f".format(
                 equator, EARTH_EQUATOR_C, EARTH_EQUATOR_ENVELOPE_C
             )
         )
@@ -661,7 +814,7 @@ class EnergyBalanceTest {
                 .format(landSwing / bands, waterSwing / bands, landSwing / waterSwing)
         )
         // Recorded at A1-6c with the high latitudes' thin summer layer, which swings the water further (docs/TODO.md).
-        KnownFailures.expect(HIGH_LATITUDE_SUMMER_LAYER, "all-ocean x2.94") {
+        KnownFailures.expect(HIGH_LATITUDE_SUMMER_LAYER, "all-ocean x2.93") {
             if (landSwing / waterSwing < LAND_TO_SEA_SWING_RATIO) {
                 throw RecordedViolation(
                     "the contrast is the geography rather than the capacities: an all-ocean world's land column swings only %.2f times its water"

@@ -171,14 +171,13 @@ class GlaciationCombTest : BorrowsSharedWorlds() {
         // Armed at A1-6b, whose ground holds none (docs/DESIGN_LEDGER.md, A1-6b). Recorded at F1:
         // one such lake on seed 42 and one on seed 7 at 1,024 rows, a rule 13 finding, not traced
         // (docs/TODO.md).
-        KnownFailures.expect("F1: an ice-made lake is a straight one-cell line on the circulation by longitude's ground", "seed 42 at 1024 has 1; seed 7 at 1024 has 1") {
-            if (straight.isNotEmpty()) {
-                throw RecordedViolation(
-                    signature + " lakes that are a straight one-cell line along a D8 bearing — a" +
-                        " trough is a valley the ice found, not a line drawn down a flow path",
-                    signature
-                )
-            }
+        // Armed at W2b, whose ground holds none (docs/DESIGN_LEDGER.md, W2b).
+        if (straight.isNotEmpty()) {
+            throw RecordedViolation(
+                signature + " lakes that are a straight one-cell line along a D8 bearing — a" +
+                    " trough is a valley the ice found, not a line drawn down a flow path",
+                signature
+            )
         }
         // Collected and asserted once, rather than seed by seed, so a run reports all three figures
         // instead of stopping at the first that is over. On the implicit update before the uplift
@@ -190,7 +189,7 @@ class GlaciationCombTest : BorrowsSharedWorlds() {
         // again at K1, whose square weather and scour moved it back under (docs/DESIGN_LEDGER.md,
         // L1 and K1). Recorded at C1b, whose snow makes the ice larger and thicker: it adds 2.9 to
         // 3.1% on all three (docs/DESIGN_LEDGER.md, C1b; docs/TODO.md, "The ice after C1b").
-        KnownFailures.expect("C1b: the larger ice adds a comb of grid-bearing bars to the standing water", "[718106 at 6.89%, 42 at 6.14%, 7 at 2.36%]") {
+        KnownFailures.expect("C1b: the larger ice adds a comb of grid-bearing bars to the standing water", "[718106 at 6.57%, 42 at 2.84%, 7 at 3.23%]") {
             if (over.isNotEmpty()) {
                 throw RecordedViolation(
                     "the ice puts ${ICE_COMB_BAR * 100}% or more of these worlds' standing water into thin" +

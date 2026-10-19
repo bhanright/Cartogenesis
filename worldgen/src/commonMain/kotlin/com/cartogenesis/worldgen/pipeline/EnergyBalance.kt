@@ -210,7 +210,7 @@ enum class Season { ANNUAL, SUMMER, WINTER, JULY, JANUARY, JULY_HALF, JANUARY_HA
  * with `p` the latitude in radians. The three terms are the sunlight the band absorbs, the
  * infrared it radiates to space ([OUTGOING_OFFSET_W_PER_M2] and
  * [OUTGOING_PER_DEGREE_W_PER_M2_C], North, Cahalan and Coakley's 1981 fit to satellite
- * radiances), and the heat the atmosphere and ocean carry into it from its neighbours
+ * radiances, less what the ITCZ's tall cloud keeps back, [ITCZ_CLOUD_SHORTWAVE_OVER_LONGWAVE]), and the heat the atmosphere and ocean carry into it from its neighbours
  * ([DIFFUSION_TROPICS_W_PER_M2_C], which falls off toward the poles). The insolation `Q` is
  * the astronomical daily mean at that latitude
  * and that day, so the seasons are the planet's tilt rather than a prescribed migration.
@@ -358,7 +358,9 @@ object EnergyBalance {
      * These two numbers carry the greenhouse effect between them. The slope is North's: 2.09 W/m2
      * for every degree, which is the sensitivity and is the better constrained half. The offset is
      * then fixed by Earth's own energy budget rather than copied — Earth absorbs 240 W/m2 and sits
-     * at 14 C, so `A = 240 - 2.09 x 14 = 210.7`.
+     * at [EARTH_MEAN_SURFACE_C], so `A = 240 - 2.09 x 14 = 210.7`, and then the ITCZ cloud's own
+     * longwave ([ITCZ_CLOUD_SHORTWAVE_OVER_LONGWAVE]) is taken back out of the law's global mean, so
+     * that Earth's planet at 14 C still sends out the 240 it absorbs.
      *
      * North's own 203.3 is not used, and the reason is worth stating: it was fitted alongside a
      * flat planetary albedo of 0.32, and with the observed albedo distribution below — which
@@ -366,8 +368,86 @@ object EnergyBalance {
      * leaves the planet four degrees too warm. Taking one paper's `A` with another's albedo is the
      * mistake; the budget is the arbiter.
      */
-    private const val OUTGOING_OFFSET_W_PER_M2 = 210.7
     private const val OUTGOING_PER_DEGREE_W_PER_M2_C = 2.09
+
+    /** The sunlight Earth absorbs, watts per square meter of the planet. */
+    private const val EARTH_ABSORBED_SUNLIGHT_W_PER_M2 = 240.0
+
+    /**
+     * Earth's annual mean surface temperature, degrees Celsius: 14.0, Jones, New, Parker, Martin
+     * and Rigor's (1999, Rev. Geophys. 37, 173-199, abstract read) absolute climatology for
+     * 1961-1990 on a one-degree grid, 14.6 in the northern hemisphere and 13.4 in the southern.
+     */
+    internal const val EARTH_MEAN_SURFACE_C = 14.0
+
+    /** `A` before the ITCZ cloud's longwave is taken out of it: Earth's budget alone. */
+    private const val OUTGOING_OFFSET_W_PER_M2 =
+        EARTH_ABSORBED_SUNLIGHT_W_PER_M2 - OUTGOING_PER_DEGREE_W_PER_M2_C * EARTH_MEAN_SURFACE_C
+
+    /**
+     * How many times its own longwave trapping the ITCZ's cloud reflects in sunlight: 1.2, the ratio
+     * of shortwave to longwave cloud forcing that Yuan, Hartmann and Wood (2008, J. Climate 21,
+     * 2337-2351, read) find "nearly constant at about 1.2" over every regime of rising air in the
+     * tropics, ERBE against the reanalyses' vertical motion at 500 hPa, and over the warm pool's
+     * convecting sea "for vertical velocities from 0 to 110 hPa per day".
+     *
+     * The albedo below carries the ITCZ's tall cloud as a belt ([CLOUD_ALBEDO_ITCZ]), fitted to
+     * CERES's all-sky planetary albedo; the outgoing longwave law, a straight line in the surface
+     * temperature, carried none of the same cloud's trapping, so the convecting tropics reflected
+     * like a cloud and radiated like a clear sky: the shortwave half of a pair whose two halves
+     * nearly cancel, 13.8 W/m2 at the equator taken without the longwave that comes back with it.
+     * The cloud's longwave is the belt's reflected sunlight over this ratio, read on the band's own
+     * annual sunlight as the belt's albedo is, and on its open share. See docs/DESIGN_LEDGER.md, W2c,
+     * for what it moved.
+     */
+    private const val ITCZ_CLOUD_SHORTWAVE_OVER_LONGWAVE = 1.2
+
+    /**
+     * The ITCZ cloud's longwave trapping averaged over Earth, W/m2: the belt's reflected sunlight
+     * over [ITCZ_CLOUD_SHORTWAVE_OVER_LONGWAVE] at Earth's tilt and sun, ice-free, by area. About 2.1.
+     * Added back to [OUTGOING_OFFSET_W_PER_M2] so the law's global budget is still Earth's.
+     */
+    private val EARTH_ITCZ_CLOUD_LONGWAVE_W_PER_M2: Double = run {
+        var weighted = 0.0
+        var area = 0.0
+        for (band in 0 until BANDS) {
+            val latitude = latitudeOfBand(band).toDouble()
+            val weight = cos(latitude * PI / 180.0)
+            weighted += weight * itczCloudLongwaveW(latitude, annualInsolationW(latitude, EARTH_OBLIQUITY_DEGREES.toDouble(), 1.0))
+            area += weight
+        }
+        weighted / area
+    }
+
+    /**
+     * The ITCZ cloud's longwave trapping at [latitudeDegrees] under [annualSunlightW] of the year's
+     * mean sunlight, W/m2, before any of the band is white: the belt's reflected share over
+     * [ITCZ_CLOUD_SHORTWAVE_OVER_LONGWAVE].
+     */
+    private fun itczCloudLongwaveW(latitudeDegrees: Double, annualSunlightW: Double): Double =
+        CLOUD_ALBEDO_ITCZ * cloudBelt(latitudeDegrees, CLOUD_ITCZ_DEGREES, CLOUD_ITCZ_WIDTH_DEGREES) *
+            annualSunlightW / ITCZ_CLOUD_SHORTWAVE_OVER_LONGWAVE
+
+    /**
+     * How far the open sea's surface stands above the marine air over it on the year's mean, degrees
+     * Celsius: Kara, Hurlburt and Loh's (2007, J. Geophys. Res. 112, C05020, read) regressions of the
+     * annual sea surface on the air over Earth's open ocean, one-degree bin by bin, `Tsst = 0.93 +
+     * 1.00 Tair` in ERA-40 and `0.63 + 1.00 Tair` in COADS; their mean, 0.78. Ignoring the high
+     * latitudes where sea ice forms, the sea stands warmer "nearly everywhere", because "solar
+     * radiation is absorbed more efficiently by the ocean" and so "average sensible heat flux is
+     * almost always cooling (warming) the ocean (atmosphere)".
+     *
+     * The surface flux between the water and the air ([SURFACE_EXCHANGE_W_PER_M2_C]) is neutral at
+     * this difference rather than at none: the water's mean sunlight leaves it partly as constant
+     * losses, the latent heat of its humidity deficit and its net longwave, and partly as the flux
+     * that follows the difference, the sensible heat above all, which only flows while the water is
+     * the warmer. The flux is still the same watts leaving one reservoir and entering the other, and
+     * the water's year still integrates to no exchange with the air, so no heat is made: the air's
+     * budget is the one it always had, and the water stands this far above it on the open share of
+     * the band. Under ice the water and the air part company by far more and by other physics, so a
+     * white share carries none of it. See docs/DESIGN_LEDGER.md, W2c.
+     */
+    const val SEA_OVER_MARINE_AIR_C = (0.93 + 0.63) / 2.0
 
     /**
      * Meridional heat transport as a diffusivity, in watts per square metre per degree Celsius.
@@ -503,7 +583,8 @@ object EnergyBalance {
      * equator itself.
      *
      * So the ITCZ's cloud is written down, at the latitude and width `ClimateStage` already puts
-     * its own rain belt on, because it is the same circulation.
+     * its own rain belt on, because it is the same circulation; and the longwave the same cloud
+     * keeps from space is written down beside it ([ITCZ_CLOUD_SHORTWAVE_OVER_LONGWAVE]).
      *
      * **And the clear sky needs two terms, not one.** A single `sin^2` climb was tried and cannot
      * carry the poleward rise: fitted to the tropics it leaves the planet's global albedo at 0.271
@@ -694,9 +775,10 @@ object EnergyBalance {
      * belong to the **air**, which is what the atmosphere does with them and what a coast feels,
      * and so does the sunlight but for the sea surface's share of its seasonal swing
      * ([SEA_SURFACE_SHARE_OF_ABSORBED_SUN]); the mixed layer hangs off the air as a buffer,
-     * exchanging by the bulk surface flux below. The annual mean is untouched by the split — at
-     * steady state the water sits exactly at the air's temperature and the air's budget is the one
-     * the single column always had — and the seasonal cycle is not. See docs/DESIGN_LEDGER.md, W1
+     * exchanging by the bulk surface flux below. The air's annual mean is untouched by the split —
+     * at steady state the flux vanishes, with the water [SEA_OVER_MARINE_AIR_C] above the air on the
+     * open sea, and the air's budget is the one the single column always had — and the seasonal
+     * cycle is not. See docs/DESIGN_LEDGER.md, W1
      * and A1-1, for the swings measured against Earth's.
      */
     private const val MARINE_AIR_HEAT_CAPACITY_J_PER_M2_C = 1.04e7
@@ -713,9 +795,10 @@ object EnergyBalance {
      * difference — over the ocean 97.1 W/m2 of latent heat, 12 of sensible and 57.4 of net
      * longwave against the 167.8 in, the same table — so the model carries them as a constant equal
      * to the mean, and the bulk coefficient [SURFACE_EXCHANGE_W_PER_M2_C] carries the part that
-     * follows the difference. The water's year therefore still integrates to no exchange with the
-     * air, which is the slab's structural limit: nothing carries heat away under the surface, so
-     * the water's annual mean is the air's.
+     * follows the difference, which is neutral with the water [SEA_OVER_MARINE_AIR_C] above the air.
+     * The water's year therefore still integrates to no exchange with the air, which is the slab's
+     * structural limit: nothing carries heat away under the surface, so the water's annual mean is
+     * the air's and that difference.
      *
      * Before A1-1 all the sunlight heated the marine air and the water was warmed only through the
      * air, so the air ran several degrees warmer than the water every summer and colder every
@@ -903,6 +986,18 @@ object EnergyBalance {
          */
         landHeatCapacityJPerM2C: Double = LAND_HEAT_CAPACITY_J_PER_M2_C,
         /**
+         * How far the open sea's water stands above its air on the year's mean, degrees Celsius:
+         * [SEA_OVER_MARINE_AIR_C], and nothing in the pipeline passes anything else. Zero is the slab
+         * whose water sat at its air's mean, the control the sea-surface guards are shown failing on.
+         */
+        seaOverAirC: Double = SEA_OVER_MARINE_AIR_C,
+        /**
+         * Whether the ITCZ's cloud traps longwave as well as reflecting sunlight
+         * ([ITCZ_CLOUD_SHORTWAVE_OVER_LONGWAVE]). Off is the law with the cloud's reflection alone,
+         * the control; nothing in the pipeline passes it.
+         */
+        itczCloudLongwave: Boolean = true,
+        /**
          * Handed the last simulated year of the land air, the marine air and the water, each
          * indexed `step * BANDS + band` in degrees Celsius, when it is not null: for the guards
          * that hold this model's windows to the year they were cut from. Nothing in the pipeline
@@ -912,7 +1007,7 @@ object EnergyBalance {
     ): ZonalClimate {
         val geometry = Geometry(
             transportTropicsW.toDouble(), transportPolarW.toDouble(), iceAlbedoFeedback,
-            landHeatCapacityJPerM2C
+            landHeatCapacityJPerM2C, seaOverAirC, itczCloudLongwave
         )
         val insolation = insolationByBandAndStep(geometry, obliquityDegrees, solarScale.toDouble())
         val annualInsolation = DoubleArray(BANDS) { band ->
@@ -921,7 +1016,8 @@ object EnergyBalance {
             total / STEPS_PER_YEAR
         }
         annualInsolation.copyInto(geometry.annualInsolation)
-        val outgoingOffset = OUTGOING_OFFSET_W_PER_M2 + outgoingOffsetShiftW
+        val outgoingOffset = OUTGOING_OFFSET_W_PER_M2 + outgoingOffsetShiftW +
+            if (itczCloudLongwave) EARTH_ITCZ_CLOUD_LONGWAVE_W_PER_M2 else 0.0
 
         val landC = DoubleArray(BANDS)
         val seaAirC = DoubleArray(BANDS)
@@ -1104,7 +1200,9 @@ object EnergyBalance {
         transportTropicsW: Double,
         transportPolarW: Double,
         val iceAlbedoFeedback: Boolean,
-        val landHeatCapacity: Double
+        val landHeatCapacity: Double,
+        val seaOverAirC: Double,
+        val itczCloudLongwave: Boolean
     ) {
         /**
          * The diffusivity on each edge between bands, which is where the flux is evaluated.
@@ -1178,6 +1276,19 @@ object EnergyBalance {
 
         /** The sunlight the water takes on the step being marched, W/m2, per band. */
         val waterSunThisStep = DoubleArray(BANDS)
+
+        /**
+         * The longwave the ITCZ's cloud keeps from space, W/m2, per band, refreshed with the white
+         * share once a year: see [ITCZ_CLOUD_SHORTWAVE_OVER_LONGWAVE].
+         */
+        val cloudLongwaveW = DoubleArray(BANDS)
+
+        /**
+         * How far above its air the band's water stands when the surface flux between them is
+         * neutral, degrees, per band: [SEA_OVER_MARINE_AIR_C] on the band's open share, refreshed
+         * with the white share once a year.
+         */
+        val waterOverAirC = DoubleArray(BANDS)
 
         /**
          * The band's planetary albedo, refreshed with [white] once a year.
@@ -1275,6 +1386,30 @@ object EnergyBalance {
     }
 
     /**
+     * The year's mean of the daily-mean sunlight at [latitudeDegrees], W/m2, on the same steps and
+     * by the same expression as [insolationByBandAndStep], for an obliquity of [obliquityDegrees] and
+     * a sun of [solarScale] times the solar constant.
+     */
+    private fun annualInsolationW(latitudeDegrees: Double, obliquityDegrees: Double, solarScale: Double): Double {
+        val obliquityRadians = obliquityDegrees * PI / 180.0
+        val latitudeRadians = latitudeDegrees * PI / 180.0
+        val solar = SOLAR_CONSTANT_W_PER_M2 * solarScale
+        var total = 0.0
+        for (step in 0 until STEPS_PER_YEAR) {
+            val declinationRadians = asin(sin(obliquityRadians) * sin(2.0 * PI * step / STEPS_PER_YEAR))
+            val sunsetCosine = -tan(latitudeRadians) * tan(declinationRadians)
+            val halfDayRadians = when {
+                sunsetCosine <= -1.0 -> PI
+                sunsetCosine >= 1.0 -> 0.0
+                else -> acos(sunsetCosine)
+            }
+            total += solar / PI * (halfDayRadians * sin(latitudeRadians) * sin(declinationRadians) +
+                cos(latitudeRadians) * cos(declinationRadians) * sin(halfDayRadians))
+        }
+        return total / STEPS_PER_YEAR
+    }
+
+    /**
      * Fills [landC] and [seaC] with the ice-free steady state of the annual-mean budget, which is
      * where the seasonal march starts.
      *
@@ -1298,9 +1433,11 @@ object EnergyBalance {
         waterC: DoubleArray
     ) {
         for (band in 0 until BANDS) {
+            val latitude = latitudeOfBand(band).toDouble()
+            val cloudLongwave = if (geometry.itczCloudLongwave) itczCloudLongwaveW(latitude, annualInsolation[band]) else 0.0
             geometry.rightHandSide[band] = annualInsolation[band] *
-                (1.0 - albedoOf(white = 0.0, latitudeDegrees = latitudeOfBand(band).toDouble())) -
-                outgoingOffset
+                (1.0 - albedoOf(white = 0.0, latitudeDegrees = latitude)) -
+                outgoingOffset + cloudLongwave
         }
         solveDiffusion(
             geometry,
@@ -1310,7 +1447,7 @@ object EnergyBalance {
             result = landC
         )
         landC.copyInto(seaAirC)
-        landC.copyInto(waterC)
+        for (band in 0 until BANDS) waterC[band] = landC[band] + geometry.seaOverAirC
         for (band in 0 until BANDS) {
             geometry.mixedSlices[band] = MIXED_LAYER_SLICES
             geometry.beneathC.fill(waterC[band], band * MIXED_LAYER_SLICES, (band + 1) * MIXED_LAYER_SLICES)
@@ -1332,9 +1469,9 @@ object EnergyBalance {
      * is the harmonic mean. And last **the surface flux**, marine air against the water beneath
      * it, at [SURFACE_EXCHANGE_W_PER_M2_C].
      *
-     * The split changes no annual mean. At steady state the surface flux vanishes, so the water
-     * sits exactly at the air's temperature and the air's budget is the one the single sea column
-     * always had. What it changes is the year: the air's amplitude rises because it is answering
+     * The split changes no annual mean of the air. At steady state the surface flux vanishes, so the
+     * water sits at the air's temperature and [SEA_OVER_MARINE_AIR_C] on its open share, and the
+     * air's budget is the one the single sea column always had. What it changes is the year: the air's amplitude rises because it is answering
      * for its own small capacity with the water only lagging behind it, and the water's falls
      * because it is driven through a flux rather than by the sun directly.
      *
@@ -1370,10 +1507,12 @@ object EnergyBalance {
             // the water; the air keeps the rest, so the column's total is what it absorbs.
             val waterSun = absorbed * geometry.openSeaSurfaceShare[band] - geometry.meanSeaSurfaceSun[band]
             geometry.waterSunThisStep[band] = waterSun
-            var land = (landC[band] + stepSeconds / landHeat * (absorbed - outgoingOffset)) /
+            // The cloud's trapped longwave is less sent to space, so it sits with the sunlight.
+            val heating = absorbed + geometry.cloudLongwaveW[band] - outgoingOffset
+            var land = (landC[band] + stepSeconds / landHeat * heating) /
                 (1.0 + stepSeconds * OUTGOING_PER_DEGREE_W_PER_M2_C / landHeat)
             var seaAir =
-                (seaAirC[band] + stepSeconds / marineAirHeat * (absorbed - waterSun - outgoingOffset)) /
+                (seaAirC[band] + stepSeconds / marineAirHeat * (heating - waterSun)) /
                     (1.0 + stepSeconds * OUTGOING_PER_DEGREE_W_PER_M2_C / marineAirHeat)
 
             // The zonal exchange, between the two *air* columns, toward the band's own mean and so
@@ -1412,12 +1551,15 @@ object EnergyBalance {
             // The open sea's layer stands at Kraus and Turner's depth for the heat the surface takes
             // in this step, its sunlight and its exchange with the air, entraining the water beneath
             // as it deepens and leaving its own as it shoals; a frozen share is the ice's.
-            val takenInW = geometry.waterSunThisStep[band] + SURFACE_EXCHANGE_W_PER_M2_C * (seaAir - waterC[band])
+            // The flux is neutral with the water [SEA_OVER_MARINE_AIR_C] above the air, so the pair is
+            // solved on the water less that difference and the difference put back after.
+            val neutralC = geometry.waterOverAirC[band]
+            val takenInW = geometry.waterSunThisStep[band] + SURFACE_EXCHANGE_W_PER_M2_C * (seaAir + neutralC - waterC[band])
             waterC[band] = moveMixedLayerBase(geometry, band, mixedLayerSlicesUnder(takenInW), waterC[band])
             val white = geometry.white[band]
             val waterHeat = SEAWATER_HEAT_CAPACITY_J_PER_M3_C * geometry.mixedSlices[band] * MIXED_LAYER_SLICE_M * (1.0 - white) +
                 FROZEN_SEA_HEAT_CAPACITY_J_PER_M2_C * white
-            val water = waterC[band] + stepSeconds / waterHeat * geometry.waterSunThisStep[band]
+            val water = waterC[band] - neutralC + stepSeconds / waterHeat * geometry.waterSunThisStep[band]
             val exchange = stepSeconds * SURFACE_EXCHANGE_W_PER_M2_C
             val determinant =
                 waterHeat * marineAirHeat + exchange * waterHeat + exchange * marineAirHeat
@@ -1426,7 +1568,7 @@ object EnergyBalance {
                 ) / determinant
             seaAirC[band] =
                 (marineAirHeat * seaAir + exchange * waterNext) / (marineAirHeat + exchange)
-            waterC[band] = waterNext
+            waterC[band] = waterNext + neutralC
         }
     }
 
@@ -1467,6 +1609,11 @@ object EnergyBalance {
             geometry.openSeaSurfaceShare[band] = SEA_SURFACE_SHARE_OF_ABSORBED_SUN * (1.0 - white)
             geometry.meanSeaSurfaceSun[band] = geometry.openSeaSurfaceShare[band] *
                 geometry.annualInsolation[band] * (1.0 - geometry.bandAlbedo[band])
+            // The cloud's longwave goes with its reflection, which a white band's ice takes over.
+            geometry.cloudLongwaveW[band] = if (geometry.itczCloudLongwave) {
+                itczCloudLongwaveW(latitudeOfBand(band).toDouble(), geometry.annualInsolation[band]) * (1.0 - white)
+            } else 0.0
+            geometry.waterOverAirC[band] = geometry.seaOverAirC * (1.0 - white)
             // The transport moves air, so the capacity it is spread over is the air's: the
             // harmonic mean of the two columns, which is what makes the watts rather than the
             // degrees the shared quantity. The water is not in it — it takes its share of the

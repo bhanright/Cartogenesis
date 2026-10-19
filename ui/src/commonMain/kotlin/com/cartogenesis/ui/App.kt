@@ -733,7 +733,7 @@ private fun Application(
                 // for the whole of it.
                 Generation.run(
                     config, reusable, accelerator, platform.oceanAccelerator,
-                    platform.iceAccelerator
+                    platform.iceAccelerator, platform.moistureAccelerator
                 ) {
                     reached = it
                     stage = it.label

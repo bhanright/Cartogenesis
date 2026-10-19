@@ -143,6 +143,9 @@ class ReceiverClampTest {
         // numerical cause. On H1's ground under the coupled climate it returns, one cell each on
         // seeds 718106 and 7: recorded so the tiers run (docs/DESIGN_LEDGER.md, M1). Armed again
         // at A1-6a, under whose rain none is left; the cell is still not traced (docs/TODO.md).
+        // Recorded at W2e, under whose rain seed 718106 leaves one, the same untraced cell
+        // (docs/DESIGN_LEDGER.md, W2e). Armed again at W2h, under whose rain none is left; the cell
+        // is still not traced.
         assertTrue(
             holesWith.isEmpty(),
             "the incision put channel cells below the cell they drain into over the twelve rounds, " +

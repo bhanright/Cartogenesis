@@ -720,7 +720,7 @@ class SiteAssemblyTest {
         // south-western peninsula of seed 718106's, and on that ground its land covers 15% of the
         // frame, so the rainfall's land is under the fifth asked and the currents' sea over the
         // four fifths (docs/TODO.md).
-        KnownFailures.expect("M1: the site's data frame holds little land on H1's ground", "img/data-rainfall.webp clear over 0.849; img/data-currents.webp clear over 0.138") {
+        KnownFailures.expect("M1: the site's data frame holds little land on H1's ground", "img/data-rainfall.webp clear over 0.852; img/data-currents.webp clear over 0.135") {
             if (unbalanced.isNotEmpty()) {
                 throw RecordedViolation(
                     "a layer that keeps land or sea is clear over less than a fifth or more than four fifths of the frame: $unbalanced",
@@ -879,7 +879,7 @@ class SiteAssemblyTest {
         }
         // Recorded with the data frame's land above: on H1's ground the frame's rivers and lakes
         // cover under the half percent the bar asks (docs/TODO.md).
-        KnownFailures.expect("M1: the site's data frame holds little land on H1's ground", "img/data-rivers.webp covers 0.0048") {
+        KnownFailures.expect("M1: the site's data frame holds little land on H1's ground", "img/data-rivers.webp covers 0.0043") {
             if (thinLayers.isNotEmpty()) {
                 throw RecordedViolation(
                     "a layer covers less of its frame than $LEAST_LAYER_COVER or more than $MOST_LAYER_COVER: " +

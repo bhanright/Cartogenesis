@@ -100,7 +100,7 @@ class PressureWindPoleTest {
         // Recorded at A1-6a, the control passing at 2.4 against 2.5 m/s; armed at A1-6c, where it
         // fails the guard again; recorded again at W2c, whose warmer tropical sea and cloud move the
         // continent's eddy pressure (docs/DESIGN_LEDGER.md and docs/TODO.md).
-        KnownFailures.expect("W2c: the polar wind's control passes on the synthetic continent", "1.73 against 2.39 m/s") {
+        KnownFailures.expect("W2c: the polar wind's control passes on the synthetic continent", "1.46 against 2.23 m/s") {
             if (keptPolar <= keptElsewhere) {
                 throw RecordedViolation(
                     "the control with the polar rows kept passes, so the guard shows nothing: %.2f against %.2f m/s".format(keptPolar, keptElsewhere),

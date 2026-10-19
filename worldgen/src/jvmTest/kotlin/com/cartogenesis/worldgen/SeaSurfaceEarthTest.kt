@@ -108,7 +108,7 @@ class SeaSurfaceEarthTest : BorrowsSharedWorlds() {
                 .format(meanC, JONES_C, JONES_NORTH_C, JONES_SOUTH_C))
             if (meanC !in JONES_SOUTH_C..JONES_NORTH_C) misses += "seed $seed %.2f C".format(meanC)
         }
-        KnownFailures.expect(PLANET_COLD, "seed 7 12.77 C; seed 1234 12.75 C") {
+        KnownFailures.expect(PLANET_COLD, "seed 7 12.76 C; seed 1234 12.76 C") {
             if (misses.isNotEmpty()) {
                 throw RecordedViolation("the planet's mean stands outside Earth's hemispheres: ${misses.joinToString("; ")}", misses.joinToString("; "))
             }

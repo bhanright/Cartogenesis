@@ -249,10 +249,10 @@ class WaterColumnEarthTest : BorrowsSharedWorlds() {
         // Under it on main, x0.64; over it from W2b to W2d, x1.86, the land raining by the column
         // law and the gated climb alone; under it again at W2e, x0.71, the subtropical highs too weak
         // to dry the horse latitudes once the climb condenses past the boundary layer's condensation
-        // level (docs/DESIGN_LEDGER.md, W2e; docs/TODO.md).
-        KnownFailures.expect("W2e: desert covers less of the land than Earth's", "x0.71") {
-            nearEarth("desert share of the land", figures.desert / figures.landArea, EARTH_DESERT_SHARE)
-        }
+        // level (docs/DESIGN_LEDGER.md, W2e; docs/TODO.md). Armed at W2h, x0.85, under the stationary
+        // waves extrapolated to their converged answer and the cells' edges by sector, whose deserts
+        // grow, most of it in the tropics (docs/DESIGN_LEDGER.md, W2h).
+        nearEarth("desert share of the land", figures.desert / figures.landArea, EARTH_DESERT_SHARE)
     }
 
     @Test
@@ -269,8 +269,10 @@ class WaterColumnEarthTest : BorrowsSharedWorlds() {
             if (wrong) misplaced += "band %d x%.2f".format(band, share / earth)
         }
         // The tropics' land stood desert from W2b to W2d, band 0 x8.46 and band 2 x4.12; at W2e twice
-        // Earth's, the polar band's gone (docs/DESIGN_LEDGER.md, W2e; docs/TODO.md).
-        KnownFailures.expect("W2e: the tropics' land is twice Earth's desert", "band 0 x2.12") {
+        // Earth's, the polar band's gone (docs/DESIGN_LEDGER.md, W2e; docs/TODO.md). At W2h three and a
+        // half times, x3.49, the tropics' deserts growing most under the converged stationary waves
+        // and the cells' edges by sector (docs/DESIGN_LEDGER.md, W2h; docs/TODO.md).
+        KnownFailures.expect("W2e: the tropics' land is twice Earth's desert", "band 0 x3.49") {
             if (misplaced.isNotEmpty()) throw RecordedViolation("desert misplaced by band: $misplaced", misplaced.joinToString())
         }
     }

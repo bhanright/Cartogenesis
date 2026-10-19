@@ -66,7 +66,9 @@ class OceanLeavesTheGroundTest : BorrowsSharedWorlds() {
      * rain and the root zone's store supply it. W2e re-took the same two: the provisional climate's
      * march carries a boundary layer and the free troposphere on their own winds. W2f re-took the
      * same two by a few tenths of a percent of the rain: the provisional climate's free troposphere
-     * takes in the boundary layer's water of the same lap. An ocean change that leaks into the
+     * takes in the boundary layer's water of the same lap. W2h re-took the same two: the provisional
+     * climate's stationary waves are extrapolated to their converged answer and its Hadley cells end
+     * at each sector's own baroclinic onset. An ocean change that leaks into the
      * ground moves them.
      * A chunk meant to move the ground re-takes them here, as the render records are re-taken.
      * At [SharedWorlds.DETAIL_ROWS], whose standard worlds the detail guards generate anyway, so
@@ -98,12 +100,12 @@ class OceanLeavesTheGroundTest : BorrowsSharedWorlds() {
             "plates.continentalShare" to -8606387063464998658L,
             "plates.upliftRateMmPerYear" to -9204950406715247596L,
             "plates.crustAge" to 5808649867131644059L,
-            "erosion.height" to -547202049739930714L,
+            "erosion.height" to -8231064963526314194L,
             "erosion.sweptOnDevice" to -358906410940142731L,
-            "sea.shorelineHeight" to 8679620093095337981L,
-            "sea.isLand" to -8960544417350287311L,
-            "sea.relativeElevation" to 7193649467547773306L,
-            "sea.landCellCount" to 6927870003309673247L
+            "sea.shorelineHeight" to -702966044717337125L,
+            "sea.isLand" to -672535606362511186L,
+            "sea.relativeElevation" to 4898869016668761950L,
+            "sea.landCellCount" to 459892246028338177L
         )
     }
 }

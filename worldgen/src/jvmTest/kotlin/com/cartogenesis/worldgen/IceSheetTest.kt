@@ -68,7 +68,7 @@ class IceSheetTest : BorrowsSharedWorlds() {
         // Recorded at C1b: the march that closes its budget snows on the polar land where the old one
         // dropped the cold cap's water, and the sheets it feeds stand thicker than Earth's. The ice
         // is measured and not fixed in C1b (docs/TODO.md, "The ice after C1b").
-        KnownFailures.expect("C1b: the sheets the conserving march feeds stand thicker than Earth's", "seed 718106 stands 6415; seed 59758 stands 6501; seed 7 stands 7352; seed 42 stands 5323") {
+        KnownFailures.expect("C1b: the sheets the conserving march feeds stand thicker than Earth's", "seed 718106 stands 6569; seed 59758 stands 6285; seed 7 stands 6525") {
             if (failures.isNotEmpty()) {
                 throw RecordedViolation(
                     "the sheets are outside the envelope Earth's two sit in:\n" + failures.joinToString("\n"),
@@ -265,7 +265,7 @@ class IceSheetTest : BorrowsSharedWorlds() {
             // Recorded when H1's ground came under the coupled climate: none of the candidates'
             // sheets fills a third of its disc near its dome, so the control has no flow to turn
             // (docs/DESIGN_LEDGER.md, M1; docs/TODO.md).
-            KnownFailures.expect("M1: no sheet the control can read has a dome", "seed 17: 16 of 513 cells; seed 718106: 150 of 513 cells; seed 59758: 135 of 513 cells; seed 7: 32 of 513 cells; seed 42: 1 of 513 cells") {
+            KnownFailures.expect("M1: no sheet the control can read has a dome", "seed 17: 31 of 513 cells; seed 718106: 148 of 513 cells; seed 59758: 77 of 513 cells; seed 7: 52 of 513 cells; seed 42: 1 of 513 cells") {
                 val readings = candidates.map { candidate ->
                     val candidateMeasured = measure(candidate)
                     val reading = readFlow(candidateMeasured, candidateMeasured.mass.sheetFlowReceiver)

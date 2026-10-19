@@ -48,6 +48,15 @@ import kotlin.test.assertTrue
  *   hPa, as `BoundaryLayerEarthTest` reads them. In each half the summer hemisphere's sea holds at
  *   least one closed high at 15 to 45 degrees whose center stands over 1,020 hPa
  *   ([SubtropicalHighs]).
+ * - **The highs' strength and latitude.** The NCEP/NCAR reanalysis's long-term monthly mean
+ *   sea-level pressure, 1991 to 2020 (NOAA PSL, `slp.mon.ltm.nc`, read through its OPeNDAP service
+ *   with its land mask), averaged over the half-years April to September and October to March: in
+ *   each half and hemisphere the highest point over the sea at 15 to 45 degrees stands 11.9 and
+ *   12.3 hPa over the planet's area mean in the half about July (north, south) and 12.7 and 11.0 in
+ *   the half about January, at 35.0, 32.5, 35.0 and 32.5 degrees. The worlds' four figures pooled
+ *   over the seeds stand within Earth's span ([HIGH_STRENGTH_LEAST_HPA] to
+ *   [HIGH_STRENGTH_MOST_HPA]; [HIGH_LATITUDE_NEAREST] to [HIGH_LATITUDE_FARTHEST]), each read over its
+ *   own planet's area mean: the worlds' is referred to 1,013.25 hPa, Earth's reanalysis reads 1,011.5.
  * - **The cells.** The ECMWF solstitial mean meridional streamfunction (MIT 12.810 lecture notes on
  *   the Hadley cell, 2023, read): the cross-equatorial winter cells' contours reach 20 and 24 times
  *   1e10 kg/s, the summer cells' 4. In each half the lower branch's greatest mass flux toward the
@@ -96,6 +105,18 @@ class MeanCirculationEarthTest : BorrowsSharedWorlds() {
 
         /** The cells are sought within 40 degrees of the equator. */
         const val CELL_SEARCH_DEGREES = 40f
+
+        /** Earth's highs over the planet's mean, the least and the most of its four half-and-hemisphere figures (NCEP/NCAR, 1991 to 2020), hPa. */
+        const val HIGH_STRENGTH_LEAST_HPA = 11.0
+        const val HIGH_STRENGTH_MOST_HPA = 12.7
+
+        /** The latitudes of Earth's same four highs, the nearest and the farthest, degrees. */
+        const val HIGH_LATITUDE_NEAREST = 32.5
+        const val HIGH_LATITUDE_FARTHEST = 35.0
+
+        /** The highs are sought over the sea between these, degrees from the equator: the subtropics. */
+        const val HIGH_SEARCH_NEAREST = 15f
+        const val HIGH_SEARCH_FARTHEST = 45f
     }
 
     private fun world(seed: Long): WorldMap = SharedWorlds.world(WorldGenConfig.forRows(seed, ROWS))
@@ -167,6 +188,74 @@ class MeanCirculationEarthTest : BorrowsSharedWorlds() {
             if (placed.isNotEmpty()) throw RecordedViolation("ridges outside 25 to 40 degrees: $placed", placed.joinToString("; "))
         }
         assertTrue(moved.isEmpty(), "the ridge does not move poleward in summer: $moved")
+    }
+
+    /**
+     * In each half and hemisphere the highest sea-level pressure over the sea at
+     * [HIGH_SEARCH_NEAREST] to [HIGH_SEARCH_FARTHEST] degrees, over the world's own area mean, and its
+     * latitude; [withWaves] false reads the circulation's pressure alone, without the stationary
+     * waves' (the control).
+     */
+    private fun highs(world: WorldMap, withWaves: Boolean): List<Pair<Double, Double>> {
+        val atmosphere = checkNotNull(ClimateStage.coupledAtmosphere(world.config, world.sea, world.ocean)).coupling.atmosphere
+        val found = ArrayList<Pair<Double, Double>>()
+        for (julyHalf in listOf(true, false)) {
+            val half = atmosphere.half(julyHalf)
+            fun pressureAt(cell: Int) = if (withWaves) half.seaLevelPressurePa(cell) else half.beltPressurePa[cell]
+            var weighted = 0.0
+            var area = 0.0
+            for (row in 0 until world.height) {
+                val weight = cos(ClimateStage.latitudeOf(row, world.height) * PI / 180)
+                for (column in 0 until world.width) { weighted += weight * pressureAt(row * world.width + column); area += weight }
+            }
+            val mean = weighted / area
+            for (north in listOf(true, false)) {
+                var highest = Double.NEGATIVE_INFINITY
+                var at = 0.0
+                for (row in 0 until world.height) {
+                    val latitude = ClimateStage.latitudeOf(row, world.height)
+                    if ((latitude > 0f) != north || abs(latitude) < HIGH_SEARCH_NEAREST || abs(latitude) > HIGH_SEARCH_FARTHEST) continue
+                    for (column in 0 until world.width) {
+                        val cell = row * world.width + column
+                        if (world.sea.isLand[cell]) continue
+                        if (pressureAt(cell) > highest) { highest = pressureAt(cell); at = abs(latitude).toDouble() }
+                    }
+                }
+                found += (highest - mean) / 100.0 to at
+            }
+        }
+        return found
+    }
+
+    @Test
+    fun `the subtropical highs stand as strong as Earth's, and where Earth's do`() {
+        val strengths = ArrayList<Double>()
+        val latitudes = ArrayList<Double>()
+        val beltStrengths = ArrayList<Double>()
+        for (seed in SEEDS) {
+            val world = world(seed)
+            val highs = highs(world, withWaves = true)
+            println("MEAN CIRCULATION seed %d highs over the area mean (July north, July south, January north, January south): %s"
+                .format(seed, highs.joinToString("; ") { "%.1f hPa at %.1f".format(it.first, it.second) }))
+            strengths += highs.map { it.first }
+            latitudes += highs.map { it.second }
+            beltStrengths += highs(world, withWaves = false).map { it.first }
+        }
+        val strength = strengths.average()
+        val latitude = latitudes.average()
+        println("MEAN CIRCULATION highs pooled: %.2f hPa at %.1f degrees (Earth %.1f to %.1f hPa at %.1f to %.1f); the circulation's pressure alone %.2f hPa"
+            .format(strength, latitude, HIGH_STRENGTH_LEAST_HPA, HIGH_STRENGTH_MOST_HPA, HIGH_LATITUDE_NEAREST, HIGH_LATITUDE_FARTHEST, beltStrengths.average()))
+        assertTrue(strength in HIGH_STRENGTH_LEAST_HPA..HIGH_STRENGTH_MOST_HPA, "the highs stand %.2f hPa over the mean pooled, Earth's %.1f to %.1f".format(strength, HIGH_STRENGTH_LEAST_HPA, HIGH_STRENGTH_MOST_HPA))
+        // The control: the zonal circulation's pressure alone, which makes ridges and no highs.
+        assertTrue(beltStrengths.average() !in HIGH_STRENGTH_LEAST_HPA..HIGH_STRENGTH_MOST_HPA, "the control's ridges stand as strong as Earth's highs, so the clause shows nothing")
+        // Recorded at W2h, where it was written: the winter hemisphere's highest pressure over the
+        // sea stands at 22 to 26 degrees on every seed, with the winter ridge, six to ten degrees
+        // equatorward of Earth's (the ridge's own clause above; docs/TODO.md).
+        KnownFailures.expect("W2h: the subtropical highs stand equatorward of Earth's", "26.8") {
+            if (latitude < HIGH_LATITUDE_NEAREST || latitude > HIGH_LATITUDE_FARTHEST) {
+                throw RecordedViolation("the highs pooled at %.1f degrees, Earth's %.1f to %.1f".format(latitude, HIGH_LATITUDE_NEAREST, HIGH_LATITUDE_FARTHEST), "%.1f".format(latitude))
+            }
+        }
     }
 
     @Test

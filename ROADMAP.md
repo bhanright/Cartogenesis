@@ -9,8 +9,8 @@ table disagree, so there is nothing to keep in step by hand.
 | Release | What it brings |
 | --- | --- |
 | 3.1.0 | More consistent rainfall on large maps, monsoon coasts, more realistic ice sheets, and softer edges between forest and open land. |
-| 3.2.0 (current) | Erosion that depends on rainfall and plant cover, rivers that start where the slope and water flow allow, and ice sheets without stripes down their sides. |
-| 3.3 | An Earth-sized planet with a real atmosphere: seasons, high-pressure cells, monsoons and trade winds that decide where rain and deserts fall; plains and continental shelves in Earth's proportions; and a new map style that looks like satellite imagery. |
+| 3.2.0 | Erosion that depends on rainfall and plant cover, rivers that start where the slope and water flow allow, and ice sheets without stripes down their sides. |
+| 3.3.0 (current) | An Earth-sized planet with a real atmosphere: seasons, high-pressure cells, monsoons and trade winds that decide where rain and deserts fall; plains and continental shelves in Earth's proportions; and a new map style that looks like satellite imagery. |
 | 3.x | Storms and the jet stream, and cold ocean currents that make coastal deserts. |
 | 3.x | Waves that shape beaches, spits and barrier islands, and rivers that widen downstream, with meanders, braided reaches and marshes. |
 | 3.x | More control over how the map is drawn, and a topographic style with contour lines. |

@@ -4,6 +4,7 @@ import com.cartogenesis.cartography.MapStyle
 import com.cartogenesis.ui.ThemeChoice
 import com.cartogenesis.ui.WorldCeilings
 import java.io.File
+import kotlinx.serialization.json.jsonObject
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -52,7 +53,7 @@ class SiteSourcesTest {
      * ends them: a checkout that ends them with a carriage return as well (Git's `autocrlf` on
      * Windows) reads the same.
      */
-    private val page: String by lazy { File(repoRoot, "site/index.html").readText().replace("\r\n", "\n") }
+    private val page: String by lazy { File(repoRoot, "site/index.html").readText().replace("\r\n", "\n").replace(Regex("""\sdata-i18n(?:-[\w-]+)?="[^\"]+""""), "") }
 
     /**
      * That the Features list still counts the map styles the application offers.
@@ -1034,9 +1035,11 @@ class SiteSourcesTest {
             .joinToString(" ") { it.groupValues[1] }
         // What the script writes where a reader meets it: text, a picture's description and an
         // accessible name or value; the words are the quoted strings in each such expression.
-        val written = Regex("""(?:textContent|\.alt)\s*=\s*([^;]+);|setAttribute\('aria-[\w-]+',\s*([^;]+)\);""").findAll(pageScript)
+        val literalWords = Regex("""(?:textContent|\.alt)\s*=\s*([^;]+);|setAttribute\('aria-[\w-]+',\s*([^;]+)\);""").findAll(pageScript)
             .flatMap { Regex("""'([^'\n]*)'""").findAll(it.value.substringAfter('=').substringAfter(',')) }
             .joinToString(" ") { it.groupValues[1] }
+        val written = literalWords + SiteTranslations.catalog("en").getValue("strings").jsonObject
+            .filterKeys { it.startsWith("script.") }.values.joinToString(" ")
         assertTrue(written.contains("arrow keys"), "the script's written words were not found; this read nothing of them")
         val roadmap = File(repoRoot, "ROADMAP.md").readText()
         val found = listOf(

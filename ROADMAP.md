@@ -17,6 +17,7 @@ table disagree, so there is nothing to keep in step by hand.
 | 3.x | Faster generation on the graphics card. |
 | 3.x | A choice of how big the planet is, and saved worlds that keep opening after an update. |
 | 4.0 | The world as a sphere: a globe to turn, and a choice of map projections for the whole-world map and for exports. |
+| 4.x | 3D models of your world: terrain for game engines, 3D-printable regions and globes, and cross sections through the land. |
 | 4.x | Start from your own terrain: import a heightmap from Wonderdraft or any grayscale image, or paint the land yourself and let the climate, rivers and everything else generate around it. |
 | 5.0 | The atlas: named land and sea features, labeled the way a printed atlas labels them. Renaming places and placing labels already work and will carry over. |
 | 5.x+ | Tidal estuaries, coral reefs and atolls; then sets of map symbols, such as trees, hills and towns, to place over the map. |

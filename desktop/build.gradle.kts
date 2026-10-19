@@ -1,3 +1,7 @@
+import java.text.NumberFormat
+import java.util.Locale
+import groovy.json.JsonSlurper
+import groovy.json.JsonOutput
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.security.MessageDigest
@@ -223,6 +227,7 @@ tasks.named<Test>("test") {
         auditOnlyClasses.forEach { excludeTestsMatching(it) }
         deepClasses.forEach { excludeTestsMatching(it) }
         excludeTestsMatching(siteAssemblyClass)
+        excludeTestsMatching("com.cartogenesis.desktop.SiteLocalizationAssemblyTest")
     }
     withPerMergeBudget()
 }
@@ -481,6 +486,156 @@ fun roadmapTable(indent: String): String = buildString {
     append(indent).append("</dl>")
 }
 
+
+fun siteCatalog(file: File): Map<String, Any> {
+    @Suppress("UNCHECKED_CAST")
+    return JsonSlurper().parse(file, "UTF-8") as Map<String, Any>
+}
+
+fun catalogStrings(catalog: Map<String, Any>, group: String = "strings"): Map<String, String> {
+    @Suppress("UNCHECKED_CAST")
+    return catalog.getValue(group) as Map<String, String>
+}
+
+fun validateSiteCatalog(source: Map<String, Any>, translated: Map<String, Any>) {
+    for (group in listOf("strings", "roadmap", "glossary")) {
+        val original = source[group] as Map<*, *>
+        val values = translated[group] as? Map<*, *> ?: error("Missing catalog group: $group")
+        check(original.keys == values.keys) { "Catalog keys differ: $group" }
+        for ((key, value) in original) {
+            val replacement = values[key]
+            if (group == "roadmap") {
+                check(replacement is List<*> && replacement.size == (value as List<*>).size &&
+                    replacement.all { it is String && it.isNotBlank() }) { "Roadmap rows differ or are empty: $key" }
+            } else {
+                check(replacement is String && replacement.isNotBlank()) { "Missing or empty translation: $key" }
+                val placeholders = Regex("\\{[a-zA-Z]+\\}|__[A-Z_]+__")
+                check(placeholders.findAll(value as String).map { it.value }.sorted().toList() ==
+                    placeholders.findAll(replacement).map { it.value }.sorted().toList()) { "Translation changes placeholders: $key" }
+            }
+        }
+    }
+}
+
+fun renderSiteTemplate(template: String, strings: Map<String, String>): String {
+    data class Element(val tag: String, val key: String?, val content: Int)
+    data class Edit(val start: Int, val end: Int, val value: String)
+    val stack = mutableListOf<Element>()
+    val edits = mutableListOf<Edit>()
+    val voidElements = "area base br col embed hr img input link meta param source track wbr".split(' ')
+    val tokens = Regex("""<!--[\s\S]*?-->|<script\b[^>]*>[\s\S]*?</script>|<style\b[^>]*>[\s\S]*?</style>|<![^>]*>|</?[a-zA-Z][^>]*>""")
+    fun required(key: String) = strings[key]?.takeIf { it.isNotBlank() } ?: error("Missing or empty translation: $key")
+    fun matches(pattern: String, value: String) = Regex(pattern).findAll(value).map { it.value }.sorted().toList()
+    for (match in tokens.findAll(template)) {
+        val raw = match.value
+        if (raw.startsWith("<!")) continue
+        val tag = Regex("""^</?([\w-]+)""").find(raw)!!.groupValues[1].lowercase()
+        if (raw.startsWith("</")) {
+            check(stack.isNotEmpty()) { "Unbalanced template element: $tag" }
+            val element = stack.removeAt(stack.lastIndex)
+            check(element.tag == tag) { "Unbalanced template element: $tag" }
+            element.key?.let { key ->
+                val original = template.substring(element.content, match.range.first)
+                val replacement = required(key)
+                check(matches("<[^>]+>", original) == matches("<[^>]+>", replacement)) { "Translation changes markup: $key" }
+                check(matches("""<code\b[^>]*>[\s\S]*?</code>""", original) == matches("""<code\b[^>]*>[\s\S]*?</code>""", replacement)) { "Translation changes code: $key" }
+                edits += Edit(element.content, match.range.first,
+                    original.takeWhile { it.isWhitespace() } + replacement + original.takeLastWhile { it.isWhitespace() })
+            }
+            continue
+        }
+        val opening = raw.substringBefore('>') + ">"
+        val key = Regex("""\sdata-i18n="([^"]+)"""").find(opening)?.groupValues?.get(1)
+        check(key == null || stack.none { it.key != null }) { "Nested translation key: $key" }
+        var rendered = opening
+        for (attribute in Regex("""\sdata-i18n-([\w-]+)="([^"]+)"""").findAll(opening)) {
+            val name = attribute.groupValues[1]
+            val value = required(attribute.groupValues[2])
+            check(value.none { it == '<' || it == '>' || it == '"' }) { "Unsafe attribute translation: $name" }
+            val pattern = Regex("""(\s$name=")[^"]*(")""")
+            check(pattern.containsMatchIn(rendered)) { "Missing translated attribute: $name" }
+            rendered = pattern.replace(rendered) { it.groupValues[1] + value + it.groupValues[2] }
+        }
+        rendered = rendered.replace(Regex("""\sdata-i18n(?:-[\w-]+)?="[^"]+""""), "")
+        if (rendered != opening) edits += Edit(match.range.first, match.range.first + opening.length, rendered)
+        if (tag !in listOf("script", "style") && tag !in voidElements && !opening.endsWith("/>")) {
+            stack += Element(tag, key, match.range.first + opening.length)
+        }
+    }
+    check(stack.isEmpty()) { "Unclosed template elements" }
+    var result = template
+    for (edit in edits.sortedByDescending { it.start }) result = result.replaceRange(edit.start, edit.end, edit.value)
+    return result
+}
+
+data class SiteLanguage(val code: String, val tag: String, val name: String, val locale: String) {
+    val path: String get() = if (code == "en") "/" else "/$code/"
+    val url: String get() = "https://cartogenesis.com$path"
+}
+val siteLanguages = listOf(
+    SiteLanguage("en", "en", "English", "en_US"),
+    SiteLanguage("zh", "zh-Hans", "简体中文", "zh_CN"),
+    SiteLanguage("hi", "hi", "हिन्दी", "hi_IN"),
+    SiteLanguage("es", "es", "Español", "es_ES"),
+    SiteLanguage("ar", "ar", "العربية", "ar_SA"),
+    SiteLanguage("fr", "fr", "Français", "fr_FR"),
+    SiteLanguage("bn", "bn", "বাংলা", "bn_BD"),
+    SiteLanguage("pt", "pt", "Português", "pt_BR"),
+    SiteLanguage("ru", "ru", "Русский", "ru_RU")
+)
+
+fun localizedSitePage(template: String, catalog: Map<String, Any>, language: SiteLanguage): String {
+    val strings = catalogStrings(catalog)
+    var page = renderSiteTemplate(template, strings)
+    page = page.replace("<html lang=\"en\">", "<html lang=\"${language.tag}\" dir=\"${if (language.code == "ar") "rtl" else "ltr"}\">")
+    page = page.replace("<link rel=\"canonical\" href=\"https://cartogenesis.com/\">",
+        "<link rel=\"canonical\" href=\"${language.url}\">" + siteLanguages.joinToString("") {
+            "\n<link rel=\"alternate\" hreflang=\"${it.tag}\" href=\"${it.url}\">"
+        } + "\n<link rel=\"alternate\" hreflang=\"x-default\" href=\"https://cartogenesis.com/\">\n<meta property=\"og:locale\" content=\"${language.locale}\">")
+    page = page.replace("<meta property=\"og:url\" content=\"https://cartogenesis.com/\">", "<meta property=\"og:url\" content=\"${language.url}\">")
+    val structuredPattern = Regex("""(<script type="application/ld\+json">)([\s\S]*?)(</script>)""")
+    page = structuredPattern.replace(page) { match ->
+        @Suppress("UNCHECKED_CAST")
+        val data = JsonSlurper().parseText(match.groupValues[2]) as MutableMap<String, Any>
+        data["description"] = strings.getValue("structured.description")
+        data["url"] = language.url
+        data["inLanguage"] = language.tag
+        match.groupValues[1] + "\n" + JsonOutput.prettyPrint(JsonOutput.toJson(data)).replace("<", "\\u003c") + "\n" + match.groupValues[3]
+    }
+    val navigation = "<nav class=\"languages\" aria-label=\"${strings.getValue("language.label")}\">" + siteLanguages.joinToString(" ") {
+        "<a href=\"${it.path}\" lang=\"${it.tag}\" hreflang=\"${it.tag}\"" +
+            (if (it.code == language.code) " aria-current=\"page\"" else "") + ">" + it.name + "</a>"
+    } + "</nav>"
+    page = page.replace("<body>", "<body>\n<header>$navigation</header>")
+    if (language.code != "en") page = page.replace("</footer>",
+        "<p class=\"translation-note\"><a href=\"https://github.com/bhanright/Cartogenesis/issues\">${strings.getValue("translation.note")}</a></p>\n</footer>")
+    @Suppress("UNCHECKED_CAST")
+    val roadmap = catalog.getValue("roadmap") as Map<String, List<String>>
+    val positions = mutableMapOf<String, Int>()
+    val table = buildString {
+        append("<dl class=\"spec\">")
+        for (row in roadmapRows()) {
+            val position = positions.getOrDefault(row.release, 0)
+            positions[row.release] = position + 1
+            val mark = if (row.current) "<span class=\"tag\">${asHtmlText(strings.getValue("roadmap.current"))}</span>" else ""
+            append("\n  <div><dt>${asHtmlText(row.release)}$mark</dt><dd>${asHtmlText(roadmap.getValue(row.release)[position])}</dd></div>")
+        }
+        append("\n</dl>")
+    }
+    page = page.replace(roadmapMarker, table)
+    val messages = strings.filterKeys { it.startsWith("script.") }
+    page = page.replace("<!-- SITE_MESSAGES -->", "<script>\nvar siteMessages = " +
+        JsonOutput.toJson(messages).replace("<", "\\u003c") + ";\n" +
+        "function siteText(key, values) { return siteMessages['script.' + key].replace(/\\{([a-zA-Z]+)\\}/g, function (_, name) { return values[name]; }); }\n" +
+        "function siteNumber(value, options) { return new Intl.NumberFormat(document.documentElement.lang, options).format(value); }\n</script>")
+    // Assets keep their root addresses when a page lives in a language directory.
+    if (language.code != "en") {
+        page = page.replace(Regex("""(["'])(img/|fonts/)""")) { it.groupValues[1] + "/" + it.groupValues[2] }
+        page = page.replace(Regex("""(?<=, )(img/)"""), "/img/")
+    }
+    return page
+}
+
 /**
  * Assembles the whole of cartogenesis.com into `desktop/build/site`, ready to hand to a static host:
  * the stored browser application under `app/`, `site/` laid over it, and the figures.
@@ -507,6 +662,7 @@ tasks.register<Sync>("assembleSite") {
     // The roadmap the landing page draws: a change to it has to re-assemble the page, and Gradle
     // cannot see a file read inside a copy action.
     inputs.file(roadmapFile).withPropertyName("roadmapTheLandingPageDraws")
+    inputs.dir(rootProject.file("site/i18n")).withPropertyName("siteTranslationCatalogs")
 
     // The stored application first, so that the pages below are laid over it. Its own copy of the
     // shell is never in the zip; `site/app/index.html` is the shell.
@@ -534,6 +690,7 @@ tasks.register<Sync>("assembleSite") {
     from(rootProject.layout.projectDirectory.dir("site")) {
         // Documentation for whoever maintains the site, not part of the site.
         exclude("README.md")
+        exclude("i18n/**")
 
         // Three files that are about the site rather than part of it: the list of release file
         // names the page's Download and Installation section is checked against, the rule that
@@ -549,16 +706,9 @@ tasks.register<Sync>("assembleSite") {
         // reads: the fonts are published, these two are not.
         exclude("fonts/build_web_fonts.py")
         exclude("fonts/faces.json")
+        exclude("fonts/sources/**")
         exclude("apt/.gitignore")
         exclude("apt/conf/**")
-
-        // The landing page's "What comes next" table, put in where the page keeps its marker.
-        // A whole-line replacement, so the table takes the marker's own indentation with it.
-        filesMatching("index.html") {
-            filter { line ->
-                if (line.trim() == roadmapMarker) roadmapTable(line.substringBefore("<")) else line
-            }
-        }
 
         filesMatching("app/index.html") {
             filter { line ->
@@ -583,11 +733,24 @@ tasks.register<Sync>("assembleSite") {
 
     doLast {
         val site = destinationDir
+        val english = siteCatalog(rootProject.file("site/i18n/en.json"))
+        validateSiteCatalog(english, english)
+        val englishTemplate = rootProject.file("site/index.html").readText(Charsets.UTF_8)
+        check(renderSiteTemplate(englishTemplate, catalogStrings(english)) == englishTemplate.replace(Regex("""\sdata-i18n(?:-[\w-]+)?="[^\"]+""""), "")) { "The English catalog differs from the template" }
+        val landingPage = File(site, "index.html")
+        val template = landingPage.readText(Charsets.UTF_8)
+        for (language in siteLanguages) {
+            val catalog = siteCatalog(rootProject.file("site/i18n/${language.code}.json"))
+            validateSiteCatalog(english, catalog)
+            val output = File(site, if (language.code == "en") "index.html" else "${language.code}/index.html")
+            output.parentFile.mkdirs()
+            output.writeText(localizedSitePage(template, catalog, language), Charsets.UTF_8)
+        }
 
         // What the download weighs, written into both pages that quote it, from one measurement of
         // the tree that is about to be published.
         val megabytes = engineDownloadMegabytes(File(site, "app"))
-        listOf("index.html", "app/index.html").forEach { path ->
+        (siteLanguages.map { if (it.code == "en") "index.html" else "${it.code}/index.html" } + "app/index.html").forEach { path ->
             val page = File(site, path)
             val before = page.readText(Charsets.UTF_8)
             // A page that has lost the token is a page that has stopped saying how big the
@@ -596,7 +759,7 @@ tasks.register<Sync>("assembleSite") {
                 "$path no longer carries $bundleSizePlaceholder, so nothing measures the size " +
                     "it tells a reader to expect"
             }
-            page.writeText(before.replace(bundleSizePlaceholder, megabytes), Charsets.UTF_8)
+            page.writeText(before.replace(bundleSizePlaceholder, if (path == "app/index.html") megabytes else NumberFormat.getNumberInstance(Locale.forLanguageTag(if (path == "index.html") "en" else path.substringBefore('/'))).format(megabytes.toDouble())), Charsets.UTF_8)
         }
         logger.lifecycle("The browser preview is $megabytes MB compressed; both pages say so")
 
@@ -655,6 +818,10 @@ tasks.register<Test>("siteTest") {
     classpath = testTask.classpath
     filter {
         includeTestsMatching(siteAssemblyClass)
+        includeTestsMatching("com.cartogenesis.desktop.SiteLocalizationAssemblyTest")
+        includeTestsMatching("com.cartogenesis.desktop.SiteTranslationTemplateTest")
+        includeTestsMatching("com.cartogenesis.desktop.SiteFontsTest")
+        includeTestsMatching("com.cartogenesis.desktop.SiteSourcesTest")
         isFailOnNoMatchingTests = true
     }
     // It reads a tree of files and generates nothing: the largest thing it holds is the opening's

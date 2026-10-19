@@ -160,20 +160,17 @@ class GlaciationTest : BorrowsSharedWorlds() {
         // Armed at A1-6b, whose ice leaves both contrasts standing (docs/DESIGN_LEDGER.md, A1-6b).
         // Recorded at W2d, whose ground return's store moved the provisional climate's ice: the ice
         // still takes cold country's lakes up sixfold, and the iced zone's ratio stands at 2.28
-        // (docs/DESIGN_LEDGER.md, W2d; docs/TODO.md).
+        // (docs/DESIGN_LEDGER.md, W2d; docs/TODO.md). Armed again at W2h, whose ice leaves both
+        // contrasts standing.
         val tripled = with.coldLakes.toLong() * without.coldLand >= 3L * without.coldLakes * with.coldLand
         val contrasted = with.ratio >= COLD_LAKE_RATIO
-        KnownFailures.expect("W2d: the iced zone holds under two and a half times temperate country's lakes", "zone ratio 2.23") {
-            if (!(tripled && contrasted)) {
-                throw RecordedViolation(
-                    ("the ice takes cold-country lakes from %.2f to %.2f per 10k cells, asked three times, " +
-                        "and the iced zone ratio to %.2f, asked %.1f").format(
-                        Locale.ROOT, without.coldDensity, with.coldDensity, with.ratio, COLD_LAKE_RATIO
-                    ),
-                    "zone ratio %.2f".format(Locale.ROOT, with.ratio)
-                )
-            }
-        }
+        assertTrue(
+            ("the ice takes cold-country lakes from %.2f to %.2f per 10k cells, asked three times, " +
+                "and the iced zone ratio to %.2f, asked %.1f").format(
+                Locale.ROOT, without.coldDensity, with.coldDensity, with.ratio, COLD_LAKE_RATIO
+            ),
+            tripled && contrasted
+        )
     }
 
     private companion object {

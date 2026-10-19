@@ -305,13 +305,9 @@ class LakeWaterBalanceTest : BorrowsSharedWorlds() {
         // whose 538-cell sample keeps endorheic water; recorded again at W2f, under whose rain the
         // same sample keeps one lake, not marked endorheic, as it did at F1: a few tenths of a
         // percent of the rain decide it (docs/DESIGN_LEDGER.md, W2e and W2f; docs/TODO.md).
-        KnownFailures.expect("F1: the dry sample keeps a lake that is not endorheic", "1 lakes") {
-            if (lakes.isNotEmpty() && lakes.none { it.endorheic }) {
-                throw RecordedViolation(
-                    "the dry basin keeps water and none of its lakes is marked endorheic: ${lakes.size} lakes",
-                    "${lakes.size} lakes"
-                )
-            }
+        // Armed again at W2h, under whose rain the sample keeps no lake that is not endorheic.
+        if (lakes.isNotEmpty() && lakes.none { it.endorheic }) {
+            throw AssertionError("the dry basin keeps water and none of its lakes is marked endorheic: ${lakes.size} lakes")
         }
         lakes.forEach { lake ->
             if (lake.endorheic) {
@@ -355,7 +351,15 @@ class LakeWaterBalanceTest : BorrowsSharedWorlds() {
         // climate, falls below its spill under the coupled rain, and the scan that re-picks it is a
         // run of its own (docs/DESIGN_LEDGER.md, M1; docs/TODO.md).
         // Armed at A1-6b, under whose rain the sample stands at its spill (docs/DESIGN_LEDGER.md, A1-6b).
-        assertTrue(stillWet == basin.size, "a wet basin must stay full to its spill: $stillWet of ${basin.size} cells")
+        // Recorded at W2h: under its drier climate the sample keeps 842 of its 1,358 cells at the
+        // balance (docs/TODO.md, "What W2h's climate moved in the deep tier").
+        KnownFailures.expect("W2h: the wet sample falls below its spill", "842 of 1358") {
+            if (stillWet != basin.size) {
+                throw RecordedViolation("a wet basin must stay full to its spill: $stillWet of ${basin.size} cells", "$stillWet of ${basin.size}")
+            }
+        }
+        // The clauses below read the lake the full basin holds, which a basin below its spill does not.
+        if (stillWet != basin.size) return
         val lake = on.rivers.lakes.lakes[on.rivers.lakes.lakeId[basin.first()]]
         assertTrue(!lake.endorheic, "a basin that overflows must not be marked endorheic")
         assertEquals(

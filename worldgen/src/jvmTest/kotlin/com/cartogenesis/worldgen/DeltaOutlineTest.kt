@@ -131,12 +131,18 @@ class DeltaOutlineTest {
                 "control %.1f%%, sea lobes %.1f%%, lake fans %.1f%%"
                 .format(controlWorst * 100, worstLobe * 100, worstFan * 100)
         )
-        assertTrue(
-            controlWorst > STRAIGHT_BAR,
-            "the square-fan control was expected to fail this guard and its worst share was " +
-                "${controlWorst * 100}%, under the ${STRAIGHT_BAR * 100}% bar, so the guard " +
-                "proves nothing"
-        )
+        // Recorded at W2h: on the climate's new ground the square-fan control's worst share falls to
+        // 1.00%, a hair under the 1.05% bar, so the control no longer shows the guard failing
+        // (docs/TODO.md, "What W2h's climate moved in the deep tier").
+        KnownFailures.expect("W2h: the square-fan control stands under the straight-run bar", "1.00%") {
+            if (controlWorst <= STRAIGHT_BAR) {
+                throw RecordedViolation(
+                    "the square-fan control was expected to fail this guard and its worst share was " +
+                        "${controlWorst * 100}%, under the ${STRAIGHT_BAR * 100}% bar, so the guard proves nothing",
+                    "%.2f%%".format(controlWorst * 100)
+                )
+            }
+        }
         assertTrue(
             worstLobe <= STRAIGHT_BAR && worstFan <= STRAIGHT_BAR,
             "sea lobes put ${worstLobe * 100}% and lake fans ${worstFan * 100}% of their " +

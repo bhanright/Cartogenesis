@@ -286,6 +286,19 @@ internal class HadleyCirculation private constructor(
     val southBelt: Belt = Belt(southEdgeDegrees)
 
     /**
+     * The surface wind poleward of cells whose edges stand at [northBelt]'s and [southBelt]'s
+     * (their own, as [LocalCirculation] places them at each longitude), meters a second, eastward
+     * and northward: the belts under this circulation's westerly peaks, with their meridional legs.
+     * For a latitude inside those edges, the calm the cells' edges meet the belts at.
+     */
+    fun beltWindMps(latitudeDegrees: Double, northBelt: Belt, southBelt: Belt): Pair<Double, Double> {
+        val north = latitudeDegrees >= 0.0
+        val eastward = if (north) northBelt.eastwardMps(latitudeDegrees, northWesterlyPeakMps)
+        else southBelt.eastwardMps(-latitudeDegrees, southWesterlyPeakMps)
+        return eastward to (if (north) 1.0 else -1.0) * meridionalShare * eastward
+    }
+
+    /**
      * The surface wind at [latitudeDegrees] under the westerly peaks [northPeakMps] and
      * [southPeakMps], meters a second, eastward and northward.
      */
@@ -756,17 +769,16 @@ internal class HadleyCirculation private constructor(
          * mean air's ([ZonalClimate.bandC]) in the half, the stratification and depth the repository's
          * ([PressureWind.BUOYANCY_FREQUENCY_PER_S], [PressureWind.TROPOPAUSE_DEPTH_M]).
          */
-        fun baroclinicOnsetDegrees(zonal: ZonalClimate, season: Season, north: Boolean, fromDegrees: Double): Double? {
-            val band = zonal.bandC(season)
-            fun airC(fromEquator: Double) = zonal.bandValueAt(band, (if (north) fromEquator else -fromEquator).toFloat()).toDouble()
-            val stratification = PressureWind.BUOYANCY_FREQUENCY_PER_S * PressureWind.BUOYANCY_FREQUENCY_PER_S *
-                PressureWind.TROPOPAUSE_DEPTH_M / DryAir.GRAVITY_MPS2
-            fun supercriticality(fromEquator: Double): Double {
-                val polewardDrop = (airC(fromEquator - GRADIENT_HALF_SPAN_DEGREES) - airC(fromEquator + GRADIENT_HALF_SPAN_DEGREES)) /
-                    (2.0 * GRADIENT_HALF_SPAN_DEGREES * DEGREES)
-                val kelvin = airC(fromEquator) + ColumnWater.KELVIN_AT_ZERO_C
-                return 2.0 * tan(fromEquator * DEGREES) * polewardDrop / (kelvin * stratification)
-            }
+        fun baroclinicOnsetDegrees(zonal: ZonalClimate, season: Season, north: Boolean, fromDegrees: Double): Double? =
+            baroclinicOnsetDegrees(zonal.bandC(season), zonal, north, fromDegrees)
+
+        /**
+         * [baroclinicOnsetDegrees] read on the air [bandsC], degrees Celsius per band of the energy
+         * balance [zonal] (whose interpolation between band centers it uses): a sector's own air,
+         * its land and marine columns by the sector's land share, as [LocalCirculation] reads it.
+         */
+        fun baroclinicOnsetDegrees(bandsC: FloatArray, zonal: ZonalClimate, north: Boolean, fromDegrees: Double): Double? {
+            fun supercriticality(fromEquator: Double) = supercriticality(bandsC, zonal, north, fromEquator)
             var previous = maxOf(fromDegrees, ONSET_STEP_DEGREES)
             var previousValue = supercriticality(previous)
             if (previousValue >= 1.0) return previous
@@ -779,6 +791,26 @@ internal class HadleyCirculation private constructor(
             }
             return null
         }
+
+        /**
+         * Held's two-layer supercriticality ([baroclinicOnsetDegrees]) of the air [bandsC] (degrees
+         * Celsius per band of [zonal]) at [fromEquator] degrees from the equator in the northern
+         * hemisphere when [north] or the southern: one where the troposphere turns unstable.
+         */
+        fun supercriticality(bandsC: FloatArray, zonal: ZonalClimate, north: Boolean, fromEquator: Double): Double {
+            fun airC(degrees: Double) = zonal.bandValueAt(bandsC, (if (north) degrees else -degrees).toFloat()).toDouble()
+            val stratification = PressureWind.BUOYANCY_FREQUENCY_PER_S * PressureWind.BUOYANCY_FREQUENCY_PER_S *
+                PressureWind.TROPOPAUSE_DEPTH_M / DryAir.GRAVITY_MPS2
+            val polewardDrop = (airC(fromEquator - GRADIENT_HALF_SPAN_DEGREES) - airC(fromEquator + GRADIENT_HALF_SPAN_DEGREES)) /
+                (2.0 * GRADIENT_HALF_SPAN_DEGREES * DEGREES)
+            val kelvin = airC(fromEquator) + ColumnWater.KELVIN_AT_ZERO_C
+            return 2.0 * tan(fromEquator * DEGREES) * polewardDrop / (kelvin * stratification)
+        }
+
+        /** [supercriticality]'s slope at [fromEquator], per degree poleward, by the onset search's own step either side. */
+        fun supercriticalitySlopePerDegree(bandsC: FloatArray, zonal: ZonalClimate, north: Boolean, fromEquator: Double): Double =
+            (supercriticality(bandsC, zonal, north, fromEquator + ONSET_STEP_DEGREES) -
+                supercriticality(bandsC, zonal, north, fromEquator - ONSET_STEP_DEGREES)) / (2.0 * ONSET_STEP_DEGREES)
 
         /** The half-span the band's gradient is taken across, degrees: two thirds of a band of the energy balance's. */
         private const val GRADIENT_HALF_SPAN_DEGREES = 0.5

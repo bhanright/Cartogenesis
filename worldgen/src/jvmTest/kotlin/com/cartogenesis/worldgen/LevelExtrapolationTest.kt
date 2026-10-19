@@ -58,7 +58,7 @@ class LevelExtrapolationTest {
         val coarse = AtmosphereLevels.equalMass(4)
         val fine = AtmosphereLevels.equalMass(8)
         fun linear(pressurePa: Double) = 3.0 - 2.0e-5 * pressurePa
-        val fields = Array(coarse.levelCount) { DoubleArray(2) { linear(coarse.levelPressurePa[it]) } }
+        val fields = Array(coarse.levelCount) { level -> DoubleArray(2) { linear(coarse.levelPressurePa[level]) } }
         for (pressure in fine.levelPressurePa) {
             val carried = LevelExtrapolation.coarseAt(fields, coarse.levelPressurePa, pressure, 2)
             assertTrue(abs(carried[0] - linear(pressure)) < 1e-12, "at $pressure Pa: ${carried[0]} against ${linear(pressure)}")

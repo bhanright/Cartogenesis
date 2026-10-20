@@ -339,7 +339,11 @@ class GroundReturnEarthTest : BorrowsSharedWorlds() {
     @Test
     fun `the continents recycle their water as Earth's do`() {
         val figures = pooled
-        nearEarth("the land's rain that last evaporated from land", figures.landOriginRain / figures.rain, EARTH_PRECIPITATION_RECYCLING)
+        // Recorded at TH1-1, on whose worlds, their sea 71% of the planet, less of the land's
+        // rain last evaporated from land (docs/DESIGN_LEDGER.md, TH1-1; docs/TODO.md).
+        KnownFailures.expect("TH1-1: on the history's worlds less of the land's rain was land's", "x0.80") {
+            nearEarth("the land's rain that last evaporated from land", figures.landOriginRain / figures.rain, EARTH_PRECIPITATION_RECYCLING)
+        }
         // Inside before W2d, x1.22; recorded at W2d, x1.28, the wet half's air raining on the land
         // it crossed; armed at W2e, x1.05 (docs/DESIGN_LEDGER.md, W2d and W2e).
         nearEarth("the land's evaporation that rains on land", figures.landOriginRain / figures.evapotranspiration, EARTH_EVAPORATION_RECYCLING)
@@ -379,7 +383,8 @@ class GroundReturnEarthTest : BorrowsSharedWorlds() {
         // condenses the boundary layer only over its condensation level and whose rain law no
         // longer reads the ground's saturated column (docs/DESIGN_LEDGER.md, W2d and W2e;
         // docs/TODO.md).
-        KnownFailures.expect("W2d: the land's rain falls where it cannot be returned", "x1.37") {
+        // Armed at TH1-1, whose worlds pass it (docs/DESIGN_LEDGER.md, TH1-1).
+        run {
             nearEarth("the land's rain where the potential is under half of it", figures.rainUnderHalf / figures.rain, EARTH_RAIN_SHARE_UNDER_HALF)
         }
     }

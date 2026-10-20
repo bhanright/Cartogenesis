@@ -228,7 +228,7 @@ class RainAgainstEarthTest : BorrowsSharedWorlds() {
         // again at F1, whose water travels on the column's vapor-weighted wind and whose rising
         // branch moves with the land, so the band is broader and its peak lower; x0.70 at W2e
         // (docs/TODO.md).
-        KnownFailures.expect("F1: the ocean's wettest band rains under Earth's", "x0.73") {
+        KnownFailures.expect("F1: the ocean's wettest band rains under Earth's", "x0.75") {
             nearEarth("the ocean's wettest two degrees, mm", pooledPeak, GPCP_OCEAN_PEAK_MM)
         }
     }

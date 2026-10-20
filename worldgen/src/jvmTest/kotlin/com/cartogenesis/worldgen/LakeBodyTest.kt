@@ -84,7 +84,8 @@ class LakeBodyTest : BorrowsSharedWorlds() {
         // same few-cell lakes that come and go with any change of the rain, here the exchange
         // inside the march's lap moving it by a few tenths of a percent (docs/DESIGN_LEDGER.md, H1,
         // M1, A1-6a, F1, W2e and W2f; docs/TODO.md).
-        KnownFailures.expect("F1: a lake in two pieces on the circulation by longitude's ground", "seed 42: [lake 67 in 2 pieces, lake 89 in 2 pieces]") {
+        // Armed at TH1-1, whose worlds pass it (docs/DESIGN_LEDGER.md, TH1-1).
+        run {
             if (pieceFailures.isNotEmpty()) {
                 throw RecordedViolation("a body of water holds more than one piece: $pieceFailures", pieceFailures.joinToString("; "))
             }
@@ -157,7 +158,8 @@ class LakeBodyTest : BorrowsSharedWorlds() {
         // own accounting, not traced (docs/TODO.md). Armed at W2b, whose ground leaves none. Recorded
         // at W2e, whose ground leaves one basin of six cells in seed 1234's dry country handed 1.05
         // times the rain reaching it, the same accounting, not traced (docs/TODO.md).
-        KnownFailures.expect("W2e: a small dry basin on seed 1234 handed more than the rain reaching it", "seed 7: 5 cells x1.00; seed 1234: 6 cells x1.04") {
+        // Armed at TH1-1, whose worlds pass it (docs/DESIGN_LEDGER.md, TH1-1).
+        run {
             if (failures.isNotEmpty()) throw RecordedViolation("rain counted twice or lost: $failures", shortFailures.joinToString("; "))
         }
     }

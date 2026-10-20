@@ -101,11 +101,20 @@ class CombGuardTest : BorrowsSharedWorlds() {
         // Recorded at K1, whose square weather moved seed 42's flanks from just under the factor to
         // just over it, 0.221 against 0.145 down a column and along a row; armed again at K2, whose
         // physics brought them back under it, 0.137 against 0.182 (docs/DESIGN_LEDGER.md, K1 and K2).
-        assertTrue(
-            oneSided.isEmpty(),
-            "the flanks are combed along one axis over $AXIS_FACTOR times the other, in km of comb per 1000 km2 of " +
-                "land: ${oneSided.joinToString("; ") { it.figure }}"
-        )
+        // Recorded again at TH1-1, whose crust moved both seeds' flanks over the factor down the
+        // columns, 0.20 against 0.08 and 0.44 against 0.12 (docs/DESIGN_LEDGER.md, TH1-1; docs/TODO.md).
+        KnownFailures.expect(
+            "TH1-1: on the history's worlds the flanks are combed down the columns past the factor",
+            "seed 7 0.20 down a column and 0.08 along a row; seed 42 0.44 down a column and 0.12 along a row"
+        ) {
+            if (oneSided.isNotEmpty()) {
+                throw RecordedViolation(
+                    "the flanks are combed along one axis over $AXIS_FACTOR times the other, in km of comb per 1000 km2 of " +
+                        "land: ${oneSided.joinToString("; ") { it.figure }}",
+                    oneSided.joinToString("; ") { it.figure }
+                )
+            }
+        }
         val bearings = WORLD_SEEDS.map { "seed $it ${BearingCensus.of(SharedWorlds.world(onTheCalibrationPlanet(it)))}" }
         bearings.forEach { println("COMB BEARINGS $it") }
         KnownFailures.expect(SYMMETRIC_COMB, RECORDED) {

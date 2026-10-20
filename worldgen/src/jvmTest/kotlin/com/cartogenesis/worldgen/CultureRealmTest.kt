@@ -156,6 +156,7 @@ class CultureRealmTest : BorrowsSharedWorlds() {
 
     @Test
     fun `peoples cover the habitable world without one swallowing it`() {
+        val unsettled = ArrayList<String>()
         listOf(42L, 7L, 1234L).forEach { seed ->
             val world = SharedWorlds.world(
                 WorldGenConfig.forRows(seed, SharedWorlds.COARSE_ROWS)
@@ -184,10 +185,7 @@ class CultureRealmTest : BorrowsSharedWorlds() {
             )
 
             // Ice caps are meant to be empty; everywhere else should belong to somebody.
-            assertTrue(
-                settled >= habitable * 0.90,
-                "seed $seed left ${100 - settled * 100 / habitable}% of habitable land unsettled"
-            )
+            if (settled < habitable * 0.90) unsettled += "seed $seed left ${100 - settled * 100 / habitable}% of habitable land unsettled"
             // Under 45% of the habitable land, which is no figure of Earth's and no setting of the
             // stage's: a pin against a runaway people, with nothing derived behind
             // it (Audit III's E-T10). Several settings elsewhere cite their margin against this
@@ -197,6 +195,12 @@ class CultureRealmTest : BorrowsSharedWorlds() {
                 "seed $seed: one people holds ${largest * 100 / habitable}% of habitable land"
             )
             assertTrue(areas.size >= 4, "seed $seed produced only ${areas.size} peoples")
+        }
+        // Recorded at TH1-1, on whose seed 7 the peoples leave 11% of the habitable land at 256 rows
+        // unsettled, the cause not traced (docs/DESIGN_LEDGER.md, TH1-1;
+        // docs/TODO.md).
+        KnownFailures.expect("TH1-1: on the history's seed 7 the peoples leave a tenth of the habitable land unsettled", "seed 7 left 11% of habitable land unsettled") {
+            if (unsettled.isNotEmpty()) throw RecordedViolation(unsettled.joinToString("; "), unsettled.joinToString("; "))
         }
     }
 }

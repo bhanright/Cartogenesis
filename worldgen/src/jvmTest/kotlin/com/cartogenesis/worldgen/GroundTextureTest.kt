@@ -144,7 +144,8 @@ class GroundTextureTest : BorrowsSharedWorlds() {
         // circulation's rain left seed 42 lakes over 4.4% of its land (docs/TODO.md). Armed again at
         // W2c, the pooled share 0.0149 against the bar's 0.0167. Recorded at W2e, 0.0253, whose land
         // rains where its interiors were desert and fills the closed basins there (docs/TODO.md).
-        KnownFailures.expect("W2e: the wetter interiors' basins hold more lake than Earth's", "0.0237") {
+        // Armed at TH1-1, whose worlds pass it (docs/DESIGN_LEDGER.md, TH1-1).
+        run {
             if (pooledLakes > earthLakeShare * LAKE_SHARE_ALLOWANCE) {
                 throw RecordedViolation(
                     "lakes cover ${"%.4f".format(pooledLakes)} of the land, more than half again Earth's" +

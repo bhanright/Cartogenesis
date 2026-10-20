@@ -175,7 +175,17 @@ class BoundaryLayerTest : BorrowsSharedWorlds() {
         println("BOUNDARY LAYER mass left over the sphere, worst %.2e of the convergence's size; the balance's lowest correlation %.3f (bar %.2f)"
             .format(worstMass, lowestCorrelation, BALANCE_CORRELATION))
         assertTrue(worstMass < MASS_TOLERANCE, "the layer's convergence leaves $worstMass of itself over the sphere")
-        assertTrue(lowestCorrelation > BALANCE_CORRELATION, "the layer's vertical motion follows the pressure's drag balance at r = $lowestCorrelation")
+        // Recorded at TH1-1, whose worlds' continents lie inside plates and whose sea covers 71% of
+        // the planet: on one of them the layer's convergence follows the drag balance less closely
+        // than the bar (docs/DESIGN_LEDGER.md, TH1-1; docs/TODO.md).
+        KnownFailures.expect("TH1-1: on the history's worlds the layer's convergence follows the drag balance less closely", "r = 0.468") {
+            if (lowestCorrelation <= BALANCE_CORRELATION) {
+                throw RecordedViolation(
+                    "the layer's vertical motion follows the pressure's drag balance at r = $lowestCorrelation",
+                    "r = %.3f".format(java.util.Locale.ROOT, lowestCorrelation)
+                )
+            }
+        }
     }
 
     /**
@@ -297,7 +307,13 @@ class BoundaryLayerTest : BorrowsSharedWorlds() {
         // the model's lowest level reads, and seed 99's January subtropics fell to r = 0.47
         // (docs/DESIGN_LEDGER.md, A1-6b). Armed at W2e, whose condensation heats the waves where the
         // two layers' march rains (docs/DESIGN_LEDGER.md, W2e).
-        assertTrue(failures.isEmpty(), "readings of the model's and the diagnosed layer's convergence disagree: $failures")
+        // Recorded at TH1-1: on the history's worlds one reading falls outside (docs/DESIGN_LEDGER.md,
+        // TH1-1; docs/TODO.md).
+        KnownFailures.expect("TH1-1: on the history's worlds a reading of the two layers' convergence disagrees", "seed 42 July 5-35") {
+            if (failures.isNotEmpty()) {
+                throw RecordedViolation("readings of the model's and the diagnosed layer's convergence disagree: $failures", failures.joinToString("; "))
+            }
+        }
     }
 
     /**

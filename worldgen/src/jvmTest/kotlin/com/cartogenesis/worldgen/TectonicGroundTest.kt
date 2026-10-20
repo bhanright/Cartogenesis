@@ -5,7 +5,6 @@ import com.cartogenesis.worldgen.model.TectonicsConfig
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.pipeline.Plate
 import com.cartogenesis.worldgen.pipeline.PlateStage
-import com.cartogenesis.worldgen.pipeline.PlateType
 import com.cartogenesis.worldgen.pipeline.TerrainStage
 import kotlin.math.PI
 import kotlin.math.abs
@@ -93,96 +92,6 @@ class TectonicGroundTest {
     } }
 
     /**
-     * The continental margin runs from one crust to the other over the same width on the ground at
-     * every bearing, and that width is the one `TectonicsConfig.crustMarginKm` names.
-     *
-     * A straight crust edge laid through the middle of the map at each of six bearings, blurred by
-     * the stage's own margin operator, and the share read back across the edge in kilometres: the
-     * distance between where it passes a tenth and where it passes nine tenths.
-     */
-    @Test
-    fun `the continental margin is as wide as the setting says at every bearing`() = calibrationGrids.forEach { grid -> with(grid) {
-        val widths = MARGIN_BEARINGS_DEGREES.associateWith { degrees ->
-            val normal = degrees * PI / 180.0
-            val crust = straightEdge(normal)
-            PlateStage.blurAcrossTheMargin(config, crust)
-            tenToNinetyKm(crust, normal)
-        }
-        val declared = config.tectonics.crustMarginKm
-        widths.forEach { (degrees, km) ->
-            println("TECTONIC ${cellsAcross}x$cellsDown margin with its normal at %5.1f degrees on the ground: 10-90%% width %.1f km against %.0f km declared".format(degrees, km, declared))
-        }
-        val widest = widths.values.max()
-        val narrowest = widths.values.min()
-        assertTrue(
-            widths.values.all { abs(it - declared) <= declared * MARGIN_TOLERANCE },
-            "the margin's 10-90% width is ${widths.values.map { it.roundToInt() }} km at bearings " +
-                "$MARGIN_BEARINGS_DEGREES, against the ${declared.roundToInt()} km declared"
-        )
-        assertTrue(
-            widest / narrowest <= 1.0 + MARGIN_TOLERANCE,
-            "the margin is ${"%.2f".format(widest / narrowest)} times as wide at one bearing as at another"
-        )
-    } }
-
-    /**
-     * A plate owns the cells nearer its seed than any other seed's, on the ground: the partition's
-     * metric is Euclid's in kilometres, before the warp moves anything.
-     *
-     * Four seeds around the middle of the map, and every cell of the window around them checked
-     * against the brute-force nearest seed on the ground — except the cells within a cell width of
-     * a tie, where the grid itself cannot say.
-     */
-    @Test
-    fun `plates are divided by distance on the ground`() = grids.forEach { grid -> with(grid) {
-        val seeds = listOf(200 to 200, 240 to 240, 300 to 180, 190 to 300)
-        val plates = seeds.mapIndexed { id, (x, y) -> Plate(id, x, y, 1f, 0f, PlateType.OCEANIC) }
-        val labels = PlateStage.nearestSeedPartition(config, plates)
-        var checked = 0
-        var wrong = 0
-        var firstWrong = ""
-        for (row in 120 until 380) {
-            for (column in 120 until 380) {
-                val distances = seeds.map { (x, y) -> groundCellWidths(column - x, row - y) }
-                val sorted = distances.sorted()
-                if (sorted[1] - sorted[0] < 1.0) continue
-                checked++
-                val nearest = distances.indexOf(sorted[0])
-                if (labels[row * cellsAcross + column] != nearest) {
-                    if (wrong == 0) firstWrong = "($column,$row) given plate ${labels[row * cellsAcross + column]}, nearest on the ground is $nearest"
-                    wrong++
-                }
-            }
-        }
-        println("TECTONIC ${cellsAcross}x$cellsDown partition: $wrong of $checked cells clear of a tie belong to a seed that is not the nearest on the ground; $firstWrong")
-        assertTrue(checked > 10_000, "only $checked cells were clear of a tie")
-        assertTrue(wrong == 0, "$wrong of $checked cells belong to a seed that is not the nearest on the ground, first $firstWrong")
-    } }
-
-    /**
-     * A plate carried back along its drift travels the same distance on the ground whichever way it
-     * drifts.
-     */
-    @Test
-    fun `a plate drifts as far on the ground whichever way it goes`() = grids.forEach { grid -> with(grid) {
-        val distance = config.cellsFor(config.tectonics.epochDriftKm)
-        val travelled = DRIFT_BEARINGS_DEGREES.associateWith { degrees ->
-            val angle = degrees * PI / 180.0
-            val plate = Plate(0, cellsAcross / 2, cellsDown / 2, cos(angle).toFloat(), sin(angle).toFloat(), PlateType.OCEANIC)
-            val moved = PlateStage.displacedPlates(config, listOf(plate), distance).single()
-            groundCellWidths(moved.seedX - plate.seedX, moved.seedY - plate.seedY)
-        }
-        travelled.forEach { (degrees, cellWidths) ->
-            println("TECTONIC ${cellsAcross}x$cellsDown drift at %5.1f degrees: %.2f cell widths on the ground against %.1f asked".format(degrees, cellWidths, distance))
-        }
-        assertTrue(
-            travelled.values.all { abs(it - distance) <= DRIFT_ROUNDING },
-            "a drift of $distance cell widths moves a seed ${travelled.values.map { "%.1f".format(it) }} cell widths on the " +
-                "ground at bearings $DRIFT_BEARINGS_DEGREES"
-        )
-    } }
-
-    /**
      * A rift's length along its own course is the length of the ground it crosses, whichever way
      * it runs, so its half-grabens are cut to the same lengths in kilometres at every bearing.
      */
@@ -203,38 +112,6 @@ class TectonicGroundTest {
             measured.values.all { abs(it - 1.0) <= RIFT_TOLERANCE },
             "a straight rift's measured arc length is ${measured.values.map { "%.2f".format(it) }} of its length on the " +
                 "ground at bearings $RIFT_BEARINGS_DEGREES"
-        )
-    } }
-
-    /**
-     * An old belt rounds as far north-south as east-west on the ground: the kernel that ages it is
-     * round in kilometres.
-     */
-    @Test
-    fun `an old belt rounds as far one way as the other`() = grids.forEach { grid -> with(grid) {
-        val impulse = FloatField(cellsAcross, cellsDown)
-        impulse[cellsAcross / 2, cellsDown / 2] = 1f
-        PlateStage.roundWithAge(config, impulse, epochsAgo = 2)
-        var total = 0.0
-        var eastWest = 0.0
-        var northSouth = 0.0
-        for (row in 0 until cellsDown) {
-            for (column in 0 until cellsAcross) {
-                val weight = impulse[column, row].toDouble()
-                if (weight == 0.0) continue
-                val acrossKm = (column - cellsAcross / 2) * config.cellWidthKm
-                val downKm = (row - cellsDown / 2) * config.cellHeightKm
-                total += weight
-                eastWest += weight * acrossKm * acrossKm
-                northSouth += weight * downKm * downKm
-            }
-        }
-        val spreadEastWestKm = sqrt(eastWest / total)
-        val spreadNorthSouthKm = sqrt(northSouth / total)
-        println("TECTONIC ${cellsAcross}x$cellsDown age rounding of a point, two epochs old: spread %.1f km east-west, %.1f km north-south".format(spreadEastWestKm, spreadNorthSouthKm))
-        assertTrue(
-            abs(spreadEastWestKm / spreadNorthSouthKm - 1.0) <= SPREAD_TOLERANCE,
-            "an old belt rounds over ${"%.0f".format(spreadEastWestKm)} km east-west and ${"%.0f".format(spreadNorthSouthKm)} km north-south"
         )
     } }
 
@@ -316,7 +193,7 @@ class TectonicGroundTest {
         assertTrue(misses.size == 2, "belts half as wide on the ground were not seen: $misses")
     }
 
-    /** Every tectonic length in [tectonics] times [factor]: the widths, offsets, drift, blur and trails. */
+    /** Every belt and trail length in [tectonics] times [factor]: the widths, offsets and trails. */
     private fun lengthsScaled(tectonics: TectonicsConfig, factor: Double): TectonicsConfig = tectonics.copy(
         boundaryFalloffKm = tectonics.boundaryFalloffKm * factor,
         andeanWidthKm = tectonics.andeanWidthKm * factor,
@@ -328,8 +205,6 @@ class TectonicGroundTest {
         riftWidthKm = tectonics.riftWidthKm * factor,
         riftShoulderOffsetKm = tectonics.riftShoulderOffsetKm * factor,
         riftShoulderWidthKm = tectonics.riftShoulderWidthKm * factor,
-        plateSpeedMmPerYear = tectonics.plateSpeedMmPerYear * factor,
-        beltAgeBlurKm = tectonics.beltAgeBlurKm * factor,
         hotspotChainLengthKm = tectonics.hotspotChainLengthKm * factor,
         hotspotSpacingKm = tectonics.hotspotSpacingKm * factor,
         hotspotRadiusKm = tectonics.hotspotRadiusKm * factor

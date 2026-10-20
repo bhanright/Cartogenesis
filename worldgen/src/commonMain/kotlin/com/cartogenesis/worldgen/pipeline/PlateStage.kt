@@ -64,6 +64,17 @@ enum class BoundaryClass {
     TRANSFORM_FAULT
 }
 
+/**
+ * One present plate: [id], where its middle stands on the map ([seedX], [seedY], a column and a
+ * row), which way it moves there ([driftX] east and [driftY] south, a unit vector on the ground),
+ * whether it is mostly a continent's ([type]: [PlateType.CONTINENTAL] where more than a quarter of
+ * it is continental crust, as Zahirovic et al. sort plates), and the rotation it moves by: its Euler
+ * pole's latitude and longitude in degrees and its rate in degrees per million years, positive
+ * counterclockwise about the pole.
+ *
+ * Since the tectonic history (docs/DESIGN_LEDGER.md, TH1-1) the rotation is the plate's motion and
+ * the drift is read from it; a plate carries both crusts, and its type says only which it mostly is.
+ */
 @Serializable
 data class Plate(
     val id: Int,
@@ -71,7 +82,10 @@ data class Plate(
     val seedY: Int,
     val driftX: Float,
     val driftY: Float,
-    val type: PlateType
+    val type: PlateType,
+    val eulerPoleLatitudeDegrees: Float = 0f,
+    val eulerPoleLongitudeDegrees: Float = 0f,
+    val rotationDegreesPerMyr: Float = 0f
 )
 
 data class PlateResult(
@@ -136,17 +150,29 @@ data class PlateResult(
      */
     val upliftRateMmPerYear: FloatField,
     /**
-     * How long ago the crust under each cell was last built, from 0 (an active belt of the present
-     * epoch) to 1 (cratonic ground no epoch in the history ever deformed).
+     * How long ago the crust under each cell was last made or deformed, in millions of years: on a
+     * continent the time since its last orogeny, or since it formed where it never had one (a
+     * craton's 1,500 to 3,000 Myr); on the ocean floor the floor's own age.
      *
-     * The bands are unambiguous by construction: with `historyEpochs` epochs, a cell whose most
-     * recent orogeny was `n` epochs ago lands in `[n/K, (n+1)/K)`, and only untouched crust reads
-     * exactly 1. That is what lets a consumer tell an Appalachian belt from an Alpine one without
-     * measuring either, and it is why this is an *age* rather than an erodibility: what a shield,
-     * a worn orogen and an active one should erode like is the lithology stage's question, not
-     * this one's. See docs/DESIGN_LEDGER.md, H1 and H3.
+     * A real age from the tectonic history (docs/DESIGN_LEDGER.md, TH1-1), where it was a band of 0
+     * to 1 counted in epochs before: what lets a consumer tell an Appalachian belt from an Alpine
+     * one without measuring either.
      */
-    val crustAge: FloatField
+    val crustAgeMyr: FloatField,
+    /**
+     * The continental crust's thickness under each cell, in kilometers, from the history: a craton's
+     * column, thinned where a margin was stretched, thickened where orogeny piled crust on. The
+     * standard column (`IsostasyConfig.continentalCrustThicknessKm`) where there is no continent.
+     */
+    val crustThicknessKm: FloatField,
+    /** The part of [crustThicknessKm] orogeny added and erosion has not yet taken, km. */
+    val orogenicExcessKm: FloatField,
+    /** What last deformed the crust under each cell, an [OrogenyKind] ordinal. */
+    val orogenyKind: IntArray,
+    /** Which craton, microcontinent or island arc a continent's crust began as; -1 under ocean floor. */
+    val terraneId: IntArray,
+    /** When the crust under each cell was stretched at a rift, Myr ago; -1 where it never was, as a save holds no NaN. */
+    val riftAgeMyr: FloatField
 )
 
 /**
@@ -380,115 +406,49 @@ object PlateStage {
         val tectonics = config.tectonics
         val cellWidths = BeltCellWidths.of(config)
 
-        val drawn = drawPlates(config)
-        val plates = drawn.plates
+        // The history that made the crust, and the crust read onto the map: the continents, the
+        // plates that carry them and the boundaries between those plates are the history's present,
+        // not a partition drawn for the map (docs/DESIGN_LEDGER.md, TH1-1).
+        val history = TectonicHistory.run(config)
+        val crust = CrustMap.read(config, history)
+        val plates = presentPlates(config, history)
+        val plateId = crust.plateId
 
-        // The history: [TectonicsConfig.historyEpochs] configurations of the same plates, stamped
-        // oldest first so the modern belts lie over the worn ones rather than under them. Only the
-        // present epoch's assignment, distances and classes leave this function; the past epochs
-        // leave nothing behind but the ground they built and their mark on `crustAge`.
-        val epochs = tectonics.historyEpochs.coerceAtLeast(1)
+        // The present belts: main's profiles, stamped on the history's present boundaries and
+        // classified by its plates' relative motion. Their redesign from the history's own
+        // thickening is TH1-2's; the belts of the past are in the crust's thickness, not stamped.
         val noise = BeltNoise(config.seed)
         val uplift = FloatField(cellsAcross, cellsDown)
-        val crustAge = FloatField(cellsAcross, cellsDown)
-        crustAge.data.fill(1f)
         val upliftRate = FloatField(cellsAcross, cellsDown)
-
-        var plateId = IntArray(0)
-        var presentDistanceCells = FloatArray(0)
-        var nearestBoundaryType = IntArray(0)
-        var nearestBoundaryClass = IntArray(0)
-        // Where the present epoch's sea floor is being made, for [seafloorAgeMyr].
-        var presentRidgeCells: List<Int> = emptyList()
-
-        for (epoch in 0 until epochs) {
-            val epochsAgo = epochs - 1 - epoch
-            val present = epochsAgo == 0
-
-            // Minus the drift, times the age: where these plates came from, not where they are
-            // headed. The crusts themselves do not change — a continent does not become an ocean
-            // floor between epochs — but which pairs meet, and how squarely, does.
-            val epochPlates =
-                if (present) {
-                    plates
-                } else {
-                    displacedPlates(config, plates, cellWidths.epochDriftCells * epochsAgo)
-                }
-            val epochPlateId = if (present) drawn.plateId else assignPlates(config, epochPlates)
-            val boundaries = classifyBoundaries(config, epochPlateId, epochPlates)
-            // Segmentation is a live rift's structure. A failed one is a filled sag (see the
-            // CONTINENTAL_RIFT arm of [stampEpoch]), so only the present epoch is walked — which
-            // also keeps the present segments, and their guard's figures, exactly as they were.
-            if (present) segmentRifts(config, boundaries, epochPlates)
-
-            val epochDistance = boundaryDistance(config, boundaries.keys)
-            val epochDistanceCells = epochDistance.distanceCellWidths
-            val nearestBoundaryCell = epochDistance.nearestBoundaryCell
-            val hasBoundaries = boundaries.isNotEmpty()
-
-            if (present) {
-                plateId = epochPlateId
-                presentDistanceCells = epochDistanceCells
-                nearestBoundaryType = IntArray(cellsAcross * cellsDown) { -1 }
-                nearestBoundaryClass = IntArray(cellsAcross * cellsDown) { -1 }
-                // In cell order, not the map's iteration order, so the age field below is the
-                // same field however the boundary map happens to be walked.
-                presentRidgeCells = boundaries.entries
-                    .filter { it.value.interaction.pairClass == BoundaryClass.OCEAN_RIDGE }
-                    .map { it.key }
-                    .sorted()
-            }
-            if (!hasBoundaries) continue
-
-            // Ageing, by the time since the belt stopped rising rather than by a factor per epoch.
-            // A dead orogen decays exponentially toward its foreland, so an epoch of silence costs
-            // it `exp(-epochLength / decayTime)` of its height and two epochs the square of that;
-            // both figures are Earth's and both are in `TectonicsConfig`. Every factor is still
-            // exactly 1 on the present epoch — `exp(0)` is 1.0 to the last bit — and the blur is
-            // skipped outright, so a one-epoch history is the arithmetic of the generator that had
-            // no history at all.
-            val ageHeightFactor = beltAgeDecay(tectonics, epochsAgo)
-            val epochCellWidths =
-                if (present) cellWidths else cellWidths.widened(tectonics.beltAgeWidening.pow(epochsAgo))
-            val epochUplift = if (present) uplift else FloatField(cellsAcross, cellsDown)
-
+        val continentalShare = FloatField(cellsAcross, cellsDown, crust.continentalShare)
+        val boundaries = classifyPresentBoundaries(config, plateId, plates, history, continentalShare)
+        segmentRifts(config, boundaries, plates)
+        val distance = boundaryDistance(config, boundaries.keys)
+        val presentDistanceCells = distance.distanceCellWidths
+        val nearestBoundaryType = IntArray(cellsAcross * cellsDown) { -1 }
+        val nearestBoundaryClass = IntArray(cellsAcross * cellsDown) { -1 }
+        if (boundaries.isNotEmpty()) {
             stampEpoch(
                 config = config,
-                cellWidths = epochCellWidths,
+                cellWidths = cellWidths,
                 noise = noise,
                 boundaries = boundaries,
-                nearestBoundaryCell = nearestBoundaryCell,
-                distanceCells = epochDistanceCells,
-                plateId = epochPlateId,
-                uplift = epochUplift,
-                crustAge = crustAge,
-                ageHeightFactor = ageHeightFactor,
-                epochsAgo = epochsAgo,
-                epochs = epochs,
-                nearestBoundaryType = if (present) nearestBoundaryType else null,
-                nearestBoundaryClass = if (present) nearestBoundaryClass else null,
-                // Only the present epoch's belts are still rising; that is what "old" means here.
-                upliftRate = if (present) upliftRate else null
+                nearestBoundaryCell = distance.nearestBoundaryCell,
+                distanceCells = presentDistanceCells,
+                plateId = plateId,
+                uplift = uplift,
+                nearestBoundaryType = nearestBoundaryType,
+                nearestBoundaryClass = nearestBoundaryClass,
+                upliftRate = upliftRate
             )
-
-            if (!present) {
-                roundWithAge(config, epochUplift, epochsAgo)
-                for (cell in uplift.data.indices) uplift.data[cell] += epochUplift.data[cell]
-            }
         }
+        // How much of each cell's relief the present belts stamped, 0 to 1, read before the
+        // hotspots add their cones: where a belt stands, its stamp is the relief, and the crust's
+        // own thickening there is not counted a second time below.
+        val crustAgeReference = tectonics.crustAgeReference.coerceAtLeast(1e-6f)
+        val stampedShare = FloatArray(cellsAcross * cellsDown) { (uplift.data[it] / crustAgeReference).coerceIn(0f, 1f) }
 
-        // Which crust each cell is made of, blurred across the plate boundary. The blur is not
-        // cosmetic: the band it makes is a continental margin, crust thinned on its way out to the
-        // ocean floor, and it is what [Isostasy.Columns] turns into a shelf, a slope and a rise.
-        val continentalShare = FloatField(cellsAcross, cellsDown)
-        for (cell in continentalShare.data.indices) {
-            continentalShare.data[cell] =
-                if (plates[plateId[cell]].type == PlateType.CONTINENTAL) 1f else 0f
-        }
-        blurAcrossTheMargin(config, continentalShare)
-        roughenMargins(config, continentalShare)
-
-        stampHotspotChains(config, plates, plateId, uplift)
+        stampHotspotChains(config, plates, plateId, continentalShare.data, uplift)
 
         val scale = config.scale
         val columns = Isostasy.Columns(config.isostasy)
@@ -499,13 +459,16 @@ object PlateStage {
         val cratonReliefMetres = tectonics.cratonReliefStandardDeviationMetres
         val oceanicReliefMetres = tectonics.oceanicReliefStandardDeviationMetres
         val orogenReliefMetres = tectonics.orogenReliefStandardDeviationMetres
-        val crustAgeReference = tectonics.crustAgeReference.coerceAtLeast(1e-6f)
         val height = FloatField(cellsAcross, cellsDown)
-
-        // How old the sea floor is under each cell, which is what decides how deep it lies. See
-        // [seafloorAgeOf].
-        val seafloor = seafloorAgeOf(config, columns, continentalShare, presentRidgeCells)
-        val seafloorAgeMyr = seafloor.ageMyr
+        val seafloorAgeMyr = crust.seafloorAgeMyr
+        // A kilometer of orogenic excess is worth this much of a stamped belt's relief, as a share
+        // of what makes a belt fully orogenic: Airy's freeboard per kilometer of crust over the
+        // relief [TectonicsConfig.crustAgeReference] stands for.
+        val freeboardMetresPerKm = config.isostasy.let {
+            (it.mantleDensity - it.continentalCrustDensity) / it.mantleDensity * METRES_PER_KILOMETRE
+        }
+        val excessForFullOrogen = crustAgeReference * beltReliefMetres / freeboardMetresPerKm
+        val standardThicknessKm = config.isostasy.continentalCrustThicknessKm
 
         // The base noise as a standard score: zero mean, unit deviation. The settings above are
         // deviations in metres, so this is what makes them mean that — and it is what makes them
@@ -523,16 +486,12 @@ object PlateStage {
         val detailLattice = GroundLattice(config, tectonics.detailWavelengthKm)
 
         // How far in from the edge of its own crust each cell sits, 0 at the edge and 1 in the
-        // craton. Both the crust's thickness and the relief it carries are read off it. With
-        // isostasy off there is no crust to have a profile — one datum, one relief — which is the
-        // world before S2 and the control this chunk's guards are shown to fail against.
+        // craton: the relief the crust carries is read off it. With isostasy off there is no crust
+        // to have a profile — one datum, one relief — which is the world before S2 and the control
+        // this chunk's guards are shown to fail against.
         val interiorShare =
             if (isostatic) cratonInteriorShare(config, continentalShare)
             else FloatArray(cellsAcross * cellsDown)
-        // Mass-neutral: the average continental column keeps the standard thickness, so the datum
-        // stays where `IsostasyConfig.continentalFreeboardMetres` puts it.
-        val meanInteriorShare = weightedMean(interiorShare, continentalShare.data)
-        val cratonThickeningKm = if (isostatic) config.isostasy.cratonThickeningKm else 0f
 
         // The base noise split at `TectonicsConfig.textureCornerKm`: the shape of the country, and
         // the texture on it. The shape keeps the crust's own deviation; the texture is scaled by
@@ -573,20 +532,23 @@ object PlateStage {
                 for (column in 0 until cellsAcross) {
                     val cell = row * cellsAcross + column
                     val share = continentalShare.data[cell]
-                    // Where the crust floats: its own thickness plus the cratonic profile, which
-                    // tilts a continent up in the middle without moving the average column.
+                    // Where the crust floats: the history's own column, beyond the standard one.
+                    // A present belt's stamp is its relief, so the thickening orogeny gave the
+                    // crust there is left out where the stamp stands, and an old belt's is not.
+                    val excessKm = crust.excessKm[cell]
                     val thickeningKm =
-                        cratonThickeningKm * (interiorShare[cell] - meanInteriorShare)
+                        crust.thicknessKm[cell] - standardThicknessKm - excessKm * stampedShare[cell]
                     datumMetres[cell] =
                         if (isostatic) {
                             columns.altitudeMetres(share, seafloorAgeMyr[cell], thickeningKm)
                         } else {
                             0f
                         }
-                    // How hard the present epoch worked here, which is what makes an orogen
-                    // rougher than the plain it stands on and leaves the foreland alone.
-                    val orogenShare =
-                        (uplift.data[cell] / crustAgeReference).coerceIn(0f, 1f)
+                    // How orogenic the ground is, which is what makes an orogen rougher than the
+                    // plain it stands on and leaves the foreland alone: a present belt's stamp, or
+                    // an old belt's thickening still in the crust.
+                    val inheritedShare = (excessKm * (1f - stampedShare[cell]) / excessForFullOrogen).coerceIn(0f, 1f)
+                    val orogenShare = maxOf(stampedShare[cell], inheritedShare)
                     // Flat in the middle of a continent and loud at its rim: see
                     // `TectonicsConfig.cratonReliefStandardDeviationMetres`.
                     val crustReliefMetres =
@@ -678,10 +640,15 @@ object PlateStage {
             nearestBoundaryClass = nearestBoundaryClass,
             height = height,
             continentalShare = continentalShare,
-            seafloorAgeMyr = FloatField(cellsAcross, cellsDown, seafloor.ageMyr),
-            seafloorHalfSpreadingRateKmPerMyr = seafloor.halfSpreadingRateKmPerMyr,
+            seafloorAgeMyr = FloatField(cellsAcross, cellsDown, seafloorAgeMyr),
+            seafloorHalfSpreadingRateKmPerMyr = meanHalfSpreadingRateKmPerMyr(history),
             upliftRateMmPerYear = upliftRate,
-            crustAge = crustAge
+            crustAgeMyr = FloatField(cellsAcross, cellsDown, crust.crustAgeMyr),
+            crustThicknessKm = FloatField(cellsAcross, cellsDown, crust.thicknessKm),
+            orogenicExcessKm = FloatField(cellsAcross, cellsDown, crust.excessKm),
+            orogenyKind = crust.orogenyKind,
+            terraneId = crust.terrane,
+            riftAgeMyr = FloatField(cellsAcross, cellsDown, crust.riftAgeMyr)
         )
     }
 
@@ -871,204 +838,6 @@ object PlateStage {
     }
 
     /**
-     * How long ago the sea floor under each cell was made, and how fast the ridges that made it
-     * are spreading.
-     */
-    internal class SeafloorAge(
-        /** Millions of years, one entry per cell; the reference age where there is no ridge. */
-        val ageMyr: FloatArray,
-        /** Solved rather than declared — see [seafloorAgeOf]. Kilometres per million years. */
-        val halfSpreadingRateKmPerMyr: Double,
-        /** How many cells of the present epoch's boundaries are spreading ridges. */
-        val ridgeCells: Int
-    )
-
-    /**
-     * How long ago the sea floor under each cell was made, in millions of years.
-     *
-     * Ocean floor is a conveyor. It is made at a spreading ridge, carried away from it, cools and
-     * contracts as it goes, and is destroyed at a trench — so its depth is a function of its age
-     * and of very little else, which is the most robust relationship in marine geophysics (Parsons
-     * & Sclater 1977). Distance to the nearest ridge over the spreading rate is that age, and it is
-     * the field this generator was missing: without it every piece of sea floor was of one age, the
-     * deep ocean stood at one level per plate, and the Voronoi partition showed straight through
-     * the bathymetry as flat polygons meeting at triple junctions.
-     *
-     * Measured to the *present* epoch's spreading boundaries only. A ridge that closed three
-     * hundred million years ago is not making floor now and the floor it made has been subducted;
-     * what a past epoch leaves on this map is a belt, not a basin.
-     *
-     * **The rate is solved, not declared, and that is the interesting part.** Floor is destroyed as
-     * fast as it is made, so the mean age of a planet's sea floor is its ocean's area over its
-     * ridges' production — a world with less ridge for its ocean must spread faster, or its floor
-     * would be older than the planet. This map has about half Earth's ridge for its ocean, because
-     * fourteen plates on a cylinder put most of their boundaries between crusts that are not both
-     * oceanic. So the rate this world spreads at is not an Earth figure to be copied; what *is* an
-     * Earth figure, and what the map can be held to, is how deep the floor ends up
-     * ([IsostasyConfig.oceanicMeanFloorMetres]). The rate is whatever puts the mean there, found by
-     * bisection on a histogram of the distances, and it is reported rather than hidden — see
-     * `IsostasyTest` and `TODO.md`, which record it running well above Earth's fastest ridge and
-     * why.
-     *
-     * Where a world has no spreading ridge at all — one plate, or every boundary convergent —
-     * every cell takes the age that floats at that same mean depth, which is the one-age ocean
-     * S2's first pass drew and the control the depth-age guards are shown to fail against.
-     */
-    internal fun seafloorAgeOf(
-        config: WorldGenConfig,
-        columns: Isostasy.Columns,
-        continentalShare: FloatField,
-        ridgeCells: List<Int>
-    ): SeafloorAge {
-        val cellCount = config.width * config.height
-        val isostasy = config.isostasy
-        val targetDepthMetres = isostasy.oceanicMeanFloorMetres
-        val referenceAge = columns.seafloorAgeAtDepth(targetDepthMetres)
-        if (!isostasy.seafloorAge || ridgeCells.isEmpty()) {
-            return SeafloorAge(FloatArray(cellCount) { referenceAge }, 0.0, ridgeCells.size)
-        }
-
-        // In cell widths and told how tall a row is, so that a ridge running east-west ages its
-        // floor over the same kilometres as one running north-south. Counted in plain cells, the
-        // age-depth curve would read the orientation of the ridge that made a piece of floor as if
-        // it were the floor's age.
-        val distanceCellWidths = FloatArray(cellCount) { JumpFloodDistance.INFINITE }
-        val nearestRidgeCell = IntArray(cellCount) { -1 }
-        ridgeCells.forEach { cell ->
-            distanceCellWidths[cell] = 0f
-            nearestRidgeCell[cell] = cell
-        }
-        JumpFloodDistance.run(
-            config.width, config.height, distanceCellWidths, nearestRidgeCell,
-            config.cellHeightInCellWidths
-        )
-
-        val kilometresPerCellWidth = config.cellWidthKm
-        val oldest = isostasy.oldestSeafloorAgeMyr
-
-        // The distances of the cells the answer is about, in one histogram, so the bisection below
-        // costs a few thousand operations rather than a few hundred million at 4096. Only the
-        // cells that are more oceanic than continental count: a continental platform's altitude is
-        // its crust's business and no age changes it, and letting it into the mean would make the
-        // solved rate depend on how much of the map happens to be land.
-        var longestKm = 0.0
-        for (cell in 0 until cellCount) {
-            if (continentalShare.data[cell] >= 0.5f) continue
-            val cellWidths = distanceCellWidths[cell]
-            if (cellWidths >= JumpFloodDistance.INFINITE) continue
-            val kilometres = cellWidths * kilometresPerCellWidth
-            if (kilometres > longestKm) longestKm = kilometres
-        }
-        if (longestKm <= 0.0) {
-            return SeafloorAge(FloatArray(cellCount) { referenceAge }, 0.0, ridgeCells.size)
-        }
-        val bins = LongArray(DISTANCE_HISTOGRAM_BINS)
-        var oceanicCells = 0L
-        for (cell in 0 until cellCount) {
-            if (continentalShare.data[cell] >= 0.5f) continue
-            val cellWidths = distanceCellWidths[cell]
-            if (cellWidths >= JumpFloodDistance.INFINITE) continue
-            val bin =
-                ((cellWidths * kilometresPerCellWidth / longestKm) * (DISTANCE_HISTOGRAM_BINS - 1))
-                    .toInt().coerceIn(0, DISTANCE_HISTOGRAM_BINS - 1)
-            bins[bin]++
-            oceanicCells++
-        }
-        if (oceanicCells == 0L) {
-            return SeafloorAge(FloatArray(cellCount) { referenceAge }, 0.0, ridgeCells.size)
-        }
-
-        fun meanDepthAt(rateKmPerMyr: Double): Double {
-            var sum = 0.0
-            for (bin in bins.indices) {
-                if (bins[bin] == 0L) continue
-                val kilometres = longestKm * bin / (DISTANCE_HISTOGRAM_BINS - 1)
-                val age = (kilometres / rateKmPerMyr).toFloat().coerceAtMost(oldest)
-                sum += -columns.seafloorDepthMetres(age).toDouble() * bins[bin]
-            }
-            return sum / oceanicCells
-        }
-
-        // Deeper the slower it spreads, so the mean depth falls monotonically with the rate and a
-        // bisection cannot miss. The bounds are a millimetre a year and ten metres a year, which
-        // bracket anything a plate partition can ask for; forty halvings settle the rate to a part
-        // in ten thousand, which is far finer than the depth curve's own fit.
-        var slow = SLOWEST_HALF_RATE_KM_PER_MYR
-        var fast = FASTEST_HALF_RATE_KM_PER_MYR
-        repeat(RATE_BISECTIONS) {
-            val middle = 0.5 * (slow + fast)
-            if (meanDepthAt(middle) > targetDepthMetres) slow = middle else fast = middle
-        }
-        val rate = 0.5 * (slow + fast)
-
-        val ageMyr = FloatArray(cellCount) { cell ->
-            val cellWidths = distanceCellWidths[cell]
-            if (cellWidths >= JumpFloodDistance.INFINITE) referenceAge
-            else (cellWidths * kilometresPerCellWidth / rate).toFloat().coerceAtMost(oldest)
-        }
-        return SeafloorAge(ageMyr, rate, ridgeCells.size)
-    }
-
-    /** Bins the distance histogram the spreading rate is solved on carries. */
-    private const val DISTANCE_HISTOGRAM_BINS = 512
-
-    /** The rate bisection's bracket, in kilometres per million years, and its depth. */
-    private const val SLOWEST_HALF_RATE_KM_PER_MYR = 1.0
-    private const val FASTEST_HALF_RATE_KM_PER_MYR = 10_000.0
-    private const val RATE_BISECTIONS = 40
-
-    /**
-     * Breaks the crust boundary up, in place, so that a coastline standing on it is a coastline.
-     *
-     * The blurred share is a smooth ramp from one crust to the other, and a coastline is a contour
-     * of it. A contour of a smooth ramp is a smooth curve — box-counted over three octaves it comes
-     * out at dimension 1.04 to 1.10, which is Richardson's *smoothest* coast and not Britain's
-     * 1.25. That was the first thing S2 broke and the first thing it had to put back: before
-     * isostasy the coastline was a percentile of the terrain noise and inherited the noise's
-     * fractal shape, and once the crust decides where the water stands the crust has to carry that
-     * shape instead.
-     *
-     * Which it should. A rifted margin is not a smooth curve on Earth either: it is offset by
-     * transform faults every few hundred kilometres, embayed where the rift arms failed, and
-     * cut into banks and troughs by the sediment that has poured off it since. So the share gets a
-     * few octaves of noise, and the noise is windowed by `4 s (1 - s)` — nothing at all where the
-     * crust is one thing or the other, everything in the band between — which keeps a continental
-     * interior at exactly the level its column floats at and lets the margin wander.
-     *
-     * The wavelength is a length on the ground rather than a count of cells, as every other noise
-     * in this file is, so a margin has the same shape at any grid with more of its octaves
-     * resolved and on a planet of any size, and on a lattice square on the ground, so it wanders
-     * as far north-south as east-west.
-     */
-    private fun roughenMargins(config: WorldGenConfig, continentalShare: FloatField) {
-        val roughness = config.tectonics.marginRoughness
-        if (roughness <= 0f) return
-        val cellsAcross = config.width
-        val cellsDown = config.height
-        val noise = PerlinNoise(config.seed * 104729 + 6199)
-        val lattice = GroundLattice(config, MARGIN_WAVELENGTH_KM)
-        parallelChunks(0, cellsDown) { startRow, endRow ->
-            for (row in startRow until endRow) {
-                for (column in 0 until cellsAcross) {
-                    val cell = row * cellsAcross + column
-                    val share = continentalShare.data[cell]
-                    val inTheBand = 4f * share * (1f - share)
-                    if (inTheBand <= 0f) continue
-                    val wander = noise.fbm(
-                        lattice.x(column),
-                        lattice.y(row),
-                        MARGIN_OCTAVES,
-                        lattice.period,
-                        lattice.period
-                    )
-                    continentalShare.data[cell] =
-                        (share + roughness * inTheBand * wander).coerceIn(0f, 1f)
-                }
-            }
-        }
-    }
-
-    /**
      * The gravitational limit on elevation, as a curve rather than a clamp.
      *
      * Below [kneeMetres] a height passes through untouched; above it the excess is compressed
@@ -1102,60 +871,6 @@ object PlateStage {
          */
         fun upliftShareAt(metres: Float): Float =
             ((kneeMetres + spanMetres - metres) / spanMetres).coerceIn(0f, 1f)
-    }
-
-    /**
-     * What a belt keeps of its height after [epochsAgo] epochs with no uplift under it.
-     *
-     * `exp(-t / tau)` with `t` the time since it stopped and `tau` the decay time of an unforced
-     * orogen — both figures in `TectonicsConfig`, both Earth's, and their ratio is why this comes
-     * out at 0.42 an epoch where H1's factor was 0.45. Exactly 1 for the present epoch.
-     */
-    internal fun beltAgeDecay(tectonics: TectonicsConfig, epochsAgo: Int): Float {
-        if (epochsAgo <= 0) return 1f
-        val decayTime = tectonics.orogenDecayTimeYears.coerceAtLeast(1.0)
-        return exp(-epochsAgo * tectonics.epochLengthYears / decayTime).toFloat()
-    }
-
-    /**
-     * Where one epoch's boundaries were, and what crust pair each cell's nearest one was — the two
-     * fields [generate] keeps for the present epoch and throws away for the past ones.
-     *
-     * Exists for the guard. An old belt can only be shown to be lower and broader than a young one
-     * if both are measured the same way, and the way `BoundaryPairTest` measures a belt is a mean
-     * radial profile away from the boundary that built it; for a past epoch that boundary is gone
-     * by the time the stage returns. Recomputing it costs one epoch's assignment and one distance
-     * field, which is cheaper and far less misleading than adding a field to [PlateResult] that
-     * nothing in the pipeline would ever read.
-     */
-    internal class EpochBoundaries(
-        /** Cell widths on the ground to the nearest boundary of that epoch. */
-        val distanceCells: FloatArray,
-        /** [BoundaryClass] ordinal of that nearest boundary, or -1 where there was none. */
-        val nearestBoundaryClass: IntArray
-    )
-
-    internal fun epochBoundaries(config: WorldGenConfig, epochsAgo: Int): EpochBoundaries {
-        val cellsAcross = config.width
-        val cellsDown = config.height
-        val tectonics = config.tectonics
-        val drawn = drawPlates(config)
-        val epochPlates =
-            if (epochsAgo == 0) drawn.plates
-            else displacedPlates(config, drawn.plates, config.cellsFor(config.tectonics.epochDriftKm) * epochsAgo)
-        val plateId = if (epochsAgo == 0) drawn.plateId else assignPlates(config, epochPlates)
-        val boundaries = classifyBoundaries(config, plateId, epochPlates)
-
-        val distance = boundaryDistance(config, boundaries.keys)
-        val distanceCells = distance.distanceCellWidths
-        val nearestBoundaryCell = distance.nearestBoundaryCell
-
-        val nearestBoundaryClass = IntArray(cellsAcross * cellsDown) { -1 }
-        for (cell in nearestBoundaryClass.indices) {
-            val boundary = boundaries[nearestBoundaryCell[cell]] ?: continue
-            nearestBoundaryClass[cell] = boundary.interaction.pairClass.ordinal
-        }
-        return EpochBoundaries(distanceCells, nearestBoundaryClass)
     }
 
     /** How far every cell stands from the nearest of a set of boundary cells, and which one that is. */
@@ -1198,89 +913,6 @@ object PlateStage {
     }
 
     /**
-     * Blurs a map of which crust each cell is made of across the boundary between the two, in
-     * place: the band this makes is the continental margin [Isostasy.Columns] turns into a shelf,
-     * a slope and a rise.
-     *
-     * A Gaussian round on the ground, so a straight crust edge becomes the same ramp whichever way
-     * it runs, and its spread is the one that makes the ramp's 10-90% width
-     * `TectonicsConfig.crustMarginKm`: a step convolved with a Gaussian is an error function, which
-     * climbs from a tenth to nine tenths over [TEN_TO_NINETY_IN_STANDARD_DEVIATIONS] standard
-     * deviations. The box blur this replaced took one radius in cells for both axes, so its ramp was
-     * 389 km wide east-west and 195 km north-south against the 300 declared, square in support
-     * and faintly diagonal in shape. See docs/DESIGN_LEDGER.md, Fix 2.
-     *
-     * Internal so `TectonicGroundTest` can measure the margin's width on edges it lays where it
-     * likes.
-     */
-    internal fun blurAcrossTheMargin(config: WorldGenConfig, crust: FloatField) {
-        val spreadKm = config.tectonics.crustMarginKm / TEN_TO_NINETY_IN_STANDARD_DEVIATIONS
-        GaussianBlur.apply(crust, spreadKm / config.cellWidthKm, spreadKm / config.cellHeightKm)
-    }
-
-    /**
-     * How many standard deviations of a Gaussian an error-function ramp takes to climb from a tenth
-     * to nine tenths: twice the normal quantile at 0.9, `2 * 1.2815515655446004`.
-     */
-    private const val TEN_TO_NINETY_IN_STANDARD_DEVIATIONS = 2.5631031310892008
-
-    /**
-     * Every plate seed carried back along minus its own drift, by [distanceCellWidths] of ground.
-     *
-     * A drift is a direction on the ground, drawn at a uniform angle, so the same distance is a
-     * whole column per cell width east-west and two rows per cell width north-south on this map's
-     * cells; carried back in cells both ways, a plate drifting north travelled half as far as one
-     * drifting east.
-     *
-     * X wraps, because the world is a cylinder. Y crosses the pole, because the world is a
-     * sphere: a seed carried north past the top row comes down the far side of the pole, half the
-     * equator round, as a path along a meridian does. With Earth's drift over an epoch, 8,400 km
-     * (`TectonicsConfig.plateSpeedMmPerYear`), a seed clamped at the edge instead, as it was when
-     * the drift was a tenth of that, would pile a third of the plates onto the polar rows. Two
-     * seeds on the same cell is harmless — the later id simply takes the cell and the earlier
-     * plate has no region in that epoch, which is a plate that had not yet rifted away from its
-     * neighbor.
-     */
-    internal fun displacedPlates(
-        config: WorldGenConfig,
-        plates: List<Plate>,
-        distanceCellWidths: Float
-    ): List<Plate> = plates.map { plate ->
-        val width = config.width
-        val height = config.height
-        val distanceRows = distanceCellWidths / config.cellHeightInCellWidths.toFloat()
-        // Rows measured from the north pole's edge to a cell's middle, so a reflection at either
-        // pole is a reflection about the grid's own edge and lands on a whole row.
-        val fromNorthPole = plate.seedY + 0.5 - plate.driftY.toDouble() * distanceRows
-        val polesCrossed = kotlin.math.floor(fromNorthPole / height).toInt()
-        val withinOneSweep = fromNorthPole - polesCrossed.toDouble() * height
-        val overAPole = polesCrossed % 2 != 0
-        val rowFromNorth = if (overAPole) height - withinOneSweep else withinOneSweep
-        val seedY = kotlin.math.floor(rowFromNorth).toInt().coerceIn(0, height - 1)
-        val halfwayRound = if (overAPole) width / 2 else 0
-        var wrappedSeedX =
-            ((plate.seedX - plate.driftX * distanceCellWidths).roundToInt() + halfwayRound) % width
-        if (wrappedSeedX < 0) wrappedSeedX += width
-        plate.copy(seedX = wrappedSeedX, seedY = seedY)
-    }
-
-    /**
-     * Rounds one past epoch's uplift, in place: what was stamped with a crest and a toe comes out as
-     * a swell, the more so the older it is.
-     *
-     * Internal so `TectonicGroundTest` can measure the kernel's spread on the ground.
-     */
-    internal fun roundWithAge(config: WorldGenConfig, uplift: FloatField, epochsAgo: Int) {
-        // A Gaussian round on the ground with the spread two box passes of the setting's radius
-        // have east-west, `sqrt(2 r (r + 1) / 3)` cell widths: the same rounding the belts were
-        // measured with along a row, and now as far down a column, where the square window in cells
-        // rounded half as far on the ground and cut its support off in a rectangle.
-        val radiusCellWidths = config.cellsFor(config.tectonics.beltAgeBlurKm).toDouble() * epochsAgo
-        val spreadCellWidths = sqrt(2.0 * radiusCellWidths * (radiusCellWidths + 1.0) / 3.0)
-        GaussianBlur.apply(uplift, spreadCellWidths, spreadCellWidths / config.cellHeightInCellWidths)
-    }
-
-    /**
      * Every length in `TectonicsConfig` that a belt profile, a drift or a hotspot trail is drawn
      * with, in cell widths of this grid: the kilometers the settings state, converted once by
      * [WorldScale] so the per-cell pass below reads the distance field's own unit.
@@ -1301,32 +933,10 @@ object PlateStage {
         val riftWidthCells: Float,
         val riftShoulderOffsetCells: Float,
         val riftShoulderWidthCells: Float,
-        val epochDriftCells: Float,
         val hotspotChainLengthCells: Float,
         val hotspotSpacingCells: Float,
         val hotspotRadiusCells: Float
     ) {
-        /**
-         * Every belt half-width, offset and reach multiplied by [factor] — the widening of ageing.
-         *
-         * Only the belts' lengths move. The heights are handled by one multiply at the point of
-         * stamping, and the dimensionless shares (`plateauFlatShare`, `riftFloorShare`, the rim
-         * share) describe the shape of a profile rather than its size, so a wider belt keeps the
-         * same proportions. The drift, the ageing blur and the hotspots are not a belt's and stay.
-         */
-        fun widened(factor: Float): BeltCellWidths = copy(
-            boundaryFalloffCells = boundaryFalloffCells * factor,
-            andeanWidthCells = andeanWidthCells * factor,
-            arcOffsetCells = arcOffsetCells * factor,
-            arcWidthCells = arcWidthCells * factor,
-            collisionWidthCells = collisionWidthCells * factor,
-            islandArcOffsetCells = islandArcOffsetCells * factor,
-            islandArcWidthCells = islandArcWidthCells * factor,
-            riftWidthCells = riftWidthCells * factor,
-            riftShoulderOffsetCells = riftShoulderOffsetCells * factor,
-            riftShoulderWidthCells = riftShoulderWidthCells * factor
-        )
-
         companion object {
             /** [config]'s tectonic lengths in cell widths of its own grid. */
             fun of(config: WorldGenConfig): BeltCellWidths {
@@ -1342,7 +952,6 @@ object PlateStage {
                     riftWidthCells = config.cellsFor(tectonics.riftWidthKm),
                     riftShoulderOffsetCells = config.cellsFor(tectonics.riftShoulderOffsetKm),
                     riftShoulderWidthCells = config.cellsFor(tectonics.riftShoulderWidthKm),
-                    epochDriftCells = config.cellsFor(tectonics.epochDriftKm),
                     hotspotChainLengthCells = config.cellsFor(tectonics.hotspotChainLengthKm),
                     hotspotSpacingCells = config.cellsFor(tectonics.hotspotSpacingKm),
                     hotspotRadiusCells = config.cellsFor(tectonics.hotspotRadiusKm)
@@ -1352,22 +961,13 @@ object PlateStage {
     }
 
     /**
-     * One epoch's belts, stamped into [uplift] and recorded in [crustAge].
+     * The present boundaries' belts, stamped into [uplift], with each cell's nearest boundary's type
+     * and class and its rate of rock uplift.
      *
-     * This is the per-cell pass that used to be the body of [generate], unchanged except for two
-     * things: what it writes is multiplied by [ageHeightFactor], and every cell it touches has
-     * its crust age pulled down to this epoch's band. [cellWidths] is the epoch's own widened copy,
-     * so every profile below reads the aged width without knowing that it has been aged.
-     *
-     * The age bands: with [epochs] epochs, an epoch [epochsAgo] back owns `[epochsAgo/K,
-     * (epochsAgo+1)/K)`, a cell landing at the bottom of its band where the belt built it
-     * outright and near the top where the belt barely reached. Untouched crust is left at 1. The
-     * bands cannot overlap, so a later consumer can bucket the field without a threshold of its
-     * own — see [PlateResult.crustAge].
-     *
-     * Rule 8 of the plan: this is per-cell arithmetic and so is the ageing blur, and both were
-     * specified with a GPU path in mind. Measured first, as the spec asks — see
-     * `TectonicHistoryTest.report the cost of a history`.
+     * The belts' profiles as they were before the tectonic history, read from the history's present
+     * boundaries; the belts of the past are not stamped, since the history leaves them in the crust's
+     * thickness (docs/DESIGN_LEDGER.md, TH1-1). The profiles' redesign from the history's own
+     * thickening is TH1-2's. A per-cell pass, specified with a GPU path in mind.
      */
     private fun stampEpoch(
         config: WorldGenConfig,
@@ -1378,13 +978,9 @@ object PlateStage {
         distanceCells: FloatArray,
         plateId: IntArray,
         uplift: FloatField,
-        crustAge: FloatField,
-        ageHeightFactor: Float,
-        epochsAgo: Int,
-        epochs: Int,
-        nearestBoundaryType: IntArray?,
-        nearestBoundaryClass: IntArray?,
-        upliftRate: FloatField?
+        nearestBoundaryType: IntArray,
+        nearestBoundaryClass: IntArray,
+        upliftRate: FloatField
     ) {
         val cellsAcross = config.width
         val cellsDown = config.height
@@ -1393,9 +989,6 @@ object PlateStage {
         val rangeNoise = noise.range
         val widthNoise = noise.width
         val arcNoise = noise.arc
-        val past = epochsAgo > 0
-        val ageBandBase = epochsAgo.toFloat() / epochs
-        val ageBandSpan = 1f / epochs
         // Every belt noise on a lattice square on the ground, so a belt swells, pinches and breaks
         // into massifs at the same spacing whichever way it runs.
         val widthSwellLattice = GroundLattice(config, WIDTH_SWELL_WAVELENGTH_KM)
@@ -1429,8 +1022,8 @@ object PlateStage {
                         val cell = row * cellsAcross + column
                         val boundary = boundaries[nearestBoundaryCell[cell]] ?: continue
                         val interaction = boundary.interaction
-                        nearestBoundaryType?.set(cell, interaction.type.ordinal)
-                        nearestBoundaryClass?.set(cell, interaction.pairClass.ordinal)
+                        nearestBoundaryType[cell] = interaction.type.ordinal
+                        nearestBoundaryClass[cell] = interaction.pairClass.ordinal
 
                         val distanceFromBoundary = distanceCells[cell]
                         if (distanceFromBoundary >= maxReachCells) continue
@@ -1512,8 +1105,7 @@ object PlateStage {
                                     tectonics.mountainHeight * 0.12f * strength * narrow *
                                         (roughness - 0.75f)
                             }
-                            uplift.data[cell] += upliftHere * ageHeightFactor
-                            recordCrustAge(crustAge, cell, upliftHere, tectonics, ageBandBase, ageBandSpan)
+                            uplift.data[cell] += upliftHere
                             recordUpliftRate(upliftRate, cell, upliftHere, interaction.pairClass, tectonics)
                             continue
                         }
@@ -1627,43 +1219,6 @@ object PlateStage {
                             BoundaryClass.CONTINENTAL_RIFT ->
                                 if (boundary.oceanicSide) {
                                     tectonics.mountainHeight * 0.22f * strength * narrow
-                                } else if (past) {
-                                    // A rift that opened in a past epoch and then stopped. It does
-                                    // not stay a canyon: the fault dies, the flexural shoulders
-                                    // relax, and the trough fills with its own erosion products
-                                    // until what is left is a broad shallow sag — an aulacogen,
-                                    // which is what the Benue trough, the Mississippi embayment
-                                    // and the North Sea graben are. Unsegmented on purpose: the
-                                    // half-grabens that made it a chain of deeps are exactly what
-                                    // the sediment has buried.
-                                    //
-                                    // The floor varies along strike, by the same `roughness *
-                                    // alongRange` every other belt on this map varies by, and that
-                                    // is not decoration. Without it the sag is a spirit level for
-                                    // the whole run of a boundary, and the outlet notch measures
-                                    // the slope below a basin's lip to decide how hard the outflow
-                                    // cuts: on a level floor that slope is zero, so the notch cuts
-                                    // nothing however large the catchment and the trough holds a
-                                    // lake for the life of the world. A varying floor gives it a
-                                    // low end to drain to and sills to break it into reaches the
-                                    // notch can finish. It is also what a filled sag looks like:
-                                    // the Mississippi embayment and the Benue trough carry a river
-                                    // down the axis, not a chain of lakes. See docs/DESIGN_LEDGER.md,
-                                    // H5, for the lake this left at 2048 before it was added.
-                                    -tectonics.riftDepth * tectonics.failedRiftFill * strength *
-                                        roughness * alongRange *
-                                        plateauFalloff(
-                                            distanceFromBoundary,
-                                            cellWidths.riftWidthCells,
-                                            tectonics.riftFloorShare
-                                        ) +
-                                        tectonics.riftShoulderHeight *
-                                        tectonics.failedRiftShoulder *
-                                        strength * ridgeAt(
-                                            distanceFromBoundary,
-                                            cellWidths.riftShoulderOffsetCells,
-                                            cellWidths.riftShoulderWidthCells
-                                        ) * roughness * alongRange
                                 } else {
                                     val place = boundary.segment
                                     if (place == null) {
@@ -1787,8 +1342,7 @@ object PlateStage {
                                 tectonics.mountainHeight * 0.12f * strength * narrow *
                                     (roughness - 0.75f)
                         }
-                        uplift.data[cell] += upliftHere * ageHeightFactor
-                        recordCrustAge(crustAge, cell, upliftHere, tectonics, ageBandBase, ageBandSpan)
+                        uplift.data[cell] += upliftHere
                         recordUpliftRate(upliftRate, cell, upliftHere, interaction.pairClass, tectonics)
                     }
                 }
@@ -1811,13 +1365,13 @@ object PlateStage {
      * than this chunk's. See `TODO.md`.
      */
     private fun recordUpliftRate(
-        upliftRate: FloatField?,
+        upliftRate: FloatField,
         cell: Int,
         upliftHere: Float,
         pairClass: BoundaryClass,
         tectonics: TectonicsConfig
     ) {
-        if (upliftRate == null || upliftHere <= 0f) return
+        if (upliftHere <= 0f) return
         val rate = when (pairClass) {
             BoundaryClass.COLLISION_PLATEAU -> tectonics.collisionUpliftMmPerYear
             BoundaryClass.ANDEAN_MARGIN -> tectonics.andeanUpliftMmPerYear
@@ -1834,30 +1388,6 @@ object PlateStage {
     }
 
     /**
-     * Pulls one cell's crust age down to this epoch's band, in proportion to how hard the epoch
-     * worked on it.
-     *
-     * A running minimum over the epochs, which is what makes the field the age of the *most
-     * recent* event rather than of the first: the present epoch stamps last, so wherever a modern
-     * belt overprints an old one the young age wins. A cell the epoch left untouched (a value of
-     * exactly zero, which is what every cell outside every profile's reach gets) is not claimed at
-     * all, so cratonic ground keeps the 1 it started with.
-     */
-    private fun recordCrustAge(
-        crustAge: FloatField,
-        cell: Int,
-        upliftHere: Float,
-        tectonics: TectonicsConfig,
-        ageBandBase: Float,
-        ageBandSpan: Float
-    ) {
-        if (upliftHere == 0f) return
-        val influence = (abs(upliftHere) / tectonics.crustAgeReference).coerceAtMost(1f)
-        val age = ageBandBase + (1f - influence) * ageBandSpan
-        if (age < crustAge.data[cell]) crustAge.data[cell] = age
-    }
-
-    /**
      * Hotspots: a point fixed in the mantle that a plate drifts over, leaving its volcanoes behind
      * it as a line of seamounts that subside with age. Hawaii, the Emperor chain, Réunion.
      *
@@ -1866,8 +1396,8 @@ object PlateStage {
      *
      * Fixed in the mantle and so drawn without regard to the plates: [TectonicsConfig.hotspotCount]
      * points spread uniformly over the sphere, each carried by whichever plate lies over it.
-     * Restricted to oceanic plates, so what comes out is island chains in deep water rather than
-     * volcanic fields inland, and clipped to the carrying plate, so a trail stops at the boundary
+     * Restricted to plumes under ocean floor, so what comes out is island chains in deep water
+     * rather than volcanic fields inland, and clipped to the carrying plate, so a trail stops at the boundary
      * instead of running on across a neighbor that never passed over the hotspot. A point is
      * read on the plate that owns its own cell, so the clip trims a chain where it leaves the plate
      * and never erases one outright, which is what a point drawn on the map and stamped on a plate
@@ -1884,10 +1414,11 @@ object PlateStage {
         config: WorldGenConfig,
         plates: List<Plate>,
         plateId: IntArray,
+        continentalShare: FloatArray,
         uplift: FloatField
     ) {
         val tectonics = config.tectonics
-        for (trail in hotspotTrails(config, plates, plateId)) {
+        for (trail in hotspotTrails(config, plates, plateId, continentalShare)) {
             for (vent in trail.vents) {
                 stampSeamount(
                     uplift = uplift,
@@ -1960,6 +1491,7 @@ object PlateStage {
         config: WorldGenConfig,
         plates: List<Plate>,
         plateId: IntArray,
+        continentalShare: FloatArray,
         plumeSpeedShare: Float = PLUME_SPEED_SHARE_OF_PLATE,
         plateTurns: Boolean = true
     ): List<HotspotTrail> {
@@ -1998,7 +1530,8 @@ object PlateStage {
             val originCell = originY.toInt().coerceIn(0, cellsDown - 1) * cellsAcross +
                 originX.toInt().coerceIn(0, cellsAcross - 1)
             val plate = plates[plateId[originCell]]
-            if (plate.type != PlateType.OCEANIC) continue
+            // A plate carries both crusts now: what decides is the crust over the plume.
+            if (continentalShare[originCell] >= 0.5f) continue
 
             // A volcano's volume goes with its plume's flux, so its radius and height go with
             // the flux's cube root, as [volcanoSizeShare]'s go with its own volume's.
@@ -2357,309 +1890,6 @@ object PlateStage {
         return modulation
     }
 
-    /** The present epoch's plates and the cells they own. */
-    internal class DrawnPlates(val plates: List<Plate>, val plateId: IntArray)
-
-    /**
-     * The order the crusts are handed out in, where each plate's seed sits, and the stream both
-     * came out of, so the caller can go on drawing from it.
-     *
-     * Separated from [drawPlates] so that a guard can ask where the seeds of a world land at a
-     * grid it has no time to generate; nothing else about a plate is settled here.
-     */
-    internal class PlateSeedDraw(
-        val shuffledOrder: MutableList<Int>,
-        val seeds: List<Plate>,
-        val random: Random
-    )
-
-    /**
-     * Where each plate's seed sits: drawn on the reference grid the world is defined on, and put
-     * on the working grid as a fraction of it.
-     *
-     * Drawn against the working grid instead — `nextInt(width)` and `nextInt(band)` — the column
-     * happened to hold, because Kotlin's `nextInt` takes the generator's top bits when the bound
-     * is a power of two and so lands at the same fraction of a 512-wide grid and of a 2048-wide
-     * one. The row's bound is the height less the pole margins and never a power of two, so it
-     * took the remainder of a division that changes with the bound: every plate sat at a different
-     * latitude at every size, and an export was a different world from the preview it came from
-     * (docs/DESIGN_LEDGER.md, F35).
-     *
-     * The repair is to stop asking the working grid where a seed may go. How many cells a world is
-     * cut into says nothing about where its plates are, so the draw is made once against
-     * [SEED_REFERENCE_CELLS] and the cell it names is then read as a fraction — which is what a
-     * finer grid resolves rather than redefines. The draws themselves are unchanged, in the same
-     * order and the same number, so the world the reference grid has always made is the world it
-     * still makes, and every other grid is now that same world drawn finer.
-     */
-    internal fun drawPlateSeeds(config: WorldGenConfig): PlateSeedDraw {
-        val width = config.width
-        val height = config.height
-        val random = Random(config.seed * 7919 + 13)
-        val plateCount = config.tectonics.plateCount(config.scale)
-        val shuffledOrder = MutableList(plateCount) { it }
-        shuffledOrder.shuffle(random)
-        val poleMarginRows = (SEED_REFERENCE_CELLS * SEED_POLE_MARGIN_SHARE).toInt()
-        val latitudeBandRows =
-            (SEED_REFERENCE_CELLS * SEED_LATITUDE_SPAN).toInt().coerceAtLeast(1)
-        val seeds = List(plateCount) { id ->
-            val angle = random.nextFloat() * 2f * PI.toFloat()
-            val columnOnReference = random.nextInt(SEED_REFERENCE_CELLS)
-            // Keeps plate seeds off the very edge, so polar rows belong to a real plate interior
-            // rather than to a seed sitting on the rim of the grid.
-            val rowOnReference = poleMarginRows + random.nextInt(latitudeBandRows)
-            Plate(
-                id = id,
-                seedX = onGrid(columnOnReference, width),
-                seedY = onGrid(rowOnReference, height),
-                driftX = cos(angle),
-                driftY = sin(angle),
-                type = PlateType.OCEANIC
-            )
-        }
-        return PlateSeedDraw(shuffledOrder, seeds, random)
-    }
-
-    /**
-     * The cell of a [cellsAcrossOrDown]-cell grid that holds the middle of reference cell
-     * [cellOnReference].
-     *
-     * The middle and not the near edge, so that a grid twice as fine puts the seed in one of the
-     * two cells the coarse one splits into rather than always in the first: a seed lands within
-     * half a reference cell of where the reference grid put it, at any grid, and on the reference
-     * grid itself it lands in exactly that cell.
-     */
-    private fun onGrid(cellOnReference: Int, cellsAcrossOrDown: Int): Int =
-        ((cellOnReference + 0.5f) / SEED_REFERENCE_CELLS * cellsAcrossOrDown)
-            .toInt().coerceIn(0, cellsAcrossOrDown - 1)
-
-    /**
-     * The plates, their drifts, which of them are continental, and which cells each owns.
-     *
-     * The crusts are chosen last and by *area*, which is what makes the ocean-coverage slider a
-     * statement about the crust rather than about a histogram. `WorldGenConfig.seaLevel` asks for a
-     * share of the world under water; `TectonicsConfig.continentalCrustSubmergedShare` says how
-     * much of a continent stands under water anyway; between them they name a share of the map
-     * that has to be continental crust, and plates are taken in a shuffled order until their
-     * Voronoi cells add up to it.
-     *
-     * Taking them by area rather than by count is the point of doing it here rather than in the
-     * draw. Fourteen Voronoi cells on a warped lattice are not the same size — the largest is
-     * routinely three times the smallest — so "55% of the plates are oceanic" and "55% of the world
-     * is oceanic crust" are different statements, and only the second one is what the slider
-     * means. The order is shuffled from the world's own stream, so which plates end up continental
-     * is still the seed's business and not the geometry's.
-     *
-     * Determinism: every draw, here and in [drawPlateSeeds], is taken for every plate whether or
-     * not it is used, in id order, and the shuffle runs on a list built in id order — never on a
-     * hash order.
-     */
-    private fun drawPlates(config: WorldGenConfig): DrawnPlates {
-        val tectonics = config.tectonics
-        val width = config.width
-        val height = config.height
-        val plateCount = tectonics.plateCount(config.scale)
-
-        // Seeds and drifts first, all oceanic for now: the assignment below reads neither the
-        // types nor anything derived from them, so the partition is settled before the crusts are.
-        val draw = drawPlateSeeds(config)
-        val order = draw.shuffledOrder
-        val drawnSeeds = draw.seeds
-        val random = draw.random
-        val plateId = assignPlates(config, drawnSeeds)
-
-        val cellsPerPlate = IntArray(plateCount)
-        for (cell in plateId.indices) {
-            val plate = plateId[cell]
-            if (plate in 0 until plateCount) cellsPerPlate[plate]++
-        }
-
-        // What share of the map has to be continental crust for `1 - seaLevel` of it to stand
-        // above water, given that some of every continent is drowned. See
-        // `TectonicsConfig.continentalCrustSubmergedShare`.
-        val landShare = (1f - config.seaLevel).coerceIn(0f, 1f)
-        val dryShareOfContinent = (1f - tectonics.continentalCrustSubmergedShare).coerceIn(0.05f, 1f)
-        val targetContinentalShare = (landShare / dryShareOfContinent).coerceIn(0f, 1f)
-
-        // Which plates touch which, so the continents can be kept apart.
-        val touches = Array(plateCount) { BooleanArray(plateCount) }
-        for (row in 0 until height) {
-            for (column in 0 until width) {
-                val here = plateId[row * width + column]
-                val rightColumn = (column + 1) % width
-                val right = plateId[row * width + rightColumn]
-                if (right != here) {
-                    touches[here][right] = true
-                    touches[right][here] = true
-                }
-                if (row + 1 >= height) continue
-                val below = plateId[(row + 1) * width + column]
-                if (below != here) {
-                    touches[here][below] = true
-                    touches[below][here] = true
-                }
-            }
-        }
-
-        val cellCount = plateId.size.toFloat()
-        val target = targetContinentalShare * cellCount
-        val continental = BooleanArray(plateCount)
-        var claimed = 0f
-
-        // Continents are rafts, not a slab. Taken straight down the shuffled order, a random
-        // 45% of fourteen Voronoi plates is almost always one connected mass — measured, every
-        // standard seed came out with a single landmass holding 99.8% of its land, no
-        // archipelago, a coastline of box dimension 1.05 where every chunk before S2 held 1.20,
-        // and a flooded rift with no land bridge left in it. Earth is not like that: its
-        // continental plates are separated by oceanic ones, which is what an ocean basin *is*.
-        //
-        // So the order is walked twice. The first pass takes only plates that touch nothing
-        // already continental, which scatters the seeds of the continents across the map; the
-        // second fills up to the target from what is left, which is what grows them. The result
-        // is several separate landmasses with ocean between them, and their margins break into
-        // islands the way a margin does.
-        for (plate in order) {
-            if (claimed >= target) break
-            if ((0 until plateCount).any { continental[it] && touches[plate][it] }) continue
-            continental[plate] = true
-            claimed += cellsPerPlate[plate]
-        }
-        for (plate in order) {
-            if (claimed >= target) break
-            if (continental[plate]) continue
-            continental[plate] = true
-            claimed += cellsPerPlate[plate]
-        }
-        // The last plate taken usually overshoots. Give it back when doing so lands nearer the
-        // target than keeping it, so the answer is the closest the plates can get rather than the
-        // first one past the post.
-        val lastTaken = order.lastOrNull { continental[it] }
-        if (lastTaken != null) {
-            val over = claimed - target
-            if (over > cellsPerPlate[lastTaken] / 2f) continental[lastTaken] = false
-        }
-
-        val plates = drawnSeeds.map { plate ->
-            if (continental[plate.id]) plate.copy(type = PlateType.CONTINENTAL) else plate
-        }
-        return DrawnPlates(plates, plateId)
-    }
-
-    /**
-     * The nearest seed's plate at every cell, on the ground, then a noise domain-warp so boundaries
-     * meander instead of looking like straight Voronoi edges.
-     *
-     * Still a warped partition, and rule 13 names a nearest-seed partition among the shapes it
-     * rejects; what is measured of the boundaries it draws is in docs/DESIGN_LEDGER.md, Fix 2, and
-     * reshaping them is its own item on the roadmap. What changed is the ruler: the partition's
-     * metric is Euclid's on the ground, and the warp moves a boundary as far north-south as
-     * east-west in kilometres, on a noise lattice square on the ground. Both were square in cells,
-     * which on this map's cells drew every plate twice as wide as it is tall on the ground and
-     * warped its boundaries twice as far and twice as tightly east-west.
-     */
-    private fun assignPlates(config: WorldGenConfig, plates: List<Plate>): IntArray {
-        val cellsAcross = config.width
-        val cellsDown = config.height
-        val nearestSeedPlate = nearestSeedPartition(config, plates)
-
-        val warp = PlateWarp(config)
-
-        val warped = IntArray(cellsAcross * cellsDown)
-        // Reads `raw`, writes its own cell of `warped` — no overlap between rows.
-        parallelChunks(0, cellsDown) { startRow, endRow ->
-            for (row in startRow until endRow) {
-                for (column in 0 until cellsAcross) {
-                    val warpAcross = warp.acrossCellWidths(column, row)
-                    val warpDown = warp.downRows(column, row)
-                    var sourceColumn = (column + warpAcross).roundToInt() % cellsAcross
-                    if (sourceColumn < 0) sourceColumn += cellsAcross
-                    val sourceRow = (row + warpDown).roundToInt().coerceIn(0, cellsDown - 1)
-                    warped[row * cellsAcross + column] =
-                        nearestSeedPlate[sourceRow * cellsAcross + sourceColumn]
-                }
-            }
-        }
-        return warped
-    }
-
-    /**
-     * Which plate's seed each cell is nearest on the ground, before the warp: Euclidean by jump
-     * flooding and told how tall a row is. A chamfer walk over square cells did this before, which
-     * is an octagonal metric in cells and, on this map's cells, one that measured north-south at
-     * twice the ground.
-     *
-     * Internal so `TectonicGroundTest` can ask it about seeds it places where it likes.
-     */
-    internal fun nearestSeedPartition(config: WorldGenConfig, plates: List<Plate>): IntArray {
-        val cellsAcross = config.width
-        val cellsDown = config.height
-        val distanceToSeed = FloatArray(cellsAcross * cellsDown) { JumpFloodDistance.INFINITE }
-        val nearestSeedPlate = IntArray(cellsAcross * cellsDown) { -1 }
-        plates.forEach { plate ->
-            val cell = plate.seedY * cellsAcross + plate.seedX
-            distanceToSeed[cell] = 0f
-            nearestSeedPlate[cell] = plate.id
-        }
-        JumpFloodDistance.run(
-            cellsAcross, cellsDown, distanceToSeed, nearestSeedPlate, config.cellHeightInCellWidths
-        )
-        return nearestSeedPlate
-    }
-
-    private fun classifyBoundaries(
-        config: WorldGenConfig,
-        plateId: IntArray,
-        plates: List<Plate>
-    ): Map<Int, Boundary> {
-        val width = config.width
-        val height = config.height
-        val boundaries = HashMap<Int, Boundary>()
-        val interactions = HashMap<Int, PairInteraction>()
-        val neighbours = arrayOf(
-            intArrayOf(1, 0), intArrayOf(-1, 0), intArrayOf(0, 1), intArrayOf(0, -1)
-        )
-
-        for (row in 0 until height) {
-            for (column in 0 until width) {
-                val cell = row * width + column
-                val plate = plates[plateId[cell]]
-                var other: Plate? = null
-
-                for (step in neighbours) {
-                    val neighbourRow = row + step[1]
-                    if (neighbourRow < 0 || neighbourRow >= height) continue
-                    var neighbourColumn = (column + step[0]) % width
-                    if (neighbourColumn < 0) neighbourColumn += width
-
-                    val candidate = plates[plateId[neighbourRow * width + neighbourColumn]]
-                    if (candidate.id != plate.id) {
-                        other = candidate
-                        break
-                    }
-                }
-
-                val neighbourPlate = other ?: continue
-                // The pair's key, always taken in ascending id order, so the two cells either
-                // side of a boundary look up the same interaction.
-                val key =
-                    if (plate.id < neighbourPlate.id) plate.id * plates.size + neighbourPlate.id
-                    else neighbourPlate.id * plates.size + plate.id
-                val interaction = interactions.getOrPut(key) {
-                    interactionOf(
-                        plates[key / plates.size], plates[key % plates.size], width,
-                        config.cellHeightInCellWidths
-                    )
-                }
-                boundaries[cell] = Boundary(
-                    interaction,
-                    oceanicSide = plate.type == PlateType.OCEANIC,
-                    overridingSide = plate.id == interaction.overridingId
-                )
-            }
-        }
-        return boundaries
-    }
-
     /**
      * What [segmentRifts] made of the present epoch's rifts, one entry per rift boundary cell, for
      * the guards that ask whether a rift is the same rift at every grid, and for `:cartography`'s
@@ -2692,10 +1922,6 @@ object PlateStage {
         }
     }
 
-    /** Each plate's crust in [config]'s world, by plate id, without stamping anything. */
-    internal fun presentPlateTypes(config: WorldGenConfig): List<PlateType> =
-        drawPlates(config).plates.map { it.type }
-
     /** [RiftSegmentReport] for [config]'s present epoch, without stamping anything. */
     fun presentRiftSegments(config: WorldGenConfig): RiftSegmentReport = presentRiftSegmentsWithout(config, emptySet())
 
@@ -2705,13 +1931,230 @@ object PlateStage {
      * to arrange it.
      */
     internal fun presentRiftSegmentsWithout(config: WorldGenConfig, withoutCells: Set<Int>): RiftSegmentReport {
-        val drawn = drawPlates(config)
-        val boundaries = classifyBoundaries(config, drawn.plateId, drawn.plates).toMutableMap()
+        val history = TectonicHistory.run(config)
+        val crust = CrustMap.read(config, history)
+        val plates = presentPlates(config, history)
+        val share = FloatField(config.width, config.height, crust.continentalShare)
+        val boundaries = classifyPresentBoundaries(config, crust.plateId, plates, history, share).toMutableMap()
         withoutCells.forEach { boundaries.remove(it) }
         val report = RiftSegmentReport()
-        segmentRifts(config, boundaries, drawn.plates, report)
+        segmentRifts(config, boundaries, plates, report)
         return report
     }
+
+    /**
+     * The history's present plates as the map reads them: each plate's middle on the map, its drift
+     * there, whether it is mostly continental, and its rotation as an Euler pole and a rate.
+     *
+     * The middle is the mean of the plate's points on the history's sphere, so it is the same place
+     * at every map grid, which is what [segmentRifts] anchors a rift's half-grabens to.
+     */
+    internal fun presentPlates(config: WorldGenConfig, history: CrustHistory): List<Plate> {
+        val sphere = history.sphere
+        val count = history.plateRotations.size
+        val sumX = DoubleArray(count)
+        val sumY = DoubleArray(count)
+        val sumZ = DoubleArray(count)
+        val cells = IntArray(count)
+        val continent = IntArray(count)
+        for (point in 0 until sphere.cellCount) {
+            val plate = history.plateOf[point]
+            sumX[plate] += sphere.x[point]; sumY[plate] += sphere.y[point]; sumZ[plate] += sphere.z[point]
+            cells[plate]++
+            if (history.continental[point]) continent[plate]++
+        }
+        return List(count) { id ->
+            var cx = sumX[id]; var cy = sumY[id]; var cz = sumZ[id]
+            val length = sqrt(cx * cx + cy * cy + cz * cz)
+            if (length > 0.0) { cx /= length; cy /= length; cz /= length } else { cx = 1.0; cy = 0.0; cz = 0.0 }
+            val latitude = kotlin.math.asin(cz.coerceIn(-1.0, 1.0))
+            var longitude = atan2(cy, cx)
+            if (longitude < 0.0) longitude += 2.0 * PI
+            val omega = history.plateRotations[id]
+            // The plate's velocity at its middle, east and north, from `omega x r`.
+            val vx = omega[1] * cz - omega[2] * cy
+            val vy = omega[2] * cx - omega[0] * cz
+            val vz = omega[0] * cy - omega[1] * cx
+            val east = -sin(longitude) * vx + cos(longitude) * vy
+            val north = -sin(latitude) * cos(longitude) * vx - sin(latitude) * sin(longitude) * vy + cos(latitude) * vz
+            val speed = sqrt(east * east + north * north)
+            val rate = sqrt(omega[0] * omega[0] + omega[1] * omega[1] + omega[2] * omega[2])
+            val poleLatitude = if (rate > 0.0) kotlin.math.asin((omega[2] / rate).coerceIn(-1.0, 1.0)) else PI / 2
+            val poleLongitude = if (rate > 0.0) atan2(omega[1], omega[0]) else 0.0
+            Plate(
+                id = id,
+                seedX = (longitude / (2.0 * PI) * config.width).toInt().coerceIn(0, config.width - 1),
+                seedY = ((0.5 - latitude / PI) * config.height).toInt().coerceIn(0, config.height - 1),
+                driftX = if (speed > 0.0) (east / speed).toFloat() else 0f,
+                driftY = if (speed > 0.0) (-north / speed).toFloat() else 0f,
+                type = if (continent[id] > CRATONIC_PLATE_SHARE * cells[id]) PlateType.CONTINENTAL else PlateType.OCEANIC,
+                eulerPoleLatitudeDegrees = (poleLatitude * DEGREES_PER_RADIAN).toFloat(),
+                eulerPoleLongitudeDegrees = (poleLongitude * DEGREES_PER_RADIAN).toFloat(),
+                rotationDegreesPerMyr = (rate * DEGREES_PER_RADIAN).toFloat()
+            )
+        }
+    }
+
+    /**
+     * The present boundaries on the map, each map cell beside another plate given the class the
+     * history read there from the two plates' relative motion: Bird 2003's 20 degrees for a
+     * transform, the crusts either side for the rest (TectonicHistory.classifyBoundaries).
+     *
+     * A boundary cell takes the class of the nearest of the history's boundary points between the
+     * same two plates within [BOUNDARY_SEARCH_SPACINGS] of the history's spacing; the map's boundary
+     * and the history's are the same line, read on two grids. Cells of one pair and one class share
+     * one [PairInteraction]: its strength is the closing rate over their stretch against the speed
+     * of a plate a slab pulls (`TectonicsConfig.slabPulledPlateSpeedMmPerYear`), its overriding
+     * plate the one the history kept on top there.
+     */
+    private fun classifyPresentBoundaries(
+        config: WorldGenConfig,
+        plateId: IntArray,
+        plates: List<Plate>,
+        history: CrustHistory,
+        continentalShare: FloatField
+    ): Map<Int, Boundary> {
+        val width = config.width
+        val height = config.height
+        val sphere = history.sphere
+        val reach = BOUNDARY_SEARCH_SPACINGS * sphere.spacingRadians
+        val otherOf = IntArray(width * height) { -1 }
+        val classOf = IntArray(width * height) { -1 }
+        val overridingOf = IntArray(width * height) { -1 }
+        val closingOf = FloatArray(width * height)
+        parallelChunks(0, height) { fromRow, toRow ->
+            for (row in fromRow until toRow) {
+                val latitude = PI / 2 - (row + 0.5) / height * PI
+                for (column in 0 until width) {
+                    val cell = row * width + column
+                    val plate = plateId[cell]
+                    var other = -1
+                    for (step in 0 until 4) {
+                        val neighborRow = row + NEIGHBOR_ROW_STEPS[step]
+                        if (neighborRow < 0 || neighborRow >= height) continue
+                        val neighborColumn = (column + NEIGHBOR_COLUMN_STEPS[step]).mod(width)
+                        val candidate = plateId[neighborRow * width + neighborColumn]
+                        if (candidate != plate) {
+                            other = candidate
+                            break
+                        }
+                    }
+                    if (other < 0) continue
+                    otherOf[cell] = other
+                    val longitude = (column + 0.5) / width * 2.0 * PI
+                    val px = cos(latitude) * cos(longitude)
+                    val py = cos(latitude) * sin(longitude)
+                    val pz = sin(latitude)
+                    var bestCosine = -2.0
+                    sphere.forEachWithin(px, py, pz, reach) { point, cosine ->
+                        val pointClass = history.boundaryClass[point]
+                        if (pointClass < 0 || cosine <= bestCosine) return@forEachWithin
+                        val a = history.plateOf[point]
+                        val b = history.boundaryOtherPlate[point]
+                        if ((a == plate && b == other) || (a == other && b == plate)) {
+                            bestCosine = cosine
+                            classOf[cell] = pointClass
+                            overridingOf[cell] = history.boundaryOverridingPlate[point]
+                            closingOf[cell] = history.boundaryClosingMmPerYear[point]
+                        }
+                    }
+                    if (classOf[cell] < 0) classOf[cell] = BoundaryClass.TRANSFORM_FAULT.ordinal
+                }
+            }
+        }
+        // One interaction per pair and class, in ascending order of the pair's key.
+        class Stretch {
+            var closingSum = 0.0
+            var cells = 0
+            val overridingVotes = HashMap<Int, Int>()
+        }
+        val stretches = HashMap<Long, Stretch>()
+        for (cell in 0 until width * height) {
+            val other = otherOf[cell]
+            if (other < 0) continue
+            val low = minOf(plateId[cell], other)
+            val high = maxOf(plateId[cell], other)
+            val key = (low.toLong() * plates.size + high) * BOUNDARY_CLASSES + classOf[cell]
+            val stretch = stretches.getOrPut(key) { Stretch() }
+            stretch.closingSum += abs(closingOf[cell]).toDouble()
+            stretch.cells++
+            if (overridingOf[cell] >= 0) stretch.overridingVotes[overridingOf[cell]] = (stretch.overridingVotes[overridingOf[cell]] ?: 0) + 1
+        }
+        val referenceSpeed = config.tectonics.slabPulledPlateSpeedMmPerYear
+        val interactions = HashMap<Long, PairInteraction>()
+        for (key in stretches.keys.sorted()) {
+            val stretch = stretches.getValue(key)
+            val pairClass = BoundaryClass.entries[(key % BOUNDARY_CLASSES).toInt()]
+            val pair = key / BOUNDARY_CLASSES
+            val low = (pair / plates.size).toInt()
+            val high = (pair % plates.size).toInt()
+            val overriding = stretch.overridingVotes.entries
+                .sortedWith(compareByDescending<Map.Entry<Int, Int>> { it.value }.thenBy { it.key })
+                .firstOrNull()?.key ?: low
+            val type = when (pairClass) {
+                BoundaryClass.ANDEAN_MARGIN, BoundaryClass.COLLISION_PLATEAU, BoundaryClass.ISLAND_ARC -> BoundaryType.CONVERGENT
+                BoundaryClass.OCEAN_RIDGE, BoundaryClass.CONTINENTAL_RIFT -> BoundaryType.DIVERGENT
+                BoundaryClass.TRANSFORM_FAULT -> BoundaryType.TRANSFORM
+            }
+            interactions[key] = PairInteraction(
+                type = type,
+                strength = (stretch.closingSum / stretch.cells / referenceSpeed).toFloat().coerceIn(MIN_BOUNDARY_STRENGTH, 1f),
+                continentalCollision = pairClass == BoundaryClass.COLLISION_PLATEAU,
+                pairClass = pairClass,
+                overridingId = overriding,
+                lowId = low,
+                highId = high
+            )
+        }
+        val boundaries = HashMap<Int, Boundary>()
+        for (cell in 0 until width * height) {
+            val other = otherOf[cell]
+            if (other < 0) continue
+            val low = minOf(plateId[cell], other)
+            val high = maxOf(plateId[cell], other)
+            val interaction = interactions.getValue((low.toLong() * plates.size + high) * BOUNDARY_CLASSES + classOf[cell])
+            boundaries[cell] = Boundary(
+                interaction,
+                oceanicSide = continentalShare.data[cell] < 0.5f,
+                overridingSide = plateId[cell] == interaction.overridingId
+            )
+        }
+        return boundaries
+    }
+
+    /**
+     * The history's mean half-spreading rate over its ridges at the present, km per Myr: reported
+     * where the stage used to solve a rate for its floor's ages, which the history now makes.
+     */
+    private fun meanHalfSpreadingRateKmPerMyr(history: CrustHistory): Double {
+        var sum = 0.0
+        var count = 0
+        for (point in 0 until history.sphere.cellCount) {
+            if (history.boundaryClass[point] != BoundaryClass.OCEAN_RIDGE.ordinal) continue
+            sum += -history.boundaryClosingMmPerYear[point] / 2.0
+            count++
+        }
+        return if (count == 0) 0.0 else sum / count
+    }
+
+    /** A map cell's four neighbors, east, west, south and north, in the order they are asked. */
+    private val NEIGHBOR_COLUMN_STEPS = intArrayOf(1, -1, 0, 0)
+    private val NEIGHBOR_ROW_STEPS = intArrayOf(0, 0, 1, -1)
+
+    /**
+     * How far from a map boundary cell the history's boundary between the same plates is sought, in
+     * the history's spacings: the map's plate boundary is read through the map pass's kernel and
+     * warp, which can move it a spacing from the history's points, and three holds both.
+     */
+    private const val BOUNDARY_SEARCH_SPACINGS = 3.0
+
+    /** How many [BoundaryClass]es there are, the stride of a stretch's key. */
+    private val BOUNDARY_CLASSES = BoundaryClass.entries.size.toLong()
+
+    /** A plate more than a quarter continental is a continent's, as Zahirovic et al. sort plates. */
+    private const val CRATONIC_PLATE_SHARE = 0.25
+
+    private const val DEGREES_PER_RADIAN = 180.0 / PI
 
     /**
      * Breaks every continental rift into half-grabens along its own length.
@@ -2734,9 +2177,9 @@ object PlateStage {
      *    pair's separate stretches it lies on or how many there are, which is topology: a third
      *    plate pinching the boundary, or a gap just over the joining threshold, moves with the grid.
      *  - Its place is a distance in kilometers along the rift's own course from an anchor that does
-     *    not move with the grid: where the rift crosses the midpoint of its two plates' seeds, read
-     *    off the bisector of those seeds through the same warp that drew the boundary, or the end of
-     *    the rift nearer it when the rift does not cross it. The course is measured along a
+     *    not move with the grid: where the rift crosses the bisector of its two plates' middles, read
+     *    off the history's sphere and so the same at every grid, or the end of the rift nearer it
+     *    when the rift does not cross it. The course is measured along a
      *    centerline drawn through stretches [CENTERLINE_STEP_KM] long, so it follows the same bends
      *    at every grid; see [arcAlongRun].
      *  - The joins fall at a sequence of lengths drawn one per half-graben from a stream keyed by
@@ -2781,7 +2224,6 @@ object PlateStage {
         val shortestKm = maxOf(tectonics.riftSegmentMinKm, MIN_SEGMENT_CELLS * cellWidthKm)
         val longestKm = maxOf(tectonics.riftSegmentMaxKm, shortestKm)
         val accommodationKm = maxOf(tectonics.riftAccommodationKm, MIN_ACCOMMODATION_CELLS * cellWidthKm)
-        val warp = PlateWarp(config)
 
         for (pairKey in cellsOfPair.keys.sorted()) {
             val pairCells = cellsOfPair.getValue(pairKey)
@@ -2790,11 +2232,7 @@ object PlateStage {
             fun bisectorKm(cell: Int): Double {
                 val column = cell % config.width
                 val row = cell / config.width
-                val sourceEastKm = (column + 0.5 + warp.acrossCellWidths(column, row)) * cellWidthKm
-                val sourceSouthKm =
-                    ((row + 0.5 + warp.downRows(column, row)).coerceIn(0.0, config.height.toDouble())) *
-                        config.cellHeightKm
-                return axis.alongKm(sourceEastKm, sourceSouthKm)
+                return axis.alongKm((column + 0.5) * cellWidthKm, (row + 0.5) * config.cellHeightKm)
             }
 
             val courses = riftCourses(config, pairCells).map { course ->
@@ -3130,25 +2568,6 @@ object PlateStage {
 
         fun alongKm(eastKm: Double, southKm: Double): Double =
             shortestEastKm(eastKm - midEastKm) * alongEast + (southKm - midSouthKm) * alongSouth
-    }
-
-    /**
-     * The warp [assignPlates] bends the nearest-seed partition by: at each cell, how far away the
-     * cell reads its plate from, across in cell widths and down in rows.
-     */
-    private class PlateWarp(config: WorldGenConfig) {
-        private val warpX = PerlinNoise(config.seed * 6151 + 3)
-        private val warpY = PerlinNoise(config.seed * 6151 + 9)
-        private val lattice = GroundLattice(config, WARP_WAVELENGTH_KM)
-        private val amplitudeCellWidths =
-            config.cellsFor(config.tectonics.boundaryFalloffKm) * WARP_AMPLITUDE_IN_BELT_WIDTHS
-        private val amplitudeRows = (amplitudeCellWidths / config.cellHeightInCellWidths).toFloat()
-
-        fun acrossCellWidths(column: Int, row: Int): Float = amplitudeCellWidths *
-            warpX.fbm(lattice.x(column), lattice.y(row), 4, lattice.period, lattice.period)
-
-        fun downRows(column: Int, row: Int): Float = amplitudeRows *
-            warpY.fbm(lattice.x(column), lattice.y(row), 4, lattice.period, lattice.period)
     }
 
     /** One stretch of a rift as a course: its cells, and each one's distance along it from one end, in km. */
@@ -3513,76 +2932,6 @@ object PlateStage {
     private const val CENTERLINE_STEP_KM = 93.75
 
     /**
-     * Projects the plates' relative motion onto the axis between their centres — the closest thing
-     * to a boundary normal that holds for the whole shared edge.
-     *
-     * The axis is taken on the ground, a row counting [cellHeightInCellWidths] of a column, because
-     * the drifts it is projected against are directions on the ground; taken in cells, a pair lying
-     * north-south of each other was read at the wrong angle to every drift not along an axis.
-     */
-    private fun interactionOf(
-        first: Plate,
-        second: Plate,
-        width: Int,
-        cellHeightInCellWidths: Double
-    ): PairInteraction {
-        var acrossCells = (second.seedX - first.seedX).toFloat()
-        // Shortest way round the cylinder, so plates either side of the seam behave sanely.
-        if (acrossCells > width / 2f) acrossCells -= width
-        if (acrossCells < -width / 2f) acrossCells += width
-        val downCellWidths = (second.seedY - first.seedY) * cellHeightInCellWidths.toFloat()
-
-        val separationCellWidths = sqrt(acrossCells * acrossCells + downCellWidths * downCellWidths)
-            .coerceAtLeast(MIN_SEED_SEPARATION_CELLS)
-        val axisAcross = acrossCells / separationCellWidths
-        val axisDown = downCellWidths / separationCellWidths
-
-        // Positive when the pair is closing.
-        val convergence = (
-            (first.driftX - second.driftX) * axisAcross +
-                (first.driftY - second.driftY) * axisDown
-            ) / 2f
-        val type = when {
-            convergence > CONVERGENCE_THRESHOLD -> BoundaryType.CONVERGENT
-            convergence < -CONVERGENCE_THRESHOLD -> BoundaryType.DIVERGENT
-            else -> BoundaryType.TRANSFORM
-        }
-        val bothContinental = first.type == PlateType.CONTINENTAL && second.type == PlateType.CONTINENTAL
-        val bothOceanic = first.type == PlateType.OCEANIC && second.type == PlateType.OCEANIC
-
-        // Dense oceanic crust goes under buoyant continental crust, so where the pair is mixed the
-        // continent overrides and there is nothing to choose. Where both are the same, the choice
-        // is genuinely arbitrary and has to be made by something that cannot vary between cells or
-        // between runs: the lower id, a total order on the pair.
-        val overridingId = when {
-            first.type == second.type -> if (first.id < second.id) first.id else second.id
-            first.type == PlateType.CONTINENTAL -> first.id
-            else -> second.id
-        }
-
-        val pairClass = when (type) {
-            BoundaryType.CONVERGENT -> when {
-                bothContinental -> BoundaryClass.COLLISION_PLATEAU
-                bothOceanic -> BoundaryClass.ISLAND_ARC
-                else -> BoundaryClass.ANDEAN_MARGIN
-            }
-            BoundaryType.DIVERGENT ->
-                if (bothOceanic) BoundaryClass.OCEAN_RIDGE else BoundaryClass.CONTINENTAL_RIFT
-            BoundaryType.TRANSFORM -> BoundaryClass.TRANSFORM_FAULT
-        }
-
-        return PairInteraction(
-            type = type,
-            strength = abs(convergence).coerceIn(MIN_BOUNDARY_STRENGTH, 1f),
-            continentalCollision = bothContinental,
-            pairClass = pairClass,
-            overridingId = overridingId,
-            lowId = if (first.id < second.id) first.id else second.id,
-            highId = if (first.id < second.id) second.id else first.id
-        )
-    }
-
-    /**
      * Sharp-crested profile, for features that really are narrow: trenches, rifts, ridges at
      * spreading centres.
      */
@@ -3663,17 +3012,6 @@ object PlateStage {
     }
 
     /**
-     * The margin noise's longest wavelength on the ground, in kilometers, and its octaves.
-     *
-     * 500 km, the scale of a coastal embayment: the 24 cycles round the 12,000 km world it was set
-     * as. Six octaves carry it down to 15.6 km, and the coastline's box count, taken over spans of
-     * tens to a few hundred kilometers, sits inside that range with power in it, which is the
-     * point. See [roughenMargins].
-     */
-    private const val MARGIN_WAVELENGTH_KM = 500.0
-    private const val MARGIN_OCTAVES = 6
-
-    /**
      * The along-strike swell of a belt's width, as a factor on its nominal half-width: the noise
      * runs it between these two.
      *
@@ -3734,44 +3072,6 @@ object PlateStage {
     private const val SEAMOUNT_SIZE_WAVELENGTH_KM = 1_333.3
 
     /**
-     * How far a plate seed is kept from each pole, as a share of the grid's height, and the band
-     * of rows left for it between the two margins.
-     *
-     * A seed on the very first or last row owns a Voronoi cell that is all edge and no interior,
-     * so the polar rows would belong to a plate boundary rather than to a plate.
-     */
-    private const val SEED_POLE_MARGIN_SHARE = 0.06f
-    private const val SEED_LATITUDE_SPAN = 0.88f
-
-    /**
-     * The grid a plate seed's position is drawn against, whatever grid the world is generated on:
-     * a seed's place is drawn as one of 512 columns and 512 rows of the map and read as that
-     * fraction of the map's width and height.
-     *
-     * A seed's place on the planet is a property of the seed, not of how finely the map is cut, so
-     * it is settled here once and read as a fraction everywhere else — see [drawPlateSeeds]. 512
-     * because it was `WorldGenConfig`'s default grid when the draw was settled, and the draws made
-     * on it are the worlds every seed has named since; it is a fraction of the map and not a
-     * length, so it holds on a planet of any size, and it is not the grid the application makes
-     * worlds on, which is 1,024 rows (docs/DESIGN_LEDGER.md, G1).
-     */
-    private const val SEED_REFERENCE_CELLS = 512
-
-    /**
-     * How far the domain warp may push a plate boundary, in belt half-widths, and its noise's
-     * longest wavelength on the ground, in kilometers.
-     *
-     * Straight Voronoi edges are the one thing that makes a plate map look computed; the warp is
-     * what makes a boundary meander. Kept comparable to the belt it carries, so the meander is of
-     * the same scale as the mountains along it. 2,000 km, the 6 cycles round the 12,000 km world
-     * it was set as: a bend or two along a boundary the length of a plate. Counted in cycles it
-     * stayed six on a world of Earth's size, where a bend is 6,679 km and the boundaries ran
-     * straight (docs/DESIGN_LEDGER.md, K1).
-     */
-    private const val WARP_AMPLITUDE_IN_BELT_WIDTHS = 1.6f
-    private const val WARP_WAVELENGTH_KM = 2_000.0
-
-    /**
      * The along-strike modulation of a volcanic arc: a wavelength of [ARC_CHAIN_WAVELENGTH_KM],
      * 461.5 km, the 26 cycles round the 12,000 km world it was set as, raised to
      * [ARC_CHAIN_EXPONENT] and scaled to [ARC_CHAIN_PEAK].
@@ -3785,19 +3085,10 @@ object PlateStage {
     private const val ARC_CHAIN_PEAK = 1.6f
 
     /**
-     * The convergence rate, as a share of a plate's own drift speed, above which a pair counts as
-     * converging or diverging rather than sliding past one another.
-     */
-    private const val CONVERGENCE_THRESHOLD = 0.15f
-
-    /**
      * The least convergence a boundary is given credit for, so that a nearly transform pair still
      * leaves a trace rather than vanishing where its relief would round to nothing.
      */
     private const val MIN_BOUNDARY_STRENGTH = 0.12f
-
-    /** Guards the division when two plate seeds land on the same cell. */
-    private const val MIN_SEED_SEPARATION_CELLS = 1e-4f
 
     /**
      * The per-cell roughness that breaks a belt's crest into peaks, between these two, at a

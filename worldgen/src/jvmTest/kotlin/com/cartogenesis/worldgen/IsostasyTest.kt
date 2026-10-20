@@ -63,7 +63,7 @@ class IsostasyTest : BorrowsSharedWorlds() {
         val isostasy = WorldGenConfig().isostasy
         val columns = Isostasy.Columns(isostasy)
 
-        val referenceAge = columns.seafloorAgeAtDepth(isostasy.oceanicMeanFloorMetres)
+        val referenceAge = EARTH_MEAN_FLOOR_AGE_MYR
         println(
             ("ISOSTASY columns continental %.0f m, a ridge %.0f m, %.0f-Myr floor %.0f m, the" +
                 " oldest floor %.0f m, a cold oceanic column %.0f m; thermal buoyancy %.0f m at" +
@@ -96,27 +96,27 @@ class IsostasyTest : BorrowsSharedWorlds() {
                 isostasy.seafloorSubsidenceMetresPerRootMyr * sqrt(20f)).toDouble(),
             columns.altitudeMetres(0f, 20f).toDouble(), 1.0
         )
-        // The cratonic profile, which is the same equation spent on thickness rather than on
+        // The crust's thickness, which is the same equation spent on thickness rather than on
         // density: a kilometre of continental crust is worth `(mantle - crust) / mantle` of itself
-        // in freeboard, so Christensen and Mooney's shield-to-extended-crust swing of
-        // `cratonThickeningKm` lifts a craton this far above the rim of its own continent.
+        // in freeboard, so Christensen and Mooney's shield-to-extended-crust swing lifts a craton
+        // this far above a stretched margin's crust.
         val perKilometre = (isostasy.mantleDensity - isostasy.continentalCrustDensity) /
             isostasy.mantleDensity * 1_000f
         // Measured upward from the standard column, so both columns stand in air: since H1 the
         // standard column floats at 374 m, and a column 6 km thinner stands under water, where the
         // water's own load adds to the swing and the arithmetic is no longer the crust's alone.
         val tiltMetres =
-            columns.altitudeMetres(1f, 0f, isostasy.cratonThickeningKm) - columns.altitudeMetres(1f, 0f, 0f)
+            columns.altitudeMetres(1f, 0f, SHIELD_TO_EXTENDED_SWING_KM) - columns.altitudeMetres(1f, 0f, 0f)
         println(
             "ISOSTASY craton profile %.0f m per km of crust, %.0f m of tilt across %.1f km"
-                .format(perKilometre, tiltMetres, isostasy.cratonThickeningKm)
+                .format(perKilometre, tiltMetres, SHIELD_TO_EXTENDED_SWING_KM)
         )
         // Five metres of slack on seventeen hundred, because the two sides are not the same
         // arithmetic in the same precision: the left is one product and the right is a difference
         // of two column masses that each carry the datum, a number near a hundred million.
         assertEquals(
             "the cratonic profile is not Airy's own arithmetic on its thickness swing",
-            (isostasy.cratonThickeningKm * perKilometre).toDouble(),
+            (SHIELD_TO_EXTENDED_SWING_KM * perKilometre).toDouble(),
             tiltMetres.toDouble(), 5.0
         )
         assertEquals(
@@ -1022,6 +1022,20 @@ class IsostasyTest : BorrowsSharedWorlds() {
     }
 
     private companion object {
+        /**
+         * Christensen and Mooney's swing from a shield's 41-45 km of crust to extended crust's
+         * 30.5, about twelve kilometres: the thickness the cratonic profile spent before the
+         * tectonic history made the crust's thickness its own (docs/DESIGN_LEDGER.md, TH1-1).
+         */
+        const val SHIELD_TO_EXTENDED_SWING_KM = 12f
+
+        /**
+         * Earth's floor's mean age, Myr: Bird 2003's 150 Myr of the whole surface's creation over
+         * the ocean's share of it, read as a floor whose area falls linearly with age to the 180
+         * Myr of the oldest, a third of that oldest: about 60.
+         */
+        const val EARTH_MEAN_FLOOR_AGE_MYR = 60f
+
         /** `GeographyAuditTest`'s standard seeds, plus the author's own world. */
         val SEEDS = listOf(7L, 42L, 1234L, 99L, 718106L)
 

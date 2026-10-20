@@ -100,6 +100,14 @@ class SatelliteStyleTest {
 
         /** Where a streak's level lines are traced: a streak this far from none, either way. */
         const val STREAK_LEVEL = 0.5f
+
+        /**
+         * A craton's crust age and a young crust's, in Myr: the history's youngest craton is 1,500 Myr
+         * old, and 180 is the 0.2 of the epochs' scale this test read before, restated
+         * (docs/DESIGN_LEDGER.md, TH1-1).
+         */
+        const val CRATON_AGE_MYR = 1_500f
+        const val YOUNG_CRUST_AGE_MYR = 180f
     }
 
     private val world: WorldMap by lazy { SharedWorlds.world(WORLD) }
@@ -115,13 +123,14 @@ class SatelliteStyleTest {
 
     @Test
     fun `a desert on old crust is redder than the same desert on young crust`() {
-        fun withCrustAge(age: Float): WorldMap {
+        fun withCrustAge(ageMyr: Float): WorldMap {
             val field = FloatField(world.width, world.height)
-            field.data.fill(age)
-            return world.copy(plates = world.plates.copy(crustAge = field))
+            field.data.fill(ageMyr)
+            return world.copy(plates = world.plates.copy(crustAgeMyr = field))
         }
-        val old = SatelliteGround.of(withCrustAge(1f))
-        val young = SatelliteGround.of(withCrustAge(0.2f))
+        // A craton's age and a young belt's, as the tectonic history writes them.
+        val old = SatelliteGround.of(withCrustAge(CRATON_AGE_MYR))
+        val young = SatelliteGround.of(withCrustAge(YOUNG_CRUST_AGE_MYR))
         val deserts = desertCells(old)
         assertTrue(deserts.size >= FEWEST_DESERT_CELLS, "only ${deserts.size} desert cells to measure")
         val oldRed = deserts.map { redness(SatelliteGround.groundColor(old, it)) }.average()
@@ -143,8 +152,8 @@ class SatelliteStyleTest {
     @Test
     fun `on a craton the red is the sand's and not every desert's`() {
         val field = FloatField(world.width, world.height)
-        field.data.fill(1f)
-        val craton = SatelliteGround.of(world.copy(plates = world.plates.copy(crustAge = field)))
+        field.data.fill(CRATON_AGE_MYR)
+        val craton = SatelliteGround.of(world.copy(plates = world.plates.copy(crustAgeMyr = field)))
         val deserts = desertCells(craton)
         assertTrue(deserts.size >= FEWEST_DESERT_CELLS, "only ${deserts.size} desert cells to measure")
         val strongRed = deserts.filter { byteOf(craton.composition[it], 0) > STRONG_RED }

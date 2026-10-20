@@ -15,21 +15,12 @@ import kotlin.random.Random
  * Perlin's improved noise (2002): a gradient at each lattice corner, chosen from the twelve edge
  * directions of a cube by a hash of the corner, blended by the quintic fade.
  */
-class SphereNoise(seed: Long) {
+class SphereNoise private constructor(private val permutation: IntArray) {
 
-    private val permutation = IntArray(DOUBLED_TABLE_SIZE)
+    constructor(seed: Long) : this(shuffledTable(seed))
 
-    init {
-        val shuffled = IntArray(TABLE_SIZE) { it }
-        val random = Random(seed)
-        for (slot in TABLE_SIZE - 1 downTo 1) {
-            val pick = random.nextInt(slot + 1)
-            val swapped = shuffled[slot]
-            shuffled[slot] = shuffled[pick]
-            shuffled[pick] = swapped
-        }
-        for (slot in 0 until DOUBLED_TABLE_SIZE) permutation[slot] = shuffled[slot and TABLE_MASK]
-    }
+    /** This noise's permutation table, [PERMUTATION_ENTRIES] entries, for a device to read the same noise. */
+    fun permutationTable(): IntArray = permutation.copyOf()
 
     /** One octave at ([x], [y], [z]) in lattice units, about -1..1. */
     fun noise(x: Double, y: Double, z: Double): Double {
@@ -84,20 +75,39 @@ class SphereNoise(seed: Long) {
         return sum / amplitudes
     }
 
-    private companion object {
-        const val TABLE_SIZE = 256
-        const val TABLE_MASK = TABLE_SIZE - 1
-        const val DOUBLED_TABLE_SIZE = 2 * TABLE_SIZE
+    companion object {
+        /** How many entries a permutation table has: Perlin's 256, stored twice end to end. */
+        const val PERMUTATION_ENTRIES = 512
+
+        /** The noise whose table is [table]'s [PERMUTATION_ENTRIES] entries from [offset]. */
+        fun fromTable(table: IntArray, offset: Int): SphereNoise =
+            SphereNoise(table.copyOfRange(offset, offset + PERMUTATION_ENTRIES))
+
+        private fun shuffledTable(seed: Long): IntArray {
+            val shuffled = IntArray(TABLE_SIZE) { it }
+            val random = Random(seed)
+            for (slot in TABLE_SIZE - 1 downTo 1) {
+                val pick = random.nextInt(slot + 1)
+                val swapped = shuffled[slot]
+                shuffled[slot] = shuffled[pick]
+                shuffled[pick] = swapped
+            }
+            return IntArray(DOUBLED_TABLE_SIZE) { shuffled[it and TABLE_MASK] }
+        }
+
+        private const val TABLE_SIZE = 256
+        private const val TABLE_MASK = TABLE_SIZE - 1
+        private const val DOUBLED_TABLE_SIZE = 2 * TABLE_SIZE
 
         /** Moves each octave off the others' lattice, so their corners never coincide. */
         const val OCTAVE_OFFSET = 17.31
 
-        fun fade(fraction: Double): Double = fraction * fraction * fraction * (fraction * (fraction * 6 - 15) + 10)
+        private fun fade(fraction: Double): Double = fraction * fraction * fraction * (fraction * (fraction * 6 - 15) + 10)
 
-        fun lerp(from: Double, to: Double, fraction: Double): Double = from + fraction * (to - from)
+        private fun lerp(from: Double, to: Double, fraction: Double): Double = from + fraction * (to - from)
 
         /** The dot of the offset with one of the cube's twelve edge directions, Perlin's choice. */
-        fun gradientDot(hash: Int, x: Double, y: Double, z: Double): Double {
+        private fun gradientDot(hash: Int, x: Double, y: Double, z: Double): Double {
             val selector = hash and 15
             val first = if (selector < 8) x else y
             val second = if (selector < 4) y else if (selector == 12 || selector == 14) x else z

@@ -123,16 +123,6 @@ class GlaciationCombTest : BorrowsSharedWorlds() {
                 // of the ice's work comes out as a rank of parallel gullies, and that is measured
                 // here against the water the ice had to work with.
                 .let { it.copy(erosion = it.erosion.copy(outletIncision = false)) }
-                // And H1's tectonic history off, for a reason of the same shape. Both figures are
-                // shares of the world's standing water, and the history changes how much of that
-                // there is and where: its worn old belts are broad, low-relief uplands, which is
-                // exactly the ground B4's two regimes divide between them, and a cold one sits
-                // near the boundary. On seed 42 the comb share reads 3.2% with the history off and
-                // 3.6% with it on, either side of a bar of 3.5% — a fortieth of the world's water
-                // moving between two categories, not a comb appearing. What the shipped world
-                // measures is asserted where it can be read against the un-glaciated world of the
-                // same seed: see `the author's 2048 world has no narrow straight water`.
-                .let { it.copy(tectonics = it.tectonics.copy(historyEpochs = 1)) }
             val world = SharedWorlds.world(config)
             val bare = SharedWorlds.world(
                 config.copy(glaciation = config.glaciation.copy(enabled = false))

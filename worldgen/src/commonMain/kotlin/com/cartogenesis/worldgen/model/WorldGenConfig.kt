@@ -522,38 +522,6 @@ data class TectonicsConfig(
      */
     val boundaryFalloffKm: Double = 609.375,
     /**
-     * How wide the band is over which one crust becomes the other, in kilometres — a continental
-     * margin, measured from where the crust starts to thin to where it is ocean floor.
-     *
-     * Read as the width over which the crust's share falls from nine tenths to a tenth, since the
-     * blur that makes the band is a Gaussian and has no end of its own; the ramp is then steepest in
-     * its middle at `1.02 / width` of the step a kilometre, which is the gradient the paragraph below
-     * works out, and the same width on the ground whichever way the margin runs. See
-     * `PlateStage.blurAcrossTheMargin`, and docs/DESIGN_LEDGER.md, Fix 2: the box blur this replaced
-     * made the band 389 km wide east-west and 195 km north-south.
-     *
-     * Implicit before it was a setting: the plate base was blurred by a third of
-     * [boundaryFalloffKm], which comes to about 200 km, and was never a
-     * length anybody had chosen. Since isostasy puts 4,500 m between the two crusts, the width of
-     * this band *is* the gradient the continental slope stands at — 300 km is 350 m in every cell
-     * of a 512 grid, 600 km is 175 — so it wanted a figure of its own and a reason for it.
-     *
-     * Three hundred kilometres, from the bathymetry rather than from the crust. Earth's margin has
-     * three parts and they are measured separately: a shelf averaging 78 km (Cogley,
-     * *Continental margins and the extent and number of the continents*, Rev. Geophys. 22, 1984),
-     * a slope of 20 to 100 km falling from the 130 m break to three or four kilometres, and a rise
-     * of 100 to 300 km out to the abyssal plain. Two hundred to four hundred and fifty kilometres
-     * is the sum of those, and 300 is the middle of it. Watts (2001) measures the *crustal*
-     * thinning — 40 km of crust to 10 — over a wider band, 200 to 500 km, but what this setting
-     * governs is where the ground is, and the ground finishes its fall at the foot of the rise.
-     *
-     * Six hundred was S2's first pass, on Watts's broad end plus the widest shelves. Measured on
-     * the five standard worlds it is worth 0.06 of hypsometric trough — the wider band spreads
-     * three times as much drowned platform through the shallowest band and fills the gap between
-     * the two modes back in — and about +0.01 of coastline dimension, which is the wrong trade.
-     */
-    val crustMarginKm: Double = 300.0,
-    /**
      * How far the boundary between the two crusts wanders inside its own margin, as a share of
      * that margin's width.
      *
@@ -1068,77 +1036,18 @@ data class TectonicsConfig(
      */
     val riftSillHeight: Float = 0.075f,
     /**
-     * How many tectonic epochs the world's history carries, the present one included.
+     * How long a dead orogen takes to fall to `1/e` of its height once its uplift has stopped, in
+     * years: 345 million. The history wears an orogen's excess crust down at this rate, the volume it
+     * loses leaving the continent as sediment (`TectonicHistory`).
      *
-     * A drift vector that only classifies today's boundaries gives a world where nothing has ever
-     * moved: every range is young and sits exactly on a plate edge. Earth is not like that. The
-     * Appalachians and the Urals are collisions whose boundary is gone — worn low, broadened, and
-     * a thousand kilometres from any plate edge — and the North Sea and the Benue trough are rifts
-     * that opened, failed and filled with sediment.
-     *
-     * So the stage runs itself [historyEpochs] times. Each past epoch displaces every plate seed
-     * back along minus its own drift (see [epochDriftKm]), classifies the boundaries of *that*
-     * configuration by the same crust pairs, stamps the same profiles, and then ages what it
-     * stamped: lower (by the time since it stopped rising — see [epochLengthYears] and
-     * [orogenDecayTimeYears]), broader ([beltAgeWidening]), rounder ([beltAgeBlurKm]). The
-     * present epoch stamps last and sharpest, and its boundaries, distances and classes are the
-     * ones the rest of the pipeline sees, unchanged.
-     *
-     * 1 — or 0, which means the same thing — is the world before any history existed, bit for
-     * bit: the present epoch alone, with every ageing factor exactly 1 and never applied.
-     * `TectonicHistoryTest` pins that against checksums taken from that build.
+     * An active collision stands 4,000-4,800 m (the Alps, the Southern Alps, the Zagros) and the
+     * Appalachians stand about 2,000 and the Urals about 1,500 after the 300 Myr since the
+     * Alleghanian and Uralian orogenies finished them, so the ratio is 0.42 and the time constant
+     * `300 / ln(1 / 0.42)` is 345 Myr. Baldwin, Whipple & Tucker (*Implications of the shear stress
+     * river incision model for the timescale of postorogenic decay of topography*, JGR 108, 2003)
+     * put the decay of an unforced orogen at 10 to 100 Myr for a soft lithology and several hundred
+     * for a resistant one, which is the band this sits in.
      */
-    val historyEpochs: Int = 3,
-    /**
-     * How fast a plate drifts, in millimeters a year, whichever way it drifts: with
-     * [epochLengthYears], how far it travels between one epoch and the next ([epochDriftKm]).
-     *
-     * A plate boundary only moves if the plates either side of it move relative to one another, so
-     * this is what decides how far an old belt ends up from a present one. Earth's: Zahirovic,
-     * Müller, Seton and Flament (*Tectonic speed limits from plate kinematic reconstructions*, EPSL
-     * 418, 2015) put the median root-mean-square speed of every plate over the last 200 million
-     * years at about 40 mm a year, the fastest, oceanic plates bounded by subduction, at about 85,
-     * and plates more than a quarter cratonic at about 28. The last is taken, because the old
-     * belts this drift places are the ones a continent keeps: an old belt on an oceanic plate has
-     * gone down a trench long before 300 million years are up, and the Appalachians and the Urals
-     * ride plates that are mostly craton.
-     *
-     * Over an epoch of 300 million years that is 8,400 km, a fifth of the equator and more than a
-     * plate's whole width on Earth (a plate of 34 million km² is a disc 6,600 km across), so a past
-     * epoch's boundaries lie where the plates' present arrangement gives no hint of them, which is
-     * what 300 million years does on Earth: the Appalachians and the Urals stand well over a
-     * thousand kilometers from any boundary today. A plate carried past a pole comes down the far
-     * side of it, half a meridian round (`PlateStage.displacedPlates`).
-     */
-    val plateSpeedMmPerYear: Double = CRATONIC_PLATE_SPEED_MM_PER_YEAR,
-    /**
-     * How long one tectonic epoch lasts, in years, and how long a dead orogen takes to fall to
-     * `1/e` of its height once its uplift has stopped.
-     *
-     * H1 aged a belt by a factor per epoch — 0.45, chosen from the Appalachians against the Alps.
-     * A factor is not a mechanism: it says a belt is low because it is old, where what is true is
-     * that a belt is low because its uplift stopped and erosion went on, and the two are only the
-     * same thing when the arithmetic between them is written down. So the factor is retired and
-     * these two times replace it, with the decay `exp(-epochsAgo * epochLengthYears /
-     * orogenDecayTimeYears)` derived from them. Double the epoch and an old belt is lower by the
-     * exponential's own amount rather than by nothing; `TectonicHistoryTest` holds that.
-     *
-     * Both figures are Earth's, and the pair reproduces H1's 0.45 to two places, which is why the
-     * belts did not have to move to gain a reason. Three hundred million years is the age of the
-     * Alleghanian orogeny that finished the Appalachians and of the Uralian that finished the
-     * Urals, which are the two collisions the ageing was written from; the Variscan is the same
-     * epoch. And the decay time is those two ranges themselves: an active collision stands
-     * 4,000-4,800 m (the Alps, the Southern Alps, the Zagros) and the Appalachians stand about
-     * 2,000 and the Urals about 1,500 after 300 Myr, so the ratio is 0.42 and the time constant
-     * `300 / ln(1 / 0.42)` is 345 Myr. Baldwin, Whipple & Tucker (*Implications of the
-     * shear stress river incision model for the timescale of postorogenic decay of topography*,
-     * JGR 108, 2003) put the decay of an unforced orogen at 10 to 100 Myr for a soft lithology and
-     * several hundred for a resistant one, which is the band this sits in.
-     *
-     * `exp(-300/345)` is 0.42, against the 0.45 H1 used: an old belt is 7% lower than it was, and
-     * two epochs back 13%.
-     */
-    val epochLengthYears: Double = 300e6,
     val orogenDecayTimeYears: Double = 345e6,
     /**
      * How fast the rock rises in an active belt, in millimetres a year, by the crust pair that is
@@ -1222,53 +1131,6 @@ data class TectonicsConfig(
      * stops.
      */
     val elevationLimitKneeMetres: Float = 3_000f,
-    /**
-     * How much broader a belt gets per epoch of age.
-     *
-     * An orogen does not merely sink, it spreads: the crustal root relaxes and the debris is laid
-     * out on the forelands either side, which is why the Appalachian province is wider than the
-     * Alpine one for a third of the height.
-     */
-    val beltAgeWidening: Float = 1.45f,
-    /**
-     * Radius, in kilometers, of the rounding blur applied per epoch of age.
-     *
-     * Applied as a Gaussian round on the ground with the spread two box passes of this radius have
-     * east-west, `sqrt(2 r (r + 1) / 3)` with `r` in cell widths; it was those two box passes,
-     * square in cells. Two rather than three because an old belt should read as rounded, not as a
-     * stain. The blur is what turns a stamped profile with a crest and a toe into the smooth swell
-     * of a worn range, and it is applied to the epoch's own uplift field alone, so it never touches
-     * the present epoch's edges.
-     *
-     * 70.3125 km, the 512 grid's 3 cell widths. The spread is kept as the box passes' formula of
-     * the radius in cell widths, which is not proportional to the radius: a Gaussian of a fixed
-     * spread in kilometers would be the physical statement, and it would move every world, so it
-     * is in `TODO.md` rather than here.
-     *
-     * Held at three cells rather than the six first tried, for a reason about the *length* of a
-     * belt rather than its cross-section. A blur is isotropic: at six cells and two passes its
-     * reach is comparable to the saddles [rangeVariation] leaves between one massif and the next
-     * (about forty cells at 512 for a [rangeVariationWavelengthKm] of 923 km), so it does not only round
-     * the profile, it fills the gaps and welds a chain of worn massifs into one continuous upland.
-     * That is bad geography — the Appalachians are a province of separate ranges with valleys
-     * through them — and it showed up downstream as one people holding 45% of seed 42's habitable
-     * land against `CultureRealmTest`'s 45% ceiling, because a continuous upland is a corridor.
-     * At three cells the saddles survive and the same seed reads 33%.
-     */
-    val beltAgeBlurKm: Double = 70.3125,
-    /**
-     * How much of a failed rift's trough survives as a trough, the rest having filled with
-     * sediment.
-     *
-     * A rift that opened in a past epoch and then stopped does not stay a canyon: it becomes an
-     * aulacogen, a broad shallow sag full of its own erosion products, which is what the North
-     * Sea, the Benue trough and the Mississippi embayment are. So a past epoch's continental rift
-     * keeps this share of its depth (before ageing takes its share too) and only a remnant of its
-     * shoulders ([failedRiftShoulder]).
-     */
-    val failedRiftFill: Float = 0.55f,
-    /** What a failed rift keeps of its shoulders. Flexural uplift relaxes once the fault stops. */
-    val failedRiftShoulder: Float = 0.35f,
     /**
      * The relief, in normalized elevation units, at which an epoch's belt counts as having made
      * the crust beneath it its own age — the scale of [PlateResult.crustAge].
@@ -1405,16 +1267,11 @@ data class TectonicsConfig(
      * How wide a rifted margin is, in kilometers: the band over which the history thins a continent
      * that begins to part, from McKenzie's beta of four at the break to nothing inland. Three
      * hundred, the middle of the 200 to 500 km Watts (*Isostasy and Flexure of the Lithosphere*,
-     * 2001) measures continental crust thinning from 40 km to 10 across, as [crustMarginKm] took it.
+     * 2001) measures continental crust thinning from 40 km to 10 across, read as the margin's width
+     * once stretched.
      */
     val riftedMarginWidthKm: Double = 300.0
 ) {
-    /**
-     * How far a plate travels between one epoch and the next, in kilometers: [plateSpeedMmPerYear]
-     * over [epochLengthYears]. Derived, so the drift is a speed and a time and nothing else.
-     */
-    val epochDriftKm: Double get() = plateSpeedMmPerYear * epochLengthYears / MILLIMETERS_PER_KM
-
     /**
      * How many plates a planet of [scale]'s size is cut into: its sphere over [meanPlateAreaKm2],
      * rounded, never fewer than two. Fifteen on Earth's.
@@ -1441,7 +1298,11 @@ data class TectonicsConfig(
         /** The fewest plates a partition can have and still have a boundary. */
         const val MIN_PLATES = 2
 
-        /** Median RMS speed of plates more than a quarter cratonic. See [plateSpeedMmPerYear]. */
+        /**
+         * The median root-mean-square speed of plates more than a quarter cratonic, mm a year:
+         * Zahirovic et al.'s 28 (see [medianPlateSpeedMmPerYear]). Not a setting: the figure the
+         * history's cratonic plates are held to, since their speed is the forces' outcome.
+         */
         const val CRATONIC_PLATE_SPEED_MM_PER_YEAR = 28.0
 
         /**
@@ -1450,7 +1311,6 @@ data class TectonicsConfig(
          */
         const val EARTH_HOTSPOT_COUNT = 49
 
-        private const val MILLIMETERS_PER_KM = 1e6
         private const val SQUARE_KM_PER_MILLION = 1e6
     }
 }
@@ -1499,28 +1359,6 @@ data class IsostasyConfig(
     /** The two crusts' thicknesses, in kilometres; see [continentalCrustDensity] for the sources. */
     val continentalCrustThicknessKm: Float = 41f,
     val oceanicCrustThicknessKm: Float = 7.1f,
-    /**
-     * How much thicker a cratonic column is than the crust at its own margin, in kilometres.
-     *
-     * Continental crust is not one thickness. Christensen and Mooney's global compilation gives
-     * the mean as 41 km and reads shields and platforms at 41 to 45, orogens thicker again, and
-     * extended and rifted crust at 25 to 30 — so a continent is thickest in the middle and thins
-     * toward its own edge. Airy turns a kilometre of crust into 141 m of altitude, because a
-     * kilometre of crust is worth `(mantle - crust) / mantle` of itself in freeboard.
-     *
-     * Twelve kilometres is the *swing* across the profile rather than an excess over the mean, and
-     * what it comes to on this map is Christensen and Mooney's own two ends: with the profile's
-     * mean over the map's continental crust subtracted, a craton carries 44.6 km and the crust's
-     * own outer edge 32.6, against their 41 to 45 for shields and platforms and 30.5 for extended
-     * crust. The tilt between them is 1,700 m of freeboard.
-     *
-     * Spent through [TectonicsConfig.cratonReachKm], and *mass-neutral*: the profile's mean over
-     * the continental crust of the map is subtracted before it is applied, so the average column
-     * is still 41 km and the datum is still where [continentalFreeboardMetres] puts it. What it changes is not how high a continent stands but how
-     * it is tilted — up in the middle, down at the rim — which is what puts the drowned part of it
-     * where Earth's is.
-     */
-    val cratonThickeningKm: Float = 12f,
     /**
      * How high a standard continental column floats, in metres — the constant of integration for
      * every other column on the map.
@@ -1590,33 +1428,6 @@ data class IsostasyConfig(
      * any planet keeps.
      */
     val oldestSeafloorAgeMyr: Float = 180f,
-    /**
-     * How deep the sea floor lies on average, in metres below the water — the one figure the
-     * depth-age curve is anchored to, and what the spreading rate is solved from.
-     *
-     * The mean depth of Earth's ocean is 3,682 m (Charette & Smith, *The volume of Earth's ocean*,
-     * Oceanography 23, 2010). Before S2's second pass this was the depth of *every* piece of sea
-     * floor, one level for the lot; now it is the mean of a distribution whose shape is Parsons and
-     * Sclater's and whose spread is the map's own geometry, and what is solved from it is the rate
-     * the ridges spread at. See [PlateStage.seafloorAgeOf] for why the rate is the thing that gives
-     * and the depth the thing that is held.
-     *
-     * One honest qualification, and it is the same one [TectonicsConfig.continentalCrustSubmergedShare]
-     * carries. Earth's 3,682 m is a mean over the whole ocean, and about a fifth of that ocean is
-     * shelf, slope and rise standing on continental crust — the deep floor away from the margins
-     * averages nearer 4,300. This generator drowns 9 to 13% of its continents against Earth's 29%,
-     * so it has far less of that shallow fifth, and anchoring its *oceanic crust* at 3,682 rather
-     * than at 4,300 is the choice to keep the whole ocean's mean where Earth's is instead of the
-     * deep floor's. The deep floor is therefore some 600 m shallower than Earth's, which is exactly
-     * the margin the model is missing. In `TODO.md`.
-     */
-    val oceanicMeanFloorMetres: Float = 3_682f,
-    /**
-     * Off gives every cell of sea floor the one age that floats at [oceanicMeanFloorMetres], which
-     * is the one-age ocean S2's first pass drew and the control the depth-age guards are shown to
-     * fail against.
-     */
-    val seafloorAge: Boolean = true,
     /**
      * Whether the plate bends under a load as well as floating on the mantle, and the elastic
      * thickness it bends with, in kilometres.
@@ -3458,16 +3269,21 @@ data class WorldGenConfig(
     /**
      * Fraction of the world covered by ocean, 0..1.
      *
-     * Read twice since S2, and the two readings are the point of the chunk. The plate stage draws
-     * `(1 - this) / (1 - TectonicsConfig.continentalCrustSubmergedShare)` of the world as
-     * continental crust, so the share of the map that stands above the waterline is a consequence
-     * of what the crust is rather than of where a histogram was cut; and the sea-level stage still
-     * cuts at the percentile this asks for, which is a statement about how much water the planet
-     * has and is the one thing isostasy cannot supply. How far apart the two answers land — the
-     * coverage the crust alone would give against the coverage asked for — is what
-     * `IsostasyTest` measures and what the shoreline residual in `UnitsTest` reads.
+     * Read twice since S2, and the two readings are the point of the chunk. The plate stage builds
+     * the tectonic history's supercontinent from `(1 - this) / (1 - TectonicsConfig.continentalCrustSubmergedShare)`
+     * of the world as continental crust, so the share of the map that stands above the waterline is
+     * a consequence of what the crust is rather than of where a histogram was cut; and the
+     * sea-level stage still cuts at the percentile this asks for, which is a statement about how
+     * much water the planet has and is the one thing isostasy cannot supply. How far apart the two
+     * answers land — the coverage the crust alone would give against the coverage asked for — is
+     * what `IsostasyTest` measures and what the shoreline residual in `UnitsTest` reads.
+     *
+     * 0.71, Earth's: its land is 29.2% of the surface (Cogley, *Continental margins and the extent
+     * and number of the continents*, Rev. Geophys. 22, 1984), so its continental crust is 41% of it.
+     * It was 0.62 until TH1-1, a third more land than Earth's, which crowded the continents into
+     * collisions (docs/DESIGN_LEDGER.md, TH1-1). The site's figures ask for 0.62 by name.
      */
-    val seaLevel: Float = 0.62f,
+    val seaLevel: Float = 0.71f,
     val sea: SeaConfig = SeaConfig(),
     val glaciation: GlaciationConfig = GlaciationConfig(),
     val climate: ClimateConfig = ClimateConfig(),

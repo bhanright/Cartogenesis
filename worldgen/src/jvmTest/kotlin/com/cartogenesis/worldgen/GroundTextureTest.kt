@@ -297,7 +297,6 @@ class GroundTextureTest : BorrowsSharedWorlds() {
                 SharedWorlds.world(
                     standard(seed).let {
                         it.copy(
-                            isostasy = it.isostasy.copy(cratonThickeningKm = 0f),
                             tectonics = it.tectonics.copy(
                                 cratonReliefStandardDeviationMetres =
                                     it.tectonics.marginReliefStandardDeviationMetres

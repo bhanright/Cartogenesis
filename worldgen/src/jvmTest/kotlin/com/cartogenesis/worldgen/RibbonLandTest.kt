@@ -26,23 +26,9 @@ class RibbonLandTest : BorrowsSharedWorlds() {
     private val EARTH_RIBBON_SHARE = 1.5
 
     /**
-     * H1 moved this case onto `historyEpochs = 1`, and the reason is worth stating.
-     *
      * The claim being tested is about *erosion*: that widening a belt's footprint stops its crest
-     * reading as a strip. Isolating that needs an un-eroded world with strips in it to widen, and
-     * with the tectonic history on, seed 234475 no longer has one — the history redistributes the
-     * relief the sea-level percentile cuts through, and the un-eroded world's strips fall from
-     * 0.57% of land to 0.14%, which leaves the pair measuring the percentile rather than erosion.
-     * The finished world is not worse for it: with the history on, the eroded world holds 0.43% of
-     * its land in strips against 0.47% with a single epoch, which is what
-     * [`the tectonic history leaves no more ribbon than a single epoch does`] below asserts. So
-     * this case keeps its own conditions and the shipped world gets a bound of its own, measured
-     * in the same run and asserted beside it — the same arrangement E1 left `GlaciationTest` and
-     * `LakeWaterBalanceTest` in. The strips the history's own failed rifts leave were checked
-     * before the case was moved: with three epochs every ribbon cell in the finished world is
-     * present-epoch crust by [PlateResult.crustAge], and turning the failed rifts off entirely
-     * leaves 0.17% rather than 0.43%, so what moved is which of today's shoulders clears the
-     * water, not what the old epochs built.
+     * reading as a strip. So the same world is measured un-eroded and eroded, and the eroded one,
+     * which is the world the app builds, is held besides to Earth's own share of such land.
      */
     @Test
     fun `erosion widens the strips a belt leaves in shallow sea`() {
@@ -59,16 +45,9 @@ class RibbonLandTest : BorrowsSharedWorlds() {
         // case had nothing to widen. Restating the strip on the ground is docs/TODO.md's.
         val base = CalibrationPlanet.of(WorldGenConfig.forRows(7L, 512))
             .atResolution(2048, 1024)
-            .let { it.copy(tectonics = it.tectonics.copy(historyEpochs = 1)) }
         listOf(
             "no erosion" to base.copy(erosion = base.erosion.copy(enabled = false)),
-            "eroded" to base,
-            // The shipped world, for the second assertion below.
-            "eroded, with history" to base.copy(
-                tectonics = base.tectonics.copy(
-                    historyEpochs = WorldGenConfig(seed = 0L).tectonics.historyEpochs
-                )
-            )
+            "eroded" to base
         ).map { (name, config) ->
             val world = SharedWorlds.world(config)
             val w = world.width
@@ -166,7 +145,7 @@ class RibbonLandTest : BorrowsSharedWorlds() {
                     .format(name, components, ribbonCount, thin, share, longest)
             )
             share
-        }.let { (withoutErosion, withErosion, withHistory) ->
+        }.let { (withoutErosion, withErosion) ->
             // Erosion cannot remove a strip, and is not meant to: a belt crossing shallow sea will
             // always leave land above water. What it does is take material off the crest and pile
             // it against the flanks, which widens the footprint until the strip stops being one.
@@ -174,29 +153,8 @@ class RibbonLandTest : BorrowsSharedWorlds() {
                 withErosion < withoutErosion,
                 "erosion left as much ribbon land as before: $withErosion% vs $withoutErosion%"
             )
-            // H1's own bound, on the world the app builds. The tectonic history rewrites the
-            // relief the sea-level percentile cuts through, so it can move which belt crests clear
-            // the water; what it must not do is leave the finished world with more strips in it
-            // than the single-epoch generator did.
-            // A twentieth of slack until H5, a tenth after it, and the figure that forced the move
-            // is 0.3733% against 0.3550% — four ten-thousandths of a percentage point of land over
-            // the old bound, on a quantity that is under four tenths of a percent either way. H5
-            // moves every coastline (the sea stood lower while the rivers were cutting, and water
-            // the ocean cannot reach is counted as land), so which belt crests clear the water
-            // moves with it, and this measure is a count of the few that do.
-            //
-            // H5b is where that last sentence stops being an aside and becomes the reading. Its
-            // receiver clamp stops the incision cutting a channel cell below the cell it drains
-            // into, which takes real depth out of every round — the cap it replaces was written in
-            // shoreline-relative units and spent on the height field, so it had been allowing about
-            // twice the drop — and a shallower-cut world hands the percentile a different set of
-            // belt crests. Measured: 0.3500% with a single epoch against 0.6218% with the history,
-            // a ratio of 1.78, and the *bodies* behind those two numbers are two strips and five.
-            // A ratio between a count of two and a count of five cannot carry a bound of a tenth,
-            // and saying so is ground rule 5's other half.
-            //
-            // So the claim is restated where it can be measured: against Earth rather than against
-            // the other configuration. A strip here is a body whose half-width is at most w/170 —
+            // The finished world, against Earth (it was against the single-epoch generator until
+            // H5b, docs/DESIGN_LEDGER.md, and that generator is gone with TH1-1). A strip here is a body whose half-width is at most w/170 —
             // six cells at 1024, so twelve across, which at this map's working scale is of the
             // order of a hundred kilometres. Earth's land of that description is its peninsulas and
             // island arcs: Baja California 143,000 km2, the Kamchatka-Kuril-Aleutian-Ryukyu chain
@@ -205,20 +163,12 @@ class RibbonLandTest : BorrowsSharedWorlds() {
             // the Antilles, the Lesser Sundas 70,000 — of the order of one to one and a half
             // million square kilometres of Earth's 148.94 million, which is 0.7 to 1.0% of its
             // land. The bound is set at 1.5%, half again above the upper end of that estimate,
-            // since one world is one sample. Both configurations clear it by more than a factor of
-            // two, and the comparative figure is printed beside it so a real drift would still be
-            // visible in the run.
-            println(
-                "RIBBON single epoch %.4f%% of land, with history %.4f%% (x%.2f), Earth's own " +
-                    "peninsulas and arcs are 0.7-1.0%%".format(
-                        withErosion, withHistory, withHistory / withErosion.coerceAtLeast(1e-9)
-                    )
-            )
+            // since one world is one sample.
+            println("RIBBON eroded %.4f%% of land; Earth's own peninsulas and arcs are 0.7-1.0%%".format(withErosion))
             assertTrue(
-                withHistory <= EARTH_RIBBON_SHARE && withErosion <= EARTH_RIBBON_SHARE,
+                withErosion <= EARTH_RIBBON_SHARE,
                 "a world holds more than $EARTH_RIBBON_SHARE% of its land in strips, which is half " +
-                    "again more than Earth's peninsulas and island arcs: $withHistory% with the " +
-                    "tectonic history, $withErosion% with a single epoch"
+                    "again more than Earth's peninsulas and island arcs: $withErosion%"
             )
         }
     }

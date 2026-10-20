@@ -46,10 +46,11 @@ class HotspotTrailTest {
         for (seed in SEEDS) {
             val config = WorldGenConfig.forRows(seed, SharedWorlds.DETAIL_ROWS)
             val plates = PlateStage.generate(config, TerrainStage.generate(config))
-            val drifting = runsOf(config, PlateStage.hotspotTrails(config, plates.plates, plates.plateId), plates.plateId)
+            val crust = plates.continentalShare.data
+            val drifting = runsOf(config, PlateStage.hotspotTrails(config, plates.plates, plates.plateId, crust), plates.plateId)
             val fixed = runsOf(
                 config,
-                PlateStage.hotspotTrails(config, plates.plates, plates.plateId, plumeSpeedShare = 0f, plateTurns = false),
+                PlateStage.hotspotTrails(config, plates.plates, plates.plateId, crust, plumeSpeedShare = 0f, plateTurns = false),
                 plates.plateId
             )
             for (run in drifting) {

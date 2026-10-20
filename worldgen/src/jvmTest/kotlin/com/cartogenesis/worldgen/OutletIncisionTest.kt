@@ -130,22 +130,11 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
      * basins are gone the largest one left on the map is a handful of cells, and which handful it is
      * changes from round to round.
      *
-     * H1 moved this case onto `historyEpochs = 1`, which reproduces the terrain it was written
-     * against bit for bit, and the reason is the last sentence of the paragraph above taken
-     * seriously. "The largest basin" is not the same basin in the two runs once the notch has
-     * worked: it drains the broad shallow hollows first, so what is left as the largest with the
-     * notch on is a narrower, deeper one than the control is still measuring. On the tectonic
-     * history's terrain that stopped being a nuisance and became the reading — seed 43's notched
-     * run ends at 0.134 against the control's 0.113, the notch apparently leaving the fill deeper
-     * than ordinary incision did, and seed 1234's at 0.554 against a control of 1.031 that has got
-     * deeper than it began. Two other measures were tried and rejected on the evidence: the
-     * deepest fill anywhere on the map cannot discriminate (0.044 against the control's 0.047 on
-     * seed 718106, because one undrainable pit dominates both runs) and total fill volume cannot
-     * either (x0.108 against x0.147, because ordinary incision removes most of the volume by
-     * sharpening rims). So the case keeps the measure that works on the terrain it works on, and
-     * what the notch does to the shipped world is guarded by
-     * [`no world keeps a lake bigger than the Caspian, and some did`] below, which passes on all
-     * six seeds with the history on.
+     * "The largest basin" is not the same basin in the two runs once the notch has worked: it
+     * drains the broad shallow hollows first, so what is left as the largest with the notch on can
+     * be a narrower, deeper one than the control is still measuring (docs/DESIGN_LEDGER.md, H1,
+     * for the figures on the terrain that showed it). What the notch does to the shipped world is
+     * guarded by [`no world keeps a lake bigger than the Caspian, and some did`] below.
      */
     @Test
     fun `the fill gets shallower as the notch deepens`() {
@@ -155,7 +144,6 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
         val perSeedDepth = ArrayList<String>()
         seeds.forEach { seed ->
             val config = WorldGenConfig.forRows(seed, SharedWorlds.DETAIL_ROWS)
-                .let { it.copy(tectonics = it.tectonics.copy(historyEpochs = 1)) }
             val on = roundsOf(config)
             val off = roundsOf(config.copy(erosion = config.erosion.copy(outletIncision = false)))
 

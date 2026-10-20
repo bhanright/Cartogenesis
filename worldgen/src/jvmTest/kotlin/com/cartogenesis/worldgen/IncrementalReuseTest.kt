@@ -88,11 +88,12 @@ class IncrementalReuseTest {
             "uplift" to base.copy(
                 tectonics = base.tectonics.copy(collisionUpliftMmPerYear = 0f)
             ),
-            // H1's knobs live on the same section, so the tectonics guard already covers them —
-            // but only if a case actually moves one, and the history is the largest change that
-            // section can make: it rewrites the height field every later stage is built on.
+            // The tectonic history's knobs live on the same section, so the tectonics guard already
+            // covers them — but only if a case actually moves one, and the history is the largest
+            // change that section can make: it rewrites the height field every later stage is
+            // built on.
             "tectonicHistory" to base.copy(
-                tectonics = base.tectonics.copy(historyEpochs = 1)
+                tectonics = base.tectonics.copy(historyLengthMyr = base.tectonics.historyLengthMyr / 2)
             ),
             "erosion" to base.copy(erosion = base.erosion.copy(enabled = false)),
             // S3: the rounds cut with a provisional climate, so switching that feed off changes
@@ -321,7 +322,12 @@ class IncrementalReuseTest {
                 seafloorHalfSpreadingRateKmPerMyr =
                     world.plates.seafloorHalfSpreadingRateKmPerMyr,
                 upliftRateMmPerYear = field(world.plates.upliftRateMmPerYear),
-                crustAge = field(world.plates.crustAge)
+                crustAgeMyr = field(world.plates.crustAgeMyr),
+                crustThicknessKm = field(world.plates.crustThicknessKm),
+                orogenicExcessKm = field(world.plates.orogenicExcessKm),
+                orogenyKind = world.plates.orogenyKind.copyOf(),
+                terraneId = world.plates.terraneId.copyOf(),
+                riftAgeMyr = field(world.plates.riftAgeMyr)
             ),
             erosion = ErosionResult(height = field(world.erosion.height)),
             sea = SeaLevelResult(

@@ -1358,7 +1358,56 @@ data class TectonicsConfig(
      * Off is the platform as the noise left it, the control `HypsometryTest` is shown against.
      * See docs/DESIGN_LEDGER.md, H1.
      */
-    val basinFill: Boolean = true
+    val basinFill: Boolean = true,
+    /**
+     * The side of a cell of the tectonic history's own grid, in kilometers: 80, the scale of a rift
+     * segment rather than of a valley. The history runs on a Fibonacci lattice of cells this size
+     * (`FibonacciSphere`), not on the map, so it costs the same at every map grid and carries the
+     * same physics on a planet of any radius with more or fewer cells. See docs/DESIGN_LEDGER.md,
+     * TH1-1.
+     */
+    val historyCellKm: Double = 80.0,
+    /**
+     * The history's time step and its length, in millions of years.
+     *
+     * Two hundred million years, about the time since Pangea began to break up (Nance, Evans and
+     * Murphy, *Pannotia: To be or not to be?*, Earth-Science Reviews 232, 2022, put Pangea at about
+     * 325 to 175 Ma), and long enough that the ocean floor the history starts with has mostly gone
+     * down a trench, as Earth's floor older than 180 Myr has. A step of five: a plate at Earth's
+     * fastest moves some 500 km in it, a few cells, which the overlap of two plates resolves.
+     */
+    val historyStepMyr: Double = 5.0,
+    val historyLengthMyr: Double = 200.0,
+    /**
+     * The share of the supercontinent cycle a supercontinent stands assembled, which is the share of
+     * worlds that are drawn still assembled: 0.23, Pangea's 150 Myr (325 to 175 Ma) over Rolf et
+     * al.'s cycle of 640 Myr, both as Nance, Evans and Murphy (2022) give them. A world's breakup is
+     * drawn uniformly over the span that makes this the chance it has not yet happened. A
+     * calibration hypothesis rather than an Earth measurement: Earth has shown one cycle in enough
+     * detail to time.
+     */
+    val assembledShareOfCycle: Double = 0.23,
+    /**
+     * The median plate's root-mean-square speed, in millimeters a year: 40, Zahirovic, Müller, Seton
+     * and Flament's median over every plate of the last 200 million years (*Tectonic speed limits
+     * from plate kinematic reconstructions*, EPSL 418, 2015). The history's forces fix the plates'
+     * speeds against one another; this fixes their scale.
+     */
+    val medianPlateSpeedMmPerYear: Double = 40.0,
+    /**
+     * The root-mean-square speed of an oceanic plate a slab pulls, in millimeters a year: 85,
+     * Zahirovic et al.'s figure for the oceanic plates bounded by subduction, the fastest of their
+     * plates. The history's plates are scaled together so the median of such plates moves at this;
+     * [medianPlateSpeedMmPerYear] sets the scale only while no slab is pulling any plate yet.
+     */
+    val slabPulledPlateSpeedMmPerYear: Double = 85.0,
+    /**
+     * How wide a rifted margin is, in kilometers: the band over which the history thins a continent
+     * that begins to part, from McKenzie's beta of four at the break to nothing inland. Three
+     * hundred, the middle of the 200 to 500 km Watts (*Isostasy and Flexure of the Lithosphere*,
+     * 2001) measures continental crust thinning from 40 km to 10 across, as [crustMarginKm] took it.
+     */
+    val riftedMarginWidthKm: Double = 300.0
 ) {
     /**
      * How far a plate travels between one epoch and the next, in kilometers: [plateSpeedMmPerYear]

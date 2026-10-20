@@ -211,9 +211,11 @@ class RiftIdentityTest {
     /**
      * A stretch of rift keeps its half-grabens when another stretch of the same pair comes or goes.
      *
-     * Seed 42's longest rift is cut in two places, 250 km apart and more than the trough's
-     * half-width across, so it breaks into three stretches with a short one of 80 km in the middle;
-     * then the short one is taken away too. Which stretches a pair's boundary breaks into is a
+     * Seed 42's longest stretch of rift is cut in two places, 250 km apart and more than the
+     * trough's half-width across, so it breaks into three stretches with a short one of 80 km in
+     * the middle; then the short one is taken away too. The pair may have other stretches of its
+     * own already, as the tectonic history's boundaries often do (docs/DESIGN_LEDGER.md, TH1-1), so
+     * the counts asked for are the pair's own plus two and plus one. Which stretches a pair's boundary breaks into is a
      * question of topology, a third plate pinching it here or a gap just over the joining
      * threshold there, and it moves with the grid; so nothing about a stretch's half-grabens may
      * hang on how many other stretches the pair has or where they rank. Every cell of the two outer
@@ -223,12 +225,13 @@ class RiftIdentityTest {
     fun `a stretch of rift keeps its half-grabens when another stretch of the pair comes or goes`() {
         val config = WorldGenConfig.forRows(42L, 512)
         val whole = PlateStage.presentRiftSegments(config)
-        // The pair whose rift runs furthest, which is the one there is room to cut in two places:
-        // on the Earth-sized planet's fifteen plates that is no longer the 2-7 pair the 12,000 km
-        // world's fourteen gave seed 42.
-        val pair = whole.cell.indices.groupBy { whole.lowId[it] * PAIR_STRIDE + whole.highId[it] }
+        // The stretch that runs furthest, which is the one there is room to cut in two places.
+        val longest = whole.cell.indices.groupBy { (whole.lowId[it] * PAIR_STRIDE + whole.highId[it]) to whole.chain[it] }
             .maxBy { (_, onIt) -> onIt.maxOf { whole.alongKm[it] } - onIt.minOf { whole.alongKm[it] } }.key
-        val entries = whole.cell.indices.filter { whole.lowId[it] * PAIR_STRIDE + whole.highId[it] == pair }
+        val pair = longest.first
+        val entries = whole.cell.indices.filter { whole.lowId[it] * PAIR_STRIDE + whole.highId[it] == pair && whole.chain[it] == longest.second }
+        val stretchesBefore = whole.cell.indices.filter { whole.lowId[it] * PAIR_STRIDE + whole.highId[it] == pair }
+            .map { whole.chain[it] }.toSet().size
         val start = entries.minOf { whole.alongKm[it] } + CUT_FROM_THE_END_KM
         fun cellsBetween(fromKm: Float, toKm: Float) =
             entries.filter { whole.alongKm[it] in fromKm..toKm }.map { whole.cell[it] }.toSet()
@@ -242,7 +245,8 @@ class RiftIdentityTest {
                 .associateBy { report.cell[it] }
         val a = byCell(withShort)
         val b = byCell(withoutShort)
-        val outer = entries.map { whole.cell[it] }.filter { it !in firstGap && it !in short && it !in secondGap }
+        val outer = whole.cell.indices.filter { whole.lowId[it] * PAIR_STRIDE + whole.highId[it] == pair }
+            .map { whole.cell[it] }.filter { it !in firstGap && it !in short && it !in secondGap }
         val moved = outer.filter { cell ->
             val x = a.getValue(cell)
             val y = b.getValue(cell)
@@ -255,10 +259,10 @@ class RiftIdentityTest {
             report.cell.indices.filter { report.lowId[it] * PAIR_STRIDE + report.highId[it] == pair }.map { report.chain[it] }.toSet().size
         }
         println(
-            "RIFT STRETCHES seed 42 rift 2-7: %d and %d stretches with the short one and without; %d of %d outer cells read another half-graben"
-                .format(stretches[0], stretches[1], moved.size, outer.size)
+            "RIFT STRETCHES seed 42: %d stretches before, %d and %d with the short one and without; %d of %d outer cells read another half-graben"
+                .format(stretchesBefore, stretches[0], stretches[1], moved.size, outer.size)
         )
-        assertEquals(listOf(3, 2), stretches, "the cuts did not make the stretches this case is about")
+        assertEquals(listOf(stretchesBefore + 2, stretchesBefore + 1), stretches, "the cuts did not make the stretches this case is about")
         assertTrue(moved.isEmpty(), "${moved.size} of ${outer.size} cells of the other stretches read another half-graben")
     }
 

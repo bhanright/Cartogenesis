@@ -1513,7 +1513,8 @@
   proxy's half-width (log-log slope 0.21 to 0.32 on coasts). What would settle it is a measure with
   no area floor: the spacing spectrum of valley axes along a coast (the dominant wavelength of the
   elevation profile a fixed distance inland), taken at three grids. Untested: the crust margin's
-  300 km band (`TectonicsConfig.crustMarginKm`), the erosion's own lengths (`debrisTravelKm`,
+  300 km band (then `TectonicsConfig.crustMarginKm`, since TH1-1 the history's rifted margin,
+  `riftedMarginWidthKm`), the erosion's own lengths (`debrisTravelKm`,
   `deltaReachKm`, `outletReachKm`), and the instrument's reference grid and shortest front, which
   were not varied. 2026-09-22, X1d.
 - ~~**The land's outlines are consistent with cell-space anisotropy in the kilometre metric.**~~
@@ -2314,7 +2315,10 @@
   should go or the sweeps should be given a threshold that means something at a 23 km cell, which
   is a question about what a sub-cell distribution of slopes does and belongs with lithology (H3)
   rather than with a constant. 2026-09-13, S2.
-- **The spreading rate this world needs is faster than Earth's fastest ridge.** Sea floor is
+- ~~**The spreading rate this world needs is faster than Earth's fastest ridge.**~~ Closed by TH1-1,
+  2026-10-20: the floor is the tectonic history's, made at ridges that spread at the plates' own
+  relative motion, and the standard seeds' present ridges spread at a mean half rate of 27 to 59
+  km per Myr (`TectonicHistoryTest`), Earth's ridges between. The entry as it stood: Sea floor is
   destroyed as fast as it is made, so the mean age of a planet's floor is its ocean's area over its
   ridges' production, and a world with less ridge for its ocean has to spread faster or its floor
   would be older than the planet. `PlateStage.seafloorAgeOf` therefore solves the rate from Earth's
@@ -2324,7 +2328,11 @@
   crusts that are not both oceanic, so this map carries about half Earth's ridge length for its
   ocean area. Giving the plates a spreading history — ridges that propagate, and triple junctions
   that migrate — is what would fix it, and it is a chunk rather than a knob. 2026-09-13, S2.
-- **The deep sea floor is some 600 m shallower than Earth's, and the missing 600 m is the margin.**
+- ~~**The deep sea floor is some 600 m shallower than Earth's, and the missing 600 m is the margin.**~~
+  Closed by TH1-1, 2026-10-20: `IsostasyConfig.oceanicMeanFloorMetres` is retired and the floor
+  stands at its own age's depth, the history's; floor 5 to 6 km deep is 0.13 to 0.23 of the sea on
+  the standard seeds at 512 rows against Earth's 0.21 (`ContinentsInsidePlatesTest`). The entry as
+  it stood:
   Earth's mean ocean depth of 3,682 m is a mean over the whole ocean, and about a fifth of that
   ocean is shelf, slope and rise standing on continental crust; the deep floor away from the margins
   averages nearer 4,300. `IsostasyConfig.oceanicMeanFloorMetres` anchors this generator's *oceanic
@@ -2499,7 +2507,10 @@
   rift lakes are held to `RiftDepthTest`'s and `OutletIncisionTest`'s bars and deepening a trough
   round by round is exactly what E7 measured and refused when it was done by the stamp. Whoever
   takes it should read E7 and E8's notes below first. 2026-09-13, S2.
-- **An old belt's rounding is not the same spread in kilometers at every grid.**
+- ~~**An old belt's rounding is not the same spread in kilometers at every grid.**~~ Retired by
+  TH1-1, 2026-10-20: no past belt is stamped or rounded any more; an old belt is the thickening the
+  history left in the crust, read on its lattice and drawn the same at every grid. The entry as it
+  stood:
   `PlateStage.roundWithAge` rounds a past epoch's uplift by a Gaussian of spread
   `sqrt(2 r (r + 1) / 3)` cell widths, with `r` the setting `TectonicsConfig.beltAgeBlurKm` read in
   cell widths: the spread two box passes of that radius had. The formula is not proportional to
@@ -2563,7 +2574,9 @@
   1.53 and 1.39 read as 1 + log2 of the growth, and 1.28 to 1.92 on the other seeds, where natural
   coasts run 1.2 to 1.3. No claim of resolution independence is made for lakes until L2 lands.
   2026-09-28, Q4; 2026-09-29, L1.
-- **Whether a plate is continental can change at 256 rows.** The crusts are handed out by
+- ~~**Whether a plate is continental can change at 256 rows.**~~ Retired by TH1-1, 2026-10-20: the
+  crust is the history's, made on its own lattice in kilometers, and the map only reads it, so a
+  world's continents and plates are the same at every grid. The entry as it stood: The crusts are handed out by
   accumulated cell counts against a target share and by raster adjacency between plates
   (`PlateStage.drawPlates`), and a plate near the target's edge, or two plates touching along a
   cell or two, can come out differently on a coarse grid: over seeds 1 to 60, the crusts differ

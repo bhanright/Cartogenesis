@@ -1036,19 +1036,24 @@ data class TectonicsConfig(
      */
     val riftSillHeight: Float = 0.075f,
     /**
-     * How long a dead orogen takes to fall to `1/e` of its height once its uplift has stopped, in
-     * years: 345 million. The history wears an orogen's excess crust down at this rate, the volume it
-     * loses leaving the continent as sediment (`TectonicHistory`).
+     * How long a dead orogen's excess crust takes to fall to `1/e` of itself once its uplift has
+     * stopped, in years: 57 million. The history wears an orogen's excess down at this rate, the
+     * volume it loses leaving the continent as sediment (`TectonicHistory`), and the excess is what
+     * the belt stands on, by Airy, so this is the decay of the belt's *mean* altitude.
      *
-     * An active collision stands 4,000-4,800 m (the Alps, the Southern Alps, the Zagros) and the
-     * Appalachians stand about 2,000 and the Urals about 1,500 after the 300 Myr since the
-     * Alleghanian and Uralian orogenies finished them, so the ratio is 0.42 and the time constant
-     * `300 / ln(1 / 0.42)` is 345 Myr. Baldwin, Whipple & Tucker (*Implications of the shear stress
-     * river incision model for the timescale of postorogenic decay of topography*, JGR 108, 2003)
-     * put the decay of an unforced orogen at 10 to 100 Myr for a soft lithology and several hundred
-     * for a resistant one, which is the band this sits in.
+     * Measured on ETOPO5 by the belt's mean land altitude, cosine-weighted (docs/DESIGN_LEDGER.md,
+     * TH1-1): Tibet's plateau (30-36 N, 80-95 E) stands 5,134 m; the Appalachians (35-41 N, 83-77 W)
+     * 352 m and the Urals (52-62 N, 57-61 E) 348, against the continental platform's 374 (H1), 300
+     * Myr after the Alleghanian and Uralian orogenies finished them. Their excess is gone to within
+     * the 25 m the belts and their boxes scatter by, so at most `25 / (5,134 - 374)` of Tibet's is
+     * left and the time constant is at most `300 / ln(4,760 / 25)`, 57 Myr: Baldwin, Whipple &
+     * Tucker's (*Implications of the shear stress river incision model for the timescale of
+     * postorogenic decay of topography*, JGR 108, 2003) 10 to 100 Myr for an unforced orogen of soft
+     * rock. It was 345 Myr, read off the belts' highest peaks (the Appalachians' 2,000 m against an
+     * active collision's 4,000-4,800), which are their relief and not the excess their crust keeps;
+     * at that figure the standard worlds' land stood 1,073 m on the mean against Earth's 840.
      */
-    val orogenDecayTimeYears: Double = 345e6,
+    val orogenDecayTimeYears: Double = 57e6,
     /**
      * How fast the rock rises in an active belt, in millimetres a year, by the crust pair that is
      * raising it — the field the hydraulic rounds add to the terrain every round.

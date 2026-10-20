@@ -79,18 +79,18 @@ class SiteAssemblyTest {
 
         /**
          * What the page fetches only when a reader asks for it, by file, each with the most it may
-         * weigh: the lens's full-size world (737,458 bytes at 4096 by 2048 on square cells, a cell
-         * to a pixel; 639,082 on the grid as many cells tall as wide, two pixels a cell, and 507,604
+         * weigh: the lens's full-size world (753,504 bytes at 4096 by 2048 on seed 42, 737,458 on the
+         * earlier seed, square cells, a cell to a pixel; 639,082 on the grid as many cells tall as wide, two pixels a cell, and 507,604
          * before the implicit erosion; fetched the first time the lens is used), each with 64 KiB
          * for the picture moving when it is made again.
          */
         val FETCHED_WHEN_USED: Map<String, Long> = mapOf(
-            "img/world-full.webp" to 737_458L + 65_536L
+            "img/world-full.webp" to 753_504L + 65_536L
         )
 
         /**
          * The ceiling on what the page fetches as it loads, by the kind of screen (see
-         * [fetchedAtLoad]): what the list sums to, 506,167 bytes narrow and 742,395 wide or dense,
+         * [fetchedAtLoad]): what the list sums to, 578,219 bytes narrow and 788,577 wide or dense,
          * each plus 64 KiB for the pictures and the page moving when they are made again.
          *
          * Measured once the page's faces were WOFF2 cut to its characters, which took 943,600
@@ -102,14 +102,17 @@ class SiteAssemblyTest {
          * 171,708 on the full band's, the page having grown by another 4,993 for the round toggles,
          * the copy review and the band's caption. Square cells (Q6) took 11,237 off the narrow
          * screens and put 32,803 on the wide, where 517,404 and 709,592 stood: the full band is
-         * 40,486 bytes heavier and the half band and the steps a little lighter. No lazy picture is fetched
+         * 40,486 bytes heavier and the half band and the steps a little lighter. The page then moved to
+         * seed 42 and Satellite, whose six steps weigh 197,120 bytes, and the page grew with its pictures'
+         * descriptions: 161,423 bytes of page. The sums stood on 506,167 and 742,395 before, and nothing
+         * measured them between, so what the climate's merge moved is not separated from this. No lazy picture is fetched
          * as the page loads (docs/DESIGN_LEDGER.md, Site 5b), so the faces, the page and the
          * pictures above the fold are the whole of it, and a face grown back to TrueType would not
          * fit.
          */
         val LOAD_BYTES: Map<String, Long> = mapOf(
-            "narrow at one device pixel" to 506_167L + 65_536L,
-            "wide or dense" to 742_395L + 65_536L
+            "narrow at one device pixel" to 578_219L + 65_536L,
+            "wide or dense" to 788_577L + 65_536L
         )
 
         /**

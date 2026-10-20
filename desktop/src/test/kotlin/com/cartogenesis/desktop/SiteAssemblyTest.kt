@@ -79,18 +79,18 @@ class SiteAssemblyTest {
 
         /**
          * What the page fetches only when a reader asks for it, by file, each with the most it may
-         * weigh: the lens's full-size world (737,458 bytes at 4096 by 2048 on square cells, a cell
-         * to a pixel; 639,082 on the grid as many cells tall as wide, two pixels a cell, and 507,604
+         * weigh: the lens's full-size world (753,504 bytes at 4096 by 2048 on seed 42, 737,458 on the
+         * earlier seed, square cells, a cell to a pixel; 639,082 on the grid as many cells tall as wide, two pixels a cell, and 507,604
          * before the implicit erosion; fetched the first time the lens is used), each with 64 KiB
          * for the picture moving when it is made again.
          */
         val FETCHED_WHEN_USED: Map<String, Long> = mapOf(
-            "img/world-full.webp" to 737_458L + 65_536L
+            "img/world-full.webp" to 753_504L + 65_536L
         )
 
         /**
          * The ceiling on what the page fetches as it loads, by the kind of screen (see
-         * [fetchedAtLoad]): what the list sums to, 506,167 bytes narrow and 742,395 wide or dense,
+         * [fetchedAtLoad]): what the list sums to, 578,219 bytes narrow and 788,577 wide or dense,
          * each plus 64 KiB for the pictures and the page moving when they are made again.
          *
          * Measured once the page's faces were WOFF2 cut to its characters, which took 943,600
@@ -102,14 +102,17 @@ class SiteAssemblyTest {
          * 171,708 on the full band's, the page having grown by another 4,993 for the round toggles,
          * the copy review and the band's caption. Square cells (Q6) took 11,237 off the narrow
          * screens and put 32,803 on the wide, where 517,404 and 709,592 stood: the full band is
-         * 40,486 bytes heavier and the half band and the steps a little lighter. No lazy picture is fetched
+         * 40,486 bytes heavier and the half band and the steps a little lighter. The page then moved to
+         * seed 42 and Satellite, whose six steps weigh 197,120 bytes, and the page grew with its pictures'
+         * descriptions: 161,423 bytes of page. The sums stood on 506,167 and 742,395 before, and nothing
+         * measured them between, so what the climate's merge moved is not separated from this. No lazy picture is fetched
          * as the page loads (docs/DESIGN_LEDGER.md, Site 5b), so the faces, the page and the
          * pictures above the fold are the whole of it, and a face grown back to TrueType would not
          * fit.
          */
         val LOAD_BYTES: Map<String, Long> = mapOf(
-            "narrow at one device pixel" to 506_167L + 65_536L,
-            "wide or dense" to 742_395L + 65_536L
+            "narrow at one device pixel" to 578_219L + 65_536L,
+            "wide or dense" to 788_577L + 65_536L
         )
 
         /**
@@ -325,7 +328,7 @@ class SiteAssemblyTest {
             // The whole world under the lens, at a quarter and at full size, and the relief's patch.
             "world-whole.webp" to (1024 to 512),
             "world-full.webp" to (4096 to 2048),
-            "relief-natural.webp" to (640 to 400),
+            "relief-satellite.webp" to (640 to 400),
             // Every seed is a world: five worlds whole, each its 1024 by 512 sheet at its own pixels.
             "seed-42.webp" to (1024 to 512),
             "seed-1066.webp" to (1024 to 512),
@@ -485,7 +488,7 @@ class SiteAssemblyTest {
      * only the two it shows.
      *
      * The page's weight at load may grow by two pictures at most for the slider, and grows by none:
-     * its default pair are the Atlas and Natural cards' own files. The other ten are named only as
+     * its default pair are the Atlas and Satellite cards' own files. The other ten are named only as
      * a picker's option and fetched when picked.
      */
     @Test
@@ -716,18 +719,10 @@ class SiteAssemblyTest {
             }
             println("SITE the data frame's ${layer.file} (${layer.cut}) is clear over %.3f".format(clear))
         }
-        // Recorded when H1's ground came under the coupled climate: the window was framed on a
-        // south-western peninsula of seed 718106's, and on that ground its land covers 15% of the
-        // frame, so the rainfall's land is under the fifth asked and the currents' sea over the
-        // four fifths (docs/TODO.md).
-        KnownFailures.expect("M1: the site's data frame holds little land on H1's ground", "img/data-rainfall.webp clear over 0.852; img/data-currents.webp clear over 0.135") {
-            if (unbalanced.isNotEmpty()) {
-                throw RecordedViolation(
-                    "a layer that keeps land or sea is clear over less than a fifth or more than four fifths of the frame: $unbalanced",
-                    unbalanced.joinToString("; ")
-                )
-            }
-        }
+        assertTrue(
+            unbalanced.isEmpty(),
+            "a layer that keeps land or sea is clear over less than a fifth or more than four fifths of the frame: $unbalanced"
+        )
 
         // Over the cards' window: the relief with the winds' arrows laid on it is the Winds card,
         // and the temperature layer is the Temperature card, to within the encoder's loss (the card
@@ -877,17 +872,10 @@ class SiteAssemblyTest {
             )
             println("SITE img/${figure.file} holds $colours colours at five bits a channel")
         }
-        // Recorded with the data frame's land above: on H1's ground the frame's rivers and lakes
-        // cover under the half percent the bar asks (docs/TODO.md).
-        KnownFailures.expect("M1: the site's data frame holds little land on H1's ground", "img/data-rivers.webp covers 0.0043") {
-            if (thinLayers.isNotEmpty()) {
-                throw RecordedViolation(
-                    "a layer covers less of its frame than $LEAST_LAYER_COVER or more than $MOST_LAYER_COVER: " +
-                        "blank, or not a layer: $thinLayers",
-                    thinLayers.joinToString("; ")
-                )
-            }
-        }
+        assertTrue(
+            thinLayers.isEmpty(),
+            "a layer covers less of its frame than $LEAST_LAYER_COVER or more than $MOST_LAYER_COVER: blank, or not a layer: $thinLayers"
+        )
     }
 
     /**

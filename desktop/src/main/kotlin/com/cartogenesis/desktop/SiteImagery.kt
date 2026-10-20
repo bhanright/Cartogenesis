@@ -60,11 +60,14 @@ import java.io.File
 object SiteImagery {
 
     /**
-     * The author's world, and the settings he generates with: 62% ocean, fourteen plates, twelve
-     * realms asked for. (The generator settles on fourteen; the number in the panel is a target
-     * that coastlines and watersheds are allowed to overrule.)
+     * The world the page's figures are cut from, chosen for its range, its coast and its climates:
+     * a long ice-capped plateau range with lakes in its ice, a dry plateau on one side of it and
+     * forested slopes on the other, a bay, and a cold south where the winds and the currents turn
+     * both ways. Its settings are the ones below: 62% ocean, fourteen plates, twelve realms asked
+     * for. (The generator settles on fourteen; the number in the panel is a target that coastlines
+     * and watersheds are allowed to overrule.)
      */
-    const val SEED = 718106L
+    const val SEED = 42L
     const val SEA_LEVEL = 0.62f
     const val PLATES = 14
     const val REALMS = 12
@@ -113,9 +116,10 @@ object SiteImagery {
      * each held when it was chosen. A pipeline change moves the coastline under a fixed window —
      * which is the whole point of rendering the page from the engine — so every window is looked at
      * again before a release ships, and moved if it no longer shows what it was picked for. The
-     * coordinates here were re-picked when the sheet took the world's true shape, from the contact
-     * sheet of that sheet, and again when the cells became square on the ground, since a seed
-     * makes a different world on a different grid (docs/DESIGN_LEDGER.md, Q6).
+     * coordinates here were picked from the half-size sheets of the candidate seeds, windows laid
+     * over each, when the page's world moved to [SEED]; a seed makes a different world on a
+     * different grid (docs/DESIGN_LEDGER.md, Q6), so they are only the right ground at
+     * [GRID_ROWS] rows and these settings.
      */
     data class Window(val x: Int, val y: Int, val width: Int, val height: Int)
 
@@ -125,11 +129,12 @@ object SiteImagery {
      * defaults, brought to [GRID_ROWS] rows the way the panel's size chips take a world), so the
      * page's link to it, `/app/?seed=1`, opens the same world at the reader's own size.
      *
-     * Not [SEED], whose every band of 800 rows carries a grid-shaped mark the page's first picture
-     * must not: its ice cap's straight edges, its dry belts ruled along rows, or its subduction
-     * coast running straight down a column. Chosen by the maintainer from three strips measured
-     * across 21 worlds for straight runs, comb and land (docs/DESIGN_LEDGER.md and docs/TODO.md,
-     * Site 5c); every other figure on the page stays on [SEED].
+     * Not the page's own world, [SEED], because the opening was chosen when that world was another
+     * seed whose every band of 800 rows carried a grid-shaped mark the page's first picture must
+     * not: an ice cap's straight edges, dry belts ruled along rows, or a subduction coast running
+     * straight down a column. Chosen by the maintainer from three strips measured across 21 worlds
+     * for straight runs, comb and land (docs/DESIGN_LEDGER.md and docs/TODO.md, Site 5c). Every
+     * other figure on the page, except the seed reel, is cut from [SEED]'s world.
      */
     const val BAND_SEED = 1L
 
@@ -160,18 +165,14 @@ object SiteImagery {
     /**
      * The window the map styles are compared in: 600 wide and 400 tall, at 1:1.
      *
-     * The body of the south-western peninsula: forested hills cut by rivers, the drowned valleys
-     * of its estuary branching in at the top, the coastal range dark along its south-east shore,
-     * and the shelf falling to the deep sea on both coasts. Height, water and sea in one frame,
-     * which is what the twelve styles part company over. West of the drowned inlet whose straight
-     * top docs/TODO.md lists. It moved here in Site 5c from the
-     * south-eastern lobe, which on the implicit erosion's terrain carried a plain comb of gullies
-     * down the columns and a dry belt ruled along a row; this window holds neither. On square
-     * cells the peninsula is where it was and so is the window; the valleys branching in at the top
-     * are a lake there, whose water stands up every gully round it, the lake area docs/TODO.md
-     * holds for the generator.
+     * A snow-capped plateau range crossing the frame from the lower left to the upper right, with
+     * lakes standing in its ice; dry, tan hills on its north-western side and forested hills cut
+     * by rivers on its south-eastern; a bay with an inlet in the south-west; and the shelf falling
+     * to the deep sea off the south-eastern coast. Three quarters land, the rest water, and the
+     * ground runs from ice to forest to desert hills: height, water, climate and sea in one frame,
+     * which is what the thirteen styles part company over.
      */
-    val STYLES_WINDOW = Window(864, 880, 600, 400)
+    val STYLES_WINDOW = Window(1650, 800, 600, 400)
 
     /**
      * The window the four data layers are read in: 480 wide and 600 tall, inside
@@ -179,11 +180,20 @@ object SiteImagery {
      *
      * Taller than wide because the layers are latitude-organised — temperature bands, the trades
      * and the westerlies, a gyre turning between them — so a window that spans more latitude shows
-     * more of what there is to see: 600 rows of 2048 is a little over fifty degrees. Land above
-     * and water below, the continent's south coast across the middle, because two of the four
+     * more of what there is to see: 600 rows of 2048 is a little over fifty degrees. Land and
+     * water both, a forested north and the south's ice cap round a gulf, because two of the four
      * layers draw nothing on land and the other two draw nothing at sea.
      */
-    val LAYERS_WINDOW = Window(800, 880, 480, 600)
+    val LAYERS_WINDOW = Window(DATA_FRAME_LEFT_PIXELS + LAYERS_PIXELS_INTO_FRAME, DATA_FRAME_TOP_PIXELS, 480, 600)
+
+    /**
+     * Which of the page's three kinds of world a figure is cut from: the page's own world, [SEED]
+     * at [GRID_ROWS] rows with the page's settings; the opening's, [BAND_SEED] at [GRID_ROWS] rows
+     * with the generator's defaults; or one of the seed reel's, at [REEL_ROWS] rows with the
+     * defaults. A seed alone does not say which: the reel's seed 42 and the page's world are both
+     * seed 42, and a seed makes a different world at a different size.
+     */
+    enum class Source { SITE, OPENING, REEL }
 
     /**
      * One picture on the page: a window of the map, read one way.
@@ -212,9 +222,12 @@ object SiteImagery {
         val quality: Int = WEBP_QUALITY,
         val showWater: Boolean = true,
         val cut: Cut = Cut.WHOLE,
-        val seed: Long = SEED
+        val seed: Long = SEED,
+        val source: Source = Source.SITE
     ) {
         init {
+            require(source != Source.SITE || seed == SEED) { "$file: the page's world is seed $SEED, not $seed" }
+            require(source != Source.OPENING || seed == BAND_SEED) { "$file: the opening's world is seed $BAND_SEED, not $seed" }
             require(reduction >= 1 && reduction and (reduction - 1) == 0) {
                 "$file: a reduction of $reduction is not a power of two, so it cannot be halved to"
             }
@@ -280,11 +293,13 @@ object SiteImagery {
      * `og:image`. The page itself does not draw it; its opening is [WORLD_BAND], whose first
      * stretch is this window.
      */
-    val HERO = Figure("natural.webp", BAND, MapView.FANTASY, MapStyle.NATURAL, seed = BAND_SEED)
+    val HERO = Figure(
+        "natural.webp", BAND, MapView.FANTASY, MapStyle.NATURAL, seed = BAND_SEED, source = Source.OPENING
+    )
 
     /**
      * Every map style the application offers, each cut from [STYLES_WINDOW]: the comparison
-     * slider's twelve pictures, in the application's own order.
+     * slider's thirteen pictures, in the application's own order.
      */
     val STYLE_PICTURES: List<Figure> = MapStyle.entries
         .map { style -> Figure("style-${style.name.lowercase()}.webp", STYLES_WINDOW, MapView.FANTASY, style) }
@@ -292,11 +307,12 @@ object SiteImagery {
     /**
      * The three styles that have a card each, the same files the slider shows.
      *
-     * Atlas, Schoolroom and Natural because they are the three that tint the ground differently for
-     * a reason a reader can be told in one line: height and climate, height alone, and the colours
-     * a satellite sees.
+     * Atlas, Schoolroom and Satellite because they are the three that colour the ground differently
+     * for a reason a reader can be told in one line: height and climate, height alone, and the
+     * ground as seen from orbit, which is the application's default and so what every other map on
+     * the page is drawn in.
      */
-    val STYLE_CARDS: List<Figure> = listOf(MapStyle.ATLAS, MapStyle.SCHOOLROOM, MapStyle.NATURAL)
+    val STYLE_CARDS: List<Figure> = listOf(MapStyle.ATLAS, MapStyle.SCHOOLROOM, MapStyle.SATELLITE)
         .map { style -> STYLE_PICTURES.single { it.style == style } }
 
     /** The four data views, one card each, all cut from [LAYERS_WINDOW]. */
@@ -304,18 +320,30 @@ object SiteImagery {
         listOf(MapView.TEMPERATURE, MapView.CURRENTS, MapView.WIND, MapView.RAINFALL)
             .map { view -> Figure("layer-${view.name.lowercase()}.webp", LAYERS_WINDOW, view) }
 
+    /** Where the data frame's top-left corner lies on the sheet, in pixels. */
+    private const val DATA_FRAME_LEFT_PIXELS = 1500
+    private const val DATA_FRAME_TOP_PIXELS = 1440
+
     /**
-     * The data frame's window: 800 by 600 at 1:1, holding [LAYERS_WINDOW] 160 columns in from its left.
+     * How far inside the data frame's left edge [LAYERS_WINDOW] begins, in pixels: the frame is 800
+     * wide and the cards 480, so 160 leaves 160 either side.
+     */
+    private const val LAYERS_PIXELS_INTO_FRAME = 160
+
+    /**
+     * The data frame's window: 800 by 600 at 1:1, holding [LAYERS_WINDOW] [LAYERS_PIXELS_INTO_FRAME]
+     * columns in from its left.
      *
      * The same ground as the four data cards and more of it either side, so the frame is wide
-     * enough to be read as one picture on a computer: the south-western peninsula whole, its hills
-     * and rivers, its coastal range, its tip, and the ocean off both its coasts.
-     * The relief under the layers is the winds view's shaded ground, which shows a comb of gullies
-     * down the columns plainest of any picture on the page; Site 5c moved the frame and the cards
-     * here from the range's eastern flank, where the implicit erosion's terrain combs it most, and
-     * where the old frame held the edge of the ice cap.
+     * enough to be read as one picture on a computer: a forested north with its rivers, a gulf, and
+     * the south's ice cap with fjords along its edge, the ocean off the west and a snowy range
+     * along the east coast. Of the world's ground it is the best for the layers: the temperature
+     * runs from warm in the north to cold in the south, the winds blow east in the north and west
+     * in the south, a gyre turns in the gulf, and the rain falls on the north-eastern forest and
+     * leaves the ground dry elsewhere. 62% land, so the layers that keep land and the layers that
+     * keep sea each have ground to cover.
      */
-    val DATA_FRAME_WINDOW = Window(640, 880, 800, 600)
+    val DATA_FRAME_WINDOW = Window(DATA_FRAME_LEFT_PIXELS, DATA_FRAME_TOP_PIXELS, 800, 600)
 
     /**
      * The data frame's pictures, bottom to top as the page lays them: the relief, which is the
@@ -336,17 +364,17 @@ object SiteImagery {
             cut = Cut.SEA_AND_MARKS
         ),
         Figure("data-wind.webp", DATA_FRAME_WINDOW, MapView.WIND, showWater = false, cut = Cut.MARKS),
-        Figure("data-rivers.webp", DATA_FRAME_WINDOW, MapView.FANTASY, MapStyle.NATURAL, cut = Cut.WATER)
+        Figure("data-rivers.webp", DATA_FRAME_WINDOW, MapView.FANTASY, MapStyle.SATELLITE, cut = Cut.WATER)
     )
 
     /**
-     * The whole world in the Natural style at a quarter of the sheet's pixels each way, 1024 by
+     * The whole world in the Satellite style at a quarter of the sheet's pixels each way, 1024 by
      * 512: the picture the zoom lens is moved over.
      */
     val WORLD_WHOLE: Figure by lazy {
         Figure(
             "world-whole.webp", Window(0, 0, SHEET_WIDTH_PIXELS, SheetGeometry.of(config()).heightPixels),
-            MapView.FANTASY, MapStyle.NATURAL, reduction = 4
+            MapView.FANTASY, MapStyle.SATELLITE, reduction = 4
         )
     }
 
@@ -357,25 +385,22 @@ object SiteImagery {
      */
     val WORLD_FULL: Figure by lazy {
         Figure(
-            "world-full.webp", WORLD_WHOLE.window, MapView.FANTASY, MapStyle.NATURAL,
+            "world-full.webp", WORLD_WHOLE.window, MapView.FANTASY, MapStyle.SATELLITE,
             quality = WORLD_BAND_QUALITY
         )
     }
 
     /**
-     * The patch of ground the page draws in relief: 640 by 400 at 1:1 of the south-western
-     * peninsula's coastal range, a ridge along the south-east shore with valleys and rivers
-     * behind it, a lake among the hills, and the sea falling away beyond the coast.
-     *
-     * Site 5c moved it here from the eastern island's western end, which on the implicit erosion's
-     * terrain carried a straight west coast down a column, a comb of gullies on the range's
-     * southern flank (plainer tilted than flat), and the scarp and the straight-edged delta flat
-     * docs/TODO.md lists. This patch holds none of them.
+     * The patch of ground the page draws in relief: 640 by 400 at 1:1 of the plateau range's
+     * south-western half. Its ice-covered crest runs along the patch from the lower left to the
+     * upper right with the valleys glaciers cut down both flanks, dry, ridged hills to the north,
+     * forest and a drowned valley to the south-east, and the sea in two corners. Land over
+     * 90% of it, and the highest ground of any window on the page, which is what a relief is for.
      */
-    val RELIEF_WINDOW = Window(960, 960, 640, 400)
+    val RELIEF_WINDOW = Window(1190, 900, 640, 400)
 
-    /** The patch in the Natural style: the picture the relief is textured with, and its still. */
-    val RELIEF_TEXTURE = Figure("relief-natural.webp", RELIEF_WINDOW, MapView.FANTASY, MapStyle.NATURAL)
+    /** The patch in the Satellite style: the picture the relief is textured with, and its still. */
+    val RELIEF_TEXTURE = Figure("relief-satellite.webp", RELIEF_WINDOW, MapView.FANTASY, MapStyle.SATELLITE)
 
     /** The file the patch's heights are published in. */
     const val RELIEF_HEIGHTS_FILE = "relief-heights.png"
@@ -410,13 +435,16 @@ object SiteImagery {
      * branching one, an inland sea with islands, two lands across open sea, and two lands across
      * shallow bays. Seven of the others were left for an ice cap ending in a wall down a column, a
      * slab of ice with straight edges, a fan of rays, or a dry belt ruled along a row.
+     *
+     * Seed 42 is also the page's own world, [SEED]; the reel's is a different world, since a seed makes
+     * another world at another size, which is why a figure says its [Figure.source].
      */
     val REEL_SEEDS: List<Long> = listOf(42L, 1066L, 2024L, 777L, 7L)
 
     /**
      * The size the reel's worlds are made at: 512 rows, 1024 by 512 cells, where a browser window
      * starts, so the pictures are the worlds the links open. It also keeps the site's build quick:
-     * seconds a world, where the author's world at 2048 is minutes.
+     * seconds a world, where the page's world at 2048 is minutes.
      */
     const val REEL_ROWS = 512
 
@@ -424,7 +452,7 @@ object SiteImagery {
     fun reelConfig(seed: Long): WorldGenConfig = WorldGenConfig(seed = seed).atRows(REEL_ROWS)
 
     /**
-     * Each reel world whole in the Natural style at its sheet's own pixels, 1024 by 512. The page
+     * Each reel world whole in the Satellite style at its sheet's own pixels, 1024 by 512. The page
      * draws the first two worlds half its column wide on a computer, about 525 CSS pixels, and
      * every world the width of a phone's screen, about 340, so 1024 covers both at two device
      * pixels to the CSS pixel, where the half-size pictures of Site 5b were enlarged.
@@ -434,7 +462,7 @@ object SiteImagery {
             val sheet = SheetGeometry.of(reelConfig(seed))
             Figure(
                 "seed-$seed.webp", Window(0, 0, sheet.widthPixels, sheet.heightPixels),
-                MapView.FANTASY, MapStyle.NATURAL, seed = seed
+                MapView.FANTASY, MapStyle.SATELLITE, seed = seed, source = Source.REEL
             )
         }
     }
@@ -445,19 +473,17 @@ object SiteImagery {
      *
      * One window and one scale, because the page plays the six pictures in turn in one frame and
      * the land must not jump between them: what changes from frame to frame is the step's own
-     * work. The south-western peninsula of the northern continent, halved so that plates and
-     * realms have room to show: the continent's plate meeting two ocean plates round its coast,
-     * valleys cut into its hills, the shelf, a climate that runs from forest on the west coast to
-     * dry grassland inland, rivers reaching both coasts, and several realms. Its top edge stands
-     * below the dry belt the generator rules along a row, and its right-hand edge west of the
-     * estuary with a straight west edge (both in docs/TODO.md), so neither is in any frame.
+     * work. The plateau range whole, halved so that plates and realms have room to show: the
+     * plate boundary the range stands on, the range itself with the lakes in its ice, the shelf
+     * round a bay, a climate that runs from desert on the north-western side to forest on the
+     * south-eastern, rivers reaching the coast, and several realms. 71% land.
      */
-    val STAGE_WINDOW = Window(440, 740, 1040, 560)
+    val STAGE_WINDOW = Window(1300, 800, 1040, 560)
 
     /**
      * The six steps, each pictured by the view that shows what that step makes, in the page's order:
-     * the tectonic plates; the elevation, for the land the erosion cut; Natural, for the coast and
-     * shelf the sea level drew; the biomes, for the climate; Natural again with its rivers and lakes,
+     * the tectonic plates; the elevation, for the land the erosion cut; Satellite, for the coast and
+     * shelf the sea level drew; the biomes, for the climate; Satellite again with its rivers and lakes,
      * for the water; and the political view, for the realms. The first four are drawn without the
      * rivers and lakes, which the fifth step makes, so the water arrives in the frame when its step
      * does rather than being there from the start.
@@ -466,11 +492,11 @@ object SiteImagery {
         Figure("step-plates.webp", STAGE_WINDOW, MapView.PLATES, reduction = 2, showWater = false),
         Figure("step-erosion.webp", STAGE_WINDOW, MapView.ELEVATION, reduction = 2, showWater = false),
         Figure(
-            "step-seas.webp", STAGE_WINDOW, MapView.FANTASY, MapStyle.NATURAL, reduction = 2,
+            "step-seas.webp", STAGE_WINDOW, MapView.FANTASY, MapStyle.SATELLITE, reduction = 2,
             showWater = false
         ),
         Figure("step-climate.webp", STAGE_WINDOW, MapView.BIOMES, reduction = 2, showWater = false),
-        Figure("step-rivers.webp", STAGE_WINDOW, MapView.FANTASY, MapStyle.NATURAL, reduction = 2),
+        Figure("step-rivers.webp", STAGE_WINDOW, MapView.FANTASY, MapStyle.SATELLITE, reduction = 2),
         Figure("step-realms.webp", STAGE_WINDOW, MapView.POLITICAL, reduction = 2)
     )
 
@@ -504,7 +530,8 @@ object SiteImagery {
     val WORLD_BAND: Figure by lazy {
         Figure(
             "world-band.webp", Window(BAND.x, BAND.y, SHEET_WIDTH_PIXELS, BAND.height),
-            MapView.FANTASY, MapStyle.SATELLITE, quality = WORLD_BAND_QUALITY, seed = BAND_SEED
+            MapView.FANTASY, MapStyle.SATELLITE, quality = WORLD_BAND_QUALITY, seed = BAND_SEED,
+            source = Source.OPENING
         )
     }
 
@@ -520,7 +547,7 @@ object SiteImagery {
     val WORLD_BAND_HALF: Figure by lazy {
         Figure(
             "world-band-half.webp", WORLD_BAND.window, MapView.FANTASY, MapStyle.SATELLITE,
-            reduction = 2, quality = WORLD_BAND_QUALITY, seed = BAND_SEED
+            reduction = 2, quality = WORLD_BAND_QUALITY, seed = BAND_SEED, source = Source.OPENING
         )
     }
 
@@ -548,22 +575,23 @@ object SiteImagery {
         val contact = System.getProperty("cartogenesis.siteImagery.contact") == "true"
 
         val started = System.currentTimeMillis()
-        // The author's world is made and cut in a function of its own so that nothing here holds
+        // The page's world is made and cut in a function of its own so that nothing here holds
         // it once its figures are written: the opening's world is as large, and with both alive
-        // the run filled the task's 8 GB (the author's world alone is 3.8 GB live). See
+        // the run filled the task's 8 GB (the page's world alone was 3.8 GB live when measured). See
         // docs/DESIGN_LEDGER.md, S1 Satellite look, round 2.
-        var total = writeAuthorsWorld(outputDir, contact, started)
+        var total = writeSiteWorld(outputDir, contact, started)
 
         // The opening's world and the reel's, one at a time, each let go before the next is made.
-        FIGURES.filter { it.seed != SEED }.groupBy { it.seed }.forEach { (seed, figures) ->
+        FIGURES.filter { it.source != Source.SITE }.groupBy { it.source to it.seed }.forEach { (kindAndSeed, figures) ->
+            val (source, seed) = kindAndSeed
             val madeAt = System.currentTimeMillis()
-            val reelWorld = WorldGenerationEngine.generateBlocking(if (seed == BAND_SEED) bandConfig() else reelConfig(seed))
-            println("SITE IMAGERY seed=$seed ${reelWorld.width}x${reelWorld.height} generated in ${System.currentTimeMillis() - madeAt} ms")
-            val reelSheets = Sheets(reelWorld)
+            val otherWorld = WorldGenerationEngine.generateBlocking(if (source == Source.OPENING) bandConfig() else reelConfig(seed))
+            println("SITE IMAGERY $source seed=$seed ${otherWorld.width}x${otherWorld.height} generated in ${System.currentTimeMillis() - madeAt} ms")
+            val otherSheets = Sheets(otherWorld)
             try {
-                total += writeFigures(reelSheets, figures, outputDir)
+                total += writeFigures(otherSheets, figures, outputDir)
             } finally {
-                reelSheets.close()
+                otherSheets.close()
             }
         }
 
@@ -579,7 +607,7 @@ object SiteImagery {
      * bytes written. The world is local to this call, so it can be collected before the next is
      * generated.
      */
-    private fun writeAuthorsWorld(outputDir: File, contact: Boolean, started: Long): Long {
+    private fun writeSiteWorld(outputDir: File, contact: Boolean, started: Long): Long {
         val world = generate()
         val generated = System.currentTimeMillis()
         println(
@@ -590,7 +618,7 @@ object SiteImagery {
         var total = 0L
         val sheets = Sheets(world)
         try {
-            total += writeFigures(sheets, FIGURES.filter { it.seed == SEED }, outputDir)
+            total += writeFigures(sheets, FIGURES.filter { it.source == Source.SITE }, outputDir)
             total += writeReliefHeights(world, outputDir)
             if (contact) writeContactSheets(sheets, outputDir)
         } finally {
@@ -601,9 +629,9 @@ object SiteImagery {
 
     /**
      * Writes [figures] from [sheets] into [outputDir], one line each to the log, and returns the
-     * bytes written. One rasterisation per distinct reading rather than one per figure: the link
-     * preview, the band and the Natural style card are the same reading of the same world, and a
-     * 2048 sheet is 32 MB and most of a second.
+     * bytes written. One rasterisation per distinct reading rather than one per figure: the
+     * Satellite style's picture, the relief's still and the whole world at both sizes are one reading
+     * of one world, and a 2048 sheet is 32 MB and most of a second.
      */
     private fun writeFigures(sheets: Sheets, figures: List<Figure>, outputDir: File): Long {
         var total = 0L
@@ -871,7 +899,7 @@ object SiteImagery {
      * map before it is rendered.
      */
     private fun writeContactSheets(sheets: Sheets, outputDir: File) {
-        val readings = FIGURES.filter { it.seed == SEED && it.cut == Cut.WHOLE }.distinctBy { it.view to it.style }
+        val readings = FIGURES.filter { it.source == Source.SITE && it.cut == Cut.WHOLE }.distinctBy { it.view to it.style }
         val mapWidth = sheets.mapWidth
         val mapHeight = sheets.mapHeight
         val contactWidth = mapWidth / 2
@@ -904,7 +932,7 @@ object SiteImagery {
             val outline = Paint().apply {
                 color = WINDOW_OUTLINE_INK; strokeWidth = 3f; mode = PaintMode.STROKE
             }
-            FIGURES.filter { it.seed == SEED }.map { it.window }.distinct().forEach { window ->
+            FIGURES.filter { it.source == Source.SITE }.map { it.window }.distinct().forEach { window ->
                 canvas.drawRect(
                     Rect.makeXYWH(
                         window.x / 2f, window.y / 2f, window.width / 2f, window.height / 2f

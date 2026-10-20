@@ -136,13 +136,14 @@ internal object Isostasy {
          * margin is crust that has been stretched and thinned on its way out to the ocean floor,
          * so a cell halfway across one carries a column halfway between the two in thickness, in
          * density and in heat. That is where the shelf, the slope and the rise come from, and it
-         * is why [PlateStage] blurs the share across the plate boundary rather than stepping it.
+         * is why the map pass reads the share as a mixture of the tectonic history's crust rather
+         * than stepping it ([CrustMap]).
          *
-         * The extra thickness is the cratonic profile
-         * ([com.cartogenesis.worldgen.model.IsostasyConfig.cratonThickeningKm]) and is a signed
-         * figure with a mean of zero over the map's continental crust, so it tilts a continent
-         * without moving the datum. It buoys in proportion to the share, because it is continental
-         * crust that is being added and there is none of it to add on the ocean floor.
+         * The extra thickness is the history's own: the crust's thickness against the standard
+         * column, thinned where a margin was stretched and thickened where orogeny piled crust on
+         * ([PlateResult.crustThicknessKm]; docs/DESIGN_LEDGER.md, TH1-1). It buoys in proportion to
+         * the share, because it is continental crust that is being added and there is none of it
+         * to add on the ocean floor.
          */
         fun altitudeMetres(
             continentalShare: Float,

@@ -31,9 +31,9 @@ data class WorldLists(
      */
     val shorelineHeight: Float,
     /**
-     * How fast this world's ridges spread, in kilometres per million years — solved from the plate
-     * partition rather than declared, and so not derivable from the arrays either. See
-     * [com.cartogenesis.worldgen.pipeline.PlateStage.seafloorAgeOf].
+     * How fast this world's ridges spread, in kilometres per million years — the tectonic history's
+     * own rate at its present ridges rather than a declared one, and so not derivable from the
+     * arrays either. See [com.cartogenesis.worldgen.pipeline.PlateResult.seafloorHalfSpreadingRateKmPerMyr].
      */
     val seafloorHalfSpreadingRateKmPerMyr: Double,
     val landCellCount: Int,

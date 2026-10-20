@@ -122,9 +122,11 @@ data class PlateResult(
      * The ocean's whole shape, since S2's second pass. Depth goes as the square root of age
      * (Parsons & Sclater 1977), so a ridge stands two and a half kilometres down and the floor
      * sinks away from it along a smooth curve — where before, every piece of floor was of one age
-     * and the deep sea was a set of flat plate polygons. Continental cells carry an age too; it
-     * simply does nothing there, because their altitude is their crust's business. See
-     * [PlateStage.seafloorAgeOf], which is also where the rate comes from.
+     * and the deep sea was a set of flat plate polygons. Since TH1-1 the age is the tectonic
+     * history's: each piece of floor was made at a ridge at a known time and carried from it, so
+     * its age is the history's and not a distance read off the map. Continental cells carry an age
+     * too; it simply does nothing there, because their altitude is their crust's business. The
+     * rate is the mean half rate of the history's present ridges (docs/DESIGN_LEDGER.md, TH1-1).
      */
     val seafloorAgeMyr: FloatField,
     val seafloorHalfSpreadingRateKmPerMyr: Double,
@@ -133,19 +135,19 @@ data class PlateResult(
      * decides the altitude the cell floats at before anything is stamped on it.
      *
      * Not a label but a mixture, because a continental margin is a mixture: crust stretched and
-     * thinned on its way out to the ocean floor. The field is 1 over a continental plate's
-     * interior and 0 over an oceanic one, blurred across the boundary by the same radius the plate
-     * base was blurred by before S2, and the band between is the shelf, the slope and the rise.
-     * [Isostasy.Columns] turns it into metres.
+     * thinned on its way out to the ocean floor. Since TH1-1 it is the tectonic history's crust
+     * read onto the map ([CrustMap]): 1 inside a continent and 0 on the ocean floor, wherever the
+     * plates' boundaries run, and the band between is the margin the history rifted or the arc it
+     * built. [Isostasy.Columns] turns it into metres.
      */
     val continentalShare: FloatField,
     /**
      * How fast the rock is still rising under each cell, in millimetres a year — zero everywhere
-     * except on the belts of the *present* epoch.
+     * except on the belts of the present boundaries.
      *
      * The other half of what retires H1's decay factors. An old belt is low because its uplift
-     * stopped and erosion went on, so a past epoch's belt is stamped and then left alone while a
-     * present one goes on being pushed up through every hydraulic round. See
+     * stopped and erosion went on, so an old belt is the crust's thickening the history left, not
+     * stamped, while a present one goes on being pushed up through every hydraulic round. See
      * [com.cartogenesis.worldgen.model.TectonicsConfig.collisionUpliftMmPerYear] and
      * `HydraulicErosion.apply`.
      */
@@ -1499,8 +1501,8 @@ object PlateStage {
      * Each plume here drifts at [plumeSpeedShare] of its plate's speed on a course that wanders over
      * [PLUME_COURSE_KM] of plate travel, its own and not its neighbors', so no two trails are alike.
      *
-     * The plate's present drift is the one the belts are built from; the turns before it are the
-     * trail's alone, since an epoch of [TectonicsConfig.epochLengthYears] holds one drift.
+     * The plate's present drift, its rotation in the tectonic history at the present, is the one
+     * the belts are built from; the turns before it are the trail's alone.
      *
      * Each plume also has its own strength ([plumeFluxShare]) and its volcanoes their own spacing
      * ([ventSpacingShare]) and size ([volcanoSizeShare]): Earth's chains are neither one size nor

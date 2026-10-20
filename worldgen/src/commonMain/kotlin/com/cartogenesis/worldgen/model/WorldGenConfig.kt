@@ -432,29 +432,29 @@ data class TectonicsConfig(
      * *Fractal plate tectonics*, GRL 30, 2003), and Morra, Seton, Quevedo and Müller
      * (*Organization of the tectonic plates in the last 200 Myr*, EPSL 373, 2013) find two
      * populations, large and small, each a power law of its own, through the whole of the last
-     * 200 million years. **The generator's partition does not match that.** Its plates are the
-     * cells of a warped Voronoi partition of seeds drawn uniformly on the map (`PlateStage`), whose
-     * areas spread like a Poisson-Voronoi cell's, a narrow hump about the mean whose largest is
-     * two to three times it and whose smallest is a third or so of it: Earth's seven major plates,
-     * 1.3 to 3.0 times the mean, are inside that, but Earth's minor plates, 0.01 to 0.5 times it,
-     * are not, and a world of fifteen Voronoi plates has none of them. A partition with Earth's two
-     * populations is in `TODO.md`.
+     * 200 million years. **The generator's plates do not match that yet.** Since TH1-1 they are the
+     * tectonic history's (`TectonicHistory`): the assembled world cut along paths through its
+     * weakest ground until there are this many, and cut again wherever the forces on a plate open
+     * it or a plate grows past the Pacific's share, so their sizes are where the cuts fell. The
+     * largest stays within Earth's, but the history makes no microplates, and Earth's two
+     * populations are still in `TODO.md`.
      */
     val meanPlateAreaKm2: Double = WorldScale.EARTH_SURFACE_KM2 / EARTH_PLATE_COUNT,
     /**
-     * How much of a plate's continental crust stands under water, as a share of its area — which
-     * is what turns the ocean-coverage slider into a count of continental plates.
+     * How much of the continental crust stands under water, as a share of its area — which is what
+     * turns the ocean-coverage slider into the share of the planet the tectonic history draws as
+     * continental crust.
      *
      * Continental crust is not the same thing as land. Earth's continental crust covers 41.2% of
      * the surface and its land 29.2% (Cogley, *Continental margins and the extent and number of
      * the continents*, Rev. Geophys. 22, 1984), so 29% of the continents are drowned — the shelves,
-     * the banks and the shallow seas. `PlateStage` reads it backwards: to put `1 - seaLevel` of the
-     * world above water it has to draw `(1 - seaLevel) / (1 - this)` of it as continental crust.
+     * the banks and the shallow seas. The tectonic history reads it backwards: to put
+     * `1 - seaLevel` of the world above water it draws `(1 - seaLevel) / (1 - this)` of it as the
+     * continental crust it begins with, which its rifts stretch and its collisions shorten by a few
+     * percent over its course (docs/DESIGN_LEDGER.md, TH1-1).
      *
-     * That is the whole of what the ocean-coverage slider now does to the tectonics, and it is why
-     * there is no longer a plate-count fraction here: which plates are continental is chosen by
-     * *area* until the target is met, so a world of fourteen plates of unequal size lands on the
-     * share asked for rather than on the nearest whole plate.
+     * That is the whole of what the ocean-coverage slider does to the tectonics: the continents
+     * lie inside plates, so the share asked for is an area of crust and not a count of plates.
      *
      * **Earth's own 0.29.** Where the sea stands on a continent is what this decides: the cut
      * drowns this share of the crust, so the land is the crust above its own 29th percentile, and
@@ -470,9 +470,9 @@ data class TectonicsConfig(
      * planet's continents are three times as wide against the same margins, so the crust drowns
      * about an eighth of itself at the datum — 12.5% on seed 42 — and at 0.20 the cut still stood
      * 250 to 450 m above the datum, where the platform's hump put half the land between 500 m and
-     * 2 km. No one model figure lands the cut on the datum anyway, since the continents are whole
-     * plates and the nearest a world can come is half a plate either way, so the share is Earth's
-     * and the datum is where Earth's platform floats ([IsostasyConfig.continentalFreeboardMetres]).
+     * 2 km. No one model figure lands the cut on the datum anyway, since a world's crust ends the
+     * history a few percent larger or smaller than it began, so the share is Earth's and the datum
+     * is where Earth's platform floats ([IsostasyConfig.continentalFreeboardMetres]).
      *
      * S2's first pass measured 0.12 here and recorded that taking it cost the coastline everything:
      * the shoreline then sat on the margin's own slope, where the ground falls hundreds of metres a
@@ -623,10 +623,10 @@ data class TectonicsConfig(
     /**
      * How far in from the edge of its own crust a continent becomes cratonic, in kilometres.
      *
-     * The reach of the profile that carries both [cratonReliefStandardDeviationMetres] and
-     * [IsostasyConfig.cratonThickeningKm]: relief falls and the crust thickens as
-     * `1 - exp(-distance / this)`, so a cell this far in has made about two thirds of the journey
-     * and one twice as far in nearly all of it.
+     * The reach of the profile that carries [cratonReliefStandardDeviationMetres]: relief falls
+     * as `1 - exp(-distance / this)`, so a cell this far in has made about two thirds of the
+     * journey and one twice as far in nearly all of it. The crust's thickness is no longer drawn on
+     * this profile but read off the tectonic history (docs/DESIGN_LEDGER.md, TH1-1).
      *
      * Four hundred kilometres, the middle of the band Watts (*Isostasy and Flexure of the
      * Lithosphere*, 2001) measures continental crust thinning from 40 km to 10 across at a rifted
@@ -1059,7 +1059,7 @@ data class TectonicsConfig(
      * stream-power river incision model*, JGR 104, 1999). A belt that is still being pushed up
      * holds its height against the rivers cutting it down, and one whose boundary has moved away
      * does not — which is the whole difference between the Alps and the Appalachians, and the
-     * reason [epochLengthYears] above can retire a decay factor.
+     * reason a belt's uplift is read off its present boundary rather than decayed by a factor.
      *
      * The *ratios* between the four are England & Molnar's (*Surface uplift, uplift of rocks, and
      * exhumation of rocks*, Geology 18, 1990), which is also the paper that insists on the
@@ -1132,13 +1132,12 @@ data class TectonicsConfig(
      */
     val elevationLimitKneeMetres: Float = 3_000f,
     /**
-     * The relief, in normalized elevation units, at which an epoch's belt counts as having made
-     * the crust beneath it its own age — the scale of [PlateResult.crustAge].
-     *
-     * A cell the epoch raised by this much or more takes that epoch's age outright; one it barely
-     * touched keeps whatever older age it had. Erosion reads the field to decide erodibility, so
-     * what matters is that the bands are unambiguous, which is why the value is a relief rather
-     * than a distance.
+     * The relief, in normalized elevation units, at which a present belt's stamp is the whole of
+     * the ground's relief: a cell a belt raised by this much or more is wholly orogenic, rougher
+     * than the plain round it, and the orogenic thickening the tectonic history left in the crust
+     * there is not counted a second time in its isostasy (`PlateStage`; docs/DESIGN_LEDGER.md,
+     * TH1-1). One a belt barely touched takes its roughness from the crust's own excess instead.
+     * A relief rather than a distance, so the share is the same at every grid.
      */
     val crustAgeReference: Float = 0.05f,
     /**
@@ -1519,8 +1518,9 @@ data class SeaConfig(
      * It was 468.75 km until S2's second pass, and that figure was doing a job it no longer has to
      * do. B1 invented this wedge because the sea floor dropped straight off every coast: there was
      * no two-density crust, so nothing but a remap could put shallow water on a margin, and the
-     * remap had to be wide enough to be seen. S2 gives the crust its two densities and a 600 km
-     * margin between them ([TectonicsConfig.crustMarginKm]), so the shallow water on a margin is
+     * remap had to be wide enough to be seen. S2 gave the crust its two densities and a margin
+     * between them, which since TH1-1 is the history's own stretched crust
+     * ([TectonicsConfig.riftedMarginWidthKm]), so the shallow water on a margin is
      * now the drowned platform itself and this is only the sediment wedge on top of it. Measured,
      * the old width was not a margin but the ocean: a 20-cell plateau and a 20-cell slope around
      * every coast of a world whose coastline runs seven thousand cells covered essentially all of

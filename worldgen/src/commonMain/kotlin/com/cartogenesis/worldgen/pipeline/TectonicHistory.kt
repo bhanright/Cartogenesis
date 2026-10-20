@@ -2258,8 +2258,8 @@ internal object TectonicHistory {
     /**
      * The thickness a collision adds to its crust at its height, km: Tibet's. Its interior stands
      * 5,023 m (Fielding et al. 1994, as `TectonicsConfig.beltReliefMetres` cites them) against a
-     * standard column's 374, and Airy turns a kilometer of crust into 141 m of altitude
-     * (`IsostasyConfig.cratonThickeningKm`), so (5,023 - 374) / 141 = 33 km.
+     * standard column's 374, and Airy turns a kilometer of crust into `(rho_m - rho_c) / rho_m`, 141 m,
+     * of altitude (`IsostasyConfig`'s densities), so (5,023 - 374) / 141 = 33 km.
      */
     internal const val TIBET_EXCESS_KM = 33.0
 

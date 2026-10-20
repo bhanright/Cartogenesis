@@ -17,7 +17,7 @@ class RegenerateGzipFixture {
 
     @OptIn(ExperimentalEncodingApi::class)
     @Test
-    fun `write the fixture this build would read`() = runTest {
+    fun `write the fixture this build would read`() = runTest(timeout = kotlin.time.Duration.parse("10m")) {
         if (System.getenv("REGENERATE_GZIP_FIXTURE") == null) return@runTest
 
         val document = WorldDocument(

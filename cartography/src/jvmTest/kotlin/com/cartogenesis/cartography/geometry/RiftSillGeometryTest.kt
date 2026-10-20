@@ -56,7 +56,10 @@ class RiftSillGeometryTest {
         val report = PlateStage.presentRiftSegments(config)
         val frame = GridFrame(config.width, config.height, config.cellWidthKm, config.cellHeightKm)
         val failures = ArrayList<String>()
-        listOf("north-south" to NORTH_SOUTH_PAIRS, "east-west" to EAST_WEST_PAIRS).forEach { (name, pairs) ->
+        val (northSouth, eastWest) = riftsByBearing(config, report)
+        println("RIFT SILLS seed $SEED: north-south pairs $northSouth, east-west pairs $eastWest")
+        assertTrue(northSouth.isNotEmpty() && eastWest.isNotEmpty(), "seed $SEED has no rift of one bearing or the other to read")
+        listOf("north-south" to northSouth, "east-west" to eastWest).forEach { (name, pairs) ->
             val nearJoin = sillCells(config, report, plates, pairs)
             val heights = plates.height.data
             val inside = nearJoin.indices.filter { nearJoin[it] }
@@ -78,6 +81,32 @@ class RiftSillGeometryTest {
             }
         }
         assertTrue(failures.isEmpty(), "a rift's sills run straight: $failures")
+    }
+
+    /**
+     * Seed 42's longest rift running north-south and its two longest running east-west, as plate
+     * pairs: a rift runs one way where its cells span [BEARING_DOMINANCE] times as far on the ground
+     * that way as the other. Chosen from the world rather than named, since the tectonic history
+     * makes the plates (docs/DESIGN_LEDGER.md, TH1-1); main named its pairs 2-7, 10-11 and 1-4.
+     */
+    private fun riftsByBearing(config: WorldGenConfig, report: PlateStage.RiftSegmentReport): Pair<Set<Int>, Set<Int>> {
+        val byPair = report.cell.indices.groupBy { report.lowId[it] * PAIR_STRIDE + report.highId[it] }
+        val spans = byPair.mapValues { (_, entries) ->
+            val rows = entries.map { report.cell[it] / config.width }
+            val columns = entries.map { report.cell[it] % config.width }
+            // A rift that crosses the wrap is read the short way round.
+            val sorted = columns.sorted()
+            var widestGap = config.width - sorted.last() + sorted.first()
+            for (index in 1 until sorted.size) widestGap = maxOf(widestGap, sorted[index] - sorted[index - 1])
+            val acrossKm = (config.width - widestGap) * config.cellWidthKm
+            val alongKm = (rows.max() - rows.min()) * config.cellHeightKm
+            alongKm to acrossKm
+        }
+        val northSouth = spans.filter { (_, s) -> s.first > BEARING_DOMINANCE * s.second }.entries
+            .sortedByDescending { it.value.first }.take(1).map { it.key }.toSet()
+        val eastWest = spans.filter { (_, s) -> s.second > BEARING_DOMINANCE * s.first }.entries
+            .sortedByDescending { it.value.second }.take(2).map { it.key }.toSet()
+        return northSouth to eastWest
     }
 
     /**
@@ -133,11 +162,8 @@ class RiftSillGeometryTest {
         const val ROWS = 512
         const val PAIR_STRIDE = 1000
 
-        /** Seed 42's rift between plates 2 and 7 runs north-south for 4,300 km at about 3,100 km east. */
-        val NORTH_SOUTH_PAIRS = setOf(2 * PAIR_STRIDE + 7)
-
-        /** Its rifts between plates 10 and 11 and between 1 and 4 run east-west. */
-        val EAST_WEST_PAIRS = setOf(10 * PAIR_STRIDE + 11, 1 * PAIR_STRIDE + 4)
+        /** How many times farther one way a rift's cells must span than the other for it to run that way. */
+        const val BEARING_DOMINANCE = 2.0
 
         /**
          * How far along the rift from a join the sill's ground is read: twice the accommodation

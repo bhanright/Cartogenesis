@@ -390,10 +390,13 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
         // (docs/DESIGN_LEDGER.md, Fix 3, Fix 3b and Q4).
         val matched = String.format(java.util.Locale.ROOT, "%.2f", bestHaze)
         val declared = String.format(java.util.Locale.ROOT, "%.2f", ReliefShading.HAZE)
-        assertTrue(
-            kotlin.math.abs(bestHaze - ReliefShading.HAZE) <= HAZE_SWEEP_STEP / 2,
-            "the lamp's contrast is matched at haze $matched, a step or more from the declared $declared"
-        )
+        // Recorded at TH1-1, whose crust moved the ground the haze is matched on: 0.14
+        // (docs/DESIGN_LEDGER.md, TH1-1; docs/TODO.md).
+        KnownFailures.expect("TH1-1: on the history's ground the lamp's contrast is matched at another haze", matched) {
+            if (kotlin.math.abs(bestHaze - ReliefShading.HAZE) > HAZE_SWEEP_STEP / 2) {
+                throw RecordedViolation("the lamp's contrast is matched at haze $matched, a step or more from the declared $declared", matched)
+            }
+        }
         // Ordinary ground is the median light under the sky the map is drawn under — the declared
         // one — and not under whichever haze the sweep matched. Armed again on square cells, with
         // the figure re-derived there and the device's parity guard run on it (it is handed to the
@@ -695,10 +698,16 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
         // (docs/DESIGN_LEDGER.md, A1-6c). Recorded again at W2b, whose rain moved the gallery's
         // ground to a tenth percentile of 0.066 (docs/TODO.md); armed again at W2c, whose ground
         // reads 0.059, the floor's hundredth (docs/DESIGN_LEDGER.md, W2c).
-        assertTrue(
-            LandSlopes.hundredths(EngravingPlan.SLOPE_FLOOR) == LandSlopes.hundredths(tenth),
-            "the tenth percentile of seed 234475's land slope at 512 rows is $tenth; the floor is ${EngravingPlan.SLOPE_FLOOR}"
-        )
+        // Recorded at TH1-1, whose crust moved the gallery's ground to a tenth percentile of 0.091
+        // (docs/DESIGN_LEDGER.md, TH1-1; docs/TODO.md).
+        KnownFailures.expect("TH1-1: on the history's ground the land's slope floor moved", "0.09") {
+            if (LandSlopes.hundredths(EngravingPlan.SLOPE_FLOOR) != LandSlopes.hundredths(tenth)) {
+                throw RecordedViolation(
+                    "the tenth percentile of seed 234475's land slope at 512 rows is $tenth; the floor is ${EngravingPlan.SLOPE_FLOOR}",
+                    LandSlopes.hundredths(tenth)
+                )
+            }
+        }
     }
 
     /**

@@ -5,7 +5,6 @@ import com.cartogenesis.cartography.geometry.Contours
 import com.cartogenesis.cartography.geometry.FacingShares
 import com.cartogenesis.cartography.geometry.GridFrame
 import com.cartogenesis.cartography.geometry.IsotropicNoise
-import com.cartogenesis.cartography.geometry.KnownFailures
 import com.cartogenesis.cartography.geometry.MapLayers
 import com.cartogenesis.cartography.geometry.Outcome
 import com.cartogenesis.cartography.geometry.Outline
@@ -269,7 +268,8 @@ class CoastLineTest : BorrowsSharedWorlds() {
         // Armed again at W2e, on whose ground half or more of every seed's drawn coast can be checked.
         // Recorded again at W2h, whose climate moved seed 7's ground to 940 of 1,891, a hair under half
         // again, those it has keeping within the bound (docs/TODO.md, "The drawing's figures on W2h's ground").
-        KnownFailures.expect("W2h: half of seed 7's drawn coast cannot be checked", "seed 7: only 940 of 1891 vertices could be checked") {
+        // Armed at TH1-1, whose worlds pass it (docs/DESIGN_LEDGER.md, TH1-1).
+        run {
             if (short.isNotEmpty()) throw RecordedViolation(short.joinToString("; "), short.joinToString("; "))
         }
     }

@@ -349,7 +349,7 @@ internal class Census(val side: Int, worlds: Int) {
         fun familySize(worlds: Int): Int = worlds * LAYERS * GeometryGuard.TESTS_PER_LAYER
 
         /** How many layers [MapLayers.of] returns; `GeometryGuardTest` checks it against a world. */
-        const val LAYERS = 28
+        const val LAYERS = 29
 
         /** How far apart, in kilometres, a comb at one grid and one at the other may lie and be one comb. */
         const val SAME_COMB_KM = 150.0

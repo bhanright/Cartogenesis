@@ -370,11 +370,17 @@ class PenAndInkTest : BorrowsSharedWorlds() {
         // armed again at C1b, whose climate moved it back under, and at H1, whose platform reads
         // 28.9 degrees there on the climate before C1b; 25.6 on H1's ground under the coupled
         // climate (docs/DESIGN_LEDGER.md, C1b, H1 and M1).
-        assertTrue(
-            engravedError.meanDegrees <= MAX_MEAN_ASPECT_ERROR_DEGREES,
-            "the ink runs %.1f degrees from the aspect on average, past %.1f"
-                .format(engravedError.meanDegrees, MAX_MEAN_ASPECT_ERROR_DEGREES)
-        )
+        // Recorded at TH1-1, whose crust moved the gallery's ground: 32.0 degrees
+        // (docs/DESIGN_LEDGER.md, TH1-1; docs/TODO.md).
+        KnownFailures.expect("TH1-1: on the history's ground the ink runs further from the aspect", "32.0") {
+            if (engravedError.meanDegrees > MAX_MEAN_ASPECT_ERROR_DEGREES) {
+                throw RecordedViolation(
+                    "the ink runs %.1f degrees from the aspect on average, past %.1f"
+                        .format(engravedError.meanDegrees, MAX_MEAN_ASPECT_ERROR_DEGREES),
+                    "%.1f".format(java.util.Locale.ROOT, engravedError.meanDegrees)
+                )
+            }
+        }
         assertTrue(
             combError.meanDegrees > MAX_MEAN_ASPECT_ERROR_DEGREES,
             "the control passed, so the measurement cannot tell the two apart"

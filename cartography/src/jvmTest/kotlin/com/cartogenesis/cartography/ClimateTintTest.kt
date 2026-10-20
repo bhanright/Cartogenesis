@@ -1,6 +1,5 @@
 package com.cartogenesis.cartography
 
-import com.cartogenesis.cartography.geometry.KnownFailures
 import com.cartogenesis.cartography.geometry.RecordedViolation
 import com.cartogenesis.worldgen.BorrowsSharedWorlds
 import com.cartogenesis.worldgen.model.WorldMap
@@ -263,7 +262,8 @@ class ClimateTintTest : BorrowsSharedWorlds() {
         // again at W2e, whose wetter gallery world draws every style's steppe inside its band.
         // Recorded again at W2h, whose drier gallery world puts Scroll's steppe 23% of the way from
         // its desert to its forest (docs/TODO.md, "The drawing's figures on W2h's ground").
-        KnownFailures.expect("W2h: Scroll's steppe stands outside its band on the gallery's world", "Scroll: a steppe stands 23% of the way from the desert to the forest, outside 25-75%") {
+        // Armed at TH1-1, whose worlds pass it (docs/DESIGN_LEDGER.md, TH1-1).
+        run {
             if (outside.isNotEmpty()) throw RecordedViolation(outside.joinToString("; "), outside.joinToString("; "))
         }
     }

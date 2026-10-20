@@ -90,9 +90,13 @@ internal class CrustHistory(
  */
 internal object TectonicHistory {
 
-    fun run(config: WorldGenConfig, trace: ((String) -> Unit)? = null): CrustHistory {
+    /**
+     * The history of [config]'s world. [latticeOrientation] turns the lattice it runs on (see
+     * [FibonacciSphere]); the guards use it, and a world is always made on the lattice as drawn.
+     */
+    fun run(config: WorldGenConfig, trace: ((String) -> Unit)? = null, latticeOrientation: DoubleArray? = null): CrustHistory {
         var mark = kotlin.time.TimeSource.Monotonic.markNow()
-        val simulation = Simulation(config, trace)
+        val simulation = Simulation(config, trace, latticeOrientation)
         trace?.invoke("lattice ms ${mark.elapsedNow().inWholeMilliseconds}")
         mark = kotlin.time.TimeSource.Monotonic.markNow()
         simulation.build()
@@ -104,11 +108,15 @@ internal object TectonicHistory {
         return simulation.present().also { trace?.invoke("present ms ${mark.elapsedNow().inWholeMilliseconds}") }
     }
 
-    private class Simulation(private val config: WorldGenConfig, private val trace: ((String) -> Unit)?) {
+    private class Simulation(
+        private val config: WorldGenConfig,
+        private val trace: ((String) -> Unit)?,
+        latticeOrientation: DoubleArray?
+    ) {
         private val tectonics = config.tectonics
         private val isostasy = config.isostasy
         private val radiusKm = config.scale.radiusMeters / 1_000.0
-        val sphere = FibonacciSphere.forCellKm(radiusKm, tectonics.historyCellKm)
+        val sphere = FibonacciSphere.forCellKm(radiusKm, tectonics.historyCellKm, latticeOrientation)
         private val cellCount = sphere.cellCount
         private val sampleAreaKm2 = sphere.cellAreaKm2
         private val spacingKm = sphere.spacingKm

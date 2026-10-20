@@ -32,7 +32,16 @@ import kotlin.math.sqrt
  * `z` toward the north pole and longitude zero along `x`, longitude growing east, as the map's
  * columns do.
  */
-internal class FibonacciSphere(val cellCount: Int, val radiusKm: Double) {
+internal class FibonacciSphere(
+    val cellCount: Int,
+    val radiusKm: Double,
+    /**
+     * A rotation the whole lattice is turned by, row-major 3 by 3, or null for the spiral as it is
+     * drawn round the polar axis: how the guards show the history's geometry owes nothing to where
+     * its lattice happens to lie (`CrustMapGeometryTest`).
+     */
+    orientation: DoubleArray? = null
+) {
 
     val x = DoubleArray(cellCount)
     val y = DoubleArray(cellCount)
@@ -55,6 +64,14 @@ internal class FibonacciSphere(val cellCount: Int, val radiusKm: Double) {
             x[point] = ring * cos(turn)
             y[point] = ring * sin(turn)
             z[point] = height
+            if (orientation != null) {
+                val px = x[point]
+                val py = y[point]
+                val pz = z[point]
+                x[point] = orientation[0] * px + orientation[1] * py + orientation[2] * pz
+                y[point] = orientation[3] * px + orientation[4] * py + orientation[5] * pz
+                z[point] = orientation[6] * px + orientation[7] * py + orientation[8] * pz
+            }
         }
     }
 
@@ -343,8 +360,9 @@ internal class FibonacciSphere(val cellCount: Int, val radiusKm: Double) {
          * kept and handed out again for the same two figures: a lattice is never written after it is
          * built, and building one, its neighbors above all, is a second of the history's time.
          */
-        fun forCellKm(radiusKm: Double, cellKm: Double): FibonacciSphere {
+        fun forCellKm(radiusKm: Double, cellKm: Double, orientation: DoubleArray? = null): FibonacciSphere {
             val count = (4.0 * PI * radiusKm * radiusKm / (cellKm * cellKm)).roundToInt().coerceAtLeast(MIN_CELLS)
+            if (orientation != null) return FibonacciSphere(count, radiusKm, orientation)
             lastBuilt?.let { if (it.cellCount == count && it.radiusKm == radiusKm) return it }
             return FibonacciSphere(count, radiusKm).also { lastBuilt = it }
         }

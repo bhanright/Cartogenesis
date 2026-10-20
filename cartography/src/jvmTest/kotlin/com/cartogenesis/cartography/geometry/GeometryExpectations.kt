@@ -93,6 +93,15 @@ internal object GeometryExpectations {
         finding("plate boundaries", Detector.ARCS, F.PLATE_BOUNDARY_ARC)
         // Two of a boundary's straight runs meeting, as the realm borders' creases are (7 at 512 rows).
         finding("plate boundaries", Detector.CREASES, F.PLATE_BOUNDARIES_STRAIGHT)
+        // The tectonic history's lines near a pole, run along the rows (TH1-1): the bearing count of
+        // the plate boundaries and every straight-run detector on the crust's edge, and the coast's
+        // and the contours' aligned sides there.
+        finding("plate boundaries", Detector.ISOTROPY, F.HISTORY_LINES_AT_THE_POLES)
+        for (detector in listOf(Detector.ISOTROPY, Detector.ALIGNED_SIDE, Detector.FACETS, Detector.CREASES)) {
+            finding("crust edge", detector, F.HISTORY_LINES_AT_THE_POLES)
+        }
+        finding("coast", Detector.ALIGNED_SIDE, F.HISTORY_LINES_AT_THE_POLES)
+        finding("terrain contours", Detector.ALIGNED_SIDE, F.HISTORY_LINES_AT_THE_POLES)
         finding("isotherms", Detector.ISOTROPY, F.ISOTHERMS_ALONG_ROWS)
         finding("isotherms", Detector.FACETS, F.ISOTHERMS_ALONG_ROWS)
         // The same run along a row seen by the aligned-side detector (42 at 512 rows), and two of

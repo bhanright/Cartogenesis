@@ -434,6 +434,7 @@ internal object TectonicHistory {
                 val agoEnd = agoStart - stepMyr
                 stepAgoEnd = agoEnd
                 if (!brokenUp && breakupMyrAgo > 0.0 && breakupMyrAgo >= agoEnd) breakUp()
+                if (brokenUp && step > 0) releaseRiftingPlates()
                 if (step > 0) settleMotions()
                 lap(0)
                 maintainPlates(agoEnd)
@@ -462,19 +463,61 @@ internal object TectonicHistory {
             trace?.invoke("phases ms: " + phaseNanos.joinToString(" ") { (it / 1_000_000).toString() })
         }
 
-        /** The supercontinent's plates are released to move each on its own forces. */
+        /** The supercontinent may begin to come apart: from now on its forces decide where it rifts. */
         private fun breakUp() {
             brokenUp = true
-            for (plate in plates) plate.assembled = false
         }
 
         /**
-         * Every plate's rotation from the forces booked on the last step, scaled together so the
-         * median plate's root-mean-square speed is Earth's, and approached over one step so a boundary
-         * that changes class between steps does not make a plate jitter. The assembled supercontinent's
-         * plates take one rotation from the forces on all of them together.
+         * The supercontinent comes apart a plate at a time, where its own forces pull a plate off
+         * it: of the plates still welded into it, the one whose force-balanced rotation carries it
+         * away from the rest fastest is released, if it is carried away at all. The plates of the
+         * supercontinent meet along its sutures, its weakest ground (Vauchez, Barruol and Tommasi
+         * 1997), so any extension across one opens it; one a step, so the breakup is a sequence of
+         * rifts over tens of millions of years, as Pangea's was (the central Atlantic first, then
+         * the south Atlantic and the Indian Ocean's rifts, then Australia from Antarctica), rather
+         * than one moment in which every piece leaves at once. A plate the forces press against the
+         * rest is held in.
          */
-        private fun settleMotions() {
+        private fun releaseRiftingPlates() {
+            val members = plates.filter { it.alive && it.assembled }
+            if (members.size < 2) {
+                members.forEach { it.assembled = false }
+                return
+            }
+            val balances = forceBalances()
+            val raw = Array(plates.size) { DoubleArray(3) }
+            for (plate in plates) if (plate.alive) raw[plate.id] = balances[plate.id].solve()
+            val scale = speedScale(raw) ?: return
+            var released: HistoryPlate? = null
+            var fastest = 0.0
+            for (member in members) {
+                val rest = TorqueBalance()
+                for (other in members) if (other !== member) rest.add(balances[other.id])
+                val restRotation = rest.solve().map { it * scale }.toDoubleArray()
+                val own = raw[member.id].map { it * scale }.toDoubleArray()
+                val sides = IntArray(cellCount) { cell ->
+                    val plate = owner[cell]
+                    when {
+                        plate == member.id -> 0
+                        plate >= 0 && plates[plate].assembled -> 1
+                        else -> -1
+                    }
+                }
+                val opening = openingAcross(sides, own, restRotation)
+                if (opening > fastest) {
+                    fastest = opening
+                    released = member
+                }
+            }
+            val plate = released ?: return
+            plate.assembled = false
+            trace?.invoke("  released plate ${plate.id} from the supercontinent, opening ${"%.1f".format(fastest)} km/Myr")
+            if (members.size == 2) members.forEach { it.assembled = false }
+        }
+
+        /** Each plate's torque balance: its basal drag and the forces booked on it the last step. */
+        private fun forceBalances(): Array<TorqueBalance> {
             val balances = Array(plates.size) { TorqueBalance() }
             for (cell in 0 until cellCount) {
                 val plate = owner[cell]
@@ -488,6 +531,17 @@ internal object TectonicHistory {
                     sphere.x[cell], sphere.y[cell], sphere.z[cell], forces.forceX[event], forces.forceY[event], forces.forceZ[event]
                 )
             }
+            return balances
+        }
+
+        /**
+         * Every plate's rotation from the forces booked on the last step, scaled together so the
+         * median plate's root-mean-square speed is Earth's, and approached over one step so a boundary
+         * that changes class between steps does not make a plate jitter. The assembled supercontinent's
+         * plates take one rotation from the forces on all of them together.
+         */
+        private fun settleMotions() {
+            val balances = forceBalances()
             val raw = Array(plates.size) { DoubleArray(3) }
             val assembledBalance = TorqueBalance()
             var anyAssembled = false
@@ -545,8 +599,10 @@ internal object TectonicHistory {
             }
             val moving = (0 until plates.size).filter { counts[it] >= MIN_PLATE_CELLS }
             fun speedOf(plate: Int) = sqrt(max(0.0, squares[plate] / counts[plate])) * radiusKm
+            // Before the first boundaries are read, and for a plate made since, no slab has pulled.
             val pulled = moving.filter {
-                slabPulledPoints[it] > 0 && slabPulledPoints[it] >= SUBDUCTION_BOUNDED_SHARE * edgePoints[it] &&
+                val slab = slabPulledPoints.getOrElse(it) { 0 }
+                slab > 0 && slab >= SUBDUCTION_BOUNDED_SHARE * edgePoints.getOrElse(it) { 0 } &&
                     continent[it] < CRATONIC_SHARE * counts[it]
             }
                 .map { speedOf(it) }.filter { it > 0.0 }
@@ -1730,17 +1786,7 @@ internal object TectonicHistory {
         /** Earth's median speed over a force-balanced rotation of unit torque, a fallback scale for a still plate. */
         private fun globalScaleGuess(): Double {
             val raw = Array(plates.size) { DoubleArray(3) }
-            val balances = Array(plates.size) { TorqueBalance() }
-            for (cell in 0 until cellCount) {
-                val plate = owner[cell]
-                if (plate < 0) continue
-                val weight = if (samples.continental[ownerSample[cell]]) PlateForces.CONTINENTAL_DRAG_RATIO else 1.0
-                balances[plate].addDrag(sphere.x[cell], sphere.y[cell], sphere.z[cell], weight)
-            }
-            for (event in 0 until forces.count) {
-                val cell = forces.point[event]
-                balances[forces.plate[event]].addForce(sphere.x[cell], sphere.y[cell], sphere.z[cell], forces.forceX[event], forces.forceY[event], forces.forceZ[event])
-            }
+            val balances = forceBalances()
             for (plate in plates) if (plate.alive) raw[plate.id] = balances[plate.id].solve()
             return speedScale(raw) ?: 0.0
         }

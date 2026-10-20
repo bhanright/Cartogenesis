@@ -279,7 +279,9 @@ internal object CrustMap {
                     val band = 4.0 * mixture * (1.0 - mixture)
                     if (band > 0.0) {
                         mixture += marginRoughness * band *
-                            noises[MARGIN].fbmOnSphere(px, py, pz, radiusKm, MARGIN_WAVELENGTH_KM, MARGIN_OCTAVES)
+                            noises[MARGIN].fbmOnSphere(
+                                px, py, pz, radiusKm, MARGIN_WAVELENGTH_KM, MARGIN_OCTAVES, SphereNoise.EARTH_OUTLINE_PERSISTENCE
+                            )
                     }
                     share[cell] = mixture.coerceIn(0.0, 1.0).toFloat()
                     thickness[cell] = if (continentWeight > 0.0) (thicknessSum / continentWeight).toFloat() else inputs.standardThicknessKm
@@ -382,7 +384,9 @@ internal object CrustMap {
     /**
      * The margin noise's longest wavelength on the ground, km, and its octaves: 500 km, the scale of
      * a coastal embayment, down six octaves to 15.6 km, as the stage's margin noise was before the
-     * history (the coastline's box count over tens to hundreds of kilometers sits inside it).
+     * history (the coastline's box count over tens to hundreds of kilometers sits inside it), each
+     * octave's amplitude [SphereNoise.EARTH_OUTLINE_PERSISTENCE] of the last, so the margin is as
+     * rough at every scale as Earth's.
      */
     const val MARGIN_WAVELENGTH_KM = 500.0
     const val MARGIN_OCTAVES = 6

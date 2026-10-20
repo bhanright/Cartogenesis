@@ -1,6 +1,7 @@
 package com.cartogenesis.worldgen.noise
 
 import kotlin.math.floor
+import kotlin.math.pow
 import kotlin.random.Random
 
 /**
@@ -57,10 +58,20 @@ class SphereNoise private constructor(private val permutation: IntArray) {
 
     /**
      * Fractal sum over [octaves] at the unit vector ([x], [y], [z]) on a sphere of [radiusKm], with
-     * the longest wavelength [wavelengthKm] on the ground; each octave half the wavelength and half
-     * the amplitude of the last, normalised by the amplitudes' sum, so the result stays about -1..1.
+     * the longest wavelength [wavelengthKm] on the ground; each octave half the wavelength of the
+     * last and [persistence] its amplitude, normalized by the amplitudes' sum, so the result stays
+     * about -1..1. A half makes a field whose level lines are smooth curves; [EARTH_OUTLINE_PERSISTENCE]
+     * one whose level lines are as rough at every scale as Earth's continental edges.
      */
-    fun fbmOnSphere(x: Double, y: Double, z: Double, radiusKm: Double, wavelengthKm: Double, octaves: Int): Double {
+    fun fbmOnSphere(
+        x: Double,
+        y: Double,
+        z: Double,
+        radiusKm: Double,
+        wavelengthKm: Double,
+        octaves: Int,
+        persistence: Double = 0.5
+    ): Double {
         // A lattice cell spans one wavelength, so a unit vector is scaled by the radius in wavelengths.
         var frequency = radiusKm / wavelengthKm
         var amplitude = 1.0
@@ -70,12 +81,29 @@ class SphereNoise private constructor(private val permutation: IntArray) {
             sum += amplitude * noise(x * frequency + OCTAVE_OFFSET * octave, y * frequency, z * frequency)
             amplitudes += amplitude
             frequency *= 2.0
-            amplitude *= 0.5
+            amplitude *= persistence
         }
         return sum / amplitudes
     }
 
     companion object {
+        /**
+         * The divider dimension of Earth's continental edge at map scale: ETOPO5's 2,000 m isobath,
+         * the foot of the continental slope where the continent's crust gives way to the ocean's,
+         * block-averaged to 512 rows and walked with D3's divider over a 256th to a 32nd of the
+         * map's width (`CrustMeasures.dividerDimension`), read 1.18; the coast reads 1.19 the same
+         * way, as the design's measures had it (docs/DESIGN_LEDGER.md, TH1-1).
+         */
+        const val EARTH_EDGE_DIVIDER_DIMENSION = 1.18
+
+        /**
+         * The octave persistence whose level lines have that dimension. A fractional Brownian field
+         * of Hurst exponent H has level lines of dimension 2 - H, and an octave
+         * sum whose amplitude falls by 2^-H for every halving of the wavelength has exponent H:
+         * 2^-(2 - 1.18), about 0.57.
+         */
+        val EARTH_OUTLINE_PERSISTENCE: Double = 2.0.pow(-(2.0 - EARTH_EDGE_DIVIDER_DIMENSION))
+
         /** How many entries a permutation table has: Perlin's 256, stored twice end to end. */
         const val PERMUTATION_ENTRIES = 512
 

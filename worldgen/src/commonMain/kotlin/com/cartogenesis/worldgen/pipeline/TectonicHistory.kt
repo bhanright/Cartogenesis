@@ -246,7 +246,8 @@ internal object TectonicHistory {
             val reach = DoubleArray(cellCount) { cell ->
                 val cosine = sphere.x[cell] * center[0] + sphere.y[cell] * center[1] + sphere.z[cell] * center[2]
                 cosine + SUPERCONTINENT_WARP * noise.fbmOnSphere(
-                    sphere.x[cell], sphere.y[cell], sphere.z[cell], radiusKm, SUPERCONTINENT_WARP_WAVELENGTH_KM, 4
+                    sphere.x[cell], sphere.y[cell], sphere.z[cell], radiusKm, SUPERCONTINENT_WARP_WAVELENGTH_KM,
+                    octavesToSpacing(SUPERCONTINENT_WARP_WAVELENGTH_KM), SphereNoise.EARTH_OUTLINE_PERSISTENCE
                 )
             }
             return topShare(reach, share)
@@ -271,7 +272,10 @@ internal object TectonicHistory {
             }
             val noise = SphereNoise(config.seed * SHAPE_SALT + 2)
             val roughness = DoubleArray(cellCount) { cell ->
-                1.0 + CRATON_METRIC_NOISE * noise.fbmOnSphere(sphere.x[cell], sphere.y[cell], sphere.z[cell], radiusKm, CRATON_NOISE_WAVELENGTH_KM, 4)
+                1.0 + CRATON_METRIC_NOISE * noise.fbmOnSphere(
+                    sphere.x[cell], sphere.y[cell], sphere.z[cell], radiusKm, CRATON_NOISE_WAVELENGTH_KM,
+                    octavesToSpacing(CRATON_NOISE_WAVELENGTH_KM), SphereNoise.EARTH_OUTLINE_PERSISTENCE
+                )
             }
             val cost = DoubleArray(cellCount) { Double.MAX_VALUE }
             val craton = IntArray(cellCount) { -1 }
@@ -351,7 +355,10 @@ internal object TectonicHistory {
                     val angle = acos(cosine.coerceIn(-1.0, 1.0))
                     val along = abs(sphere.x[cell] * axis[0] + sphere.y[cell] * axis[1] + sphere.z[cell] * axis[2])
                     val score = angle / radius + MICROCONTINENT_ELONGATION * along / radius +
-                        MICROCONTINENT_WARP * noise.fbmOnSphere(sphere.x[cell], sphere.y[cell], sphere.z[cell], radiusKm, MICROCONTINENT_WARP_WAVELENGTH_KM, 3)
+                        MICROCONTINENT_WARP * noise.fbmOnSphere(
+                            sphere.x[cell], sphere.y[cell], sphere.z[cell], radiusKm, MICROCONTINENT_WARP_WAVELENGTH_KM,
+                            octavesToSpacing(MICROCONTINENT_WARP_WAVELENGTH_KM), SphereNoise.EARTH_OUTLINE_PERSISTENCE
+                        )
                     scored.add((score.toFloat().toRawBits().toLong() shl 32) or cell.toLong())
                 }
                 scored.sortWith(compareBy({ Float.fromBits((it ushr 32).toInt()) }, { it and 0xFFFFFFFFL }))
@@ -1901,7 +1908,10 @@ internal object TectonicHistory {
                     samples.orogenyKind[sample].toInt() == OrogenyKind.NONE.ordinal -> CRATON_HARDNESS
                     else -> WEAK_ZONE_HARDNESS
                 }
-                hardness[cell] = base * (1.0 + PATH_NOISE * noise.fbmOnSphere(sphere.x[cell], sphere.y[cell], sphere.z[cell], radiusKm, PATH_NOISE_WAVELENGTH_KM, 3))
+                hardness[cell] = base * (1.0 + PATH_NOISE * noise.fbmOnSphere(
+                    sphere.x[cell], sphere.y[cell], sphere.z[cell], radiusKm, PATH_NOISE_WAVELENGTH_KM,
+                    octavesToSpacing(PATH_NOISE_WAVELENGTH_KM), SphereNoise.EARTH_OUTLINE_PERSISTENCE
+                ))
                     .coerceAtLeast(MIN_PATH_HARDNESS)
             }
             // Through the plate's middle: by way of a point far from its edge, so a cut across a plate
@@ -2127,6 +2137,13 @@ internal object TectonicHistory {
             val ring = sqrt(max(0.0, 1.0 - height * height))
             return doubleArrayOf(ring * kotlin.math.cos(turn), ring * sin(turn), height)
         }
+
+        /**
+         * How many octaves a noise whose longest wavelength is [wavelengthKm] needs to reach the
+         * lattice's spacing, below which the lattice cannot carry a shape: at least one.
+         */
+        private fun octavesToSpacing(wavelengthKm: Double): Int =
+            max(1, kotlin.math.ceil(ln(wavelengthKm / sphere.spacingKm) / ln(2.0)).toInt())
 
         private fun floodKey(cost: Double, cell: Int): Long =
             (cost.toFloat().toRawBits().toLong() shl 32) or cell.toLong()

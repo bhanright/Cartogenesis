@@ -8,7 +8,6 @@ import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.cos
-import kotlin.math.floor
 import kotlin.math.hypot
 import kotlin.math.ln
 
@@ -374,33 +373,56 @@ internal object CrustMeasures {
     }
 
     /**
-     * The box-counting dimension of a line at map scale, over boxes a 256th to a 32nd of the map's
-     * width, counted on the midpoints of its cell edges equatorward of [MAX_LINE_LATITUDE].
+     * Richardson's divider dimension of a line at map scale, D3's: the lines spanning more than
+     * [DIVIDER_MIN_SPAN_KM] whose middle lies equatorward of [MAX_LINE_LATITUDE], walked with
+     * rulers from 20 km up by halves of an octave, and one less the slope of the log of their
+     * length against the log of the ruler fitted over rulers a 256th to a 32nd of the map's width.
+     * A line of polygons reads near 1; a natural outline, rough at every scale, above it.
      */
-    fun boxDimension(lines: Lines): Double {
-        val xs = ArrayList<Double>()
-        val ys = ArrayList<Double>()
-        for ((lx, ly) in lines.polylines) {
-            for (index in 1 until lx.size) {
-                val y = (ly[index] + ly[index - 1]) / 2
-                if (abs(lines.latitudeAtKm(y)) >= MAX_LINE_LATITUDE) continue
-                xs.add(((lx[index] + lx[index - 1]) / 2).mod(lines.worldWidthKm))
-                ys.add(y)
-            }
+    fun dividerDimension(lines: Lines): Double {
+        val rulers = DoubleArray(DIVIDER_RULERS) { DIVIDER_FIRST_RULER_KM * Math.pow(2.0, it / 2.0) }
+        val lengths = DoubleArray(DIVIDER_RULERS)
+        for ((xs, ys) in lines.polylines) {
+            if (xs.size < DIVIDER_MIN_POINTS) continue
+            if (hypot(xs.max() - xs.min(), ys.max() - ys.min()) < DIVIDER_MIN_SPAN_KM) continue
+            if (abs(lines.latitudeAtKm((ys.min() + ys.max()) / 2)) >= MAX_LINE_LATITUDE) continue
+            for (index in rulers.indices) lengths[index] += walk(xs, ys, rulers[index])
         }
-        if (xs.isEmpty()) return Double.NaN
-        val logSize = ArrayList<Double>()
-        val logCount = ArrayList<Double>()
-        var size = lines.worldWidthKm / 256
-        while (size <= lines.worldWidthKm / 32 * 1.01) {
-            val columns = (lines.worldWidthKm / size).toLong() + 1
-            val boxes = HashSet<Long>()
-            for (index in xs.indices) boxes.add(floor(ys[index] / size).toLong() * columns + floor(xs[index] / size).toLong())
-            logSize.add(ln(1.0 / size))
-            logCount.add(ln(boxes.size.toDouble()))
-            size *= kotlin.math.sqrt(2.0)
+        val low = lines.worldWidthKm / 256 * 0.99
+        val high = lines.worldWidthKm / 32 * 1.01
+        val logRuler = ArrayList<Double>()
+        val logLength = ArrayList<Double>()
+        for (index in rulers.indices) {
+            if (rulers[index] < low || rulers[index] > high || lengths[index] <= 0.0) continue
+            logRuler.add(ln(rulers[index]))
+            logLength.add(ln(lengths[index]))
         }
-        return slope(logSize, logCount)
+        return if (logRuler.size < 2) Double.NaN else 1.0 - slope(logRuler, logLength)
+    }
+
+    /** The length of a polyline walked with a ruler [rulerKm] long, the last part step measured as it lies. */
+    private fun walk(xs: DoubleArray, ys: DoubleArray, rulerKm: Double): Double {
+        var px = xs[0]
+        var py = ys[0]
+        var index = 1
+        var steps = 0
+        while (index < xs.size) {
+            while (index < xs.size && hypot(xs[index] - px, ys[index] - py) < rulerKm) index++
+            if (index >= xs.size) break
+            // Where the segment ending at this point crosses the circle of the ruler's length.
+            val ax = xs[index - 1] - px
+            val ay = ys[index - 1] - py
+            val dx = xs[index] - xs[index - 1]
+            val dy = ys[index] - ys[index - 1]
+            val a = dx * dx + dy * dy
+            val b = 2 * (ax * dx + ay * dy)
+            val c = ax * ax + ay * ay - rulerKm * rulerKm
+            val t = if (a == 0.0) 1.0 else (-b + kotlin.math.sqrt(maxOf(0.0, b * b - 4 * a * c))) / (2 * a)
+            px = xs[index - 1] + t * dx
+            py = ys[index - 1] + t * dy
+            steps++
+        }
+        return steps * rulerKm + hypot(xs.last() - px, ys.last() - py)
     }
 
     /**
@@ -429,4 +451,8 @@ internal object CrustMeasures {
     private const val CORNER_DEGREES = 45.0
     private const val STRAIGHT_WINDOW_SHARE = 1.0 / 10
     private const val STRAIGHT_DEGREES = 10.0
+    private const val DIVIDER_RULERS = 14
+    private const val DIVIDER_FIRST_RULER_KM = 20.0
+    private const val DIVIDER_MIN_POINTS = 10
+    private const val DIVIDER_MIN_SPAN_KM = 2000.0
 }

@@ -223,7 +223,12 @@ class SaveResolutionAuditTest {
                 seafloorHalfSpreadingRateKmPerMyr = 25.0,
                 continentalShare = field(),
                 upliftRateMmPerYear = field(),
-                crustAge = field()
+                crustAgeMyr = field(),
+                crustThicknessKm = field(),
+                orogenicExcessKm = field(),
+                orogenyKind = IntArray(cells),
+                terraneId = none(),
+                riftAgeMyr = field()
             ),
             erosion = ErosionResult(field()),
             sea = SeaLevelResult(0.4f, BooleanArray(cells) { it % 3 == 0 }, field(), (cells + 2) / 3),

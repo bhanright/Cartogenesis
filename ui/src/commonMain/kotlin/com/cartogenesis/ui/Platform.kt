@@ -9,6 +9,7 @@ import com.cartogenesis.cartography.WorldDocument
 import com.cartogenesis.cartography.WorldLibrary
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.ErosionAccelerator
+import com.cartogenesis.worldgen.pipeline.CrustMapAccelerator
 import com.cartogenesis.worldgen.pipeline.IceSheetAccelerator
 import com.cartogenesis.worldgen.pipeline.MoistureAccelerator
 import com.cartogenesis.worldgen.pipeline.OceanAccelerator
@@ -189,6 +190,16 @@ interface Platform {
      * says, as [iceAccelerator] is; the climate stage reads the switch where it would call the card.
      */
     val moistureAccelerator: MoistureAccelerator? get() = null
+
+    /**
+     * Where to read the tectonic history's crust onto the map, or null to leave it on the processor.
+     *
+     * Behind the same switch as [accelerator]: the card weighs the history's points in single
+     * precision, so its crust is the processor's within `CrustMapParity`'s bars and not to the bit.
+     * Offered whatever the switch says; the plate stage reads the switch where it would call the
+     * card.
+     */
+    val crustAccelerator: CrustMapAccelerator? get() = null
 
     val accelerationUnavailableBecause: String?
 

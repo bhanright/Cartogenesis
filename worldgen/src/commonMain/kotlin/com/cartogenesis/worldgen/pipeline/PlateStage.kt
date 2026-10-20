@@ -5,6 +5,7 @@ import com.cartogenesis.worldgen.math.BoxBlur
 import com.cartogenesis.worldgen.math.GaussianBlur
 import com.cartogenesis.worldgen.math.JumpFloodDistance
 import com.cartogenesis.worldgen.math.LongMinHeap
+import com.cartogenesis.worldgen.model.Acceleration
 import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.TectonicsConfig
 import com.cartogenesis.worldgen.model.WorldGenConfig
@@ -400,7 +401,30 @@ object PlateStage {
         val relay = PerlinNoise(seed * 104729 + 3313)
     }
 
+    /**
+     * The plate stage on the processor: the history, the crust read onto the map, and the ground the
+     * two make.
+     */
     fun generate(config: WorldGenConfig, terrain: TerrainResult): PlateResult {
+        val history = TectonicHistory.run(config)
+        return generate(config, terrain, history, CrustMap.read(config, history))
+    }
+
+    /**
+     * The same, with the crust read onto the map on [crustAccelerator]'s device where the settings
+     * ask for the card (`ErosionConfig.acceleration`) and the device takes the job; the processor's
+     * reading otherwise. The history itself runs on the processor (docs/DESIGN_LEDGER.md, TH1-1).
+     */
+    suspend fun generate(config: WorldGenConfig, terrain: TerrainResult, crustAccelerator: CrustMapAccelerator?): PlateResult {
+        val history = TectonicHistory.run(config)
+        val onTheCard =
+            if (crustAccelerator != null && config.erosion.acceleration == Acceleration.GPU) {
+                CrustMap.readOn(crustAccelerator, config, history)
+            } else null
+        return generate(config, terrain, history, onTheCard ?: CrustMap.read(config, history))
+    }
+
+    private fun generate(config: WorldGenConfig, terrain: TerrainResult, history: CrustHistory, crust: CrustOnMap): PlateResult {
         val cellsAcross = config.width
         val cellsDown = config.height
         val tectonics = config.tectonics
@@ -409,8 +433,6 @@ object PlateStage {
         // The history that made the crust, and the crust read onto the map: the continents, the
         // plates that carry them and the boundaries between those plates are the history's present,
         // not a partition drawn for the map (docs/DESIGN_LEDGER.md, TH1-1).
-        val history = TectonicHistory.run(config)
-        val crust = CrustMap.read(config, history)
         val plates = presentPlates(config, history)
         val plateId = crust.plateId
 

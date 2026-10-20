@@ -42,10 +42,11 @@ internal class CrustOnMap(
  *
  * **The processor's [CrustMap.read] is the reference.** Anything implementing this is held to its
  * answer by a test, within a stated tolerance: the card sums in single precision, so it does not
- * promise the last bit (`GpuCrustMapTest`).
+ * promise the last bit ([CrustMapParity], `GpuCrustMapTest`).
  *
- * Not yet called by the engine: the history's own steps are on the processor in TH1-1, and the
- * card is wired in, with the time budget measured, in TH1-4 (docs/DESIGN_LEDGER.md, TH1-1).
+ * The engine hands it to the plate stage through the same switch as the other cards
+ * (`ErosionConfig.acceleration`); the history's own steps stay on the processor, and moving them is
+ * TH1-4's (docs/DESIGN_LEDGER.md, TH1-1).
  */
 interface CrustMapAccelerator {
 
@@ -88,7 +89,21 @@ class CrustMapInputs internal constructor(
     val binPoints: IntArray,
     /** The warp's three noises' and the margin noise's permutation tables, 512 entries each, in that order. */
     val permutations: IntArray,
-    val standardThicknessKm: Float
+    val standardThicknessKm: Float,
+    /** The kernel's Gaussian spread and how far it is read, radians on the sphere. */
+    val kernelSpreadRadians: Double,
+    val kernelReachRadians: Double,
+    /** How far the reading place is moved, radians, and the warp noise's longest wavelength and octaves. */
+    val warpRadians: Double,
+    val warpWavelengthKm: Double,
+    val warpOctaves: Int,
+    /** The margin's roughening: its amplitude in share, its noise's longest wavelength, octaves and persistence. */
+    val marginRoughness: Float,
+    val marginWavelengthKm: Double,
+    val marginOctaves: Int,
+    val marginPersistence: Double,
+    /** More plates than ever lie within the kernel's reach of one cell. */
+    val maxPlatesNear: Int
 )
 
 /** What the map pass writes, one entry per map cell, row-major: [CrustOnMap]'s fields, rift age -1 where never. */
@@ -123,9 +138,14 @@ class CrustMapOutputs(
  */
 internal object CrustMap {
 
-    fun read(config: WorldGenConfig, history: CrustHistory): CrustOnMap {
-        val outputs = readOnProcessor(inputs(config, history), config.tectonics.marginRoughness)
-        return CrustOnMap(
+    fun read(config: WorldGenConfig, history: CrustHistory): CrustOnMap = onMap(readOnProcessor(inputs(config, history)))
+
+    /** [read] on [accelerator]'s device, or null if it declined, in which case the caller reads on the processor. */
+    suspend fun readOn(accelerator: CrustMapAccelerator, config: WorldGenConfig, history: CrustHistory): CrustOnMap? =
+        accelerator.read(inputs(config, history))?.let { onMap(it) }
+
+    private fun onMap(outputs: CrustMapOutputs): CrustOnMap =
+        CrustOnMap(
             continentalShare = outputs.continentalShare,
             thicknessKm = outputs.thicknessKm,
             excessKm = outputs.excessKm,
@@ -136,7 +156,6 @@ internal object CrustMap {
             terrane = outputs.terrane,
             plateId = outputs.plateId
         )
-    }
 
     /** The map pass's inputs for [history] on [config]'s grid. */
     fun inputs(config: WorldGenConfig, history: CrustHistory): CrustMapInputs {
@@ -175,12 +194,22 @@ internal object CrustMap {
             binStart = sphere.binStart.copyOf(),
             binPoints = sphere.binPoints.copyOf(),
             permutations = permutations,
-            standardThicknessKm = config.isostasy.continentalCrustThicknessKm
+            standardThicknessKm = config.isostasy.continentalCrustThicknessKm,
+            kernelSpreadRadians = KERNEL_SPREAD_SPACINGS * sphere.spacingRadians,
+            kernelReachRadians = KERNEL_REACH_SPACINGS * sphere.spacingRadians,
+            warpRadians = WARP_SPACINGS * sphere.spacingRadians,
+            warpWavelengthKm = WARP_WAVELENGTH_SPACINGS * sphere.spacingKm,
+            warpOctaves = WARP_OCTAVES,
+            marginRoughness = config.tectonics.marginRoughness,
+            marginWavelengthKm = MARGIN_WAVELENGTH_KM,
+            marginOctaves = MARGIN_OCTAVES,
+            marginPersistence = SphereNoise.EARTH_OUTLINE_PERSISTENCE,
+            maxPlatesNear = MAX_PLATES_NEAR
         )
     }
 
     /** The processor's map pass: the reference every accelerator is held to. */
-    fun readOnProcessor(inputs: CrustMapInputs, marginRoughness: Float): CrustMapOutputs {
+    fun readOnProcessor(inputs: CrustMapInputs): CrustMapOutputs {
         val columns = inputs.mapColumns
         val rows = inputs.mapRows
         val cells = columns * rows
@@ -194,14 +223,17 @@ internal object CrustMap {
         val terrane = IntArray(cells)
         val plate = IntArray(cells)
         val noises = Array(NOISES) { SphereNoise.fromTable(inputs.permutations, it * SphereNoise.PERMUTATION_ENTRIES) }
-        val spread = KERNEL_SPREAD_SPACINGS * inputs.spacingRadians
-        val reach = KERNEL_REACH_SPACINGS * inputs.spacingRadians
-        val warpRadians = WARP_SPACINGS * inputs.spacingRadians
+        val spread = inputs.kernelSpreadRadians
+        val reach = inputs.kernelReachRadians
+        val warpRadians = inputs.warpRadians
         val radiusKm = inputs.radiusKm
-        val warpWavelengthKm = WARP_WAVELENGTH_SPACINGS * inputs.spacingRadians * radiusKm
+        val warpWavelengthKm = inputs.warpWavelengthKm
+        val warpOctaves = inputs.warpOctaves
+        val marginRoughness = inputs.marginRoughness
+        val maxPlatesNear = inputs.maxPlatesNear
         parallelChunks(0, rows) { fromRow, toRow ->
-            val votePlate = IntArray(MAX_PLATES_NEAR)
-            val voteWeight = DoubleArray(MAX_PLATES_NEAR)
+            val votePlate = IntArray(maxPlatesNear)
+            val voteWeight = DoubleArray(maxPlatesNear)
             for (row in fromRow until toRow) {
                 val latitude = PI / 2 - (row + 0.5) / rows * PI
                 for (column in 0 until columns) {
@@ -212,9 +244,9 @@ internal object CrustMap {
                     val pz = sin(latitude)
                     // Where the cell reads: moved a few tenths of the history's spacing by a noise
                     // on the sphere, so a boundary between two of its points is not a straight cut.
-                    var qx = px + warpRadians * noises[WARP_X].fbmOnSphere(px, py, pz, radiusKm, warpWavelengthKm, WARP_OCTAVES)
-                    var qy = py + warpRadians * noises[WARP_Y].fbmOnSphere(px, py, pz, radiusKm, warpWavelengthKm, WARP_OCTAVES)
-                    var qz = pz + warpRadians * noises[WARP_Z].fbmOnSphere(px, py, pz, radiusKm, warpWavelengthKm, WARP_OCTAVES)
+                    var qx = px + warpRadians * noises[WARP_X].fbmOnSphere(px, py, pz, radiusKm, warpWavelengthKm, warpOctaves)
+                    var qy = py + warpRadians * noises[WARP_Y].fbmOnSphere(px, py, pz, radiusKm, warpWavelengthKm, warpOctaves)
+                    var qz = pz + warpRadians * noises[WARP_Z].fbmOnSphere(px, py, pz, radiusKm, warpWavelengthKm, warpOctaves)
                     val length = sqrt(qx * qx + qy * qy + qz * qz)
                     qx /= length; qy /= length; qz /= length
 
@@ -253,7 +285,7 @@ internal object CrustMap {
                         val pointPlate = inputs.pointPlate[point]
                         var slot = -1
                         for (index in 0 until votes) if (votePlate[index] == pointPlate) slot = index
-                        if (slot < 0 && votes < MAX_PLATES_NEAR) {
+                        if (slot < 0 && votes < maxPlatesNear) {
                             slot = votes++
                             votePlate[slot] = pointPlate
                             voteWeight[slot] = 0.0
@@ -280,7 +312,7 @@ internal object CrustMap {
                     if (band > 0.0) {
                         mixture += marginRoughness * band *
                             noises[MARGIN].fbmOnSphere(
-                                px, py, pz, radiusKm, MARGIN_WAVELENGTH_KM, MARGIN_OCTAVES, SphereNoise.EARTH_OUTLINE_PERSISTENCE
+                                px, py, pz, radiusKm, inputs.marginWavelengthKm, inputs.marginOctaves, inputs.marginPersistence
                             )
                     }
                     share[cell] = mixture.coerceIn(0.0, 1.0).toFloat()

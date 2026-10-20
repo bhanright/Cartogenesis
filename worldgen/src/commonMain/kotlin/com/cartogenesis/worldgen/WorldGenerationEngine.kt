@@ -6,6 +6,7 @@ import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.ClimateStage
 import com.cartogenesis.worldgen.pipeline.CultureStage
 import com.cartogenesis.worldgen.pipeline.DepositionLog
+import com.cartogenesis.worldgen.pipeline.CrustMapAccelerator
 import com.cartogenesis.worldgen.pipeline.ErosionAccelerator
 import com.cartogenesis.worldgen.pipeline.ErosionStage
 import com.cartogenesis.worldgen.pipeline.GlaciationStage
@@ -133,6 +134,12 @@ object WorldGenerationEngine {
          */
         moistureAccelerator: MoistureAccelerator? = null,
         /**
+         * Used only when the config asks for it, through the same switch again, for reading the
+         * tectonic history's crust onto the map; null keeps the processor's reading. The history
+         * itself runs on the processor (docs/DESIGN_LEDGER.md, TH1-1).
+         */
+        crustAccelerator: CrustMapAccelerator? = null,
+        /**
          * Filled in with the layers the map draws that no stage's result carries, for the geometry
          * guard; null, the default, costs a few null checks, allocates nothing and moves no bit of the
          * world. See [LayerCapture].
@@ -183,7 +190,7 @@ object WorldGenerationEngine {
                     it.config.scale == config.scale
             }
             ?.plates
-            ?: PlateStage.generate(config, terrain)
+            ?: PlateStage.generate(config, terrain, crustAccelerator)
 
         report(GenerationStage.EROSION)
         val erosion = reusable

@@ -110,8 +110,8 @@ val auditOnlyClasses = listOf(
     // F30b's discriminating case: 718106 at 2048 twice, once over the potential and once over the
     // fill's staircase. Its invariants and cost run at 512 and stay in `FlatCourseTest`.
     "com.cartogenesis.worldgen.FlatCourseAuditTest",
-    // H1's cost report: sixteen runs of the tectonic stage at 1024 and 2048, reported rather than
-    // asserted. Its guards run at 512 and stay in `TectonicHistoryTest`.
+    // TH1-1's cost report: the history, the map pass and the plate stage at 1,024 rows, and a whole
+    // world's time and heap, reported rather than asserted. Its guards stay in `TectonicHistoryTest`.
     "com.cartogenesis.worldgen.TectonicHistoryAuditTest",
     // H2's cost report, which builds a 2048 world's terrain to time the balance on it.
     "com.cartogenesis.worldgen.SnowBalanceAuditTest",
@@ -229,10 +229,8 @@ val deepClassesByStage: Map<String, List<String>> = mapOf(
         "com.cartogenesis.worldgen.GroundTextureTest.a continent drowns at its rim",
         "com.cartogenesis.worldgen.HypsometryTest.the guards fail on the platform before H1",
         "com.cartogenesis.worldgen.RiftSegmentationTest.the unsegmented rift fails every one of those",
-        "com.cartogenesis.worldgen.TectonicHistoryTest.zero epochs is read as one, and a second epoch changes the ground",
-        "com.cartogenesis.worldgen.TectonicHistoryTest.an old belt stands far from any present boundary",
-        "com.cartogenesis.worldgen.TectonicHistoryTest.the guard finds nothing inland when the plates never moved",
-        "com.cartogenesis.worldgen.TectonicHistoryTest.an old belt is lower and broader than a present one"
+        // TH1-1: sixty worlds' plate stages, the configuration's distributions over the cycle.
+        "com.cartogenesis.worldgen.ContinentalConfigurationEnsembleTest"
     ),
     "erosion" to listOf(
         "com.cartogenesis.worldgen.DeltaMouthTest",

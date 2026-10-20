@@ -1265,13 +1265,8 @@ internal object TectonicHistory {
          * is held for the stretched crust the opening lays beside it ([fillGaps]).
          */
         private fun stretchMargins(riftCells: List<Int>, agoEnd: Double) {
-            // Watts's width is the margin as it stands, stretched; the band that stretched to it was
-            // narrower by the area beta added, `W0 (1 + (beta0 - 1) / ln((beta0 - 1) / e))` with `e`
-            // the excess at the band's inner edge.
-            val falloffs = ln((BETA_AT_BREAK - 1.0) / BETA_AT_MARGIN_EDGE_EXCESS)
-            val stretchedWidthPerUnstretched = 1.0 + (BETA_AT_BREAK - 1.0) / falloffs * (1.0 - BETA_AT_MARGIN_EDGE_EXCESS / (BETA_AT_BREAK - 1.0))
-            val widthKm = tectonics.riftedMarginWidthKm / stretchedWidthPerUnstretched
-            val efoldKm = widthKm / falloffs
+            val widthKm = tectonics.riftedMarginWidthKm / STRETCHED_WIDTH_PER_UNSTRETCHED
+            val efoldKm = widthKm / MARGIN_FALLOFFS
             val (distanceKm, source) = sphere.distanceFlood(riftCells.toIntArray(), reachKm = widthKm)
             for (sample in 0 until samples.count) {
                 if (removed[sample] || !samples.continental[sample] || !samples.riftMyrAgo[sample].isNaN()) continue
@@ -1343,7 +1338,9 @@ internal object TectonicHistory {
          * thickness against the standard column's, the Moho's temperature on a linear geotherm, and
          * the flux's scale is set from Bird's Tibet: features 400 km across survive about 20 Myr there
          * ([FLOW_COEFFICIENT_KM2_PER_MYR]). The flow moves volume from sample to sample across the
-         * lattice, so it conserves it to the bit.
+         * lattice, so it conserves it to the bit. A sample that owns several points stands at each of
+         * them with a share of its area, so a point's volume is its share's and no sample can give
+         * away more crust than it has.
          *
          * The wear is erosion: an orogen's excess falls as `exp(-t / orogenDecayTime)`, the decay of
          * an unforced orogen the settings carry, and the volume it loses leaves the continental crust
@@ -1353,12 +1350,19 @@ internal object TectonicHistory {
             val thickness = FloatArray(cellCount)
             val flows = BooleanArray(cellCount)
             val continent = BooleanArray(cellCount)
+            val pointsOwned = IntArray(samples.count)
             for (cell in 0 until cellCount) {
                 val sample = ownerSample[cell]
                 if (sample < 0 || removed[sample]) continue
                 thickness[cell] = samples.thicknessKm(sample)
                 flows[cell] = true
                 continent[cell] = samples.continental[sample]
+                pointsOwned[sample]++
+            }
+            // Each point's share of its sample's area: the point stands for that much crust.
+            val areaShare = FloatArray(cellCount) { cell ->
+                val sample = ownerSample[cell]
+                if (flows[cell]) 1f / pointsOwned[sample] else 1f
             }
             val before = thickness.copyOf()
             val change = FloatArray(cellCount)
@@ -1379,20 +1383,21 @@ internal object TectonicHistory {
                             if (!flows[next] || (!continent[cell] && !continent[next])) continue
                             val low = min(cell, next)
                             val high = max(cell, next)
-                            val moved = edgeFlow(low, high, thickness[low], thickness[high], dtMyr)
+                            val moved = edgeFlow(low, high, thickness[low], thickness[high], dtMyr, min(areaShare[low], areaShare[high]))
                             gained += if (cell == low) -moved else moved
                         }
-                        change[cell] = gained.toFloat()
+                        // The volume a point gains spreads over the area it stands for.
+                        change[cell] = (gained / areaShare[cell]).toFloat()
                     }
                 }
                 for (cell in 0 until cellCount) if (flows[cell]) thickness[cell] += change[cell]
             }
-            // Each point's gain or loss goes to the sample that owns it; a sample owning two points
-            // takes both, so the volume moved still sums to nothing.
+            // Each point's gain or loss goes to the sample that owns it, by the share of the sample's
+            // area the point stood for, so the volume moved still sums to nothing.
             for (cell in 0 until cellCount) {
                 if (!flows[cell]) continue
                 val sample = ownerSample[cell]
-                val gained = thickness[cell] - before[cell]
+                val gained = (thickness[cell] - before[cell]) * areaShare[cell]
                 // A floor sample that became continent at its first point takes its second point's
                 // share as a continent's, so it is booked once.
                 if (continent[cell] || samples.continental[sample]) {
@@ -1434,10 +1439,11 @@ internal object TectonicHistory {
          * the thicker to the thinner. The graph Laplacian of a near-hexagonal lattice is `4 / (n s^2)`
          * per neighbor, `n` taken as the larger of the two points' counts so the edge is the same
          * from either end; and never more crosses one edge in a substep than would level the pair,
-         * shared among the neighbors, which is the explicit scheme's stability and not a limit on the
-         * flow, since a pair that fast levels within the substep anyway.
+         * shared among the neighbors and scaled to the smaller [areaShare] of the two, which is the
+         * explicit scheme's stability and not a limit on the flow, since a pair that fast levels
+         * within the substep anyway. In thickness over a whole point's area.
          */
-        private fun edgeFlow(low: Int, high: Int, lowKm: Float, highKm: Float, dtMyr: Double): Double {
+        private fun edgeFlow(low: Int, high: Int, lowKm: Float, highKm: Float, dtMyr: Double, areaShare: Float): Double {
             val distance = sphere.distanceKm(low, high)
             val neighborCount = max(
                 sphere.neighborStart[low + 1] - sphere.neighborStart[low],
@@ -1445,7 +1451,7 @@ internal object TectonicHistory {
             )
             val diffusivity = edgeDiffusivity(lowKm, highKm, distance)
             val rate = diffusivity * LAPLACIAN_PER_NEIGHBOR / (neighborCount * distance * distance)
-            val share = min(rate * dtMyr, 1.0 / (2 * neighborCount))
+            val share = min(rate * dtMyr, areaShare / (2.0 * neighborCount))
             return share * (lowKm - highKm)
         }
 
@@ -2201,7 +2207,7 @@ internal object TectonicHistory {
      * standard column's 374, and Airy turns a kilometer of crust into 141 m of altitude
      * (`IsostasyConfig.cratonThickeningKm`), so (5,023 - 374) / 141 = 33 km.
      */
-    private const val TIBET_EXCESS_KM = 33.0
+    internal const val TIBET_EXCESS_KM = 33.0
 
     /**
      * How fast a collision belt's thickening falls off away from its axis, km: the e-folding of the
@@ -2315,6 +2321,19 @@ internal object TectonicHistory {
      */
     private const val BETA_AT_BREAK = 4.0
     private const val BETA_AT_MARGIN_EDGE_EXCESS = 0.1
+
+    /** How many e-folds the stretching falls through between the break and the margin's inner edge. */
+    private val MARGIN_FALLOFFS = ln((BETA_AT_BREAK - 1.0) / BETA_AT_MARGIN_EDGE_EXCESS)
+
+    /**
+     * Watts's width is the margin as it stands, stretched; the band that stretched to it was
+     * narrower by the area beta added: the mean of `1 + (beta0 - 1) exp(-x / L)` over the band,
+     * `1 + (beta0 - 1) / ln((beta0 - 1) / e) (1 - e / (beta0 - 1))` with `e` the excess at its inner
+     * edge, about 1.853. So a rifted margin adds `W (1 - 1 / 1.853)`, about 138 km, of crust for
+     * every kilometer of its length.
+     */
+    internal val STRETCHED_WIDTH_PER_UNSTRETCHED =
+        1.0 + (BETA_AT_BREAK - 1.0) / MARGIN_FALLOFFS * (1.0 - BETA_AT_MARGIN_EDGE_EXCESS / (BETA_AT_BREAK - 1.0))
 
     /**
      * Bird's flux goes as the tenth power of the lower crust's absolute temperature, read here as

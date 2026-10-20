@@ -19,6 +19,9 @@ internal class HistoryPlate(val id: Int) {
     /** Part of the supercontinent, which moves as one until it breaks up. */
     var assembled = false
 
+    /** Until when, Myr before the present, a split of this plate is not tried again; it has been tried and held. */
+    var heldTogetherUntilMyrAgo = Double.MAX_VALUE
+
     /**
      * Volume (km³) a rifted margin of this plate has given up by stretching, still to be laid out as
      * crust, and the area (km²) it is to cover: a sample stretched by beta frees `h (1 - 1/beta)` of

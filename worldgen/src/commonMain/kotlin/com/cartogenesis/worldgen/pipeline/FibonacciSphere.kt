@@ -338,11 +338,20 @@ internal class FibonacciSphere(val cellCount: Int, val radiusKm: Double) {
         const val NEIGHBOR_REACH_SPACINGS = 1.6
         const val MAX_NEIGHBORS = 8
 
-        /** A lattice whose cells are [cellKm] on a side on a sphere of [radiusKm]. */
+        /**
+         * A lattice whose cells are [cellKm] on a side on a sphere of [radiusKm]. The last one made is
+         * kept and handed out again for the same two figures: a lattice is never written after it is
+         * built, and building one, its neighbors above all, is a second of the history's time.
+         */
         fun forCellKm(radiusKm: Double, cellKm: Double): FibonacciSphere {
             val count = (4.0 * PI * radiusKm * radiusKm / (cellKm * cellKm)).roundToInt().coerceAtLeast(MIN_CELLS)
-            return FibonacciSphere(count, radiusKm)
+            lastBuilt?.let { if (it.cellCount == count && it.radiusKm == radiusKm) return it }
+            return FibonacciSphere(count, radiusKm).also { lastBuilt = it }
         }
+
+        /** The lattice [forCellKm] last built; a race between two threads only builds it twice. */
+        @kotlin.concurrent.Volatile
+        private var lastBuilt: FibonacciSphere? = null
 
         /** The fewest points a history lattice may have, so a tiny test planet still has plates. */
         const val MIN_CELLS = 2_000

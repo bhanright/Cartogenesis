@@ -91,10 +91,17 @@ internal class CrustHistory(
 internal object TectonicHistory {
 
     fun run(config: WorldGenConfig, trace: ((String) -> Unit)? = null): CrustHistory {
+        var mark = kotlin.time.TimeSource.Monotonic.markNow()
         val simulation = Simulation(config, trace)
+        trace?.invoke("lattice ms ${mark.elapsedNow().inWholeMilliseconds}")
+        mark = kotlin.time.TimeSource.Monotonic.markNow()
         simulation.build()
+        trace?.invoke("build ms ${mark.elapsedNow().inWholeMilliseconds}")
+        mark = kotlin.time.TimeSource.Monotonic.markNow()
         simulation.runSteps()
-        return simulation.present()
+        trace?.invoke("steps ms ${mark.elapsedNow().inWholeMilliseconds}")
+        mark = kotlin.time.TimeSource.Monotonic.markNow()
+        return simulation.present().also { trace?.invoke("present ms ${mark.elapsedNow().inWholeMilliseconds}") }
     }
 
     private class Simulation(private val config: WorldGenConfig, private val trace: ((String) -> Unit)?) {
@@ -153,6 +160,7 @@ internal object TectonicHistory {
         // ------------------------------------------------------------------------------- building
 
         fun build() {
+            val buildMark = kotlin.time.TimeSource.Monotonic.markNow()
             val continentalShare = targetContinentalShare()
             val microShare = MICROCONTINENT_SHARE_OF_CRUST * continentalShare
             val superCells = supercontinentCells((continentalShare - microShare).coerceAtLeast(0.01))
@@ -160,6 +168,7 @@ internal object TectonicHistory {
             val sutureAgeMyr = sutureAges()
             val sutureDistanceKm = sutureDistances(superCells, cratonOf)
             val micro = microcontinentCells(superCells, microShare)
+            trace?.invoke("build fields ms ${buildMark.elapsedNow().inWholeMilliseconds}")
 
             // Every point starts as one sample of crust at the point itself.
             for (cell in 0 until cellCount) {
@@ -210,6 +219,7 @@ internal object TectonicHistory {
                 val largest = largestPlate { !plates[it].assembled } ?: break
                 if (!splitForBalance(largest)) break
             }
+            trace?.invoke("build splits ms ${buildMark.elapsedNow().inWholeMilliseconds}")
             initialOceanAges()
             initialMotions()
             trace?.invoke("built plates=${livePlateCount()} target=$targetPlates breakup=$breakupMyrAgo cells=$cellCount shares=${shareSummary()}")
@@ -528,15 +538,19 @@ internal object TectonicHistory {
             }
             val moving = (0 until plates.size).filter { counts[it] >= MIN_PLATE_CELLS }
             fun speedOf(plate: Int) = sqrt(max(0.0, squares[plate] / counts[plate])) * radiusKm
-            val pulled = moving.filter { slabPulledPoints[it] > 0 && continent[it] < CRATONIC_SHARE * counts[it] }
+            val pulled = moving.filter {
+                slabPulledPoints[it] > 0 && slabPulledPoints[it] >= SUBDUCTION_BOUNDED_SHARE * edgePoints[it] &&
+                    continent[it] < CRATONIC_SHARE * counts[it]
+            }
                 .map { speedOf(it) }.filter { it > 0.0 }
             medianOf(pulled)?.let { return tectonics.slabPulledPlateSpeedMmPerYear / it }
             val all = moving.map { speedOf(it) }.filter { it > 0.0 }
             return medianOf(all)?.let { targetSpeedKmPerMyr / it }
         }
 
-        /** How many points of each plate's edge a slab pulled at, as the last boundaries were read. */
+        /** How many points of each plate's edge a slab pulled at, and how many points its edge has, as the last boundaries were read. */
         private var slabPulledPoints = IntArray(0)
+        private var edgePoints = IntArray(0)
 
         /** Every sample carried one step by its plate's rotation. */
         private fun carry() {
@@ -732,8 +746,11 @@ internal object TectonicHistory {
          * toward this sample, faster than Bird's 20 degrees from sliding past it, so two plates that
          * merely slide by one another along a transform keep their crust; or the overriding crust lies
          * so close over it that the two occupy one place, which two plates' crusts side by side never
-         * do, since new crust is laid no nearer than [COVER_SPACINGS] to old; or its plate owns none
-         * of the ground around it, so it is surrounded by the plate over it rather than at its edge.
+         * do, since new crust is laid no nearer than [COVER_SPACINGS] to old; or its plate owns less
+         * than a third of the ground around it, so it lies inside the plate over it rather than at
+         * its edge. Two rigid plates side by side cannot interleave, and a sample left inside
+         * another's ground by the lattices sliding past each other along a transform is crust that
+         * plate has overridden.
          */
         private fun consumeOverriddenCrust(): List<Collision> {
             removed.fill(false, 0, samples.count)
@@ -750,14 +767,14 @@ internal object TectonicHistory {
                     if (samples.continental[sample] && !samples.continental[top]) continue
                     val overlapping = samples.x[sample] * samples.x[top] + samples.y[sample] * samples.y[top] +
                         samples.z[sample] * samples.z[top] > overlapCosine
-                    var ownGroundBeside = false
+                    var ownGround = 0
+                    var ground = 0
                     for (index in sphere.neighborStart[cell] until sphere.neighborStart[cell + 1]) {
-                        if (owner[sphere.neighbors[index]] == under) {
-                            ownGroundBeside = true
-                            break
-                        }
+                        ground++
+                        if (owner[sphere.neighbors[index]] == under) ownGround++
                     }
-                    if (overlapping || !ownGroundBeside || closingRate(sample, top, under, over) > approach) consumed[sample] = true
+                    val surrounded = ownGround * SURROUNDED_SHARE_INVERSE < ground
+                    if (overlapping || surrounded || closingRate(sample, top, under, over) > approach) consumed[sample] = true
                 }
             }
             val collisions = ArrayList<Collision>()
@@ -1037,6 +1054,9 @@ internal object TectonicHistory {
                 }
             }
             slabPulledPoints = slabPulled
+            edgePoints = IntArray(plates.size).also { edges ->
+                for (cell in 0 until cellCount) if (boundaryOther[cell] >= 0) edges[owner[cell]]++
+            }
             if (!withEffects) return
             if (trenchCells.isNotEmpty()) growArcsAndWearForearcs(trenchCells.toIntArray(), lengthKm, agoEnd)
             if (collisionCells.isNotEmpty()) exchangeInCollisionZones(collisionCells.toIntArray(), lengthKm, agoEnd)
@@ -1429,7 +1449,11 @@ internal object TectonicHistory {
         private fun edgeDiffusivity(first: Float, second: Float, distanceKm: Double): Double {
             val mean = 0.5 * (first + second) / continentalKm
             val slope = (first - second) / distanceKm
-            return FLOW_COEFFICIENT_KM2_PER_MYR * mean.pow(FLOW_TEMPERATURE_EXPONENT) * slope * slope
+            // The tenth power by squaring: this runs for every edge of every substep.
+            val squared = mean * mean
+            val fourth = squared * squared
+            val tenth = fourth * fourth * squared
+            return FLOW_COEFFICIENT_KM2_PER_MYR * tenth * slope * slope
         }
 
         /**
@@ -1573,12 +1597,15 @@ internal object TectonicHistory {
             val largest = (0 until plates.size).filter { plates[it].alive && !plates[it].assembled }.maxByOrNull { sizes[it] } ?: return
             val tooLarge = sizes[largest] > LARGEST_PLATE_SHARE * cellCount
             if (live >= targetPlates && !tooLarge) return
+            // A plate tried and held together by its forces is not tried again until they have had
+            // time to change: the forces move with the boundaries, which take steps to move.
             val candidates = (0 until plates.size)
-                .filter { plates[it].alive && !plates[it].assembled && sizes[it] >= MIN_SPLIT_CELLS }
+                .filter { plates[it].alive && !plates[it].assembled && sizes[it] >= MIN_SPLIT_CELLS && plates[it].heldTogetherUntilMyrAgo > agoEnd }
                 .sortedByDescending { sizes[it] }
                 .take(SPLIT_PLATES_TRIED)
             for (plate in candidates) {
                 if (splitForForces(plate, agoEnd, initiate = tooLarge && plate == largest)) return
+                plates[plate].heldTogetherUntilMyrAgo = agoEnd - SPLIT_RETRY_STEPS * stepMyr
             }
         }
 
@@ -1607,9 +1634,8 @@ internal object TectonicHistory {
         private fun splitForBalance(plate: Int): Boolean {
             var best: IntArray? = null
             var bestBalance = 0.0
-            repeat(SPLIT_CANDIDATES) {
-                val pole = poleAcross(plate) ?: return@repeat
-                val sides = splitAlongPath(plate, pole) ?: return@repeat
+            for (sides in candidateCuts(plate)) {
+                if (sides == null) continue
                 val first = sides.count { it == 0 }
                 val second = sides.count { it == 1 }
                 val balance = min(first, second).toDouble() / (first + second)
@@ -1642,9 +1668,8 @@ internal object TectonicHistory {
             val scale = currentScale(plate)
             var paths = 0
             var widest = Double.NEGATIVE_INFINITY
-            repeat(SPLIT_CANDIDATES) {
-                val pole = poleAcross(plate) ?: return@repeat
-                val sides = splitAlongPath(plate, pole) ?: return@repeat
+            for (sides in candidateCuts(plate)) {
+                if (sides == null) continue
                 paths++
                 val halves = halfRotations(plate, sides)
                 val first = halves.first.map { it * scale }.toDoubleArray()
@@ -1807,7 +1832,53 @@ internal object TectonicHistory {
          * between, so the path comes out as ridge segments offset by transforms. Returns the side of
          * each of the plate's points, -1 off the plate, or null if the path does not cut it.
          */
-        private fun splitAlongPath(plate: Int, pole: DoubleArray): IntArray? {
+        private fun splitAlongPath(ground: SplitGround, pole: DoubleArray, via: Int): IntArray? {
+            val inPlate = ground.inPlate
+            val edge = ground.edge
+            val hardness = ground.hardness
+            val angleFromPole = DoubleArray(cellCount)
+            for (cell in edge) {
+                angleFromPole[cell] = acos((sphere.x[cell] * pole[0] + sphere.y[cell] * pole[1] + sphere.z[cell] * pole[2]).coerceIn(-1.0, 1.0))
+            }
+            val nearest = edge.minOf { angleFromPole[it] }
+            val farthest = edge.maxOf { angleFromPole[it] }
+            val band = SPLIT_END_BAND_SPACINGS * sphere.spacingRadians
+            if (farthest - nearest < 4 * band) return null
+            val starts = edge.filter { angleFromPole[it] <= nearest + band }
+            val ends = BooleanArray(cellCount)
+            for (cell in edge) if (angleFromPole[cell] >= farthest - band) ends[cell] = true
+            val viaOnly = BooleanArray(cellCount).also { it[via] = true }
+            val toVia = shortestPath(starts, viaOnly, inPlate, hardness, pole) ?: return null
+            val fromVia = shortestPath(listOf(via), ends, inPlate, hardness, pole) ?: return null
+            return sidesOfCut(inPlate, toVia + fromVia)
+        }
+
+        /**
+         * [SPLIT_CANDIDATES] cuts across [plate], each from a drawn pole and a drawn deep point, null
+         * where one does not cut it. The draws are made in turn, so the cuts are the same however
+         * many workers find them; the paths are found side by side, since each only reads.
+         */
+        private fun candidateCuts(plate: Int): List<IntArray?> {
+            val ground = splitGround(plate) ?: return emptyList()
+            val draws = ArrayList<Pair<DoubleArray, Int>>()
+            repeat(SPLIT_CANDIDATES) {
+                val pole = poleAcross(plate) ?: return@repeat
+                draws.add(pole to ground.deep[random.nextInt(ground.deep.size)])
+            }
+            val cuts = arrayOfNulls<IntArray>(draws.size)
+            parallelChunks(0, draws.size) { from, to ->
+                for (index in from until to) cuts[index] = splitAlongPath(ground, draws[index].first, draws[index].second)
+            }
+            return cuts.toList()
+        }
+
+        /**
+         * What every candidate cut across one plate shares, worked out once: the plate's points, its
+         * edge, how hard each point is to break, and the deep points a cut runs by way of.
+         */
+        private class SplitGround(val inPlate: BooleanArray, val edge: List<Int>, val hardness: DoubleArray, val deep: List<Int>)
+
+        private fun splitGround(plate: Int): SplitGround? {
             val inPlate = BooleanArray(cellCount) { owner[it] == plate }
             val edge = ArrayList<Int>()
             for (cell in 0 until cellCount) {
@@ -1820,17 +1891,6 @@ internal object TectonicHistory {
                 }
             }
             if (edge.size < 2) return null
-            val angleFromPole = DoubleArray(cellCount)
-            for (cell in edge) {
-                angleFromPole[cell] = acos((sphere.x[cell] * pole[0] + sphere.y[cell] * pole[1] + sphere.z[cell] * pole[2]).coerceIn(-1.0, 1.0))
-            }
-            val nearest = edge.minOf { angleFromPole[it] }
-            val farthest = edge.maxOf { angleFromPole[it] }
-            val band = SPLIT_END_BAND_SPACINGS * sphere.spacingRadians
-            if (farthest - nearest < 4 * band) return null
-            val starts = edge.filter { angleFromPole[it] <= nearest + band }
-            val ends = BooleanArray(cellCount)
-            for (cell in edge) if (angleFromPole[cell] >= farthest - band) ends[cell] = true
             val noise = SphereNoise(config.seed * SPLIT_NOISE_SALT + splitCount * 31L + plate)
             val hardness = DoubleArray(cellCount)
             for (cell in 0 until cellCount) {
@@ -1851,14 +1911,15 @@ internal object TectonicHistory {
             for (cell in 0 until cellCount) if (inPlate[cell] && edgeDistanceKm[cell] != Double.MAX_VALUE) deepest = max(deepest, edgeDistanceKm[cell])
             val deep = (0 until cellCount).filter { inPlate[it] && edgeDistanceKm[it] != Double.MAX_VALUE && edgeDistanceKm[it] >= VIA_DEPTH_SHARE * deepest }
             if (deep.isEmpty()) return null
-            val via = deep[random.nextInt(deep.size)]
-            val viaOnly = BooleanArray(cellCount).also { it[via] = true }
-            val toVia = shortestPath(starts, viaOnly, inPlate, hardness, pole) ?: return null
-            val fromVia = shortestPath(listOf(via), ends, inPlate, hardness, pole) ?: return null
+            return SplitGround(inPlate, edge, hardness, deep)
+        }
+
+        /** The two sides of [inPlate] a cut along [path] leaves, as [splitAlongPath] returns them. */
+        private fun sidesOfCut(inPlate: BooleanArray, path: List<Int>): IntArray? {
             // A path one point wide can be stepped across between two of its neighbors, so the cut is
             // the path and the ring of points round it.
             val onPath = BooleanArray(cellCount)
-            for (cell in toVia + fromVia) {
+            for (cell in path) {
                 onPath[cell] = true
                 for (index in sphere.neighborStart[cell] until sphere.neighborStart[cell + 1]) {
                     val next = sphere.neighbors[index]
@@ -2165,10 +2226,20 @@ internal object TectonicHistory {
     private const val OVERLAP_SPACINGS = 0.5
 
     /**
+     * An oceanic plate is bounded by subduction, in Zahirovic et al.'s sense, when a slab pulls at a
+     * quarter of its edge or more: a plate whose edge is mostly ridge and transform with a short
+     * trench is not the kind of plate their 85 mm a year describes.
+     */
+    private const val SUBDUCTION_BOUNDED_SHARE = 0.25
+
+    /**
      * A plate more than a quarter continental is a cratonic one, as Zahirovic et al. sort plates for
      * their speeds; the rest are oceanic.
      */
     private const val CRATONIC_SHARE = 0.25
+
+    /** A sample whose plate owns under one in this many of its neighbors is surrounded: a third. */
+    private const val SURROUNDED_SHARE_INVERSE = 3
 
     /** More plates than ever meet at a lattice point. */
     private const val MAX_PLATES_AT_A_POINT = 8
@@ -2274,6 +2345,9 @@ internal object TectonicHistory {
      * its own edge, drawn among all such, so it crosses the plate rather than skirting it.
      */
     private const val VIA_DEPTH_SHARE = 0.6
+
+    /** How many steps a plate its forces held together waits before it is tried for a split again. */
+    private const val SPLIT_RETRY_STEPS = 3
 
     /** How many paths are tried for one split, and how many plates, largest first. */
     private const val SPLIT_CANDIDATES = 6

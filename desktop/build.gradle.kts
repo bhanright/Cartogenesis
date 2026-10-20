@@ -291,7 +291,7 @@ val siteImageryDir = layout.buildDirectory.dir("site-imagery")
  */
 tasks.register<JavaExec>("renderSiteImagery") {
     group = "distribution"
-    description = "Renders cartogenesis.com's figures from seed 718106 at 2048 rows into " +
+    description = "Renders cartogenesis.com's figures from seed 42 at 2048 rows into " +
         "desktop/build/site-imagery."
     mainClass = "com.cartogenesis.desktop.SiteImagery"
     classpath = sourceSets["main"].runtimeClasspath

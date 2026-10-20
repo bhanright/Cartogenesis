@@ -325,7 +325,7 @@ class SiteAssemblyTest {
             // The whole world under the lens, at a quarter and at full size, and the relief's patch.
             "world-whole.webp" to (1024 to 512),
             "world-full.webp" to (4096 to 2048),
-            "relief-natural.webp" to (640 to 400),
+            "relief-satellite.webp" to (640 to 400),
             // Every seed is a world: five worlds whole, each its 1024 by 512 sheet at its own pixels.
             "seed-42.webp" to (1024 to 512),
             "seed-1066.webp" to (1024 to 512),
@@ -485,7 +485,7 @@ class SiteAssemblyTest {
      * only the two it shows.
      *
      * The page's weight at load may grow by two pictures at most for the slider, and grows by none:
-     * its default pair are the Atlas and Natural cards' own files. The other ten are named only as
+     * its default pair are the Atlas and Satellite cards' own files. The other ten are named only as
      * a picker's option and fetched when picked.
      */
     @Test

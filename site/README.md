@@ -21,8 +21,8 @@ here, because keeping a second copy of any of them is how a copy goes stale:
 - **The typefaces' licences**, copied into `fonts/` from `ui/licences`, which is where the
   application keeps them.
 - **Every picture**, under `img/`. There are no image files in this folder at all. They are
-  rendered from the engine at assembly time by `:desktop:renderSiteImagery` — seed 718106 at 2048
-  with the author's settings, cut to fixed windows, and the opening's band and link preview from seed 1,
+  rendered from the engine at assembly time by `:desktop:renderSiteImagery` — seed 42 at 2048
+  with the page's settings (62% ocean, 14 plates, 12 realms), cut to fixed windows, and the opening's band and link preview from seed 1,
   whose rows hold fewer straight runs — so a release that changes what a coastline looks
   like changes the coastline the page shows. See `SiteImagery.kt` for the seed, the windows and
   how to pick a new one.

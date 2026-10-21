@@ -576,12 +576,9 @@ class RiverWidthTest {
         // Recorded at TH1-1: on the history's seed 1234 two pixels of ink lie on water with no land
         // beside them, both on cell (row 27, column 400), a passage: sea too narrow to draw as sea
         // that the course runs on through, which the stroke count above exempts and this pixel count
-        // does not (docs/DESIGN_LEDGER.md, TH1-1; docs/TODO.md).
-        KnownFailures.expect("TH1-1: a river's ink crosses a passage at least three cells wide on the history's seed 1234", "seed 1234: 2") {
-            if (offshoreInk.isNotEmpty()) {
-                throw RecordedViolation("river pixels lie on water with no land beside them: ${offshoreInk.joinToString("; ")}", offshoreInk.joinToString("; "))
-            }
-        }
+        // does not (docs/DESIGN_LEDGER.md, TH1-1). Armed at TH1-1b, whose worlds pass it
+        // (docs/DESIGN_LEDGER.md, TH1-1b).
+        assertTrue(offshoreInk.isEmpty(), "river pixels lie on water with no land beside them: ${offshoreInk.joinToString("; ")}")
         assertTrue(
             untrimmedEndsOverWater > 0 && worstUntrimmed > 1f,
             "the untrimmed course no longer ends over water, so this guard has stopped discriminating"

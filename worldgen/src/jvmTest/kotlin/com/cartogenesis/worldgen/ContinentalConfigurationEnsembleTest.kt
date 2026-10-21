@@ -13,7 +13,7 @@ import org.junit.Assert.assertTrue
 
 /**
  * The continents' configuration over many worlds, as Earth's supercontinent cycle would scatter it
- * (docs/DESIGN_LEDGER.md, TH1-1; the maintainer's decisions for TH1): the largest landmass's share,
+ * (docs/DESIGN_LEDGER.md, TH1-1): the largest landmass's share,
  * Korčák's K, the passive share of the crust's edge and the collision share of the boundaries are
  * phase-dependent, so they are read as distributions over a predeclared ensemble rather than held
  * per world.

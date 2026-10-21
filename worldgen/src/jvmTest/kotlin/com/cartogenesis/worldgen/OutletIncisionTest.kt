@@ -565,7 +565,9 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
         // at 0.28% (docs/DESIGN_LEDGER.md, W2d); 4.72 times at W2e, seed 99's at 2.86%, seed 42's at
         // 2.70% and seed 7's at 1.01%, the wetter interiors filling the basins under the cut
         // (docs/DESIGN_LEDGER.md, W2e; docs/TODO.md).
-        KnownFailures.expect("W2c: the drowned interiors stand over the Caspian's share pooled", "4.06x") {
+        // Armed at TH1-1, on whose worlds the largest drowned basins pool at 0.09 times the
+        // Caspian's share (docs/DESIGN_LEDGER.md, TH1-1).
+        run {
             if (pooledDrowned >= caspianShare * drownedChaos) {
                 throw RecordedViolation(
                     "these worlds keep a basin below the sea-level cut holding more water than the " +

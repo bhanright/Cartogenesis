@@ -12,10 +12,11 @@
   settle it is an outline assembled from cratons and terranes rather than a warped cap. 2026-10-20,
   TH1-1.
 - **The ensemble's worlds are assembled or dispersed, and too few between (TH1-1, measured).** Over
-  the predeclared seeds 1 to 30 at 512 rows, 14 assembled (largest landmass at least 0.75 of the
-  land), 9 intermediate and 7 highly dispersed (under 0.39); over the validation seeds 1001 to 1030,
-  11, 10 and 9 (`ContinentalConfigurationEnsembleTest`). The calibration hypothesis is 25%, 60% and
-  15%; no category is absent or grossly over-represented, but intermediate stands at 30 to 33%.
+  the predeclared seeds 1 to 30 at 512 rows, 11 assembled (largest landmass at least 0.75 of the
+  land), 11 intermediate and 8 highly dispersed (under 0.39); over the validation seeds 1001 to 1030,
+  9, 12 and 9 (`ContinentalConfigurationEnsembleTest`). The calibration hypothesis is 25%, 60% and
+  15%; no category is absent or grossly over-represented, but intermediate stands at 37 to 40%, a
+  count that low having a chance of about 1% and 2% under the hypothesis.
   Behind it: the continental plates move at 1 to 30 mm a year against Earth's cratonic plates'
   28, so a supercontinent's plates part slowly where forces part them at all, and once parted they
   rarely meet again in the history's 200 Myr; the supercontinent rifts a plate a step where its
@@ -55,21 +56,54 @@
   drawn on the sphere. Whether the census should read a line's run on the ground near the poles, or
   the map should draw them otherwise, is a question for the drawing. 2026-10-20, TH1-1.
 - **The history's worlds move the climate's guards (TH1-1, recorded).** With continents inside
-  plates and the sea at 71% of the planet the land carries 7.5% desert against Earth's 19.1% (x0.39,
-  `WaterColumnEarthTest`; it was x0.85 at W2h on main's worlds at 62% sea), its rain that last
-  evaporated from land is x0.80 Earth's, one boundary-layer reading falls outside and the drag
-  balance's correlation drops to 0.47 (`BoundaryLayerTest`), two seeds' coldest eastern-boundary
-  water stands at 42 to 45 degrees (`ColdWaterPlacementTest`), seed 7's peoples leave 11% of the
-  habitable land unsettled at 256 rows (`CultureRealmTest`), and on the 12,000 km calibration planet
-  two seeds' flanks are combed down the columns past the factor (`CombGuardTest`). Each runs as a
-  known failure under TH1-1; which part is the sea level and which the history is not separated.
-  Eight clauses recorded before pass on the new worlds and are armed. 2026-10-20, TH1-1.
+  plates and the sea at 71% of the planet the land carries desert at x0.36 Earth's share
+  (`WaterColumnEarthTest`; it was x0.85 at W2h on main's worlds at 62% sea) and imports 50,397 km3
+  of water a year at Earth's land area, 97 past the top of Rodell's range (`RainPlacementEarthTest`);
+  one boundary-layer reading falls outside and the drag balance's correlation drops to 0.35
+  (`BoundaryLayerTest`); seed 7's coldest eastern-boundary water lies at 48 degrees
+  (`ColdWaterPlacementTest`), its sheet stands 4,803 m, 27 m past Earth's deepest sounding
+  (`IceSheetTest`), and seed 99's planet stands at 13.04 C (`SeaSurfaceEarthTest`); on the 12,000
+  km calibration planet two seeds' flanks are combed down the columns past the factor
+  (`CombGuardTest`). Each runs as a known failure under TH1-1; which part is the sea level and which
+  the history is not separated. Clauses recorded on main pass on the new worlds and are armed, some
+  of them (the lakes' pieces and basins, the peoples' unsettled land, the land's rain against its
+  potential) after failing on the history's first worlds: they sit at their margins and come and go
+  with the ground. 2026-10-21, TH1-1.
+- **What the history moved in the deep tier (TH1-1, recorded).** On the interim belts, which TH1-2
+  redraws: seeds 5, 22 and 23 draw no collision plateau broader than their margin and pooled the
+  plateau is 1.02 times as broad for its height, the one-profile control reading no margin at all
+  (`BoundaryPairTest`), seed 17's rift axis stands +0.033 above its flanks, and one seed in four
+  offers a range to `ClimateFedErosionTest`. Of the ground: seed 1234's sea mode stands at -5,325 m
+  where its floor is oldest (`IsostasyTest`, as `EarthLikenessTest`), seed 42's foreland moat lies at
+  the window's last bin with nothing beyond to rise, seed 7's ice moat is 226 m of the 1,408 its ice
+  floats out at, the ice takes cold country's lakes only from 0.45 to 1.04 per 10,000 cells
+  (`GlaciationTest`), seed 1's dry sample is 295 cells and stays at 84% of its spill
+  (`LakeWaterBalanceTest`), no seed starts with a lake over the Caspian's share
+  (`OutletIncisionTest`), the incision leaves one channel cell below its receiver on seed 42
+  (`ReceiverClampTest`) and two seeds carry a marginal snow band (`SnowBalanceTest`). Of the air:
+  seed 7's equatorial basins stand 0.19 hPa lower in the east (`AirSeaEarthTest`), the rain's largest
+  step across a row pools at 4.36 against main's 3.72 (`RainGeometryTest`), and two controls no
+  longer fail: the belts alone reverse the subtropical coasts, +0.19 against -0.20 m/s
+  (`PressureWindTest`), and hotspot cones eight times as wide raise 4.40% of a larger ocean's floor
+  (`BoundaryPairTest`). The synthetic belt of `IsostasyTest`'s steady state fails on main as here:
+  on its 200 km world no heating latitude closes the Hadley cells. In the whole deep tier at once
+  five classes ran out of their 5 GB workers and pass alone. 2026-10-21, TH1-1.
+- **The history's crust stands less of the world above the datum than the slider asks (TH1-1,
+  recorded).** The plate stage draws `(1 - seaLevel) / (1 - continentalCrustSubmergedShare)` of the
+  sphere as continental crust, and on the history's worlds 0.241 to 0.287 of the world then stands
+  above the isostatic datum where the slider asks 0.29: stretched crust and the wide drowned
+  platforms stand lower than the submerged share allows for, and the sea-level cut lands 196 to 901
+  m under the datum against `IsostasyTest`'s 300 (seed 99 the furthest). The conversion is to be
+  re-derived on the history's crust, with the margins of TH1-3. 2026-10-21, TH1-1.
 - **The drawing's calibrated figures moved with the ground (TH1-1, recorded).** The relief's slope
-  floor reads 0.09 against `EngravingPlan.SLOPE_FLOOR`'s 0.06 and its haze matches at 0.14 against
-  0.10 (`ReliefShadingTest`), the pen's ink runs 32.0 degrees from the aspect (`PenAndInkTest`), and
-  Mars's water reads 4.5 against its land (`WaterColorTest`). Each was set on main's worlds; whether
-  to re-derive them is the drawing's question once the belts (TH1-2) and margins (TH1-3) settle the
-  ground. 2026-10-20, TH1-1.
+  floor reads 0.14 against `EngravingPlan.SLOPE_FLOOR`'s 0.06, its haze matches at 0.12 against 0.10
+  and the sky draws 13% flatter than the lamp (`ReliefShadingTest`), the pen's ink runs 33.7 degrees
+  from the aspect and its gain puts the widest stroke at 0.99 of the land (`PenAndInkTest`), Mars's
+  water reads 4.7 against its land (`WaterColorTest`), 16 cells of seed 969495 draw less green under
+  more cover (`SatelliteStyleTest`), and on seed 1234 two pixels of river ink cross a passage at
+  least three cells wide, which the stroke count exempts and the pixel count does not
+  (`RiverWidthTest`). Each was set on main's worlds; whether to re-derive them is the drawing's
+  question once the belts (TH1-2) and margins (TH1-3) settle the ground. 2026-10-21, TH1-1.
 - **What TH1-4 must put on the card (TH1-1).** The map pass is on the card behind
   `CrustMapAccelerator` (`GpuCrustMap`, held to the processor by `CrustMapParity`: the share 2.4e-3
   at worst against a bar of 1.1e-2, the categories differing on 1e-5 of the cells). Still on the

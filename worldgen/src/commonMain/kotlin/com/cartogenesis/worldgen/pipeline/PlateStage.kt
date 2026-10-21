@@ -564,7 +564,10 @@ object PlateStage {
                         crust.thicknessKm[cell] - standardThicknessKm - excessKm * stampedShare[cell]
                     datumMetres[cell] =
                         if (isostatic) {
-                            columns.altitudeMetres(share, seafloorAgeMyr[cell], thickeningKm)
+                            columns.altitudeMetres(
+                                share, seafloorAgeMyr[cell], thickeningKm,
+                                columns.stretchedThermalBuoyancyMetres(crust.thicknessKm[cell], crust.riftAgeMyr[cell])
+                            )
                         } else {
                             0f
                         }

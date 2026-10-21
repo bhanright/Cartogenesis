@@ -6,6 +6,7 @@ import com.cartogenesis.worldgen.model.IsostasyConfig
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import kotlin.math.PI
 import kotlin.math.exp
+import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
@@ -128,6 +129,34 @@ internal object Isostasy {
                 oceanicBuoyantMass) / mantleDensity
 
         /**
+         * The heat still in continental lithosphere stretched [riftAgeMyr] million years ago, as the
+         * air-equivalent metres of buoyancy it is worth: McKenzie's thermal subsidence still to come
+         * (*Some remarks on the development of sedimentary basins*, EPSL 40, 1978).
+         *
+         * Stretching by beta thins the mantle lithosphere with the crust and hot asthenosphere wells
+         * up under it, so a margin first subsides only by what its thinner crust takes away less
+         * what the heat gives back, and sinks the rest of the way as the heat leaves it: by
+         * `E0 (beta / pi) sin(pi / beta) (1 - exp(-t / tau))` under water, `tau` the plate's thermal
+         * time constant and `E0 = 4 a rho_m alpha T1 / (pi^2 (rho_m - rho_w))`. The same plate
+         * cooling under a ridge sinks the ocean floor from its ridge depth to its abyssal asymptote,
+         * `rho_m alpha T1 a / (2 (rho_m - rho_w))`, so `E0` is `8 / pi^2` of Parsons and Sclater's
+         * 3,900 m and `tau` is their 62.8 Myr: the margin's heat is read off the same plate as the
+         * ocean's, and a margin that has cooled for good stands where the crust's thinning alone puts
+         * it, as [altitudeMetres]'s Airy column did before this term. Beta is the standard column's
+         * thickness over the crust's, at least one. Zero where the crust was never stretched.
+         */
+        fun stretchedThermalBuoyancyMetres(thicknessKm: Float, riftAgeMyr: Float): Float {
+            if (riftAgeMyr < 0f || thicknessKm <= 0f) return 0f
+            val beta = (isostasy.continentalCrustThicknessKm / thicknessKm).coerceAtLeast(1f)
+            if (beta <= 1f) return 0f
+            val plateSubsidenceMetres = isostasy.seafloorAbyssalAsymptoteMetres - isostasy.seafloorRidgeDepthMetres
+            val initialWaterLoadedMetres = MCKENZIE_THERMAL_SHARE_OF_PLATE * plateSubsidenceMetres
+            val remaining = (beta / PI.toFloat()) * sin(PI.toFloat() / beta) *
+                exp(-riftAgeMyr / isostasy.seafloorFlatteningTimeMyr)
+            return initialWaterLoadedMetres * remaining * (mantleDensity - waterDensity) / mantleDensity
+        }
+
+        /**
          * The altitude a column floats at, for a cell that is [continentalShare] continental crust
          * of the rest oceanic and [seafloorAgeMyr] million years old where it is oceanic, carrying
          * [extraContinentalThicknessKm] of crust beyond the standard continental column.
@@ -143,19 +172,21 @@ internal object Isostasy {
          * column, thinned where a margin was stretched and thickened where orogeny piled crust on
          * ([PlateResult.crustThicknessKm]; docs/DESIGN_LEDGER.md, TH1-1). It buoys in proportion to
          * the share, because it is continental crust that is being added and there is none of it
-         * to add on the ocean floor.
+         * to add on the ocean floor. [continentalHeatMetres] is the continent's own thermal buoyancy,
+         * [stretchedThermalBuoyancyMetres] where it was stretched, carried in the same proportion.
          */
         fun altitudeMetres(
             continentalShare: Float,
             seafloorAgeMyr: Float,
-            extraContinentalThicknessKm: Float = 0f
+            extraContinentalThicknessKm: Float = 0f,
+            continentalHeatMetres: Float = 0f
         ): Float {
             val share = continentalShare.coerceIn(0f, 1f)
             val extraBuoyantMass = share * extraContinentalThicknessKm * METRES_PER_KM *
                 (mantleDensity - isostasy.continentalCrustDensity)
             val buoyantMass = extraBuoyantMass +
                 oceanicBuoyantMass + share * (continentalBuoyantMass - oceanicBuoyantMass)
-            val buoyancy = (1f - share) * oceanicThermalBuoyancyMetres(seafloorAgeMyr)
+            val buoyancy = (1f - share) * oceanicThermalBuoyancyMetres(seafloorAgeMyr) + share * continentalHeatMetres
             val columnMass = datum + buoyantMass + mantleDensity * buoyancy
             return if (columnMass >= 0f) columnMass / mantleDensity
             else columnMass / (mantleDensity - waterDensity)
@@ -346,6 +377,13 @@ internal object Isostasy {
 
 /** Metres in a kilometre, for the thicknesses this file is handed in kilometres. */
 private const val METRES_PER_KM = 1_000.0f
+
+/**
+ * McKenzie's thermal subsidence of a stretched margin as a share of a plate's whole cooling
+ * subsidence: `E0 = 4 a rho_m alpha T1 / (pi^2 (rho_m - rho_w))` against a plate's
+ * `rho_m alpha T1 a / (2 (rho_m - rho_w))`, so `8 / pi^2`. See [Isostasy.Columns.stretchedThermalBuoyancyMetres].
+ */
+private val MCKENZIE_THERMAL_SHARE_OF_PLATE = 8f / (PI.toFloat() * PI.toFloat())
 
 /** Pascals in a gigapascal, for Young's modulus. */
 private const val PASCALS_PER_GPA = 1e9

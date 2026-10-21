@@ -86,8 +86,19 @@ internal class Rotation(axisX: Double, axisY: Double, axisZ: Double, angleRadian
  *
  * Each force is booked where it acts, as a vector in the tangent plane at a lattice point weighted
  * by the length of boundary the point stands for (one spacing), so a plate's torque is `sum r x F`.
- * The drag on a plate turning at `omega` is `-sum k a (omega - (omega . r) r)` over its points, `k`
- * one under ocean and [CONTINENTAL_DRAG_RATIO] under continent; the balance is a 3 by 3 solve.
+ * Two things resist a plate's motion. The drag under its base, `-sum (omega - (omega . r) r)` over
+ * its points for a plate turning at `omega`, the same under continent as under ocean. And the slab
+ * it sinks into at a trench, which the mantle resists as it sinks: a resistance to motion square to
+ * the trench, `-k (v . n) n` at each trench point with `n` the trench's normal, which Forsyth and
+ * Uyeda's inversion carries as slab resistance against slab pull. It is that resistance, standing at
+ * the trench rather than spread under the plate, that lets a plate a slab pulls move at the slab's
+ * own sinking rate whatever its area, as Earth's do: the Pacific, Nazca and Cocos plates, 36 times
+ * apart in area, move at 65.5, 70.0 and 74.6 mm a year (Argus, Gordon and DeMets, *Geologically
+ * current motion of 56 plates relative to the no-net-rotation reference frame*, G-cubed 12, 2011,
+ * NNR-MORVEL56's Table 1). With basal drag alone a plate's speed went as its trench's length over
+ * its area, so the small slab-pulled plates the speeds are scaled to raced, and the large plates the
+ * continents ride on crawled at a third of Earth's (docs/DESIGN_LEDGER.md, TH1-1b). `k` is
+ * `TectonicsConfig.slabResistanceKm`. The balance is a 3 by 3 solve.
  *
  * The forces' absolute size is not something the history can know, since it carries no mantle
  * viscosity; what it can know is their ratios, which are Forsyth and Uyeda's, and Earth's plate
@@ -103,8 +114,28 @@ internal class PlateForces(pointCount: Int) {
     var count = 0
         private set
 
+    val resistPoint = IntArray(pointCount)
+    val resistPlate = IntArray(pointCount)
+    val resistX = DoubleArray(pointCount)
+    val resistY = DoubleArray(pointCount)
+    val resistZ = DoubleArray(pointCount)
+    var resistCount = 0
+        private set
+
     fun clear() {
         count = 0
+        resistCount = 0
+    }
+
+    /** Books the slab's resistance at a trench point of the plate going down, along the unit tangent toward the trench. */
+    fun addSlabResistance(atPoint: Int, plateId: Int, dx: Double, dy: Double, dz: Double) {
+        if (resistCount == resistPoint.size) return
+        resistPoint[resistCount] = atPoint
+        resistPlate[resistCount] = plateId
+        resistX[resistCount] = dx
+        resistY[resistCount] = dy
+        resistZ[resistCount] = dz
+        resistCount++
     }
 
     /** Books a force on [plateId] at [atPoint], [magnitude] along the unit tangent ([dx], [dy], [dz]). */
@@ -154,14 +185,6 @@ internal class PlateForces(pointCount: Int) {
          */
         const val COLLISION_RESISTANCE = 1.0
 
-        /**
-         * How much harder the base of a continent drags than the base of an ocean (Forsyth and
-         * Uyeda: stronger under continents). Three, the ratio of Zahirovic et al.'s speeds for
-         * oceanic plates bounded by subduction, about 85 mm a year, to plates more than a quarter
-         * cratonic, about 28 (*Tectonic speed limits from plate kinematic reconstructions*, EPSL
-         * 418, 2015; see `TectonicsConfig.medianPlateSpeedMmPerYear`).
-         */
-        const val CONTINENTAL_DRAG_RATIO = 1.5
     }
 }
 
@@ -180,6 +203,16 @@ internal class TorqueBalance {
         drag[0] += weight * (1 - rx * rx); drag[1] -= weight * rx * ry; drag[2] -= weight * rx * rz
         drag[3] -= weight * ry * rx; drag[4] += weight * (1 - ry * ry); drag[5] -= weight * ry * rz
         drag[6] -= weight * rz * rx; drag[7] -= weight * rz * ry; drag[8] += weight * (1 - rz * rz)
+    }
+
+    /** Adds a resistance to motion along the unit tangent n at r only: `k m m^T` with `m = r x n`. */
+    fun addLineDrag(rx: Double, ry: Double, rz: Double, nx: Double, ny: Double, nz: Double, weight: Double) {
+        val mx = ry * nz - rz * ny
+        val my = rz * nx - rx * nz
+        val mz = rx * ny - ry * nx
+        drag[0] += weight * mx * mx; drag[1] += weight * mx * my; drag[2] += weight * mx * mz
+        drag[3] += weight * my * mx; drag[4] += weight * my * my; drag[5] += weight * my * mz
+        drag[6] += weight * mz * mx; drag[7] += weight * mz * my; drag[8] += weight * mz * mz
     }
 
     /** Adds the torque `r x F` of a force at a point. */

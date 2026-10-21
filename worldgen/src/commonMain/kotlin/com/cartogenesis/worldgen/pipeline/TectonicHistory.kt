@@ -52,8 +52,30 @@ internal class CrustHistory(
     val historyMyr: Double,
     /** How many plates split during the history, and how many collisions welded a piece on. */
     val splits: Int,
-    val sutures: Int
+    val sutures: Int,
+    /** Every live plate's speed and make-up at the end of every step, for the guards that hold them to Earth's. */
+    val plateSpeeds: PlateSpeedRecord
 )
+
+/**
+ * One row per live plate per step of the history: when, the plate's share of the sphere, the share
+ * of it that is continental crust, the share of its edge where it goes down a trench, and its
+ * root-mean-square speed in mm a year, the figures Zahirovic et al. (2015) sort Earth's plates by.
+ */
+internal class PlateSpeedRecord {
+    val myrAgo = ArrayList<Float>()
+    val areaShare = ArrayList<Float>()
+    val continentalShare = ArrayList<Float>()
+    val subductingEdgeShare = ArrayList<Float>()
+    val rmsSpeedMmPerYear = ArrayList<Float>()
+
+    val size: Int get() = myrAgo.size
+
+    fun add(ago: Double, area: Double, continental: Double, subducting: Double, speed: Double) {
+        myrAgo.add(ago.toFloat()); areaShare.add(area.toFloat()); continentalShare.add(continental.toFloat())
+        subductingEdgeShare.add(subducting.toFloat()); rmsSpeedMmPerYear.add(speed.toFloat())
+    }
+}
 
 /**
  * The crust made by a history rather than by whole plates: Part A of the tectonic-history design
@@ -171,8 +193,9 @@ internal object TectonicHistory {
             val buildMark = kotlin.time.TimeSource.Monotonic.markNow()
             val continentalShare = targetContinentalShare()
             val microShare = MICROCONTINENT_SHARE_OF_CRUST * continentalShare
-            val superCells = supercontinentCells((continentalShare - microShare).coerceAtLeast(0.01))
-            val cratonOf = cratonDomains(superCells)
+            val blockOf = IntArray(cellCount) { -1 }
+            val superCells = supercontinentCells((continentalShare - microShare).coerceAtLeast(0.01), blockOf)
+            val cratonOf = cratonDomains(superCells, blockOf)
             val sutureAgeMyr = sutureAges()
             val sutureDistanceKm = sutureDistances(superCells, cratonOf)
             val micro = microcontinentCells(superCells, microShare)
@@ -244,24 +267,44 @@ internal object TectonicHistory {
         }
 
         /**
-         * The supercontinent: the points nearest a center, as warped by a noise on the sphere, to the
-         * share asked for. The warp is what gives it lobes and embayments rather than a cap's circle.
+         * The supercontinent, assembled from blocks: continents gathered from the cycle before, each
+         * a cap of [CONTINENT_BLOCK_RADIUS_KM], docked one at a time against a block already in place
+         * at a drawn bearing, overlapping it by a suture's sliver and no other further, so the assembly
+         * grows as Pangea's did, by collisions at its edge, into an irregular, lobed and embayed whole
+         * rather than one round cap.
          *
-         * The outline wanders at every scale up to the cap's own width as Earth's continental edge
-         * does: over a stretch of any length from 250 to 2,000 km, ETOPO5's 2,000 m isobath stands
+         * A cap as large as the supercontinent bounds itself by a circle seventy to ninety degrees
+         * across, which turns too slowly to read as anything but straight over a continent's side,
+         * and a hemisphere's circle is two meridians on the map; a cap a craton's size bends faster
+         * than Earth's edge does and strings the outline into beads. A block's radius is where its
+         * own curvature puts the edge as far from its chord as Earth's edge stands over the longest
+         * stretch it was read on (see [CONTINENT_BLOCK_RADIUS_KM]), about thirty degrees on Earth's
+         * planet: six such blocks make Earth's continental crust, as six continents do.
+         *
+         * Inside a block's own width the outline wanders as Earth's continental edge does: over a
+         * stretch of any length from 250 to 2,000 km, ETOPO5's 2,000 m isobath stands
          * [EARTH_EDGE_WANDER_PER_LENGTH] of the stretch's length from its chord, root mean square, and
-         * its octaves fall as Earth's edge's divider dimension says ([SphereNoise.EARTH_OUTLINE_PERSISTENCE]).
-         * So the noise's longest wavelength is the cap's diameter, and its amplitude is what moves the
-         * cap's edge, where the cosine falls by `sin(theta)` a radian, that share of the diameter: a
-         * supercontinent as large as a hemisphere is no longer a hemisphere's circle, which on the
-         * map is two meridians.
+         * its octaves fall as Earth's edge's divider dimension says
+         * ([SphereNoise.EARTH_OUTLINE_PERSISTENCE]); so the noise's longest wavelength is a block's
+         * diameter and its amplitude moves the edge that share of it. The points within the wandering
+         * union are taken to the share asked for exactly.
+         *
+         * Each point's block, written to [blockOf], is the earliest block docked that covers it: a
+         * block docks against the margin of the assembly already there, so its suture is that
+         * margin, the arc of the block it docked against as it wanders, and not a line midway
+         * between the two blocks' centers, which is a bisector (docs/CONVENTIONS.md, rule 13).
          */
-        private fun supercontinentCells(share: Double): BooleanArray {
-            val center = randomUnit(random)
-            supercontinentCenter = center
+        private fun supercontinentCells(share: Double, blockOf: IntArray): BooleanArray {
+            val blockRadians = CONTINENT_BLOCK_RADIUS_KM / radiusKm
+            val blockShare = (1.0 - kotlin.math.cos(blockRadians)) / 2.0
+            val blockCount = max(1, (share / blockShare).roundToInt())
+            val centers = assembleBlocks(blockCount, blockRadians)
+            var cx = 0.0; var cy = 0.0; var cz = 0.0
+            for (center in centers) { cx += center[0]; cy += center[1]; cz += center[2] }
+            val length = sqrt(cx * cx + cy * cy + cz * cz)
+            supercontinentCenter = if (length > 1e-9) doubleArrayOf(cx / length, cy / length, cz / length) else centers[0]
             val noise = SphereNoise(config.seed * SHAPE_SALT + 1)
-            val capRadians = acos((1.0 - 2.0 * share).coerceIn(-1.0, 1.0))
-            val wavelengthKm = 2.0 * capRadians * radiusKm
+            val wavelengthKm = 2.0 * blockRadians * radiusKm
             val octaves = octavesToSpacing(wavelengthKm)
             val warp = DoubleArray(cellCount) { cell ->
                 noise.fbmOnSphere(
@@ -271,22 +314,120 @@ internal object TectonicHistory {
             }
             val mean = warp.average()
             val spread = sqrt(warp.sumOf { (it - mean) * (it - mean) } / warp.size).coerceAtLeast(1e-9)
-            val wanderKm = EARTH_EDGE_WANDER_PER_LENGTH * wavelengthKm
-            val amplitude = wanderKm / radiusKm * sin(capRadians) / spread
-            val reach = DoubleArray(cellCount) { cell ->
-                val cosine = sphere.x[cell] * center[0] + sphere.y[cell] * center[1] + sphere.z[cell] * center[2]
-                cosine + amplitude * warp[cell]
+            val amplitudeRadians = EARTH_EDGE_WANDER_PER_LENGTH * wavelengthKm / radiusKm / spread
+            val reach = DoubleArray(cellCount)
+            parallelChunks(0, cellCount) { from, to ->
+                for (cell in from until to) {
+                    var nearest = -1.0
+                    for (center in centers) {
+                        val cosine = sphere.x[cell] * center[0] + sphere.y[cell] * center[1] + sphere.z[cell] * center[2]
+                        if (cosine > nearest) nearest = cosine
+                    }
+                    reach[cell] = blockRadians - acos(nearest.coerceIn(-1.0, 1.0)) + amplitudeRadians * warp[cell]
+                }
             }
-            return topShare(reach, share)
+            val chosen = topShare(reach, share)
+            var threshold = Double.MAX_VALUE
+            for (cell in 0 until cellCount) if (chosen[cell]) threshold = min(threshold, reach[cell])
+            parallelChunks(0, cellCount) { from, to ->
+                for (cell in from until to) {
+                    if (!chosen[cell]) continue
+                    for (block in centers.indices) {
+                        val center = centers[block]
+                        val cosine = sphere.x[cell] * center[0] + sphere.y[cell] * center[1] + sphere.z[cell] * center[2]
+                        if (blockRadians - acos(cosine.coerceIn(-1.0, 1.0)) + amplitudeRadians * warp[cell] >= threshold) {
+                            blockOf[cell] = block
+                            break
+                        }
+                    }
+                }
+            }
+            return chosen
         }
 
         /**
-         * Each supercontinent point's craton: the seed it is nearest along a path whose every step costs
-         * its length times a noise on the sphere, so the domains meet along wandering sutures rather
-         * than along the straight bisectors a nearest-seed partition draws (docs/CONVENTIONS.md, rule 13).
+         * The blocks' centers, docked one at a time inside the hemisphere the assembly gathers in.
+         * Mantle convection with continents absent settles into one hemisphere of downwelling and one
+         * of upwelling, and the continents converge into the downwelling one to make a supercontinent
+         * (Zhong, Zhang, Li and Roberts, *Supercontinent cycles, true polar wander, and very
+         * long-wavelength mantle convection*, EPSL 261, 2007); the first block stands at that
+         * hemisphere's pole. Each later block docks against a block already placed, drawn evenly, at a
+         * drawn bearing, its center two block radii less [BLOCK_OVERLAP_SHARE] of a diameter away so
+         * the two weld along a suture: the first of [BLOCK_DOCKING_TRIES] such dockings that lies
+         * wholly inside the hemisphere and comes no nearer any other block is taken, so the assembly
+         * grows at whatever free margin a block reaches, as an aggregate of collisions does, and not
+         * toward its own center, which rounds it into one cap again. Failing one, the first free
+         * docking anywhere, and failing that the one that comes least near the others.
          */
-        private fun cratonDomains(superCells: BooleanArray): IntArray {
-            val cratonCount = max(2, (CRATONS_ON_EARTH * config.scale.sphereAreaKm2 / EARTH_SURFACE_KM2).roundToInt())
+        private fun assembleBlocks(blockCount: Int, blockRadians: Double): List<DoubleArray> {
+            val centers = ArrayList<DoubleArray>()
+            val gathering = randomUnit(random)
+            centers.add(gathering)
+            val docking = 2.0 * blockRadians * (1.0 - BLOCK_OVERLAP_SHARE)
+            val insideHemisphere = sin(blockRadians)
+            while (centers.size < blockCount) {
+                var inside: DoubleArray? = null
+                var free: DoubleArray? = null
+                var crowded: DoubleArray? = null
+                var crowdedClearance = Double.NEGATIVE_INFINITY
+                for (attempt in 0 until BLOCK_DOCKING_TRIES) {
+                    val anchor = centers[random.nextInt(centers.size)]
+                    val candidate = stepFrom(anchor, randomTangent(anchor), docking)
+                    var clearance = Double.POSITIVE_INFINITY
+                    for (other in centers) {
+                        if (other === anchor) continue
+                        val cosine = candidate[0] * other[0] + candidate[1] * other[1] + candidate[2] * other[2]
+                        clearance = min(clearance, acos(cosine.coerceIn(-1.0, 1.0)) - docking)
+                    }
+                    if (clearance >= -DOCKING_TOLERANCE_RADIANS) {
+                        val height = candidate[0] * gathering[0] + candidate[1] * gathering[1] + candidate[2] * gathering[2]
+                        if (height >= insideHemisphere) {
+                            inside = candidate
+                            break
+                        }
+                        if (free == null) free = candidate
+                    } else if (clearance > crowdedClearance) {
+                        crowdedClearance = clearance
+                        crowded = candidate
+                    }
+                }
+                centers.add(inside ?: free ?: crowded!!)
+            }
+            return centers
+        }
+
+        /** A unit tangent at [point] at a drawn bearing. */
+        private fun randomTangent(point: DoubleArray): DoubleArray {
+            val other = randomUnit(random)
+            val along = other[0] * point[0] + other[1] * point[1] + other[2] * point[2]
+            var tx = other[0] - along * point[0]
+            var ty = other[1] - along * point[1]
+            var tz = other[2] - along * point[2]
+            val length = sqrt(tx * tx + ty * ty + tz * tz).coerceAtLeast(1e-12)
+            tx /= length; ty /= length; tz /= length
+            return doubleArrayOf(tx, ty, tz)
+        }
+
+        /** The point [angleRadians] along the great circle leaving [point] along the unit tangent [tangent]. */
+        private fun stepFrom(point: DoubleArray, tangent: DoubleArray, angleRadians: Double): DoubleArray {
+            val c = kotlin.math.cos(angleRadians)
+            val s = sin(angleRadians)
+            return doubleArrayOf(c * point[0] + s * tangent[0], c * point[1] + s * tangent[1], c * point[2] + s * tangent[2])
+        }
+
+        /** How many cratons the planet's continents were assembled from: Earth's count, by area. */
+        private fun cratonCount(): Int = max(2, (CRATONS_ON_EARTH * config.scale.sphereAreaKm2 / EARTH_SURFACE_KM2).roundToInt())
+
+        /**
+         * Each supercontinent point's craton: the seed it is nearest along a path whose every step
+         * costs its length times a noise on the sphere, so the domains meet along wandering sutures
+         * rather than along the straight bisectors a nearest-seed partition draws (docs/CONVENTIONS.md,
+         * rule 13); and a craton the docking of two blocks cut is two, one on each side of the
+         * docking suture. Numbered block by block, so a label less than the planet's craton count
+         * times its block count tells both apart.
+         */
+        private fun cratonDomains(superCells: BooleanArray, blockOf: IntArray): IntArray {
+            val cratonCount = cratonCount()
             val candidates = (0 until cellCount).filter { superCells[it] }
             val seeds = ArrayList<Int>()
             val separation = sqrt(candidates.size * sampleAreaKm2 / cratonCount) * CRATON_SEED_SEPARATION_SHARE
@@ -328,6 +469,9 @@ internal object TectonicHistory {
                     }
                 }
             }
+            for (cell in 0 until cellCount) {
+                if (craton[cell] >= 0 && blockOf[cell] >= 0) craton[cell] += blockOf[cell] * cratonCount
+            }
             return craton
         }
 
@@ -340,6 +484,7 @@ internal object TectonicHistory {
         private fun sutureDistances(superCells: BooleanArray, cratonOf: IntArray): Array<Pair<Double, Int>> {
             val sutureCells = ArrayList<Int>()
             val pairOf = IntArray(cellCount) { -1 }
+            val labels = (cratonOf.maxOrNull() ?: 0) + 1
             for (cell in 0 until cellCount) {
                 if (!superCells[cell]) continue
                 for (index in sphere.neighborStart[cell] until sphere.neighborStart[cell + 1]) {
@@ -347,7 +492,7 @@ internal object TectonicHistory {
                     if (!superCells[next] || cratonOf[next] == cratonOf[cell] || cratonOf[next] < 0) continue
                     val low = min(cratonOf[cell], cratonOf[next])
                     val high = max(cratonOf[cell], cratonOf[next])
-                    pairOf[cell] = low * CRATON_PAIR_STRIDE + high
+                    pairOf[cell] = low * labels + high
                     sutureCells.add(cell)
                     break
                 }
@@ -374,14 +519,17 @@ internal object TectonicHistory {
                 val nearestCell = sphere.nearest(center[0], center[1], center[2])
                 if (superCells[nearestCell] || micro[nearestCell] >= 0) continue
                 val radius = sqrt(cellsEach * sampleAreaKm2 / PI) / radiusKm
-                val axis = randomUnit(random)
+                // The axis lies in the ground at the sliver's center, so the sliver is an ellipse about
+                // that center: an axis drawn anywhere on the sphere put the shortest crossing off the
+                // center and cut the sliver along a great circle, a straight side.
+                val axis = randomTangent(center)
                 // Long across its axis and short along it, as a rifted sliver is.
                 val scored = ArrayList<Long>()
                 sphere.forEachWithin(center[0], center[1], center[2], radius * MICROCONTINENT_SEARCH_RADII) { cell, cosine ->
                     if (superCells[cell] || micro[cell] >= 0) return@forEachWithin
-                    val angle = acos(cosine.coerceIn(-1.0, 1.0))
-                    val along = abs(sphere.x[cell] * axis[0] + sphere.y[cell] * axis[1] + sphere.z[cell] * axis[2])
-                    val score = angle / radius + MICROCONTINENT_ELONGATION * along / radius +
+                    val across = acos(cosine.coerceIn(-1.0, 1.0)) / radius
+                    val along = MICROCONTINENT_ELONGATION * (sphere.x[cell] * axis[0] + sphere.y[cell] * axis[1] + sphere.z[cell] * axis[2]) / radius
+                    val score = sqrt(across * across + along * along) +
                         MICROCONTINENT_WARP * noise.fbmOnSphere(
                             sphere.x[cell], sphere.y[cell], sphere.z[cell], radiusKm, MICROCONTINENT_WARP_WAVELENGTH_KM,
                             octavesToSpacing(MICROCONTINENT_WARP_WAVELENGTH_KM), SphereNoise.EARTH_OUTLINE_PERSISTENCE
@@ -474,6 +622,7 @@ internal object TectonicHistory {
                 rebuildBuckets()
                 lap(3)
                 classifyBoundaries(agoEnd, withEffects = true)
+                recordSpeeds(agoEnd)
                 lap(4)
                 distributeCollisions(collisions, agoEnd)
                 flowAndWear()
@@ -543,19 +692,36 @@ internal object TectonicHistory {
             if (members.size == 2) members.forEach { it.assembled = false }
         }
 
-        /** Each plate's torque balance: its basal drag and the forces booked on it the last step. */
+        /**
+         * The slab's resistance at one trench point, in points of basal drag: the base area that drags
+         * as much as one spacing of trench resists, `slabResistanceKm` times a spacing, over a point's
+         * area.
+         */
+        private val slabResistancePerPoint = tectonics.slabResistanceKm / spacingKm
+
+        /**
+         * Each plate's torque balance: the drag on its base, one for every point whatever its crust,
+         * the resistance of the slabs it sinks into at its trenches, and the forces booked on it the
+         * last step (see [PlateForces]).
+         */
         private fun forceBalances(): Array<TorqueBalance> {
             val balances = Array(plates.size) { TorqueBalance() }
             for (cell in 0 until cellCount) {
                 val plate = owner[cell]
                 if (plate < 0) continue
-                val weight = if (samples.continental[ownerSample[cell]]) PlateForces.CONTINENTAL_DRAG_RATIO else 1.0
-                balances[plate].addDrag(sphere.x[cell], sphere.y[cell], sphere.z[cell], weight)
+                balances[plate].addDrag(sphere.x[cell], sphere.y[cell], sphere.z[cell], 1.0)
             }
             for (event in 0 until forces.count) {
                 val cell = forces.point[event]
                 balances[forces.plate[event]].addForce(
                     sphere.x[cell], sphere.y[cell], sphere.z[cell], forces.forceX[event], forces.forceY[event], forces.forceZ[event]
+                )
+            }
+            val resistance = slabResistancePerPoint
+            for (event in 0 until forces.resistCount) {
+                val cell = forces.resistPoint[event]
+                balances[forces.resistPlate[event]].addLineDrag(
+                    sphere.x[cell], sphere.y[cell], sphere.z[cell], forces.resistX[event], forces.resistY[event], forces.resistZ[event], resistance
                 )
             }
             return balances
@@ -629,13 +795,40 @@ internal object TectonicHistory {
             // Before the first boundaries are read, and for a plate made since, no slab has pulled.
             val pulled = moving.filter {
                 val slab = slabPulledPoints.getOrElse(it) { 0 }
-                slab > 0 && slab >= SUBDUCTION_BOUNDED_SHARE * edgePoints.getOrElse(it) { 0 } &&
+                slab > 0 && slab > SUBDUCTION_BOUNDED_SHARE * edgePoints.getOrElse(it) { 0 } &&
                     continent[it] < CRATONIC_SHARE * counts[it]
             }
                 .map { speedOf(it) }.filter { it > 0.0 }
             medianOf(pulled)?.let { return tectonics.slabPulledPlateSpeedMmPerYear / it }
             val all = moving.map { speedOf(it) }.filter { it > 0.0 }
             return medianOf(all)?.let { targetSpeedKmPerMyr / it }
+        }
+
+        private val speedRecord = PlateSpeedRecord()
+
+        /** Each live plate's speed and make-up as the boundaries were just read, into [speedRecord]. */
+        private fun recordSpeeds(agoEnd: Double) {
+            val squares = DoubleArray(plates.size)
+            val counts = IntArray(plates.size)
+            val continent = IntArray(plates.size)
+            for (cell in 0 until cellCount) {
+                val plate = owner[cell]
+                if (plate < 0) continue
+                val record = plates[plate]
+                val along = record.omegaX * sphere.x[cell] + record.omegaY * sphere.y[cell] + record.omegaZ * sphere.z[cell]
+                squares[plate] += record.omegaX * record.omegaX + record.omegaY * record.omegaY + record.omegaZ * record.omegaZ - along * along
+                counts[plate]++
+                if (samples.continental[ownerSample[cell]]) continent[plate]++
+            }
+            for (plate in 0 until plates.size) {
+                if (!plates[plate].alive || counts[plate] < MIN_PLATE_CELLS) continue
+                val edge = edgePoints.getOrElse(plate) { 0 }
+                speedRecord.add(
+                    agoEnd, counts[plate].toDouble() / cellCount, continent[plate].toDouble() / counts[plate],
+                    if (edge > 0) slabPulledPoints.getOrElse(plate) { 0 }.toDouble() / edge else 0.0,
+                    sqrt(squares[plate] / counts[plate]) * radiusKm
+                )
+            }
         }
 
         /** How many points of each plate's edge a slab pulled at, and how many points its edge has, as the last boundaries were read. */
@@ -1136,6 +1329,7 @@ internal object TectonicHistory {
                 if (goesDown) {
                     boundaryOverriding[cell] = other
                     forces.add(cell, plate, PlateForces.SLAB_PULL * lengthKm, nx, ny, nz)
+                    forces.addSlabResistance(cell, plate, nx, ny, nz)
                     slabPulled[plate]++
                 } else {
                     boundaryOverriding[cell] = plate
@@ -1583,8 +1777,7 @@ internal object TectonicHistory {
 
         /** A tenth of a craton block of the supercontinent, in lattice points: the largest piece that docks as a terrane. */
         private fun terraneMaximumCells(): Int {
-            val cratonCount = max(2, (CRATONS_ON_EARTH * config.scale.sphereAreaKm2 / EARTH_SURFACE_KM2).roundToInt())
-            return max(1, (targetContinentalShare() * cellCount / cratonCount * TERRANE_SHARE_OF_CRATON).roundToInt())
+            return max(1, (targetContinentalShare() * cellCount / cratonCount() * TERRANE_SHARE_OF_CRATON).roundToInt())
         }
 
         /** [plate]'s continental points connected to its boundary with [other]'s continent. */
@@ -1818,8 +2011,7 @@ internal object TectonicHistory {
             for (cell in 0 until cellCount) {
                 val side = sides[cell]
                 if (side < 0) continue
-                val weight = if (samples.continental[ownerSample[cell]]) PlateForces.CONTINENTAL_DRAG_RATIO else 1.0
-                halves[side].addDrag(sphere.x[cell], sphere.y[cell], sphere.z[cell], weight)
+                halves[side].addDrag(sphere.x[cell], sphere.y[cell], sphere.z[cell], 1.0)
             }
             for (event in 0 until forces.count) {
                 if (forces.plate[event] != plate) continue
@@ -1827,6 +2019,14 @@ internal object TectonicHistory {
                 val side = sides[cell]
                 if (side < 0) continue
                 halves[side].addForce(sphere.x[cell], sphere.y[cell], sphere.z[cell], forces.forceX[event], forces.forceY[event], forces.forceZ[event])
+            }
+            val resistance = slabResistancePerPoint
+            for (event in 0 until forces.resistCount) {
+                if (forces.resistPlate[event] != plate) continue
+                val cell = forces.resistPoint[event]
+                val side = sides[cell]
+                if (side < 0) continue
+                halves[side].addLineDrag(sphere.x[cell], sphere.y[cell], sphere.z[cell], forces.resistX[event], forces.resistY[event], forces.resistZ[event], resistance)
             }
             return halves[0].solve() to halves[1].solve()
         }
@@ -2195,7 +2395,8 @@ internal object TectonicHistory {
                 breakupMyrAgo = if (brokenUp) breakupMyrAgo else Double.NaN,
                 historyMyr = historyMyr,
                 splits = splitCount,
-                sutures = sutureCount
+                sutures = sutureCount,
+                plateSpeeds = speedRecord
             )
         }
 
@@ -2260,6 +2461,38 @@ internal object TectonicHistory {
     private const val CRATON_METRIC_NOISE = 0.8
     private const val CRATON_NOISE_WAVELENGTH_KM = 1_500.0
 
+    /**
+     * The longest stretch over which Earth's continental edge was read for its wander, km
+     * ([EARTH_EDGE_WANDER_PER_LENGTH]).
+     */
+    private const val EARTH_EDGE_LONGEST_STRETCH_KM = 2_000.0
+
+    /**
+     * A supercontinent block's radius, km: the circle whose own curvature puts its edge as far from
+     * a chord as Earth's edge stands over the longest stretch it was read on. An arc of radius `R`
+     * stands `L^2 / (sqrt(120) R)` from a chord of length `L`, root mean square, so a block bent no
+     * more than Earth's edge over [EARTH_EDGE_LONGEST_STRETCH_KM] has `R = L / (sqrt(120) w)`, `w`
+     * being [EARTH_EDGE_WANDER_PER_LENGTH]: 3,260 km. Smaller blocks bend faster than Earth's edge
+     * and string the outline into beads; larger ones straighten it.
+     */
+    private val CONTINENT_BLOCK_RADIUS_KM = EARTH_EDGE_LONGEST_STRETCH_KM / (sqrt(120.0) * EARTH_EDGE_WANDER_PER_LENGTH)
+
+    /**
+     * How far a docking block overlaps the block it docks against, as a share of a block's
+     * diameter: a tenth, the sliver of each that the suture's belt takes, so the two weld rather
+     * than touch at a point and leave a gap of ocean between their rounded sides.
+     */
+    private const val BLOCK_OVERLAP_SHARE = 0.1
+
+    /**
+     * How many bearings a docking block tries before it takes the one that comes least near the
+     * other blocks: enough that a block finds the open side of an assembly ringed by others.
+     */
+    private const val BLOCK_DOCKING_TRIES = 24
+
+    /** A docking block may come this much nearer another block than the docking distance, radians: rounding only. */
+    private const val DOCKING_TOLERANCE_RADIANS = 1e-9
+
     /** Cratons formed between 1,500 and 3,000 Myr ago: Archean and Paleoproterozoic. */
     private const val CRATON_OLDEST_MYR = 3_000.0
     private const val CRATON_AGE_SPREAD_MYR = 1_500.0
@@ -2271,7 +2504,6 @@ internal object TectonicHistory {
      */
     private const val SUTURE_AGE_SPAN_MYR = 320.0
     private const val SUTURE_AGE_TABLE = 4_096
-    private const val CRATON_PAIR_STRIDE = 1_000
 
     /**
      * The thickness a collision adds to its crust at its height, km: Tibet's. Its interior stands
@@ -2325,11 +2557,13 @@ internal object TectonicHistory {
     private const val OVERLAP_SPACINGS = 0.5
 
     /**
-     * An oceanic plate is bounded by subduction, in Zahirovic et al.'s sense, when a slab pulls at a
-     * quarter of its edge or more: a plate whose edge is mostly ridge and transform with a short
-     * trench is not the kind of plate their 85 mm a year describes.
+     * An oceanic plate is bounded by subduction, in Zahirovic et al.'s sense, when it goes down a
+     * trench along more than a fifth of its edge: their fastest category, plates under a quarter
+     * continental with more than 20% of their perimeter subducting, whose median is the 85 mm a year
+     * the speeds are scaled to (*Tectonic speed limits from plate kinematic reconstructions*, EPSL
+     * 418, 2015, section 3.5). A plate whose edge is mostly ridge and transform is not that kind.
      */
-    private const val SUBDUCTION_BOUNDED_SHARE = 0.25
+    private const val SUBDUCTION_BOUNDED_SHARE = 0.20
 
     /**
      * A plate more than a quarter continental is a cratonic one, as Zahirovic et al. sort plates for

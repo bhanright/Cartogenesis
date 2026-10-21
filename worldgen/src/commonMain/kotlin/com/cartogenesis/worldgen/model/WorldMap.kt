@@ -74,6 +74,21 @@ data class WorldMap(
 
     fun isLand(x: Int, y: Int): Boolean = sea.isLand[y * width + x]
 
-    /** Land as a share of the whole map, water included — not as a share of anything else. */
-    fun landFraction(): Float = sea.landCellCount.toFloat() / (width * height)
+    /**
+     * Land as a share of the planet's surface, water included — not as a share of anything else:
+     * by area on the sphere, each cell weighing the cosine of its row's latitude, as the ocean
+     * coverage it answers to is ([WorldGenConfig.seaLevel]).
+     */
+    fun landFraction(): Float {
+        var land = 0.0
+        var all = 0.0
+        for (row in 0 until height) {
+            val weight = kotlin.math.cos(kotlin.math.PI / 2 - (row + 0.5) / height * kotlin.math.PI)
+            var landInRow = 0
+            for (column in 0 until width) if (sea.isLand[row * width + column]) landInRow++
+            land += weight * landInRow
+            all += weight * width
+        }
+        return (land / all).toFloat()
+    }
 }

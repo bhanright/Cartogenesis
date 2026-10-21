@@ -456,7 +456,20 @@ data class TectonicsConfig(
      * That is the whole of what the ocean-coverage slider does to the tectonics: the continents
      * lie inside plates, so the share asked for is an area of crust and not a count of plates.
      *
-     * **Earth's own 0.29.** Where the sea stands on a continent is what this decides: the cut
+     * **0.36, the history's own.** Earth's 29% counts its rifted margins among the drowned crust,
+     * their stretched crust lifted to shelf depth by the sediment that fills them; the history's
+     * rifted margins stand where McKenzie's stretching and cooling put their bare crust, below the
+     * shelves, and the platform still drowns its own 29% of the crust that was never stretched. So
+     * the history's crust drowns more than Earth's, by as much as it rifts: over the calibration
+     * seeds 2001 to 2030 at 256 rows, the share of its crust under the isostatic datum read 0.364
+     * on the mean when the crust was drawn for 0.29 (0.25 on a world still assembled, 0.46 on the
+     * most rifted), with the sea-level cut 219 m under the datum on the mean; drawn for 0.36 it reads
+     * 0.353 and the cut lands 12 m under it, 352 m under to 293 above. The fixed point, rounded, is
+     * this. It goes back toward Earth's when the margins carry their sediment (TH1-3), and until
+     * then the history's crust covers 0.45 of the planet where Earth's covers 0.41
+     * (docs/DESIGN_LEDGER.md, TH1-1b).
+     *
+     * **Earth's own 0.29, before the history.** Where the sea stands on a continent is what this decides: the cut
      * drowns this share of the crust, so the land is the crust above its own 29th percentile, and
      * that is the whole of the land's hypsometry. Earth's continental platform — its land under
      * 2 km and its shelves to 500 m, on the six ice-free continents of NOAA's ETOPO5 — stands at a
@@ -478,7 +491,7 @@ data class TectonicsConfig(
      * the shoreline then sat on the margin's own slope, where the ground falls hundreds of metres a
      * cell. Earth's share puts it on the platform instead, which is where Earth's coasts are.
      */
-    val continentalCrustSubmergedShare: Float = 0.29f,
+    val continentalCrustSubmergedShare: Float = 0.36f,
     /**
      * What one unit of every belt height below is worth, in metres.
      *
@@ -1246,13 +1259,29 @@ data class TectonicsConfig(
     val historyLengthMyr: Double = 200.0,
     /**
      * The share of the supercontinent cycle a supercontinent stands assembled, which is the share of
-     * worlds that are drawn still assembled: 0.23, Pangea's 150 Myr (325 to 175 Ma) over Rolf et
-     * al.'s cycle of 640 Myr, both as Nance, Evans and Murphy (2022) give them. A world's breakup is
-     * drawn uniformly over the span that makes this the chance it has not yet happened. A
-     * calibration hypothesis rather than an Earth measurement: Earth has shown one cycle in enough
-     * detail to time.
+     * worlds drawn still assembled: 0.31, the mean of the last three supercontinents' tenures over
+     * the cycle's period.
+     *
+     * The tenures, from assembly to the first rifting: Pangea's 155 Myr, assembled about 330 Ma as
+     * Gondwana and Laurussia collided and breaking from about 175 Ma, and Rodinia's 150, largely
+     * assembled by 900 Ma and breaking from about 750 (Zhong, Zhang, Li and Roberts,
+     * *Supercontinent cycles, true polar wander, and very long-wavelength mantle convection*, EPSL
+     * 261, 2007); Nuna's 250, the middle of the 100 to 400 Myr four reconstructions give it (1780 to
+     * 1400, 1500 to 1400, 1780 to 1380 and 1540 to 1420 Ma; Evans, Li and Murphy, *Four-dimensional
+     * context of Earth's supercontinents*, Geol. Soc. Spec. Publ. 424, 2016). The period: 600 Myr,
+     * the spacing of the minima in Earth's zircon ages that mark its aggregations, at about 0.3,
+     * 0.9 and 1.5 Ga (Bradley 2011, as Evans et al. give it). So (155 + 150 + 250) / 3 / 600.
+     *
+     * The rest of the cycle, 415 Myr, is the dispersal after a breakup and the gathering toward the
+     * next supercontinent, about half each: Pangea's pieces have been parting for some 200 Myr and
+     * Rodinia's took about 420 from its breakup to Pangea. The history runs forward from a
+     * supercontinent and not toward the next one, so a world caught gathering is drawn as the
+     * dispersing world at the same distance in time from a supercontinent, and the breakup is drawn
+     * uniformly over [historyLengthMyr], 200 of the half-cycle's 207. The categories this makes over
+     * the ensemble are reported against a calibration hypothesis, not fitted to it
+     * (`ContinentalConfigurationEnsembleTest`; docs/DESIGN_LEDGER.md, TH1-1b).
      */
-    val assembledShareOfCycle: Double = 0.23,
+    val assembledShareOfCycle: Double = 0.31,
     /**
      * The median plate's root-mean-square speed, in millimeters a year: 40, Zahirovic, Müller, Seton
      * and Flament's median over every plate of the last 200 million years (*Tectonic speed limits
@@ -1267,6 +1296,24 @@ data class TectonicsConfig(
      * [medianPlateSpeedMmPerYear] sets the scale only while no slab is pulling any plate yet.
      */
     val slabPulledPlateSpeedMmPerYear: Double = 85.0,
+    /**
+     * How hard the mantle resists a slab sinking, as the base area of a plate that drags as much,
+     * per kilometer of trench: 2,400 km, so a kilometer of trench resists like 2,400 km2 of plate.
+     *
+     * The ratio of the two resistances is what sets the continents' speeds against the oceans', and
+     * nothing measures it directly, so it is read off Earth's speeds: with it, the history's plates
+     * over half continental move at a median of 27 to 31 mm a year after their supercontinent breaks
+     * against Zahirovic et al.'s 28 over the last 200 Myr, those a quarter continental or more with
+     * under a fifth of their edge subducting at 28 to 33 against their 28, those with no trench at
+     * all at 22 to 35 against their 26, and those a slab pulls at 80 to 83 against their 79 and 85
+     * (*Tectonic speed limits from plate kinematic reconstructions*, EPSL 418, 2015, section 3.5),
+     * on twenty calibration seeds kept apart from the ensemble's; and the speed of a slab-pulled
+     * oceanic plate no longer falls with its area, as Earth's do not ([com.cartogenesis.worldgen.pipeline.PlateForces]).
+     * At zero, basal drag alone, the plates over half continental crawl at 8 and the continents part
+     * at 17 mm a year against the Atlantic's 20 to 33 (`TectonicHistoryTest`; docs/DESIGN_LEDGER.md,
+     * TH1-1b).
+     */
+    val slabResistanceKm: Double = 2_400.0,
     /**
      * How wide a rifted margin is, in kilometers: the band over which the history thins a continent
      * that begins to part, from McKenzie's beta of four at the break to nothing inland. Three
@@ -3272,7 +3319,9 @@ data class WorldGenConfig(
      */
     val flatPotential: Boolean = true,
     /**
-     * Fraction of the world covered by ocean, 0..1.
+     * Fraction of the world covered by ocean, 0..1: of the planet's surface by area, each map cell
+     * weighing the cosine of its latitude, and not of the map's cells, which count a polar sea many
+     * times over (since TH1-1b; `SeaLevelStage.percentileCut`).
      *
      * Read twice since S2, and the two readings are the point of the chunk. The plate stage builds
      * the tectonic history's supercontinent from `(1 - this) / (1 - TectonicsConfig.continentalCrustSubmergedShare)`

@@ -426,6 +426,54 @@ internal object CrustMeasures {
     }
 
     /**
+     * The share of all land, by area on the sphere, in the hemisphere that holds the most of it:
+     * the classic land hemisphere, searched over [HEMISPHERE_CENTERS] centers spread evenly on the
+     * sphere (a Fibonacci spiral), each a cell weighing the cosine of its latitude. Earth's reads
+     * 0.811 through this instrument on ETOPO5 at 512 rows (0.813 on its own five-minute grid, the
+     * hemisphere centered near 40 N 2 E; docs/DESIGN_LEDGER.md, TH1-1).
+     */
+    fun landHemisphereShare(config: WorldGenConfig, land: BooleanArray): Double {
+        val width = config.width
+        val height = config.height
+        val count = land.count { it }
+        if (count == 0) return Double.NaN
+        val xs = DoubleArray(count)
+        val ys = DoubleArray(count)
+        val zs = DoubleArray(count)
+        val weights = DoubleArray(count)
+        var next = 0
+        for (cell in land.indices) {
+            if (!land[cell]) continue
+            val latitude = (90.0 - (cell / width + 0.5) * 180.0 / height) * PI / 180.0
+            val longitude = (cell % width + 0.5) / width * 2.0 * PI
+            xs[next] = cos(latitude) * cos(longitude)
+            ys[next] = cos(latitude) * kotlin.math.sin(longitude)
+            zs[next] = kotlin.math.sin(latitude)
+            weights[next] = cos(latitude)
+            next++
+        }
+        val total = weights.sum()
+        var best = 0.0
+        val turn = PI * (3.0 - kotlin.math.sqrt(5.0))
+        for (center in 0 until HEMISPHERE_CENTERS) {
+            val cz = 1.0 - (2.0 * center + 1.0) / HEMISPHERE_CENTERS
+            val ring = kotlin.math.sqrt(1.0 - cz * cz)
+            val cx = ring * cos(center * turn)
+            val cy = ring * kotlin.math.sin(center * turn)
+            var inside = 0.0
+            for (index in 0 until count) if (xs[index] * cx + ys[index] * cy + zs[index] * cz > 0.0) inside += weights[index]
+            if (inside > best) best = inside
+        }
+        return best / total
+    }
+
+    /** How many hemispheres [landHemisphereShare] tries: a spacing of three degrees between centers. */
+    const val HEMISPHERE_CENTERS = 4_000
+
+    /** Earth's land hemisphere through [landHemisphereShare], ETOPO5 at 512 rows. */
+    const val EARTH_LAND_HEMISPHERE_SHARE = 0.811
+
+    /**
      * A configuration category from the largest landmass's share of the land, defined before the
      * ensemble was run: assembled where one landmass holds three quarters of the land or more, as
      * Pangea did nearly all of it; highly dispersed under 0.39, below Earth's 0.57 by as much

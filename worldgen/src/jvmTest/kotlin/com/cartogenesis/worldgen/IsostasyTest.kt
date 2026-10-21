@@ -13,8 +13,10 @@ import com.cartogenesis.worldgen.pipeline.OceanStage
 import com.cartogenesis.worldgen.pipeline.SeaLevelStage
 import com.cartogenesis.worldgen.pipeline.TerrainStage
 import com.cartogenesis.worldgen.pipeline.erodeBlocking
+import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.ln
+import kotlin.math.sin
 import kotlin.math.sqrt
 import kotlin.test.Test
 import kotlinx.coroutines.runBlocking
@@ -164,6 +166,40 @@ class IsostasyTest : BorrowsSharedWorlds() {
             )
             deepest = here
         }
+    }
+
+    /**
+     * A margin stretched by beta sinks as McKenzie's does: first by what its thinner crust takes
+     * away less what the heat welling up under it gives back, then the rest of the way as the heat
+     * leaves it, `E0 (beta / pi) sin(pi / beta)` under water with `E0` 8 / pi^2 of Parsons and
+     * Sclater's 3,900 m (*Some remarks on the development of sedimentary basins*, EPSL 40, 1978):
+     * 2,012 m for a beta of two, gone to 1/e of itself in the plate's 62.8 Myr; and a margin cooled
+     * for good stands where its crust alone puts it. The control is crust never stretched, which
+     * carries no heat of its own; before TH1-1b every margin stood as if cooled for good, which put
+     * a margin rifted ten million years ago as deep as one rifted two hundred.
+     */
+    @Test
+    fun `a stretched margin carries McKenzie's heat and loses it as he says`() {
+        val isostasy = WorldGenConfig().isostasy
+        val columns = Isostasy.Columns(isostasy)
+        val beta = 2f
+        val thicknessKm = isostasy.continentalCrustThicknessKm / beta
+        val extraKm = thicknessKm - isostasy.continentalCrustThicknessKm
+        fun standsAt(ageMyr: Float) = columns.altitudeMetres(1f, 0f, extraKm, columns.stretchedThermalBuoyancyMetres(thicknessKm, ageMyr))
+        val cooled = columns.altitudeMetres(1f, 0f, extraKm, 0f)
+        val young = standsAt(0f)
+        val tau = isostasy.seafloorFlatteningTimeMyr
+        val plateSubsidence = isostasy.seafloorAbyssalAsymptoteMetres - isostasy.seafloorRidgeDepthMetres
+        val mckenzie = 8.0 / (PI * PI) * plateSubsidence * beta / PI * sin(PI / beta)
+        println(
+            "ISOSTASY stretched by %.1f: %.0f m new, %.0f m at %.1f Myr, %.0f m cooled; McKenzie's thermal subsidence %.0f m"
+                .format(beta, young, standsAt(tau), tau, cooled, mckenzie)
+        )
+        assertTrue("a margin stretched by two stands above the water when new, so the test is not under water", young < 0f)
+        assertEquals("a new margin does not stand McKenzie's thermal subsidence above a cooled one", mckenzie, (young - cooled).toDouble(), 0.01 * mckenzie)
+        assertEquals("the heat is not gone to 1/e in the plate's thermal time", mckenzie / kotlin.math.E, (standsAt(tau) - cooled).toDouble(), 0.01 * mckenzie)
+        assertEquals("crust never stretched carries heat", 0f, columns.stretchedThermalBuoyancyMetres(isostasy.continentalCrustThicknessKm, -1f), 0f)
+        assertEquals("crust at the standard thickness carries heat", 0f, columns.stretchedThermalBuoyancyMetres(isostasy.continentalCrustThicknessKm, 0f), 0f)
     }
 
     // ------------------------------------------------------------------ the flexure
@@ -344,10 +380,12 @@ class IsostasyTest : BorrowsSharedWorlds() {
             )
         }
         val furthest = worst.maxByOrNull { abs(it.second) }!!
-        // Recorded at TH1-1: the history's crust puts 0.24 to 0.29 of the world above the datum
-        // where the slider asks 0.29, its stretched crust and drowned platforms standing lower than
-        // `continentalCrustSubmergedShare` allows for, and on seed 99 the cut lands 901 m under the
-        // datum (docs/DESIGN_LEDGER.md, TH1-1; docs/TODO.md).
+        // Recorded at TH1-1 and measured again at TH1-1b: with the sea's share taken by area and
+        // McKenzie's heat in young margins, the history's crust puts 0.23 to 0.30 of the planet
+        // above the datum where the slider asks 0.29, and the cut lands 404 m under it on seed 7,
+        // whose rifted margins are a fifth of its crust; drawing the crust for the share the
+        // history's own crust drowns lands the cut on the datum but parts the land (the TODO entry;
+        // docs/DESIGN_LEDGER.md, TH1-1 and TH1-1b).
         KnownFailures.expect("TH1-1: the history's crust stands less of the world above the datum than the slider asks", "seed 99") {
             if (abs(furthest.second) > SHORELINE_RESIDUAL_BAR_METRES) {
                 throw RecordedViolation(

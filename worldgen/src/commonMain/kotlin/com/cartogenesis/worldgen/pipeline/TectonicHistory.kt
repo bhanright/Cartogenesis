@@ -1883,13 +1883,18 @@ internal object TectonicHistory {
         private fun maintainPlates(agoEnd: Double) {
             val sizes = plateSizes()
             val live = plates.count { it.alive }
-            val largest = (0 until plates.size).filter { plates[it].alive && !plates[it].assembled }.maxByOrNull { sizes[it] } ?: return
+            val largest = (0 until plates.size).filter { plates[it].alive }.maxByOrNull { sizes[it] } ?: return
             val tooLarge = sizes[largest] > LARGEST_PLATE_SHARE * cellCount
             if (live >= targetPlates && !tooLarge) return
             // A plate tried and held together by its forces is not tried again until they have had
-            // time to change: the forces move with the boundaries, which take steps to move.
+            // time to change: the forces move with the boundaries, which take steps to move. A plate
+            // of the assembled supercontinent is tried only when it has grown larger than Earth's
+            // largest, and then only through its ocean floor (see [splitForForces]).
             val candidates = (0 until plates.size)
-                .filter { plates[it].alive && !plates[it].assembled && sizes[it] >= MIN_SPLIT_CELLS && plates[it].heldTogetherUntilMyrAgo > agoEnd }
+                .filter {
+                    plates[it].alive && sizes[it] >= MIN_SPLIT_CELLS && plates[it].heldTogetherUntilMyrAgo > agoEnd &&
+                        (!plates[it].assembled || (tooLarge && it == largest))
+                }
                 .sortedByDescending { sizes[it] }
                 .take(SPLIT_PLATES_TRIED)
             for (plate in candidates) {
@@ -1950,9 +1955,14 @@ internal object TectonicHistory {
             val scale = currentScale(plate)
             var paths = 0
             var widest = Double.NEGATIVE_INFINITY
+            // A plate of the assembled supercontinent parts only through its ocean floor: the floor
+            // round a supercontinent breaks into plates of its own, as Panthalassa's did, while the
+            // supercontinent stands until its own breakup.
+            val oceanOnly = plates[plate].assembled
             for (cut in candidateCuts(plate)) {
                 if (cut == null) continue
                 val sides = cut.sides
+                if (oceanOnly && continentOnCut(sides) > 0) continue
                 paths++
                 val halves = halfRotations(plate, sides)
                 val first = halves.first.map { it * scale }.toDoubleArray()
@@ -2337,12 +2347,21 @@ internal object TectonicHistory {
                 it.setOmega(parent.omegaX, parent.omegaY, parent.omegaZ)
                 it.assembled = parent.assembled
             })
+            val continentOnSide = IntArray(2)
             for (sample in 0 until samples.count) {
                 if (samples.plate[sample] != plate) continue
                 val cell = sampleCell[sample]
-                if (cell >= 0 && sides[cell] == 1) samples.plate[sample] = created
+                val side = if (cell >= 0 && sides[cell] == 1) 1 else 0
+                if (side == 1) samples.plate[sample] = created
+                if (samples.continental[sample]) continentOnSide[side]++
             }
             for (cell in 0 until cellCount) if (owner[cell] == plate && sides[cell] == 1) owner[cell] = created
+            // Of the assembled supercontinent's plates, a half with no continent on it is ocean floor
+            // and goes its own way.
+            if (parent.assembled) {
+                if (continentOnSide[0] == 0) parent.assembled = false
+                if (continentOnSide[1] == 0) plates[created].assembled = false
+            }
             return created
         }
 

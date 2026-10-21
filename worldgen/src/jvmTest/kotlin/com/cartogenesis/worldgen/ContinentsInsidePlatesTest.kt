@@ -59,8 +59,10 @@ class ContinentsInsidePlatesTest : BorrowsSharedWorlds() {
      * scale, its share of sharp corners and its share of straight runs, each against Earth's
      * continental edge (ETOPO5's 2,000 m isobath at 512 rows, read by the same instruments: 1.17,
      * 0.286 and 0.146) and main's (D3: 1.04, 0.009 and 0.341). The straight share is recorded as a
-     * known failure: the history's continents are larger and smoother at the scale of a tenth of the
-     * map than Earth's (docs/TODO.md).
+     * known failure: the history's continents run straighter than Earth's at the scale of a tenth of
+     * the map, along their rifted margins and their blocks' outer arcs alike; assembling the
+     * supercontinent from continent-sized blocks took it from TH1-1's 0.35 to 0.30 (docs/TODO.md;
+     * docs/DESIGN_LEDGER.md, TH1-1b).
      */
     @Test
     fun `the crust's edge is a natural outline`() {

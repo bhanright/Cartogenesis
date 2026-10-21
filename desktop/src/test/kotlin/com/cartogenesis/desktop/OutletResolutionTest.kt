@@ -222,7 +222,8 @@ class OutletResolutionTest {
         // times the share (docs/DESIGN_LEDGER.md, W2e). Recorded at W2h: seed 59758's largest lake at
         // 1,024 rows stands at 5.24 times the share and the pool at 1.21 (docs/TODO.md, "What W2h's
         // climate moved in the deep tier").
-        KnownFailures.expect("W2h: the pooled largest lake stands over the Caspian's share", "1.21x") {
+        // Armed at TH1-1, whose largest lakes pool at 0.27 times the share (docs/DESIGN_LEDGER.md, TH1-1).
+        run {
             if (pooledLargest >= caspianShare) {
                 throw RecordedViolation(
                     "the largest lake pooled over ${largestLandLakeShares.size} worlds is " +

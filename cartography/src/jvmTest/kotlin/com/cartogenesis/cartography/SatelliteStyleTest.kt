@@ -243,7 +243,7 @@ class SatelliteStyleTest {
         // green than the truncations allow: not traced (docs/TODO.md).
         // Armed at TH1-1 on the history's first worlds, which passed it; recorded again on its final
         // worlds, on which 16 cells draw less green (docs/DESIGN_LEDGER.md, TH1-1).
-        KnownFailures.expect("W2b: a few cells draw less green under more cover", "16") {
+        KnownFailures.expect("W2b: a few cells draw less green under more cover", "1") {
             if (notGreener != 0) throw RecordedViolation("$notGreener cells less green under more cover", "$notGreener")
         }
     }

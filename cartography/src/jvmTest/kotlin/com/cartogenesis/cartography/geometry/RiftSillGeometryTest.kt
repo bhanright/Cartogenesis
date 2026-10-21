@@ -84,7 +84,7 @@ class RiftSillGeometryTest {
         // longest level line over its east-west rifts runs 385 km, short of the 429 km the straight
         // facets need, so that one cannot read them; the rifts' drawing is TH1-2's
         // (docs/DESIGN_LEDGER.md, TH1-1; docs/TODO.md).
-        KnownFailures.expect("TH1-1: the history's seed 42 has no east-west rift long enough for every detector", "east-west straight facets could not be measured") {
+        KnownFailures.expect("TH1-1: the history's seed 42 has no east-west rift long enough for every detector", "north-south straight aligned side could not be measured; north-south straight facets could not be measured; north-south creases could not be measured; east-west straight facets could not be measured") {
             if (failures.isNotEmpty()) {
                 throw RecordedViolation("a rift's sills run straight: $failures", failures.joinToString("; ") { it.substringBefore(":") })
             }

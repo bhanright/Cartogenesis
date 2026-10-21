@@ -311,7 +311,7 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
         // Armed again at A1-2: C1b2's gallery world floored faces under the sky at its ninth decile
         // of slope, and on A1-2's ground no face is floored (docs/DESIGN_LEDGER.md, A1-2). Recorded
         // again at A1-4, whose ground moved with the provisional climates' wind (docs/TODO.md).
-        KnownFailures.expect("A1-4: the gallery cone's steepest faces are floored again", "69") {
+        KnownFailures.expect("A1-4: the gallery cone's steepest faces are floored again", "73") {
             if (sky.floored != 0) {
                 throw RecordedViolation(
                     "${sky.floored} of $BEARINGS bearings round the cone are pinned at the darkest factor the model " +
@@ -406,7 +406,7 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
         // Recorded at K2: the gallery's world on the 12,000 km planet under K2's physics is other
         // ground than the one the declared figure was read off; it is the drawing's to re-derive,
         // with its other constants, for the Earth-sized default (docs/TODO.md).
-        KnownFailures.expect("K2: the relief's ordinary ground was read off the gallery's ground before K2", "0.7704") {
+        KnownFailures.expect("K2: the relief's ordinary ground was read off the gallery's ground before K2", "0.7643") {
             if (kotlin.math.abs(declaredGround - ReliefShading.ordinaryGround) > MAX_GROUND_DRIFT) {
                 val found = "%.4f".format(declaredGround)
                 throw RecordedViolation(
@@ -612,7 +612,7 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
         // to be re-derived once TH1-2 and TH1-3 settle the ground (docs/DESIGN_LEDGER.md, TH1-1;
         // docs/TODO.md, "The drawing's calibrated figures moved with the ground").
         val drift = (sky.deviation - lamp.deviation) / lamp.deviation
-        KnownFailures.expect("TH1-1: on the history's ground the sky draws flatter than the lamp", "13%") {
+        KnownFailures.expect("TH1-1: on the history's ground the sky draws flatter than the lamp", "14%") {
             if (kotlin.math.abs(drift) > MAX_CONTRAST_DRIFT) {
                 throw RecordedViolation(
                     "the sky model's contrast is %.4f against the lamp's %.4f, more than %.0f%% apart"

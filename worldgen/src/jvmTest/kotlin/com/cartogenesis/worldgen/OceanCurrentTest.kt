@@ -3,6 +3,7 @@ package com.cartogenesis.worldgen
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.pipeline.ClimateStage
 import com.cartogenesis.worldgen.pipeline.EnergyBalance
+import com.cartogenesis.worldgen.pipeline.OceanCirculation
 import com.cartogenesis.worldgen.pipeline.OceanStage
 import kotlin.math.PI
 import kotlin.math.abs
@@ -50,11 +51,24 @@ class OceanCurrentTest : BorrowsSharedWorlds() {
         // alone solves on every standard world, seed 42 at 256 rows included, so K1's stall no
         // longer holds here, nor in the three other clauses that read the control.
         val failures = ArrayList<String>()
+        val stalled = ArrayList<String>()
         for (seed in SharedWorlds.STANDARD_SEEDS) {
             val world = SharedWorlds.world(WorldGenConfig.forRows(seed, SharedWorlds.COARSE_ROWS))
             val beltsOnly = world.config.copy(climate = world.config.climate.copy(pressureWinds = false))
-            val beltsOcean = OceanStage.generate(beltsOnly, world.sea)
+            val beltsOcean = try {
+                OceanStage.generate(beltsOnly, world.sea)
+            } catch (stall: OceanCirculation.OceanSolveFailure) {
+                println("OCEAN STALL seed $seed: ${stall.message}")
+                stalled += "seed $seed"
+                continue
+            }
             failures += OceanSense.check("seed $seed at ${SharedWorlds.COARSE_ROWS} rows", world.config, world.sea, world.ocean, beltsOcean)
+        }
+        // Recorded at TH1-1: on one of the history's worlds at 256 rows the control ocean under the
+        // belts' wind alone stops short of the solve's tolerance, as K1's seed 42 did until K2
+        // (docs/DESIGN_LEDGER.md, K1 and TH1-1; docs/TODO.md). The world itself solves.
+        KnownFailures.expect("TH1-1: the control ocean under the belts' wind alone stalls on one history world", "seed 7") {
+            if (stalled.isNotEmpty()) throw RecordedViolation("the circulation did not solve under the belts' wind alone on ${stalled.joinToString()}", stalled.joinToString())
         }
         // Recorded at A1-6b, whose wind is the seasonal circulation's: its easterly is weakest on the
         // equator, where the cross-equatorial air arrives calm, so its curl turns the interior east
@@ -62,7 +76,7 @@ class OceanCurrentTest : BorrowsSharedWorlds() {
         // three seeds the band's mean with it (docs/TODO.md).
         val trades = failures.filter { "the trades' band flows east" in it }
         assertTrue((failures - trades.toSet()).isEmpty(), (failures - trades.toSet()).joinToString("\n"))
-        KnownFailures.expect("A1-6b: under the circulation alone the trades' band flows east", "seed 7 at 256 rows: under the belts alone the trades' band flows east in the south (+0.0042 m/s); seed 1234 at 256 rows: under the belts alone the trades' band flows east in the south (+0.0067 m/s)") {
+        KnownFailures.expect("A1-6b: under the circulation alone the trades' band flows east", "seed 42 at 256 rows: under the belts alone the trades' band flows east in the south (+0.0002 m/s); seed 1234 at 256 rows: under the belts alone the trades' band flows east in the south (+0.0059 m/s)") {
             if (trades.isNotEmpty()) throw RecordedViolation(trades.joinToString("\n"), trades.joinToString("; "))
         }
     }

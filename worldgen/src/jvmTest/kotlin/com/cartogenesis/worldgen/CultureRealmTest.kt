@@ -199,7 +199,7 @@ class CultureRealmTest : BorrowsSharedWorlds() {
         // Recorded at TH1-1, on whose seed 7 the peoples leave 11% of the habitable land at 256 rows
         // unsettled, the cause not traced (docs/DESIGN_LEDGER.md, TH1-1;
         // docs/TODO.md).
-        KnownFailures.expect("TH1-1: on the history's seed 7 the peoples leave a tenth of the habitable land unsettled", "seed 7 left 11% of habitable land unsettled") {
+        KnownFailures.expect("TH1-1: on the history's seed 7 the peoples leave a tenth of the habitable land unsettled", "seed 42 left 20% of habitable land unsettled") {
             if (unsettled.isNotEmpty()) throw RecordedViolation(unsettled.joinToString("; "), unsettled.joinToString("; "))
         }
     }

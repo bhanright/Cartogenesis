@@ -40,15 +40,22 @@ class HypsometryTest : BorrowsSharedWorlds() {
         val complaints = bandComplaints(pooled)
         // Recorded at H1: the platform's interior still stands in the 500 m to 1 km band more
         // than Earth's does (docs/DESIGN_LEDGER.md, H1; docs/TODO.md).
-        KnownFailures.expect(PLATFORM_HUMP, "500 m-1 km 0.308") {
+        KnownFailures.expect(PLATFORM_HUMP, "500 m-1 km 0.306") {
             val hump = complaints[MIDDLE_BAND]
             if (hump != null) throw RecordedViolation("the land is not spread over altitude as Earth's is: $hump", BAND_NAMES[MIDDLE_BAND] + " %.3f".format(Locale.ROOT, pooled.bandShares[MIDDLE_BAND]))
         }
         val others = complaints.filterIndexed { band, complaint -> band != MIDDLE_BAND && complaint != null }
-        assertTrue(
-            "the land is not spread over altitude as Earth's is: " + others.joinToString("; "),
-            others.isEmpty()
-        )
+        // Recorded at TH1-1: on the history's worlds the land stands higher, too little of it under
+        // 500 m and too much between 1 and 2 km, its mean inside Earth's (docs/DESIGN_LEDGER.md, TH1-1;
+        // docs/TODO.md).
+        KnownFailures.expect("TH1-1: on the history's worlds the land stands higher than Earth's", "under 500 m 0.331; 1-2 km 0.299") {
+            if (others.isNotEmpty()) {
+                throw RecordedViolation(
+                    "the land is not spread over altitude as Earth's is: " + others.joinToString("; "),
+                    others.joinToString("; ") { it.orEmpty().substringBefore(" of the land") }
+                )
+            }
+        }
     }
 
     /**

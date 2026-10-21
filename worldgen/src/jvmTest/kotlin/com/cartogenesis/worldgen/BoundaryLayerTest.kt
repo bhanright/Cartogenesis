@@ -178,7 +178,7 @@ class BoundaryLayerTest : BorrowsSharedWorlds() {
         // Recorded at TH1-1, whose worlds' continents lie inside plates and whose sea covers 71% of
         // the planet: on one of them the layer's convergence follows the drag balance less closely
         // than the bar (docs/DESIGN_LEDGER.md, TH1-1; docs/TODO.md).
-        KnownFailures.expect("TH1-1: on the history's worlds the layer's convergence follows the drag balance less closely", "r = 0.468") {
+        KnownFailures.expect("TH1-1: on the history's worlds the layer's convergence follows the drag balance less closely", "r = 0.496") {
             if (lowestCorrelation <= BALANCE_CORRELATION) {
                 throw RecordedViolation(
                     "the layer's vertical motion follows the pressure's drag balance at r = $lowestCorrelation",

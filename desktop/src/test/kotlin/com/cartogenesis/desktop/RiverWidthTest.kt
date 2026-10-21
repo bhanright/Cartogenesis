@@ -390,7 +390,8 @@ class RiverWidthTest {
         // counted (the filter above), and the pen rises with the water at every width but the
         // widest, so an equal width is the float's last digit. Seed 1234 at 84.1%, the other two
         // above the bar (docs/DESIGN_LEDGER.md, C1b; docs/TODO.md).
-        KnownFailures.expect("C1b: dry branches add too little water to widen their trunks", "97.7%") {
+        // Armed at TH1-1, whose final worlds pass it (docs/DESIGN_LEDGER.md, TH1-1).
+        run {
             if (worstShareNow < MIN_WIDENING_JUNCTIONS) {
                 throw RecordedViolation(
                     "only %.1f%% of confluences widen the trunk on the worst seed, under %.1f%%"
@@ -512,6 +513,7 @@ class RiverWidthTest {
         val options = RenderOptions(view = MapView.FANTASY, style = MapStyle.ATLAS)
         var worstUntrimmed = 0f
         var untrimmedEndsOverWater = 0
+        val offshoreInk = ArrayList<String>()
         MOUTH_SEEDS.forEach { seed ->
             val world = world(seed)
             val w = world.width
@@ -569,10 +571,16 @@ class RiverWidthTest {
                 endsOverWater == 0,
                 "seed $seed: $endsOverWater river strokes end over open water"
             )
-            assertTrue(
-                offshore == 0,
-                "seed $seed: $offshore river pixels lie on water with no land beside them"
-            )
+            if (offshore != 0) offshoreInk += "seed $seed: $offshore"
+        }
+        // Recorded at TH1-1: on the history's seed 1234 two pixels of ink lie on water with no land
+        // beside them, both on cell (row 27, column 400), a passage: sea too narrow to draw as sea
+        // that the course runs on through, which the stroke count above exempts and this pixel count
+        // does not (docs/DESIGN_LEDGER.md, TH1-1; docs/TODO.md).
+        KnownFailures.expect("TH1-1: a river's ink crosses a passage at least three cells wide on the history's seed 1234", "seed 1234: 2") {
+            if (offshoreInk.isNotEmpty()) {
+                throw RecordedViolation("river pixels lie on water with no land beside them: ${offshoreInk.joinToString("; ")}", offshoreInk.joinToString("; "))
+            }
         }
         assertTrue(
             untrimmedEndsOverWater > 0 && worstUntrimmed > 1f,

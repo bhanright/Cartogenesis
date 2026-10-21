@@ -57,8 +57,8 @@ class ContinentsInsidePlatesTest : BorrowsSharedWorlds() {
     /**
      * The crust's edge as D3 read it, pooled over the standard worlds: its divider dimension at map
      * scale, its share of sharp corners and its share of straight runs, each against Earth's
-     * continental edge (ETOPO5's 2,000 m isobath at 512 rows, read by the same instruments: 1.18,
-     * 0.275 and 0.187) and main's (D3: 1.04, 0.009 and 0.341). The straight share is recorded as a
+     * continental edge (ETOPO5's 2,000 m isobath at 512 rows, read by the same instruments: 1.17,
+     * 0.286 and 0.146) and main's (D3: 1.04, 0.009 and 0.341). The straight share is recorded as a
      * known failure: the history's continents are larger and smoother at the scale of a tenth of the
      * map than Earth's (docs/TODO.md).
      */
@@ -175,11 +175,11 @@ class ContinentsInsidePlatesTest : BorrowsSharedWorlds() {
         const val EARTH_EDGE_ON_BOUNDARY = 0.35
         const val MAIN_EDGE_ON_BOUNDARY = 1.0
 
-        const val EARTH_EDGE_DIMENSION = 1.18
+        const val EARTH_EDGE_DIMENSION = 1.17
         const val MAIN_EDGE_DIMENSION = 1.04
-        const val EARTH_EDGE_CORNERS = 0.275
+        const val EARTH_EDGE_CORNERS = 0.286
         const val MAIN_EDGE_CORNERS = 0.009
-        const val EARTH_EDGE_STRAIGHT = 0.187
+        const val EARTH_EDGE_STRAIGHT = 0.146
         const val MAIN_EDGE_STRAIGHT = 0.341
         const val STRAIGHT_EDGES = "TH1-1: the crust's edge runs straighter than Earth's at a tenth of the map"
 

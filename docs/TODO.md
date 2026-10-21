@@ -3,9 +3,9 @@
 - **The history's continents run straighter than Earth's at a tenth of the map (TH1-1, recorded).**
   D3's straight-run instrument (windows a tenth of the map wide whose halves turn under 10 degrees,
   `CrustMeasures.straightShare`) reads the crust's edge at 0.31 to 0.34 pooled over the standard
-  worlds at 512 rows, main's 0.34 and Earth's 0.19 (ETOPO5's 2,000 m isobath at 512 rows, the same
-  instrument); its corners (0.39 to 0.42 against Earth's 0.28 and main's 0.01) and its divider
-  dimension (1.17 against Earth's 1.18 and main's 1.03) are Earth's. The straight windows lie on the
+  worlds at 512 rows, main's 0.34 and Earth's 0.15 (ETOPO5's 2,000 m isobath at 512 rows, the same
+  instrument); its corners (0.39 to 0.42 against Earth's 0.29 and main's 0.01) and its divider
+  dimension (1.17 against Earth's 1.17 and main's 1.03) are Earth's. The straight windows lie on the
   long sides of the largest continents, the old supercontinent's outline and its rifted margins
   (drawn for TH1-1); a warp of the supercontinent at its own size
   did not move the share. `ContinentsInsidePlatesTest` runs it as a known failure. What would

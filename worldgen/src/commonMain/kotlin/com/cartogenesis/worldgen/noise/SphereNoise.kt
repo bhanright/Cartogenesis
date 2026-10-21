@@ -91,16 +91,16 @@ class SphereNoise private constructor(private val permutation: IntArray) {
          * The divider dimension of Earth's continental edge at map scale: ETOPO5's 2,000 m isobath,
          * the foot of the continental slope where the continent's crust gives way to the ocean's,
          * block-averaged to 512 rows and walked with D3's divider over a 256th to a 32nd of the
-         * map's width (`CrustMeasures.dividerDimension`), read 1.18; the coast reads 1.19 the same
-         * way, as the design's measures had it (docs/DESIGN_LEDGER.md, TH1-1).
+         * map's width (`CrustMeasures.dividerDimension`), read 1.17; the coast, the 1,000 m and the
+         * 3,000 m isobaths read 1.17, 1.16 and 1.18 the same way (docs/DESIGN_LEDGER.md, TH1-1).
          */
-        const val EARTH_EDGE_DIVIDER_DIMENSION = 1.18
+        const val EARTH_EDGE_DIVIDER_DIMENSION = 1.17
 
         /**
          * The octave persistence whose level lines have that dimension. A fractional Brownian field
          * of Hurst exponent H has level lines of dimension 2 - H, and an octave
          * sum whose amplitude falls by 2^-H for every halving of the wavelength has exponent H:
-         * 2^-(2 - 1.18), about 0.57.
+         * 2^-(2 - 1.17), about 0.56.
          */
         val EARTH_OUTLINE_PERSISTENCE: Double = 2.0.pow(-(2.0 - EARTH_EDGE_DIVIDER_DIMENSION))
 

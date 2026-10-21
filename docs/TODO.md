@@ -96,8 +96,9 @@
   m under the datum against `IsostasyTest`'s 300 (seed 99 the furthest). The conversion is to be
   re-derived on the history's crust, with the margins of TH1-3. 2026-10-21, TH1-1.
 - **The drawing's calibrated figures moved with the ground (TH1-1, recorded).** The relief's slope
-  floor reads 0.14 against `EngravingPlan.SLOPE_FLOOR`'s 0.06, its haze matches at 0.12 against 0.10
-  and the sky draws 13% flatter than the lamp (`ReliefShadingTest`), the pen's ink runs 33.7 degrees
+  floor reads 0.14 against `EngravingPlan.SLOPE_FLOOR`'s 0.06, its haze matches at 0.12 against 0.10,
+  the sky draws 13% flatter than the lamp and the steepest exaggeration that pins no face of the
+  gallery's cone is 48 against the declared 37.5 (`ReliefShadingTest`), the pen's ink runs 33.7 degrees
   from the aspect and its gain puts the widest stroke at 0.99 of the land (`PenAndInkTest`), Mars's
   water reads 4.7 against its land (`WaterColorTest`), 16 cells of seed 969495 draw less green under
   more cover (`SatelliteStyleTest`), and on seed 1234 two pixels of river ink cross a passage at

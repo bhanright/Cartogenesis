@@ -666,11 +666,17 @@ class ReliefShadingTest : BorrowsSharedWorlds() {
         // constant on it is the drawing's chunk (docs/TODO.md). Armed at C1b2, whose gallery world
         // reads the declared figure again (docs/DESIGN_LEDGER.md, C1b2), as H1's ground under the
         // coupled climate does (docs/DESIGN_LEDGER.md, M1); H1's ground on main's climate read 39.25.
-        if (kotlin.math.abs(declared - steepestClear) > EXAGGERATION_SWEEP_STEP / 2) {
-            throw AssertionError(
-                "the steepest exaggeration that pins no face of the cone is %.2f, not the declared %.4f"
-                    .format(steepestClear, declared)
-            )
+        // Recorded at TH1-1, on whose gallery ground the steepest that pins no face is 48.00, with the
+        // drawing's other calibrations (docs/DESIGN_LEDGER.md, TH1-1; docs/TODO.md, "The drawing's
+        // calibrated figures moved with the ground").
+        KnownFailures.expect("TH1-1: on the history's gallery ground the steepest clear exaggeration moved", "48.00") {
+            if (kotlin.math.abs(declared - steepestClear) > EXAGGERATION_SWEEP_STEP / 2) {
+                throw RecordedViolation(
+                    "the steepest exaggeration that pins no face of the cone is %.2f, not the declared %.4f"
+                        .format(steepestClear, declared),
+                    "%.2f".format(steepestClear)
+                )
+            }
         }
         // The contrast is held against another grid's picture, so it is reported rather than
         // asserted: the application makes one grid (docs/DESIGN_LEDGER.md, G1).

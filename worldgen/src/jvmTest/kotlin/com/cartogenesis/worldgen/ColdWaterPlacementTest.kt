@@ -107,7 +107,7 @@ class ColdWaterPlacementTest : BorrowsSharedWorlds() {
         // the upwelling latitudes, at 48 degrees (docs/DESIGN_LEDGER.md, TH1-1; docs/TODO.md).
         KnownFailures.expect(
             "TH1-1: on the history's worlds the coldest eastern-boundary water lies poleward of Earth's upwelling",
-            "seed 7: the coldest eastern-boundary water, -3.37 C, lies at 48.0 degrees"
+            "seed 7: the coldest eastern-boundary water, -2.45 C, lies at 48.3 degrees"
         ) {
             if (failures.isNotEmpty()) throw RecordedViolation(failures.joinToString("\n"), failures.joinToString("; "))
         }
@@ -132,7 +132,7 @@ class ColdWaterPlacementTest : BorrowsSharedWorlds() {
         }
         // Re-recorded on square cells at Q2, the ocean still solved on its own grid (docs/DESIGN_LEDGER.md, Q2).
         // Re-recorded at L1, whose rifts are Earth's half-grabens and the same at every grid (docs/DESIGN_LEDGER.md, L1).
-        KnownFailures.expect(EQUATORIAL_TONGUE_SHALLOW, "seed 7 0.07 of 1.10 C; seed 42 0.11 of 1.27 C; seed 1234 0.17 of 1.54 C; seed 99 0.06 of 1.10 C") {
+        KnownFailures.expect(EQUATORIAL_TONGUE_SHALLOW, "seed 7 0.06 of 0.57 C; seed 42 0.04 of 0.75 C; seed 1234 0.04 of 0.45 C; seed 99 0.04 of 0.43 C") {
             if (failures.isNotEmpty()) throw RecordedViolation(failures.joinToString("\n"), shortOf.joinToString("; "))
         }
     }

@@ -105,7 +105,7 @@ class CombGuardTest : BorrowsSharedWorlds() {
         // columns, 0.20 against 0.08 and 0.44 against 0.12 (docs/DESIGN_LEDGER.md, TH1-1; docs/TODO.md).
         KnownFailures.expect(
             "TH1-1: on the history's worlds the flanks are combed down the columns past the factor",
-            "seed 7 0.28 down a column and 0.15 along a row; seed 42 0.78 down a column and 0.15 along a row"
+            "seed 7 0.34 down a column and 0.15 along a row; seed 42 0.23 down a column and 0.07 along a row"
         ) {
             if (oneSided.isNotEmpty()) {
                 throw RecordedViolation(
@@ -239,7 +239,7 @@ class CombGuardTest : BorrowsSharedWorlds() {
          * on the 12,000 km planet under K2's physics, and at TH1-1 on the history's worlds
          * (docs/DESIGN_LEDGER.md, L1, K2 and TH1-1).
          */
-        const val RECORDED = "seed 7 0.28 down a column and 0.15 along a row; seed 42 0.78 down a column and 0.15 along a row"
+        const val RECORDED = "seed 7 0.34 down a column and 0.15 along a row; seed 42 0.23 down a column and 0.07 along a row"
 
         /**
          * The grid the guard is taken on, [SharedWorlds.DETAIL_ROWS]: square cells, 1,024 by 512,

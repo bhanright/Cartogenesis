@@ -439,8 +439,12 @@ class JumpFloodDistanceTest : BorrowsSharedWorlds() {
         // The flood is not exact on land-mask sources (A-I11, above), and told how tall a row is it
         // misses on this shelf too: a handful of cells hear of a coast a whisker farther than the
         // nearest. Recorded under that finding rather than excused; re-recorded on square cells at Q2.
-        // Armed at TH1-1, whose worlds pass it (docs/DESIGN_LEDGER.md, TH1-1).
-        run {
+        // Armed at TH1-1, whose worlds passed it, and recorded again at TH1-1b, whose seed 42 shows
+        // it on three cells (docs/DESIGN_LEDGER.md, TH1-1b).
+        KnownFailures.expect(
+            "A-I11: the plain jump flood is not exact on land-mask sources, and seed 42's shelf is drawn off it",
+            "3 cells, the worst 0.0031 cell widths at (491,477)"
+        ) {
             if (offCells > 0) {
                 val found = String.format(
                     Locale.ROOT, "%d cells, the worst %.4f cell widths at (%d,%d)", offCells, worstError, worstAt % w, worstAt / w

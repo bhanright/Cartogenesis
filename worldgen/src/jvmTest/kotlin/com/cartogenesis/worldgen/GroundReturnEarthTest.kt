@@ -261,6 +261,9 @@ class GroundReturnEarthTest : BorrowsSharedWorlds() {
     }
 
     /** Throws when [measured] stands more than [factor] from [earth] either way. */
+    /** TH1-1b's finding, under which this class's clauses that its worlds moved are recorded. */
+    private val WATER_CYCLE_ON_DISPERSED_WORLDS = "TH1-1b: on the history's dispersed worlds the land's water cycle stands off Earth's"
+
     private fun nearEarth(name: String, measured: Double, earth: Double, factor: Double = EARTH_TOLERANCE) {
         val ratio = measured / earth
         println("EARTH %s: %.3f against Earth's %.3f, x%.2f".format(name, measured, earth, ratio))
@@ -313,8 +316,11 @@ class GroundReturnEarthTest : BorrowsSharedWorlds() {
         }
         // Recorded at W2d, the humid groups raining half again to twice Earth's rain there, A x0.80,
         // C x0.70 and E x0.75; armed at W2e, whose rain no longer gathers on the windward ranges
-        // (docs/DESIGN_LEDGER.md, W2d and W2e).
-        assertTrue(outside.isEmpty(), "groups outside Earth's share: $outside")
+        // (docs/DESIGN_LEDGER.md, W2d and W2e). Recorded at TH1-1b, whose continents part at Earth's
+        // speeds and spread over both hemispheres (docs/DESIGN_LEDGER.md, TH1-1b; docs/TODO.md).
+        KnownFailures.expect(WATER_CYCLE_ON_DISPERSED_WORLDS, "D x0.79; E x0.78") {
+            if (outside.isNotEmpty()) throw RecordedViolation("groups outside Earth's share: $outside", outside.joinToString("; "))
+        }
     }
 
     @Test
@@ -332,14 +338,20 @@ class GroundReturnEarthTest : BorrowsSharedWorlds() {
         }
         // Recorded at W2d, B x0.45, C x1.42 and E x1.34, the arid group raining under half Earth's
         // arid rain and the temperate and polar twice and half again Earth's; armed at W2e
-        // (docs/DESIGN_LEDGER.md, W2d and W2e).
-        assertTrue(outside.isEmpty(), "groups outside Earth's millimeters: $outside")
+        // (docs/DESIGN_LEDGER.md, W2d and W2e). Recorded at TH1-1b (docs/TODO.md).
+        KnownFailures.expect(WATER_CYCLE_ON_DISPERSED_WORLDS, "E x1.51") {
+            if (outside.isNotEmpty()) throw RecordedViolation("groups outside Earth's millimeters: $outside", outside.joinToString("; "))
+        }
     }
 
     @Test
     fun `the continents recycle their water as Earth's do`() {
         val figures = pooled
-        nearEarth("the land's rain that last evaporated from land", figures.landOriginRain / figures.rain, EARTH_PRECIPITATION_RECYCLING)
+        // Recorded at TH1-1b, whose continents, smaller and spread over both hemispheres, rain more
+        // of the sea's water and less of their own (docs/DESIGN_LEDGER.md, TH1-1b; docs/TODO.md).
+        KnownFailures.expect(WATER_CYCLE_ON_DISPERSED_WORLDS, "x0.69") {
+            nearEarth("the land's rain that last evaporated from land", figures.landOriginRain / figures.rain, EARTH_PRECIPITATION_RECYCLING)
+        }
         // Inside before W2d, x1.22; recorded at W2d, x1.28, the wet half's air raining on the land
         // it crossed; armed at W2e, x1.05 (docs/DESIGN_LEDGER.md, W2d and W2e).
         nearEarth("the land's evaporation that rains on land", figures.landOriginRain / figures.evapotranspiration, EARTH_EVAPORATION_RECYCLING)
@@ -379,9 +391,9 @@ class GroundReturnEarthTest : BorrowsSharedWorlds() {
         // condenses the boundary layer only over its condensation level and whose rain law no
         // longer reads the ground's saturated column (docs/DESIGN_LEDGER.md, W2d and W2e;
         // docs/TODO.md).
-        // Recorded again at TH1-1 on the history's first worlds, x1.34.
-        // Armed at TH1-1, whose final worlds pass it (docs/DESIGN_LEDGER.md, TH1-1).
-        run {
+        // Recorded again at TH1-1 on the history's first worlds, x1.34; armed at TH1-1, whose final
+        // worlds passed it; recorded at TH1-1b (docs/DESIGN_LEDGER.md, TH1-1b; docs/TODO.md).
+        KnownFailures.expect(WATER_CYCLE_ON_DISPERSED_WORLDS, "x1.54") {
             nearEarth("the land's rain where the potential is under half of it", figures.rainUnderHalf / figures.rain, EARTH_RAIN_SHARE_UNDER_HALF)
         }
     }

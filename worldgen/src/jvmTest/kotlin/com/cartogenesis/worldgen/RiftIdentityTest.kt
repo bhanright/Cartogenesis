@@ -402,12 +402,9 @@ class RiftIdentityTest {
                     (tooShort + tooLong).take(6).joinToString { "%.0f".format(it) }
             }
         }
-        // Recorded at TH1-1: the history's present rifts on seed 7 at 256 rows hold half-grabens longer
-        // than the bar, at a grid that resolves a half-graben in two cells (docs/DESIGN_LEDGER.md,
-        // TH1-1; docs/TODO.md). The belts and rifts are TH1-2's to redraw.
-        KnownFailures.expect("TH1-1: seed 7's rifts at 256 rows hold half-grabens past Earth's longest", "seed 1234 at 512 rows, world 20000.0 km: 20") {
-            if (failures.isNotEmpty()) throw RecordedViolation("half-grabens outside Earth's lengths: $failures", failures.joinToString("; "))
-        }
+        // Recorded at TH1-1, whose present rifts on seed 7 at 256 rows held half-grabens longer than
+        // the bar; armed at TH1-1b, whose worlds pass it (docs/DESIGN_LEDGER.md, TH1-1b).
+        assertTrue(failures.isEmpty(), "half-grabens outside Earth's lengths: $failures")
     }
 
     /**

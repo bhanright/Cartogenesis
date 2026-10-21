@@ -71,7 +71,9 @@ class OceanLeavesTheGroundTest : BorrowsSharedWorlds() {
      * at each sector's own baroclinic onset. TH1-1 re-took the plates', the erosion's and the sea's,
      * the terrain holding: the crust and the plates are the tectonic history's, the plate result
      * gained the crust's thickness, excess, orogeny, terrane and rift age, and the sea covers 71% of
-     * the planet. An ocean change that leaks into the ground moves them.
+     * the planet. TH1-1b re-took the same three: the plates move under the slab's resistance, the
+     * supercontinent is docked from blocks, a stretched margin carries McKenzie's heat and the sea's
+     * share is the planet's area. An ocean change that leaks into the ground moves them.
      * A chunk meant to move the ground re-takes them here, as the render records are re-taken.
      * At [SharedWorlds.DETAIL_ROWS], whose standard worlds the detail guards generate anyway, so
      * the pin costs a digest and no generation.
@@ -91,28 +93,28 @@ class OceanLeavesTheGroundTest : BorrowsSharedWorlds() {
         val GROUND_AT_512_ROWS: Map<String, Long> = mapOf(
             "terrain.normals" to 6074751788244030761L,
             "terrain.height" to 7240865613227243168L,
-            "plates.plates" to 4205432608396131125L,
-            "plates.plateId" to 5872659054991835439L,
-            "plates.boundaryDistance" to -2945112583290156101L,
-            "plates.nearestBoundaryType" to -6399786652235443384L,
-            "plates.nearestBoundaryClass" to 3684987199559823026L,
-            "plates.height" to 1583846289663850481L,
-            "plates.seafloorAgeMyr" to -4953343518751050192L,
-            "plates.seafloorHalfSpreadingRateKmPerMyr" to 603120819437055813L,
-            "plates.continentalShare" to 3313932813984479745L,
-            "plates.upliftRateMmPerYear" to 1847631117686990428L,
-            "plates.crustAgeMyr" to -4804200931285030006L,
-            "plates.crustThicknessKm" to 7757536850938634213L,
-            "plates.orogenicExcessKm" to -7957636193946202376L,
-            "plates.orogenyKind" to 4801998332311724014L,
-            "plates.terraneId" to -3628642736252229890L,
-            "plates.riftAgeMyr" to 5222902038014206637L,
-            "erosion.height" to -9061817914971109959L,
+            "plates.plates" to 1185571480707291848L,
+            "plates.plateId" to -1209224759531656845L,
+            "plates.boundaryDistance" to 6585478191589768180L,
+            "plates.nearestBoundaryType" to 5511822490401968978L,
+            "plates.nearestBoundaryClass" to -6446152563601979244L,
+            "plates.height" to -5737995890519387026L,
+            "plates.seafloorAgeMyr" to -8791439532516588920L,
+            "plates.seafloorHalfSpreadingRateKmPerMyr" to -8368331689549705287L,
+            "plates.continentalShare" to -526563274972592572L,
+            "plates.upliftRateMmPerYear" to -1718296791794212122L,
+            "plates.crustAgeMyr" to 3389138786568334843L,
+            "plates.crustThicknessKm" to 8673068255522645312L,
+            "plates.orogenicExcessKm" to -8524949002491831432L,
+            "plates.orogenyKind" to 3754805494289959091L,
+            "plates.terraneId" to -1345245112893816914L,
+            "plates.riftAgeMyr" to -5030207783681739225L,
+            "erosion.height" to -1085441225625492187L,
             "erosion.sweptOnDevice" to -358906410940142731L,
-            "sea.shorelineHeight" to -2125162891366603039L,
-            "sea.isLand" to -1943980704115817013L,
-            "sea.relativeElevation" to -689333008590018652L,
-            "sea.landCellCount" to 5530198232037000793L
+            "sea.shorelineHeight" to 2470761607611970528L,
+            "sea.isLand" to 6136578173525658681L,
+            "sea.relativeElevation" to -7140185660726072502L,
+            "sea.landCellCount" to 9064154023223610944L
         )
     }
 }

@@ -79,9 +79,10 @@ class EarthLikenessTest : BorrowsSharedWorlds() {
         // 1.05 at L1's review round, whose rift joins are relay ramps.
         KnownFailures.expect(
             LAW_SETS_EVERY_CUT,
-            "1234: the sea's hypsometric mode is at -5292 m, " +
-                "more than 1500 m from Earth's -3700 (Cawood et al. 2022); " +
-                "pooled: the coastline's box-counting dimension is 0.789, " +
+            "42: humid country carries 1.04 times the channel per unit of land that semi-arid " +
+                "country does, where Moglen, " +
+                "Eltahir & Bras (1998) have the density falling away on the wet side and so below one; " +
+                "pooled: the coastline's box-counting dimension is 0.788, " +
                 "outside 1.25 +/- 0.15 (Mandelbrot 1967: Britain 1.25, Richardson's smoothest coast 1.02)"
         ) {
             if (complaints.isNotEmpty()) {

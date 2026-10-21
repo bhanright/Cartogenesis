@@ -185,7 +185,11 @@ class RainAgainstEarthTest : BorrowsSharedWorlds() {
         nearEarth("open-sea rain, mm", pooled.seaRain / pooled.seaArea, EARTH_OCEAN_RAIN_MM)
         // Recorded from C1b2 at x0.55; armed at A1-4, where the boundary layer's wind no longer
         // blows the continents' air out over the sea as W2's thermal pressure did (docs/TODO.md).
-        nearEarth("land rain, mm", pooled.landRain / pooled.landArea, EARTH_LAND_RAIN_MM)
+        // Recorded at TH1-1b, whose continents, smaller and spread over both hemispheres, lie nearer
+        // the sea's water (docs/DESIGN_LEDGER.md, TH1-1b; docs/TODO.md).
+        KnownFailures.expect("TH1-1b: on the history's dispersed worlds the land's water cycle stands off Earth's", "x1.30") {
+            nearEarth("land rain, mm", pooled.landRain / pooled.landArea, EARTH_LAND_RAIN_MM)
+        }
     }
 
     @Test
@@ -228,7 +232,7 @@ class RainAgainstEarthTest : BorrowsSharedWorlds() {
         // again at F1, whose water travels on the column's vapor-weighted wind and whose rising
         // branch moves with the land, so the band is broader and its peak lower; x0.70 at W2e
         // (docs/TODO.md).
-        KnownFailures.expect("F1: the ocean's wettest band rains under Earth's", "x0.74") {
+        KnownFailures.expect("F1: the ocean's wettest band rains under Earth's", "x0.66") {
             nearEarth("the ocean's wettest two degrees, mm", pooledPeak, GPCP_OCEAN_PEAK_MM)
         }
     }

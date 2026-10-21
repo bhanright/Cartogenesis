@@ -121,7 +121,7 @@ class ContinentsInsidePlatesTest : BorrowsSharedWorlds() {
             )
             if (share < bar) shallow += "seed $seed"
         }
-        KnownFailures.expect("TH1-1: a world whose floor is young holds less deep floor than Earth's", "seed 99") {
+        KnownFailures.expect("TH1-1: a world whose floor is young holds less deep floor than Earth's", "seed 1234") {
             if (shallow.isNotEmpty()) {
                 throw RecordedViolation("the floor 5-6 km deep is under $bar of the floor on ${shallow.joinToString()}", shallow.joinToString("; "))
             }

@@ -411,9 +411,9 @@ class RiverCourseTest : BorrowsSharedWorlds() {
             if (stubs > 0) stubFailures += "seed $seed: $stubs at $firstStub"
         }
         // Armed until W2e; recorded at W2e, whose ground leaves seed 7 one course of a
-        // single cell of land into water (docs/TODO.md).
-        // Armed at TH1-1, whose worlds pass it (docs/DESIGN_LEDGER.md, TH1-1).
-        run {
+        // single cell of land into water (docs/TODO.md). Armed at TH1-1, whose worlds passed it;
+        // recorded at TH1-1b, whose seed 99 leaves one (docs/DESIGN_LEDGER.md, TH1-1b).
+        KnownFailures.expect("W2e: a course into water holds one cell of land and a mouth", "seed 99: 1 at 67033 -> 66009") {
             if (stubFailures.isNotEmpty()) {
                 throw RecordedViolation("courses into water hold one cell of land and a mouth: $stubFailures", stubFailures.joinToString("; "))
             }

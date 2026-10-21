@@ -111,8 +111,8 @@ class RainGeometryTest : BorrowsSharedWorlds() {
         noWorse("the April-September half's largest row step", summer, MAIN_SUMMER_STEP)
         noWorse("the October-March half's largest row step", winter, MAIN_WINTER_STEP)
         // Recorded at TH1-1, on whose worlds the annual rain's largest step across a row pools at
-        // 4.36 against main's 3.72 (docs/DESIGN_LEDGER.md, TH1-1; docs/TODO.md).
-        KnownFailures.expect("TH1-1: on the history's worlds the rain steps across a row more than main's did", "the annual rain's largest row step") {
+        // 4.36 against main's 3.72, and the October-March half's at 4.27 against 4.04 (docs/DESIGN_LEDGER.md, TH1-1; docs/TODO.md).
+        KnownFailures.expect("TH1-1: on the history's worlds the rain steps across a row more than main's did", "the annual rain's largest row step; the October-March half's largest row step") {
             if (worse.isNotEmpty()) throw RecordedViolation(worse.joinToString("; "), worse.joinToString("; ") { it.substringBefore(":") })
         }
         // Recorded on H1's ground under the coupled climate, where the deserts' edges along a row
@@ -146,7 +146,8 @@ class RainGeometryTest : BorrowsSharedWorlds() {
         // Recorded again at W2f, with the desert's edge above: the isohyet ends along a row at 385,
         // 371 and 718 km, 491 pooled against main's 487, seed 7's the longest again, 631 km on W2e's
         // ground (docs/TODO.md, "The desert's edge along the belts' factor").
-        KnownFailures.expect("M1: the 250 mm isohyet's edge runs longer along a row", "524.52") {
+        // Armed at TH1-1, whose worlds pass it (docs/DESIGN_LEDGER.md, TH1-1).
+        run {
             if (dryEdge.average() > MAIN_DRY_ROW_EDGE_KM.average()) {
                 throw RecordedViolation(
                     "the 250 mm isohyet's straightest edge along a row: %.2f pooled against main's %.2f"

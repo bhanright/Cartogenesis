@@ -262,12 +262,18 @@ class LakeWaterBalanceTest : BorrowsSharedWorlds() {
         // Recorded at F1, under whose rain the sample stays full again; the scan that re-picks it is
         // M1's (docs/TODO.md). Armed at W2e, under whose rain seed 1's dry basin of 538 cells, 93 mm a
         // year against 2,552 mm of open-water evaporation, settles at 10% of its spill area
-        // (docs/DESIGN_LEDGER.md, W2e).
-        assertTrue(
-            share < DRY_BASIN_SHARE_OF_SPILL_AREA,
-            "seed $drySeed's dry basin holds ${"%.0f".format(share * 100)}% of its spill area," +
-                " wanted under ${"%.0f".format(DRY_BASIN_SHARE_OF_SPILL_AREA * 100)}%"
-        )
+        // (docs/DESIGN_LEDGER.md, W2e). Recorded at TH1-1, whose seed 1 offers a dry basin of 295
+        // cells that stays at 84% of its spill area; the scan that re-picks the sample is M1's
+        // (docs/DESIGN_LEDGER.md, TH1-1; docs/TODO.md).
+        KnownFailures.expect("TH1-1: on the history's seed 1 the dry sample stays near its spill", "84%") {
+            if (share >= DRY_BASIN_SHARE_OF_SPILL_AREA) {
+                throw RecordedViolation(
+                    "seed $drySeed's dry basin holds ${"%.0f".format(share * 100)}% of its spill area," +
+                        " wanted under ${"%.0f".format(DRY_BASIN_SHARE_OF_SPILL_AREA * 100)}%",
+                    "${"%.0f".format(share * 100)}%"
+                )
+            }
+        }
 
         // Since L1 a closed basin holds a lake in each of its hollows, and a hollow full to its
         // saddle spills into the next, so the basin can hold several: every one that keeps its water

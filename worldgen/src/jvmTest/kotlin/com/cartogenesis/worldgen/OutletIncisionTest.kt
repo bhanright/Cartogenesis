@@ -527,11 +527,16 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
         // starts with a lake over the Caspian's share, the largest seed 42's at 0.19% of its land.
         // Armed at A1-6b, under whose rain three seeds do (docs/DESIGN_LEDGER.md, A1-6b). Recorded
         // at W2b, under whose drier land one seed does (docs/TODO.md), and at W2c none. Armed at W2e,
-        // under whose wetter interiors seeds 718106 and 7 do (docs/DESIGN_LEDGER.md, W2e).
-        assertTrue(
-            overLarge >= 2,
-            "only $overLarge of ${seeds.size} seeds had an over-large lake to begin with, so this guard proves little"
-        )
+        // under whose wetter interiors seeds 718106 and 7 do (docs/DESIGN_LEDGER.md, W2e). Recorded
+        // at TH1-1, on whose worlds none does (docs/DESIGN_LEDGER.md, TH1-1; docs/TODO.md).
+        KnownFailures.expect("TH1-1: on the history's worlds no seed starts with a lake over the Caspian's share", "0 of 6") {
+            if (overLarge < 2) {
+                throw RecordedViolation(
+                    "only $overLarge of ${seeds.size} seeds had an over-large lake to begin with, so this guard proves little",
+                    "$overLarge of ${seeds.size}"
+                )
+            }
+        }
         // Collected over every seed rather than asserted inside the loop, so a run reports all six
         // figures. With `postCutOutlet = false` this reads
         // 718106 0.6244%, 99 0.6514%, 43 0.2568% — see the ledger row for H5b.

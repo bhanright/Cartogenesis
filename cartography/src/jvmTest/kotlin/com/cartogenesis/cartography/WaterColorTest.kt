@@ -78,7 +78,7 @@ class WaterColorTest {
         }
         // Recorded at TH1-1, whose crust moved the ground under Mars's water (docs/DESIGN_LEDGER.md,
         // TH1-1; docs/TODO.md).
-        KnownFailures.expect("TH1-1: on the history's ground Mars's water does not read at a glance", "MARS river on land 4.5; MARS lake on land 4.5") {
+        KnownFailures.expect("TH1-1: on the history's ground Mars's water does not read at a glance", "MARS river on land 4.7; MARS lake on land 4.7") {
             if (failures.isNotEmpty()) throw RecordedViolation("water that does not read: $failures", failures.joinToString("; "))
         }
     }

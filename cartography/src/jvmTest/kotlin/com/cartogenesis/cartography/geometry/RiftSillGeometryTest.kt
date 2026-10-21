@@ -80,10 +80,11 @@ class RiftSillGeometryTest {
                 }
             }
         }
-        // Recorded at TH1-1: on the history's seed 42 the east-west rifts' level lines crease past
-        // the natural bar once, 4.98 against 4.37, a 155 degree turn; the rifts' drawing is TH1-2's
-        // (docs/DESIGN_LEDGER.md, TH1-1; docs/TODO.md).
-        KnownFailures.expect("TH1-1: an east-west rift's level lines crease on the history's seed 42", "east-west creases") {
+        // Recorded at TH1-1: on the history's seed 42 the east-west rifts read clean, but its one
+        // north-south rift is 484 cells whose longest level line runs 273 km, short of the 284 to
+        // 429 km the three shape detectors need, so they cannot read it; the rifts' drawing is
+        // TH1-2's (docs/DESIGN_LEDGER.md, TH1-1; docs/TODO.md).
+        KnownFailures.expect("TH1-1: the history's seed 42 has no north-south rift long enough to read", "north-south straight aligned side could not be measured; north-south straight facets could not be measured; north-south creases could not be measured") {
             if (failures.isNotEmpty()) {
                 throw RecordedViolation("a rift's sills run straight: $failures", failures.joinToString("; ") { it.substringBefore(":") })
             }

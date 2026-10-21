@@ -21,6 +21,26 @@
   rarely meet again in the history's 200 Myr; the supercontinent rifts a plate a step where its
   forces open a suture. Earth's dispersal is checked by new collisions (India, Arabia, Africa into
   Eurasia). 2026-10-20, TH1-1.
+- **The land crowds into one hemisphere (TH1-1, measured).** The share of all land in each world's
+  most land-rich hemisphere, searched over 4,000 centers, reads a median of 0.974 over the sixty
+  ensemble seeds at 512 rows (10th to 90th percentile 0.882 to 0.990; one world at or under Earth's)
+  against Earth's 0.811, ETOPO5 read the same way at 512 rows (0.813 on its own five-minute grid,
+  centered near 40 N 2 E: 46% of that hemisphere is land and 11% of the other, as the classic land
+  and water hemispheres have it). It falls with the time since the breakup began: 0.98 where it has
+  not begun or began under 50 Myr ago (29 of the 60, as `assembledShareOfCycle`'s uniform draw over
+  260 Myr expects about 42%), 0.966, 0.911 and 0.886 over 50 to 100, 100 to 150 and 150 to 200 Myr,
+  against Earth's 0.81 some 200 Myr after Pangea began to part. A supercontinent of 29% of the
+  sphere fits inside one hemisphere, so an assembled world reads near 1; the dispersed worlds' 0.92
+  median is the slow drift of the speeds entry below. 2026-10-20, TH1-1.
+- **The narrow seaways inside the continents, by age (TH1-1, measured).** Water within 400 km of
+  land on both sides along a row, a column or a diagonal, equatorward of 70 degrees, in pieces at
+  least 800 km across: 7 to 30 a world over the sixty ensemble seeds (median 18.5) against Earth's
+  26 read the same way on ETOPO5 at 512 rows (its marginal and inland seas, from the Mediterranean,
+  Black, Caspian, Red and Baltic seas to Hudson Bay, the Gulfs of California and Saint Lawrence and
+  the Indonesian seas). Of the history's 1,094, 415 lie on ocean floor or rifts under 50 Myr old
+  (a median of 6 a world, 1 to 19), 318 on older, and 361 on drowned continental crust with no rift.
+  The young ones follow the cycle: 10.1 a world where the breakup began under 50 Myr ago, 8.5 at 50
+  to 100 Myr, 6.1 at 100 to 200, and 3.0 where it has not begun. 2026-10-20, TH1-1.
 - **The rifts are common on some worlds (TH1-1, measured).** Seed 7 carries 456 whole half-grabens
   at 1,024 rows (`RiftIdentityTest`), the others 36 to 509: the history's plate boundaries cross the
   continents wherever a split ran through one, and every slowly diverging continental pair is a

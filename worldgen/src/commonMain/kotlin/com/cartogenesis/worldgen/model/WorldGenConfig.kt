@@ -456,20 +456,18 @@ data class TectonicsConfig(
      * That is the whole of what the ocean-coverage slider does to the tectonics: the continents
      * lie inside plates, so the share asked for is an area of crust and not a count of plates.
      *
-     * **0.36, the history's own.** Earth's 29% counts its rifted margins among the drowned crust,
-     * their stretched crust lifted to shelf depth by the sediment that fills them; the history's
-     * rifted margins stand where McKenzie's stretching and cooling put their bare crust, below the
-     * shelves, and the platform still drowns its own 29% of the crust that was never stretched. So
-     * the history's crust drowns more than Earth's, by as much as it rifts: over the calibration
-     * seeds 2001 to 2030 at 256 rows, the share of its crust under the isostatic datum read 0.364
-     * on the mean when the crust was drawn for 0.29 (0.25 on a world still assembled, 0.46 on the
-     * most rifted), with the sea-level cut 219 m under the datum on the mean; drawn for 0.36 it reads
-     * 0.353 and the cut lands 12 m under it, 352 m under to 293 above. The fixed point, rounded, is
-     * this. It goes back toward Earth's when the margins carry their sediment (TH1-3), and until
-     * then the history's crust covers 0.45 of the planet where Earth's covers 0.41
-     * (docs/DESIGN_LEDGER.md, TH1-1b).
+     * **Earth's, and not the history's.** On the history's crust the share under the isostatic
+     * datum reads 0.36 on the mean of the calibration seeds 2001 to 2030 at 256 rows (0.25 on a
+     * world still assembled, 0.46 on the most rifted), because its rifted margins stand where
+     * McKenzie's stretching puts their bare crust, below the shelves that sediment builds on Earth's,
+     * and the platform still drowns its own share of the crust that was never stretched. Drawing
+     * the crust for 0.36 lands the sea-level cut on the datum, but on 0.45 of the planet where
+     * Earth's crust covers 0.41, and the extra crust, drowned, parts the land: half the ensemble's
+     * worlds read as highly dispersed. The share stays Earth's, and the cut stands a few hundred
+     * metres under the datum on a much-rifted world, until the margins carry their sediment
+     * (docs/DESIGN_LEDGER.md, TH1-1b; docs/TODO.md).
      *
-     * **Earth's own 0.29, before the history.** Where the sea stands on a continent is what this decides: the cut
+     * **Earth's own 0.29.** Where the sea stands on a continent is what this decides: the cut
      * drowns this share of the crust, so the land is the crust above its own 29th percentile, and
      * that is the whole of the land's hypsometry. Earth's continental platform — its land under
      * 2 km and its shelves to 500 m, on the six ice-free continents of NOAA's ETOPO5 — stands at a
@@ -491,7 +489,7 @@ data class TectonicsConfig(
      * the shoreline then sat on the margin's own slope, where the ground falls hundreds of metres a
      * cell. Earth's share puts it on the platform instead, which is where Earth's coasts are.
      */
-    val continentalCrustSubmergedShare: Float = 0.36f,
+    val continentalCrustSubmergedShare: Float = 0.29f,
     /**
      * What one unit of every belt height below is worth, in metres.
      *

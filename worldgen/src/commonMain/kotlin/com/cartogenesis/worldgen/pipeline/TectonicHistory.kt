@@ -221,11 +221,11 @@ internal object TectonicHistory {
             val supercontinentPlates = max(2, (targetPlates * continentalShare).roundToInt())
             while (plates.count { it.alive && it.assembled } < supercontinentPlates) {
                 val largest = largestPlate { plates[it].assembled } ?: break
-                if (!splitForBalance(largest)) break
+                if (!splitAlongWeakestPath(largest)) break
             }
             while (livePlateCount() < targetPlates) {
                 val largest = largestPlate { !plates[it].assembled } ?: break
-                if (!splitForBalance(largest)) break
+                if (!splitAlongWeakestPath(largest)) break
             }
             trace?.invoke("build splits ms ${buildMark.elapsedNow().inWholeMilliseconds}")
             initialOceanAges()
@@ -246,17 +246,36 @@ internal object TectonicHistory {
         /**
          * The supercontinent: the points nearest a center, as warped by a noise on the sphere, to the
          * share asked for. The warp is what gives it lobes and embayments rather than a cap's circle.
+         *
+         * The outline wanders at every scale up to the cap's own width as Earth's continental edge
+         * does: over a stretch of any length from 250 to 2,000 km, ETOPO5's 2,000 m isobath stands
+         * [EARTH_EDGE_WANDER_PER_LENGTH] of the stretch's length from its chord, root mean square, and
+         * its octaves fall as Earth's edge's divider dimension says ([SphereNoise.EARTH_OUTLINE_PERSISTENCE]).
+         * So the noise's longest wavelength is the cap's diameter, and its amplitude is what moves the
+         * cap's edge, where the cosine falls by `sin(theta)` a radian, that share of the diameter: a
+         * supercontinent as large as a hemisphere is no longer a hemisphere's circle, which on the
+         * map is two meridians.
          */
         private fun supercontinentCells(share: Double): BooleanArray {
             val center = randomUnit(random)
             supercontinentCenter = center
             val noise = SphereNoise(config.seed * SHAPE_SALT + 1)
+            val capRadians = acos((1.0 - 2.0 * share).coerceIn(-1.0, 1.0))
+            val wavelengthKm = 2.0 * capRadians * radiusKm
+            val octaves = octavesToSpacing(wavelengthKm)
+            val warp = DoubleArray(cellCount) { cell ->
+                noise.fbmOnSphere(
+                    sphere.x[cell], sphere.y[cell], sphere.z[cell], radiusKm, wavelengthKm, octaves,
+                    SphereNoise.EARTH_OUTLINE_PERSISTENCE
+                )
+            }
+            val mean = warp.average()
+            val spread = sqrt(warp.sumOf { (it - mean) * (it - mean) } / warp.size).coerceAtLeast(1e-9)
+            val wanderKm = EARTH_EDGE_WANDER_PER_LENGTH * wavelengthKm
+            val amplitude = wanderKm / radiusKm * sin(capRadians) / spread
             val reach = DoubleArray(cellCount) { cell ->
                 val cosine = sphere.x[cell] * center[0] + sphere.y[cell] * center[1] + sphere.z[cell] * center[2]
-                cosine + SUPERCONTINENT_WARP * noise.fbmOnSphere(
-                    sphere.x[cell], sphere.y[cell], sphere.z[cell], radiusKm, SUPERCONTINENT_WARP_WAVELENGTH_KM,
-                    octavesToSpacing(SUPERCONTINENT_WARP_WAVELENGTH_KM), SphereNoise.EARTH_OUTLINE_PERSISTENCE
-                )
+                cosine + amplitude * warp[cell]
             }
             return topShare(reach, share)
         }
@@ -1707,22 +1726,15 @@ internal object TectonicHistory {
                 .joinToString(",") { "${(1000 * sizes[it] / cellCount)}${if (plates[it].assembled) "a" else ""}" }
         }
 
-        /** The split of the assembled world's construction: the most even of several paths. */
-        private fun splitForBalance(plate: Int): Boolean {
-            var best: IntArray? = null
-            var bestBalance = 0.0
-            for (sides in candidateCuts(plate)) {
-                if (sides == null) continue
-                val first = sides.count { it == 0 }
-                val second = sides.count { it == 1 }
-                val balance = min(first, second).toDouble() / (first + second)
-                if (balance > bestBalance) {
-                    bestBalance = balance
-                    best = sides
-                }
-            }
-            val sides = best ?: return false
-            makeSplit(plate, sides)
+        /**
+         * The split of the assembled world's construction: the weakest of several paths, the one
+         * whose ground is softest on the mean, each leaving both halves at least [MIN_SPLIT_SHARE] of
+         * the plate. A plate parts where its rock is weakest (Vauchez, Barruol and Tommasi 1997), and
+         * taking the most even cut instead stacks a long plate into parallel strips.
+         */
+        private fun splitAlongWeakestPath(plate: Int): Boolean {
+            val cut = candidateCuts(plate).filterNotNull().minByOrNull { it.meanHardness } ?: return false
+            makeSplit(plate, cut.sides)
             return true
         }
 
@@ -1745,8 +1757,9 @@ internal object TectonicHistory {
             val scale = currentScale(plate)
             var paths = 0
             var widest = Double.NEGATIVE_INFINITY
-            for (sides in candidateCuts(plate)) {
-                if (sides == null) continue
+            for (cut in candidateCuts(plate)) {
+                if (cut == null) continue
+                val sides = cut.sides
                 paths++
                 val halves = halfRotations(plate, sides)
                 val first = halves.first.map { it * scale }.toDoubleArray()
@@ -1899,7 +1912,7 @@ internal object TectonicHistory {
          * between, so the path comes out as ridge segments offset by transforms. Returns the side of
          * each of the plate's points, -1 off the plate, or null if the path does not cut it.
          */
-        private fun splitAlongPath(ground: SplitGround, pole: DoubleArray, via: Int): IntArray? {
+        private fun splitAlongPath(ground: SplitGround, pole: DoubleArray, via: Int): Cut? {
             val inPlate = ground.inPlate
             val edge = ground.edge
             val hardness = ground.hardness
@@ -1917,22 +1930,27 @@ internal object TectonicHistory {
             val viaOnly = BooleanArray(cellCount).also { it[via] = true }
             val toVia = shortestPath(starts, viaOnly, inPlate, hardness, pole) ?: return null
             val fromVia = shortestPath(listOf(via), ends, inPlate, hardness, pole) ?: return null
-            return sidesOfCut(inPlate, toVia + fromVia)
+            val path = toVia + fromVia
+            val sides = sidesOfCut(inPlate, path) ?: return null
+            return Cut(sides, path.sumOf { hardness[it] } / path.size)
         }
+
+        /** A cut across a plate: the side of each of its points, -1 off it, and how hard its path's ground is on the mean. */
+        private class Cut(val sides: IntArray, val meanHardness: Double)
 
         /**
          * [SPLIT_CANDIDATES] cuts across [plate], each from a drawn pole and a drawn deep point, null
          * where one does not cut it. The draws are made in turn, so the cuts are the same however
          * many workers find them; the paths are found side by side, since each only reads.
          */
-        private fun candidateCuts(plate: Int): List<IntArray?> {
+        private fun candidateCuts(plate: Int): List<Cut?> {
             val ground = splitGround(plate) ?: return emptyList()
             val draws = ArrayList<Pair<DoubleArray, Int>>()
             repeat(SPLIT_CANDIDATES) {
                 val pole = poleAcross(plate) ?: return@repeat
                 draws.add(pole to ground.deep[random.nextInt(ground.deep.size)])
             }
-            val cuts = arrayOfNulls<IntArray>(draws.size)
+            val cuts = arrayOfNulls<Cut>(draws.size)
             parallelChunks(0, draws.size) { from, to ->
                 for (index in from until to) cuts[index] = splitAlongPath(ground, draws[index].first, draws[index].second)
             }
@@ -2283,9 +2301,13 @@ internal object TectonicHistory {
     private const val MICROCONTINENT_TERRANE_BASE = 10_000
     private const val ARC_TERRANE_BASE = 20_000
 
-    /** How far the supercontinent's outline wanders from a cap, in the cap's cosine, and at what scale. */
-    private const val SUPERCONTINENT_WARP = 0.3
-    private const val SUPERCONTINENT_WARP_WAVELENGTH_KM = 3_000.0
+    /**
+     * How far Earth's continental edge stands from the chord of a stretch of it, root mean square, as
+     * a share of the stretch's length: ETOPO5's 2,000 m isobath equatorward of 60 degrees, on its own
+     * five-minute grid, read 14, 29, 57 and 110 km over stretches of 250, 500, 1,000 and 2,000 km
+     * (docs/DESIGN_LEDGER.md, TH1-1).
+     */
+    private const val EARTH_EDGE_WANDER_PER_LENGTH = 0.056
 
     /**
      * How near a sample must lie to a lattice point to cover it, in spacings: past the lattice's

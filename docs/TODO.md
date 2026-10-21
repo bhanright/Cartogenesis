@@ -1,5 +1,73 @@
 # To do
 
+- **The history's continents run straighter than Earth's at a tenth of the map (TH1-1, recorded).**
+  D3's straight-run instrument (windows a tenth of the map wide whose halves turn under 10 degrees,
+  `CrustMeasures.straightShare`) reads the crust's edge at 0.31 to 0.34 pooled over the standard
+  worlds at 512 rows, main's 0.34 and Earth's 0.19 (ETOPO5's 2,000 m isobath at 512 rows, the same
+  instrument); its corners (0.39 to 0.42 against Earth's 0.28 and main's 0.01) and its divider
+  dimension (1.17 against Earth's 1.18 and main's 1.03) are Earth's. The straight windows lie on the
+  long sides of the largest continents, the old supercontinent's outline and its rifted margins
+  (drawn for TH1-1); a warp of the supercontinent at its own size
+  did not move the share. `ContinentsInsidePlatesTest` runs it as a known failure. What would
+  settle it is an outline assembled from cratons and terranes rather than a warped cap. 2026-10-20,
+  TH1-1.
+- **The ensemble's worlds are assembled or dispersed, and too few between (TH1-1, measured).** Over
+  the predeclared seeds 1 to 30 at 512 rows, 14 assembled (largest landmass at least 0.75 of the
+  land), 9 intermediate and 7 highly dispersed (under 0.39); over the validation seeds 1001 to 1030,
+  11, 10 and 9 (`ContinentalConfigurationEnsembleTest`). The calibration hypothesis is 25%, 60% and
+  15%; no category is absent or grossly over-represented, but intermediate stands at 30 to 33%.
+  Behind it: the continental plates move at 1 to 30 mm a year against Earth's cratonic plates'
+  28, so a supercontinent's plates part slowly where forces part them at all, and once parted they
+  rarely meet again in the history's 200 Myr; the supercontinent rifts a plate a step where its
+  forces open a suture. Earth's dispersal is checked by new collisions (India, Arabia, Africa into
+  Eurasia). 2026-10-20, TH1-1.
+- **The rifts are common on some worlds (TH1-1, measured).** Seed 7 carries 456 whole half-grabens
+  at 1,024 rows (`RiftIdentityTest`), the others 36 to 509: the history's plate boundaries cross the
+  continents wherever a split ran through one, and every slowly diverging continental pair is a
+  rift. At 256 rows seed 7 holds half-grabens of 332 to 456 km, past Earth's longest (a known
+  failure). The belts and rifts are TH1-2's to redraw. 2026-10-20, TH1-1.
+- **The history's lines near a pole run along the map's rows (TH1-1, recorded).** The crust's
+  edge, the plate boundaries and the coast and contours drawn on them run 36 to 307 steps along a
+  row within a few degrees of a pole on the standard worlds, and the plate boundaries' bearing
+  count reads 1.5 to 1.8 east-west over the whole map: on the ground they project 0.98 to 1.08 as
+  far east-west as north-south, on the map 1.57 to 1.68, the equirectangular grid's own stretch
+  (`GeometryFindings.HISTORY_LINES_AT_THE_POLES`). The census reads the map, and the history is
+  drawn on the sphere. Whether the census should read a line's run on the ground near the poles, or
+  the map should draw them otherwise, is a question for the drawing. 2026-10-20, TH1-1.
+- **The history's worlds move the climate's guards (TH1-1, recorded).** With continents inside
+  plates and the sea at 71% of the planet the land carries 7.5% desert against Earth's 19.1% (x0.39,
+  `WaterColumnEarthTest`; it was x0.85 at W2h on main's worlds at 62% sea), its rain that last
+  evaporated from land is x0.80 Earth's, one boundary-layer reading falls outside and the drag
+  balance's correlation drops to 0.47 (`BoundaryLayerTest`), two seeds' coldest eastern-boundary
+  water stands at 42 to 45 degrees (`ColdWaterPlacementTest`), seed 7's peoples leave 11% of the
+  habitable land unsettled at 256 rows (`CultureRealmTest`), and on the 12,000 km calibration planet
+  two seeds' flanks are combed down the columns past the factor (`CombGuardTest`). Each runs as a
+  known failure under TH1-1; which part is the sea level and which the history is not separated.
+  Eight clauses recorded before pass on the new worlds and are armed. 2026-10-20, TH1-1.
+- **The drawing's calibrated figures moved with the ground (TH1-1, recorded).** The relief's slope
+  floor reads 0.09 against `EngravingPlan.SLOPE_FLOOR`'s 0.06 and its haze matches at 0.14 against
+  0.10 (`ReliefShadingTest`), the pen's ink runs 32.0 degrees from the aspect (`PenAndInkTest`), and
+  Mars's water reads 4.5 against its land (`WaterColorTest`). Each was set on main's worlds; whether
+  to re-derive them is the drawing's question once the belts (TH1-2) and margins (TH1-3) settle the
+  ground. 2026-10-20, TH1-1.
+- **What TH1-4 must put on the card (TH1-1).** The map pass is on the card behind
+  `CrustMapAccelerator` (`GpuCrustMap`, held to the processor by `CrustMapParity`: the share 2.4e-3
+  at worst against a bar of 1.1e-2, the categories differing on 1e-5 of the cells). Still on the
+  processor: the history itself, about 2.5 s of the plate stage's 3.9 at 1,024 rows warm, of which
+  the per-point passes are the carrying of every sample by its plate's rotation, the ownership
+  raster, the gap fill's floods, the boundary classification and its arcs and collisions, and the
+  lower crust's flow (ten explicit substeps over every lattice edge); and the plate stage's raster
+  floods (`boundaryDistance`, `cratonInteriorShare`), main's jump flood on the processor. 2026-10-20,
+  TH1-1.
+- **The history's continents' speeds and the cratonic plates' 28 mm a year (TH1-1, measured).**
+  `TectonicsConfig.CRATONIC_PLATE_SPEED_MM_PER_YEAR` is kept as a validation figure, and the history
+  normalizes its speeds on the slab-pulled oceanic plates at 85 mm a year; the plates mostly
+  continental come out at 1 to 30 mm a year on the standard seeds, many under 10. No guard holds
+  them yet. 2026-10-20, TH1-1.
+- **Sea-floor age is young on some worlds (TH1-1, measured).** The floor's mean age on the map
+  reads 33 to 56 Myr on the standard seeds at 512 rows against Earth's about 60 (the history's own
+  ridges spread at a mean half rate of 27 to 59 km a Myr); its area falls with age as Earth's does.
+  2026-10-20, TH1-1.
 - **Fewer levels make the stationary waves' surface pressure stronger, not weaker (W2h, measured).**
   A1-3's "17 to 21% off at eight levels" was the relative root mean square of the difference from
   twenty-four levels, not a shortfall: on the benchmarks the eight-level surface pressure's root mean

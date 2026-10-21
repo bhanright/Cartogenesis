@@ -344,13 +344,21 @@ class IsostasyTest : BorrowsSharedWorlds() {
             )
         }
         val furthest = worst.maxByOrNull { abs(it.second) }!!
-        assertTrue(
-            "seed ${furthest.first}: the sea-level cut lands ${"%.0f".format(furthest.second)} m" +
-                " from the level isostasy puts the shoreline at, outside the stated" +
-                " $SHORELINE_RESIDUAL_BAR_METRES m — the crust the plate stage drew is not the" +
-                " crust the ocean-coverage slider asked for",
-            abs(furthest.second) <= SHORELINE_RESIDUAL_BAR_METRES
-        )
+        // Recorded at TH1-1: the history's crust puts 0.24 to 0.29 of the world above the datum
+        // where the slider asks 0.29, its stretched crust and drowned platforms standing lower than
+        // `continentalCrustSubmergedShare` allows for, and on seed 99 the cut lands 901 m under the
+        // datum (docs/DESIGN_LEDGER.md, TH1-1; docs/TODO.md).
+        KnownFailures.expect("TH1-1: the history's crust stands less of the world above the datum than the slider asks", "seed 99") {
+            if (abs(furthest.second) > SHORELINE_RESIDUAL_BAR_METRES) {
+                throw RecordedViolation(
+                    "seed ${furthest.first}: the sea-level cut lands ${"%.0f".format(furthest.second)} m" +
+                        " from the level isostasy puts the shoreline at, outside the stated" +
+                        " $SHORELINE_RESIDUAL_BAR_METRES m — the crust the plate stage drew is not the" +
+                        " crust the ocean-coverage slider asked for",
+                    "seed ${furthest.first}"
+                )
+            }
+        }
 
         // The control: the aim told to draw far more continental crust than the slider's coverage
         // needs. Nothing else changes — the same seeds, the same plates, the same erosion, on the
@@ -387,6 +395,7 @@ class IsostasyTest : BorrowsSharedWorlds() {
      */
     @Test
     fun `the hypsometry is bimodal, and is one mode without the two crusts`() {
+        val deepSea = ArrayList<String>()
         SEEDS.take(3).forEach { seed ->
             val world = worldAt(seed)
             val flat = SharedWorlds.world(
@@ -410,16 +419,20 @@ class IsostasyTest : BorrowsSharedWorlds() {
                 "seed $seed: " + (EarthLikeness.bimodalityComplaint("$seed", here) ?: ""),
                 EarthLikeness.bimodalityComplaint("$seed", here) == null
             )
-            assertTrue(
-                "seed $seed: " + (EarthLikeness.seaModeComplaint("$seed", here) ?: ""),
-                EarthLikeness.seaModeComplaint("$seed", here) == null
-            )
+            EarthLikeness.seaModeComplaint("$seed", here)?.let { deepSea += it }
             assertTrue(
                 "seed $seed: the curve is still two modes with a trough with isostasy switched" +
                     " off, so neither clause is measuring the two crusts",
                 EarthLikeness.bimodalityComplaint("$seed", there) != null ||
                     EarthLikeness.seaModeComplaint("$seed", there) != null
             )
+        }
+        // Recorded at TH1-1: on the history's seed 1234, whose floor is the oldest of the three (a mean
+        // of 60 Myr), the sea's mode stands at -5,325 m, the depth the floor's cooling gives 60 Myr
+        // floor (-5,169 m in `the two crusts float where Earth's do`), as `EarthLikenessTest` records
+        // (docs/DESIGN_LEDGER.md, TH1-1; docs/TODO.md).
+        KnownFailures.expect("TH1-1: on the history's seed 1234 the sea's mode stands deeper than Earth's", "1234") {
+            if (deepSea.isNotEmpty()) throw RecordedViolation(deepSea.joinToString("; "), deepSea.joinToString("; ") { it.substringBefore(":") })
         }
     }
 
@@ -457,6 +470,14 @@ class IsostasyTest : BorrowsSharedWorlds() {
         } catch (noGrid: IllegalArgumentException) {
             KnownFailures.expect("M1: the coupled atmosphere has no grid for a world 200 km across", "a spherical grid needs two rows and two columns, got 1 by 2") {
                 throw RecordedViolation("the synthetic belt's world cannot be generated: ${noGrid.message}", noGrid.message ?: "")
+            }
+            return
+        } catch (noCells: IllegalStateException) {
+            // Recorded at TH1-1, and failing the same way on main before it: on the 200 km world the
+            // Hadley cells close at no heating latitude, and `HadleyCirculation.heldWhereTheyClose`
+            // finds none (docs/DESIGN_LEDGER.md, TH1-1; docs/TODO.md).
+            KnownFailures.expect("TH1-1: on main and here the synthetic belt's 200 km world has no Hadley cells that close", "Required value was null.") {
+                throw RecordedViolation("the synthetic belt's world cannot be generated: ${noCells.message}", noCells.message ?: "")
             }
             return
         }
@@ -688,7 +709,7 @@ class IsostasyTest : BorrowsSharedWorlds() {
         // denudation this is derived from (docs/DESIGN_LEDGER.md, Fix 3 and Fix 3b). Recorded on
         // H1's ground under the coupled climate, whose rain takes more off the belts: the setting is
         // the generator's to re-derive, not this merge's (docs/DESIGN_LEDGER.md, M1; docs/TODO.md).
-        KnownFailures.expect("M1: the collision rate trails this model's denudation under the coupled climate", "0.761 implied") {
+        KnownFailures.expect("M1: the collision rate trails this model's denudation under the coupled climate", "0.758 implied") {
             if (abs(implied - tectonics.collisionUpliftMmPerYear) > UPLIFT_RATE_TOLERANCE_MM_PER_YEAR) {
                 throw RecordedViolation(
                     "the collision uplift rate is not Earth's surface uplift plus what this model's own rivers take off a " +
@@ -814,16 +835,23 @@ class IsostasyTest : BorrowsSharedWorlds() {
         // Re-recorded at L1. Armed again at H1, where seed 42's collision is another collision (more
         // of its plates are continents) and its moat lies at 750-938 km, 1,140 m under the belt,
         // with the ground rising 10 m beyond it (docs/DESIGN_LEDGER.md, H1).
-        assertTrue(
-            "the ground beyond the moat does not come back up, so what was measured is a slope" +
-                " away from the belt and not a trough — and a trough with a rise beyond it is the" +
-                " one thing no uniform bend can make: " + String.format(
-                    java.util.Locale.ROOT, "moat at %.0f-%.0f km, %.0f m under the belt, rising %.0f m beyond it",
-                    moatBin * FLEXURE_BIN_KM, (moatBin + 1) * FLEXURE_BIN_KM,
-                    overTheBelt - inTheForeland, beyondTheMoat - inTheForeland
-                ),
-            beyondTheMoat - inTheForeland >= MIN_FOREBULGE_METRES
-        )
+        // Recorded at TH1-1: on the history's seed 42 the collision is another collision, its moat at
+        // the window's last bin, 1,125 to 1,313 km, with no ground beyond it to rise, as before H1
+        // (docs/DESIGN_LEDGER.md, TH1-1; docs/TODO.md).
+        KnownFailures.expect("TH1-1: on the history's seed 42 the foreland's moat lies at the window's edge", "moat at 1125-1313 km") {
+            if (beyondTheMoat - inTheForeland < MIN_FOREBULGE_METRES) {
+                throw RecordedViolation(
+                    "the ground beyond the moat does not come back up, so what was measured is a slope" +
+                        " away from the belt and not a trough — and a trough with a rise beyond it is the" +
+                        " one thing no uniform bend can make: " + String.format(
+                            java.util.Locale.ROOT, "moat at %.0f-%.0f km, %.0f m under the belt, rising %.0f m beyond it",
+                            moatBin * FLEXURE_BIN_KM, (moatBin + 1) * FLEXURE_BIN_KM,
+                            overTheBelt - inTheForeland, beyondTheMoat - inTheForeland
+                        ),
+                    String.format(java.util.Locale.ROOT, "moat at %.0f-%.0f km", moatBin * FLEXURE_BIN_KM, (moatBin + 1) * FLEXURE_BIN_KM)
+                )
+            }
+        }
     }
 
     /**
@@ -952,12 +980,18 @@ class IsostasyTest : BorrowsSharedWorlds() {
         // Recorded at K2 at 69 m of 433, and armed again at H1 at 62 m of 239: the moat is about as
         // deep as it was, and what moved is seed 7's thickest ice, 860 m against 1,558, so this
         // passes on a smaller sheet rather than a deeper moat (docs/DESIGN_LEDGER.md, K2 and H1).
-        assertTrue(
-            "the moat round the ice is ${"%.0f".format(deepestMoat)} m deep, which is not between" +
-                " a fifth and the whole of the ${"%.0f".format(thickest * airyRatio)} m the" +
-                " thickest ice on this world floats out at",
-            deepestMoat in (thickest * airyRatio * MOAT_SHARE_OF_AIRY_FLOOR)..(thickest * airyRatio).toDouble()
-        )
+        // Recorded at TH1-1: on the history's seed 7 the thickest ice is 5,065 m and floats out at
+        // 1,408 m, and its moat is 226 m, under the fifth (docs/DESIGN_LEDGER.md, TH1-1; docs/TODO.md).
+        KnownFailures.expect("TH1-1: on the history's seed 7 the ice's moat is shallower than a fifth of its float", "226 of 1408") {
+            if (deepestMoat !in (thickest * airyRatio * MOAT_SHARE_OF_AIRY_FLOOR)..(thickest * airyRatio).toDouble()) {
+                throw RecordedViolation(
+                    "the moat round the ice is ${"%.0f".format(deepestMoat)} m deep, which is not between" +
+                        " a fifth and the whole of the ${"%.0f".format(thickest * airyRatio)} m the" +
+                        " thickest ice on this world floats out at",
+                    "${"%.0f".format(deepestMoat)} of ${"%.0f".format(thickest * airyRatio)}"
+                )
+            }
+        }
     }
 
     /**

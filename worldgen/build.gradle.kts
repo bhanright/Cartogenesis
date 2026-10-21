@@ -263,7 +263,9 @@ val deepClassesByStage: Map<String, List<String>> = mapOf(
         "com.cartogenesis.worldgen.IceSheetTest.the sheet's surface is a dome and not a ruling of the grid"
     ),
     "ocean" to listOf(
-        "com.cartogenesis.worldgen.OceanLeavesTheGroundTest.the ground is the same with the currents and without them"
+        "com.cartogenesis.worldgen.OceanLeavesTheGroundTest.the ground is the same with the currents and without them",
+        // A control world of its own at 256 rows, the one MeridionalWindTest's deep cases build.
+        "com.cartogenesis.worldgen.CirculationRescueTest"
     ),
     "climate" to listOf(
         "com.cartogenesis.worldgen.AtmosphereCouplingTest.the plain iteration does not settle, and where the loop starts does not move where it settles",

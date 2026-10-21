@@ -173,7 +173,8 @@ class SeaLevelHistoryTest : BorrowsSharedWorlds() {
         // again, to 1.47x (docs/TODO.md). Armed again at W2c, whose ground reads it once more
         // (docs/DESIGN_LEDGER.md, W2c). Recorded at W2e, whose rain moved the ground under it again,
         // to 1.34x (docs/TODO.md).
-        KnownFailures.expect("W2e: the lowstand drowns fewer valleys than it owes", "1.39x") {
+        // Armed at TH1-1, whose worlds pass it (docs/DESIGN_LEDGER.md, TH1-1).
+        run {
             if (!(pooledEstuaries.size == seeds.size && meanGain >= estuaryGain)) {
                 throw RecordedViolation(
                     "pooled over ${pooledEstuaries.size} seeds the lowstand leaves ${meanGain}x the estuary mouths, " +

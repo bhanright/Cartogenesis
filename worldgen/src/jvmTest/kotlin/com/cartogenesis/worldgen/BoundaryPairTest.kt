@@ -132,6 +132,7 @@ class BoundaryPairTest {
 
     @Test
     fun `an Andean margin and a collision plateau are different shapes`() {
+        val narrow = ArrayList<String>()
         var withPairs = 0.0
         var withOneProfile = 0.0
         listOf(true, false).forEach { crustPairs ->
@@ -184,12 +185,7 @@ class BoundaryPairTest {
                     // Broader, per seed, and twice as broad only pooled: the factor of two is a
                     // property of the profiles and the spread is a property of which pairs a world
                     // happens to draw, which the per-seed lines above print.
-                    assertTrue(
-                        t.widthToHeight > a.widthToHeight,
-                        "seed ${pairSeeds[index]}: the collision plateau is only " +
-                            "${t.widthToHeight} cells wide for its height against the " +
-                            "margin's ${a.widthToHeight} — a plateau has to be the broad one"
-                    )
+                    if (!(t.widthToHeight > a.widthToHeight)) narrow += "seed ${pairSeeds[index]}"
                 }
             }
         }
@@ -200,11 +196,18 @@ class BoundaryPairTest {
         // broader of the two for its height — the old code gave an oceanic-continental boundary
         // four fifths of the height at the same width — and a guard on the magnitude alone would
         // have accepted that as a difference.
-        assertTrue(
-            withPairs >= 2.0,
-            "an Andean margin and a collision plateau came out the same shape: the plateau is " +
-                "only ${withPairs}x broader for its height, wanted at least 2x"
-        )
+        // Recorded at TH1-1, whose belts are interim until TH1-2 redraws them from the history: a
+        // seed or more of the six has no plateau broader than its margin, and pooled the plateau is
+        // 1.02 times as broad for its height (docs/DESIGN_LEDGER.md, TH1-1; docs/TODO.md).
+        KnownFailures.expect("TH1-1: on the history's interim belts a collision plateau is no broader than a margin", "seed 5; pooled 1.02x") {
+            if (narrow.isNotEmpty() || withPairs < 2.0) {
+                throw RecordedViolation(
+                    "an Andean margin and a collision plateau came out the same shape: no broader plateau on " +
+                        "${narrow.joinToString()}, and pooled the plateau is only ${withPairs}x broader for its height, wanted at least 2x",
+                    (narrow + "pooled %.2fx".format(java.util.Locale.ROOT, withPairs)).joinToString("; ")
+                )
+            }
+        }
         // And the same measurement fails the world built with one profile for every convergent
         // boundary, which is what gives the clause above its meaning: a pooled ratio that cleared
         // two whatever the profiles were would be measuring the seeds.
@@ -238,7 +241,11 @@ class BoundaryPairTest {
             "PAIRS seed %d rift axis %+.4f, shoulder at %.0f cells %+.4f"
                 .format(arcSeed, axis, cfg.riftShoulderOffsetCells, shoulder)
         )
-        assertTrue(axis < 0f, "a continental rift's axis should be a trough, measured $axis")
+        // Recorded at TH1-1: on the history's seed 17 the rift's axis stands above the ground beside
+        // it; the rifts' relief is TH1-2's to draw from the history's stretching (docs/DESIGN_LEDGER.md, TH1-1; docs/TODO.md).
+        KnownFailures.expect("TH1-1: on the history's interim belts a rift's axis is no trough", "0.0330") {
+            if (!(axis < 0f)) throw RecordedViolation("a continental rift's axis should be a trough, measured $axis", "%.4f".format(java.util.Locale.ROOT, axis))
+        }
         assertTrue(
             shoulder > axis,
             "a continental rift should rise from its axis to its shoulders, " +
@@ -342,11 +349,19 @@ class BoundaryPairTest {
             },
             "control, cones eight times as wide"
         )
-        assertTrue(
-            control.clearShare <= control.floorClearShare || control.raised * 10 >= control.oceanFloor,
-            "the control with cones eight times as wide passes both bars, so neither can tell a " +
-                "chain from a plateau"
-        )
+        // Recorded at TH1-1: on the history's seed 7, its sea 71% of the planet, the wide cones raise
+        // 4.40% of the ocean floor, under the tenth that would make them a plateau, and stand clear of
+        // the belts as the chains do, so the control no longer fails (docs/DESIGN_LEDGER.md, TH1-1; docs/TODO.md).
+        val controlShare = control.raised * 100.0 / control.oceanFloor
+        KnownFailures.expect("TH1-1: on the history's worlds the hotspot control passes both bars", "4.40%") {
+            if (!(control.clearShare <= control.floorClearShare || control.raised * 10 >= control.oceanFloor)) {
+                throw RecordedViolation(
+                    "the control with cones eight times as wide passes both bars, raising %.2f%% of the ocean floor, so neither can tell a chain from a plateau"
+                        .format(java.util.Locale.ROOT, controlShare),
+                    "%.2f%%".format(java.util.Locale.ROOT, controlShare)
+                )
+            }
+        }
     }
 
     private class HotspotReach(

@@ -175,7 +175,8 @@ class SeaIceTest : BorrowsSharedWorlds() {
         // under it gives the boundary layer: seed 7's cells take 1.76 times their rain with the ice
         // off and seed 42's 1.96, the frozen sea still five to six times drier than the open sea
         // beside it (docs/DESIGN_LEDGER.md, W2e; docs/TODO.md).
-        KnownFailures.expect("W2e: the frozen cells take under twice their rain with the ice off", "seed 7 x1.67; seed 42 x1.97") {
+        // Armed at TH1-1, whose worlds pass it (docs/DESIGN_LEDGER.md, TH1-1).
+        run {
             if (lidless.isNotEmpty()) {
                 throw RecordedViolation(
                     "with the ice off the same cells take less than $ICE_OFF_WETTER_RATIO times the rain they take with it on, " +

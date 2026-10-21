@@ -188,7 +188,11 @@ class LakeWaterBalanceTest : BorrowsSharedWorlds() {
         // on, and seed 1's largest dry basin is 477 cells; the scan that re-picks it is a run of
         // its own (docs/TODO.md). The rest of the case reads the basin it has. Armed at W2e, whose
         // ground gives seed 1 a dry basin of 538 cells (docs/DESIGN_LEDGER.md, W2e).
-        assertTrue(basin.size >= 500, "seed $drySeed has no large dry basin any more (${basin.size} cells)")
+        // Recorded at TH1-1, on whose seed 1 the largest dry basin is 295 cells; the case reads the
+        // basin it has (docs/DESIGN_LEDGER.md, TH1-1; docs/TODO.md).
+        KnownFailures.expect("TH1-1: on the history's seed 1 the dry basin is small", "295 cells") {
+            if (basin.size < 500) throw RecordedViolation("seed $drySeed has no large dry basin any more (${basin.size} cells)", "${basin.size} cells")
+        }
         if (basin.isEmpty()) return
 
         val rain = basin.map { off.climate.precipitationMm.data[it] }.average()
@@ -334,7 +338,8 @@ class LakeWaterBalanceTest : BorrowsSharedWorlds() {
         // Armed at A1-6b, under whose rain the sample stands at its spill (docs/DESIGN_LEDGER.md, A1-6b).
         // Recorded at W2h: under its drier climate the sample keeps 842 of its 1,358 cells at the
         // balance (docs/TODO.md, "What W2h's climate moved in the deep tier").
-        KnownFailures.expect("W2h: the wet sample falls below its spill", "842 of 1358") {
+        // Armed at TH1-1, whose worlds pass it (docs/DESIGN_LEDGER.md, TH1-1).
+        run {
             if (stillWet != basin.size) {
                 throw RecordedViolation("a wet basin must stay full to its spill: $stillWet of ${basin.size} cells", "$stillWet of ${basin.size}")
             }

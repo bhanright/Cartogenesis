@@ -91,7 +91,7 @@ class SeaSurfaceEarthTest : BorrowsSharedWorlds() {
                 .format(seaC, OISST_TROPICS_C, OISST_TROPICS_NORTH_C, OISST_TROPICS_SOUTH_C))
             if (abs(seaC - OISST_TROPICS_C) > TROPICS_ENVELOPE_C) misses += "seed $seed %+.2f".format(seaC - OISST_TROPICS_C)
         }
-        KnownFailures.expect(TROPICAL_SEA_COLD, "seed 7 -0.58; seed 42 -0.62; seed 1234 -0.58; seed 99 -0.61") {
+        KnownFailures.expect(TROPICAL_SEA_COLD, "seed 7 -0.58; seed 42 -0.63; seed 1234 -0.58; seed 99 -0.56") {
             if (misses.isNotEmpty()) {
                 throw RecordedViolation("the tropical sea stands outside Earth's halves: ${misses.joinToString("; ")}", misses.joinToString("; "))
             }
@@ -109,7 +109,7 @@ class SeaSurfaceEarthTest : BorrowsSharedWorlds() {
         }
         // Recorded again at TH1-1, on whose worlds two seeds' planets stand under Earth's southern
         // hemisphere (docs/DESIGN_LEDGER.md, TH1-1).
-        KnownFailures.expect("TH1-1: on the history's worlds the planet's mean stands under Earth's", "seed 1234 13.26 C; seed 99 13.27 C") {
+        KnownFailures.expect("TH1-1: on the history's worlds the planet's mean stands under Earth's", "seed 99 13.04 C") {
             if (misses.isNotEmpty()) {
                 throw RecordedViolation("the planet's mean stands outside Earth's hemispheres: ${misses.joinToString("; ")}", misses.joinToString("; "))
             }

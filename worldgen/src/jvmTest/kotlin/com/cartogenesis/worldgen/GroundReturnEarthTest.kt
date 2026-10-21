@@ -379,8 +379,9 @@ class GroundReturnEarthTest : BorrowsSharedWorlds() {
         // condenses the boundary layer only over its condensation level and whose rain law no
         // longer reads the ground's saturated column (docs/DESIGN_LEDGER.md, W2d and W2e;
         // docs/TODO.md).
-        // Recorded again at TH1-1, x1.34, on the history's worlds (docs/DESIGN_LEDGER.md, TH1-1).
-        KnownFailures.expect("TH1-1: on the history's worlds the land's rain falls where it cannot be returned", "x1.34") {
+        // Recorded again at TH1-1 on the history's first worlds, x1.34.
+        // Armed at TH1-1, whose final worlds pass it (docs/DESIGN_LEDGER.md, TH1-1).
+        run {
             nearEarth("the land's rain where the potential is under half of it", figures.rainUnderHalf / figures.rain, EARTH_RAIN_SHARE_UNDER_HALF)
         }
     }

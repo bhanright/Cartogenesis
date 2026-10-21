@@ -178,7 +178,7 @@ class BoundaryLayerTest : BorrowsSharedWorlds() {
         // Recorded at TH1-1, whose worlds' continents lie inside plates and whose sea covers 71% of
         // the planet: on one of them the layer's convergence follows the drag balance less closely
         // than the bar (docs/DESIGN_LEDGER.md, TH1-1; docs/TODO.md).
-        KnownFailures.expect("TH1-1: on the history's worlds the layer's convergence follows the drag balance less closely", "r = 0.496") {
+        KnownFailures.expect("TH1-1: on the history's worlds the layer's convergence follows the drag balance less closely", "r = 0.352") {
             if (lowestCorrelation <= BALANCE_CORRELATION) {
                 throw RecordedViolation(
                     "the layer's vertical motion follows the pressure's drag balance at r = $lowestCorrelation",
@@ -309,7 +309,7 @@ class BoundaryLayerTest : BorrowsSharedWorlds() {
         // two layers' march rains (docs/DESIGN_LEDGER.md, W2e).
         // Recorded at TH1-1: on the history's worlds one reading falls outside (docs/DESIGN_LEDGER.md,
         // TH1-1; docs/TODO.md).
-        KnownFailures.expect("TH1-1: on the history's worlds a reading of the two layers' convergence disagrees", "seed 42 July 5-35") {
+        KnownFailures.expect("TH1-1: on the history's worlds a reading of the two layers' convergence disagrees", "seed 7 January 35-65") {
             if (failures.isNotEmpty()) {
                 throw RecordedViolation("readings of the model's and the diagnosed layer's convergence disagree: $failures", failures.joinToString("; "))
             }

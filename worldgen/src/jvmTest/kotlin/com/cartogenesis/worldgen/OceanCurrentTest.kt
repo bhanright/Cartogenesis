@@ -67,7 +67,7 @@ class OceanCurrentTest : BorrowsSharedWorlds() {
         // Recorded at TH1-1: on one of the history's worlds at 256 rows the control ocean under the
         // belts' wind alone stops short of the solve's tolerance, as K1's seed 42 did until K2
         // (docs/DESIGN_LEDGER.md, K1 and TH1-1; docs/TODO.md). The world itself solves.
-        KnownFailures.expect("TH1-1: the control ocean under the belts' wind alone stalls on one history world", "seed 7") {
+        KnownFailures.expect("TH1-1: the control ocean under the belts' wind alone stalls on one history world", "seed 1234") {
             if (stalled.isNotEmpty()) throw RecordedViolation("the circulation did not solve under the belts' wind alone on ${stalled.joinToString()}", stalled.joinToString())
         }
         // Recorded at A1-6b, whose wind is the seasonal circulation's: its easterly is weakest on the
@@ -76,7 +76,7 @@ class OceanCurrentTest : BorrowsSharedWorlds() {
         // three seeds the band's mean with it (docs/TODO.md).
         val trades = failures.filter { "the trades' band flows east" in it }
         assertTrue((failures - trades.toSet()).isEmpty(), (failures - trades.toSet()).joinToString("\n"))
-        KnownFailures.expect("A1-6b: under the circulation alone the trades' band flows east", "seed 42 at 256 rows: under the belts alone the trades' band flows east in the south (+0.0002 m/s); seed 1234 at 256 rows: under the belts alone the trades' band flows east in the south (+0.0059 m/s)") {
+        KnownFailures.expect("A1-6b: under the circulation alone the trades' band flows east", "seed 7 at 256 rows: under the belts alone the trades' band flows east in the south (+0.0040 m/s); seed 99 at 256 rows: under the belts alone the trades' band flows east in the north (+0.0002 m/s); seed 99 at 256 rows: under the belts alone the trades' band flows east in the south (+0.0019 m/s)") {
             if (trades.isNotEmpty()) throw RecordedViolation(trades.joinToString("\n"), trades.joinToString("; "))
         }
     }

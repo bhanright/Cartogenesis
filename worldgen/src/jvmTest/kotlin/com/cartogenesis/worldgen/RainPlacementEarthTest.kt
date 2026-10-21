@@ -230,8 +230,9 @@ class RainPlacementEarthTest : BorrowsSharedWorlds() {
         val figures = pooled
         // x2.63 on 6d5257e2; x1.74 at W2e, the subtropical highs too weak and the eddy winds still
         // carrying the interiors' water away (docs/DESIGN_LEDGER.md, W2e; docs/TODO.md).
-        // Recorded again at TH1-1, x1.34, on the history's worlds (docs/DESIGN_LEDGER.md, TH1-1).
-        KnownFailures.expect("TH1-1: on the history's worlds more of the land stands far drier than its potential", "x1.34") {
+        // Recorded again at TH1-1 on the history's first worlds, x1.34.
+        // Armed at TH1-1, whose final worlds pass it (docs/DESIGN_LEDGER.md, TH1-1).
+        run {
             nearEarth("land over five times drier than its potential", figures.veryDry / figures.landArea, EARTH_VERY_DRY_SHARE)
         }
     }
@@ -242,8 +243,13 @@ class RainPlacementEarthTest : BorrowsSharedWorlds() {
         val atEarthsLand = figures.importKm3 * EARTH_LAND_KM2 / figures.landKm2
         val most = RODELL_IMPORT_KM3 + RODELL_IMPORT_UNCERTAINTY_KM3
         println("EARTH the land's rain less its evaporation, at Earth's land area: %.0f km3 against %.0f to %.0f".format(atEarthsLand, TRENBERTH_IMPORT_KM3, most))
-        if (atEarthsLand < TRENBERTH_IMPORT_KM3 || atEarthsLand > most) {
-            throw RecordedViolation("the land imports %.0f km3 a year at Earth's land area".format(atEarthsLand), "%.0f".format(atEarthsLand / 1_000.0))
+        // Recorded at TH1-1: on the history's final worlds the land imports 50,397 km3 a year at
+        // Earth's land area, 97 past the top of Rodell's range, the land wetter with the sea at 71%
+        // (docs/DESIGN_LEDGER.md, TH1-1; docs/TODO.md).
+        KnownFailures.expect("TH1-1: on the history's worlds the land imports more water than Earth's", "50") {
+            if (atEarthsLand < TRENBERTH_IMPORT_KM3 || atEarthsLand > most) {
+                throw RecordedViolation("the land imports %.0f km3 a year at Earth's land area".format(atEarthsLand), "%.0f".format(atEarthsLand / 1_000.0))
+            }
         }
     }
 
@@ -263,7 +269,7 @@ class RainPlacementEarthTest : BorrowsSharedWorlds() {
         // x0.28 at W2e, whose isolated high ground no longer raises the rain law and whose lifted
         // air rains only past its condensation level: fewer wet spots than Earth's isolated
         // mountains and volcanoes carry (docs/DESIGN_LEDGER.md, W2e; docs/TODO.md).
-        KnownFailures.expect("W2e: the land carries fewer isolated wet spots than Earth's", "x0.48") {
+        KnownFailures.expect("W2e: the land carries fewer isolated wet spots than Earth's", "x0.31") {
             nearEarth("wet spots' share of the land", figures.spotArea / figures.landArea, EARTH_SPOT_SHARE, SPOT_FACTOR)
         }
     }

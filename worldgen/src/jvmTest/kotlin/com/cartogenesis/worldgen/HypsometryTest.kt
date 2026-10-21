@@ -48,7 +48,7 @@ class HypsometryTest : BorrowsSharedWorlds() {
         // Recorded at TH1-1: on the history's worlds the land stands higher, too little of it under
         // 500 m and too much between 1 and 2 km, its mean inside Earth's (docs/DESIGN_LEDGER.md, TH1-1;
         // docs/TODO.md).
-        KnownFailures.expect("TH1-1: on the history's worlds the land stands higher than Earth's", "under 500 m 0.331; 1-2 km 0.299") {
+        KnownFailures.expect("TH1-1: on the history's worlds the land stands higher than Earth's", "under 500 m 0.381; 1-2 km 0.254") {
             if (others.isNotEmpty()) {
                 throw RecordedViolation(
                     "the land is not spread over altitude as Earth's is: " + others.joinToString("; "),

@@ -85,9 +85,11 @@
   continental come out at 1 to 30 mm a year on the standard seeds, many under 10. No guard holds
   them yet. 2026-10-20, TH1-1.
 - **Sea-floor age is young on some worlds (TH1-1, measured).** The floor's mean age on the map
-  reads 33 to 56 Myr on the standard seeds at 512 rows against Earth's about 60 (the history's own
-  ridges spread at a mean half rate of 27 to 59 km a Myr); its area falls with age as Earth's does.
-  2026-10-20, TH1-1.
+  reads 30 to 60 Myr on the standard seeds at 512 rows against Earth's about 60 (the history's own
+  ridges spread at a mean half rate of 23 to 52 km a Myr); its area falls with age as Earth's does.
+  Seed 99's floor, 34.5 Myr on average and 0.048 of it older than 100, stands 5 to 6 km deep over
+  0.077 of it, under `ContinentsInsidePlatesTest`'s 0.11 (recorded); seed 42's, 30.3 Myr, over
+  0.120. 2026-10-20, TH1-1.
 - **Fewer levels make the stationary waves' surface pressure stronger, not weaker (W2h, measured).**
   A1-3's "17 to 21% off at eight levels" was the relative root mean square of the difference from
   twenty-four levels, not a shortfall: on the benchmarks the eight-level surface pressure's root mean

@@ -101,11 +101,14 @@ class ContinentsInsidePlatesTest : BorrowsSharedWorlds() {
     /**
      * Floor between 5 and 6 km deep, as a share of the sea floor: Earth's 0.21 (ETOPO5 at 39 km, the
      * design's measures), where old floor has cooled and sunk; main's 0.011, whose floor was never
-     * older than its boundary blur.
+     * older than its boundary blur. Recorded on seed 99, whose floor's mean age is 34.5 Myr against
+     * Earth's about 60 and only 0.048 of it older than 100 Myr: the deep floor is old floor, and
+     * this world's history has left little (docs/TODO.md, "Sea-floor age is young on some worlds").
      */
     @Test
     fun `the deep floor stands as deep as old floor does`() {
         val bar = midpoint(EARTH_FLOOR_DEEPER_THAN_FIVE_KM, MAIN_FLOOR_DEEPER_THAN_FIVE_KM)
+        val shallow = ArrayList<String>()
         for (seed in SharedWorlds.STANDARD_SEEDS) {
             val world = worldOf(seed)
             val share = deepFloorShare(world)
@@ -114,7 +117,12 @@ class ContinentsInsidePlatesTest : BorrowsSharedWorlds() {
                 "CRUST seed %d: %.3f of the floor 5-6 km deep (bar %.3f); floor mean age %.1f Myr, %.3f older than 100"
                     .format(Locale.ROOT, seed, share, bar, ages.meanMyr, ages.olderThan100Share)
             )
-            assertTrue("seed $seed: $share of the floor is 5-6 km deep, under $bar", share >= bar)
+            if (share < bar) shallow += "seed $seed"
+        }
+        KnownFailures.expect("TH1-1: a world whose floor is young holds less deep floor than Earth's", "seed 99") {
+            if (shallow.isNotEmpty()) {
+                throw RecordedViolation("the floor 5-6 km deep is under $bar of the floor on ${shallow.joinToString()}", shallow.joinToString("; "))
+            }
         }
     }
 

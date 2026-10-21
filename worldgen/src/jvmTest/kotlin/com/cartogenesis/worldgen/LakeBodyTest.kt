@@ -84,8 +84,9 @@ class LakeBodyTest : BorrowsSharedWorlds() {
         // same few-cell lakes that come and go with any change of the rain, here the exchange
         // inside the march's lap moving it by a few tenths of a percent (docs/DESIGN_LEDGER.md, H1,
         // M1, A1-6a, F1, W2e and W2f; docs/TODO.md).
-        // Recorded at TH1-1: on the history's seed 1234 a lake lies in two pieces (docs/TODO.md).
-        KnownFailures.expect("TH1-1: on the history's ground a lake lies in two pieces", "seed 1234: [lake 43 in 2 pieces]") {
+        // Recorded at TH1-1 on the history's first worlds, where seed 1234 held a lake in two pieces.
+        // Armed at TH1-1, whose final worlds pass it (docs/DESIGN_LEDGER.md, TH1-1).
+        run {
             if (pieceFailures.isNotEmpty()) {
                 throw RecordedViolation("a body of water holds more than one piece: $pieceFailures", pieceFailures.joinToString("; "))
             }
@@ -158,9 +159,10 @@ class LakeBodyTest : BorrowsSharedWorlds() {
         // own accounting, not traced (docs/TODO.md). Armed at W2b, whose ground leaves none. Recorded
         // at W2e, whose ground leaves one basin of six cells in seed 1234's dry country handed 1.05
         // times the rain reaching it, the same accounting, not traced (docs/TODO.md).
-        // Recorded at TH1-1: on the history's seed 42 two small basins are handed more than the rain
-        // reaching them, the basins' accounting the earlier entries name (docs/TODO.md).
-        KnownFailures.expect("TH1-1: on the history's ground small basins are handed more than the rain reaching them", "seed 42: 7 cells x1.51; seed 42: 4 cells x10.38") {
+        // Recorded at TH1-1 on the history's first worlds, where two of seed 42's small basins were
+        // handed more than the rain reaching them, the accounting the earlier entries name.
+        // Armed at TH1-1, whose final worlds pass it (docs/DESIGN_LEDGER.md, TH1-1).
+        run {
             if (failures.isNotEmpty()) throw RecordedViolation("rain counted twice or lost: $failures", shortFailures.joinToString("; "))
         }
     }

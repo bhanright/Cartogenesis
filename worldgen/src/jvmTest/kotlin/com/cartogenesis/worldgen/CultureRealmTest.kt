@@ -196,10 +196,10 @@ class CultureRealmTest : BorrowsSharedWorlds() {
             )
             assertTrue(areas.size >= 4, "seed $seed produced only ${areas.size} peoples")
         }
-        // Recorded at TH1-1, on whose seed 7 the peoples leave 11% of the habitable land at 256 rows
-        // unsettled, the cause not traced (docs/DESIGN_LEDGER.md, TH1-1;
-        // docs/TODO.md).
-        KnownFailures.expect("TH1-1: on the history's seed 7 the peoples leave a tenth of the habitable land unsettled", "seed 42 left 20% of habitable land unsettled") {
+        // Recorded at TH1-1 on the history's first worlds, on which seed 7 and then seed 42 left a
+        // tenth to a fifth of the habitable land unsettled, the cause not traced.
+        // Armed at TH1-1, whose final worlds pass it (docs/DESIGN_LEDGER.md, TH1-1).
+        run {
             if (unsettled.isNotEmpty()) throw RecordedViolation(unsettled.joinToString("; "), unsettled.joinToString("; "))
         }
     }

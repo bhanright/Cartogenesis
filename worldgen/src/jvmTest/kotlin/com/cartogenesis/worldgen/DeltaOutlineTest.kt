@@ -134,7 +134,7 @@ class DeltaOutlineTest {
         // Recorded at W2h: on the climate's new ground the square-fan control's worst share falls to
         // 1.00%, a hair under the 1.05% bar, so the control no longer shows the guard failing
         // (docs/TODO.md, "What W2h's climate moved in the deep tier").
-        KnownFailures.expect("W2h: the square-fan control stands under the straight-run bar", "0.92%") {
+        KnownFailures.expect("W2h: the square-fan control stands under the straight-run bar", "0.81%") {
             if (controlWorst <= STRAIGHT_BAR) {
                 throw RecordedViolation(
                     "the square-fan control was expected to fail this guard and its worst share was " +

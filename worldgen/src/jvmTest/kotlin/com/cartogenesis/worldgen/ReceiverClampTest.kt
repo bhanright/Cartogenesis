@@ -147,7 +147,8 @@ class ReceiverClampTest {
         // (docs/DESIGN_LEDGER.md, W2e). Armed again at W2h, under whose rain none is left; the cell
         // is still not traced. Recorded at TH1-1, on whose seed 42 one cell is left, the same
         // untraced cell (docs/DESIGN_LEDGER.md, TH1-1; docs/TODO.md).
-        KnownFailures.expect("TH1-1: the incision leaves one channel cell below its receiver on the history's seed 42", "seed 42: 1") {
+        // Armed at TH1-1b, whose worlds pass it (docs/DESIGN_LEDGER.md, TH1-1b).
+        run {
             if (holesWith.isNotEmpty()) {
                 throw RecordedViolation(
                     "the incision put channel cells below the cell they drain into over the twelve rounds, " +

@@ -190,7 +190,7 @@ class LakeWaterBalanceTest : BorrowsSharedWorlds() {
         // ground gives seed 1 a dry basin of 538 cells (docs/DESIGN_LEDGER.md, W2e).
         // Recorded at TH1-1, on whose seed 1 the largest dry basin is 295 cells; the case reads the
         // basin it has (docs/DESIGN_LEDGER.md, TH1-1; docs/TODO.md).
-        KnownFailures.expect("TH1-1: on the history's seed 1 the dry basin is small", "295 cells") {
+        KnownFailures.expect("TH1-1: on the history's seed 1 the dry basin is small", "449 cells") {
             if (basin.size < 500) throw RecordedViolation("seed $drySeed has no large dry basin any more (${basin.size} cells)", "${basin.size} cells")
         }
         if (basin.isEmpty()) return
@@ -265,7 +265,8 @@ class LakeWaterBalanceTest : BorrowsSharedWorlds() {
         // (docs/DESIGN_LEDGER.md, W2e). Recorded at TH1-1, whose seed 1 offers a dry basin of 295
         // cells that stays at 84% of its spill area; the scan that re-picks the sample is M1's
         // (docs/DESIGN_LEDGER.md, TH1-1; docs/TODO.md).
-        KnownFailures.expect("TH1-1: on the history's seed 1 the dry sample stays near its spill", "84%") {
+        // Armed at TH1-1b, whose worlds pass it (docs/DESIGN_LEDGER.md, TH1-1b).
+        run {
             if (share >= DRY_BASIN_SHARE_OF_SPILL_AREA) {
                 throw RecordedViolation(
                     "seed $drySeed's dry basin holds ${"%.0f".format(share * 100)}% of its spill area," +

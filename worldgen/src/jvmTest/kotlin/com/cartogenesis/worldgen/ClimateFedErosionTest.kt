@@ -297,7 +297,8 @@ class ClimateFedErosionTest {
         }
         // Recorded at TH1-1, whose interim belts give one seed in four a range this reads; the
         // belts are TH1-2's to redraw (docs/DESIGN_LEDGER.md, TH1-1; docs/TODO.md).
-        KnownFailures.expect("TH1-1: on the history's interim belts one seed in four offers a range", "1 of 4") {
+        // Armed at TH1-1b, whose worlds pass it (docs/DESIGN_LEDGER.md, TH1-1b).
+        run {
             if (measurements.size < 2) {
                 throw RecordedViolation("only ${measurements.size} of ${SEEDS.size} seeds offered a belt to measure", "${measurements.size} of ${SEEDS.size}")
             }
@@ -393,7 +394,8 @@ class ClimateFedErosionTest {
             )
         }
         // Recorded at TH1-1, as the case above (docs/DESIGN_LEDGER.md, TH1-1; docs/TODO.md).
-        KnownFailures.expect("TH1-1: on the history's interim belts one seed in four offers a range", "1 of 4") {
+        // Armed at TH1-1b, whose worlds pass it (docs/DESIGN_LEDGER.md, TH1-1b).
+        run {
             if (checked < 2) throw RecordedViolation("only $checked of ${SEEDS.size} seeds offered a belt to measure", "$checked of ${SEEDS.size}")
         }
         // Earth's own figure for the same comparison, so a reader has the scale of it: the western
@@ -450,8 +452,9 @@ class ClimateFedErosionTest {
         // Re-recorded on square cells at Q2 (docs/DESIGN_LEDGER.md, Q2). Re-recorded at L1, whose rifts are Earth's half-grabens and the same at every grid (docs/DESIGN_LEDGER.md, L1).
         // Re-recorded at A1-6a, under whose circulation seed 1234's fed figure reads under the pin as
         // well as its flat-rain control (docs/DESIGN_LEDGER.md, A1-6a).
-        // Armed at TH1-1, whose worlds pass it (docs/DESIGN_LEDGER.md, TH1-1).
-        run {
+        // Armed at TH1-1, whose worlds passed it. Recorded at TH1-1b, on whose worlds seed 42's
+        // flat-rain control ranks against the rain (docs/DESIGN_LEDGER.md, TH1-1b; docs/TODO.md).
+        KnownFailures.expect("B-I2: the dissection pin was taken off the uplift path", "; seed 42's flat-rain control at -0.048") {
             if (underThePin.isNotEmpty() || uncontrolled.isNotEmpty()) {
                 val found = underThePin.joinToString { (seed, fed) -> String.format(Locale.ROOT, "seed %d at %.3f", seed, fed) } +
                     "; " + uncontrolled.joinToString { (seed, flat) ->

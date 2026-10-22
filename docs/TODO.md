@@ -1,38 +1,44 @@
 # To do
 
-- **The history's continents run straighter than Earth's at a tenth of the map (TH1-1, recorded).**
-  D3's straight-run instrument (windows a tenth of the map wide whose halves turn under 10 degrees,
-  `CrustMeasures.straightShare`) reads the crust's edge at 0.31 to 0.34 pooled over the standard
-  worlds at 512 rows, main's 0.34 and Earth's 0.15 (ETOPO5's 2,000 m isobath at 512 rows, the same
-  instrument); its corners (0.39 to 0.42 against Earth's 0.29 and main's 0.01) and its divider
-  dimension (1.17 against Earth's 1.17 and main's 1.03) are Earth's. The straight windows lie on the
-  long sides of the largest continents, the old supercontinent's outline and its rifted margins
-  (drawn for TH1-1); a warp of the supercontinent at its own size
-  did not move the share. `ContinentsInsidePlatesTest` runs it as a known failure. What would
-  settle it is an outline assembled from cratons and terranes rather than a warped cap. 2026-10-20,
-  TH1-1.
-- **The ensemble's worlds are assembled or dispersed, and too few between (TH1-1, measured).** Over
-  the predeclared seeds 1 to 30 at 512 rows, 11 assembled (largest landmass at least 0.75 of the
-  land), 11 intermediate and 8 highly dispersed (under 0.39); over the validation seeds 1001 to 1030,
-  9, 12 and 9 (`ContinentalConfigurationEnsembleTest`). The calibration hypothesis is 25%, 60% and
-  15%; no category is absent or grossly over-represented, but intermediate stands at 37 to 40%, a
-  count that low having a chance of about 1% and 2% under the hypothesis.
-  Behind it: the continental plates move at 1 to 30 mm a year against Earth's cratonic plates'
-  28, so a supercontinent's plates part slowly where forces part them at all, and once parted they
-  rarely meet again in the history's 200 Myr; the supercontinent rifts a plate a step where its
-  forces open a suture. Earth's dispersal is checked by new collisions (India, Arabia, Africa into
-  Eurasia). 2026-10-20, TH1-1.
-- **The land crowds into one hemisphere (TH1-1, measured).** The share of all land in each world's
-  most land-rich hemisphere, searched over 4,000 centers, reads a median of 0.974 over the sixty
-  ensemble seeds at 512 rows (10th to 90th percentile 0.882 to 0.990; one world at or under Earth's)
-  against Earth's 0.811, ETOPO5 read the same way at 512 rows (0.813 on its own five-minute grid,
-  centered near 40 N 2 E: 46% of that hemisphere is land and 11% of the other, as the classic land
-  and water hemispheres have it). It falls with the time since the breakup began: 0.98 where it has
-  not begun or began under 50 Myr ago (29 of the 60, as `assembledShareOfCycle`'s uniform draw over
-  260 Myr expects about 42%), 0.966, 0.911 and 0.886 over 50 to 100, 100 to 150 and 150 to 200 Myr,
-  against Earth's 0.81 some 200 Myr after Pangea began to part. A supercontinent of 29% of the
-  sphere fits inside one hemisphere, so an assembled world reads near 1; the dispersed worlds' 0.92
-  median is the slow drift of the speeds entry below. 2026-10-20, TH1-1.
+- **The history's continents run straighter than Earth's at a tenth of the map (TH1-1, recorded;
+  TH1-1b, measured again).** D3's straight-run instrument (windows a tenth of the map wide whose
+  halves turn under 10 degrees, `CrustMeasures.straightShare`) reads the crust's edge at 0.30 pooled
+  over the standard worlds at 512 rows (0.31 the ensemble's median), against TH1-1's 0.35, main's 0.34
+  and Earth's 0.15 (ETOPO5's 2,000 m isobath at 512 rows, the same instrument); corners 0.37 to 0.40
+  (Earth 0.29) and divider dimension 1.14 to 1.16 (Earth 1.17). TH1-1b assembles the supercontinent
+  from continent-sized blocks docked one at a time (`TectonicHistory.supercontinentCells`), which took
+  the site world's 718106 from one cap whose east and west coasts were meridians to a lobed assembly
+  whose east coast is a gentle arc. What is left straight is split about evenly between the rifted
+  margins (0.27 to 0.37 of their windows) and the blocks' outer arcs (0.22 to 0.36). Tried and not
+  kept: craton-sized blocks (35 on Earth), which read 0.19 to 0.22 but string every continent into
+  round beads and scatter the land into many small continents; a wander at the supercontinent's own
+  scale over the blocks (0.31); and rifts drawn along the sutures' own line rather than the belt's
+  width (0.32). What would settle it is a rift that follows its belt's curve and steps by transforms
+  at every scale, as Earth's margins do (TH1-2's rifts, TH1-3's margins). 2026-10-21, TH1-1b.
+- **The ensemble's intermediate worlds (TH1-1 and TH1-1b, measured).** Over the predeclared seeds 1 to
+  30 at 512 rows, 9 assembled (largest landmass at least 0.75 of the land), 15 intermediate and 6
+  highly dispersed (under 0.39); over the validation seeds 1001 to 1030, 10, 10 and 10
+  (`ContinentalConfigurationEnsembleTest`); TH1-1 read 11, 11 and 8, and 9, 12 and 9. The calibration
+  hypothesis is 25%, 60% and 15%: no category absent or grossly over-represented, the calibration set
+  near it, the validation set's intermediate low (10 of 30, a count that low under 1% likely under the
+  hypothesis) and its dispersed high (10, 0.7%). The phase draw now follows Earth's tenures, a
+  supercontinent standing 0.31 of a 600 Myr cycle (`TectonicsConfig.assembledShareOfCycle`), so a
+  world still assembled is drawn a little more often than TH1-1's 0.23. The largest landmass's median
+  0.50 and 0.56 (Earth 0.54), Korcak's K 0.40 and 0.42 (Earth 0.51). Some assembled supercontinents
+  close round an interior sea (seeds 1, 9, 23): their blocks dock wherever they reach the assembly's
+  edge inside one hemisphere, and the ring they make encloses ocean floor. 2026-10-21, TH1-1b.
+- **The land's hemisphere over the cycle (TH1-1, measured; TH1-1b, the crowding closed).** The
+  share of all land in each world's most land-rich hemisphere (`CrustMeasures.landHemisphereShare`,
+  4,000 centers) reads a median of 0.82 over the sixty ensemble seeds at 512 rows (10th to 90th
+  percentile 0.67 to 0.93; 25 of the 60 at or under Earth's 0.811), against TH1-1's 0.974 (one world
+  of 60 at or under Earth's). By the time since the breakup began: 0.91 where it has not begun (20
+  worlds), 0.88, 0.78, 0.72 and 0.69 over 0 to 50, 50 to 100, 100 to 150 and 150 to 200 Myr (TH1-1:
+  0.98, 0.966, 0.911, 0.886), against Earth's 0.81 some 200 Myr after Pangea began to part: the
+  continents now part at Earth's speeds (the plates' slab resistance, TH1-1b), and a world as far
+  into its dispersal as Earth now holds its land a little less in one hemisphere than Earth does,
+  where TH1-1's held it far more. `ContinentalConfigurationEnsembleTest` holds the median of the
+  worlds broken 150 Myr ago or more under 0.849, midway between Earth's and TH1-1's. 2026-10-21,
+  TH1-1b.
 - **The narrow seaways inside the continents, by age (TH1-1, measured).** Water within 400 km of
   land on both sides along a row, a column or a diagonal, equatorward of 70 degrees, in pieces at
   least 800 km across: 7 to 30 a world over the sixty ensemble seeds (median 18.5) against Earth's
@@ -89,12 +95,27 @@
   on its 200 km world no heating latitude closes the Hadley cells. In the whole deep tier at once
   five classes ran out of their 5 GB workers and pass alone. 2026-10-21, TH1-1.
 - **The history's crust stands less of the world above the datum than the slider asks (TH1-1,
-  recorded).** The plate stage draws `(1 - seaLevel) / (1 - continentalCrustSubmergedShare)` of the
-  sphere as continental crust, and on the history's worlds 0.241 to 0.287 of the world then stands
-  above the isostatic datum where the slider asks 0.29: stretched crust and the wide drowned
-  platforms stand lower than the submerged share allows for, and the sea-level cut lands 196 to 901
-  m under the datum against `IsostasyTest`'s 300 (seed 99 the furthest). The conversion is to be
-  re-derived on the history's crust, with the margins of TH1-3. 2026-10-21, TH1-1.
+  recorded; TH1-1b, two of three causes fixed).** Three causes were read apart on the coverage seeds
+  at 256 rows. The slider was a share of the map's cells and the history's crust a share of the
+  sphere's area, so the same crust drew 0.35 of the cells near the equator and 0.47 toward a pole:
+  fixed, the sea's share is now by area (`SeaLevelStage.shorelineForFraction`, `SeaShareTest`).
+  Stretched margins stood as if cooled for good from the moment they rifted: fixed, they carry
+  McKenzie's heat (`Isostasy.Columns.stretchedThermalBuoyancyMetres`), worth a median 140 to 310 m on
+  the standard worlds, whose margins are mostly old. What is left is the history's crust drowning
+  more of itself than Earth's: before erosion, 0.36 of it on the mean of the calibration seeds 2001
+  to 2030 (0.25 still assembled, 0.46 most rifted) against Earth's 0.29 to 0.30, its rifted margins
+  up to a fifth of its crust on a much-rifted world (Earth's slope and rise, below the shelf break,
+  0.16 of its crust on ETOPO5) standing below the shelves Earth's sediment builds, while the platform
+  still drowns its own share of the crust never stretched (0.15 to 0.22 of all the crust; Earth's
+  shelves 0.15). On the plate stage's height the cut lands 77 to 404 m under the datum on four of the
+  five seeds and 30 m over it on 718106; on the finished world, after erosion has lowered the land,
+  `IsostasyTest` reads 144 to 644 m under it (seed 7 the furthest; TH1-1: 196 to 901), a known
+  failure. Drawing the crust for the history's own 0.36 lands the uneroded cut on the datum (the
+  calibration mean 12 m under) but on 0.45 of the planet, and the extra crust, drowned, parts the
+  land: the ensemble went to 7, 24 and 29 assembled, intermediate and dispersed, the land
+  hemisphere's median to 0.76. Not done; the margins' sediment and a stretching that grows with the
+  opening (TH1-3) are what bring the drowned share back to Earth's, and the cut's place after erosion
+  is the erosion's own question. 2026-10-21, TH1-1b.
 - **The drawing's calibrated figures moved with the ground (TH1-1, recorded).** The relief's slope
   floor reads 0.14 against `EngravingPlan.SLOPE_FLOOR`'s 0.06, its haze matches at 0.12 against 0.10,
   the sky draws 13% flatter than the lamp and the steepest exaggeration that pins no face of the
@@ -105,6 +126,58 @@
   least three cells wide, which the stroke count exempts and the pixel count does not
   (`RiverWidthTest`). Each was set on main's worlds; whether to re-derive them is the drawing's
   question once the belts (TH1-2) and margins (TH1-3) settle the ground. 2026-10-21, TH1-1.
+- **What TH1-1b moved in the deep tier (recorded).** Lost their controls: the circulation's control
+  ocean is solved by its cycles alone in 14 and no longer stalls, so the rescue is not exercised
+  (`CirculationRescueTest`); the old slab lobe lies flat on three seeds of four
+  (`DeltaMouthTest`); the seam's control draws no seam past 235 km (`LocalCirculationEarthTest`); the
+  uniform-crust control drowns 0.823 of its crust at the rim (`GroundTextureTest`); no standard world
+  has a cold dry interior to measure (`SnowBalanceTest`). Moved: seed 42's flat-rain control ranks
+  against the rain (-0.048, `ClimateFedErosionTest`); seed 42's sheet round the south pole runs 47
+  cells along a row against 45.6 allowed and flows outward at 67.9 degrees off radial against 67.5
+  (`IceSheetTest`); the bed under seed 7's cap sinks a hair past Airy's own share and its moat is 173
+  m of the 1,096 its ice floats out at (`IsostasyTest`); seed 42's southern ridge moves 10.0 degrees
+  (`MeanCirculationEarthTest`); the continents recycle 0.275 of their rain (`MoistureBudgetTest`);
+  seed 1234 starts with a lake 2.13 times the Caspian's share that keeps two thirds of its world's
+  water (`OutletIncisionTest`); its lowstand drowns no valleys, 224 mouths inside an inlet against
+  232, the three seeds pooling 1.12 times against 1.5 (`SeaLevelHistoryTest`). Armed, their worlds
+  passing: the equatorial basins' eastern pressure (`AirSeaEarthTest`), the rift's axis
+  (`BoundaryPairTest`), the ranges on offer to the climate-fed erosion (`ClimateFedErosionTest`), the
+  continents shelved rather than flooded (`GroundTextureTest`), the sea's mode on seed 1234
+  (`IsostasyTest`), seed 1's dry basin (`LakeWaterBalanceTest`), the subtropical coasts and the
+  interior's rain under the pressure term (`PressureWindTest`), the rain's step across a row
+  (`RainGeometryTest`) and the channel below its receiver (`ReceiverClampTest`). `DepositionTest`
+  read 140 cells of the logged erosion off the generated world in the whole tier at once and none
+  run alone. 2026-10-22, TH1-1b.
+- **The sea-level cut and McKenzie's heat on the processor (TH1-1b).** The sea's share is now cut by
+  area, a weighted histogram and a sort of one bin (`SeaLevelStage`), and the plate stage's column
+  carries a stretched margin's heat per cell (`Isostasy.Columns.stretchedThermalBuoyancyMetres`); both
+  are per-cell passes on the processor beside the plate stage's other raster work, and belong with it
+  on the card when TH1-4 moves the plate stage there. 2026-10-21, TH1-1b.
+- **An assembled supercontinent left standing sheds its ocean floor into many plates (TH1-1b,
+  measured).** A plate of the supercontinent that grows past Earth's largest plate, as the ocean round
+  a world still assembled is consumed under it, now splits through its ocean floor only; on seed
+  718106 at the defaults, never broken, the history ends with 26 plates, the largest 0.246 of the
+  sphere. Earth's Panthalassa carried a dozen or so. 2026-10-21, TH1-1b.
+- **On the history's dispersed worlds the land's water cycle stands off Earth's (TH1-1b, recorded).**
+  With the continents parting at Earth's speeds the standard worlds' land is smaller pieces spread
+  over both hemispheres, and the land's rain reads 981 mm a year, x1.30 Earth's
+  (`RainAgainstEarthTest`); the rain that last evaporated from land x0.69 Earth's, the rain falling
+  where the potential is under half of it x1.54, the humid continental and polar groups giving back
+  x0.79 and x0.78 of Earth's share and the polar evaporating x1.51 its millimeters
+  (`GroundReturnEarthTest`); the land's desert x0.44 Earth's share (it was x0.36 at TH1-1). Each runs
+  as a known failure under TH1-1b; which part is the new layout and which the sea's share taken by
+  area is not separated. 2026-10-21, TH1-1b.
+- **Other clauses the TH1-1b worlds moved (recorded).** Seed 42's steep ground falls 19.2 m a km down
+  a column against 15.8 along a row, 1.22 apart against `GroundIsotropyTest`'s 1.2, its land now
+  reaching the south pole under ice, the cause not traced; seed 7 leaves 11% of its habitable land
+  unsettled against a bar of 10% (`CultureRealmTest`); seed 99 carries one course of a single cell of
+  land into water (`RiverCourseTest`); seed 42's shelf, drawn off the plain jump flood, stands three
+  cells a whisker off the true distance (A-I11, `JumpFloodDistanceTest`); and seed 718106 at the
+  defaults, its supercontinent never broken and clear of both poles, carries no ice, so the
+  ice-sheet clauses read the other three of their four seeds (`IceSheetTest`). Armed, their worlds
+  passing: the boundary layer's two clauses (`BoundaryLayerTest`), the isolated wet spots
+  (`RainPlacementEarthTest`), the half-grabens' lengths (`RiftIdentityTest`) and the ice sheets'
+  thickness (`IceSheetTest`, the thickest 4,655 m). 2026-10-21, TH1-1b.
 - **What TH1-4 must put on the card (TH1-1).** The map pass is on the card behind
   `CrustMapAccelerator` (`GpuCrustMap`, held to the processor by `CrustMapParity`: the share 2.4e-3
   at worst against a bar of 1.1e-2, the categories differing on 1e-5 of the cells). Still on the
@@ -114,11 +187,16 @@
   lower crust's flow (ten explicit substeps over every lattice edge); and the plate stage's raster
   floods (`boundaryDistance`, `cratonInteriorShare`), main's jump flood on the processor. 2026-10-20,
   TH1-1.
-- **The history's continents' speeds and the cratonic plates' 28 mm a year (TH1-1, measured).**
-  `TectonicsConfig.CRATONIC_PLATE_SPEED_MM_PER_YEAR` is kept as a validation figure, and the history
-  normalizes its speeds on the slab-pulled oceanic plates at 85 mm a year; the plates mostly
-  continental come out at 1 to 30 mm a year on the standard seeds, many under 10. No guard holds
-  them yet. 2026-10-20, TH1-1.
+- ~~**The history's continents' speeds and the cratonic plates' 28 mm a year (TH1-1, measured).**~~
+  Closed by TH1-1b, 2026-10-21: the plates' balance carries the slab's resistance at the trench
+  (`TectonicsConfig.slabResistanceKm`), and the plates more than half continental move at a median of
+  29 to 31 mm a year after their breakup against Zahirovic et al.'s 28 (basal drag alone: 13 to 16),
+  the continents parting at 33 mm a year against the 20 to 33 of today's Atlantic and Indian ridges
+  (`TectonicHistoryTest`). Still off: every plate's median 58 to 62 against their 42, the plates a
+  quarter to half continental 47 against 38, and a slab-pulled plate's speed still falls with its
+  area (a slope of -0.22 in the logs against Earth's 0.00), the trench's resistance standing at about
+  a fifth of a large plate's basal drag; the ensemble's land hemisphere at 150 to 200 Myr reads 0.69
+  against Earth's 0.81.
 - **Sea-floor age is young on some worlds (TH1-1, measured).** The floor's mean age on the map
   reads 30 to 60 Myr on the standard seeds at 512 rows against Earth's about 60 (the history's own
   ridges spread at a mean half rate of 23 to 52 km a Myr); its area falls with age as Earth's does.

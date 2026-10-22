@@ -112,7 +112,8 @@ class RainGeometryTest : BorrowsSharedWorlds() {
         noWorse("the October-March half's largest row step", winter, MAIN_WINTER_STEP)
         // Recorded at TH1-1, on whose worlds the annual rain's largest step across a row pools at
         // 4.36 against main's 3.72, and the October-March half's at 4.27 against 4.04 (docs/DESIGN_LEDGER.md, TH1-1; docs/TODO.md).
-        KnownFailures.expect("TH1-1: on the history's worlds the rain steps across a row more than main's did", "the annual rain's largest row step; the October-March half's largest row step") {
+        // Armed at TH1-1b, whose worlds pass it (docs/DESIGN_LEDGER.md, TH1-1b).
+        run {
             if (worse.isNotEmpty()) throw RecordedViolation(worse.joinToString("; "), worse.joinToString("; ") { it.substringBefore(":") })
         }
         // Recorded on H1's ground under the coupled climate, where the deserts' edges along a row
@@ -190,7 +191,7 @@ class RainGeometryTest : BorrowsSharedWorlds() {
             )
             if (found.alongRowKm > bar) over += "%d %.0f km at %.0f".format(seed, found.alongRowKm, found.rowLatitude)
         }
-        KnownFailures.expect("C1b2: fronts along the belts' factor", "42 1775 km at -17; 969495 1117 km at 23; 7 1254 km at 34") {
+        KnownFailures.expect("C1b2: fronts along the belts' factor", "42 2337 km at -17; 969495 1700 km at -22; 7 1191 km at -42") {
             if (over.isNotEmpty()) {
                 throw RecordedViolation(
                     "fronts hold a row for longer than a quarter of the weather's wavelength: " + over.joinToString("; "),
@@ -227,7 +228,7 @@ class RainGeometryTest : BorrowsSharedWorlds() {
         // Recorded at A1-6b: the front moves with the seasons and the march carries water across the
         // wind's reversal, yet the year's rain still steps along a row near 64 degrees on every seed
         // (docs/TODO.md).
-        KnownFailures.expect("A1-6b: the rain still ends along a row at the polar front", "42 923 km at -60.9; 7 861 km at -63.0") {
+        KnownFailures.expect("A1-6b: the rain still ends along a row at the polar front", "969495 804 km at 61.1; 7 870 km at -60.4") {
             if (over.isNotEmpty()) {
                 throw RecordedViolation(
                     "fronts hold a row at the polar front for longer than a quarter of the weather's wavelength: " +

@@ -107,7 +107,8 @@ class AirSeaEarthTest : BorrowsSharedWorlds() {
         }
         // Recorded at TH1-1: on the history's seed 7 the equatorial basins' eastern thirds stand
         // 0.19 hPa under their western (docs/DESIGN_LEDGER.md, TH1-1; docs/TODO.md).
-        KnownFailures.expect("TH1-1: on the history's seed 7 the equatorial basins' eastern thirds stand lower", "seed 7 -0.19 hPa") {
+        // Armed at TH1-1b, whose worlds pass it (docs/DESIGN_LEDGER.md, TH1-1b).
+        run {
             if (failures.isNotEmpty()) throw RecordedViolation("the eastern thirds stand no higher: $failures", failures.joinToString("; "))
         }
     }
@@ -132,7 +133,7 @@ class AirSeaEarthTest : BorrowsSharedWorlds() {
                 .format(north / DAYS_PER_YEAR, northAt, south / DAYS_PER_YEAR, -southAt, ratio, equator / DAYS_PER_YEAR))
             if (!(ratio >= NORTH_OVER_SOUTH_PEAK)) failures += "seed $seed %.2f".format(ratio)
         }
-        KnownFailures.expect("A1-6c: the year's ocean rain peaks either side of the equator alike", "seed 42 0.97; seed 969495 0.97; seed 7 1.01") {
+        KnownFailures.expect("A1-6c: the year's ocean rain peaks either side of the equator alike", "seed 42 0.93; seed 969495 0.92; seed 7 1.04") {
             if (failures.isNotEmpty()) throw RecordedViolation("the north peak stands under twice the south: $failures", failures.joinToString("; "))
         }
     }

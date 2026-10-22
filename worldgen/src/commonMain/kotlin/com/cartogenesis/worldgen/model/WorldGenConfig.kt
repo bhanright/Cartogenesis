@@ -1303,10 +1303,10 @@ data class TectonicsConfig(
      * over half continental move at a median of 27 to 31 mm a year after their supercontinent breaks
      * against Zahirovic et al.'s 28 over the last 200 Myr, those a quarter continental or more with
      * under a fifth of their edge subducting at 28 to 33 against their 28, those with no trench at
-     * all at 22 to 35 against their 26, and those a slab pulls at 80 to 83 against their 79 and 85
+     * all at 20 to 44 against their 26, and those a slab pulls at 80 to 83 against their 79 and 85
      * (*Tectonic speed limits from plate kinematic reconstructions*, EPSL 418, 2015, section 3.5),
      * on twenty calibration seeds kept apart from the ensemble's; and a slab-pulled oceanic plate's
-     * speed falls less with its area, the slope of its log speed on its log area -0.22 against basal
+     * speed falls less with its area, the slope of its log speed on its log area -0.23 against basal
      * drag's -0.29 and Earth's 0.00 ([com.cartogenesis.worldgen.pipeline.PlateForces]). At zero, basal
      * drag alone, the plates over half continental crawl at 13 to 16 mm a year and the continents
      * part at 21 against the 20 to 33 of the Atlantic's and the Indian Ocean's ridges today, which

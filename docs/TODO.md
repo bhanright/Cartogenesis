@@ -194,9 +194,8 @@
   the continents parting at 33 mm a year against the 20 to 33 of today's Atlantic and Indian ridges
   (`TectonicHistoryTest`). Still off: every plate's median 58 to 62 against their 42, the plates a
   quarter to half continental 47 against 38, and a slab-pulled plate's speed still falls with its
-  area (a slope of -0.22 in the logs against Earth's 0.00), the trench's resistance standing at about
-  a fifth of a large plate's basal drag; the ensemble's land hemisphere at 150 to 200 Myr reads 0.69
-  against Earth's 0.81.
+  area (a slope of -0.23 in the logs against basal drag's -0.29 and Earth's 0.00); the ensemble's
+  land hemisphere at 150 to 200 Myr reads 0.68 to 0.76 against Earth's 0.81.
 - **Sea-floor age is young on some worlds (TH1-1, measured).** The floor's mean age on the map
   reads 30 to 60 Myr on the standard seeds at 512 rows against Earth's about 60 (the history's own
   ridges spread at a mean half rate of 23 to 52 km a Myr); its area falls with age as Earth's does.

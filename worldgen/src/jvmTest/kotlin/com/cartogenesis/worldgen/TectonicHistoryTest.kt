@@ -116,8 +116,8 @@ class TectonicHistoryTest {
      * plate, 56.5. Printed beside it, not held: how a slab-pulled plate's speed falls with its area,
      * the slope of its log speed on its log area, where Earth's NNR-MORVEL56 Pacific, Nazca, Cocos and
      * Philippine Sea plates, 36 times apart in area, read 0.00 (Argus, Gordon and DeMets 2011,
-     * Table 1); the slab's resistance takes the history's from basal drag's -0.29 to -0.22, a
-     * third of the way.
+     * Table 1); the slab's resistance takes the history's from basal drag's -0.29 to -0.23, a
+     * fifth of the way.
      *
      * The control is the same histories with the slab's resistance at nothing, basal drag alone
      * (`TectonicsConfig.slabResistanceKm`), which fails it.

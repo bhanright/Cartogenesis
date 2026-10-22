@@ -21,8 +21,8 @@
   (`ContinentalConfigurationEnsembleTest`); TH1-1 read 11, 11 and 8, and 9, 12 and 9. The calibration
   hypothesis is 25%, 60% and 15%: no category absent or grossly over-represented, the calibration set
   near it, the validation set's intermediate low (10 of 30, a count that low under 1% likely under the
-  hypothesis) and its dispersed high (10, 0.7%). The phase draw now follows Earth's tenures, a
-  supercontinent standing 0.31 of a 600 Myr cycle (`TectonicsConfig.assembledShareOfCycle`), so a
+  hypothesis) and its dispersed high (10, a count that high 1.0% likely). The phase draw now follows
+  Earth's tenures, a supercontinent standing 0.31 of a 600 Myr cycle (`TectonicsConfig.assembledShareOfCycle`), so a
   world still assembled is drawn a little more often than TH1-1's 0.23. The largest landmass's median
   0.50 and 0.56 (Earth 0.54), Korcak's K 0.40 and 0.42 (Earth 0.51). Some assembled supercontinents
   close round an interior sea (seeds 1, 9, 23): their blocks dock wherever they reach the assembly's

@@ -246,7 +246,9 @@ val deepClassesByStage: Map<String, List<String>> = mapOf(
         "com.cartogenesis.worldgen.DeltaOutlineTest.lobe rims in a world",
         "com.cartogenesis.worldgen.DepositionTest.river mouths gain land, and do not without deposition",
         "com.cartogenesis.worldgen.DepositionTest.deposition off is deposition absent, and its knobs cannot leak",
-        "com.cartogenesis.worldgen.ErosionSkipTest.report what skipping settled ground saves"
+        "com.cartogenesis.worldgen.ErosionSkipTest.report what skipping settled ground saves",
+        // TH1-2: the belts' replay three times over, at its step, its half and its quarter.
+        "com.cartogenesis.worldgen.BeltReplayTest.the replay converges as its step halves"
     ),
     "sea" to listOf(
         "com.cartogenesis.worldgen.GlacialBasinShapeTest",

@@ -1386,9 +1386,16 @@ internal object TectonicHistory {
                     continue
                 }
                 if (opening > 0.0) {
+                    // A rift is continental lithosphere pulled apart, continent on both sides. A
+                    // divergent boundary at a continent's edge with ocean floor across it is the
+                    // ridge the continent has already parted from: Bird (2003) counts a boundary
+                    // oceanic where it lies deeper than 2,000 m, the isobath a continent's edge is
+                    // read at (D3), and the slow opening that holds the ridge against the margin
+                    // for a step or two is the lattice's, not a rift valley on land
+                    // (docs/DESIGN_LEDGER.md, TH1-2).
                     boundaryClass[cell] =
-                        if (!continent && !otherContinent) BoundaryClass.OCEAN_RIDGE.ordinal
-                        else BoundaryClass.CONTINENTAL_RIFT.ordinal
+                        if (continent && otherContinent) BoundaryClass.CONTINENTAL_RIFT.ordinal
+                        else BoundaryClass.OCEAN_RIDGE.ordinal
                     forces.add(cell, plate, PlateForces.RIDGE_PUSH * lengthKm, -nx, -ny, -nz)
                     // A continent begins to part only where it meets the other side's continent: a
                     // ridge along a margin already rifted is ocean opening, not new stretching.

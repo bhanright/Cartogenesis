@@ -408,6 +408,43 @@ class RiftIdentityTest {
     }
 
     /**
+     * A world is no more rifted than Earth: its present rifts, measured along each rift's course,
+     * run no farther in all than Earth's whole continental rift boundary, Bird's 27,472 km (*An
+     * updated digital model of plate boundaries*, G-cubed 4, 2003, Table 3), which counts the
+     * transitional steps of young oceans such as the Red Sea's and the Gulf of California's as
+     * continental too, so it is the most a world's rifts on land can be held to.
+     *
+     * A rift is continental crust pulled apart, continent on both sides; TH1-1b drew one wherever
+     * a ridge ran against a continent's edge as well, and this clause fails there (docs/DESIGN_LEDGER.md,
+     * TH1-2). The half-grabens are counted and printed beside it.
+     */
+    @Test
+    fun `a world is no more rifted than Earth`() {
+        val failures = ArrayList<String>()
+        for (seed in seeds) {
+            val grid = grid(seed, coarseRows.last())
+            val report = grid.report
+            val spans = HashMap<Pair<Int, Int>, Pair<Float, Float>>()
+            val halfGrabens = HashSet<Triple<Int, Int, Int>>()
+            report.cell.indices.forEach { entry ->
+                val chain = grid.pairOf(entry) to report.chain[entry]
+                val along = report.alongKm[entry]
+                val span = spans[chain]
+                spans[chain] = if (span == null) along to along else minOf(span.first, along) to maxOf(span.second, along)
+                halfGrabens.add(Triple(grid.pairOf(entry), report.chain[entry], report.ordinal[entry]))
+            }
+            val lengthKm = spans.values.sumOf { (it.second - it.first).toDouble() }
+            val longestKm = spans.values.maxOfOrNull { (it.second - it.first).toDouble() } ?: 0.0
+            println(
+                "RIFT COUNT seed %d at %d rows: %d rifts, %.0f km in all (Earth's continental rift boundary %.0f km), the longest %.0f km; %d half-grabens"
+                    .format(seed, coarseRows.last(), spans.size, lengthKm, EARTH_CONTINENTAL_RIFT_KM, longestKm, halfGrabens.size)
+            )
+            if (lengthKm > EARTH_CONTINENTAL_RIFT_KM) failures += "seed $seed: %.0f km".format(lengthKm)
+        }
+        assertTrue(failures.isEmpty(), "worlds more rifted than Earth: $failures")
+    }
+
+    /**
      * Each whole half-graben's length twice over, in kilometers: walked over its own cells from one
      * end to the other, and in a straight line between the two ends.
      */
@@ -485,5 +522,7 @@ class RiftIdentityTest {
         const val MIN_COMPARED_CELLS = 8
         /** A second world, five thirds as wide as the one the knobs are calibrated on. */
         const val SECOND_WORLD_WIDTH_KM = 20_000.0
+        /** Earth's continental rift boundary, km: Bird 2003, Table 3. */
+        const val EARTH_CONTINENTAL_RIFT_KM = 27_472.0
     }
 }

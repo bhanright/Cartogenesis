@@ -1401,8 +1401,10 @@ object PlateStage {
                                         0f
                                     }
 
+                            // The ridge is the floor's: where a ridge runs against a continent's
+                            // edge, the continent beside it stands as its margin and is not raised.
                             BoundaryClass.OCEAN_RIDGE ->
-                                tectonics.mountainHeight * 0.22f * strength * narrow
+                                if (boundary.oceanicSide) tectonics.mountainHeight * 0.22f * strength * narrow else 0f
 
                             // Continental crust being pulled apart: the floor drops between two
                             // rebounding shoulders. Where such a pair has ocean on one side, that

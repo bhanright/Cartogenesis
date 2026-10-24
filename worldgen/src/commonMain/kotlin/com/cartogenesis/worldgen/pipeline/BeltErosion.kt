@@ -28,9 +28,10 @@ class BeltWindow(
  *
  * The books close: what the rivers cut leaves the belts at their outlets, into the sea or onto the
  * land beyond them, where the foreland's own rivers take it on ([exportedToSeaCubicMetres],
- * [exportedToLandCubicMetres]); what the hillslopes shed onto the ground beside the belts stays
- * there ([shedBesideCubicMetres]). Nothing is laid inside the belts: the replay cuts rock, and the
- * rounds that follow it lay the spoil of their own four million years.
+ * [exportedToLandCubicMetres], the second with what a hollow inside a belt holds); what the
+ * hillslopes shed onto the ground beside the belts stays there ([shedBesideCubicMetres]). The
+ * replay cuts rock and lays none: the rounds that follow it lay the spoil of their own four million
+ * years.
  */
 internal class BeltReplay(
     val rounds: Int,
@@ -205,9 +206,10 @@ internal object BeltErosion {
         val routing = DoubleArray(cellCount) { surface[it].toDouble() }
         val filled = FloatArray(beltCells)
         val receiver = IntArray(beltCells)
-        val order = IntArray(beltCells)
         val discharge = DoubleArray(beltCells)
         val flux = DoubleArray(beltCells)
+        val donors = IntArray(beltCells)
+        val runOrder = IntArray(beltCells)
         val erodedMetres = FloatArray(cellCount)
         val visited = BooleanArray(beltCells)
         val heap = LongMinHeap(beltCells.coerceAtLeast(16))
@@ -261,10 +263,8 @@ internal object BeltErosion {
                     heap.push(FlowRouting.encode(surface[cell], local))
                 }
             }
-            var popped = 0
             while (!heap.isEmpty()) {
                 val local = FlowRouting.decodeIndex(heap.pop())
-                order[popped++] = local
                 val level = filled[local]
                 forEachNeighbor(cellsAcross, cellsDown, belt[local]) { neighbor ->
                     val other = localOf[neighbor]
@@ -287,22 +287,40 @@ internal object BeltErosion {
                     else FlowRouting.facetReceiver(cellsAcross, cellsDown, routing, cell % cellsAcross, cell / cellsAcross, steps, config.seed)
                 }
             }
-            // Water gathered from the top down, the flood's order reversed.
-            for (index in 0 until popped) {
-                val local = order[index]
+            // The order the water runs in, every cell before the cell it drains to: counted from the
+            // receivers themselves, not read off the flood, whose keys round two levels a few
+            // hundred-millionths apart to one and may then pop a receiver after its donor.
+            donors.fill(0)
+            for (local in 0 until beltCells) {
+                val down = receiver[local]
+                if (down < 0) continue
+                val downLocal = localOf[down]
+                if (downLocal >= 0) donors[downLocal]++
+            }
+            var downstream = 0
+            for (local in 0 until beltCells) if (donors[local] == 0) runOrder[downstream++] = local
+            var walked = 0
+            while (walked < downstream) {
+                val down = receiver[runOrder[walked++]]
+                if (down < 0) continue
+                val downLocal = localOf[down]
+                if (downLocal >= 0 && --donors[downLocal] == 0) runOrder[downstream++] = downLocal
+            }
+            // Water gathered from the top down.
+            for (local in 0 until beltCells) {
                 discharge[local] = weights[belt[local]] + inflow[local]
                 flux[local] = 0.0
             }
-            for (index in popped - 1 downTo 0) {
-                val local = order[index]
+            for (index in 0 until downstream) {
+                val local = runOrder[index]
                 val down = receiver[local]
                 if (down < 0) continue
                 val downLocal = localOf[down]
                 if (downLocal >= 0) discharge[downLocal] += discharge[local]
             }
             // The cut, from the outlets up: each cell toward the level its receiver now grades to.
-            for (index in 0 until popped) {
-                val local = order[index]
+            for (index in downstream - 1 downTo 0) {
+                val local = runOrder[index]
                 val cell = belt[local]
                 val down = receiver[local]
                 if (down < 0) continue
@@ -324,12 +342,14 @@ internal object BeltErosion {
                 cut += lostMetres.toDouble() * cellAreaM2
                 flux[local] += lostMetres.toDouble() * cellAreaM2
             }
-            // The spoil carried down to where it leaves the belts.
-            for (index in popped - 1 downTo 0) {
-                val local = order[index]
+            // The spoil carried down to where it leaves the belts, or to the hollow or the sea inside
+            // one that holds it.
+            for (index in 0 until downstream) {
+                val local = runOrder[index]
                 val down = receiver[local]
                 if (down < 0) {
-                    if (flux[local] > 0.0) toLand += flux[local]
+                    val cell = belt[local]
+                    if (!isLand[cell] || surface[cell] <= shoreline) toSea += flux[local] else toLand += flux[local]
                     continue
                 }
                 val downLocal = localOf[down]

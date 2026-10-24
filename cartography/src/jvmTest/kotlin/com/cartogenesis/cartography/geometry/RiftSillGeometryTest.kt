@@ -24,7 +24,7 @@ import kotlin.test.assertTrue
  *
  * Read on the plate floor, where the sills are made: its level lines every [LEVEL_STEP_METERS]
  * over the valley and its shoulders on their continental flanks within [JOIN_REACH_KM] of a join,
- * through every detector of the geometry census, on seed 42's north-south rift and its two
+ * through every detector of the geometry census, on seed 14's north-south rift and its two
  * east-west ones separately. The bars are the census's natural controls at a place family sized to
  * this layer ([SILL_PLACES]) rather than to a whole world's, since the lines here are the sills and
  * nothing else. No detector may find a violation; the three that read a line's own shape,
@@ -48,7 +48,7 @@ class RiftSillGeometryTest {
 
     @Test
     fun `a rift's sills cross its trough as ragged oblique ramps, not straight rungs`() {
-        // On the 12,000 km planet with its fourteen plates, where seed 42 has the rifts named below
+        // On the 12,000 km planet with its fourteen plates, where seed 14 has the rifts named below
         // and a valley 55 km across is four cells at 512 rows; on the Earth-sized planet's 39 km
         // cells it is one and a half, too few for a level line's shape.
         val config = CalibrationPlanet.of(WorldGenConfig.forRows(SEED, ROWS))
@@ -80,11 +80,13 @@ class RiftSillGeometryTest {
                 }
             }
         }
-        // Recorded at TH1-1: on the history's seed 42 every detector reads its rifts clean, but the
-        // longest level line over its east-west rifts runs 385 km, short of the 429 km the straight
-        // facets need, so that one cannot read them; the rifts' drawing is TH1-2's
-        // (docs/DESIGN_LEDGER.md, TH1-1; docs/TODO.md).
-        KnownFailures.expect("TH1-1: the history's seed 42 has no east-west rift long enough for every detector", "north-south straight aligned side could not be measured; north-south straight facets could not be measured; north-south creases could not be measured; east-west straight facets could not be measured") {
+        // Recorded at TH1-1: on the history's seed 42 every detector read its rifts clean, but the
+        // longest level line over its east-west rifts ran 385 km, short of the 429 km the straight
+        // facets need, so that one could not read them (docs/DESIGN_LEDGER.md, TH1-1). TH1-2 draws a
+        // rift only with continent on both sides, and seed 42 keeps no north-south rift; seed 14,
+        // the lowest seed whose rifts run both ways for hundreds of kilometers (762 km north-south,
+        // 984 km east-west), stands in (docs/DESIGN_LEDGER.md, TH1-2).
+        KnownFailures.expect("TH1-1: the history's rifts are too short for every detector", "north-south straight aligned side could not be measured; north-south straight facets could not be measured; north-south creases could not be measured; east-west straight facets could not be measured") {
             if (failures.isNotEmpty()) {
                 throw RecordedViolation("a rift's sills run straight: $failures", failures.joinToString("; ") { it.substringBefore(":") })
             }
@@ -92,7 +94,7 @@ class RiftSillGeometryTest {
     }
 
     /**
-     * Seed 42's longest rift running north-south and its two longest running east-west, as plate
+     * Seed 14's longest rift running north-south and its two longest running east-west, as plate
      * pairs: a rift runs one way where its cells span [BEARING_DOMINANCE] times as far on the ground
      * that way as the other. Chosen from the world rather than named, since the tectonic history
      * makes the plates (docs/DESIGN_LEDGER.md, TH1-1); main named its pairs 2-7, 10-11 and 1-4.
@@ -166,7 +168,7 @@ class RiftSillGeometryTest {
     }
 
     private companion object {
-        const val SEED = 42L
+        const val SEED = 14L
         const val ROWS = 512
         const val PAIR_STRIDE = 1000
 

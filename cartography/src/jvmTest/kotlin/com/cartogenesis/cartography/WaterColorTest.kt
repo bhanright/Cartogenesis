@@ -76,11 +76,9 @@ class WaterColorTest {
                 failures += "${style.name} lake from the sea %.1f".format(lakeFromSea)
             }
         }
-        // Recorded at TH1-1, whose crust moved the ground under Mars's water (docs/DESIGN_LEDGER.md,
-        // TH1-1; docs/TODO.md).
-        KnownFailures.expect("TH1-1: on the history's ground Mars's water does not read at a glance", "MARS river on land 4.4; MARS lake on land 4.4") {
-            if (failures.isNotEmpty()) throw RecordedViolation("water that does not read: $failures", failures.joinToString("; "))
-        }
+        // Recorded at TH1-1, whose crust moved the ground under Mars's water; armed at TH1-2, whose
+        // ground passes it (docs/DESIGN_LEDGER.md, TH1-1 and TH1-2).
+        assertTrue(failures.isEmpty(), "water that does not read: $failures")
     }
 
     private fun tenthPercentile(values: List<Double>): Double {

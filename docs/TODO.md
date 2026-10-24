@@ -97,7 +97,19 @@
   makes active margins follow plate boundaries, which are paths on the lattice. Armed, their worlds
   passing: the coldest eastern-boundary water's latitude, the habitable land settled, the pooled
   tropical desert band, seed 42's steep ground's isotropy, the one-cell river course and the
-  planet's mean temperature. 2026-10-24, TH1-2.
+  planet's mean temperature. In `:cartography`: the satellite world 969495 has too little ground at
+  the tree line for the alpine clause (69 cells against 500, the scarce high ranges again), and seed
+  42's coast prefers the row's bearing where its land meets the south pole (named with the
+  history's lines at the poles); the rift sills are read on seed 14, since seed 42 keeps no
+  north-south rift; armed there, the steppe's band, the sky's contrast, the slope floor and Mars's
+  water. In `:desktop`: two pixels of river ink on water with no land beside them on seed 298405
+  (`RiverWidthTest`, as TH1-1 recorded on 1234). 2026-10-24, TH1-2.
+- **`:ui`'s tier fails as it did on TH1-1b (measured at TH1-2).** Eleven of its 160 tests fail on
+  both trees alike: `BugReportTest` expects the ocean coverage at 62% where the default has been 71%
+  since TH1-1, and nine cases that generate worlds run out of the test task's heap in
+  `OceanStage.cancellableRound` (`CartoucheTest`, `GenerationProgressTest`, `SavesAndExportsTest`,
+  `SettingsTest`, `WorldLinkWorldTest`). Not TH1-2's; a heap for the task or smaller worlds would
+  settle the second. 2026-10-24, TH1-2.
 - **The ensemble's intermediate worlds (TH1-1 and TH1-1b, measured).** Over the predeclared seeds 1 to
   30 at 512 rows, 9 assembled (largest landmass at least 0.75 of the land), 15 intermediate and 6
   highly dispersed (under 0.39); over the validation seeds 1001 to 1030, 10, 10 and 10

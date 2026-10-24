@@ -16,18 +16,19 @@ import kotlinx.coroutines.runBlocking
  * meaning entirely different things, and a positional call resolved to whichever needed no default
  * — quietly running a different piece of the pipeline than the caller asked for.
  *
- * The internal variants take the tectonic uplift with no default, for the same reason. The engine
- * always hands the stage `PlateResult.upliftRateMmPerYear`, and the flexure only answers an uplift
- * it is given; a guard that let the rate default to null ran a stage the map is never made by, and
- * every one of them did (Audit III's B-I2). So each caller says which it is running: the plates'
- * own rate, which is production, or null, which is a control and says so where it is passed.
+ * The internal variants take the tectonics with no default, for the same reason. The engine always
+ * hands the stage `ErosionTectonics.of(plates)`, the uplift, the rock's erodibility and the belts'
+ * history together, and the flexure only answers an uplift it is given; a guard that let them
+ * default to null ran a stage the map is never made by, and every one of them did (Audit III's
+ * B-I2). So each caller says which it is running: the plates' own, which is production, or null,
+ * which is a control and says so where it is passed.
  */
 fun erodeBlocking(
     config: WorldGenConfig,
     height: FloatField,
     accelerator: ErosionAccelerator? = null,
-    upliftRateMmPerYear: FloatField? = null
-): ErosionResult = runBlocking { ErosionStage.apply(config, height, upliftRateMmPerYear, accelerator) }
+    tectonics: ErosionTectonics? = null
+): ErosionResult = runBlocking { ErosionStage.apply(config, height, tectonics, accelerator) }
 
 /**
  * The thermal sweeps alone, with the activity-tile skip switchable — the control
@@ -44,18 +45,18 @@ internal fun thermalSweepBlocking(
 internal fun erodeBlockingReportingRounds(
     config: WorldGenConfig,
     height: FloatField,
-    upliftRateMmPerYear: FloatField?,
+    tectonics: ErosionTectonics?,
     onRound: (RoundMass) -> Unit
 ): ErosionResult =
-    runBlocking { ErosionStage.apply(config, height, upliftRateMmPerYear, null, onRound) }
+    runBlocking { ErosionStage.apply(config, height, tectonics, null, onRound) }
 
 /** The whole stage, recording which mechanism laid sediment where, for the fan-outline guards. */
 internal fun erodeBlockingLoggingDeposition(
     config: WorldGenConfig,
     height: FloatField,
-    upliftRateMmPerYear: FloatField?,
+    tectonics: ErosionTectonics?,
     log: DepositionLog
-): ErosionResult = runBlocking { ErosionStage.apply(config, height, upliftRateMmPerYear, null, null, log) }
+): ErosionResult = runBlocking { ErosionStage.apply(config, height, tectonics, null, null, log) }
 
 /**
  * The whole stage, with the receiver clamp switchable — the control `ReceiverClampTest` needs.
@@ -68,11 +69,11 @@ internal fun erodeBlockingLoggingDeposition(
 internal fun erodeBlockingWithReceiverClamp(
     config: WorldGenConfig,
     height: FloatField,
-    upliftRateMmPerYear: FloatField?,
+    tectonics: ErosionTectonics?,
     receiverClamp: Boolean,
     onRound: ((RoundMass) -> Unit)? = null
 ): ErosionResult = runBlocking {
-    ErosionStage.apply(config, height, upliftRateMmPerYear, null, onRound, receiverClamp = receiverClamp)
+    ErosionStage.apply(config, height, tectonics, null, onRound, receiverClamp = receiverClamp)
 }
 
 /**
@@ -88,7 +89,7 @@ internal fun erodeBlockingWithReceiverClamp(
 internal fun erodeBlockingObservingCover(
     config: WorldGenConfig,
     height: FloatField,
-    upliftRateMmPerYear: FloatField?,
+    tectonics: ErosionTectonics?,
     shieldCut: Boolean = true,
     /** See [erodeBlockingWithReceiverClamp]; production keeps it on. */
     receiverClamp: Boolean = true,
@@ -97,7 +98,7 @@ internal fun erodeBlockingObservingCover(
     incisionWatch: IncisionWatch? = null
 ): ErosionResult = runBlocking {
     ErosionStage.apply(
-        config, height, upliftRateMmPerYear, null, null, null, receiverClamp = receiverClamp,
+        config, height, tectonics, null, null, null, receiverClamp = receiverClamp,
         weightSums = weightSums, shieldCut = shieldCut, incisionWatch = incisionWatch
     )
 }
@@ -110,12 +111,12 @@ internal fun erodeBlockingObservingCover(
 internal fun erodeBlockingWatchingIncision(
     config: WorldGenConfig,
     height: FloatField,
-    upliftRateMmPerYear: FloatField?,
+    tectonics: ErosionTectonics?,
     watch: IncisionWatch,
     receiverClamp: Boolean = true
 ): ErosionResult = runBlocking {
     ErosionStage.apply(
-        config, height, upliftRateMmPerYear, null, null, null, receiverClamp = receiverClamp,
+        config, height, tectonics, null, null, null, receiverClamp = receiverClamp,
         incisionWatch = watch
     )
 }

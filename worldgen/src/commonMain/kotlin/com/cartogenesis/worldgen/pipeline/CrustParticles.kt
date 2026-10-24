@@ -26,7 +26,13 @@ enum class OrogenyKind {
     RIFT,
 
     /** A small piece of crust carried in on another plate and welded on. */
-    ACCRETED_TERRANE
+    ACCRETED_TERRANE,
+
+    /**
+     * Continental crust stretched behind an arc whose upper plate retreats from its trench: the
+     * Basin and Range, the Aegean (Heuret and Lallemand 2005).
+     */
+    BACK_ARC_EXTENSION
 }
 
 /**
@@ -69,6 +75,32 @@ internal class CrustParticles(initialCapacity: Int) {
     /** When the margin here was stretched, Myr before the present; NaN where never. */
     var riftMyrAgo = FloatArray(initialCapacity); private set
 
+    /**
+     * How buoyant the ocean floor here is for the slab it will become, 0 to 1, uniform over the
+     * floor: drawn where the floor was made, so a feature on it (a plateau, an aseismic ridge) rides
+     * the plate into the trench and the trench's segments move with the slab. Meaningless on
+     * continental crust.
+     */
+    var slabBuoyancy = FloatArray(initialCapacity); private set
+
+    /** The thickness at the start of the step being run, km, so the step's change can be told apart from its wear. */
+    var stepStartKm = FloatArray(initialCapacity); private set
+
+    /** What the orogens' wear took off in the step being run, km. */
+    var stepWearKm = FloatArray(initialCapacity); private set
+
+    /**
+     * What tectonics did to the thickness over the history's last steps, the exposure window, km:
+     * thickening by shortening, collision, arcs and the lower crust's flow, less thinning by
+     * stretching and flow; [windowWearKm] is what the orogens' wear took over the same steps, and
+     * [windowOnsetMyrAgo] when the first thickening of the window began, NaN where none did.
+     * [lastStepTectonicKm] is the last step's own, the present rate's numerator.
+     */
+    var windowTectonicKm = FloatArray(initialCapacity); private set
+    var windowWearKm = FloatArray(initialCapacity); private set
+    var windowOnsetMyrAgo = FloatArray(initialCapacity); private set
+    var lastStepTectonicKm = FloatArray(initialCapacity); private set
+
     fun thicknessKm(sample: Int): Float = baseKm[sample] + excessKm[sample]
 
     /** Appends a sample at the unit vector given and returns its index. */
@@ -91,6 +123,14 @@ internal class CrustParticles(initialCapacity: Int) {
         orogenyKind[sample] = kind.ordinal.toByte()
         terrane[sample] = terraneId
         riftMyrAgo[sample] = rift
+        slabBuoyancy[sample] = 0f
+        // Born during a step, so the step's change is counted from what it was born with.
+        stepStartKm[sample] = base + excess
+        stepWearKm[sample] = 0f
+        windowTectonicKm[sample] = 0f
+        windowWearKm[sample] = 0f
+        windowOnsetMyrAgo[sample] = Float.NaN
+        lastStepTectonicKm[sample] = 0f
         return sample
     }
 
@@ -117,6 +157,10 @@ internal class CrustParticles(initialCapacity: Int) {
                 formedMyrAgo[kept] = formedMyrAgo[sample]; orogenyMyrAgo[kept] = orogenyMyrAgo[sample]
                 orogenyKind[kept] = orogenyKind[sample]; terrane[kept] = terrane[sample]
                 riftMyrAgo[kept] = riftMyrAgo[sample]
+                slabBuoyancy[kept] = slabBuoyancy[sample]
+                stepStartKm[kept] = stepStartKm[sample]; stepWearKm[kept] = stepWearKm[sample]
+                windowTectonicKm[kept] = windowTectonicKm[sample]; windowWearKm[kept] = windowWearKm[sample]
+                windowOnsetMyrAgo[kept] = windowOnsetMyrAgo[sample]; lastStepTectonicKm[kept] = lastStepTectonicKm[sample]
             }
             kept++
         }
@@ -131,6 +175,10 @@ internal class CrustParticles(initialCapacity: Int) {
         formedMyrAgo = formedMyrAgo.copyOf(capacity); orogenyMyrAgo = orogenyMyrAgo.copyOf(capacity)
         orogenyKind = orogenyKind.copyOf(capacity); terrane = terrane.copyOf(capacity)
         riftMyrAgo = riftMyrAgo.copyOf(capacity)
+        slabBuoyancy = slabBuoyancy.copyOf(capacity)
+        stepStartKm = stepStartKm.copyOf(capacity); stepWearKm = stepWearKm.copyOf(capacity)
+        windowTectonicKm = windowTectonicKm.copyOf(capacity); windowWearKm = windowWearKm.copyOf(capacity)
+        windowOnsetMyrAgo = windowOnsetMyrAgo.copyOf(capacity); lastStepTectonicKm = lastStepTectonicKm.copyOf(capacity)
     }
 }
 
@@ -155,6 +203,12 @@ class CrustBudget {
     /** Continental crust that went under another continent and became thickness there. */
     var shortenedAreaKm2 = 0.0
 
+    /**
+     * An upper plate's crust given up at its trench to the shortening behind its arc, its volume
+     * moved into the thrust belt (`TectonicHistory`'s upper plates' deformation).
+     */
+    var shortenedAtMarginsAreaKm2 = 0.0
+
     /** Forearc crust worn thinner than a continent can be by subduction erosion. */
     var erodedForearcAreaKm2 = 0.0
 
@@ -173,7 +227,8 @@ class CrustBudget {
 
     /** The area the books end with: the start, plus what was made, less what was lost. */
     val closingAreaKm2: Double
-        get() = startingAreaKm2 + arcAreaMadeKm2 + stretchedAreaMadeKm2 + escapedAreaMadeKm2 - shortenedAreaKm2 - erodedForearcAreaKm2
+        get() = startingAreaKm2 + arcAreaMadeKm2 + stretchedAreaMadeKm2 + escapedAreaMadeKm2 - shortenedAreaKm2 -
+            shortenedAtMarginsAreaKm2 - erodedForearcAreaKm2
 
     /**
      * The volume the books end with. Collision moves volume from the sample that went under to the

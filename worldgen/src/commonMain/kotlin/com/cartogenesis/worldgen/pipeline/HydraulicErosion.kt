@@ -598,11 +598,12 @@ internal object HydraulicErosion {
         height: FloatField,
         provisionalSeaLevel: Float,
         /**
-         * How fast the rock is rising under each cell, in millimetres a year — `PlateStage`'s own
-         * field, or null where a caller wants the rounds without the tectonics (which is the
-         * control the uplift guards are shown to fail against).
+         * What the plate stage hands the erosion beside the ground: how fast the rock is rising
+         * under each cell, in millimetres a year, its erodibility, and the belts' recent history to
+         * replay ([ErosionTectonics.of]); or null where a caller wants the rounds without the
+         * tectonics, which is the control the uplift guards are shown to fail against.
          */
-        upliftRateMmPerYear: FloatField? = null,
+        tectonics: ErosionTectonics? = null,
         onRound: ((RoundMass) -> Unit)? = null,
         log: DepositionLog? = null,
         receiverClamp: Boolean = true,
@@ -620,9 +621,13 @@ internal object HydraulicErosion {
         incisionWatch: IncisionWatch? = null,
         /** Where the provisional weather's march runs its laps when the config asks for the card. */
         moistureAccelerator: MoistureAccelerator? = null,
+        /** Handed what the belts' replay did ([BeltErosion]), for the guards and the probes. Diagnostics only. */
+        onReplay: ((BeltReplay) -> Unit)? = null,
         relax: suspend (FloatField) -> FloatField
     ): FloatField {
         val erosion = config.erosion
+        val upliftRateMmPerYear = tectonics?.upliftRateMmPerYear
+        val rockErodibility = tectonics?.rockErodibility?.data
         if (erosion.hydraulicRounds <= 0 || erosion.bedrockErodibilityPerYear <= 0f) return height
         val rates = Rates(config)
 
@@ -662,6 +667,17 @@ internal object HydraulicErosion {
         // that round's shoreline is known. Allocated here so the rounds share them.
         val runoff = FloatArray(cellsAcross * cellsDown)
         val erodibility = FloatArray(cellsAcross * cellsDown)
+
+        // The young belts' rise and wear over the exposure window, before the rounds cut the last
+        // four million years everywhere (see [BeltErosion]).
+        val window = tectonics?.window
+        if (window != null) {
+            val replay = BeltErosion.replay(
+                config, working.data, window, upliftRateMmPerYear?.data, rainfallMm, vegetationDensity, rockErodibility,
+                provisionalSeaLevel, shieldCut
+            )
+            onReplay?.invoke(replay)
+        }
         // The closing breach and the post-cut outlet pass route over surfaces the rounds never
         // routed over, each with its own shoreline, so each takes its own normalisation.
         val spoilRunoff = FloatArray(cellsAcross * cellsDown)
@@ -676,13 +692,10 @@ internal object HydraulicErosion {
         // that is being pushed up while it is being cut down reaches a height where the two
         // balance, and that balance is the whole of what S2 exists to model. See docs/DESIGN_LEDGER.md,
         // S2, and [Isostasy].
-        val tectonics = config.tectonics
         val scale = config.scale
         val metresPerFieldUnit = scale.reliefSpanMetres
         val upliftMetresPerRoundPerMm =
             (scale.yearsPerHydraulicRound / MILLIMETRES_PER_METRE).toFloat()
-        val elevationLimit =
-            PlateStage.Limit(tectonics.elevationLimitKneeMetres, scale.highestLandMetres)
         val flexure =
             if (config.isostasy.enabled && config.isostasy.flexure) Isostasy.Flexure(config) else null
         // What the field looked like before any of this, and the bend that has been applied to it
@@ -806,10 +819,9 @@ internal object HydraulicErosion {
                 val surface = working.data
                 for (cell in surface.indices) {
                     if (rate[cell] <= 0f) continue
-                    val altitude = scale.altitudeAtField(surface[cell])
-                    val metres = rate[cell] * upliftMetresPerRoundPerMm *
-                        elevationLimit.upliftShareAt(altitude)
-                    if (metres <= 0f) continue
+                    // No ceiling: a belt stops rising where its crust stops thickening, which is
+                    // the history's business (docs/DESIGN_LEDGER.md, TH1-2).
+                    val metres = rate[cell] * upliftMetresPerRoundPerMm
                     surface[cell] += metres / metresPerFieldUnit
                     if (upliftedMetres.isNotEmpty()) upliftedMetres[cell] += metres
                     upliftedThisRound += metres.toDouble()
@@ -884,6 +896,10 @@ internal object HydraulicErosion {
                 shieldingOverLand(vegetationDensity, sea.isLand, sea.landCellCount, erodibility)
             } else {
                 erodibility.fill(1f)
+            }
+            // The rock's own erodibility, a factor on bedrock K across its band ([PlateResult.rockErodibility]).
+            if (rockErodibility != null) {
+                for (cell in erodibility.indices) erodibility[cell] *= rockErodibility[cell]
             }
             weightSums?.let { reportRoutedWeight(it, "round $round", runoff, sea.isLand) }
 

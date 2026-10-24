@@ -1125,29 +1125,6 @@ data class TectonicsConfig(
     val islandArcUpliftMmPerYear: Float = 0.1038f,
     val riftShoulderUpliftMmPerYear: Float = 0.04476f,
     /**
-     * The height, in metres, past which the crust's own strength starts to hold a range back.
-     *
-     * Not a clamp for tidiness but the oldest limit in orogeny: rock is not strong enough to
-     * support unlimited relief, so a range that is pushed up past a few kilometres spreads
-     * sideways under its own weight instead of rising further. Molnar and Lyon-Caen (*Some simple
-     * physical aspects of the support, structure, and evolution of mountain belts*, GSA Special
-     * Paper 218, 1988) put that limit at about three kilometres of elevation above the
-     * surroundings for crust of ordinary strength, which is why Tibet and the Altiplano stand at
-     * five and nothing on Earth stands at ten; Whipple and Tucker reach the same ceiling from the
-     * erosional side and Willett (*Orogeny and orography*, JGR 104, 1999) from the critical wedge.
-     *
-     * Two things read it, and both need it. The belts are stamped by profiles whose along-strike
-     * swell puts a strong pair's crest eight times above a typical one's, so without a limit one
-     * massif per map would stand at ten kilometres and out of the ruler the climate reads; above
-     * this knee the stamp is compressed toward [WorldScale.highestLandMetres] by
-     * `knee + span * (1 - exp(-(h - knee) / span))`, which never reaches the ceiling and never
-     * flattens a crest into a bench — a slope through it is compressed, not erased. And the uplift
-     * the hydraulic rounds add tapers linearly to nothing between here and the ceiling, so a belt
-     * rising at five millimetres a year for four million years arrives at Tibet's height and
-     * stops.
-     */
-    val elevationLimitKneeMetres: Float = 3_000f,
-    /**
      * The relief, in normalized elevation units, at which a present belt's stamp is the whole of
      * the ground's relief: a cell a belt raised by this much or more is wholly orogenic, rougher
      * than the plain round it, and the orogenic thickening the tectonic history left in the crust
@@ -1321,7 +1298,18 @@ data class TectonicsConfig(
      * 2001) measures continental crust thinning from 40 km to 10 across, read as the margin's width
      * once stretched.
      */
-    val riftedMarginWidthKm: Double = 300.0
+    val riftedMarginWidthKm: Double = 300.0,
+    /**
+     * How much of the belts' recent history the plate stage hands the erosion, in millions of years:
+     * the history's last steps over which it books, per piece of crust, what tectonics did to the
+     * thickness, what the orogens' wear took, and when the thickening began, so the erosion can
+     * replay the belts' rise over that time rather than cut them for four million years as they
+     * stand today (docs/DESIGN_LEDGER.md, TH1-2). Twenty to forty million years is the time Earth's
+     * young belts have been rising and wearing: the Central Andes thickened over the last 15 to 25
+     * Myr (Isacks 1988, as Allmendinger, Jordan, Kay and Isacks 1997 quote him), the Himalaya since
+     * India's collision some 50 Myr ago. A whole number of the history's steps.
+     */
+    val exposureWindowMyr: Double = 40.0
 ) {
     /**
      * How many plates a planet of [scale]'s size is cut into: its sphere over [meanPlateAreaKm2],

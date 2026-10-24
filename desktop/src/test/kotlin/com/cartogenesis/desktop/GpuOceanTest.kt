@@ -1,5 +1,6 @@
 package com.cartogenesis.desktop
 
+import com.cartogenesis.worldgen.pipeline.ErosionTectonics
 import com.cartogenesis.cartography.WorldCodec
 import com.cartogenesis.cartography.WorldDocument
 import com.cartogenesis.worldgen.WorldGenerationEngine
@@ -294,7 +295,7 @@ class GpuOceanTest {
     /** The land mask the gyres close against. Glaciation preserves it, so it stops here. */
     private suspend fun seaFor(config: WorldGenConfig): SeaLevelResult {
         val plates = PlateStage.generate(config, TerrainStage.generate(config))
-        val erosion = ErosionStage.apply(config, plates.height, plates.upliftRateMmPerYear)
+        val erosion = ErosionStage.apply(config, plates.height, ErosionTectonics.of(plates))
         return SeaLevelStage.apply(erosion.height, config)
     }
 

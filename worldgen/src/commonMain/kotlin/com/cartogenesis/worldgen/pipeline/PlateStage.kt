@@ -175,7 +175,24 @@ data class PlateResult(
     /** Which craton, microcontinent or island arc a continent's crust began as; -1 under ocean floor. */
     val terraneId: IntArray,
     /** When the crust under each cell was stretched at a rift, Myr ago; -1 where it never was, as a save holds no NaN. */
-    val riftAgeMyr: FloatField
+    val riftAgeMyr: FloatField,
+    /**
+     * How readily each cell's rock is cut, as a factor on `ErosionConfig.bedrockErodibilityPerYear`:
+     * 1 for a craton's crystalline basement to the configured bedrock band's top for the weakest
+     * rock a belt or a terrane boundary holds ([BeltFields]; docs/DESIGN_LEDGER.md, TH1-2).
+     */
+    val rockErodibility: FloatField,
+    /**
+     * The belts' recent history, for the erosion to replay ([exposureWindowMyr], the history's last
+     * steps): what tectonics did to each cell's crust over the window, km of thickness, thickening
+     * positive; what the orogens' wear took over it, km; and when its thickening began, Myr ago,
+     * -1 where none did. A continent's own; nothing on the ocean floor.
+     */
+    val windowTectonicKm: FloatField,
+    val windowWearKm: FloatField,
+    val windowOnsetMyrAgo: FloatField,
+    /** The exposure window's length, Myr. */
+    val exposureWindowMyr: Double
 )
 
 /**
@@ -409,7 +426,7 @@ object PlateStage {
      */
     fun generate(config: WorldGenConfig, terrain: TerrainResult): PlateResult {
         val history = TectonicHistory.run(config)
-        return generate(config, terrain, history, CrustMap.read(config, history))
+        return generate(config, terrain, history, CrustMap.read(config, history)) { null }
     }
 
     /**
@@ -423,10 +440,22 @@ object PlateStage {
             if (crustAccelerator != null && config.erosion.acceleration == Acceleration.GPU) {
                 CrustMap.readOn(crustAccelerator, config, history)
             } else null
-        return generate(config, terrain, history, onTheCard ?: CrustMap.read(config, history))
+        return generate(config, terrain, history, onTheCard ?: CrustMap.read(config, history)) { inputs ->
+            if (crustAccelerator != null && config.erosion.acceleration == Acceleration.GPU) crustAccelerator.beltFields(inputs) else null
+        }
     }
 
-    private fun generate(config: WorldGenConfig, terrain: TerrainResult, history: CrustHistory, crust: CrustOnMap): PlateResult {
+    /**
+     * The stage itself, the belts' map pass ([BeltFields]) offered to [readBeltFields] first, which
+     * may decline it, in which case the processor's runs.
+     */
+    private inline fun generate(
+        config: WorldGenConfig,
+        terrain: TerrainResult,
+        history: CrustHistory,
+        crust: CrustOnMap,
+        readBeltFields: (BeltFieldInputs) -> BeltFieldOutputs?
+    ): PlateResult {
         val cellsAcross = config.width
         val cellsDown = config.height
         val tectonics = config.tectonics
@@ -438,9 +467,11 @@ object PlateStage {
         val plates = presentPlates(config, history)
         val plateId = crust.plateId
 
-        // The present belts: main's profiles, stamped on the history's present boundaries and
-        // classified by its plates' relative motion. Their redesign from the history's own
-        // thickening is TH1-2's; the belts of the past are in the crust's thickness, not stamped.
+        // The present boundaries, classified by the history's plates' relative motion, and the
+        // features stamped on them that are not the continent's own crust: the ocean's trenches,
+        // ridges, arcs and transforms, and the present rifts' half-grabens. The continent's belts
+        // are its crust's thickness from the history, with ridges laid along their strike
+        // (docs/DESIGN_LEDGER.md, TH1-2).
         val noise = BeltNoise(config.seed)
         val uplift = FloatField(cellsAcross, cellsDown)
         val upliftRate = FloatField(cellsAcross, cellsDown)
@@ -477,7 +508,6 @@ object PlateStage {
         val scale = config.scale
         val columns = Isostasy.Columns(config.isostasy)
         val isostatic = config.isostasy.enabled
-        val elevationLimit = Limit(tectonics.elevationLimitKneeMetres, scale.highestLandMetres)
         val beltReliefMetres = tectonics.beltReliefMetres
         val marginReliefMetres = tectonics.marginReliefStandardDeviationMetres
         val cratonReliefMetres = tectonics.cratonReliefStandardDeviationMetres
@@ -493,6 +523,24 @@ object PlateStage {
         }
         val excessForFullOrogen = crustAgeReference * beltReliefMetres / freeboardMetresPerKm
         val standardThicknessKm = config.isostasy.continentalCrustThicknessKm
+
+        // The belts' own relief at the map's scale and the rock's erodibility, read off the crust
+        // the history left (see [BeltFields]).
+        val beltInputs = beltFieldInputs(config, crust, continentalShare.data, stampedShare, excessForFullOrogen)
+        val beltFields = readBeltFields(beltInputs) ?: BeltFields.readOnProcessor(beltInputs)
+
+        // The rock rising under the belts the history is still thickening: Airy's freeboard of the
+        // crust added a year, the plate stage's own column (`IsostasyConfig`), where a stamped
+        // feature's rate is not already larger. A kilometer of crust a million years is a
+        // millimetre a year.
+        val freeboardShare = config.isostasy.let { (it.mantleDensity - it.continentalCrustDensity) / it.mantleDensity }
+        for (cell in 0 until cellsAcross * cellsDown) {
+            val share = continentalShare.data[cell]
+            val thickening = crust.presentThickeningKmPerMyr[cell]
+            if (share <= 0f || thickening <= 0f) continue
+            val rate = freeboardShare * thickening * share
+            if (rate > upliftRate.data[cell]) upliftRate.data[cell] = rate
+        }
 
         // The base noise as a standard score: zero mean, unit deviation. The settings above are
         // deviations in metres, so this is what makes them mean that — and it is what makes them
@@ -571,11 +619,10 @@ object PlateStage {
                         } else {
                             0f
                         }
-                    // How orogenic the ground is, which is what makes an orogen rougher than the
-                    // plain it stands on and leaves the foreland alone: a present belt's stamp, or
-                    // an old belt's thickening still in the crust.
-                    val inheritedShare = (excessKm * (1f - stampedShare[cell]) / excessForFullOrogen).coerceIn(0f, 1f)
-                    val orogenShare = maxOf(stampedShare[cell], inheritedShare)
+                    // How orogenic a stamped feature makes the ground, a rift's shoulders or an
+                    // arc: rougher than the plain round it in every direction. The continent's own
+                    // belts carry their relief as ridges along strike instead ([BeltFields]).
+                    val orogenShare = stampedShare[cell]
                     // Flat in the middle of a continent and loud at its rim: see
                     // `TectonicsConfig.cratonReliefStandardDeviationMetres`.
                     val crustReliefMetres =
@@ -599,7 +646,8 @@ object PlateStage {
                     // The base noise is a standard score, so multiplying by a deviation in metres
                     // is all there is to it, and its mean of zero is what keeps it from moving the
                     // level the crust floats at.
-                    beltMetres[cell] = (uplift.data[cell] + detail) * beltReliefMetres
+                    beltMetres[cell] = (uplift.data[cell] + detail) * beltReliefMetres +
+                        beltFields.ridgeMetres[cell] + beltFields.provinceMetres[cell]
                     shapeMetres[cell] = shapeNoise.data[cell] * reliefMetres + beltMetres[cell]
                 }
             }
@@ -654,7 +702,9 @@ object PlateStage {
                         } else {
                             filledPlatform[cell] + beltMetres[cell]
                         }
-                    height.data[cell] = scale.fieldAtAltitude(elevationLimit.applyTo(metres))
+                    // No ceiling: what holds a belt down is the lower crust's flow in the history,
+                    // which spreads crust past its strength into a plateau (docs/DESIGN_LEDGER.md, TH1-2).
+                    height.data[cell] = scale.fieldAtAltitude(metres)
                 }
             }
         }
@@ -675,9 +725,181 @@ object PlateStage {
             orogenicExcessKm = FloatField(cellsAcross, cellsDown, crust.excessKm),
             orogenyKind = crust.orogenyKind,
             terraneId = crust.terrane,
-            riftAgeMyr = FloatField(cellsAcross, cellsDown, crust.riftAgeMyr)
+            riftAgeMyr = FloatField(cellsAcross, cellsDown, crust.riftAgeMyr),
+            rockErodibility = FloatField(cellsAcross, cellsDown, beltFields.rockErodibility),
+            windowTectonicKm = FloatField(cellsAcross, cellsDown, crust.windowTectonicKm),
+            windowWearKm = FloatField(cellsAcross, cellsDown, crust.windowWearKm),
+            windowOnsetMyrAgo = FloatField(cellsAcross, cellsDown, crust.windowOnsetMyrAgo),
+            exposureWindowMyr = history.exposureWindowMyr
         )
     }
+
+    /**
+     * The belts' map pass's inputs: the strike tensor on the map, the ridges' amplitude where the
+     * history left orogenic excess, a sub-cell province's where a back-arc was stretched, the
+     * rock's softness, and each cell's distance from a terrane boundary.
+     *
+     * The ridges carry [com.cartogenesis.worldgen.model.TectonicsConfig.orogenReliefStandardDeviationMetres]
+     * in proportion to how much of a full orogen's excess the crust still holds, which is how young
+     * and how thick it is at once: the excess decays as the belt wears (`orogenDecayTimeYears`).
+     *
+     * The province is the Basin and Range's horsts and grabens, 24 to 32 km apart (Stewart 1971,
+     * abstract), finer than a cell: drawn at [PROVINCE_NYQUIST_CELLS] cells, the finest wavelength the
+     * grid draws without aliasing, with the relief a cell's mean keeps of ranges standing
+     * [PROVINCE_RANGE_RELIEF_METRES] over their basins ([BeltFields.cellMeanShare]), fading as the
+     * stretching ages, as an orogen's excess does.
+     *
+     * The softness: a craton's crystalline basement nothing; an arc's volcanics, a rift's or a
+     * back-arc's fill and an accreted terrane's arc and melange the weakest; a collision or an
+     * Andean belt half, its crystalline core and metamorphosed basement exhumed beside its
+     * sedimentary and volcanic cover; each fading as the crust ages, at the orogens' decay time, as
+     * the weak cover is stripped. Stock and Montgomery
+     * (*Geologic constraints on bedrock river incision using the stream power law*, JGR 104, 1999,
+     * abstract) find K of 10^-7 to 10^-6 for granite and metamorphic rock, 10^-5 to 10^-4 for
+     * volcaniclastics and more for mudstones, so the band's two ends are the two kinds of rock; age
+     * and kind alone are an imperfect stand-in for the lithology, which nothing here records.
+     */
+    private fun beltFieldInputs(
+        config: WorldGenConfig,
+        crust: CrustOnMap,
+        continentalShare: FloatArray,
+        stampedShare: FloatArray,
+        excessForFullOrogen: Float
+    ): BeltFieldInputs {
+        val tectonics = config.tectonics
+        val cells = config.width * config.height
+        val decayMyr = (tectonics.orogenDecayTimeYears / 1e6).toFloat()
+        val ridgeAmplitude = FloatArray(cells)
+        val provinceAmplitude = FloatArray(cells)
+        val softness = FloatArray(cells)
+        val cellKm = sqrt(config.cellWidthKm * config.cellHeightKm)
+        val provinceWavelengthKm = maxOf(PROVINCE_RANGE_SPACING_KM, PROVINCE_NYQUIST_CELLS * cellKm)
+        // A sinusoid's standard deviation is its amplitude over root two, half the relief it spans.
+        val provinceStandardMetres = (PROVINCE_RANGE_RELIEF_METRES / 2.0 / sqrt(2.0) *
+            BeltFields.cellMeanShare(PROVINCE_RANGE_SPACING_KM, cellKm)).toFloat()
+        for (cell in 0 until cells) {
+            val share = continentalShare[cell]
+            val kind = crust.orogenyKind[cell]
+            val ageMyr = crust.crustAgeMyr[cell].coerceAtLeast(0f)
+            val fading = exp(-ageMyr / decayMyr)
+            if (share > 0f) {
+                val inherited = (crust.excessKm[cell] * (1f - stampedShare[cell]) / excessForFullOrogen).coerceIn(0f, 1f)
+                ridgeAmplitude[cell] = tectonics.orogenReliefStandardDeviationMetres * inherited * share
+                if (kind == OrogenyKind.BACK_ARC_EXTENSION.ordinal) provinceAmplitude[cell] = provinceStandardMetres * fading * share
+            }
+            val young = when (kind) {
+                OrogenyKind.NONE.ordinal -> if (share >= 0.5f) 0f else 1f
+                OrogenyKind.COLLISION.ordinal, OrogenyKind.ASSEMBLY_SUTURE.ordinal, OrogenyKind.ANDEAN.ordinal -> MIXED_BELT_SOFTNESS
+                else -> 1f
+            }
+            softness[cell] = if (kind == OrogenyKind.NONE.ordinal) young else young * fading
+        }
+        return BeltFieldInputs(
+            mapColumns = config.width,
+            mapRows = config.height,
+            radiusKm = config.scale.radiusMeters / 1_000.0,
+            seed = (config.seed xor (config.seed ushr 32)).toInt() xor BELT_FIELD_SALT,
+            strikeEastEast = crust.strikeEastEast,
+            strikeEastNorth = crust.strikeEastNorth,
+            strikeNorthNorth = crust.strikeNorthNorth,
+            ridgeAmplitudeMetres = ridgeAmplitude,
+            provinceAmplitudeMetres = provinceAmplitude,
+            softness = softness,
+            weakZoneKm = terraneBoundaryKm(config, crust.terrane, continentalShare),
+            ridgeWavelengthsKm = doubleArrayOf(RIDGE_LONGEST_WAVELENGTH_KM, RIDGE_LONGEST_WAVELENGTH_KM / 2),
+            ridgeOctaveWeights = BeltFields.octaveWeights(RIDGE_OCTAVES, tectonics.topographyHurstExponent),
+            provinceWavelengthKm = provinceWavelengthKm,
+            elongation = RIDGE_ELONGATION,
+            impulsesPerCube = GABOR_IMPULSES_PER_CUBE,
+            weakZoneEfoldKm = WEAK_ZONE_EFOLD_KM,
+            erodibilityBandFactor = ERODIBILITY_BAND_FACTOR
+        )
+    }
+
+    /**
+     * How far each cell lies from the nearest boundary between two terranes of continental crust,
+     * km on the ground, by jump flooding from the cells beside another terrane; -1 everywhere on a
+     * world with no such boundary.
+     */
+    private fun terraneBoundaryKm(config: WorldGenConfig, terrane: IntArray, continentalShare: FloatArray): FloatArray {
+        val cellsAcross = config.width
+        val cellsDown = config.height
+        val cells = cellsAcross * cellsDown
+        val distance = FloatArray(cells) { JumpFloodDistance.INFINITE }
+        val nearest = IntArray(cells) { -1 }
+        var any = false
+        for (cell in 0 until cells) {
+            if (continentalShare[cell] < 0.5f || terrane[cell] < 0) continue
+            val column = cell % cellsAcross
+            val row = cell / cellsAcross
+            for (step in 0 until 4) {
+                val neighborRow = row + NEIGHBOR_ROW_STEPS[step]
+                if (neighborRow < 0 || neighborRow >= cellsDown) continue
+                val neighbor = neighborRow * cellsAcross + (column + NEIGHBOR_COLUMN_STEPS[step]).mod(cellsAcross)
+                if (continentalShare[neighbor] >= 0.5f && terrane[neighbor] >= 0 && terrane[neighbor] != terrane[cell]) {
+                    distance[cell] = 0f
+                    nearest[cell] = cell
+                    any = true
+                    break
+                }
+            }
+        }
+        if (!any) return FloatArray(cells) { -1f }
+        JumpFloodDistance.run(cellsAcross, cellsDown, distance, nearest, config.cellHeightInCellWidths)
+        val kmPerCellWidth = config.cellWidthKm.toFloat()
+        return FloatArray(cells) { if (distance[it] >= JumpFloodDistance.INFINITE) -1f else distance[it] * kmPerCellWidth }
+    }
+
+    /**
+     * The ridges along a belt's strike: two octaves, the longest 150 km, the spacing of the Andes'
+     * Cordilleras Occidental and Oriental across the Altiplano, the next 75 km, of the Greater and
+     * Lesser Himalaya across the Midlands (the figures [com.cartogenesis.worldgen.model.TectonicsConfig.orogenReliefStandardDeviationMetres]
+     * cites for an orogen's relief), weighted by the topography's Hurst exponent.
+     */
+    private const val RIDGE_LONGEST_WAVELENGTH_KM = 150.0
+    private const val RIDGE_OCTAVES = 2
+
+    /**
+     * How many crests long a ridge kernel runs: three, the length over the spacing of the Basin and
+     * Range's ranges, 80 to 150 km long and 24 to 32 km apart.
+     */
+    private const val RIDGE_ELONGATION = 3.0
+
+    /**
+     * Impulses in each cube of the noise: each point then hears the kernels of about 17, `4/3 pi`
+     * cubes' worth, enough that the sum is near Gaussian (Lagae et al. 2009).
+     */
+    private const val GABOR_IMPULSES_PER_CUBE = 4
+
+    /** Stewart's (1971) spacing of the Basin and Range's grabens, 24 to 32 km: the middle. */
+    private const val PROVINCE_RANGE_SPACING_KM = 28.0
+
+    /**
+     * How high the Basin and Range's ranges stand over their basins, m: 900 to 1,500 m, 3,000 to
+     * 5,000 ft (Encyclopaedia Britannica, *Basin and Range Province*): the middle.
+     */
+    private const val PROVINCE_RANGE_RELIEF_METRES = 1_200.0
+
+    /** The finest wavelength a grid draws without aliasing it into a coarser one, in cells: three. */
+    private const val PROVINCE_NYQUIST_CELLS = 3.0
+
+    /** A collisional or Andean belt's softness while young: half, its crystalline core beside its cover. */
+    private const val MIXED_BELT_SOFTNESS = 0.5f
+
+    /**
+     * How far a terrane boundary's weakness reaches, km: a suture zone's melange and its faults,
+     * tens of kilometers wide, as the Indus-Yarlung suture's; the e-folding of the softness.
+     */
+    private const val WEAK_ZONE_EFOLD_KM = 25.0
+
+    /**
+     * The bedrock band's span: K from 10^-6 to 10^-5 a year across lithologies (Whipple and Tucker
+     * 1999, as `ErosionConfig.bedrockErodibilityPerYear` cites them), so the factor runs 1 to 10.
+     */
+    private const val ERODIBILITY_BAND_FACTOR = 10.0
+
+    /** Keeps the belt fields' hash apart from every other stream the seed feeds. */
+    private const val BELT_FIELD_SALT = 0x2B1E7
 
     /**
      * [field] as a standard score: the same shape with a mean of zero and a deviation of one.
@@ -862,42 +1084,6 @@ object PlateStage {
             val variance = squares.data[it] - mean.data[it] * mean.data[it]
             if (variance <= 0f) 0f else sqrt(variance) * METRES_PER_KILOMETRE
         }
-    }
-
-    /**
-     * The gravitational limit on elevation, as a curve rather than a clamp.
-     *
-     * Below [kneeMetres] a height passes through untouched; above it the excess is compressed
-     * toward [ceilingMetres] by `span * (1 - exp(-excess / span))`, which approaches the ceiling
-     * without ever reaching it. That last part is what makes it usable on a map: a clamp would
-     * turn every crest above the bar into one dead-flat bench at exactly the bar, and a bench is
-     * the kind of geometry this project treats as a defect. Here a crest that was 300 m above its
-     * neighbour is still above it, by less.
-     *
-     * See [com.cartogenesis.worldgen.model.TectonicsConfig.elevationLimitKneeMetres] for where the
-     * knee comes from.
-     */
-    internal class Limit(private val kneeMetres: Float, ceilingMetres: Float) {
-
-        private val spanMetres = (ceilingMetres - kneeMetres).coerceAtLeast(1f)
-
-        fun applyTo(metres: Float): Float {
-            if (metres <= kneeMetres) return metres
-            val excess = metres - kneeMetres
-            return kneeMetres + spanMetres * (1f - exp(-excess / spanMetres))
-        }
-
-        /**
-         * What share of a further metre of uplift survives at [metres] — 1 below the knee, 0 at
-         * the ceiling, straight between.
-         *
-         * A taper rather than [applyTo] because the hydraulic rounds add uplift over and over, and
-         * a curve applied twelve times is not the curve applied once. Tapering the increment
-         * instead is stable however many rounds run, and it is the same statement: a range near
-         * its gravitational limit does not go on rising.
-         */
-        fun upliftShareAt(metres: Float): Float =
-            ((kneeMetres + spanMetres - metres) / spanMetres).coerceIn(0f, 1f)
     }
 
     /** How far every cell stands from the nearest of a set of boundary cells, and which one that is. */
@@ -1168,49 +1354,17 @@ object PlateStage {
                             // the range the overriding one's, so the two sides of the same
                             // boundary get quite different ground — which is the asymmetry a
                             // symmetric distance profile could not express.
+                            // The trench is the ocean's; the range behind it is the upper plate's
+                            // crust, thickened in the history by its arc and its shortening.
                             BoundaryClass.ANDEAN_MARGIN ->
-                                if (!boundary.overridingSide) {
-                                    -tectonics.trenchDepth * strength * narrow
-                                } else {
-                                    tectonics.andeanHeight * strength *
-                                        beltFalloff(
-                                            distanceFromBoundary,
-                                            cellWidths.andeanWidthCells * widthScale * edgeJitter
-                                        ) * roughness * alongRange +
-                                        tectonics.arcHeight * strength *
-                                        ridgeAt(
-                                            distanceFromBoundary,
-                                            cellWidths.arcOffsetCells,
-                                            cellWidths.arcWidthCells
-                                        ) *
-                                        volcanicChain(arcNoise, arcChainLattice, column, row) *
-                                        alongRange
-                                }
+                                if (!boundary.overridingSide) -tectonics.trenchDepth * strength * narrow else 0f
 
                             // Continental against continental. Neither side will go under, so the
                             // crust thickens over a wide area instead of piling onto a line: broad,
                             // high, flat-topped and very nearly symmetric.
-                            BoundaryClass.COLLISION_PLATEAU -> {
-                                val plateauWidth = cellWidths.collisionWidthCells * widthScale * edgeJitter
-                                val rimShare = tectonics.plateauRimShare.coerceIn(0.1f, 0.95f)
-                                tectonics.collisionHeight * strength *
-                                    plateauFalloff(
-                                        distanceFromBoundary,
-                                        plateauWidth,
-                                        tectonics.plateauFlatShare
-                                    ) *
-                                    // Damped roughness: a plateau is a plain at altitude, and the
-                                    // full ridge noise would make it a mountain range again.
-                                    (1f + (roughness - 1f) * PLATEAU_ROUGHNESS_DAMPING) *
-                                    alongPlateau +
-                                    // The rim ranges, which stand on the edge rather than in it.
-                                    tectonics.plateauRimHeight * strength *
-                                    ridgeAt(
-                                        distanceFromBoundary,
-                                        plateauWidth * rimShare,
-                                        plateauWidth * (1f - rimShare)
-                                    ) * roughness * alongRange
-                            }
+                            // Two continents' crust stacked in the history, spread by its lower
+                            // crust's flow: the thickness is the belt, so nothing is stamped.
+                            BoundaryClass.COLLISION_PLATEAU -> 0f
 
                             // Oceanic under oceanic. Same trench, but what rises behind it is a
                             // line of volcanoes on oceanic crust, most of which never reaches the

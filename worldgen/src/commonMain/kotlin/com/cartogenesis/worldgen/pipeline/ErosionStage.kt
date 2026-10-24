@@ -22,6 +22,27 @@ data class ErosionResult(
 )
 
 /**
+ * What the plate stage hands the erosion beside the ground: [upliftRateMmPerYear], how fast the rock
+ * is rising under each cell now, millimetres a year; [rockErodibility], a factor on bedrock K per
+ * cell, or null for one rock everywhere; and [window], the belts' recent history for the rounds to
+ * replay before their own ([BeltErosion]), or null to run no replay.
+ */
+class ErosionTectonics(
+    val upliftRateMmPerYear: FloatField,
+    val rockErodibility: FloatField? = null,
+    val window: BeltWindow? = null
+) {
+    companion object {
+        /** Everything [plates] hands the erosion, as the engine passes it. */
+        fun of(plates: PlateResult): ErosionTectonics = ErosionTectonics(
+            upliftRateMmPerYear = plates.upliftRateMmPerYear,
+            rockErodibility = plates.rockErodibility,
+            window = BeltWindow(plates.windowTectonicKm, plates.windowWearKm, plates.windowOnsetMyrAgo, plates.exposureWindowMyr)
+        )
+    }
+}
+
+/**
  * Step 4: wear the terrain down.
  *
  * Uplift alone leaves mountains with the shape the falloff gave them, which is the shape no real
@@ -85,16 +106,17 @@ object ErosionStage {
     suspend fun apply(
         config: WorldGenConfig,
         height: FloatField,
-        upliftRateMmPerYear: FloatField? = null,
+        tectonics: ErosionTectonics? = null,
         accelerator: ErosionAccelerator? = null,
         /** Where the hydraulic rounds' provisional weather marches its rain when the config asks for the card. */
         moistureAccelerator: MoistureAccelerator? = null
-    ): ErosionResult = apply(config, height, upliftRateMmPerYear, accelerator, onRound = null, moistureAccelerator = moistureAccelerator)
+    ): ErosionResult = apply(config, height, tectonics, accelerator, onRound = null, moistureAccelerator = moistureAccelerator)
 
     /**
-     * @param upliftRateMmPerYear how fast the rock is still rising under each cell, which the
-     *   hydraulic rounds add to the terrain round by round; null runs the rounds without the
-     *   tectonics, which is the control the uplift guards are measured against.
+     * @param tectonics what the plate stage hands the erosion ([ErosionTectonics.of]): the rock's
+     *   uplift rate, which the hydraulic rounds add to the terrain round by round, its erodibility,
+     *   and the belts' history the rounds replay first; null runs the rounds without the tectonics,
+     *   which is the control the uplift guards are measured against.
      * @param onRound handed each hydraulic round's mass budget as it closes, for the guard that
      *   checks the sediment bookkeeping adds up. Purely an observer — passing it changes nothing,
      *   except that the round's pit census is only counted when someone asked for it.
@@ -107,7 +129,7 @@ object ErosionStage {
     internal suspend fun apply(
         config: WorldGenConfig,
         height: FloatField,
-        upliftRateMmPerYear: FloatField?,
+        tectonics: ErosionTectonics?,
         accelerator: ErosionAccelerator?,
         onRound: ((RoundMass) -> Unit)?,
         log: DepositionLog? = null,
@@ -126,7 +148,9 @@ object ErosionStage {
         /** See `HydraulicErosion.incise`: every cell the incision reached, for its guards. */
         incisionWatch: IncisionWatch? = null,
         /** See the public [apply]. */
-        moistureAccelerator: MoistureAccelerator? = null
+        moistureAccelerator: MoistureAccelerator? = null,
+        /** See `HydraulicErosion.apply`: what the belts' replay did. */
+        onReplay: ((BeltReplay) -> Unit)? = null
     ): ErosionResult {
         if (!config.erosion.enabled) return ErosionResult(height)
 
@@ -145,8 +169,8 @@ object ErosionStage {
 
         return ErosionResult(
             HydraulicErosion.apply(
-                config, weathered.height, config.seaLevel, upliftRateMmPerYear, onRound, log,
-                receiverClamp, weightSums, shieldCut, incisionWatch, moistureAccelerator
+                config, weathered.height, config.seaLevel, tectonics, onRound, log,
+                receiverClamp, weightSums, shieldCut, incisionWatch, moistureAccelerator, onReplay
             ) { field ->
                 thermalErosion(config, field, accelerator, sweepsPerRound).height
             },

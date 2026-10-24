@@ -1,5 +1,6 @@
 package com.cartogenesis.worldgen
 
+import com.cartogenesis.worldgen.pipeline.ErosionTectonics
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
 import com.cartogenesis.worldgen.pipeline.PlateStage
@@ -57,7 +58,7 @@ class GenerationStopTest {
         val plates = PlateStage.generate(base, TerrainStage.generate(base))
         val roundMillis = mutableListOf<Long>()
         var lastRoundEnded = System.currentTimeMillis()
-        erodeBlockingReportingRounds(base, plates.height, plates.upliftRateMmPerYear) { _ ->
+        erodeBlockingReportingRounds(base, plates.height, ErosionTectonics.of(plates)) { _ ->
             val now = System.currentTimeMillis()
             roundMillis += now - lastRoundEnded
             lastRoundEnded = now

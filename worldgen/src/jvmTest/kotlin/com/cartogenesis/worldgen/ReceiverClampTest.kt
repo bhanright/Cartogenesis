@@ -1,5 +1,6 @@
 package com.cartogenesis.worldgen
 
+import com.cartogenesis.worldgen.pipeline.ErosionTectonics
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.pipeline.FlowRouting
 import com.cartogenesis.worldgen.pipeline.PitStage
@@ -101,7 +102,7 @@ class ReceiverClampTest {
 
             listOf(false to loose, true to tight).forEach { (clamp, into) ->
                 val rounds = ArrayList<RoundMass>()
-                val eroded = erodeBlockingWithReceiverClamp(config, plates.height, plates.upliftRateMmPerYear, clamp) { rounds.add(it) }
+                val eroded = erodeBlockingWithReceiverClamp(config, plates.height, ErosionTectonics.of(plates), clamp) { rounds.add(it) }
                 val totals = IntArray(PitStage.COUNT)
                 rounds.forEach { r ->
                     for (s in 0 until PitStage.COUNT) totals[s] += r.channelPits[s]

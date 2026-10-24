@@ -1,5 +1,6 @@
 package com.cartogenesis.worldgen
 
+import com.cartogenesis.worldgen.pipeline.ErosionTectonics
 import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.pipeline.HydraulicErosion
@@ -76,7 +77,7 @@ class DeltaOutlineTest {
 
         init {
             val plates = PlateStage.generate(config, TerrainStage.generate(config))
-            height = erodeBlockingLoggingDeposition(config, plates.height, plates.upliftRateMmPerYear, log).height
+            height = erodeBlockingLoggingDeposition(config, plates.height, ErosionTectonics.of(plates), log).height
             isLand = SeaLevelStage.percentileCut(height, config.seaLevel, config.scale).isLand
         }
 

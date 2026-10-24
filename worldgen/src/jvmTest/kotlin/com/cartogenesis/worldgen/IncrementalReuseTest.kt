@@ -327,7 +327,12 @@ class IncrementalReuseTest {
                 orogenicExcessKm = field(world.plates.orogenicExcessKm),
                 orogenyKind = world.plates.orogenyKind.copyOf(),
                 terraneId = world.plates.terraneId.copyOf(),
-                riftAgeMyr = field(world.plates.riftAgeMyr)
+                riftAgeMyr = field(world.plates.riftAgeMyr),
+                rockErodibility = field(world.plates.rockErodibility),
+                windowTectonicKm = field(world.plates.windowTectonicKm),
+                windowWearKm = field(world.plates.windowWearKm),
+                windowOnsetMyrAgo = field(world.plates.windowOnsetMyrAgo),
+                exposureWindowMyr = world.plates.exposureWindowMyr
             ),
             erosion = ErosionResult(height = field(world.erosion.height)),
             sea = SeaLevelResult(

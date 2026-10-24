@@ -9,6 +9,7 @@ import com.cartogenesis.worldgen.pipeline.DepositionLog
 import com.cartogenesis.worldgen.pipeline.CrustMapAccelerator
 import com.cartogenesis.worldgen.pipeline.ErosionAccelerator
 import com.cartogenesis.worldgen.pipeline.ErosionStage
+import com.cartogenesis.worldgen.pipeline.ErosionTectonics
 import com.cartogenesis.worldgen.pipeline.GlaciationStage
 import com.cartogenesis.worldgen.pipeline.LandmarkStage
 import com.cartogenesis.worldgen.pipeline.MoistureAccelerator
@@ -237,11 +238,11 @@ object WorldGenerationEngine {
             }
             ?.erosion
             ?: if (capture == null) {
-                ErosionStage.apply(config, plates.height, plates.upliftRateMmPerYear, accelerator, moistureAccelerator)
+                ErosionStage.apply(config, plates.height, ErosionTectonics.of(plates), accelerator, moistureAccelerator)
             } else {
                 val log = DepositionLog(config.width * config.height)
                 ErosionStage.apply(
-                    config, plates.height, plates.upliftRateMmPerYear, accelerator,
+                    config, plates.height, ErosionTectonics.of(plates), accelerator,
                     onRound = null, log = log, moistureAccelerator = moistureAccelerator
                 ).also { capture.deposition = DepositionLayers(log.mechanism) }
             }

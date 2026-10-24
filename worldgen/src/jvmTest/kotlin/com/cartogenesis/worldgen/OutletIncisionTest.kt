@@ -1,5 +1,6 @@
 package com.cartogenesis.worldgen
 
+import com.cartogenesis.worldgen.pipeline.ErosionTectonics
 import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
@@ -664,7 +665,7 @@ class OutletIncisionTest : BorrowsSharedWorlds() {
     private fun roundsOf(config: WorldGenConfig): List<RoundMass> {
         val plates = PlateStage.generate(config, TerrainStage.generate(config))
         val rounds = ArrayList<RoundMass>()
-        erodeBlockingReportingRounds(config, plates.height, plates.upliftRateMmPerYear) { rounds.add(it) }
+        erodeBlockingReportingRounds(config, plates.height, ErosionTectonics.of(plates)) { rounds.add(it) }
         return rounds
     }
 

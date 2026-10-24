@@ -1,5 +1,6 @@
 package com.cartogenesis.worldgen
 
+import com.cartogenesis.worldgen.pipeline.ErosionTectonics
 import com.cartogenesis.worldgen.math.JumpFloodDistance
 import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.WorldGenConfig
@@ -643,7 +644,7 @@ class IsostasyTest : BorrowsSharedWorlds() {
             for (column in 0 until cellsAcross) uplift.data[row * cellsAcross + column] = upliftMmPerYear
         }
 
-        val eroded = erodeBlocking(config, ground, upliftRateMmPerYear = uplift)
+        val eroded = erodeBlocking(config, ground, tectonics = ErosionTectonics(uplift))
         val upliftedMetres =
             upliftMmPerYear.toDouble() * scale.yearsPerHydraulicRound * rounds / 1_000.0
 

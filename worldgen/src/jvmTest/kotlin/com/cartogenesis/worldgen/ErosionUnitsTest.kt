@@ -1,5 +1,6 @@
 package com.cartogenesis.worldgen
 
+import com.cartogenesis.worldgen.pipeline.ErosionTectonics
 import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.pipeline.HydraulicErosion
@@ -47,7 +48,7 @@ class ErosionUnitsTest {
             val config = WorldGenConfig.forRows(SEED, SIDE)
             val plates = PlateStage.generate(config, TerrainStage.generate(config))
             val watch = Watched(config)
-            erodeBlockingWatchingIncision(config, plates.height, plates.upliftRateMmPerYear, watch)
+            erodeBlockingWatchingIncision(config, plates.height, ErosionTectonics.of(plates), watch)
             watch
         }
 

@@ -1,5 +1,6 @@
 package com.cartogenesis.worldgen
 
+import com.cartogenesis.worldgen.pipeline.ErosionTectonics
 import com.cartogenesis.worldgen.pipeline.BoundaryClass
 import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.WorldGenConfig
@@ -211,7 +212,7 @@ class ClimateFedErosionTest {
                 }
                 erodeBlockingObservingCover(
                     once.copy(erosion = once.erosion.copy(climateFeed = climateFeed)),
-                    bare, upliftRateMmPerYear = null, shieldCut = shieldCut, incisionWatch = watch
+                    bare, tectonics = null, shieldCut = shieldCut, incisionWatch = watch
                 )
                 result
             }
@@ -223,7 +224,7 @@ class ClimateFedErosionTest {
             erodeBlocking(
                 config.copy(erosion = config.erosion.copy(climateFeed = climateFeed)),
                 plates.height,
-                upliftRateMmPerYear = plates.upliftRateMmPerYear
+                tectonics = ErosionTectonics.of(plates)
             ).height
         }
 
@@ -620,7 +621,7 @@ class ClimateFedErosionTest {
         val config = WorldGenConfig.forRows(42L, 256)
         val plates = PlateStage.generate(config, TerrainStage.generate(config))
         val passes = mutableListOf<Triple<String, Double, Int>>()
-        erodeBlockingObservingCover(config, plates.height, plates.upliftRateMmPerYear, weightSums = { name, summed, landCells ->
+        erodeBlockingObservingCover(config, plates.height, ErosionTectonics.of(plates), weightSums = { name, summed, landCells ->
             passes += Triple(name, summed, landCells)
         })
         val names = passes.map { it.first }.toSet()

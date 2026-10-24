@@ -1,5 +1,6 @@
 package com.cartogenesis.worldgen
 
+import com.cartogenesis.worldgen.pipeline.ErosionTectonics
 import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.pipeline.ClimateStage
@@ -62,14 +63,14 @@ class ClimateFedErosionMeasurementTest {
         val flatRain = config.copy(erosion = config.erosion.copy(climateFeed = false))
 
         for ((label, rounds) in listOf("fed" to config, "flat" to flatRain)) {
-            val carved = erodeBlocking(rounds, uplift, upliftRateMmPerYear = plates.upliftRateMmPerYear).height
+            val carved = erodeBlocking(rounds, uplift, tectonics = ErosionTectonics.of(plates)).height
             // The ground halfway down, which is what the second march is taken on. Six of the
             // twelve rather than the twelfth round's own terrain: the lowstand schedule is written
             // against the configured round count, so a six-round world's sea stands a little
             // differently, and this is the midpoint to within that.
             val halfway = erodeBlocking(
                 rounds.copy(erosion = rounds.erosion.copy(hydraulicRounds = 6)), uplift,
-                upliftRateMmPerYear = plates.upliftRateMmPerYear
+                tectonics = ErosionTectonics.of(plates)
             ).height
 
             val atTheTop = weightsOver(config, weathered)

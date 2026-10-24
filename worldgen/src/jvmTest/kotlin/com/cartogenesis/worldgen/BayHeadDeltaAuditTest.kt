@@ -1,5 +1,6 @@
 package com.cartogenesis.worldgen
 
+import com.cartogenesis.worldgen.pipeline.ErosionTectonics
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.pipeline.DepositionLog
 import com.cartogenesis.worldgen.pipeline.ErosionStage
@@ -195,7 +196,7 @@ class BayHeadDeltaAuditTest {
         val plates = PlateStage.generate(config, TerrainStage.generate(config))
         val log = DepositionLog(world.width * world.height)
         val eroded = runBlocking {
-            ErosionStage.apply(config, plates.height, plates.upliftRateMmPerYear, null, null, log)
+            ErosionStage.apply(config, plates.height, ErosionTectonics.of(plates), null, null, log)
         }
         var differing = 0
         for (cell in eroded.height.data.indices) {

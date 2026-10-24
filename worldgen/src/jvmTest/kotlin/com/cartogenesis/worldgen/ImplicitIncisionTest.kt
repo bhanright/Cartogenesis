@@ -1,5 +1,6 @@
 package com.cartogenesis.worldgen
 
+import com.cartogenesis.worldgen.pipeline.ErosionTectonics
 import com.cartogenesis.worldgen.model.FloatField
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.pipeline.FlowRouting
@@ -304,7 +305,7 @@ class ImplicitIncisionTest {
         val config = WorldGenConfig.forRows(42L, SharedWorlds.COARSE_ROWS)
         val plates = PlateStage.generate(config, TerrainStage.generate(config))
         val bounds = Bounds(config.width * config.height, config.scale.reliefSpanMetres, HydraulicErosion.Rates(config).pondDepth)
-        erodeBlockingWatchingIncision(config, plates.height, plates.upliftRateMmPerYear, bounds)
+        erodeBlockingWatchingIncision(config, plates.height, ErosionTectonics.of(plates), bounds)
         println(
             "IMPLICIT bounds seed 42@${config.height} rows over the rounds: ${bounds.cuts} cuts, ${bounds.largeCourant} at F over one, " +
                 "${bounds.mouths} mouths, ${bounds.leftAlone} left alone at or below their base, " +

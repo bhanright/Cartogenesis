@@ -18,6 +18,10 @@ import kotlin.math.sqrt
  * is any. [crustAgeMyr] is how long ago the crust was last made or deformed, [riftAgeMyr] when it
  * was stretched (-1 where never), [orogenyKind] an [OrogenyKind] ordinal, [terrane] the craton,
  * microcontinent or arc a continent began as (-1 for ocean floor), [plateId] the present plate.
+ * [windowTectonicKm], [windowWearKm], [windowOnsetMyrAgo] (-1 where nothing thickened) and
+ * [presentThickeningKmPerMyr] are the continent's exposure-window books ([CrustHistory]);
+ * [strikeEastEast], [strikeEastNorth] and [strikeNorthNorth] the orogenic excess's gradient tensor
+ * in the cell's own east and north, km² per km².
  */
 internal class CrustOnMap(
     val continentalShare: FloatArray,
@@ -28,7 +32,14 @@ internal class CrustOnMap(
     val riftAgeMyr: FloatArray,
     val orogenyKind: IntArray,
     val terrane: IntArray,
-    val plateId: IntArray
+    val plateId: IntArray,
+    val windowTectonicKm: FloatArray,
+    val windowWearKm: FloatArray,
+    val windowOnsetMyrAgo: FloatArray,
+    val presentThickeningKmPerMyr: FloatArray,
+    val strikeEastEast: FloatArray,
+    val strikeEastNorth: FloatArray,
+    val strikeNorthNorth: FloatArray
 )
 
 /**
@@ -58,6 +69,13 @@ interface CrustMapAccelerator {
      * after all, in which case the caller runs the processor's. Returning null is a normal outcome.
      */
     suspend fun read(inputs: CrustMapInputs): CrustMapOutputs?
+
+    /**
+     * The belts' map pass ([BeltFields.readOnProcessor]) of [inputs] on the device, or null if this
+     * accelerator cannot do the job, in which case the caller runs the processor's. The plate
+     * stage's other per-cell pass, on the same seam (docs/DESIGN_LEDGER.md, TH1-2).
+     */
+    suspend fun beltFields(inputs: BeltFieldInputs): BeltFieldOutputs? = null
 }
 
 /**
@@ -82,6 +100,13 @@ class CrustMapInputs internal constructor(
     val pointRiftMyrAgo: FloatArray,
     val pointOrogenyKind: IntArray,
     val pointTerrane: IntArray,
+    /** The exposure window's books at each point: tectonic change and wear, km; onset, Myr ago, -1 where none; the present rate, km per Myr. */
+    val pointWindowTectonicKm: FloatArray,
+    val pointWindowWearKm: FloatArray,
+    val pointWindowOnsetMyrAgo: FloatArray,
+    val pointPresentThickeningKmPerMyr: FloatArray,
+    /** The strike tensor's six components at each point, six to a point in [CrustHistory.strikeTensor]'s order. */
+    val pointStrikeTensor: FloatArray,
     val bandCount: Int,
     val binsInBand: IntArray,
     val firstBinOfBand: IntArray,
@@ -106,7 +131,7 @@ class CrustMapInputs internal constructor(
     val maxPlatesNear: Int
 )
 
-/** What the map pass writes, one entry per map cell, row-major: [CrustOnMap]'s fields, rift age -1 where never. */
+/** What the map pass writes, one entry per map cell, row-major: [CrustOnMap]'s fields, rift age and onset -1 where never. */
 class CrustMapOutputs(
     val continentalShare: FloatArray,
     val thicknessKm: FloatArray,
@@ -116,7 +141,14 @@ class CrustMapOutputs(
     val riftAgeMyr: FloatArray,
     val orogenyKind: IntArray,
     val terrane: IntArray,
-    val plateId: IntArray
+    val plateId: IntArray,
+    val windowTectonicKm: FloatArray,
+    val windowWearKm: FloatArray,
+    val windowOnsetMyrAgo: FloatArray,
+    val presentThickeningKmPerMyr: FloatArray,
+    val strikeEastEast: FloatArray,
+    val strikeEastNorth: FloatArray,
+    val strikeNorthNorth: FloatArray
 )
 
 /**
@@ -154,7 +186,14 @@ internal object CrustMap {
             riftAgeMyr = outputs.riftAgeMyr,
             orogenyKind = outputs.orogenyKind,
             terrane = outputs.terrane,
-            plateId = outputs.plateId
+            plateId = outputs.plateId,
+            windowTectonicKm = outputs.windowTectonicKm,
+            windowWearKm = outputs.windowWearKm,
+            windowOnsetMyrAgo = outputs.windowOnsetMyrAgo,
+            presentThickeningKmPerMyr = outputs.presentThickeningKmPerMyr,
+            strikeEastEast = outputs.strikeEastEast,
+            strikeEastNorth = outputs.strikeEastNorth,
+            strikeNorthNorth = outputs.strikeNorthNorth
         )
 
     /** The map pass's inputs for [history] on [config]'s grid. */
@@ -188,6 +227,11 @@ internal object CrustMap {
             pointRiftMyrAgo = FloatArray(count) { if (history.riftMyrAgo[it].isNaN()) -1f else history.riftMyrAgo[it] },
             pointOrogenyKind = history.orogenyKind.copyOf(),
             pointTerrane = history.terrane.copyOf(),
+            pointWindowTectonicKm = history.windowTectonicKm.copyOf(),
+            pointWindowWearKm = history.windowWearKm.copyOf(),
+            pointWindowOnsetMyrAgo = history.windowOnsetMyrAgo.copyOf(),
+            pointPresentThickeningKmPerMyr = history.presentThickeningKmPerMyr.copyOf(),
+            pointStrikeTensor = FloatArray(STRIKE_COMPONENTS * count) { history.strikeTensor[it % STRIKE_COMPONENTS][it / STRIKE_COMPONENTS] },
             bandCount = sphere.bandCount,
             binsInBand = sphere.binsInBand.copyOf(),
             firstBinOfBand = sphere.firstBinOfBand.copyOf(),
@@ -222,6 +266,13 @@ internal object CrustMap {
         val kind = IntArray(cells)
         val terrane = IntArray(cells)
         val plate = IntArray(cells)
+        val windowTectonic = FloatArray(cells)
+        val windowWear = FloatArray(cells)
+        val windowOnset = FloatArray(cells)
+        val presentRate = FloatArray(cells)
+        val strikeEastEast = FloatArray(cells)
+        val strikeEastNorth = FloatArray(cells)
+        val strikeNorthNorth = FloatArray(cells)
         val noises = Array(NOISES) { SphereNoise.fromTable(inputs.permutations, it * SphereNoise.PERMUTATION_ENTRIES) }
         val spread = inputs.kernelSpreadRadians
         val reach = inputs.kernelReachRadians
@@ -259,6 +310,12 @@ internal object CrustMap {
                     var crustAgeSum = 0.0
                     var riftWeight = 0.0
                     var riftSum = 0.0
+                    var windowTectonicSum = 0.0
+                    var windowWearSum = 0.0
+                    var presentRateSum = 0.0
+                    var onsetWeight = 0.0
+                    var onsetSum = 0.0
+                    var txx = 0.0; var txy = 0.0; var txz = 0.0; var tyy = 0.0; var tyz = 0.0; var tzz = 0.0
                     var heaviest = -1
                     var heaviestWeight = -1.0
                     var votes = 0
@@ -266,10 +323,24 @@ internal object CrustMap {
                         val weight = exp(-(angle / spread) * (angle / spread))
                         weightSum += weight
                         crustAgeSum += weight * inputs.pointCrustAgeMyr[point]
+                        val tensor = STRIKE_COMPONENTS * point
+                        txx += weight * inputs.pointStrikeTensor[tensor]
+                        txy += weight * inputs.pointStrikeTensor[tensor + 1]
+                        txz += weight * inputs.pointStrikeTensor[tensor + 2]
+                        tyy += weight * inputs.pointStrikeTensor[tensor + 3]
+                        tyz += weight * inputs.pointStrikeTensor[tensor + 4]
+                        tzz += weight * inputs.pointStrikeTensor[tensor + 5]
                         if (inputs.pointContinental[point] == 1) {
                             continentWeight += weight
                             thicknessSum += weight * inputs.pointThicknessKm[point]
                             excessSum += weight * inputs.pointExcessKm[point]
+                            windowTectonicSum += weight * inputs.pointWindowTectonicKm[point]
+                            windowWearSum += weight * inputs.pointWindowWearKm[point]
+                            presentRateSum += weight * inputs.pointPresentThickeningKmPerMyr[point]
+                            if (inputs.pointWindowOnsetMyrAgo[point] >= 0f) {
+                                onsetWeight += weight
+                                onsetSum += weight * inputs.pointWindowOnsetMyrAgo[point]
+                            }
                         } else {
                             oceanWeight += weight
                             floorAgeSum += weight * inputs.pointFormedMyrAgo[point]
@@ -299,6 +370,17 @@ internal object CrustMap {
                         if (inputs.pointContinental[heaviest] == 1) continentWeight = 1.0 else oceanWeight = 1.0
                         thicknessSum = inputs.pointThicknessKm[heaviest].toDouble()
                         excessSum = inputs.pointExcessKm[heaviest].toDouble()
+                        windowTectonicSum = inputs.pointWindowTectonicKm[heaviest].toDouble()
+                        windowWearSum = inputs.pointWindowWearKm[heaviest].toDouble()
+                        presentRateSum = inputs.pointPresentThickeningKmPerMyr[heaviest].toDouble()
+                        if (inputs.pointWindowOnsetMyrAgo[heaviest] >= 0f) {
+                            onsetWeight = continentWeight
+                            onsetSum = continentWeight * inputs.pointWindowOnsetMyrAgo[heaviest]
+                        }
+                        val tensor = STRIKE_COMPONENTS * heaviest
+                        txx = inputs.pointStrikeTensor[tensor].toDouble(); txy = inputs.pointStrikeTensor[tensor + 1].toDouble()
+                        txz = inputs.pointStrikeTensor[tensor + 2].toDouble(); tyy = inputs.pointStrikeTensor[tensor + 3].toDouble()
+                        tyz = inputs.pointStrikeTensor[tensor + 4].toDouble(); tzz = inputs.pointStrikeTensor[tensor + 5].toDouble()
                         floorAgeSum = inputs.pointFormedMyrAgo[heaviest].toDouble()
                         crustAgeSum = inputs.pointCrustAgeMyr[heaviest].toDouble()
                         votes = 1
@@ -324,6 +406,23 @@ internal object CrustMap {
                     riftAge[cell] = if (riftWeight * 2 >= weightSum) (riftSum / riftWeight).toFloat() else -1f
                     kind[cell] = inputs.pointOrogenyKind[heaviest]
                     terrane[cell] = inputs.pointTerrane[heaviest]
+                    if (continentWeight > 0.0) {
+                        windowTectonic[cell] = (windowTectonicSum / continentWeight).toFloat()
+                        windowWear[cell] = (windowWearSum / continentWeight).toFloat()
+                        presentRate[cell] = (presentRateSum / continentWeight).toFloat()
+                    }
+                    windowOnset[cell] = if (continentWeight > 0.0 && onsetWeight * 2 >= continentWeight) (onsetSum / onsetWeight).toFloat() else -1f
+                    // The tensor in the cell's own east and north, the frame a map direction is read in.
+                    val eastX = -sin(longitude)
+                    val eastY = cos(longitude)
+                    val northX = -sin(latitude) * cos(longitude)
+                    val northY = -sin(latitude) * sin(longitude)
+                    val northZ = cos(latitude)
+                    strikeEastEast[cell] = ((txx * eastX * eastX + 2 * txy * eastX * eastY + tyy * eastY * eastY) / weightSum).toFloat()
+                    strikeEastNorth[cell] = ((txx * eastX * northX + txy * (eastX * northY + eastY * northX) + txz * eastX * northZ +
+                        tyy * eastY * northY + tyz * eastY * northZ) / weightSum).toFloat()
+                    strikeNorthNorth[cell] = ((txx * northX * northX + tyy * northY * northY + tzz * northZ * northZ +
+                        2 * (txy * northX * northY + txz * northX * northZ + tyz * northY * northZ)) / weightSum).toFloat()
                     var winner = 0
                     for (index in 1 until votes) {
                         if (voteWeight[index] > voteWeight[winner] ||
@@ -334,7 +433,10 @@ internal object CrustMap {
                 }
             }
         }
-        return CrustMapOutputs(share, thickness, excess, floorAge, crustAge, riftAge, kind, terrane, plate)
+        return CrustMapOutputs(
+            share, thickness, excess, floorAge, crustAge, riftAge, kind, terrane, plate,
+            windowTectonic, windowWear, windowOnset, presentRate, strikeEastEast, strikeEastNorth, strikeNorthNorth
+        )
     }
 
     /**
@@ -425,6 +527,9 @@ internal object CrustMap {
 
     /** More plates than ever lie within a kernel's reach of one map cell. */
     const val MAX_PLATES_NEAR = 8
+
+    /** The strike tensor's components at a point: xx, xy, xz, yy, yz, zz. */
+    const val STRIKE_COMPONENTS = 6
 
     /** The noises the pass reads: the warp's three axes and the margin. */
     const val NOISES = 4

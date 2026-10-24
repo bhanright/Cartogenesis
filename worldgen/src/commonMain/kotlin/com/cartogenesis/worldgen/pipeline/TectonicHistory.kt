@@ -54,7 +54,26 @@ internal class CrustHistory(
     val splits: Int,
     val sutures: Int,
     /** Every live plate's speed and make-up at the end of every step, for the guards that hold them to Earth's. */
-    val plateSpeeds: PlateSpeedRecord
+    val plateSpeeds: PlateSpeedRecord,
+    /**
+     * Over the exposure window ([exposureWindowMyr], the history's last steps): what tectonics did to
+     * the crust's thickness at each point, km, thickening positive; what the orogens' wear took, km;
+     * when the window's first thickening began, Myr ago, -1 where none did; and the last step's
+     * tectonic change over the step's length, km per Myr, the present thickening rate.
+     */
+    val windowTectonicKm: FloatArray,
+    val windowWearKm: FloatArray,
+    val windowOnsetMyrAgo: FloatArray,
+    val presentThickeningKmPerMyr: FloatArray,
+    val exposureWindowMyr: Double,
+    /**
+     * The orogenic excess's gradient tensor at each point, smoothed over a belt's width: the six
+     * components of the symmetric 3 by 3 sum of `g g^T`, `g` the excess's gradient in the tangent
+     * plane, km² per km², in the order xx, xy, xz, yy, yz, zz. Frame-free and sign-free, so it reads
+     * onto the map by the same weighted mean as every other field; a belt's strike is square to the
+     * tensor's leading direction.
+     */
+    val strikeTensor: Array<FloatArray>
 )
 
 /**
@@ -155,6 +174,17 @@ internal object TectonicHistory {
         private val targetSpeedKmPerMyr = tectonics.medianPlateSpeedMmPerYear
         private val targetPlates = tectonics.plateCount(config.scale)
         private val orogenDecayMyr = tectonics.orogenDecayTimeYears / 1e6
+        private val exposureWindowMyr = tectonics.exposureWindowMyr.coerceIn(0.0, historyMyr)
+
+        /**
+         * The ocean floor's slab buoyancy, drawn where the floor is made: a noise on the sphere
+         * read at the place and time of birth, so floor made at one place on a ridge over many steps
+         * carries one value in a stripe along the spreading, as a hotspot's track and the plateau
+         * it builds do; its values sorted over the lattice once, so a draw maps to its rank and the
+         * buoyancy is uniform over the floor ([slabBuoyancyAt]).
+         */
+        private val slabNoise = SphereNoise(config.seed * SHAPE_SALT + SLAB_NOISE_STREAM)
+        private var slabNoiseRanks = DoubleArray(0)
 
         /** When the supercontinent breaks up, Myr before the present; at or below zero it never does. */
         private val breakupMyrAgo: Double
@@ -201,6 +231,8 @@ internal object TectonicHistory {
             val micro = microcontinentCells(superCells, microShare)
             trace?.invoke("build fields ms ${buildMark.elapsedNow().inWholeMilliseconds}")
 
+            slabNoiseRanks = DoubleArray(cellCount) { slabNoiseAt(sphere.x[it], sphere.y[it], sphere.z[it]) }.also { it.sort() }
+
             // Every point starts as one sample of crust at the point itself.
             for (cell in 0 until cellCount) {
                 if (superCells[cell]) {
@@ -224,8 +256,9 @@ internal object TectonicHistory {
                     samples.add(sphere.x[cell], sphere.y[cell], sphere.z[cell], 1, true, continentalKm, 0f,
                         formed, Float.NaN, OrogenyKind.NONE, MICROCONTINENT_TERRANE_BASE + micro[cell], Float.NaN)
                 } else {
-                    samples.add(sphere.x[cell], sphere.y[cell], sphere.z[cell], 1, false, oceanicKm, 0f,
+                    val floor = samples.add(sphere.x[cell], sphere.y[cell], sphere.z[cell], 1, false, oceanicKm, 0f,
                         historyMyr.toFloat(), Float.NaN, OrogenyKind.NONE, -1, Float.NaN)
+                    samples.slabBuoyancy[floor] = slabBuoyancyAt(sphere.x[cell], sphere.y[cell], sphere.z[cell])
                 }
             }
             plates.add(HistoryPlate(0).also { it.assembled = true })
@@ -257,6 +290,21 @@ internal object TectonicHistory {
 
             budget.startingAreaKm2 = continentalAreaKm2()
             budget.startingVolumeKm3 = continentalVolumeKm3()
+        }
+
+        private fun slabNoiseAt(x: Double, y: Double, z: Double): Double =
+            slabNoise.fbmOnSphere(x, y, z, radiusKm, SLAB_FEATURE_WAVELENGTH_KM, SLAB_FEATURE_OCTAVES)
+
+        /** The slab buoyancy of floor made at the unit vector given: its noise's rank among the lattice's, 0 to 1. */
+        private fun slabBuoyancyAt(x: Double, y: Double, z: Double): Float {
+            val value = slabNoiseAt(x, y, z)
+            var low = 0
+            var high = slabNoiseRanks.size
+            while (low < high) {
+                val middle = (low + high) ushr 1
+                if (slabNoiseRanks[middle] < value) low = middle + 1 else high = middle
+            }
+            return (low.toDouble() / slabNoiseRanks.size).toFloat()
         }
 
         /** The share of the sphere that is continental crust for the sea to cover what the settings ask. */
@@ -608,6 +656,7 @@ internal object TectonicHistory {
                 val agoStart = historyMyr - step * stepMyr
                 val agoEnd = agoStart - stepMyr
                 stepAgoEnd = agoEnd
+                openStepBooks()
                 if (!brokenUp && breakupMyrAgo > 0.0 && breakupMyrAgo >= agoEnd) breakUp()
                 if (brokenUp && step > 0) releaseRiftingPlates()
                 if (step > 0) settleMotions()
@@ -626,6 +675,7 @@ internal object TectonicHistory {
                 lap(4)
                 distributeCollisions(collisions, agoEnd)
                 flowAndWear()
+                closeStepBooks(agoStart, agoEnd)
                 lap(5)
                 weldLockedCollisions(collisions)
                 compact()
@@ -637,6 +687,36 @@ internal object TectonicHistory {
                 )
             }
             trace?.invoke("phases ms: " + phaseNanos.joinToString(" ") { (it / 1_000_000).toString() })
+        }
+
+        /** Every sample's thickness as the step opens, and its wear so far nothing, for [closeStepBooks]. */
+        private fun openStepBooks() {
+            for (sample in 0 until samples.count) {
+                samples.stepStartKm[sample] = samples.thicknessKm(sample)
+                samples.stepWearKm[sample] = 0f
+            }
+        }
+
+        /**
+         * What the step from [agoStart] to [agoEnd] did to each sample: its change in thickness less
+         * the wear, which is tectonics' share, booked into the exposure window when the step lies
+         * inside it, the window's onset where it is the first to thicken the sample there; and the
+         * step's own change, which the last step leaves as the present rate's numerator. A sample
+         * made during the step counts from what it was made with.
+         */
+        private fun closeStepBooks(agoStart: Double, agoEnd: Double) {
+            val inWindow = agoEnd < exposureWindowMyr - WINDOW_ROUNDING_MYR
+            for (sample in 0 until samples.count) {
+                if (removed[sample]) continue
+                val change = samples.thicknessKm(sample) - samples.stepStartKm[sample] + samples.stepWearKm[sample]
+                samples.lastStepTectonicKm[sample] = change
+                if (!inWindow) continue
+                samples.windowTectonicKm[sample] += change
+                samples.windowWearKm[sample] += samples.stepWearKm[sample]
+                if (change > OROGENY_MARK_KM && samples.windowOnsetMyrAgo[sample].isNaN()) {
+                    samples.windowOnsetMyrAgo[sample] = minOf(agoStart, exposureWindowMyr).toFloat()
+                }
+            }
         }
 
         /** The supercontinent may begin to come apart: from now on its forces decide where it rifts. */
@@ -1171,6 +1251,7 @@ internal object TectonicHistory {
                 } else {
                     val sample = samples.add(sphere.x[cell], sphere.y[cell], sphere.z[cell], plate, false, oceanicKm, 0f,
                         (agoEnd + ageMyr).toFloat(), Float.NaN, OrogenyKind.NONE, -1, Float.NaN)
+                    samples.slabBuoyancy[sample] = slabBuoyancyAt(sphere.x[cell], sphere.y[cell], sphere.z[cell])
                     adopt(sample, cell)
                 }
             }
@@ -1273,6 +1354,10 @@ internal object TectonicHistory {
             val strikeSlip = sin(STRIKE_SLIP_TOLERANCE_RADIANS)
             val riftStart = ArrayList<Int>()
             val trenchCells = ArrayList<Int>()
+            // At each trench point of a continental upper plate: how fast that plate moves toward its
+            // trench, km per Myr (negative where it retreats), and the slab's buoyancy there.
+            val advanceKmPerMyr = FloatArray(cellCount)
+            val slabBuoyancyAtTrench = FloatArray(cellCount)
             val collisionCells = ArrayList<Int>()
             val slabPulled = IntArray(plates.size)
             val lengthKm = spacingKm
@@ -1335,6 +1420,14 @@ internal object TectonicHistory {
                     boundaryOverriding[cell] = plate
                     forces.add(cell, plate, PlateForces.TRENCH_SUCTION * lengthKm, nx, ny, nz)
                     trenchCells.add(cell)
+                    // The upper plate's own motion, in the mantle's frame the rotations are written
+                    // in, along the normal toward its trench: Heuret and Lallemand's Vup(n).
+                    val upper = plates[plate]
+                    val ux = (upper.omegaY * pz - upper.omegaZ * py) * radiusKm
+                    val uy = (upper.omegaZ * px - upper.omegaX * pz) * radiusKm
+                    val uz = (upper.omegaX * py - upper.omegaY * px) * radiusKm
+                    advanceKmPerMyr[cell] = (ux * nx + uy * ny + uz * nz).toFloat()
+                    slabBuoyancyAtTrench[cell] = samples.slabBuoyancy[otherSideSample(cell, other)]
                 }
             }
             slabPulledPoints = slabPulled
@@ -1342,7 +1435,14 @@ internal object TectonicHistory {
                 for (cell in 0 until cellCount) if (boundaryOther[cell] >= 0) edges[owner[cell]]++
             }
             if (!withEffects) return
-            if (trenchCells.isNotEmpty()) growArcsAndWearForearcs(trenchCells.toIntArray(), lengthKm, agoEnd)
+            if (trenchCells.isNotEmpty()) {
+                val trenches = trenchCells.toIntArray()
+                val slabRank = slabRanksUnderContinents(trenches, slabBuoyancyAtTrench)
+                val flatSlab = BooleanArray(cellCount)
+                for (cell in trenches) flatSlab[cell] = !slabRank[cell].isNaN() && slabRank[cell] >= 1f - FLAT_SLAB_SHARE
+                growArcsAndWearForearcs(trenches, lengthKm, agoEnd, flatSlab)
+                deformUpperPlates(trenches, lengthKm, agoEnd, flatSlab, advanceKmPerMyr, slabRank)
+            }
             if (collisionCells.isNotEmpty()) exchangeInCollisionZones(collisionCells.toIntArray(), lengthKm, agoEnd)
             if (riftStart.isNotEmpty()) {
                 val before = budget.stretchedAreaMadeKm2
@@ -1415,16 +1515,18 @@ internal object TectonicHistory {
          * The arc stands [com.cartogenesis.worldgen.model.TectonicsConfig.arcOffsetKm] behind a
          * continental margin's trench and `islandArcOffsetKm` behind an island arc's.
          */
-        private fun growArcsAndWearForearcs(trenches: IntArray, lengthKm: Double, agoEnd: Double) {
+        private fun growArcsAndWearForearcs(trenches: IntArray, lengthKm: Double, agoEnd: Double, flatSlab: BooleanArray) {
             val continentalTrench = BooleanArray(cellCount)
             for (cell in trenches) continentalTrench[cell] = samples.continental[ownerSample[cell]]
             fun offsetOf(source: Int) = if (continentalTrench[source]) tectonics.arcOffsetKm else tectonics.islandArcOffsetKm
             fun widthOf(source: Int) = if (continentalTrench[source]) tectonics.arcWidthKm else tectonics.islandArcWidthKm
             val reachKm = max(tectonics.arcOffsetKm + 2 * tectonics.arcWidthKm, tectonics.islandArcOffsetKm + 2 * tectonics.islandArcWidthKm)
             val addedKm3 = ARC_ADDITION_KM3_PER_KM_MYR * lengthKm * stepMyr
+            // Over a flat slab the arc goes out: the slab runs under the upper plate too shallow to
+            // melt (Gutscher, Spakman, Bijwaard and Engdahl 2000), so a flat segment adds no arc.
             spreadFromSources(trenches, reachKm, { distanceKm, source, _ ->
                 val off = (distanceKm - offsetOf(source)) / widthOf(source)
-                if (distanceKm > offsetOf(source) + 2 * widthOf(source)) 0.0 else exp(-off * off)
+                if (flatSlab[source] || distanceKm > offsetOf(source) + 2 * widthOf(source)) 0.0 else exp(-off * off)
             }) { sample, source, share ->
                 val km = (addedKm3 * share / sampleAreaKm2).toFloat()
                 if (samples.continental[sample]) {
@@ -1449,6 +1551,217 @@ internal object TectonicHistory {
             }) { sample, _, share ->
                 wear(sample, (wornKm3 * share / sampleAreaKm2).toFloat(), forearc = true)
             }
+        }
+
+        /**
+         * The upper plate's deformation above its slab, at every trench point of a continental upper
+         * plate: the plate is shortened where it advances on its trench and stretched behind its arc
+         * where it retreats, by the share of its motion the slab holds against it.
+         *
+         * Heuret and Lallemand (*Plate motions, slab dynamics and back-arc deformation*, PEPI 149,
+         * 2005): over Earth's oceanic subduction zones the back-arc deformation follows the upper
+         * plate's absolute motion, compression where it advances and extension where it retreats,
+         * the slab partly anchored so the deformation rate is a share of that motion, `Vd = a Vup`,
+         * `a` from nothing (a free slab, the trench following the upper plate) to one (an anchored
+         * slab, the trench fixed). Here `a` is the slab's own: drawn from the subducting floor's
+         * buoyancy ([anchoringOf]), so a trench is segmented as its slab is and the segments ride in
+         * with the floor. A flat slab, the floor's most buoyant tenth, couples the plates harder and
+         * deforms the upper plate far inboard (Gutscher et al. 2000).
+         *
+         * Conservative: shortening moves the crust the upper plate's edge gives up at the trench, the
+         * width the slab holds back, into the thrust belt behind the arc, so the trench migrates into
+         * the plate as `Vt = Vup - Vd` says and the volume stays in the continent; stretching thins
+         * the back-arc and hands the volume it frees to the plate's stretched crust ([fillGaps]).
+         */
+        private fun deformUpperPlates(
+            trenches: IntArray,
+            lengthKm: Double,
+            agoEnd: Double,
+            flatSlab: BooleanArray,
+            advanceKmPerMyr: FloatArray,
+            slabRank: FloatArray
+        ) {
+            val shortened = ArrayList<Int>()
+            val shortenedFlat = ArrayList<Int>()
+            val extended = ArrayList<Int>()
+            val widthKm = DoubleArray(cellCount)
+            for (cell in trenches) {
+                if (slabRank[cell].isNaN()) continue
+                val coupling = if (flatSlab[cell]) FLAT_SLAB_COUPLING else anchoringOf(slabRank[cell])
+                val rate = advanceKmPerMyr[cell].toDouble()
+                val width = coupling * abs(rate) * stepMyr
+                if (width <= 0.0) continue
+                widthKm[cell] = width
+                when {
+                    rate < 0.0 -> extended.add(cell)
+                    flatSlab[cell] -> shortenedFlat.add(cell)
+                    else -> shortened.add(cell)
+                }
+            }
+            if (shortened.isNotEmpty() || shortenedFlat.isNotEmpty()) {
+                val taken = consumeAtTrenches((shortened + shortenedFlat).toIntArray(), widthKm, lengthKm)
+                thickenBehindTrenches(shortened.toIntArray(), taken, agoEnd, THRUST_BELT_OFFSET_KM + 2 * THRUST_BELT_HALF_WIDTH_KM) { distanceKm ->
+                    val off = (distanceKm - THRUST_BELT_OFFSET_KM) / THRUST_BELT_HALF_WIDTH_KM
+                    exp(-off * off)
+                }
+                thickenBehindTrenches(shortenedFlat.toIntArray(), taken, agoEnd, FLAT_SLAB_FARTHEST_KM + FLAT_SLAB_RAMP_KM) { distanceKm ->
+                    smoothBox(distanceKm, FLAT_SLAB_NEAREST_KM, FLAT_SLAB_FARTHEST_KM, FLAT_SLAB_RAMP_KM)
+                }
+            }
+            if (extended.isNotEmpty()) stretchBackArcs(extended.toIntArray(), widthKm, lengthKm, agoEnd)
+            trace?.invoke(
+                "  upper plates at ago=$agoEnd: shortened ${shortened.size}+${shortenedFlat.size} points, " +
+                    "${(shortened + shortenedFlat).sumOf { widthKm[it] * lengthKm }.roundToInt()} km2; " +
+                    "stretched ${extended.size} points, ${extended.sumOf { widthKm[it] * lengthKm }.roundToInt()} km2; advance " +
+                    (shortened + shortenedFlat + extended).map { advanceKmPerMyr[it] }.sorted().let { list ->
+                        if (list.isEmpty()) "-" else "p10 %.0f p50 %.0f p90 %.0f".format(list[list.size / 10], list[list.size / 2], list[list.size * 9 / 10])
+                    }
+            )
+        }
+
+        /**
+         * Each trench point of a continent's plate, its slab's buoyancy ranked among every such point
+         * of the step, 0 to 1; NaN at every other trench point. A continent's plate is more than a
+         * quarter continental, as Zahirovic et al. sort plates: an oceanic plate carrying an arc's
+         * crust at its trench is not deformed as a continent's upper plate is.
+         *
+         * Ranked, because the statistics the coupling is drawn from are Earth's trenches' own, a
+         * share of the trench at one time: Gutscher et al.'s tenth of the convergent margins flat,
+         * Heuret and Lallemand's segments sampled every 2 degrees along them. Which segment is which
+         * is the slab's: its buoyancy, carried in from where its floor was made.
+         */
+        private fun slabRanksUnderContinents(trenches: IntArray, slabBuoyancyAtTrench: FloatArray): FloatArray {
+            val points = IntArray(plates.size)
+            val continentPoints = IntArray(plates.size)
+            for (cell in 0 until cellCount) {
+                val plate = owner[cell]
+                if (plate < 0) continue
+                points[plate]++
+                if (samples.continental[ownerSample[cell]]) continentPoints[plate]++
+            }
+            val ranked = trenches.filter {
+                samples.continental[ownerSample[it]] && continentPoints[owner[it]] > CRATONIC_SHARE * points[owner[it]]
+            }.sortedWith(compareBy({ slabBuoyancyAtTrench[it] }, { it }))
+            val rank = FloatArray(cellCount) { Float.NaN }
+            ranked.forEachIndexed { index, cell -> rank[cell] = ((index + 0.5) / ranked.size).toFloat() }
+            return rank
+        }
+
+        /**
+         * The share of an upper plate's motion a slab ranked [rank] holds against it: Heuret and
+         * Lallemand's `a`, drawn in the order of their own statistics. The least buoyant
+         * [QUIET_BACK_ARC_SHARE] of the ordinary floor, old and dense, has a back-arc that does not
+         * deform measurably; of the rest, the least buoyant [SLAB_CONTROLLED_SHARE] is the
+         * slab-controlled kind, its trench moving on its own, and holds nothing of the upper plate's
+         * motion; the remainder is spread by [ANCHORING_EXPONENT].
+         */
+        private fun anchoringOf(rank: Float): Double {
+            val share = (rank / (1.0 - FLAT_SLAB_SHARE)).coerceIn(0.0, 1.0)
+            if (share <= QUIET_BACK_ARC_SHARE) return 0.0
+            val deforming = (share - QUIET_BACK_ARC_SHARE) / (1.0 - QUIET_BACK_ARC_SHARE)
+            if (deforming <= SLAB_CONTROLLED_SHARE) return 0.0
+            return ((deforming - SLAB_CONTROLLED_SHARE) / (1.0 - SLAB_CONTROLLED_SHARE)).pow(ANCHORING_EXPONENT)
+        }
+
+        /**
+         * The upper plate's crust at each trench point of [sources] given up to the shortening: the
+         * width [widthKm] of crust as thick as the trench point's, taken from the plate's own samples
+         * within [CONSUMED_REACH_KM] of the trench, nearest most. A sample worn thinner than ocean
+         * floor goes, its area booked as shortened and all its volume taken. Returns the volume each
+         * source took, km³.
+         */
+        private fun consumeAtTrenches(sources: IntArray, widthKm: DoubleArray, lengthKm: Double): DoubleArray {
+            val taken = DoubleArray(cellCount)
+            val wantedKm3 = DoubleArray(cellCount)
+            for (cell in sources) wantedKm3[cell] = widthKm[cell] * lengthKm * samples.thicknessKm(ownerSample[cell])
+            spreadFromSources(sources, CONSUMED_REACH_KM, { distanceKm, _, sample ->
+                if (samples.continental[sample]) exp(-distanceKm / CONSUMED_EFOLD_KM) else 0.0
+            }) { sample, source, share ->
+                if (removed[sample]) return@spreadFromSources
+                val km = (wantedKm3[source] * share / sampleAreaKm2).toFloat()
+                val fromExcess = min(km, samples.excessKm[sample])
+                samples.excessKm[sample] -= fromExcess
+                val fromBase = min(km - fromExcess, samples.baseKm[sample])
+                samples.baseKm[sample] -= fromBase
+                var takenKm = fromExcess + fromBase
+                if (samples.thicknessKm(sample) < oceanicKm) {
+                    takenKm += samples.thicknessKm(sample)
+                    samples.excessKm[sample] = 0f
+                    samples.baseKm[sample] = 0f
+                    removed[sample] = true
+                    budget.shortenedAtMarginsAreaKm2 += sampleAreaKm2
+                }
+                taken[source] += takenKm.toDouble() * sampleAreaKm2
+            }
+            return taken
+        }
+
+        /**
+         * Lays the volume each of [sources] took ([taken], km³) on the continental crust of its own
+         * plate behind it, by [weight] of the distance from the trench out to [reachKm], as orogenic
+         * excess; what a source finds no continent to lay on goes to the mantle with the slab.
+         */
+        private inline fun thickenBehindTrenches(
+            sources: IntArray,
+            taken: DoubleArray,
+            agoEnd: Double,
+            reachKm: Double,
+            crossinline weight: (distanceKm: Double) -> Double
+        ) {
+            if (sources.isEmpty()) return
+            val given = DoubleArray(cellCount)
+            spreadFromSources(sources, reachKm, { distanceKm, _, sample ->
+                if (samples.continental[sample] && !removed[sample]) weight(distanceKm) else 0.0
+            }) { sample, source, share ->
+                val km = (taken[source] * share / sampleAreaKm2).toFloat()
+                samples.excessKm[sample] += km
+                given[source] += km.toDouble() * sampleAreaKm2
+                if (km > OROGENY_MARK_KM) markOrogeny(sample, agoEnd, OrogenyKind.ANDEAN)
+            }
+            for (source in sources) {
+                val lost = taken[source] - given[source]
+                if (lost > 0.0) budget.recycledAtTrenchesKm3 += lost
+            }
+        }
+
+        /**
+         * Stretches the back-arc behind each of [sources] by the width [widthKm] its slab holds the
+         * retreating plate back by: the crust of the back-arc band thinned by the volume of a
+         * standard column that wide, never past McKenzie's beta at a break, the volume it frees and
+         * the area it opens handed to the plate's stretched crust; the crust is marked stretched,
+         * and carries a stretched margin's heat ([Isostasy.Columns.stretchedThermalBuoyancyMetres]).
+         */
+        private fun stretchBackArcs(sources: IntArray, widthKm: DoubleArray, lengthKm: Double, agoEnd: Double) {
+            val freeKm3 = DoubleArray(cellCount)
+            for (cell in sources) freeKm3[cell] = widthKm[cell] * lengthKm * continentalKm
+            val thinnestKm = (continentalKm / BETA_AT_BREAK).toFloat()
+            val nearestKm = tectonics.arcOffsetKm
+            val farthestKm = tectonics.arcOffsetKm + BACK_ARC_WIDTH_KM
+            spreadFromSources(sources, farthestKm + BACK_ARC_RAMP_KM, { distanceKm, _, sample ->
+                if (!samples.continental[sample] || removed[sample]) 0.0
+                else smoothBox(distanceKm, nearestKm, farthestKm, BACK_ARC_RAMP_KM)
+            }) { sample, source, share ->
+                val wantedKm = (freeKm3[source] * share / sampleAreaKm2).toFloat()
+                val km = min(wantedKm, (samples.thicknessKm(sample) - thinnestKm).coerceAtLeast(0f))
+                if (km <= 0f) return@spreadFromSources
+                val fromExcess = min(km, samples.excessKm[sample])
+                samples.excessKm[sample] -= fromExcess
+                samples.baseKm[sample] -= km - fromExcess
+                val record = plates[samples.plate[sample]]
+                record.stretchPoolKm3 += km.toDouble() * sampleAreaKm2
+                record.stretchPoolAreaKm2 += widthKm[source] * lengthKm * share
+                samples.riftMyrAgo[sample] = agoEnd.toFloat()
+                if (km > OROGENY_MARK_KM) markOrogeny(sample, agoEnd, OrogenyKind.BACK_ARC_EXTENSION)
+            }
+        }
+
+        /** One between [from] and [to] km, falling to nothing over [rampKm] about each edge by a smoothstep. */
+        private fun smoothBox(distanceKm: Double, from: Double, to: Double, rampKm: Double): Double {
+            fun step(edge: Double): Double {
+                val t = ((distanceKm - edge) / rampKm + 0.5).coerceIn(0.0, 1.0)
+                return t * t * (3 - 2 * t)
+            }
+            return step(from) * (1.0 - step(to))
         }
 
         /**
@@ -1623,6 +1936,9 @@ internal object TectonicHistory {
          * an unforced orogen the settings carry, and the volume it loses leaves the continental crust
          * as sediment.
          */
+        private var stiffEdgeTally = 0
+        private var stiffCycleTally = 0
+
         private fun flowAndWear() {
             val thickness = FloatArray(cellCount)
             val flows = BooleanArray(cellCount)
@@ -1643,14 +1959,19 @@ internal object TectonicHistory {
             }
             val before = thickness.copyOf()
             val change = FloatArray(cellCount)
+            // Which of a point's edges toward a higher-numbered point flowed too fast for the
+            // substep, one bit per neighbor slot, for the stiff pass below.
+            val stiffEdges = IntArray(cellCount)
             val dtMyr = stepMyr / FLOW_SUBSTEPS
             repeat(FLOW_SUBSTEPS) {
                 // Each point gathers what crosses each of its edges, worked out the same way from
                 // either end, so the two ends see equal and opposite amounts and the passes can run
-                // in parallel and still move nothing out of the crust.
+                // in parallel and still move nothing out of the crust. An edge whose flow would
+                // level more than its share within the substep is left to the stiff pass.
                 parallelChunks(0, cellCount) { from, to ->
                     for (cell in from until to) {
                         change[cell] = 0f
+                        stiffEdges[cell] = 0
                         if (!flows[cell]) continue
                         var gained = 0.0
                         for (index in sphere.neighborStart[cell] until sphere.neighborStart[cell + 1]) {
@@ -1660,6 +1981,11 @@ internal object TectonicHistory {
                             if (!flows[next] || (!continent[cell] && !continent[next])) continue
                             val low = min(cell, next)
                             val high = max(cell, next)
+                            val shareCap = edgeShareCap(low, high, min(areaShare[low], areaShare[high]))
+                            if (edgeRate(low, high, thickness[low], thickness[high]) * dtMyr > shareCap) {
+                                if (cell == low) stiffEdges[cell] = stiffEdges[cell] or (1 shl (index - sphere.neighborStart[cell]))
+                                continue
+                            }
                             val moved = edgeFlow(low, high, thickness[low], thickness[high], dtMyr, min(areaShare[low], areaShare[high]))
                             gained += if (cell == low) -moved else moved
                         }
@@ -1668,7 +1994,9 @@ internal object TectonicHistory {
                     }
                 }
                 for (cell in 0 until cellCount) if (flows[cell]) thickness[cell] += change[cell]
+                flowStiffEdges(stiffEdges, thickness, areaShare, dtMyr)
             }
+            widenPastTheForces(thickness, flows, continent, areaShare)
             // Each point's gain or loss goes to the sample that owns it, by the share of the sample's
             // area the point stood for, so the volume moved still sums to nothing.
             for (cell in 0 until cellCount) {
@@ -1701,12 +2029,18 @@ internal object TectonicHistory {
                     samples.excessKm[sample] = 0f
                 }
             }
+            var thickest = 0f
+            for (cell in 0 until cellCount) if (flows[cell] && continent[cell]) thickest = max(thickest, thickness[cell])
+            trace?.invoke("  flow at ago=$stepAgoEnd: stiff edges $stiffEdgeTally, most cycles $stiffCycleTally, thickest ${"%.1f".format(thickest)} km")
+            stiffEdgeTally = 0
+            stiffCycleTally = 0
             val keep = exp(-stepMyr / orogenDecayMyr).toFloat()
             for (sample in 0 until samples.count) {
                 if (removed[sample] || !samples.continental[sample]) continue
                 val excess = samples.excessKm[sample]
                 if (excess <= 0f) continue
                 samples.excessKm[sample] = excess * keep
+                samples.stepWearKm[sample] += excess - samples.excessKm[sample]
                 budget.erodedFromOrogensKm3 += (excess - samples.excessKm[sample]).toDouble() * sampleAreaKm2
             }
         }
@@ -1721,15 +2055,146 @@ internal object TectonicHistory {
          * within the substep anyway. In thickness over a whole point's area.
          */
         private fun edgeFlow(low: Int, high: Int, lowKm: Float, highKm: Float, dtMyr: Double, areaShare: Float): Double {
-            val distance = sphere.distanceKm(low, high)
-            val neighborCount = max(
-                sphere.neighborStart[low + 1] - sphere.neighborStart[low],
-                sphere.neighborStart[high + 1] - sphere.neighborStart[high]
-            )
-            val diffusivity = edgeDiffusivity(lowKm, highKm, distance)
-            val rate = diffusivity * LAPLACIAN_PER_NEIGHBOR / (neighborCount * distance * distance)
-            val share = min(rate * dtMyr, areaShare / (2.0 * neighborCount))
+            val share = min(edgeRate(low, high, lowKm, highKm) * dtMyr, edgeShareCap(low, high, areaShare))
             return share * (lowKm - highKm)
+        }
+
+        /** How fast the flow across the edge levels its two ends, per Myr: the diffusivity over the edge's Laplacian scale. */
+        private fun edgeRate(low: Int, high: Int, lowKm: Float, highKm: Float): Double {
+            val distance = sphere.distanceKm(low, high)
+            val neighborCount = edgeNeighborCount(low, high)
+            return edgeDiffusivity(lowKm, highKm, distance) * LAPLACIAN_PER_NEIGHBOR / (neighborCount * distance * distance)
+        }
+
+        /** The most of the difference across an edge one step may move: what keeps a point's total outflow under half. */
+        private fun edgeShareCap(low: Int, high: Int, areaShare: Float): Double = areaShare / (2.0 * edgeNeighborCount(low, high))
+
+        private fun edgeNeighborCount(low: Int, high: Int): Int = max(
+            sphere.neighborStart[low + 1] - sphere.neighborStart[low],
+            sphere.neighborStart[high + 1] - sphere.neighborStart[high]
+        )
+
+        /**
+         * Crust thicker than the plates' forces can hold spreads out over the ground round it.
+         *
+         * Thickening a belt stores gravitational potential energy in it, and the forces driving the
+         * plates together are what supply it; once they can supply no more, further convergence
+         * widens the belt instead of raising it (Molnar and Lyon-Caen, *Some simple physical aspects
+         * of the support, structure, and evolution of mountain belts*, GSA Special Paper 218, 1988,
+         * as Pusok and Kaus give the argument in their supporting information to *Development of
+         * topography in 3D continental collision models*, G-cubed 16, 2015). The largest such force
+         * Earth shows is Tibet's, whose crust is [TIBET_EXCESS_KM] past the standard column: so the
+         * crust of a plateau past Tibet's is laid on the ground beside it instead, nearest first by
+         * distance on the sphere, onto the floor beside a continent where the continent has no room,
+         * as the lower crust's flow escapes. Every point's volume moves to another, so the crust's
+         * volume is kept to the bit; a belt's height is what its crust's volume and its width make.
+         */
+        private fun widenPastTheForces(thickness: FloatArray, flows: BooleanArray, continent: BooleanArray, areaShare: FloatArray) {
+            val ceilingKm = (continentalKm + TIBET_EXCESS_KM).toFloat()
+            val plateau = IntArray(cellCount) { -1 }
+            var plateaus = 0
+            for (start in 0 until cellCount) {
+                if (plateau[start] >= 0 || !flows[start] || !continent[start] || thickness[start] <= ceilingKm) continue
+                // The plateau the over-thick point stands in: its connected crust at the ceiling or past it.
+                val members = ArrayList<Int>()
+                members.add(start)
+                plateau[start] = plateaus
+                var head = 0
+                while (head < members.size) {
+                    val cell = members[head++]
+                    for (index in sphere.neighborStart[cell] until sphere.neighborStart[cell + 1]) {
+                        val next = sphere.neighbors[index]
+                        if (plateau[next] >= 0 || !flows[next] || !continent[next] || thickness[next] < ceilingKm) continue
+                        plateau[next] = plateaus
+                        members.add(next)
+                    }
+                }
+                plateaus++
+                var excess = 0.0
+                for (cell in members) {
+                    if (thickness[cell] > ceilingKm) {
+                        excess += (thickness[cell] - ceilingKm).toDouble() * areaShare[cell]
+                        thickness[cell] = ceilingKm
+                    }
+                }
+                // As far out as the excess could need if the ground round it stood at the standard
+                // column, and twice as far again until it is laid.
+                var reachKm = sqrt((members.size + excess / (ceilingKm - continentalKm)) / PI) * spacingKm + WIDENING_MARGIN_SPACINGS * spacingKm
+                val sources = members.toIntArray()
+                while (excess > 0.0 && reachKm < PI * radiusKm) {
+                    val (distanceKm, _) = sphere.distanceFlood(sources, allowed = flows, reachKm = reachKm)
+                    var found = 0
+                    var keys = LongArray(64)
+                    for (cell in 0 until cellCount) {
+                        if (plateau[cell] >= 0 || !flows[cell] || distanceKm[cell] == Double.MAX_VALUE || thickness[cell] >= ceilingKm) continue
+                        if (found == keys.size) keys = keys.copyOf(found * 2)
+                        keys[found++] = floodKey(distanceKm[cell], cell)
+                    }
+                    keys = keys.copyOf(found)
+                    keys.sort()
+                    for (key in keys) {
+                        if (excess <= 0.0) break
+                        val cell = (key and 0xFFFFFFFFL).toInt()
+                        val room = (ceilingKm - thickness[cell]).toDouble() * areaShare[cell]
+                        val laid = min(room, excess)
+                        thickness[cell] += (laid / areaShare[cell]).toFloat()
+                        excess -= laid
+                    }
+                    reachKm *= 2.0
+                }
+                // A world with no ground left to widen onto keeps what it could not lay.
+                if (excess > 0.0) {
+                    thickness[start] += (excess / areaShare[start]).toFloat()
+                }
+            }
+        }
+
+        /**
+         * The edges [stiffEdges] marks, whose flow would level them faster than the substep [dtMyr]
+         * can carry: integrated over the substep in as many shorter ones as their fastest needs, so
+         * the lower crust under a thickened belt spreads as fast as Bird's flux says and not as fast
+         * as an explicit step allows, up to [MAX_FLOW_SUBCYCLES]. Every edge moves equal and opposite
+         * volumes, so the crust's volume is kept to the bit as the ordinary pass keeps it.
+         */
+        private fun flowStiffEdges(stiffEdges: IntArray, thickness: FloatArray, areaShare: FloatArray, dtMyr: Double) {
+            var lows = IntArray(0)
+            var highs = IntArray(0)
+            var count = 0
+            var fastest = 0.0
+            for (cell in 0 until cellCount) {
+                val bits = stiffEdges[cell]
+                if (bits == 0) continue
+                for (index in sphere.neighborStart[cell] until sphere.neighborStart[cell + 1]) {
+                    if (bits and (1 shl (index - sphere.neighborStart[cell])) == 0) continue
+                    val next = sphere.neighbors[index]
+                    if (count == lows.size) {
+                        lows = lows.copyOf(max(16, count * 2))
+                        highs = highs.copyOf(max(16, count * 2))
+                    }
+                    lows[count] = cell
+                    highs[count] = next
+                    count++
+                    val share = min(areaShare[cell], areaShare[next])
+                    fastest = max(fastest, edgeRate(cell, next, thickness[cell], thickness[next]) * dtMyr / edgeShareCap(cell, next, share))
+                }
+            }
+            if (count == 0) return
+            val cycles = min(MAX_FLOW_SUBCYCLES, kotlin.math.ceil(fastest).toInt())
+            stiffEdgeTally += count
+            stiffCycleTally = max(stiffCycleTally, cycles)
+            val cycleMyr = dtMyr / cycles
+            val moved = DoubleArray(count)
+            repeat(cycles) {
+                for (edge in 0 until count) {
+                    val low = lows[edge]
+                    val high = highs[edge]
+                    moved[edge] = edgeFlow(low, high, thickness[low], thickness[high], cycleMyr, min(areaShare[low], areaShare[high]))
+                }
+                for (edge in 0 until count) {
+                    thickness[lows[edge]] -= (moved[edge] / areaShare[lows[edge]]).toFloat()
+                    thickness[highs[edge]] += (moved[edge] / areaShare[highs[edge]]).toFloat()
+                }
+            }
         }
 
         /**
@@ -1822,6 +2287,7 @@ internal object TectonicHistory {
                 if (removed[sample] || samples.plate[sample] != from) continue
                 if (!inPiece[sampleCell[sample]]) continue
                 samples.plate[sample] = to
+                if (samples.continental[sample]) markOrogeny(sample, stepAgoEnd, OrogenyKind.ACCRETED_TERRANE)
             }
             for (cell in cells) if (owner[cell] == from) owner[cell] = to
         }
@@ -2415,8 +2881,92 @@ internal object TectonicHistory {
                 historyMyr = historyMyr,
                 splits = splitCount,
                 sutures = sutureCount,
-                plateSpeeds = speedRecord
+                plateSpeeds = speedRecord,
+                windowTectonicKm = field { samples.windowTectonicKm[it] },
+                windowWearKm = field { samples.windowWearKm[it] },
+                windowOnsetMyrAgo = field { if (samples.windowOnsetMyrAgo[it].isNaN()) -1f else samples.windowOnsetMyrAgo[it] },
+                presentThickeningKmPerMyr = field { (samples.lastStepTectonicKm[it] / stepMyr).toFloat() },
+                exposureWindowMyr = exposureWindowMyr,
+                strikeTensor = strikeTensor(field { if (samples.continental[it]) samples.excessKm[it] else 0f })
             )
+        }
+
+        /**
+         * The gradient tensor of [excessKm] at every point, smoothed over [STRIKE_SMOOTHING_KM]: each
+         * point's gradient in its tangent plane by least squares over its neighbors, its outer
+         * product with itself as a symmetric 3 by 3 tensor (six components, see
+         * [CrustHistory.strikeTensor]), averaged with its neighbors' as many times as spreads it over
+         * a belt's width. A tensor and not a direction, so opposite gradients on a belt's two flanks
+         * add instead of cancelling, and the result has no frame and no sign for the map to read.
+         */
+        private fun strikeTensor(excessKm: FloatArray): Array<FloatArray> {
+            val components = Array(STRIKE_COMPONENTS) { FloatArray(cellCount) }
+            parallelChunks(0, cellCount) { from, to ->
+                for (cell in from until to) {
+                    val px = sphere.x[cell]; val py = sphere.y[cell]; val pz = sphere.z[cell]
+                    // Normal equations of the least-squares gradient in the tangent plane, in 3D:
+                    // sum t t^T and sum (dh) t over the neighbors, t the tangent offset in km.
+                    var axx = 0.0; var axy = 0.0; var axz = 0.0; var ayy = 0.0; var ayz = 0.0; var azz = 0.0
+                    var bx = 0.0; var by = 0.0; var bz = 0.0
+                    for (index in sphere.neighborStart[cell] until sphere.neighborStart[cell + 1]) {
+                        val next = sphere.neighbors[index]
+                        var tx = sphere.x[next] - px; var ty = sphere.y[next] - py; var tz = sphere.z[next] - pz
+                        val radial = tx * px + ty * py + tz * pz
+                        tx = (tx - radial * px) * radiusKm; ty = (ty - radial * py) * radiusKm; tz = (tz - radial * pz) * radiusKm
+                        val rise = (excessKm[next] - excessKm[cell]).toDouble()
+                        axx += tx * tx; axy += tx * ty; axz += tx * tz; ayy += ty * ty; ayz += ty * tz; azz += tz * tz
+                        bx += rise * tx; by += rise * ty; bz += rise * tz
+                    }
+                    // The tangent-plane system is singular along the radial direction; adding the
+                    // radial direction's outer product makes it invertible without moving the
+                    // tangent answer, since the right side has no radial part.
+                    val scale = axx + ayy + azz
+                    if (scale <= 0.0) continue
+                    axx += scale * px * px; axy += scale * px * py; axz += scale * px * pz
+                    ayy += scale * py * py; ayz += scale * py * pz; azz += scale * pz * pz
+                    val c00 = ayy * azz - ayz * ayz
+                    val c01 = axz * ayz - axy * azz
+                    val c02 = axy * ayz - axz * ayy
+                    val determinant = axx * c00 + axy * c01 + axz * c02
+                    if (determinant == 0.0) continue
+                    val c11 = axx * azz - axz * axz
+                    val c12 = axy * axz - axx * ayz
+                    val c22 = axx * ayy - axy * axy
+                    val gx = (c00 * bx + c01 * by + c02 * bz) / determinant
+                    val gy = (c01 * bx + c11 * by + c12 * bz) / determinant
+                    val gz = (c02 * bx + c12 * by + c22 * bz) / determinant
+                    components[0][cell] = (gx * gx).toFloat()
+                    components[1][cell] = (gx * gy).toFloat()
+                    components[2][cell] = (gx * gz).toFloat()
+                    components[3][cell] = (gy * gy).toFloat()
+                    components[4][cell] = (gy * gz).toFloat()
+                    components[5][cell] = (gz * gz).toFloat()
+                }
+            }
+            // Each averaging over a point and its neighbors spreads the field by about half a
+            // spacing squared in variance, so a spread of the smoothing length takes twice its
+            // square in spacings.
+            val passes = (2.0 * (STRIKE_SMOOTHING_KM / spacingKm) * (STRIKE_SMOOTHING_KM / spacingKm)).roundToInt().coerceAtLeast(1)
+            var current = components
+            var next = Array(STRIKE_COMPONENTS) { FloatArray(cellCount) }
+            repeat(passes) {
+                val read = current
+                val write = next
+                parallelChunks(0, cellCount) { from, to ->
+                    for (cell in from until to) {
+                        val first = sphere.neighborStart[cell]
+                        val last = sphere.neighborStart[cell + 1]
+                        for (component in 0 until STRIKE_COMPONENTS) {
+                            var sum = read[component][cell].toDouble()
+                            for (index in first until last) sum += read[component][sphere.neighbors[index]]
+                            write[component][cell] = (sum / (1 + last - first)).toFloat()
+                        }
+                    }
+                }
+                current = write
+                next = read
+            }
+            return current
         }
 
         // ------------------------------------------------------------------------------- helpers
@@ -2458,6 +3008,99 @@ internal object TectonicHistory {
     }
 
     // ---------------------------------------------------------------------------------- figures
+
+    /**
+     * Flat subduction at about a tenth of today's convergent margins (Gutscher, Spakman, Bijwaard and
+     * Engdahl, *Geodynamics of flat subduction*, Tectonics 19, 2000, abstract): the floor's most
+     * buoyant tenth, its thickened crust of plateaus and aseismic ridges, goes down flat.
+     */
+    private const val FLAT_SLAB_SHARE = 0.10f
+
+
+    /** Where a flat slab deforms the upper plate, km from the trench (Gutscher et al. 2000), and the ramp at each edge. */
+    private const val FLAT_SLAB_NEAREST_KM = 250.0
+    private const val FLAT_SLAB_FARTHEST_KM = 800.0
+    private const val FLAT_SLAB_RAMP_KM = 100.0
+
+    /**
+     * The ordinary slab's anchoring `a` is the slab buoyancy's share below the flat slabs raised to
+     * this power. Heuret and Lallemand (2005) find nearly 45% of the subduction zones whose back-arc
+     * deformation the upper plate's motion explains lying near the free slab's line, and a perfectly
+     * anchored slab rare: `a` under a tenth on 45% of them is `ln 0.1 / ln 0.45`, 2.88, which leaves
+     * `a` over 0.9 on 3.6% and a median of 0.14.
+     */
+    private val ANCHORING_EXPONENT = ln(FREE_SLAB_ANCHORING) / ln(FREE_SLAB_SHARE)
+    private const val FREE_SLAB_ANCHORING = 0.1
+    private const val FREE_SLAB_SHARE = 0.45
+
+    /**
+     * The share of the ordinary floor's trenches whose back-arc does not deform measurably: of
+     * Heuret and Lallemand's 159 segments, 80 have a back-arc deformation well enough characterized
+     * to be given a rate (their classes E2, E3, C2 and C3), and the rest are neutral or deform only
+     * diffusely (classes 0, E1 and C1). Their statistics of the anchoring, below, are of the 80.
+     */
+    private const val QUIET_BACK_ARC_SHARE = 1.0 - 80.0 / 159.0
+
+    /**
+     * The share of the deforming trenches whose back-arc deformation the upper plate's motion does
+     * not explain: Heuret and Lallemand's 40% of the 80 in the slab-motion-controlled field, the
+     * trench moving on its own (rollback, mantle flow), mostly back-arc spreading. Here their upper
+     * plates are not deformed by their own motion; the slab's own extension is not modeled.
+     */
+    private const val SLAB_CONTROLLED_SHARE = 0.4
+
+    /**
+     * Over a flat slab the plates are coupled harder: Gutscher et al. find the upper plate's seismic
+     * energy release 250 to 800 km from the trench three to five times that above the steep slabs
+     * beside it, and a strain rate goes as the moment released (Kostrov), so four times the ordinary
+     * slab's mean anchoring: the deforming share of the trenches, less its slab-controlled share,
+     * times the mean of `u^2.88` for `u` even over 0 to 1, `1 / 3.88`; 0.078, so 0.31.
+     */
+    private val FLAT_SLAB_COUPLING =
+        FLAT_SLAB_DEFORMATION_RATIO * (1.0 - QUIET_BACK_ARC_SHARE) * (1.0 - SLAB_CONTROLLED_SHARE) / (1.0 + ANCHORING_EXPONENT)
+    private const val FLAT_SLAB_DEFORMATION_RATIO = 4.0
+
+    /**
+     * The slab buoyancy noise's longest wavelength, km, and its octaves: features of the floor a few
+     * hundred kilometers across, the scale over which Heuret and Lallemand's samples, every 2 degrees
+     * of trench (about 220 km), change their anchoring along one trench; two octaves, down to 500 km.
+     */
+    private const val SLAB_FEATURE_WAVELENGTH_KM = 1_000.0
+    private const val SLAB_FEATURE_OCTAVES = 2
+    private const val SLAB_NOISE_STREAM = 4L
+
+    /**
+     * The thrust belt behind an Andean margin, km from the trench, and its half-width: the Central
+     * Andes at 20 S, where the shortening east of the arc (Allmendinger, Jordan, Kay and Isacks 1997,
+     * Table 1) lies in the Eastern Cordillera and the Subandean belt, 65.5 to 63.5 W against a trench
+     * at 71.5 W and an arc in the Western Cordillera at 68.5 to 69 W: 450 to 750 km behind the
+     * trench, at 105 km a degree of longitude there.
+     */
+    private const val THRUST_BELT_OFFSET_KM = 600.0
+    private const val THRUST_BELT_HALF_WIDTH_KM = 150.0
+
+    /**
+     * How far from the trench the upper plate's edge gives up its crust to the shortening, km, and
+     * the e-folding of the take: the forearc within two of the history's spacings, mostly its edge.
+     */
+    private const val CONSUMED_REACH_KM = 160.0
+    private const val CONSUMED_EFOLD_KM = 40.0
+
+    /**
+     * The back-arc band a retreating upper plate stretches, km beyond the arc, and the ramp at each
+     * edge: the Great Basin's breadth from the Sierra Nevada's crest at 119 W to the Wasatch front at
+     * 111.8 W, 620 km at 39 N, its extension 48 to 97 km over 17 Myr in grabens 24 to 32 km apart
+     * (Stewart, *Basin and range structure*, GSA Bulletin 82, 1971, abstract).
+     */
+    private const val BACK_ARC_WIDTH_KM = 620.0
+    private const val BACK_ARC_RAMP_KM = 100.0
+
+
+    /** How far past the widening's own estimate its first search reaches, in the lattice's spacings. */
+    private const val WIDENING_MARGIN_SPACINGS = 3.0
+
+    /** A step ends inside the exposure window if it ends this much before the window's start, Myr: rounding only. */
+    private const val WINDOW_ROUNDING_MYR = 1e-6
 
     /** Earth's surface, km², for the counts set per Earth. */
     private const val EARTH_SURFACE_KM2 = 510.1e6
@@ -2541,6 +3184,10 @@ internal object TectonicHistory {
     const val BELT_EFOLD_KM = 100.0
     private const val SUTURE_REACH_BELT_WIDTHS = 3.0
     private const val BELT_REACH_KM = 3.0 * BELT_EFOLD_KM
+
+    /** The strike tensor's six components, and the length it is smoothed over: a belt's width, three of its e-folds. */
+    private const val STRIKE_COMPONENTS = 6
+    private const val STRIKE_SMOOTHING_KM = 3.0 * BELT_EFOLD_KM
 
     /** What share of the continental crust starts as microcontinents in the ocean, and how many on an Earth. */
     private const val MICROCONTINENT_SHARE_OF_CRUST = 0.03
@@ -2691,6 +3338,13 @@ internal object TectonicHistory {
      * it, any number is stable, and ten resolves the flow's own front to a tenth of a step.
      */
     private const val FLOW_SUBSTEPS = 10
+
+    /**
+     * The most shorter substeps an edge too stiff for its substep is integrated in: Bird's flux
+     * under 120 km of crust, the thickest a collision piles before the flow spreads it, levels an
+     * edge some six hundred times faster than a substep allows, and a thousand covers it.
+     */
+    private const val MAX_FLOW_SUBCYCLES = 1_024
 
     /**
      * A plate larger than Earth's largest, the Pacific at 0.205 of the sphere (Bird 2003, Table 1),

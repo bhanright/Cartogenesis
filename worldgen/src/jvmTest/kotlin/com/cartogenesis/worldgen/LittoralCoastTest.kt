@@ -1,5 +1,6 @@
 package com.cartogenesis.worldgen
 
+import com.cartogenesis.worldgen.pipeline.ErosionTectonics
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.pipeline.LittoralGrading
 import com.cartogenesis.worldgen.pipeline.PlateStage
@@ -65,7 +66,7 @@ class LittoralCoastTest {
         val config = WorldGenConfig.forRows(seed, rows)
         val terrain = TerrainStage.generate(config)
         val plates = PlateStage.generate(config, terrain)
-        val eroded = erodeBlocking(config, plates.height, upliftRateMmPerYear = plates.upliftRateMmPerYear)
+        val eroded = erodeBlocking(config, plates.height, tectonics = ErosionTectonics.of(plates))
         val control = config.copy(
             sea = config.sea.copy(littoralGrading = false, drownedValleyFill = false)
         )

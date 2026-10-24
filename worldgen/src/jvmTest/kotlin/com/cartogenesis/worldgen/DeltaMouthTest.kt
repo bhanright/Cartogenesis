@@ -1,5 +1,6 @@
 package com.cartogenesis.worldgen
 
+import com.cartogenesis.worldgen.pipeline.ErosionTectonics
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.pipeline.HydraulicErosion
 import com.cartogenesis.worldgen.model.WorldMap
@@ -58,7 +59,7 @@ class DeltaMouthTest : BorrowsSharedWorlds() {
         val cfg = config.copy(erosion = config.erosion.copy(deltaLobe = deltaLobe))
         val log = DepositionLog(cfg.width * cfg.height)
         val plates = PlateStage.generate(cfg, TerrainStage.generate(cfg))
-        val eroded = erodeBlockingLoggingDeposition(cfg, plates.height, plates.upliftRateMmPerYear, log)
+        val eroded = erodeBlockingLoggingDeposition(cfg, plates.height, ErosionTectonics.of(plates), log)
         // The same erosion the world was cut from, to the last bit, or the mask below would be
         // another run's lobes laid over this world's new land.
         val differing = eroded.height.data.indices.count { eroded.height.data[it] != world.erosion.height.data[it] }

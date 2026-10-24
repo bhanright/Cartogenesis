@@ -1,5 +1,6 @@
 package com.cartogenesis.worldgen
 
+import com.cartogenesis.worldgen.pipeline.ErosionTectonics
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.pipeline.DrownedValleys
 import com.cartogenesis.worldgen.pipeline.LittoralGrading
@@ -53,7 +54,7 @@ class CoastVarietyAuditTest {
             val shipped = baseConfig(seed, rows)
             val terrain = TerrainStage.generate(shipped)
             val plates = PlateStage.generate(shipped, terrain)
-            val eroded = erodeBlocking(shipped, plates.height, upliftRateMmPerYear = plates.upliftRateMmPerYear)
+            val eroded = erodeBlocking(shipped, plates.height, tectonics = ErosionTectonics.of(plates))
 
             // The rules that live inside the sea stage: same eroded field, one rule off at a time.
             val sameField = listOf(
@@ -71,18 +72,18 @@ class CoastVarietyAuditTest {
 
             // The rules upstream of the cut, each of which needs its own eroded field.
             val lowstandOff = shipped.copy(sea = shipped.sea.copy(lowstandMetres = 0f))
-            val lowstandOffField = erodeBlocking(lowstandOff, plates.height, upliftRateMmPerYear = plates.upliftRateMmPerYear)
+            val lowstandOffField = erodeBlocking(lowstandOff, plates.height, tectonics = ErosionTectonics.of(plates))
             report("lowstand off", seed, SeaLevelStage.apply(lowstandOffField.height, lowstandOff).isLand,
                 rows, pooled, pooledOctaves, pooledSpread)
 
             val erosionOff = shipped.copy(erosion = shipped.erosion.copy(enabled = false))
-            val erosionOffField = erodeBlocking(erosionOff, plates.height, upliftRateMmPerYear = plates.upliftRateMmPerYear)
+            val erosionOffField = erodeBlocking(erosionOff, plates.height, tectonics = ErosionTectonics.of(plates))
             report("erosion off", seed, SeaLevelStage.apply(erosionOffField.height, erosionOff).isLand,
                 rows, pooled, pooledOctaves, pooledSpread)
 
             val detailOff = shipped.copy(tectonics = shipped.tectonics.copy(detailAmplitude = 0f))
             val detailOffPlates = PlateStage.generate(detailOff, terrain)
-            val detailOffField = erodeBlocking(detailOff, detailOffPlates.height, upliftRateMmPerYear = detailOffPlates.upliftRateMmPerYear)
+            val detailOffField = erodeBlocking(detailOff, detailOffPlates.height, tectonics = ErosionTectonics.of(detailOffPlates))
             report("plate detail noise off", seed,
                 SeaLevelStage.apply(detailOffField.height, detailOff).isLand,
                 rows, pooled, pooledOctaves, pooledSpread)
@@ -129,7 +130,7 @@ class CoastVarietyAuditTest {
         val config = baseConfig(718106L, rows)
         val terrain = TerrainStage.generate(config)
         val plates = PlateStage.generate(config, terrain)
-        val eroded = erodeBlocking(config, plates.height, upliftRateMmPerYear = plates.upliftRateMmPerYear)
+        val eroded = erodeBlocking(config, plates.height, tectonics = ErosionTectonics.of(plates))
         val drained = SeaLevelStage.apply(
             eroded.height,
             config.copy(sea = config.sea.copy(drownedValleyFill = false, littoralGrading = false, shelfWidthKm = 0.0))
@@ -186,7 +187,7 @@ class CoastVarietyAuditTest {
             val shipped = baseConfig(seed, rows)
             val terrain = TerrainStage.generate(shipped)
             val plates = PlateStage.generate(shipped, terrain)
-            val eroded = erodeBlocking(shipped, plates.height, upliftRateMmPerYear = plates.upliftRateMmPerYear)
+            val eroded = erodeBlocking(shipped, plates.height, tectonics = ErosionTectonics.of(plates))
             val variants = listOf(
                 "shipped" to shipped,
                 "2.0.2 (no coast passes)" to shipped.copy(
@@ -200,7 +201,7 @@ class CoastVarietyAuditTest {
             }
 
             val lowstandOff = shipped.copy(sea = shipped.sea.copy(lowstandMetres = 0f))
-            val lowstandOffField = erodeBlocking(lowstandOff, plates.height, upliftRateMmPerYear = plates.upliftRateMmPerYear)
+            val lowstandOffField = erodeBlocking(lowstandOff, plates.height, tectonics = ErosionTectonics.of(plates))
             reportRulers(
                 "lowstand off", seed,
                 SeaLevelStage.apply(lowstandOffField.height, lowstandOff).isLand, rows
@@ -219,7 +220,7 @@ class CoastVarietyAuditTest {
             // coast: a curve on a grid is a staircase, and a majority coarsening of a staircase is
             // not the same curve at half the scale.
             val erosionOff = shipped.copy(erosion = shipped.erosion.copy(enabled = false))
-            val erosionOffField = erodeBlocking(erosionOff, plates.height, upliftRateMmPerYear = plates.upliftRateMmPerYear)
+            val erosionOffField = erodeBlocking(erosionOff, plates.height, tectonics = ErosionTectonics.of(plates))
             reportRulers(
                 "erosion off (the floor)", seed,
                 SeaLevelStage.apply(erosionOffField.height, erosionOff).isLand, rows

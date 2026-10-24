@@ -809,8 +809,6 @@ data class TectonicsConfig(
      * whole point of distinguishing the pairs. 328.125 km, the 512 grid's 14 cell widths.
      */
     val andeanWidthKm: Double = 328.125,
-    /** Crest height of that coastal range, in normalized elevation units. Narrow but tall. */
-    val andeanHeight: Float = 0.52f,
     /**
      * How far inland of the suture the volcanic arc stands, in kilometers.
      *
@@ -822,43 +820,11 @@ data class TectonicsConfig(
     val arcOffsetKm: Double = 304.6875,
     /** Half-width of the volcanic arc ridge about its own axis, in kilometers: the 512 grid's 5 cell widths. */
     val arcWidthKm: Double = 117.1875,
-    /** Height of the volcanic arc above the range it rides on, in normalized elevation units. */
-    val arcHeight: Float = 0.20f,
     /**
      * Half-width, in kilometers, of a continental collision plateau. Broad — see [andeanWidthKm].
      * 609.375 km, the 512 grid's 26 cell widths.
      */
     val collisionWidthKm: Double = 609.375,
-    /**
-     * Height of the plateau, in normalized elevation units.
-     *
-     * Lower than [andeanHeight] on purpose. Tibet stands below the highest Andean peaks and holds
-     * that height over a hundred times the area, and since the whole field is normalized before
-     * sea level is cut, a plateau as tall as it is wide would simply push every other landform
-     * down the colour ramp.
-     */
-    val collisionHeight: Float = 0.34f,
-    /**
-     * Share of the plateau's half-width that is dead flat before the profile starts falling away.
-     *
-     * Tibet is a plain at altitude, not a ridge: the interesting thing about a continent-continent
-     * collision is that it thickens the crust over a wide area rather than piling it on a line.
-     */
-    val plateauFlatShare: Float = 0.60f,
-    /**
-     * Height of the ranges around a plateau's rim, above the plateau surface itself.
-     *
-     * The Himalaya, the Karakoram, the Kunlun and the Qilian all stand on the edge of Tibet rather
-     * than in it, which is what stops a plateau reading as a dome: the high ground is a rough plain
-     * inside a ring of mountains. Without it the collision profile is smooth everywhere and the
-     * eye reads a mound.
-     */
-    val plateauRimHeight: Float = 0.12f,
-    /**
-     * Where the rim ranges crest, as a share of the plateau's half-width, and how wide they are —
-     * the rim's own half-width is one minus this. Dimensionless, so it needs no rescaling.
-     */
-    val plateauRimShare: Float = 0.78f,
     /**
      * How much of [rangeVariation] a plateau feels, as a fraction.
      *

@@ -171,6 +171,13 @@ internal object WorldSections {
         IntSection("plates.orogenyKind", { 0 until OrogenyKind.entries.size }) { it.plates.orogenyKind },
         IntSection("plates.terraneId", { -1 until TERRANE_ID_LIMIT }) { it.plates.terraneId },
         FloatSection("plates.riftAgeMyr") { it.plates.riftAgeMyr.data },
+        // How readily the rock is cut, and the belts' recent history the erosion replays: the
+        // first is drawn from the crust's kind and age with noise along the belts, the second is
+        // the history's books, and neither is in the height field (docs/DESIGN_LEDGER.md, TH1-2).
+        FloatSection("plates.rockErodibility") { it.plates.rockErodibility.data },
+        FloatSection("plates.windowTectonicKm") { it.plates.windowTectonicKm.data },
+        FloatSection("plates.windowWearKm") { it.plates.windowWearKm.data },
+        FloatSection("plates.windowOnsetMyrAgo") { it.plates.windowOnsetMyrAgo.data },
         FloatSection("erosion.height") { it.erosion.height.data },
         ByteSection("sea.isLand", ByteMeaning.FLAG) { flagsOf(it.sea.isLand) },
         FloatSection("sea.relativeElevation") { it.sea.relativeElevation.data },
@@ -350,7 +357,12 @@ internal object WorldSections {
                 orogenicExcessKm = field("plates.orogenicExcessKm"),
                 orogenyKind = ints("plates.orogenyKind"),
                 terraneId = ints("plates.terraneId"),
-                riftAgeMyr = field("plates.riftAgeMyr")
+                riftAgeMyr = field("plates.riftAgeMyr"),
+                rockErodibility = field("plates.rockErodibility"),
+                windowTectonicKm = field("plates.windowTectonicKm"),
+                windowWearKm = field("plates.windowWearKm"),
+                windowOnsetMyrAgo = field("plates.windowOnsetMyrAgo"),
+                exposureWindowMyr = config.tectonics.exposureWindowMyr
             ),
             erosion = ErosionResult(height = field("erosion.height")),
             sea = SeaLevelResult(

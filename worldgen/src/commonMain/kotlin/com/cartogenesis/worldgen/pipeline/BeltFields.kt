@@ -123,7 +123,7 @@ internal object BeltFields {
                     if (provinceAmplitude > 0f) {
                         province[cell] = (provinceAmplitude * gaborAt(
                             px, py, pz, omegaX, omegaY, omegaZ, inputs.provinceWavelengthKm, inputs.elongation,
-                            inputs.impulsesPerCube, inputs.seed, PROVINCE_OCTAVE
+                            inputs.impulsesPerCube, inputs.seed, BeltFieldsHash.PROVINCE_OCTAVE
                         )).toFloat()
                     }
                 }
@@ -157,7 +157,7 @@ internal object BeltFields {
             val cz = cubeZ + offsetZ
             var hash = cubeHash(seed, octave, cx, cy, cz)
             for (impulse in 0 until impulses) {
-                hash = mix(hash + IMPULSE_STEP)
+                hash = mix(hash + BeltFieldsHash.IMPULSE_STEP)
                 val ix = (cx + unit(hash)) * cubeKm
                 hash = mix(hash)
                 val iy = (cy + unit(hash)) * cubeKm
@@ -176,12 +176,12 @@ internal object BeltFields {
                 sum += weight * exp(-PI * bandwidth * bandwidth * distance2) * cos(2.0 * PI * frequency * along + phase)
             }
         }
-        return sum * sqrt(GABOR_VARIANCE_DIVISOR / impulses)
+        return sum * sqrt(BeltFieldsHash.VARIANCE_DIVISOR / impulses)
     }
 
     /** A cube's hash: [seed], the octave and the cube's three indices mixed in turn. */
     fun cubeHash(seed: Int, octave: Int, x: Int, y: Int, z: Int): Int {
-        var hash = mix(seed + OCTAVE_STEP * (octave + 1))
+        var hash = mix(seed + BeltFieldsHash.OCTAVE_STEP * (octave + 1))
         hash = mix(hash xor x)
         hash = mix(hash xor y)
         hash = mix(hash xor z)
@@ -202,23 +202,6 @@ internal object BeltFields {
     /** A hash's top 24 bits as a number in 0..1. */
     fun unit(hash: Int): Double = (hash ushr 8).toDouble() / UNIT_DIVISOR
 
-    /**
-     * What makes the noise's variance one: sparse convolution with `n` impulses in each cube of side
-     * `1 / a`, weights uniform on -1..1 (mean square a third) and random phases (a cosine's mean
-     * square a half), has variance `n a^3 (1/3) K^2 (1/2) (2 a^2)^(-3/2)`, which is `n K^2 / (12
-     * sqrt 2)` whatever `a` is; so `K = sqrt(12 sqrt 2 / n)`. The kernel is read only within `1 /
-     * a`, where its square has fallen to `exp(-2 pi)`; the Gaussian's square holds all but 0.6% of
-     * its volume inside that.
-     */
-    private val GABOR_VARIANCE_DIVISOR = 12.0 * sqrt(2.0)
-
-    /** The province's noise is its own octave of the hash, apart from the ridges' two. */
-    private const val PROVINCE_OCTAVE = 7
-
-    /** Golden-ratio steps that keep the octaves' and the impulses' hashes apart. */
-    private const val OCTAVE_STEP = -0x61c88647
-    private const val IMPULSE_STEP = 0x632be5ab
-
     private const val UNIT_DIVISOR = 16_777_216.0
 
     /**
@@ -237,4 +220,33 @@ internal object BeltFields {
         val norm = sqrt(raw.sumOf { it * it })
         return DoubleArray(octaves) { raw[it] / norm }
     }
+}
+
+/**
+ * The figures the belts' noise is hashed and normalized by, public so a device's pass draws the
+ * same impulses ([BeltFields.gaborAt]): a shader is handed them as literals, the steps as the
+ * unsigned numbers with the same bits.
+ */
+object BeltFieldsHash {
+
+    /**
+     * What makes the noise's variance one: sparse convolution with `n` impulses in each cube of side
+     * `1 / a`, weights uniform on -1..1 (mean square a third) and random phases (a cosine's mean
+     * square a half), has variance `n a^3 (1/3) K^2 (1/2) (2 a^2)^(-3/2)`, which is `n K^2 / (12
+     * sqrt 2)` whatever `a` is; so `K = sqrt(12 sqrt 2 / n)`. The kernel is read only within `1 /
+     * a`, where its square has fallen to `exp(-2 pi)`; the Gaussian's square holds all but 0.6% of
+     * its volume inside that.
+     */
+    val VARIANCE_DIVISOR: Double = 12.0 * sqrt(2.0)
+
+    /** The province's noise is its own octave of the hash, apart from the ridges'. */
+    const val PROVINCE_OCTAVE = 7
+
+    /** Golden-ratio steps that keep the octaves' and the impulses' hashes apart. */
+    const val OCTAVE_STEP = -0x61c88647
+    const val IMPULSE_STEP = 0x632be5ab
+
+    /** The same steps' bits read as unsigned numbers, as a shader's literals take them. */
+    val OCTAVE_STEP_UNSIGNED: Long = OCTAVE_STEP.toLong() and 0xFFFF_FFFFL
+    val IMPULSE_STEP_UNSIGNED: Long = IMPULSE_STEP.toLong() and 0xFFFF_FFFFL
 }

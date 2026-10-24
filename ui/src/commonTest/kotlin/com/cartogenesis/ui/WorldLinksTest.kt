@@ -44,7 +44,6 @@ class WorldLinksTest {
         var config = Knobs.atResolution(WorldGenConfig(seed = 718106L), 2048)
         config = Knobs.oceanCoverage.set(config, 0.4137f)
         config = Knobs.plates.set(config, 23)
-        config = Knobs.mountainHeight.set(config, 0.7771f)
         config = Knobs.erosionStrength.set(config, 1.337e-6f)
         config = Knobs.seasonalTiltDegrees.set(config, 3.25f)
         config = Knobs.rainShadow.set(config, 4.1f)

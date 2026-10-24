@@ -118,7 +118,6 @@ object WorldLinks {
     internal val KEYED: List<Pair<String, Knob>> = listOf(
         "ocean" to Knobs.oceanCoverage,
         "plates" to Knobs.plates,
-        "mountains" to Knobs.mountainHeight,
         "erosion" to Knobs.erosionStrength,
         "tilt" to Knobs.seasonalTiltDegrees,
         "rainshadow" to Knobs.rainShadow,

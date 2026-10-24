@@ -82,7 +82,12 @@ internal object SyntheticWorlds {
                 orogenicExcessKm = field(),
                 orogenyKind = IntArray(cells) { it % OrogenyKind.entries.size },
                 terraneId = IntArray(cells) { if (it % 2 == 0) -1 else it },
-                riftAgeMyr = field()
+                riftAgeMyr = field(),
+                rockErodibility = field(),
+                windowTectonicKm = field(),
+                windowWearKm = field(),
+                windowOnsetMyrAgo = field(),
+                exposureWindowMyr = config.tectonics.exposureWindowMyr
             ),
             erosion = ErosionResult(field()),
             sea = SeaLevelResult(

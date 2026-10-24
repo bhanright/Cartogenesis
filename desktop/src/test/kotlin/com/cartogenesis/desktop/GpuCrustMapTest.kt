@@ -31,18 +31,19 @@ class GpuCrustMapTest {
         val gap = fixture.compare(onTheCard!!)
         println(
             ("TH1-1 PARITY %dx%d cells: share at worst %.2e apart (bar %.2e); thickness %.3f km (bar %.3f); floor age %.3f Myr" +
-                " (bar %.3f); crust age %.3f Myr (bar %.3f); categories differ on %.5f of the cells (bar %.5f);" +
-                " the worst share at row %d column %d, %.4f here and %.4f on the card")
+                " (bar %.3f); crust age %.3f Myr (bar %.3f); the belts' books %.2e of their spans (bar %.2e);" +
+                " categories differ on %.5f of the cells (bar %.5f); the worst share at row %d column %d, %.4f here and %.4f on the card")
                 .format(
                     fixture.cellsAcross, fixture.cellsDown, gap.shareWorst, gap.shareBar, gap.thicknessWorstKm, gap.thicknessBarKm,
-                    gap.floorAgeWorstMyr, gap.floorAgeBarMyr, gap.crustAgeWorstMyr, gap.crustAgeBarMyr, gap.categoriesDiffering, gap.categoriesBar,
-                    gap.worstRow, gap.worstColumn, gap.worstProcessorShare, gap.worstDeviceShare
+                    gap.floorAgeWorstMyr, gap.floorAgeBarMyr, gap.crustAgeWorstMyr, gap.crustAgeBarMyr, gap.beltBooksWorstShare, gap.shareBar,
+                    gap.categoriesDiffering, gap.categoriesBar, gap.worstRow, gap.worstColumn, gap.worstProcessorShare, gap.worstDeviceShare
                 )
         )
         assertTrue(gap.shareWorst <= gap.shareBar, "the card's crust share is ${gap.shareWorst} off the processor's")
         assertTrue(gap.thicknessWorstKm <= gap.thicknessBarKm, "the card's thickness is ${gap.thicknessWorstKm} km off")
         assertTrue(gap.floorAgeWorstMyr <= gap.floorAgeBarMyr, "the card's floor age is ${gap.floorAgeWorstMyr} Myr off")
         assertTrue(gap.crustAgeWorstMyr <= gap.crustAgeBarMyr, "the card's crust age is ${gap.crustAgeWorstMyr} Myr off")
+        assertTrue(gap.beltBooksWorstShare <= gap.shareBar, "the card's belt books are ${gap.beltBooksWorstShare} of their spans off")
         assertTrue(gap.categoriesDiffering <= gap.categoriesBar, "the card's categories differ on ${gap.categoriesDiffering} of the cells")
     }
 }

@@ -445,6 +445,17 @@ object PlateStage {
         }
     }
 
+    /** The belts' map pass's inputs on [config]'s world, as the stage builds them: the fixture a device's pass is held to ([BeltFieldsParity]). */
+    internal fun beltFieldInputsOf(config: WorldGenConfig): BeltFieldInputs {
+        val history = TectonicHistory.run(config)
+        var captured: BeltFieldInputs? = null
+        generate(config, TerrainStage.generate(config), history, CrustMap.read(config, history)) { inputs ->
+            captured = inputs
+            null
+        }
+        return captured!!
+    }
+
     /**
      * The stage itself, the belts' map pass ([BeltFields]) offered to [readBeltFields] first, which
      * may decline it, in which case the processor's runs.

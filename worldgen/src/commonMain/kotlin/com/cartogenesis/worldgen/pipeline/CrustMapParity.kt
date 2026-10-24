@@ -22,6 +22,10 @@ import kotlin.math.max
  * own crust's points and a cell with none of them takes a stand-in (the standard column, the
  * nearest point's age) that a single point at the reach may replace. A category is the heaviest
  * point's or plate's, which a float can tip only where two weigh within its last bits of each other.
+ *
+ * The belts' books (TH1-2: the exposure window's tectonic change, wear and onset, the present
+ * thickening rate, and the strike tensor) are weighted means the same way, so each is held to the
+ * same share of its own span; whether a cell has an onset at all is a category.
  */
 class CrustMapParity private constructor(private val inputs: CrustMapInputs, private val reference: CrustMapOutputs) {
 
@@ -41,7 +45,9 @@ class CrustMapParity private constructor(private val inputs: CrustMapInputs, pri
         val floorAgeBarMyr: Double,
         val crustAgeWorstMyr: Double,
         val crustAgeBarMyr: Double,
-        /** Cells whose plate, orogeny kind, terrane, or whether they were ever rifted, differ: a share of all cells. */
+        /** The belts' books' worst gap, each as a share of its own span: the window's, the rate's and the strike tensor's. */
+        val beltBooksWorstShare: Double,
+        /** Cells whose plate, orogeny kind, terrane, or whether they were ever rifted or have an onset, differ: a share of all cells. */
         val categoriesDiffering: Double,
         val categoriesBar: Double,
         /** Where the share stands farthest apart, row and column, and the two shares there. */
@@ -52,7 +58,7 @@ class CrustMapParity private constructor(private val inputs: CrustMapInputs, pri
     ) {
         val withinBars: Boolean
             get() = shareWorst <= shareBar && thicknessWorstKm <= thicknessBarKm && floorAgeWorstMyr <= floorAgeBarMyr &&
-                crustAgeWorstMyr <= crustAgeBarMyr && categoriesDiffering <= categoriesBar
+                crustAgeWorstMyr <= crustAgeBarMyr && beltBooksWorstShare <= shareBar && categoriesDiffering <= categoriesBar
     }
 
     fun compare(device: CrustMapOutputs): Gap {
@@ -63,23 +69,44 @@ class CrustMapParity private constructor(private val inputs: CrustMapInputs, pri
         var floorWorst = 0.0
         var crustWorst = 0.0
         var differing = 0
+        fun span(values: FloatArray): Double = (values.max() - values.min()).toDouble()
+        val continentalBooks = listOf(
+            device.windowTectonicKm to reference.windowTectonicKm,
+            device.windowWearKm to reference.windowWearKm,
+            device.presentThickeningKmPerMyr to reference.presentThickeningKmPerMyr
+        ).map { (there, here) -> Triple(there, here, span(here)) }
+        val tensorBooks = listOf(
+            device.strikeEastEast to reference.strikeEastEast,
+            device.strikeEastNorth to reference.strikeEastNorth,
+            device.strikeNorthNorth to reference.strikeNorthNorth
+        ).map { (there, here) -> Triple(there, here, span(here)) }
+        val onsetSpan = span(reference.windowOnsetMyrAgo)
+        var booksWorst = 0.0
+        fun book(gap: Float, span: Double) {
+            if (span > 0.0) booksWorst = max(booksWorst, abs(gap.toDouble()) / span)
+        }
         for (cell in 0 until cells) {
             val shareGap = abs((device.continentalShare[cell] - reference.continentalShare[cell]).toDouble())
             if (shareGap > shareWorst) {
                 shareWorst = shareGap
                 worstCell = cell
             }
+            for ((there, here, span) in tensorBooks) book(there[cell] - here[cell], span)
             if (reference.continentalShare[cell] >= HALF) {
                 thicknessWorst = max(thicknessWorst, abs((device.thicknessKm[cell] - reference.thicknessKm[cell]).toDouble()))
+                for ((there, here, span) in continentalBooks) book(there[cell] - here[cell], span)
+                if (device.windowOnsetMyrAgo[cell] >= 0f && reference.windowOnsetMyrAgo[cell] >= 0f) {
+                    book(device.windowOnsetMyrAgo[cell] - reference.windowOnsetMyrAgo[cell], onsetSpan)
+                }
             } else {
                 floorWorst = max(floorWorst, abs((device.seafloorAgeMyr[cell] - reference.seafloorAgeMyr[cell]).toDouble()))
             }
             crustWorst = max(crustWorst, abs((device.crustAgeMyr[cell] - reference.crustAgeMyr[cell]).toDouble()))
             if (device.plateId[cell] != reference.plateId[cell] || device.orogenyKind[cell] != reference.orogenyKind[cell] ||
-                device.terrane[cell] != reference.terrane[cell] || (device.riftAgeMyr[cell] >= 0f) != (reference.riftAgeMyr[cell] >= 0f)
+                device.terrane[cell] != reference.terrane[cell] || (device.riftAgeMyr[cell] >= 0f) != (reference.riftAgeMyr[cell] >= 0f) ||
+                (device.windowOnsetMyrAgo[cell] >= 0f) != (reference.windowOnsetMyrAgo[cell] >= 0f)
             ) differing++
         }
-        fun span(values: FloatArray): Double = (values.max() - values.min()).toDouble()
         val shareBar = TAIL_WEIGHT / NEAREST_WEIGHT + FLOAT_ROUNDING
         return Gap(
             shareWorst = shareWorst,
@@ -90,6 +117,7 @@ class CrustMapParity private constructor(private val inputs: CrustMapInputs, pri
             floorAgeBarMyr = shareBar * span(reference.seafloorAgeMyr),
             crustAgeWorstMyr = crustWorst,
             crustAgeBarMyr = shareBar * span(reference.crustAgeMyr),
+            beltBooksWorstShare = booksWorst,
             categoriesDiffering = differing.toDouble() / cells,
             categoriesBar = CATEGORY_TIES,
             worstRow = worstCell / inputs.mapColumns,

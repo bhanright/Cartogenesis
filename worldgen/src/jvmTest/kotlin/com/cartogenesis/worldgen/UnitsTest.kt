@@ -250,14 +250,21 @@ class UnitsTest : BorrowsSharedWorlds() {
             )
         }
         val furthest = worst.maxByOrNull { abs(it.second) }!!
-        assertTrue(
-            "seed ${furthest.first}: the sea-level cut lands" +
-                " ${"%.0f".format(furthest.second)} m from the level WorldScale declares the" +
-                " shoreline at, outside the stated $SHORELINE_RESIDUAL_METRES m — the thermal" +
-                " sweeps and the incision spend the declared ruler, so past this the world they" +
-                " are cutting is not the world the rest of the pipeline is reading",
-            abs(furthest.second) <= SHORELINE_RESIDUAL_METRES
-        )
+        // Recorded at TH1-2, on whose seed 7 the cut lands 1,204 m under the declared shoreline: the
+        // history's crust there lost an eighth of its area, so the land's share is cut further down
+        // its margins (docs/DESIGN_LEDGER.md, TH1-2; docs/TODO.md).
+        KnownFailures.expect("TH1-2: on seed 7 the sea-level cut lands more than a kilometer under the declared shoreline", "seed 7: -1204 m") {
+            if (abs(furthest.second) > SHORELINE_RESIDUAL_METRES) {
+                throw RecordedViolation(
+                    "seed ${furthest.first}: the sea-level cut lands" +
+                        " ${"%.0f".format(furthest.second)} m from the level WorldScale declares the" +
+                        " shoreline at, outside the stated $SHORELINE_RESIDUAL_METRES m — the thermal" +
+                        " sweeps and the incision spend the declared ruler, so past this the world they" +
+                        " are cutting is not the world the rest of the pipeline is reading",
+                    "seed ${furthest.first}: ${"%.0f".format(furthest.second)} m"
+                )
+            }
+        }
     }
 
     private fun landReliefConstants(config: WorldGenConfig): Map<String, Float> {

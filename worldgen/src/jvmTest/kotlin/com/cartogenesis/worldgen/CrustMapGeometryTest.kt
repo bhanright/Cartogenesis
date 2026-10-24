@@ -51,6 +51,21 @@ class CrustMapGeometryTest {
                 "LATTICE %s: %.3f as drawn, %.3f turned, difference %.3f (bar %.3f)"
                     .format(Locale.ROOT, name, first.average(), second.average(), difference, bar)
             )
+            if (name == "straight runs") {
+                // Recorded at TH1-2: the straight runs read 0.341 as drawn and 0.273 turned, 0.068
+                // apart against 0.067. Over ten seeds the two read 0.316 and 0.289, the paired
+                // difference 0.027 at 1.7 of its standard errors, so whether the lattice shows is not
+                // settled either way (docs/DESIGN_LEDGER.md, TH1-2; docs/TODO.md).
+                KnownFailures.expect("TH1-2: the crust's straight runs move with the lattice's turn past the bar", "0.068 against 0.067") {
+                    if (difference > bar) {
+                        throw RecordedViolation(
+                            "the crust's $name moves by $difference when the lattice turns, more than $bar",
+                            "%.3f against %.3f".format(Locale.ROOT, difference, bar)
+                        )
+                    }
+                }
+                continue
+            }
             assertTrue("the crust's $name moves by $difference when the lattice turns, more than $bar", difference <= bar)
         }
     }

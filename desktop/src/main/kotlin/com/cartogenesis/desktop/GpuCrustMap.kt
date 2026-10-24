@@ -561,8 +561,8 @@ class GpuCrustMap private constructor(override val name: String) : CrustMapAccel
             const uint OCTAVE_STEP = ${BeltFieldsHash.OCTAVE_STEP_UNSIGNED}u;
             const uint IMPULSE_STEP = ${BeltFieldsHash.IMPULSE_STEP_UNSIGNED}u;
             const int PROVINCE_OCTAVE = ${BeltFieldsHash.PROVINCE_OCTAVE};
-            const float UNIT_DIVISOR = 16777216.0;
-            const float VARIANCE_DIVISOR = ${BeltFieldsHash.VARIANCE_DIVISOR};
+            const float UNIT_SPAN = 16777216.0;
+            const float VARIANCE_NORMALIZER = ${BeltFieldsHash.VARIANCE_NORMALIZER};
 
             uint mixHash(uint value) {
                 uint bits = value;
@@ -573,7 +573,7 @@ class GpuCrustMap private constructor(override val name: String) : CrustMapAccel
                 bits ^= bits >> 16;
                 return bits;
             }
-            float unitOf(uint hash) { return float(hash >> 8) / UNIT_DIVISOR; }
+            float unitOf(uint hash) { return float(hash >> 8) / UNIT_SPAN; }
             uint cubeHash(int octave, ivec3 cube) {
                 uint hash = mixHash(uint(uSeed) + OCTAVE_STEP * uint(octave + 1));
                 hash = mixHash(hash ^ uint(cube.x));
@@ -609,7 +609,7 @@ class GpuCrustMap private constructor(override val name: String) : CrustMapAccel
                         sum += weight * exp(-PI * bandwidth * bandwidth * distance2) * cos(2.0 * PI * frequency * along + phase);
                     }
                 }
-                return sum * sqrt(VARIANCE_DIVISOR / float(uImpulses));
+                return sum * sqrt(VARIANCE_NORMALIZER / float(uImpulses));
             }
 
             void main() {

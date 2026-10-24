@@ -443,7 +443,7 @@ class JumpFloodDistanceTest : BorrowsSharedWorlds() {
         // it on three cells (docs/DESIGN_LEDGER.md, TH1-1b).
         KnownFailures.expect(
             "A-I11: the plain jump flood is not exact on land-mask sources, and seed 42's shelf is drawn off it",
-            "3 cells, the worst 0.0031 cell widths at (491,477)"
+            "4 cells, the worst 0.0031 cell widths at (8,9)"
         ) {
             if (offCells > 0) {
                 val found = String.format(

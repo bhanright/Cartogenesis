@@ -176,7 +176,7 @@ internal object BeltFields {
                 sum += weight * exp(-PI * bandwidth * bandwidth * distance2) * cos(2.0 * PI * frequency * along + phase)
             }
         }
-        return sum * sqrt(BeltFieldsHash.VARIANCE_DIVISOR / impulses)
+        return sum * sqrt(BeltFieldsHash.VARIANCE_NORMALIZER / impulses)
     }
 
     /** A cube's hash: [seed], the octave and the cube's three indices mixed in turn. */
@@ -200,9 +200,9 @@ internal object BeltFields {
     }
 
     /** A hash's top 24 bits as a number in 0..1. */
-    fun unit(hash: Int): Double = (hash ushr 8).toDouble() / UNIT_DIVISOR
+    fun unit(hash: Int): Double = (hash ushr 8).toDouble() / UNIT_SPAN
 
-    private const val UNIT_DIVISOR = 16_777_216.0
+    private const val UNIT_SPAN = 16_777_216.0
 
     /**
      * How much of a sinusoid's amplitude survives a cell's mean, for ground whose ranges are
@@ -237,7 +237,7 @@ object BeltFieldsHash {
      * a`, where its square has fallen to `exp(-2 pi)`; the Gaussian's square holds all but 0.6% of
      * its volume inside that.
      */
-    val VARIANCE_DIVISOR: Double = 12.0 * sqrt(2.0)
+    val VARIANCE_NORMALIZER: Double = 12.0 * sqrt(2.0)
 
     /** The province's noise is its own octave of the hash, apart from the ridges'. */
     const val PROVINCE_OCTAVE = 7

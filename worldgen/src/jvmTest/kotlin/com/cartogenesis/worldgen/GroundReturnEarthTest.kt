@@ -318,7 +318,7 @@ class GroundReturnEarthTest : BorrowsSharedWorlds() {
         // C x0.70 and E x0.75; armed at W2e, whose rain no longer gathers on the windward ranges
         // (docs/DESIGN_LEDGER.md, W2d and W2e). Recorded at TH1-1b, whose continents part at Earth's
         // speeds and spread over both hemispheres (docs/DESIGN_LEDGER.md, TH1-1b; docs/TODO.md).
-        KnownFailures.expect(WATER_CYCLE_ON_DISPERSED_WORLDS, "D x0.79; E x0.78") {
+        KnownFailures.expect(WATER_CYCLE_ON_DISPERSED_WORLDS, "E x1.27") {
             if (outside.isNotEmpty()) throw RecordedViolation("groups outside Earth's share: $outside", outside.joinToString("; "))
         }
     }
@@ -339,7 +339,7 @@ class GroundReturnEarthTest : BorrowsSharedWorlds() {
         // Recorded at W2d, B x0.45, C x1.42 and E x1.34, the arid group raining under half Earth's
         // arid rain and the temperate and polar twice and half again Earth's; armed at W2e
         // (docs/DESIGN_LEDGER.md, W2d and W2e). Recorded at TH1-1b (docs/TODO.md).
-        KnownFailures.expect(WATER_CYCLE_ON_DISPERSED_WORLDS, "E x1.51") {
+        KnownFailures.expect(WATER_CYCLE_ON_DISPERSED_WORLDS, "E x0.74") {
             if (outside.isNotEmpty()) throw RecordedViolation("groups outside Earth's millimeters: $outside", outside.joinToString("; "))
         }
     }
@@ -349,7 +349,7 @@ class GroundReturnEarthTest : BorrowsSharedWorlds() {
         val figures = pooled
         // Recorded at TH1-1b, whose continents, smaller and spread over both hemispheres, rain more
         // of the sea's water and less of their own (docs/DESIGN_LEDGER.md, TH1-1b; docs/TODO.md).
-        KnownFailures.expect(WATER_CYCLE_ON_DISPERSED_WORLDS, "x0.69") {
+        KnownFailures.expect(WATER_CYCLE_ON_DISPERSED_WORLDS, "x0.72") {
             nearEarth("the land's rain that last evaporated from land", figures.landOriginRain / figures.rain, EARTH_PRECIPITATION_RECYCLING)
         }
         // Inside before W2d, x1.22; recorded at W2d, x1.28, the wet half's air raining on the land
@@ -393,7 +393,7 @@ class GroundReturnEarthTest : BorrowsSharedWorlds() {
         // docs/TODO.md).
         // Recorded again at TH1-1 on the history's first worlds, x1.34; armed at TH1-1, whose final
         // worlds passed it; recorded at TH1-1b (docs/DESIGN_LEDGER.md, TH1-1b; docs/TODO.md).
-        KnownFailures.expect(WATER_CYCLE_ON_DISPERSED_WORLDS, "x1.54") {
+        KnownFailures.expect(WATER_CYCLE_ON_DISPERSED_WORLDS, "x1.32") {
             nearEarth("the land's rain where the potential is under half of it", figures.rainUnderHalf / figures.rain, EARTH_RAIN_SHARE_UNDER_HALF)
         }
     }

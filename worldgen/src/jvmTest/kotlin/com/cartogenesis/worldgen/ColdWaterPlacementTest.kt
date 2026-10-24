@@ -7,6 +7,7 @@ import com.cartogenesis.worldgen.pipeline.OceanHeat
 import com.cartogenesis.worldgen.pipeline.OceanStage
 import kotlin.math.abs
 import kotlin.test.Test
+import kotlin.test.assertTrue
 
 /**
  * Where the rising water puts the sea's cold, against where Earth has it, on the four standard
@@ -103,14 +104,10 @@ class ColdWaterPlacementTest : BorrowsSharedWorlds() {
         // Armed at A1-6b, whose seasonal circulation's easterly is weakest on the equator itself, so
         // the equatorial tongue no longer reaches the eastern shores colder than the subtropical
         // upwelling; the tongue's own shallowness is the next clause's (docs/DESIGN_LEDGER.md, A1-6b).
-        // Recorded at TH1-1, on whose worlds seed 7's coldest eastern-boundary water lies poleward of
-        // the upwelling latitudes, at 48 degrees (docs/DESIGN_LEDGER.md, TH1-1; docs/TODO.md).
-        KnownFailures.expect(
-            "TH1-1: on the history's worlds the coldest eastern-boundary water lies poleward of Earth's upwelling",
-            "seed 7: the coldest eastern-boundary water, -2.45 C, lies at 48.3 degrees"
-        ) {
-            if (failures.isNotEmpty()) throw RecordedViolation(failures.joinToString("\n"), failures.joinToString("; "))
-        }
+        // Recorded at TH1-1, on whose worlds seed 7's coldest eastern-boundary water lay poleward of
+        // the upwelling latitudes, at 48 degrees; armed at TH1-2, whose worlds pass it
+        // (docs/DESIGN_LEDGER.md, TH1-1 and TH1-2).
+        assertTrue(failures.isEmpty(), failures.joinToString("\n"))
     }
 
     @Test
@@ -132,7 +129,7 @@ class ColdWaterPlacementTest : BorrowsSharedWorlds() {
         }
         // Re-recorded on square cells at Q2, the ocean still solved on its own grid (docs/DESIGN_LEDGER.md, Q2).
         // Re-recorded at L1, whose rifts are Earth's half-grabens and the same at every grid (docs/DESIGN_LEDGER.md, L1).
-        KnownFailures.expect(EQUATORIAL_TONGUE_SHALLOW, "seed 7 0.06 of 0.57 C; seed 42 0.04 of 0.75 C; seed 1234 0.04 of 0.45 C; seed 99 0.04 of 0.43 C") {
+        KnownFailures.expect(EQUATORIAL_TONGUE_SHALLOW, "seed 7 0.08 of 0.78 C; seed 42 0.08 of 0.82 C; seed 1234 0.04 of 0.52 C; seed 99 0.07 of 0.86 C") {
             if (failures.isNotEmpty()) throw RecordedViolation(failures.joinToString("\n"), shortOf.joinToString("; "))
         }
     }

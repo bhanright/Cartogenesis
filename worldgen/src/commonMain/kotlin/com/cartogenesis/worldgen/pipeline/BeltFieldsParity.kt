@@ -81,7 +81,7 @@ class BeltFieldsParity private constructor(private val inputs: BeltFieldInputs, 
             }
             if (cellOff) off++
         }
-        val normalization = sqrt(BeltFieldsHash.VARIANCE_DIVISOR / inputs.impulsesPerCube)
+        val normalization = sqrt(BeltFieldsHash.VARIANCE_NORMALIZER / inputs.impulsesPerCube)
         val heaviestOctave = inputs.ridgeOctaveWeights.maxOrNull() ?: 1.0
         return Gap(
             ridgeWorstShare = ridgeWorst,
@@ -98,7 +98,7 @@ class BeltFieldsParity private constructor(private val inputs: BeltFieldInputs, 
 
     /** Rounding's bar on a cell's relief, a share of its amplitude: every octave's terms each off by [TERM_ROUNDING] of `K`. */
     private fun roundingBar(): Double {
-        val normalization = sqrt(BeltFieldsHash.VARIANCE_DIVISOR / inputs.impulsesPerCube)
+        val normalization = sqrt(BeltFieldsHash.VARIANCE_NORMALIZER / inputs.impulsesPerCube)
         val octaveWeights = max(inputs.ridgeOctaveWeights.sum(), 1.0)
         return TERMS_PER_OCTAVE * inputs.impulsesPerCube * normalization * TERM_ROUNDING * octaveWeights
     }

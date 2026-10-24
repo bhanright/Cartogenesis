@@ -510,8 +510,12 @@ class RiftIdentityTest {
     private companion object {
         const val PAIR_STRIDE = 1000
 
-        /** Where the cuts begin along the rift, away from its end, and how long each gap is: more than `riftWidthKm`. */
-        const val CUT_FROM_THE_END_KM = 1_000f
+        /**
+         * Where the cuts begin along the rift, away from its end, and how long each gap is: more than
+         * `riftWidthKm`. A gap's length from the end, since TH1-2's rifts are continental on both
+         * sides and seed 42's longest runs 959 km, short of the 1,580 km the cuts took from 1,000 km in.
+         */
+        const val CUT_FROM_THE_END_KM = 250f
         const val GAP_KM = 250f
 
         /** The short stretch left between the two gaps. */

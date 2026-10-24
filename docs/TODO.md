@@ -80,6 +80,24 @@
   1,000 km, against `measures.tsv`'s 0.121, 1,150 km and 2.2; at 1,024 rows 0.083, 2,750 km and
   3.99. The guards keep the design's figures and bars; which reading of Earth the bars should stand
   on is a question for the maintainer. 2026-10-24, TH1-2.
+- **What TH1-2 moved in the everyday tier (recorded).** On the history's new worlds, each a known
+  failure against its finding: the land holds too little above 2 km, 2.9% against Earth's 11.3%
+  (`HypsometryTest`, where TH1-1 recorded the opposite miss), and the isolated wet spots the high
+  ground raises fall to 0.18 of Earth's (`RainPlacementEarthTest`), both the scarce high ranges of
+  the entry above; the sea-level cut on seed 7 lands 1,204 m under the declared shoreline at 256 rows
+  (`UnitsTest`), that seed's crust having lost an eighth of its area (the area entry above); seed
+  1234's July boundary layer follows the drag balance at r = 0.305 against a bar of 0.50
+  (`BoundaryLayerTest`); the site world 718106 carries a sheet again, 1,642 m thick over 509 km,
+  under Greenland's divide (`IceSheetTest`); seed 42's cold coasts settle 1.5% better than its warm
+  (`OceanCurrentTest`); one realm's piece is stranded in another at 256 rows (`RealmSpreadTest`);
+  and the crust edge's straight runs read 0.341 as the lattice lies and 0.273 turned, 0.068 apart
+  against a bar of 0.067 (`CrustMapGeometryTest`, rule 13's turned lattice). Over ten seeds the
+  turned and unturned lattices read 0.316 and 0.289, the paired difference 0.027 at 1.7 of its
+  standard errors: not settled either way, and worth a look, since the upper plates' shortening
+  makes active margins follow plate boundaries, which are paths on the lattice. Armed, their worlds
+  passing: the coldest eastern-boundary water's latitude, the habitable land settled, the pooled
+  tropical desert band, seed 42's steep ground's isotropy, the one-cell river course and the
+  planet's mean temperature. 2026-10-24, TH1-2.
 - **The ensemble's intermediate worlds (TH1-1 and TH1-1b, measured).** Over the predeclared seeds 1 to
   30 at 512 rows, 9 assembled (largest landmass at least 0.75 of the land), 15 intermediate and 6
   highly dispersed (under 0.39); over the validation seeds 1001 to 1030, 10, 10 and 10

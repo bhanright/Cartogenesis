@@ -15,6 +15,71 @@
   scale over the blocks (0.31); and rifts drawn along the sutures' own line rather than the belt's
   width (0.32). What would settle it is a rift that follows its belt's curve and steps by transforms
   at every scale, as Earth's margins do (TH1-2's rifts, TH1-3's margins). 2026-10-21, TH1-1b.
+  **TH1-2, measured again and not fixed.** The same instrument over seeds 7, 42, 1234, 99 and 718106
+  reads 0.341 on the standard four against TH1-1b's 0.307, each seed straighter or level: the upper
+  plates' shortening takes a margin's crust back from its trench evenly along the trench, so an
+  active margin's edge follows the boundary's line. Tried and not kept: the ocean floor's ridge and
+  transform anisotropy on the continent's steps of a split's path too (`TectonicHistory.stepAnisotropy`),
+  which read 0.297 pooled over the five but split 14 plates where the history split 24 (seed 99 two
+  against eight), since a cut's transform steps open nothing and the split is taken only where the
+  cut opens; carrying it means weighing a cut's opening along its ridge steps alone, a change to the
+  cycle TH1-1b holds. 2026-10-24, TH1-2.
+- **The ranges above 1,500 m run shorter on the land than Earth's (TH1-2, recorded).** The design's
+  named-range instrument (`RangeInstrument`) finds 79.5 km of range axis above 1,500 m per million
+  km2 of land over the standard worlds at 512 rows against Earth's 197 (ETOPO5 at 39 km) and
+  TH1-1b's 172 to 278 on seeds 42, 1066 and 7 (`MountainRangesTest`, a known failure): the belts
+  the history thickens stand lower than TH1-1b's stamped ones, Andean belts most (no Andean range on
+  the standard seeds reaches the instrument), and the replay of the belts' window lowers them a
+  further sixth to a third (on seeds 7, 42 and 1066 the range length falls from 182, 69 and 242 km
+  per million km2 without the replay to 154, 58 and 167 with it). The land's mean height is near
+  Earth's (587 to 826 m against 743), so the land is more evenly middling than Earth's, with fewer
+  high narrow ranges. What to weigh: the upper plates' coupling (`TectonicHistory.anchoringOf`),
+  read from the deforming half of Heuret and Lallemand's segments; the rock's erodibility band on
+  the belts (its mean about 2); and whether the history's orogen wear and the replay's rivers agree
+  on how fast a belt wears (on seed 42 the belts thickened more than 5 km stand at a mean of 1,111 m
+  without the replay and 820 m with it). 2026-10-24, TH1-2.
+- **The history's crust area balance sits near its bar (TH1-2, measured).** With the upper plates
+  shortened at their trenches the crust's area moves by -12.6% and -12.9% on seeds 7 and 1066 over
+  200 Myr (bar 13.9%; without the shortening and the widening, -3.8% and -4.2%), the margins'
+  shortening booking -5.5% and -6.2% of the start. The coupling is Heuret and Lallemand's
+  (`Vd = a Vup`, Earth's continental upper plates advancing at up to 48 mm a year in their table),
+  but by a rough count against their table the history's continents meet about twice Earth's length
+  of trench, and the books' sources hardly make area: island arcs became continent over 0.00 to
+  0.05% of the start. The slab-controlled segments' own back-arc spreading, Heuret and Lallemand's
+  other 40% of the deforming ones, is not modeled, and would make area where it opens.
+  2026-10-24, TH1-2.
+- **Glacial carving does not run in the belts' replay (TH1-2).** The ice carves the present ranges
+  after erosion, as it always has (`GlaciationStage`); the replay of the belts' window runs rivers
+  and slopes only, so the cirques and troughs of the window's glaciations are not in it. What it
+  needs: the window's climate, where the replay takes the opening climate's rain, and a sheet and
+  valley-glacier pass inside the replay's rounds. 2026-10-24, TH1-2.
+- **Hovius's outlet spacing is not yet an instrument (TH1-2).** The brief asks the transverse
+  valleys' spacing against Hovius's ratio of a range's half-width to its outlets' spacing, 1.91 to
+  2.23 over eleven orogens (Hovius 1996, as Talling et al. 1997 give it), treated statistically. At
+  1,024 rows a range's half-width of about 170 km spaces its outlets some 80 km apart, four cells; an
+  instrument needs the range front on each flank and the outlets of the basins that reach the main
+  divide crossing it. The chained lakes inside ranges the design saw are counted in the TH1-2 report,
+  not guarded. 2026-10-24, TH1-2.
+- **The belts' replay has no card path (TH1-2).** It costs 2 to 3 s a world at 512 rows and about
+  12 s at 1,024 (`BeltErosion`); its rivers' flood and order are sequential, and its slopes' sweeps
+  are the rounds' and would go to the card's sweep (`ErosionAccelerator.erode`) with a mask of the
+  belts, which the card's sweep does not take yet. 2026-10-24, TH1-2.
+- **The replay at its own step cuts a quarter less than at a finer one (TH1-2, measured).** On seed
+  42 at 256 rows its rivers cut 370, 431 and 465 million km3 at its step, its half and its quarter
+  (`BeltReplayTest`): first-order convergence, the change halving from 76 m to 42 m a cell, so the
+  converged cut is about 500 million and the shipped step's a quarter under it. A higher-order step,
+  or a finer one on the young belts only, would close it. 2026-10-24, TH1-2.
+- **The Mountain height dial is retired (TH1-2).** It set the stamped Andean belts' height
+  (`tectonics.andeanHeight`), and those belts no longer exist: the belts are the history's crust.
+  An old link's `mountains=` is set aside with the usual notice. A physical replacement, if one is
+  wanted, would be an input the physics takes (the plates' coupling, the orogens' wear time), not
+  an outcome. 2026-10-24, TH1-2.
+- **The design's Earth figures for the ranges came from a cut-down grid (TH1-2, measured).** Read
+  over the whole of ETOPO5 averaged onto 512 rows, the named-range instrument gives Earth 9 ranges,
+  29,391 km of axis, a crest zone low share of 0.092, a high run of 3,010 km and 1.12 massifs per
+  1,000 km, against `measures.tsv`'s 0.121, 1,150 km and 2.2; at 1,024 rows 0.083, 2,750 km and
+  3.99. The guards keep the design's figures and bars; which reading of Earth the bars should stand
+  on is a question for the maintainer. 2026-10-24, TH1-2.
 - **The ensemble's intermediate worlds (TH1-1 and TH1-1b, measured).** Over the predeclared seeds 1 to
   30 at 512 rows, 9 assembled (largest landmass at least 0.75 of the land), 15 intermediate and 6
   highly dispersed (under 0.39); over the validation seeds 1001 to 1030, 10, 10 and 10
@@ -48,11 +113,18 @@
   (a median of 6 a world, 1 to 19), 318 on older, and 361 on drowned continental crust with no rift.
   The young ones follow the cycle: 10.1 a world where the breakup began under 50 Myr ago, 8.5 at 50
   to 100 Myr, 6.1 at 100 to 200, and 3.0 where it has not begun. 2026-10-20, TH1-1.
-- **The rifts are common on some worlds (TH1-1, measured).** Seed 7 carries 456 whole half-grabens
-  at 1,024 rows (`RiftIdentityTest`), the others 36 to 509: the history's plate boundaries cross the
-  continents wherever a split ran through one, and every slowly diverging continental pair is a
-  rift. At 256 rows seed 7 holds half-grabens of 332 to 456 km, past Earth's longest (a known
-  failure). The belts and rifts are TH1-2's to redraw. 2026-10-20, TH1-1.
+- **The rifts are common on some worlds (TH1-1, measured; TH1-2, redrawn).** Seed 7 carried 456
+  whole half-grabens at 1,024 rows (`RiftIdentityTest`), the others 36 to 509. Most of them were not
+  rifts: a divergent boundary with continent on one side and ocean floor on the other, the ridge a
+  continent had already parted from held against its edge for a step or two by the lattice's slow
+  opening, was drawn as a rift valley along the coast. TH1-2 draws a rift only with continent on
+  both sides (Bird 2003 counts a boundary deeper than 2,000 m oceanic), and the ridge's own relief
+  only on the floor's side. At 512 rows the standard seeds, 718106 and 59758 now carry 0.6 to 7.9
+  thousand km of rift in all, the longest 289 to 1,412 km and 8 to 78 half-grabens, where TH1-1b
+  carried 2.4 to 29.8 thousand km, the longest 468 to 16,144 km and 26 to 264 half-grabens; Earth's
+  continental rift boundary is 27,472 km in all (Bird 2003, Table 3), its transitional steps
+  included. A rift still runs along its split's path, straight where the path is (the straight-edge
+  entry above). 2026-10-24, TH1-2.
 - **The history's lines near a pole run along the map's rows (TH1-1, recorded).** The crust's
   edge, the plate boundaries and the coast and contours drawn on them run 36 to 307 steps along a
   row within a few degrees of a pole on the standard worlds, and the plate boundaries' bearing

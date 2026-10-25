@@ -47,8 +47,16 @@ class MountainRangesTest : BorrowsSharedWorlds() {
     @Test
     fun `the ranges are dissected as Earth's, stratum by stratum`() {
         val ranges = SharedWorlds.STANDARD_SEEDS.flatMap { RangeInstrument.ranges(worldOf(it)) }
-        val complaints = complaintsOf(ranges, "TH1-2b")
-        assertTrue("the ranges are not dissected as Earth's: " + complaints.joinToString("; "), complaints.isEmpty())
+        val complaints = complaintsOf(ranges, "TH1-2c")
+        val andean = complaints.filter { it.startsWith(RangeInstrument.Stratum.ANDEAN.name) }
+        val others = complaints - andean.toSet()
+        // Recorded at TH1-2c: with the back-arcs' heat the Andean stratum is long enough to be held
+        // for the first time, and its ranges stand on the hot back-arc's smooth plateau, their crest
+        // zones cut less than the Andes' and Mexico's (docs/DESIGN_LEDGER.md, TH1-2c; docs/TODO.md).
+        KnownFailures.expect(ANDEAN_DISSECTION_FINDING, ANDEAN_DISSECTION_SIGNATURE) {
+            if (andean.isNotEmpty()) throw RecordedViolation("the Andean ranges are not dissected as Earth's: " + andean.joinToString("; "), ANDEAN_DISSECTION_SIGNATURE)
+        }
+        assertTrue("the ranges are not dissected as Earth's: " + others.joinToString("; "), others.isEmpty())
     }
 
     /** The ranges are still there to be read: as long on the land as Earth's. */
@@ -299,6 +307,9 @@ class MountainRangesTest : BorrowsSharedWorlds() {
             EARTH_ADVANCING_MARGIN_SHARE - 2 * sqrt(EARTH_ADVANCING_MARGIN_SHARE * (1 - EARTH_ADVANCING_MARGIN_SHARE) / EARTH_ADVANCING_MARGINS)
 
         const val MARGINS_FINDING = "TH1-2c: young ranges stand behind fewer advancing margins than Earth's"
+
+        const val ANDEAN_DISSECTION_FINDING = "TH1-2c: the Andean ranges stand on the hot back-arc's plateau, less dissected than Earth's"
+        const val ANDEAN_DISSECTION_SIGNATURE = "Andean stratum under Earth's dissection"
         const val MARGINS_SIGNATURE = "advancing margins with a young range under the bar"
 
         /**

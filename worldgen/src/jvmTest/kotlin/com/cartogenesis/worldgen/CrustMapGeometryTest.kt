@@ -28,8 +28,8 @@ import org.junit.Assert.assertTrue
 class CrustMapGeometryTest {
 
     /**
-     * The crust's edge pooled over the standard seeds, drawn once on the lattice as it lies and
-     * once on the lattice turned through a fixed rotation: its divider dimension, its sharp corners
+     * The crust's edge pooled over the standard seeds, drawn once on the lattice as each world lays
+     * it and once on the lattice turned through a fixed rotation: its divider dimension, its sharp corners
      * and its straight runs agree within twice the standard error of their difference, the error
      * taken from the worlds' own spread. A history whose shapes came from its lattice would carry
      * the lattice's turn into them.
@@ -51,23 +51,9 @@ class CrustMapGeometryTest {
                 "LATTICE %s: %.3f as drawn, %.3f turned, difference %.3f (bar %.3f)"
                     .format(Locale.ROOT, name, first.average(), second.average(), difference, bar)
             )
-            if (name == "divider dimension") {
-                // Recorded at TH1-2b: 1.170 as drawn and 1.151 turned, 0.0192 apart against 0.0190.
-                // Over ten seeds the paired difference is 0.010 at 1.4 of its standard errors, so the
-                // lattice does not show in the dimension beyond the four seeds' scatter
-                // (docs/DESIGN_LEDGER.md, TH1-2b; docs/TODO.md).
-                KnownFailures.expect("TH1-2b: the crust's divider dimension moves with the lattice's turn past the bar", "0.019 against 0.019") {
-                    if (difference > bar) {
-                        throw RecordedViolation(
-                            "the crust's $name moves by $difference when the lattice turns, more than $bar",
-                            "%.3f against %.3f".format(Locale.ROOT, difference, bar)
-                        )
-                    }
-                }
-                continue
-            }
-            // The straight runs moved with the turn past the bar at TH1-2 (0.068 against 0.067); with
-            // the splits opening along their ridge steps they read 0.310 and 0.300 (TH1-2b), held again.
+            // The lattice drawn round the planet's axis carried its bearings into the edge's straight
+            // runs and its dimension (TH1-2 and TH1-2b, recorded); each world's lattice now lies at a
+            // turn its seed draws, and every figure is held (docs/DESIGN_LEDGER.md, TH1-2c).
             assertTrue("the crust's $name moves by $difference when the lattice turns, more than $bar", difference <= bar)
         }
     }
@@ -75,8 +61,8 @@ class CrustMapGeometryTest {
     /**
      * At 1,024 rows, a map cell is a quarter of the lattice's spacing, so a polygon of lattice
      * points would show: the edge walked in chords of one spacing would turn by the lattice's own
-     * angles, sixty degrees between its neighbors, more often than by angles either side of it. A
-     * natural edge turns less often the sharper the turn. The control reads each map cell at its
+     * angles, about sixty degrees between its neighbors, more often than by the gentler angles
+     * before them. A natural edge turns less often the sharper the turn. The control reads each map cell at its
      * nearest lattice point, which draws the lattice's own cells, and fails.
      */
     @Test
@@ -109,11 +95,17 @@ class CrustMapGeometryTest {
      * (a cell against the one half the map away in its own row) against the other row pairs. The
      * control reads the last column a third of the map away, as an error in the wrap would, and
      * fails.
+     *
+     * Read on the lattice as drawn round the polar axis, with a point at each pole, so the pole is
+     * one place of the crust and its first row one ring: the clause is about the map pass's own
+     * seams. On a lattice lying at another turn a coast may cross the pole's small cap, and every
+     * cell of the first row then stands across it from the cell half the map away, a coast and not
+     * a seam (docs/DESIGN_LEDGER.md, TH1-2c).
      */
     @Test
     fun `the map has no seam at its wrap or its poles`() {
         val config = WorldGenConfig.forRows(SharedWorlds.STANDARD_SEEDS.first(), SharedWorlds.DETAIL_ROWS)
-        val crust = CrustMap.read(config, TectonicHistory.run(config))
+        val crust = CrustMap.read(config, TectonicHistory.run(config, latticeOrientation = AS_DRAWN))
         val share = crust.continentalShare
         val width = config.width
         val height = config.height
@@ -159,11 +151,25 @@ class CrustMapGeometryTest {
         return listOf(CrustMeasures.dividerDimension(lines), CrustMeasures.cornerShare(lines), CrustMeasures.straightShare(lines))
     }
 
-    /** Whether [mask]'s edge, walked in chords of [chordKm], turns by sixty degrees more often than by the angles either side. */
+    /**
+     * Whether [mask]'s edge, walked in chords of [chordKm] on the ground, turns by the lattice's
+     * angle more often than by the gentler angles before it: a natural edge turns less often the
+     * sharper the turn, and a polygon of lattice cells puts a bump at its corners' angle. The map's
+     * kilometers east are the equator's, so a line's eastward steps are shrunk by its latitude's
+     * cosine first, and the angles are the ground's whatever way the lattice lies. The spiral
+     * lattice's cells are not regular, so their corners spread over the two bins about sixty
+     * degrees, and the bump is read on that pair against the pair before it (docs/DESIGN_LEDGER.md,
+     * TH1-2c).
+     */
     private fun turnsAtTheLatticeAngle(config: WorldGenConfig, mask: BooleanArray, chordKm: Double, label: String): Boolean {
         val lines = CrustMeasures.traceLines(config, mask)
         val bins = IntArray(TURN_BINS)
-        for ((xs, ys) in lines.polylines) {
+        for ((mapXs, ys) in lines.polylines) {
+            val xs = DoubleArray(mapXs.size)
+            for (index in 1 until mapXs.size) {
+                val latitude = (90.0 - (ys[index - 1] + ys[index]) / 2 / (config.height * config.cellHeightKm) * 180.0) * PI / 180.0
+                xs[index] = xs[index - 1] + (mapXs[index] - mapXs[index - 1]) * cos(latitude)
+            }
             val (px, py) = walk(xs, ys, chordKm)
             for (index in 2 until px.size) {
                 val latitude = 90.0 - py[index - 1] / (config.height * config.cellHeightKm) * 180.0
@@ -179,7 +185,9 @@ class CrustMapGeometryTest {
         println("LATTICE %s: turns per %d degrees at the lattice's spacing %s".format(Locale.ROOT, label, TURN_BIN_DEGREES.toInt(), bins.joinToString(" ")))
         // The bin holding sixty degrees against the two either side of it.
         val sixty = (LATTICE_TURN_DEGREES / TURN_BIN_DEGREES).toInt()
-        return bins[sixty] > maxOf(bins[sixty - 1], bins[sixty + 1])
+        val atTheCorners = bins[sixty - 1] + bins[sixty]
+        val gentler = bins[sixty - 3] + bins[sixty - 2]
+        return atTheCorners > gentler
     }
 
     /** The points a polyline is walked through with chords [chordKm] long. */
@@ -203,6 +211,9 @@ class CrustMapGeometryTest {
     }
 
     private companion object {
+        /** No turn: the lattice drawn round the polar axis. */
+        val AS_DRAWN: DoubleArray = doubleArrayOf(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0)
+
         /** A turn of one radian about an axis that is no axis of the map's: (1, 2, 3) normalized. */
         val TURN: DoubleArray = run {
             val length = sqrt(1.0 + 4.0 + 9.0)

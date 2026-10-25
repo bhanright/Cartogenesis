@@ -49,7 +49,7 @@
   of the reaches finer than a cell, which the history's crust stands on, was worn away again. The
   cell's ground now stands over its channel by that relief, at the steepness the history's own wear
   needs (`UnresolvedRelief`). The standard worlds read 93.0 (bar 58.1, passing); the young belts
-  keep 0.8 to 0.9 of their mean height. What is left: the linear law makes the unresolved relief
+  keep 0.74 to 0.88 of their mean height (seeds 7 and 42). What is left: the linear law makes the unresolved relief
   linear in the erosion rate, where Earth's 39 km boxes of active ranges hold 1,250 to 1,890 m of
   relief over rates a hundredfold apart, as Lague (2014) finds the steady state needs `n` near 2;
   read from the thickening rate instead of the wear the relief ran to 6 km at the thickest

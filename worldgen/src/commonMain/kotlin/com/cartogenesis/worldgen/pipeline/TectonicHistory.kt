@@ -1572,8 +1572,10 @@ internal object TectonicHistory {
          * `a` from nothing (a free slab, the trench following the upper plate) to one (an anchored
          * slab, the trench fixed). Here `a` is the slab's own: drawn from the subducting floor's
          * buoyancy ([anchoringOf]), so a trench is segmented as its slab is and the segments ride in
-         * with the floor. A flat slab, the floor's most buoyant tenth, couples the plates harder and
-         * deforms the upper plate far inboard (Gutscher et al. 2000).
+         * with the floor; and where the upper plate advances, only as often as their Table 1 finds an
+         * advancing plate shortened hard at its speed, which is never under 30 mm a year, and by their
+         * own measured anchorings ([compressedShareAt]). A flat slab, the floor's most buoyant tenth,
+         * couples the plates harder and deforms the upper plate far inboard (Gutscher et al. 2000).
          *
          * Conservative: shortening moves the crust the upper plate's edge gives up at the trench, the
          * width the slab holds back, into the thrust belt behind the arc, so the trench migrates into
@@ -1656,7 +1658,10 @@ internal object TectonicHistory {
 
         /**
          * The share of an upper plate's motion a slab ranked [rank] holds against it: Heuret and
-         * Lallemand's `a`, drawn in the order of their own statistics. The least buoyant
+         * Lallemand's `a`, drawn in the order of their own statistics. An upper plate advancing at
+         * [advanceKmPerMyr] is held by the most buoyant [compressedShareAt] of the ordinary floor
+         * under it, at their Table 1's measured anchorings ([compressedAnchoringAt]); their
+         * statistics over every segment, below, describe a retreating one. There the least buoyant
          * [QUIET_BACK_ARC_SHARE] of the ordinary floor, old and dense, has a back-arc that does not
          * deform measurably; of the rest, the least buoyant [SLAB_CONTROLLED_SHARE] is the
          * slab-controlled kind, its trench moving on its own, and holds nothing of the upper plate's
@@ -2670,9 +2675,10 @@ internal object TectonicHistory {
          * its edge nearest [pole] to the stretch farthest from it, each step costing its length times
          * how hard the ground is to break. A craton nucleus is four times as hard as ordinary ground
          * and an old suture or belt half as hard (Vauchez, Barruol and Tommasi 1997: continents break
-         * parallel to old orogens, and craton nuclei stop a rift); a noise on the sphere roughens the
-         * cost; and through ocean floor a step square to the spreading, or along it, is cheaper than one
-         * between, so the path comes out as ridge segments offset by transforms. Returns the side of
+         * parallel to old orogens, and craton nuclei stop a rift), a stretched margin weak only while
+         * it is hot; a noise on the sphere roughens the cost; and through continent and ocean floor
+         * alike a step square to the spreading, or along it, is cheaper than one between, so the path
+         * comes out as ridge segments offset by transforms. Returns the side of
          * each of the plate's points, -1 off the plate, or null if the path does not cut it.
          */
         private fun splitAlongPath(ground: SplitGround, pole: DoubleArray, via: Int): Cut? {
@@ -3170,7 +3176,9 @@ internal object TectonicHistory {
      * energy release 250 to 800 km from the trench three to five times that above the steep slabs
      * beside it, and a strain rate goes as the moment released (Kostrov), so four times the ordinary
      * slab's mean anchoring: the deforming share of the trenches, less its slab-controlled share,
-     * times the mean of `u^2.88` for `u` even over 0 to 1, `1 / 3.88`; 0.078, so 0.31.
+     * times the mean of `u^2.88` for `u` even over 0 to 1, `1 / 3.88`; 0.078, so 0.31. Under an
+     * advancing plate the flat slab is held against the ordinary slabs beside it at that plate's
+     * speed instead ([flatSlabCouplingAt]).
      */
     private val FLAT_SLAB_COUPLING =
         FLAT_SLAB_DEFORMATION_RATIO * (1.0 - QUIET_BACK_ARC_SHARE) * (1.0 - SLAB_CONTROLLED_SHARE) / (1.0 + ANCHORING_EXPONENT)

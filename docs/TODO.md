@@ -24,20 +24,54 @@
   against eight), since a cut's transform steps open nothing and the split is taken only where the
   cut opens; carrying it means weighing a cut's opening along its ridge steps alone, a change to the
   cycle TH1-1b holds. 2026-10-24, TH1-2.
-- **The ranges above 1,500 m run shorter on the land than Earth's (TH1-2, recorded).** The design's
-  named-range instrument (`RangeInstrument`) finds 79.5 km of range axis above 1,500 m per million
-  km2 of land over the standard worlds at 512 rows against Earth's 197 (ETOPO5 at 39 km) and
-  TH1-1b's 172 to 278 on seeds 42, 1066 and 7 (`MountainRangesTest`, a known failure): the belts
-  the history thickens stand lower than TH1-1b's stamped ones, Andean belts most (no Andean range on
-  the standard seeds reaches the instrument), and the replay of the belts' window lowers them a
-  further sixth to a third (on seeds 7, 42 and 1066 the range length falls from 182, 69 and 242 km
-  per million km2 without the replay to 154, 58 and 167 with it). The land's mean height is near
-  Earth's (587 to 826 m against 743), so the land is more evenly middling than Earth's, with fewer
-  high narrow ranges. What to weigh: the upper plates' coupling (`TectonicHistory.anchoringOf`),
-  read from the deforming half of Heuret and Lallemand's segments; the rock's erodibility band on
-  the belts (its mean about 2); and whether the history's orogen wear and the replay's rivers agree
-  on how fast a belt wears (on seed 42 the belts thickened more than 5 km stand at a mean of 1,111 m
-  without the replay and 820 m with it). 2026-10-24, TH1-2.
+  **TH1-2b, moved and not settled.** What makes the narrow ribbon continents: a later cut drawn
+  along a young rifted margin, whose stretched crust the cut's cost read as weak as an old suture's
+  (half ordinary ground, a craton four times it), so the cut ran a margin's width inland of the
+  first and sliced a strip off (seed 7's two strips in the north-west). Now a stretched margin is
+  weak only while hot, its strength back at the plate's thermal time constant; a cut takes the
+  ridge-and-transform steps through continents as through floor; and its opening is weighed on its
+  ridge steps alone, the transform steps (within Bird's 20 degrees of the motion) opening nothing.
+  With the advancing plates' coupling read from Heuret and Lallemand's table (the entry below), the
+  standard worlds read 0.310 (seeds 7, 42, 1234, 99: 0.271, 0.297, 0.302, 0.371; TH1-2 0.341, Earth
+  0.146), fifteen seeds 0.30 to 0.32 across the runs, the site world 0.25 against 0.36; corners and
+  dimension as before, splits 3.3 a world against 3.8. Ribbons are fewer but some remain (seed 42's
+  south). Measured: the upper plates' shortening alone carries 0.015 of the share over fifteen seeds
+  (0.050 on the standard four), since a margin trimmed evenly along its trench follows the
+  boundary's line. 2026-10-25, TH1-2b.
+- **The ranges stood a third of their crust's height after the rounds; held at TH1-2b, with what
+  is left (TH1-2, recorded; TH1-2b, found and fixed in part).** TH1-2 read 79.5 km of range above
+  1,500 m per million km² of land against Earth's 197. Two causes. Earth's figure counted the ice
+  domes of Greenland and Antarctica, 12,093 of its 29,391 km of axis; read without them Earth's rock
+  ranges run 116.2 (`MountainRangesTest`). And the rounds graded each cell as a reach of channel, so
+  a belt sank to the share of its steady fluvial relief the grid resolves, by Flint's and Hack's
+  laws a third at 512 rows and a half at 1,024 (measured on seed 42: the belts kept 0.34 and 0.50 of
+  their plate-stage height above a fixed datum, 1.45 times apart against the laws' 1.44): the relief
+  of the reaches finer than a cell, which the history's crust stands on, was worn away again. The
+  cell's ground now stands over its channel by that relief, at the steepness the history's own wear
+  needs (`UnresolvedRelief`). The standard worlds read 93.0 (bar 58.1, passing); the young belts
+  keep 0.8 to 0.9 of their mean height. What is left: the linear law makes the unresolved relief
+  linear in the erosion rate, where Earth's 39 km boxes of active ranges hold 1,250 to 1,890 m of
+  relief over rates a hundredfold apart, as Lague (2014) finds the steady state needs `n` near 2;
+  read from the thickening rate instead of the wear the relief ran to 6 km at the thickest
+  collisions, so the wear's is the one used. 2026-10-25, TH1-2b.
+- **Young ranges stand behind fewer advancing margins than Earth's (TH1-2b, recorded).** Of the
+  present trench points where a continent's plate advances on its trench, 0.333 on the standard
+  worlds have a young range within 750 km (`MountainRangesTest`; seeds 7, 42, 1234, 99: 0.48,
+  0.31, 0.29, 0.25), against Earth's 35 of Heuret and Lallemand's 38 such segments on ETOPO5 (0.92,
+  bar 0.83). At the plate stage the same reading is about 0.77; the rounds lower the arcs and
+  thrust belts there below the threshold, those belts' excess, and so their unresolved relief, being
+  small. Earth's ranges behind its slow margins (Cascadia, Mexico) are the Cordillera's, inherited
+  and hot; the history's arcs and thrust belts are short-lived where its trenches move, and the
+  back-arc's heat stands only under its extended crust (the entry below). 2026-10-25, TH1-2b.
+- **A back-arc's heat stands only under its extended crust (TH1-2b).** Hyndman, Currie and
+  Mazzotti (2005) find every back-arc hot across its whole width, extended or not, about a kilometer
+  of buoyancy; the plate stage gives it to the crust the history stretched behind an arc, where the
+  province needs it, and not yet to an advancing margin's back-arc, where thick crust already
+  stands high and the heat would raise the Andean belts with it. What it needs: the history to mark
+  a back-arc's width behind every live trench and the time its subduction stopped. 2026-10-25, TH1-2b.
+- **The unresolved relief and the back-arc's heat have no card path (TH1-2b).** Both are per-cell
+  passes on the processor: the relief is read once and spent inside the rounds' incision, which has
+  no card path, and the heat is a Gaussian blur in the plate stage. 2026-10-25, TH1-2b.
 - **The history's crust area balance sits near its bar (TH1-2, measured).** With the upper plates
   shortened at their trenches the crust's area moves by -12.6% and -12.9% on seeds 7 and 1066 over
   200 Myr (bar 13.9%; without the shortening and the widening, -3.8% and -4.2%), the margins'
@@ -47,7 +81,10 @@
   of trench, and the books' sources hardly make area: island arcs became continent over 0.00 to
   0.05% of the start. The slab-controlled segments' own back-arc spreading, Heuret and Lallemand's
   other 40% of the deforming ones, is not modeled, and would make area where it opens.
-  2026-10-24, TH1-2.
+  2026-10-24, TH1-2. **TH1-2b:** with the advancing plates shortened only as often as Heuret and
+  Lallemand's Table 1 finds at their speed (none of 18 segments under 30 mm a year, 17 of 24 over
+  40) and by their measured anchorings (median 0.12), seeds 7 and 1066 move -13.1% and -13.2% (bar
+  13.9%); drawn at that share with the old anchorings they moved -17.8% and -17.3%.
 - **Glacial carving does not run in the belts' replay (TH1-2).** The ice carves the present ranges
   after erosion, as it always has (`GlaciationStage`); the replay of the belts' window runs rivers
   and slopes only, so the cirques and troughs of the window's glaciations are not in it. What it
@@ -74,12 +111,19 @@
   An old link's `mountains=` is set aside with the usual notice. A physical replacement, if one is
   wanted, would be an input the physics takes (the plates' coupling, the orogens' wear time), not
   an outcome. 2026-10-24, TH1-2.
-- **The design's Earth figures for the ranges came from a cut-down grid (TH1-2, measured).** Read
-  over the whole of ETOPO5 averaged onto 512 rows, the named-range instrument gives Earth 9 ranges,
-  29,391 km of axis, a crest zone low share of 0.092, a high run of 3,010 km and 1.12 massifs per
-  1,000 km, against `measures.tsv`'s 0.121, 1,150 km and 2.2; at 1,024 rows 0.083, 2,750 km and
-  3.99. The guards keep the design's figures and bars; which reading of Earth the bars should stand
-  on is a question for the maintainer. 2026-10-24, TH1-2.
+- **The design's Earth figures for the ranges came from a cut-down grid (TH1-2, measured; TH1-2b,
+  settled).** The whole of ETOPO5 read 0.092, 3,010 km and 1.12 because the instrument read the
+  ice domes of Greenland and Antarctica as ranges (crest zone low 0, a high run their whole length).
+  The bars are now Earth's own ranges read by the same instrument on the same grid, ice left out,
+  each stratum held to the least dissected of its kind (`MountainRangesTest.EARTH_RANGES`). The
+  old stratum is held to every high ground on Earth's old crust at 500 m, swells and traps included,
+  since a world's old stratum takes the same; held to the two old orogens alone it failed (high run
+  699 km against 626, massifs 1.79 against 3.28). 2026-10-25, TH1-2b.
+- **The crust's divider dimension moves with the lattice's turn at the bar's edge (TH1-2b,
+  recorded).** On the standard four, 1.170 as drawn and 1.151 turned, 0.0192 apart against a bar of
+  0.0190 (`CrustMapGeometryTest`); over ten seeds the paired difference is 0.010 at 1.4 of its
+  standard errors, the straight runs' 0.025 at 2.1. The straight-run clause TH1-2 recorded is held
+  again. 2026-10-25, TH1-2b.
 - **What TH1-2 moved in the everyday tier (recorded).** On the history's new worlds, each a known
   failure against its finding: the land holds too little above 2 km, 2.9% against Earth's 11.3%
   (`HypsometryTest`, where TH1-1 recorded the opposite miss), and the isolated wet spots the high

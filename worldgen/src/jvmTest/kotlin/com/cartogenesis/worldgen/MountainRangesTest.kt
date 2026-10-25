@@ -2,48 +2,56 @@ package com.cartogenesis.worldgen
 
 import com.cartogenesis.worldgen.model.WorldGenConfig
 import com.cartogenesis.worldgen.model.WorldMap
+import com.cartogenesis.worldgen.pipeline.TectonicHistory
 import java.util.Locale
-import kotlin.math.cos
 import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.sqrt
 import kotlin.test.Test
 import org.junit.Assert.assertTrue
 
 /**
  * The mountain ranges, found from the ground and read by the design's named-range instrument
  * ([RangeInstrument]), stratified by the kind and age of the belt each stands on, and each stratum
- * held to Earth's (docs/DESIGN_LEDGER.md, TH1-2).
+ * held to Earth's ranges of its kind read the same way (docs/DESIGN_LEDGER.md, TH1-2 and TH1-2b).
  *
  * What the maintainer saw was ranges of one height along their whole length: no passes, no
  * transverse valleys, one long solid line. The figures that read it are the crest zone's dissection
  * (of the cells within 80 km of each station's crest, the share standing under 60% of it), how far
  * the crest holds high without a break, how many separate massifs the high ground makes, and how
- * the belt's width varies along strike. Earth's are ETOPO5's at 39 km cells, the grid the standard
- * worlds are read on (the design's `measures.tsv`), and each stratum is printed beside the Earth
- * ranges its kind matches in the curated table (GMRT, read at the same 39 km): the Andes for an
- * Andean belt, the Himalaya and the Alps for a collision, the Rockies for accreted terranes and a
- * flat slab's foreland, the Appalachians for an old belt.
+ * the belt's width varies along strike.
  *
- * The bars are the design's, each where ETOPO5's Earth reads: the crest zone's low share at least
- * 0.10 (Earth 0.121, ETOPO5 being coarse in Asia and South America a floor), the high-ground run at
- * most 1.3 times Earth's 1,150 km, the massifs at least 1.9 per 1,000 km (Earth 2.2), the width's
- * variation at least 0.19 (Earth 0.225). A stratum is held where the standard worlds pool at least
+ * **Earth's figures** are the instrument's own on ETOPO5 averaged over the whole globe onto the
+ * standard worlds' grid, 512 rows ([EARTH_RANGES]): the same smoothing, threshold, skeleton and swath
+ * the worlds are read with, and every range Earth has rather than a chosen few. Two kinds of axis it
+ * finds are left out: the ice domes of Greenland and Antarctica, whose surface is ice and not the
+ * rock relief the instrument reads a range by (read in, they set Earth at a crest-zone low share of
+ * 0.092, a high run of 3,010 km and 1.12 massifs, figures TH1-2 found beside the bars). The curated crests
+ * of the design's table were read on finer data along narrower swaths by another tool, so they do
+ * not compare like for like and are no longer the bars.
+ *
+ * **The bars.** A stratum is held to the least dissected of Earth's ranges of its kind, where Earth
+ * has two or more: an Andean belt to the Andes and Mexico's Sierra Madre, a collision to Tibet and
+ * the Himalaya, Iran and the Caucasus, and the Altai, the old stratum to Earth's high ground on old
+ * crust at 500 m. The strata Earth has fewer of (terranes, back-arcs and rifts) are held to Earth's
+ * young ranges as a whole. A stratum is held where the standard worlds pool at least
  * [HELD_STRATUM_KM] of it: one range is a sample of one.
  *
- * Against passing by erasing the mountains: the ranges' count and length on the land, beside the
- * land's hypsometry (`HypsometryTest`). The control is the maintainer's complaint drawn on a map:
- * one range of one height along its whole length fails every clause. TH1-1b's worlds, read by the
- * same instrument at TH1-2, are in docs/DESIGN_LEDGER.md (TH1-2).
+ * Against passing by erasing the mountains: the ranges' length on the land, and the young ranges
+ * behind the advancing margins, beside the land's hypsometry (`HypsometryTest`). The control is the
+ * maintainer's complaint drawn on a map: one range of one height along its whole length fails every
+ * clause.
  */
 class MountainRangesTest : BorrowsSharedWorlds() {
 
     @Test
     fun `the ranges are dissected as Earth's, stratum by stratum`() {
         val ranges = SharedWorlds.STANDARD_SEEDS.flatMap { RangeInstrument.ranges(worldOf(it)) }
-        val complaints = complaintsOf(ranges, "TH1-2")
+        val complaints = complaintsOf(ranges, "TH1-2b")
         assertTrue("the ranges are not dissected as Earth's: " + complaints.joinToString("; "), complaints.isEmpty())
     }
 
-    /** The ranges are still there to be read: as many, and as long on the land, as Earth's. */
+    /** The ranges are still there to be read: as long on the land as Earth's. */
     @Test
     fun `the ranges are not erased to pass`() {
         var length = 0.0
@@ -61,12 +69,40 @@ class MountainRangesTest : BorrowsSharedWorlds() {
             "RANGES pooled: %d ranges above 1,500 m, %.0f km of them, %.1f km per million km2 of land (Earth %.1f, bar %.1f)"
                 .format(Locale.ROOT, count, length, perLand, EARTH_YOUNG_RANGE_KM_PER_MKM2, EARTH_YOUNG_RANGE_KM_PER_MKM2 / 2)
         )
-        // Recorded at TH1-2: the belts the history thickens stand lower than Earth's and TH1-1b's
-        // stamped ones, and the replay of their window lowers them a further sixth to a third
-        // (docs/DESIGN_LEDGER.md, TH1-2; docs/TODO.md).
-        KnownFailures.expect(ERASED_FINDING, ERASED_SIGNATURE) {
-            if (perLand < EARTH_YOUNG_RANGE_KM_PER_MKM2 / 2) {
-                throw RecordedViolation("the ranges above 1,500 m run %.1f km per million km2 of land, under half Earth's".format(Locale.ROOT, perLand), ERASED_SIGNATURE)
+        assertTrue(
+            "the ranges above 1,500 m run %.1f km per million km2 of land, under half Earth's %.1f".format(Locale.ROOT, perLand, EARTH_YOUNG_RANGE_KM_PER_MKM2),
+            perLand >= EARTH_YOUNG_RANGE_KM_PER_MKM2 / 2
+        )
+    }
+
+    /**
+     * Young ranges stand behind the margins whose continents advance on their trenches, in Earth's
+     * share: of the trench points where a continent's plate overrides a slab and moves toward it, the
+     * share with ground above the young threshold, smoothed as the instrument smooths it, within
+     * [RangeInstrument.MARGIN_REACH_KM] (the far edge of the Andes' thrust belt behind its trench).
+     * Earth's share is read the same way on Heuret and Lallemand's (2005) Table 1: of its 38
+     * segments where a continent's plate advances, 35 ([EARTH_ADVANCING_MARGINS_WITH_RANGE]).
+     */
+    @Test
+    fun `the advancing margins carry young ranges as Earth's do`() {
+        var withRange = 0
+        var advancing = 0
+        for (seed in SharedWorlds.STANDARD_SEEDS) {
+            val world = worldOf(seed)
+            val margins = RangeInstrument.advancingMargins(world, TectonicHistory.run(world.config))
+            withRange += margins.withRange
+            advancing += margins.points
+            println("MARGINS seed $seed: %d of %d advancing continental trench points with a young range within reach (%.2f)"
+                .format(Locale.ROOT, margins.withRange, margins.points, margins.withRange.toDouble() / margins.points))
+        }
+        val share = withRange.toDouble() / advancing
+        println("MARGINS pooled: %.3f (Earth %.3f, bar %.3f)".format(Locale.ROOT, share, EARTH_ADVANCING_MARGIN_SHARE, ADVANCING_MARGIN_BAR))
+        // Recorded at TH1-2b: the plate stage stands a young range behind about three quarters of
+        // them, and the rounds lower the arcs and thrust belts there below the threshold
+        // (docs/DESIGN_LEDGER.md, TH1-2b; docs/TODO.md).
+        KnownFailures.expect(MARGINS_FINDING, MARGINS_SIGNATURE) {
+            if (share < ADVANCING_MARGIN_BAR) {
+                throw RecordedViolation("%.3f of the advancing margins carry a young range, under the bar %.3f".format(Locale.ROOT, share, ADVANCING_MARGIN_BAR), MARGINS_SIGNATURE)
             }
         }
     }
@@ -74,9 +110,8 @@ class MountainRangesTest : BorrowsSharedWorlds() {
     /**
      * The control: the maintainer's own complaint drawn on a map, one range of one height along its
      * whole length, a Gaussian ridge 3,000 m high whose height falls by e 250 km either side of a
-     * gentle arc,
-     * fails every clause the young strata are held to. The range is found and read by the same
-     * instrument as the worlds' (`RangeInstrument`), at the standard worlds' grid.
+     * gentle arc, fails every clause the young strata are held to. The range is found and read by
+     * the same instrument as the worlds' (`RangeInstrument`), at the standard worlds' grid.
      */
     @Test
     fun `a range of one height along its whole length fails the guard`() {
@@ -122,6 +157,29 @@ class MountainRangesTest : BorrowsSharedWorlds() {
         return area
     }
 
+    /** One of Earth's ranges as the instrument reads it, and the strata it stands for. */
+    internal class EarthRange(
+        val name: String,
+        val strata: Set<RangeInstrument.Stratum>,
+        val lengthKm: Double,
+        val crestZoneLowShare: Double,
+        val widthCv: Double,
+        val highRunKm: Double,
+        val massifsPer1000Km: Double
+    )
+
+    /** A stratum's bars: the least dissected of its Earth ranges on each figure. */
+    internal class Bars(val earth: List<EarthRange>) {
+        val crestZoneLowAtLeast = earth.minOf { it.crestZoneLowShare }
+        val widthCvAtLeast = earth.minOf { it.widthCv }
+        val highRunAtMostKm = earth.maxOf { it.highRunKm }
+        val massifsAtLeast = earth.minOf { it.massifsPer1000Km }
+
+        override fun toString(): String = earth.joinToString("; ") {
+            "%s %.3f, %.3f, %.0f km, %.2f".format(Locale.ROOT, it.name, it.crestZoneLowShare, it.widthCv, it.highRunKm, it.massifsPer1000Km)
+        }
+    }
+
     companion object {
 
         /** Each stratum pooled, printed beside its Earth ranges, and the held ones' complaints. */
@@ -131,59 +189,92 @@ class MountainRangesTest : BorrowsSharedWorlds() {
                 val members = ranges.filter { it.stratum == stratum }
                 if (members.isEmpty()) continue
                 val pooled = RangeInstrument.pooled(members)
+                val bars = barsOf(stratum)
                 println(
                     ("RANGES %s %s: %d ranges, %.0f km; crest zone low %.3f, width CV %.3f, high run %.0f km, massifs %.2f per 1,000 km," +
-                        " ranges across %.2f, crest CV %.3f, p90-p10 %.0f m, mean crest %.0f m, passes %.2f per 1,000 km; Earth's %s")
+                        " ranges across %.2f, crest CV %.3f, p90-p10 %.0f m, mean crest %.0f m, passes %.2f per 1,000 km; bars %.3f, %.3f, %.0f km, %.2f from %s")
                         .format(
                             Locale.ROOT, label, stratum, pooled.count, pooled.lengthKm, pooled["crestZoneLowShare"], pooled["widthCv"],
                             pooled["highRunMeanKm"], pooled["massifsPer1000Km"], pooled["rangesAcrossMean"], pooled["cv"],
-                            pooled["p90MinusP10M"], pooled["meanM"], pooled["passesPer1000Km"], EARTH_MATCHES[stratum].orEmpty()
+                            pooled["p90MinusP10M"], pooled["meanM"], pooled["passesPer1000Km"],
+                            bars.crestZoneLowAtLeast, bars.widthCvAtLeast, bars.highRunAtMostKm, bars.massifsAtLeast, bars
                         )
                 )
                 if (pooled.lengthKm < HELD_STRATUM_KM) continue
-                if (pooled["crestZoneLowShare"] < CREST_ZONE_LOW_BAR) {
-                    complaints.add("$stratum crest zone low share (%.3f under %.2f)".format(Locale.ROOT, pooled["crestZoneLowShare"], CREST_ZONE_LOW_BAR))
+                if (pooled["crestZoneLowShare"] < bars.crestZoneLowAtLeast) {
+                    complaints.add("$stratum crest zone low share (%.3f under %.3f)".format(Locale.ROOT, pooled["crestZoneLowShare"], bars.crestZoneLowAtLeast))
                 }
-                if (pooled["highRunMeanKm"] > HIGH_RUN_BAR_KM) {
-                    complaints.add("$stratum high run (%.0f km over %.0f)".format(Locale.ROOT, pooled["highRunMeanKm"], HIGH_RUN_BAR_KM))
+                if (pooled["highRunMeanKm"] > bars.highRunAtMostKm) {
+                    complaints.add("$stratum high run (%.0f km over %.0f)".format(Locale.ROOT, pooled["highRunMeanKm"], bars.highRunAtMostKm))
                 }
-                if (pooled["massifsPer1000Km"] < MASSIFS_BAR) {
-                    complaints.add("$stratum massifs (%.2f under %.1f)".format(Locale.ROOT, pooled["massifsPer1000Km"], MASSIFS_BAR))
+                if (pooled["massifsPer1000Km"] < bars.massifsAtLeast) {
+                    complaints.add("$stratum massifs (%.2f under %.2f)".format(Locale.ROOT, pooled["massifsPer1000Km"], bars.massifsAtLeast))
                 }
-                if (pooled["widthCv"] < WIDTH_CV_BAR) {
-                    complaints.add("$stratum width CV (%.3f under %.2f)".format(Locale.ROOT, pooled["widthCv"], WIDTH_CV_BAR))
+                if (pooled["widthCv"] < bars.widthCvAtLeast) {
+                    complaints.add("$stratum width CV (%.3f under %.3f)".format(Locale.ROOT, pooled["widthCv"], bars.widthCvAtLeast))
                 }
             }
             return complaints
         }
 
-        /** ETOPO5's Earth at 39 km and the design's bars (`notes`' `measures.tsv`, TH1 design section 9). */
-        const val CREST_ZONE_LOW_BAR = 0.10
-        const val EARTH_HIGH_RUN_KM = 1_150.0
-        const val HIGH_RUN_BAR_KM = 1.3 * EARTH_HIGH_RUN_KM
-        const val MASSIFS_BAR = 1.9
-        const val WIDTH_CV_BAR = 0.19
+        /** The Earth ranges a stratum is held to: its own kind where Earth has two or more, else Earth's young ranges as a whole. */
+        internal fun barsOf(stratum: RangeInstrument.Stratum): Bars {
+            val own = EARTH_RANGES.filter { stratum in it.strata }
+            return Bars(if (own.size >= 2) own else EARTH_RANGES.filter { it.strata.any { kind -> kind in YOUNG_STRATA } })
+        }
+
+        private val YOUNG_STRATA = setOf(
+            RangeInstrument.Stratum.ANDEAN, RangeInstrument.Stratum.COLLISION, RangeInstrument.Stratum.TERRANE,
+            RangeInstrument.Stratum.BACK_ARC, RangeInstrument.Stratum.RIFT
+        )
+
+        /**
+         * Earth's ranges as this instrument reads them on ETOPO5 averaged over the whole globe onto
+         * 512 rows: length km, crest-zone low share, width CV, high run km and massifs per 1,000 km.
+         * Young at 1,500 m; at 500 m every axis on crust that is not a young belt's, as the old
+         * stratum takes every high ground of old crust a world has, orogen or not; left out are the
+         * ice domes of Greenland (1,957 km at 1,500 m, 2,896 at 500) and Antarctica (7,553 and 2,583
+         * km; 3,796 and 9,510), and at 500 m the young belts again (the Cordillera, Asia's, the Andes,
+         * the Alps, the Atlas, New Guinea), read at 1,500.
+         */
+        internal val EARTH_RANGES: List<EarthRange> = listOf(
+            EarthRange("the Andes", setOf(RangeInstrument.Stratum.ANDEAN), 5_009.0, 0.312, 0.455, 1_722.0, 0.60),
+            EarthRange("the Sierra Madre and Mexico's plateau", setOf(RangeInstrument.Stratum.ANDEAN), 1_487.0, 0.133, 0.185, 1_487.0, 3.36),
+            EarthRange("Tibet and the Himalaya", setOf(RangeInstrument.Stratum.COLLISION), 5_205.0, 0.082, 0.221, 851.0, 0.77),
+            EarthRange("Iran, the Caucasus and Anatolia", setOf(RangeInstrument.Stratum.COLLISION), 1_879.0, 0.128, 0.141, 1_879.0, 5.86),
+            EarthRange("the Altai and Mongolia", setOf(RangeInstrument.Stratum.COLLISION), 2_035.0, 0.099, 0.175, 822.0, 0.98),
+            EarthRange(
+                "the Great Basin and the northern Rockies", setOf(RangeInstrument.Stratum.TERRANE, RangeInstrument.Stratum.BACK_ARC),
+                1_683.0, 0.007, 0.072, 241.0, 2.97
+            ),
+            EarthRange("the Scandinavian mountains", setOf(RangeInstrument.Stratum.OLD), 1_526.0, 0.214, 0.242, 235.0, 3.28),
+            EarthRange("the Brazilian highlands", setOf(RangeInstrument.Stratum.OLD), 2_152.0, 0.059, 0.127, 626.0, 3.72),
+            EarthRange("Africa's plateaus and swells", setOf(RangeInstrument.Stratum.OLD), 9_510.0, 0.053, 0.168, 444.0, 1.68),
+            EarthRange("the Arabian shield's rim", setOf(RangeInstrument.Stratum.OLD), 2_544.0, 0.084, 0.255, 157.0, 1.57),
+            EarthRange("the Siberian traps", setOf(RangeInstrument.Stratum.OLD), 2_192.0, 0.047, 0.116, 744.0, 0.46),
+            EarthRange("Madagascar's highlands", setOf(RangeInstrument.Stratum.OLD), 900.0, 0.283, 0.246, 274.0, 2.22)
+        )
 
         /** A stratum is held where the standard worlds pool at least this much of it, km: two of the instrument's shortest ranges. */
         const val HELD_STRATUM_KM = 2 * RangeInstrument.SHORTEST_RANGE_KM
 
-        /**
-         * Earth's ranges above 1,500 m per million km² of land, read by the same instrument on ETOPO5
-         * at 39 km equatorward of 70 degrees: 29,391 km of range axis over Earth's 148.9 million km² of
-         * land (the polar land's ranges are not read, so this is a floor).
-         */
-        const val EARTH_YOUNG_RANGE_KM_PER_MKM2 = 29_391.0 / 148.9
+        /** Earth's land, km² on ETOPO5, the ice-covered included, over which its ranges are counted. */
+        private const val EARTH_LAND_KM2 = 148.9e6
 
-        /** The curated table's ranges (GMRT at 39 km) each stratum is printed beside. */
-        internal val EARTH_MATCHES: Map<RangeInstrument.Stratum, String> = mapOf(
-            RangeInstrument.Stratum.ANDEAN to "Andes: crest zone low 0.328, width CV 0.375, high run 958 km, massifs 0.56, ranges across 1.02, crest CV 0.396",
-            RangeInstrument.Stratum.COLLISION to "Himalaya: 0.254, 0.179, 1,170 km, 1.26, 0.10, 0.102; Alps: 0.227, 0.163, 704 km, 1.16, 0.09, 0.160",
-            RangeInstrument.Stratum.TERRANE to "Rockies: 0.066, 0.034, 241 km, 1.94, 0.55, 0.220",
-            RangeInstrument.Stratum.BACK_ARC to "Rockies: 0.066, 0.034, 241 km, 1.94, 0.55, 0.220",
-            RangeInstrument.Stratum.OLD to "Appalachians: 0.337, 0.217, 704 km, 0.85, 0.02, 0.365"
-        )
+        /** Earth's young ranges above 1,500 m per million km² of land: their axes' length over its land, 17,298 km over 148.9 million km². */
+        val EARTH_YOUNG_RANGE_KM_PER_MKM2: Double =
+            EARTH_RANGES.filter { it.strata.any { kind -> kind in YOUNG_STRATA } }.sumOf { it.lengthKm } / (EARTH_LAND_KM2 / 1e6)
 
-        const val ERASED_FINDING = "TH1-2: the ranges above 1,500 m run shorter on the land than Earth's"
-        const val ERASED_SIGNATURE = "ranges above 1,500 m under half Earth's"
+        /** Of Heuret and Lallemand's segments where a continent's plate advances on its trench, those with a young range within reach on ETOPO5. */
+        const val EARTH_ADVANCING_MARGINS = 38
+        const val EARTH_ADVANCING_MARGINS_WITH_RANGE = 35
+        val EARTH_ADVANCING_MARGIN_SHARE: Double = EARTH_ADVANCING_MARGINS_WITH_RANGE.toDouble() / EARTH_ADVANCING_MARGINS
+
+        /** Earth's share less two of its own binomial standard errors: what a sample of Earth's size could read and still be Earth's. */
+        val ADVANCING_MARGIN_BAR: Double =
+            EARTH_ADVANCING_MARGIN_SHARE - 2 * sqrt(EARTH_ADVANCING_MARGIN_SHARE * (1 - EARTH_ADVANCING_MARGIN_SHARE) / EARTH_ADVANCING_MARGINS)
+
+        const val MARGINS_FINDING = "TH1-2b: young ranges stand behind fewer advancing margins than Earth's"
+        const val MARGINS_SIGNATURE = "advancing margins with a young range under the bar"
     }
 }

@@ -51,12 +51,12 @@ class CrustMapGeometryTest {
                 "LATTICE %s: %.3f as drawn, %.3f turned, difference %.3f (bar %.3f)"
                     .format(Locale.ROOT, name, first.average(), second.average(), difference, bar)
             )
-            if (name == "straight runs") {
-                // Recorded at TH1-2: the straight runs read 0.341 as drawn and 0.273 turned, 0.068
-                // apart against 0.067. Over ten seeds the two read 0.316 and 0.289, the paired
-                // difference 0.027 at 1.7 of its standard errors, so whether the lattice shows is not
-                // settled either way (docs/DESIGN_LEDGER.md, TH1-2; docs/TODO.md).
-                KnownFailures.expect("TH1-2: the crust's straight runs move with the lattice's turn past the bar", "0.068 against 0.067") {
+            if (name == "divider dimension") {
+                // Recorded at TH1-2b: 1.170 as drawn and 1.151 turned, 0.0192 apart against 0.0190.
+                // Over ten seeds the paired difference is 0.010 at 1.4 of its standard errors, so the
+                // lattice does not show in the dimension beyond the four seeds' scatter
+                // (docs/DESIGN_LEDGER.md, TH1-2b; docs/TODO.md).
+                KnownFailures.expect("TH1-2b: the crust's divider dimension moves with the lattice's turn past the bar", "0.019 against 0.019") {
                     if (difference > bar) {
                         throw RecordedViolation(
                             "the crust's $name moves by $difference when the lattice turns, more than $bar",
@@ -66,6 +66,8 @@ class CrustMapGeometryTest {
                 }
                 continue
             }
+            // The straight runs moved with the turn past the bar at TH1-2 (0.068 against 0.067); with
+            // the splits opening along their ridge steps they read 0.310 and 0.300 (TH1-2b), held again.
             assertTrue("the crust's $name moves by $difference when the lattice turns, more than $bar", difference <= bar)
         }
     }

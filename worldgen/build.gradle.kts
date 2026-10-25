@@ -230,7 +230,9 @@ val deepClassesByStage: Map<String, List<String>> = mapOf(
         "com.cartogenesis.worldgen.HypsometryTest.the guards fail on the platform before H1",
         "com.cartogenesis.worldgen.RiftSegmentationTest.the unsegmented rift fails every one of those",
         // TH1-1: sixty worlds' plate stages, the configuration's distributions over the cycle.
-        "com.cartogenesis.worldgen.ContinentalConfigurationEnsembleTest"
+        "com.cartogenesis.worldgen.ContinentalConfigurationEnsembleTest",
+        // TH1-2b: the site world at 1,024 rows, where the drowned province's islets showed.
+        "com.cartogenesis.worldgen.ExtendedProvinceTest"
     ),
     "erosion" to listOf(
         "com.cartogenesis.worldgen.DeltaMouthTest",

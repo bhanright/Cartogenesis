@@ -1,6 +1,8 @@
 package com.cartogenesis.worldgen
 
 import com.cartogenesis.worldgen.model.WorldMap
+import com.cartogenesis.worldgen.pipeline.BoundaryClass
+import com.cartogenesis.worldgen.pipeline.CrustHistory
 import com.cartogenesis.worldgen.pipeline.OrogenyKind
 import kotlin.math.abs
 import kotlin.math.exp
@@ -154,6 +156,93 @@ internal object RangeInstrument {
         return axes(config.width, config.height, config.cellWidthKm, config.cellHeightKm, elevation, world.sea.isLand, thresholdMeters)
             .map { axis -> axis.size * config.cellWidthKm }
     }
+
+    /** Of a world's advancing continental trench points, how many there are and how many have a young range within reach. */
+    class Margins(val points: Int, val withRange: Int)
+
+    /**
+     * How far behind a trench a young range is looked for, km: the far edge of the Andes' thrust
+     * belt at 20 S, 750 km behind the trench (Allmendinger, Jordan, Kay and Isacks 1997, as the
+     * history lays its thrust belts).
+     */
+    const val MARGIN_REACH_KM = 750.0
+
+    /**
+     * The present trench points of [history] where a continent's plate overrides a slab and moves
+     * toward its trench, poleward of [MAX_LATITUDE_DEGREES] left out as the axes are, and how many
+     * of them have ground of [world] at or above [YOUNG_THRESHOLD_METERS], smoothed as [axes]
+     * smooths it, within [MARGIN_REACH_KM] on the sphere.
+     */
+    fun advancingMargins(world: WorldMap, history: CrustHistory): Margins {
+        val config = world.config
+        val width = config.width
+        val height = config.height
+        val elevation = elevationMeters(world)
+        val land = world.sea.isLand
+        val ground = DoubleArray(width * height) { if (land[it]) max(elevation[it], 0.0) else 0.0 }
+        val smooth = blur(ground, width, height, max(1, pythonRound(SMOOTHING_KM / config.cellWidthKm)))
+        val sphere = history.sphere
+        val radiusKm = sphere.radiusKm
+        var points = 0
+        var withRange = 0
+        for (point in 0 until sphere.cellCount) {
+            if (history.boundaryClass[point] != BoundaryClass.ANDEAN_MARGIN.ordinal) continue
+            val plate = history.plateOf[point]
+            if (history.boundaryOverridingPlate[point] != plate || !history.continental[point]) continue
+            // The direction toward the plate across, from the neighbors on it; and the upper plate's
+            // own motion along it, as the history reads Heuret and Lallemand's Vup(n).
+            val other = history.boundaryOtherPlate[point]
+            var nx = 0.0; var ny = 0.0; var nz = 0.0
+            for (index in sphere.neighborStart[point] until sphere.neighborStart[point + 1]) {
+                val next = sphere.neighbors[index]
+                if (history.plateOf[next] != other) continue
+                nx += sphere.x[next] - sphere.x[point]; ny += sphere.y[next] - sphere.y[point]; nz += sphere.z[next] - sphere.z[point]
+            }
+            val px = sphere.x[point]; val py = sphere.y[point]; val pz = sphere.z[point]
+            val rotation = history.plateRotations[plate]
+            val advance = (rotation[1] * pz - rotation[2] * py) * nx + (rotation[2] * px - rotation[0] * pz) * ny + (rotation[0] * py - rotation[1] * px) * nz
+            if (advance <= 0.0) continue
+            val latitudeDegrees = Math.toDegrees(sphere.latitudeRadians(point))
+            if (abs(latitudeDegrees) >= MAX_LATITUDE_DEGREES) continue
+            points++
+            if (rangeWithin(config, smooth, px, py, pz, latitudeDegrees, sphere.longitudeRadians(point), radiusKm)) withRange++
+        }
+        return Margins(points, withRange)
+    }
+
+    private fun rangeWithin(
+        config: com.cartogenesis.worldgen.model.WorldGenConfig,
+        smooth: DoubleArray,
+        px: Double, py: Double, pz: Double,
+        latitudeDegrees: Double,
+        longitudeRadians: Double,
+        radiusKm: Double
+    ): Boolean {
+        val width = config.width
+        val height = config.height
+        val row = ((90.0 - latitudeDegrees) / 180.0 * height).toInt().coerceIn(0, height - 1)
+        val column = (longitudeRadians / (2 * Math.PI) * width).toInt().coerceIn(0, width - 1)
+        val reachRows = (MARGIN_REACH_KM / config.cellHeightKm).toInt() + 1
+        val shrink = kotlin.math.cos(Math.toRadians(latitudeDegrees)).coerceAtLeast(MIN_COLUMN_SHRINK)
+        val reachColumns = min(width / 2, (MARGIN_REACH_KM / (config.cellWidthKm * shrink)).toInt() + 1)
+        for (rowStep in -reachRows..reachRows) {
+            val near = row + rowStep
+            if (near < 0 || near >= height) continue
+            val latitude = Math.toRadians(90.0 - (near + 0.5) * 180.0 / height)
+            for (columnStep in -reachColumns..reachColumns) {
+                val across = (column + columnStep + width) % width
+                if (smooth[near * width + across] < YOUNG_THRESHOLD_METERS) continue
+                val longitude = (across + 0.5) / width * 2 * Math.PI
+                val cosine = kotlin.math.cos(latitude) * kotlin.math.cos(longitude) * px +
+                    kotlin.math.cos(latitude) * kotlin.math.sin(longitude) * py + kotlin.math.sin(latitude) * pz
+                if (kotlin.math.acos(cosine.coerceIn(-1.0, 1.0)) * radiusKm <= MARGIN_REACH_KM) return true
+            }
+        }
+        return false
+    }
+
+    /** The narrowest a row's span of longitude is taken to shrink, so the search near a pole stays bounded. */
+    private const val MIN_COLUMN_SHRINK = 0.05
 
     /** The stratum of a range along [axis]: its commonest kind of deformation and the median age of its crust. */
     fun stratumOf(world: WorldMap, axis: IntArray): Stratum {

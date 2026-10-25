@@ -87,6 +87,10 @@ class MountainRangesTest : BorrowsSharedWorlds() {
     fun `the advancing margins carry young ranges as Earth's do`() {
         var withRange = 0
         var advancing = 0
+        var landArea = 0.0
+        var landMeters = 0.0
+        var aboveTwoKm = 0.0
+        val ranges = ArrayList<RangeInstrument.Range>()
         for (seed in SharedWorlds.STANDARD_SEEDS) {
             val world = worldOf(seed)
             val margins = RangeInstrument.advancingMargins(world, TectonicHistory.run(world.config))
@@ -94,12 +98,32 @@ class MountainRangesTest : BorrowsSharedWorlds() {
             advancing += margins.points
             println("MARGINS seed $seed: %d of %d advancing continental trench points with a young range within reach (%.2f)"
                 .format(Locale.ROOT, margins.withRange, margins.points, margins.withRange.toDouble() / margins.points))
+            val elevation = RangeInstrument.elevationMeters(world)
+            for (cell in elevation.indices) {
+                if (!world.sea.isLand[cell]) continue
+                val weight = cos(PI / 2 - (cell / world.config.width + 0.5) / world.config.height * PI)
+                landArea += weight
+                landMeters += weight * elevation[cell]
+                if (elevation[cell] >= TWO_KM_METERS) aboveTwoKm += weight
+            }
+            ranges.addAll(RangeInstrument.ranges(world).filter { it.stratum == RangeInstrument.Stratum.ANDEAN })
         }
         val share = withRange.toDouble() / advancing
         println("MARGINS pooled: %.3f (Earth %.3f, bar %.3f)".format(Locale.ROOT, share, EARTH_ADVANCING_MARGIN_SHARE, ADVANCING_MARGIN_BAR))
-        // Recorded at TH1-2b: the plate stage stands a young range behind about three quarters of
-        // them, and the rounds lower the arcs and thrust belts there below the threshold
-        // (docs/DESIGN_LEDGER.md, TH1-2b; docs/TODO.md).
+        // Beside it, what the back-arcs' heat does to the land as a whole: its mean and its share above
+        // 2 km against Earth's ice-free land, and the Andean stratum's crests.
+        val andeanKm = ranges.sumOf { it.lengthKm }
+        println(
+            "MARGINS land mean %.0f m (Earth %.0f), above 2 km %.3f (Earth %.3f); Andean stratum %d ranges, %.0f km, mean crest %.0f m"
+                .format(
+                    Locale.ROOT, landMeters / landArea, EARTH_ICE_FREE_LAND_MEAN_METERS, aboveTwoKm / landArea, EARTH_ICE_FREE_LAND_ABOVE_TWO_KM,
+                    ranges.size, andeanKm, if (andeanKm > 0.0) ranges.sumOf { it.meanM * it.lengthKm } / andeanKm else Double.NaN
+                )
+        )
+        // Recorded at TH1-2b and again at TH1-2c: with the back-arcs' heat the plate stage stands a
+        // young range behind nearly all of them, and the erosion stage lowers the narrow arcs and
+        // thrust belts there, and leaves the hot plateaus about the threshold
+        // (docs/DESIGN_LEDGER.md, TH1-2b and TH1-2c; docs/TODO.md).
         KnownFailures.expect(MARGINS_FINDING, MARGINS_SIGNATURE) {
             if (share < ADVANCING_MARGIN_BAR) {
                 throw RecordedViolation("%.3f of the advancing margins carry a young range, under the bar %.3f".format(Locale.ROOT, share, ADVANCING_MARGIN_BAR), MARGINS_SIGNATURE)
@@ -274,7 +298,16 @@ class MountainRangesTest : BorrowsSharedWorlds() {
         val ADVANCING_MARGIN_BAR: Double =
             EARTH_ADVANCING_MARGIN_SHARE - 2 * sqrt(EARTH_ADVANCING_MARGIN_SHARE * (1 - EARTH_ADVANCING_MARGIN_SHARE) / EARTH_ADVANCING_MARGINS)
 
-        const val MARGINS_FINDING = "TH1-2b: young ranges stand behind fewer advancing margins than Earth's"
+        const val MARGINS_FINDING = "TH1-2c: young ranges stand behind fewer advancing margins than Earth's"
         const val MARGINS_SIGNATURE = "advancing margins with a young range under the bar"
+
+        /**
+         * Earth's ice-free land, Antarctica and Greenland left out, on ETOPO5 averaged onto 512 rows:
+         * its mean height and its share above 2 km, read beside the margins as what the back-arcs'
+         * heat does to the land as a whole.
+         */
+        const val EARTH_ICE_FREE_LAND_MEAN_METERS = 673.0
+        const val EARTH_ICE_FREE_LAND_ABOVE_TWO_KM = 0.058
+        private const val TWO_KM_METERS = 2_000.0
     }
 }

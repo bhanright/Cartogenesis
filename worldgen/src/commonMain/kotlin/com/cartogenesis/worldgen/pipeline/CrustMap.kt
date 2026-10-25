@@ -16,7 +16,8 @@ import kotlin.math.sqrt
  * [excessKm] are the continent's crust where there is any (the standard column where there is
  * none), the second the part orogeny piled on; [seafloorAgeMyr] the ocean floor's age where there
  * is any. [crustAgeMyr] is how long ago the crust was last made or deformed, [riftAgeMyr] when it
- * was stretched (-1 where never), [orogenyKind] an [OrogenyKind] ordinal, [terrane] the craton,
+ * was stretched (-1 where never), [backArcAgeMyr] how long since it last stood behind a live
+ * trench (0 where its trench is live, -1 where never), [orogenyKind] an [OrogenyKind] ordinal, [terrane] the craton,
  * microcontinent or arc a continent began as (-1 for ocean floor), [plateId] the present plate.
  * [windowTectonicKm], [windowWearKm], [windowOnsetMyrAgo] (-1 where nothing thickened) and
  * [presentThickeningKmPerMyr] are the continent's exposure-window books ([CrustHistory]);
@@ -30,6 +31,7 @@ internal class CrustOnMap(
     val seafloorAgeMyr: FloatArray,
     val crustAgeMyr: FloatArray,
     val riftAgeMyr: FloatArray,
+    val backArcAgeMyr: FloatArray,
     val orogenyKind: IntArray,
     val terrane: IntArray,
     val plateId: IntArray,
@@ -98,6 +100,8 @@ class CrustMapInputs internal constructor(
     val pointCrustAgeMyr: FloatArray,
     /** Rift age where stretched, -1 where never: a device has no NaN it can be trusted with. */
     val pointRiftMyrAgo: FloatArray,
+    /** When the point last stood in a live back-arc, Myr ago, -1 where never. */
+    val pointBackArcMyrAgo: FloatArray,
     val pointOrogenyKind: IntArray,
     val pointTerrane: IntArray,
     /** The exposure window's books at each point: tectonic change and wear, km; onset, Myr ago, -1 where none; the present rate, km per Myr. */
@@ -131,7 +135,7 @@ class CrustMapInputs internal constructor(
     val maxPlatesNear: Int
 )
 
-/** What the map pass writes, one entry per map cell, row-major: [CrustOnMap]'s fields, rift age and onset -1 where never. */
+/** What the map pass writes, one entry per map cell, row-major: [CrustOnMap]'s fields, rift age, back-arc age and onset -1 where never. */
 class CrustMapOutputs(
     val continentalShare: FloatArray,
     val thicknessKm: FloatArray,
@@ -139,6 +143,7 @@ class CrustMapOutputs(
     val seafloorAgeMyr: FloatArray,
     val crustAgeMyr: FloatArray,
     val riftAgeMyr: FloatArray,
+    val backArcAgeMyr: FloatArray,
     val orogenyKind: IntArray,
     val terrane: IntArray,
     val plateId: IntArray,
@@ -184,6 +189,7 @@ internal object CrustMap {
             seafloorAgeMyr = outputs.seafloorAgeMyr,
             crustAgeMyr = outputs.crustAgeMyr,
             riftAgeMyr = outputs.riftAgeMyr,
+            backArcAgeMyr = outputs.backArcAgeMyr,
             orogenyKind = outputs.orogenyKind,
             terrane = outputs.terrane,
             plateId = outputs.plateId,
@@ -225,6 +231,7 @@ internal object CrustMap {
                 if (history.continental[it] && !orogeny.isNaN()) orogeny else history.formedMyrAgo[it]
             },
             pointRiftMyrAgo = FloatArray(count) { if (history.riftMyrAgo[it].isNaN()) -1f else history.riftMyrAgo[it] },
+            pointBackArcMyrAgo = FloatArray(count) { if (history.backArcMyrAgo[it].isNaN()) -1f else history.backArcMyrAgo[it] },
             pointOrogenyKind = history.orogenyKind.copyOf(),
             pointTerrane = history.terrane.copyOf(),
             pointWindowTectonicKm = history.windowTectonicKm.copyOf(),
@@ -263,6 +270,7 @@ internal object CrustMap {
         val floorAge = FloatArray(cells)
         val crustAge = FloatArray(cells)
         val riftAge = FloatArray(cells)
+        val backArcAge = FloatArray(cells)
         val kind = IntArray(cells)
         val terrane = IntArray(cells)
         val plate = IntArray(cells)
@@ -310,6 +318,8 @@ internal object CrustMap {
                     var crustAgeSum = 0.0
                     var riftWeight = 0.0
                     var riftSum = 0.0
+                    var backArcWeight = 0.0
+                    var backArcSum = 0.0
                     var windowTectonicSum = 0.0
                     var windowWearSum = 0.0
                     var presentRateSum = 0.0
@@ -348,6 +358,10 @@ internal object CrustMap {
                         if (inputs.pointRiftMyrAgo[point] >= 0f) {
                             riftWeight += weight
                             riftSum += weight * inputs.pointRiftMyrAgo[point]
+                        }
+                        if (inputs.pointBackArcMyrAgo[point] >= 0f) {
+                            backArcWeight += weight
+                            backArcSum += weight * inputs.pointBackArcMyrAgo[point]
                         }
                         if (weight > heaviestWeight) {
                             heaviestWeight = weight
@@ -404,6 +418,7 @@ internal object CrustMap {
                     else inputs.pointFormedMyrAgo[heaviest]
                     crustAge[cell] = (crustAgeSum / weightSum).toFloat()
                     riftAge[cell] = if (riftWeight * 2 >= weightSum) (riftSum / riftWeight).toFloat() else -1f
+                    backArcAge[cell] = if (backArcWeight * 2 >= weightSum) (backArcSum / backArcWeight).toFloat() else -1f
                     kind[cell] = inputs.pointOrogenyKind[heaviest]
                     terrane[cell] = inputs.pointTerrane[heaviest]
                     if (continentWeight > 0.0) {
@@ -434,7 +449,7 @@ internal object CrustMap {
             }
         }
         return CrustMapOutputs(
-            share, thickness, excess, floorAge, crustAge, riftAge, kind, terrane, plate,
+            share, thickness, excess, floorAge, crustAge, riftAge, backArcAge, kind, terrane, plate,
             windowTectonic, windowWear, windowOnset, presentRate, strikeEastEast, strikeEastNorth, strikeNorthNorth
         )
     }

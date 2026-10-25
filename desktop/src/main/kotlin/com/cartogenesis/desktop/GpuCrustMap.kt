@@ -64,6 +64,7 @@ class GpuCrustMap private constructor(override val name: String) : CrustMapAccel
             for (component in 0 until STRIKE_COMPONENTS) {
                 pointFloats[f + 12 + component] = inputs.pointStrikeTensor[STRIKE_COMPONENTS * point + component]
             }
+            pointFloats[f + 18] = inputs.pointBackArcMyrAgo[point]
             val i = point * POINT_INTS
             pointInts[i] = inputs.pointContinental[point]
             pointInts[i + 1] = inputs.pointPlate[point]
@@ -137,6 +138,7 @@ class GpuCrustMap private constructor(override val name: String) : CrustMapAccel
                     seafloorAgeMyr = FloatArray(cells) { outFloats[it * OUT_FLOATS + 3] },
                     crustAgeMyr = FloatArray(cells) { outFloats[it * OUT_FLOATS + 4] },
                     riftAgeMyr = FloatArray(cells) { outFloats[it * OUT_FLOATS + 5] },
+                    backArcAgeMyr = FloatArray(cells) { outFloats[it * OUT_FLOATS + 13] },
                     orogenyKind = IntArray(cells) { outInts[it * OUT_INTS] },
                     terrane = IntArray(cells) { outInts[it * OUT_INTS + 1] },
                     plateId = IntArray(cells) { outInts[it * OUT_INTS + 2] },
@@ -244,19 +246,19 @@ class GpuCrustMap private constructor(override val name: String) : CrustMapAccel
 
         /**
          * A point's floats (x, y, z, thickness, excess, floor age, crust age, rift age, the window's
-         * tectonic change, wear and onset, the present thickening rate, the strike tensor's six) and
-         * integers (continental, plate, kind, terrane).
+         * tectonic change, wear and onset, the present thickening rate, the strike tensor's six, the
+         * back-arc's age) and integers (continental, plate, kind, terrane).
          */
-        private const val POINT_FLOATS = 18
+        private const val POINT_FLOATS = 19
         private const val POINT_INTS = 4
         private const val STRIKE_COMPONENTS = 6
 
         /**
          * A cell's floats (share, thickness, excess, floor age, crust age, rift age, the window's
          * tectonic change, wear and onset, the present rate, the strike tensor's east-east,
-         * east-north and north-north) and integers (kind, terrane, plate).
+         * east-north and north-north, the back-arc's age) and integers (kind, terrane, plate).
          */
-        private const val OUT_FLOATS = 13
+        private const val OUT_FLOATS = 14
         private const val OUT_INTS = 3
 
         /** The belts' pass: its storage bindings, a cell's floats in and out, and the most ridge octaves its uniforms hold. */
@@ -401,6 +403,7 @@ class GpuCrustMap private constructor(override val name: String) : CrustMapAccel
 
                 float weightSum = 0.0; float continentWeight = 0.0; float thicknessSum = 0.0; float excessSum = 0.0;
                 float oceanWeight = 0.0; float floorAgeSum = 0.0; float crustAgeSum = 0.0; float riftWeight = 0.0; float riftSum = 0.0;
+                float backArcWeight = 0.0; float backArcSum = 0.0;
                 float windowTectonicSum = 0.0; float windowWearSum = 0.0; float presentRateSum = 0.0; float onsetWeight = 0.0; float onsetSum = 0.0;
                 float txx = 0.0; float txy = 0.0; float txz = 0.0; float tyy = 0.0; float tyz = 0.0; float tzz = 0.0;
                 int heaviest = -1; float heaviestWeight = -1.0;
@@ -462,6 +465,10 @@ class GpuCrustMap private constructor(override val name: String) : CrustMapAccel
                                 riftWeight += weight;
                                 riftSum += weight * pointFloats[point * PF + 7];
                             }
+                            if (pointFloats[point * PF + 18] >= 0.0) {
+                                backArcWeight += weight;
+                                backArcSum += weight * pointFloats[point * PF + 18];
+                            }
                             if (weight > heaviestWeight) { heaviestWeight = weight; heaviest = point; }
                             int pointPlate = pointInts[point * 4 + 1];
                             int slot = -1;
@@ -506,6 +513,7 @@ class GpuCrustMap private constructor(override val name: String) : CrustMapAccel
                 outFloats[cell * OF + 3] = oceanWeight > 0.0 ? floorAgeSum / oceanWeight : pointFloats[heaviest * PF + 5];
                 outFloats[cell * OF + 4] = crustAgeSum / weightSum;
                 outFloats[cell * OF + 5] = riftWeight * 2.0 >= weightSum ? riftSum / riftWeight : -1.0;
+                outFloats[cell * OF + 13] = backArcWeight * 2.0 >= weightSum ? backArcSum / backArcWeight : -1.0;
                 outFloats[cell * OF + 6] = continentWeight > 0.0 ? windowTectonicSum / continentWeight : 0.0;
                 outFloats[cell * OF + 7] = continentWeight > 0.0 ? windowWearSum / continentWeight : 0.0;
                 outFloats[cell * OF + 8] = (continentWeight > 0.0 && onsetWeight * 2.0 >= continentWeight) ? onsetSum / onsetWeight : -1.0;

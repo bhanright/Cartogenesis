@@ -104,6 +104,7 @@ class CrustMapParity private constructor(private val inputs: CrustMapInputs, pri
             crustWorst = max(crustWorst, abs((device.crustAgeMyr[cell] - reference.crustAgeMyr[cell]).toDouble()))
             if (device.plateId[cell] != reference.plateId[cell] || device.orogenyKind[cell] != reference.orogenyKind[cell] ||
                 device.terrane[cell] != reference.terrane[cell] || (device.riftAgeMyr[cell] >= 0f) != (reference.riftAgeMyr[cell] >= 0f) ||
+                (device.backArcAgeMyr[cell] >= 0f) != (reference.backArcAgeMyr[cell] >= 0f) ||
                 (device.windowOnsetMyrAgo[cell] >= 0f) != (reference.windowOnsetMyrAgo[cell] >= 0f)
             ) differing++
         }

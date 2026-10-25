@@ -356,20 +356,23 @@ internal class FibonacciSphere(
         const val MAX_NEIGHBORS = 8
 
         /**
-         * A lattice whose cells are [cellKm] on a side on a sphere of [radiusKm]. The last one made is
-         * kept and handed out again for the same two figures: a lattice is never written after it is
-         * built, and building one, its neighbors above all, is a second of the history's time.
+         * A lattice whose cells are [cellKm] on a side on a sphere of [radiusKm], turned by
+         * [orientation]. The last one made is kept and handed out again for the same figures and the
+         * same turn: a lattice is never written after it is built, and building one, its neighbors
+         * above all, is a second of the history's time.
          */
         fun forCellKm(radiusKm: Double, cellKm: Double, orientation: DoubleArray? = null): FibonacciSphere {
             val count = (4.0 * PI * radiusKm * radiusKm / (cellKm * cellKm)).roundToInt().coerceAtLeast(MIN_CELLS)
-            if (orientation != null) return FibonacciSphere(count, radiusKm, orientation)
-            lastBuilt?.let { if (it.cellCount == count && it.radiusKm == radiusKm) return it }
-            return FibonacciSphere(count, radiusKm).also { lastBuilt = it }
+            lastBuilt?.let { (built, turn) ->
+                val sameTurn = if (orientation == null) turn == null else turn != null && turn.contentEquals(orientation)
+                if (built.cellCount == count && built.radiusKm == radiusKm && sameTurn) return built
+            }
+            return FibonacciSphere(count, radiusKm, orientation).also { lastBuilt = it to orientation?.copyOf() }
         }
 
-        /** The lattice [forCellKm] last built; a race between two threads only builds it twice. */
+        /** The lattice [forCellKm] last built and its turn; a race between two threads only builds it twice. */
         @kotlin.concurrent.Volatile
-        private var lastBuilt: FibonacciSphere? = null
+        private var lastBuilt: Pair<FibonacciSphere, DoubleArray?>? = null
 
         /** The fewest points a history lattice may have, so a tiny test planet still has plates. */
         const val MIN_CELLS = 2_000

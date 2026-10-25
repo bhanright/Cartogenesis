@@ -36,6 +36,11 @@ internal class CrustHistory(
     val orogenyKind: IntArray,
     val terrane: IntArray,
     val riftMyrAgo: FloatArray,
+    /**
+     * When each point's crust last stood in the back-arc of a live trench, Myr before the present, 0
+     * where its trench is live now; NaN where never in the history.
+     */
+    val backArcMyrAgo: FloatArray,
     /** [BoundaryClass] ordinal of a boundary point, -1 elsewhere. */
     val boundaryClass: IntArray,
     /** At a boundary point, the plate across the boundary; -1 elsewhere. */
@@ -133,11 +138,12 @@ internal object TectonicHistory {
 
     /**
      * The history of [config]'s world. [latticeOrientation] turns the lattice it runs on (see
-     * [FibonacciSphere]); the guards use it, and a world is always made on the lattice as drawn.
+     * [FibonacciSphere]); the guards use it, and a world is otherwise made on its lattice turned by
+     * [latticeTurnOf] its seed.
      */
     fun run(config: WorldGenConfig, trace: ((String) -> Unit)? = null, latticeOrientation: DoubleArray? = null): CrustHistory {
         var mark = kotlin.time.TimeSource.Monotonic.markNow()
-        val simulation = Simulation(config, trace, latticeOrientation)
+        val simulation = Simulation(config, trace, latticeOrientation ?: latticeTurnOf(config.seed))
         trace?.invoke("lattice ms ${mark.elapsedNow().inWholeMilliseconds}")
         mark = kotlin.time.TimeSource.Monotonic.markNow()
         simulation.build()
@@ -1247,6 +1253,7 @@ internal object TectonicHistory {
                     budget.stretchedAreaMadeKm2 += sampleAreaKm2
                     val sample = samples.add(sphere.x[cell], sphere.y[cell], sphere.z[cell], plate, true, stretchedBase, 0f,
                         samples.formedMyrAgo[beside], agoEnd.toFloat(), OrogenyKind.RIFT, samples.terrane[beside], samples.riftMyrAgo[beside])
+                    samples.backArcMyrAgo[sample] = samples.backArcMyrAgo[beside]
                     adopt(sample, cell)
                 } else {
                     val sample = samples.add(sphere.x[cell], sphere.y[cell], sphere.z[cell], plate, false, oceanicKm, 0f,
@@ -1448,6 +1455,7 @@ internal object TectonicHistory {
                 val flatSlab = BooleanArray(cellCount)
                 for (cell in trenches) flatSlab[cell] = !slabRank[cell].isNaN() && slabRank[cell] >= 1f - FLAT_SLAB_SHARE
                 growArcsAndWearForearcs(trenches, lengthKm, agoEnd, flatSlab)
+                markBackArcs(trenches, agoEnd, flatSlab)
                 deformUpperPlates(trenches, lengthKm, agoEnd, flatSlab, advanceKmPerMyr, slabRank)
             }
             if (collisionCells.isNotEmpty()) exchangeInCollisionZones(collisionCells.toIntArray(), lengthKm, agoEnd)
@@ -1559,6 +1567,50 @@ internal object TectonicHistory {
                 wear(sample, (wornKm3 * share / sampleAreaKm2).toFloat(), forearc = true)
             }
         }
+
+        /**
+         * Marks the back-arc behind every trench of [trenches] live at [agoEnd]: the upper plate's
+         * crust from its arc to [BACK_ARC_WIDTH_KM] beyond it where it is not a craton's ([heatable]),
+         * whatever the upper plate does, since every back-arc is hot across its whole width,
+         * extended or not (Currie and Hyndman, *The thermal structure of subduction zone back arcs*,
+         * JGR 111, 2006: 1,200 C at about 60 km over back-arc widths of 250 to more than 900 km, the
+         * hot mantle kept convecting by the slab's water). A flat slab's is left out: the only cool back-arcs they found lie over flat
+         * slabs, with no wedge of mantle left to convect and no arc (the arc goes out there too, see
+         * [growArcsAndWearForearcs]). The mark is the time, so a back-arc whose trench dies keeps the
+         * time it died, which is when its heat begins to leave.
+         */
+        private fun markBackArcs(trenches: IntArray, agoEnd: Double, flatSlab: BooleanArray) {
+            val sources = trenches.filter { !flatSlab[it] }.toIntArray()
+            if (sources.isEmpty()) return
+            val continentalTrench = BooleanArray(cellCount)
+            for (cell in sources) continentalTrench[cell] = samples.continental[ownerSample[cell]]
+            val reachKm = max(tectonics.arcOffsetKm, tectonics.islandArcOffsetKm) + BACK_ARC_WIDTH_KM
+            val (distanceKm, nearest) = sphere.distanceFlood(sources, reachKm = reachKm, region = owner)
+            val stamp = agoEnd.toFloat()
+            for (sample in 0 until samples.count) {
+                if (removed[sample]) continue
+                val cell = sampleCell[sample]
+                val source = nearest[cell]
+                if (source < 0 || samples.plate[sample] != owner[source] || !heatable(sample)) continue
+                val arcKm = if (continentalTrench[source]) tectonics.arcOffsetKm else tectonics.islandArcOffsetKm
+                val distance = distanceKm[cell]
+                if (distance >= arcKm && distance <= arcKm + BACK_ARC_WIDTH_KM) samples.backArcMyrAgo[sample] = stamp
+            }
+        }
+
+        /**
+         * Whether a back-arc's convection can heat the lithosphere under [sample]: continental crust
+         * that is not a craton's. A craton's lithosphere is 200 to 250 km of cold, refractory mantle,
+         * and a back-arc's hot wedge stops at its edge (Hyndman 2015: the Cordillera's back-arc ends
+         * at the Rocky Mountain Trench, over the craton's thermal and lithospheric boundary; "the
+         * asthenosphere convection may be limited by thick, refractory craton lithosphere"), save
+         * where rifting thinned the craton's margin first, which the stretched mark says. Belts,
+         * arcs, terranes and old sutures are not refractory: western Europe's Variscan ground is a
+         * hot back-arc again today. Ocean floor carries its own heat in its age.
+         */
+        private fun heatable(sample: Int): Boolean =
+            samples.continental[sample] &&
+                (samples.orogenyKind[sample].toInt() != OrogenyKind.NONE.ordinal || !samples.riftMyrAgo[sample].isNaN())
 
         /**
          * The upper plate's deformation above its slab, at every trench point of a continental upper
@@ -2975,6 +3027,7 @@ internal object TectonicHistory {
                 orogenyKind = IntArray(cellCount) { samples.orogenyKind[ownerSample[it]].toInt() },
                 terrane = IntArray(cellCount) { samples.terrane[ownerSample[it]] },
                 riftMyrAgo = field { samples.riftMyrAgo[it] },
+                backArcMyrAgo = field { samples.backArcMyrAgo[it] },
                 boundaryClass = boundaryClass.copyOf(),
                 boundaryOtherPlate = IntArray(cellCount) { if (boundaryOther[it] >= 0) renumber[boundaryOther[it]] else -1 },
                 boundaryOverridingPlate = IntArray(cellCount) { if (boundaryOverriding[it] >= 0) renumber[boundaryOverriding[it]] else -1 },
@@ -3101,6 +3154,36 @@ internal object TectonicHistory {
             (cost.toFloat().toRawBits().toLong() shl 32) or cell.toLong()
     }
 
+    /**
+     * The turn a world's lattice lies at: a rotation drawn uniformly from all rotations by [seed]
+     * (Shoemake, *Uniform random rotations*, Graphics Gems III, 1992), row-major 3 by 3.
+     *
+     * The spiral lattice is drawn round its own polar axis, every point holding one band of its own
+     * latitude, so its neighbors lie at the same bearings all the way round a band. Drawn round the
+     * planet's axis, those bearings are the same along each row of the map, and the history's paths
+     * and floods, which step from neighbor to neighbor, carry them into the crust's edge as runs
+     * the map draws straight: the edge reads more straight runs on a lattice whose axis is the
+     * planet's than on a tilted one (docs/DESIGN_LEDGER.md, TH1-2c). A lattice whose axis lies
+     * anywhere leaves the map's rows nothing to line up with (docs/CONVENTIONS.md, rule 13).
+     */
+    internal fun latticeTurnOf(seed: Long): DoubleArray {
+        val first = hash01(seed xor LATTICE_TURN_SALT, 0)
+        val second = 2.0 * PI * hash01(seed xor LATTICE_TURN_SALT, 1)
+        val third = 2.0 * PI * hash01(seed xor LATTICE_TURN_SALT, 2)
+        val w = sqrt(1.0 - first) * sin(second)
+        val x = sqrt(1.0 - first) * kotlin.math.cos(second)
+        val y = sqrt(first) * sin(third)
+        val z = sqrt(first) * kotlin.math.cos(third)
+        return doubleArrayOf(
+            1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w),
+            2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w),
+            2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)
+        )
+    }
+
+    /** Keeps the lattice's turn apart from every other stream the seed feeds. */
+    private const val LATTICE_TURN_SALT = 0x5A7715E5L
+
     /** A uniform draw in 0..1 from a seed and an index, by splitmix64's finalizer: no shared stream. */
     private fun hash01(seed: Long, index: Long): Double {
         val gamma = 0x9E3779B97F4A7C15UL.toLong()
@@ -3214,7 +3297,9 @@ internal object TectonicHistory {
      * The back-arc band a retreating upper plate stretches, km beyond the arc, and the ramp at each
      * edge: the Great Basin's breadth from the Sierra Nevada's crest at 119 W to the Wasatch front at
      * 111.8 W, 620 km at 39 N, its extension 48 to 97 km over 17 Myr in grabens 24 to 32 km apart
-     * (Stewart, *Basin and range structure*, GSA Bulletin 82, 1971, abstract).
+     * (Stewart, *Basin and range structure*, GSA Bulletin 82, 1971, abstract). The hot back-arc
+     * every trench keeps ([markBackArcs]) is the same width: Currie and Hyndman's (2006, Table 1)
+     * ten back-arcs measure 250 to more than 900 km from their arcs, 600 at the middle.
      */
     private const val BACK_ARC_WIDTH_KM = 620.0
     private const val BACK_ARC_RAMP_KM = 100.0

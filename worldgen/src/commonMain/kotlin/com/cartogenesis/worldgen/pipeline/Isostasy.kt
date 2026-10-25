@@ -157,24 +157,43 @@ internal object Isostasy {
         }
 
         /**
-         * The heat of a back-arc's mantle, as the air-equivalent metres of buoyancy it is worth, for
-         * a back-arc last stretched [riftAgeMyr] million years ago; zero where none was.
+         * The heat of a back-arc's mantle, as the air-equivalent metres of buoyancy it is worth over
+         * a craton's, for crust whose subduction stopped [backArcAgeMyr] million years ago (0 where
+         * its trench is live); zero where it never stood behind one.
          *
-         * Back-arcs are hot across their whole width, their lithosphere thin over a mantle the
-         * subduction keeps convecting, and they stand high on crust thinner than a craton's for it:
-         * the North American Cordillera's crust is rarely thicker than 35 km, yet it stands about
-         * 1,500 m, where cratons with 40 km stand near the sea (Hyndman, Currie and Mazzotti,
-         * *Subduction zone backarcs, mobile belts, and orogenic heat*, GSA Today 15(2), 2005). Their
-         * figure: a mantle 200 C hotter on the mean to 150 km, at a thermal expansion of 3.5e-5 per
-         * degree, balances about a kilometer of elevation ([HOT_BACK_ARC_BUOYANCY_METRES]). The heat
-         * leaves as the plate cools once the stretching that marks the subduction's pull has
-         * stopped, at the plate's own thermal time constant, as a stretched margin's does
-         * ([stretchedThermalBuoyancyMetres]).
+         * Back-arcs are hot across their whole width, extended or not, their lithosphere about 60 km
+         * thick over a mantle the slab's water keeps convecting, where a craton's is 200 to 250 km
+         * (Hyndman, Currie and Mazzotti, *Subduction zone backarcs, mobile belts, and orogenic heat*,
+         * GSA Today 15(2), 2005; Currie and Hyndman, *The thermal structure of subduction zone back
+         * arcs*, JGR 111, 2006). They stand high on thin crust for it: the North American
+         * Cordillera stands [HOT_BACK_ARC_BUOYANCY_METRES] above the Canadian Shield at the same
+         * crustal thickness, and western Europe as far above the Fennoscandian Shield (Hyndman,
+         * *Tectonic consequences of a uniformly hot backarc and why is the Cordillera mountain belt
+         * high?*, Geoscience Canada 42, 2015, figure 6, after Hyndman and Currie 2011).
+         *
+         * When the subduction stops the convection stops with it, within a few tens of millions of
+         * years, and the back-arc cools by conduction toward a craton's lithosphere: Currie and
+         * Hyndman's model is a plate 250 km thick cooling from the back-arc's geotherm, the same
+         * problem as the ocean floor's plate. Its time constant is the plate's thickness squared
+         * over `pi^2 kappa`, so it is Parsons and Sclater's for their 125 km plate scaled by the
+         * square of the thicknesses ([backArcCoolingTimeMyr], 251 Myr). Their compilations of heat
+         * flow against the last thermotectonic event give "about 300 Myr" (2006) and 300 to 500 Myr
+         * (2015); the northern Canadian Cordillera, cut off at 40 to 50 Ma, is as hot as a live
+         * back-arc, and the Appalachians, about 260 Myr on, keep 600 to 800 m of it.
          */
-        fun hotBackArcBuoyancyMetres(riftAgeMyr: Float): Float {
-            if (riftAgeMyr < 0f) return 0f
-            return HOT_BACK_ARC_BUOYANCY_METRES * exp(-riftAgeMyr / isostasy.seafloorFlatteningTimeMyr)
+        fun hotBackArcBuoyancyMetres(backArcAgeMyr: Float): Float {
+            if (backArcAgeMyr < 0f) return 0f
+            return HOT_BACK_ARC_BUOYANCY_METRES * exp(-backArcAgeMyr / backArcCoolingTimeMyr)
         }
+
+        /**
+         * The back-arc's cooling time constant, Myr: the ocean floor's plate time constant
+         * ([IsostasyConfig.seafloorFlatteningTimeMyr], Parsons and Sclater's 62.8 Myr for a plate
+         * of [OCEAN_PLATE_THICKNESS_KM]) times the square of [CRATON_LITHOSPHERE_THICKNESS_KM] over
+         * it, the diffusion time of the thicker plate at the same diffusivity.
+         */
+        val backArcCoolingTimeMyr: Float =
+            isostasy.seafloorFlatteningTimeMyr * (CRATON_LITHOSPHERE_THICKNESS_KM / OCEAN_PLATE_THICKNESS_KM).let { it * it }
 
         /**
          * The altitude a column floats at, for a cell that is [continentalShare] continental crust
@@ -406,11 +425,24 @@ private const val METRES_PER_KM = 1_000.0f
 private val MCKENZIE_THERMAL_SHARE_OF_PLATE = 8f / (PI.toFloat() * PI.toFloat())
 
 /**
- * A hot back-arc's buoyancy over a craton's, air-equivalent metres: Hyndman, Currie and Mazzotti's
- * (2005) mean excess temperature of 200 C to a depth of 150 km at a thermal expansion of 3.5e-5 per
- * degree, `alpha dT L`, 1,050 m, their "approximately ... 1 km".
+ * A hot back-arc's elevation over a craton's at the same crustal thickness, metres: the offset
+ * between the North American Cordillera's and the Canadian Shield's lines of elevation against
+ * crustal thickness, about 1,600 m (Hyndman and Currie 2011, as Hyndman 2015 gives it in his figure
+ * 6), the measured figure for what Hyndman, Currie and Mazzotti (2005) first estimated from a
+ * mean 200 C to 150 km at 3.5e-5 a degree as "approximately ... 1 km". Thermal isostasy is the
+ * cause they give; a craton's lithosphere is cold and also chemically depleted, which is why its
+ * deficit is not the whole of its cold mantle's contraction.
  */
-private const val HOT_BACK_ARC_BUOYANCY_METRES = 3.5e-5f * 200f * 150f * METRES_PER_KM
+private const val HOT_BACK_ARC_BUOYANCY_METRES = 1_600f
+
+/**
+ * The plates the two thermal time constants belong to, km: Parsons and Sclater's ocean plate, 125
+ * km (*An analysis of the variation of ocean floor bathymetry and heat flow with age*, JGR 82,
+ * 1977, abstract), and the craton's lithosphere a back-arc cools toward, 250 km, the plate Currie
+ * and Hyndman (2006) let a back-arc cool in.
+ */
+private const val OCEAN_PLATE_THICKNESS_KM = 125f
+private const val CRATON_LITHOSPHERE_THICKNESS_KM = 250f
 
 /** Pascals in a gigapascal, for Young's modulus. */
 private const val PASCALS_PER_GPA = 1e9

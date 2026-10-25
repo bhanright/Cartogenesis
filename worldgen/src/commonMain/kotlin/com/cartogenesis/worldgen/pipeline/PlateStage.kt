@@ -535,7 +535,8 @@ object PlateStage {
         val excessForFullOrogen = crustAgeReference * beltReliefMetres / freeboardMetresPerKm
         val standardThicknessKm = config.isostasy.continentalCrustThicknessKm
 
-        // The hot mantle under the back-arcs the history stretched (see [backArcHeatMetres]).
+        // The hot mantle under every back-arc the history's trenches kept, live or cooling (see
+        // [backArcHeatMetres]).
         val backArcHeat = backArcHeatMetres(config, crust, continentalShare.data, columns)
 
         // The belts' own relief at the map's scale and the rock's erodibility, read off the crust
@@ -845,10 +846,11 @@ object PlateStage {
     }
 
     /**
-     * The heat of a back-arc's mantle under every cell whose crust the history stretched behind an
-     * arc ([Isostasy.Columns.hotBackArcBuoyancyMetres]), air-equivalent meters, smoothed over the
-     * depth the heat reaches ([HOT_BACK_ARC_DEPTH_KM]): a mantle's temperature does not step where
-     * the crust's mark does, and the plate above it is stood by the whole column beneath.
+     * The heat of a back-arc's mantle under every continental cell the history's trenches kept
+     * behind their arcs, live or since stopped ([Isostasy.Columns.hotBackArcBuoyancyMetres]),
+     * air-equivalent meters, smoothed over the depth the heat reaches ([HOT_BACK_ARC_DEPTH_KM]): a
+     * mantle's temperature does not step where the crust's mark does, and the plate above it is
+     * stood by the whole column beneath.
      */
     private fun backArcHeatMetres(
         config: WorldGenConfig,
@@ -860,8 +862,8 @@ object PlateStage {
         val heat = FloatField(config.width, config.height)
         var any = false
         for (cell in 0 until cells) {
-            if (crust.orogenyKind[cell] != OrogenyKind.BACK_ARC_EXTENSION.ordinal || continentalShare[cell] <= 0f) continue
-            heat.data[cell] = columns.hotBackArcBuoyancyMetres(crust.riftAgeMyr[cell])
+            if (continentalShare[cell] <= 0f || crust.backArcAgeMyr[cell] < 0f) continue
+            heat.data[cell] = columns.hotBackArcBuoyancyMetres(crust.backArcAgeMyr[cell])
             any = true
         }
         if (!any || !config.isostasy.enabled) return FloatArray(cells)

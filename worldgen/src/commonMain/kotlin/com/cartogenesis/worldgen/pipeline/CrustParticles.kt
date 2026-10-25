@@ -76,6 +76,12 @@ internal class CrustParticles(initialCapacity: Int) {
     var riftMyrAgo = FloatArray(initialCapacity); private set
 
     /**
+     * When the crust here last stood in the back-arc of a live trench, Myr before the present: the
+     * time its subduction stopped, from which its mantle's heat leaves; NaN where never.
+     */
+    var backArcMyrAgo = FloatArray(initialCapacity); private set
+
+    /**
      * How buoyant the ocean floor here is for the slab it will become, 0 to 1, uniform over the
      * floor: drawn where the floor was made, so a feature on it (a plateau, an aseismic ridge) rides
      * the plate into the trench and the trench's segments move with the slab. Meaningless on
@@ -123,6 +129,7 @@ internal class CrustParticles(initialCapacity: Int) {
         orogenyKind[sample] = kind.ordinal.toByte()
         terrane[sample] = terraneId
         riftMyrAgo[sample] = rift
+        backArcMyrAgo[sample] = Float.NaN
         slabBuoyancy[sample] = 0f
         // Born during a step, so the step's change is counted from what it was born with.
         stepStartKm[sample] = base + excess
@@ -156,7 +163,7 @@ internal class CrustParticles(initialCapacity: Int) {
                 baseKm[kept] = baseKm[sample]; excessKm[kept] = excessKm[sample]
                 formedMyrAgo[kept] = formedMyrAgo[sample]; orogenyMyrAgo[kept] = orogenyMyrAgo[sample]
                 orogenyKind[kept] = orogenyKind[sample]; terrane[kept] = terrane[sample]
-                riftMyrAgo[kept] = riftMyrAgo[sample]
+                riftMyrAgo[kept] = riftMyrAgo[sample]; backArcMyrAgo[kept] = backArcMyrAgo[sample]
                 slabBuoyancy[kept] = slabBuoyancy[sample]
                 stepStartKm[kept] = stepStartKm[sample]; stepWearKm[kept] = stepWearKm[sample]
                 windowTectonicKm[kept] = windowTectonicKm[sample]; windowWearKm[kept] = windowWearKm[sample]
@@ -174,7 +181,7 @@ internal class CrustParticles(initialCapacity: Int) {
         baseKm = baseKm.copyOf(capacity); excessKm = excessKm.copyOf(capacity)
         formedMyrAgo = formedMyrAgo.copyOf(capacity); orogenyMyrAgo = orogenyMyrAgo.copyOf(capacity)
         orogenyKind = orogenyKind.copyOf(capacity); terrane = terrane.copyOf(capacity)
-        riftMyrAgo = riftMyrAgo.copyOf(capacity)
+        riftMyrAgo = riftMyrAgo.copyOf(capacity); backArcMyrAgo = backArcMyrAgo.copyOf(capacity)
         slabBuoyancy = slabBuoyancy.copyOf(capacity)
         stepStartKm = stepStartKm.copyOf(capacity); stepWearKm = stepWearKm.copyOf(capacity)
         windowTectonicKm = windowTectonicKm.copyOf(capacity); windowWearKm = windowWearKm.copyOf(capacity)
